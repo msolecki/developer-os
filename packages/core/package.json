@@ -9,6 +9,10 @@
       "default": "./dist/index.js"
     }
   },
+  "dependencies": {
+    "smol-toml": "1.6.1",
+    "zod": "4.4.3"
+  },
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run"

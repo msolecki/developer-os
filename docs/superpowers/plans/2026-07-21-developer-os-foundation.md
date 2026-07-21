@@ -497,13 +497,13 @@ Reviewer checks exit meanings, JSON stability, stdout/stderr separation, and tha
 
 **Test:** Valid, precedence, malformed, telemetry, relative-path, and NUL fixtures pass with deterministic serialization and the full lint/test gate.
 
-- [ ] **Step 1: Add exact runtime dependencies**
+- [x] **Step 1: Add exact runtime dependencies**
 
 ```bash
 pnpm --filter @developer-os/core add --save-exact smol-toml zod
 ```
 
-- [ ] **Step 2: Write failing tests**
+- [x] **Step 2: Write failing tests**
 
 Test a valid version 1 TOML with absolute Brain path, adapter flags, disabled Git, and disabled automation. Assert the exact object:
 
@@ -520,7 +520,7 @@ Test a valid version 1 TOML with absolute Brain path, adapter flags, disabled Gi
 
 Also test environment precedence, relative-path refusal, unknown-key refusal, and rejection of `telemetry = true`.
 
-- [ ] **Step 3: Run red**
+- [x] **Step 3: Run red**
 
 ```bash
 pnpm vitest run packages/core/src/config/config.test.ts
@@ -528,7 +528,7 @@ pnpm vitest run packages/core/src/config/config.test.ts
 
 Expected: FAIL because config modules do not exist.
 
-- [ ] **Step 4: Implement exact contracts**
+- [x] **Step 4: Implement exact contracts**
 
 ```typescript
 export interface DeveloperOsConfigV1 {
@@ -554,7 +554,7 @@ export interface RuntimePaths {
 
 Use strict Zod objects, deterministic TOML serialization, and this precedence: environment override, parsed config for Brain, then defaults. Reject empty, relative, and NUL-containing paths before filesystem access.
 
-- [ ] **Step 5: Verify, review, and commit**
+- [x] **Step 5: Verify, review, and commit**
 
 ```bash
 pnpm vitest run packages/core/src/config/config.test.ts
