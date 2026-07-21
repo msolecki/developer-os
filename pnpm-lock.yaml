@@ -42,6 +42,12 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
 
+  packages/security:
+    dependencies:
+      '@developer-os/core':
+        specifier: workspace:*
+        version: link:../core
+
 packages:
 
   '@esbuild/aix-ppc64@0.27.7':

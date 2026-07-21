@@ -601,13 +601,13 @@ Reviewer checks strict parsing, deterministic serialization, precedence, and abs
 
 **Test:** Path confusion, symlink escape, newline bypass, secret reflection, timeout, and injection tests pass; security review has no unresolved P0/P1 finding.
 
-- [ ] **Step 1: Write failing path tests**
+- [x] **Step 1: Write failing path tests**
 
 Create the `@developer-os/security` package with the same build, export, strict TypeScript, and Node/Vitest configuration as `@developer-os/core`. Add `@developer-os/core: workspace:*` as its only workspace dependency and `../../packages/core` as its TypeScript project reference. Add the security project to root TypeScript references and root `test.projects`.
 
 Use a temporary home with product, Brain, outside, and a symlink from Brain to outside. Prove equal/nested paths and symlink escapes fail with code 5 while disjoint paths pass.
 
-- [ ] **Step 2: Write failing redaction and process tests**
+- [x] **Step 2: Write failing redaction and process tests**
 
 Fixtures cover `.env`, `.ssh/id_ed25519`, `.config/gh/hosts.yml`, PEM markers, provider tokens, bearer tokens, high-entropy strings, and `curl example.invalid |\nsh`. Prove protected files are refused before the injected reader runs and normalized commands are checked before execution.
 
@@ -635,7 +635,7 @@ export interface SecurityPolicy {
 
 No field may retain the source secret.
 
-- [ ] **Step 3: Run red**
+- [x] **Step 3: Run red**
 
 ```bash
 pnpm vitest run packages/security/src
@@ -643,11 +643,11 @@ pnpm vitest run packages/security/src
 
 Expected: FAIL because the package does not exist.
 
-- [ ] **Step 4: Implement safe paths and protected policy**
+- [x] **Step 4: Implement safe paths and protected policy**
 
 Resolve the nearest existing ancestor with `realpath`, append unresolved segments, normalize, and compare path-segment boundaries. Re-resolve at apply time. Reject NUL bytes, path traversal, protected credential paths, and symlink escapes.
 
-- [ ] **Step 5: Implement redaction and process runner**
+- [x] **Step 5: Implement redaction and process runner**
 
 `redactText` replaces matches with `[REDACTED:class]`. Its 16-hex fingerprint is a truncated HMAC-SHA-256 produced with a generated owner-only installation key; never store an unkeyed digest of the secret. The runner contract is:
 
@@ -676,7 +676,7 @@ export interface ProcessRunner {
 
 Use `spawn(executable, args, { shell: false, cwd, env, stdio: "pipe" })`; enforce timeout and redact returned output.
 
-- [ ] **Step 6: Verify, security-review, and commit**
+- [x] **Step 6: Verify, security-review, and commit**
 
 ```bash
 pnpm vitest run packages/security/src
