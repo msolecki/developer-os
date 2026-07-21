@@ -9,5 +9,8 @@
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@developer-os/core": "workspace:*"
   }
 }

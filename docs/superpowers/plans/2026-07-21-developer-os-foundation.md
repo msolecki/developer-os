@@ -381,7 +381,7 @@ Expected: commands pass, one smoke test passes, and the working tree is clean. T
 
 **Test:** Result and CLI tests pass, JSON bytes remain exact, unknown input returns code 2, and the full lint/test gate passes.
 
-- [ ] **Step 1: Write failing contract tests**
+- [x] **Step 1: Write failing contract tests**
 
 Create `packages/core/package.json`:
 
@@ -410,7 +410,7 @@ expect(formatJsonResult(success({ version: "0.0.0" }))).toBe(
 );
 ```
 
-- [ ] **Step 2: Run red**
+- [x] **Step 2: Run red**
 
 ```bash
 pnpm vitest run packages/core/src/result.test.ts
@@ -418,7 +418,7 @@ pnpm vitest run packages/core/src/result.test.ts
 
 Expected: FAIL because the module does not exist.
 
-- [ ] **Step 3: Implement exact types**
+- [x] **Step 3: Implement exact types**
 
 Create `packages/core/src/result.ts`:
 
@@ -457,7 +457,7 @@ export const formatJsonResult = <T>(result: CliResult<T>): string => JSON.string
 
 Move `CliIo` to `apps/cli/src/io.ts` and add `--json` handling. Unknown commands and options return code 2.
 
-- [ ] **Step 4: Verify, review, and commit**
+- [x] **Step 4: Verify, review, and commit**
 
 ```bash
 pnpm vitest run packages/core/src/result.test.ts apps/cli/src/main.test.ts
