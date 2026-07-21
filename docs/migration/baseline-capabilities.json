@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "claudeCode": {
+    "version": "2.1.216",
+    "sharedRules": true,
+    "sharedPlugin": true,
+    "sharedHooks": true,
+    "sessionStartBrainInjection": true,
+    "sessionEndCapture": true,
+    "preCompactCapture": true,
+    "protectedPathGuards": true,
+    "protectedCommandGuards": true
+  },
+  "codexCli": {
+    "version": "0.144.6",
+    "generatedAgents": true,
+    "generatedRules": true,
+    "generatedHooks": true,
+    "sessionStartBrainInjection": true,
+    "protectedPathHook": true,
+    "protectedCommandHook": true,
+    "preCompactHook": true,
+    "reliableTranscriptCaptureParity": false
+  },
+  "brain": {
+    "obsidianMarkdown": true,
+    "vaultMap": true,
+    "catalog": true,
+    "graph": true,
+    "indexFirstRetrieval": true,
+    "lintCommand": "lint",
+    "reindexCommand": "reindex",
+    "ingestCommand": "ingest",
+    "testCommand": "test",
+    "localGitOptional": true
+  },
+  "runtime": {
+    "nodeVersion": "24.16.0",
+    "pnpmVersion": "11.3.0"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@developer-os/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "developer-os": "./dist/bin.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  }
+}

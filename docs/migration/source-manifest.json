@@ -1,0 +1,253 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-07-21",
+  "classifications": [
+    "user-owned",
+    "public-source-candidate",
+    "generated",
+    "private-content",
+    "sensitive-history",
+    "excluded"
+  ],
+  "sources": [
+    {
+      "sourceId": "shared-runtime",
+      "branch": "main",
+      "commit": "31da0713a3446d6e9c8d0517520e178f985296c2",
+      "statusEntryCount": 152
+    },
+    {
+      "sourceId": "private-brain",
+      "branch": "main",
+      "commit": "8d97ec1a1114b4eb57b9ba6076a8f6f8ce9ad42d",
+      "statusEntryCount": 7
+    }
+  ],
+  "classificationEvidence": {
+    "entryCount": 159,
+    "redactedCanonicalLedgerSha256": "a47aa1c5e58c122c189af11df259b13c5f57cdeb131db72003d45f0c035b947f",
+    "backupPreservedOutsideRepositories": true,
+    "backupOwnerOnly": true,
+    "exactPrivateLedgerPreserved": true,
+    "untrackedContentsCopied": false,
+    "rawPatchHashesPublished": false,
+    "recoveryOnlyStatement": "Source patches and inventories are recovery-only and are not hashed as publication evidence."
+  },
+  "publicationCandidates": [
+    {
+      "sourceId": "shared-runtime",
+      "sourcePath": "docs/superpowers/specs/2026-07-21-developer-os-design.md",
+      "classification": "public-source-candidate",
+      "owner": "developer-os",
+      "publicDestination": "docs/superpowers/specs/2026-07-21-developer-os-design.md",
+      "reviewer": "independent-task-reviewer",
+      "redactionFindings": 0,
+      "evidenceSha256": "6205105a9fd3efd864e181f07abce27ccd14761ba1dca10179772e9ace7070c9"
+    },
+    {
+      "sourceId": "shared-runtime",
+      "sourcePath": "docs/superpowers/plans/2026-07-21-developer-os-program.md",
+      "classification": "public-source-candidate",
+      "owner": "developer-os",
+      "publicDestination": "docs/superpowers/plans/2026-07-21-developer-os-program.md",
+      "reviewer": "independent-task-reviewer",
+      "redactionFindings": 0,
+      "evidenceSha256": "25ee72045c5712bd49decb58f007cb57b940ad5514c78140ad70900bbe7a6d61"
+    },
+    {
+      "sourceId": "shared-runtime",
+      "sourcePath": "docs/superpowers/plans/2026-07-21-developer-os-foundation.md",
+      "classification": "public-source-candidate",
+      "owner": "developer-os",
+      "publicDestination": "docs/superpowers/plans/2026-07-21-developer-os-foundation.md",
+      "reviewer": "independent-task-reviewer",
+      "redactionFindings": 0,
+      "evidenceSha256": "91828462b0259bc6005eb253a75c923524fd38fe4346a005ec60076aca4635ef"
+    }
+  ],
+  "statusClassification": {
+    "matcherSemantics": {
+      "pathAnchor": "repository-root",
+      "pathCaseSensitive": true,
+      "pathFormat": "repository-relative-posix",
+      "pathSeparator": "/",
+      "pathEquals": "exact-equality",
+      "pathGlobs": {
+        "*": "matches-within-one-segment",
+        "**": "matches-across-segments"
+      },
+      "statusContains": "matches-a-character-in-the-two-column-porcelain-status",
+      "anyOf": "logical-or",
+      "ruleEvaluation": "ascending-precedence-first-match-wins"
+    },
+    "sources": [
+      {
+        "sourceId": "shared-runtime",
+        "statusEntryCount": 152,
+        "assignedEntryCount": 152,
+        "unassignedEntryCount": 0,
+        "duplicateAssignmentCount": 0,
+        "assignmentEvidence": "derived-from-exact-private-ledger-using-this-matcher-schema",
+        "rules": [
+          {
+            "precedence": 1,
+            "ruleId": "shared-approved-exact-candidates",
+            "matcher": {
+              "pathInPublicationCandidates": true
+            },
+            "classification": "public-source-candidate",
+            "matchedEntryCount": 3
+          },
+          {
+            "precedence": 2,
+            "ruleId": "shared-deleted-entries",
+            "matcher": {
+              "statusContains": "D"
+            },
+            "classification": "excluded",
+            "matchedEntryCount": 9
+          },
+          {
+            "precedence": 3,
+            "ruleId": "shared-generated-exact-or-pattern-paths",
+            "matcher": {
+              "anyOf": [
+                {
+                  "pathEquals": [
+                    "AGENTS.md",
+                    "CLAUDE.md",
+                    "plugin/.codex-plugin/plugin.json",
+                    "templates/codex-hooks.json",
+                    "templates/codex-rules.rules"
+                  ]
+                },
+                {
+                  "pathGlobs": [
+                    "plugin/skills/*/agents/openai.yaml"
+                  ]
+                }
+              ]
+            },
+            "classification": "generated",
+            "matchedEntryCount": 24
+          },
+          {
+            "precedence": 4,
+            "ruleId": "shared-history-or-machine-exclusion",
+            "matcher": {
+              "pathGlobs": [
+                "docs/history/**",
+                ".claude/**"
+              ]
+            },
+            "classification": "excluded",
+            "matchedEntryCount": 1
+          },
+          {
+            "precedence": 5,
+            "ruleId": "shared-audited-repository-material",
+            "matcher": {
+              "anyOf": [
+                {
+                  "pathEquals": [
+                    "README.md",
+                    "REJESTR.md"
+                  ]
+                },
+                {
+                  "pathGlobs": [
+                    ".claude-plugin/**",
+                    "automation/**",
+                    "docs/ROADMAP.md",
+                    "docs/superpowers/**",
+                    "evals/**",
+                    "hooks/**",
+                    "knowledge/**",
+                    "output-styles/**",
+                    "plugin/**",
+                    "rules/**",
+                    "rules-lazy/**",
+                    "templates/**"
+                  ]
+                }
+              ]
+            },
+            "classification": "public-source-candidate",
+            "matchedEntryCount": 115
+          },
+          {
+            "precedence": 6,
+            "ruleId": "shared-fail-closed-remainder",
+            "matcher": {
+              "remainder": true
+            },
+            "classification": "excluded",
+            "matchedEntryCount": 0
+          }
+        ]
+      },
+      {
+        "sourceId": "private-brain",
+        "statusEntryCount": 7,
+        "assignedEntryCount": 7,
+        "unassignedEntryCount": 0,
+        "duplicateAssignmentCount": 0,
+        "assignmentEvidence": "derived-from-exact-private-ledger-using-this-matcher-schema",
+        "rules": [
+          {
+            "precedence": 1,
+            "ruleId": "brain-obsidian-local-state",
+            "matcher": {
+              "pathGlobs": [
+                "content/.obsidian",
+                "content/.obsidian/**"
+              ]
+            },
+            "classification": "user-owned",
+            "matchedEntryCount": 1
+          },
+          {
+            "precedence": 2,
+            "ruleId": "brain-raw-private-content",
+            "matcher": {
+              "pathGlobs": [
+                "content/_raw/**"
+              ]
+            },
+            "classification": "private-content",
+            "matchedEntryCount": 6
+          },
+          {
+            "precedence": 3,
+            "ruleId": "brain-fail-closed-remainder",
+            "matcher": {
+              "remainder": true
+            },
+            "classification": "excluded",
+            "matchedEntryCount": 0
+          }
+        ]
+      }
+    ]
+  },
+  "historicalCredentialRotationWaiver": {
+    "rotationCount": 4,
+    "implementationBlocker": false,
+    "publicationBlocker": false,
+    "permitsAffectedValues": false,
+    "permitsRawHistory": false,
+    "permitsRawSourceOrPrivateContent": false,
+    "permitsSecretBearingPatchesOrBackups": false
+  },
+  "remoteGate": {
+    "freshLocalRepository": true,
+    "targetBranch": "feat/foundation",
+    "originRecorded": true,
+    "hooksDisabledLocally": true,
+    "remoteVerification": "blocked_by_environment",
+    "externalVerificationRequired": true,
+    "fetchAllowed": false,
+    "pushAllowed": false,
+    "publicReleaseAllowed": false
+  }
+}

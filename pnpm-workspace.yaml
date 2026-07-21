@@ -1,0 +1,6 @@
+packages:
+  - apps/cli
+  - packages/core
+  - packages/security
+  - packages/platform-macos
+  - tests
