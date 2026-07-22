@@ -693,6 +693,12 @@ Reviewer actively tests prefix confusion, symlink race, newline bypass, secret r
 
 ### Task 5: Implement recoverable filesystem transactions
 
+> **Active implementation addendum (2026-07-22):** Execute
+> `docs/superpowers/plans/2026-07-22-developer-os-kernel-transaction-lock.md`
+> for Task 5's exclusion protocol. It supersedes any lease, heartbeat,
+> stale-owner, quarantine, or lock-file deletion behavior while preserving the
+> transaction journal, durability, recovery, and rollback requirements below.
+
 **Complexity:** L
 
 **Files:**
@@ -891,13 +897,13 @@ Reviewer proves update/uninstall cannot gain ownership merely by editing a manif
 **Complexity:** M
 
 **Files:**
-- Create: `packages/platform-macos/package.json`
-- Create: `packages/platform-macos/tsconfig.json`
-- Create: `packages/platform-macos/vitest.config.ts`
+- Modify: `packages/platform-macos/package.json`
+- Modify: `packages/platform-macos/tsconfig.json`
+- Modify: `packages/platform-macos/vitest.config.ts`
 - Create: `packages/platform-macos/src/types.ts`
 - Create: `packages/platform-macos/src/macos.ts`
 - Create: `packages/platform-macos/src/macos.test.ts`
-- Create: `packages/platform-macos/src/index.ts`
+- Modify: `packages/platform-macos/src/index.ts`
 - Modify: `tsconfig.json`
 - Modify: `vitest.config.ts`
 
@@ -913,9 +919,13 @@ Reviewer proves update/uninstall cannot gain ownership merely by editing a manif
 
 **Test:** Darwin/non-Darwin and executable discovery fixtures pass; no Keychain or scheduler operation occurs; the full lint/test gate passes.
 
-- [ ] **Step 1: Write failing injected-platform tests**
+- [ ] **Step 1: Extend the package with failing injected-platform tests**
 
-Create the `@developer-os/platform-macos` package with the same build, export, strict TypeScript, and Node/Vitest configuration as the other library packages. Add `@developer-os/core: workspace:*` and `@developer-os/security: workspace:*` as dependencies and both packages as TypeScript project references. Add the macOS project to root TypeScript references and root `test.projects`.
+Extend the minimal `@developer-os/platform-macos` package created by the active
+Task 5 addendum. Preserve its transaction-lock exports and tests. Add
+`@developer-os/security: workspace:*` beside its existing core dependency, add
+security beside core in its TypeScript project references, and keep the existing
+root TypeScript/Vitest project entries without duplicating them.
 
 Prove non-Darwin returns code 4; Darwin returns OS/architecture/home; executable discovery uses `/usr/bin/which` through `ProcessRunner`; missing executables are data; no Keychain or scheduler command is called.
 
@@ -925,7 +935,7 @@ Prove non-Darwin returns code 4; Darwin returns OS/architecture/home; executable
 pnpm vitest run packages/platform-macos/src/macos.test.ts
 ```
 
-Expected: FAIL because the package does not exist.
+Expected: FAIL because the platform facts and discovery modules do not exist.
 
 - [ ] **Step 3: Implement the interface**
 
