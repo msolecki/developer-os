@@ -31,6 +31,8 @@
 - Every code-producing task receives a fresh-context review by an agent other than the author.
 - The repository remains private until its own publication-candidate secret scan is clean and an OSI-approved license is selected with qualified legal counsel. Historical credential rotations in unrelated repositories are explicitly outside the Developer OS release gate.
 - This program plan is an umbrella. Each subsystem after Foundation receives its own approved spec and implementation plan before code work.
+- `docs/superpowers/plans/legacy-runtime/` describes the founder's pre-Developer-OS machine, not this product. It is a publication-excluded path: Task 0's `exclusion-policy.md` must name it, and no publication candidate may copy or reference its contents.
+- `docs/superpowers/BACKLOG.md` is the single index of outstanding plans, specs, and gates. Any new plan or spec must be registered there in the same change that creates it.
 
 ## Approved execution decisions
 
@@ -41,7 +43,7 @@
 ## Canonical inputs
 
 - Product design: `$DEVELOPER_OS_SOURCE_REPO/docs/superpowers/specs/2026-07-21-developer-os-design.md`
-- Current migration follow-up: `$DEVELOPER_OS_SOURCE_REPO/docs/superpowers/plans/2026-07-20-brain-claude-shared-follow-up.md`
+- Current migration follow-up: `docs/superpowers/plans/legacy-runtime/2026-07-20-brain-claude-shared-follow-up.md` (relocated into this repository on 2026-07-27; the source repository no longer holds it)
 - Current shared architecture: `$DEVELOPER_OS_SOURCE_REPO/README.md`
 - Current Brain contract: `$DEVELOPER_OS_SOURCE_BRAIN/AGENTS.md`
 - Historical-secret gate: `$DEVELOPER_OS_SOURCE_BRAIN/content/_outputs/proposals/2026-07-19-historical-secret-triage.md`
@@ -97,7 +99,7 @@ P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5
 **Complexity:** M
 
 **Files:**
-- Read: `$DEVELOPER_OS_SOURCE_REPO/docs/superpowers/plans/2026-07-20-brain-claude-shared-follow-up.md`
+- Read: `docs/superpowers/plans/legacy-runtime/2026-07-20-brain-claude-shared-follow-up.md`
 - Read: `$DEVELOPER_OS_SOURCE_BRAIN/content/_outputs/proposals/2026-07-19-historical-secret-triage.md`
 - Create: `docs/migration/source-manifest.json`
 - Create: `docs/migration/exclusion-policy.md`

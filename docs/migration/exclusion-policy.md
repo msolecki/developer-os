@@ -22,6 +22,7 @@ The following material is prohibited from public artifacts, prompts, reports, lo
 - Owner-only backup evidence, its location, its filenames, and its raw contents.
 - Command output, debug logs, model traces, or test fixtures containing source or private values.
 - Generated artifacts that have not received content review and independent approval.
+- Everything under `docs/superpowers/plans/legacy-runtime/`. These documents describe the owner's pre-Developer-OS machine, its repositories, its automation, and a credential-rotation checklist. They are tracked in this repository so the outstanding work has one home; they are never publication candidates and are never referenced from a public artifact.
 
 ## Clean-room migration procedure
 
