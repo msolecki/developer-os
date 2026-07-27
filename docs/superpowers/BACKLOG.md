@@ -1,8 +1,9 @@
 # Developer OS — Outstanding Work Backlog
 
-> **Looking for what to do next? That is `ORDER.md`, not this file.**
-> This one is the reference: what each outstanding document must contain and why it
-> exists. `ORDER.md` is the queue: which entry is in progress and what unblocks the next.
+> **Starting a session? `SESSION.md`. Looking for what to do next? `ORDER.md`.**
+> Three files, one job each: `SESSION.md` is the procedure, `ORDER.md` is the queue, and
+> this one is the reference — what each outstanding document must contain and why it
+> exists.
 
 Single index of everything that still has to be done, for this product and for the
 founder's legacy runtime. Consolidated on 2026-07-27 from `~/claude-shared` and

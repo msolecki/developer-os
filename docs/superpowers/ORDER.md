@@ -3,6 +3,8 @@
 The queue. Work top to bottom. This file answers one question — *what do I do next* — and
 nothing else; the detail behind each entry lives in `BACKLOG.md`.
 
+> **Starting a session?** Read `SESSION.md` first. It is the procedure; this is the queue.
+
 **How to use it**
 
 1. Read `NOW` below. That is the only thing in progress.
@@ -109,6 +111,7 @@ is not verification.
 
 | You want | Read |
 |---|---|
+| how to run a session start to finish | `SESSION.md` |
 | what to do next | this file |
 | what a missing spec must decide, and what it produces | `BACKLOG.md` §3 |
 | what Foundation has left | `BACKLOG.md` §2, then the foundation plan |

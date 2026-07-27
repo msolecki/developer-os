@@ -1,0 +1,144 @@
+# Session protocol
+
+How to continue Developer OS in a fresh session, without the previous session's context.
+
+**The prompt. Paste this and nothing else:**
+
+```
+Continue Developer OS. Read docs/superpowers/SESSION.md and follow it exactly.
+```
+
+It works every time because it carries no state. Everything needed to resume is in
+`ORDER.md`, the plan it points to, and `git`. If resuming ever requires remembering
+something that is not in one of those three, that is a bug in the documents — fix it in the
+same session.
+
+---
+
+## 1. Orient. Never skip, never abbreviate
+
+Run all of these before deciding anything:
+
+```bash
+git status --short
+git log --oneline -5
+```
+
+Read, in this order:
+
+1. `docs/superpowers/ORDER.md` — find the row marked `now`. That is the entry.
+2. The plan linked in that row. Read the whole task, not just the next unchecked step.
+3. `docs/superpowers/BACKLOG.md` §7 — the gates every commit must pass.
+
+Do not read the plans you are not working on. Do not reconstruct history from git log
+beyond checking that the tree is where `ORDER.md` says it is.
+
+## 2. Verify `NOW` is actually now
+
+`ORDER.md` can be stale if a previous session ended badly. Check the current entry's
+**Done when** against reality before starting:
+
+- If it is **already satisfied and committed** → update the row to `done`, move `NOW` to the
+  next entry, commit that bookkeeping alone, and start the new entry.
+- If the tree is **dirty in a way the entry does not explain** → stop. Report what is
+  uncommitted and ask. Do not start new work on top of someone else's unfinished work, and
+  do not commit changes you did not make.
+- If it is **partially done** → continue from the first unchecked step, after confirming the
+  checked ones have real evidence.
+
+## 3. Pick the skill before touching anything
+
+`ORDER.md` entries come in three shapes. The shape decides the skill:
+
+| Entry shape | Skill to invoke first |
+|---|---|
+| Execute an existing plan — A0 through A4 | `superpowers:executing-plans` |
+| Write a spec — the **S** gate of A6…A11 | `superpowers:brainstorming`, then write the spec |
+| Write an implementation plan — the **P** gate | `superpowers:writing-plans` |
+| Any code step inside a plan | `superpowers:test-driven-development` |
+| Something is broken and you do not know why | `superpowers:systematic-debugging` |
+
+Announce which one you are using and why. If a plan step and a skill disagree on procedure,
+the plan wins — it was approved for this repository.
+
+## 4. Do the work
+
+One `ORDER.md` entry per session. Not two. Finish it completely, including review and
+commit, then stop.
+
+Inside the entry, follow the plan step by step:
+
+- Steps that say "write failing tests" mean the tests must actually fail first, for the
+  stated reason. A test that passes on first run has not pinned anything.
+- A test pins the **contract**, not current behavior. If a test starts passing only after
+  you changed the test, prove you did not just encode a bug.
+- Do not skip ahead to the interesting step. The plans are ordered because later steps
+  assume earlier evidence exists.
+
+## 5. Close the loop — all four, in one commit
+
+An entry is not finished until every one of these is true:
+
+1. **Gates pass.** `npm run check` — that is lint, tests, build, and `git diff --check`.
+   Show failures only; a wall of passing output tells nobody anything.
+2. **Fresh-context review.** Dispatch a reviewer that is not you and did not write the
+   code. Give it the constraints, the exact file list, and instructions to review only —
+   no edits, no commits. When it returns, run `git status --short` and `git diff` yourself
+   to prove it did not touch the tree. For every accepted finding: add a regression test
+   first, apply the smallest fix, rerun the gates, request another verdict.
+3. **Checkboxes match evidence.** Tick a step only when its own evidence exists. Update
+   the plan and the `ORDER.md` row in the same change as the work.
+4. **Exact-path staging.** `git add <exact paths>`. Never `git add -A`, never `git add .`,
+   never a wildcard. Then `git show --stat HEAD` and confirm it contains only what you
+   meant to ship.
+
+## 6. Report and stop
+
+Three to five bullets: what changed, what the evidence was, what `NOW` is now. Then stop
+and let the next session take the next entry. Fresh context per entry is the point, not an
+accident.
+
+---
+
+## Hard rules
+
+These are not style preferences. Each one exists because it was already violated once.
+
+- **A green local tree is not evidence. A commit is.** This repository spent a week with a
+  finished, tested, entirely uncommitted transaction lock. Everything worked locally and
+  every other checkout was red.
+- **Never `git add -A`.** Stage named paths only.
+- **Never read `~/claude-shared`, `~/brain`, or any `DEVELOPER_OS_SOURCE_*` path.** Program
+  Task 0 froze everything the build needs into `docs/migration/`. A missing legacy fact is
+  a gap in `docs/migration/baseline-capabilities.json` or in the design spec, and it is
+  fixed there. The only exceptions are the exit checklist in `BACKLOG.md` §6 and the DOS-P8
+  cutover, and neither is build work.
+- **Fixtures are synthetic.** No real vault, no real client name, no real repository, no
+  copied third-party content.
+- **Redact before truncating, hashing, logging, persisting, or sending to a model.**
+  Truncation and hashing do not make a secret safe.
+- **Every filesystem mutation follows** `plan → backup → stage → validate → apply → verify
+  → finalize`.
+- **Reviewer ≠ author.** Always. A subagent's security or auth change is unauthorized until
+  independently reviewed.
+- **Finished plans get deleted, not archived.** When a plan's last step closes, remove the
+  file in that same commit, after carrying any evidence a later step still needs into the
+  document that needs it. Git history is the archive.
+
+## Stop and ask — do not decide these yourself
+
+- Anything in **Track B or Track L** of `ORDER.md`. B1 credential rotation and L1 license
+  approval are the founder's, and no amount of context makes them yours.
+- **A12's open decision**: whether the founder cutover gets its own plan. Recommendation is
+  on record; the call is not made.
+- **Any live machine change** — `~/.claude`, `~/.codex`, launchd, a real remote.
+- **Any push.** Remote verification is still `blocked_by_environment`.
+- A plan step that turns out to be **wrong rather than merely hard**. Say so, propose the
+  correction, and wait. Do not quietly implement a better idea; the plans were approved.
+
+## When something does not fit
+
+If the plan tells you to do something that is impossible, unsafe, or already done
+differently, that is information, not an obstacle to route around. Write down what you
+found, what you did instead or why you stopped, and put it in the report. A plan that
+disagrees with reality is a document to fix, not a rule to break silently.
