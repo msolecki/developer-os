@@ -195,6 +195,13 @@ plan, not a preference. Every spec starts with a brainstorming/approval cycle.
 - **Gate:** a vendor overlay can never weaken a canonical refusal or widen write scope;
   generated output changes only when canonical source or renderer changes.
 - **Creates:** `packages/workflow-schema/src/`, `workflows/*`, `tests/{contracts,fixtures}/workflows/`.
+- **Reference reading, optional:** `github.com/phuryn/pm-skills` (MIT) — 68 skills across 9
+  Claude plugins, maintained as one hand-written format per skill with **no compile step**.
+  It is the approach this task exists to replace, so it is useful in exactly two ways: as
+  evidence that the single-format shortcut is what people actually reach for, and as a
+  corpus to sanity-check that `WorkflowContractV1` can express a real skill without
+  contortion. Not a dependency, not a fixture, not a source — repository fixtures stay
+  synthetic.
 
 ### DOS-P4 — Claude Code adapter
 
@@ -212,6 +219,13 @@ plan, not a preference. Every spec starts with a brainstorming/approval cycle.
   an unsupported version reports exact missing capabilities rather than partial success.
 - **Checkpoint:** a Claude-only user completes the full synthetic Brain workflow with no
   Codex installed.
+- **Reference reading, optional:** `phuryn/pm-skills/validate_plugins.py` (MIT) is a
+  working inventory of real-world Claude plugin-manifest checks — name matches directory,
+  semver, author object shape, description length floors, `use when` trigger phrasing,
+  50–3000 word bounds as a progressive-disclosure proxy, and dangling skill-reference
+  detection. Read it once when drafting this spec to avoid missing an obvious check. Note
+  what it omits, because those are precisely our requirements: it does not reject unknown
+  fields, does not check path traversal, and does not detect generated-vs-source drift.
 
 ### DOS-P5 — Codex adapter
 
