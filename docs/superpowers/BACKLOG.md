@@ -26,17 +26,24 @@ more.
 
 | Area | Documents | Progress |
 |---|---|---|
-| Program (umbrella) | 1 plan | Task 0 artifacts exist, Task 1 in progress, Tasks 2–9 open |
+| Program (umbrella) | 1 plan | Task 0 **complete**, Task 1 in progress, Tasks 2–9 open |
 | Foundation | 1 plan + 1 spec | 23/51 steps; Tasks 1–4 committed, 5 in progress, 6–9 open |
 | Kernel transaction lock | 1 plan + 1 spec | 11/15 steps; code written, **not committed** |
 | Subsystem specs | 0 of 6 written | all open |
 | Subsystem plans | 0 of 6 written | all open |
-| Legacy runtime | 1 plan | 0/14 steps, four of them P0 |
+| Legacy runtime | 1 exit checklist | 3 items, all P0; 10 former items frozen |
 
 Every document still present has open work. One plan was completed and retired on
 2026-07-27: the brain/claude-shared English migration (all five steps done and reviewed
 on 2026-07-20). It is recoverable from commit `28a0ddc`; its regression baseline was
-carried into follow-up Step 3 before removal.
+carried into EXIT-3 before removal.
+
+**Self-containment.** As of 2026-07-27 no Developer OS task reads `~/claude-shared`,
+`~/brain`, or any `DEVELOPER_OS_SOURCE_*` path. Program Task 0 froze everything the build
+needs into `docs/migration/`, and its manifest admitted exactly three files — all already
+here. The only remaining contact with the legacy machine is the exit checklist in §6 and
+the read-only cutover in DOS-P8, both of which operate on the founder's machine as user
+data, not as source material.
 
 ---
 
@@ -60,12 +67,24 @@ carried into follow-up Step 3 before removal.
 
 ### ACT-2 — Reconcile program-plan bookkeeping
 
-- **Status:** open
-- **Problem:** `plans/2026-07-21-developer-os-program.md` shows 0/71 checkboxes, but
-  Task 0's three artifacts already exist in `docs/migration/` and Task 1 is four tasks
-  deep. The plan understates real progress, so a fresh session would redo Task 0.
-- **Do:** Check off Task 0's seven steps against the artifacts actually present, and
-  mark Task 1 as in progress with a pointer to the Foundation plan's task counter.
+- **Status:** done 2026-07-27
+- **Problem:** the program plan showed 0/71 checkboxes while Task 0's three artifacts
+  already existed, so a fresh session would have redone Task 0 — which is impossible,
+  because its inputs are deliberately out of reach.
+- **Done:** Task 0 is marked complete with its seven steps checked against the artifacts
+  and their recorded counts.
+
+### ACT-4 — Keep the repository self-contained
+
+- **Status:** open, recurring
+- **Why:** the self-containment rule is currently only prose. Nothing mechanically stops a
+  future task from adding `readFileSync('~/brain/...')` to a fixture builder, and that is
+  exactly how a clean-room boundary erodes.
+- **Do:** add a repository check that fails on any reference to `claude-shared`, `~/brain`,
+  or `DEVELOPER_OS_SOURCE_` outside `docs/superpowers/plans/legacy-runtime/`,
+  `docs/migration/`, and this file. Wire it into `npm run lint`.
+- **Complexity:** S. Worth doing before DOS-P2, which is the first task that will be
+  tempted to peek at a real vault.
 
 ### ACT-3 — Name the publication-excluded path in the exclusion policy
 
@@ -131,9 +150,12 @@ plan, not a preference. Every spec starts with a brainstorming/approval cycle.
   - lint classes: frontmatter, provenance, links, duplicates, staleness, generated-index drift
   - retrieval contract: index-first, explicit maximum candidate count, source paths returned
   - contents of the synthetic public vault template — no founder, client, or repository names
-- **The plan must contain:** exact schemas, golden fixtures, and a read-only
-  compatibility harness against a redacted structural fixture derived from
-  `docs/migration/source-manifest.json`.
+- **The plan must contain:** exact schemas, golden fixtures, and a read-only compatibility
+  harness that runs against `tests/fixtures/brain/legacy-shape/` — a committed, wholly
+  invented vault encoding only the shape recorded in `docs/migration/baseline-capabilities.json`.
+  The fixture is never generated from, compared against, or refreshed from a real vault.
+  If it turns out to miss a shape the product must support, extend the fixture and say so;
+  do not open a vault to find out.
 - **Produces:** `BrainConfigV1`, `NoteFrontmatterV1`, `CaptureEnvelopeV1`,
   `IndexBuildResult`, `LintResult`, `RetrievalQuery`, `RetrievalResult`, `BrainMigration`,
   `BrainService`.
@@ -194,8 +216,8 @@ plan, not a preference. Every spec starts with a brainstorming/approval cycle.
   managed hook plans, structured agent-run results.
 - **Gate:** direct and wrapper capability matrices are tested separately; a missing
   capture hook is classified `wrapper-required`, never a false `yes`.
-- **Absorbs:** legacy follow-up Step 8 (`Add stable Codex learning capture`) as a product
-  feature. The legacy obligation still stands separately — see LEGACY-8.
+- **Absorbs:** legacy follow-up Step 8 (`Add stable Codex learning capture`), frozen on the
+  legacy runtime 2026-07-27 and rebuilt here instead.
 
 ### DOS-P6 — Knowledge pipeline hardening
 
@@ -214,7 +236,8 @@ plan, not a preference. Every spec starts with a brainstorming/approval cycle.
   staging, reports and canonical notes; model output cannot widen write scope; failure
   leaves the capture retryable and never marks it ingested. Independent security review
   is required before the checkpoint.
-- **Absorbs:** legacy follow-up Steps 5, 9 and 12 as product features.
+- **Absorbs:** legacy follow-up Steps 5, 7, 9 and 12, frozen on the legacy runtime
+  2026-07-27 and rebuilt here instead.
 
 ### DOS-P7 — Git, automation, update and release lifecycle
 
@@ -230,7 +253,8 @@ plan, not a preference. Every spec starts with a brainstorming/approval cycle.
 - **Gate:** a Git-disabled and automation-disabled install performs no related process or
   network call; push failure never records a successful sync; update refuses drift;
   uninstall removes only manifest-owned artifacts.
-- **Absorbs:** legacy follow-up Step 6 (real-Git integration coverage) as a product feature.
+- **Absorbs:** legacy follow-up Step 6 (real-Git integration coverage), frozen on the
+  legacy runtime 2026-07-27 and rebuilt here instead.
 
 ---
 
@@ -278,6 +302,7 @@ subproject; listed here so nothing is discovered late.
 |---|---|---|
 | `tests/contracts/` | Foundation onward | missing |
 | `tests/fixtures/` | Foundation onward | missing |
+| `tests/fixtures/brain/legacy-shape/` | DOS-P2 | missing — synthetic vault that replaces every reason to read `~/brain` at build time |
 | `tests/integration/` | Foundation onward | missing |
 | `tests/e2e/` | Foundation Task 9 | missing — `npm run test:e2e` currently has no target |
 | `tests/security/` | DOS-P6 | missing |
@@ -291,57 +316,66 @@ subproject; listed here so nothing is discovered late.
 
 ---
 
-## 6. Legacy runtime obligations
+## 6. Legacy runtime — exit checklist
 
-Plan: `plans/legacy-runtime/2026-07-20-brain-claude-shared-follow-up.md` — **0 of 14
-steps done.** These execute against `~/brain` and `~/claude-shared`, not against this
-repository. They are tracked here because that is where the founder's outstanding work
-now lives, and because Developer OS Task 0 consumes the document as a canonical input.
+Plan: `plans/legacy-runtime/2026-07-20-brain-claude-shared-follow-up.md`. Rescoped
+2026-07-27 from a 14-step development backlog into a 3-item exit checklist.
 
-| ID | Pri | Step | Owner | Status |
+**None of this gates Developer OS development.** Foundation through DOS-P7 are
+self-contained. These three items gate DOS-P8 cutover, and closing them ends work on the
+legacy runtime permanently.
+
+| ID | Pri | Item | Owner | Status |
 |---|:---:|---|---|---|
-| LEGACY-0 | P0 | Preserve and classify both working trees | Agent + Founder | open |
-| LEGACY-1 | P0 | Rotate historical credential candidates | **Founder only** | open |
-| LEGACY-2 | P0 | Resolve the non-npm commit-gate contradiction | Agent + Founder | open |
-| LEGACY-3 | P0 | Review and land the English migration | Agent + Founder | blocked by 0–2 |
-| LEGACY-4 | P1 | Resolve live/template configuration drift | Agent + Founder | open |
-| LEGACY-5 | P1 | Replace false-green Brain validation | Agent | open |
-| LEGACY-6 | P1 | Test weekly automation against real Git | Agent | open |
-| LEGACY-7 | P1 | Close scanner coverage gaps | Agent | open |
-| LEGACY-8 | P1 | Add stable Codex learning capture | Agent | open |
-| LEGACY-9 | P2 | Enforce the Brain schema and graph policy | Agent | open |
-| LEGACY-10 | P2 | Measure retrieval quality | Agent | open |
-| LEGACY-11 | P2 | Add a unified read-only doctor | Agent | open |
-| LEGACY-12 | P2 | Add proposal lifecycle and observability | Agent | open |
-| LEGACY-13 | P3 | Curate content and archive provenance | Agent + Founder | open |
+| EXIT-1 | P0 | Rotate historical credential candidates | **Founder** | open — console work, touches no repository |
+| EXIT-2 | P0 | Resolve the non-npm commit-gate contradiction | Agent + Founder | open — one rules file |
+| EXIT-3 | P0 | Land or durably preserve the uncommitted trees | Agent + Founder | open, needs EXIT-2 |
 
-**Two things that are more urgent than they look:**
+- **EXIT-1** treats four historical credential findings as active until a provider proves
+  otherwise: the Taxos AWS key, the KM Energy Monitoring AWS key, the shared VAV/Vavita
+  Zindigi AWS key, and historical authentication/email credentials in Przedsiębiorcze
+  Trójmiasto. The founder waived these as *Developer OS publication* blockers on
+  2026-07-21. A waiver scopes this product; it does not revoke a key. Pending since
+  2026-07-20.
+- **EXIT-3** is the durability problem: `~/claude-shared` carries roughly 136 changed or
+  untracked entries including a completed, reviewed, never-committed English migration.
+  `~/brain` was largely committed since and now carries a small untracked inbox — verify
+  before acting. Resolution is a commit *or* a founder-accepted archive; leaving it dirty
+  is not a resolution.
+- Former Step 0 (preserve and classify) is **partially discharged** by Program Task 0,
+  which backed up and classified both trees on 2026-07-21. Its remaining piece — an
+  include/exclude manifest for a *commit* boundary rather than a *publication* boundary —
+  now sits inside EXIT-3.
 
-- **LEGACY-1** treats four historical credential findings as active until a provider
-  proves otherwise: the Taxos AWS key, the KM Energy Monitoring AWS key, the shared
-  VAV/Vavita Zindigi AWS key, and historical authentication/email credentials in
-  Przedsiębiorcze Trójmiasto. The founder waived these as *Developer OS publication*
-  blockers on 2026-07-21. The waiver does not rotate anything. This step has been pending
-  since 2026-07-20.
-- **LEGACY-3** is the durability problem: `~/claude-shared` carries roughly 136 changed
-  or untracked entries and `~/brain` about 169, including a validated but uncommitted
-  English migration. A passing dirty tree is not a recoverable checkpoint.
+**Frozen 2026-07-27 — ten items, will not be done on the legacy runtime.** Each is rebuilt
+as a Developer OS feature on synthetic fixtures. Full original text in commit `28a0ddc`.
 
-**Open proposals feeding these steps** (in `~/brain/content/_outputs/proposals/`, left in
-place as private Brain content):
+| Was | Item | Rebuilt as |
+|---|---|---|
+| Step 4 | Live/template configuration drift | DOS-P4 |
+| Step 5 | False-green Brain validation | DOS-P6 |
+| Step 6 | Weekly automation against real Git | DOS-P7 |
+| Step 7 | Scanner coverage gaps | DOS-P6 |
+| Step 8 | Stable Codex learning capture | DOS-P5 |
+| Step 9 | Brain schema and graph policy | DOS-P2 |
+| Step 10 | Retrieval quality benchmark | DOS-P2 |
+| Step 11 | Unified read-only doctor | Foundation Task 8, extended in DOS-P7 |
+| Step 12 | Proposal lifecycle and observability | DOS-P6 |
+| Step 13 | Content curation and archive provenance | DOS-P2, Program Task 8 |
 
-- `2026-07-19-historical-secret-triage.md` → LEGACY-1
-- `config-drift.md` → LEGACY-4
+**One asymmetry.** Frozen Step 7 fixed two known secret-scanner gaps: linked worktrees are
+skipped, and results truncate at twenty matches without reporting how many were omitted.
+If EXIT-1's scan is the deciding evidence for a rotation verdict, unfreeze exactly those
+two fixes and nothing else.
 
-**Relationship to Developer OS.** DOS-P5 absorbs LEGACY-8, DOS-P6 absorbs LEGACY-5, -9
-and -12, DOS-P7 absorbs LEGACY-6. Building the product feature does **not** discharge the
-legacy obligation: the founder's current machine keeps running the old runtime until
-DOS-P8 cutover completes.
+**Open proposals** (in `~/brain/content/_outputs/proposals/`, left in place as private
+Brain content — they are not repository inputs): `2026-07-19-historical-secret-triage.md`
+feeds EXIT-1; `config-drift.md` is frozen with Step 4.
 
 **Retired 2026-07-27:** the English migration plan that produced the current dirty trees
 was completed and reviewed on 2026-07-20, so it was deleted rather than archived (commit
-`28a0ddc` holds it). Its only unresolved consequence is LEGACY-3, and its evidence numbers
-now live in that step as the regression baseline the staged tree must reproduce.
+`28a0ddc` holds it). Its only unresolved consequence is EXIT-3, and its evidence numbers
+now live in that item as the regression baseline the staged tree must reproduce.
 
 ---
 

@@ -12,7 +12,9 @@
 
 - Target remote: `git@github.com:msolecki/developer-os.git`.
 - Target checkout: the root of the dedicated `developer-os` clone; never persist the founder's machine-specific absolute checkout path in public artifacts.
-- Source repositories: absolute paths supplied at execution as `DEVELOPER_OS_SOURCE_REPO` and `DEVELOPER_OS_SOURCE_BRAIN`; validate both once and never persist their values in public artifacts.
+- Self-contained execution: every task runs against this repository alone. Task 0 closed on 2026-07-21 and froze the legacy source material into `docs/migration/`; its manifest admitted exactly three files, all of which are already here. Do not read, mount, clone, or require `~/claude-shared`, `~/brain`, or any `DEVELOPER_OS_SOURCE_*` path. `DEVELOPER_OS_SOURCE_REPO` and `DEVELOPER_OS_SOURCE_BRAIN` are retired and must not be reintroduced.
+- If a task appears to need a legacy fact that `docs/migration/` does not hold, that is a gap in the frozen record. Close it by adding a reviewed, redacted artifact to `docs/migration/` under the exclusion policy — never by reopening a source repository.
+- The single exception is Task 8, which points the finished product at the founder's live vault in read-only diagnostic mode. That is a product capability exercised on user data after Task 7, not a source-material dependency of the build.
 - Initial platform: macOS only; package platform behavior behind a `PlatformAdapter` interface.
 - Users may install Claude Code, Codex, or both; neither adapter is mandatory.
 - AI-assisted operations use the selected installed agent CLI; no direct model API integration exists in version 1.
@@ -42,12 +44,15 @@
 
 ## Canonical inputs
 
-- Product design: `$DEVELOPER_OS_SOURCE_REPO/docs/superpowers/specs/2026-07-21-developer-os-design.md`
-- Current migration follow-up: `docs/superpowers/plans/legacy-runtime/2026-07-20-brain-claude-shared-follow-up.md` (relocated into this repository on 2026-07-27; the source repository no longer holds it)
-- Current shared architecture: `$DEVELOPER_OS_SOURCE_REPO/README.md`
-- Current Brain contract: `$DEVELOPER_OS_SOURCE_BRAIN/AGENTS.md`
-- Historical-secret gate: `$DEVELOPER_OS_SOURCE_BRAIN/content/_outputs/proposals/2026-07-19-historical-secret-triage.md`
-- Configuration-drift gate: `$DEVELOPER_OS_SOURCE_BRAIN/content/_outputs/proposals/config-drift.md`
+Every input is in this repository. Nothing below resolves outside it.
+
+- Product design: `docs/superpowers/specs/2026-07-21-developer-os-design.md`
+- Frozen source classification: `docs/migration/source-manifest.json`
+- Publication boundary: `docs/migration/exclusion-policy.md`
+- Frozen legacy behavior: `docs/migration/baseline-capabilities.json` — the recorded Claude Code, Codex, and Brain capability surface as of 2026-07-21, and the only admissible statement about what the legacy runtime did
+- Cutover preconditions: `docs/superpowers/plans/legacy-runtime/2026-07-20-brain-claude-shared-follow-up.md`
+
+Three former inputs were retired on 2026-07-27 because they contradicted this program's own exclusion policy: the legacy `README.md` and `AGENTS.md` were never publication candidates, and the two Brain proposals are `private-content`. Their product-relevant substance is `baseline-capabilities.json`; their unresolved obligations are cutover preconditions, not build inputs.
 
 ## Program file map
 
@@ -98,12 +103,12 @@ P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5
 
 **Complexity:** M
 
+**Status: COMPLETE — closed 2026-07-21. This task is the reason the rest of the program needs no legacy access. Do not re-run it; it cannot be re-run, because its inputs are deliberately no longer reachable.**
+
 **Files:**
-- Read: `docs/superpowers/plans/legacy-runtime/2026-07-20-brain-claude-shared-follow-up.md`
-- Read: `$DEVELOPER_OS_SOURCE_BRAIN/content/_outputs/proposals/2026-07-19-historical-secret-triage.md`
-- Create: `docs/migration/source-manifest.json`
-- Create: `docs/migration/exclusion-policy.md`
-- Create: `docs/migration/baseline-capabilities.json`
+- Created: `docs/migration/source-manifest.json`
+- Created: `docs/migration/exclusion-policy.md`
+- Created: `docs/migration/baseline-capabilities.json`
 
 **Interfaces:**
 - Consumes: current working-tree inventories, existing redaction policy, current hook and Brain test commands.
@@ -111,27 +116,28 @@ P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5
 
 **What:** Preserve recoverability, settle the security publication gate, and record exactly which source paths may inform the clean public implementation.
 
-**Where:** Both legacy repositories, provider consoles controlled by the founder, and the new repository's `docs/migration/` directory.
+**Where:** `docs/migration/` in this repository. The legacy checkouts and provider consoles that were read at the time are out of reach by design and must stay that way.
 
-**How:**
+**How (all steps closed):**
 
-- [ ] Capture read-only status, tracked diffs, untracked path inventories, current commits, and validation commands for both legacy repositories into an owner-only backup outside either repo. Do not copy untracked file contents until classification proves they are safe and required.
-- [ ] Classify every current path as `user-owned`, `public-source-candidate`, `generated`, `private-content`, `sensitive-history`, or `excluded`.
-- [ ] Record the founder's explicit waiver of the four historical rotations as out of scope for Developer OS, while retaining every prohibition against copying affected histories or source material.
-- [ ] Inspect `.claude/settings.json`, `.claude/hooks/`, and `.mcp.json` before trusting any fetched checkout. If credentials are unavailable, record `remoteVerification: "blocked_by_environment"`, use only a fresh local repository with hooks disabled, and block fetch, push, or public release until external verification occurs.
-- [ ] Write `source-manifest.json` with source repo, source path, classification, owner, public destination, reviewer, and evidence hash for each migration candidate.
-- [ ] Write `exclusion-policy.md` naming raw captures, client notes, credentials, `.obsidian` local state, real remotes, historical secret-bearing commits, and machine-local config as prohibited public inputs.
-- [ ] Record existing Claude/Codex/Brain behavior in `baseline-capabilities.json` using only booleans, versions, command names, and redacted fixture identifiers.
+- [x] Captured read-only status, tracked diffs, untracked path inventories, commits, and validation commands for both legacy repositories into an owner-only backup outside either repo, without copying untracked file contents.
+- [x] Classified every path as `user-owned`, `public-source-candidate`, `generated`, `private-content`, `sensitive-history`, or `excluded`. Result: 152 of 152 shared-runtime entries and 7 of 7 private-brain entries assigned, zero unassigned, zero duplicate assignments.
+- [x] Recorded the founder's waiver of the four historical rotations as out of scope for Developer OS, retaining every prohibition against copying affected histories or source material.
+- [x] Recorded `remoteVerification: "blocked_by_environment"`; fetch, push, and public release stay blocked until external verification occurs.
+- [x] Wrote `source-manifest.json`. It admits exactly **three** publication candidates, all of them planning documents, all already present at their public destinations with matching SHA-256 evidence.
+- [x] Wrote `exclusion-policy.md` naming raw captures, client notes, credentials, `.obsidian` state, real remotes, secret-bearing history, and machine-local config as prohibited public inputs. Extended 2026-07-27 to name `docs/superpowers/plans/legacy-runtime/`.
+- [x] Recorded the legacy Claude, Codex, and Brain capability surface in `baseline-capabilities.json` as booleans, versions, and command names only.
 
-**Test:**
+**Test (evidence in the artifacts):**
 
-- Every current working-tree entry appears in exactly one classification.
-- Applying the saved patches to disposable clones reproduces the tracked source state without modifying originals; the separately hashed untracked inventory accounts for every untracked path without copying its content.
-- A full secret scan reports no untriaged publication candidate.
-- The new public checkout contains no copied legacy history and no real Brain content.
-- The founder's waiver is recorded, and no unresolved historical credential value or affected Git history appears in a publication candidate.
+- Every working-tree entry appears in exactly one classification; the manifest carries the per-rule matched counts that prove it.
+- A full secret scan reported no untriaged publication candidate.
+- This checkout contains no copied legacy history and no real Brain content.
+- No unresolved historical credential value or affected Git history appears in a publication candidate.
 
-**Checkpoint:** The remote may be cloned and populated privately. Public visibility remains blocked.
+**What this task bought.** Everything the program still needs to know about the legacy runtime is now three files in `docs/migration/`. That is the whole point: after Task 0, `~/claude-shared` and `~/brain` are not build inputs, not review inputs, and not test inputs. The only later contact is Task 8, read-only, against the user's vault as product data.
+
+**Checkpoint:** The repository may be populated privately. Public visibility remains blocked pending license approval and remote verification.
 
 ---
 
@@ -197,9 +203,10 @@ P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5
 - [ ] Implement deterministic `vault-map`, `catalog`, and graph generation.
 - [ ] Implement lint classes for frontmatter, provenance, links, duplicates, staleness, and generated-index drift.
 - [ ] Implement index-first retrieval with explicit maximum candidate counts and source paths.
-- [ ] Implement legacy aliases for `PROJEKTY` and `NARZEDZIA` without automatic renames.
+- [ ] Support `PROJEKTY` and `NARZEDZIA` as folder aliases without automatic renames. These are ordinary configurable vault folder names, not a legacy lookup: the implementation reads them from `BrainConfigV1`, never from a legacy repository.
 - [ ] Build a synthetic template containing no founder names, clients, repositories, or real source text.
-- [ ] Add a read-only compatibility harness against a redacted structural fixture derived through Task 0's manifest.
+- [ ] Author a synthetic structural fixture in `tests/fixtures/brain/legacy-shape/` and commit it. It encodes only the shape recorded in `docs/migration/baseline-capabilities.json` — Obsidian Markdown, `vault-map`, `catalog`, `graph`, index-first retrieval, the four command names — with invented notes, invented tags, and invented links. It must never be generated from, compared against, or refreshed from a real vault.
+- [ ] Run the compatibility harness read-only against that committed fixture. If the fixture turns out to miss a shape the product must support, extend the fixture and say so in the plan; do not open a real vault to find out.
 
 **Test:**
 
@@ -237,7 +244,7 @@ P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5
 - [ ] Approve a dedicated schema covering identity, semantic version, triggers, inputs, read/write scopes, required capabilities, refusals, steps, structured result, validators, and recovery.
 - [ ] Implement strict parsing and reject unknown fields for version 1 contracts.
 - [ ] Implement renderer interfaces without embedding vendor behavior in canonical workflows.
-- [ ] Encode Brain workflows from the current system using audited source candidates only.
+- [ ] Encode the Brain workflows from `docs/superpowers/specs/2026-07-21-developer-os-design.md` and the command names frozen in `docs/migration/baseline-capabilities.json` (`lint`, `reindex`, `ingest`, `test`). Write them as new canonical contracts; do not port a legacy script, and do not open a legacy repository to recover one. If the design does not specify a workflow you believe is needed, that is a spec gap to resolve in DOS-P3's approval cycle.
 - [ ] Add generated-artifact markers and CI drift checks.
 - [ ] Add negative fixtures for missing capability, excessive write scope, prompt instructions inside source data, and incompatible schema versions.
 
@@ -439,6 +446,11 @@ P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5
 **What:** Replace the founder's legacy runtime without moving `~/brain`, deleting legacy recovery data, or enabling two copies of a mutating hook.
 
 **Where:** Founder machine, current `~/brain`, existing agent configs, and an isolated Developer OS shadow queue.
+
+**Boundary — this is the only task in the program that touches the legacy runtime, and it does so as a finished product, not as a builder.** Everything it reads is user data through shipped read-only commands; nothing here is a source-material input, and nothing here may be copied into the repository. Two consequences follow:
+
+- No task from Foundation through Task 7 may borrow from this one. If an earlier task wants to "just check what the old system did", the answer is `docs/migration/baseline-capabilities.json` or a spec gap — never a legacy checkout.
+- The preconditions listed in `docs/superpowers/plans/legacy-runtime/2026-07-20-brain-claude-shared-follow-up.md` must be closed before cutover starts. They are the only remaining reasons to open `~/claude-shared` or `~/brain` at all, and closing them ends legacy work permanently.
 
 **How:**
 

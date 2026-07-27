@@ -10,12 +10,12 @@
 
 ## Global Constraints
 
-- Execute after Task 0's source-classification and publication-boundary review passes. Historical rotations explicitly waived in the Program plan are not part of this gate.
+- Program Task 0 closed on 2026-07-21; its source classification and publication boundary are frozen in `docs/migration/`. Historical rotations explicitly waived in the Program plan are not part of this gate.
 - Target remote: `git@github.com:msolecki/developer-os.git`.
 - Target checkout: the current repository root after cloning; do not persist its machine-specific absolute path.
 - Inspect remote hooks and MCP configuration before running commands in the checkout.
 - Keep the repository private throughout Foundation.
-- Do not import legacy Git history or bulk-copy source repositories.
+- Do not import legacy Git history or bulk-copy source repositories. Foundation is self-contained: no task may read `~/claude-shared`, `~/brain`, or any `DEVELOPER_OS_SOURCE_*` path. Legacy facts come from `docs/migration/baseline-capabilities.json` or they are a spec gap.
 - Use pnpm; obtain approval before the first network-backed dependency download.
 - Pin Node.js to 24.16.0 and pnpm to 11.3.0 for this checkpoint.
 - Use TypeScript strict mode and Vitest.
@@ -78,7 +78,7 @@ All paths are relative to the target repository root.
 - Create: `docs/superpowers/plans/2026-07-21-developer-os-foundation.md`
 
 **Interfaces:**
-- Consumes: the approved design and plans below the validated `DEVELOPER_OS_SOURCE_REPO` runtime path.
+- Consumes: the approved design and plans, now resident at `docs/superpowers/` in this repository. (Completed 2026-07-21 by copying the three approved documents by hash; the hashes are recorded in `docs/migration/source-manifest.json`.)
 - Produces: a validated workspace and the `@developer-os/cli` package.
 
 **What:** Create the empty public repository checkout, pinned monorepo configuration, and a minimal tested CLI binary.

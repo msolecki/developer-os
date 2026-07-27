@@ -20,10 +20,17 @@ independent adapters: a user may install either one or both. Agent CLIs perform
 AI-assisted work; Developer OS does not require separate Anthropic or OpenAI API
 keys. Scheduled maintenance and Git synchronization are explicit opt-ins.
 
-The existing `~/claude-shared` and `~/brain` repositories are migration sources,
-not histories to merge into the public repository. Their code and behavior are
-reimplemented or copied in audited, reviewable commits. Private Brain content and
-potentially sensitive Git history never enter the public repository.
+The existing `~/claude-shared` and `~/brain` repositories were migration sources.
+That role closed on 2026-07-21: Program Task 0 classified both working trees,
+admitted three planning documents, and froze everything else the product needs to
+know into `docs/migration/`. Developer OS is built from its own design and those
+frozen artifacts, in audited, reviewable commits. No implementation, review, or
+test step reads a legacy repository. Private Brain content and potentially
+sensitive Git history never enter the public repository.
+
+Two roles survive that closure, and neither is a source dependency: `~/brain` may
+be selected at runtime as a vault, like any other user vault, and both repositories
+are the subject of the one-time shadow cutover in Phase 7.
 
 ## 2. Approved product decisions
 
@@ -108,12 +115,18 @@ reuse the user's existing Git authentication through the normal Git process.
 
 ### 5.3 Legacy repositories
 
-- `~/claude-shared` remains a migration source until feature parity is proven.
-- `~/brain` remains the founder's private canonical vault and can be configured as
-  the Developer OS Brain without moving files.
+- `~/claude-shared` is no longer a migration source. Its source role closed with
+  Program Task 0; what the product needed from it is `docs/migration/baseline-capabilities.json`.
+  It remains the founder's live runtime until the Phase 7 cutover replaces it.
+- `~/brain` remains the founder's private canonical vault. It may be configured as
+  the Developer OS Brain without moving files, on exactly the same terms as any
+  other user-selected vault.
 - Neither Git history is imported into the public repository.
 - Both legacy repositories remain recoverable until the new system completes at
   least one full capture, ingest, retrieval, update, and rollback cycle.
+- Build-time access is prohibited. No package, test, fixture, or review step may
+  read either path; a missing legacy fact is a gap in `docs/migration/` or in this
+  design, and is resolved there.
 
 ## 6. Repository architecture
 
@@ -773,6 +786,13 @@ specification before code changes.
 - OpenAI, building plugins: <https://developers.openai.com/codex/plugins/build>
 - Anthropic, Claude Code plugins: <https://code.claude.com/docs/en/plugins>
 - Anthropic, Claude Code extension surfaces: <https://code.claude.com/docs/en/features-overview>
-- Current architecture: `~/claude-shared/README.md`
-- Current Brain contract: `~/brain/AGENTS.md`
-- Current migration follow-up: `docs/superpowers/plans/2026-07-20-brain-claude-shared-follow-up.md`
+- Frozen legacy behavior: `docs/migration/baseline-capabilities.json`
+- Frozen source classification: `docs/migration/source-manifest.json`
+- Publication boundary: `docs/migration/exclusion-policy.md`
+- Cutover preconditions: `docs/superpowers/plans/legacy-runtime/2026-07-20-brain-claude-shared-follow-up.md`
+
+The former entries for `~/claude-shared/README.md` and `~/brain/AGENTS.md` were
+removed on 2026-07-27. Neither was a publication candidate under
+`docs/migration/source-manifest.json`, so citing them as references contradicted
+this product's own exclusion policy. Their product-relevant substance is
+`baseline-capabilities.json`.
