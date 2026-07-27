@@ -24,9 +24,9 @@ week of confusion.
 
 ## NOW
 
-**A0 — Commit the kernel transaction lock.** Plan Task 3, four steps, in
-`plans/2026-07-22-developer-os-kernel-transaction-lock.md`. Everything else in this file is
-blocked behind it, because the tree currently carries 12 untracked source files.
+**A1 — Foundation Task 6: owned artifacts and config drift.** Five steps, in
+`plans/2026-07-21-developer-os-foundation.md`. A0 closed on 2026-07-27: the kernel
+transaction lock is committed, so the tree no longer carries untracked source.
 
 ---
 
@@ -41,12 +41,12 @@ is approved.
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A0 | Kernel transaction lock — commit (`ACT-1`) | `plans/…-kernel-transaction-lock.md` Task 3 | — | S | 4 steps checked; `git status` clean; commit holds only Task 5 paths | **now** |
-| A1 | Foundation Task 6 — owned artifacts and config drift | `plans/…-foundation.md` | A0 | M | 5 steps; `InstallationManifestV1` and three-way drift evidence; commit | next |
-| A2 | Foundation Task 7 — macOS platform boundary | `plans/…-foundation.md` | A1 | S | 4 steps; `PlatformAdapter` facts and discovery; commit. **Do not re-scaffold `packages/platform-macos/`** — A0 created it | blocked |
+| A0 | Kernel transaction lock — commit (`ACT-1`) | done; plan deleted, see `specs/…-kernel-transaction-lock-design.md` | — | S | 4 steps checked; `git status` clean; commit holds only Task 5 paths | done |
+| A1 | Foundation Task 6 — owned artifacts and config drift | `plans/…-foundation.md` | A0 | M | 5 steps; `InstallationManifestV1` and three-way drift evidence; commit | **now** |
+| A2 | Foundation Task 7 — macOS platform boundary | `plans/…-foundation.md` | A1 | S | 4 steps; `PlatformAdapter` facts and discovery; commit. **Do not re-scaffold `packages/platform-macos/`** — A0 created it | next |
 | A3 | Foundation Task 8 — no-agent CLI lifecycle | `plans/…-foundation.md` | A2 | L | 7 steps; `init` `status` `doctor` `repair` `uninstall`; commit | blocked |
 | A4 | Foundation Task 9 — temporary-HOME lifecycle | `plans/…-foundation.md` | A3 | L | 7 steps **and the Foundation completion gate**; first `docs/architecture/` entries | blocked |
-| A5 | ACT-4 — self-containment check in lint | `BACKLOG.md` §1 | A0 | S | `npm run lint` fails on any legacy path reference outside the allowed three locations | blocked |
+| A5 | ACT-4 — self-containment check in lint | `BACKLOG.md` §1 | A0 | S | `npm run lint` fails on any legacy path reference outside the allowed three locations | parallel, startable now |
 | A6 ‖ | DOS-P2 Brain engine — S / P / I | to write | A4, A5 | L | Task 2 checkpoint: init, validate, index and search a synthetic vault with no adapter | blocked |
 | A7 ‖ | DOS-P3 Workflow compiler — S / P / I | to write | A4, A5 | L | Task 3 checkpoint: canonical workflows compile to abstract artifacts | blocked |
 | A8 ‖ | DOS-P4 Claude adapter — S / P / I | to write | A7 | L | Task 4 checkpoint: Claude-only user completes the full synthetic workflow | blocked |
@@ -127,5 +127,5 @@ Foundation has 23 steps left across four tasks. Six subsystems need a spec, a pl
 implementation each — eighteen documents-or-milestones that do not exist yet. Then cutover,
 then release. Track B is three items; Track L is two.
 
-The next four entries — A0 through A3 — are the only ones you can act on today without
-writing a new document first.
+The next three entries — A1 through A3 — are the only ones you can act on today without
+writing a new document first. A5 joins them: it needs only A0, which is now closed.

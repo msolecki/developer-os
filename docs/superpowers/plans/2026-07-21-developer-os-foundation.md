@@ -693,11 +693,44 @@ Reviewer actively tests prefix confusion, symlink race, newline bypass, secret r
 
 ### Task 5: Implement recoverable filesystem transactions
 
-> **Active implementation addendum (2026-07-22):** Execute
-> `docs/superpowers/plans/2026-07-22-developer-os-kernel-transaction-lock.md`
-> for Task 5's exclusion protocol. It supersedes any lease, heartbeat,
-> stale-owner, quarantine, or lock-file deletion behavior while preserving the
-> transaction journal, durability, recovery, and rollback requirements below.
+> **Completed 2026-07-27.** Task 5 shipped with the kernel exclusion protocol
+> designed in
+> `docs/superpowers/specs/2026-07-22-developer-os-kernel-transaction-lock-design.md`,
+> which remains the reference for review and drift checks. The implementation
+> plan that carried it was deleted when its last step closed; recover it from
+> git history if the reasoning is ever needed. No lease, heartbeat, stale-owner,
+> quarantine, or lock-file deletion behavior exists anywhere in the result.
+>
+> **What Task 7 inherits, and must not undo:**
+>
+> - `packages/core` owns a mandatory, platform-neutral `TransactionLockProvider`
+>   port; `packages/platform-macos` implements it over `/usr/bin/lockf` in
+>   descriptor mode. Core contains no macOS conditional and never spawns.
+> - `TransactionLockContext` carries a mutable `active` flag, cleared before
+>   release. Reentrancy requires it, so an async descendant that outlives the
+>   outer scope re-acquires instead of proceeding on a released handle.
+> - The macOS provider is deliberately stricter than the design listing: it pins
+>   the parent directory's `dev`/`ino` and re-asserts both parent and lock-file
+>   identity *after* `lockf` returns, and it validates the descriptor's type and
+>   owner *before* `chmod(0o600)`. Four adversarial tests pin this. Do not
+>   simplify them away when adding platform facts.
+> - The stable lock file is never unlinked. `<state>/transactions/` therefore
+>   accumulates one permanent `0600` lock file per transaction id, and a core
+>   test asserts that file's presence — wiring the real provider must not break
+>   it. Whether that accumulation wants collection is an open founder question.
+> - `SpawnLockfRunner` calls non-blocking `lockf -t 0` with no watchdog. Whether
+>   it needs one is the second open founder question.
+>
+> **Environment note.** The offline `pnpm` store cannot materialize a full
+> install in this checkout, so `pnpm install --frozen-lockfile --offline` fails
+> on unrelated pre-existing tarballs after its lockfile check passes. The
+> equivalent persistence check is
+> `pnpm install --lockfile-only --frozen-lockfile --offline --ignore-scripts --trust-lockfile`.
+> `packages/platform-macos` also needed its `node_modules/@developer-os/core`
+> workspace symlink created by hand, mirroring `packages/security`; any working
+> `pnpm install` creates it from the `link:../core` entry already in the
+> lockfile. `packages/platform-macos/tsconfig.json` must stay free of a `paths`
+> alias, like every sibling package.
 
 **Complexity:** L
 
@@ -722,7 +755,7 @@ Reviewer actively tests prefix confusion, symlink race, newline bypass, secret r
 
 **Test:** Every interruption phase resumes or rolls back to exact bytes; concurrent edits refuse overwrite; the full lint/test gate passes.
 
-- [ ] **Step 1: Write table-driven failure-injection tests**
+- [x] **Step 1: Write table-driven failure-injection tests**
 
 Inject a stop after each phase:
 
@@ -739,7 +772,7 @@ const phases = [
 
 For every stop, assert safe resume or rollback to exact original bytes. Add a concurrent edit between backup and apply.
 
-- [ ] **Step 2: Run red**
+- [x] **Step 2: Run red**
 
 ```bash
 pnpm vitest run packages/core/src/transactions/transactions.test.ts
@@ -747,7 +780,7 @@ pnpm vitest run packages/core/src/transactions/transactions.test.ts
 
 Expected: FAIL because transaction modules do not exist.
 
-- [ ] **Step 3: Define the journal**
+- [x] **Step 3: Define the journal**
 
 ```typescript
 export type TransactionPhase =
@@ -785,13 +818,13 @@ export interface TransactionGuards {
 
 Inject clock, ID generation, filesystem operations, and `TransactionGuards`. The CLI composition root supplies the concrete security implementation, preventing a core/security package cycle.
 
-- [ ] **Step 4: Implement durable transitions and rollback**
+- [x] **Step 4: Implement durable transitions and rollback**
 
 Write journal JSON to an owner-only sibling temporary file, `fsync`, rename, then `fsync` its parent. Reject non-monotonic or stale transitions. Backup exact bytes/metadata, stage and validate, recheck source hashes, atomically apply, verify hashes, then finalize.
 
 Rollback compares current post-apply hashes before restore. Concurrent edits return code 3 rather than overwrite.
 
-- [ ] **Step 5: Verify, review, and commit**
+- [x] **Step 5: Verify, review, and commit**
 
 ```bash
 pnpm vitest run packages/core/src/transactions/transactions.test.ts
@@ -921,8 +954,9 @@ Reviewer proves update/uninstall cannot gain ownership merely by editing a manif
 
 - [ ] **Step 1: Extend the package with failing injected-platform tests**
 
-Extend the minimal `@developer-os/platform-macos` package created by the active
-Task 5 addendum. Preserve its transaction-lock exports and tests. Add
+Extend the minimal `@developer-os/platform-macos` package created by Task 5;
+read that task's completion note above before touching this package. Preserve
+its transaction-lock exports and tests. Add
 `@developer-os/security: workspace:*` beside its existing core dependency, add
 security beside core in its TypeScript project references, and keep the existing
 root TypeScript/Vitest project entries without duplicating them.

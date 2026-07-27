@@ -36,8 +36,8 @@ more.
 | Area | Documents | Progress |
 |---|---|---|
 | Program (umbrella) | 1 plan | Task 0 **complete**, Task 1 in progress, Tasks 2–9 open |
-| Foundation | 1 plan + 1 spec | 23/51 steps; Tasks 1–4 committed, 5 in progress, 6–9 open |
-| Kernel transaction lock | 1 plan + 1 spec | 11/15 steps; code written, **not committed** |
+| Foundation | 1 plan + 1 spec | 28/51 steps; Tasks 1–5 committed, 6–9 open |
+| Kernel transaction lock | 1 plan + 1 spec | 15/15 steps; **committed 2026-07-27** |
 | Subsystem specs | 0 of 6 written | all open |
 | Subsystem plans | 0 of 6 written | all open |
 | Legacy runtime | 1 exit checklist | 3 items, all P0; 10 former items frozen |
@@ -60,19 +60,22 @@ data, not as source material.
 
 ### ACT-1 — Commit the kernel transaction lock (Foundation Task 5)
 
-- **Status:** in progress, 11/15
-- **Plan:** `plans/2026-07-22-developer-os-kernel-transaction-lock.md`
-- **Spec:** `specs/2026-07-22-developer-os-kernel-transaction-lock-design.md`
-- **Problem:** Task 1 (6/6) and Task 2 (5/5) are implemented but exist only in the
-  working tree — 12 untracked files under `packages/core/src/transactions/` and
-  `packages/platform-macos/`, plus 5 modified tracked files. Every other checkout is
-  red. This is the exact failure mode recorded as SEC-105.
-- **Remaining (plan Task 3, 0/4):**
-  1. Audit the final diff against the approved design.
-  2. Run all repository and security gates (`npm run check`, gitleaks).
-  3. Obtain a fresh-context code review from an agent that is not the author.
-  4. Stage the exact Task 5 paths and commit.
-- **Nothing else in this backlog should start before ACT-1 closes.**
+- **Status:** done 2026-07-27, 15/15
+- **Plan:** deleted on completion per the rule above; recover from git history.
+- **Spec:** `specs/2026-07-22-developer-os-kernel-transaction-lock-design.md`, retained.
+- **Was:** Task 1 (6/6) and Task 2 (5/5) were implemented but existed only in the
+  working tree — 12 untracked files plus 5 modified tracked files, so every other
+  checkout was red. This was the exact failure mode recorded as SEC-105.
+- **Done:** Task 3's four steps closed. The diff was audited against the design,
+  all twelve design test-contract bullets map to named tests, the repository and
+  security gates passed, two independent fresh reviewers returned
+  `VERDICT: APPROVED` with no P0/P1, and the work is committed.
+- **Two open questions the reviewers raised, deliberately not decided here:**
+  whether `SpawnLockfRunner` needs a watchdog around the non-blocking `lockf`
+  call, and whether `<state>/transactions/` accumulating one permanent `0600`
+  lock file per transaction id — a consequence of a per-transaction lock path
+  plus the never-unlink rule — is intended or wants collection. Both are carried
+  into the Foundation plan's Task 5 completion note, which Task 7 must read.
 
 ### ACT-2 — Reconcile program-plan bookkeeping
 
@@ -122,7 +125,7 @@ All steps are already written; nothing new needs authoring here.
 | 2. CLI result and error contracts | 4/4 | done | `CliResult`, stable exit codes |
 | 3. Strict configuration and runtime paths | 5/5 | done | `DeveloperOsConfigV1` |
 | 4. Path, redaction, process primitives | 6/6 | done | `SecurityPolicy` |
-| 5. Recoverable filesystem transactions | 0/5 | in progress via ACT-1 | `TransactionStore` |
+| 5. Recoverable filesystem transactions | 5/5 | committed via ACT-1 | `TransactionStore` |
 | 6. Owned artifacts and configuration drift | 0/5 | open | `InstallationManifestV1`, three-way drift evidence |
 | 7. macOS platform boundary | 0/4 | open | `PlatformAdapter` facts and discovery |
 | 8. No-agent CLI lifecycle | 0/7 | open | `init`, `status`, `doctor`, `repair`, `uninstall` |
