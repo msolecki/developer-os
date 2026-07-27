@@ -11,6 +11,12 @@ more.
 - Status values: `done`, `in progress`, `open`, `blocked`, `decision required`.
 - A step is `done` only when its own evidence exists. A passing local tree is not
   evidence; a commit is.
+- **`plans/` and `specs/` hold only unfinished work.** When a plan's last step is done,
+  delete the file in the same commit that closes it, after carrying any evidence a later
+  step still needs into the document that needs it. Git history is the archive — do not
+  keep a `completed/` or `archive/` directory.
+- Specs are exempt from the rule above while their subsystem is unfinished: a design
+  document is a reference for review and drift checks, not an executed artifact.
 - `docs/superpowers/plans/legacy-runtime/` is publication-excluded. Nothing in it may be
   copied into a public artifact.
 
@@ -25,7 +31,12 @@ more.
 | Kernel transaction lock | 1 plan + 1 spec | 11/15 steps; code written, **not committed** |
 | Subsystem specs | 0 of 6 written | all open |
 | Subsystem plans | 0 of 6 written | all open |
-| Legacy runtime | 1 plan (open) + 1 plan (completed record) | 0/14 steps, four of them P0 |
+| Legacy runtime | 1 plan | 0/14 steps, four of them P0 |
+
+Every document still present has open work. One plan was completed and retired on
+2026-07-27: the brain/claude-shared English migration (all five steps done and reviewed
+on 2026-07-20). It is recoverable from commit `28a0ddc`; its regression baseline was
+carried into follow-up Step 3 before removal.
 
 ---
 
@@ -327,9 +338,10 @@ and -12, DOS-P7 absorbs LEGACY-6. Building the product feature does **not** disc
 legacy obligation: the founder's current machine keeps running the old runtime until
 DOS-P8 cutover completes.
 
-**Completed record:** `plans/legacy-runtime/2026-07-20-english-brain-claude-shared.md`
-(Steps 1–5 all completed 2026-07-20, fresh-context review recorded). Kept for provenance;
-its one unresolved caveat is LEGACY-3.
+**Retired 2026-07-27:** the English migration plan that produced the current dirty trees
+was completed and reviewed on 2026-07-20, so it was deleted rather than archived (commit
+`28a0ddc` holds it). Its only unresolved consequence is LEGACY-3, and its evidence numbers
+now live in that step as the regression baseline the staged tree must reproduce.
 
 ---
 

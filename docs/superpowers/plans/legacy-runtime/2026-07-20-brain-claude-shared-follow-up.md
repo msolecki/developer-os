@@ -204,6 +204,25 @@ instructions, Codex instructions, plugin metadata, Brain indexes, and source lin
 **Invariant:** Each repository is usable after its commit; no partial cross-repository
 contract is pushed without a documented compatibility order.
 
+**Baseline to reproduce before staging.** The English migration plan that produced this
+dirty tree was completed and independently reviewed on 2026-07-20, then removed from this
+repository as executed work (recoverable from commit `28a0ddc`). Its final evidence is the
+regression baseline for this step — the staged tree must still produce all of it:
+
+- Brain suite passes, including source-archive target resolution.
+- Brain index: `notes=25`, `edges=67`, `incoming_targets=20`, `tags=66`, `dated=25`, no dead links.
+- Claude hook suite: `PASS=39`, `FAIL=0`.
+- Weekly automation: 15 cases; distillation: 5 cases; config drift: 2 tests.
+- Language guard: 4 unit tests, and a full scan of both repositories reporting `OK`.
+- Plugin manifests: base version `1.6.0` consistent across Claude, marketplace, and the
+  Codex build.
+- All 19 plugin skill packages validate; shell syntax, Python compilation, JSON parsing,
+  generated-`AGENTS.md` idempotence, and both `git diff --check` runs pass.
+
+Two constraints carried from that plan: the reported live/template configuration drift is
+never applied automatically (it is Step 4's decision), and no live Claude or Codex
+configuration was overwritten while producing this baseline.
+
 ## Step 4 — Resolve live/template configuration drift
 
 - **Priority:** P1
