@@ -1,5 +1,9 @@
 # Developer OS — Outstanding Work Backlog
 
+> **Looking for what to do next? That is `ORDER.md`, not this file.**
+> This one is the reference: what each outstanding document must contain and why it
+> exists. `ORDER.md` is the queue: which entry is in progress and what unblocks the next.
+
 Single index of everything that still has to be done, for this product and for the
 founder's legacy runtime. Consolidated on 2026-07-27 from `~/claude-shared` and
 `~/brain`; neither of those repositories holds plans, specs, or open roadmap items any
@@ -7,7 +11,11 @@ more.
 
 **Rules for this file**
 
-- Every new plan or spec is registered here in the same change that creates it.
+- Order lives in `ORDER.md` and detail lives here. When they disagree about sequence,
+  `ORDER.md` wins; when they disagree about content, this file wins. Never copy a
+  requirement into `ORDER.md` — link to the section instead.
+- Every new plan or spec is registered here in the same change that creates it, and gets a
+  row in `ORDER.md` in that same change.
 - Status values: `done`, `in progress`, `open`, `blocked`, `decision required`.
 - A step is `done` only when its own evidence exists. A passing local tree is not
   evidence; a commit is.
@@ -81,8 +89,11 @@ data, not as source material.
   future task from adding `readFileSync('~/brain/...')` to a fixture builder, and that is
   exactly how a clean-room boundary erodes.
 - **Do:** add a repository check that fails on any reference to `claude-shared`, `~/brain`,
-  or `DEVELOPER_OS_SOURCE_` outside `docs/superpowers/plans/legacy-runtime/`,
-  `docs/migration/`, and this file. Wire it into `npm run lint`.
+  or `DEVELOPER_OS_SOURCE_` outside this allowlist, and wire it into `npm run lint`:
+  `docs/superpowers/plans/legacy-runtime/`, `docs/migration/`, `docs/superpowers/BACKLOG.md`,
+  `docs/superpowers/ORDER.md`, and the cutover sections of the program plan and design spec.
+  Every allowlisted location is prose about the boundary; anything outside it is code or a
+  fixture reaching for a real machine, which is the case worth failing on.
 - **Complexity:** S. Worth doing before DOS-P2, which is the first task that will be
   tempted to peek at a real vault.
 
