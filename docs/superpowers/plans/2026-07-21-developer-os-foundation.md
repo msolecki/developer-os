@@ -867,11 +867,89 @@ Reviewer checks durability, phase monotonicity, permissions, symlink re-resoluti
 
 **Test:** Ownership, duplicate target, out-of-root, unmanaged removal, drift, and forged-manifest tests pass with the full lint/test gate.
 
-- [ ] **Step 1: Write failing manifest and plan tests**
+> **Derived contract (2026-07-27).** This task fixes `ManagedArtifactV1` and
+> `InstallationManifestV1` exactly, and those ship field-for-field as written.
+> It names `ChangePlanV1`, `DriftFinding`, `ManifestStore`, and
+> `validateChangePlan` without defining them; those were derived from design
+> spec §9.2–9.4 and reviewed. What a later task must not silently change:
+>
+> - **Ownership comes from the target's location, never from the manifest.**
+>   `validateChangePlan` checks the target against `ownedRoots`/`excludedRoots`
+>   first; a manifest entry naming an out-of-root path grants nothing. Roots are
+>   matched **exactly** to grant and **case-folded, NFC-normalized** to deny,
+>   because macOS volumes are case-insensitive by default and an exclusion
+>   compared exactly would miss `<home>/BACKUPS`. Manifest lookup and duplicate
+>   detection fold **canonicalized** paths; `validateManifest`'s own uniqueness
+>   check folds **declared** paths, because it has no canonicalizer. Together
+>   they stop `Settings.json` being created over a managed `settings.json`.
+>   The roots are re-checked **after** canonicalization against the declared
+>   ones, and the test is whether canonicalization *grew* authority — a canonical
+>   root that contains its own declared root resolved to an ancestor. A
+>   user-writable `~/.claude` symlinked to `/` or to `$HOME` would otherwise
+>   widen ownership while every declared-root check still passed. Enumerating
+>   forbidden roots instead would not work, because `$HOME`, `~/.ssh`, and `/etc`
+>   would each need naming; a sideways relocation such as
+>   `~/.claude -> ~/Dropbox/claude` stays allowed.
+>
+>   **Known residual.** The rule is anchored on each root's own declared path, so
+>   it stops *widening* but not *relocation*: `~/.claude -> ~/Documents` is
+>   neither an ancestor nor nested nor excluded, and is accepted, granting the
+>   plan ownership of that tree. Credential directories are caught one layer
+>   down by `ProtectedPathPolicy`; an ordinary directory is not. Closing this
+>   needs an anchor on `ChangePlanContext` — the composition root knows the user
+>   home — and is Task 8's call, not a silent gap.
+> - **`validateChangePlan` is async and canonicalizes through an injected
+>   `ChangePlanContext.canonicalize`** before any containment test. Lexical
+>   matching alone is not enough: a symlink planted inside an owned root
+>   otherwise resolves into the Brain while still matching the owned root as a
+>   string, and nothing downstream catches it — `ProtectedPathPolicy` knows
+>   about `.ssh`/`.aws`/`.gnupg`/`.env`, not about the Brain or `<state>/backups`.
+>   The composition root supplies `canonicalizePlannedPath`, which resolves the
+>   longest existing ancestor and tolerates a target that does not exist yet.
+> - `replace` and `remove` additionally require the operation's `owner`, `kind`,
+>   and `mergeStrategy` to equal the recorded artifact's, and its
+>   `expectedBeforeHash` to equal the recorded `installedHash`.
+> - A context with no `excludedRoots`, or with `/` as an owned root, is refused.
+> - **Core reads user files through an injected `ManifestGuards.assertReadable`**,
+>   because `packages/core` must not import `packages/security`. Drift inspection
+>   and conflict evidence render file content into diagnostics, so every read
+>   passes the guard, uses `O_RDONLY | O_NOFOLLOW` with a `dev`/`ino` re-check
+>   after open, and is size capped.
+>
+>   **Task 8 must supply exactly this and no other shape.** `assertReadable`
+>   returns `join(realpath(dirname(path)), basename(path))` — ancestors
+>   canonicalized, final component verbatim — and unlike
+>   `TransactionGuards.assertTarget` it returns a path rather than `void`.
+>   `ProtectedPathPolicy.assertReadable` and the `SecurityPolicy` interface in
+>   Task 4 still return `Promise<void>`, so wiring this is a compile error until
+>   they change. **`canonicalizePlannedPath` is the wrong function here**: it
+>   realpaths the whole path when the target exists and only walks up on
+>   `ENOENT`, so it resolves the final component. It is the right function for
+>   `ChangePlanContext.canonicalize`, which wants full resolution, and the wrong
+>   one for `assertReadable`, which must not. Do not fix that error with
+>   `async p => { await policy.assertReadable(p); return p; }` — that returns the
+>   unvalidated path and reopens the intermediate-symlink hole. Do not use a full
+>   `realpath` either: resolving the final component makes core's `lstat` check
+>   dead, so a managed file swapped for a symlink is read through it and a
+>   managed `kind: "symlink"` artifact reports `type_changed` forever.
+> - `ManifestStore.read()` throws `ManifestMissingError` (code 2) when no
+>   manifest exists and `ManifestStateError` (code 6) only when one exists and is
+>   corrupt. `readOptional()` returns null for the absent case. A machine that
+>   never ran `init` must not be told to run transaction recovery.
+>
+> **Deferred, failing closed.** `validateManifest` currently **refuses**
+> `kind: "config-entry"`. Verifying one needs the semantic merge that arrives
+> with the Claude and Codex adapters, and accepting it would let `doctor` report
+> a clean tree it never actually checked. The kind stays in `ManagedArtifactV1`;
+> lift the refusal in DOS-P4/DOS-P5 together with real semantic-merge drift
+> detection, and add the three-way diff design §9.3 requires — Foundation ships
+> the two-way form (current vs proposed) named in Step 4.
+
+- [x] **Step 1: Write failing manifest and plan tests**
 
 Prove create/replace ownership, unchanged and drifted hashes, duplicate-target refusal, out-of-root refusal, unmanaged-remove refusal, Brain/backups exclusion, and read-only drift detection.
 
-- [ ] **Step 2: Run red**
+- [x] **Step 2: Run red**
 
 ```bash
 pnpm vitest run packages/core/src/manifest packages/core/src/plans
@@ -879,7 +957,7 @@ pnpm vitest run packages/core/src/manifest packages/core/src/plans
 
 Expected: FAIL because modules do not exist.
 
-- [ ] **Step 3: Define exact ownership types**
+- [x] **Step 3: Define exact ownership types**
 
 ```typescript
 export interface ManagedArtifactV1 {
@@ -906,11 +984,11 @@ export interface InstallationManifestV1 {
 
 Each change-plan operation contains exact target, expected prior hash, owner, operation type, and staged source. Validate before transaction creation.
 
-- [ ] **Step 4: Implement drift and three-way evidence**
+- [x] **Step 4: Implement drift and three-way evidence**
 
 Return `missing`, `content_changed`, `type_changed`, or `target_changed` with expected/actual hashes. For a conflict, report baseline backup, current hash, proposed hash, and redacted unified diff. Do not auto-resolve.
 
-- [ ] **Step 5: Verify, review, and commit**
+- [x] **Step 5: Verify, review, and commit**
 
 ```bash
 pnpm vitest run packages/core/src/manifest packages/core/src/plans

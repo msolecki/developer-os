@@ -24,9 +24,10 @@ week of confusion.
 
 ## NOW
 
-**A1 — Foundation Task 6: owned artifacts and config drift.** Five steps, in
-`plans/2026-07-21-developer-os-foundation.md`. A0 closed on 2026-07-27: the kernel
-transaction lock is committed, so the tree no longer carries untracked source.
+**A2 — Foundation Task 7: macOS platform boundary.** Four steps, in
+`plans/2026-07-21-developer-os-foundation.md`. A1 closed on 2026-07-28. **Do not
+re-scaffold `packages/platform-macos/`** — A0 created it, and read Task 6's
+completion note before wiring `ManifestGuards`.
 
 ---
 
@@ -42,9 +43,9 @@ is approved.
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
 | A0 | Kernel transaction lock — commit (`ACT-1`) | done; plan deleted, see `specs/…-kernel-transaction-lock-design.md` | — | S | 4 steps checked; `git status` clean; commit holds only Task 5 paths | done |
-| A1 | Foundation Task 6 — owned artifacts and config drift | `plans/…-foundation.md` | A0 | M | 5 steps; `InstallationManifestV1` and three-way drift evidence; commit | **now** |
-| A2 | Foundation Task 7 — macOS platform boundary | `plans/…-foundation.md` | A1 | S | 4 steps; `PlatformAdapter` facts and discovery; commit. **Do not re-scaffold `packages/platform-macos/`** — A0 created it | next |
-| A3 | Foundation Task 8 — no-agent CLI lifecycle | `plans/…-foundation.md` | A2 | L | 7 steps; `init` `status` `doctor` `repair` `uninstall`; commit | blocked |
+| A1 | Foundation Task 6 — owned artifacts and config drift | `plans/…-foundation.md` | A0 | M | 5 steps; `InstallationManifestV1` and three-way drift evidence; commit | done |
+| A2 | Foundation Task 7 — macOS platform boundary | `plans/…-foundation.md` | A1 | S | 4 steps; `PlatformAdapter` facts and discovery; commit. **Do not re-scaffold `packages/platform-macos/`** — A0 created it | **now** |
+| A3 | Foundation Task 8 — no-agent CLI lifecycle | `plans/…-foundation.md` | A2 | L | 7 steps; `init` `status` `doctor` `repair` `uninstall`; commit. Read Task 6's note: it fixes the `ManifestGuards` and `canonicalize` shapes Task 8 must supply | next |
 | A4 | Foundation Task 9 — temporary-HOME lifecycle | `plans/…-foundation.md` | A3 | L | 7 steps **and the Foundation completion gate**; first `docs/architecture/` entries | blocked |
 | A5 | ACT-4 — self-containment check in lint | `BACKLOG.md` §1 | A0 | S | `npm run lint` fails on any legacy path reference outside the allowed three locations | parallel, startable now |
 | A6 ‖ | DOS-P2 Brain engine — S / P / I | to write | A4, A5 | L | Task 2 checkpoint: init, validate, index and search a synthetic vault with no adapter | blocked |

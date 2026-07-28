@@ -7,6 +7,44 @@ export type {
   RuntimePaths,
 } from "./config/index.js";
 export {
+  buildConflictEvidence,
+  containsPath,
+  containsPathLoosely,
+  foldPath,
+  detectDrift,
+  hashBytes,
+  ManifestMissingError,
+  ManifestStateError,
+  ManifestStore,
+  ManifestUnsupportedArtifactError,
+  validateManifest,
+} from "./manifest/index.js";
+export type {
+  ArtifactKind,
+  ArtifactOwner,
+  ConflictEvidence,
+  ConflictEvidenceRequest,
+  DriftFileSystem,
+  DriftFinding,
+  DriftKind,
+  DriftRequest,
+  InstallationManifestV1,
+  ManagedArtifactV1,
+  ManifestFileSystem,
+  ManifestGuards,
+  ManifestStoreDependencies,
+  MergeStrategy,
+} from "./manifest/index.js";
+export { ChangePlanError, validateChangePlan } from "./plans/index.js";
+export type {
+  ChangeOperationKind,
+  ChangePlanContext,
+  ChangePlanOperationV1,
+  ChangePlanRefusalReason,
+  ChangePlanV1,
+  ValidatedChangePlanOperationV1,
+} from "./plans/index.js";
+export {
   recoverTransaction,
   TransactionConflictError,
   TransactionExecutor,
