@@ -1005,6 +1005,94 @@ Reviewer proves update/uninstall cannot gain ownership merely by editing a manif
 
 ### Task 7: Add the macOS platform boundary
 
+> **Completed 2026-07-29.** `packages/platform-macos` was extended, not
+> re-scaffolded: `transaction-lock.ts` and its tests are untouched, `index.ts`
+> gained additive exports only, and `tsconfig.json` still carries no `paths`
+> alias. The root `tsconfig.json` and `vitest.config.ts` already listed this
+> package, so Task 7's "keep the existing entries without duplicating them"
+> required no edit to either file.
+>
+> **What Task 8 inherits, and must not undo:**
+>
+> - **`AgentDiscovery.version` is always `null` in Foundation, by design.**
+>   Filling it means executing a `PATH`-resolved binary, which this boundary
+>   never does, and design spec §6.6 assigns version detection to the agent
+>   adapters. DOS-P4/DOS-P5 populate it. Task 8 is the *no-agent* lifecycle and
+>   has no consumer for it.
+> - **`discoverExecutable` distinguishes absence from malfunction.** A non-zero
+>   `which` exit, or a zero exit with empty output, is `installed: false` —
+>   reported data, because printing nothing is consistent with absence. A zero
+>   exit with output that `which` could never legitimately produce — any
+>   `\p{Cc}` control character, non-absolute, or bearing a `[REDACTED:` marker —
+>   throws `MacOsPlatformDiscoveryError` (code 1). This is not defensive
+>   padding: `ProcessRunner` redacts its own stdout, and a real path such as
+>   `<home>/.cache/<40-char-segment>/bin/claude` comes back as
+>   `<home>/.[REDACTED:high-entropy]` — still absolute, still single-line. The
+>   first implementation reported that as `installed: true` with a path that
+>   never existed on disk. A test drives the real `redactText` over that input,
+>   so it fails loudly if redaction is ever retuned. The control-character class
+>   is `\p{Cc}` rather than `[\0\n\r]` because the directory component comes
+>   from the caller's `PATH`, and Task 8 renders this value to a terminal and
+>   writes it into the manifest; an embedded ESC is terminal-escape injection
+>   into both. `MacOsPlatformDiscoveryError`'s message deliberately does not
+>   interpolate the candidate — that would leak the `PATH`-derived string the
+>   check just refused.
+> - **`cwd: "/"` on the discovery request is load-bearing; do not change it to
+>   `process.cwd()`.** Apple's `which` maps an empty `PATH` element to `.`, so a
+>   trailing colon in `PATH` — common — makes it probe `./claude` and print a
+>   relative result on success. Anchoring at `/`, where no agent binary lives,
+>   is what keeps that from becoming a false positive before the non-absolute
+>   check ever sees it.
+> - **Malformed input is code 2 on every method.** `assertHomeShape` runs inside
+>   `inspect()` *before* the injected canonicalizer, so a relative, upward-
+>   traversing, NUL-bearing, or `/` home is `invalidInput` rather than
+>   `securityRefusal`. Code 5 stays reserved for a genuine canonicalizer
+>   refusal. Do not let a later composition root reintroduce the split by
+>   canonicalizing first.
+> - **Two gates, deliberately different widths. The test is whether the method
+>   touches the host, not whether it reads architecture.** `inspect` and
+>   `discoverExecutable` read host state and spawn a process, so both take
+>   `#assertSupportedPlatform` (platform, architecture, release).
+>   `productStateRoot`/`proposedBrainRoot` are pure string functions of their
+>   argument, so they take `#assertDarwin` (platform identity only) — the only
+>   question they owe is whether this is the right adapter. Do not "fix" the
+>   asymmetry by dropping `discoverExecutable` to the narrow gate. The visible
+>   consequence is that on a Darwin/`ia32` host `productStateRoot` answers while
+>   `inspect` throws code 4; that is right for `doctor`, and unreachable for
+>   `init`, which must call `inspect` first to obtain `userHome`.
+> - `productStateRoot`/`proposedBrainRoot` agree with `resolveRuntimePaths` in
+>   `packages/core/src/config/paths.ts`, and a test pins that agreement. The
+>   literals are duplicated across two packages; the test is the drift guard.
+> - Only `PATH` is forwarded to the discovery subprocess, and an empty `PATH`
+>   falls back to `/usr/bin:/bin:/usr/sbin:/sbin`. `NodeProcessRunner` replaces
+>   the child environment rather than merging it, so nothing else leaks.
+>
+> **Open question, reinforced not resolved — and now larger than Task 5 sized
+> it.** `NodeProcessRunner.finishFromClose` returns early while
+> `closeInformation` is `undefined`, so the post-`SIGKILL` escalation cannot
+> settle the promise: a child that survives `SIGKILL` leaves it pending
+> *forever*, not merely late, and `discoverExecutable` hangs with it. The defect
+> is in `packages/security/src/process.ts`, outside this task's files and
+> already reviewed under Task 4, so it was deliberately not fixed here. What
+> changed is the blast radius: the runner now has **two** consumers that depend
+> on its timeout being terminal — the transaction lock and agent discovery.
+> That is the fact that should decide the founder's answer to the watchdog
+> question Task 5 opened. Unreachable in the committed tree, because nothing
+> wires `MacOsPlatformAdapter` to `NodeProcessRunner` yet; Task 8 is what makes
+> it reachable.
+>
+> **One duplication accepted knowingly.** `REDACTION_MARKER` restates a literal
+> that `packages/security/src/redaction.ts` owns and does not export. The test
+> that drives the real `redactText` is the drift guard. The clean version is for
+> the security package to export the marker, or a `containsRedaction` predicate,
+> so the platform boundary asks the redactor what its own output looks like
+> instead of guessing — that is a security-package change, not a Task 7 one.
+>
+> **Environment note.** `packages/platform-macos/node_modules/@developer-os/security`
+> was created by hand, exactly as Task 5 recorded for `core`; any working
+> `pnpm install` creates it from the `link:../security` entry now in the
+> lockfile.
+
 **Complexity:** M
 
 **Files:**
@@ -1030,7 +1118,7 @@ Reviewer proves update/uninstall cannot gain ownership merely by editing a manif
 
 **Test:** Darwin/non-Darwin and executable discovery fixtures pass; no Keychain or scheduler operation occurs; the full lint/test gate passes.
 
-- [ ] **Step 1: Extend the package with failing injected-platform tests**
+- [x] **Step 1: Extend the package with failing injected-platform tests**
 
 Extend the minimal `@developer-os/platform-macos` package created by Task 5;
 read that task's completion note above before touching this package. Preserve
@@ -1041,7 +1129,7 @@ root TypeScript/Vitest project entries without duplicating them.
 
 Prove non-Darwin returns code 4; Darwin returns OS/architecture/home; executable discovery uses `/usr/bin/which` through `ProcessRunner`; missing executables are data; no Keychain or scheduler command is called.
 
-- [ ] **Step 2: Run red**
+- [x] **Step 2: Run red**
 
 ```bash
 pnpm vitest run packages/platform-macos/src/macos.test.ts
@@ -1049,7 +1137,7 @@ pnpm vitest run packages/platform-macos/src/macos.test.ts
 
 Expected: FAIL because the platform facts and discovery modules do not exist.
 
-- [ ] **Step 3: Implement the interface**
+- [x] **Step 3: Implement the interface**
 
 ```typescript
 export interface PlatformFacts {
@@ -1076,7 +1164,7 @@ export interface PlatformAdapter {
 
 Use injected platform, architecture, OS release, home, and runner values. Do not implement `launchd` until Program Task 7.
 
-- [ ] **Step 4: Verify, review, and commit**
+- [x] **Step 4: Verify, review, and commit**
 
 ```bash
 pnpm vitest run packages/platform-macos/src/macos.test.ts

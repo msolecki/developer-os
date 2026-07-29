@@ -47,6 +47,9 @@ importers:
       '@developer-os/core':
         specifier: workspace:*
         version: link:../core
+      '@developer-os/security':
+        specifier: workspace:*
+        version: link:../security
 
   packages/security:
     dependencies:

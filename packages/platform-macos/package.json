@@ -14,6 +14,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@developer-os/core": "workspace:*"
+    "@developer-os/core": "workspace:*",
+    "@developer-os/security": "workspace:*"
   }
 }
