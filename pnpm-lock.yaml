@@ -32,6 +32,12 @@ importers:
       '@developer-os/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@developer-os/platform-macos':
+        specifier: workspace:*
+        version: link:../../packages/platform-macos
+      '@developer-os/security':
+        specifier: workspace:*
+        version: link:../../packages/security
 
   packages/core:
     dependencies:

@@ -1179,6 +1179,157 @@ git commit -m "feat: add macos platform boundary"
 
 ### Task 8: Implement the no-agent CLI lifecycle
 
+> **Completed 2026-07-31.** Five commands over the Foundation contracts, no agent
+> integration, no network. Two fresh-context reviewers found two P0 defects that
+> the first implementation shipped with; both are fixed and pinned by regression
+> tests. What Task 9 inherits, and must not undo:
+>
+> - **`CliContext` carries five members beyond the eight this plan fixes** —
+>   `fs`, `executor`, `guards`, `paths`, `productVersion`. The eight cannot be
+>   used without them: `transactions` and `manifests` are stores, not a
+>   filesystem, and nothing else can build an executor. `ids` is in the contract
+>   and deliberately unused — `TransactionExecutor` generates its own identifiers,
+>   and calling `ids.next()` as well would desynchronise them.
+> - **`ManifestGuards.assertReadable` is supplied by the composition root, not by
+>   changing `packages/security`.** Task 6 predicted a compile error here and it
+>   is real; the fix is `assertReadableArtifactPath` in `apps/cli/src/context.ts`,
+>   which canonicalizes the **parent** with `canonicalizePlannedPath` and appends
+>   `basename` verbatim. `ProtectedPathPolicy.assertReadable` and the `Task 4`
+>   `SecurityPolicy` interface are untouched and still return `Promise<void>`.
+>   **The policy is asked twice — about the caller's path and about the
+>   ancestor-resolved result — and both calls are load-bearing.** A leaf symlink
+>   that points back out of `~/.ssh` passes the first check and is refused only by
+>   the second; a test asserts the single check accepts it, so collapsing the two
+>   fails loudly.
+> - **A finalized transaction cannot be rolled back, so `init` undoes itself with
+>   a compensating transaction.** `TransactionExecutor.execute()` runs through to
+>   `finalized` before returning, and `rollback` on a finalized journal throws
+>   code 6. The revert is therefore the same operation `uninstall` performs, and
+>   it is the same code (`revertArtifacts`). Do not "fix" this back into
+>   `executor.rollback`. Running `doctor` inside the transaction's verify phase is
+>   the other tempting shape and it deadlocks: `doctor` reads journals through
+>   `context.transactions`, a different `TransactionStore` instance, so the
+>   reentrancy check in `withTransactionLock` misses and the lock is unavailable.
+> - **The Brain skeleton is recorded in the manifest, and uninstall still cannot
+>   remove it.** `init` owns what it created, so a failed install undoes the
+>   `.gitkeep` and the vault directory completely. `uninstall` passes
+>   `ownedRoots: [productHome]` and `excludedRoots: [brain]`, so Brain artifacts
+>   are refused by location. Those are two different ownership universes over one
+>   manifest, and that is the point.
+> - **Ownership is decided on the declared path *and* the canonical path, for
+>   every artifact kind.** Directory artifacts never reach `validateChangePlan` —
+>   the executor moves files only — so they carried no canonicalization at all in
+>   the first implementation. A manifest naming `<productHome>/link/x`, where
+>   `link` is a symlink to the vault, drove `rmdir` into the Brain. `rmdir` being
+>   non-recursive bounds *what* is deleted, never *where*. `removeDirectories`
+>   now `lstat`s the canonical path and skips anything that is not a real
+>   directory.
+> - **Ownership is re-resolved immediately before each `rmdir`, and an absent
+>   directory is never removed.** Deciding once, before the transaction, is not
+>   enough: the transaction writes a journal and then fsyncs for hundreds of
+>   milliseconds, which is a deterministic signal and a deterministic window for
+>   an attacker to turn an ancestor into a symlink after the decision. Two rules
+>   close it — a directory whose drift is `missing` is skipped (its canonical form
+>   is its own declared path, so nothing resolves it into the Brain until the
+>   ancestor is planted), and the canonical path is recomputed in the removal loop
+>   and any disagreement preserves the artifact. What remains is the gap between
+>   that call and `rmdir` itself, which needs `unlinkat` on a directory descriptor
+>   to close and is recorded rather than hidden.
+> - **Machine health is a precondition of `init`, not a postcondition.** With the
+>   full `doctor` report as the only post-apply gate, one stale journal from an
+>   earlier interrupted run made every subsequent `init` install successfully and
+>   then revert itself, forever. `assertNoIncompleteTransaction` runs before any
+>   mutation and returns code 6 with both repair commands.
+> - **Configuration is read through the policy, and the TOML parser's message
+>   never escapes.** `smol-toml` embeds three raw source lines in `TomlError`, so
+>   propagating it printed the contents of whatever file was read into `status`,
+>   `doctor`, and their JSON. Redaction is a heuristic — it does not catch
+>   `DATABASE_URL=postgres://user:pw@host/db` — and must not be the only thing
+>   standing there. Absence is detected with `lstat` first, because the guarded
+>   reader reports a missing file as a security refusal.
+> - **`renderPath` sanitizes every path that reaches a terminal or a JSON field.**
+>   `isManagedPath` accepts any absolute NUL-free string, so an artifact path may
+>   carry ANSI escapes and repaint the uninstall confirmation prompt — the only
+>   consent gate on deletion. `config.brainPath` reaches the `init` prompt the
+>   same way. Task 7 already refuses control characters coming out of `which`;
+>   this is the same rule on the way back out. It covers `\p{Cf}` as well as
+>   `\p{Cc}`, because U+202E reorders rendered text without being a control
+>   character, and it is deliberately **not** applied to `--json`, where
+>   `JSON.stringify` escapes those code points itself and a machine consumer needs
+>   the value as recorded.
+> - **Every `doctor` check has its own error boundary.** Doctor is the command run
+>   on exactly the machines where reads fail, and an escaping rejection there
+>   became an unhandled top-level rejection with a stack trace and no report.
+>
+> **Deviations from this task's staged path list**, all additive: this task also
+> stages `apps/cli/vitest.config.ts` (aliases for the two new workspace
+> dependencies, so tests run against source rather than `dist`),
+> `apps/cli/src/context.test.ts` and `apps/cli/src/commands/testing.ts` (the guard
+> wiring and the shared fixture are the highest-risk code here and were otherwise
+> untested), `apps/cli/src/main.test.ts` (the usage string it pinned no longer
+> exists), and `pnpm-lock.yaml` (the CLI gained two workspace dependencies; a
+> lockfile disagreeing with `package.json` breaks `--frozen-lockfile`).
+>
+> **Environment note.** `apps/cli/node_modules/@developer-os/{security,platform-macos}`
+> were created by hand, exactly as Tasks 5 and 7 recorded; any working
+> `pnpm install` creates them from the `link:` entries now in the lockfile.
+>
+> **Named residuals, for Task 9 to close or record.** Two fresh-context reviewers
+> agreed none of these blocks the commit. Numbers 1 and 2 are the ones that matter:
+> each is a state a user can reach and not command their way out of, and number 1
+> reports *success* while doing it.
+>
+> 1. **A crash between `executor.execute()` returning and the manifest write
+>    leaves an installation no command repairs.** The config file exists, the
+>    journal says `finalized`, no manifest exists: `init` reports "already
+>    initialized", `doctor` says "run init", `uninstall` removes nothing. The
+>    remedy today is deleting the product home by hand. Closing it means writing
+>    the manifest inside the transaction, or teaching `buildPlan` to re-adopt
+>    on-disk artifacts when no manifest exists.
+> 2. **A managed artifact that is *deleted* blocks `init`.** `assertNoDrift`
+>    refuses on any finding, including `missing`, while `revertArtifacts`
+>    deliberately skips `missing`. `doctor`'s drift check now carries the escape
+>    (`uninstall`, then initialize again) as its `recovery` string, but `init`
+>    should probably re-create what is missing rather than refuse.
+> 3. **A malformed journal cannot be repaired through the CLI.** `repair` reads
+>    the journal before checking its phase, so both actions fail with code 6 and
+>    no command quarantines the file. `doctor` points at `repair`, which cannot
+>    help, and `init` refuses with the generic state-error message and no
+>    recovery. It wants a `repair --discard <id>`, which is a new command surface
+>    and therefore not Task 8's to add.
+> 4. **A revert leaves the product directories unmanaged.** `state`, `staging`,
+>    and `backups` always hold the journal and backups of the transaction being
+>    reverted, so `rmdir` refuses them and the manifest is then deleted. They
+>    exist with no manifest entry, and `buildPlan` records only *missing*
+>    directories, so no later `init` adopts them and no later `uninstall` removes
+>    them. Empty directories only — no data loss, nothing misreported — but the
+>    fix is to record every product directory the plan depends on, not only the
+>    ones it created.
+> 5. **A `kind: "symlink"` artifact would delete its target, not the link.**
+>    `validateChangePlan` canonicalizes the leaf, so the executor unlinks the
+>    resolved path. Latent — Foundation emits no symlink artifacts — and it lands
+>    in DOS-P4/DOS-P5, which will.
+> 6. **Directory removal still has a check-to-use window.** It is now one
+>    canonicalization away from the `rmdir`, rather than a whole transaction away,
+>    and an absent directory is never a candidate. Closing it entirely needs
+>    `unlinkat` against a directory descriptor, which Node does not expose.
+> 7. **A relocated product home makes `uninstall` a no-op.** `isRemovableAt`
+>    requires declared-path containment while `recordArtifacts` stores canonical
+>    paths, so `~/.developer-os -> ~/Dropbox/developer-os` preserves everything and
+>    still deletes the manifest. Pre-existing, fails closed, and the declared check
+>    is conservatism only — the canonical check carries the security — but it
+>    should be decided deliberately rather than inherited.
+> 8. **`assertRootsAnchored` is inert for a root named through
+>    `DEVELOPER_OS_HOME`/`DEVELOPER_OS_BRAIN`**, because such a root anchors to
+>    itself. It constrains symlink relocation of the default paths and of
+>    `config.brainPath`, which is what Task 6's residual asked for; it is not a
+>    containment policy for the environment.
+>
+> **Foundation ships no `--verbose`.** Design spec §8 lists it for every mutating
+> command; Step 6 of this task does not, and dispatch is strict, so `--verbose`
+> is rejected with code 2. Add it with the subsystem that has diagnostics worth
+> printing.
+
 **Complexity:** L
 
 **Files:**
@@ -1212,7 +1363,7 @@ git commit -m "feat: add macos platform boundary"
 
 Before implementation, add `@developer-os/core`, `@developer-os/security`, and `@developer-os/platform-macos` as `workspace:*` CLI dependencies and all three projects as CLI TypeScript references.
 
-- [ ] **Step 1: Define the composition contract**
+- [x] **Step 1: Define the composition contract**
 
 ```typescript
 export interface CliContext {
@@ -1229,13 +1380,13 @@ export interface CliContext {
 
 Only `bin.ts` creates production dependencies.
 
-- [ ] **Step 2: Write failing `init` tests**
+- [x] **Step 2: Write failing `init` tests**
 
 Cover dry-run purity, declined confirmation, accepted initialization, existing Brain read-only validation, path overlap refusal, idempotent second init, and rollback after post-apply doctor failure.
 
 Foundation creates only product state plus directories and `.gitkeep` for a new Brain; it creates no canonical note.
 
-- [ ] **Step 3: Run red and implement `init`**
+- [x] **Step 3: Run red and implement `init`**
 
 ```bash
 pnpm vitest run apps/cli/src/commands/init.test.ts
@@ -1258,7 +1409,7 @@ export interface InitResultV1 {
 
 Implement inspect, config/path validation, plan, confirmation, transaction, manifest, doctor, and rollback. Command modules never write directly.
 
-- [ ] **Step 4: Write and implement status/doctor tests**
+- [x] **Step 4: Write and implement status/doctor tests**
 
 Status reports config, manifest, incomplete transactions, drift count, agent discovery, and Brain existence without mutation.
 
@@ -1281,13 +1432,13 @@ export interface DoctorReportV1 {
 
 Incomplete transaction `tx_fixture_001` returns code 6 and exact resume/rollback commands. Doctor never repairs.
 
-- [ ] **Step 5: Write and implement repair/uninstall tests**
+- [x] **Step 5: Write and implement repair/uninstall tests**
 
 Repair accepts exactly one of `--resume tx_fixture_001` and `--rollback tx_fixture_001`. Invalid/finalized IDs return 2.
 
 Uninstall dry-run lists only manifest-owned artifacts. Drift returns 3. Confirmed uninstall restores original shared bytes, removes product-created artifacts, preserves Brain/backups/unrelated files, and is idempotent.
 
-- [ ] **Step 6: Implement strict argument dispatch**
+- [x] **Step 6: Implement strict argument dispatch**
 
 Use Node `parseArgs`. Support:
 
@@ -1302,7 +1453,7 @@ developer-os uninstall --dry-run --json
 
 Unknown commands/options return 2. `--yes` never bypasses drift, security, backup, or journal failures.
 
-- [ ] **Step 7: Verify, review, and commit**
+- [x] **Step 7: Verify, review, and commit**
 
 ```bash
 pnpm vitest run apps/cli/src/commands

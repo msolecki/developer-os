@@ -8,6 +8,12 @@ export default defineProject({
       "@developer-os/core": fileURLToPath(
         new URL("../../packages/core/src/index.ts", import.meta.url),
       ),
+      "@developer-os/platform-macos": fileURLToPath(
+        new URL("../../packages/platform-macos/src/index.ts", import.meta.url),
+      ),
+      "@developer-os/security": fileURLToPath(
+        new URL("../../packages/security/src/index.ts", import.meta.url),
+      ),
     },
   },
   test: {

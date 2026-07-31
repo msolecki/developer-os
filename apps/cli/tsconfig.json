@@ -8,6 +8,12 @@
   "references": [
     {
       "path": "../../packages/core"
+    },
+    {
+      "path": "../../packages/platform-macos"
+    },
+    {
+      "path": "../../packages/security"
     }
   ]
 }

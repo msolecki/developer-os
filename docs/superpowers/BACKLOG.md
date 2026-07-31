@@ -36,7 +36,7 @@ more.
 | Area | Documents | Progress |
 |---|---|---|
 | Program (umbrella) | 1 plan | Task 0 **complete**, Task 1 in progress, Tasks 2–9 open |
-| Foundation | 1 plan + 1 spec | 37/51 steps; Tasks 1–7 committed, 8–9 open |
+| Foundation | 1 plan + 1 spec | 44/51 steps; Tasks 1–8 committed, 9 open |
 | Kernel transaction lock | 1 plan + 1 spec | 15/15 steps; **committed 2026-07-27** |
 | Subsystem specs | 0 of 6 written | all open |
 | Subsystem plans | 0 of 6 written | all open |
@@ -128,7 +128,7 @@ All steps are already written; nothing new needs authoring here.
 | 5. Recoverable filesystem transactions | 5/5 | committed via ACT-1 | `TransactionStore` |
 | 6. Owned artifacts and configuration drift | 5/5 | done 2026-07-28 | `InstallationManifestV1`, drift and conflict evidence |
 | 7. macOS platform boundary | 4/4 | done 2026-07-29 | `PlatformAdapter` facts and discovery |
-| 8. No-agent CLI lifecycle | 0/7 | open | `init`, `status`, `doctor`, `repair`, `uninstall` |
+| 8. No-agent CLI lifecycle | 7/7 | done 2026-07-31 | `init`, `status`, `doctor`, `repair`, `uninstall` |
 | 9. Temporary-HOME lifecycle proof | 0/7 | open | E2E suite, `docs/architecture/` first entries |
 
 **Foundation completion gate** (all must hold before Program Task 2 may start):

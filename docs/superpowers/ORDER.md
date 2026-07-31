@@ -24,11 +24,14 @@ week of confusion.
 
 ## NOW
 
-**A3 — Foundation Task 8: no-agent CLI lifecycle.** Seven steps, in
-`plans/2026-07-21-developer-os-foundation.md`. A2 closed on 2026-07-29. Read
-**both** completion notes first: Task 6's fixes the `ManifestGuards` and
-`canonicalize` shapes this task must supply, and Task 7's fixes the platform
-boundary's error classes and the always-null `AgentDiscovery.version`.
+**A4 — Foundation Task 9: temporary-HOME lifecycle.** Seven steps **and the
+Foundation completion gate**, in `plans/2026-07-21-developer-os-foundation.md`.
+A3 closed on 2026-07-31. Read Task 8's completion note first: it fixes the
+composition contract this task drives the compiled binary through, and it lists
+five named residuals — the first three are states a user can reach and not
+command their way out of, and this task owns interruption cases.
+
+A5 is still startable in parallel and must land before A6.
 
 ---
 
@@ -46,8 +49,8 @@ is approved.
 | A0 | Kernel transaction lock — commit (`ACT-1`) | done; plan deleted, see `specs/…-kernel-transaction-lock-design.md` | — | S | 4 steps checked; `git status` clean; commit holds only Task 5 paths | done |
 | A1 | Foundation Task 6 — owned artifacts and config drift | `plans/…-foundation.md` | A0 | M | 5 steps; `InstallationManifestV1` and three-way drift evidence; commit | done |
 | A2 | Foundation Task 7 — macOS platform boundary | `plans/…-foundation.md` | A1 | S | 4 steps; `PlatformAdapter` facts and discovery; commit | done |
-| A3 | Foundation Task 8 — no-agent CLI lifecycle | `plans/…-foundation.md` | A2 | L | 7 steps; `init` `status` `doctor` `repair` `uninstall`; commit. Read Task 6's **and** Task 7's completion notes: they fix the `ManifestGuards`, `canonicalize`, and platform-error shapes Task 8 must supply | **now** |
-| A4 | Foundation Task 9 — temporary-HOME lifecycle | `plans/…-foundation.md` | A3 | L | 7 steps **and the Foundation completion gate**; first `docs/architecture/` entries | blocked |
+| A3 | Foundation Task 8 — no-agent CLI lifecycle | `plans/…-foundation.md` | A2 | L | 7 steps; `init` `status` `doctor` `repair` `uninstall`; commit | done |
+| A4 | Foundation Task 9 — temporary-HOME lifecycle | `plans/…-foundation.md` | A3 | L | 7 steps **and the Foundation completion gate**; first `docs/architecture/` entries. Read Task 8's completion note: five named residuals, three of them unrecoverable states | **now** |
 | A5 | ACT-4 — self-containment check in lint | `BACKLOG.md` §1 | A0 | S | `npm run lint` fails on any legacy path reference outside the allowed three locations | parallel, startable now |
 | A6 ‖ | DOS-P2 Brain engine — S / P / I | to write | A4, A5 | L | Task 2 checkpoint: init, validate, index and search a synthetic vault with no adapter | blocked |
 | A7 ‖ | DOS-P3 Workflow compiler — S / P / I | to write | A4, A5 | L | Task 3 checkpoint: canonical workflows compile to abstract artifacts | blocked |
@@ -63,7 +66,7 @@ because DOS-P2 is the first task that will be tempted to open a real vault "just
 the shape". Prose does not stop that; a failing lint does.
 
 **A6/A7 parallelism** is real but conditional: it opens only once Foundation's interfaces
-are frozen at A4. Starting A6 against interfaces that A3 may still change wastes the work.
+are frozen at A4. Starting A6 against interfaces that A4 may still change wastes the work.
 
 **A12 decision, unresolved.** The program plan enumerates Task 8's ten steps inline and
 does not mandate a dedicated plan. Recommendation on record: write one anyway — it is the
@@ -125,9 +128,9 @@ is not verification.
 
 ## Counting what is left
 
-Foundation has 14 steps left across two tasks. Six subsystems need a spec, a plan, and an
+Foundation has 7 steps left in one task. Six subsystems need a spec, a plan, and an
 implementation each — eighteen documents-or-milestones that do not exist yet. Then cutover,
 then release. Track B is three items; Track L is two.
 
-A3 is the only Track A entry you can act on today without writing a new document first.
+A4 is the only Track A entry you can act on today without writing a new document first.
 A5 joins it: it needs only A0, which is closed.
