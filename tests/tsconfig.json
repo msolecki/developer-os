@@ -4,7 +4,11 @@
     "rootDir": ".",
     "outDir": "dist"
   },
-  "include": ["helpers/**/*.ts", "e2e/**/*.ts"],
+  "include": [
+    "helpers/**/*.ts",
+    "e2e/**/*.ts",
+    "repository/**/*.ts"
+  ],
   "references": [
     {
       "path": "../apps/cli"

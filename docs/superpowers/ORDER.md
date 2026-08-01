@@ -24,20 +24,18 @@ week of confusion.
 
 ## NOW
 
-**A5 — ACT-4: self-containment check in lint.** Detail in `BACKLOG.md` §1. One
-repository check that fails on any reference to `claude-shared`, `~/brain`, or
-`DEVELOPER_OS_SOURCE_` outside the five allowlisted prose locations, wired into
-`npm run lint`. Size S.
+**A6 — DOS-P2 Brain engine, starting with its spec.** Nothing is written yet: the
+**S** gate comes first, through a brainstorming cycle, then **P**, then **I**. What
+the spec must decide is in `BACKLOG.md` §3. A7 (DOS-P3, the workflow compiler) is
+startable in parallel and has the same three gates.
 
-**Foundation closed on 2026-08-01** with A4. Its plan was deleted per `SESSION.md`;
-what survives it is `docs/architecture/foundation.md`,
-`docs/architecture/foundation-constraints.md`, and
+**Foundation closed on 2026-08-01** with A4, and **A5 closed the same day**. The
+foundation plan was deleted per `SESSION.md`; what survives it is
+`docs/architecture/foundation.md`, `docs/architecture/foundation-constraints.md`, and
 `docs/releases/foundation-checkpoint.md`. Read the first before touching Foundation
 code and the second before changing any behaviour it describes.
 
-A5 must land before A6, which is the first task that will be tempted to open a real
-vault. After A5, A6 and A7 unblock and may run in parallel — but each needs a spec
-and a plan written first, and neither exists yet.
+Every Track A entry from here begins with a document, not with code.
 
 ---
 
@@ -57,9 +55,9 @@ is approved.
 | A2 | Foundation Task 7 — macOS platform boundary | done; plan deleted | A1 | S | 4 steps; `PlatformAdapter` facts and discovery; commit | done |
 | A3 | Foundation Task 8 — no-agent CLI lifecycle | done; plan deleted | A2 | L | 7 steps; `init` `status` `doctor` `repair` `uninstall`; commit | done |
 | A4 | Foundation Task 9 — temporary-HOME lifecycle | done; plan deleted, see `docs/architecture/foundation.md` | A3 | L | 7 steps and the Foundation completion gate; 31 e2e cases; evidence in `docs/releases/foundation-checkpoint.md` | done |
-| A5 | ACT-4 — self-containment check in lint | `BACKLOG.md` §1 | A0 | S | `npm run lint` fails on any legacy path reference outside the allowlisted locations | **now** |
-| A6 ‖ | DOS-P2 Brain engine — S / P / I | to write | A5 | L | Task 2 checkpoint: init, validate, index and search a synthetic vault with no adapter | blocked by A5 only |
-| A7 ‖ | DOS-P3 Workflow compiler — S / P / I | to write | A5 | L | Task 3 checkpoint: canonical workflows compile to abstract artifacts | blocked by A5 only |
+| A5 | ACT-4 — self-containment check in lint | `BACKLOG.md` §1 | A0 | S | `npm run lint` fails on any legacy path reference outside the allowlisted locations | done |
+| A6 ‖ | DOS-P2 Brain engine — S / P / I | to write | A5 | L | Task 2 checkpoint: init, validate, index and search a synthetic vault with no adapter | **now** |
+| A7 ‖ | DOS-P3 Workflow compiler — S / P / I | to write | A5 | L | Task 3 checkpoint: canonical workflows compile to abstract artifacts | parallel, startable now |
 | A8 ‖ | DOS-P4 Claude adapter — S / P / I | to write | A7 | L | Task 4 checkpoint: Claude-only user completes the full synthetic workflow | blocked |
 | A9 ‖ | DOS-P5 Codex adapter — S / P / I | to write | A7 | L | Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | blocked |
 | A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | A8 **and** A9 | L | Task 6 checkpoint, after independent security review | blocked |
@@ -67,12 +65,12 @@ is approved.
 | A12 | DOS-P8 Founder shadow migration | to write — see decision below | A11, **B1 B2 B3**, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |
 
-**A5 placement.** It only needs A0, so slot it into any gap — but it must land before A6,
-because DOS-P2 is the first task that will be tempted to open a real vault "just to check
-the shape". Prose does not stop that; a failing lint does.
+**A5 landed before A6, as required.** DOS-P2 is the first task that will be tempted to open a
+real vault "just to check the shape", and prose does not stop that. `npm run lint` now does.
 
-**A6/A7 parallelism** is now open on the interface side: Foundation's interfaces were frozen
-at A4 and are listed in `docs/architecture/foundation.md` §2. Only A5 still gates them.
+**A6/A7 parallelism** is open: Foundation's interfaces were frozen at A4 and are listed in
+`docs/architecture/foundation.md` §2, and A5 has landed. Both still need a spec and a plan
+before any code.
 
 **A12 decision, unresolved.** The program plan enumerates Task 8's ten steps inline and
 does not mandate a dedicated plan. Recommendation on record: write one anyway — it is the
@@ -140,5 +138,5 @@ Foundation is closed. Six subsystems need a spec, a plan, and an implementation 
 eighteen documents-or-milestones that do not exist yet. Then cutover, then release. Track B is
 three items; Track L is two.
 
-A5 is the only Track A entry you can act on today without writing a new document first.
-Everything after it starts with a brainstorming cycle and a spec.
+No Track A entry can be acted on today without writing a document first: every remaining one
+starts with a brainstorming cycle and a spec.

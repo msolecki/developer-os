@@ -89,18 +89,35 @@ data, not as source material.
 
 ### ACT-4 — Keep the repository self-contained
 
-- **Status:** open, recurring
-- **Why:** the self-containment rule is currently only prose. Nothing mechanically stops a
-  future task from adding `readFileSync('~/brain/...')` to a fixture builder, and that is
-  exactly how a clean-room boundary erodes.
-- **Do:** add a repository check that fails on any reference to `claude-shared`, `~/brain`,
-  or `DEVELOPER_OS_SOURCE_` outside this allowlist, and wire it into `npm run lint`:
-  `docs/superpowers/plans/legacy-runtime/`, `docs/migration/`, `docs/superpowers/BACKLOG.md`,
-  `docs/superpowers/ORDER.md`, and the cutover sections of the program plan and design spec.
-  Every allowlisted location is prose about the boundary; anything outside it is code or a
-  fixture reaching for a real machine, which is the case worth failing on.
-- **Complexity:** S. Worth doing before DOS-P2, which is the first task that will be
-  tempted to peek at a real vault.
+- **Status:** done 2026-08-01
+- **Was:** the self-containment rule was only prose. Nothing mechanically stopped a future
+  task from adding a `readFileSync` against the founder's vault to a fixture builder, and
+  that is exactly how a clean-room boundary erodes.
+- **Done:** `tests/repository/self-containment.ts` holds the rule and `tests/repository/check.ts`
+  runs it over every tracked file **and every untracked file `.gitignore` does not exclude**;
+  `npm run lint` fails on any reference outside the allowlist. Twenty-five tests: the matcher's
+  patterns and vocabulary exclusions, and the enumerator driven end to end against throwaway git
+  repositories.
+- **The enumerator needed as much care as the rule.** A reviewer found that the first version
+  spliced paths into a `file://` URL, so a file named `issue#12.ts` was skipped silently — and a
+  checkout under any directory containing `#` skipped *every* file and still exited 0. It also
+  read only the index, so a newly written file was invisible until staged, which is precisely
+  when lint runs. Both are fixed and both have tests; the "passes by scanning nothing" failure is
+  the one this kind of gate is most prone to.
+- **The patterns catch the spellings that work, not only the one that reads well.** `~/brain`
+  does not expand inside a JavaScript string, JSON, or most YAML, so anyone actually reading the
+  vault from code writes an absolute path or joins it onto the home directory. `/Users/…/brain`
+  and `homedir()`-adjacent joins are matched too, case-insensitively.
+- **Two deviations from the allowlist as specified here, both deliberate:**
+  `docs/superpowers/SESSION.md` was added, because it states the rule and the check would
+  otherwise fail on the document that defines it. The program plan and design spec are allowed
+  *whole* rather than only in their cutover sections: in both, boundary prose appears
+  throughout — scope, non-goals, migration sources, the vault the founder may keep — so a
+  section-scoped rule would flag legitimate text and would depend on heading names nobody has
+  agreed to freeze. The narrower rule is left to review.
+- **Scope:** it is a lint rule, not a sandbox. It refuses the obvious spellings so that
+  crossing the boundary is deliberate and visible in a diff; it cannot stop deliberate
+  obfuscation and does not try.
 
 ### ACT-3 — Name the publication-excluded path in the exclusion policy
 

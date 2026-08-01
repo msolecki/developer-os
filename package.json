@@ -10,7 +10,7 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "lint": "tsc -b --pretty false && eslint .",
+    "lint": "tsc -b --pretty false && eslint . && node tests/dist/repository/check.js",
     "test": "vitest run",
     "test:e2e": "vitest run tests/e2e",
     "check": "npm run lint && npm test && pnpm build && git diff --check"
