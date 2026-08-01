@@ -4,3 +4,4 @@ coverage/
 *.tsbuildinfo
 .DS_Store
 .developer-os-test/
+_Context.md
