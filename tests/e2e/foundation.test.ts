@@ -611,15 +611,20 @@ describe("Foundation refusals", () => {
     });
   });
 
-  it("cannot install when the discovered agent path trips the redactor", async () => {
+  it("still installs when the discovered agent path trips the redactor", async () => {
     await withHome(async (home) => {
       /**
        * A directory long and mixed enough that the redactor rewrites any
        * executable path beneath it. `MacOsPlatformAdapter` then refuses to
-       * report a path it can no longer vouch for, `doctor`'s agents check fails,
-       * and `init` treats that as a failed post-install verification and undoes
-       * itself. Recorded, not endorsed: a user whose agent lives at such a path
-       * cannot install at all, and no command tells them why.
+       * report a path it can no longer vouch for — correctly, because a
+       * rewritten path names an executable that never existed.
+       *
+       * What must not follow is an unusable product. Foundation installs no
+       * agent integration, so this is a warning and the install completes. It
+       * did not always: `doctor` graded the refusal as a failing check, `init`
+       * read that as failed post-install verification, and every user whose
+       * agent lived at such a path — a temporary directory, a content-addressed
+       * store — was told only "post-install verification failed".
        */
       const deepBin = join(
         home.root,
@@ -631,22 +636,35 @@ describe("Foundation refusals", () => {
         mode: 0o755,
       });
 
-      const doctor = await runJson<DoctorReportV1>(home, ["doctor", "--json"], {
-        env: { PATH: deepBin },
-      });
-      expect(failedChecks(errorOf(doctor.result))).toContain("agents");
-
       const run = await runJson<InitResultV1>(home, ["init", "--yes", "--json"], {
         env: { PATH: deepBin },
       });
-      expect(run.exitCode).toBe(EXIT_CODES.operationalFailure);
-      expect(errorOf(run.result).message).toMatch(/verification failed/u);
+      expect(run.exitCode).toBe(EXIT_CODES.success);
+      expect(okData(run.result).transactionId).not.toBeNull();
 
       const after = await inventory(home.root);
-      expect(after.has(join(home.productHome, "config.toml"))).toBe(false);
+      expect(after.has(join(home.productHome, "config.toml"))).toBe(true);
       expect(after.has(join(home.productHome, "installation-manifest.json"))).toBe(
-        false,
+        true,
       );
+
+      const doctor = await runJson<DoctorReportV1>(home, ["doctor", "--json"], {
+        env: { PATH: deepBin },
+      });
+      expect(doctor.exitCode).toBe(EXIT_CODES.success);
+      const checks = okData(doctor.result).checks;
+      expect(checks.find((check) => check.id === "agents")?.status).toBe("warn");
+      expect(checks.filter((check) => check.status === "fail")).toStrictEqual([]);
+
+      /** `status` reported it as a warning all along; the two now agree. */
+      const status = await runJson<StatusReportV1>(home, ["status", "--json"], {
+        env: { PATH: deepBin },
+      });
+      expect(status.exitCode).toBe(EXIT_CODES.success);
+      expect(okData(status.result).agents).toStrictEqual([]);
+      expect(
+        status.result.ok ? status.result.warnings : [],
+      ).not.toStrictEqual([]);
     });
   });
 });

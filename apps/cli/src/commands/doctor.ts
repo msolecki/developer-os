@@ -16,6 +16,7 @@ import type {
   InstallationManifestV1,
   RuntimePaths,
 } from "@developer-os/core";
+import { MacOsPlatformDiscoveryError } from "@developer-os/platform-macos";
 import type { AgentDiscovery, AgentName } from "@developer-os/platform-macos";
 
 import { exitCodeOf, runtimePathsFor } from "../context.js";
@@ -73,6 +74,23 @@ function isMissingEntry(error: unknown): boolean {
 function pass(id: string, message: string, paths: readonly string[]): Finding {
   return {
     check: { id, status: "pass", message, paths },
+    code: EXIT_CODES.success,
+  };
+}
+
+/**
+ * A check that could not answer, about something Foundation does not depend on.
+ *
+ * It is the `status`, not the code, that keeps it harmless: `doctorExitCode` and
+ * `hasFailingCheck` both filter on `status === "fail"` before looking at
+ * anything else, so a warning can neither decide the exit status nor supply a
+ * recovery string. `code` is carried only to keep `Finding` one shape, and
+ * `success` is the honest value for a finding that is not a failure — changing
+ * it would not change any behaviour.
+ */
+function warn(id: string, message: string, paths: readonly string[]): Finding {
+  return {
+    check: { id, status: "warn", message, paths },
     code: EXIT_CODES.success,
   };
 }
@@ -391,19 +409,36 @@ async function checkBrain(
       );
 }
 
+/**
+ * Discovery that refuses is a warning, never a failure.
+ *
+ * `MacOsPlatformAdapter` rejects a `which` result it cannot vouch for — most
+ * often because the redactor rewrote a long, high-entropy path — and that
+ * refusal is right: reporting it as installed would record an executable that
+ * never existed. But Foundation installs no agent integration, so agent presence
+ * is informational. Grading the refusal as a failure made `init` treat it as
+ * failed post-install verification and revert a perfectly good install, which
+ * meant nobody whose agent lived at such a path could install at all. `status`
+ * has always degraded this to a warning; this is `doctor` agreeing with it.
+ */
 async function checkAgents(context: CliContext): Promise<Finding> {
   try {
     const agents = await discoverAgents(context);
     return pass("agents", describeAgents(agents), []);
   } catch (error) {
-    return fail(
-      "agents",
-      context.guards.redactDiagnostic(
-        error instanceof Error ? error.message : "agent discovery failed",
-      ),
-      [],
-      EXIT_CODES.operationalFailure,
+    const message = context.guards.redactDiagnostic(
+      error instanceof Error ? error.message : "agent discovery failed",
     );
+
+    /**
+     * Only the refusal is demoted. `discoverExecutable` can also raise an
+     * unsupported platform, invalid input, or a security refusal from the
+     * process runner, and flattening those into a warning would erase the one
+     * signal that says a guard fired.
+     */
+    return error instanceof MacOsPlatformDiscoveryError
+      ? warn("agents", message, [])
+      : fail("agents", message, [], exitCodeOf(error));
   }
 }
 
@@ -509,6 +544,46 @@ export async function runDoctorReport(
 
 export function hasFailingCheck(report: DoctorReportV1): boolean {
   return report.checks.some((check) => check.status === "fail");
+}
+
+/**
+ * The checks `init` is answerable for, and the only ones that may undo it.
+ *
+ * `runInit` used to gate on the whole report, which meant any check failing for
+ * a reason the install did not cause reverted a good install. That has now
+ * happened twice: once with a stale journal from an unrelated interrupted run —
+ * fixed by promoting the transaction check to a precondition — and once with
+ * agent discovery refusing a path it could not vouch for. The pattern is the
+ * bug, not either instance, so the gate is scoped rather than patched again.
+ *
+ * Excluded on purpose: `platform` and `transactions`, both already preconditions
+ * checked before any mutation, and `agents`, which Foundation does not depend on
+ * at all. Adding a check here is a deliberate statement that a failure of it
+ * means the installation itself is broken.
+ */
+const INIT_OWNED_CHECKS: ReadonlySet<string> = new Set([
+  "product-home",
+  "configuration",
+  "manifest",
+  "drift",
+  "brain",
+]);
+
+export function hasBlockingFailure(report: DoctorReportV1): boolean {
+  return report.checks.some(
+    (check) => check.status === "fail" && INIT_OWNED_CHECKS.has(check.id),
+  );
+}
+
+/** Every non-blocking finding, phrased for the caller's warning channel. */
+export function advisoryWarnings(report: DoctorReportV1): readonly string[] {
+  return report.checks
+    .filter(
+      (check) =>
+        check.status === "warn" ||
+        (check.status === "fail" && !INIT_OWNED_CHECKS.has(check.id)),
+    )
+    .map((check) => `${check.id}: ${check.message}`);
 }
 
 /**

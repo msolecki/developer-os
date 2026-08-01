@@ -32,8 +32,9 @@ import {
 } from "../context.js";
 import type { CliContext } from "../context.js";
 import {
+  advisoryWarnings,
   detectManagedDrift,
-  hasFailingCheck,
+  hasBlockingFailure,
   isDirectory,
   listIncompleteTransactions,
   readConfigFile,
@@ -572,15 +573,23 @@ export async function runInit(
     });
 
     const recorded = await recordArtifacts(context, plan, operations);
+    let advisories: readonly string[] = [];
     try {
       const report = await dependencies.verify(context);
-      if (hasFailingCheck(report)) {
+      if (hasBlockingFailure(report)) {
         throw new InitRefusal(
           EXIT_CODES.operationalFailure,
           "post-install verification failed",
           [plan.paths.home],
         );
       }
+      /**
+       * Carried out rather than discarded. A check that did not block the
+       * install still happened, and the user learning about it only if they
+       * later think to run `doctor` is how a silent success becomes a support
+       * question.
+       */
+      advisories = advisoryWarnings(report);
     } catch (error) {
       /**
        * A revert that fails must not replace the failure that caused it. The
@@ -600,7 +609,7 @@ export async function runInit(
       throw error;
     }
 
-    return success({ ...settled, transactionId: journal.id });
+    return success({ ...settled, transactionId: journal.id }, advisories);
   } catch (error) {
     return failureFrom(
       context,

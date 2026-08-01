@@ -61,6 +61,12 @@ export interface FakePlatformOptions {
   readonly userHome: string;
   readonly agents?: Readonly<Record<AgentName, AgentDiscovery>>;
   readonly inspectFailure?: Error;
+  /**
+   * Agent discovery that refuses rather than reporting absence. The real adapter
+   * does this whenever `which` returns a path it cannot vouch for — most often
+   * because the redactor rewrote a long, high-entropy one.
+   */
+  readonly discoveryFailure?: Error;
 }
 
 export class FakePlatformAdapter implements PlatformAdapter {
@@ -83,6 +89,9 @@ export class FakePlatformAdapter implements PlatformAdapter {
   }
 
   discoverExecutable(name: AgentName): Promise<AgentDiscovery> {
+    if (this.#options.discoveryFailure !== undefined) {
+      return Promise.reject(this.#options.discoveryFailure);
+    }
     const configured = this.#options.agents?.[name];
     return Promise.resolve(
       configured ?? { name, installed: false, executablePath: null, version: null },
@@ -135,6 +144,7 @@ export interface FixtureOptions {
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly agents?: Readonly<Record<AgentName, AgentDiscovery>>;
   readonly inspectFailure?: Error;
+  readonly discoveryFailure?: Error;
   readonly now?: () => Date;
   /**
    * Interrupts the executor after the named phase, leaving a real journal with
@@ -188,6 +198,9 @@ export async function createCommandFixture(
       ...(options.inspectFailure === undefined
         ? {}
         : { inspectFailure: options.inspectFailure }),
+      ...(options.discoveryFailure === undefined
+        ? {}
+        : { discoveryFailure: options.discoveryFailure }),
     }),
     transactions: new TransactionStore({
       stateDir: paths.stateDir,

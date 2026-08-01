@@ -36,7 +36,7 @@ git diff --check
 | Command | Result |
 |---|---|
 | `npm run lint` | pass, no diagnostics |
-| `npm test` | **19 files, 382 passed, 1 skipped** |
+| `npm test` | **19 files, 388 passed, 1 skipped** |
 | `pnpm build` | pass |
 | `pnpm test:e2e` | **1 file, 31 passed** |
 | `git diff --check` | clean |
@@ -46,7 +46,7 @@ The one skipped test is `packages/platform-macos/src/macos.test.ts`, which carri
 branch ran and the non-Darwin branch skipped.
 
 `npm test` includes the end-to-end project, so the 31 e2e cases are counted twice above —
-once inside the 382, once on their own. That is deliberate: `npm run check` must not be able
+once inside the 388, once on their own. That is deliberate: `npm run check` must not be able
 to pass while the process-level evidence is failing.
 
 **Ordering matters.** `lint` runs `tsc -b` first, so `dist/` is current by the time `test`
@@ -62,7 +62,7 @@ else inherited), no shell, closed stdin, and every proxy variable pointed at `12
 | Group | Cases | Proves |
 |---|---:|---|
 | Lifecycle | 1 | the full `init --dry-run → init → status → doctor → init → uninstall → uninstall → doctor` sequence, with a path-and-hash snapshot compared before and after every command |
-| Refusals | 9 | nested Brain, symlinked product home, read-only target, unattended decline, strict dispatch, drift, forged out-of-root manifest, unusable discovered agent path, and the residue `uninstall` leaves behind |
+| Refusals | 9 | nested Brain, symlinked product home, read-only target, unattended decline, strict dispatch, drift, and a forged out-of-root manifest — plus two cases that pin what the product does *not* refuse: an unusable discovered agent path still installs, and `uninstall` leaves its own transaction residue behind |
 | Interruption | 18 | for each of the six non-terminal phases: reported by `doctor`, blocks `init`, resumes to `finalized`, and rolls back to `rolled_back` |
 | Boundaries | 3 | no network capability in any compiled non-test module; the configuration parser never quotes what it failed to read; a secret sentinel is never echoed or persisted |
 
@@ -187,11 +187,11 @@ Recorded rather than silently absorbed.
 2. **The end-to-end sandbox lives under `/tmp`, not `os.tmpdir()`.** On macOS the per-user
    temporary directory is `/var/folders/<2>/<30 random chars>/T/`, and an executable path
    beneath it is long and mixed enough that the product's redactor rewrites it — at which point
-   agent discovery correctly refuses a path it can no longer vouch for, `doctor` fails, and
-   `init` reverts a good install. `createTempHome` asserts its own executable path survives
-   `redactText` and fails with an explanatory message if a future change breaks that. The
-   underlying behaviour is pinned by its own case and recorded as residual 3 in
-   `docs/architecture/foundation.md`.
+   agent discovery correctly refuses a path it can no longer vouch for and reports nothing
+   found. Since the fix below that is a warning rather than a failure, so it no longer breaks
+   the product — but it still breaks these tests, which plant a fake `claude` and assert it is
+   discovered. `createTempHome` asserts its own executable path survives `redactText` and fails
+   with an explanatory message if a future change breaks that.
 3. **`uninstall` leaves the product home and three non-empty directories behind.** The plan's
    Step 1 wording is "product artifacts removed, Brain retained". What actually happens is that
    every *removable* manifest artifact is removed, and `state/`, `staging/`, `backups/` and the
@@ -254,6 +254,32 @@ phase→side-effect mapping against `executor.ts` line by line, and found no rea
 lets `removeTempHome` delete outside its sandbox or lets a child resolve the developer's real
 home.
 
+**Reviewer C — the post-review fix.** The `warn` change was itself reviewed by a third
+reviewer that did not write it. No P0. One P1: the sandbox comment in `tests/helpers/temp-home.ts`
+still described the pre-fix symptom, which would have sent the next person debugging a deep
+sandbox after a message that can no longer appear — and, worse, invited them to delete a guard
+that is still load-bearing. Fixed. Five P2s accepted and fixed: the demotion now applies only to
+`MacOsPlatformDiscoveryError`, so an unsupported platform, invalid input, or a security refusal
+from the process runner still fails; `init` now carries non-blocking findings out through
+`CliResult.warnings` instead of discarding them; the `warn` helper's doc comment named the wrong
+mechanism (`status`, not `code`, is what keeps it harmless); one new test asserted only statuses
+and never touched the exit-code composition it was named for; and the residual cross-references
+were renumbered. The reviewer also confirmed by probing the real `redactText` over 3000 synthetic
+sandbox roots that the end-to-end case's deep path triggers the redactor in 3000 of 3000 — it is
+not a borderline fixture.
+
+Its most valuable finding was structural and is also fixed: demoting one check is a point fix for
+a general defect, because `runInit` gated on the *whole* doctor report, so any check failing for a
+reason the install did not cause reverted a good install. That had already happened once before,
+with a stale journal. The gate is now scoped to the five checks `init` is answerable for —
+`product-home`, `configuration`, `manifest`, `drift`, `brain` — with `platform` and `transactions`
+excluded as preconditions already checked before any mutation, and `agents` excluded as something
+Foundation does not depend on. Two further regressions pin both halves.
+
+One P2 was accepted as a limitation rather than fixed: a warning is invisible on a *failing*
+`doctor` run, because `CliResult`'s failure branch carries no data and therefore no checks. Fixing
+that means changing a frozen interface, which is not this task's to do.
+
 **Reviewer B — documentation accuracy against source.** Two P0 findings, both accepted, both
 errors in this checkpoint and in `docs/architecture/foundation.md`:
 
@@ -274,12 +300,21 @@ incomplete-transaction check moved to a precondition but the post-apply `doctor`
 `rolled_back` from four phases, not one; and the evidence suite pins ten types by import, not
 the whole frozen-interface table. Reviewer B also verified as correct — and these were not
 changed — the exit-code table and `doctor` severity order, the ownership roots, all six §5
-invariants, every row of the frozen-interface table, residuals 1/2/3/4/6/7/8/9, the reference
+invariants, every row of the frozen-interface table, every residual it checked, the reference
 installation, and the whole workspace wiring.
 
-**Verdict: no unresolved P0 or P1.** Every accepted finding is fixed and re-verified; the two
-knowingly unfixed items (the `dist` staleness check, and the composition defect in residual 3)
-are recorded above and in `docs/architecture/foundation.md` §8 rather than silently carried.
+**Verdict: no unresolved P0 or P1.** Every accepted finding across the three reviewers is fixed
+and re-verified. Two items are knowingly unfixed and recorded rather than silently carried: the
+`dist` staleness check, and warnings being invisible on a failing `doctor` run.
+
+**After the review, the agent-discovery defect was fixed rather than carried.** It was a real
+defect in Task 8's committed code — a refusal that made the product impossible to install for
+anyone whose agent sat at a long, high-entropy path — and the founder asked for it to be
+corrected. `doctor` now grades a `MacOsPlatformDiscoveryError` as `warn` instead of `fail`,
+which is what `status` had always done, and `init`'s post-install gate is scoped to the checks
+init is answerable for. Regressions in `apps/cli/src/commands/doctor.test.ts` and
+`apps/cli/src/commands/init.test.ts`, plus the rewritten end-to-end case, pin both the demotion
+and the scoped gate.
 
 ## Gate
 

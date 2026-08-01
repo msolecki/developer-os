@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { EXIT_CODES } from "@developer-os/core";
+import { MacOsPlatformDiscoveryError } from "@developer-os/platform-macos";
 
 import { runDoctor, runDoctorReport } from "./doctor.js";
 import { runInit } from "./init.js";
@@ -174,6 +175,109 @@ describe("runDoctor", () => {
     expect(await inventory(fixture.root)).toEqual(before);
     expect(await nodeFs.readFile(fixture.paths.configFile, "utf8")).toBe(
       "schemaVersion = 1\n",
+    );
+  });
+});
+
+describe("agent discovery that refuses", () => {
+  /**
+   * The composition this pins. `MacOsPlatformAdapter` refuses a `which` result
+   * it cannot vouch for — most often because the redactor rewrote a long,
+   * high-entropy path — and that refusal is correct: reporting it as installed
+   * would record an executable that never existed.
+   *
+   * What must not follow is the whole product becoming unusable. Foundation
+   * installs no agent integration at all, so agent presence is informational,
+   * `status` already degrades this to a warning, and `doctor` must agree. When
+   * it did not, `init` read the failing check as failed post-install
+   * verification and reverted a perfectly good install, telling the user only
+   * "post-install verification failed".
+   *
+   * The real error class below is not a stand-in: `checkAgents` demotes exactly
+   * this one, so a plain `Error` would test a path production never takes.
+   */
+  const REFUSAL = new MacOsPlatformDiscoveryError(
+    "Agent discovery returned an unusable executable path",
+  );
+
+  it("is a warning, not a failing check", async () => {
+    const fixture = await createCommandFixture("doctor-agents-refused", {
+      discoveryFailure: REFUSAL,
+    });
+    await runInit(fixture.context, ACCEPTED);
+
+    const result = await runDoctor(fixture.context);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.code).toBe(EXIT_CODES.success);
+
+    const agents = result.data.checks.find((check) => check.id === "agents");
+    expect(agents?.status).toBe("warn");
+    expect(
+      result.data.checks.filter((check) => check.status === "fail"),
+    ).toEqual([]);
+  });
+
+  it("does not stop init from completing", async () => {
+    const fixture = await createCommandFixture("init-agents-refused", {
+      discoveryFailure: REFUSAL,
+    });
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.transactionId).not.toBeNull();
+    await expect(
+      nodeFs.readFile(fixture.paths.configFile, "utf8"),
+    ).resolves.toContain("brainPath");
+    await expect(
+      nodeFs.readFile(fixture.paths.manifestFile, "utf8"),
+    ).resolves.toContain("artifacts");
+  });
+
+  it("never shadows a real failure or its recovery", async () => {
+    const unsupported = Object.assign(new Error("this host is not supported"), {
+      code: EXIT_CODES.capabilityUnavailable,
+    });
+    const fixture = await createCommandFixture("doctor-agents-vs-platform", {
+      discoveryFailure: REFUSAL,
+      inspectFailure: unsupported,
+    });
+    await runInit(fixture.context, ACCEPTED);
+
+    const result = await runDoctor(fixture.context);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    /**
+     * The warning must not decide the code, and must not supply the recovery
+     * string — that has to come from the check that decided it.
+     */
+    expect(result.code).toBe(EXIT_CODES.capabilityUnavailable);
+    expect(result.error.message).toContain("platform:");
+    expect(result.error.message).not.toContain("agents:");
+  });
+
+  it("is not something a discovery error of another kind can hide behind", async () => {
+    const refused = Object.assign(new Error("PATH contains a NUL byte"), {
+      code: EXIT_CODES.invalidInput,
+    });
+    const fixture = await createCommandFixture("doctor-agents-invalid", {
+      discoveryFailure: refused,
+    });
+    await runInit(fixture.context, ACCEPTED);
+
+    const report = await runDoctorReport(fixture.context);
+
+    /**
+     * Only `MacOsPlatformDiscoveryError` is demoted. Flattening every error the
+     * adapter or the process runner can raise would erase the one signal that
+     * says a guard fired.
+     */
+    expect(report.checks.find((check) => check.id === "agents")?.status).toBe(
+      "fail",
     );
   });
 });

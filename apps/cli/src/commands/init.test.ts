@@ -279,14 +279,20 @@ describe("runInit", () => {
     const fixture = await createCommandFixture("init-failing-report");
 
     const result = await runInit(fixture.context, ACCEPTED, {
+      /**
+       * A real check id, not an invented one. This case pins that a failing
+       * report *returned* rather than thrown still reverts; since the gate was
+       * scoped to the checks init is answerable for, an id nothing recognises
+       * would no longer block, and the case would pass for the wrong reason.
+       */
       verify: () =>
         Promise.resolve({
           schemaVersion: 1,
           checks: [
             {
-              id: "synthetic",
+              id: "manifest",
               status: "fail",
-              message: "synthetic failure",
+              message: "no installation manifest exists",
               paths: [],
             },
           ],
@@ -298,6 +304,57 @@ describe("runInit", () => {
     expect(result.code).toBe(EXIT_CODES.operationalFailure);
     expect(await exists(fixture.paths.configFile)).toBe(false);
     expect(await exists(fixture.paths.manifestFile)).toBe(false);
+  });
+
+  it("completes despite a failing check it is not answerable for", async () => {
+    const fixture = await createCommandFixture("init-unowned-failure");
+
+    const result = await runInit(fixture.context, ACCEPTED, {
+      verify: () =>
+        Promise.resolve({
+          schemaVersion: 1,
+          checks: [
+            {
+              id: "agents",
+              status: "fail",
+              message: "discovery exploded",
+              paths: [],
+            },
+          ],
+        }),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.transactionId).not.toBeNull();
+    expect(await exists(fixture.paths.configFile)).toBe(true);
+    /** Not blocking is not the same as not worth saying. */
+    expect(result.warnings).toContain("agents: discovery exploded");
+  });
+
+  it("carries a warning out of a check that could not answer", async () => {
+    const fixture = await createCommandFixture("init-warned");
+
+    const result = await runInit(fixture.context, ACCEPTED, {
+      verify: () =>
+        Promise.resolve({
+          schemaVersion: 1,
+          checks: [
+            {
+              id: "agents",
+              status: "warn",
+              message: "agent discovery returned an unusable path",
+              paths: [],
+            },
+          ],
+        }),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.warnings).toStrictEqual([
+      "agents: agent discovery returned an unusable path",
+    ]);
   });
 
   it("reports an unsupported platform as a capability failure", async () => {

@@ -164,8 +164,8 @@ behaviour described here.
   the full `doctor` report as the only post-apply gate, one stale journal from an earlier
   interrupted run made every subsequent `init` install successfully and then revert itself,
   forever. `assertNoIncompleteTransaction` now runs before any mutation. The post-apply
-  `runDoctorReport` gate still exists and still reverts on *any* failing check — which is what
-  residual 3 is about.
+  `runDoctorReport` gate still exists and still reverts on any *failing* check, which is why
+  the distinction between a failing check and a warning below is load-bearing.
 - **The TOML parser's message never escapes.** `smol-toml` embeds three raw source lines in
   `TomlError`, so propagating it printed the contents of whatever file was read into `status`,
   `doctor`, and their JSON. Configuration is read through the protected-path policy, absence is
@@ -183,6 +183,21 @@ behaviour described here.
 - **Every `doctor` check has its own error boundary.** Doctor is the command run on exactly the
   machines where reads fail, and an escaping rejection there became an unhandled top-level
   rejection with a stack trace and no report at all.
+- **`init`'s post-install gate is scoped to the checks it is answerable for**, listed in
+  `INIT_OWNED_CHECKS`: `product-home`, `configuration`, `manifest`, `drift`, `brain`. It used to
+  gate on the whole `doctor` report, which meant any check failing for a reason the install did
+  not cause reverted a good install — and that happened twice, first with a stale journal from
+  an unrelated interrupted run, then with agent discovery. `platform` and `transactions` are
+  excluded because both are already preconditions checked before any mutation; `agents` is
+  excluded because Foundation does not depend on an agent existing. Adding an id to that set is
+  a deliberate statement that its failure means the *installation* is broken.
+- **A `doctor` check that cannot answer, about something Foundation does not depend on, is a
+  `warn` and never a `fail`** — and the demotion is narrow. Only `MacOsPlatformDiscoveryError`
+  from agent discovery is treated this way; an unsupported platform, invalid input, or a
+  security refusal from the process runner still fails, because flattening those would erase the
+  one signal that says a guard fired. `status` had always treated the refusal as a warning;
+  `doctor` now agrees, and non-blocking findings are carried out through `CliResult.warnings`
+  rather than discarded, so a successful `init` still says what it could not check.
 - **`ids` on `CliContext` is deliberately unused.** `TransactionExecutor` generates its own
   identifiers; calling `ids.next()` as well would desynchronise them.
 
@@ -215,7 +230,9 @@ not exist here" look identical from outside and are not the same thing.
   closed port.
 - **No agent integration.** Agents are *discovered* — `/usr/bin/which`, with a `PATH` and
   nothing else — and never executed. `AgentDiscovery.version` is permanently `null` in
-  Foundation because determining it requires running the binary.
+  Foundation because determining it requires running the binary. Discovery that refuses, or
+  finds nothing, is reported and never blocks a command: nothing in Foundation depends on an
+  agent being present.
 - **No Brain content.** `init` creates a vault directory and one `.gitkeep` when the vault does
   not exist. It writes no canonical note, and it never modifies a vault that already exists.
 - **No credentials.** No Keychain, no token store. The protected-path policy refuses `.ssh`,
@@ -239,22 +256,10 @@ three are the ones a user can hit.
 2. **A managed artifact that is deleted blocks `init`.** `assertNoDrift` refuses on any finding
    including `missing`, while the revert deliberately skips `missing`. `doctor` carries the
    escape as recovery text; `init` should arguably re-create what is gone.
-3. **An agent at a path the redactor rewrites makes the product impossible to install.** Two
-   individually correct decisions compose badly. Agent discovery *should* refuse a `which`
-   result it can no longer vouch for — `ProcessRunner` redacts its own stdout, so a rewritten
-   path is one that never existed on disk, and Task 7 fixed a real bug where it was reported as
-   `installed: true`. But `doctor` then maps that refusal to a **failing** check rather than a
-   warning, and `init` reads any failing check as failed post-install verification and reverts
-   a perfectly good install. `status` treats the identical condition as a warning and succeeds,
-   which is the inconsistency worth looking at first. Any executable path long and mixed enough
-   to look high-entropy triggers it — temporary directories reliably do, and so would a
-   content-addressed store path. The user is told only "post-install verification failed".
-   Pinned by `tests/e2e/foundation.test.ts`; deciding what to do about it means changing Task
-   8's reviewed code and is the founder's call, not this task's.
-4. **A malformed journal cannot be repaired through the CLI.** `repair` reads the journal
+3. **A malformed journal cannot be repaired through the CLI.** `repair` reads the journal
    before checking its phase, so both actions fail with code 6 and no command quarantines the
    file. It wants a `repair --discard <id>`.
-5. **`uninstall` leaves the product home and its three bookkeeping directories behind, and
+4. **`uninstall` leaves the product home and its three bookkeeping directories behind, and
    they are not empty.** `state/`, `staging/`, and `backups/` still hold both transactions'
    journals, the never-unlinked `.<id>.lock` files, the staged blobs, and the backups —
    including **a readable byte copy of the `config.toml` it just removed**, which names the
@@ -262,16 +267,16 @@ three are the ones a user can hit.
    refuses too, and the manifest is deleted, leaving residue no later run adopts or removes.
    No user data is lost and nothing is misreported, but "uninstall" does not mean "gone".
    Pinned by `tests/e2e/foundation.test.ts`.
-6. **A `kind: "symlink"` artifact would delete its target, not the link.** Latent: Foundation
+5. **A `kind: "symlink"` artifact would delete its target, not the link.** Latent: Foundation
    emits no symlink artifacts. It lands in the Claude and Codex adapters, which will.
-7. **Directory removal retains a check-to-use window.** Narrowed to one canonicalization before
+6. **Directory removal retains a check-to-use window.** Narrowed to one canonicalization before
    the `rmdir`; closing it entirely needs `unlinkat` against a directory descriptor, which Node
    does not expose.
-8. **A relocated product home makes `uninstall` a no-op.** `isRemovableAt` requires
+7. **A relocated product home makes `uninstall` a no-op.** `isRemovableAt` requires
    declared-path containment while artifacts are recorded canonically, so
    `~/.developer-os -> ~/Dropbox/developer-os` preserves everything and still deletes the
    manifest. Fails closed.
-9. **`assertRootsAnchored` is inert for a root named through `DEVELOPER_OS_HOME` or
+8. **`assertRootsAnchored` is inert for a root named through `DEVELOPER_OS_HOME` or
    `DEVELOPER_OS_BRAIN`**, because such a root anchors to itself. It constrains symlink
    relocation of the default paths and of `config.brainPath` only. Through the CLI's default
    paths it is unreachable in practice: a product home that is a symlink is refused earlier, by

@@ -19,11 +19,14 @@ import { redactText } from "@developer-os/security";
  * directory is `/var/folders/<2>/<30 random chars>/T/`, and an executable path
  * beneath it is long and high-entropy enough that the product's redactor
  * rewrites it — at which point `MacOsPlatformAdapter` correctly refuses to
- * report a path it can no longer vouch for, agent discovery fails, `doctor`
- * fails, and `init` reverts a perfectly good install. That is real product
- * behaviour, pinned by its own case in the negative suite; the happy path needs
- * a sandbox short enough to stay out of its way. Foundation is macOS-only, so
- * `/tmp` is always present.
+ * report a path it can no longer vouch for, and agent discovery reports nothing.
+ *
+ * That is not fatal: `doctor` grades the refusal as a warning and `init`
+ * completes. But it is fatal *to these tests*, which assert that a planted fake
+ * `claude` is discovered and that every check passes. Under `os.tmpdir()` the
+ * lifecycle case fails on `agents` reporting absence — a much quieter and more
+ * confusing signal than the one this guard produces. Foundation is macOS-only,
+ * so `/tmp` is always present.
  */
 const SANDBOX_BASE = "/tmp";
 const PREFIX = "dos";
@@ -39,8 +42,8 @@ const PROBE_KEY = new Uint8Array(32).fill(7);
 /**
  * The harness depends on a property of its own paths, so it checks that
  * property instead of trusting it. Without this, moving the sandbox one
- * directory deeper turns the entire lifecycle suite red with
- * `post-install verification failed`, and nothing in that message points here.
+ * directory deeper makes the lifecycle case fail on an agent it planted itself
+ * being reported absent, and nothing in that failure points here.
  */
 function assertDiscoverablePath(path: string): void {
   if (redactText(path, PROBE_KEY).text === path) return;
