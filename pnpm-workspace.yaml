@@ -4,3 +4,9 @@ packages:
   - packages/security
   - packages/platform-macos
   - tests
+# esbuild ships a prebuilt platform binary as an optional dependency, and vite
+# resolves it directly, so its postinstall script has nothing left to do here —
+# the full suite passes without it. Declined rather than left unanswered, so an
+# install is never blocked on a prompt and no third-party install script runs.
+allowBuilds:
+  esbuild: false
