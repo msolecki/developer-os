@@ -7,6 +7,7 @@ export default defineConfig({
       "packages/platform-macos/vitest.config.ts",
       "packages/security/vitest.config.ts",
       "apps/cli/vitest.config.ts",
+      "tests/vitest.config.ts",
     ],
   },
 });

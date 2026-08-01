@@ -36,7 +36,7 @@ more.
 | Area | Documents | Progress |
 |---|---|---|
 | Program (umbrella) | 1 plan | Task 0 **complete**, Task 1 in progress, Tasks 2–9 open |
-| Foundation | 1 plan + 1 spec | 44/51 steps; Tasks 1–8 committed, 9 open |
+| Foundation | 1 spec (plan deleted) | 51/51 steps; **complete 2026-08-01** |
 | Kernel transaction lock | 1 plan + 1 spec | 15/15 steps; **committed 2026-07-27** |
 | Subsystem specs | 0 of 6 written | all open |
 | Subsystem plans | 0 of 6 written | all open |
@@ -75,7 +75,8 @@ data, not as source material.
   call, and whether `<state>/transactions/` accumulating one permanent `0600`
   lock file per transaction id — a consequence of a per-transaction lock path
   plus the never-unlink rule — is intended or wants collection. Both are carried
-  into the Foundation plan's Task 5 completion note, which Task 7 must read.
+  into `docs/architecture/foundation-constraints.md`, under Task 5, where they
+  survived the foundation plan's deletion at the close of Task 9.
 
 ### ACT-2 — Reconcile program-plan bookkeeping
 
@@ -114,10 +115,14 @@ data, not as source material.
 
 ---
 
-## 2. Foundation — remaining tasks
+## 2. Foundation — complete
 
-Plan: `plans/2026-07-21-developer-os-foundation.md`. Spec: `specs/2026-07-21-developer-os-design.md`.
-All steps are already written; nothing new needs authoring here.
+**Closed 2026-08-01.** The plan was deleted when its last step closed, per the session
+protocol; recover it from git history if the reasoning is ever needed. Its durable output is
+three documents: `docs/architecture/foundation.md` (what the layer is and cannot do),
+`docs/architecture/foundation-constraints.md` (the verbatim per-task constraints, including two
+open founder questions), and `docs/releases/foundation-checkpoint.md` (the gate evidence).
+Spec: `specs/2026-07-21-developer-os-design.md`.
 
 | Task | Steps | Status | Produces |
 |---|---|---|---|
@@ -129,14 +134,14 @@ All steps are already written; nothing new needs authoring here.
 | 6. Owned artifacts and configuration drift | 5/5 | done 2026-07-28 | `InstallationManifestV1`, drift and conflict evidence |
 | 7. macOS platform boundary | 4/4 | done 2026-07-29 | `PlatformAdapter` facts and discovery |
 | 8. No-agent CLI lifecycle | 7/7 | done 2026-07-31 | `init`, `status`, `doctor`, `repair`, `uninstall` |
-| 9. Temporary-HOME lifecycle proof | 0/7 | open | E2E suite, `docs/architecture/` first entries |
+| 9. Temporary-HOME lifecycle proof | 7/7 | done 2026-08-01 | E2E suite (31 cases), `docs/architecture/` and `docs/releases/` first entries |
 
-**Foundation completion gate** (all must hold before Program Task 2 may start):
-`npm run lint && npm test`, `pnpm build`, and `pnpm test:e2e` pass freshly; the
-temporary-HOME lifecycle is idempotent; interruption recovery and rollback pass at every
-phase; overlap, symlink escape, drift, forged manifest, and secret sentinel cases fail
-closed; no real agent config, Brain, credential, scheduler, Git remote, or network is
-touched; fresh-context review has no unresolved P0/P1 finding; the working tree is clean.
+**Foundation completion gate — satisfied.** Every clause is evidenced in
+`docs/releases/foundation-checkpoint.md`: `npm run lint && npm test`, `pnpm build`, and
+`pnpm test:e2e` pass freshly; the temporary-HOME lifecycle is idempotent; interruption recovery
+and rollback pass at every phase; overlap, symlink escape, drift, forged manifest, and secret
+sentinel cases fail closed; nothing real is touched; two fresh-context reviewers left no
+unresolved P0/P1; the tree is clean. **Program Task 2 may start.**
 
 > Note: Foundation Task 7 was rewritten on 2026-07-22 from *Create* to *Modify* because
 > the kernel-lock work already created `packages/platform-macos/`. Do not re-scaffold it.
@@ -333,10 +338,10 @@ subproject; listed here so nothing is discovered late.
 | `tests/fixtures/` | Foundation onward | missing |
 | `tests/fixtures/brain/legacy-shape/` | DOS-P2 | missing — synthetic vault that replaces every reason to read `~/brain` at build time |
 | `tests/integration/` | Foundation onward | missing |
-| `tests/e2e/` | Foundation Task 9 | missing — `npm run test:e2e` currently has no target |
+| `tests/e2e/` | Foundation Task 9 | **created 2026-08-01** — `pnpm test:e2e` runs 31 cases |
 | `tests/security/` | DOS-P6 | missing |
-| `docs/architecture/` | Foundation Task 9, then per subsystem | missing — must cover product boundaries, workflow schema, threat model, capability model |
-| `docs/releases/` | DOS-P7 | missing |
+| `docs/architecture/` | Foundation Task 9, then per subsystem | **created 2026-08-01** — Foundation boundaries and constraints done; workflow schema, threat model, capability model still owed by later subsystems |
+| `docs/releases/` | DOS-P7 | **created 2026-08-01** by Foundation Task 9, ahead of its named owner |
 | `packages/brain/` | DOS-P2 | missing |
 | `packages/workflow-schema/` | DOS-P3 | missing |
 | `packages/adapter-claude/`, `plugins/claude/` | DOS-P4 | missing |

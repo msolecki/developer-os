@@ -24,14 +24,20 @@ week of confusion.
 
 ## NOW
 
-**A4 — Foundation Task 9: temporary-HOME lifecycle.** Seven steps **and the
-Foundation completion gate**, in `plans/2026-07-21-developer-os-foundation.md`.
-A3 closed on 2026-07-31. Read Task 8's completion note first: it fixes the
-composition contract this task drives the compiled binary through, and it lists
-five named residuals — the first three are states a user can reach and not
-command their way out of, and this task owns interruption cases.
+**A5 — ACT-4: self-containment check in lint.** Detail in `BACKLOG.md` §1. One
+repository check that fails on any reference to `claude-shared`, `~/brain`, or
+`DEVELOPER_OS_SOURCE_` outside the five allowlisted prose locations, wired into
+`npm run lint`. Size S.
 
-A5 is still startable in parallel and must land before A6.
+**Foundation closed on 2026-08-01** with A4. Its plan was deleted per `SESSION.md`;
+what survives it is `docs/architecture/foundation.md`,
+`docs/architecture/foundation-constraints.md`, and
+`docs/releases/foundation-checkpoint.md`. Read the first before touching Foundation
+code and the second before changing any behaviour it describes.
+
+A5 must land before A6, which is the first task that will be tempted to open a real
+vault. After A5, A6 and A7 unblock and may run in parallel — but each needs a spec
+and a plan written first, and neither exists yet.
 
 ---
 
@@ -47,13 +53,13 @@ is approved.
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
 | A0 | Kernel transaction lock — commit (`ACT-1`) | done; plan deleted, see `specs/…-kernel-transaction-lock-design.md` | — | S | 4 steps checked; `git status` clean; commit holds only Task 5 paths | done |
-| A1 | Foundation Task 6 — owned artifacts and config drift | `plans/…-foundation.md` | A0 | M | 5 steps; `InstallationManifestV1` and three-way drift evidence; commit | done |
-| A2 | Foundation Task 7 — macOS platform boundary | `plans/…-foundation.md` | A1 | S | 4 steps; `PlatformAdapter` facts and discovery; commit | done |
-| A3 | Foundation Task 8 — no-agent CLI lifecycle | `plans/…-foundation.md` | A2 | L | 7 steps; `init` `status` `doctor` `repair` `uninstall`; commit | done |
-| A4 | Foundation Task 9 — temporary-HOME lifecycle | `plans/…-foundation.md` | A3 | L | 7 steps **and the Foundation completion gate**; first `docs/architecture/` entries. Read Task 8's completion note: five named residuals, three of them unrecoverable states | **now** |
-| A5 | ACT-4 — self-containment check in lint | `BACKLOG.md` §1 | A0 | S | `npm run lint` fails on any legacy path reference outside the allowed three locations | parallel, startable now |
-| A6 ‖ | DOS-P2 Brain engine — S / P / I | to write | A4, A5 | L | Task 2 checkpoint: init, validate, index and search a synthetic vault with no adapter | blocked |
-| A7 ‖ | DOS-P3 Workflow compiler — S / P / I | to write | A4, A5 | L | Task 3 checkpoint: canonical workflows compile to abstract artifacts | blocked |
+| A1 | Foundation Task 6 — owned artifacts and config drift | done; plan deleted | A0 | M | 5 steps; `InstallationManifestV1` and three-way drift evidence; commit | done |
+| A2 | Foundation Task 7 — macOS platform boundary | done; plan deleted | A1 | S | 4 steps; `PlatformAdapter` facts and discovery; commit | done |
+| A3 | Foundation Task 8 — no-agent CLI lifecycle | done; plan deleted | A2 | L | 7 steps; `init` `status` `doctor` `repair` `uninstall`; commit | done |
+| A4 | Foundation Task 9 — temporary-HOME lifecycle | done; plan deleted, see `docs/architecture/foundation.md` | A3 | L | 7 steps and the Foundation completion gate; 31 e2e cases; evidence in `docs/releases/foundation-checkpoint.md` | done |
+| A5 | ACT-4 — self-containment check in lint | `BACKLOG.md` §1 | A0 | S | `npm run lint` fails on any legacy path reference outside the allowlisted locations | **now** |
+| A6 ‖ | DOS-P2 Brain engine — S / P / I | to write | A5 | L | Task 2 checkpoint: init, validate, index and search a synthetic vault with no adapter | blocked by A5 only |
+| A7 ‖ | DOS-P3 Workflow compiler — S / P / I | to write | A5 | L | Task 3 checkpoint: canonical workflows compile to abstract artifacts | blocked by A5 only |
 | A8 ‖ | DOS-P4 Claude adapter — S / P / I | to write | A7 | L | Task 4 checkpoint: Claude-only user completes the full synthetic workflow | blocked |
 | A9 ‖ | DOS-P5 Codex adapter — S / P / I | to write | A7 | L | Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | blocked |
 | A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | A8 **and** A9 | L | Task 6 checkpoint, after independent security review | blocked |
@@ -65,8 +71,8 @@ is approved.
 because DOS-P2 is the first task that will be tempted to open a real vault "just to check
 the shape". Prose does not stop that; a failing lint does.
 
-**A6/A7 parallelism** is real but conditional: it opens only once Foundation's interfaces
-are frozen at A4. Starting A6 against interfaces that A4 may still change wastes the work.
+**A6/A7 parallelism** is now open on the interface side: Foundation's interfaces were frozen
+at A4 and are listed in `docs/architecture/foundation.md` §2. Only A5 still gates them.
 
 **A12 decision, unresolved.** The program plan enumerates Task 8's ten steps inline and
 does not mandate a dedicated plan. Recommendation on record: write one anyway — it is the
@@ -119,7 +125,9 @@ is not verification.
 | how to run a session start to finish | `SESSION.md` |
 | what to do next | this file |
 | what a missing spec must decide, and what it produces | `BACKLOG.md` §3 |
-| what Foundation has left | `BACKLOG.md` §2, then the foundation plan |
+| what Foundation delivered, and what it deliberately cannot do | `docs/architecture/foundation.md` |
+| the per-task Foundation constraints, and two open founder questions | `docs/architecture/foundation-constraints.md` |
+| the Foundation gate evidence | `docs/releases/foundation-checkpoint.md` |
 | which repository directories do not exist yet | `BACKLOG.md` §5 |
 | what was frozen on the legacy runtime and why | `BACKLOG.md` §6 |
 | the gates every commit must pass | `BACKLOG.md` §7 |
@@ -128,9 +136,9 @@ is not verification.
 
 ## Counting what is left
 
-Foundation has 7 steps left in one task. Six subsystems need a spec, a plan, and an
-implementation each — eighteen documents-or-milestones that do not exist yet. Then cutover,
-then release. Track B is three items; Track L is two.
+Foundation is closed. Six subsystems need a spec, a plan, and an implementation each —
+eighteen documents-or-milestones that do not exist yet. Then cutover, then release. Track B is
+three items; Track L is two.
 
-A4 is the only Track A entry you can act on today without writing a new document first.
-A5 joins it: it needs only A0, which is closed.
+A5 is the only Track A entry you can act on today without writing a new document first.
+Everything after it starts with a brainstorming cycle and a spec.

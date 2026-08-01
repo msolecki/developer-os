@@ -63,6 +63,21 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  tests:
+    dependencies:
+      '@developer-os/cli':
+        specifier: workspace:*
+        version: link:../apps/cli
+      '@developer-os/core':
+        specifier: workspace:*
+        version: link:../packages/core
+      '@developer-os/platform-macos':
+        specifier: workspace:*
+        version: link:../packages/platform-macos
+      '@developer-os/security':
+        specifier: workspace:*
+        version: link:../packages/security
+
 packages:
 
   '@esbuild/aix-ppc64@0.27.7':

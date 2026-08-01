@@ -1,0 +1,278 @@
+# Foundation architecture
+
+What the Foundation layer is, what it guarantees, and — at least as importantly — what it
+deliberately cannot do. Written at the close of Foundation Task 9; the evidence behind every
+claim here is in `docs/releases/foundation-checkpoint.md`.
+
+Foundation is the part of Developer OS that installs and removes *itself*. It integrates no
+agent, writes no Brain note, and touches no network. Everything a user would recognise as the
+product is built on top of it, by the subsystems listed in `docs/superpowers/BACKLOG.md` §3.
+
+---
+
+## 1. Boundaries
+
+Four packages and one test package. The dependency direction is strictly downward; nothing
+below the CLI knows a command exists.
+
+| Package | Owns | May depend on |
+|---|---|---|
+| `@developer-os/core` | result and exit contracts, configuration, runtime paths, change plans, transactions, manifest and drift | nothing in this repository |
+| `@developer-os/security` | canonical paths and containment, the protected-path policy, redaction, shell-free process execution | `core` |
+| `@developer-os/platform-macos` | macOS facts, agent discovery, the transaction lock | `core`, `security` |
+| `@developer-os/cli` | argv, output, exit status, one module per command, and the composition root | all three |
+| `@developer-os/tests` | process-level evidence against the compiled binary | `core` and `security` at runtime, `cli` for types only |
+
+Within those packages, one responsibility per path:
+
+| Path | Responsibility |
+|---|---|
+| `apps/cli/src/bin.ts` | process boundary: argv, output, and exit code |
+| `apps/cli/src/main.ts` | pure command dispatch returning `CliResult` |
+| `apps/cli/src/io.ts` | injectable user interaction |
+| `apps/cli/src/context.ts` | the composition root and the guards it supplies |
+| `apps/cli/src/commands/` | one command per module |
+| `packages/core/src/result.ts` | stable exit and error contracts |
+| `packages/core/src/config/` | runtime paths and TOML configuration |
+| `packages/core/src/plans/` | exact change-plan model |
+| `packages/core/src/transactions/` | journal, backup, apply, recovery |
+| `packages/core/src/manifest/` | managed ownership and drift |
+| `packages/security/src/paths.ts` | canonicalization, disjointness, owned-path resolution (`containsPath` itself lives in `core/manifest/store.ts`) |
+| `packages/security/src/protected-paths.ts` | default deny policy |
+| `packages/security/src/redaction.ts` | redact-before-log primitives |
+| `packages/security/src/process.ts` | shell-free process runner |
+| `packages/platform-macos/src/` | macOS facts and executable discovery |
+| `tests/helpers/` | temporary HOME, hash inventory, process runner |
+| `tests/e2e/foundation.test.ts` | the temporary-HOME lifecycle |
+
+Two boundaries carry more weight than the rest:
+
+- **`bin.ts` is the only place production dependencies are constructed.** Every command
+  receives a `CliContext`; no command reaches for a filesystem, a clock, or an identifier
+  generator of its own. That is what lets the unit suites run without a real home, and what
+  lets `tests/` run against a temporary one.
+- **Every file the product *manages* is written transactionally — and the manifest is not one
+  of them.** Creating, replacing, or removing a managed artifact is always a validated change
+  plan handed to the executor, so it is journalled, backed up, and recoverable. Four direct
+  filesystem writes sit outside that, and it is worth knowing all four:
+
+  | Site | Operation | Why it is outside a transaction |
+  |---|---|---|
+  | `init.ts` | `mkdir` + `chmod 0o700` | the executor moves files, never directories. The `chmod` loop covers the *product* directories only; the Brain is created and left alone. `mkdir`'s mode applies only to directories it actually created, so a pre-existing world-writable one would otherwise keep its mode |
+  | `uninstall.ts` | `rmdir` | never a recursive delete, so a directory still holding backups, logs, or anything a user put there refuses to go and is reported as preserved |
+  | `uninstall.ts` | `unlink` of the manifest | product bookkeeping, deliberately not one of its own managed artifacts |
+  | `init.ts` → `ManifestStore.write` | `open("wx")` → `write` → `rename` | **the manifest writes its own content outside any transaction.** Durable, but not journalled and not recoverable — which is precisely why residual 1 exists |
+
+## 2. Frozen interfaces
+
+These are what Program Task 2 (`DOS-P2`, the Brain engine) consumes. Changing any of them
+after this point is a breaking change to a downstream subsystem that has not been written yet,
+which is exactly when it is cheapest to get right and easiest to get wrong.
+
+| Interface | Where | Purpose |
+|---|---|---|
+| `CliResult<T>` / `CliError` / `EXIT_CODES` | `core/src/result.ts` | the only success and failure shape any command returns |
+| `DeveloperOsConfigV1`, `RuntimePaths`, `PathEnvironment` | `core/src/config/` | configuration and every path derived from it |
+| `ChangePlanV1`, `ValidatedChangePlanOperationV1` | `core/src/plans/` | the exact set of mutations a command proposes |
+| `TransactionJournalV1`, `TransactionPhase`, `TransactionPlan` | `core/src/transactions/` | the durable record a crash is recovered from |
+| `InstallationManifestV1`, `ManagedArtifactV1`, `DriftFinding` | `core/src/manifest/` | what the product owns and how it detects that ownership was violated |
+| `PlatformAdapter`, `PlatformFacts`, `AgentDiscovery` | `platform-macos/src/types.ts` | the whole of what the product knows about the host |
+| `CliContext`, `CliGuards`, `CliFileSystem` | `apps/cli/src/context.ts` | the composition contract every command is written against |
+| `InitResultV1`, `StatusReportV1`, `DoctorReportV1`, `RepairResultV1`, `UninstallResultV1` | `apps/cli/src/commands/` | the `--json` surface, version-stamped with `schemaVersion: 1` |
+
+`tests/e2e/foundation.test.ts` imports the five `--json` result types by name, plus
+`CliResult`, `CliError`, `InstallationManifestV1`, `TransactionJournalV1`, and `EXIT_CODES`, so
+a change to any of *those* fails the build of the evidence suite rather than passing silently.
+The rest of this table is frozen by convention and review, not by a compiler.
+
+## 3. The mutation pipeline
+
+Every filesystem mutation in the product goes through seven phases, recorded in a journal at
+`<product home>/state/transactions/<id>.json` *after* the phase it names completes and before
+the next one is attempted. So the journal always describes work already done — which is what
+makes the table below, and recovery itself, meaningful.
+
+```
+planned → backed_up → staged → validated → applied → verified → finalized
+   │            │          │          │           │          │
+   └────────────┴──────────┴──────────┴───────────┴──────────┴──→ rolled_back
+```
+
+| Phase | What has happened on disk when the journal says this |
+|---|---|
+| `planned` | the staging and backup directories exist, and every non-`remove` mutation's staged blob and digest is written |
+| `backed_up` | each target's metadata is recorded under `backups/`, plus its prior content where the target already existed — an all-`create` plan such as `init` copies no content at all |
+| `staged` | staged blobs re-read and verified against their digests |
+| `validated` | targets re-asserted against the guards; staged content verified again |
+| `applied` | targets created, replaced, or unlinked; the only phase that changes user-visible files |
+| `verified` | targets re-read and compared to what was staged |
+| `finalized` | terminal; the transaction cannot be rolled back |
+
+Two consequences are load-bearing and easy to get wrong later:
+
+- **Rollback is only meaningful from `validated`, `applied`, or `verified`.** From the earlier
+  phases there is nothing applied to undo, so rollback is a transition and nothing else.
+- **`finalized` cannot be rolled back.** `init` therefore undoes itself with a second,
+  compensating transaction over the artifacts it just recorded — the same code path
+  `uninstall` uses. See `revertArtifacts` in `apps/cli/src/commands/uninstall.ts`.
+
+The lock is advisory and per-transaction, taken at `<state>/transactions/.<id>.lock` by
+`MacOsTransactionLockProvider`, and re-entrant within one `TransactionStore` instance only.
+Two different store instances in one process do *not* share re-entrancy, so `doctor` could not
+be run from inside a transaction's verify phase — it reads journals through a different
+`TransactionStore` and would deadlock. Nothing in production registers an `afterPhase` hook, so
+this is a constraint on future changes rather than an observed failure.
+
+## 4. Ownership
+
+The installation manifest at `<product home>/installation-manifest.json` records every
+artifact the product created, with the hash it installed and whether the path existed before.
+Ownership is decided on **both** the declared path and the canonical path, for every artifact
+kind, and re-resolved immediately before each removal.
+
+Two ownership universes exist over that one manifest, and the difference is the point:
+
+| Operation | Owned roots | Excluded roots | Effect |
+|---|---|---|---|
+| `init` revert | product home **and** a Brain it just created | `backups/` | undoes its own work completely, Brain skeleton included |
+| `uninstall` | product home only | the Brain | Brain artifacts are refused by location, whatever the manifest says |
+
+Drift compares each recorded artifact against the filesystem on three axes — presence, kind,
+and content — and reports one of four findings: `missing`, `type_changed`, `content_changed`,
+or `target_changed` (symlinks, whose "content" is the hash of their target). Every read goes
+through the guard's canonical path, with `O_NOFOLLOW` and a `dev`/`ino` re-check after open.
+
+Any finding stops `init` and `uninstall`. A `missing` finding is skipped by the revert itself,
+because a file that is already gone is not work this run did — which is also why a deleted
+managed artifact currently blocks `init` while the revert would have tolerated it (residual 2).
+
+## 5. Invariants that must not be collapsed
+
+Each of these looks like redundancy and is not, and every one was written in response to a
+defect that shipped. What follows is a summary; the full, verbatim record from the tasks that
+shipped the code — including two questions still open for the founder — is in
+[`foundation-constraints.md`](./foundation-constraints.md). Read that before changing any
+behaviour described here.
+
+- **`ManifestGuards.assertReadable` is supplied by the composition root, not by
+  `packages/security`.** `assertReadableArtifactPath` canonicalizes the *parent* with
+  `canonicalizePlannedPath` and appends `basename` verbatim, so the leaf is never resolved and
+  core's `lstat` check stays meaningful. **The policy is asked twice** — about the caller's path
+  and about the ancestor-resolved result — and both calls are load-bearing: a leaf symlink
+  pointing back out of `~/.ssh` passes the first and is refused only by the second.
+- **The incomplete-transaction check is a precondition of `init`, not a postcondition.** With
+  the full `doctor` report as the only post-apply gate, one stale journal from an earlier
+  interrupted run made every subsequent `init` install successfully and then revert itself,
+  forever. `assertNoIncompleteTransaction` now runs before any mutation. The post-apply
+  `runDoctorReport` gate still exists and still reverts on *any* failing check — which is what
+  residual 3 is about.
+- **The TOML parser's message never escapes.** `smol-toml` embeds three raw source lines in
+  `TomlError`, so propagating it printed the contents of whatever file was read into `status`,
+  `doctor`, and their JSON. Configuration is read through the protected-path policy, absence is
+  detected with `lstat` first — the guarded reader reports a missing file as a security refusal
+  — and any parse failure becomes a content-free `ConfigurationError`. Redaction is a heuristic
+  and must not be the only thing standing there.
+- **`renderPath` sanitizes every path that reaches a terminal or a JSON *rendering*.**
+  `isManagedPath` accepts any absolute NUL-free string, so an artifact path may carry ANSI
+  escapes and repaint the uninstall confirmation prompt — the only consent gate on deletion. It
+  covers `\p{Cf}` as well as `\p{Cc}`, because U+202E reorders rendered text without being a
+  control character. It is deliberately **not** applied to `--json`, where `JSON.stringify`
+  escapes those code points itself and a machine consumer needs the value as recorded. Sanitize
+  per line, never per message: `\n` is a control character, and rendering a whole message
+  through it collapses the usage block into replacement characters.
+- **Every `doctor` check has its own error boundary.** Doctor is the command run on exactly the
+  machines where reads fail, and an escaping rejection there became an unhandled top-level
+  rejection with a stack trace and no report at all.
+- **`ids` on `CliContext` is deliberately unused.** `TransactionExecutor` generates its own
+  identifiers; calling `ids.next()` as well would desynchronise them.
+
+## 6. Exit codes
+
+Stable, and part of the contract. `doctor` picks the most severe code among failing checks, in
+this order, and the recovery text it prints comes from the check that decided the code.
+
+| Code | Name | Means |
+|---:|---|---|
+| 0 | `success` | — |
+| 1 | `operationalFailure` | something went wrong that is nobody's decision |
+| 2 | `invalidInput` | the command line, environment, or a file was not valid |
+| 3 | `decisionRequired` | a human must choose: drift, or a declined confirmation |
+| 4 | `capabilityUnavailable` | the host cannot run this product |
+| 5 | `securityRefusal` | a path or command was refused by policy |
+| 6 | `recoveryRequired` | an unfinished transaction or malformed state blocks progress |
+
+Severity order for `doctor`: 6, 5, 4, 3, 2, 1.
+
+## 7. What Foundation deliberately cannot do
+
+Stated as capabilities that are *absent*, because "we did not implement it yet" and "it must
+not exist here" look identical from outside and are not the same thing.
+
+- **No network.** No HTTP client, no socket, no DNS. `tests/e2e/foundation.test.ts` scans every
+  compiled non-test module — 37 of them — for `node:http`, `node:https`, `node:net`,
+  `node:tls`, `node:dgram`, `node:dns`, `node:http2`, `fetch(`, `XMLHttpRequest`, and
+  `WebSocket`, and every command the suite spawns runs with all proxy variables pointed at a
+  closed port.
+- **No agent integration.** Agents are *discovered* — `/usr/bin/which`, with a `PATH` and
+  nothing else — and never executed. `AgentDiscovery.version` is permanently `null` in
+  Foundation because determining it requires running the binary.
+- **No Brain content.** `init` creates a vault directory and one `.gitkeep` when the vault does
+  not exist. It writes no canonical note, and it never modifies a vault that already exists.
+- **No credentials.** No Keychain, no token store. The protected-path policy refuses `.ssh`,
+  `.aws`, `.gnupg`, `.env` and `.env.*` — but *not* `.envrc` or `.environment` — and three
+  exact files (`.config/gh/hosts.yml`, `.codex/auth.json`, `.claude/.credentials.json`), on
+  both the declared and the canonical path.
+- **No scheduler, no Git mutation, no telemetry.**
+- **No `--verbose`.** Design spec §8 lists it for every mutating command; dispatch is strict,
+  so it exits 2. It belongs to the first subsystem with diagnostics worth printing.
+- **macOS only.** `PlatformAdapter.inspect()` refuses any other platform with code 4.
+
+## 8. Known residuals
+
+Recorded rather than hidden. Each is reachable, none blocks the Foundation gate, and the first
+three are the ones a user can hit.
+
+1. **A crash between the transaction finalizing and the manifest write leaves an installation
+   no command repairs.** The config exists, the journal says `finalized`, no manifest exists:
+   `init` reports "already initialized", `doctor` says "run init", `uninstall` removes nothing.
+   The remedy today is deleting the product home by hand.
+2. **A managed artifact that is deleted blocks `init`.** `assertNoDrift` refuses on any finding
+   including `missing`, while the revert deliberately skips `missing`. `doctor` carries the
+   escape as recovery text; `init` should arguably re-create what is gone.
+3. **An agent at a path the redactor rewrites makes the product impossible to install.** Two
+   individually correct decisions compose badly. Agent discovery *should* refuse a `which`
+   result it can no longer vouch for — `ProcessRunner` redacts its own stdout, so a rewritten
+   path is one that never existed on disk, and Task 7 fixed a real bug where it was reported as
+   `installed: true`. But `doctor` then maps that refusal to a **failing** check rather than a
+   warning, and `init` reads any failing check as failed post-install verification and reverts
+   a perfectly good install. `status` treats the identical condition as a warning and succeeds,
+   which is the inconsistency worth looking at first. Any executable path long and mixed enough
+   to look high-entropy triggers it — temporary directories reliably do, and so would a
+   content-addressed store path. The user is told only "post-install verification failed".
+   Pinned by `tests/e2e/foundation.test.ts`; deciding what to do about it means changing Task
+   8's reviewed code and is the founder's call, not this task's.
+4. **A malformed journal cannot be repaired through the CLI.** `repair` reads the journal
+   before checking its phase, so both actions fail with code 6 and no command quarantines the
+   file. It wants a `repair --discard <id>`.
+5. **`uninstall` leaves the product home and its three bookkeeping directories behind, and
+   they are not empty.** `state/`, `staging/`, and `backups/` still hold both transactions'
+   journals, the never-unlinked `.<id>.lock` files, the staged blobs, and the backups —
+   including **a readable byte copy of the `config.toml` it just removed**, which names the
+   user's Brain path. `rmdir` refuses them because they are non-empty, so the product home
+   refuses too, and the manifest is deleted, leaving residue no later run adopts or removes.
+   No user data is lost and nothing is misreported, but "uninstall" does not mean "gone".
+   Pinned by `tests/e2e/foundation.test.ts`.
+6. **A `kind: "symlink"` artifact would delete its target, not the link.** Latent: Foundation
+   emits no symlink artifacts. It lands in the Claude and Codex adapters, which will.
+7. **Directory removal retains a check-to-use window.** Narrowed to one canonicalization before
+   the `rmdir`; closing it entirely needs `unlinkat` against a directory descriptor, which Node
+   does not expose.
+8. **A relocated product home makes `uninstall` a no-op.** `isRemovableAt` requires
+   declared-path containment while artifacts are recorded canonically, so
+   `~/.developer-os -> ~/Dropbox/developer-os` preserves everything and still deletes the
+   manifest. Fails closed.
+9. **`assertRootsAnchored` is inert for a root named through `DEVELOPER_OS_HOME` or
+   `DEVELOPER_OS_BRAIN`**, because such a root anchors to itself. It constrains symlink
+   relocation of the default paths and of `config.brainPath` only. Through the CLI's default
+   paths it is unreachable in practice: a product home that is a symlink is refused earlier, by
+   the `lstat` check in `init`, with code 2.

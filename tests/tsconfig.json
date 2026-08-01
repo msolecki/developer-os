@@ -1,0 +1,22 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist"
+  },
+  "include": ["helpers/**/*.ts", "e2e/**/*.ts"],
+  "references": [
+    {
+      "path": "../apps/cli"
+    },
+    {
+      "path": "../packages/core"
+    },
+    {
+      "path": "../packages/platform-macos"
+    },
+    {
+      "path": "../packages/security"
+    }
+  ]
+}
