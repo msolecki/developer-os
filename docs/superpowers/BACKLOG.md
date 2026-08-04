@@ -39,7 +39,7 @@ more.
 | Foundation | 1 spec (plan deleted) | 51/51 steps; **complete 2026-08-01** |
 | Kernel transaction lock | 1 plan + 1 spec | 15/15 steps; **committed 2026-07-27** |
 | Subsystem specs | 1 of 6 written | DOS-P2 approved 2026-08-04; five open |
-| Subsystem plans | 0 of 6 written | all open |
+| Subsystem plans | 1 of 6 written | DOS-P2 written 2026-08-04; five open |
 | Legacy runtime | 1 exit checklist | 3 items, all P0; 10 former items frozen |
 
 Every document still present has open work. One plan was completed and retired on
@@ -174,7 +174,7 @@ plan, not a preference. Every spec starts with a brainstorming/approval cycle.
 ### DOS-P2 — Brain engine
 
 - **Spec:** `specs/2026-07-21-developer-os-brain-engine-design.md` — **written 2026-08-04**
-- **Plan:** `plans/2026-07-21-developer-os-brain-engine.md` — missing
+- **Plan:** `plans/2026-07-21-developer-os-brain-engine.md` — **written 2026-08-04**, 10 tasks
 - **Program task:** 2 · **Complexity:** L · **Blocked by:** Foundation completion gate
 - **Parallel with:** DOS-P3, once Foundation interfaces are frozen
 - **The spec must decide:**
@@ -187,6 +187,11 @@ plan, not a preference. Every spec starts with a brainstorming/approval cycle.
   - lint classes: frontmatter, provenance, links, duplicates, staleness, generated-index drift
   - retrieval contract: index-first, explicit maximum candidate count, source paths returned
   - contents of the synthetic public vault template — no founder, client, or repository names
+- **One decision the plan defers to the founder, before its Task 2 starts:** frontmatter is
+  YAML and this repository has no YAML parser. The plan recommends the `yaml` package (v2,
+  MIT, no runtime dependencies, YAML 1.2 core schema — so a tag spelled `no` stays the string
+  `"no"`) over a hand-written parser for the fixed vocabulary. No `pnpm add` runs until that
+  is answered.
 - **The plan must contain:** exact schemas, golden fixtures, and a read-only compatibility
   harness that runs against `tests/fixtures/brain/legacy-shape/` — a committed, wholly
   invented vault encoding only the shape recorded in `docs/migration/baseline-capabilities.json`.
