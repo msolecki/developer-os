@@ -187,11 +187,11 @@ plan, not a preference. Every spec starts with a brainstorming/approval cycle.
   - lint classes: frontmatter, provenance, links, duplicates, staleness, generated-index drift
   - retrieval contract: index-first, explicit maximum candidate count, source paths returned
   - contents of the synthetic public vault template — no founder, client, or repository names
-- **One decision the plan defers to the founder, before its Task 2 starts:** frontmatter is
-  YAML and this repository has no YAML parser. The plan recommends the `yaml` package (v2,
-  MIT, no runtime dependencies, YAML 1.2 core schema — so a tag spelled `no` stays the string
-  `"no"`) over a hand-written parser for the fixed vocabulary. No `pnpm add` runs until that
-  is answered.
+- **Dependency decision, settled 2026-08-04:** frontmatter is YAML and this repository had no
+  YAML parser. The founder approved `yaml@2.8.1` (MIT, no runtime dependencies) over a
+  hand-written subset parser. It defaults to the YAML 1.2 core schema, so a tag spelled `no`
+  stays the string `"no"` instead of becoming `false`. Used for reading only — note rewriting
+  patches retained text and never re-serializes through it.
 - **The plan must contain:** exact schemas, golden fixtures, and a read-only compatibility
   harness that runs against `tests/fixtures/brain/legacy-shape/` — a committed, wholly
   invented vault encoding only the shape recorded in `docs/migration/baseline-capabilities.json`.

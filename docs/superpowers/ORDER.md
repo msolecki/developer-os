@@ -30,10 +30,9 @@ ending in its own commit — under `superpowers:executing-plans`. The spec behin
 `specs/2026-07-21-developer-os-brain-engine-design.md`; read its §15 first, because it
 amends four documents that were approved before it existed.
 
-**One founder decision blocks the plan's Task 2, and nothing before it.** Frontmatter is
-YAML and this repository has no YAML parser; the plan recommends the `yaml` package over
-a hand-written one and forbids `pnpm add` until that is answered. Task 1 can be executed
-without it. Detail is in `BACKLOG.md` §3.
+**Nothing blocks execution.** The plan's one open decision — a YAML parser for frontmatter —
+was settled on 2026-08-04: `yaml@2.8.1`, approved by the founder. Any *further* dependency
+still needs approval before `pnpm add` runs. Detail is in `BACKLOG.md` §3.
 
 A7 (DOS-P3, the workflow compiler) is startable in parallel and still has all three
 gates open.

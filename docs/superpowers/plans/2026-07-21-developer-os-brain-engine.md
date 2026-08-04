@@ -18,7 +18,7 @@
 - **Never commit without `npm run lint && npm test`.** Each task's final step runs `npm run check`.
 - **Reviewer ≠ author.** Every task gets a fresh-context review before its commit is considered closed.
 - **Every filesystem mutation goes through `TransactionExecutor`.** `packages/brain` performs no direct write to a user's vault; it returns bytes and the CLI stages them.
-- **One dependency decision needs founder approval before Task 2 starts** — see Task 2, Step 1. Do not run `pnpm add` without it.
+- **One dependency is approved and no other is.** `yaml@2.8.1`, settled 2026-08-04 (Task 2, Step 1). Any *further* dependency needs the founder's approval before `pnpm add` runs.
 - **Exact values, copied verbatim from the spec:** `summary` maximum 400 characters; default `topicFolders` `["PROJECTS", "TOOLS", "DEV", "INFRA", "QA"]`; default `contentRoot` `"content"`; default `indexesDir` `"_indexes"`; default `retrieval.maxCandidates` `10`; default `staleness.reviewAfterDays` `180`; scoring weights title 4, alias 3, tag 3, summary 2, body 1; the `emerging`/`established`/`deprecated` stage enum; the `knowledge-note`/`compiled-note`/`project-note`/`reference-note` type enum.
 
 ## File Structure
@@ -380,13 +380,13 @@ git commit -m "feat: give the Brain a package and an optional config section"
 - Consumes: nothing from earlier tasks.
 - Produces: `NoteType`, `NoteStage`, `NoteAuthor`, `NoteFrontmatterV1`, `NoteParseIssue`, `ParsedNote`, `NoteParseResult`, `RESERVED_KEYS`, `parseNote(source: string): NoteParseResult`, `renderNote(note: ParsedNote): string`.
 
-- [ ] **Step 1: Get founder approval for the YAML dependency — BLOCKING**
+- [ ] **Step 1: Confirm the approved dependency**
 
-Frontmatter is YAML and this repository has no YAML parser. The security rules forbid installing a dependency without asking. Present exactly this and wait:
+**Settled on 2026-08-04: the founder approved the `yaml` package.** No further approval is needed for this task; do not re-ask.
 
-> Frontmatter parsing needs either the `yaml` package (v2, MIT, zero runtime dependencies, YAML 1.2 core schema — so `no` stays the string `"no"` rather than becoming `false`, which matters because tags are free text), or a hand-written parser for the fixed vocabulary in spec §4.2 (strings, dates, string arrays, integers, `null`). The dependency is the recommendation: the repository already accepts `smol-toml` and `zod` on the same reasoning, and a hand-rolled YAML subset silently mis-parses the first note a user writes that steps outside the subset.
+Pin `yaml@2.8.1` exactly, as `smol-toml` and `zod` are pinned. It is used for reading only — `renderNote` never re-serializes through it (Step 5), so its output formatting is not part of any contract this repository has to keep.
 
-Do not run `pnpm add` until the founder answers. If they choose the hand-written parser, the rest of this task is unchanged except that Step 5 implements `parseYamlSubset` instead of delegating, and its failure mode becomes a `malformed` issue rather than a thrown `YAMLParseError`.
+Two properties the rest of this task depends on. It defaults to the **YAML 1.2 core schema**, so a tag spelled `no` parses as the string `"no"` rather than `false` — under a YAML 1.1 parser that would silently corrupt a user's tag list. And it throws `YAMLParseError` on malformed input rather than returning a partial object, which is why Step 5's `catch` can map any failure to a single `malformed` issue.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -521,7 +521,7 @@ describe("renderNote", () => {
 Run: `npx vitest run packages/brain/src/schema/note.test.ts`
 Expected: FAIL, "Cannot find module './note.js'".
 
-- [ ] **Step 4: Add the dependency (only if approved in Step 1)**
+- [ ] **Step 4: Add the dependency**
 
 ```bash
 pnpm --filter @developer-os/brain add yaml@2.8.1
