@@ -38,7 +38,7 @@ more.
 | Program (umbrella) | 1 plan | Task 0 **complete**, Task 1 in progress, Tasks 2–9 open |
 | Foundation | 1 spec (plan deleted) | 51/51 steps; **complete 2026-08-01** |
 | Kernel transaction lock | 1 plan + 1 spec | 15/15 steps; **committed 2026-07-27** |
-| Subsystem specs | 0 of 6 written | all open |
+| Subsystem specs | 1 of 6 written | DOS-P2 approved 2026-08-04; five open |
 | Subsystem plans | 0 of 6 written | all open |
 | Legacy runtime | 1 exit checklist | 3 items, all P0; 10 former items frozen |
 
@@ -173,7 +173,7 @@ plan, not a preference. Every spec starts with a brainstorming/approval cycle.
 
 ### DOS-P2 — Brain engine
 
-- **Spec:** `specs/2026-07-21-developer-os-brain-engine-design.md` — missing
+- **Spec:** `specs/2026-07-21-developer-os-brain-engine-design.md` — **written 2026-08-04**
 - **Plan:** `plans/2026-07-21-developer-os-brain-engine.md` — missing
 - **Program task:** 2 · **Complexity:** L · **Blocked by:** Foundation completion gate
 - **Parallel with:** DOS-P3, once Foundation interfaces are frozen
@@ -198,8 +198,22 @@ plan, not a preference. Every spec starts with a brainstorming/approval cycle.
   `BrainService`.
 - **Gate:** index rebuilds are byte-for-byte deterministic under a frozen clock; every
   retrieval claim resolves to a selected canonical note.
-- **Creates:** `packages/brain/src/{schema,indexes,lint,retrieval,migrations}/`,
+- **Creates:** `packages/brain/src/{schema,discovery,indexes,lint,retrieval,migrations}/`,
   `templates/brain/`, `tests/{contracts,fixtures,integration}/brain/`.
+- **Four deviations from already-approved documents**, recorded in the spec's §15 and listed
+  here because each changes a document approved before the spec existed: design spec §8 gains
+  a `brain` command group, because the Task 2 checkpoint needs four verbs and §8 supplies one;
+  `discovery/` is a sixth source directory beyond the five this plan named; the frozen
+  `DeveloperOsConfigV1` gains an **optional** `brain` section — `configSchema` is `.strict()`,
+  so a required section or a version bump would stop every existing installation from loading;
+  and `init` installs `templates/brain/` when, and only when, it creates the vault, which keeps
+  Foundation's "never modify an existing vault" guarantee intact.
+- **The baseline records no frontmatter field names.** `docs/migration/baseline-capabilities.json`
+  froze the vault's *capabilities* — Obsidian Markdown, map, catalog, graph, index-first
+  retrieval, four command names — and nothing about note schema. `NoteFrontmatterV1` is
+  therefore a design decision, not a migration fact, and the `legacy-shape/` fixture's
+  frontmatter is invented rather than reconstructed. Stated so no later reader mistakes it for
+  something recovered from a real vault.
 
 ### DOS-P3 — Workflow compiler
 

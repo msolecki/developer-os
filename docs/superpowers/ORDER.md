@@ -24,10 +24,12 @@ week of confusion.
 
 ## NOW
 
-**A6 — DOS-P2 Brain engine, starting with its spec.** Nothing is written yet: the
-**S** gate comes first, through a brainstorming cycle, then **P**, then **I**. What
-the spec must decide is in `BACKLOG.md` §3. A7 (DOS-P3, the workflow compiler) is
-startable in parallel and has the same three gates.
+**A6 — DOS-P2 Brain engine. The S gate closed on 2026-08-04**; **P** is next, then
+**I**. The approved spec is `specs/2026-07-21-developer-os-brain-engine-design.md` —
+read it before writing the plan, and read its §15 first, because the spec amends four
+documents that were approved before it existed. What the spec had to decide, and what
+the plan must contain, is in `BACKLOG.md` §3. A7 (DOS-P3, the workflow compiler) is
+startable in parallel and still has all three gates open.
 
 **Foundation closed on 2026-08-01** with A4, and **A5 closed the same day**. The
 foundation plan was deleted per `SESSION.md`; what survives it is
@@ -56,7 +58,7 @@ is approved.
 | A3 | Foundation Task 8 — no-agent CLI lifecycle | done; plan deleted | A2 | L | 7 steps; `init` `status` `doctor` `repair` `uninstall`; commit | done |
 | A4 | Foundation Task 9 — temporary-HOME lifecycle | done; plan deleted, see `docs/architecture/foundation.md` | A3 | L | 7 steps and the Foundation completion gate; 31 e2e cases; evidence in `docs/releases/foundation-checkpoint.md` | done |
 | A5 | ACT-4 — self-containment check in lint | `BACKLOG.md` §1 | A0 | S | `npm run lint` fails on any legacy path reference outside the allowlisted locations | done |
-| A6 ‖ | DOS-P2 Brain engine — S / P / I | to write | A5 | L | Task 2 checkpoint: init, validate, index and search a synthetic vault with no adapter | **now** |
+| A6 ‖ | DOS-P2 Brain engine — S / P / I | **S** done: `specs/…-brain-engine-design.md`; **P** to write | A5 | L | Task 2 checkpoint: init, validate, index and search a synthetic vault with no adapter | **now** |
 | A7 ‖ | DOS-P3 Workflow compiler — S / P / I | to write | A5 | L | Task 3 checkpoint: canonical workflows compile to abstract artifacts | parallel, startable now |
 | A8 ‖ | DOS-P4 Claude adapter — S / P / I | to write | A7 | L | Task 4 checkpoint: Claude-only user completes the full synthetic workflow | blocked |
 | A9 ‖ | DOS-P5 Codex adapter — S / P / I | to write | A7 | L | Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | blocked |
