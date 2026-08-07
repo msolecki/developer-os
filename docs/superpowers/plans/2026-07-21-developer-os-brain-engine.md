@@ -372,23 +372,37 @@ git commit -m "feat: give the Brain a package and an optional config section"
 
 ### Task 2: Note schema — parse, reserved vocabulary, byte-identical rewrite
 
+> **Shipped 2026-08-08. The code blocks below are the pre-review draft and are
+> superseded by `packages/brain/src/schema/note.ts` — read that, not this, if you
+> are recovering context.** Two review rounds changed the approach materially:
+> `ParsedNote` gained a `header` slice so `header + body === source` holds by
+> construction rather than by test; parsing goes through `parseAllDocuments` with
+> `logLevel: "silent"` and hand-inspected errors, because `parse()` ties throwing
+> to the log level and `parseDocument` silently discards everything after a `...`
+> end marker; the fence regex tolerates a BOM, trailing fence spaces, an EOF-
+> terminated fence, and an empty block; and `renderNote` takes
+> `Pick<ParsedNote, "header" | "body">`. The suite is 50 cases, not the ten the
+> steps below describe.
+
 **Files:**
 - Create: `packages/brain/src/schema/note.ts`, `packages/brain/src/schema/note.test.ts`
 - Modify: `packages/brain/src/index.ts`, `packages/brain/package.json`
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks.
-- Produces: `NoteType`, `NoteStage`, `NoteAuthor`, `NoteFrontmatterV1`, `NoteParseIssue`, `ParsedNote`, `NoteParseResult`, `RESERVED_KEYS`, `parseNote(source: string): NoteParseResult`, `renderNote(note: ParsedNote): string`.
+- Produces: `NoteType`, `NoteStage`, `NoteAuthor`, `NoteFrontmatterV1`, `NoteParseIssue`, `ParsedNote`, `NoteParseResult`, `RESERVED_KEYS`, `parseNote(source: string): NoteParseResult`, `renderNote(note: Pick<ParsedNote, "header" | "body">): string`.
 
-- [ ] **Step 1: Confirm the approved dependency**
+- [x] **Step 1: Confirm the approved dependency**
 
 **Settled on 2026-08-04: the founder approved the `yaml` package.** No further approval is needed for this task; do not re-ask.
 
 Pin `yaml@2.8.1` exactly, as `smol-toml` and `zod` are pinned. It is used for reading only — `renderNote` never re-serializes through it (Step 5), so its output formatting is not part of any contract this repository has to keep.
 
-Two properties the rest of this task depends on. It defaults to the **YAML 1.2 core schema**, so a tag spelled `no` parses as the string `"no"` rather than `false` — under a YAML 1.1 parser that would silently corrupt a user's tag list. And it throws `YAMLParseError` on malformed input rather than returning a partial object, which is why Step 5's `catch` can map any failure to a single `malformed` issue.
+One property the rest of this task depends on: it defaults to the **YAML 1.2 core schema**, so a tag spelled `no` parses as the string `"no"` rather than `false` — under a YAML 1.1 parser that would silently corrupt a user's tag list.
 
-- [ ] **Step 2: Write the failing tests**
+**Do not assume it throws on malformed input.** Whether `parse()` throws is decided by `logLevel`, so silencing the log channel — which is required, see below — also silences the refusal. The shipped code reads the errors off the document instead.
+
+- [x] **Step 2: Write the failing tests**
 
 `packages/brain/src/schema/note.test.ts`:
 
@@ -516,18 +530,18 @@ describe("renderNote", () => {
 });
 ```
 
-- [ ] **Step 3: Run and confirm they fail**
+- [x] **Step 3: Run and confirm they fail**
 
 Run: `npx vitest run packages/brain/src/schema/note.test.ts`
 Expected: FAIL, "Cannot find module './note.js'".
 
-- [ ] **Step 4: Add the dependency**
+- [x] **Step 4: Add the dependency**
 
 ```bash
 pnpm --filter @developer-os/brain add yaml@2.8.1
 ```
 
-- [ ] **Step 5: Implement**
+- [x] **Step 5: Implement**
 
 `packages/brain/src/schema/note.ts`:
 
@@ -806,12 +820,12 @@ export function renderNote(note: ParsedNote): string {
 }
 ```
 
-- [ ] **Step 6: Run and confirm the tests pass**
+- [x] **Step 6: Run and confirm the tests pass**
 
 Run: `npx vitest run packages/brain/src/schema/note.test.ts`
-Expected: PASS, all ten cases.
+Expected: PASS.
 
-- [ ] **Step 7: Export and run the gates**
+- [x] **Step 7: Export and run the gates**
 
 Add to `packages/brain/src/index.ts`:
 
@@ -840,7 +854,7 @@ export type {
 Run: `npm run check`
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add packages/brain/src/schema/note.ts packages/brain/src/schema/note.test.ts \
@@ -859,6 +873,7 @@ git commit -m "feat: parse a note strictly without owning the user's frontmatter
 
 **Interfaces:**
 - Consumes: `BrainConfigV1` (Task 1); `containsPath` from `@developer-os/core`.
+- **Carried from Task 2's review:** `yaml` parsing is quadratic in mapping size — measured at 14 ms for 1,000 frontmatter keys, 1.2 s for 16,000, and no completion inside two minutes for a 700 KB block, while the fence regex over the same input stays under 3 ms. Discovery walks arbitrary user files, so bound the bytes handed to `parseNote` and report an oversized frontmatter as a finding rather than hanging the CLI.
 - Produces: `DirectoryEntry`, `DirectoryReader`, `DiscoveredNote`, `DiscoveryResult`, `PRIVATE_FOLDERS`, `discoverNotes(request: DiscoveryRequest): Promise<DiscoveryResult>`, `DiscoveryRequest`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -1721,6 +1736,20 @@ export interface LintRequest {
 ```
 
 `readArtifact` returns `null` for a missing artifact rather than throwing, because "the index has never been built" is an `index-drift` finding with recovery text, not a crash. `today` is a `YYYY-MM-DD` string taken from the injected clock — the staleness class is the only one that needs the current date, and passing it explicitly keeps `lintVault` a pure function of its arguments.
+
+**Two findings carried here from Task 2's review, both to be closed by this task:**
+
+1. **An unterminated frontmatter block silently swallows body prose.** A note whose opening
+   fence is never closed will have the *next* `---` in the body treated as the closing fence,
+   so everything above it parses as frontmatter and the indexed body loses its first paragraph.
+   The round trip still holds and the only signal today is an `info`. A YAML mapping key
+   containing whitespace is a near-certain sign of this, and real reserved keys never contain
+   any — so `frontmatter` reports an unknown key matching `/\s/` at `warn`. It is a heuristic,
+   which is why it lives here and not in the parser.
+2. **A `YAMLParseError` carries line and column that the parser discards.** `parseNote` maps
+   every YAML failure to one `malformed` issue with `key: null`, so a duplicate `tags:` — which
+   Obsidian users do hit — reports nothing about where. Carry `err.linePos` onto the issue.
+   Read `err.linePos` and `err.pos` **only** — never `err.message`, and never `err.source`. Both embed the offending source verbatim (`"Map keys must be unique at line 2, column 1:\n\ntitle: a\ntitle: b"`), which is exactly the note content the redaction rule exists for.
 
 `lintVault` runs `buildIndex`, then evaluates each class against the build result and the four artifacts read from disk. Findings carry `{ class, severity, path, key, message }` and are returned sorted by path, then class, then message, so the output is as deterministic as the index. `LintResult` also carries `errorCount`, `warnCount`, and `infoCount`.
 
