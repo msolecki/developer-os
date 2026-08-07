@@ -68,7 +68,7 @@ Three helpers are used by more than one task. Each is created by the task that f
 - Consumes: `DeveloperOsConfigV1`, `loadConfig`, `serializeConfig` from `@developer-os/core`.
 - Produces: `BrainConfigV1` (from `@developer-os/core`), and `DEFAULT_BRAIN_CONFIG`, `resolveBrainConfig(config: DeveloperOsConfigV1): BrainConfigV1` from `@developer-os/brain`.
 
-- [ ] **Step 1: Write the failing test for backward-compatible config loading**
+- [x] **Step 1: Write the failing test for backward-compatible config loading**
 
 Append to `packages/core/src/config/config.test.ts`:
 
@@ -143,12 +143,12 @@ describe("brain configuration section", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [x] **Step 2: Run it and confirm it fails**
 
 Run: `npx vitest run packages/core/src/config/config.test.ts`
 Expected: FAIL. The first case fails because `.strict()` rejects nothing yet but `config.brain` is not a declared property, so TypeScript errors first with "Property 'brain' does not exist on type 'DeveloperOsConfigV1'".
 
-- [ ] **Step 3: Add the type**
+- [x] **Step 3: Add the type**
 
 In `packages/core/src/config/types.ts`, above `DeveloperOsConfigV1`:
 
@@ -172,7 +172,7 @@ and add one member to `DeveloperOsConfigV1`, after `automation`:
 
 `exactOptionalPropertyTypes` is on, so `brain?:` means the key may be absent — never present-and-`undefined`. That distinction is what keeps `serializeConfig` from emitting an empty table.
 
-- [ ] **Step 4: Add the schema and serialization**
+- [x] **Step 4: Add the schema and serialization**
 
 In `packages/core/src/config/loader.ts`, above `configSchema`:
 
@@ -220,16 +220,16 @@ In `serializeConfig`, after the `automation` key and before `telemetry`:
 
 The spread is conditional so a configuration without the section serializes byte-identically to what Foundation writes today.
 
-- [ ] **Step 5: Run the test and confirm it passes**
+- [x] **Step 5: Run the test and confirm it passes**
 
 Run: `npx vitest run packages/core/src/config/config.test.ts`
 Expected: PASS, all four new cases.
 
-- [ ] **Step 6: Export the type from core**
+- [x] **Step 6: Export the type from core**
 
 In `packages/core/src/config/index.ts` and `packages/core/src/index.ts`, add `BrainConfigV1` to the exported type list beside `DeveloperOsConfigV1`.
 
-- [ ] **Step 7: Create the package scaffold**
+- [x] **Step 7: Create the package scaffold**
 
 `packages/brain/package.json`:
 
@@ -277,7 +277,7 @@ In `packages/core/src/config/index.ts` and `packages/core/src/index.ts`, add `Br
 
 Register the package in three places: add `- packages/brain` to `pnpm-workspace.yaml` under `packages:`; add `{ "path": "./packages/brain" }` to the root `tsconfig.json` `references` array **after** `./packages/security` and before `./apps/cli`, because references are built in order and the CLI will depend on it; add `"packages/brain/vitest.config.ts"` to the `projects` array in the root `vitest.config.ts`.
 
-- [ ] **Step 8: Write the failing test for config resolution**
+- [x] **Step 8: Write the failing test for config resolution**
 
 `packages/brain/src/schema/config.test.ts`:
 
@@ -317,12 +317,12 @@ describe("resolveBrainConfig", () => {
 });
 ```
 
-- [ ] **Step 9: Run it and confirm it fails**
+- [x] **Step 9: Run it and confirm it fails**
 
 Run: `npx vitest run packages/brain`
 Expected: FAIL, "Cannot find module './config.js'".
 
-- [ ] **Step 10: Implement**
+- [x] **Step 10: Implement**
 
 `packages/brain/src/schema/config.ts`:
 
@@ -351,12 +351,12 @@ export { DEFAULT_BRAIN_CONFIG, resolveBrainConfig } from "./schema/config.js";
 export type { BrainConfigV1 } from "@developer-os/core";
 ```
 
-- [ ] **Step 11: Run the gates**
+- [x] **Step 11: Run the gates**
 
 Run: `npm run check`
 Expected: PASS. If `tsc -b` reports the new package is not referenced, the root `tsconfig.json` edit in Step 7 was missed.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 git add packages/brain/package.json packages/brain/tsconfig.json \

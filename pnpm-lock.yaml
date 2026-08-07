@@ -39,6 +39,15 @@ importers:
         specifier: workspace:*
         version: link:../../packages/security
 
+  packages/brain:
+    dependencies:
+      '@developer-os/core':
+        specifier: workspace:*
+        version: link:../core
+      '@developer-os/security':
+        specifier: workspace:*
+        version: link:../security
+
   packages/core:
     dependencies:
       smol-toml:

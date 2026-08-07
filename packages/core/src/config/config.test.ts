@@ -84,9 +84,162 @@ describe("loadConfig", () => {
   });
 });
 
+const brainToml = `${validToml}
+[brain]
+schemaVersion = 1
+contentRoot = "content"
+topicFolders = ["DEV", "PROJECTS"]
+indexesDir = "_indexes"
+
+[brain.topicAliases]
+PROJEKTY = "PROJECTS"
+
+[brain.retrieval]
+maxCandidates = 25
+
+[brain.staleness]
+reviewAfterDays = 90
+`;
+
+describe("brain configuration section", () => {
+  it("loads a configuration written before the section existed", () => {
+    expect(loadConfig(validToml).brain).toBeUndefined();
+  });
+
+  it("loads an explicit section", () => {
+    const config = loadConfig(brainToml);
+
+    expect(config.brain?.topicAliases).toStrictEqual({ PROJEKTY: "PROJECTS" });
+    expect(config.brain?.retrieval.maxCandidates).toBe(25);
+    expect(config.brain?.staleness.reviewAfterDays).toBe(90);
+    expect(config.brain?.topicFolders).toStrictEqual(["DEV", "PROJECTS"]);
+  });
+
+  it.each([
+    {
+      name: "a topic folder that is a path rather than a segment",
+      source: brainToml.replace('["DEV", "PROJECTS"]', '["../escape"]'),
+    },
+    {
+      name: "a content root containing a separator",
+      source: brainToml.replace('contentRoot = "content"', 'contentRoot = "a/b"'),
+    },
+    {
+      name: "an empty topic folder list",
+      source: brainToml.replace('["DEV", "PROJECTS"]', "[]"),
+    },
+    {
+      name: "an unknown key inside the section",
+      source: brainToml.replace("contentRoot =", "unknown = true\ncontentRoot ="),
+    },
+    {
+      name: "a non-integer candidate maximum",
+      source: brainToml.replace("maxCandidates = 25", "maxCandidates = 2.5"),
+    },
+    {
+      name: "a candidate maximum below one",
+      source: brainToml.replace("maxCandidates = 25", "maxCandidates = 0"),
+    },
+    /**
+     * The six cases above are all caught by the separator check, which left the
+     * `.` and `..` comparisons and the alias *key* schema pinned by nothing — a
+     * reviewer proved both could be deleted with the suite still green.
+     */
+    {
+      name: "a parent-directory content root",
+      source: brainToml.replace('contentRoot = "content"', 'contentRoot = ".."'),
+    },
+    {
+      name: "a parent-directory index directory",
+      source: brainToml.replace('indexesDir = "_indexes"', 'indexesDir = ".."'),
+    },
+    {
+      name: "a current-directory topic folder",
+      source: brainToml.replace('["DEV", "PROJECTS"]', '["."]'),
+    },
+    {
+      name: "an alias key that is a path",
+      source: brainToml.replace("PROJEKTY =", '"../escape" ='),
+    },
+    {
+      /**
+       * Named for the rule that actually fires. A reviewer proved the alias
+       * *value* schema can be deleted with the suite still green, because
+       * membership rejects `../escape` first — and membership is sound, since
+       * every `topicFolders` entry is itself a validated segment.
+       */
+      name: "an alias value that is a path, via the membership rule",
+      source: brainToml.replace('PROJEKTY = "PROJECTS"', 'PROJEKTY = "../escape"'),
+    },
+    {
+      name: "an alias key JavaScript treats as special",
+      source: brainToml.replace("PROJEKTY =", '"__proto__" ='),
+    },
+    {
+      name: "an alias naming a folder that is not a topic",
+      source: brainToml.replace('PROJEKTY = "PROJECTS"', 'PROJEKTY = "ABSENT"'),
+    },
+    {
+      name: "topic folders that repeat",
+      source: brainToml.replace('["DEV", "PROJECTS"]', '["DEV", "PROJECTS", "DEV"]'),
+    },
+    {
+      name: "topic folders that collide case-insensitively on APFS",
+      source: brainToml.replace('["DEV", "PROJECTS"]', '["DEV", "PROJECTS", "dev"]'),
+    },
+    {
+      name: "a staleness threshold beyond any real review cadence",
+      source: brainToml.replace("reviewAfterDays = 90", "reviewAfterDays = 99999999999"),
+    },
+    {
+      name: "topic folders colliding only after Unicode normalization",
+      /**
+       * TOML \uXXXX escapes, so the distinction survives this source file: the
+       * first is a composed e-acute, the second is `e` plus a combining acute.
+       * Two entries here, one directory on the default macOS volume.
+       */
+      source: brainToml.replace(
+        '["DEV", "PROJECTS"]',
+        '["DEV", "PROJECTS", "caf\\u00E9", "cafe\\u0301"]',
+      ),
+    },
+    {
+      name: "an alias key that is itself a topic folder",
+      source: brainToml.replace("PROJEKTY =", '"DEV" ='),
+    },
+    {
+      name: "an alias pointing a topic folder at itself",
+      source: brainToml.replace('PROJEKTY = "PROJECTS"', 'PROJECTS = "PROJECTS"'),
+    },
+    {
+      name: "an alias key that is a topic folder under case folding",
+      source: brainToml.replace("PROJEKTY =", '"dev" ='),
+    },
+  ])("rejects $name", ({ source }) => {
+    expect(() => loadConfig(source)).toThrow();
+  });
+
+  it("keeps an alias map free of inherited members", () => {
+    const aliases = loadConfig(brainToml).brain?.topicAliases;
+
+    expect(Object.hasOwn(aliases ?? {}, "PROJEKTY")).toBe(true);
+    expect(Object.hasOwn(aliases ?? {}, "toString")).toBe(false);
+  });
+});
+
 describe("serializeConfig", () => {
   it("emits canonical TOML bytes including the final newline", () => {
     expect(serializeConfig(loadConfig(validToml))).toBe(validToml);
+  });
+
+  it("omits the brain section entirely when it is absent", () => {
+    expect(serializeConfig(loadConfig(validToml))).not.toContain("[brain");
+  });
+
+  it("round-trips an explicit brain section", () => {
+    expect(loadConfig(serializeConfig(loadConfig(brainToml)))).toStrictEqual(
+      loadConfig(brainToml),
+    );
   });
 });
 

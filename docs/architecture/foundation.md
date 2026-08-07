@@ -281,3 +281,9 @@ three are the ones a user can hit.
    relocation of the default paths and of `config.brainPath` only. Through the CLI's default
    paths it is unreachable in practice: a product home that is a symlink is refused earlier, by
    the `lstat` check in `init`, with code 2.
+9. **Configuration cannot be changed after `init`.** `config.toml` is a managed artifact and
+   Foundation ships no command that edits it, so changing any setting means hand-editing a
+   hash-tracked file — which drifts the manifest and makes `init`, `doctor` and `uninstall`
+   all refuse, including the recovery `doctor` itself prints. Affects `git.enabled` and
+   `automation.enabled` today. Found after Foundation closed; owner and full detail in
+   [`foundation-constraints.md`](./foundation-constraints.md), "Found after Foundation closed".

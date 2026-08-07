@@ -380,3 +380,36 @@ collection. `docs/superpowers/BACKLOG.md` §1 routes readers here for them.
 > command; Step 6 of this task does not, and dispatch is strict, so `--verbose`
 > is rejected with code 2. Add it with the subsystem that has diagnostics worth
 > printing.
+
+---
+
+## Found after Foundation closed
+
+Not part of the verbatim record above — each was discovered by a later subsystem and is
+recorded here because that is where a reader looks for what Foundation cannot do.
+
+### Residual 9: configuration cannot be changed after `init`
+
+**Found 2026-08-07, by the fresh-context review of DOS-P2 Task 1.**
+
+`init` records `config.toml` as a managed artifact (`apps/cli/src/commands/init.ts:226`), and
+drift compares its content hash. Foundation ships **no command that edits configuration**, so
+the only way to change any setting is to edit the file by hand — which is drift.
+
+The consequence is worse than inconvenient, and it is the shape of residual 1: `doctor` reports
+the drift and prints "uninstall, then initialize again" as its recovery, and `uninstall` refuses
+on that same drift (`uninstall.ts:397`). `init` refuses too. The user's only exit is deleting the
+product home by hand. `tests/e2e/foundation.test.ts:990` already states the mechanism in its own
+comment; what it does not say is that no supported path exists to reach the state legitimately.
+
+**This is not new with DOS-P2.** `git.enabled` and `automation.enabled` are written as fixed
+defaults by `init` (`init.ts:112`) and have had the identical problem since Foundation shipped.
+The `[brain]` section added by DOS-P2 is mechanically the third instance, and is unreachable
+until a command writes or reads it.
+
+**Owner: DOS-P7**, which already owns `developer-os git enable|disable` and
+`automation enable|disable` — the two existing consumers. One transactional write path that
+rewrites `config.toml` and re-records its manifest hash serves all three. **Recommendation on
+record, not a decision**: DOS-P2 ships `[brain]` written by `init` inside the existing
+transaction and not editable afterwards; DOS-P7 adds the general command. Settle it before
+DOS-P7 starts, not during.

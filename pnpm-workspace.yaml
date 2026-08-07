@@ -3,6 +3,7 @@ packages:
   - packages/core
   - packages/security
   - packages/platform-macos
+  - packages/brain
   - tests
 # esbuild ships a prebuilt platform binary as an optional dependency, and vite
 # resolves it directly, so its postinstall script has nothing left to do here —
