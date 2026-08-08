@@ -1,3 +1,16 @@
+export {
+  compareCanonical,
+  compareRawBytes,
+  discoverNotes,
+  PRIVATE_FOLDERS,
+} from "./discovery/index.js";
+export type {
+  DirectoryEntry,
+  DirectoryReader,
+  DiscoveredNote,
+  DiscoveryRequest,
+  DiscoveryResult,
+} from "./discovery/index.js";
 export { DEFAULT_BRAIN_CONFIG, resolveBrainConfig } from "./schema/config.js";
 export {
   MAX_SUMMARY_LENGTH,
