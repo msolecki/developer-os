@@ -52,8 +52,8 @@ beyond checking that the tree is where `ORDER.md` says it is.
 
 | Entry shape | Skill to invoke first |
 |---|---|
-| Execute an existing plan — A0 through A4 | `superpowers:executing-plans` |
-| Write a spec — the **S** gate of A6…A11 | `superpowers:brainstorming`, then write the spec |
+| Execute an existing plan — any entry whose **P** gate is already closed | `superpowers:executing-plans` |
+| Write a spec — any entry whose **S** gate is still open | `superpowers:brainstorming`, then write the spec |
 | Write an implementation plan — the **P** gate | `superpowers:writing-plans` |
 | Any code step inside a plan | `superpowers:test-driven-development` |
 | Something is broken and you do not know why | `superpowers:systematic-debugging` |
@@ -87,7 +87,12 @@ An entry is not finished until every one of these is true:
    to prove it did not touch the tree. For every accepted finding: add a regression test
    first, apply the smallest fix, rerun the gates, request another verdict.
 3. **Checkboxes match evidence.** Tick a step only when its own evidence exists. Update
-   the plan and the `ORDER.md` row in the same change as the work.
+   the plan and the `ORDER.md` row in the same change as the work. **This has gone wrong
+   twice** — once when the program plan showed 0/71 while its first task's artifacts already
+   existed, so a fresh session would have tried to redo a task whose inputs are deliberately
+   out of reach; and again when two steps stayed unticked for four days after the documents
+   they describe landed. Ticking the box is part of the work, and one plan is the checkbox
+   record for any given piece of it — never two.
 4. **Exact-path staging.** `git add <exact paths>`. Never `git add -A`, never `git add .`,
    never a wildcard. Then `git show --stat HEAD` and confirm it contains only what you
    meant to ship.
@@ -115,6 +120,13 @@ These are not style preferences. Each one exists because it was already violated
   cutover, and neither is build work.
 - **Fixtures are synthetic.** No real vault, no real client name, no real repository, no
   copied third-party content.
+- **A gate that can pass by scanning nothing is not a gate.** Every check that sweeps a set —
+  files, modules, directories — asserts that the set is non-empty, and asserts it *per scope*,
+  because a total is satisfied by one populated scope while the rest go unread. This has
+  already been violated twice: the self-containment enumerator once skipped every file in any
+  checkout whose path contained `#` and still exited 0, and the network-capability scan asserts
+  non-emptiness per listed package and therefore never noticed that `packages/brain` is not on
+  the list (`BACKLOG.md` §1, NEW-1).
 - **Redact before truncating, hashing, logging, persisting, or sending to a model.**
   Truncation and hashing do not make a secret safe.
 - **Every filesystem mutation follows** `plan → backup → stage → validate → apply → verify
@@ -123,7 +135,15 @@ These are not style preferences. Each one exists because it was already violated
   independently reviewed.
 - **Finished plans get deleted, not archived.** When a plan's last step closes, remove the
   file in that same commit, after carrying any evidence a later step still needs into the
-  document that needs it. Git history is the archive.
+  document that needs it. Git history is the archive. **A spec is not a plan** — it stays
+  while its subsystem is unfinished, and afterwards only while another document points at
+  it as the design of record, with a status line that says so in the past tense.
+- **An approved document is not silently rewritten.** When something you build changes a
+  document that was approved before you started, record the change in the document you are
+  writing, cross-reference it from the one it amends, and register the pair in
+  `BACKLOG.md` §8. Edit an approved document in place only for its status line. Four
+  amendments were recorded and never cross-referenced, and readers of the amended sections
+  got the superseded contract for four days.
 
 ## Stop and ask — do not decide these yourself
 

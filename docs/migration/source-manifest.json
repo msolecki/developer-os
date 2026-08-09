@@ -33,6 +33,20 @@
     "rawPatchHashesPublished": false,
     "recoveryOnlyStatement": "Source patches and inventories are recovery-only and are not hashed as publication evidence."
   },
+  "publicationCandidateEvidence": {
+    "asOf": "2026-07-21",
+    "meaning": "Each evidenceSha256 proves the identity of the candidate at the moment Task 0 admitted it. It is frozen historical evidence and is not a checksum of the current working tree.",
+    "recomputeOnVerification": false,
+    "destinationsAmendedSince": [
+      "docs/superpowers/specs/2026-07-21-developer-os-design.md",
+      "docs/superpowers/plans/2026-07-21-developer-os-program.md"
+    ],
+    "destinationsDeletedSince": [
+      "docs/superpowers/plans/2026-07-21-developer-os-foundation.md"
+    ],
+    "deletionReason": "Retired at Foundation close under the finished-plan rule; recoverable from commit c4f883f^. Its durable output is docs/architecture/foundation.md, docs/architecture/foundation-constraints.md, and docs/releases/foundation-checkpoint.md.",
+    "consequence": "Neither surviving hash matches its destination today, and the third destination no longer exists. Do not read a mismatch as tampering, and do not overwrite these values: the pre-publication re-scan required by BACKLOG.md section 7 is what verifies the tree that actually ships."
+  },
   "publicationCandidates": [
     {
       "sourceId": "shared-runtime",

@@ -244,6 +244,21 @@ or both paths resolve to the same directory.
 
 ## 8. CLI contract
 
+> **Amended since approval — read this before treating the block below as the contract.**
+> The command list and the flag list are the 2026-07-21 approved design; three things have
+> changed and the index of all of them is `BACKLOG.md` §8.
+>
+> 1. **A `brain` group is added** — `brain reindex|lint|search|status` — and `search`
+>    becomes an alias for `brain search`. Amended 2026-08-04 by
+>    `specs/2026-07-21-developer-os-brain-engine-design.md` §11; not yet built (its plan's
+>    Task 9).
+> 2. **`--verbose` is not implemented anywhere**, and dispatch is strict, so passing it
+>    exits 2. It belongs to the first subsystem with diagnostics worth printing. See
+>    `docs/architecture/foundation.md` §7.
+> 3. **`repair` is a mutating command that takes neither `--dry-run` nor `--yes`**; it takes
+>    an explicit `--resume` or `--rollback` against a named transaction id instead. The
+>    "every mutating command" sentence below describes the plan-producing commands.
+
 ```text
 developer-os init
 developer-os status
@@ -304,6 +319,21 @@ values.
 
 Re-running `init` with the same inputs is idempotent.
 
+> **What Foundation actually shipped, for steps 2, 3 and 9.** Recorded here so a reader of
+> this section alone is not misled; full reasoning in `docs/architecture/foundation.md` §5
+> and §7, index in `BACKLOG.md` §8.
+>
+> - **Steps 2 and 3 ask nothing.** Foundation writes both adapters `false` and takes the
+>   vault path from `DEVELOPER_OS_BRAIN`, then `config.brainPath`, then the `~/DeveloperBrain`
+>   default. Adapter selection arrives with DOS-P4 and DOS-P5. Template installation arrives
+>   with DOS-P2, and only when `init` is the thing that creates the vault — Foundation
+>   creates a directory and one `.gitkeep`, and never modifies a vault that already exists.
+> - **Step 9 runs a subset, deliberately.** The post-install gate is the five checks in
+>   `INIT_OWNED_CHECKS` — `product-home`, `configuration`, `manifest`, `drift`, `brain` — not
+>   the whole report. Gating on the whole report reverted two good installs, once for a stale
+>   journal from an unrelated interrupted run and once for agent discovery. Adding an id to
+>   that set asserts that its failure means the *installation* is broken.
+
 ### 9.2 Managed artifacts
 
 Developer OS does not own all of `~/.claude` or `~/.codex`. The installation
@@ -329,6 +359,15 @@ If a managed file differs from its recorded hash, update stops before mutation
 and reports a three-way diff: installed baseline, current user state, and proposed
 version. The user may preserve their state, accept the new version, or resolve the
 conflict manually. Developer OS does not silently choose.
+
+> **What Foundation shipped, and what is still owed.** Foundation Task 6 built the *evidence*
+> and deferred the *diff*: `buildConflictEvidence` records all three hashes — installed
+> baseline, current, proposed — but the rendered diff is current-versus-proposed only. The
+> three-way rendering this section describes is deferred to DOS-P4/DOS-P5, whose semantic
+> config merge is its first consumer; nothing calls `buildConflictEvidence` today. The
+> refusal-before-mutation half is shipped and is not deferred: any drift finding stops `init`
+> and `uninstall`. Detail in `docs/architecture/foundation-constraints.md` Task 6; index in
+> `docs/superpowers/BACKLOG.md` §8.
 
 ### 9.4 Uninstall
 

@@ -2,7 +2,11 @@
 
 **Date:** 2026-08-04
 
-**Status:** Approved design; implementation plan pending
+**Status:** Approved design. Plan written 2026-08-04
+(`plans/2026-07-21-developer-os-brain-engine.md`); **implementation in progress — plan
+Tasks 1 and 2 of 10 committed** (`4cd7224`, `9f82901`). Clauses corrected against the
+shipped code carry an inline "**Shipped:**" note; §15 indexes what this spec amends
+elsewhere, and `BACKLOG.md` §8 records whether each amendment has been applied.
 
 **Scope:** Program Task 2 (`DOS-P2`) — the vault schema, deterministic indexes, lint,
 and index-first retrieval that let `developer-os` initialize, validate, index, and
@@ -66,13 +70,20 @@ repository. It has no knowledge of an agent, a workflow, or a command.
 
 | Path | Responsibility |
 |---|---|
-| `packages/brain/src/schema/` | `NoteFrontmatterV1`, `BrainConfigV1`, `CaptureEnvelopeV1`; parsing, the reserved vocabulary, unknown-key preservation |
+| `packages/brain/src/schema/` | `NoteFrontmatterV1`, `CaptureEnvelopeV1`; parsing, the reserved vocabulary, unknown-key preservation; the brain config defaults and their resolution |
 | `packages/brain/src/discovery/` | folder policy and deny-by-default enumeration |
 | `packages/brain/src/indexes/` | `IndexBuildResult`; building `index.json` and `graph.json`, rendering the two Markdown views |
 | `packages/brain/src/lint/` | the six lint classes and `LintResult` |
 | `packages/brain/src/retrieval/` | `RetrievalQuery`, `RetrievalResult`, the two-stage funnel and the scorer |
 | `packages/brain/src/migrations/` | `BrainMigration`, the registry, and the adoption report |
 | `packages/brain/src/service.ts` | `BrainService` — the only module the CLI imports |
+
+**Shipped 2026-08-07, and this table was corrected in place on 2026-08-08.** The
+`packages/brain/src/schema/` row originally listed `BrainConfigV1` among the types this
+directory owns. It does not: the type and its zod schema live in
+`packages/core/src/config/types.ts`, because `DeveloperOsConfigV1` must reference the type and
+a mutual import between `core` and `brain` is a cycle. This directory owns the defaults and
+their resolution and re-exports the type. Reasoning in §3; indexed in `BACKLOG.md` §8.
 
 `BrainService` is a facade over the six directories and the single seam the CLI is written
 against. Commands construct nothing else; the composition root in `apps/cli/src/context.ts`
@@ -106,13 +117,23 @@ and `topicAliases` is empty. Aliases are configuration a user or a migration add
 never a legacy lookup table compiled into the product.
 
 **This extends a frozen interface, and the shape of the extension is load-bearing.**
-`configSchema` in `packages/core/src/config/loader.ts` is `.strict()`, so an unknown
-`[brain]` table is currently a parse error. Every config written to date lacks the section.
+`configSchema` in `packages/core/src/config/loader.ts` is `.strict()`, so any table it does
+not know is a parse error, and every config written before this section existed lacks it.
 The field is therefore `.optional()` with a documented default, and `schemaVersion` stays
 `1` — a required section, or a version bump, would make every existing installation fail to
-load on upgrade. `serializeConfig` emits the section only when it differs from the default,
-so `init` on a default vault produces a byte-identical config to the one Foundation writes
-today.
+load on upgrade.
+
+**Shipped 2026-08-07 in `4cd7224`, with two corrections to this section.** The type and its
+zod schema live in `packages/core/src/config/types.ts`, not in `packages/brain/src/schema/`:
+`DeveloperOsConfigV1` must reference the type, and `core` importing from `brain` while
+`brain` imports from `core` is a cycle. `packages/brain/src/schema/config.ts` owns
+`DEFAULT_BRAIN_CONFIG` and `resolveBrainConfig` and re-exports the type. And
+`serializeConfig` emits the section whenever the key is **present**, not when it differs from
+the default — there is no comparison against the default anywhere in the loader. The
+byte-identical guarantee still holds, by a different mechanism: `init` writes no `[brain]`
+section, and `exactOptionalPropertyTypes` makes "absent" distinguishable from
+"present-and-undefined", so a config that never had the section serializes exactly as
+Foundation wrote it.
 
 ## 4. Note contract
 
@@ -169,6 +190,67 @@ Preservation is a contract, not an intention: a note read and rewritten with no 
 change must be byte-identical, including key order, comment placement, quoting style, and
 block scalar form. The parse layer therefore retains the original frontmatter text and
 patches it, rather than re-serializing a parsed object.
+
+### 4.4 The parser must be YAML 1.2, and that binds any future replacement
+
+`yaml@2.8.1`, approved 2026-08-04, defaults to the **YAML 1.2 core schema**. Under that
+schema a tag spelled `no` parses as the string `"no"`. Under YAML 1.1 — which several
+still-popular parsers implement, and which is what "just swap the YAML library" usually
+lands on — the same note yields the boolean `false` instead: the user loses a tag, gains a
+value no lint class expects, and nothing downstream reports it. `on` and `off` behave the
+same way, `18:30` becomes a sexagesimal integer, and `y`/`n` do too under parsers that
+implement the 1.1 type repository literally — PyYAML, the most widely deployed 1.1
+implementation, deliberately omits those two.
+
+**So the version is a requirement, not an implementation detail.** Any replacement parser
+must, and this list is the contract:
+
+1. resolve the **YAML 1.2 core schema**;
+2. expose a **bound on alias and anchor expansion**;
+3. report a **duplicate mapping key as an error** rather than resolving it — the YAML spec
+   permits last-one-wins, and a parser that takes that option lets a note carrying
+   `schemaVersion: 1` and later `schemaVersion: 999`, or two `tags` lists, reach the validator
+   as the surviving value alone;
+4. be shipped with tests pinning at least the `no` case and the duplicate key.
+
+This list is about what a replacement must not *drop*. Whether it should also constrain what
+one must not *add* — resolving application tags into constructed values, the `load` versus
+`safe_load` distinction — is an open decision recorded with NEW-2 in `BACKLOG.md` §1, not a
+clause here: `yaml@2.8.1` does not do it, so there is nothing to regress, and adding the clause
+would be a new design decision rather than a recorded one. Read that entry before swapping the
+parser.
+
+The first three are the behaviour; the fourth is how anyone finds out one of them was lost,
+because these are corruptions that surface months later in somebody else's vault and look like
+the vault's fault. **Clauses 1 and 3 already have those tests, and they must not be
+relaxed.** A parser swap that makes
+`packages/brain/src/schema/note.test.ts`'s "refuses a duplicate key rather than parsing it
+partially" case fail has broken clause 3; the correct response is to reject the parser, not to
+loosen the test. Recorded here rather than only in the implementation plan, because that plan
+is deleted when it closes and this constraint outlives it.
+
+Four properties of the library are load-bearing for different reasons, and three of the four
+are documented at their call sites in `packages/brain/src/schema/note.ts`:
+
+- **Whether it throws on malformed input is tied to `logLevel`**, so silencing the channel
+  that would otherwise print note content to stderr also silences the refusal. The shipped
+  code silences the channel and reads the errors off the document by hand.
+- **`parseAllDocuments`, not `parseDocument`**, because a `...` end marker inside the block
+  starts a second document that `parseDocument` returns *without an error* while discarding
+  everything after it — the bytes survive and only the validation goes blind.
+- **`maxAliasCount: 100`**, the library's own default pinned explicitly. It is the only
+  resource-exhaustion bound in this parser, and this package walks arbitrary user files, so a
+  replacement that satisfies the schema requirement and drops the alias bound has traded a
+  silent corruption for a denial of service. That is why the bound is part of the requirement
+  above and not a footnote to it.
+- **`uniqueKeys: true` — a default the code relies on and does *not* pin**, which is an
+  asymmetry with `maxAliasCount` rather than a decision. The duplicate-key refusal reaches
+  `parseNote` only through `document.errors`, and it is there only because the library defaults
+  that way; a version that changed the default would make duplicate keys parse silently, and
+  the only thing standing there is the test named in clause 3. Passing it explicitly at the
+  call site is behaviour-identical today and would close the gap; it is a code change rather
+  than a documentation one, so it is registered as NEW-2 in `BACKLOG.md` §1 for the next task
+  that touches this file.
 
 ## 5. Folder policy — deny by default
 
@@ -282,13 +364,36 @@ vault-relative path, and the frontmatter classes carry the offending key.
 |---|---|
 | `frontmatter` | missing required key, wrong type, value outside an enum, malformed date, `summary` over 400 characters (`error`); unknown key (`info`) |
 | `provenance` | `author: agent` with `reviewed: null` (`warn`); a `sources` entry that resolves to no file and is not an absolute URL (`error`) |
-| `links` | wikilink resolving to nothing (`error`); link into an excluded folder (`error`); link escaping the vault (`error`) |
+| `links` | wikilink resolving to nothing (`error`); link into an excluded folder (`error`); link escaping the vault (`error`); link text matching more than one note (`warn`) |
 | `duplicates` | identical normalized title within one topic folder (`warn`); identical content hash anywhere (`warn`); case-insensitive path collision (`error`) |
 | `staleness` | `reviewed` older than `staleness.reviewAfterDays` (`warn`); `stage: emerging` with `occurrences >= 3` and `reviewed: null` (`warn`) |
 | `index-drift` | any of the four artifacts whose canonical form (§6.3) differs from a fresh in-memory build (`error`); an artifact missing entirely (`error`) |
 
 `unclassified-folder` (§5) is reported by `discovery` through the `frontmatter` class's
 result envelope at `warn`, so it surfaces in `brain lint` without a seventh class.
+
+**Amended 2026-08-09 by DOS-P2 Task 4 — two link-resolution decisions, recorded here
+because the implementation forced them and the original text did not cover them.**
+
+*Ambiguity is a `warn`, not an `error`.* Resolution tries, in order: an exact vault path, a
+`<topicFolder>/<name>` suffix, a bare basename, an exact title, an exact alias — then the
+same five folded to lower case. The bare-basename tier exists because it is what Obsidian
+writes: "shortest path when possible" is its stock setting, so a vault authored there
+contains `[[caching]]`, and without the tier every such link was an `error` and `brain lint`
+failed on exactly the vaults this product claims to support. The tier also makes genuine
+ambiguity reachable — `content/DEV/readme.md` and `content/PROJECTS/readme.md` are an
+ordinary shape — so `buildIndex` reports `ambiguousLinks` carrying the chosen target and
+every candidate. It resolves to the lowest path so the graph stays deterministic. This is a
+`warn` because none of the three `duplicates` findings covers it: the two notes have
+different titles, different content hashes, and no case-insensitive path collision.
+
+*Case folding is a fallback, never an override.* All five exact tiers are tried before any
+folded tier, so case-sensitive intent cannot lose to a case-insensitive coincidence.
+Obsidian's resolver is case-insensitive on macOS and Windows, so `[[Caching]]` opens
+`caching.md` in the editor; leaving it unresolved made `brain lint` error on links that
+demonstrably work. Two notes differing only in case fold to one key and surface through
+`ambiguousLinks`, which is additive to the `duplicates` case-collision `error` rather than
+in tension with it.
 
 The case-insensitive collision being an `error` while the other duplicate findings are
 `warn` is intentional. Two notes with the same title are a curation question. Two paths
@@ -490,8 +595,15 @@ Recorded here because each one changes a document that was approved before this 
 
 ## 16. What this subsystem deliberately cannot do
 
-- **No network, no embeddings.** Retrieval is lexical and local; Foundation's compiled-module
-  network scan covers `packages/brain` on the same terms as everything else.
+- **No network, no embeddings.** Retrieval is lexical and local.
+  **The sentence this bullet originally carried — that Foundation's compiled-module network
+  scan covers `packages/brain` on the same terms as everything else — was false when written
+  and the gap it described is still open.** Foundation's compiled-module
+  network scan in `tests/e2e/foundation.test.ts` iterates a hard-coded list of four package
+  directories, and `packages/brain` has never been on it, so nothing scans this package's
+  compiled output. The scan's own guard against passing vacuously — it refuses an empty
+  inventory — is per-directory, so it cannot notice a directory nobody listed. Tracked as
+  NEW-1 in `BACKLOG.md` §1 and owed by the next task that touches this package.
 - **No capture, review, or ingest.** The envelope type exists; nothing writes one.
 - **No agent.** Nothing in this package spawns a process.
 - **No stemming, no fuzzy matching, no synonyms** (§8).

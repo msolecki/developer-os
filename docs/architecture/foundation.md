@@ -43,6 +43,7 @@ Within those packages, one responsibility per path:
 | `packages/security/src/process.ts` | shell-free process runner |
 | `packages/platform-macos/src/` | macOS facts and executable discovery |
 | `tests/helpers/` | temporary HOME, hash inventory, process runner |
+| `tests/repository/` | the self-containment rule, its allowlist, and the git-driven enumerator `npm run lint` runs over tracked and untracked files alike |
 | `tests/e2e/foundation.test.ts` | the temporary-HOME lifecycle |
 
 Two boundaries carry more weight than the rest:
@@ -84,6 +85,16 @@ which is exactly when it is cheapest to get right and easiest to get wrong.
 `CliResult`, `CliError`, `InstallationManifestV1`, `TransactionJournalV1`, and `EXIT_CODES`, so
 a change to any of *those* fails the build of the evidence suite rather than passing silently.
 The rest of this table is frozen by convention and review, not by a compiler.
+
+**One of them has been amended since, exactly as this section invited.** On 2026-08-07
+(`4cd7224`) DOS-P2 gave `DeveloperOsConfigV1` an **optional** `brain?: BrainConfigV1` member,
+and `core/src/config/` now also owns and exports `BrainConfigV1`. The change is additive:
+`configSchema` stays `.strict()`, `schemaVersion` stays `1`, `serializeConfig` emits the
+section only when the key is present, and `exactOptionalPropertyTypes` keeps "absent"
+distinguishable from "present-and-undefined" — so a configuration written before the section
+existed still loads and still serializes byte-identically. Rationale in
+`specs/2026-07-21-developer-os-brain-engine-design.md` §3 and §15.3; every amendment to a
+frozen interface is indexed in `docs/superpowers/BACKLOG.md` §8.
 
 ## 3. The mutation pipeline
 
@@ -223,11 +234,17 @@ Severity order for `doctor`: 6, 5, 4, 3, 2, 1.
 Stated as capabilities that are *absent*, because "we did not implement it yet" and "it must
 not exist here" look identical from outside and are not the same thing.
 
-- **No network.** No HTTP client, no socket, no DNS. `tests/e2e/foundation.test.ts` scans every
-  compiled non-test module — 37 of them — for `node:http`, `node:https`, `node:net`,
-  `node:tls`, `node:dgram`, `node:dns`, `node:http2`, `fetch(`, `XMLHttpRequest`, and
-  `WebSocket`, and every command the suite spawns runs with all proxy variables pointed at a
-  closed port.
+- **No network.** No HTTP client, no socket, no DNS. `tests/e2e/foundation.test.ts` scans
+  every compiled non-test module in the four Foundation packages — `apps/cli`,
+  `packages/core`, `packages/security`, `packages/platform-macos`, 37 modules — for
+  `node:http`, `node:https`, `node:net`, `node:tls`, `node:dgram`, `node:dns`, `node:http2`,
+  `fetch(`, `XMLHttpRequest`, and `WebSocket`, and every command the suite spawns runs with
+  all proxy variables pointed at a closed port.
+  **It does not yet cover `packages/brain`**, which was added on 2026-08-07: the package list
+  is hard-coded, and the assertion that a scan is not passing vacuously is made per listed
+  directory, so it cannot notice a directory nobody listed. Tracked as NEW-1 in
+  `docs/superpowers/BACKLOG.md` §1. Until that closes, "no network" is enforced for
+  Foundation and asserted for the Brain.
 - **No agent integration.** Agents are *discovered* — `/usr/bin/which`, with a `PATH` and
   nothing else — and never executed. `AgentDiscovery.version` is permanently `null` in
   Foundation because determining it requires running the binary. Discovery that refuses, or

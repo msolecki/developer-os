@@ -39,7 +39,7 @@ Hash-only evidence may be recorded only when an owner-controlled process has alr
 
 Stage only reviewed, explicitly named target paths. Never use recursive staging, directory-wide staging, `git add .`, `git add -A`, or wildcard staging for migration work. Re-run the candidate-only secret scan against the exact staged paths and inspect the staged diff before any commit.
 
-Task 0 is a control artifact task. Its publication candidates remain unstaged and uncommitted so the Foundation bootstrap can incorporate them under its own verified boundary.
+Task 0 is a control artifact task. Its publication candidates were deliberately left unstaged at the time, so that the Foundation bootstrap could incorporate them under its own verified boundary — which it did, in commit `098ea92` on 2026-07-21. All three have been tracked ever since; one was later retired under the finished-plan rule. Nothing from Task 0 remains unstaged, and the frozen evidence hashes in `source-manifest.json` are identity proofs as of 2026-07-21, not checksums of the current tree. See `publicationCandidateEvidence` in that file.
 
 ## Remote and release gates
 

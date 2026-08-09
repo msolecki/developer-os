@@ -13,7 +13,7 @@ before assuming a piece of apparent redundancy is safe to remove.
 Two items here are **open founder questions**, not settled decisions, both from Task 5:
 whether `SpawnLockfRunner`'s non-blocking `lockf -t 0` call needs a watchdog, and whether
 `<state>/transactions/` accumulating one permanent `0600` lock file per transaction id wants
-collection. `docs/superpowers/BACKLOG.md` §1 routes readers here for them.
+collection. `docs/superpowers/BACKLOG.md` §2 routes readers here for them.
 
 ---
 

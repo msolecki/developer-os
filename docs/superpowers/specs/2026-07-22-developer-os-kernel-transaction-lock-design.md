@@ -2,7 +2,14 @@
 
 **Date:** 2026-07-22
 
-**Status:** Approved design; implementation pending written-spec review
+**Status:** **Implemented and committed 2026-07-27** — 15/15 steps, two independent
+fresh-context reviews returning `VERDICT: APPROVED` with no unresolved P0/P1. The
+implementation plan was deleted on completion; **this spec is deliberately retained as the
+design of record** for `packages/platform-macos/src/transaction-lock.ts` and
+`packages/core/src/transactions/`, which is why it survives the delete-on-completion rule
+(`BACKLOG.md`, "Rules for this file"). Read the sections below as the contract the shipped
+code is checked against, not as future work; two questions the reviewers raised are still
+open and are recorded under Task 5 in `docs/architecture/foundation-constraints.md`.
 
 **Scope:** Foundation Task 5 transaction exclusion and the minimal macOS platform primitive it requires
 

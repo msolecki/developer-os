@@ -49,6 +49,14 @@ branch ran and the non-Darwin branch skipped.
 once inside the 388, once on their own. That is deliberate: `npm run check` must not be able
 to pass while the process-level evidence is failing.
 
+**This page is a dated record, not a live status page.** Every number above is what the gate
+reported on 2026-08-01 and is deliberately not refreshed; the current counts are whatever
+`npm run check` prints today. One thing has changed that a reader following the block above
+would otherwise miss: since commit `8479529`, also on 2026-08-01, `npm run lint` has a third
+stage — `node tests/dist/repository/check.js`, the self-containment enumerator. It needs
+`tests/dist/`, which the leading `tsc -b` produces, so the ordering below is load-bearing for
+a second reason.
+
 **Ordering matters.** `lint` runs `tsc -b` first, so `dist/` is current by the time `test`
 executes the binary. Running `vitest` alone against a stale or absent `dist/` fails loudly:
 `run-cli.ts` refuses to spawn and names `pnpm build` in the error.
@@ -211,8 +219,9 @@ Recorded rather than silently absorbed.
    list.** The session protocol deletes a plan when its last step closes, and Task 9 is the
    foundation plan's last task — but that plan carried 352 lines of reviewed "what the next task
    must not undo" notes from Tasks 5 through 8, including two questions explicitly left open for
-   the founder that `BACKLOG.md` §1 routes readers to. They are reproduced there verbatim rather
-   than summarised, and `BACKLOG.md` §1 now points at the new location.
+   the founder. They are reproduced there verbatim rather than summarised, and `BACKLOG.md` §2
+   points at the new location. (That pointer was in `BACKLOG.md` §1 when this was written; §1
+   became the live open-work section on 2026-08-08 and the closed remediations moved to §8.)
 
 6. **The repository's `node_modules/vitest` symlink was dangling** at the start of this task —
    it pointed into a sibling project that had since been reinstalled, so `npm test` could not

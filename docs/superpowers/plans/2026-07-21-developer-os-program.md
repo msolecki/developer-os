@@ -99,76 +99,41 @@ P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5
 
 ---
 
-### Task 0: Preserve sources and establish the publication boundary
+### Tasks 0 and 1 — closed. What survives them is a boundary and three documents
 
-**Complexity:** M
+**Task 0 — preserve sources and establish the publication boundary.** Closed 2026-07-21.
+**Task 1 — build the public foundation and CLI lifecycle.** Closed 2026-08-01, executed as a
+dedicated Foundation plan of 51 steps across 9 tasks, with the completion gate satisfied.
 
-**Status: COMPLETE — closed 2026-07-21. This task is the reason the rest of the program needs no legacy access. Do not re-run it; it cannot be re-run, because its inputs are deliberately no longer reachable.**
+Neither can be re-run and neither should be read as instruction. Task 0's inputs are
+deliberately out of reach; Task 1's plan was deleted when its last step closed. Their step
+lists are removed rather than kept as ticked boxes, because this plan holds only unfinished
+work. Recover them from `git show 9f82901:docs/superpowers/plans/2026-07-21-developer-os-program.md`
+and `git show c4f883f^:docs/superpowers/plans/2026-07-21-developer-os-foundation.md`.
 
-**Files:**
-- Created: `docs/migration/source-manifest.json`
-- Created: `docs/migration/exclusion-policy.md`
-- Created: `docs/migration/baseline-capabilities.json`
+**Task 0 produced the constraint the whole program runs under, and it is still binding.**
+Everything the build needs to know about the founder's legacy runtime is three files in
+`docs/migration/`: `source-manifest.json` (which admitted exactly three publication candidates,
+all planning documents), `exclusion-policy.md` (what may never cross into a public artifact),
+and `baseline-capabilities.json` (the frozen legacy capability surface, as booleans, versions
+and command names only). After Task 0 those legacy repositories are not build inputs, not
+review inputs, and not test inputs. Since 2026-08-01 `npm run lint` enforces that mechanically
+rather than by prose. The only later contact is Task 8, read-only, against the user's own vault
+as product data — and `docs/superpowers/BACKLOG.md` §6, which is machine housekeeping, not
+build work.
 
-**Interfaces:**
-- Consumes: current working-tree inventories, existing redaction policy, current hook and Brain test commands.
-- Produces: `SourceManifestV1`, `PublicationExclusionPolicyV1`, and `CapabilityBaselineV1`; every later migration task must consume these artifacts.
+**Task 1's durable output is `docs/architecture/foundation.md` (what the layer is and cannot
+do, plus nine known residuals), `docs/architecture/foundation-constraints.md` (verbatim
+per-task constraints and two still-open founder questions), and
+`docs/releases/foundation-checkpoint.md` (the gate evidence, dated).** Read the first before
+touching Foundation code and the second before changing any behaviour it describes. Residual 9
+— configuration cannot be changed after `init` — is owed by Task 7 and recorded in
+`BACKLOG.md` §3.
 
-**What:** Preserve recoverability, settle the security publication gate, and record exactly which source paths may inform the clean public implementation.
-
-**Where:** `docs/migration/` in this repository. The legacy checkouts and provider consoles that were read at the time are out of reach by design and must stay that way.
-
-**How (all steps closed):**
-
-- [x] Captured read-only status, tracked diffs, untracked path inventories, commits, and validation commands for both legacy repositories into an owner-only backup outside either repo, without copying untracked file contents.
-- [x] Classified every path as `user-owned`, `public-source-candidate`, `generated`, `private-content`, `sensitive-history`, or `excluded`. Result: 152 of 152 shared-runtime entries and 7 of 7 private-brain entries assigned, zero unassigned, zero duplicate assignments.
-- [x] Recorded the founder's waiver of the four historical rotations as out of scope for Developer OS, retaining every prohibition against copying affected histories or source material.
-- [x] Recorded `remoteVerification: "blocked_by_environment"`; fetch, push, and public release stay blocked until external verification occurs.
-- [x] Wrote `source-manifest.json`. It admits exactly **three** publication candidates, all of them planning documents, all already present at their public destinations with matching SHA-256 evidence.
-- [x] Wrote `exclusion-policy.md` naming raw captures, client notes, credentials, `.obsidian` state, real remotes, secret-bearing history, and machine-local config as prohibited public inputs. Extended 2026-07-27 to name `docs/superpowers/plans/legacy-runtime/`.
-- [x] Recorded the legacy Claude, Codex, and Brain capability surface in `baseline-capabilities.json` as booleans, versions, and command names only.
-
-**Test (evidence in the artifacts):**
-
-- Every working-tree entry appears in exactly one classification; the manifest carries the per-rule matched counts that prove it.
-- A full secret scan reported no untriaged publication candidate.
-- This checkout contains no copied legacy history and no real Brain content.
-- No unresolved historical credential value or affected Git history appears in a publication candidate.
-
-**What this task bought.** Everything the program still needs to know about the legacy runtime is now three files in `docs/migration/`. That is the whole point: after Task 0, `~/claude-shared` and `~/brain` are not build inputs, not review inputs, and not test inputs. The only later contact is Task 8, read-only, against the user's vault as product data.
-
-**Checkpoint:** The repository may be populated privately. Public visibility remains blocked pending license approval and remote verification.
-
----
-
-### Task 1: Build the public foundation and CLI lifecycle
-
-**Complexity:** L
-
-**Files:**
-- Create: repository root configuration, `apps/cli/`, `packages/core/`, `packages/security/`, `packages/platform-macos/`, and Foundation fixtures/tests.
-- Create: `docs/superpowers/plans/2026-07-21-developer-os-foundation.md` in the target repository from the approved execution plan maintained alongside this program plan.
-
-**Interfaces:**
-- Consumes: `SourceManifestV1` and `PublicationExclusionPolicyV1` from Task 0.
-- Produces: `DeveloperOsConfigV1`, `PlatformAdapter`, `TransactionStore`, `InstallationManifestV1`, `SecurityPolicy`, `CliResult`, stable exit codes, and the commands `init`, `status`, `doctor`, `repair`, and `uninstall` for a no-agent installation.
-
-**What:** Establish a clean, typed, tested repository and a safe filesystem lifecycle before adding Brain or vendor behavior.
-
-**Where:** The target repository root.
-
-**How:** Execute the dedicated Foundation plan task-by-task with TDD and fresh-context review after each meaningful task. Do not migrate legacy scripts wholesale; port behavior only through public synthetic fixtures.
-
-**Test:**
-
-- `npm run lint && npm test` passes.
-- `pnpm build` passes.
-- `developer-os init -> doctor -> repair -> uninstall` passes against a temporary `HOME`.
-- Repeated `init` and `uninstall` are idempotent.
-- Product home/Brain overlap, symlink escape, manifest forgery, config drift, and interrupted transaction fixtures fail closed.
-- No test touches real `~/.claude`, `~/.codex`, `~/brain`, Keychain, GitHub credentials, or network.
-
-**Checkpoint:** A private prerelease binary safely manages its own state but installs no Claude/Codex integration and writes no canonical Brain notes.
+Two facts from these tasks that later tasks still need: `remoteVerification` is
+`blocked_by_environment`, so no fetch, push, pull request, or public release; and the founder's
+2026-07-21 waiver of four historical credential rotations scoped *this product's* release gate
+only — it did not revoke a key, and the rotations are still owed as `BACKLOG.md` §6 EXIT-1.
 
 ---
 
@@ -176,10 +141,15 @@ P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5
 
 **Complexity:** L
 
+**Status: IN PROGRESS.** Spec and plan both approved 2026-08-04. Execution is tracked
+task-by-task in `docs/superpowers/plans/2026-07-21-developer-os-brain-engine.md`, which is
+the authoritative checkbox record — **2 of its 10 tasks are committed** (`4cd7224`,
+`9f82901`); resume at its Task 3. The bullets below are this task's own coarse steps, not a
+second copy of that plan.
+
 **Files:**
-- Create: `docs/superpowers/specs/2026-07-21-developer-os-brain-engine-design.md`
-- Create: `docs/superpowers/plans/2026-07-21-developer-os-brain-engine.md`
-- Create: `packages/brain/src/schema/`
+- Created: `docs/superpowers/specs/2026-07-21-developer-os-brain-engine-design.md`, `docs/superpowers/plans/2026-07-21-developer-os-brain-engine.md`, `packages/brain/src/schema/`
+- Create: `packages/brain/src/discovery/` — a sixth source directory beyond the five this plan originally named, because folder policy is consumed by both `indexes/` and `lint/` and is not schema parsing (spec §15.2)
 - Create: `packages/brain/src/indexes/`
 - Create: `packages/brain/src/lint/`
 - Create: `packages/brain/src/retrieval/`
@@ -195,11 +165,10 @@ P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5
 
 **Where:** `packages/brain/` and `templates/brain/` in the target repository.
 
-**How:**
+**How.** The spec cycle (`db8637a`) and the implementation plan (`9ef4b92`) are closed and their
+bullets are removed; what is left is the work:
 
-- [ ] Run a dedicated brainstorming/spec approval cycle for schema, folder policy, lifecycle statuses, confidence, topic aliases, and index formats.
-- [ ] Write the Brain implementation plan with exact schemas and golden fixtures.
-- [ ] Implement note discovery and schema parsing without scanning quarantine or raw archives as canonical notes.
+- [ ] Implement note discovery without scanning quarantine or raw archives as canonical notes. — *schema parsing landed in `9f82901`; discovery is the brain plan's Task 3.*
 - [ ] Implement deterministic `vault-map`, `catalog`, and graph generation.
 - [ ] Implement lint classes for frontmatter, provenance, links, duplicates, staleness, and generated-index drift.
 - [ ] Implement index-first retrieval with explicit maximum candidate counts and source paths.

@@ -1,3 +1,17 @@
+/**
+ * `yaml@2.8.1`, and the **version family is a requirement, not an implementation
+ * detail**: it resolves the YAML 1.2 core schema, so a tag spelled `no` stays the
+ * string `"no"`. A YAML 1.1 parser — which is what "just swap the YAML library"
+ * usually lands on — yields `false` instead, and `on`, `off` and `18:30` go the
+ * same way. The user silently loses a tag and gains a value no lint class
+ * expects. Any replacement must resolve the 1.2 core schema, must bound alias
+ * expansion (see `maxAliasCount` below), and must report a duplicate mapping key
+ * as an error rather than resolving it last-one-wins — that one rides on this
+ * library's `uniqueKeys` default, which the call below does not pin (BACKLOG.md
+ * NEW-2). The duplicate-key case in `note.test.ts` is what stands there, and it
+ * pins a contract: a new parser that fails it is the wrong parser, not a test to
+ * loosen. Design spec §4.4 states all four clauses.
+ */
 import { parseAllDocuments } from "yaml";
 
 export type NoteType =
@@ -330,7 +344,7 @@ export function parseNote(source: string): NoteParseResult {
   let raw: unknown;
   try {
     /**
-     * `parseDocument` with `logLevel: "silent"`, and errors inspected by hand.
+     * `parseAllDocuments` with `logLevel: "silent"`, and errors inspected by hand.
      * Both halves are load-bearing and they pull against each other:
      *
      * - The default log level prints warnings — an unresolved `!!tag`, a

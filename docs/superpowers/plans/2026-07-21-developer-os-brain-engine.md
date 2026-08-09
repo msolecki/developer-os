@@ -18,7 +18,7 @@
 - **Never commit without `npm run lint && npm test`.** Each task's final step runs `npm run check`.
 - **Reviewer ≠ author.** Every task gets a fresh-context review before its commit is considered closed.
 - **Every filesystem mutation goes through `TransactionExecutor`.** `packages/brain` performs no direct write to a user's vault; it returns bytes and the CLI stages them.
-- **One dependency is approved and no other is.** `yaml@2.8.1`, settled 2026-08-04 (Task 2, Step 1). Any *further* dependency needs the founder's approval before `pnpm add` runs.
+- **One dependency is approved and no other is.** `yaml@2.8.1`, settled by the founder on 2026-08-04 and installed by Task 2. Any *further* dependency needs the founder's approval before `pnpm add` runs. The version family is itself a contract, not a convenience — spec §4.4.
 - **Exact values, copied verbatim from the spec:** `summary` maximum 400 characters; default `topicFolders` `["PROJECTS", "TOOLS", "DEV", "INFRA", "QA"]`; default `contentRoot` `"content"`; default `indexesDir` `"_indexes"`; default `retrieval.maxCandidates` `10`; default `staleness.reviewAfterDays` `180`; scoring weights title 4, alias 3, tag 3, summary 2, body 1; the `emerging`/`established`/`deprecated` stage enum; the `knowledge-note`/`compiled-note`/`project-note`/`reference-note` type enum.
 
 ## File Structure
@@ -42,7 +42,7 @@
 
 ### Shared test helpers
 
-Three helpers are used by more than one task. Each is created by the task that first needs it and imported unchanged afterwards — do not write a second copy.
+Five helpers are used by more than one task. Each is created by the task that first needs it and imported unchanged afterwards — do not write a second copy.
 
 | Helper | Created in | Signature |
 |---|---|---|
@@ -56,815 +56,46 @@ Three helpers are used by more than one task. Each is created by the task that f
 
 ---
 
-### Task 1: Package scaffold and the optional `[brain]` config section
-
-**Files:**
-- Create: `packages/brain/package.json`, `packages/brain/tsconfig.json`, `packages/brain/vitest.config.ts`, `packages/brain/src/index.ts`
-- Create: `packages/brain/src/schema/config.ts`, `packages/brain/src/schema/config.test.ts`
-- Modify: `packages/core/src/config/types.ts`, `packages/core/src/config/loader.ts`, `packages/core/src/config/index.ts`, `packages/core/src/config/config.test.ts`
-- Modify: `pnpm-workspace.yaml`, `tsconfig.json`, `vitest.config.ts`
-
-**Interfaces:**
-- Consumes: `DeveloperOsConfigV1`, `loadConfig`, `serializeConfig` from `@developer-os/core`.
-- Produces: `BrainConfigV1` (from `@developer-os/core`), and `DEFAULT_BRAIN_CONFIG`, `resolveBrainConfig(config: DeveloperOsConfigV1): BrainConfigV1` from `@developer-os/brain`.
-
-- [x] **Step 1: Write the failing test for backward-compatible config loading**
-
-Append to `packages/core/src/config/config.test.ts`:
-
-```typescript
-const CONFIG_WITHOUT_BRAIN = [
-  'schemaVersion = 1',
-  'brainPath = "/Users/example/DeveloperBrain"',
-  'telemetry = false',
-  '[adapters]',
-  'claude = true',
-  'codex = false',
-  '[git]',
-  'enabled = false',
-  '[automation]',
-  'enabled = false',
-].join("\n");
-
-describe("brain configuration section", () => {
-  it("loads a configuration written before the section existed", () => {
-    const config = loadConfig(CONFIG_WITHOUT_BRAIN);
-    expect(config.brain).toBeUndefined();
-  });
-
-  it("loads an explicit section", () => {
-    const config = loadConfig(
-      [
-        CONFIG_WITHOUT_BRAIN,
-        '[brain]',
-        'schemaVersion = 1',
-        'contentRoot = "content"',
-        'topicFolders = ["DEV"]',
-        'indexesDir = "_indexes"',
-        '[brain.topicAliases]',
-        'PROJEKTY = "PROJECTS"',
-        '[brain.retrieval]',
-        'maxCandidates = 25',
-        '[brain.staleness]',
-        'reviewAfterDays = 90',
-      ].join("\n"),
-    );
-
-    expect(config.brain?.topicAliases).toEqual({ PROJEKTY: "PROJECTS" });
-    expect(config.brain?.retrieval.maxCandidates).toBe(25);
-  });
-
-  it("refuses a topic folder that is a path rather than a segment", () => {
-    expect(() =>
-      loadConfig(
-        [
-          CONFIG_WITHOUT_BRAIN,
-          '[brain]',
-          'schemaVersion = 1',
-          'contentRoot = "content"',
-          'topicFolders = ["../escape"]',
-          'indexesDir = "_indexes"',
-          '[brain.topicAliases]',
-          '[brain.retrieval]',
-          'maxCandidates = 10',
-          '[brain.staleness]',
-          'reviewAfterDays = 180',
-        ].join("\n"),
-      ),
-    ).toThrow();
-  });
-
-  it("round-trips a configuration that has no brain section", () => {
-    expect(serializeConfig(loadConfig(CONFIG_WITHOUT_BRAIN))).toBe(
-      serializeConfig(loadConfig(CONFIG_WITHOUT_BRAIN)),
-    );
-    expect(serializeConfig(loadConfig(CONFIG_WITHOUT_BRAIN))).not.toContain("brain]");
-  });
-});
-```
-
-- [x] **Step 2: Run it and confirm it fails**
-
-Run: `npx vitest run packages/core/src/config/config.test.ts`
-Expected: FAIL. The first case fails because `.strict()` rejects nothing yet but `config.brain` is not a declared property, so TypeScript errors first with "Property 'brain' does not exist on type 'DeveloperOsConfigV1'".
-
-- [x] **Step 3: Add the type**
-
-In `packages/core/src/config/types.ts`, above `DeveloperOsConfigV1`:
-
-```typescript
-export interface BrainConfigV1 {
-  readonly schemaVersion: 1;
-  readonly contentRoot: string;
-  readonly topicFolders: readonly string[];
-  readonly topicAliases: Readonly<Record<string, string>>;
-  readonly indexesDir: string;
-  readonly retrieval: { readonly maxCandidates: number };
-  readonly staleness: { readonly reviewAfterDays: number };
-}
-```
-
-and add one member to `DeveloperOsConfigV1`, after `automation`:
-
-```typescript
-  readonly brain?: BrainConfigV1;
-```
-
-`exactOptionalPropertyTypes` is on, so `brain?:` means the key may be absent — never present-and-`undefined`. That distinction is what keeps `serializeConfig` from emitting an empty table.
-
-- [x] **Step 4: Add the schema and serialization**
-
-In `packages/core/src/config/loader.ts`, above `configSchema`:
-
-```typescript
-/**
- * A single path segment, never a path. Topic folders and the content root are
- * joined onto the vault root, so accepting `../` here would let a configuration
- * file walk out of the vault before any guard sees a path.
- */
-const pathSegmentSchema = z
-  .string()
-  .min(1)
-  .refine(
-    (value) =>
-      !value.includes("\0") &&
-      !value.includes("/") &&
-      !value.includes("\\") &&
-      value !== "." &&
-      value !== "..",
-    { message: "Must be a single path segment" },
-  );
-
-const brainSchema = z
-  .object({
-    schemaVersion: z.literal(1),
-    contentRoot: pathSegmentSchema,
-    topicFolders: z.array(pathSegmentSchema).min(1),
-    topicAliases: z.record(pathSegmentSchema, pathSegmentSchema),
-    indexesDir: pathSegmentSchema,
-    retrieval: z
-      .object({ maxCandidates: z.number().int().min(1).max(1000) })
-      .strict(),
-    staleness: z.object({ reviewAfterDays: z.number().int().min(1) }).strict(),
-  })
-  .strict();
-```
-
-Add `brain: brainSchema.optional(),` to `configSchema`'s object literal, after `automation`.
-
-In `serializeConfig`, after the `automation` key and before `telemetry`:
-
-```typescript
-    ...(validated.brain === undefined ? {} : { brain: validated.brain }),
-```
-
-The spread is conditional so a configuration without the section serializes byte-identically to what Foundation writes today.
-
-- [x] **Step 5: Run the test and confirm it passes**
-
-Run: `npx vitest run packages/core/src/config/config.test.ts`
-Expected: PASS, all four new cases.
-
-- [x] **Step 6: Export the type from core**
-
-In `packages/core/src/config/index.ts` and `packages/core/src/index.ts`, add `BrainConfigV1` to the exported type list beside `DeveloperOsConfigV1`.
-
-- [x] **Step 7: Create the package scaffold**
-
-`packages/brain/package.json`:
-
-```json
-{
-  "name": "@developer-os/brain",
-  "version": "0.0.0",
-  "private": true,
-  "type": "module",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    }
-  },
-  "scripts": {
-    "build": "tsc -b",
-    "test": "vitest run"
-  },
-  "dependencies": {
-    "@developer-os/core": "workspace:*",
-    "@developer-os/security": "workspace:*"
-  }
-}
-```
-
-`packages/brain/tsconfig.json`:
-
-```json
-{
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "rootDir": "src",
-    "outDir": "dist"
-  },
-  "include": ["src/**/*.ts"],
-  "references": [
-    { "path": "../../packages/core" },
-    { "path": "../../packages/security" }
-  ]
-}
-```
-
-`packages/brain/vitest.config.ts`: copy `packages/security/vitest.config.ts` verbatim, changing only any package-name string it contains.
-
-Register the package in three places: add `- packages/brain` to `pnpm-workspace.yaml` under `packages:`; add `{ "path": "./packages/brain" }` to the root `tsconfig.json` `references` array **after** `./packages/security` and before `./apps/cli`, because references are built in order and the CLI will depend on it; add `"packages/brain/vitest.config.ts"` to the `projects` array in the root `vitest.config.ts`.
-
-- [x] **Step 8: Write the failing test for config resolution**
-
-`packages/brain/src/schema/config.test.ts`:
-
-```typescript
-import { describe, expect, it } from "vitest";
-
-import { DEFAULT_BRAIN_CONFIG, resolveBrainConfig } from "./config.js";
-
-const BASE = {
-  schemaVersion: 1,
-  brainPath: "/Users/example/DeveloperBrain",
-  adapters: { claude: false, codex: false },
-  git: { enabled: false },
-  automation: { enabled: false },
-  telemetry: false,
-} as const;
-
-describe("resolveBrainConfig", () => {
-  it("falls back to the documented defaults", () => {
-    expect(resolveBrainConfig(BASE)).toEqual(DEFAULT_BRAIN_CONFIG);
-  });
-
-  it("uses an explicit section unchanged", () => {
-    const brain = { ...DEFAULT_BRAIN_CONFIG, topicFolders: ["DEV"] };
-    expect(resolveBrainConfig({ ...BASE, brain })).toEqual(brain);
-  });
-
-  it("defaults to the five documented topic folders", () => {
-    expect(DEFAULT_BRAIN_CONFIG.topicFolders).toEqual([
-      "PROJECTS",
-      "TOOLS",
-      "DEV",
-      "INFRA",
-      "QA",
-    ]);
-  });
-});
-```
-
-- [x] **Step 9: Run it and confirm it fails**
-
-Run: `npx vitest run packages/brain`
-Expected: FAIL, "Cannot find module './config.js'".
-
-- [x] **Step 10: Implement**
-
-`packages/brain/src/schema/config.ts`:
-
-```typescript
-import type { BrainConfigV1, DeveloperOsConfigV1 } from "@developer-os/core";
-
-export const DEFAULT_BRAIN_CONFIG: BrainConfigV1 = {
-  schemaVersion: 1,
-  contentRoot: "content",
-  topicFolders: ["PROJECTS", "TOOLS", "DEV", "INFRA", "QA"],
-  topicAliases: {},
-  indexesDir: "_indexes",
-  retrieval: { maxCandidates: 10 },
-  staleness: { reviewAfterDays: 180 },
-};
-
-export function resolveBrainConfig(config: DeveloperOsConfigV1): BrainConfigV1 {
-  return config.brain ?? DEFAULT_BRAIN_CONFIG;
-}
-```
-
-`packages/brain/src/index.ts`:
-
-```typescript
-export { DEFAULT_BRAIN_CONFIG, resolveBrainConfig } from "./schema/config.js";
-export type { BrainConfigV1 } from "@developer-os/core";
-```
-
-- [x] **Step 11: Run the gates**
-
-Run: `npm run check`
-Expected: PASS. If `tsc -b` reports the new package is not referenced, the root `tsconfig.json` edit in Step 7 was missed.
-
-- [x] **Step 12: Commit**
-
-```bash
-git add packages/brain/package.json packages/brain/tsconfig.json \
-  packages/brain/vitest.config.ts packages/brain/src/index.ts \
-  packages/brain/src/schema/config.ts packages/brain/src/schema/config.test.ts \
-  packages/core/src/config/types.ts packages/core/src/config/loader.ts \
-  packages/core/src/config/index.ts packages/core/src/config/config.test.ts \
-  packages/core/src/index.ts pnpm-workspace.yaml tsconfig.json vitest.config.ts
-git commit -m "feat: give the Brain a package and an optional config section"
-```
-
----
-
-### Task 2: Note schema — parse, reserved vocabulary, byte-identical rewrite
-
-> **Shipped 2026-08-08. The code blocks below are the pre-review draft and are
-> superseded by `packages/brain/src/schema/note.ts` — read that, not this, if you
-> are recovering context.** Two review rounds changed the approach materially:
-> `ParsedNote` gained a `header` slice so `header + body === source` holds by
-> construction rather than by test; parsing goes through `parseAllDocuments` with
-> `logLevel: "silent"` and hand-inspected errors, because `parse()` ties throwing
-> to the log level and `parseDocument` silently discards everything after a `...`
-> end marker; the fence regex tolerates a BOM, trailing fence spaces, an EOF-
-> terminated fence, and an empty block; and `renderNote` takes
-> `Pick<ParsedNote, "header" | "body">`. The suite is 50 cases, not the ten the
-> steps below describe.
-
-**Files:**
-- Create: `packages/brain/src/schema/note.ts`, `packages/brain/src/schema/note.test.ts`
-- Modify: `packages/brain/src/index.ts`, `packages/brain/package.json`
-
-**Interfaces:**
-- Consumes: nothing from earlier tasks.
-- Produces: `NoteType`, `NoteStage`, `NoteAuthor`, `NoteFrontmatterV1`, `NoteParseIssue`, `ParsedNote`, `NoteParseResult`, `RESERVED_KEYS`, `parseNote(source: string): NoteParseResult`, `renderNote(note: Pick<ParsedNote, "header" | "body">): string`.
-
-- [x] **Step 1: Confirm the approved dependency**
-
-**Settled on 2026-08-04: the founder approved the `yaml` package.** No further approval is needed for this task; do not re-ask.
-
-Pin `yaml@2.8.1` exactly, as `smol-toml` and `zod` are pinned. It is used for reading only — `renderNote` never re-serializes through it (Step 5), so its output formatting is not part of any contract this repository has to keep.
-
-One property the rest of this task depends on: it defaults to the **YAML 1.2 core schema**, so a tag spelled `no` parses as the string `"no"` rather than `false` — under a YAML 1.1 parser that would silently corrupt a user's tag list.
-
-**Do not assume it throws on malformed input.** Whether `parse()` throws is decided by `logLevel`, so silencing the log channel — which is required, see below — also silences the refusal. The shipped code reads the errors off the document instead.
-
-- [x] **Step 2: Write the failing tests**
-
-`packages/brain/src/schema/note.test.ts`:
-
-```typescript
-import { describe, expect, it } from "vitest";
-
-import { parseNote, renderNote } from "./note.js";
-
-const VALID = [
-  "---",
-  "schemaVersion: 1",
-  "title: Widget cache invalidation",
-  "type: knowledge-note",
-  "created: 2026-08-04",
-  "tags: [dev, caching]",
-  "summary: Invalidate on write, not on read.",
-  "stage: emerging",
-  "author: agent",
-  "reviewed: null",
-  "---",
-  "",
-  "Body text with a [[DEV/other]] link.",
-  "",
-].join("\n");
-
-describe("parseNote", () => {
-  it("accepts a note carrying every required key", () => {
-    const result = parseNote(VALID);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.note.frontmatter.title).toBe("Widget cache invalidation");
-    expect(result.note.frontmatter.reviewed).toBeNull();
-    expect(result.note.frontmatter.tags).toEqual(["dev", "caching"]);
-  });
-
-  it("reports a missing required key as an error naming that key", () => {
-    const result = parseNote(VALID.replace("stage: emerging\n", ""));
-    expect(result.ok).toBe(false);
-    expect(result.issues).toContainEqual(
-      expect.objectContaining({ key: "stage", code: "missing", severity: "error" }),
-    );
-  });
-
-  it("distinguishes an absent reviewed key from an explicit null", () => {
-    const result = parseNote(VALID.replace("reviewed: null\n", ""));
-    expect(result.ok).toBe(false);
-    expect(result.issues).toContainEqual(
-      expect.objectContaining({ key: "reviewed", code: "missing" }),
-    );
-  });
-
-  it("rejects a value outside an enum", () => {
-    const result = parseNote(VALID.replace("stage: emerging", "stage: ripe"));
-    expect(result.ok).toBe(false);
-    expect(result.issues).toContainEqual(
-      expect.objectContaining({ key: "stage", code: "enum" }),
-    );
-  });
-
-  it("rejects a malformed date", () => {
-    const result = parseNote(VALID.replace("created: 2026-08-04", "created: 04/08/2026"));
-    expect(result.ok).toBe(false);
-    expect(result.issues).toContainEqual(
-      expect.objectContaining({ key: "created", code: "date" }),
-    );
-  });
-
-  it("rejects a summary over 400 characters", () => {
-    const long = "x".repeat(401);
-    const result = parseNote(VALID.replace("Invalidate on write, not on read.", long));
-    expect(result.ok).toBe(false);
-    expect(result.issues).toContainEqual(
-      expect.objectContaining({ key: "summary", code: "length" }),
-    );
-  });
-
-  it("reports an unknown key at info and still parses", () => {
-    const result = parseNote(VALID.replace("---\n\nBody", "cssclasses: [wide]\n---\n\nBody"));
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.note.unknownKeys).toEqual(["cssclasses"]);
-    expect(result.issues).toContainEqual(
-      expect.objectContaining({ key: "cssclasses", code: "unknown-key", severity: "info" }),
-    );
-  });
-
-  it("reports a file with no frontmatter as malformed", () => {
-    expect(parseNote("# Just a heading\n").ok).toBe(false);
-  });
-});
-
-describe("renderNote", () => {
-  it("rewrites an unchanged note byte-identically", () => {
-    const result = parseNote(VALID);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(renderNote(result.note)).toBe(VALID);
-  });
-
-  it("preserves unknown keys, key order, and comments byte-identically", () => {
-    const source = [
-      "---",
-      "# a comment nobody should lose",
-      "title: Widget cache invalidation",
-      "cssclasses: [wide]",
-      "schemaVersion: 1",
-      "type: knowledge-note",
-      "created: 2026-08-04",
-      "tags: []",
-      "summary: Short.",
-      "stage: emerging",
-      "author: human",
-      "reviewed: 2026-08-04",
-      "---",
-      "",
-      "Body.",
-      "",
-    ].join("\n");
-
-    const result = parseNote(source);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(renderNote(result.note)).toBe(source);
-  });
-});
-```
-
-- [x] **Step 3: Run and confirm they fail**
-
-Run: `npx vitest run packages/brain/src/schema/note.test.ts`
-Expected: FAIL, "Cannot find module './note.js'".
-
-- [x] **Step 4: Add the dependency**
-
-```bash
-pnpm --filter @developer-os/brain add yaml@2.8.1
-```
-
-- [x] **Step 5: Implement**
-
-`packages/brain/src/schema/note.ts`:
-
-```typescript
-import { parse as parseYaml } from "yaml";
-
-export type NoteType =
-  | "knowledge-note"
-  | "compiled-note"
-  | "project-note"
-  | "reference-note";
-export type NoteStage = "emerging" | "established" | "deprecated";
-export type NoteAuthor = "agent" | "human";
-
-export const NOTE_TYPES: readonly NoteType[] = [
-  "knowledge-note",
-  "compiled-note",
-  "project-note",
-  "reference-note",
-];
-export const NOTE_STAGES: readonly NoteStage[] = [
-  "emerging",
-  "established",
-  "deprecated",
-];
-export const NOTE_AUTHORS: readonly NoteAuthor[] = ["agent", "human"];
-
-export const RESERVED_KEYS: readonly string[] = [
-  "schemaVersion",
-  "title",
-  "type",
-  "created",
-  "updated",
-  "tags",
-  "aliases",
-  "summary",
-  "stage",
-  "author",
-  "reviewed",
-  "occurrences",
-  "sources",
-];
-
-export const MAX_SUMMARY_LENGTH = 400;
-
-export interface NoteFrontmatterV1 {
-  readonly schemaVersion: 1;
-  readonly title: string;
-  readonly type: NoteType;
-  readonly created: string;
-  readonly updated?: string;
-  readonly tags: readonly string[];
-  readonly aliases?: readonly string[];
-  readonly summary: string;
-  readonly stage: NoteStage;
-  readonly author: NoteAuthor;
-  readonly reviewed: string | null;
-  readonly occurrences?: number;
-  readonly sources?: readonly string[];
-}
-
-export type NoteIssueCode =
-  | "missing"
-  | "type"
-  | "enum"
-  | "date"
-  | "length"
-  | "unknown-key"
-  | "malformed";
-
-export interface NoteParseIssue {
-  readonly key: string | null;
-  readonly code: NoteIssueCode;
-  readonly message: string;
-  readonly severity: "error" | "info";
-}
-
-export interface ParsedNote {
-  readonly frontmatter: NoteFrontmatterV1;
-  readonly unknownKeys: readonly string[];
-  readonly frontmatterText: string;
-  readonly body: string;
-}
-
-export type NoteParseResult =
-  | { readonly ok: true; readonly note: ParsedNote; readonly issues: readonly NoteParseIssue[] }
-  | { readonly ok: false; readonly issues: readonly NoteParseIssue[] };
-
-const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n)([\s\S]*)$/u;
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/u;
-
-function error(key: string | null, code: NoteIssueCode, message: string): NoteParseIssue {
-  return { key, code, message, severity: "error" };
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-
-function isIsoDate(value: unknown): value is string {
-  if (typeof value !== "string" || !ISO_DATE.test(value)) return false;
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(value);
-}
-```
-
-The `toISOString().startsWith` re-check is not redundant: `2026-02-30` matches the regular expression and `Date` silently rolls it over to March 2nd. Without it, an impossible date parses and every downstream ordering is wrong by a day.
-
-Then the validator. It collects issues rather than throwing on the first one, so `brain lint` can report a whole note at once:
-
-```typescript
-function validate(raw: Record<string, unknown>): {
-  readonly frontmatter: NoteFrontmatterV1 | null;
-  readonly issues: readonly NoteParseIssue[];
-  readonly unknownKeys: readonly string[];
-} {
-  const issues: NoteParseIssue[] = [];
-  const unknownKeys = Object.keys(raw)
-    .filter((key) => !RESERVED_KEYS.includes(key))
-    .sort();
-
-  for (const key of unknownKeys) {
-    issues.push({
-      key,
-      code: "unknown-key",
-      message: `\`${key}\` is not a Developer OS key; it is preserved and ignored`,
-      severity: "info",
-    });
-  }
-
-  const require = (key: string): unknown => {
-    if (!Object.hasOwn(raw, key)) {
-      issues.push(error(key, "missing", `\`${key}\` is required`));
-      return undefined;
-    }
-    return raw[key];
-  };
-
-  const schemaVersion = require("schemaVersion");
-  if (schemaVersion !== undefined && schemaVersion !== 1) {
-    issues.push(error("schemaVersion", "type", "`schemaVersion` must be the literal 1"));
-  }
-
-  const title = require("title");
-  if (title !== undefined && (typeof title !== "string" || title.length === 0)) {
-    issues.push(error("title", "type", "`title` must be a non-empty string"));
-  }
-
-  const type = require("type");
-  if (type !== undefined && !NOTE_TYPES.includes(type as NoteType)) {
-    issues.push(error("type", "enum", `\`type\` must be one of ${NOTE_TYPES.join(", ")}`));
-  }
-
-  const created = require("created");
-  if (created !== undefined && !isIsoDate(created)) {
-    issues.push(error("created", "date", "`created` must be a real YYYY-MM-DD date"));
-  }
-
-  if (Object.hasOwn(raw, "updated") && !isIsoDate(raw.updated)) {
-    issues.push(error("updated", "date", "`updated` must be a real YYYY-MM-DD date"));
-  }
-
-  const tags = require("tags");
-  if (tags !== undefined && !isStringArray(tags)) {
-    issues.push(error("tags", "type", "`tags` must be an array of strings"));
-  }
-
-  if (Object.hasOwn(raw, "aliases") && !isStringArray(raw.aliases)) {
-    issues.push(error("aliases", "type", "`aliases` must be an array of strings"));
-  }
-
-  const summary = require("summary");
-  if (summary !== undefined) {
-    if (typeof summary !== "string") {
-      issues.push(error("summary", "type", "`summary` must be a string"));
-    } else if (summary.length > MAX_SUMMARY_LENGTH) {
-      issues.push(
-        error("summary", "length", `\`summary\` must be at most ${MAX_SUMMARY_LENGTH} characters`),
-      );
-    }
-  }
-
-  const stage = require("stage");
-  if (stage !== undefined && !NOTE_STAGES.includes(stage as NoteStage)) {
-    issues.push(error("stage", "enum", `\`stage\` must be one of ${NOTE_STAGES.join(", ")}`));
-  }
-
-  const author = require("author");
-  if (author !== undefined && !NOTE_AUTHORS.includes(author as NoteAuthor)) {
-    issues.push(error("author", "enum", `\`author\` must be one of ${NOTE_AUTHORS.join(", ")}`));
-  }
-
-  if (!Object.hasOwn(raw, "reviewed")) {
-    issues.push(error("reviewed", "missing", "`reviewed` is required; use null when unreviewed"));
-  } else if (raw.reviewed !== null && !isIsoDate(raw.reviewed)) {
-    issues.push(error("reviewed", "date", "`reviewed` must be null or a real YYYY-MM-DD date"));
-  }
-
-  if (Object.hasOwn(raw, "occurrences")) {
-    const value = raw.occurrences;
-    if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
-      issues.push(error("occurrences", "type", "`occurrences` must be an integer of at least 1"));
-    }
-  }
-
-  if (Object.hasOwn(raw, "sources") && !isStringArray(raw.sources)) {
-    issues.push(error("sources", "type", "`sources` must be an array of strings"));
-  }
-
-  if (issues.some((issue) => issue.severity === "error")) {
-    return { frontmatter: null, issues, unknownKeys };
-  }
-
-  return {
-    frontmatter: {
-      schemaVersion: 1,
-      title: raw.title as string,
-      type: raw.type as NoteType,
-      created: raw.created as string,
-      ...(Object.hasOwn(raw, "updated") ? { updated: raw.updated as string } : {}),
-      tags: raw.tags as string[],
-      ...(Object.hasOwn(raw, "aliases") ? { aliases: raw.aliases as string[] } : {}),
-      summary: raw.summary as string,
-      stage: raw.stage as NoteStage,
-      author: raw.author as NoteAuthor,
-      reviewed: raw.reviewed as string | null,
-      ...(Object.hasOwn(raw, "occurrences") ? { occurrences: raw.occurrences as number } : {}),
-      ...(Object.hasOwn(raw, "sources") ? { sources: raw.sources as string[] } : {}),
-    },
-    issues,
-    unknownKeys,
-  };
-}
-
-export function parseNote(source: string): NoteParseResult {
-  const match = FRONTMATTER.exec(source);
-  if (match === null) {
-    return { ok: false, issues: [error(null, "malformed", "the note has no frontmatter block")] };
-  }
-
-  const [, frontmatterText = "", body = ""] = match;
-
-  let raw: unknown;
-  try {
-    raw = parseYaml(frontmatterText) as unknown;
-  } catch {
-    return { ok: false, issues: [error(null, "malformed", "the frontmatter is not valid YAML")] };
-  }
-
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    return { ok: false, issues: [error(null, "malformed", "the frontmatter is not a mapping")] };
-  }
-
-  const validated = validate(raw as Record<string, unknown>);
-  if (validated.frontmatter === null) return { ok: false, issues: validated.issues };
-
-  return {
-    ok: true,
-    note: {
-      frontmatter: validated.frontmatter,
-      unknownKeys: validated.unknownKeys,
-      frontmatterText,
-      body,
-    },
-    issues: validated.issues,
-  };
-}
-
-/**
- * Rebuilds the file from the retained frontmatter text. Nothing is re-serialized
- * from the parsed object, which is the only way key order, comments, quoting
- * style, and unknown keys survive a read-write cycle unchanged.
- */
-export function renderNote(note: ParsedNote): string {
-  return `---\n${note.frontmatterText}\n---\n${note.body}`;
-}
-```
-
-- [x] **Step 6: Run and confirm the tests pass**
-
-Run: `npx vitest run packages/brain/src/schema/note.test.ts`
-Expected: PASS.
-
-- [x] **Step 7: Export and run the gates**
-
-Add to `packages/brain/src/index.ts`:
-
-```typescript
-export {
-  MAX_SUMMARY_LENGTH,
-  NOTE_AUTHORS,
-  NOTE_STAGES,
-  NOTE_TYPES,
-  parseNote,
-  renderNote,
-  RESERVED_KEYS,
-} from "./schema/note.js";
-export type {
-  NoteAuthor,
-  NoteFrontmatterV1,
-  NoteIssueCode,
-  NoteParseIssue,
-  NoteParseResult,
-  NoteStage,
-  NoteType,
-  ParsedNote,
-} from "./schema/note.js";
-```
-
-Run: `npm run check`
-Expected: PASS.
-
-- [x] **Step 8: Commit**
-
-```bash
-git add packages/brain/src/schema/note.ts packages/brain/src/schema/note.test.ts \
-  packages/brain/src/index.ts packages/brain/package.json pnpm-lock.yaml
-git commit -m "feat: parse a note strictly without owning the user's frontmatter"
-```
+### Tasks 1 and 2 — closed, and removed from this plan
+
+**Task 1 — package scaffold and the optional `[brain]` config section.** Shipped 2026-08-07,
+commit `4cd7224`.
+
+**Task 2 — note schema: strict parse, reserved vocabulary, byte-identical rewrite.** Shipped
+2026-08-08, commit `9f82901`, as 51 test cases after two review rounds.
+
+Their steps and draft code blocks are gone rather than kept as ticked boxes: this plan holds
+only unfinished work, and 826 lines of pre-review draft that the shipped code had already
+superseded were the single largest source of stale instruction in it. Recover them from
+`git show 9f82901:docs/superpowers/plans/2026-07-21-developer-os-brain-engine.md` if the
+reasoning is ever needed.
+
+**Nothing durable was lost, because none of it lived only there.** Where each thing lives now:
+
+| What | Where it is now |
+|---|---|
+| the four `brainSchema` guards review added — the `__proto__`/`constructor`/`prototype` alias-key rejection, the 3650-day staleness ceiling, and the two alias refinements | `packages/core/src/config/loader.ts`, each with its reasoning at the code |
+| why `BrainConfigV1` lives in `core` and not here | the placement note above, `BACKLOG.md` §3 fact 3, spec §2 and §3 |
+| why `serializeConfig` emits the section on presence rather than on difference | spec §3, marked as shipped |
+| the parser contract — YAML 1.2 core schema, alias bound, duplicate-key error, and the tests that pin them | spec §4.4 and the header comment in `packages/brain/src/schema/note.ts` |
+| why `parseAllDocuments` and a silenced `logLevel`, and why the header slice makes the round trip hold by construction | comments at those exact lines in `note.ts` |
+| `yaml` is quadratic in mapping size, so Task 3 must bound the bytes handed to `parseNote` | Task 3's Interfaces block below, and `BACKLOG.md` §3 fact 1 |
+| the unterminated-frontmatter heuristic and the `YAMLParseError` line/column carry | Task 6's step list below, where they are to be built |
+
+Two obligations these tasks created and did not close are open items, not history:
+**NEW-1** (`packages/brain` is outside the network-capability scan) and **NEW-2** (`uniqueKeys`
+is an unpinned library default), both in `BACKLOG.md` §1, both hooked from Task 10 Step 6.
 
 ---
 
 ### Task 3: Discovery — deny-by-default enumeration and the committed fixture
+
+**Status: SHIPPED 2026-08-08, commit `4b59220`.** Three deviations from the draft below, all
+recorded in that commit message: the `TOOLS/` fixture note is `rowlease.md` rather than a real
+product; `DiscoveryResult` carries a third field `symlinkedFolders`; and `compareRawBytes` is
+exported because `compareCanonical` folds to NFC and so cannot break its own ties — Task 4
+re-sorts by `path` and meets the same pair. The draft code blocks below are superseded by the
+shipped module and are kept only until Task 10 compresses this section.
 
 **Files:**
 - Create: `packages/brain/src/discovery/index.ts`, `packages/brain/src/discovery/discover.ts`, `packages/brain/src/discovery/discover.test.ts`
@@ -876,7 +107,7 @@ git commit -m "feat: parse a note strictly without owning the user's frontmatter
 - **Carried from Task 2's review:** `yaml` parsing is quadratic in mapping size — measured at 14 ms for 1,000 frontmatter keys, 1.2 s for 16,000, and no completion inside two minutes for a 700 KB block, while the fence regex over the same input stays under 3 ms. Discovery walks arbitrary user files, so bound the bytes handed to `parseNote` and report an oversized frontmatter as a finding rather than hanging the CLI.
 - Produces: `DirectoryEntry`, `DirectoryReader`, `DiscoveredNote`, `DiscoveryResult`, `PRIVATE_FOLDERS`, `discoverNotes(request: DiscoveryRequest): Promise<DiscoveryResult>`, `DiscoveryRequest`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/brain/src/discovery/discover.test.ts`. Use an in-memory reader so the hostile-order case in Task 4 can reuse it:
 
@@ -987,12 +218,12 @@ describe("discoverNotes", () => {
 });
 ```
 
-- [ ] **Step 2: Run and confirm they fail**
+- [x] **Step 2: Run and confirm they fail**
 
 Run: `npx vitest run packages/brain/src/discovery`
 Expected: FAIL, "Cannot find module './discover.js'".
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `packages/brain/src/discovery/discover.ts`:
 
@@ -1138,16 +369,16 @@ export async function discoverNotes(
 
 Symlinks are refused rather than followed even when they resolve inside the vault, because a link and its target would otherwise be indexed as two notes with one content hash — a duplicate finding nobody can act on.
 
-- [ ] **Step 4: Run and confirm the tests pass**
+- [x] **Step 4: Run and confirm the tests pass**
 
 Run: `npx vitest run packages/brain/src/discovery`
 Expected: PASS, all six cases.
 
-- [ ] **Step 5: Add the barrel export**
+- [x] **Step 5: Add the barrel export**
 
 `packages/brain/src/discovery/index.ts` re-exports every name from `./discover.js`. Add the same names to `packages/brain/src/index.ts`.
 
-- [ ] **Step 6: Build the committed synthetic fixture**
+- [x] **Step 6: Build the committed synthetic fixture**
 
 Create `tests/fixtures/brain/legacy-shape/` with exactly this tree. Every word is invented; it encodes only the shape recorded in `docs/migration/baseline-capabilities.json` (Obsidian Markdown, a vault map, a catalog, a graph, index-first retrieval).
 
@@ -1158,7 +389,7 @@ tests/fixtures/brain/legacy-shape/
     ├── DEV/caching.md                 knowledge-note, tags [dev, caching], links to DEV/testing
     ├── DEV/testing.md                 knowledge-note, tags [dev, testing]
     ├── PROJECTS/orchard.md            project-note, tags [project, orchard]
-    ├── TOOLS/ledger-cli.md            reference-note, tags [tools]
+    ├── TOOLS/rowlease.md              reference-note, tags [tools]
     ├── INFRA/backups.md               compiled-note, tags [infra]
     ├── _raw/inbox/unprocessed.md      must never appear in any index
     ├── _outputs/report.md             must never appear in any index
@@ -1193,12 +424,12 @@ Give `PROJECTS/orchard.md` `author: agent` and `reviewed: null` with `occurrence
 
 Add `tests/fixtures/brain/README.md` stating, in one paragraph, that the fixture is wholly invented, is never generated from or compared against a real vault, and is extended in place when the product needs a shape it does not yet encode.
 
-- [ ] **Step 7: Run the gates**
+- [x] **Step 7: Run the gates**
 
 Run: `npm run check`
 Expected: PASS. The self-containment lint reads untracked files too, so a fixture accidentally naming a real path fails here rather than in review.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add packages/brain/src/discovery/ packages/brain/src/index.ts tests/fixtures/brain/
@@ -1209,6 +440,15 @@ git commit -m "feat: find notes by permission, not by absence of exclusion"
 
 ### Task 4: Index and graph construction
 
+**Status: SHIPPED 2026-08-09, commit `5e3cff7`.** Deviations, all in that commit message:
+link resolution is five tiers plus a case-folded fallback rather than four (spec §7 carries
+the amendment, `BACKLOG.md` §8 registers it); `IndexBuildResult` gains `ambiguousLinks`,
+`symlinkedFolders` and `sources` on `IndexedNote`; `parseIssues` carries issues from notes
+that *parsed*, which is where `unknown-key` lives; the quadratic-`yaml` bound that Task 3's
+Interfaces block assigned to discovery landed here instead, as `MAX_FRONTMATTER_CHARS`,
+because discovery reads no files. The draft code blocks below are superseded by the shipped
+modules and are kept only until Task 10 compresses this section.
+
 **Files:**
 - Create: `packages/brain/src/indexes/build.ts`, `packages/brain/src/indexes/serialize.ts`, `packages/brain/src/indexes/tokenize.ts`, `packages/brain/src/indexes/index.ts`
 - Create: `packages/brain/src/indexes/build.test.ts`, `packages/brain/src/indexes/serialize.test.ts`
@@ -1218,7 +458,7 @@ git commit -m "feat: find notes by permission, not by absence of exclusion"
 - Consumes: `discoverNotes`, `DirectoryReader`, `compareCanonical` (Task 3); `parseNote` (Task 2); `hashBytes` from `@developer-os/core`.
 - Produces: `IndexedTerm`, `IndexedNote`, `IndexedFolder`, `IndexedTag`, `IndexDocumentV1`, `GraphNode`, `GraphEdge`, `GraphDocumentV1`, `IndexBuildResult`, `buildIndex(request: IndexBuildRequest): Promise<IndexBuildResult>`, `IndexBuildRequest`, `serializeIndex(document: IndexDocumentV1): string`, `serializeGraph(document: GraphDocumentV1): string`, `tokenize(text: string): readonly string[]`.
 
-- [ ] **Step 1: Write the failing determinism tests**
+- [x] **Step 1: Write the failing determinism tests**
 
 `packages/brain/src/indexes/build.test.ts` — the two assertions that carry the gate:
 
@@ -1254,7 +494,7 @@ describe("buildIndex determinism", () => {
       "content/DEV/testing.md",
       "content/INFRA/backups.md",
       "content/PROJECTS/orchard.md",
-      "content/TOOLS/ledger-cli.md",
+      "content/TOOLS/rowlease.md",
     ]);
   });
 
@@ -1275,12 +515,12 @@ describe("buildIndex determinism", () => {
 
 `packages/brain/src/indexes/testing.ts` builds an `IndexBuildRequest` over `tests/fixtures/brain/legacy-shape/` using `node:fs/promises` for reads and a `DirectoryReader` that wraps `readdir(path, { withFileTypes: true })`, with a `reversed` variant that reverses each result array. Keep it in `src/` rather than a test folder so the reversed reader is available to Task 6 too.
 
-- [ ] **Step 2: Run and confirm they fail**
+- [x] **Step 2: Run and confirm they fail**
 
 Run: `npx vitest run packages/brain/src/indexes`
 Expected: FAIL, "Cannot find module './build.js'".
 
-- [ ] **Step 3: Implement tokenization**
+- [x] **Step 3: Implement tokenization**
 
 `packages/brain/src/indexes/tokenize.ts`:
 
@@ -1298,7 +538,7 @@ export function tokenize(text: string): readonly string[] {
 
 No stemming, by decision — spec §8 states it as a non-goal rather than half-solving it.
 
-- [ ] **Step 4: Implement the build**
+- [x] **Step 4: Implement the build**
 
 `packages/brain/src/indexes/build.ts`. The types first:
 
@@ -1411,7 +651,7 @@ export function extractLinks(body: string): readonly string[] {
 
 Every array in both documents is sorted with `compareCanonical` before it is returned: `notes` by `path`, `tags` by `tag`, each tag's `paths` by path, `folders` by the configured `topicFolders` order then name, `topTags` by count descending then tag, `nodes` by `path`, `edges` by `source` then `target` then `text`, and `terms` by `term`.
 
-- [ ] **Step 5: Implement canonical serialization**
+- [x] **Step 5: Implement canonical serialization**
 
 `packages/brain/src/indexes/serialize.ts`:
 
@@ -1429,12 +669,12 @@ export function serializeGraph(document: GraphDocumentV1): string {
 
 Add a test in `serialize.test.ts` asserting the output ends with exactly one `\n`, contains no `\r`, and that re-serializing a `JSON.parse` of the output reproduces it byte for byte.
 
-- [ ] **Step 6: Run and confirm the tests pass**
+- [x] **Step 6: Run and confirm the tests pass**
 
 Run: `npx vitest run packages/brain/src/indexes`
 Expected: PASS. If only the reversed-reader case fails, an unsorted array reached the output — find it by diffing the two serialized strings rather than by inspection.
 
-- [ ] **Step 7: Run the gates and commit**
+- [x] **Step 7: Run the gates and commit**
 
 Run: `npm run check`
 
@@ -1447,6 +687,14 @@ git commit -m "feat: build an index that two machines agree on"
 
 ### Task 5: Rendered Markdown views
 
+**Status: SHIPPED 2026-08-09, commit `6f23e2d`.** Additions beyond the draft, all in that
+commit message: two golden-artifact tests holding the full bytes of both views (the property
+tests let four content-destroying mutants pass); `schemaVersion` in the Markdown frontmatter;
+a `## Notes with no folder section` fallback so an orphaned note cannot vanish from the
+catalog; and escaping that covers backtick, brackets, angle bracket and a leading block
+marker, because `note.ts` validates tags and summaries for type and length only. The tag line
+is a list item so it cannot begin with untrusted bytes.
+
 **Files:**
 - Create: `packages/brain/src/indexes/render.ts`, `packages/brain/src/indexes/render.test.ts`
 - Modify: `packages/brain/src/indexes/index.ts`, `packages/brain/src/index.ts`
@@ -1455,7 +703,7 @@ git commit -m "feat: build an index that two machines agree on"
 - Consumes: `IndexBuildResult`, `IndexDocumentV1` (Task 4).
 - Produces: `renderVaultMap(index: IndexDocumentV1): string`, `renderCatalog(index: IndexDocumentV1): string`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```typescript
 import { describe, expect, it } from "vitest";
@@ -1499,12 +747,12 @@ describe("rendered views", () => {
 });
 ```
 
-- [ ] **Step 2: Run and confirm they fail**
+- [x] **Step 2: Run and confirm they fail**
 
 Run: `npx vitest run packages/brain/src/indexes/render.test.ts`
 Expected: FAIL, "Cannot find module './render.js'".
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Both renderers emit YAML frontmatter with `generatedAt` and nothing else time-derived, then Markdown built only from `IndexDocumentV1`. `renderVaultMap` writes a folder table (folder, notes, types, top tags), a tag line, and a "recent changes" list of at most fifteen notes ordered by `updated ?? created` descending then path ascending. `renderCatalog` writes one `##` section per folder in the index's folder order, each listing `- [title](path) — summary`.
 
@@ -1512,7 +760,7 @@ Escape every interpolated value for Markdown table cells by replacing `|` with `
 
 Both functions end their output with exactly one `\n`.
 
-- [ ] **Step 4: Run, gate, and commit**
+- [x] **Step 4: Run, gate, and commit**
 
 Run: `npx vitest run packages/brain/src/indexes` then `npm run check`
 
@@ -1526,6 +774,14 @@ git commit -m "feat: render a map a human can read from an index a machine can t
 
 ### Task 6: Lint
 
+**Status: SHIPPED 2026-08-09, commit `a80856c`.** Deviations, all in that commit message: the
+`collision` fixture is built in memory because a case-insensitive volume cannot hold it and a
+committed one would mean different things on macOS and Linux CI; the unterminated-fence
+heuristic gained a length gate so it does not fire on ordinary Obsidian property names; source
+validation is an allowlist *plus* a shape test; every interpolated value is bounded by
+`renderValue`. The second carried finding — `YAMLParseError`'s line and column — is **not**
+closed here and is `BACKLOG.md` §1 NEW-3, hooked from Task 8's opening and Task 10 Step 6.
+
 **Files:**
 - Create: `packages/brain/src/lint/lint.ts`, `packages/brain/src/lint/drift.ts`, `packages/brain/src/lint/index.ts`, `packages/brain/src/lint/lint.test.ts`
 - Create: `tests/fixtures/brain/malformed/` (eight one-concern fixtures)
@@ -1535,7 +791,7 @@ git commit -m "feat: render a map a human can read from an index a machine can t
 - Consumes: `IndexBuildResult`, `buildIndex` (Task 4); `renderCatalog`, `renderVaultMap` (Task 5); `NoteParseIssue` (Task 2).
 - Produces: `LintClass`, `LintSeverity`, `LintFinding`, `LintResult`, `lintVault(request: LintRequest): Promise<LintResult>`, `LintRequest`, `canonicalizeArtifact(text: string): string`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 One case per row of spec §7's table, each against its own fixture, plus the drift case that matters most:
 
@@ -1666,12 +922,12 @@ it("counts an error only when one is present", async () => {
 
 `lintRequestForFixture(name)` is a thin wrapper over `lintRequestFor` that points at `tests/fixtures/brain/<name>/` and reindexes it first, so each malformed fixture is compared against its own freshly built artifacts rather than against `legacy-shape`'s.
 
-- [ ] **Step 2: Run and confirm they fail**
+- [x] **Step 2: Run and confirm they fail**
 
 Run: `npx vitest run packages/brain/src/lint`
 Expected: FAIL, "Cannot find module './lint.js'".
 
-- [ ] **Step 3: Implement canonical-form drift**
+- [x] **Step 3: Implement canonical-form drift**
 
 `packages/brain/src/lint/drift.ts`:
 
@@ -1698,7 +954,7 @@ export function canonicalizeArtifact(text: string): string {
 
 Add a test asserting `canonicalizeArtifact` replaces exactly one occurrence per artifact, so a note body containing the literal text `generatedAt:` cannot be rewritten.
 
-- [ ] **Step 4: Implement the six classes**
+- [x] **Step 4: Implement the six classes**
 
 The types, in `packages/brain/src/lint/lint.ts`:
 
@@ -1737,14 +993,19 @@ export interface LintRequest {
 
 `readArtifact` returns `null` for a missing artifact rather than throwing, because "the index has never been built" is an `index-drift` finding with recovery text, not a crash. `today` is a `YYYY-MM-DD` string taken from the injected clock — the staleness class is the only one that needs the current date, and passing it explicitly keeps `lintVault` a pure function of its arguments.
 
-**Two findings carried here from Task 2's review, both to be closed by this task:**
+**Two findings carried here from Task 2's review. The first shipped; the second did not —
+it is `BACKLOG.md` §1 NEW-3, because it needs a new field on `NoteParseIssue` and
+`LintFinding`, which is a decision about an interface Tasks 7–10 consume:**
 
 1. **An unterminated frontmatter block silently swallows body prose.** A note whose opening
    fence is never closed will have the *next* `---` in the body treated as the closing fence,
    so everything above it parses as frontmatter and the indexed body loses its first paragraph.
    The round trip still holds and the only signal today is an `info`. A YAML mapping key
-   containing whitespace is a near-certain sign of this, and real reserved keys never contain
-   any — so `frontmatter` reports an unknown key matching `/\s/` at `warn`. It is a heuristic,
+   containing whitespace is a sign of this, and real reserved keys never contain any — so
+   `frontmatter` reports an unknown key that contains whitespace **and is longer than 24
+   characters** at `warn`. The length gate is not decoration: Obsidian's Properties UI accepts
+   arbitrary property names, so `Due date` is a stock note, and a class that fires on ordinary
+   Obsidian output is a class users learn to ignore. It is a heuristic,
    which is why it lives here and not in the parser.
 2. **A `YAMLParseError` carries line and column that the parser discards.** `parseNote` maps
    every YAML failure to one `malformed` issue with `key: null`, so a duplicate `tags:` — which
@@ -1755,7 +1016,7 @@ export interface LintRequest {
 
 Case-collision detection folds each path with `toLowerCase()` and groups; any group of more than one is an `error` reported against every member. Content-hash duplicates group on `contentHash`. Title duplicates group on `title.trim().toLowerCase()` within one `topicFolder`.
 
-- [ ] **Step 5: Run, gate, and commit**
+- [x] **Step 5: Run, gate, and commit**
 
 Run: `npx vitest run packages/brain/src/lint` then `npm run check`
 
@@ -1905,6 +1166,11 @@ git commit -m "feat: retrieve through the funnel and say when nothing is reachab
 ---
 
 ### Task 8: Public surface — capture type, migrations, adoption, and the facade
+
+**Before writing anything here, settle `BACKLOG.md` §1 NEW-3.** It proposes
+`readonly line: number | null` on `NoteParseIssue` and `LintFinding`. Both are shapes this
+task consumes, so adding the field afterwards is a breaking change to a published interface
+and adding it now is one line in each.
 
 **Files:**
 - Create: `packages/brain/src/schema/capture.ts`, `packages/brain/src/schema/capture.test.ts`
@@ -2232,13 +1498,31 @@ Expected: PASS. Report failures only.
 
 - [ ] **Step 6: Close the bookkeeping**
 
-In `BACKLOG.md` §3, mark the DOS-P2 plan written and implemented; in §5, mark `packages/brain/`, `templates/brain/`, `tests/contracts/brain/`, `tests/fixtures/brain/`, and `tests/integration/brain/` created. In `ORDER.md`, set A6's status to `done` and move `NOW` to A7. Per `SESSION.md`, delete this plan file in the same commit that closes its last step, carrying anything a later task still needs into `docs/architecture/`.
+In `BACKLOG.md` §3, mark DOS-P2 implemented and delete the per-task "Remaining" list; in §5, mark `packages/brain/`, `templates/brain/`, `tests/contracts/brain/`, `tests/fixtures/brain/`, and `tests/integration/brain/` created. In `ORDER.md`, set A6's status to `done`, remove its row, and move `NOW` to A7.
+
+Then check three things off before deleting this file, because deleting it is what makes them unrecoverable:
+
+- **`BACKLOG.md` §3 already carries the five facts that must outlive this plan** — the quadratic-`yaml` byte bound, the invented-frontmatter caveat, the `BrainConfigV1` placement, the never-refresh-the-fixture rule, and the YAML 1.2 core-schema requirement. Confirm each is still accurate as shipped and correct it there rather than restating it somewhere new. The fifth one's durable homes are **not** §3, which collapses when this subsystem closes: it lives in design spec §4.4 and at the import site in `packages/brain/src/schema/note.ts`. Verify both are still there before deleting anything.
+- **`BACKLOG.md` §1 NEW-1 must be closed by this subsystem**: `packages/brain` is not in the network-capability scan's package list in `tests/e2e/foundation.test.ts`, which makes brain-engine spec §16's "no network" clause an unchecked assertion. Add the package to that list here if no earlier task did, and delete the NEW-1 entry.
+- **`BACKLOG.md` §1 NEW-2 must be closed by this subsystem too**: pass `uniqueKeys: true` explicitly at the `parseAllDocuments` call in `packages/brain/src/schema/note.ts` — it is a parse option, not a `toJS` option — add a regression test beside the existing duplicate-key case, and delete the NEW-2 entry. Do it in whichever earlier task next touches that file if one does; this step is the backstop, not the intended home. Also settle the open decision recorded with NEW-2 about application-tag resolution, or carry it forward explicitly rather than letting it lapse.
+- **`BACKLOG.md` §1 NEW-3 must be settled by this subsystem too**: `parseNote` discards the
+  line and column a `YAMLParseError` carries, so a duplicate `tags:` reports nothing about
+  where. Carrying it means adding `readonly line: number | null` to **both** `NoteParseIssue`
+  and `LintFinding`, which is why it is a decision rather than a patch — Task 8 consumes both
+  shapes. Read `err.linePos` and `err.pos` **only**: `err.message` and `err.source` embed the
+  offending note content verbatim. Settle it before Task 8 rather than here if you can; this
+  step is the backstop, not the intended home.
+- **`BACKLOG.md` §8's "Still owed" table has exactly two rows, and this plan owns both** — the `brain` CLI command group (Task 9) and `init` installing the template (Task 10). Move each to the Discharged table as it lands. Task 9 has no bookkeeping step of its own, so if it closes before this one, discharge its row there rather than leaving it for here.
+
+Per `SESSION.md`, delete this plan file in the same commit that closes its last step, carrying anything else a later task still needs into `docs/architecture/`.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add templates/brain/ apps/cli/src/commands/init.ts apps/cli/src/commands/init.test.ts \
-  tests/e2e/brain.test.ts docs/superpowers/BACKLOG.md docs/superpowers/ORDER.md
+  tests/e2e/brain.test.ts tests/e2e/foundation.test.ts \
+  docs/superpowers/BACKLOG.md docs/superpowers/ORDER.md \
+  docs/superpowers/specs/2026-07-21-developer-os-brain-engine-design.md
 git rm docs/superpowers/plans/2026-07-21-developer-os-brain-engine.md
 git commit -m "feat: ship a Brain a new install can use on day one"
 ```
@@ -2267,4 +1551,6 @@ git commit -m "feat: ship a Brain a new install can use on day one"
 | §14 gate | 10 Step 5 |
 | §15 deviations | 1 (config), 9 (CLI), 10 (init), File Structure note (`discovery/`) |
 
-**Two things a reviewer should check first**, because they are where this plan is most likely to be wrong: that `serializeConfig` really does emit a byte-identical file for a config with no `[brain]` section (Task 1 Step 4), and that `canonicalizeArtifact` replaces exactly one occurrence per artifact rather than every occurrence of a string a note body could also contain (Task 6 Step 3).
+Rows naming Tasks 1 and 2 are satisfied and closed; the spec section is where to check them, not this plan.
+
+**The one thing a reviewer should check first**, because it is where the remaining plan is most likely to be wrong: that `canonicalizeArtifact` replaces exactly one occurrence per artifact rather than every occurrence of a string a note body could also contain (Task 6 Step 3). The Task 1 half of this warning — that `serializeConfig` emits a byte-identical file for a config with no `[brain]` section — was checked when Task 1 shipped and is pinned by a round-trip test in `packages/core/src/config/config.test.ts`.

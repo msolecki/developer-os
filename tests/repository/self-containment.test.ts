@@ -163,6 +163,13 @@ describe("the allowlist itself", () => {
  * as a failing test and has to be justified in the same diff. Foundation is
  * closed, so neither document is expected to move much; if one legitimately
  * gains or loses a mention, update the number here and say why in the commit.
+ *
+ * The program plan went 15 -> 12 on 2026-08-08, when its closed Tasks 0 and 1
+ * were compressed to a status block and their step lists removed. Lowering an
+ * exact-equality baseline tightens this check rather than relaxing it: the three
+ * references are now *forbidden* to come back unnoticed. Every survivor is
+ * boundary prose that has to be there — the self-contained-execution constraint,
+ * the cutover-preconditions pointer, and Task 8, which is the cutover itself.
  */
 describe("references inside the wholly-allowed documents", () => {
   it("has not grown since the rule was written", async () => {
@@ -171,7 +178,7 @@ describe("references inside the wholly-allowed documents", () => {
     const root = fileURLToPath(new URL("../../", import.meta.url));
 
     const baseline: Readonly<Record<string, number>> = {
-      "docs/superpowers/plans/2026-07-21-developer-os-program.md": 15,
+      "docs/superpowers/plans/2026-07-21-developer-os-program.md": 12,
       "docs/superpowers/specs/2026-07-21-developer-os-design.md": 12,
     };
 
