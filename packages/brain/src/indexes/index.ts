@@ -21,5 +21,10 @@ export type {
   NoteIssues,
   UnresolvedLink,
 } from "./build.js";
+export {
+  RECENT_CHANGES_LIMIT,
+  renderCatalog,
+  renderVaultMap,
+} from "./render.js";
 export { serializeGraph, serializeIndex } from "./serialize.js";
 export { tokenize } from "./tokenize.js";

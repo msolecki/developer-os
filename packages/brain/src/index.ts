@@ -16,6 +16,8 @@ export {
   extractLinks,
   frontmatterExceeds,
   MAX_FRONTMATTER_CHARS,
+  renderCatalog,
+  renderVaultMap,
   TOP_TAGS_PER_FOLDER,
   serializeGraph,
   serializeIndex,
