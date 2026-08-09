@@ -1029,6 +1029,18 @@ git commit -m "feat: fail a vault loudly and per path"
 
 ### Task 7: Retrieval
 
+**Status: SHIPPED 2026-08-09, commit `83e9ba1`.** Deviations, all in that commit message:
+query tokens are deduplicated; `title` and `summary` are character-screened and the title
+capped, while `path` is deliberately left byte-exact because spec §14 gates on a match
+resolving at it; the dead `tokens.includes(type)` branch is deleted and its premise enforced
+by a test.
+
+**Two things Task 9 inherits.** It must pass a match's `path` through `renderPath` before
+printing — retrieval cannot screen it without breaking the §14 gate. And spec §8 needs one
+amendment covering `considered`/`selected`, `--limit`, and the fact that a multi-word query
+is an OR over its tokens rather than the literal whole-query reading §8 currently implies;
+all three live in the same paragraph, so they are one edit, not three.
+
 **Files:**
 - Create: `packages/brain/src/retrieval/search.ts`, `packages/brain/src/retrieval/index.ts`, `packages/brain/src/retrieval/search.test.ts`
 - Modify: `packages/brain/src/index.ts`
@@ -1037,7 +1049,7 @@ git commit -m "feat: fail a vault loudly and per path"
 - Consumes: `IndexDocumentV1`, `IndexedNote` (Task 4); `tokenize` (Task 4).
 - Produces: `RetrievalQuery`, `RetrievalMatch`, `RetrievalResult`, `search(index: IndexDocumentV1, query: RetrievalQuery): RetrievalResult`, `FIELD_WEIGHTS`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```typescript
 let index: IndexDocumentV1;
@@ -1129,12 +1141,12 @@ describe("search", () => {
 });
 ```
 
-- [ ] **Step 2: Run and confirm they fail**
+- [x] **Step 2: Run and confirm they fail**
 
 Run: `npx vitest run packages/brain/src/retrieval`
 Expected: FAIL, "Cannot find module './search.js'".
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```typescript
 export const FIELD_WEIGHTS = {
@@ -1154,7 +1166,7 @@ Sort by score descending, then `compareCanonical(path)` ascending. Truncate to `
 
 An empty stage 1 returns `{ kind: "no-candidates", tried: FUNNEL_STAGES }` and does not score anything.
 
-- [ ] **Step 4: Run, gate, and commit**
+- [x] **Step 4: Run, gate, and commit**
 
 Run: `npx vitest run packages/brain/src/retrieval` then `npm run check`
 
