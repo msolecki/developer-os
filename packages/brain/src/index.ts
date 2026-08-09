@@ -54,6 +54,17 @@ export type {
   LintResult,
   LintSeverity,
 } from "./lint/index.js";
+export {
+  FIELD_WEIGHTS,
+  FUNNEL_STAGES,
+  search,
+} from "./retrieval/index.js";
+export type {
+  RetrievalFieldMatch,
+  RetrievalMatch,
+  RetrievalQuery,
+  RetrievalResult,
+} from "./retrieval/index.js";
 export { DEFAULT_BRAIN_CONFIG, resolveBrainConfig } from "./schema/config.js";
 export {
   MAX_SUMMARY_LENGTH,

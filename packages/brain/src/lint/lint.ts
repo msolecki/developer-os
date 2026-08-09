@@ -113,7 +113,17 @@ const MAX_VALUE_IN_MESSAGE = 64;
 const GRAPHEMES = new Intl.Segmenter("en", { granularity: "grapheme" });
 
 function renderValue(value: string): string {
-  const collapsed = value.replace(/\s+/gu, " ").trim();
+  /**
+   * `\p{Cf}` first: U+202E RIGHT-TO-LEFT OVERRIDE reorders the rest of a
+   * printed line (Trojan Source, CVE-2021-42574) and U+200B is invisible, and
+   * `\s` matches neither, so the collapse below cannot reach them. Findings go
+   * to a terminal and a log.
+   */
+  const collapsed = value
+    // eslint-disable-next-line no-control-regex -- the pattern is what removes them
+    .replace(/[\u0000-\u001F\u007F-\u009F\p{Cf}]/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
   if (collapsed.length <= MAX_VALUE_IN_MESSAGE) return collapsed;
 
   const kept: string[] = [];
