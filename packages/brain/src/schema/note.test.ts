@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { parseNote, renderNote } from "./note.js";
+import {
+  FRONTMATTER_PARSE_OPTIONS,
+  parseNote,
+  renderNote,
+} from "./note.js";
 
 const VALID = [
   "---",
@@ -508,5 +512,120 @@ describe("renderNote", () => {
     if (!result.ok) return;
     expect(renderNote(result.note)).toBe(source);
     expect(result.note.frontmatter.title).toBe("Fences");
+  });
+});
+
+
+describe("parse failures carry a position, and nothing else from the error", () => {
+  it("reports the line of a duplicate key", () => {
+    /**
+     * BACKLOG NEW-3. `parseNote` mapped every YAML failure to one issue with no
+     * position, so a duplicate `tags:` — which Obsidian users do produce — said
+     * nothing about where. Only `err.linePos` is read: `err.message` and
+     * `err.source` both embed the offending input verbatim.
+     */
+    const result = parseNote(
+      ["---", "title: a", "title: b", "---", "", "Body.", ""].join("\n"),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.issues[0]?.code).toBe("malformed");
+    /**
+     * File line 3, not slice line 2. `yaml` numbers lines within the string it
+     * was handed, which starts below the opening fence — and the number is
+     * rendered beside a vault path, where every consumer reads it as
+     * file-relative. 3 is derivable from the fixture without reading the
+     * implementation, which is what makes this a contract and not a snapshot.
+     */
+    expect(result.issues[0]?.line).toBe(3);
+  });
+
+  it("never lets the offending source reach the message", () => {
+    const secret = "unlikely-sentinel-value";
+    const result = parseNote(
+      ["---", `title: ${secret}`, `title: ${secret}`, "---", "", "Body.", ""].join("\n"),
+    );
+    expect(result.ok).toBe(false);
+    for (const issue of result.issues) {
+      expect(issue.message).not.toContain(secret);
+      expect(JSON.stringify(issue)).not.toContain(secret);
+    }
+    /** The same fixed-string pin, on the error-list path. */
+    expect(result.issues[0]?.message).toBe("the frontmatter is not valid YAML");
+  });
+
+  it("carries null where the failure has no position", () => {
+    const result = parseNote("---\n- not a mapping\n---\n\nBody.\n");
+    expect(result.ok).toBe(false);
+    expect(result.issues[0]?.line).toBeNull();
+  });
+
+  it("gives every validation issue a null position", () => {
+    /** Only YAML failures have a line; a missing key is about the whole block. */
+    const result = parseNote("---\ntitle: Only a title\n---\n\nBody.\n");
+    expect(result.ok).toBe(false);
+    expect(result.issues.length).toBeGreaterThan(1);
+    for (const issue of result.issues) expect(issue.line).toBeNull();
+  });
+
+  it("still refuses a duplicate key with uniqueKeys pinned explicitly", () => {
+    /**
+     * BACKLOG NEW-2. The refusal used to ride on the library's default. This is
+     * the contract, not the current behaviour: a parser that resolves
+     * duplicates last-one-wins is the wrong parser, not a test to loosen.
+     */
+    const result = parseNote(
+      ["---", "schemaVersion: 1", "schemaVersion: 999", "---", "", "Body.", ""].join("\n"),
+    );
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe("the frontmatter parse options are pinned, not inherited", () => {
+  it("passes uniqueKeys and a silent log level explicitly", () => {
+    /**
+     * Neither option is observable from behaviour — `uniqueKeys` already
+     * defaults to `true` — so no functional test can fail when one is deleted.
+     * That is precisely why they are pinned, and a pin nothing checks is not a
+     * pin. This asserts the object the call site passes.
+     */
+    expect(FRONTMATTER_PARSE_OPTIONS).toEqual({
+      logLevel: "silent",
+      uniqueKeys: true,
+    });
+    expect(Object.isFrozen(FRONTMATTER_PARSE_OPTIONS)).toBe(true);
+  });
+
+  it("refuses an alias bomb without echoing the note, through the catch path", () => {
+    /**
+     * The other half of the redaction seam. `positionOf` is called from two
+     * places and only the error-list one was covered; this reaches the `catch`,
+     * where `toJS` throws on excessive alias expansion.
+     */
+    const sentinel = "unlikely-sentinel-value";
+    const bomb = [
+      "---",
+      `a: &x ${sentinel}`,
+      "b: &y [*x, *x, *x, *x, *x, *x, *x, *x, *x, *x]",
+      "c: &z [*y, *y, *y, *y, *y, *y, *y, *y, *y, *y]",
+      "d: [*z, *z, *z, *z, *z, *z, *z, *z, *z, *z]",
+      "---",
+      "",
+      "Body.",
+      "",
+    ].join("\n");
+
+    const result = parseNote(bomb);
+    expect(result.ok).toBe(false);
+    expect(result.issues[0]?.code).toBe("malformed");
+    for (const issue of result.issues) {
+      expect(JSON.stringify(issue)).not.toContain(sentinel);
+    }
+    /**
+     * Pinned exactly, not merely checked for the sentinel. The error this path
+     * throws today carries no note content, so a sentinel assertion cannot fail
+     * when someone interpolates `err.message` here — and the next library
+     * version's error may carry plenty. A fixed string fails on any addition.
+     */
+    expect(result.issues[0]?.message).toBe("the frontmatter is not valid YAML");
   });
 });

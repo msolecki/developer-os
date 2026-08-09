@@ -1167,10 +1167,9 @@ git commit -m "feat: retrieve through the funnel and say when nothing is reachab
 
 ### Task 8: Public surface — capture type, migrations, adoption, and the facade
 
-**Before writing anything here, settle `BACKLOG.md` §1 NEW-3.** It proposes
-`readonly line: number | null` on `NoteParseIssue` and `LintFinding`. Both are shapes this
-task consumes, so adding the field afterwards is a breaking change to a published interface
-and adding it now is one line in each.
+**`NoteParseIssue` and `LintFinding` both carry `readonly line: number | null`** as of
+2026-08-09, which closed `BACKLOG.md` §1 NEW-3 before this task could freeze the shape without
+it. Nothing further is owed here.
 
 **Files:**
 - Create: `packages/brain/src/schema/capture.ts`, `packages/brain/src/schema/capture.test.ts`
@@ -1504,14 +1503,9 @@ Then check three things off before deleting this file, because deleting it is wh
 
 - **`BACKLOG.md` §3 already carries the five facts that must outlive this plan** — the quadratic-`yaml` byte bound, the invented-frontmatter caveat, the `BrainConfigV1` placement, the never-refresh-the-fixture rule, and the YAML 1.2 core-schema requirement. Confirm each is still accurate as shipped and correct it there rather than restating it somewhere new. The fifth one's durable homes are **not** §3, which collapses when this subsystem closes: it lives in design spec §4.4 and at the import site in `packages/brain/src/schema/note.ts`. Verify both are still there before deleting anything.
 - **`BACKLOG.md` §1 NEW-1 must be closed by this subsystem**: `packages/brain` is not in the network-capability scan's package list in `tests/e2e/foundation.test.ts`, which makes brain-engine spec §16's "no network" clause an unchecked assertion. Add the package to that list here if no earlier task did, and delete the NEW-1 entry.
-- **`BACKLOG.md` §1 NEW-2 must be closed by this subsystem too**: pass `uniqueKeys: true` explicitly at the `parseAllDocuments` call in `packages/brain/src/schema/note.ts` — it is a parse option, not a `toJS` option — add a regression test beside the existing duplicate-key case, and delete the NEW-2 entry. Do it in whichever earlier task next touches that file if one does; this step is the backstop, not the intended home. Also settle the open decision recorded with NEW-2 about application-tag resolution, or carry it forward explicitly rather than letting it lapse.
-- **`BACKLOG.md` §1 NEW-3 must be settled by this subsystem too**: `parseNote` discards the
-  line and column a `YAMLParseError` carries, so a duplicate `tags:` reports nothing about
-  where. Carrying it means adding `readonly line: number | null` to **both** `NoteParseIssue`
-  and `LintFinding`, which is why it is a decision rather than a patch — Task 8 consumes both
-  shapes. Read `err.linePos` and `err.pos` **only**: `err.message` and `err.source` embed the
-  offending note content verbatim. Settle it before Task 8 rather than here if you can; this
-  step is the backstop, not the intended home.
+- **`BACKLOG.md` §1 NEW-4 must be settled or explicitly deferred**: whether the parser
+  contract forbids resolving application tags. NEW-2 and NEW-3, which this step used to
+  backstop, both closed on 2026-08-09; NEW-4 is what they left behind.
 - **`BACKLOG.md` §8's "Still owed" table has exactly two rows, and this plan owns both** — the `brain` CLI command group (Task 9) and `init` installing the template (Task 10). Move each to the Discharged table as it lands. Task 9 has no bookkeeping step of its own, so if it closes before this one, discharge its row there rather than leaving it for here.
 
 Per `SESSION.md`, delete this plan file in the same commit that closes its last step, carrying anything else a later task still needs into `docs/architecture/`.

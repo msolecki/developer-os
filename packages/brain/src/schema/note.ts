@@ -89,6 +89,12 @@ export interface NoteParseIssue {
   readonly code: NoteIssueCode;
   readonly message: string;
   readonly severity: "error" | "info";
+  /**
+   * 1-based line **in the file**, or `null` where there is no position — every
+   * validation issue, and any YAML failure the library did not locate. Only
+   * `malformed` issues ever carry one.
+   */
+  readonly line: number | null;
 }
 
 export interface ParsedNote {
@@ -136,6 +142,27 @@ const FRONTMATTER =
   /^\uFEFF?---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)([\s\S]*)$/u;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/u;
 
+/**
+ * Exported so a test can assert it, because neither option is observable from
+ * the parser's behaviour: `uniqueKeys` already defaults to `true`, so removing
+ * it changes nothing today and everything the day the library's default moves.
+ * That is exactly why it is pinned, and pinning something no behaviour can
+ * detect is worth nothing unless something fails when it disappears.
+ *
+ * `uniqueKeys` — a parser that resolves duplicates last-one-wins hands the
+ * validator only the surviving value, so a note carrying `schemaVersion: 1` and
+ * later `schemaVersion: 999`, or two `tags` lists, validates against a value its
+ * author never wrote. The bytes survive; only the checking goes blind. Obsidian
+ * users do produce duplicate keys.
+ *
+ * `logLevel` — see the call site: the default prints warnings *with the
+ * offending source line* to stderr, past every redaction seam.
+ */
+export const FRONTMATTER_PARSE_OPTIONS = Object.freeze({
+  logLevel: "silent",
+  uniqueKeys: true,
+} as const);
+
 /** Long enough to identify a key, short enough that a prose line cannot fill a terminal. */
 const MAX_KEY_IN_MESSAGE = 64;
 
@@ -149,8 +176,47 @@ function issue(
   key: string | null,
   code: NoteIssueCode,
   message: string,
+  line: number | null = null,
 ): NoteParseIssue {
-  return { key, code, message, severity: "error" };
+  return { key, code, message, severity: "error", line };
+}
+
+/**
+ * The line a YAML failure happened on, and **nothing else from the error**.
+ *
+ * `err.linePos` and `err.pos` are numbers. `err.message` and `err.source` are
+ * not: both embed the offending input verbatim — a duplicate-key error reads
+ * `Map keys must be unique at line 2, column 1:\n\ntitle: a\ntitle: b` — so
+ * reading either would carry note content into every message, log and terminal
+ * downstream. That is the redaction rule, and this is the seam it applies at.
+ *
+ * Duck-typed rather than `instanceof YAMLParseError`, because the shape is what
+ * matters and an `instanceof` across a bundled copy of the library silently
+ * fails closed to `null`, which looks identical to "no position available".
+ */
+/**
+ * The opening fence is exactly one line — the regex consumes `---` plus its
+ * newline, and a BOM sits on that same line — so the slice the parser sees
+ * starts at file line 2.
+ */
+const FRONTMATTER_LINE_OFFSET = 1;
+
+function positionOf(error: unknown): number | null {
+  if (typeof error !== "object" || error === null) return null;
+  const { linePos } = error as { linePos?: readonly { line?: number }[] };
+  const line = linePos?.[0]?.line;
+  /**
+   * Offset into the file. `yaml` numbers lines within the string it was handed,
+   * which is `frontmatterText` — a slice starting below the opening fence. The
+   * number travels on a finding next to a vault `path`, and every consumer of a
+   * path-and-line pair reads it as file-relative: a terminal printing
+   * `note.md:3`, an editor jump, a CI annotation. Reported unadjusted, a failure
+   * on the first frontmatter line comes out as line 1, which is the fence — a
+   * line that by construction cannot contain the error.
+   */
+  return typeof line === "number" && Number.isInteger(line) && line > 0
+    ? line + FRONTMATTER_LINE_OFFSET
+    : null;
 }
 
 function isMember<T extends string>(
@@ -198,6 +264,8 @@ function validate(raw: Record<string, unknown>): ValidationOutcome {
     issues.push({
       key,
       code: "unknown-key",
+      /** No position: the key is known, the block it sits in parsed cleanly. */
+      line: null,
       message: `${renderKey(key)} is not a Developer OS key; it is preserved and ignored`,
       severity: "info",
     });
@@ -365,13 +433,20 @@ export function parseNote(source: string): NoteParseResult {
      * an unsupported `schemaVersion`, an unvalidated date, and unknown keys that
      * were never reported. The bytes survived; only the checks were blind.
      */
-    const documents = parseAllDocuments(frontmatterText, { logLevel: "silent" });
+    const documents = parseAllDocuments(frontmatterText, FRONTMATTER_PARSE_OPTIONS);
     const document = documents[0];
 
     if (documents.length > 1 || (document?.errors.length ?? 0) > 0) {
       return {
         ok: false,
-        issues: [issue(null, "malformed", "the frontmatter is not valid YAML")],
+        issues: [
+          issue(
+            null,
+            "malformed",
+            "the frontmatter is not valid YAML",
+            positionOf(document?.errors[0]),
+          ),
+        ],
       };
     }
 
@@ -385,10 +460,12 @@ export function parseNote(source: string): NoteParseResult {
       document === undefined
         ? null
         : (document.toJS({ maxAliasCount: 100 }) as unknown);
-  } catch {
+  } catch (error: unknown) {
     return {
       ok: false,
-      issues: [issue(null, "malformed", "the frontmatter is not valid YAML")],
+      issues: [
+        issue(null, "malformed", "the frontmatter is not valid YAML", positionOf(error)),
+      ],
     };
   }
 

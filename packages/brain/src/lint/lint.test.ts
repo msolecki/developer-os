@@ -997,3 +997,38 @@ describe("the second review's findings", () => {
     expect(of(bareFolder, "links")[0]?.message).toContain("excluded");
   });
 });
+
+describe("a finding carries the line a parse failure happened on", () => {
+  it("puts a duplicate key's file line on the frontmatter finding", async () => {
+    /**
+     * The load-bearing half of NEW-3: `LintFinding.line` exists because the CLI
+     * renders findings, not issues, and nothing asserted the carry. Setting it
+     * to `null` in `frontmatterFindings` left the whole suite green.
+     */
+    const result = await lintMemory({
+      "content/DEV/a.md": [
+        "---",
+        "schemaVersion: 1",
+        "title: a",
+        "title: b",
+        "---",
+        "",
+        "Body.",
+        "",
+      ].join("\n"),
+    });
+    const malformed = of(result, "frontmatter").find(
+      (f) => f.path === "content/DEV/a.md",
+    );
+    expect(malformed?.severity).toBe("error");
+    /** File line of the duplicate, not the offset into the frontmatter slice. */
+    expect(malformed?.line).toBe(4);
+  });
+
+  it("leaves line null on findings that have no position", async () => {
+    const result = await lintMemory({
+      "content/DEV/a.md": note({ someUnknownKey: "v" }),
+    });
+    for (const f of result.findings) expect(f.line).toBeNull();
+  });
+});

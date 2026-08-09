@@ -102,60 +102,42 @@ Everything in this section is genuinely open. Nothing here is bookkeeping.
   count, or the "37 modules" in `docs/architecture/foundation.md` §7 should stop being prose
   the test does not pin. Decide which; do not do both silently.
 
-### NEW-2 — pin `uniqueKeys: true` where the note parser reads frontmatter
+### NEW-4 — decide whether the parser contract forbids application tags
 
-- **Status:** open, found 2026-08-08 · **Owner:** DOS-P2, next task touching the file ·
+- **Status:** open, inherited from NEW-2 when that closed · **Owner:** DOS-P2 or DOS-P6 ·
   **Size:** XS
-- `parseNote` refuses a note with a duplicate frontmatter key, and it does so only because
-  `yaml` happens to default `uniqueKeys` to `true`. The call passes `logLevel` and
-  `maxAliasCount` explicitly and this one implicitly, which is an asymmetry rather than a
-  decision — `maxAliasCount` carries a comment saying it is pinned precisely so a future
-  change to the library default cannot quietly remove a guarantee, and the same argument
-  applies here.
-- **What a lost default costs.** A parser that resolves duplicates last-one-wins hands the
-  validator only the surviving value, so a note carrying `schemaVersion: 1` and later
-  `schemaVersion: 999`, or two `tags` lists, passes validation on a value the author did not
-  write. The bytes survive; only the checking goes blind. Obsidian users do produce duplicate
-  keys.
-- **This is not currently unprotected** — `note.test.ts`'s "refuses a duplicate key rather than
-  parsing it partially" case fails if the behaviour changes, and design spec §4.4 clause 3 now
-  states that the test pins a contract and may not be relaxed to make a new parser pass. The
-  fix is one option at the call site, making the guarantee explicit rather than inherited.
-- Deliberately **not** done as part of the 2026-08-08 documentation pass: it is a change to
-  twice-reviewed parsing code, and this repository's gates want that in its own commit with its
-  own fresh-context review. Hooked from the brain plan's Task 10 Step 6 so it cannot be lost —
-  §1 is not on the orientation path a fresh session follows.
+- Design spec §4.4 states what a replacement parser must not *drop*. It says nothing about
+  what one must not *add*, and there is exactly one candidate: resolving application tags into
+  constructed values — the `yaml.load` versus `safe_load` distinction that has produced remote
+  code execution in more than one ecosystem. `yaml@2.8.1` does no such thing, so nothing today
+  depends on its absence and nothing can regress; the product design spec's §14.1 already
+  classifies vault files as untrusted data but places no constraint on the parser itself.
+- The proposed clause is one sentence — *resolve only core-schema tags; a parser that
+  constructs application-tagged values is refused outright* — and it costs nothing to adopt.
+  It is recorded rather than written into §4.4 because it would be a new design decision in an
+  approved spec.
+- **Settle it in DOS-P2's remaining work or explicitly defer it to DOS-P6**, whose threat model
+  owns untrusted input. It carried the two closed items' hook in Task 10 Step 6; keep it there.
 
-**One decision required alongside it, and it is not settled.** §4.4 now states what a
-replacement parser must not *drop*. It says nothing about what one must not *add*, and there is
-exactly one candidate: resolving application tags into constructed values — the `yaml.load`
-versus `safe_load` distinction that has produced remote code execution in more than one
-ecosystem. `yaml@2.8.1` does no such thing, so nothing today depends on its absence and nothing
-can regress; design spec §14.1 already classifies vault files as untrusted data but places no
-constraint on the parser itself. The proposed clause is one sentence — *resolve only
-core-schema tags; a parser that constructs application-tagged values is refused outright* — and
-it costs nothing to adopt. **It is recorded here rather than written into §4.4 because it would
-be a new design decision in an approved spec, and this pass only relocated already-approved
-ones.** Settle it in DOS-P2's remaining work or explicitly defer it to DOS-P6, whose threat
-model owns untrusted input.
+**NEW-2 and NEW-3 closed 2026-08-09.** `uniqueKeys: true` is pinned at the `parseAllDocuments`
+call, and a YAML failure now carries the line it happened on, through `NoteParseIssue.line` and
+`LintFinding.line`. Only `err.linePos` is read — `err.message` and `err.source` embed the
+offending note verbatim, and a test asserts a sentinel from the note reaches neither the
+message nor any serialized part of the issue.
 
-### NEW-3 — `YAMLParseError`'s line and column are still discarded
+### NEW-5 — `LintFinding` reports a line two different ways
 
-- **Status:** open, found 2026-08-09 · **Owner:** DOS-P2 · **Size:** S
-- The brain plan's Task 6 says two findings carried from Task 2's review are "both to be
-  closed by this task". One was: the unterminated-frontmatter heuristic, shipped. The other
-  was not: `parseNote` maps every YAML failure to one `malformed` issue with `key: null`, so
-  a duplicate `tags:` — which Obsidian users do hit — reports nothing about *where*. The fix
-  is to carry `err.linePos` onto the issue, reading **`err.linePos` and `err.pos` only** —
-  never `err.message` and never `err.source`, both of which embed the offending note content
-  verbatim and are exactly what the redaction rule exists for.
-- **Why it is not simply a missed line item.** Neither `NoteParseIssue` nor `LintFinding` has
-  a field that can hold a line number, so closing it means widening a type that Tasks 7–10
-  are written against. Doing that after Task 8 ships `BrainService.lint()` is a breaking
-  change to a consumed interface; doing it now is one field. Decide before Task 8, not after.
-- **Blocked on a working-tree decision, not on difficulty.** The change is in
-  `packages/brain/src/schema/note.ts`, which carries uncommitted edits from the 2026-08-08
-  documentation pass, and staging it would sweep those into a feature commit.
+- **Status:** open, found 2026-08-09 · **Owner:** DOS-P2 Task 9, or DOS-P4 · **Size:** XS
+- `frontmatter` findings put the line in the structured `line` field. `index-drift` findings
+  put it in prose inside `message` — "differs from a fresh build at line 6" — and carry
+  `line: null`. One type, one concept, two conventions.
+- **It surfaces the moment `--json` ships.** A consumer gets
+  `{"class":"index-drift","line":null,"message":"…at line 6…"}` and has to parse the message
+  to recover a number the type already has a field for.
+- The one-line version is passing `line` at the two drift sites too. The honest version is
+  deciding what frame `LintFinding.line` names when `path` is a generated artifact rather than
+  a note — for a note it is a file line, and for an artifact it is a line in a file the user
+  did not write. Settle it before Task 9 renders findings, not after.
 
 ### EXIT-1, EXIT-2, EXIT-4 — the legacy runtime
 

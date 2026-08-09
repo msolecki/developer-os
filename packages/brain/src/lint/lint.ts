@@ -37,6 +37,14 @@ export interface LintFinding {
    */
   readonly key: string | null;
   readonly message: string;
+  /**
+   * 1-based line inside the frontmatter block, or `null` where the finding has
+   * no position. Only parse failures the YAML library located carry one — a
+   * duplicate `tags:`, which Obsidian users do produce, is the case this exists
+   * for. It is on `LintFinding` rather than only on `NoteParseIssue` because
+   * the CLI renders findings, not issues.
+   */
+  readonly line: number | null;
 }
 
 export interface LintResult {
@@ -129,8 +137,9 @@ function finding(
   path: string,
   key: string | null,
   message: string,
+  line: number | null = null,
 ): LintFinding {
-  return { class: cls, severity, path, key, message };
+  return { class: cls, severity, path, key, message, line };
 }
 
 /* ---------------------------------------------------------------- frontmatter */
@@ -187,6 +196,7 @@ function frontmatterFindings(
           note.path,
           renderKeyField(issue.key),
           issue.message,
+          issue.line,
         ),
       );
     }

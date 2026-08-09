@@ -586,6 +586,8 @@ export async function buildIndex(
           {
             key: null,
             code: "length",
+            /** No position: the block was never handed to the parser. */
+            line: null,
             message: `the frontmatter block exceeds ${String(maxFrontmatterChars)} characters and was not parsed`,
             severity: "error",
           },
