@@ -39,6 +39,21 @@ export type {
   NoteIssues,
   UnresolvedLink,
 } from "./indexes/index.js";
+export {
+  artifactPaths,
+  canonicalizeArtifact,
+  firstDifferingLine,
+  GENERATED_AT_SENTINEL,
+  lintVault,
+} from "./lint/index.js";
+export type {
+  ArtifactPaths,
+  LintClass,
+  LintFinding,
+  LintRequest,
+  LintResult,
+  LintSeverity,
+} from "./lint/index.js";
 export { DEFAULT_BRAIN_CONFIG, resolveBrainConfig } from "./schema/config.js";
 export {
   MAX_SUMMARY_LENGTH,

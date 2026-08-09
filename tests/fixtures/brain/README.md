@@ -25,3 +25,15 @@ One of those excluded files, `content/DEV/_raw/nested.md`, is deliberately **not
 under `content/`. Spec §5 excludes the private folder names at any depth, and an indexer
 that applies the rule only to `content/`'s immediate children passes every other fixture in
 this tree while quietly indexing quarantined captures. That file is the one that fails it.
+
+`malformed/` holds eight fixtures, one lint concern each, and that is the property to
+preserve: a fixture that emits a finding it was not built to demonstrate makes every count in
+the lint suite depend on an unrelated file. Their `reviewed` dates are recent for exactly that
+reason — an old one made all eight emit a staleness warning.
+
+One case from the plan is **not** here and cannot be. A case-insensitive path collision
+(`Caching.md` beside `caching.md`) does not survive on a default macOS volume, which is
+case-insensitive: the second write replaces the first. Git's index *is* case-sensitive, so
+committing both would produce one file on a macOS checkout and two on Linux CI — a test whose
+result depends on the developer's filesystem. It is built in memory instead, in
+`lint.test.ts`, which is the only construction that means the same thing everywhere.
