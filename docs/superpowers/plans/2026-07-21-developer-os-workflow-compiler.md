@@ -868,7 +868,7 @@ export type { EffectFootprint } from "./vocabulary.js";
 Run: `npx vitest run packages/workflow-schema/src/vocabulary.test.ts`
 Expected: PASS, 6 tests.
 
-- [ ] **Step 5: Run the gates, fresh-context review, then commit**
+- [x] **Step 5: Run the gates, fresh-context review, then commit**
 
 ```bash
 npm run check
