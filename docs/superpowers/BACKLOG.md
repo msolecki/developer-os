@@ -60,7 +60,7 @@ Open work only. Program Tasks 0 and 1 are closed and are not rows here.
 | Program (umbrella) | 1 plan | Tasks 3–9 open; Tasks 0–2 closed and not rows here |
 | DOS-P3 … DOS-P7 | nothing written | 5 specs, 5 plans, 5 implementations |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | NEW-5 … NEW-8, all XS to S, none blocking |
+| Repository-level | §1 | NEW-6, NEW-7, NEW-8 — all XS to S, none blocking |
 | Repository infrastructure | §5 | six directories a later subsystem still owes; CI landed 2026-08-10 |
 | Legacy runtime | 1 exit checklist | 3 items — EXIT-1 closed 2026-08-10 as declined; one untouched since 2026-07-20, one nearly discharged, one new |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -93,7 +93,7 @@ founder's machine as user data, not as source material.
 ## 1. Open right now
 
 Everything in this section is genuinely open. Nothing here is bookkeeping, and nothing
-closed stays here — NEW-1 through NEW-4 and NEW-9 were removed on 2026-08-10 when they
+closed stays here — NEW-1 through NEW-5 and NEW-9 were removed on 2026-08-10 when they
 closed. What a
 closed item leaves behind is a row in §8, a clause in a spec, or a test; if it left nothing,
 it was not worth recording. Git history is the archive.
@@ -152,20 +152,6 @@ it was not worth recording. Git history is the archive.
   real defects, it changes artifact bytes, and it needs its own test. Three rounds of this
   task were spent on defects introduced by fixes to earlier defects; a fourth unreviewed
   change to artifact rendering is how that continues.
-
-### NEW-5 — `LintFinding` reports a line two different ways
-
-- **Status:** open, found 2026-08-09 · **Owner:** DOS-P2 Task 9, or DOS-P4 · **Size:** XS
-- `frontmatter` findings put the line in the structured `line` field. `index-drift` findings
-  put it in prose inside `message` — "differs from a fresh build at line 6" — and carry
-  `line: null`. One type, one concept, two conventions.
-- **It surfaces the moment `--json` ships.** A consumer gets
-  `{"class":"index-drift","line":null,"message":"…at line 6…"}` and has to parse the message
-  to recover a number the type already has a field for.
-- The one-line version is passing `line` at the two drift sites too. The honest version is
-  deciding what frame `LintFinding.line` names when `path` is a generated artifact rather than
-  a note — for a note it is a file line, and for an artifact it is a line in a file the user
-  did not write. Settle it before Task 9 renders findings, not after.
 
 ### EXIT-2, EXIT-4 — the legacy runtime
 
