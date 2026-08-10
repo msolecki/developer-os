@@ -43,7 +43,11 @@ export interface LintFinding {
    * case this exists for. For a generated artifact — `index-drift` — it is a
    * line in a file the user did not write, counted from the first byte of the
    * artifact rather than from any block inside it, and it is the first line that
-   * differs from a fresh build.
+   * differs from a fresh build. That one **may be one past the last line the
+   * file has**, when the artifact on disk is a prefix of the fresh build: a
+   * truncated `catalog.md` or a stripped final newline differs at a line that is
+   * missing, and `drift.ts` reports the position rather than no difference at
+   * all. A consumer that jumps to it must tolerate the end of the file.
    *
    * The two frames are deliberately one field. A consumer's question is "where
    * do I look", and the answer is a line number in the file it was handed; which

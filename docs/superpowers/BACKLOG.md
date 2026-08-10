@@ -60,7 +60,7 @@ Open work only. Program Tasks 0 and 1 are closed and are not rows here.
 | Program (umbrella) | 1 plan | Tasks 3–9 open; Tasks 0–2 closed and not rows here |
 | DOS-P3 … DOS-P7 | nothing written | 5 specs, 5 plans, 5 implementations |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | NEW-7 alone — XS to check, and it needs a machine with Obsidian |
+| Repository-level | §1 | NEW-7 and NEW-10 — both XS; NEW-7 needs a machine with Obsidian |
 | Repository infrastructure | §5 | six directories a later subsystem still owes; CI landed 2026-08-10 |
 | Legacy runtime | 1 exit checklist | 3 items — EXIT-1 closed 2026-08-10 as declined; one untouched since 2026-07-20, one nearly discharged, one new |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -96,6 +96,22 @@ Everything in this section is genuinely open. Nothing here is bookkeeping, and n
 closed stays here — NEW-1 through NEW-6, NEW-8 and NEW-9 were removed on 2026-08-10 when
 they closed. What a closed item leaves behind is a row in §8, a clause in a spec, or a test;
 if it left nothing, it was not worth recording. Git history is the archive.
+
+### NEW-10 — a title made only of invisible characters is a valid title
+
+- **Status:** open, found 2026-08-10 by the review of NEW-6 · **Owner:** the next task
+  touching `schema/note.ts` · **Size:** XS
+- `note.ts` refuses a title only when `title.trim().length === 0`, and `String#trim` removes
+  neither U+200B nor U+00AD. A note titled with nothing but invisibles therefore validates,
+  and every surface that screens it renders **empty**: the catalog row is `[](<path>)`, a
+  link with no text.
+- NEW-6 did not create this and does not depend on it. It made it *visible*: two such notes
+  now group as duplicates of each other, correctly — they are the same empty row — which is
+  pinned by a test that says so in as many words.
+- The fix is a screen-aware emptiness check in `note.ts`, not a change to lint: the class
+  that reports it is right, the value should not have been accepted. Decide it with NEW-6's
+  amendment to spec §7 in view, because both turn on the same question — which form of a
+  title the product treats as the title.
 
 ### NEW-7 — a link destination's percent-encoding is unverified against Obsidian
 

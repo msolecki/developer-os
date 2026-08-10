@@ -34,9 +34,10 @@ agent judging it ready** — that is where an agent working alone runs out of A7
 
 **Nothing else is startable without the founder.** `BACKLOG.md` §1's repository defects
 closed on 2026-08-10 — NEW-9 with CI (`c6d1ef1`), then NEW-5, NEW-8 and NEW-6, each a place
-where two parts of this product disagreed with each other. **NEW-7 is what is left of §1**
-and it is not agent work: it needs ten minutes with a machine that has Obsidian, which is
-the founder's.
+where two parts of this product disagreed with each other. **What is left of §1's repository
+defects is NEW-7 and NEW-10** — the rest of §1 is EXIT-2, EXIT-4, L1 and L2, all below.
+NEW-7 is not agent work: it needs ten minutes with a machine that has Obsidian, which is the
+founder's. NEW-10 is XS and was found by the review that closed NEW-6.
 
 So the queue below is genuinely what remains, and every entry at its head waits on a person:
 A7 on the spec approval above, Track B on the founder's legacy machine, Track L on the

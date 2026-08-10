@@ -95,13 +95,16 @@ Each is a deliberate limitation with a named owner, not an oversight.
 | 5 | `reindex` does not call `assertRootsAnchored` where `init` does | a hand-edited `brainPath` outside the home is refused by one and accepted by the other | DOS-P7 lifecycle, or the next task touching `brain.ts` |
 | 6 | `brain reindex --dry-run` validates nothing | it cannot fail where the real run fails, and a real run reconciles the manifest where a dry run does not | as above |
 
-Three open decisions remain in `BACKLOG.md` §1. **NEW-6**: `duplicates` groups titles on
-unscreened bytes while the catalog now renders the screened form, so two titles differing
-only by a zero-width space render identically and are reported as no duplicate. **NEW-7**:
-a link destination's percent-encoding is verified against CommonMark and not against
-Obsidian, because there is no Obsidian here to ask. **NEW-5**: `LintFinding` reports a line two ways —
-a structured field for frontmatter findings, and prose inside the message for `index-drift`.
-NEW-4 closed on 2026-08-10 as design spec §4.4 clause 5.
+One open decision remains in `BACKLOG.md` §1. **NEW-7**: a link destination's
+percent-encoding is verified against CommonMark and not against Obsidian, because there is
+no Obsidian here to ask.
+
+Three closed on 2026-08-10 and are recorded here because this section named them as current.
+**NEW-6**: `duplicates` now groups titles on the screened form, so a title differing only by
+a zero-width space is the duplicate the catalog already rendered it as — spec §7 carries the
+amendment. **NEW-5**: `index-drift` carries its line in `LintFinding.line` like every other
+class, and no longer in prose. **NEW-8**: `contentRoot` is no longer wrapped in a code span a
+backtick in the value could close. NEW-4 closed as design spec §4.4 clause 5.
 
 ## 5. The two invariants worth defending
 

@@ -427,7 +427,12 @@ describe("untrusted tags and summaries cannot become structure", () => {
     const map = renderVaultMap({ ...document, contentRoot: "con`tent" });
     const summary = map.split("\n").find((line) => line.includes("note in")) ?? "";
     expect(summary).toContain("con\\`tent");
-    expect(summary).not.toMatch(/(?<!\\)`/u);
+    /**
+     * No span, asserted the way the tag cloud asserts it. A lookbehind for a
+     * backslash would pass on any even number of them, which is the regression
+     * an escaped backslash beside an unescaped backtick would produce.
+     */
+    expect(summary).not.toMatch(/`[^`]*`/u);
   });
 
   it("does not let a summary render as a clickable link", () => {
