@@ -31,8 +31,10 @@ approval**: `specs/2026-07-21-developer-os-workflow-compiler-design.md`. Nothing
 may start until that approval exists — `S` ends with the founder approving it, not with an
 agent judging it ready, and that is exactly where an agent working alone runs out of A7.
 
-Its §15 lists the seven decisions it makes; two of them were the founder's on 2026-08-10 and
-the other five are the ones to argue with. When it is approved, the next step is
+**Its §15 decisions are all ruled**, on 2026-08-10: six accepted as drafted, and one — the
+`scheduled` trigger — reversed into a refusal, which is §15.8 and a seventh required negative
+fixture. What remains is approval of the document itself, which is a separate act from
+agreeing with its decisions and is still the founder's. When it exists, the next step is
 `superpowers:writing-plans`, not code.
 
 **Nothing else is startable without the founder.** `BACKLOG.md` §1's repository defects

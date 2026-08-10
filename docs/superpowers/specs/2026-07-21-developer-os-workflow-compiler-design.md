@@ -76,7 +76,7 @@ Unknown fields are rejected. `WorkflowContractV1` is `.strict()` at every level.
 | `id` | slug | `^[a-z][a-z0-9-]*$`; must equal the directory name |
 | `version` | semver | the workflow's own version, independent of `schemaVersion` |
 | `description` | string | human-facing, one paragraph |
-| `triggers` | array | closed set: `manual`, `session_start`, `session_end`, `scheduled`. **`scheduled` is declarable in v1 and honoured by nobody** — the scheduler is `launchd` and belongs to DOS-P7, so a workflow declaring it validates and renders, and no artifact yet binds it. Stated because a trigger that silently does nothing is worse than one that is refused |
+| `triggers` | array | closed set: `manual`, `session_start`, `session_end`. **`scheduled` is not a v1 value and is refused**, with an error naming DOS-P7 as its owner — see the decision in §15.8. DOS-P7 adds it to this set in the same change that makes `launchd` fire it |
 | `inputs` | record | name → `{ type, required, description }`; types are `string`, `integer`, `boolean`, `path` |
 | `output` | object | the structured result shape the workflow promises |
 | `capabilities` | array | keys from §11 of the product spec; unknown keys are refused |
@@ -290,7 +290,10 @@ Required negative fixtures, four from `BACKLOG.md` §3 and two the design adds:
 4. an incompatible `schemaVersion`;
 5. **an overlay attempting to set `scopes`** — must fail as an unknown-field parse error, not
    as a merge check, and the test asserts *which* kind of failure it is;
-6. **a workflow that over-declares** — the §6 equality rule, which a subset check would pass.
+6. **a workflow that over-declares** — the §6 equality rule, which a subset check would pass;
+7. **a workflow declaring `trigger: scheduled`** — must be refused by the enum, and the test
+   asserts the error names DOS-P7, because the whole value of §15.8 is that the author is told
+   where the capability went rather than left to wonder why nothing fires.
 
 Positive coverage must include one workflow of each of the six shapes rendering
 byte-identically twice, and once under a reversed directory reader.
@@ -331,7 +334,30 @@ adapters is not beside any one of them.
 7. An **independent security review** is satisfied by a fresh-context agent review, the
    discipline used throughout DOS-P2. Recorded here because `BACKLOG.md` §3 gates DOS-P6 on
    that phrase and it had no agreed meaning.
+8. **`scheduled` is not a v1 trigger value.** It is refused with an error naming DOS-P7, and
+   DOS-P7 adds it in the same change that makes `launchd` fire it.
 
-Decisions 6 and 7 were the founder's, on 2026-08-10. Decision 6 was made against the
-recommendation in this document's brainstorming, and the objection was withdrawn once §13 was
-confirmed to specify the pipeline the objection assumed was missing.
+**All eight were ruled by the founder on 2026-08-10**, decisions 1 to 5 in a walkthrough of
+this section. Decision 6 was made against the recommendation in this document's brainstorming,
+and the objection was withdrawn once §13 was confirmed to specify the pipeline the objection
+assumed was missing.
+
+**Decision 8 reverses this document's first draft**, which made `scheduled` declarable and
+inert on the argument that a trigger silently doing nothing is worse than one that is refused.
+The argument was right and the conclusion did not follow from it: a value that passes
+validation while the property it names is false is precisely the defect shape this repository
+has shipped twice — a self-containment enumerator that skipped every file under a `#` path and
+exited 0, and a capability scan that asserted non-emptiness per listed package and so never
+noticed an unlisted one. Refusing the value is how it stops being that shape.
+
+**Decision 5 was accepted knowing what it does not do**, and it is worth writing down where a
+reader will find it rather than only in a conversation. Scope enforcement is compile-time only.
+Once an artifact is inside Claude or Codex, `scopes` is a declaration the adapter rendered, not
+a sandbox — nothing in this product observes what the agent then does. What protects the vault
+is that `review` and `ingest`, the only two workflows that write into it, are expressed
+entirely in effect verbs with no prose step that touches anything (§10), and that staging is
+governed by Foundation's transaction model (§6). Two alternatives were on the table and
+declined: requiring the adapters to render a declared write scope into whatever the vendor can
+actually enforce, and forbidding prose steps outright in any workflow that declares a write
+scope. Either remains available to DOS-P4/P5 without changing this contract, and neither is
+owed by it.
