@@ -26,11 +26,14 @@ week of confusion.
 
 ## NOW
 
-**A7 — DOS-P3 Workflow compiler.** All three gates are open: no spec, no plan, no code.
-Start with `superpowers:brainstorming` and a spec approval cycle; `BACKLOG.md` §3 lists what
-that spec must decide and what it produces. Do not start `P` before `S` is approved, and do
-not start `I` before `P` is written. **`S` ends with the founder approving it, not with an
-agent judging it ready** — that is where an agent working alone runs out of A7.
+**A7 — DOS-P3 Workflow compiler.** The spec is written and **awaiting the founder's
+approval**: `specs/2026-07-21-developer-os-workflow-compiler-design.md`. Nothing else on A7
+may start until that approval exists — `S` ends with the founder approving it, not with an
+agent judging it ready, and that is exactly where an agent working alone runs out of A7.
+
+Its §15 lists the seven decisions it makes; two of them were the founder's on 2026-08-10 and
+the other five are the ones to argue with. When it is approved, the next step is
+`superpowers:writing-plans`, not code.
 
 **Nothing else is startable without the founder.** `BACKLOG.md` §1's repository defects
 closed on 2026-08-10 — NEW-9 with CI (`c6d1ef1`), then NEW-5, NEW-8 and NEW-6, each a place
@@ -68,7 +71,7 @@ is approved.
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A7 | DOS-P3 Workflow compiler — S / P / I | to write | — | L | program plan Task 3 checkpoint: canonical workflows compile to abstract artifacts | **now** — nothing written |
+| A7 | DOS-P3 Workflow compiler — S / P / I | spec written 2026-08-10 | — | L | program plan Task 3 checkpoint: canonical workflows compile to abstract artifacts | **now** — **S awaiting founder approval**; P and I blocked on it |
 | A8 ‖ | DOS-P4 Claude adapter — S / P / I | to write | A7 | L | program plan Task 4 checkpoint: a Claude-only user completes the full synthetic workflow | blocked |
 | A9 ‖ | DOS-P5 Codex adapter — S / P / I | to write | A7 | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | blocked |
 | A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | A8 **and** A9 | L | program plan Task 6 checkpoint, after independent security review | blocked |
