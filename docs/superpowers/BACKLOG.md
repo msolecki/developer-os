@@ -46,8 +46,9 @@ replacement text says where it went.
   the `^`. Stripped in part: the program plan's Tasks 0–1 and the Brain plan's Tasks 1–2, both
   recoverable at `9f82901`, which is the commit that added the superseding notes rather than
   one that removed anything.
-- `docs/superpowers/plans/legacy-runtime/` is publication-excluded. Nothing in it may be
-  copied into a public artifact.
+- `docs/superpowers/plans/legacy-runtime/` is publication-excluded and, since 2026-08-10,
+  **empty** — its one document closed and was deleted. The exclusion stands for anything
+  written there again.
 
 ---
 
@@ -62,7 +63,7 @@ Open work only. Program Tasks 0 and 1 are closed and are not rows here.
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
 | Repository-level | §1 | NEW-7 and NEW-10 — both XS; NEW-7 needs a machine with Obsidian |
 | Repository infrastructure | §5 | six directories a later subsystem still owes; CI landed 2026-08-10 |
-| Legacy runtime | 1 exit checklist | 3 items — EXIT-1 closed 2026-08-10 as declined; one untouched since 2026-07-20, one nearly discharged, one new |
+| Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
 
 **Foundation and DOS-P2 are closed.** Neither is a row above. What each left behind is
@@ -73,9 +74,10 @@ Foundation's open questions; their plans are deleted and git history is the arch
 `github.com/msolecki/developer-os` and the founder confirmed the visibility after being shown
 what §6 discloses. Two consequences worth knowing before writing anything here:
 
-- **`docs/superpowers/plans/legacy-runtime/` is published**, despite its own header calling it
-  a publication-excluded path. That header predates the repository having a remote and is now
-  wrong; it is left in place because rewriting it would not un-publish anything.
+- **`docs/superpowers/plans/legacy-runtime/` was published** for the days it existed alongside
+  a remote, despite its own header calling it publication-excluded. Deleting it on 2026-08-10
+  does not un-publish it — git history is public too — which is why §6 now states what that
+  document disclosed rather than relying on the file being gone.
 - **The self-containment lint does not guard this.** It allowlists that directory by design —
   it exists to stop an agent *reading* the founder's machine, not to stop the repository
   *publishing* what was already written down. Nothing was bypassed; there was never a check
@@ -131,11 +133,6 @@ if it left nothing, it was not worth recording. Git history is the archive.
   worth ten minutes with any Markdown preview rather than being left indefinitely: `%` in a
   filename is ordinary where U+202E is not, so the encoder now touches common paths.
 - Recorded rather than assumed, and stated at the call site too.
-
-### EXIT-2, EXIT-4 — the legacy runtime
-
-Two of the four legacy items are open and one has not moved since 2026-07-20. Detail is in
-§6; `ORDER.md` Track B carries the sequence. **EXIT-1 is closed as declined** — see §6.
 
 ### L1, L2 — outside this environment
 
@@ -399,107 +396,81 @@ not exist, and a map with a gap invites a second copy.
 
 ---
 
-## 6. Legacy runtime — exit checklist
+## 6. Legacy runtime — closed 2026-08-10
 
-Plan: `plans/legacy-runtime/2026-07-20-brain-claude-shared-follow-up.md`. Rescoped
-2026-07-27 from a 14-step development backlog into an exit checklist, and **re-verified by
-read-only inspection on 2026-08-08.**
+**The exit checklist is discharged and its plan is deleted**, per the rule that `plans/` holds
+only unfinished work; recover it at `72f9c58` if the reasoning is ever needed. Nothing is
+planned, scheduled, or in progress on `~/claude-shared` or `~/brain`. Both are frozen artifacts
+running the founder's machine until the DOS-P8 cutover retires them, and **Track B no longer
+gates A12.**
 
-**None of this gates Developer OS development.** Foundation through DOS-P7 are
-self-contained. These items gate DOS-P8 cutover, and closing them ends work on the legacy
-runtime permanently.
+This section is no longer a worklist. It is what a cutover still has to know.
 
-| ID | Pri | Item | Owner | Status |
-|---|:---:|---|---|---|
-| EXIT-1 | P0 | Rotate historical credential candidates | **Founder** | **closed 2026-08-10 as declined by the founder.** Not done, not deferred — decided against. See below |
-| EXIT-2 | P0 | Resolve the non-npm commit-gate contradiction | Agent + Founder | open — one rules file, unchanged since 2026-07-20 |
-| EXIT-3 | P0 | Land or durably preserve the remaining untracked entries | Agent + Founder | **mostly discharged** — see below |
-| EXIT-4 | P0 | Stop or fix the failing legacy weekly job | Agent + Founder | **open, new 2026-08-08** |
+### What was decided, and must not be reopened by accident
 
-### What the 2026-08-08 re-verification found
+**EXIT-1 — historical credential rotation — was declined by the founder on 2026-08-10.** Not
+done, not deferred; decided against, in the same conversation that established this repository
+is public and that this section therefore describes the unrotated candidate set to anyone who
+reads it. Four things bound that decision:
 
-**EXIT-3's premise no longer holds, and that is the largest single correction in this
-revision.** The previous text described "roughly 136 changed or untracked entries including
-a completed and independently reviewed English migration that was never committed". That
-migration was committed. Both repositories are now in sync with their remotes and neither
-has a single modified tracked file. What remains is:
+- **No credential value is written anywhere in this repository.** What is public is the
+  *status* of the candidates, not the candidates.
+- **The obligation does not expire.** The original reasoning — that this is the one item whose
+  consequence exists whether or not this product ever ships — was weighed and set aside, not
+  shown to be wrong.
+- **Nothing downstream depends on it.** It gated no sequence, and A12 never needed it.
+- **Reopening it is a conversation with the founder**, never a task picked up from a backlog.
 
-- **Four untracked entries in the shared-runtime tree.** Three are automation backup files
-  from the change that broke the weekly job, and possibly the only copy of the last working
-  version, so EXIT-4 settles before they are deleted. One is a roadmap document, and it needs
-  no migration: every open item it ever carried is already represented here, and the file
-  itself now says so and points at this backlog. Committing or discarding the four is the
-  whole of EXIT-3's remaining work, which is why it dropped from L to S.
-- **An untracked capture inbox in the vault tree**, roughly thirty unprocessed captures
-  accumulated since 2026-07-27. This is user data awaiting ingest, not uncommitted work of
-  value — but it is only accumulating because EXIT-4 is open.
+**The candidate set is a floor, not a total.** A 2026-07-19 triage recorded four rotation
+candidates; a second scan on 2026-07-27 reported matches across six repositories; no
+provider-side verdict was ever recorded for any of them. That second scan was produced by a
+scanner with two known gaps — linked worktrees are skipped, and results truncate at twenty
+matches without reporting how many were omitted. If a scan is ever the deciding evidence for a
+rotation verdict, fix exactly those two gaps first. The founder's 2026-07-21 waiver scoped
+*this product's* release gate; a waiver does not revoke a key.
 
-**EXIT-4 is new.** The legacy weekly job has not succeeded since 2026-07-27; two fix commits
-landed afterwards and neither worked. Two consequences: the capture inbox above is backing
-up, and the legacy plan's own definition of done — "no further change is planned,
-scheduled, or in progress on either repository" — is false while a scheduled job is still
-firing and failing. Either fix it or disable it with the founder's agreement and drain the
-backlog; leaving a job that fails silently for eleven days is neither.
+### What changed on the founder's machine, and why a cutover cares
 
-**EXIT-1 was declined by the founder on 2026-08-10, and this paragraph exists so that is a
-decision on the record rather than an item that quietly stopped being listed.**
+- **The global commit gate is no longer npm-only** (EXIT-2). It is a fail-closed ladder:
+  `package.json` scripts, else the repository's documented suite, else the commit is blocked.
+  Missing validation metadata stays a blocker. DOS-P8 inherits a machine where a compliant
+  agent can commit in a non-npm repository, which was impossible for nineteen days.
+- **The English guard stopped counting quoted material as prose** (also EXIT-2, and the reason
+  it took a day rather than an afternoon). The corrected commit gate immediately blocked its own
+  commit: the declared suite was failing on 173 findings, every one a raw capture in the
+  language it was captured in — and *no automation ran the check*, so the red was invisible
+  while the weekly job reported green. `content/_raw/**` is now out of scope, and a fenced
+  block, an inline code span and a price in `zł` are verbatim contexts rather than prose. Six
+  tests pin it, four of them negative.
+- **Both trees are clean** (EXIT-3). Three `.bak.20260727-210611` files were deleted after being
+  proved byte-identical to `ef4a972`; `docs/ROADMAP.md` was committed as the tombstone it had
+  become. What remains untracked in the vault is one day of new captures awaiting the next
+  scheduled run — user data, not work at risk.
+- **The weekly job was not broken** (EXIT-4). It was recorded as failing on 2026-08-08 and the
+  very next scheduled run, 2026-08-09, succeeded: hooks `PASS=49 FAIL=0`, plugin version
+  consistent, 52 files committed and pushed, the entire capture backlog drained. The two fix
+  commits that preceded the report had worked and nobody had waited for a Sunday to find out.
+  **The lesson is the one this product exists for**: a job that reports only into a log nobody
+  reads is indistinguishable from a job that is broken, in both directions.
 
-It was raised in the same conversation that established this repository is **public**, and
-that §6 therefore describes the unrotated candidate set — four candidates, matches across six
-repositories, no provider-side verdict, and two scanner gaps making six a floor rather than a
-total — to anyone who reads it. The founder's answer to both questions was to leave the
-repository public and not to rotate.
+**A live constraint DOS-P8 must not break.** The weekly job's preflight refuses pre-existing
+changes under `content`, `AGENTS.md` or `README.md`. Any cutover step that edits the vault and
+leaves the edit uncommitted will abort the next run — which is precisely how the 2026-08-02
+failure in that log happened.
 
-That is theirs to decide and it is not revisited here. What is written down is only what a
-later reader needs in order not to re-open it by accident:
+### The ten frozen items
 
-- **No credential value is written anywhere in this repository.** That was true before the
-  decision and is what bounds it: what is public is the *status* of the candidates, not the
-  candidates.
-- **The obligation does not expire.** The original entry's reasoning — that this is the one
-  item whose consequence exists whether or not this product ever ships — was not shown to be
-  wrong; it was weighed and set aside.
-- **Nothing downstream depends on it.** EXIT-1 gated nothing: `ORDER.md` A12 needs B2, B3 and
-  B4, and B1 was always console work touching no repository. Closing it changes no sequence.
-- **Do not silently reopen it.** If a future session believes it should be rotated, that is a
-  conversation with the founder, not a task to pick up from a backlog.
+Frozen 2026-07-27 as *will not do there*, each rebuilt as a Developer OS feature on synthetic
+fixtures. The per-subsystem mapping is in §3, on the subsystem that absorbs each one — DOS-P5
+takes Step 8, DOS-P6 takes Steps 5, 7, 9 and 12, DOS-P7 takes Step 6 — rather than duplicated
+here, because two copies of a mapping is how they come to disagree. Full original text in
+`28a0ddc`.
 
-**EXIT-1's candidate set is wider than this file used to say.** The 2026-07-19 triage
-recorded four rotation candidates and its verdict still stands unchanged. A second scan on
-2026-07-27 reported candidate matches across six repositories. No provider-side verdict has
-been recorded for any of them. The founder waived these as *Developer OS publication*
-blockers on 2026-07-21; a waiver scopes this product, it does not revoke a key.
+### Still on the machine, and not this repository's business
 
-**EXIT-2 is unchanged, verbatim.** The global rule still forbids every commit without
-`npm run lint && npm test`. Neither legacy repository is an npm project, so the literal rule
-makes a compliant agent commit impossible — which is exactly why EXIT-3 sat open for
-nineteen days with committable work in it. The fix is a fail-closed validation contract:
-run the repository-declared validation command; when `package.json` exposes lint/test
-scripts, run them; when it does not, run the documented repository-specific suite. Missing
-validation metadata stays a commit blocker, and npm projects are not weakened.
-
-**Five proposals await review, not two.** The previous revision mentioned the historical-secret
-triage and a config-drift proposal. There are five, three of them written on 2026-07-27 —
-including a second secret scan and a template-hygiene report with sixteen findings needing
-manual review. They are private Brain content left in place and are not repository inputs, so
-they are counted here and named only in the legacy plan, which is the publication-excluded
-document that may hold their paths.
-
-### Frozen 2026-07-27 — ten items, will not be done on the legacy runtime
-
-Each was closed as *will not do there* and is rebuilt as a Developer OS feature on synthetic
-fixtures. The per-item mapping to DOS-P2 through DOS-P7, with the condition that would justify
-unfreezing each one, is a table in the legacy plan; it is not duplicated here, because two
-copies of a mapping is how they come to disagree. Full original text in commit `28a0ddc`.
-
-**One of the ten has a live consequence, and it is the only reason to read the frozen list at
-all.** Frozen Step 7 would have fixed two known secret-scanner gaps: linked worktrees are
-skipped, and results truncate at twenty matches without reporting how many were omitted. EXIT-1
-depends on a trustworthy scan, and the 2026-07-27 scan was produced by the *unfixed* scanner —
-so its six-repository count is a floor, not a total. If that scan is the deciding evidence for a
-rotation verdict, unfreeze exactly those two fixes and nothing else.
-
----
+Several agent-written proposals await the founder's review inside the vault. They are private
+Brain content, they are not repository inputs, and their paths are deliberately not recorded
+here now that this repository is public.
 
 ## 7. Standing gates
 
@@ -541,6 +512,7 @@ left:**
 | `specs/…-brain-engine-design.md` §7 lint table | the brain plan's Task 4, as shipped | the `links` class gains a `warn` row for a link text matching more than one note, and §7 records the five-tier resolution ladder plus its case-folded fallback | code, this task; the spec carries a dated in-place amendment marked as shipped |
 | `specs/…-brain-engine-design.md` §8 retrieval | the brain plan's Tasks 7 and 9, as shipped | a multi-word query is an OR over its tokens; `considered`/`selected` are defined; `--limit` supplies `maxCandidates` | code, Tasks 7 and 9; the spec carries a dated in-place amendment marked as shipped |
 | `specs/…-brain-engine-design.md` §4.4 parser contract | DOS-P2 Task 10, as shipped | gains clause 5: frontmatter carries no explicitly tagged node, and one is refused. Adopted rather than deferred **because the premise for deferring it was measured false** — `yaml@2.8.1` resolves `!!binary` to a `Buffer`, `!!timestamp` to a `Date` and `!!set` to an object, on the core schema | code, Task 10; the spec carries a dated in-place amendment |
+| `specs/…-design.md` input list | Track B closing, 2026-08-10 | "Cutover preconditions" named the legacy exit checklist, which closed and was deleted. §6 of this file is the record in its place | the spec carries a dated in-place correction beneath the line, which is left standing rather than rewritten |
 | `specs/…-brain-engine-design.md` §7 `duplicates` row | NEW-6, as shipped 2026-08-10 | "identical normalized title" now normalizes the **screened** title, not the bytes on disk, so the class agrees with the `catalog.md` rows §6 Task 10 changed. Path comparison stays unscreened, for the reason a link destination is not screened either | code, this change; the spec carries a dated in-place amendment marked as shipped |
 | `specs/…-brain-engine-design.md` §6 rendered views | DOS-P2 Task 10, as shipped | display text in `catalog.md` and `vault-map.md` is screened for control and format characters, not only escaped for Markdown structure. A link destination is **not** screened, because a path has to resolve to the note it names | code, Task 10; the renderer states both halves at the seam |
 | program plan Task 2 file list | brain-engine spec §15.2 | `discovery/` is a sixth source directory, because folder policy is consumed by both `indexes/` and `lint/` and is not schema parsing | the program plan's file list, and the brain plan |

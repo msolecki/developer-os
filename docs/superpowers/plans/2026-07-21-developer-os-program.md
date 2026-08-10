@@ -33,7 +33,7 @@
 - Every code-producing task receives a fresh-context review by an agent other than the author.
 - The repository remains private until its own publication-candidate secret scan is clean and an OSI-approved license is selected with qualified legal counsel. Historical credential rotations in unrelated repositories are explicitly outside the Developer OS release gate.
 - This program plan is an umbrella. Each subsystem after Foundation receives its own approved spec and implementation plan before code work.
-- `docs/superpowers/plans/legacy-runtime/` describes the founder's pre-Developer-OS machine, not this product. It is a publication-excluded path: Task 0's `exclusion-policy.md` must name it, and no publication candidate may copy or reference its contents.
+- `docs/superpowers/plans/legacy-runtime/` described the founder's pre-Developer-OS machine, not this product. It is a publication-excluded path, named by Task 0's `exclusion-policy.md`, and it is now **empty** — its one document closed on 2026-08-10 and was deleted. The exclusion stands for anything that might be written there again.
 - `docs/superpowers/BACKLOG.md` is the single index of outstanding plans, specs, and gates. Any new plan or spec must be registered there in the same change that creates it.
 
 ## Approved execution decisions
@@ -50,7 +50,7 @@ Every input is in this repository. Nothing below resolves outside it.
 - Frozen source classification: `docs/migration/source-manifest.json`
 - Publication boundary: `docs/migration/exclusion-policy.md`
 - Frozen legacy behavior: `docs/migration/baseline-capabilities.json` — the recorded Claude Code, Codex, and Brain capability surface as of 2026-07-21, and the only admissible statement about what the legacy runtime did
-- Cutover preconditions: `docs/superpowers/plans/legacy-runtime/2026-07-20-brain-claude-shared-follow-up.md`
+- Cutover preconditions: `docs/superpowers/BACKLOG.md` §6. The exit checklist that held them closed on 2026-08-10 and its plan is deleted; §6 is now the record of what a cutover has to know about the founder's machine
 
 Three former inputs were retired on 2026-07-27 because they contradicted this program's own exclusion policy: the legacy `README.md` and `AGENTS.md` were never publication candidates, and the two Brain proposals are `private-content`. Their product-relevant substance is `baseline-capabilities.json`; their unresolved obligations are cutover preconditions, not build inputs.
 
@@ -348,7 +348,7 @@ document inviting the next session to redo it.
 **Boundary — this is the only task in the program that touches the legacy runtime, and it does so as a finished product, not as a builder.** Everything it reads is user data through shipped read-only commands; nothing here is a source-material input, and nothing here may be copied into the repository. Two consequences follow:
 
 - No task from Foundation through Task 7 may borrow from this one. If an earlier task wants to "just check what the old system did", the answer is `docs/migration/baseline-capabilities.json` or a spec gap — never a legacy checkout.
-- The preconditions listed in `docs/superpowers/plans/legacy-runtime/2026-07-20-brain-claude-shared-follow-up.md` must be closed before cutover starts. They are the only remaining reasons to open `~/claude-shared` or `~/brain` at all, and closing them ends legacy work permanently.
+- The cutover preconditions closed on 2026-08-10 and no longer gate this task. `docs/superpowers/BACKLOG.md` §6 records what they left behind — a declined credential-rotation decision, a corrected commit gate, two clean trees, and one live constraint this task must not break: the weekly job's preflight refuses pre-existing changes under `content`, so any cutover step that edits the vault and does not commit the edit will abort the next scheduled run.
 
 **How:**
 

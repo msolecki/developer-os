@@ -165,11 +165,14 @@ describe("the allowlist itself", () => {
  * gains or loses a mention, update the number here and say why in the commit.
  *
  * The program plan went 15 -> 12 on 2026-08-08, when its closed Tasks 0 and 1
- * were compressed to a status block and their step lists removed. Lowering an
- * exact-equality baseline tightens this check rather than relaxing it: the three
- * references are now *forbidden* to come back unnoticed. Every survivor is
- * boundary prose that has to be there — the self-contained-execution constraint,
- * the cutover-preconditions pointer, and Task 8, which is the cutover itself.
+ * were compressed to a status block and their step lists removed, then 12 -> 8
+ * on 2026-08-10, when Track B closed: the cutover-preconditions pointer now
+ * names `BACKLOG.md` §6 instead of a deleted checklist, and Task 8 no longer
+ * says the legacy trees must be opened, because the reasons to open them are
+ * discharged. Lowering an exact-equality baseline tightens this check rather
+ * than relaxing it: those references are now *forbidden* to come back
+ * unnoticed. Every survivor is boundary prose that has to be there — the
+ * self-contained-execution constraint, and Task 8, which is the cutover itself.
  */
 describe("references inside the wholly-allowed documents", () => {
   it("has not grown since the rule was written", async () => {
@@ -178,7 +181,7 @@ describe("references inside the wholly-allowed documents", () => {
     const root = fileURLToPath(new URL("../../", import.meta.url));
 
     const baseline: Readonly<Record<string, number>> = {
-      "docs/superpowers/plans/2026-07-21-developer-os-program.md": 12,
+      "docs/superpowers/plans/2026-07-21-developer-os-program.md": 8,
       "docs/superpowers/specs/2026-07-21-developer-os-design.md": 12,
     };
 
