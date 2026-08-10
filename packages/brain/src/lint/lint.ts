@@ -33,11 +33,21 @@ export interface LintFinding {
   readonly key: string | null;
   readonly message: string;
   /**
-   * 1-based line inside the frontmatter block, or `null` where the finding has
-   * no position. Only parse failures the YAML library located carry one — a
-   * duplicate `tags:`, which Obsidian users do produce, is the case this exists
-   * for. It is on `LintFinding` rather than only on `NoteParseIssue` because
-   * the CLI renders findings, not issues.
+   * A 1-based line in the file named by `path`, or `null` where the finding has
+   * no position. It is on `LintFinding` rather than only on `NoteParseIssue`
+   * because the CLI renders findings, not issues.
+   *
+   * **`path` names two kinds of file, so the frame has to be stated.** For a
+   * note it is a line the author wrote, inside the frontmatter block: only parse
+   * failures the YAML library located carry one, a duplicate `tags:` being the
+   * case this exists for. For a generated artifact — `index-drift` — it is a
+   * line in a file the user did not write, counted from the first byte of the
+   * artifact rather than from any block inside it, and it is the first line that
+   * differs from a fresh build.
+   *
+   * The two frames are deliberately one field. A consumer's question is "where
+   * do I look", and the answer is a line number in the file it was handed; which
+   * of the two produced it is already carried by `class`.
    */
   readonly line: number | null;
 }
@@ -632,6 +642,12 @@ async function driftFindings(
      * The line number, never the line. Spec §6.3 asks for the first differing
      * line, and echoing its content would put note text into a terminal and a
      * log — which the redaction rule exists to prevent.
+     *
+     * It goes in the field and not in the message. The prose form — "differs
+     * from a fresh build at line 6" beside `line: null` — made one type carry
+     * one concept in two conventions, and a `--json` consumer had to parse
+     * English to recover a number the type already declares. The CLI renders
+     * `path:line` from the field, so the human output loses nothing.
      */
     findings.push(
       finding(
@@ -639,7 +655,8 @@ async function driftFindings(
         "error",
         path,
         null,
-        `differs from a fresh build at line ${String(line)}; run developer-os brain reindex`,
+        "differs from a fresh build; run developer-os brain reindex",
+        line,
       ),
     );
   }

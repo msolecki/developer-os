@@ -158,8 +158,27 @@ describe("index-drift", () => {
       lintRequestFor(written, TODAY, buildRequestForFixture("legacy-shape", BUILD_CLOCK)),
     );
     const finding = of(result, "index-drift")[0];
-    expect(finding?.message).toMatch(/line 6\b/u);
+    expect(finding?.line).toBe(6);
     expect(finding?.message).not.toContain("Vault MAP");
+  });
+
+  it("puts the line in the field rather than in the prose", async () => {
+    /**
+     * One type, one concept, one convention. `frontmatter` findings have always
+     * used the structured field; drift wrote "at line 6" into `message` and left
+     * `line` null, so a `--json` consumer had to parse English to recover a
+     * number the type already has a field for.
+     */
+    const built = await buildIndex(buildRequestForFixture("legacy-shape", BUILD_CLOCK));
+    const written = { ...writtenArtifacts(built) };
+    written[PATHS.vaultMap] = (written[PATHS.vaultMap] ?? "").replace(
+      "# Vault map",
+      "# Vault MAP",
+    );
+    const result = await lintVault(
+      lintRequestFor(written, TODAY, buildRequestForFixture("legacy-shape", BUILD_CLOCK)),
+    );
+    expect(of(result, "index-drift")[0]?.message).not.toMatch(/\bline\b/iu);
   });
 
   it("reports a missing artifact as an error", async () => {
@@ -179,6 +198,8 @@ describe("index-drift", () => {
         severity: "error",
         path: PATHS.graph,
         message: containing("has never been built"),
+        /** A file that does not exist has no line to name. */
+        line: null,
       }),
     );
   });
