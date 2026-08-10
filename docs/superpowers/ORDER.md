@@ -29,20 +29,28 @@ week of confusion.
 **A7 — DOS-P3 Workflow compiler.** All three gates are open: no spec, no plan, no code.
 Start with `superpowers:brainstorming` and a spec approval cycle; `BACKLOG.md` §3 lists what
 that spec must decide and what it produces. Do not start `P` before `S` is approved, and do
-not start `I` before `P` is written.
+not start `I` before `P` is written. **`S` ends with the founder approving it, not with an
+agent judging it ready** — that is where an agent working alone runs out of A7.
 
-**A6 closed on 2026-08-10** — ten tasks, the determinism gate satisfied under a frozen clock
-and a reversed directory reader, and the four `brain` commands proved end to end against the
-compiled binary under a temporary HOME. What survives it is
-`docs/architecture/brain.md`: read that before touching Brain code, and the design spec
-before changing Brain behaviour. Its plan is deleted; git history is the archive.
+**Do first, and it is not on Track A.** `BACKLOG.md` §1 **NEW-9**: nothing runs the gates
+except the machine that writes the code. The branch is on `origin` and nothing on the far
+side has ever executed a test. It is S-sized, it blocks nothing formally, and every
+subsystem after it inherits the exposure — so it is cheaper now than at any later point.
 
-**Closed, and not repeated below.** Foundation closed on 2026-08-01 — nine tasks, 51 steps,
-the completion gate satisfied — together with the kernel transaction lock and the
-self-containment lint that guards the clean-room boundary. What survives that work is
-`docs/architecture/foundation.md`, `docs/architecture/foundation-constraints.md`, and
-`docs/releases/foundation-checkpoint.md`. What Foundation left *open* — two founder
-questions, one unconsumed interface, and one residual owed by A11 — is `BACKLOG.md` §2.
+**Closed, and not repeated below.** Foundation on 2026-08-01 — nine tasks, 51 steps —
+together with the kernel transaction lock and the self-containment lint that guards the
+clean-room boundary. A6/DOS-P2 on 2026-08-10 — ten tasks, the determinism gate satisfied
+under a frozen clock *and* a reversed directory reader, the four `brain` commands proved end
+to end against the compiled binary. Both plans are deleted and git history is the archive.
+What survives them:
+
+| Read this | Before you |
+|---|---|
+| `docs/architecture/foundation.md`, `…-constraints.md` | touch the CLI, transactions, or the manifest |
+| `docs/releases/foundation-checkpoint.md` | ask what Foundation's gate evidence was |
+| `docs/architecture/brain.md` | touch Brain code |
+| `specs/2026-07-21-developer-os-brain-engine-design.md` | change Brain *behaviour* |
+| `BACKLOG.md` §2 | assume Foundation left nothing open — it left two founder questions, one unconsumed interface, and one residual owed by A11 |
 
 ---
 
@@ -157,5 +165,7 @@ is not verification.
 ## Counting what is left
 
 Foundation and DOS-P2 are closed. Five subsystems need a spec, a plan, and an
-implementation each — **fifteen milestones, none of which exist yet**. Then cutover, then release.
-Track B is four items; Track L is two.
+implementation each — **fifteen milestones, none of which exist yet**. Then cutover, then
+release. Track B is four items; Track L is two; `BACKLOG.md` §1 is five repository-level
+items, of which **NEW-9 (no CI) is the only one that gets more expensive the longer it
+waits** — the other four are XS-to-S defects with named owners and no compounding cost.
