@@ -85,27 +85,35 @@ closed stays here — NEW-1 through NEW-4 were removed on 2026-08-10 when they c
 closed item leaves behind is a row in §8, a clause in a spec, or a test; if it left nothing,
 it was not worth recording. Git history is the archive.
 
-### NEW-9 — nothing runs the gates except the machine that wrote the code
+### NEW-9 — the gates now have a second place to run, and it has never run
 
-- **Status:** open, recorded 2026-08-10 when the branch was first pushed · **Owner:** the next
-  session, before DOS-P3 code · **Size:** S
-- There is no `.github/`, no workflow, no hook that runs `npm run check` or `pnpm test:e2e`
-  anywhere but locally. `feat/foundation` is now on `origin`, and nothing on the far side has
-  ever executed a test.
-- This contradicts a rule this repository already states twice. `SESSION.md`: *a green local
-  tree is not evidence, a commit is.* `docs/architecture/foundation.md` §7 leans on the
-  capability scan to enforce "no network" — enforcement that exists only where somebody runs
-  it. Right now that is one laptop.
-- It is not hypothetical for this codebase. DOS-P2 shipped three defects that a green local
-  gate did not see and a second reader did, and one of them — `packages/brain` going unscanned
-  for three days by the network gate — was invisible precisely because the check enumerated a
-  hardcoded list nobody re-derived. A gate that runs in one place is one `--no-verify` from
-  running nowhere.
-- **What it must run:** `npm run check` and `pnpm test:e2e` on Node 24.16 on macOS, on every
-  push and every pull request, with no network egress available to the job so the "no network"
-  claim is enforced by the environment rather than only asserted by a grep.
-- **Decide with it:** the repository has no `main` branch, locally or on `origin` — only
-  `feat/foundation`. A branch-protection story and a CI story are the same conversation.
+- **Status:** open — **the workflow is written and has never executed** · **Owner:** the next
+  session, on the first push after this one · **Size:** XS to verify, S if it fails
+- `.github/workflows/check.yml` runs `npm run check` and `pnpm test:e2e` on `macos-15` and
+  Node 24.x, on every push and every pull request, with `contents: read` and nothing else.
+  Before it there was no `.github/` at all: the branch was on `origin` and nothing on the far
+  side had ever executed a test.
+- **It is committed, not verified.** Remote verification is `blocked_by_environment` and this
+  is exactly that case — a workflow file is a claim about a machine this session cannot reach.
+  Treat the first run as the evidence and this entry as open until then. If the runner label
+  or the corepack step is wrong it fails loudly on line one, which is the failure mode to
+  prefer.
+- **A correction to what this entry said before the work.** It required "no network egress
+  available to the job, so the *no network* claim is enforced by the environment rather than
+  only asserted by a grep." **That is not achievable on a hosted runner** — there is no egress
+  control to set. The capability scan in `tests/e2e/foundation.test.ts` remains the only
+  enforcement; CI multiplies where it runs rather than changing what it proves. Written down
+  because the requirement was stated confidently and was wrong, and a requirement nobody can
+  satisfy is worse than one nobody wrote.
+- **Two deliberate pins, both worth revisiting with a network available:**
+  `actions/checkout` and `actions/setup-node` are pinned by **tag, not commit SHA**, which is
+  the weaker supply-chain position — a tag is mutable and a third party controls it. It was
+  chosen over inventing a SHA that could not be verified offline. Second, the runner is
+  `macos-15` rather than `macos-latest`: a retired label fails loudly, where a drifting one
+  silently changes the environment under a product that pins an ICU locale on purpose.
+- **Still undecided, and the same conversation:** this repository has no `main` branch,
+  locally or on `origin` — only `feat/foundation`. Branch protection has nothing to protect
+  until that is settled.
 
 ### NEW-6 — `duplicates` groups on bytes the user is no longer shown
 
@@ -418,7 +426,7 @@ subproject; listed here so nothing is discovered late.
 | `packages/adapter-codex/`, `plugins/codex/` | DOS-P5 | missing |
 | `templates/brain/` | DOS-P2 | **created 2026-08-10** — the vault skeleton `init` installs, embedded in `apps/cli/src/commands/brain-template.ts` so a shipped binary carries it, with a test that fails if the two drift |
 | `workflows/` | DOS-P3 | missing |
-| `.github/workflows/` | nobody — **that is the finding** | missing, and it is NEW-9. The program file map never named it, so no subsystem owes it and it has been nobody's job since 2026-07-21 |
+| `.github/workflows/` | nobody owed it — **that was the finding** | **created 2026-08-10** as `check.yml`, and never yet executed. The program file map never named it, so no subsystem owed it and it was nobody's job for twenty days |
 
 **`tests/repository/` gained a second rule on 2026-08-10.** Beside the self-containment
 enumerator there is now `control-bytes.test.ts`, which fails the build on a literal control
