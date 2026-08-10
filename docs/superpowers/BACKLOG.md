@@ -175,7 +175,7 @@ that subsystem in §3.
 
 ## 3. Missing specs and plans
 
-**Nine documents. One is written and awaiting approval.** DOS-P3's spec exists; its plan and DOS-P4 through DOS-P7's specs and plans do not.
+**Eight documents left.** DOS-P3's spec is approved and its plan is written; DOS-P4 through DOS-P7 need a spec and a plan each.
 Each subsystem after Foundation requires an approved spec **and** an implementation plan
 before any code work — this is a Global Constraint of the program plan, not a preference.
 Every spec starts with a brainstorming/approval cycle, and approval is the founder's.
@@ -187,7 +187,7 @@ names it as the design of record; its plan is deleted, recoverable at `81e7e7d`.
 ### DOS-P3 — Workflow compiler
 
 - **Spec:** `specs/2026-07-21-developer-os-workflow-compiler-design.md` — **approved by the founder 2026-08-10.** Still no code: the plan below comes first, which is a Global Constraint, not a preference
-- **Plan:** `plans/2026-07-21-developer-os-workflow-compiler.md` — missing
+- **Plan:** `plans/2026-07-21-developer-os-workflow-compiler.md` — **written 2026-08-10.** Twelve tasks, TDD throughout, each ending in a fresh-context review and a commit
 - **Program task:** 3 · **Complexity:** L · **Blocked by:** nothing
 - **Parallel with:** DOS-P2
 - **The spec must decide:**

@@ -31,11 +31,17 @@ every decision — six as drafted, the `scheduled` trigger reversed into a refus
 approved `specs/2026-07-21-developer-os-workflow-compiler-design.md`. That document is now
 the design of record.
 
-**`P` is the entry.** The next session writes
-`plans/2026-07-21-developer-os-workflow-compiler.md` with `superpowers:writing-plans`, and
-writes no code: the plan before the implementation is a Global Constraint of the program
-plan, not a preference. `BACKLOG.md` §3 lists what the plan must cover and what DOS-P3
-produces.
+**`P` closed the same day.** `plans/2026-07-21-developer-os-workflow-compiler.md` is written:
+twelve tasks, TDD throughout, each ending in a fresh-context review and a commit. **`I` is the
+entry** — execute it with `superpowers:subagent-driven-development` or
+`superpowers:executing-plans`, one task at a time.
+
+Two things the plan settled that the spec left to it. The display screen moves from
+`packages/brain` into `@developer-os/security`, because `workflow-schema` needs the same screen
+and must not depend on a peer subsystem. And spec §13's demand that six workflows "render
+byte-identically" **cannot be met literally in DOS-P3**, which ships no renderer by design:
+Task 11 proves what this package can prove and names DOS-P4/P5 as owing the rest, rather than
+skipping the requirement quietly.
 
 **Nothing else is startable without the founder.** `BACKLOG.md` §1's repository defects
 closed on 2026-08-10 — NEW-9 with CI (`c6d1ef1`), then NEW-5, NEW-8 and NEW-6, each a place
@@ -72,7 +78,7 @@ is approved.
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A7 | DOS-P3 Workflow compiler — S / P / I | spec approved 2026-08-10; plan to write | — | L | program plan Task 3 checkpoint: canonical workflows compile to abstract artifacts | **now** — **S closed**; `P` is the entry, `I` blocked on it |
+| A7 | DOS-P3 Workflow compiler — S / P / I | `plans/2026-07-21-developer-os-workflow-compiler.md` | — | L | program plan Task 3 checkpoint: canonical workflows compile to abstract artifacts | **now** — **S and P closed**; `I` is the entry, twelve tasks |
 | A8 ‖ | DOS-P4 Claude adapter — S / P / I | to write | A7 | L | program plan Task 4 checkpoint: a Claude-only user completes the full synthetic workflow | blocked |
 | A9 ‖ | DOS-P5 Codex adapter — S / P / I | to write | A7 | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | blocked |
 | A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | A8 **and** A9 | L | program plan Task 6 checkpoint, after independent security review | blocked |
