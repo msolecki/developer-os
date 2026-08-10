@@ -61,7 +61,7 @@ Open work only. Program Tasks 0 and 1 are closed and are not rows here.
 | DOS-P3 … DOS-P7 | nothing written | 5 specs, 5 plans, 5 implementations |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
 | Repository-level | §1 | NEW-5 … NEW-8, all XS to S, none blocking |
-| Repository infrastructure | §5 | **no CI**, and six directories a later subsystem still owes |
+| Repository infrastructure | §5 | six directories a later subsystem still owes; CI landed 2026-08-10 |
 | Legacy runtime | 1 exit checklist | 3 items — EXIT-1 closed 2026-08-10 as declined; one untouched since 2026-07-20, one nearly discharged, one new |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
 
