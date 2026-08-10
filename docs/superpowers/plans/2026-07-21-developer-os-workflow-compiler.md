@@ -2530,7 +2530,7 @@ records that hand-off so it cannot be lost.
 - Consumes: `loadWorkflow`, `detectWorkflowDrift`, `sourceMarker` from `@developer-os/workflow-schema`.
 - Produces: nothing.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/contracts/workflows/determinism.test.ts`:
 
@@ -2620,12 +2620,12 @@ describe("determinism", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to make sure it fails, then passes**
+- [x] **Step 2: Run it to make sure it fails, then passes**
 
 Run: `npx vitest run tests/contracts/workflows/determinism.test.ts`
 Expected: FAIL before Task 9's workflows exist; PASS after. If it is run in order it passes immediately, which is why each assertion also proves its set is non-empty — a determinism test over zero workflows is the exact defect this repository has shipped before.
 
-- [ ] **Step 3: Run the gates, fresh-context review, then commit**
+- [x] **Step 3: Run the gates, fresh-context review, then commit**
 
 ```bash
 npm run check
