@@ -207,8 +207,20 @@ function plural(count: number, noun: string): string {
 export function renderVaultMap(index: IndexDocumentV1): string {
   const lines: string[] = [frontmatter(index), "# Vault map", ""];
 
+  /**
+   * Plain escaped text, not a code span, and `inlineText` rather than `cell`
+   * because this line is prose and has no columns to protect.
+   *
+   * The span this replaces is the same defect the tag cloud below records: a
+   * backslash is literal inside a code span, so `inlineText`'s `\`` does not
+   * escape the backtick — it closes the span the renderer opened and hands the
+   * rest of the line to Markdown. `pathSegmentSchema` accepts a backtick, and
+   * the user writes `contentRoot` themselves in `config.toml`, so the value can
+   * really carry one. The lesson was written one screen down and not applied
+   * here.
+   */
   lines.push(
-    `${plural(index.notes.length, "note")} in ${plural(index.folders.length, "folder")} under \`${cell(index.contentRoot)}\`.`,
+    `${plural(index.notes.length, "note")} in ${plural(index.folders.length, "folder")} under ${inlineText(index.contentRoot)}.`,
     "",
     "## Folders",
     "",

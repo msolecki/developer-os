@@ -60,7 +60,7 @@ Open work only. Program Tasks 0 and 1 are closed and are not rows here.
 | Program (umbrella) | 1 plan | Tasks 3–9 open; Tasks 0–2 closed and not rows here |
 | DOS-P3 … DOS-P7 | nothing written | 5 specs, 5 plans, 5 implementations |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | NEW-6, NEW-7, NEW-8 — all XS to S, none blocking |
+| Repository-level | §1 | NEW-6 and NEW-7 — one S, one XS, neither blocking |
 | Repository infrastructure | §5 | six directories a later subsystem still owes; CI landed 2026-08-10 |
 | Legacy runtime | 1 exit checklist | 3 items — EXIT-1 closed 2026-08-10 as declined; one untouched since 2026-07-20, one nearly discharged, one new |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -93,10 +93,9 @@ founder's machine as user data, not as source material.
 ## 1. Open right now
 
 Everything in this section is genuinely open. Nothing here is bookkeeping, and nothing
-closed stays here — NEW-1 through NEW-5 and NEW-9 were removed on 2026-08-10 when they
-closed. What a
-closed item leaves behind is a row in §8, a clause in a spec, or a test; if it left nothing,
-it was not worth recording. Git history is the archive.
+closed stays here — NEW-1 through NEW-5, NEW-8 and NEW-9 were removed on 2026-08-10 when
+they closed. What a closed item leaves behind is a row in §8, a clause in a spec, or a test;
+if it left nothing, it was not worth recording. Git history is the archive.
 
 ### NEW-6 — `duplicates` groups on bytes the user is no longer shown
 
@@ -136,22 +135,6 @@ it was not worth recording. Git history is the archive.
   worth ten minutes with any Markdown preview rather than being left indefinitely: `%` in a
   filename is ordinary where U+202E is not, so the encoder now touches common paths.
 - Recorded rather than assumed, and stated at the call site too.
-
-### NEW-8 — the catalog still wraps `contentRoot` in a code span
-
-- **Status:** open, pre-existing · **Owner:** the next task touching `render.ts` · **Size:** XS
-- `render.ts` wraps `cell(index.contentRoot)` in a code span. `inlineText` escapes a backtick
-  to `` \` ``, but inside a code span a backslash is literal and the backtick closes the span
-  — which is precisely what the same file records two functions further down, where it
-  removed the span from the tag cloud with the note that *the span cannot be made safe, only
-  removed*. The lesson was written and then not applied one screen higher.
-- `pathSegmentSchema` accepts a backtick, so the value can reach it. The blast radius is one
-  corrupted line in `catalog.md`, and the value is **config-derived rather than vault-derived**
-  — the user writes their own `config.toml` — which is why this is XS and not urgent.
-- **Not fixed in Task 10 on purpose.** It arrived in a third review round already carrying two
-  real defects, it changes artifact bytes, and it needs its own test. Three rounds of this
-  task were spent on defects introduced by fixes to earlier defects; a fourth unreviewed
-  change to artifact rendering is how that continues.
 
 ### EXIT-2, EXIT-4 — the legacy runtime
 
