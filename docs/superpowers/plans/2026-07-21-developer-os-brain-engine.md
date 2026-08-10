@@ -1179,6 +1179,19 @@ git commit -m "feat: retrieve through the funnel and say when nothing is reachab
 
 ### Task 8: Public surface — capture type, migrations, adoption, and the facade
 
+**Status: SHIPPED 2026-08-10, commit `d5dc429`.** Deviations, all in that commit message:
+`BrainService.search` returns a `BrainSearchOutcome`, which adds an `index-unavailable`
+variant to spec §8's two rather than throwing for an expected vault state; `renderArtifacts`
+and `lintBuild` were extracted first, closing the two refactors an earlier review assigned
+here; adoption is an allow-list rather than a subtraction list.
+
+**Task 9 inherits three things from this task**, on top of the two Task 7 left it:
+`BrainService.search` also **throws** `RangeError` for a `maxCandidates` that is not a
+positive integer — a caller bug, not a variant — so `--limit` needs validation *and* a
+`try`/`catch`; `BrainIndexUnavailable.reason` is `"missing" | "unreadable"` and the two
+deserve different recovery text; and `readArtifact` reports an unreadable artifact as a
+missing one, so a permission error surfaces as "run reindex".
+
 **`NoteParseIssue` and `LintFinding` both carry `readonly line: number | null`** as of
 2026-08-09, which closed `BACKLOG.md` §1 NEW-3 before this task could freeze the shape without
 it. Nothing further is owed here.
@@ -1193,11 +1206,11 @@ it. Nothing further is owed here.
 - Consumes: everything from Tasks 2 through 7.
 - Produces: `CaptureStatus`, `CaptureEnvelopeV1`, `CAPTURE_STATUSES`, `BrainMigration`, `BRAIN_MIGRATIONS`, `BrainStatusReportV1`, `BrainService`, `BrainServiceDependencies`, `BrainArtifacts`.
 
-- [ ] **Step 1: Define the capture envelope as a type only**
+- [x] **Step 1: Define the capture envelope as a type only**
 
 `packages/brain/src/schema/capture.ts` declares `CaptureEnvelopeV1` with exactly the fields in design spec §13.1 and the six statuses `quarantined`, `accepted`, `rejected`, `staging`, `ingested`, `failed`. Nothing in this package constructs, transitions, or persists one — `DOS-P6` owns the lifecycle. Add a single test asserting `CAPTURE_STATUSES` has those six members in that order, so a later task cannot quietly add a seventh.
 
-- [ ] **Step 2: Define migrations as an empty registry**
+- [x] **Step 2: Define migrations as an empty registry**
 
 ```typescript
 /**
@@ -1227,7 +1240,7 @@ export const BRAIN_MIGRATIONS: readonly BrainMigration[] = [];
 
 Test: the registry is empty, and every entry (vacuously) satisfies `from < to`. The second assertion exists so the invariant is already pinned when the first migration lands.
 
-- [ ] **Step 3: Write the failing facade test**
+- [x] **Step 3: Write the failing facade test**
 
 ```typescript
 describe("BrainService", () => {
@@ -1255,7 +1268,7 @@ describe("BrainService", () => {
 
 `serviceFor(overrides)` builds a `BrainService` over `tests/fixtures/brain/legacy-shape/` from `fixtureRequest`'s dependencies, replacing `readFile` with one that records every path it is asked for and, when `onWrite` is supplied, asserting it is never called — the write channel does not exist on `BrainServiceDependencies` at all, which is what makes the first assertion structural rather than behavioural.
 
-- [ ] **Step 4: Implement the facade**
+- [x] **Step 4: Implement the facade**
 
 ```typescript
 export interface BrainArtifacts {
@@ -1307,7 +1320,7 @@ Method bodies are left to the implementer because each one is a two-to-four line
 
 `search` reads `index.json` from disk rather than rebuilding, so retrieval stays index-first; a missing or unparseable index returns a failure telling the user to run `brain reindex`.
 
-- [ ] **Step 5: Run, gate, and commit**
+- [x] **Step 5: Run, gate, and commit**
 
 Run: `npx vitest run packages/brain` then `npm run check`
 
