@@ -40,10 +40,11 @@ replacement text says where it went.
   markers instead — §8, §9.1 and §9.3 each say what actually shipped — which is finer
   granularity than this rule asks for. Do not give it a global past-tense status line, and do
   not treat it as a deletion candidate while any subsystem it specifies is unbuilt.
-- **Three deleted plans and two stripped ones, all in git history.** Deleted whole: the
+- **Four deleted plans and two stripped ones, all in git history.** Deleted whole: the
   brain/claude-shared English migration (`28a0ddc`), the kernel transaction lock (`cf70342^`),
-  and Foundation (`c4f883f^`) — a deleting commit does not contain the file it deleted, hence
-  the `^`. Stripped in part: the program plan's Tasks 0–1 and the Brain plan's Tasks 1–2, both
+  Foundation (`c4f883f^`), and the DOS-P3 workflow compiler (`a47e965`). A deleting commit does
+  not contain the file it deleted, which is what the `^` suffixes mean; `a47e965` is written
+  without one because it is already the last commit that *contains* the plan. Stripped in part: the program plan's Tasks 0–1 and the Brain plan's Tasks 1–2, both
   recoverable at `9f82901`, which is the commit that added the superseding notes rather than
   one that removed anything.
 - `docs/superpowers/plans/legacy-runtime/` is publication-excluded and, since 2026-08-10,
@@ -54,21 +55,25 @@ replacement text says where it went.
 
 ## 0. Status at a glance
 
-Open work only. Program Tasks 0 and 1 are closed and are not rows here.
+Open work only. Program Tasks 0 to 3 are closed and are not rows here.
 
 | Area | Where | What is left |
 |---|---|---|
-| Program (umbrella) | 1 plan | Tasks 3–9 open; Tasks 0–2 closed and not rows here |
-| DOS-P3 … DOS-P7 | nothing written | 5 specs, 5 plans, 5 implementations |
+| Program (umbrella) | 1 plan | Tasks 4–9 open; Tasks 0–3 closed and not rows here |
+| DOS-P4 … DOS-P7 | nothing written | 4 specs, 4 plans, 4 implementations |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
 | Repository-level | §1 | NEW-7 and NEW-10 — both XS; NEW-7 needs a machine with Obsidian |
-| Repository infrastructure | §5 | six directories a later subsystem still owes; CI landed 2026-08-10 |
+| Repository infrastructure | §5 | four directories a later subsystem still owes; `tests/contracts/`, `packages/workflow-schema/` and `workflows/` landed with DOS-P3 on 2026-08-10 |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
 
-**Foundation and DOS-P2 are closed.** Neither is a row above. What each left behind is
-`docs/architecture/foundation.md` and `docs/architecture/brain.md`, plus §2 here for
-Foundation's open questions; their plans are deleted and git history is the archive.
+**Foundation, DOS-P2 and DOS-P3 are closed.** None is a row above. What each left behind is
+`docs/architecture/foundation.md`, `docs/architecture/brain.md` and
+`docs/architecture/workflow-schema.md`, plus §2 here for Foundation's open questions; their plans
+are deleted and git history is the archive. DOS-P3's note is the one to read before either
+adapter — its §7 records four canonical workflows that say less than the product spec does, each
+with an owner, and its §8 records nine residuals — two of them explicitly the adapters',
+the rest unowned until somebody needs them.
 
 **This repository is public, deliberately, as of 2026-08-10.** It was pushed to
 `github.com/msolecki/developer-os` and the founder confirmed the visibility after being shown
@@ -175,7 +180,11 @@ that subsystem in §3.
 
 ## 3. Missing specs and plans
 
-**Eight documents left.** DOS-P3's spec is approved and its plan is written; DOS-P4 through DOS-P7 need a spec and a plan each.
+**Eight documents left.** DOS-P4 through DOS-P7 need a spec and a plan each.
+DOS-P3 is closed and is not listed here any more: its spec is retained at
+`specs/2026-07-21-developer-os-workflow-compiler-design.md` because
+`docs/architecture/workflow-schema.md` names it as the design of record; its plan is deleted,
+recoverable at `a47e965`.
 Each subsystem after Foundation requires an approved spec **and** an implementation plan
 before any code work — this is a Global Constraint of the program plan, not a preference.
 Every spec starts with a brainstorming/approval cycle, and approval is the founder's.
@@ -183,35 +192,6 @@ Every spec starts with a brainstorming/approval cycle, and approval is the found
 DOS-P2 is not listed here any more. Its spec is retained at
 `specs/2026-07-21-developer-os-brain-engine-design.md` because `docs/architecture/brain.md`
 names it as the design of record; its plan is deleted, recoverable at `81e7e7d`.
-
-### DOS-P3 — Workflow compiler
-
-- **Spec:** `specs/2026-07-21-developer-os-workflow-compiler-design.md` — **approved by the founder 2026-08-10.** Still no code: the plan below comes first, which is a Global Constraint, not a preference
-- **Plan:** `plans/2026-07-21-developer-os-workflow-compiler.md` — **written 2026-08-10.** Twelve tasks, TDD throughout, each ending in a fresh-context review and a commit
-- **Program task:** 3 · **Complexity:** L · **Blocked by:** nothing
-- **Parallel with:** DOS-P2
-- **The spec must decide:**
-  - the canonical workflow schema: identity, semantic version, triggers, inputs,
-    read/write scopes, required capabilities, refusals, steps, structured result,
-    validators, recovery
-  - strict parsing that rejects unknown fields for v1 contracts
-  - the renderer interface boundary — no vendor behavior inside canonical workflows
-  - which workflows ship: `shared`, `brain-search`, `capture`, `review`, `ingest`, `doctor`
-  - generated-artifact markers and the CI drift check
-- **Negative fixtures required:** missing capability, excessive write scope, prompt
-  instructions embedded inside source data, incompatible schema version.
-- **Produces:** `WorkflowContractV1`, `WorkflowCapability`, `WorkflowInputSchema`,
-  `WorkflowOutputSchema`, `WorkflowRenderer`, `RenderedArtifact`, `WorkflowValidationResult`.
-- **Gate:** a vendor overlay can never weaken a canonical refusal or widen write scope;
-  generated output changes only when canonical source or renderer changes.
-- **Creates:** `packages/workflow-schema/src/`, `workflows/*`, `tests/{contracts,fixtures}/workflows/`.
-- **Reference reading, optional:** `github.com/phuryn/pm-skills` (MIT) — 68 skills across 9
-  Claude plugins, maintained as one hand-written format per skill with **no compile step**.
-  It is the approach this task exists to replace, so it is useful in exactly two ways: as
-  evidence that the single-format shortcut is what people actually reach for, and as a
-  corpus to sanity-check that `WorkflowContractV1` can express a real skill without
-  contortion. Not a dependency, not a fixture, not a source — repository fixtures stay
-  synthetic.
 
 ### DOS-P4 — Claude Code adapter
 
@@ -362,20 +342,21 @@ subproject; listed here so nothing is discovered late.
 
 | Path | First owner | Status |
 |---|---|---|
-| `tests/contracts/` | Foundation onward | missing — DOS-P2 put its contract cases beside the code they pin, in `packages/brain/src/**/*.test.ts`, rather than creating this tree |
+| `tests/fixtures/workflows/` | DOS-P3 | **created 2026-08-10** — the seven synthetic negative fixtures, one change from the base each |
+| `tests/contracts/` | Foundation onward | **created 2026-08-10** by DOS-P3 — `workflows/{canonical,negative,determinism}.test.ts`, 16 cases. DOS-P2 had put its contract cases beside the code they pin instead |
 | `tests/fixtures/` | Foundation onward | **created 2026-08-08** |
 | `tests/fixtures/brain/legacy-shape/` | DOS-P2 Task 3 | **created 2026-08-08**, plus eight one-concern `malformed/` fixtures for lint |
 | `tests/integration/` | Foundation onward | missing — DOS-P2's reindex/lint/search integration runs in `tests/e2e/brain.test.ts` against the compiled binary, which is the stronger of the two |
 | `tests/e2e/` | Foundation Task 9 | **created 2026-08-01** — `pnpm test:e2e` runs 45 cases across `foundation.test.ts` and `brain.test.ts` |
 | `tests/security/` | DOS-P6 | missing |
-| `docs/architecture/` | Foundation Task 9, then per subsystem | **created 2026-08-01** — Foundation boundaries and constraints done; workflow schema, threat model, capability model still owed by later subsystems |
+| `docs/architecture/` | Foundation Task 9, then per subsystem | **created 2026-08-01** — Foundation boundaries and constraints done, Brain and the workflow schema done; threat model and capability model still owed by later subsystems |
 | `docs/releases/` | DOS-P7 | **created 2026-08-01** by Foundation Task 9, ahead of its named owner |
-| `packages/brain/` | DOS-P2 | **complete 2026-08-10** — `schema/`, `discovery/`, `indexes/`, `lint/`, `retrieval/`, `migrations/`, `service.ts`, `redact.ts` |
-| `packages/workflow-schema/` | DOS-P3 | missing |
+| `packages/brain/` | DOS-P2 | **complete 2026-08-10** — `schema/`, `discovery/`, `indexes/`, `lint/`, `retrieval/`, `migrations/`, `service.ts`, and `redact.ts` as a re-export of the screen that moved to `packages/security` in DOS-P3 |
+| `packages/workflow-schema/` | DOS-P3 | **complete 2026-08-10** — `parse`, `contract`, `vocabulary`, `derive`, `validate`, `overlay`, `load`, `drift` |
 | `packages/adapter-claude/`, `plugins/claude/` | DOS-P4 | missing |
 | `packages/adapter-codex/`, `plugins/codex/` | DOS-P5 | missing |
 | `templates/brain/` | DOS-P2 | **created 2026-08-10** — the vault skeleton `init` installs, embedded in `apps/cli/src/commands/brain-template.ts` so a shipped binary carries it, with a test that fails if the two drift |
-| `workflows/` | DOS-P3 | missing |
+| `workflows/` | DOS-P3 | **created 2026-08-10** — the six canonical workflows |
 | `.github/workflows/` | nobody owed it — **that was the finding** | **created and verified green 2026-08-10** — `check.yml`, run `31377323072` on `macos-15`, both gate steps executed. The program file map never named it, so no subsystem owed it and it was nobody's job for twenty days |
 
 **`tests/repository/` gained a second rule on 2026-08-10.** Beside the self-containment
@@ -500,13 +481,23 @@ it before trusting any approved document, because it is the only place that says
 one in front of you is still current.
 
 **Nothing is owed.** Both rows that stood here — the `brain` CLI group and `init`
-installing the template — shipped with DOS-P2 Tasks 9 and 10 and are in the table below.
+installing the template — shipped with DOS-P2 Tasks 9 and 10 and are in the table below, and
+DOS-P3's two amendments landed with it on 2026-08-10.
+
+**One thing that is deliberately *not* a row here**, because §8 is amendments to approved
+documents and this was the reverse. DOS-P3's first draft invented `session_start_hook` and
+`session_end_hook` for what product spec §11 already called `session_start_injection` and
+`session_end_capture`; the **code** was corrected to match the spec on 2026-08-10, so §11 is
+current and untouched. Recorded here only so the next reader does not go looking for an
+amendment that would say otherwise.
 
 **Discharged. Listed because the amended document is still read, not because there is work
 left:**
 
 | Amended | By | What changed | Where it landed |
 |---|---|---|---|
+| `specs/…-workflow-compiler-design.md` §4, "semantic version" | DOS-P3, as shipped | narrowed to `MAJOR.MINOR.PATCH` with no leading zero: pre-release and build metadata are refused, because `extends` pins `id@version` exactly and comparing `1.2.3-rc.1` against `1.2.3` there means nothing | code, DOS-P3 Task 3; recorded in `docs/architecture/workflow-schema.md` §2.5, and the spec carries a dated in-place amendment |
+| `specs/…-workflow-compiler-design.md` §13, byte-identical rendering | DOS-P3, and the fact that §14 makes `WorkflowRenderer` an interface | the requirement that six workflows "render byte-identically" **cannot be met in DOS-P3**, which ships no renderer. Task 11 proves the inputs are byte-identical across two loads and a reversed directory reader; the byte-identity of real vendor artifacts is owed by DOS-P4 and DOS-P5 | `docs/architecture/workflow-schema.md` §6, which is where the hand-off is recorded so it cannot be lost with the plan |
 | `DeveloperOsConfigV1`, frozen at `foundation.md` §2 | brain-engine spec §3, §15.3 | gains an **optional** `brain` section; `configSchema` stays `.strict()` and `schemaVersion` stays 1, so every existing installation still loads | code, `4cd7224`; cross-referenced in `foundation.md` §2 |
 | brain-engine spec §2 placement table | the brain plan, and the shipped code | `BrainConfigV1`'s type and schema live in `packages/core`, not `packages/brain` | code, `4cd7224`; the spec table carries a dated in-place correction |
 | `specs/…-brain-engine-design.md` §7 lint table | the brain plan's Task 4, as shipped | the `links` class gains a `warn` row for a link text matching more than one note, and §7 records the five-tier resolution ladder plus its case-folded fallback | code, this task; the spec carries a dated in-place amendment marked as shipped |

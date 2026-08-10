@@ -110,6 +110,34 @@ describe("workflowContractSchema", () => {
     ).toBe(false);
   });
 
+  it("pins where the duplicate-id check does and does not report", () => {
+    /**
+     * `docs/architecture/workflow-schema.md` §8.2 documents this boundary as a
+     * known exception to "every finding, not the first", and nothing pinned it
+     * — a residual asserted rather than tested is the shape this repository
+     * distrusts. zod runs a root refinement when a child fails a *check* and
+     * skips it when a child fails a *type or shape* parse, so the rule is
+     * reported alongside a bad trigger and silent alongside a wrong
+     * `schemaVersion`. It never fails open: the workflow is refused either way.
+     */
+    const duplicates = [
+      { id: "same", do: "brain.readIndex" },
+      { id: "same", prose: "text" },
+    ];
+    const reports = (overrides: Record<string, unknown>): boolean => {
+      const result = workflowContractSchema.safeParse(
+        contract({ steps: duplicates, ...overrides }),
+      );
+      expect(result.success).toBe(false);
+      return JSON.stringify(result.error?.issues).includes("duplicate step id");
+    };
+
+    expect(reports({}), "duplicates alone").toBe(true);
+    expect(reports({ triggers: ["nope"] }), "beside a failed check").toBe(true);
+    expect(reports({ schemaVersion: 2 }), "beside a type failure").toBe(false);
+    expect(reports({ elevated: true }), "beside an unknown key").toBe(false);
+  });
+
   it("refuses a refusal whose exit code is not a CliExitCode", () => {
     expect(
       workflowContractSchema.safeParse(

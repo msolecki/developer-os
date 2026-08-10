@@ -1,7 +1,7 @@
 import type { ParseRefusal } from "./parse.js";
 import { parseWorkflowYaml } from "./parse.js";
 import type { WorkflowValidationResult } from "./validate.js";
-import { validateWorkflow } from "./validate.js";
+import { screenFindingPath, validateWorkflow } from "./validate.js";
 
 export interface WorkflowSource {
   readonly file: string;
@@ -36,7 +36,13 @@ export function loadWorkflow(source: WorkflowSource): WorkflowValidationResult {
     return {
       findings: [
         {
-          file: source.file,
+          /**
+           * Screened here too. This was the one path into a `WorkflowFinding`
+           * that passed the file through raw, so a directory name carrying a
+           * U+202E reordered every line printed after it — but only for a file
+           * that failed to parse, which is the case least likely to be noticed.
+           */
+          file: screenFindingPath(source.file),
           stepId: null,
           rule: "parse",
           severity: "error",

@@ -65,6 +65,21 @@ describe("loadWorkflow", () => {
     }
   });
 
+  it("screens the file path on the parse-refusal path too", () => {
+    /**
+     * The one path into a `WorkflowFinding` that passed `file` through raw.
+     * `validateWorkflow` screens the same field and says why; a workflow
+     * directory name is author-controlled once `workflows/` is user-extensible,
+     * and this is the branch taken when the YAML fails to parse — the case
+     * least likely to be looked at closely.
+     */
+    const hostile = `evil\u202E\u0007${"L".repeat(400)}/workflow.yaml`;
+    const result = loadWorkflow({ file: hostile, text: "id: a\nid: b\n" });
+    expect(result.findings[0]?.file).not.toContain("\u202E");
+    expect(result.findings[0]?.file).not.toContain("\u0007");
+    expect(result.findings[0]?.file.length).toBeLessThan(300);
+  });
+
   it("never echoes the file into the finding it reports", () => {
     const result = loadWorkflow({
       file: "workflows/sample/workflow.yaml",

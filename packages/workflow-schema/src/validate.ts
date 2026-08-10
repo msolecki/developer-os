@@ -43,6 +43,16 @@ const MAX_MESSAGE = 512;
 /** A path needs more room than a value, and still needs a bound. */
 const MAX_PATH = 256;
 
+/**
+ * Exported so `load.ts` screens the same field the same way. It did not, and a
+ * hostile workflow **directory** name therefore reached a terminal untouched
+ * whenever the YAML failed to parse — every other path into a `WorkflowFinding`
+ * was screened, which is exactly what made the omission invisible.
+ */
+export function screenFindingPath(file: string): string {
+  return screenAndCap(file, MAX_PATH);
+}
+
 /** An author-controlled value: screened, then capped hard. */
 function fragment(text: string): string {
   return screenAndCap(text, MAX_FRAGMENT);
@@ -139,7 +149,7 @@ export function validateWorkflow(
        * every line a renderer prints after it, and its length is bounded by
        * nothing. A path needs more room than a value, hence its own bound.
        */
-      file: screenAndCap(file, MAX_PATH),
+      file: screenFindingPath(file),
       stepId: stepId === null ? null : fragment(stepId),
       rule,
       severity,

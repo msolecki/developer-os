@@ -99,63 +99,36 @@ P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5
 
 ---
 
-### Tasks 0, 1 and 2 — closed, and not described here
+### Tasks 0 to 3 — closed, and not described here
 
 | Task | Closed | What survives it |
 |---|---|---|
 | 0 — preserve sources, establish the publication boundary | 2026-07-21 | the three files in `docs/migration/`, and the self-containment constraint in Global Constraints above — enforced by `npm run lint` since 2026-08-01 rather than by prose |
 | 1 — public foundation and CLI lifecycle | 2026-08-01 | `docs/architecture/foundation.md`, `docs/architecture/foundation-constraints.md`, `docs/releases/foundation-checkpoint.md` |
 | 2 — Brain engine | 2026-08-10 | `docs/architecture/brain.md`, and `specs/2026-07-21-developer-os-brain-engine-design.md` as the design of record |
+| 3 — workflow compiler | 2026-08-10 | `docs/architecture/workflow-schema.md`, and `specs/2026-07-21-developer-os-workflow-compiler-design.md` as the design of record |
 
 None can be re-run and none should be read as instruction: Task 0's inputs are deliberately out
 of reach, and the plans for Tasks 1 and 2 were deleted when their last steps closed. The
 recovery commits for all three are in `BACKLOG.md`'s rules, which is the one place that index
 lives — a second copy here is how two indexes come to disagree.
 
-**Their step lists are deleted rather than kept as ticked boxes**, and Task 2 is why that rule
-is worth obeying. It stood marked COMPLETE while three of its boxes were still unticked and the
-work those boxes describe had landed days earlier — the synthetic fixture among them, which
-`BACKLOG.md` §5 records as created on 2026-08-08. A closed task carrying a stale checklist is a
-document inviting the next session to redo it.
+**Their step lists are deleted rather than kept as ticked boxes**, and Tasks 2 and 3 are both
+why that rule is worth obeying. Task 2 stood marked COMPLETE while three of its boxes were still
+unticked and the work those boxes describe had landed days earlier — the synthetic fixture among
+them, which `BACKLOG.md` §5 records as created on 2026-08-08. A closed task carrying a stale checklist is a
+document inviting the next session to redo it. Task 3 was the same failure in the other
+direction: four of its six boxes stood ticked while `packages/workflow-schema` did not exist,
+and the two still unticked when it closed were the two that had *actually* been done first —
+the founder approved the schema on 2026-08-10, and the six canonical workflows were written
+from the product spec. A checkbox nobody can trust is worse than no checkbox.
 
-### Task 3: Specify and implement the workflow compiler
-
-**Complexity:** L
-
-**Files:**
-- Create: `docs/superpowers/specs/2026-07-21-developer-os-workflow-compiler-design.md`
-- Create: `docs/superpowers/plans/2026-07-21-developer-os-workflow-compiler.md`
-- Create: `packages/workflow-schema/src/`
-- Create: `workflows/shared/`, `workflows/brain-search/`, `workflows/capture/`, `workflows/review/`, `workflows/ingest/`, and `workflows/doctor/`
-- Create: `tests/contracts/workflows/` and `tests/fixtures/workflows/`
-
-**Interfaces:**
-- Consumes: stable `BrainService` read/write scopes and Foundation result/error types.
-- Produces: `WorkflowContractV1`, `WorkflowCapability`, `WorkflowInputSchema`, `WorkflowOutputSchema`, `WorkflowRenderer`, `RenderedArtifact`, and `WorkflowValidationResult`.
-
-**What:** Establish one canonical outcome contract while allowing explicit Claude and Codex overlays.
-
-**Where:** `packages/workflow-schema/` and `workflows/`.
-
-**How:**
-
-- [ ] Approve a dedicated schema covering identity, semantic version, triggers, inputs, read/write scopes, required capabilities, refusals, steps, structured result, validators, and recovery.
-- [x] Implement strict parsing and reject unknown fields for version 1 contracts.
-- [x] Implement renderer interfaces without embedding vendor behavior in canonical workflows.
-- [ ] Encode the Brain workflows from `docs/superpowers/specs/2026-07-21-developer-os-design.md` and the command names frozen in `docs/migration/baseline-capabilities.json` (`lint`, `reindex`, `ingest`, `test`). Write them as new canonical contracts; do not port a legacy script, and do not open a legacy repository to recover one. If the design does not specify a workflow you believe is needed, that is a spec gap to resolve in DOS-P3's approval cycle.
-- [x] Add generated-artifact markers and CI drift checks.
-- [x] Add negative fixtures for missing capability, excessive write scope, prompt instructions inside source data, and incompatible schema versions.
-
-**Test:**
-
-- Workflow validation is deterministic.
-- Every workflow declares exact read/write scope and at least one validator.
-- Vendor overlays cannot weaken a canonical refusal or widen write scope.
-- Generated output is idempotent and changes only when canonical source or renderer changes.
-
-**Checkpoint:** Canonical workflows compile into abstract adapter artifacts; no vendor plugin is installed yet.
-
----
+**One thing Task 3's file list said that its checkpoint did not need.** It asked for the command
+names frozen in `docs/migration/baseline-capabilities.json` — `lint`, `reindex`, `ingest`,
+`test` — to be encoded as canonical workflows. The approved DOS-P3 spec names six workflows and
+those are what shipped; `lint` and `reindex` are served by the `brain` CLI group DOS-P2 shipped,
+which is a command surface rather than an agent workflow, and `test` is a repository gate. The
+spec wins over the plan, and this is recorded rather than left as an apparent omission.
 
 ### Task 4: Specify and implement the Claude Code adapter
 

@@ -77,7 +77,7 @@ Unknown fields are rejected. `WorkflowContractV1` is `.strict()` at every level.
 |---|---|---|
 | `schemaVersion` | `1` | literal; a different value is refused with a named error, never coerced |
 | `id` | slug | `^[a-z][a-z0-9-]*$`; must equal the directory name |
-| `version` | semver | the workflow's own version, independent of `schemaVersion` |
+| `version` | semver | the workflow's own version, independent of `schemaVersion`. **Amended 2026-08-10 by DOS-P3, as shipped:** narrowed to `MAJOR.MINOR.PATCH` with no leading zero — pre-release and build metadata are refused, because §8's `extends` pins `id@version` exactly and comparing `1.2.3-rc.1` against `1.2.3` there would mean nothing. `BACKLOG.md` §8 |
 | `description` | string | human-facing, one paragraph |
 | `triggers` | array | closed set: `manual`, `session_start`, `session_end`. **`scheduled` is not a v1 value and is refused**, with an error naming DOS-P7 as its owner — see the decision in §15.8. DOS-P7 adds it to this set in the same change that makes `launchd` fire it |
 | `inputs` | record | name → `{ type, required, description }`; types are `string`, `integer`, `boolean`, `path` |
@@ -285,7 +285,11 @@ format characters and bounded, via `redact.ts`. A workflow file is repository co
 
 Fixtures are synthetic. No real vault, no real client name, no copied third-party content.
 
-Required negative fixtures, four from `BACKLOG.md` §3 and two the design adds:
+Required negative fixtures, four from `BACKLOG.md` §3 and three the design adds:
+
+> **Corrected in place 2026-08-10, arithmetic only.** This line read "and two the design adds"
+> above a list of seven. The list is what shipped, as seven fixtures under
+> `tests/fixtures/workflows/`; only the count was wrong.
 
 1. a workflow requiring a capability the target does not provide;
 2. a workflow whose declared write scope exceeds what its verbs derive;
@@ -300,6 +304,13 @@ Required negative fixtures, four from `BACKLOG.md` §3 and two the design adds:
 
 Positive coverage must include one workflow of each of the six shapes rendering
 byte-identically twice, and once under a reversed directory reader.
+
+> **Amended 2026-08-10 by DOS-P3, as shipped.** This paragraph **cannot be satisfied literally by
+> DOS-P3**, because §14 makes `WorkflowRenderer` an interface and the package ships no renderer.
+> What was built instead: the *inputs* a renderer is handed are byte-identical across two loads
+> and under a reversed directory reader, and the drift check is deterministic against a stub. The
+> byte-identity of real vendor artifacts is owed by **DOS-P4 and DOS-P5**. Recorded in
+> `docs/architecture/workflow-schema.md` §6; registered in `BACKLOG.md` §8.
 
 **Every gate that sweeps a set asserts the set is non-empty, per scope.** A drift check that
 finds no artifacts passes silently otherwise, which is the shape of the defect that let

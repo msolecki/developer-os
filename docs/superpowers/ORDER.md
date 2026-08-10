@@ -26,22 +26,25 @@ week of confusion.
 
 ## NOW
 
-**A7 — DOS-P3 Workflow compiler. `S` closed on 2026-08-10**: the founder walked §15, ruled
-every decision — six as drafted, the `scheduled` trigger reversed into a refusal — and
-approved `specs/2026-07-21-developer-os-workflow-compiler-design.md`. That document is now
-the design of record.
+**A8 and A9 — DOS-P4 Claude adapter and DOS-P5 Codex adapter.** Both are `‖`, both unblock
+together now that DOS-P3's schemas are frozen, and both start at `S`: write the spec, get it
+approved by the founder, then the plan, then the code. Neither is code work today.
 
-**`P` closed the same day.** `plans/2026-07-21-developer-os-workflow-compiler.md` is written:
-twelve tasks, TDD throughout, each ending in a fresh-context review and a commit. **`I` is the
-entry** — execute it with `superpowers:subagent-driven-development` or
-`superpowers:executing-plans`, one task at a time.
+**A7 closed on 2026-08-10.** All three gates. `packages/workflow-schema` ships the contract, the
+closed effect vocabulary, the scope-equality rule, the overlay boundary, the loader and the drift
+check; `workflows/` ships the six canonical workflows; `tests/fixtures/workflows/` holds the seven
+negative fixtures and `tests/contracts/workflows/` the sixteen cases that drive them. What survives it is
+`docs/architecture/workflow-schema.md` — read that before touching workflow code, and before
+starting either adapter, because §7 and §8 are what DOS-P4 and DOS-P5 inherit. Its plan is
+deleted and git history is the archive.
 
-Two things the plan settled that the spec left to it. The display screen moves from
-`packages/brain` into `@developer-os/security`, because `workflow-schema` needs the same screen
-and must not depend on a peer subsystem. And spec §13's demand that six workflows "render
-byte-identically" **cannot be met literally in DOS-P3**, which ships no renderer by design:
-Task 11 proves what this package can prove and names DOS-P4/P5 as owing the rest, rather than
-skipping the requirement quietly.
+**Three things A7 settled that a reader of the spec alone would not know.** Spec §13's demand
+that six workflows "render byte-identically" **cannot be met literally in DOS-P3**, which ships
+no renderer by design — Task 11 proves what this package can prove and the architecture note
+names DOS-P4/P5 as owing the rest. The display screen moved from `packages/brain` into
+`@developer-os/security`, because two peer subsystems needed it. And four of the six workflows
+say less than the product spec does; the founder ruled on 2026-08-10 that each is recorded with
+an owner rather than closed, because every one needs a handler that does not exist yet.
 
 **Nothing else is startable without the founder.** `BACKLOG.md` §1's repository defects
 closed on 2026-08-10 — NEW-9 with CI (`c6d1ef1`), then NEW-5, NEW-8 and NEW-6, each a place
@@ -62,6 +65,7 @@ document rather than retold here. What survives them:
 | `docs/architecture/foundation.md`, `…-constraints.md` | touch the CLI, transactions, or the manifest |
 | `docs/releases/foundation-checkpoint.md` | ask what Foundation's gate evidence was |
 | `docs/architecture/brain.md` | touch Brain code |
+| `docs/architecture/workflow-schema.md` | touch a workflow, a verb, or either adapter — §7 and §8 are what DOS-P4 and DOS-P5 inherit |
 | `specs/2026-07-21-developer-os-brain-engine-design.md` | change Brain *behaviour* |
 | `BACKLOG.md` §2 | assume Foundation left nothing open — it left two founder questions, one unconsumed interface, and one residual owed by A11 |
 
@@ -78,19 +82,19 @@ is approved.
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A7 | DOS-P3 Workflow compiler — S / P / I | `plans/2026-07-21-developer-os-workflow-compiler.md` | — | L | program plan Task 3 checkpoint: canonical workflows compile to abstract artifacts | **now** — **S and P closed**; `I` is the entry, twelve tasks |
-| A8 ‖ | DOS-P4 Claude adapter — S / P / I | to write | A7 | L | program plan Task 4 checkpoint: a Claude-only user completes the full synthetic workflow | blocked |
-| A9 ‖ | DOS-P5 Codex adapter — S / P / I | to write | A7 | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | blocked |
+| A7 | DOS-P3 Workflow compiler — S / P / I | deleted; `docs/architecture/workflow-schema.md` is what it left | — | L | program plan Task 3 checkpoint: canonical workflows compile to abstract artifacts | **done** 2026-08-10 |
+| A8 ‖ | DOS-P4 Claude adapter — S / P / I | to write | A7 | L | program plan Task 4 checkpoint: a Claude-only user completes the full synthetic workflow | **now** — starts at `S` |
+| A9 ‖ | DOS-P5 Codex adapter — S / P / I | to write | A7 | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | **now** — starts at `S`, parallel with A8 |
 | A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | A8 **and** A9 | L | program plan Task 6 checkpoint, after independent security review | blocked |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |
 
-**A7 has no unmet Needs**, and it is no longer parallel with anything: A6 closed, so the
-`‖` pairing is gone.
+**A8 and A9 have no unmet Needs.** They are the `‖` pair, and they unblocked together when
+A7 froze the schemas they both render from.
 
 **No Track A entry is code work today.** Every remaining one begins with a document —
-DOS-P3 through DOS-P7 each need an approved spec *and* an implementation plan before any
+DOS-P4 through DOS-P7 each need an approved spec *and* an implementation plan before any
 code, which is a Global Constraint of the program plan rather than a preference.
 
 **A12 decision, settled 2026-08-10 by the founder: it gets its own plan.** The program plan
@@ -146,6 +150,7 @@ is not verification.
 | what to do next | this file |
 | what a missing spec must decide, and what it produces | `BACKLOG.md` §3 |
 | what the Brain engine is, and its six residuals | `docs/architecture/brain.md` |
+| what the workflow compiler is, what it deliberately cannot do, and the four workflows that say less than the product spec does | `docs/architecture/workflow-schema.md` |
 | what Foundation delivered, and what it deliberately cannot do | `docs/architecture/foundation.md` |
 | the per-task Foundation constraints, and two open founder questions | `docs/architecture/foundation-constraints.md` |
 | the Foundation gate evidence, as it stood on 2026-08-01 | `docs/releases/foundation-checkpoint.md` |
@@ -158,9 +163,9 @@ is not verification.
 
 ## Counting what is left
 
-Foundation and DOS-P2 are closed, and DOS-P3's spec is approved. Five subsystems need a plan
-and an implementation each, four of them a spec as well — **fourteen milestones left, and the
-next one is DOS-P3's plan**. Then cutover, then release.
+Foundation, DOS-P2 and DOS-P3 are closed. Four subsystems need a spec, a plan and an
+implementation each — **twelve milestones left, and the next two are DOS-P4's and DOS-P5's
+specs, which may be written in parallel**. Then cutover, then release.
 
 **Track B is closed entirely** and Track L is still two items outside this room. `BACKLOG.md`
 §1 is two repository-level defects, both XS, both with named owners, neither compounding.
