@@ -410,7 +410,7 @@ git commit -m "feat(workflow-schema): refuse the YAML shapes that hide a workflo
 - Consumes: `EXIT_CODES`, `ExitCode` from `@developer-os/core`.
 - Produces: `WorkflowContractV1`, `WorkflowInputSchema`, `WorkflowOutputSchema`, `WorkflowCapability`, `WorkflowTrigger`, `WorkflowStep`, `WorkflowRefusal`, `workflowContractSchema`, `WORKFLOW_TRIGGERS`, `WORKFLOW_CAPABILITIES`, `REFUSAL_CONDITIONS`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `packages/workflow-schema/src/contract.test.ts`:
 
@@ -525,12 +525,12 @@ describe("workflowContractSchema", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails** — FAIL, `Cannot find module './contract.js'`.
 
 Run: `npx vitest run packages/workflow-schema/src/contract.test.ts`
 Expected: FAIL — `Cannot find module './contract.js'`.
 
-- [ ] **Step 3: Implement the contract**
+- [x] **Step 3: Implement the contract**
 
 `packages/workflow-schema/src/contract.ts`:
 
@@ -711,12 +711,12 @@ export type {
 } from "./contract.js";
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes** — PASS, 11 tests.
 
 Run: `npx vitest run packages/workflow-schema/src/contract.test.ts`
 Expected: PASS, 11 tests.
 
-- [ ] **Step 5: Run the gates, fresh-context review, then commit**
+- [x] **Step 5: Run the gates, fresh-context review, then commit**
 
 ```bash
 npm run check
@@ -738,7 +738,7 @@ git commit -m "feat(workflow-schema): make the contract refuse what it cannot ex
 - Produces: `EFFECT_VOCABULARY: Readonly<Record<string, EffectFootprint>>`, `EffectFootprint`, `isKnownVerb(verb: string): boolean`.
   `interface EffectFootprint { readonly read: readonly string[]; readonly write: readonly string[]; readonly staging: boolean; readonly capability: WorkflowCapability | null; readonly owner: string; readonly implemented: boolean }`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `packages/workflow-schema/src/vocabulary.test.ts`:
 
@@ -804,12 +804,12 @@ describe("EFFECT_VOCABULARY", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails** — FAIL, `Cannot find module './vocabulary.js'`.
 
 Run: `npx vitest run packages/workflow-schema/src/vocabulary.test.ts`
 Expected: FAIL — `Cannot find module './vocabulary.js'`.
 
-- [ ] **Step 3: Implement the vocabulary**
+- [x] **Step 3: Implement the vocabulary**
 
 `packages/workflow-schema/src/vocabulary.ts`:
 
@@ -863,7 +863,7 @@ export { EFFECT_VOCABULARY, isKnownVerb } from "./vocabulary.js";
 export type { EffectFootprint } from "./vocabulary.js";
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes** — PASS, 6 tests.
 
 Run: `npx vitest run packages/workflow-schema/src/vocabulary.test.ts`
 Expected: PASS, 6 tests.
