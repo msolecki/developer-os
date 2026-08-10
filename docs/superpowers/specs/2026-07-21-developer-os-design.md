@@ -829,6 +829,10 @@ specification before code changes.
 - Frozen source classification: `docs/migration/source-manifest.json`
 - Publication boundary: `docs/migration/exclusion-policy.md`
 - Cutover preconditions: `docs/superpowers/plans/legacy-runtime/2026-07-20-brain-claude-shared-follow-up.md`
+  — **corrected 2026-08-10, and registered in `BACKLOG.md` §8:** those preconditions closed,
+  that document is deleted, and `BACKLOG.md` §6 is the record in its place. The path is left
+  written above because it is what this approved list said; the correction is the line you are
+  reading, not a rewrite of the line above it.
 
 The former entries for `~/claude-shared/README.md` and `~/brain/AGENTS.md` were
 removed on 2026-07-27. Neither was a publication candidate under

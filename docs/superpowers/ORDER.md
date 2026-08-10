@@ -44,8 +44,8 @@ defects is NEW-7 and NEW-10** — the rest of §1 is EXIT-2, EXIT-4, L1 and L2, 
 NEW-7 is not agent work: it needs ten minutes with a machine that has Obsidian, which is the
 founder's. NEW-10 is XS and was found by the review that closed NEW-6.
 
-So the queue below is genuinely what remains. A7 is now agent work again; Track L still waits
-on the founder and their counsel.
+**Track B closed the same day**, so the queue below is genuinely what remains: Track A, and
+Track L waiting on the founder and their counsel.
 
 **Closed, and not repeated below.** Foundation on 2026-08-01, A6/DOS-P2 on 2026-08-10. Both
 plans are deleted and git history is the archive; what each proved is in its own checkpoint
@@ -77,7 +77,7 @@ is approved.
 | A9 ‖ | DOS-P5 Codex adapter — S / P / I | to write | A7 | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | blocked |
 | A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | A8 **and** A9 | L | program plan Task 6 checkpoint, after independent security review | blocked |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
-| A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, **B2 B3 B4**, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
+| A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |
 
 **A7 has no unmet Needs**, and it is no longer parallel with anything: A6 closed, so the
@@ -98,45 +98,24 @@ exist yet. `BACKLOG.md` §4 carries what it must contain.
 
 ## Track B — legacy exit
 
-Runs in parallel with all of Track A. **Blocks only A12.** Closing the remaining three ends
-work on the founder's legacy runtime permanently; B1 is closed as declined.
+**Closed on 2026-08-10. It no longer blocks A12.** Nothing further is planned, scheduled, or
+in progress on `~/claude-shared` or `~/brain`; both are frozen artifacts running the founder's
+machine until the DOS-P8 cutover retires them. The checklist that ran this track is deleted —
+`BACKLOG.md` §6 carries what a cutover still needs to know, and git history is the archive.
 
-**Re-verified 2026-08-08 by read-only inspection**, which is one of the two sanctioned
-reasons to look at those trees at all (`BACKLOG.md` §6). Two items moved a long way; one did
-not move at all; one is new.
+| # | Entry | Closed how |
+|---|---|---|
+| B1 | EXIT-1 — rotate historical credential candidates | **declined by the founder**, not done and not deferred. `BACKLOG.md` §6 carries the decision and the reasons not to reopen it from a backlog |
+| B2 | EXIT-2 — the non-npm commit-gate contradiction | fixed. The npm-only absolute is a fail-closed ladder: `package.json` scripts, else the repository's documented suite, else blocked |
+| B3 | EXIT-3 — untracked entries | discharged. Three `.bak` files deleted as byte-identical to `ef4a972`, `docs/ROADMAP.md` committed. What remains untracked in the vault is one day of new captures awaiting the next scheduled run |
+| B4 | EXIT-4 — the failing weekly job | **already fixed when it was checked.** The run of 2026-08-09 succeeded — hooks `PASS=49 FAIL=0`, 52 files committed and pushed, the whole backlog drained. The item was written on 2026-08-08 and the next scheduled Sunday proved the two fix commits that preceded it |
 
-| # | Entry | Owner | Needs | Size | Done when | Status |
-|---|---|---|---|:---:|---|---|
-| B1 | EXIT-1 — rotate historical credential candidates | **Founder** | — | M | — | **closed 2026-08-10 — declined by the founder**, not deferred. `BACKLOG.md` §6 carries the decision. Do not reopen it from a backlog; it is a conversation |
-| B2 | EXIT-2 — fix the non-npm commit-gate contradiction | Agent + Founder | — | S | a non-npm repository with a declared suite can be committed; npm projects unweakened | **start now** — unchanged since 2026-07-20 |
-| B3 | EXIT-3 — land or durably preserve the remaining untracked entries | Agent + Founder | B2 | **S** | both trees hold no untracked work of value, by commit or by an archive the founder accepted | parallel — mostly discharged |
-| B4 | EXIT-4 — stop or fix the failing legacy weekly job | Agent + Founder | — | S | the job succeeds, or is disabled with the founder's agreement and its backlog drained | **new 2026-08-08** |
-
-Detail: `plans/legacy-runtime/2026-07-20-brain-claude-shared-follow-up.md`.
-
-**B1 is the oldest item in this file and the only one with a security consequence that
-exists whether or not this product ever ships.** It needs no repository and no Developer OS
-progress — only console access. The recorded verdict is still "four real rotation candidates
-remain", and a second scan on 2026-07-27 widened the candidate set to six repositories
-without changing any verdict.
-
-**B2 is an afternoon and it has not been touched.** The rule still reads as an npm-only
-absolute, verbatim, which is why B3 could not be closed by a compliant agent.
-
-**B3 shrank from L to S.** The 136-entry dirty tree the plan was written against no longer
-exists: the completed English migration was committed, and both repositories are now in sync
-with their remotes. What is left is four untracked entries in one tree — three automation
-backup files and one roadmap document whose content is already fully represented in
-`BACKLOG.md` — and an untracked capture inbox in the other, which is user data awaiting the
-ingest that B4 has blocked. Confirm the counts before acting; do not assume these numbers
-either.
-
-**B4 is new and nobody recorded it.** The legacy weekly job has not succeeded since
-2026-07-27; two fix commits landed and neither worked. It is why the capture inbox is
-backing up, and it contradicts this plan's own definition of done, which requires that
-nothing remain scheduled or in progress on either repository.
-
----
+**What closing it cost, and it is worth knowing before the cutover.** B2's corrected rule
+immediately blocked its own commit, because the declared suite it points at was failing on 173
+findings — every one a raw capture in the language it was captured in, and no automation ran
+the check, so the red had been invisible while the weekly job reported green. Two exclusions
+settled it: `_raw` is out of scope, and quoted material — a fenced block, an inline code span,
+a price in `zł` — is not prose. `BACKLOG.md` §6 has the detail.
 
 ## Track L — long lead time, start early
 
@@ -173,7 +152,9 @@ is not verification.
 
 ## Counting what is left
 
-Foundation and DOS-P2 are closed. Five subsystems need a spec, a plan, and an
-implementation each — **fifteen milestones, none of which exist yet**. Then cutover, then
-release. Track B is three items — B1 closed as declined — and Track L is two. `BACKLOG.md`
-§1 is four repository-level defects, all XS to S, all with named owners, none compounding.
+Foundation and DOS-P2 are closed, and DOS-P3's spec is approved. Five subsystems need a plan
+and an implementation each, four of them a spec as well — **fourteen milestones left, and the
+next one is DOS-P3's plan**. Then cutover, then release.
+
+**Track B is closed entirely** and Track L is still two items outside this room. `BACKLOG.md`
+§1 is two repository-level defects, both XS, both with named owners, neither compounding.
