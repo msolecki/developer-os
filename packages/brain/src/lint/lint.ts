@@ -510,12 +510,25 @@ function duplicateFindings(build: IndexBuildResult): readonly LintFinding[] {
   for (const [, group] of groupBy(
     notes,
     /**
-     * NFC-folded like the path key two branches up. Without it, two notes in
-     * one folder titled the same word in different normalizations are not
-     * reported — two lines apart, two different Unicode policies.
+     * Screened first, then NFC-folded like the path key two branches up.
+     *
+     * The screen is what makes this class agree with the artifact it is about.
+     * `catalog.md` renders a *screened* title, so `Deploy keys` and
+     * `Deploy<U+200B> keys` produce byte-identical rows — and grouping on the
+     * raw bytes reported no duplicate at all, which left the vault showing what
+     * reads as a duplicate while lint said there was none. A check about what a
+     * human perceives as a duplicate has to run on the form the human was
+     * shown. It collapses runs of whitespace for the same reason: the renderer
+     * does, so two titles differing only by a second space are one row.
+     *
+     * The NFC fold stays, and stays second. Without it, two notes in one folder
+     * titled the same word in different normalizations are not reported — two
+     * lines apart, two different Unicode policies. Screening cannot replace it:
+     * it removes invisibles, it does not compose. `trim()` is gone because
+     * `screenControlCharacters` already trims.
      */
     (note) =>
-      `${note.topicFolder}\u0000${note.title.normalize("NFC").trim().toLowerCase()}`,
+      `${note.topicFolder}\u0000${screenControlCharacters(note.title).normalize("NFC").toLowerCase()}`,
   )) {
     if (group.length < 2) continue;
     for (const note of group) {

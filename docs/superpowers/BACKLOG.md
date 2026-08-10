@@ -60,7 +60,7 @@ Open work only. Program Tasks 0 and 1 are closed and are not rows here.
 | Program (umbrella) | 1 plan | Tasks 3–9 open; Tasks 0–2 closed and not rows here |
 | DOS-P3 … DOS-P7 | nothing written | 5 specs, 5 plans, 5 implementations |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | NEW-6 and NEW-7 — one S, one XS, neither blocking |
+| Repository-level | §1 | NEW-7 alone — XS to check, and it needs a machine with Obsidian |
 | Repository infrastructure | §5 | six directories a later subsystem still owes; CI landed 2026-08-10 |
 | Legacy runtime | 1 exit checklist | 3 items — EXIT-1 closed 2026-08-10 as declined; one untouched since 2026-07-20, one nearly discharged, one new |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -93,29 +93,9 @@ founder's machine as user data, not as source material.
 ## 1. Open right now
 
 Everything in this section is genuinely open. Nothing here is bookkeeping, and nothing
-closed stays here — NEW-1 through NEW-5, NEW-8 and NEW-9 were removed on 2026-08-10 when
+closed stays here — NEW-1 through NEW-6, NEW-8 and NEW-9 were removed on 2026-08-10 when
 they closed. What a closed item leaves behind is a row in §8, a clause in a spec, or a test;
 if it left nothing, it was not worth recording. Git history is the archive.
-
-### NEW-6 — `duplicates` groups on bytes the user is no longer shown
-
-- **Status:** open, from DOS-P2 Task 10's third review · **Owner:** DOS-P2 follow-up or the
-  next task touching `lint.ts` · **Size:** S
-- `duplicateFindings` groups titles on `note.title.normalize("NFC").trim().toLowerCase()` —
-  unscreened. Since Task 10, `catalog.md` renders the *screened* form, so two notes titled
-  `Deploy keys` and `Deploy<U+200B> keys` produce byte-identical catalog rows while lint
-  reports no duplicate at all. The catalog shows what reads as a duplicate and lint says
-  there is none.
-- Task 10 did not create this — a ZWSP is invisible, so the two rows looked identical before
-  as well; it made the bytes agree with the appearance, which is an improvement. What it did
-  create is an inconsistency in the product's own position: the screened form is now what a
-  human sees in an artifact, while a check about what a human *perceives* as a duplicate
-  still runs on machine bytes.
-- The fix is to fold the grouping key through `screenControlCharacters`. **Deliberately not
-  done in Task 10**: it changes lint output, needs its own tests, and it was found in a third
-  review round that was already carrying two defects. Making it a fourth would be how a
-  half-considered change reaches a gate that has stopped reading carefully.
-- Decide it with `frontmatter`'s near-duplicate detection in view, not alone.
 
 ### NEW-7 — a link destination's percent-encoding is unverified against Obsidian
 
@@ -539,6 +519,7 @@ left:**
 | `specs/…-brain-engine-design.md` §7 lint table | the brain plan's Task 4, as shipped | the `links` class gains a `warn` row for a link text matching more than one note, and §7 records the five-tier resolution ladder plus its case-folded fallback | code, this task; the spec carries a dated in-place amendment marked as shipped |
 | `specs/…-brain-engine-design.md` §8 retrieval | the brain plan's Tasks 7 and 9, as shipped | a multi-word query is an OR over its tokens; `considered`/`selected` are defined; `--limit` supplies `maxCandidates` | code, Tasks 7 and 9; the spec carries a dated in-place amendment marked as shipped |
 | `specs/…-brain-engine-design.md` §4.4 parser contract | DOS-P2 Task 10, as shipped | gains clause 5: frontmatter carries no explicitly tagged node, and one is refused. Adopted rather than deferred **because the premise for deferring it was measured false** — `yaml@2.8.1` resolves `!!binary` to a `Buffer`, `!!timestamp` to a `Date` and `!!set` to an object, on the core schema | code, Task 10; the spec carries a dated in-place amendment |
+| `specs/…-brain-engine-design.md` §7 `duplicates` row | NEW-6, as shipped 2026-08-10 | "identical normalized title" now normalizes the **screened** title, not the bytes on disk, so the class agrees with the `catalog.md` rows §6 Task 10 changed. Path comparison stays unscreened, for the reason a link destination is not screened either | code, this change; the spec carries a dated in-place amendment marked as shipped |
 | `specs/…-brain-engine-design.md` §6 rendered views | DOS-P2 Task 10, as shipped | display text in `catalog.md` and `vault-map.md` is screened for control and format characters, not only escaped for Markdown structure. A link destination is **not** screened, because a path has to resolve to the note it names | code, Task 10; the renderer states both halves at the seam |
 | program plan Task 2 file list | brain-engine spec §15.2 | `discovery/` is a sixth source directory, because folder policy is consumed by both `indexes/` and `lint/` and is not schema parsing | the program plan's file list, and the brain plan |
 | `specs/…-design.md` §8 CLI contract | brain-engine spec §11, §15.1 | a `brain reindex\|lint\|search\|status` group is added; `search` becomes an alias for `brain search` | code, DOS-P2 Task 9 (`8c9f4f6`); cross-referenced in §8 of that spec |
