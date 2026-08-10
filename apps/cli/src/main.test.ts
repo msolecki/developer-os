@@ -1,4 +1,7 @@
 import * as nodeFs from "node:fs/promises";
+import { join } from "node:path";
+
+import { serializeConfig } from "@developer-os/core";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -28,6 +31,59 @@ async function createHarness(label: string): Promise<Harness> {
     err: fixture.io.err,
     invoke: (argv) => run(argv, fixture.io, () => fixture.context),
   };
+}
+
+/**
+ * An installed product with one findable note and a built index, so an alias
+ * test can observe the subcommand and the query rather than a config failure.
+ */
+async function createAliasFixture(): Promise<Harness> {
+  const fixture = await createCommandFixture("search-alias");
+  await nodeFs.mkdir(fixture.paths.home, { recursive: true, mode: 0o700 });
+  await nodeFs.writeFile(
+    fixture.paths.configFile,
+    serializeConfig({
+      schemaVersion: 1,
+      brainPath: fixture.paths.brain,
+      adapters: { claude: false, codex: false },
+      git: { enabled: false },
+      automation: { enabled: false },
+      telemetry: false,
+    }),
+    { mode: 0o600 },
+  );
+  const dev = join(fixture.paths.brain, "content", "DEV");
+  await nodeFs.mkdir(dev, { recursive: true, mode: 0o700 });
+  await nodeFs.writeFile(
+    join(dev, "caching.md"),
+    [
+      "---",
+      "schemaVersion: 1",
+      "title: Caching",
+      "type: knowledge-note",
+      "created: 2026-01-01",
+      "tags: [caching]",
+      "summary: A summary.",
+      "stage: established",
+      "author: human",
+      "reviewed: 2026-07-01",
+      "---",
+      "",
+      "Body.",
+      "",
+    ].join("\n"),
+    { mode: 0o600 },
+  );
+
+  const harness: Harness = {
+    fixture,
+    out: fixture.io.out,
+    err: fixture.io.err,
+    invoke: (argv) => run(argv, fixture.io, () => fixture.context),
+  };
+  await harness.invoke(["brain", "reindex"]);
+  fixture.io.out.length = 0;
+  return harness;
 }
 
 function collectingIo(lines: string[]): CliIo {
@@ -229,5 +285,120 @@ describe("run", () => {
     ]);
 
     expect(code).toBe(2);
+  });
+});
+
+describe("brain dispatch", () => {
+  /**
+   * Dispatch only — every case here is refused before a context is built, so
+   * none of them needs an installed product. `neverCreatesContext` is what
+   * proves the refusal happened at parse time rather than inside the command.
+   */
+  async function refuses(argv: readonly string[]): Promise<void> {
+    const lines: string[] = [];
+    const code = await run(argv, collectingIo(lines), neverCreatesContext);
+    expect(code, argv.join(" ")).toBe(2);
+    /**
+     * The exit code alone proves nothing here: `neverCreatesContext` throwing
+     * also yields 2, so a parse rule that stopped working would look identical.
+     * The usage block is emitted only by the parse-level refusal.
+     */
+    expect(lines.join("\n"), argv.join(" ")).toContain(
+      "Usage: developer-os <command>",
+    );
+  }
+
+  it("refuses an unknown brain subcommand", async () => {
+    await refuses(["brain", "reticulate"]);
+  });
+
+  it("refuses a brain invocation with no subcommand", async () => {
+    await refuses(["brain"]);
+  });
+
+  it("refuses a third positional", async () => {
+    await refuses(["brain", "search", "one", "two"]);
+  });
+
+  it("refuses a subcommand named after a prototype member", async () => {
+    /** `BRAIN_SUBCOMMANDS["toString"]` is a function without `Object.hasOwn`. */
+    await refuses(["brain", "toString"]);
+    await refuses(["brain", "constructor"]);
+  });
+
+  it("refuses --limit on a subcommand that does not take it", async () => {
+    await refuses(["brain", "lint", "--limit", "5"]);
+    await refuses(["brain", "reindex", "--limit", "5"]);
+  });
+
+  it("refuses --dry-run on a read-only subcommand", async () => {
+    await refuses(["brain", "search", "x", "--dry-run"]);
+    await refuses(["brain", "lint", "--dry-run"]);
+  });
+
+  it("refuses a search with no query, and a non-search with one", async () => {
+    await refuses(["brain", "search"]);
+    await refuses(["search"]);
+    await refuses(["brain", "lint", "extra"]);
+  });
+
+  it("refuses a --limit that is not a positive integer", async () => {
+    /**
+     * Refused before a context exists. Letting a `0` through to the command
+     * also exits 2 — `search` throws `RangeError` and the command maps it — so
+     * asserting the code alone would pass against no validation at all.
+     */
+    for (const limit of ["0", "-1", "2.5", "abc", "1e3", ""]) {
+      await refuses(["brain", "search", "x", "--limit", limit]);
+    }
+  });
+
+  it("accepts every well-formed brain invocation", async () => {
+    /**
+     * These reach the command, which then refuses because the fixture has no
+     * configuration — exit 2 either way, so the assertion that distinguishes
+     * parse from command is the stderr text.
+     */
+    for (const argv of [
+      ["brain", "status"],
+      ["brain", "lint"],
+      ["brain", "reindex"],
+      ["brain", "reindex", "--dry-run"],
+      ["brain", "search", "caching"],
+      ["brain", "search", "caching", "--limit", "3"],
+      ["search", "caching"],
+    ]) {
+      const fixture = await createCommandFixture(`ok-${argv.join("-")}`);
+      const lines: string[] = [];
+      await run(argv, collectingIo(lines), () => fixture.context);
+      expect(lines.join("\n"), argv.join(" ")).toContain(
+        "Developer OS is not initialized",
+      );
+    }
+  });
+
+  it("treats developer-os search as an alias for brain search", async () => {
+    /**
+     * On an *installed* fixture with a real index. On an uninitialized one both
+     * invocations fail inside `readConfig` before the subcommand or the query
+     * is ever read, so `search x` running `brain status`, or searching for the
+     * empty string, both passed.
+     */
+    const fixture = await createAliasFixture();
+
+    const viaAlias = await fixture.invoke(["search", "caching", "--json"]);
+    const direct = await fixture.invoke(["brain", "search", "caching", "--json"]);
+    expect(viaAlias).toBe(0);
+    expect(direct).toBe(0);
+
+    const [aliasLine, directLine] = fixture.out;
+    expect(aliasLine).toBe(directLine);
+    expect(aliasLine).toContain('"subcommand":"search"');
+    expect(aliasLine).toContain("caching.md");
+
+    /** A different query must produce a different answer, or nothing is pinned. */
+    await fixture.invoke(["search", "zzzznotpresent", "--json"]);
+    expect(fixture.out[2]).not.toBe(aliasLine);
+    expect(fixture.out[2]).toContain('"matches":[]');
   });
 });

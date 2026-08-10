@@ -8,6 +8,8 @@ import {
 } from "@developer-os/core";
 import type { CliResult, ExitCode } from "@developer-os/core";
 
+import { renderBrain, runBrain } from "./commands/brain.js";
+import type { BrainResultV1, BrainSubcommand } from "./commands/brain.js";
 import { runDoctor } from "./commands/doctor.js";
 import type { DoctorReportV1 } from "./commands/doctor.js";
 import { runInit } from "./commands/init.js";
@@ -29,6 +31,8 @@ const USAGE = [
   "",
   "Commands:",
   "  init       install product state and a Brain skeleton",
+  "  brain      reindex | lint | search <query> | status",
+  "  search     alias for brain search <query>",
   "  status     report the current installation without changing it",
   "  doctor     run every health check without repairing anything",
   "  repair     resume or roll back one incomplete transaction",
@@ -38,6 +42,7 @@ const USAGE = [
   "  --dry-run        show the plan without changing anything (init, uninstall)",
   "  --yes            accept ordinary confirmations (init, uninstall)",
   "  --json           emit one machine-readable line",
+  "  --limit <n>      most matches to return (brain search)",
   "  --resume <id>    finish an incomplete transaction (repair)",
   "  --rollback <id>  undo an incomplete transaction (repair)",
   "  --version        print the product version",
@@ -47,6 +52,7 @@ const OPTIONS = {
   "dry-run": { type: "boolean" },
   json: { type: "boolean" },
   yes: { type: "boolean" },
+  limit: { type: "string" },
   resume: { type: "string" },
   rollback: { type: "string" },
   version: { type: "boolean" },
@@ -58,17 +64,47 @@ const OPTION_NAMES: readonly OptionName[] = [
   "dry-run",
   "json",
   "yes",
+  "limit",
   "resume",
   "rollback",
   "version",
 ];
 
 const COMMAND_OPTIONS: Readonly<Record<string, readonly OptionName[]>> = {
+  brain: ["dry-run", "json", "limit"],
+  search: ["json", "limit"],
   init: ["dry-run", "yes", "json"],
   status: ["json"],
   doctor: ["json"],
   repair: ["resume", "rollback", "json"],
   uninstall: ["dry-run", "yes", "json"],
+};
+
+/**
+ * How many positionals each command takes. `parse` used to reject more than one
+ * outright; widening that to a per-command range keeps it exactly as strict —
+ * every command still declares its own arity, and anything outside it is
+ * invalid input rather than a best guess.
+ */
+const COMMAND_POSITIONALS: Readonly<
+  Record<string, { readonly min: number; readonly max: number }>
+> = {
+  init: { min: 0, max: 0 },
+  status: { min: 0, max: 0 },
+  doctor: { min: 0, max: 0 },
+  repair: { min: 0, max: 0 },
+  uninstall: { min: 0, max: 0 },
+  brain: { min: 1, max: 2 },
+  search: { min: 1, max: 1 },
+};
+
+const BRAIN_SUBCOMMANDS: Readonly<
+  Record<string, { readonly options: readonly OptionName[]; readonly query: boolean }>
+> = {
+  reindex: { options: ["dry-run", "json"], query: false },
+  lint: { options: ["json"], query: false },
+  search: { options: ["json", "limit"], query: true },
+  status: { options: ["json"], query: false },
 };
 
 export type CliContextFactory = (io: CliIo) => CliContext;
@@ -78,6 +114,23 @@ type OptionValues = Partial<Record<OptionName, boolean | string>>;
 interface Invocation {
   readonly command: string;
   readonly values: OptionValues;
+  readonly positionals: readonly string[];
+  readonly limit: number | null;
+}
+
+/**
+ * `--limit` is a positive integer or it is invalid input, and it is decided
+ * during parsing rather than in the command. `search` throws a `RangeError`
+ * for a non-positive integer, and a stack trace is not a CLI error message —
+ * but more than that, deciding it later means the refusal happens *after* a
+ * context is built, which makes "invalid argument" indistinguishable from
+ * "your environment is broken".
+ */
+function parseLimit(value: string | null): number | null | "invalid" {
+  if (value === null) return null;
+  if (!/^\d+$/u.test(value)) return "invalid";
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : "invalid";
 }
 
 function usageFailure(): CliResult<never> {
@@ -108,15 +161,13 @@ function parse(argv: readonly string[]): Invocation | null {
     return null;
   }
 
-  if (positionals.length > 1) return null;
-
   const [positional] = positionals;
   if (positional === undefined) {
     return values.version === true &&
       suppliedOptions(values).every(
         (name) => name === "version" || name === "json",
       )
-      ? { command: "--version", values }
+      ? { command: "--version", values, positionals: [], limit: null }
       : null;
   }
 
@@ -133,7 +184,41 @@ function parse(argv: readonly string[]): Invocation | null {
     return null;
   }
 
-  return { command: positional, values };
+  const arity = Object.hasOwn(COMMAND_POSITIONALS, positional)
+    ? COMMAND_POSITIONALS[positional]
+    : undefined;
+  if (arity === undefined) return null;
+  const rest = positionals.slice(1);
+  if (rest.length < arity.min || rest.length > arity.max) return null;
+
+  /**
+   * A `brain` subcommand declares its own options and whether it takes a query,
+   * so `brain lint --limit 5` and `brain search --dry-run` are refused at parse
+   * time rather than ignored later. `Object.hasOwn` for the same reason the
+   * command lookup uses it: a subcommand named after a prototype member would
+   * otherwise resolve to a function.
+   */
+  if (positional === "brain") {
+    const [name, query] = rest;
+    if (name === undefined || !Object.hasOwn(BRAIN_SUBCOMMANDS, name)) {
+      return null;
+    }
+    const subcommand = BRAIN_SUBCOMMANDS[name];
+    if (subcommand === undefined) return null;
+    if (subcommand.query !== (query !== undefined)) return null;
+    if (!suppliedOptions(values).every((o) => subcommand.options.includes(o))) {
+      return null;
+    }
+  }
+
+  const limit = parseLimit(optionString(values.limit));
+  if (limit === "invalid") return null;
+
+  return { command: positional, values, positionals: rest, limit };
+}
+
+function renderBrainResult(result: BrainResultV1): readonly string[] {
+  return renderBrain(result);
 }
 
 function renderInit(result: InitResultV1): readonly string[] {
@@ -259,6 +344,25 @@ function optionString(value: boolean | string | undefined): string | null {
   return typeof value === "string" ? value : null;
 }
 
+/**
+ * `developer-os search <query>` is normalized into the same invocation
+ * `brain search <query>` produces, so exactly one code path runs and the alias
+ * cannot drift from the command it aliases.
+ */
+function brainOptionsFor(
+  invocation: Invocation,
+  limit: number | null,
+): { subcommand: BrainSubcommand; query: string | null; limit: number | null; dryRun: boolean } {
+  const [first, second] = invocation.positionals;
+  const alias = invocation.command === "search";
+  return {
+    subcommand: alias ? "search" : ((first ?? "status") as BrainSubcommand),
+    query: alias ? (first ?? null) : (second ?? null),
+    limit,
+    dryRun: invocation.values["dry-run"] === true,
+  };
+}
+
 async function dispatch(
   invocation: Invocation,
   io: CliIo,
@@ -315,6 +419,14 @@ async function dispatch(
         await runUninstall(context, { dryRun, assumeYes }),
         json,
         renderUninstall,
+      );
+    case "brain":
+    case "search":
+      return emit(
+        io,
+        await runBrain(context, brainOptionsFor(invocation, invocation.limit)),
+        json,
+        renderBrainResult,
       );
     default:
       return emit(io, usageFailure(), json, () => []);

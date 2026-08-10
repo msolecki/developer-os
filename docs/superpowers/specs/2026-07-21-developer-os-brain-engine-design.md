@@ -447,6 +447,27 @@ funnel decorative while producing results nobody can explain the reachability of
 `retrieval.maxCandidates` from config; a caller that forgets to choose gets a type error
 rather than a silent 10.
 
+**Amended 2026-08-10 by DOS-P2 Tasks 7 and 9 — three facts the original text left out
+or stated more narrowly than the code can honour.**
+
+*A multi-word query is an OR over its tokens, not a single substring.* Stage 1 above says a
+title or alias "containing the query as a substring"; the implementation tests each token, so
+`cache invalidation strategies` reaches a note titled `Cache invalidation` as well as one
+titled `Cache invalidation strategies`, and stage 2's additive scoring puts the fuller match
+first. The literal reading returns only exact-phrase notes, which is not how any search box
+a user has met behaves. The widening is strictly a superset: if the whole query is a
+substring of a title, so is every token of it.
+
+*`considered` and `selected` are stage-1 and post-truncation counts.* `considered` is how
+many notes survived the funnel and were scored; `selected` is how many were returned after
+`maxCandidates`. `considered` is therefore not a count of *relevant* notes — a common token
+in a long query drags in a zero-scoring tail — and the CLI must not present it as one.
+
+*`--limit` supplies `maxCandidates` from the command line.* It is validated during argument
+parsing as a positive integer; `search` throws `RangeError` for anything else, which is a
+caller bug rather than a user-facing state. Absent, the CLI supplies
+`retrieval.maxCandidates` from configuration, as this section already says.
+
 **Stated non-goal: no stemming.** `cache` does not match `caching`. Stemming is
 language-specific, and every implementation worth having is either a large dependency or a
 rule set that is wrong often enough to make results unexplainable. Tags and aliases are the

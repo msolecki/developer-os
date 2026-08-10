@@ -1,6 +1,7 @@
 import { join } from "node:path";
 
 import {
+  containsPath,
   detectDrift,
   EXIT_CODES,
   failure,
@@ -368,6 +369,7 @@ async function checkTransactions(context: CliContext): Promise<Finding> {
 async function checkDrift(
   context: CliContext,
   manifest: InstallationManifestV1 | null,
+  paths: RuntimePaths,
 ): Promise<Finding> {
   if (manifest === null) {
     return pass("drift", "no manifest to compare against", []);
@@ -376,12 +378,25 @@ async function checkDrift(
   if (findings.length === 0) {
     return pass("drift", "every managed artifact matches its record", []);
   }
+  /**
+   * A generated Brain artifact gets its own recovery line, because the generic
+   * one cannot fix it: `uninstall` preserves everything under the vault by
+   * location and `init` does not rebuild an index, so "uninstall and initialize
+   * again" is advice that provably loops. `brain reindex` is what regenerates
+   * them, and it is the *only* thing that does.
+   */
+  const inVault = findings.some((finding) =>
+    containsPath(paths.brain, finding.path),
+  );
+
   return fail(
     "drift",
     `${String(findings.length)} managed artifacts differ from their record`,
     findings.map((finding) => finding.path),
     EXIT_CODES.decisionRequired,
-    "resolve each file by hand, or run developer-os uninstall and initialize again",
+    inVault
+      ? "developer-os brain reindex for generated Brain artifacts; resolve anything else by hand"
+      : "resolve each file by hand, or run developer-os uninstall and initialize again",
   );
 }
 
@@ -511,7 +526,9 @@ async function collectFindings(
     await guarded(context, "transactions", [], () =>
       checkTransactions(context),
     ),
-    await guarded(context, "drift", [], () => checkDrift(context, inspected)),
+    await guarded(context, "drift", [], () =>
+      checkDrift(context, inspected, paths),
+    ),
     await guarded(context, "brain", [paths.brain], () =>
       checkBrain(context, paths),
     ),
