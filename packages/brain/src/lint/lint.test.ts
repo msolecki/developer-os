@@ -446,6 +446,43 @@ describe("duplicates", () => {
     ).toEqual([]);
   });
 
+  it("reports two titles that differ only by an invisible character", async () => {
+    /**
+     * NEW-6. Written as an escape, never as the character: a literal ZWSP in a
+     * source file is invisible in every diff, and `tests/repository` fails the
+     * build over one.
+     */
+    const result = await lintMemory({
+      "content/DEV/a.md": note({ title: "Deploy keys" }, "one\n"),
+      "content/DEV/b.md": note({ title: "Deploy\u200B keys" }, "two\n"),
+    });
+    const titles = of(result, "duplicates").filter((f) => f.key === "title");
+    expect(titles.map((f) => f.path).sort()).toEqual([
+      "content/DEV/a.md",
+      "content/DEV/b.md",
+    ]);
+  });
+
+  it("groups on the form the catalog shows, not on the bytes on disk", async () => {
+    /**
+     * The seam this class is about. `catalog.md` renders the *screened* title,
+     * so these two notes produce byte-identical rows; a check about what a
+     * human perceives as a duplicate has to run on the same form the human was
+     * shown, or the artifact and the report disagree in front of them.
+     */
+    const files = {
+      "content/DEV/a.md": note({ title: "Deploy keys" }, "one\n"),
+      "content/DEV/b.md": note({ title: "Deploy\u200B keys" }, "two\n"),
+    };
+    const build = memoryBuild(files);
+    const catalog = writtenArtifacts(await buildIndex(build))[PATHS.catalog] ?? "";
+    expect(catalog.split("[Deploy keys]")).toHaveLength(3);
+    expect(catalog).not.toContain("\u200B");
+
+    const result = await lintMemory(files);
+    expect(of(result, "duplicates").filter((f) => f.key === "title")).toHaveLength(2);
+  });
+
   it("reports an identical content hash at warn", async () => {
     const request = await lintRequestForFixture("malformed/duplicate-content", TODAY);
     const result = await lintVault(request);

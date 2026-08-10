@@ -420,6 +420,26 @@ The case-insensitive collision being an `error` while the other duplicate findin
 `warn` is intentional. Two notes with the same title are a curation question. Two paths
 that differ only in case are a data-loss question the moment the vault is cloned onto APFS.
 
+**Amended 2026-08-10, shipped — what "identical normalized title" normalizes.** The table
+row says *identical normalized title within one topic folder*, and until now that read as
+NFC plus case folding over the bytes in the file. It is now the **screened** form: the title
+is passed through `screenControlCharacters` (§6, the same screen the rendered views use)
+before it is NFC-folded and lower-cased.
+
+The reason is that §6's rendered views changed and this class did not follow them. Since
+`catalog.md` renders a screened title, `Deploy keys` and `Deploy<U+200B> keys` produce
+byte-identical catalog rows while the byte comparison here reported no duplicate at all — so
+the artifact showed the user what reads as a duplicate and the report told them there was
+none. A class about what a human *perceives* as a duplicate is defined over the form the
+human was shown.
+
+Two consequences worth stating rather than discovering: a title differing only by an
+invisible format character is now a `warn`, and so is one differing only by a run of
+whitespace, because the screen collapses runs and the renderer therefore already showed them
+as one row. Path comparison is **unchanged** and deliberately unscreened — a path is an
+identifier that has to resolve, which is the same reason §6 does not screen a link
+destination.
+
 ## 8. Retrieval
 
 ```typescript
