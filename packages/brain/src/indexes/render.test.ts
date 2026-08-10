@@ -60,7 +60,7 @@ schemaVersion: 1
 
 # Vault map
 
-5 notes in 4 folders under \`content\`.
+5 notes in 4 folders under content.
 
 ## Folders
 
@@ -415,6 +415,19 @@ describe("untrusted tags and summaries cannot become structure", () => {
     const map = renderVaultMap(withTag("a`b"));
     const cloud = map.slice(map.indexOf("## Tags"), map.indexOf("## Recent"));
     expect(cloud).not.toMatch(/`[^`]*`/u);
+  });
+
+  it("does not let contentRoot break out of a span either", () => {
+    /**
+     * The same lesson as the tag cloud two tests up, one screen higher in the
+     * renderer, where it was written and then not applied. `pathSegmentSchema`
+     * accepts a backtick, so a config-derived root really can carry one.
+     */
+    const document = documentWith([indexedNote()]);
+    const map = renderVaultMap({ ...document, contentRoot: "con`tent" });
+    const summary = map.split("\n").find((line) => line.includes("note in")) ?? "";
+    expect(summary).toContain("con\\`tent");
+    expect(summary).not.toMatch(/(?<!\\)`/u);
   });
 
   it("does not let a summary render as a clickable link", () => {
