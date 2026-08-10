@@ -107,6 +107,9 @@ importers:
       '@developer-os/security':
         specifier: workspace:*
         version: link:../packages/security
+      '@developer-os/workflow-schema':
+        specifier: workspace:*
+        version: link:../packages/workflow-schema
 
 packages:
 

@@ -1,0 +1,42 @@
+schemaVersion: 1
+id: capture
+version: 1.0.0
+description: Write an observation into quarantine, where nothing reads it as canonical.
+triggers:
+  - manual
+  - session_end
+inputs:
+  text:
+    type: string
+    required: true
+    description: The observation to capture.
+output:
+  path:
+    type: path
+    required: true
+    description: The quarantine path the capture was written to.
+capabilities: []
+scopes:
+  read: []
+  write:
+    - content/_raw/quarantine/**
+refusals:
+  - when: vault-missing
+    exit: 1
+    message: No vault was found. Run developer-os init first.
+  - when: input-invalid
+    exit: 2
+    message: A capture needs text.
+  - when: scope-violation
+    exit: 5
+    message: A capture is written to quarantine and nowhere else.
+steps:
+  - id: write
+    do: capture.write
+    with:
+      text: $input.text
+validators:
+  - the written path is inside the quarantine directory
+recovery:
+  leaves: the capture unwritten
+  resume: developer-os capture

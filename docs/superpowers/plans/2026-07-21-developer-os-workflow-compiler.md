@@ -1966,7 +1966,7 @@ git commit -m "feat(workflow-schema): load without throwing, and report drift wi
 - Consumes: `loadWorkflow` from `@developer-os/workflow-schema`.
 - Produces: the six shipped workflows. Their semantics derive from approved product spec sections — `shared` §10, `brain-search` §13.5, `capture` §13.1/§13.2, `review` §13.3, `ingest` §13.4, `doctor` §11 — and none are invented here.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/contracts/workflows/canonical.test.ts`:
 
@@ -2040,12 +2040,12 @@ describe("canonical workflows", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `npx vitest run tests/contracts/workflows/canonical.test.ts`
 Expected: FAIL — `ENOENT`, the `workflows` directory does not exist.
 
-- [ ] **Step 3: Write `workflows/brain-search/workflow.yaml`**
+- [x] **Step 3: Write `workflows/brain-search/workflow.yaml`**
 
 ```yaml
 schemaVersion: 1
@@ -2099,7 +2099,7 @@ recovery:
   resume: developer-os brain search
 ```
 
-- [ ] **Step 4: Write `workflows/doctor/workflow.yaml`**
+- [x] **Step 4: Write `workflows/doctor/workflow.yaml`**
 
 ```yaml
 schemaVersion: 1
@@ -2136,7 +2136,7 @@ recovery:
   resume: developer-os doctor
 ```
 
-- [ ] **Step 5: Write `workflows/shared/workflow.yaml`**
+- [x] **Step 5: Write `workflows/shared/workflow.yaml`**
 
 ```yaml
 schemaVersion: 1
@@ -2174,7 +2174,7 @@ recovery:
   resume: developer-os doctor
 ```
 
-- [ ] **Step 6: Write `workflows/capture/workflow.yaml`**
+- [x] **Step 6: Write `workflows/capture/workflow.yaml`**
 
 ```yaml
 schemaVersion: 1
@@ -2221,7 +2221,7 @@ recovery:
   resume: developer-os capture
 ```
 
-- [ ] **Step 7: Write `workflows/review/workflow.yaml`**
+- [x] **Step 7: Write `workflows/review/workflow.yaml`**
 
 ```yaml
 schemaVersion: 1
@@ -2270,7 +2270,7 @@ recovery:
   resume: developer-os review
 ```
 
-- [ ] **Step 8: Write `workflows/ingest/workflow.yaml`**
+- [x] **Step 8: Write `workflows/ingest/workflow.yaml`**
 
 ```yaml
 schemaVersion: 1
@@ -2317,12 +2317,12 @@ recovery:
   resume: developer-os repair --resume
 ```
 
-- [ ] **Step 9: Run the test to verify it passes**
+- [x] **Step 9: Run the test to verify it passes**
 
 Run: `npx vitest run tests/contracts/workflows/canonical.test.ts`
 Expected: PASS, 3 tests. If a scope-equality error appears, the declared block and the steps disagree — fix the declaration to match the derivation rather than loosening the rule.
 
-- [ ] **Step 10: Run the gates, fresh-context review, then commit**
+- [x] **Step 10: Run the gates, fresh-context review, then commit**
 
 ```bash
 npm run check

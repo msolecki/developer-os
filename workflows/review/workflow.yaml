@@ -1,0 +1,44 @@
+schemaVersion: 1
+id: review
+version: 1.0.0
+description: Accept, edit, or reject quarantined captures. Never deletes a source.
+triggers:
+  - manual
+inputs:
+  decision:
+    type: string
+    required: true
+    description: accept, edit, or reject.
+output:
+  reviewed:
+    type: integer
+    required: true
+    description: How many captures changed status.
+capabilities: []
+scopes:
+  read:
+    - content/_raw/quarantine/**
+  write:
+    - content/_raw/quarantine/**
+refusals:
+  - when: vault-missing
+    exit: 1
+    message: No vault was found. Run developer-os init first.
+  - when: input-invalid
+    exit: 2
+    message: A decision must be accept, edit, or reject.
+  - when: scope-violation
+    exit: 5
+    message: Review changes a capture's status and never deletes its source.
+steps:
+  - id: list
+    do: capture.list
+  - id: decide
+    do: capture.setStatus
+    with:
+      decision: $input.decision
+validators:
+  - no source file is removed by any decision
+recovery:
+  leaves: every capture at its previous status
+  resume: developer-os review

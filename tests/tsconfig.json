@@ -6,6 +6,7 @@
   },
   "include": [
     "helpers/**/*.ts",
+    "contracts/**/*.ts",
     "e2e/**/*.ts",
     "repository/**/*.ts"
   ],
@@ -21,6 +22,9 @@
     },
     {
       "path": "../packages/security"
+    },
+    {
+      "path": "../packages/workflow-schema"
     }
   ]
 }

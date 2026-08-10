@@ -1,0 +1,49 @@
+schemaVersion: 1
+id: brain-search
+version: 1.0.0
+description: Search the vault index and return ranked matches with their source paths.
+triggers:
+  - manual
+inputs:
+  query:
+    type: string
+    required: true
+    description: The text to search for.
+  limit:
+    type: integer
+    required: false
+    description: Maximum number of candidates to consider.
+output:
+  matches:
+    type: string
+    required: true
+    description: Ranked matches, each with a vault-relative source path.
+capabilities: []
+scopes:
+  read:
+    - content/_indexes/**
+  write: []
+refusals:
+  - when: index-missing
+    exit: 2
+    message: The vault index has not been built. Run developer-os brain reindex first.
+  - when: input-invalid
+    exit: 2
+    message: A query is required and must not be empty.
+steps:
+  - id: load-index
+    do: brain.readIndex
+  - id: rank
+    do: brain.search
+    with:
+      query: $input.query
+      limit: $input.limit
+  - id: explain
+    prose: |
+      Summarise why each match was returned. Name the source path for every
+      claim; a claim without a path is not a result.
+validators:
+  - every reported match resolves to a canonical note path
+recovery:
+  leaves: nothing
+  resume: developer-os brain search
