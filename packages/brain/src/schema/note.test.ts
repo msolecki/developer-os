@@ -629,3 +629,135 @@ describe("the frontmatter parse options are pinned, not inherited", () => {
     expect(result.issues[0]?.message).toBe("the frontmatter is not valid YAML");
   });
 });
+
+describe("parseNote and explicitly tagged YAML", () => {
+  /**
+   * `yaml@2.8.1` resolves an explicitly tagged node through its known-tags
+   * fallback even on the core schema. This was recorded in the backlog as a
+   * clause that "costs nothing to adopt because nothing today depends on its
+   * absence" — and that premise was wrong. The three below construct values.
+   */
+  it("refuses a tag that constructs a value the schema never validates", () => {
+    const constructed: readonly [string, string][] = [
+      ["!!binary aGk=", "a Buffer"],
+      ["!!timestamp 2020-01-01", "a Date"],
+      ["!!set { x: null }", "a constructed object"],
+    ];
+
+    for (const [value, what] of constructed) {
+      const result = parseNote(VALID.replace("author: agent", `author: ${value}`));
+      expect(result.ok, `${what} from ${value}`).toBe(false);
+      if (result.ok) continue;
+      expect(result.issues[0]?.code).toBe("malformed");
+      expect(result.issues[0]?.message).toContain("explicit YAML tag");
+    }
+  });
+
+  it("refuses any tag, not a denylist of the dangerous ones", () => {
+    /**
+     * `!!str` constructs nothing and is harmless today. It is refused anyway,
+     * because an allowlist makes the rule "which tags construct values" — a
+     * question the library answers and re-answers on upgrade — instead of
+     * "frontmatter carries no tags", which this product decides.
+     */
+    for (const value of ["!!str plain", "!!seq [a]", "!vendor/private x"]) {
+      const result = parseNote(VALID.replace("author: agent", `author: ${value}`));
+      expect(result.ok, value).toBe(false);
+    }
+  });
+
+  it("finds a tag nested inside a collection, not only at the top level", () => {
+    const nested = VALID.replace("tags: [dev, caching]", "tags:\n  - dev\n  - !!binary aGk=");
+    const result = parseNote(nested);
+    expect(result.ok).toBe(false);
+  });
+
+  it("reports the tagged node's line, in file coordinates", () => {
+    /**
+     * Line 1 is the opening fence, so the first frontmatter key is line 2 and
+     * `author:` — the eighth key — is line 9.
+     */
+    const result = parseNote(VALID.replace("author: agent", "author: !!binary aGk="));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues[0]?.line).toBe(9);
+  });
+
+  it("reports the value's line when the tag sits on the line above it", () => {
+    /**
+     * The caveat the docstring and spec §4.4 both state, pinned so it cannot
+     * drift into being untrue quietly. `yaml` gives a node's range as the
+     * *value* token's offset, so a tag on its own line names the line below
+     * itself. Documented rather than corrected — recovering the tag's own
+     * offset needs retained source tokens, and the alternative is a backwards
+     * scan that is wrong in flow collections and quoted scalars.
+     *
+     * `summary:` is the sixth key, so the tag sits on file line 7 and the
+     * value it tags on line 8. The refusal names 8.
+     */
+    const split = VALID.replace(
+      "summary: Invalidate on write, not on read.",
+      "summary: !!str\n  Invalidate on write, not on read.",
+    );
+    const result = parseNote(split);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues[0]?.message).toContain("explicit YAML tag");
+    expect(result.issues[0]?.line).toBe(8);
+  });
+
+  it("bounds the tag it names", () => {
+    /**
+     * The first version of this test used a tag containing U+202E and asserted
+     * the character never reached the message. It passed without
+     * `firstExplicitTag` running at all: U+202E is not a legal tag character,
+     * so `yaml` refused the document one branch earlier and the assertion was
+     * satisfied by a message that never held a tag. Review caught it.
+     *
+     * The library rejects non-ASCII and control characters in a tag and does
+     * not percent-decode one, so the screen is defence in depth. **The cap is
+     * the half that actually fires**, and this is the test for it: a tag is
+     * author-written and has no length limit.
+     */
+    const long = `!vendor${"z".repeat(200)}`;
+    const result = parseNote(VALID.replace("author: agent", `author: ${long} x`));
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const message = result.issues[0]?.message ?? "";
+    expect(message).toContain("explicit YAML tag");
+    expect(message).toContain("!vendor");
+    /**
+     * The tag is capped at 64 graphemes and the prose around it is fixed, so
+     * the whole message is bounded whatever the note does. Uncapped, this same
+     * input produces roughly 320 characters.
+     */
+    expect(message).not.toContain("z".repeat(65));
+    expect(message.length).toBeLessThan(200);
+  });
+
+  it("leaves an untagged note alone", () => {
+    /** The guard must not fire on ordinary frontmatter, or it refuses every note. */
+    expect(parseNote(VALID).ok).toBe(true);
+  });
+});
+
+describe("a frontmatter key echoed back at its author", () => {
+  it("is screened, not merely truncated", () => {
+    /**
+     * The unknown-key message interpolates the key. A quoted YAML key may hold
+     * `\r` or U+202E, and the message travels through `lint.ts` to a terminal.
+     * Truncation bounded the length and screened nothing.
+     */
+    const key = '"bad\u202E\rkey"';
+    const result = parseNote(VALID.replace("author: agent", `${key}: 1\nauthor: agent`));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const unknown = result.issues.find((issue) => issue.code === "unknown-key");
+    expect(unknown).toBeDefined();
+    expect(unknown?.message).not.toContain("\u202E");
+    expect(unknown?.message).not.toContain("\r");
+    expect(unknown?.message).toContain("bad key");
+  });
+});

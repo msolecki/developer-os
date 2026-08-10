@@ -30,6 +30,10 @@ import {
   renderPath,
   runtimePathsFor,
 } from "../context.js";
+import {
+  BRAIN_TEMPLATE,
+  BRAIN_TEMPLATE_DIRECTORIES,
+} from "./brain-template.js";
 import type { CliContext } from "../context.js";
 import {
   advisoryWarnings,
@@ -93,6 +97,14 @@ interface InitPlan {
   readonly productDirectories: readonly string[];
   readonly missingProductDirectories: readonly string[];
   readonly brainDirectories: readonly string[];
+  /**
+   * Directories inside the vault that the template needs, created but **not**
+   * declared as owned roots. `brainDirectories` becomes an ownership universe,
+   * and nesting a dozen roots inside `paths.brain` would be a widening the
+   * change-plan validator is right to refuse — the vault root already owns
+   * everything beneath it.
+   */
+  readonly brainTemplateDirectories: readonly string[];
   readonly productFiles: readonly DesiredFile[];
   readonly brainFiles: readonly DesiredFile[];
   readonly created: readonly string[];
@@ -234,6 +246,7 @@ async function buildPlan(context: CliContext): Promise<InitPlan> {
 
   const brainPresent = await inspectBrain(context, paths.brain);
   const brainDirectories = brainPresent ? [] : [paths.brain];
+  const brainTemplateDirectories: string[] = [];
   const brainFiles: DesiredFile[] = [];
   if (brainPresent) {
     unchanged.push(paths.brain);
@@ -245,6 +258,34 @@ async function buildPlan(context: CliContext): Promise<InitPlan> {
       source: BRAIN_KEEP_SOURCE,
     });
     created.push(join(paths.brain, BRAIN_KEEP_FILE));
+
+    /**
+     * The skeleton, and **only** when this run is what creates the vault.
+     * Foundation's guarantee is that `init` never modifies an existing vault;
+     * the brain-engine spec's §10 amendment narrows that to "installs the
+     * template when, and only when, it creates the vault", which keeps the
+     * guarantee intact rather than carving an exception out of it.
+     */
+    for (const directory of BRAIN_TEMPLATE_DIRECTORIES) {
+      const path = join(paths.brain, directory);
+      brainTemplateDirectories.push(path);
+      /**
+       * Declared, not merely created. `init --dry-run` promises the complete
+       * list of what a real run would make, and the end-to-end suite checks
+       * every path that appears afterwards against it — a directory created
+       * without being declared is a change the user was not shown.
+       */
+      created.push(path);
+    }
+    for (const file of BRAIN_TEMPLATE) {
+      const path = join(paths.brain, file.path);
+      brainFiles.push({
+        path,
+        content: new TextEncoder().encode(file.content),
+        source: `generated/brain/${file.path}`,
+      });
+      created.push(path);
+    }
   }
 
   return {
@@ -252,6 +293,7 @@ async function buildPlan(context: CliContext): Promise<InitPlan> {
     productDirectories,
     missingProductDirectories,
     brainDirectories,
+    brainTemplateDirectories,
     productFiles,
     brainFiles,
     created,
@@ -380,6 +422,7 @@ async function createDirectories(
   for (const directory of [
     ...plan.missingProductDirectories,
     ...plan.brainDirectories,
+    ...plan.brainTemplateDirectories,
   ]) {
     await context.guards.transaction.assertTarget(directory);
     await context.fs.mkdir(directory, { recursive: true, mode: 0o700 });
@@ -432,6 +475,13 @@ async function recordArtifacts(
   for (const directory of [
     ...plan.missingProductDirectories,
     ...plan.brainDirectories,
+    /**
+     * Recorded, though not declared as owned roots. A revert removes what the
+     * manifest says this run added, and without these the vault could not be
+     * removed at all: `rmdir` refuses a non-empty directory, which is the
+     * property that stops uninstall taking user content with it.
+     */
+    ...plan.brainTemplateDirectories,
   ]) {
     directoryArtifacts.push({
       owner: "core",

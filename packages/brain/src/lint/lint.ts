@@ -7,6 +7,7 @@ import type {
   IndexBuildResult,
   IndexedNote,
 } from "../indexes/index.js";
+import { screenAndCap, screenControlCharacters } from "../redact.js";
 import { canonicalizeArtifact, firstDifferingLine } from "./drift.js";
 
 export type LintClass =
@@ -76,41 +77,14 @@ export interface LintRequest {
 const MAX_VALUE_IN_MESSAGE = 64;
 
 /**
- * Grapheme clusters, not code units and not code points. `String#slice` counts
- * code units and can cut a surrogate pair in half, putting a lone surrogate
- * into a string that gets written to a log — where it round-trips to U+FFFD or
- * throws in a JSON writer. Code points fix that but still split a combining
- * sequence or a ZWJ emoji into pieces.
+ * The screen and the bound both live in `../redact.js`; this names the bound.
  *
- * The locale is pinned rather than left to the host. Segmentation can vary with
- * the ICU version, and while this only affects the tail of a truncated *display
- * message* — no artifact is derived from a finding — a comparison of two
- * machines' lint output should not turn on which Unicode table they shipped.
+ * Grapheme clusters, not code units: `String#slice` can cut a surrogate pair in
+ * half and put a lone surrogate into a log, where it round-trips to U+FFFD or
+ * throws in a JSON writer.
  */
-const GRAPHEMES = new Intl.Segmenter("en", { granularity: "grapheme" });
-
 function renderValue(value: string): string {
-  /**
-   * `\p{Cf}` first: U+202E RIGHT-TO-LEFT OVERRIDE reorders the rest of a
-   * printed line (Trojan Source, CVE-2021-42574) and U+200B is invisible, and
-   * `\s` matches neither, so the collapse below cannot reach them. Findings go
-   * to a terminal and a log.
-   */
-  const collapsed = value
-    // eslint-disable-next-line no-control-regex -- the pattern is what removes them
-    .replace(/[\u0000-\u001F\u007F-\u009F\p{Cf}]/gu, " ")
-    .replace(/\s+/gu, " ")
-    .trim();
-  if (collapsed.length <= MAX_VALUE_IN_MESSAGE) return collapsed;
-
-  const kept: string[] = [];
-  for (const { segment } of GRAPHEMES.segment(collapsed)) {
-    if (kept.length === MAX_VALUE_IN_MESSAGE) break;
-    kept.push(segment);
-  }
-  return kept.length < MAX_VALUE_IN_MESSAGE
-    ? collapsed
-    : `${kept.join("")}…`;
+  return screenAndCap(value, MAX_VALUE_IN_MESSAGE);
 }
 
 /** `LintFinding.key` is bounded on every branch, not only the prose one. */
@@ -182,7 +156,15 @@ function frontmatterFindings(
           issue.severity,
           note.path,
           renderKeyField(issue.key),
-          issue.message,
+          /**
+           * Screened here as well as at its source. `note.ts` interpolates a
+           * frontmatter key into this message and screens it as it does so, but
+           * a finding is the seam where foreign text becomes something this
+           * process prints — a message arriving unscreened from any future
+           * producer must not be able to reach a terminal through this branch.
+           * The screen is idempotent, so applying it twice costs a scan.
+           */
+          screenControlCharacters(issue.message),
           issue.line,
         ),
       );
@@ -416,6 +398,23 @@ function linkFindings(
         "warn",
         ambiguous.source,
         null,
+        /**
+         * `chosen` is the only value on this line not passed through
+         * `renderValue`, and deliberately: **paths are exempt as a class**,
+         * here and at `${folder}` above, because a path is an identifier the
+         * user has to be able to act on — copy it, open it, pass it back to the
+         * tool. Screening or capping one produces a string that names nothing.
+         * They are screened and bounded at the terminal instead, by
+         * `renderPath` in `apps/cli`, which is where a path stops being an
+         * identifier and becomes output.
+         *
+         * An earlier version of this comment justified the exemption with spec
+         * §14, which does not cover it: §14 gates on a *retrieval match*
+         * resolving at its returned path, and on `finding.path`, not on a path
+         * interpolated into prose that nothing parses back out. Recorded
+         * because a wrong reason in a comment is worse than no reason — the
+         * next reader applies it where it does not hold.
+         */
         `the link "${renderValue(ambiguous.text)}" matches ${String(ambiguous.candidates.length)} notes and resolved to ${ambiguous.chosen}; spell it with a folder to say which you meant`,
       ),
     );

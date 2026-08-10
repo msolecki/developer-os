@@ -235,16 +235,18 @@ Stated as capabilities that are *absent*, because "we did not implement it yet" 
 not exist here" look identical from outside and are not the same thing.
 
 - **No network.** No HTTP client, no socket, no DNS. `tests/e2e/foundation.test.ts` scans
-  every compiled non-test module in the four Foundation packages — `apps/cli`,
-  `packages/core`, `packages/security`, `packages/platform-macos`, 37 modules — for
+  every compiled non-test module in **every workspace under `apps/` and `packages/`** — for
   `node:http`, `node:https`, `node:net`, `node:tls`, `node:dgram`, `node:dns`, `node:http2`,
   `fetch(`, `XMLHttpRequest`, and `WebSocket`, and every command the suite spawns runs with
   all proxy variables pointed at a closed port.
-  **It does not yet cover `packages/brain`**, which was added on 2026-08-07: the package list
-  is hard-coded, and the assertion that a scan is not passing vacuously is made per listed
-  directory, so it cannot notice a directory nobody listed. Tracked as NEW-1 in
-  `docs/superpowers/BACKLOG.md` §1. Until that closes, "no network" is enforced for
-  Foundation and asserted for the Brain.
+
+  The workspace list is **discovered, not written down**, and that is the whole of the fix
+  for `BACKLOG.md` NEW-1: it used to be a hard-coded array of four directories, so
+  `packages/brain` was added on 2026-08-07 and scanned by nothing while this paragraph
+  claimed otherwise. The non-empty assertion is made per workspace rather than over the
+  total, because a floor over the sum is satisfied by one populated directory while every
+  other goes unread — which is how the gap stayed invisible. No module count is stated here
+  any more: a number in prose that no test pins is the same defect in a different shape.
 - **No agent integration.** Agents are *discovered* — `/usr/bin/which`, with a `PATH` and
   nothing else — and never executed. `AgentDiscovery.version` is permanently `null` in
   Foundation because determining it requires running the binary. Discovery that refuses, or

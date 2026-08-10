@@ -78,52 +78,90 @@ founder's machine as user data, not as source material.
 
 Everything in this section is genuinely open. Nothing here is bookkeeping.
 
-### NEW-1 — `packages/brain` is outside the network-capability scan
+**NEW-1 closed 2026-08-10.** The capability scan in `tests/e2e/foundation.test.ts` now
+enumerates every workspace under `apps/` and `packages/` instead of a hardcoded list, which
+is what let `packages/brain` ship unscanned for three days. Verified by planting a network
+call in a Brain module and watching the scan refuse it. The per-package non-empty assertion
+stays, because a floor over the *sum* is satisfied by one populated workspace while every
+other goes unread — the exact shape of the gap. `docs/architecture/foundation.md` §7 now
+describes the scan by what it enumerates rather than by a module count no test pinned.
 
-- **Status:** open, found 2026-08-08 · **Owner:** DOS-P2 · **Size:** S
-- **The problem is a false claim in two approved documents, not a missing nicety.** The Brain
-  engine design spec §16 asserted that "Foundation's compiled-module network scan covers
-  `packages/brain` on the same terms as everything else", and `docs/architecture/foundation.md`
-  §7 described the scan as covering "every compiled non-test module". Neither was true. Both
-  have been corrected in place to say what the scan actually does; the gap itself is still open.
-  `tests/e2e/foundation.test.ts` iterates a hard-coded list of four package directories —
-  `apps/cli`, `packages/core`, `packages/security`, `packages/platform-macos`. The Brain
-  package was added on 2026-08-07 and was never added to that list, so its three compiled
-  modules are scanned by nothing.
-- **Why it is worth its own entry rather than a line in a plan.** The scan is the only
-  mechanical enforcement behind "this product makes no network call". A guarantee that a
-  spec asserts and a test does not check is worse than an unasserted one, because the next
-  reviewer stops looking. The same test already guards against the failure mode that makes
-  this class of gap invisible — it refuses an empty inventory, so a scan over nothing
-  cannot pass — and that guard is per-directory, so it cannot notice a directory nobody
-  listed.
-- **Fix:** add `packages/brain` to the list, in the task that next touches the Brain
-  package. The floor assertion `expect(scanned).toBeGreaterThan(20)` should become an exact
-  count, or the "37 modules" in `docs/architecture/foundation.md` §7 should stop being prose
-  the test does not pin. Decide which; do not do both silently.
+### NEW-4 — parser contract and application tags · **CLOSED 2026-08-10, as adopted**
 
-### NEW-4 — decide whether the parser contract forbids application tags
-
-- **Status:** open, inherited from NEW-2 when that closed · **Owner:** DOS-P2 or DOS-P6 ·
-  **Size:** XS
-- Design spec §4.4 states what a replacement parser must not *drop*. It says nothing about
-  what one must not *add*, and there is exactly one candidate: resolving application tags into
-  constructed values — the `yaml.load` versus `safe_load` distinction that has produced remote
-  code execution in more than one ecosystem. `yaml@2.8.1` does no such thing, so nothing today
-  depends on its absence and nothing can regress; the product design spec's §14.1 already
-  classifies vault files as untrusted data but places no constraint on the parser itself.
-- The proposed clause is one sentence — *resolve only core-schema tags; a parser that
-  constructs application-tagged values is refused outright* — and it costs nothing to adopt.
-  It is recorded rather than written into §4.4 because it would be a new design decision in an
-  approved spec.
-- **Settle it in DOS-P2's remaining work or explicitly defer it to DOS-P6**, whose threat model
-  owns untrusted input. It carried the two closed items' hook in Task 10 Step 6; keep it there.
+- Settled inside DOS-P2 rather than deferred to DOS-P6, and settled the other way from how it
+  was written up. This entry claimed the clause "costs nothing to adopt" because
+  "`yaml@2.8.1` does no such thing, so nothing today depends on its absence and nothing can
+  regress." **Both halves of that were wrong**, and a five-line probe of the actual library
+  is what showed it: on the core schema it still resolves `!!binary` to a Node `Buffer`,
+  `!!timestamp` to a `Date`, and `!!set` to a constructed object, through its known-tags
+  fallback. A field the schema validated as a string could hold a `Buffer`.
+- Adopted as design spec §4.4 clause 5 — *frontmatter carries no explicitly tagged node, and
+  one is refused outright* — registered in §8 below, implemented as `firstExplicitTag` in
+  `packages/brain/src/schema/note.ts`, and covered by six tests plus two mutants.
+- **The lesson worth keeping is not about YAML.** A backlog entry asserting that a library
+  does not do something, written without running the library, stood for two days and would
+  have justified skipping the clause entirely. Probe before recording a premise as a fact.
 
 **NEW-2 and NEW-3 closed 2026-08-09.** `uniqueKeys: true` is pinned at the `parseAllDocuments`
 call, and a YAML failure now carries the line it happened on, through `NoteParseIssue.line` and
 `LintFinding.line`. Only `err.linePos` is read — `err.message` and `err.source` embed the
 offending note verbatim, and a test asserts a sentinel from the note reaches neither the
 message nor any serialized part of the issue.
+
+### NEW-6 — `duplicates` groups on bytes the user is no longer shown
+
+- **Status:** open, from DOS-P2 Task 10's third review · **Owner:** DOS-P2 follow-up or the
+  next task touching `lint.ts` · **Size:** S
+- `duplicateFindings` groups titles on `note.title.normalize("NFC").trim().toLowerCase()` —
+  unscreened. Since Task 10, `catalog.md` renders the *screened* form, so two notes titled
+  `Deploy keys` and `Deploy<U+200B> keys` produce byte-identical catalog rows while lint
+  reports no duplicate at all. The catalog shows what reads as a duplicate and lint says
+  there is none.
+- Task 10 did not create this — a ZWSP is invisible, so the two rows looked identical before
+  as well; it made the bytes agree with the appearance, which is an improvement. What it did
+  create is an inconsistency in the product's own position: the screened form is now what a
+  human sees in an artifact, while a check about what a human *perceives* as a duplicate
+  still runs on machine bytes.
+- The fix is to fold the grouping key through `screenControlCharacters`. **Deliberately not
+  done in Task 10**: it changes lint output, needs its own tests, and it was found in a third
+  review round that was already carrying two defects. Making it a fourth would be how a
+  half-considered change reaches a gate that has stopped reading carefully.
+- Decide it with `frontmatter`'s near-duplicate detection in view, not alone.
+
+### NEW-7 — a link destination's percent-encoding is unverified against Obsidian
+
+- **Status:** open, needs a machine with Obsidian · **Owner:** the founder, or DOS-P6 ·
+  **Size:** XS to check, S if it fails
+- `linkTarget` percent-encodes a control or format character in a vault path so that
+  `catalog.md` carries no raw override while the link still resolves. CommonMark
+  percent-decodes a destination and that half is checked. **Whether Obsidian's resolver does
+  the same for a local vault path is not**, because this repository has no Obsidian to ask.
+- Only a path containing such a character is affected, which is pathological and rare — but
+  note the stakes moved when the encoding went in. Before it, a control character in a path
+  produced a link that resolved and merely looked wrong; now correctness depends on the
+  consumer decoding. If Obsidian does not decode, such a link is **broken** where it
+  previously worked. The fallback is then to refuse the path at lint time — *not* to go back
+  to emitting the raw byte, which is the defect that motivated the encoding.
+- **`%` is encoded too**, which is what makes the mapping reversible, and it is why this is
+  worth ten minutes with any Markdown preview rather than being left indefinitely: `%` in a
+  filename is ordinary where U+202E is not, so the encoder now touches common paths.
+- Recorded rather than assumed, and stated at the call site too.
+
+### NEW-8 — the catalog still wraps `contentRoot` in a code span
+
+- **Status:** open, pre-existing · **Owner:** the next task touching `render.ts` · **Size:** XS
+- `render.ts` wraps `cell(index.contentRoot)` in a code span. `inlineText` escapes a backtick
+  to `` \` ``, but inside a code span a backslash is literal and the backtick closes the span
+  — which is precisely what the same file records two functions further down, where it
+  removed the span from the tag cloud with the note that *the span cannot be made safe, only
+  removed*. The lesson was written and then not applied one screen higher.
+- `pathSegmentSchema` accepts a backtick, so the value can reach it. The blast radius is one
+  corrupted line in `catalog.md`, and the value is **config-derived rather than vault-derived**
+  — the user writes their own `config.toml` — which is why this is XS and not urgent.
+- **Not fixed in Task 10 on purpose.** It arrived in a third review round already carrying two
+  real defects, it changes artifact bytes, and it needs its own test. Three rounds of this
+  task were spent on defects introduced by fixes to earlier defects; a fourth unreviewed
+  change to artifact rendering is how that continues.
 
 ### NEW-5 — `LintFinding` reports a line two different ways
 
@@ -191,62 +229,21 @@ Each subsystem after Foundation requires an approved spec **and** an implementat
 before any code work — this is a Global Constraint of the program plan, not a preference.
 Every spec starts with a brainstorming/approval cycle.
 
-### DOS-P2 — Brain engine · **in progress**
+### DOS-P2 — Brain engine · **done 2026-08-10**
 
-- **Spec:** `specs/2026-07-21-developer-os-brain-engine-design.md` — written 2026-08-04
-- **Plan:** `plans/2026-07-21-developer-os-brain-engine.md` — written 2026-08-04, 10 tasks
-- **Program task:** 2 · **Complexity:** L · **Blocked by:** nothing
-- **Committed:** Task 1 — package scaffold and the optional `[brain]` config section
-  (`4cd7224`). Task 2 — note schema: strict parse, reserved vocabulary, byte-identical
-  rewrite (`9f82901`), shipped as 51 test cases after two review rounds.
-- **Remaining, in order:** Task 3 discovery and the committed synthetic fixture · Task 4
-  index and graph construction · Task 5 rendered Markdown views · Task 6 lint, six classes ·
-  Task 7 retrieval · Task 8 the `BrainService` facade, capture-envelope type and migration
-  registry · Task 9 the `brain` CLI group · Task 10 template, `init` integration, end-to-end
-  suite and the bookkeeping that closes this entry.
-- **Produces:** `BrainConfigV1`, `NoteFrontmatterV1`, `CaptureEnvelopeV1`,
+- **Spec:** `specs/2026-07-21-developer-os-brain-engine-design.md` — retained while later
+  subsystems reference it; §7 and §8 carry dated amendments, registered in §8 below.
+- **Plan:** deleted when its last task closed, per the rule at the top of this file.
+  Recoverable at `81e7e7d`.
+- **Shipped as ten commits**, `4cd7224` through the Task 10 commit. What survives the plan is
+  `docs/architecture/brain.md`: what the layer is, what it deliberately cannot do, the five
+  facts that outlive the plan, and six known residuals with named owners.
+- **Produces, all present:** `BrainConfigV1`, `NoteFrontmatterV1`, `CaptureEnvelopeV1`,
   `IndexBuildResult`, `LintResult`, `RetrievalQuery`, `RetrievalResult`, `BrainMigration`,
-  `BrainService`. The first two exist.
-- **Gate:** index rebuilds are byte-for-byte deterministic under a frozen clock; every
-  retrieval claim resolves to a selected canonical note.
-- **Creates:** `packages/brain/src/{discovery,indexes,lint,retrieval,migrations}/`,
-  `templates/brain/`, `tests/{contracts,fixtures,integration}/brain/`. `schema/` is done.
-
-**Five facts that must survive the plan's deletion.** The plan is deleted when Task 10
-closes, so anything a later subsystem needs is carried here now rather than lost:
-
-1. **`yaml` parsing is quadratic in mapping size** — measured at 14 ms for 1,000
-   frontmatter keys, 1.2 s for 16,000, and no completion inside two minutes for a 700 KB
-   block, while the fence regular expression over the same input stays under 3 ms.
-   Discovery walks arbitrary user files, so the bytes handed to `parseNote` must be bounded
-   and an oversized frontmatter reported as a finding rather than hanging the CLI. The spec
-   has no lint class for that finding yet; Task 6 needs one, or §7 of the spec needs a row.
-2. **`NoteFrontmatterV1` is a design decision, not a migration fact.**
-   `docs/migration/baseline-capabilities.json` froze the vault's *capabilities* — Obsidian
-   Markdown, map, catalog, graph, index-first retrieval, four command names — and nothing
-   about note schema. The `legacy-shape/` fixture's frontmatter is therefore invented, not
-   reconstructed. Stated so no later reader mistakes it for something recovered from a real
-   vault.
-3. **`BrainConfigV1`'s type and zod schema live in `packages/core/src/config/types.ts`**,
-   not in `packages/brain/src/schema/`. `DeveloperOsConfigV1` must reference the type, and
-   `core` importing from `brain` while `brain` imports from `core` is a cycle.
-   `packages/brain` owns the defaults and resolution and re-exports the type. The spec's §2
-   table was corrected to match on 2026-08-08.
-4. **The fixture is never generated from, compared against, or refreshed from a real
-   vault.** If it turns out to miss a shape the product must support, extend the fixture and
-   say so; do not open a vault to find out.
-5. **`yaml@2.8.1` resolves the YAML 1.2 core schema, and that is why it was chosen.**
-   A tag spelled `no` stays the string `"no"` rather than becoming `false`. Under a YAML 1.1
-   parser the note silently loses a tag and gains a boolean nothing downstream expects. This
-   one has two durable homes rather than this list, because it binds anyone who ever swaps
-   the parser and that will happen long after DOS-P2 closes: design spec §4.4 states the
-   contract, and the import site in `packages/brain/src/schema/note.ts` carries it where a
-   reader who is *about to* change the parser is actually standing.
-
-**Amendments this spec makes to earlier documents:** see §8. One of the four is applied in
-code, one in the brain plan, one is cross-referenced only, and one — `init` installing the
-template — is not yet built. None of them rewrites approved content beyond a status line or a
-correction marked as shipped.
+  `BrainService`.
+- **Gate satisfied:** index rebuilds are byte-for-byte deterministic under a frozen clock and
+  under a reversed directory reader; every retrieval match resolves to a note that exists at
+  the returned path, asserted end to end against the compiled binary.
 
 ### DOS-P3 — Workflow compiler
 
@@ -420,19 +417,20 @@ subproject; listed here so nothing is discovered late.
 
 | Path | First owner | Status |
 |---|---|---|
-| `tests/contracts/` | Foundation onward | missing |
-| `tests/fixtures/` | Foundation onward | missing |
-| `tests/fixtures/brain/legacy-shape/` | DOS-P2 Task 3 | missing — synthetic vault that replaces every reason to read a real vault at build time |
-| `tests/integration/` | Foundation onward | missing |
+| `tests/contracts/` | Foundation onward | missing — DOS-P2 put its contract cases beside the code they pin, in `packages/brain/src/**/*.test.ts`, rather than creating this tree |
+| `tests/fixtures/` | Foundation onward | **created 2026-08-08** |
+| `tests/fixtures/brain/legacy-shape/` | DOS-P2 Task 3 | **created 2026-08-08**, plus eight one-concern `malformed/` fixtures for lint |
+| `tests/integration/` | Foundation onward | missing — DOS-P2's reindex/lint/search integration runs in `tests/e2e/brain.test.ts` against the compiled binary, which is the stronger of the two |
 | `tests/e2e/` | Foundation Task 9 | **created 2026-08-01** — `pnpm test:e2e` runs 31 cases |
 | `tests/security/` | DOS-P6 | missing |
 | `docs/architecture/` | Foundation Task 9, then per subsystem | **created 2026-08-01** — Foundation boundaries and constraints done; workflow schema, threat model, capability model still owed by later subsystems |
 | `docs/releases/` | DOS-P7 | **created 2026-08-01** by Foundation Task 9, ahead of its named owner |
-| `packages/brain/` | DOS-P2 | **created 2026-08-07** — `src/schema/` only (`4cd7224`, `9f82901`). `discovery/`, `indexes/`, `lint/`, `retrieval/`, `migrations/`, `service.ts` still owed by plan Tasks 3–10 |
+| `packages/brain/` | DOS-P2 | **complete 2026-08-10** — `schema/`, `discovery/`, `indexes/`, `lint/`, `retrieval/`, `migrations/`, `service.ts` |
 | `packages/workflow-schema/` | DOS-P3 | missing |
 | `packages/adapter-claude/`, `plugins/claude/` | DOS-P4 | missing |
 | `packages/adapter-codex/`, `plugins/codex/` | DOS-P5 | missing |
-| `workflows/`, `templates/brain/` | DOS-P2 / DOS-P3 | missing |
+| `templates/brain/` | DOS-P2 | **created 2026-08-10** — the vault skeleton `init` installs, embedded in `apps/cli/src/commands/brain-template.ts` so a shipped binary carries it, with a test that fails if the two drift |
+| `workflows/` | DOS-P3 | missing |
 
 **Two directories exist that the program file map never named:** `tests/helpers/` (the
 temporary HOME, the hash inventory, the process runner) and `tests/repository/` (the
@@ -551,12 +549,8 @@ amended one; only code and status lines are edited in place. This section is the
 it before trusting any approved document, because it is the only place that says whether the
 one in front of you is still current.
 
-**Still owed. These two amendments are recorded and not yet built:**
-
-| Amended | By | What changes | Owed by |
-|---|---|---|---|
-| `specs/…-design.md` §8 CLI contract | brain-engine spec §11, §15.1 | a `brain reindex\|lint\|search\|status` group is added; `search` becomes an alias for `brain search` | brain plan Task 9. Cross-referenced in §8 of that spec; its command block is left unchanged because it is a dated approved record |
-| Foundation's "never modify an existing vault" | brain-engine spec §10, §15.4 | `init` installs `templates/brain/` when, and only when, it creates the vault, which keeps the guarantee intact | brain plan Task 10 |
+**Nothing is owed.** Both rows that stood here — the `brain` CLI group and `init`
+installing the template — shipped with DOS-P2 Tasks 9 and 10 and are in the table below.
 
 **Discharged. Listed because the amended document is still read, not because there is work
 left:**
@@ -567,7 +561,11 @@ left:**
 | brain-engine spec §2 placement table | the brain plan, and the shipped code | `BrainConfigV1`'s type and schema live in `packages/core`, not `packages/brain` | code, `4cd7224`; the spec table carries a dated in-place correction |
 | `specs/…-brain-engine-design.md` §7 lint table | the brain plan's Task 4, as shipped | the `links` class gains a `warn` row for a link text matching more than one note, and §7 records the five-tier resolution ladder plus its case-folded fallback | code, this task; the spec carries a dated in-place amendment marked as shipped |
 | `specs/…-brain-engine-design.md` §8 retrieval | the brain plan's Tasks 7 and 9, as shipped | a multi-word query is an OR over its tokens; `considered`/`selected` are defined; `--limit` supplies `maxCandidates` | code, Tasks 7 and 9; the spec carries a dated in-place amendment marked as shipped |
+| `specs/…-brain-engine-design.md` §4.4 parser contract | DOS-P2 Task 10, as shipped | gains clause 5: frontmatter carries no explicitly tagged node, and one is refused. Adopted rather than deferred **because the premise for deferring it was measured false** — `yaml@2.8.1` resolves `!!binary` to a `Buffer`, `!!timestamp` to a `Date` and `!!set` to an object, on the core schema | code, Task 10; the spec carries a dated in-place amendment |
+| `specs/…-brain-engine-design.md` §6 rendered views | DOS-P2 Task 10, as shipped | display text in `catalog.md` and `vault-map.md` is screened for control and format characters, not only escaped for Markdown structure. A link destination is **not** screened, because a path has to resolve to the note it names | code, Task 10; the renderer states both halves at the seam |
 | program plan Task 2 file list | brain-engine spec §15.2 | `discovery/` is a sixth source directory, because folder policy is consumed by both `indexes/` and `lint/` and is not schema parsing | the program plan's file list, and the brain plan |
+| `specs/…-design.md` §8 CLI contract | brain-engine spec §11, §15.1 | a `brain reindex\|lint\|search\|status` group is added; `search` becomes an alias for `brain search` | code, DOS-P2 Task 9 (`8c9f4f6`); cross-referenced in §8 of that spec |
+| Foundation's "never modify an existing vault" | brain-engine spec §10, §15.4 | `init` installs `templates/brain/` when, and only when, it creates the vault, which keeps the guarantee intact | code, DOS-P2 Task 10 |
 | `specs/…-design.md` §8 flags | Foundation, `foundation.md` §7 | `--verbose` is not implemented and dispatch is strict, so it exits 2; `repair` takes `--resume`/`--rollback` rather than `--dry-run`/`--yes` | cross-referenced in §8 of that spec |
 | `specs/…-design.md` §9.1 `init` | Foundation | `init` prompts for neither adapters nor vault path, and its post-install gate is the five checks in `INIT_OWNED_CHECKS`, not the whole `doctor` report | cross-referenced in §9.1 |
 | `specs/…-design.md` §9.3 conflict evidence | Foundation Task 6 | the three-way *diff* is deferred to DOS-P4/P5; Foundation shipped three recorded hashes and a current-versus-proposed diff | cross-referenced in §9.3, with the reasoning in `foundation-constraints.md` Task 6 |

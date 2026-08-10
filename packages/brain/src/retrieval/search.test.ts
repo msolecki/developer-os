@@ -761,7 +761,8 @@ describe("premises the code depends on", () => {
     ]);
     const result = search(document, { text: "dev", maxCandidates: 10 });
     if (result.kind !== "results") throw new Error("expected results");
-    expect(result.matches[0]?.title).not.toMatch(/\p{Cf}/u);
+    /** U+200D is exempt; see `redact.ts`. The bare class would forbid a joined emoji. */
+    expect(result.matches[0]?.title).not.toMatch(/(?!\u200D)\p{Cf}/u);
   });
 
   it("leaves path byte-exact so a match still resolves", () => {

@@ -1,4 +1,5 @@
 import { compareCanonical } from "../discovery/index.js";
+import { capGraphemes, screenControlCharacters } from "../redact.js";
 import { tokenize } from "../indexes/index.js";
 import type { IndexDocumentV1, IndexedNote } from "../indexes/index.js";
 import type { NoteStage } from "../schema/note.js";
@@ -73,64 +74,32 @@ export const FUNNEL_STAGES: readonly string[] = Object.freeze([
 
 /**
  * A match's `title` and `summary` are printed to a terminal and written to a
- * log by Task 9, and both are author-controlled: `note.ts` validates `title` as
- * a non-empty string with no length bound and no character screen, so a 50,000
- * character title parses clean, as does one carrying `\r` or an ANSI escape. A
- * carriage return lets one result overwrite the row printed above it.
+ * log by the CLI, and both are author-controlled: `note.ts` validates `title`
+ * as a non-empty string with no length bound and no character screen, so a
+ * 50,000 character title parses clean, as does one carrying `\r` or an ANSI
+ * escape.
  *
- * `\p{Cf}` is in the class for the same reason and is easy to leave out: it
- * covers U+202E RIGHT-TO-LEFT OVERRIDE, which reorders the rest of the printed
- * line (Trojan Source, CVE-2021-42574), and U+200B ZERO WIDTH SPACE. Neither is
- * matched by `\s`, so the whitespace collapse below does not reach them.
- *
- * This is `lint.ts`'s `renderValue` policy applied to a different job. Lint
- * caps at 64 because its values are incidental diagnostics; here the text *is*
- * the payload, so only the safety half applies — collapse whitespace, drop C0
- * and C1 controls, and cap the title, which is the one field the schema does
- * not bound. It happens here rather than in the CLI so a JSON-log consumer
- * cannot skip it. If a third site needs this, the three should become one
- * helper rather than a third copy.
- */
-/**
- * The rule below exists to catch a control character written into a pattern by
- * accident. This one is the point: the pattern is what removes them.
- */
-// eslint-disable-next-line no-control-regex
-const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F-\u009F\p{Cf}]/gu;
-const GRAPHEMES = new Intl.Segmenter("en", { granularity: "grapheme" });
-
-/**
- * Long enough for any real note title, short enough not to own a terminal — of
- * Latin text; 200 graphemes of CJK is about 400 columns.
+ * The screen itself is `../redact.js`. What differs here is which half applies:
+ * lint caps at 64 because its values are incidental diagnostics, while here the
+ * text *is* the payload, so a summary is screened and not capped and only the
+ * title — the one field the schema does not bound — is capped. It happens at
+ * this layer rather than in the CLI so a JSON-log consumer cannot skip it.
  *
  * `matched` and `score` are computed from the *raw* title, before this cap, so
  * a capped row can name a `title` match on a word the shown title no longer
  * contains. That is the right trade — scoring the truncated text would make
- * relevance depend on a display bound — but it means Task 9 must not present
+ * relevance depend on a display bound — but it means a caller must not present
  * the title as the evidence for `matched`. A `body` match already names a term
- * the row never shows.
+ * the row never shows. (Deleted by the refactor that made this module share one
+ * screen, and restored after review: the behaviour never changed, only the
+ * record of why it must not.)
  */
 const MAX_TITLE_GRAPHEMES = 200;
 
 function displayText(value: string, maxGraphemes?: number): string {
-  const clean = value
-    .replace(CONTROL_CHARACTERS, " ")
-    .replace(/\s+/gu, " ")
-    .trim();
-  /**
-   * `undefined` means "screen it, do not cap it". Passing a huge number instead
-   * worked, but only via a fast path that reads like a redundant optimisation:
-   * delete it and every summary would be segmented against a bound that can
-   * never be reached — correct output, silent performance cliff, no test.
-   */
-  if (maxGraphemes === undefined || clean.length <= maxGraphemes) return clean;
-
-  const kept: string[] = [];
-  for (const { segment } of GRAPHEMES.segment(clean)) {
-    if (kept.length === maxGraphemes) break;
-    kept.push(segment);
-  }
-  return kept.length < maxGraphemes ? clean : `${kept.join("")}…`;
+  const clean = screenControlCharacters(value);
+  /** `undefined` means "screen it, do not cap it" — a summary is already bounded by its schema. */
+  return maxGraphemes === undefined ? clean : capGraphemes(clean, maxGraphemes);
 }
 
 function fold(value: string): string {

@@ -26,35 +26,23 @@ week of confusion.
 
 ## NOW
 
-**A6 — DOS-P2 Brain engine, implementation.** All three gates are open no longer: **S** and
-**P** closed on 2026-08-04, and **I** is under way.
+**A7 — DOS-P3 Workflow compiler.** All three gates are open: no spec, no plan, no code.
+Start with `superpowers:brainstorming` and a spec approval cycle; `BACKLOG.md` §3 lists what
+that spec must decide and what it produces. Do not start `P` before `S` is approved, and do
+not start `I` before `P` is written.
 
-**Progress: Tasks 1 and 2 of 10 are committed.** Task 1 (package scaffold and the optional
-`[brain]` config section) is `4cd7224`; Task 2 (note schema) is `9f82901`. **Resume at
-Task 3 — Discovery**, which also creates the committed synthetic fixture
-`tests/fixtures/brain/legacy-shape/`.
-
-Execute `plans/2026-07-21-developer-os-brain-engine.md` under
-`superpowers:executing-plans`. The plan's own checkboxes are the authoritative per-task
-record; this file tracks the entry, not the steps. The spec behind it is
-`specs/2026-07-21-developer-os-brain-engine-design.md` — read its §15 first, because it
-amends four documents that were approved before it existed, and `BACKLOG.md` §8 records which
-of those amendments have been applied and which are cross-referenced only.
-
-**Nothing blocks execution.** `yaml@2.8.1` was approved on 2026-08-04 and is installed. Any
-*further* dependency still needs approval before `pnpm add` runs.
-
-A7 (DOS-P3, the workflow compiler) is startable in parallel and still has all three gates
-open.
+**A6 closed on 2026-08-10** — ten tasks, the determinism gate satisfied under a frozen clock
+and a reversed directory reader, and the four `brain` commands proved end to end against the
+compiled binary under a temporary HOME. What survives it is
+`docs/architecture/brain.md`: read that before touching Brain code, and the design spec
+before changing Brain behaviour. Its plan is deleted; git history is the archive.
 
 **Closed, and not repeated below.** Foundation closed on 2026-08-01 — nine tasks, 51 steps,
 the completion gate satisfied — together with the kernel transaction lock and the
 self-containment lint that guards the clean-room boundary. What survives that work is
 `docs/architecture/foundation.md`, `docs/architecture/foundation-constraints.md`, and
-`docs/releases/foundation-checkpoint.md`. Read the first before touching Foundation code and
-the second before changing any behaviour it describes. What Foundation left *open* — two
-founder questions, one unconsumed interface, and one residual owed by A11 — is `BACKLOG.md`
-§2; the rest is history and is in git.
+`docs/releases/foundation-checkpoint.md`. What Foundation left *open* — two founder
+questions, one unconsumed interface, and one residual owed by A11 — is `BACKLOG.md` §2.
 
 ---
 
@@ -69,8 +57,7 @@ is approved.
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A6 ‖ | DOS-P2 Brain engine — **I** only | **S** and **P** done: `specs/…-brain-engine-design.md`, `plans/…-brain-engine.md` | — | L | the brain plan's ten tasks are all checked with committed evidence, its Task 10 closes the bookkeeping, and the plan file is deleted in that same commit | **now** — 2/10 |
-| A7 ‖ | DOS-P3 Workflow compiler — S / P / I | to write | — | L | program plan Task 3 checkpoint: canonical workflows compile to abstract artifacts | parallel |
+| A7 | DOS-P3 Workflow compiler — S / P / I | to write | — | L | program plan Task 3 checkpoint: canonical workflows compile to abstract artifacts | **now** — nothing written |
 | A8 ‖ | DOS-P4 Claude adapter — S / P / I | to write | A7 | L | program plan Task 4 checkpoint: a Claude-only user completes the full synthetic workflow | blocked |
 | A9 ‖ | DOS-P5 Codex adapter — S / P / I | to write | A7 | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | blocked |
 | A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | A8 **and** A9 | L | program plan Task 6 checkpoint, after independent security review | blocked |
@@ -78,14 +65,12 @@ is approved.
 | A12 | DOS-P8 Founder shadow migration | to write — see decision below | A11, **B1 B2 B3 B4**, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |
 
-**A6 and A7 have no unmet Needs.** Both required Foundation's frozen interfaces
-(`docs/architecture/foundation.md` §2) and the self-containment lint, and both landed on
-2026-08-01. They are marked `‖` with each other only — nothing marks either parallel to
-Foundation.
+**A7 has no unmet Needs**, and it is no longer parallel with anything: A6 closed, so the
+`‖` pairing is gone.
 
-**A6 is the only Track A entry that is code work today**, because it is the only one whose
-spec and plan are already written. Every entry after it begins with a document, not with
-code.
+**No Track A entry is code work today.** Every remaining one begins with a document —
+DOS-P3 through DOS-P7 each need an approved spec *and* an implementation plan before any
+code, which is a Global Constraint of the program plan rather than a preference.
 
 **A12 decision, unresolved.** The program plan enumerates Task 8's ten steps inline and
 does not mandate a dedicated plan. Recommendation on record: write one anyway — it is the
@@ -158,7 +143,7 @@ is not verification.
 | how to run a session start to finish | `SESSION.md` |
 | what to do next | this file |
 | what a missing spec must decide, and what it produces | `BACKLOG.md` §3 |
-| what the Brain engine still owes | `BACKLOG.md` §3, DOS-P2 |
+| what the Brain engine is, and its six residuals | `docs/architecture/brain.md` |
 | what Foundation delivered, and what it deliberately cannot do | `docs/architecture/foundation.md` |
 | the per-task Foundation constraints, and two open founder questions | `docs/architecture/foundation-constraints.md` |
 | the Foundation gate evidence, as it stood on 2026-08-01 | `docs/releases/foundation-checkpoint.md` |
@@ -171,7 +156,6 @@ is not verification.
 
 ## Counting what is left
 
-Foundation is closed. Six subsystems need a spec, a plan, and an implementation each —
-eighteen milestones in total, of which **sixteen do not exist yet**: DOS-P2's spec and plan
-are written, and 2 of that plan's 10 tasks are committed. Then cutover, then release.
+Foundation and DOS-P2 are closed. Five subsystems need a spec, a plan, and an
+implementation each — **fifteen milestones, none of which exist yet**. Then cutover, then release.
 Track B is four items; Track L is two.

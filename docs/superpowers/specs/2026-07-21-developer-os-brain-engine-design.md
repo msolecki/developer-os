@@ -3,7 +3,7 @@
 **Date:** 2026-08-04
 
 **Status:** Approved design. Plan written 2026-08-04
-(`plans/2026-07-21-developer-os-brain-engine.md`); **implementation in progress — plan
+(plan deleted on completion, recoverable at `81e7e7d`); **implemented and shipped 2026-08-10 — plan
 Tasks 1 and 2 of 10 committed** (`4cd7224`, `9f82901`). Clauses corrected against the
 shipped code carry an inline "**Shipped:**" note; §15 indexes what this spec amends
 elsewhere, and `BACKLOG.md` §8 records whether each amendment has been applied.
@@ -213,12 +213,33 @@ must, and this list is the contract:
    as the surviving value alone;
 4. be shipped with tests pinning at least the `no` case and the duplicate key.
 
-This list is about what a replacement must not *drop*. Whether it should also constrain what
-one must not *add* — resolving application tags into constructed values, the `load` versus
-`safe_load` distinction — is an open decision recorded with NEW-2 in `BACKLOG.md` §1, not a
-clause here: `yaml@2.8.1` does not do it, so there is nothing to regress, and adding the clause
-would be a new design decision rather than a recorded one. Read that entry before swapping the
-parser.
+**Amendment, 2026-08-10 (settles NEW-4; registered in `BACKLOG.md` §8).** Clauses 1–4 are
+about what a replacement must not *drop*. There is now a fifth about what it must not *add*:
+
+5. **frontmatter carries no explicitly tagged node, and one is refused outright** — the
+   `load` versus `safe_load` distinction, which has produced remote code execution in more
+   than one ecosystem.
+
+This was recorded as an open decision on the premise that it cost nothing, because
+`yaml@2.8.1` "does not do it, so there is nothing to regress." **That premise was false and
+the measurement is what settled the decision.** The library resolves an explicitly tagged
+node through its known-tags fallback even on the core schema: `!!binary aGk=` yields a
+Node `Buffer`, `!!timestamp 2020-01-01` a `Date`, and `!!set { x: null }` a constructed
+object. Those are values reaching a schema that validated the field as a string, and a
+`Buffer` one library version away from a JSON artifact holding `{"type":"Buffer",…}`.
+
+The clause is deliberately *any* tag rather than a denylist of the constructing ones. An
+allowlist would make the rule **which tags construct values** — a question the library
+answers, and re-answers on upgrade — instead of **frontmatter carries no tags**, which is a
+property this product defines and can hold. `!!str` is harmless today and refused anyway.
+Note frontmatter has no legitimate use for an explicit tag. A refusal names the note, the
+tag — screened and capped, since it is author-written — and the line of the *tagged node*,
+which is the value token: a tag written on the line above its value reports the value's
+line. Stated because the code does exactly that and no more.
+
+Implemented in `packages/brain/src/schema/note.ts` as `firstExplicitTag`, with tests for a
+value-constructing tag, a harmless one, a nested one, the reported line, and that an
+ordinary note is untouched.
 
 The first three are the behaviour; the fourth is how anyone finds out one of them was lost,
 because these are corruptions that surface months later in somebody else's vault and look like

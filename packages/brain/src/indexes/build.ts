@@ -644,7 +644,12 @@ export async function buildIndex(
       }
 
       /** A note linking twice to one target is one edge; edges are a set. */
-      const key = `${note.path} ${resolved.note.path} ${text}`;
+      /**
+       * The separator is written as an escape, never as the byte. A literal NUL
+       * in a source file survives every diff and every review unseen; this one
+       * did, until a repository gate went looking for it.
+       */
+      const key = `${note.path}\u0000${resolved.note.path}\u0000${text}`;
       if (seenEdges.has(key)) continue;
       seenEdges.add(key);
       edges.push({ source: note.path, target: resolved.note.path, text });

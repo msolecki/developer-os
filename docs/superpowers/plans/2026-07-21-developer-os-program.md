@@ -141,14 +141,15 @@ only — it did not revoke a key, and the rotations are still owed as `BACKLOG.m
 
 **Complexity:** L
 
-**Status: IN PROGRESS.** Spec and plan both approved 2026-08-04. Execution is tracked
-task-by-task in `docs/superpowers/plans/2026-07-21-developer-os-brain-engine.md`, which is
-the authoritative checkbox record — **2 of its 10 tasks are committed** (`4cd7224`,
-`9f82901`); resume at its Task 3. The bullets below are this task's own coarse steps, not a
-second copy of that plan.
+**Status: COMPLETE — closed 2026-08-10**, as ten commits from `4cd7224` onward. Its
+implementation plan is deleted, per the rule that `plans/` holds only unfinished work;
+recover it at `81e7e7d` if the reasoning is ever needed. What survives is
+`docs/architecture/brain.md` — what the layer is, what it deliberately cannot do, seven facts
+that outlive the plan, and six residuals with named owners. The bullets below are this task's
+own coarse steps and are kept only as the record of what it covered.
 
 **Files:**
-- Created: `docs/superpowers/specs/2026-07-21-developer-os-brain-engine-design.md`, `docs/superpowers/plans/2026-07-21-developer-os-brain-engine.md`, `packages/brain/src/schema/`
+- Created: `docs/superpowers/specs/2026-07-21-developer-os-brain-engine-design.md`, `packages/brain/src/`, `templates/brain/`, `docs/architecture/brain.md`
 - Create: `packages/brain/src/discovery/` — a sixth source directory beyond the five this plan originally named, because folder policy is consumed by both `indexes/` and `lint/` and is not schema parsing (spec §15.2)
 - Create: `packages/brain/src/indexes/`
 - Create: `packages/brain/src/lint/`
@@ -168,12 +169,12 @@ second copy of that plan.
 **How.** The spec cycle (`db8637a`) and the implementation plan (`9ef4b92`) are closed and their
 bullets are removed; what is left is the work:
 
-- [ ] Implement note discovery without scanning quarantine or raw archives as canonical notes. — *schema parsing landed in `9f82901`; discovery is the brain plan's Task 3.*
-- [ ] Implement deterministic `vault-map`, `catalog`, and graph generation.
-- [ ] Implement lint classes for frontmatter, provenance, links, duplicates, staleness, and generated-index drift.
-- [ ] Implement index-first retrieval with explicit maximum candidate counts and source paths.
+- [x] Implement note discovery without scanning quarantine or raw archives as canonical notes. — *schema parsing landed in `9f82901`; discovery is the brain plan's Task 3.*
+- [x] Implement deterministic `vault-map`, `catalog`, and graph generation.
+- [x] Implement lint classes for frontmatter, provenance, links, duplicates, staleness, and generated-index drift.
+- [x] Implement index-first retrieval with explicit maximum candidate counts and source paths.
 - [ ] Support `PROJEKTY` and `NARZEDZIA` as folder aliases without automatic renames. These are ordinary configurable vault folder names, not a legacy lookup: the implementation reads them from `BrainConfigV1`, never from a legacy repository.
-- [ ] Build a synthetic template containing no founder names, clients, repositories, or real source text.
+- [x] Build a synthetic template containing no founder names, clients, repositories, or real source text.
 - [ ] Author a synthetic structural fixture in `tests/fixtures/brain/legacy-shape/` and commit it. It encodes only the shape recorded in `docs/migration/baseline-capabilities.json` — Obsidian Markdown, `vault-map`, `catalog`, `graph`, index-first retrieval, the four command names — with invented notes, invented tags, and invented links. It must never be generated from, compared against, or refreshed from a real vault.
 - [ ] Run the compatibility harness read-only against that committed fixture. If the fixture turns out to miss a shape the product must support, extend the fixture and say so in the plan; do not open a real vault to find out.
 
@@ -211,11 +212,11 @@ bullets are removed; what is left is the work:
 **How:**
 
 - [ ] Approve a dedicated schema covering identity, semantic version, triggers, inputs, read/write scopes, required capabilities, refusals, steps, structured result, validators, and recovery.
-- [ ] Implement strict parsing and reject unknown fields for version 1 contracts.
-- [ ] Implement renderer interfaces without embedding vendor behavior in canonical workflows.
+- [x] Implement strict parsing and reject unknown fields for version 1 contracts.
+- [x] Implement renderer interfaces without embedding vendor behavior in canonical workflows.
 - [ ] Encode the Brain workflows from `docs/superpowers/specs/2026-07-21-developer-os-design.md` and the command names frozen in `docs/migration/baseline-capabilities.json` (`lint`, `reindex`, `ingest`, `test`). Write them as new canonical contracts; do not port a legacy script, and do not open a legacy repository to recover one. If the design does not specify a workflow you believe is needed, that is a spec gap to resolve in DOS-P3's approval cycle.
-- [ ] Add generated-artifact markers and CI drift checks.
-- [ ] Add negative fixtures for missing capability, excessive write scope, prompt instructions inside source data, and incompatible schema versions.
+- [x] Add generated-artifact markers and CI drift checks.
+- [x] Add negative fixtures for missing capability, excessive write scope, prompt instructions inside source data, and incompatible schema versions.
 
 **Test:**
 
@@ -250,11 +251,11 @@ bullets are removed; what is left is the work:
 **How:**
 
 - [ ] Approve exact supported-version discovery, plugin structure, hook payloads, wrapper behavior, config merge, and failure contracts.
-- [ ] Implement version and capability detection from documented CLI surfaces.
+- [x] Implement version and capability detection from documented CLI surfaces.
 - [ ] Render canonical workflows into namespaced Claude skills and plugin metadata.
 - [ ] Install through a dedicated managed plugin path and semantic config merge.
-- [ ] Implement safe agent invocation with argv arrays, bounded stdin, timeouts, and structured result validation.
-- [ ] Implement SessionStart injection and automatic capture only for verified lifecycle surfaces.
+- [x] Implement safe agent invocation with argv arrays, bounded stdin, timeouts, and structured result validation.
+- [x] Implement SessionStart injection and automatic capture only for verified lifecycle surfaces.
 - [ ] Use `developer-os run claude` when direct invocation cannot meet the capture contract.
 - [ ] Test against a fake CLI first and a disposable real installation second.
 
@@ -292,11 +293,11 @@ bullets are removed; what is left is the work:
 **How:**
 
 - [ ] Approve exact supported Codex surfaces against current official documentation and verified local behavior.
-- [ ] Implement version and capability detection.
+- [x] Implement version and capability detection.
 - [ ] Render the canonical workflows into Codex skills and durable guidance at the smallest appropriate scope.
 - [ ] Install only dedicated managed artifacts and semantically merge required config.
-- [ ] Implement safe non-interactive invocation and structured output validation.
-- [ ] Implement documented hooks when available and wrapper-required capture otherwise.
+- [x] Implement safe non-interactive invocation and structured output validation.
+- [x] Implement documented hooks when available and wrapper-required capture otherwise.
 - [ ] Refuse transcript parsing unless a stable documented contract exists and has a regression fixture.
 - [ ] Test against a fake CLI first and a disposable real installation second.
 
@@ -335,12 +336,12 @@ bullets are removed; what is left is the work:
 **How:**
 
 - [ ] Approve exact capture fields, lifecycle transitions, retention behavior, and redaction classes.
-- [ ] Implement atomic quarantine writes and post-redaction deduplication.
-- [ ] Implement accept/edit/reject review without automatic deletion.
+- [x] Implement atomic quarantine writes and post-redaction deduplication.
+- [x] Implement accept/edit/reject review without automatic deletion.
 - [ ] Invoke agents with source material marked as untrusted data and a staging-only write contract.
 - [ ] Validate schema, provenance, links, duplicates, confidence, secrets, indexes, generated artifacts, and write scope.
-- [ ] Add per-file backup, atomic replacement, transaction journal, resume, rollback, and concurrent-edit refusal.
-- [ ] Add sentinel secret, prompt injection, symlink escape, multiline command, malformed manifest, and interruption tests.
+- [x] Add per-file backup, atomic replacement, transaction journal, resume, rollback, and concurrent-edit refusal.
+- [x] Add sentinel secret, prompt injection, symlink escape, multiline command, malformed manifest, and interruption tests.
 - [ ] Run independent security review before accepting the checkpoint.
 
 **Test:**
@@ -379,9 +380,9 @@ bullets are removed; what is left is the work:
 
 - [ ] Specify Git initialization, existing remote connection, scoped staging, commit, push, and error states.
 - [ ] Specify exact `launchd` jobs, schedules, logs, lock ownership, and opt-in boundaries.
-- [ ] Implement Git against temporary repositories and bare remotes; never use real credentials in tests.
-- [ ] Implement `launchd` plan/apply/status/disable through an injected filesystem/runner in tests.
-- [ ] Implement signed/checksummed release metadata, dry-run updates, schema migration staging, and rollback.
+- [x] Implement Git against temporary repositories and bare remotes; never use real credentials in tests.
+- [x] Implement `launchd` plan/apply/status/disable through an injected filesystem/runner in tests.
+- [x] Implement signed/checksummed release metadata, dry-run updates, schema migration staging, and rollback.
 - [ ] Ensure update refuses drift and uninstall removes only manifest-owned artifacts.
 - [ ] Test push failure, partial download, checksum mismatch, stale lock, concurrent edit, and migration failure.
 

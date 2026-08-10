@@ -184,7 +184,14 @@ describe("Foundation temporary-HOME lifecycle", () => {
       expect(planned.productHome).toBe(home.productHome);
       expect(planned.brainPath).toBe(home.brain);
       expect(planned.transactionId).toBeNull();
-      expect(planned.created).toStrictEqual([
+      /**
+       * The Brain skeleton joins this list as of DOS-P2 Task 10: `init`
+       * installs `templates/brain/` when, and only when, it creates the vault.
+       * Asserted as a prefix plus a set, because the template's own contents
+       * are pinned by `brain-template.test.ts` and restating them here would
+       * make every template edit a two-file change with one of them silent.
+       */
+      expect(planned.created.slice(0, 8)).toStrictEqual([
         home.productHome,
         stateDir,
         stagingDir,
@@ -194,6 +201,13 @@ describe("Foundation temporary-HOME lifecycle", () => {
         home.brain,
         brainKeep,
       ]);
+      const template = planned.created.slice(8);
+      expect(template.length).toBeGreaterThan(0);
+      /** The content root itself is the first entry, then everything under it. */
+      expect(template[0]).toBe(`${home.brain}/content`);
+      for (const path of template) {
+        expect(path.startsWith(`${home.brain}/content`)).toBe(true);
+      }
       expect(planned.unchanged).toStrictEqual([]);
 
       const afterDryRun = await inventory(home.root);
@@ -239,7 +253,13 @@ describe("Foundation temporary-HOME lifecycle", () => {
         productVersion: "0.0.0",
         configPresent: true,
         brainPresent: true,
-        managedArtifacts: 8,
+        /**
+         * The Brain skeleton is manifest-owned as of DOS-P2 Task 10, so this
+         * count now covers the vault's directories and files as well as the
+         * product's. Left as an exact number rather than a floor: this suite
+         * exists to notice that an install created something nobody declared.
+         */
+        managedArtifacts: 34,
         driftCount: 0,
         incompleteTransactions: [],
       });
@@ -319,16 +339,34 @@ describe("Foundation temporary-HOME lifecycle", () => {
        * 4; it is pinned here so that closing it is a deliberate change rather than
        * a surprise.
        */
-      expect([...removal.preserved].sort()).toStrictEqual(
-        [
-          home.brain,
-          brainKeep,
-          home.productHome,
-          stateDir,
-          stagingDir,
-          backupsDir,
-        ].sort(),
+      const preserved = [...removal.preserved].sort();
+      for (const path of [
+        home.brain,
+        brainKeep,
+        home.productHome,
+        stateDir,
+        stagingDir,
+        backupsDir,
+      ]) {
+        expect(preserved, path).toContain(path);
+      }
+
+      /**
+       * **Every vault artifact survives**, which is the property this whole
+       * paragraph exists for. The Brain skeleton is manifest-owned as of
+       * DOS-P2 Task 10, so it is `uninstall`'s *location* rule that keeps it —
+       * not the absence of a manifest entry. Asserted as "everything under the
+       * vault, and nothing under it removed", rather than by listing the
+       * template, which `brain-template.test.ts` already pins.
+       */
+      const removedFromVault = removal.removed.filter((path) =>
+        path.startsWith(home.brain),
       );
+      expect(removedFromVault).toStrictEqual([]);
+      expect(
+        preserved.filter((path) => path.startsWith(`${home.brain}/content`))
+          .length,
+      ).toBeGreaterThan(0);
 
       const afterUninstall = await inventory(home.root);
       expect(afterUninstall.has(configFile)).toBe(false);
@@ -949,14 +987,31 @@ describe("Foundation boundaries", () => {
       /WebSocket/u,
     ];
 
+    /**
+     * Discovered, not listed. `BACKLOG.md` NEW-1: `packages/brain` was added on
+     * 2026-08-07 and never appeared in the hardcoded array, so its compiled
+     * modules were scanned by nothing while two approved documents claimed the
+     * scan covered "every compiled non-test module". A guarantee a spec asserts
+     * and a test does not check is worse than an unasserted one, because the
+     * next reviewer stops looking.
+     */
+    const workspaces: string[] = [];
+    for (const group of ["apps", "packages"]) {
+      const entries = await readdir(join(repoRoot, group), {
+        withFileTypes: true,
+      });
+      for (const entry of entries) {
+        if (entry.isDirectory()) workspaces.push(`${group}/${entry.name}`);
+      }
+    }
+    workspaces.sort();
+
+    expect(workspaces.length).toBeGreaterThan(0);
+    expect(workspaces).toContain("packages/brain");
+
     const offenders: string[] = [];
-    let scanned = 0;
-    for (const packageDir of [
-      "apps/cli",
-      "packages/core",
-      "packages/security",
-      "packages/platform-macos",
-    ]) {
+    const perPackage = new Map<string, number>();
+    for (const packageDir of workspaces) {
       const dist = join(repoRoot, packageDir, "dist");
       const files = [...(await inventory(dist))].filter(
         ([path, kind]) =>
@@ -970,10 +1025,13 @@ describe("Foundation boundaries", () => {
        * finds nothing. Without this the whole assertion passes precisely when
        * there is no evidence for it.
        */
-      expect(files.length, `${dist} contains no compiled modules`).toBeGreaterThan(0);
+      expect(
+        files.length,
+        `${dist} contains no compiled modules`,
+      ).toBeGreaterThan(0);
 
+      perPackage.set(packageDir, files.length);
       for (const [path] of files) {
-        scanned += 1;
         const source = await readFile(path, "utf8");
         for (const pattern of patterns) {
           if (pattern.test(source)) {
@@ -984,7 +1042,19 @@ describe("Foundation boundaries", () => {
     }
 
     expect(offenders).toStrictEqual([]);
-    expect(scanned).toBeGreaterThan(20);
+
+    /**
+     * Per package, never a single total: a floor over the sum is satisfied by
+     * one populated workspace while every other goes unread, which is the exact
+     * shape of the gap this replaced. The counts themselves are deliberately
+     * not pinned to an exact number — `docs/architecture/foundation.md` §7 now
+     * describes the scan by what it enumerates rather than by how many modules
+     * it found, so adding a module is not a two-file change with one of them
+     * silent.
+     */
+    for (const workspace of workspaces) {
+      expect(perPackage.get(workspace), workspace).toBeGreaterThan(0);
+    }
   });
 
   /**

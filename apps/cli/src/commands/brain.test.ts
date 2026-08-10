@@ -620,7 +620,14 @@ describe("rendering", () => {
 
     /** Per line: joining with `\n` would put a `\p{Cc}` in the haystack itself. */
     for (const line of rendered) {
-      expect(line).not.toMatch(/[\p{Cc}\p{Cf}]/u);
+      /**
+       * U+200D is exempt, here as in `redact.ts` and `renderPath`. Written as
+       * an exemption rather than as a bare class so that adding an emoji to a
+       * fixture cannot make this go red for the wrong reason — the obvious
+       * repair for that would be to weaken the assertion or to drop the
+       * exemption, and both undo a deliberate decision.
+       */
+      expect(line).not.toMatch(/(?!\u200D)[\p{Cc}\p{Cf}]/u);
     }
     expect(rendered.join(" ")).toContain("il.md");
   });
@@ -660,7 +667,14 @@ describe("rendering", () => {
       wouldChange: [],
     });
     for (const line of rendered) {
-      expect(line).not.toMatch(/[\p{Cc}\p{Cf}]/u);
+      /**
+       * U+200D is exempt, here as in `redact.ts` and `renderPath`. Written as
+       * an exemption rather than as a bare class so that adding an emoji to a
+       * fixture cannot make this go red for the wrong reason — the obvious
+       * repair for that would be to weaken the assertion or to drop the
+       * exemption, and both undo a deliberate decision.
+       */
+      expect(line).not.toMatch(/(?!\u200D)[\p{Cc}\p{Cf}]/u);
     }
   });
 });

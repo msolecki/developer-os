@@ -29,6 +29,9 @@ importers:
 
   apps/cli:
     dependencies:
+      '@developer-os/brain':
+        specifier: workspace:*
+        version: link:../../packages/brain
       '@developer-os/core':
         specifier: workspace:*
         version: link:../../packages/core

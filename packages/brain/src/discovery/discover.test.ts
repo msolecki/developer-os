@@ -148,7 +148,11 @@ describe("discoverNotes", () => {
 
   it("discovers a note nested in a subdirectory of a topic folder", async () => {
     /**
-     * Spec §5 defines canonical notes as `<contentRoot>/<topicFolder>/**‍/*.md`.
+     * Spec §5 defines canonical notes as any `.md` file at any depth below
+     * `<contentRoot>/<topicFolder>/`. Written as prose because the glob for it
+     * ends a block comment, and the previous version of this line kept the glob
+     * by hiding a ZERO WIDTH JOINER inside it — an invisible character load-
+     * bearing for the file's syntax.
      * Without this case an implementation that read only the top level of each
      * topic folder ships green.
      */

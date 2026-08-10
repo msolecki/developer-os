@@ -72,7 +72,7 @@ export interface CliFileSystem
   readonly rmdir: typeof rmdir;
 }
 
-const UNSAFE_RENDER_CHARACTERS = /[\p{Cc}\p{Cf}]/gu;
+const UNSAFE_RENDER_CHARACTERS = /(?!\u200D)[\p{Cc}\p{Cf}]/gu;
 const MAX_RENDERED_PATH = 512;
 
 /**
@@ -86,6 +86,16 @@ const MAX_RENDERED_PATH = 512;
  * reorder rendered text without being control characters. JSON output is
  * deliberately *not* passed through this: `JSON.stringify` escapes these to
  * `\uXXXX`, and a machine consumer needs the real bytes.
+ *
+ * **U+200D is exempt**, and it must stay exempt for the same reason
+ * `packages/brain/src/redact.ts` exempts it: a ZERO WIDTH JOINER is part of a
+ * grapheme cluster rather than an attack on one, and replacing it here turns a
+ * family emoji in a note title into `\u{1F468}\uFFFD\u{1F469}\uFFFD\u{1F467}`.
+ * The two layers held opposite policies for one review round and the result was
+ * output *worse* than before either was written — the Brain carefully preserved
+ * the joiner and this function then destroyed it. Change one of these and you
+ * must change the other; `tests/e2e/brain.test.ts` crosses the seam so that a
+ * future divergence fails rather than merely looking wrong.
  */
 export function renderPath(value: string): string {
   const escaped = value.replace(UNSAFE_RENDER_CHARACTERS, "�");

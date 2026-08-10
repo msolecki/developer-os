@@ -12,7 +12,9 @@
  * pins a contract: a new parser that fails it is the wrong parser, not a test to
  * loosen. Design spec §4.4 states all four clauses.
  */
-import { parseAllDocuments } from "yaml";
+import { parseAllDocuments, visit } from "yaml";
+
+import { screenAndCap } from "../redact.js";
 
 export type NoteType =
   | "knowledge-note"
@@ -166,10 +168,14 @@ export const FRONTMATTER_PARSE_OPTIONS = Object.freeze({
 /** Long enough to identify a key, short enough that a prose line cannot fill a terminal. */
 const MAX_KEY_IN_MESSAGE = 64;
 
+/**
+ * A key is author-controlled and this message is printed. YAML lets a quoted
+ * key hold anything a string can hold, including `\r` and U+202E, and the
+ * message travels through `lint.ts` to a terminal. Truncation alone was the
+ * bug: it bounded the length and screened nothing.
+ */
 function renderKey(key: string): string {
-  return key.length > MAX_KEY_IN_MESSAGE
-    ? `${key.slice(0, MAX_KEY_IN_MESSAGE)}…`
-    : key;
+  return screenAndCap(key, MAX_KEY_IN_MESSAGE);
 }
 
 function issue(
@@ -217,6 +223,83 @@ function positionOf(error: unknown): number | null {
   return typeof line === "number" && Number.isInteger(line) && line > 0
     ? line + FRONTMATTER_LINE_OFFSET
     : null;
+}
+
+/**
+ * The line an offset into the frontmatter block falls on, in file coordinates.
+ *
+ * `yaml` reports a *node's* position as a character offset rather than the
+ * `linePos` pair it attaches to an error, so this counts newlines. The same
+ * `FRONTMATTER_LINE_OFFSET` applies for the same reason `positionOf` applies
+ * it: the block begins below the opening fence, and a consumer of a
+ * path-and-line pair reads the number as file-relative.
+ */
+function lineOfOffset(text: string, offset: number): number {
+  let line = 1;
+  const bounded = Math.min(offset, text.length);
+  for (let index = 0; index < bounded; index += 1) {
+    if (text[index] === "\n") line += 1;
+  }
+  return line + FRONTMATTER_LINE_OFFSET;
+}
+
+/**
+ * The first node carrying an explicit YAML tag, or `null`.
+ *
+ * **Any** tag, not a denylist of the dangerous ones. `yaml@2.8.1` resolves
+ * explicitly tagged nodes through its known-tags fallback even on the core
+ * schema, and it is not theoretical: `!!binary` yields a `Buffer`, `!!timestamp`
+ * a `Date`, `!!set` a constructed object. Those are values no downstream
+ * consumer of this schema expects from a field it validated as a string, and
+ * they are one library version away from a JSON artifact holding
+ * `{"type":"Buffer",…}`.
+ *
+ * An allowlist of "harmless" tags — `!!str`, `!!seq` — was the first draft and
+ * it is the wrong shape: it makes the rule *which tags construct values*, a
+ * question whose answer belongs to the library and changes with it, instead of
+ * *frontmatter carries no tags*, which is a property of the format this
+ * product defines. Note frontmatter has no legitimate use for an explicit tag.
+ * This is design spec §4.4's amendment for BACKLOG NEW-4.
+ *
+ * The tag text is screened and capped before it reaches the message: `!custom`
+ * is author-written, unbounded, and this refusal is printed.
+ *
+ * The line reported is the **tagged node's**, which is the value token — so a
+ * tag written on the line above its value (`summary: !!str` then an indented
+ * `hello`) names the value's line rather than the tag's. Said plainly rather
+ * than corrected, because `yaml` does not expose the tag's own offset without
+ * retaining source tokens, and a number that is off by a line in a rare layout
+ * is a smaller cost than a heuristic that is wrong in ways nobody predicts.
+ */
+function firstExplicitTag(
+  document: unknown,
+  frontmatterText: string,
+): { readonly tag: string; readonly line: number } | null {
+  let found: { readonly tag: string; readonly line: number } | null = null;
+  visit(document as Parameters<typeof visit>[0], (_key, node) => {
+    /**
+     * `visit` hands the callback `null` for an empty document, and destructuring
+     * that threw a `TypeError` the surrounding `catch` reported as malformed
+     * YAML — so an empty frontmatter block was refused with the wrong reason
+     * instead of listing its missing keys.
+     */
+    if (node === null || typeof node !== "object") return undefined;
+    const { tag, range } = node as {
+      tag?: unknown;
+      range?: readonly (number | null)[];
+    };
+    if (typeof tag !== "string") return undefined;
+    const offset = range?.[0];
+    found = {
+      tag: screenAndCap(tag, MAX_KEY_IN_MESSAGE),
+      line: lineOfOffset(
+        frontmatterText,
+        typeof offset === "number" ? offset : 0,
+      ),
+    };
+    return visit.BREAK;
+  });
+  return found;
 }
 
 function isMember<T extends string>(
@@ -445,6 +528,21 @@ export function parseNote(source: string): NoteParseResult {
             "malformed",
             "the frontmatter is not valid YAML",
             positionOf(document?.errors[0]),
+          ),
+        ],
+      };
+    }
+
+    const tagged = firstExplicitTag(document, frontmatterText);
+    if (tagged !== null) {
+      return {
+        ok: false,
+        issues: [
+          issue(
+            null,
+            "malformed",
+            `the frontmatter carries an explicit YAML tag (${tagged.tag}); frontmatter is data, and a tag asks the parser to construct a value`,
+            tagged.line,
           ),
         ],
       };

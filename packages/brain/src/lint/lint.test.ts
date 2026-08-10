@@ -7,7 +7,7 @@ import type { IndexBuildRequest } from "../indexes/index.js";
 import { DEFAULT_BRAIN_CONFIG } from "../schema/config.js";
 import { canonicalizeArtifact, GENERATED_AT_SENTINEL } from "./drift.js";
 import { artifactPaths } from "../indexes/index.js";
-import { lintVault } from "./lint.js";
+import { lintBuild, lintVault } from "./lint.js";
 import type { LintFinding } from "./lint.js";
 import {
   buildRequestForFixture,
@@ -1031,5 +1031,251 @@ describe("a finding carries the line a parse failure happened on", () => {
       "content/DEV/a.md": note({ someUnknownKey: "v" }),
     });
     for (const f of result.findings) expect(f.line).toBeNull();
+  });
+});
+
+describe("a parse issue's message crossing into a finding", () => {
+  it("is screened at the seam, not only at its producer", async () => {
+    /**
+     * `note.ts` screens the key it interpolates, so today every message
+     * arriving here is already clean and removing this screen breaks nothing —
+     * which is exactly why it needs its own test. A finding is where foreign
+     * text becomes something this process prints; a future producer of a
+     * `NoteParseIssue` must not be able to reach a terminal through this branch
+     * by forgetting what `note.ts` remembered.
+     */
+    const request = await lintRequestForFixture("legacy-shape", TODAY, BUILD_CLOCK);
+    const built = await buildIndex(buildRequestForFixture("legacy-shape", BUILD_CLOCK));
+    const hostile = "harmless\u202E\rsuffix";
+
+    const result = await lintBuild(
+      {
+        ...built,
+        parseIssues: [
+          {
+            path: "DEV/example.md",
+            issues: [
+              {
+                key: null,
+                code: "malformed" as const,
+                message: hostile,
+                severity: "error" as const,
+                line: 2,
+              },
+            ],
+          },
+        ],
+      },
+      request,
+    );
+
+    const printed = result.findings.map((finding) => finding.message).join("");
+    expect(printed).toContain("harmless suffix");
+    expect(printed).not.toContain("\u202E");
+    expect(printed).not.toContain("\r");
+  });
+});
+
+describe("the artifacts a human opens", () => {
+  it("carry no character that can reorder or overwrite a line", async () => {
+    /**
+     * `catalog.md` and `vault-map.md` are written into the user's vault and
+     * opened in Obsidian. Escaping Markdown structure is not the same as
+     * screening characters, and this renderer had only the first: a title
+     * ending in U+202E put a RIGHT-TO-LEFT OVERRIDE straight into the file,
+     * reordering the rest of the line for every reader.
+     *
+     * The paired assertion matters as much: the joined emoji must survive, or
+     * the screen is trading one corruption for another.
+     */
+    const family = "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}";
+    const note = [
+      "---",
+      "schemaVersion: 1",
+      `title: "Deploy ${family} keys\u202E"`,
+      "type: knowledge-note",
+      "created: 2026-08-04",
+      "tags: [dev]",
+      `summary: "sum\u200Bmary\u0007here"`,
+      "stage: emerging",
+      "author: agent",
+      "reviewed: null",
+      "---",
+      "",
+      "Body.",
+      "",
+    ].join("\n");
+
+    /**
+     * The path is hostile too, and that is the point. An earlier version of
+     * this test made the same universal claim over a fixture living at a clean
+     * path, so it passed while the property was false: the link *text* was
+     * screened and the *destination* on the same line still carried the raw
+     * override. A universal assertion over a non-adversarial input is not a
+     * test, and this is the third time that shape got through in this task.
+     */
+    const built = await buildIndex(
+      memoryBuild({ [`content/DEV/ho\u202Estile.md`]: note }),
+    );
+    const artifacts = writtenArtifacts(built);
+
+    for (const [path, text] of Object.entries(artifacts)) {
+      if (!path.endsWith(".md")) continue;
+      expect(text, path).not.toContain("\u202E");
+      expect(text, path).not.toContain("\u200B");
+      expect(text, path).not.toContain("\u0007");
+    }
+
+    const catalog = artifacts[PATHS.catalog] ?? "";
+    expect(catalog).toContain(family);
+    expect(catalog).toContain("Deploy");
+  });
+
+  it("emits destinations that round-trip and never collide", async () => {
+    /**
+     * The contract is resolution, not literal bytes, and it is a *property*
+     * rather than a case: decode any destination and get back exactly the path
+     * it came from, and no two distinct paths ever produce the same
+     * destination. macOS permits any byte but `/` and NUL in a filename, so all
+     * of these are paths a note can really live at.
+     *
+     * Written this way because a single fixture kept passing while the property
+     * was false. The first version used one path with no `%` in it — and `%` is
+     * the escape character, so `100%.md` produced a destination that throws on
+     * decode, `50%20off.md` decoded to a different file, and a path containing
+     * a literal `%E2%80%AE` collided with one containing a real U+202E. The
+     * exotic inputs worked and the ordinary one did not.
+     */
+    const names = [
+      "plain",
+      "100%",
+      "50%20off",
+      `pre%E2%80%AEencoded`,
+      `over\u202Eridden`,
+      `zero\u200Bwidth`,
+      `line\u2028separator`,
+      `para\u2029separator`,
+      `bell\u0007`,
+      `astral\u{E0067}`,
+      `joined\u{1F468}\u200D\u{1F469}`,
+      "back\\slash",
+      "a<b",
+      "a>b",
+    ];
+    const note = (title: string): string =>
+      [
+        "---",
+        "schemaVersion: 1",
+        `title: ${title}`,
+        "type: knowledge-note",
+        "created: 2026-08-04",
+        "tags: [dev]",
+        "summary: A summary.",
+        "stage: emerging",
+        "author: agent",
+        "reviewed: null",
+        "---",
+        "",
+        "Body.",
+        "",
+      ].join("\n");
+
+    const files: Record<string, string> = {};
+    for (const [index, name] of names.entries()) {
+      files[`content/DEV/${name}.md`] = note(`Note ${String(index)}`);
+    }
+
+    const built = await buildIndex(memoryBuild(files));
+    const catalog = writtenArtifacts(built)[PATHS.catalog] ?? "";
+    /**
+     * `linkTarget` emits **two** layers — percent-encoding, then Markdown
+     * backslash escaping of `\`, `<` and `>` — so reading it back needs both
+     * inverses, in that order, exactly as a CommonMark consumer does — and the
+     * extractor forbids a bare `<` inside the destination for the same reason
+     * CommonMark does, so a missing escape shows up as a link that does not
+     * parse rather than as one this test quietly tolerates. An
+     * earlier version of this test applied only `decodeURIComponent`, which
+     * meant the escaping layer had no round-trip coverage at all. That
+     * asymmetry is how the unencoded `%` survived: half of this function was
+     * pinned by a property and half by nothing.
+     */
+    const destinations = [
+      ...catalog.matchAll(/\]\(<((?:\\.|[^<>\\])*)>\)/gu),
+    ].map((match) => match[1] ?? "");
+
+    const resolve = (destination: string): string =>
+      decodeURIComponent(destination.replace(/\\(.)/gu, "$1"));
+
+    expect(destinations).toHaveLength(names.length);
+
+    /** Every destination leads back to the file it names. */
+    for (const destination of destinations) {
+      expect(() => resolve(destination), destination).not.toThrow();
+      expect(Object.keys(files)).toContain(resolve(destination));
+    }
+
+    /** And distinct notes never share one. */
+    expect(new Set(destinations).size).toBe(names.length);
+
+    /** And none of them carries a character that reorders the line it sits on. */
+    for (const destination of destinations) {
+      expect(destination, destination).not.toMatch(
+        /(?!\u200D)[\p{Cc}\p{Cf}\u2028\u2029]/u,
+      );
+    }
+  });
+
+  it("leaves a joiner in a destination alone, like everywhere else", async () => {
+    /** One exemption, applied in every place that touches vault text. */
+    const family = "\u{1F468}\u200D\u{1F469}";
+    const note = [
+      "---",
+      "schemaVersion: 1",
+      "title: A joined name",
+      "type: knowledge-note",
+      "created: 2026-08-04",
+      "tags: [dev]",
+      "summary: A summary.",
+      "stage: emerging",
+      "author: agent",
+      "reviewed: null",
+      "---",
+      "",
+      "Body.",
+      "",
+    ].join("\n");
+
+    const built = await buildIndex(
+      memoryBuild({ [`content/DEV/${family}.md`]: note }),
+    );
+    expect(writtenArtifacts(built)[PATHS.catalog] ?? "").toContain(family);
+  });
+
+  it("keeps the machine-readable artifacts faithful to the note", async () => {
+    /**
+     * The other half of the decision. `index.json` is data, not display: the
+     * retrieval layer screens a title on the way out and a consumer needs the
+     * bytes the note actually holds. Screening here would make the index
+     * disagree with the vault it indexes.
+     */
+    const note = [
+      "---",
+      "schemaVersion: 1",
+      `title: "Deploy keys\u202E"`,
+      "type: knowledge-note",
+      "created: 2026-08-04",
+      "tags: [dev]",
+      "summary: A summary.",
+      "stage: emerging",
+      "author: agent",
+      "reviewed: null",
+      "---",
+      "",
+      "Body.",
+      "",
+    ].join("\n");
+
+    const built = await buildIndex(memoryBuild({ "content/DEV/hostile.md": note }));
+    expect(writtenArtifacts(built)[PATHS.index] ?? "").toContain("\u202E");
   });
 });
