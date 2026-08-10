@@ -26,16 +26,16 @@ week of confusion.
 
 ## NOW
 
-**A7 — DOS-P3 Workflow compiler.** The spec is written and **awaiting the founder's
-approval**: `specs/2026-07-21-developer-os-workflow-compiler-design.md`. Nothing else on A7
-may start until that approval exists — `S` ends with the founder approving it, not with an
-agent judging it ready, and that is exactly where an agent working alone runs out of A7.
+**A7 — DOS-P3 Workflow compiler. `S` closed on 2026-08-10**: the founder walked §15, ruled
+every decision — six as drafted, the `scheduled` trigger reversed into a refusal — and
+approved `specs/2026-07-21-developer-os-workflow-compiler-design.md`. That document is now
+the design of record.
 
-**Its §15 decisions are all ruled**, on 2026-08-10: six accepted as drafted, and one — the
-`scheduled` trigger — reversed into a refusal, which is §15.8 and a seventh required negative
-fixture. What remains is approval of the document itself, which is a separate act from
-agreeing with its decisions and is still the founder's. When it exists, the next step is
-`superpowers:writing-plans`, not code.
+**`P` is the entry.** The next session writes
+`plans/2026-07-21-developer-os-workflow-compiler.md` with `superpowers:writing-plans`, and
+writes no code: the plan before the implementation is a Global Constraint of the program
+plan, not a preference. `BACKLOG.md` §3 lists what the plan must cover and what DOS-P3
+produces.
 
 **Nothing else is startable without the founder.** `BACKLOG.md` §1's repository defects
 closed on 2026-08-10 — NEW-9 with CI (`c6d1ef1`), then NEW-5, NEW-8 and NEW-6, each a place
@@ -44,9 +44,8 @@ defects is NEW-7 and NEW-10** — the rest of §1 is EXIT-2, EXIT-4, L1 and L2, 
 NEW-7 is not agent work: it needs ten minutes with a machine that has Obsidian, which is the
 founder's. NEW-10 is XS and was found by the review that closed NEW-6.
 
-So the queue below is genuinely what remains, and every entry at its head waits on a person:
-A7 on the spec approval above, Track B on the founder's legacy machine, Track L on the
-founder and their counsel.
+So the queue below is genuinely what remains. A7 is now agent work again; Track L still waits
+on the founder and their counsel.
 
 **Closed, and not repeated below.** Foundation on 2026-08-01, A6/DOS-P2 on 2026-08-10. Both
 plans are deleted and git history is the archive; what each proved is in its own checkpoint
@@ -73,7 +72,7 @@ is approved.
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A7 | DOS-P3 Workflow compiler — S / P / I | spec written 2026-08-10 | — | L | program plan Task 3 checkpoint: canonical workflows compile to abstract artifacts | **now** — **S awaiting founder approval**; P and I blocked on it |
+| A7 | DOS-P3 Workflow compiler — S / P / I | spec approved 2026-08-10; plan to write | — | L | program plan Task 3 checkpoint: canonical workflows compile to abstract artifacts | **now** — **S closed**; `P` is the entry, `I` blocked on it |
 | A8 ‖ | DOS-P4 Claude adapter — S / P / I | to write | A7 | L | program plan Task 4 checkpoint: a Claude-only user completes the full synthetic workflow | blocked |
 | A9 ‖ | DOS-P5 Codex adapter — S / P / I | to write | A7 | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | blocked |
 | A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | A8 **and** A9 | L | program plan Task 6 checkpoint, after independent security review | blocked |

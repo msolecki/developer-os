@@ -2,7 +2,10 @@
 
 **Date:** 2026-08-10
 
-**Status:** Draft for approval. Not approved; no code may be written against it until it is.
+**Status:** **Approved by the founder on 2026-08-10**, after a walkthrough of §15 that ruled
+every decision it makes — six as drafted, one reversed into §15.8. This is the design of
+record for DOS-P3. It is still not a licence to write code: the implementation plan comes
+first, which is a Global Constraint of the program plan.
 
 **Scope:** Program Task 3 (`DOS-P3`) — the canonical workflow contract, its validator, the
 effect vocabulary that makes declared scopes checkable, the vendor overlay boundary, and the
