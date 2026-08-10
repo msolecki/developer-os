@@ -60,7 +60,7 @@ Open work only. Program Tasks 0 and 1 are closed and are not rows here.
 | Program (umbrella) | 1 plan | Tasks 3–9 open; Tasks 0–2 closed and not rows here |
 | DOS-P3 … DOS-P7 | nothing written | 5 specs, 5 plans, 5 implementations |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | NEW-5 … NEW-9, all XS to S, none blocking |
+| Repository-level | §1 | NEW-5 … NEW-8, all XS to S, none blocking |
 | Repository infrastructure | §5 | **no CI**, and six directories a later subsystem still owes |
 | Legacy runtime | 1 exit checklist | 3 items — EXIT-1 closed 2026-08-10 as declined; one untouched since 2026-07-20, one nearly discharged, one new |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -93,39 +93,10 @@ founder's machine as user data, not as source material.
 ## 1. Open right now
 
 Everything in this section is genuinely open. Nothing here is bookkeeping, and nothing
-closed stays here — NEW-1 through NEW-4 were removed on 2026-08-10 when they closed. What a
+closed stays here — NEW-1 through NEW-4 and NEW-9 were removed on 2026-08-10 when they
+closed. What a
 closed item leaves behind is a row in §8, a clause in a spec, or a test; if it left nothing,
 it was not worth recording. Git history is the archive.
-
-### NEW-9 — the gates now have a second place to run, and it has never run
-
-- **Status:** open — **the workflow is written and has never executed** · **Owner:** the next
-  session, on the first push after this one · **Size:** XS to verify, S if it fails
-- `.github/workflows/check.yml` runs `npm run check` and `pnpm test:e2e` on `macos-15` and
-  Node 24.x, on every push and every pull request, with `contents: read` and nothing else.
-  Before it there was no `.github/` at all: the branch was on `origin` and nothing on the far
-  side had ever executed a test.
-- **It is committed, not verified.** Remote verification is `blocked_by_environment` and this
-  is exactly that case — a workflow file is a claim about a machine this session cannot reach.
-  Treat the first run as the evidence and this entry as open until then. If the runner label
-  or the corepack step is wrong it fails loudly on line one, which is the failure mode to
-  prefer.
-- **A correction to what this entry said before the work.** It required "no network egress
-  available to the job, so the *no network* claim is enforced by the environment rather than
-  only asserted by a grep." **That is not achievable on a hosted runner** — there is no egress
-  control to set. The capability scan in `tests/e2e/foundation.test.ts` remains the only
-  enforcement; CI multiplies where it runs rather than changing what it proves. Written down
-  because the requirement was stated confidently and was wrong, and a requirement nobody can
-  satisfy is worse than one nobody wrote.
-- **Two deliberate pins, both worth revisiting with a network available:**
-  `actions/checkout` and `actions/setup-node` are pinned by **tag, not commit SHA**, which is
-  the weaker supply-chain position — a tag is mutable and a third party controls it. It was
-  chosen over inventing a SHA that could not be verified offline. Second, the runner is
-  `macos-15` rather than `macos-latest`: a retired label fails loudly, where a drifting one
-  silently changes the environment under a product that pins an ICU locale on purpose.
-- **Still undecided, and the same conversation:** this repository has no `main` branch,
-  locally or on `origin` — only `feat/foundation`. Branch protection has nothing to protect
-  until that is settled.
 
 ### NEW-6 — `duplicates` groups on bytes the user is no longer shown
 
@@ -437,7 +408,7 @@ subproject; listed here so nothing is discovered late.
 | `packages/adapter-codex/`, `plugins/codex/` | DOS-P5 | missing |
 | `templates/brain/` | DOS-P2 | **created 2026-08-10** — the vault skeleton `init` installs, embedded in `apps/cli/src/commands/brain-template.ts` so a shipped binary carries it, with a test that fails if the two drift |
 | `workflows/` | DOS-P3 | missing |
-| `.github/workflows/` | nobody owed it — **that was the finding** | **created 2026-08-10** as `check.yml`, and never yet executed. The program file map never named it, so no subsystem owed it and it was nobody's job for twenty days |
+| `.github/workflows/` | nobody owed it — **that was the finding** | **created and verified green 2026-08-10** — `check.yml`, run `31377323072` on `macos-15`, both gate steps executed. The program file map never named it, so no subsystem owed it and it was nobody's job for twenty days |
 
 **`tests/repository/` gained a second rule on 2026-08-10.** Beside the self-containment
 enumerator there is now `control-bytes.test.ts`, which fails the build on a literal control

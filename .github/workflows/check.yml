@@ -1,11 +1,20 @@
 name: check
 
-# Every push and every pull request. Not a schedule and not a manual trigger:
-# the point is that no commit reaches `origin` without something other than the
-# author's laptop having run the gates. DOS-P2 shipped three defects that a
+# Pull requests, and pushes to the default branch. Not a schedule and not a
+# manual trigger: the point is that nothing lands without something other than
+# the author's laptop having run the gates. DOS-P2 shipped three defects that a
 # green local gate did not see.
+#
+# `push:` is scoped rather than bare. Unscoped, a branch with an open pull
+# request runs the whole suite twice for every commit — once for the push and
+# once for the pull request — which was measured on this workflow's own first
+# run. Nothing is lost by scoping it: a repository rule requires a pull request
+# to reach the default branch, so every commit that can land is still checked,
+# and a topic branch with no pull request open is not yet asking to land.
 on:
   push:
+    branches:
+      - feat/foundation
   pull_request:
 
 # Least privilege. This workflow reads the repository and writes nothing —

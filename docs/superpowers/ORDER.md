@@ -166,6 +166,5 @@ is not verification.
 
 Foundation and DOS-P2 are closed. Five subsystems need a spec, a plan, and an
 implementation each — **fifteen milestones, none of which exist yet**. Then cutover, then
-release. Track B is four items; Track L is two; `BACKLOG.md` §1 is five repository-level
-items, of which **NEW-9 (no CI) is the only one that gets more expensive the longer it
-waits** — the other four are XS-to-S defects with named owners and no compounding cost.
+release. Track B is three items — B1 closed as declined — and Track L is two. `BACKLOG.md`
+§1 is four repository-level defects, all XS to S, all with named owners, none compounding.
