@@ -6,7 +6,8 @@ import { buildIndex } from "../indexes/index.js";
 import type { IndexBuildRequest } from "../indexes/index.js";
 import { DEFAULT_BRAIN_CONFIG } from "../schema/config.js";
 import { canonicalizeArtifact, GENERATED_AT_SENTINEL } from "./drift.js";
-import { artifactPaths, lintVault } from "./lint.js";
+import { artifactPaths } from "../indexes/index.js";
+import { lintVault } from "./lint.js";
 import type { LintFinding } from "./lint.js";
 import {
   buildRequestForFixture,

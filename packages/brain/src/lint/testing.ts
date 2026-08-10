@@ -6,15 +6,8 @@ import type { BrainConfigV1 } from "@developer-os/core";
 
 import type { DirectoryEntry, DirectoryReader } from "../discovery/index.js";
 import type { IndexBuildRequest, IndexBuildResult } from "../indexes/index.js";
-import {
-  buildIndex,
-  renderCatalog,
-  renderVaultMap,
-  serializeGraph,
-  serializeIndex,
-} from "../indexes/index.js";
+import { buildIndex, renderArtifacts } from "../indexes/index.js";
 import { DEFAULT_BRAIN_CONFIG } from "../schema/config.js";
-import { artifactPaths } from "./lint.js";
 import type { LintRequest } from "./lint.js";
 
 const FIXTURES = fileURLToPath(
@@ -22,25 +15,15 @@ const FIXTURES = fileURLToPath(
 );
 
 /**
- * The four artifacts a clean reindex produces, built once so no test asserts
- * drift against bytes a real reindex would never have written.
- *
- * This is the *second* copy of that rendering — `lint.ts` has the first, and
- * Task 8's `BrainService.reindex` will be the third. Nothing enforces that they
- * agree, so do not read this as a promise that they do; collapsing all three
- * into one `renderArtifacts(build, config)` is Task 8's first step.
+ * The four artifacts a clean reindex produces. A thin alias now: `lint`, this
+ * helper and `BrainService.reindex` all call one `renderArtifacts`, so the
+ * claim that they agree is structural rather than a promise in a comment.
  */
 export function writtenArtifacts(
   build: IndexBuildResult,
   config: BrainConfigV1 = DEFAULT_BRAIN_CONFIG,
-): Record<string, string> {
-  const paths = artifactPaths(config);
-  return {
-    [paths.index]: serializeIndex(build.index),
-    [paths.graph]: serializeGraph(build.graph),
-    [paths.vaultMap]: renderVaultMap(build.index),
-    [paths.catalog]: renderCatalog(build.index),
-  };
+): Readonly<Record<string, string>> {
+  return renderArtifacts(build, config);
 }
 
 function readerFor(): DirectoryReader {

@@ -1,13 +1,7 @@
 import type { BrainConfigV1 } from "@developer-os/core";
 
 import { compareCanonical, PRIVATE_FOLDERS } from "../discovery/index.js";
-import {
-  buildIndex,
-  renderCatalog,
-  renderVaultMap,
-  serializeGraph,
-  serializeIndex,
-} from "../indexes/index.js";
+import { buildIndex, renderArtifacts } from "../indexes/index.js";
 import type {
   IndexBuildRequest,
   IndexBuildResult,
@@ -68,23 +62,6 @@ export interface LintRequest {
    * `new Date()` would make findings depend on the day the suite ran.
    */
   readonly today: string;
-}
-
-export interface ArtifactPaths {
-  readonly index: string;
-  readonly graph: string;
-  readonly vaultMap: string;
-  readonly catalog: string;
-}
-
-export function artifactPaths(config: BrainConfigV1): ArtifactPaths {
-  const dir = `${config.contentRoot.normalize("NFC")}/${config.indexesDir.normalize("NFC")}`;
-  return {
-    index: `${dir}/index.json`,
-    graph: `${dir}/graph.json`,
-    vaultMap: `${dir}/vault-map.md`,
-    catalog: `${dir}/catalog.md`,
-  };
 }
 
 /**
@@ -627,13 +604,8 @@ async function driftFindings(
   request: LintRequest,
   build: IndexBuildResult,
 ): Promise<readonly LintFinding[]> {
-  const paths = artifactPaths(request.build.config);
-  const expected: Record<string, string> = {
-    [paths.index]: serializeIndex(build.index),
-    [paths.graph]: serializeGraph(build.graph),
-    [paths.vaultMap]: renderVaultMap(build.index),
-    [paths.catalog]: renderCatalog(build.index),
-  };
+  /** One renderer, shared with the test helper and with `BrainService`. */
+  const expected = renderArtifacts(build, request.build.config);
 
   const findings: LintFinding[] = [];
   for (const [path, fresh] of Object.entries(expected)) {
@@ -678,8 +650,22 @@ async function driftFindings(
 
 /* ----------------------------------------------------------------------- main */
 
-export async function lintVault(request: LintRequest): Promise<LintResult> {
-  const build = await buildIndex(request.build);
+/**
+ * Lints a build the caller already has.
+ *
+ * `lintVault` is the convenience wrapper, and the split exists because
+ * `BrainService.status` needs both the findings and the build: with only the
+ * wrapper it walked and parsed the whole vault twice for one command.
+ *
+ * The caller owes one thing the wrapper used to guarantee: `build` must have
+ * been produced from `request.build`. Drift takes artifact paths from
+ * `request.build.config` and content from `build`, so two different configs
+ * would compare one vault's bytes against another's paths.
+ */
+export async function lintBuild(
+  build: IndexBuildResult,
+  request: LintRequest,
+): Promise<LintResult> {
   const { config } = request.build;
   const contentRoot = config.contentRoot.normalize("NFC");
 
@@ -703,4 +689,8 @@ export async function lintVault(request: LintRequest): Promise<LintResult> {
     warnCount: findings.filter((f) => f.severity === "warn").length,
     infoCount: findings.filter((f) => f.severity === "info").length,
   };
+}
+
+export async function lintVault(request: LintRequest): Promise<LintResult> {
+  return lintBuild(await buildIndex(request.build), request);
 }

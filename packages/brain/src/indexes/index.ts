@@ -1,3 +1,5 @@
+export { artifactPaths, renderArtifacts } from "./artifacts.js";
+export type { ArtifactPaths } from "./artifacts.js";
 export {
   buildIndex,
   extractLinks,

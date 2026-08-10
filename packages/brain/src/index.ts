@@ -12,8 +12,10 @@ export type {
   DiscoveryResult,
 } from "./discovery/index.js";
 export {
+  artifactPaths,
   buildIndex,
   extractLinks,
+  renderArtifacts,
   frontmatterExceeds,
   MAX_FRONTMATTER_CHARS,
   renderCatalog,
@@ -25,6 +27,7 @@ export {
 } from "./indexes/index.js";
 export type {
   AmbiguousLink,
+  ArtifactPaths,
   GraphDocumentV1,
   GraphEdge,
   GraphNode,
@@ -40,14 +43,12 @@ export type {
   UnresolvedLink,
 } from "./indexes/index.js";
 export {
-  artifactPaths,
   canonicalizeArtifact,
   firstDifferingLine,
   GENERATED_AT_SENTINEL,
   lintVault,
 } from "./lint/index.js";
 export type {
-  ArtifactPaths,
   LintClass,
   LintFinding,
   LintRequest,
@@ -65,7 +66,23 @@ export type {
   RetrievalQuery,
   RetrievalResult,
 } from "./retrieval/index.js";
+export { BRAIN_MIGRATIONS } from "./migrations/index.js";
+export type { BrainMigration, VaultSnapshot } from "./migrations/index.js";
+export { CAPTURE_STATUSES } from "./schema/capture.js";
+export type {
+  CaptureEnvelopeV1,
+  CaptureRedactionFinding,
+  CaptureStatus,
+} from "./schema/capture.js";
 export { DEFAULT_BRAIN_CONFIG, resolveBrainConfig } from "./schema/config.js";
+export { BrainService } from "./service.js";
+export type {
+  BrainArtifacts,
+  BrainIndexUnavailable,
+  BrainSearchOutcome,
+  BrainServiceDependencies,
+  BrainStatusReportV1,
+} from "./service.js";
 export {
   MAX_SUMMARY_LENGTH,
   NOTE_AUTHORS,
