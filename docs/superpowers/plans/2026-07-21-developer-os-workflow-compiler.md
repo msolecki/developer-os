@@ -1125,7 +1125,7 @@ git commit -m "feat(workflow-schema): require declared and derived scopes to be 
   `interface WorkflowValidationResult { readonly findings: readonly WorkflowFinding[]; readonly errorCount: number; readonly warnCount: number; readonly infoCount: number; readonly contract: WorkflowContractV1 | null }`
   `validateWorkflow(file: string, value: unknown): WorkflowValidationResult`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `packages/workflow-schema/src/validate.test.ts`:
 
@@ -1219,12 +1219,12 @@ describe("validateWorkflow", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `npx vitest run packages/workflow-schema/src/validate.test.ts`
 Expected: FAIL — `Cannot find module './validate.js'`.
 
-- [ ] **Step 3: Implement validation**
+- [x] **Step 3: Implement validation**
 
 `packages/workflow-schema/src/validate.ts`:
 
@@ -1362,12 +1362,12 @@ export type {
 } from "./validate.js";
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx vitest run packages/workflow-schema/src/validate.test.ts`
 Expected: PASS, 6 tests.
 
-- [ ] **Step 5: Run the gates, fresh-context review, then commit**
+- [x] **Step 5: Run the gates, fresh-context review, then commit**
 
 ```bash
 npm run check

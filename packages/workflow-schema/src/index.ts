@@ -28,5 +28,11 @@ export { compareScopes, deriveScopes } from "./derive.js";
 export type { DerivedScopes, ScopeMismatch } from "./derive.js";
 export { parseWorkflowYaml, WORKFLOW_PARSE_OPTIONS } from "./parse.js";
 export type { ParseOutcome, ParseRefusal } from "./parse.js";
+export { validateWorkflow } from "./validate.js";
+export type {
+  WorkflowFinding,
+  WorkflowSeverity,
+  WorkflowValidationResult,
+} from "./validate.js";
 export { EFFECT_VOCABULARY, isKnownVerb, lookupVerb } from "./vocabulary.js";
 export type { EffectFootprint } from "./vocabulary.js";
