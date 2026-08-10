@@ -189,7 +189,7 @@ names it as the design of record; its plan is deleted, recoverable at `81e7e7d`.
 
 ### DOS-P3 — Workflow compiler
 
-- **Spec:** `specs/2026-07-21-developer-os-workflow-compiler-design.md` — **written 2026-08-10, awaiting founder approval.** No code until it is approved; that is a Global Constraint, not a preference
+- **Spec:** `specs/2026-07-21-developer-os-workflow-compiler-design.md` — **approved by the founder 2026-08-10.** Still no code: the plan below comes first, which is a Global Constraint, not a preference
 - **Plan:** `plans/2026-07-21-developer-os-workflow-compiler.md` — missing
 - **Program task:** 3 · **Complexity:** L · **Blocked by:** nothing
 - **Parallel with:** DOS-P2
