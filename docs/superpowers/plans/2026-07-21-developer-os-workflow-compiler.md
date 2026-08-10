@@ -35,6 +35,40 @@ change are far apart, and a reader who meets only one of them would not know a d
    `tests/contracts/` is invisible to `npm test` — the repository's own "a gate that can pass by
    scanning nothing is not a gate" rule. Task 12 Step 1 noticed half of this ten tasks too late.
 
+**A fourth correction, found by Task 2's own review rather than before it.** `parse.ts` as
+drafted was not a total function and leaked what it parsed. Three defects, one fix:
+
+- `document.toJS()` was unguarded. `a: *nope` throws a `ReferenceError` whose message carries
+  the author's anchor name **verbatim** — unscreened, uncapped, past every redaction seam — and
+  an alias bomb throws from inside the library. A caller validating six workflows aborted on the
+  first hostile one instead of reporting six findings, which is the invariant Task 8's loader is
+  built on.
+- A self-referential alias (`a: &a [*a]`) returned `{ok: true}` with a **circular** value, and a
+  repeated alias returned two branches that were the same object.
+- `documents.length !== 1` reported **zero** documents as `multiple-documents`, so a zero-byte
+  file was told to look for a second document that does not exist.
+
+The fix refuses **any anchor and any alias**, the same any-of-a-kind policy already applied to
+tags, which removes all three at their source rather than three times downstream; adds
+`"anchor-or-alias"` to `ParseRefusal`; changes the document count test to `> 1` so zero falls
+through to `malformed`; and keeps a `try`/`catch` around `toJS({ maxAliasCount: 100 })` as a
+backstop whose caught error is **discarded**, never inspected. Task 8's `PARSE_MESSAGE` gains a
+line for the new reason, and its type tightens from `Record<string, string>` to
+`Record<ParseRefusal, string>` so the next added reason is a compile error rather than a silent
+fallback.
+
+**A fifth correction, from the same task's second review.** The `try` was around the wrong call.
+`parseAllDocuments` composes recursively and `visit` walks recursively, so a **two-kilobyte**
+file — `a: ` and a thousand nested brackets — threw `RangeError: Maximum call stack size
+exceeded` from the function's *first statement*, outside a guard that protected a `toJS` the
+anchor refusal had already made safe. The whole body now sits inside the `try`. Two related
+notes the review established rather than assumed: the anchor and alias walk is **complete** —
+34 hand-built shapes and 60,000 fuzzed inputs found no escape, and `node.anchor` is assigned in
+exactly three places in `yaml@2.8.1`, all of them nodes `visit` reaches — and
+`refuseHostileNodes` now accumulates into an array instead of a `let`, because TypeScript does
+not model an assignment inside a callback and would otherwise infer the function returns `null`
+and every refusal branch is dead, reporting nothing.
+
 ## Global Constraints
 
 - **Reviewer ≠ author.** Every task ends with a fresh-context review by an agent that did not write the code, before its commit is considered done.
@@ -160,7 +194,7 @@ git commit -m "refactor(security): move the display screen where two packages ca
   and `type ParseRefusal = "multiple-documents" | "explicit-tag" | "malformed"`.
   Also `WORKFLOW_PARSE_OPTIONS`, frozen.
 
-- [ ] **Step 1: Create the workspace manifest**
+- [x] **Step 1: Create the workspace manifest**
 
 `packages/workflow-schema/package.json`:
 
@@ -189,7 +223,7 @@ git commit -m "refactor(security): move the display screen where two packages ca
 }
 ```
 
-- [ ] **Step 2: Create the tsconfig and wire the references**
+- [x] **Step 2: Create the tsconfig and wire the references** — plus `packages/workflow-schema/vitest.config.ts` and a line in the root `vitest.config.ts` `projects` array, per correction 3 above. Without them nothing runs this package's tests.
 
 `packages/workflow-schema/tsconfig.json`:
 
@@ -210,9 +244,9 @@ git commit -m "refactor(security): move the display screen where two packages ca
 
 Add `- packages/workflow-schema` to `pnpm-workspace.yaml` under `packages:`, after `packages/brain`. Add `{ "path": "./packages/workflow-schema" }` to the root `tsconfig.json` `references` array, after `./packages/brain`.
 
-- [ ] **Step 3: Write the failing test**
+- [x] **Step 3: Write the failing test**
 
-`packages/workflow-schema/src/parse.test.ts`:
+`packages/workflow-schema/src/parse.test.ts` — as below, plus the five cases the review added:
 
 ```typescript
 import { describe, expect, it } from "vitest";
@@ -261,12 +295,12 @@ describe("parseWorkflowYaml", () => {
 });
 ```
 
-- [ ] **Step 4: Run it to make sure it fails**
+- [x] **Step 4: Run it to make sure it fails** — FAIL, `Cannot find module './parse.js'`.
 
 Run: `npx vitest run packages/workflow-schema/src/parse.test.ts`
 Expected: FAIL — `Cannot find module './parse.js'`.
 
-- [ ] **Step 5: Implement the parser**
+- [x] **Step 5: Implement the parser** — as below, then corrected per the fourth correction above; the shipped module is the corrected one.
 
 `packages/workflow-schema/src/parse.ts`:
 
@@ -340,17 +374,22 @@ export { parseWorkflowYaml, WORKFLOW_PARSE_OPTIONS } from "./parse.js";
 export type { ParseOutcome, ParseRefusal } from "./parse.js";
 ```
 
-- [ ] **Step 6: Run the test to verify it passes**
+- [x] **Step 6: Run the test to verify it passes** — PASS, 10 tests (5 as planned, 5 from the review).
 
 Run: `npx vitest run packages/workflow-schema/src/parse.test.ts`
 Expected: PASS, 5 tests.
 
-- [ ] **Step 7: Install and run the gates**
+- [x] **Step 7: Install and run the gates** — `pnpm install` approved by the founder; the lockfile change is additive only, one `importers:` entry, no resolution moved. `npm run check` PASS, 39 files / 831 tests.
 
 Run: `pnpm install` — ask before running it, per the standing rule that installs change dependencies. Then `npm run check`.
 Expected: PASS. If `tests/e2e/foundation.test.ts` fails with "contains no compiled modules" for `packages/workflow-schema/dist`, that is the non-empty-per-scope assertion working: the package must build before that scan can cover it, and `pnpm build` in `npm run check` runs first.
 
-- [ ] **Step 8: Fresh-context review, then commit**
+- [x] **Step 8: Fresh-context review, then commit**
+
+The review found the three parser defects recorded as the fourth correction above, and
+confirmed the nested-tag traversal was already correct — that one was missing coverage, not a
+missing check. The commit therefore also carries `packages/workflow-schema/vitest.config.ts`
+and the root `vitest.config.ts` line.
 
 ```bash
 git add packages/workflow-schema/package.json packages/workflow-schema/tsconfig.json \
@@ -1749,11 +1788,20 @@ export interface WorkflowSource {
   readonly text: string;
 }
 
-const PARSE_MESSAGE: Readonly<Record<string, string>> = {
+/**
+ * `Record<ParseRefusal, …>`, never `Record<string, …>`. The loose type accepts
+ * any subset, so adding a refusal reason silently ships its author the fallback
+ * message instead of failing the build. That already happened once: Task 2's
+ * review added `anchor-or-alias`, which is the refusal a human is most likely to
+ * trip on innocently and least likely to guess from "could not be parsed".
+ */
+const PARSE_MESSAGE: Readonly<Record<ParseRefusal, string>> = {
   "multiple-documents":
     "this file holds more than one YAML document; everything after the first would be silently unread",
   "explicit-tag":
     "an explicitly tagged YAML node is refused, because a tag resolves to a type a string schema cannot check",
+  "anchor-or-alias":
+    "a YAML anchor or alias is refused, because it makes the bytes and the parsed value disagree; write the value out in full",
   malformed: "this file is not well-formed YAML, or it repeats a key",
 };
 

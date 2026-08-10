@@ -14,6 +14,9 @@
       "path": "./packages/brain"
     },
     {
+      "path": "./packages/workflow-schema"
+    },
+    {
       "path": "./apps/cli"
     },
     {

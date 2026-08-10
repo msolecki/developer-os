@@ -78,6 +78,21 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/workflow-schema:
+    dependencies:
+      '@developer-os/core':
+        specifier: workspace:*
+        version: link:../core
+      '@developer-os/security':
+        specifier: workspace:*
+        version: link:../security
+      yaml:
+        specifier: 2.8.1
+        version: 2.8.1
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   tests:
     dependencies:
       '@developer-os/cli':

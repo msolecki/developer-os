@@ -1,0 +1,22 @@
+{
+  "name": "@developer-os/workflow-schema",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@developer-os/core": "workspace:*",
+    "@developer-os/security": "workspace:*",
+    "yaml": "2.8.1",
+    "zod": "4.4.3"
+  }
+}
