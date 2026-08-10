@@ -89,8 +89,8 @@ is declared complete. Settle this before A11 finishes, not at A12.
 
 ## Track B — legacy exit
 
-Runs in parallel with all of Track A. **Blocks only A12.** Closing all four ends work on the
-founder's legacy runtime permanently.
+Runs in parallel with all of Track A. **Blocks only A12.** Closing the remaining three ends
+work on the founder's legacy runtime permanently; B1 is closed as declined.
 
 **Re-verified 2026-08-08 by read-only inspection**, which is one of the two sanctioned
 reasons to look at those trees at all (`BACKLOG.md` §6). Two items moved a long way; one did
@@ -98,7 +98,7 @@ not move at all; one is new.
 
 | # | Entry | Owner | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| B1 | EXIT-1 — rotate historical credential candidates | **Founder** | — | M | every candidate has a recorded provider-side verdict; no value written anywhere | **start now** — open since 2026-07-20 |
+| B1 | EXIT-1 — rotate historical credential candidates | **Founder** | — | M | — | **closed 2026-08-10 — declined by the founder**, not deferred. `BACKLOG.md` §6 carries the decision. Do not reopen it from a backlog; it is a conversation |
 | B2 | EXIT-2 — fix the non-npm commit-gate contradiction | Agent + Founder | — | S | a non-npm repository with a declared suite can be committed; npm projects unweakened | **start now** — unchanged since 2026-07-20 |
 | B3 | EXIT-3 — land or durably preserve the remaining untracked entries | Agent + Founder | B2 | **S** | both trees hold no untracked work of value, by commit or by an archive the founder accepted | parallel — mostly discharged |
 | B4 | EXIT-4 — stop or fix the failing legacy weekly job | Agent + Founder | — | S | the job succeeds, or is disabled with the founder's agreement and its backlog drained | **new 2026-08-08** |

@@ -62,12 +62,24 @@ Open work only. Program Tasks 0 and 1 are closed and are not rows here.
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
 | Repository-level | §1 | NEW-5 … NEW-9, all XS to S, none blocking |
 | Repository infrastructure | §5 | **no CI**, and six directories a later subsystem still owes |
-| Legacy runtime | 1 exit checklist | 4 items: two untouched since 2026-07-20, one nearly discharged, one new |
+| Legacy runtime | 1 exit checklist | 3 items — EXIT-1 closed 2026-08-10 as declined; one untouched since 2026-07-20, one nearly discharged, one new |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
 
 **Foundation and DOS-P2 are closed.** Neither is a row above. What each left behind is
 `docs/architecture/foundation.md` and `docs/architecture/brain.md`, plus §2 here for
 Foundation's open questions; their plans are deleted and git history is the archive.
+
+**This repository is public, deliberately, as of 2026-08-10.** It was pushed to
+`github.com/msolecki/developer-os` and the founder confirmed the visibility after being shown
+what §6 discloses. Two consequences worth knowing before writing anything here:
+
+- **`docs/superpowers/plans/legacy-runtime/` is published**, despite its own header calling it
+  a publication-excluded path. That header predates the repository having a remote and is now
+  wrong; it is left in place because rewriting it would not un-publish anything.
+- **The self-containment lint does not guard this.** It allowlists that directory by design —
+  it exists to stop an agent *reading* the founder's machine, not to stop the repository
+  *publishing* what was already written down. Nothing was bypassed; there was never a check
+  here. If publication control is ever wanted, it is a new rule, not a fix to that one.
 
 **Self-containment.** No Developer OS task reads the founder's legacy runtime. Program
 Task 0 froze everything the build needs into `docs/migration/`, and since 2026-08-01
@@ -184,11 +196,10 @@ it was not worth recording. Git history is the archive.
   a note — for a note it is a file line, and for an artifact it is a line in a file the user
   did not write. Settle it before Task 9 renders findings, not after.
 
-### EXIT-1, EXIT-2, EXIT-4 — the legacy runtime
+### EXIT-2, EXIT-4 — the legacy runtime
 
-Three of the four legacy items are open and two have not moved since 2026-07-20. Detail is
-in §6; `ORDER.md` Track B carries the sequence. **EXIT-1 is the oldest open item in this
-repository and the only one whose consequence exists whether or not this product ships.**
+Two of the four legacy items are open and one has not moved since 2026-07-20. Detail is in
+§6; `ORDER.md` Track B carries the sequence. **EXIT-1 is closed as declined** — see §6.
 
 ### L1, L2 — outside this environment
 
@@ -458,7 +469,7 @@ runtime permanently.
 
 | ID | Pri | Item | Owner | Status |
 |---|:---:|---|---|---|
-| EXIT-1 | P0 | Rotate historical credential candidates | **Founder** | open — console work, touches no repository; pending since 2026-07-20 |
+| EXIT-1 | P0 | Rotate historical credential candidates | **Founder** | **closed 2026-08-10 as declined by the founder.** Not done, not deferred — decided against. See below |
 | EXIT-2 | P0 | Resolve the non-npm commit-gate contradiction | Agent + Founder | open — one rules file, unchanged since 2026-07-20 |
 | EXIT-3 | P0 | Land or durably preserve the remaining untracked entries | Agent + Founder | **mostly discharged** — see below |
 | EXIT-4 | P0 | Stop or fix the failing legacy weekly job | Agent + Founder | **open, new 2026-08-08** |
@@ -487,6 +498,29 @@ up, and the legacy plan's own definition of done — "no further change is plann
 scheduled, or in progress on either repository" — is false while a scheduled job is still
 firing and failing. Either fix it or disable it with the founder's agreement and drain the
 backlog; leaving a job that fails silently for eleven days is neither.
+
+**EXIT-1 was declined by the founder on 2026-08-10, and this paragraph exists so that is a
+decision on the record rather than an item that quietly stopped being listed.**
+
+It was raised in the same conversation that established this repository is **public**, and
+that §6 therefore describes the unrotated candidate set — four candidates, matches across six
+repositories, no provider-side verdict, and two scanner gaps making six a floor rather than a
+total — to anyone who reads it. The founder's answer to both questions was to leave the
+repository public and not to rotate.
+
+That is theirs to decide and it is not revisited here. What is written down is only what a
+later reader needs in order not to re-open it by accident:
+
+- **No credential value is written anywhere in this repository.** That was true before the
+  decision and is what bounds it: what is public is the *status* of the candidates, not the
+  candidates.
+- **The obligation does not expire.** The original entry's reasoning — that this is the one
+  item whose consequence exists whether or not this product ever ships — was not shown to be
+  wrong; it was weighed and set aside.
+- **Nothing downstream depends on it.** EXIT-1 gated nothing: `ORDER.md` A12 needs B2, B3 and
+  B4, and B1 was always console work touching no repository. Closing it changes no sequence.
+- **Do not silently reopen it.** If a future session believes it should be rotated, that is a
+  conversation with the founder, not a task to pick up from a backlog.
 
 **EXIT-1's candidate set is wider than this file used to say.** The 2026-07-19 triage
 recorded four rotation candidates and its verdict still stands unchanged. A second scan on
