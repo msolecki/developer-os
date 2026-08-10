@@ -21,7 +21,7 @@ agent adapter present and no network call.
 | `src/lint/` | the six classes of spec §7, and canonical-form drift |
 | `src/retrieval/` | the two-stage funnel and its integer scorer |
 | `src/migrations/` | `BrainMigration` and a deliberately empty registry |
-| `src/redact.ts` | the one screen and the one bound applied to any vault text this package prints |
+| `src/redact.ts` | a re-export of the screen, which moved to `@developer-os/security` in DOS-P3 Task 1 once a second package needed it. Delete it when the last brain call site imports `security` directly |
 | `src/service.ts` | `BrainService`, the only module the CLI imports |
 
 ## 2. What it cannot do, on purpose
@@ -68,9 +68,12 @@ lifecycle, and a test asserts this module's runtime surface stays one constant.
 4. **The fixtures are never generated from, compared against, or refreshed from a real
    vault.** If one misses a shape the product must support, extend it and say so in the
    commit. `tests/fixtures/brain/README.md` carries the rule.
-5. **Every screen of vault text is one function, in `redact.ts`.** It began as three copies —
+5. **Every screen of vault text is one function**, now `packages/security/src/screen.ts` and
+   reached here through the `redact.ts` re-export. It began as three copies —
    lint's finding message, search's title and summary, and the parser's echoed-back key —
-   and the third copy is what merged them. A screen that exists three times is a screen that
+   and the third copy is what merged them; the fourth site, in `workflow-schema`, is what
+   moved it out of this package, since the two are peers and neither may depend on the
+   other. A screen that exists three times is a screen that
    will be corrected twice. `\p{Cf}` is the half most easily left out and the half that
    matters: it carries U+202E, which reorders a printed line, and `\s` does not match it.
 6. **Control characters are written as escapes, never as bytes.** This repository shipped a

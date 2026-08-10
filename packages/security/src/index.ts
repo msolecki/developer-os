@@ -17,6 +17,7 @@ export type {
   ProcessResult,
   ProcessRunner,
 } from "./process.js";
+export { capGraphemes, screenAndCap, screenControlCharacters } from "./screen.js";
 
 export interface SecurityPolicy {
   assertReadable(path: string): Promise<void>;

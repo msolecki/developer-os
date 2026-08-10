@@ -10,6 +10,31 @@
 
 **Design of record:** `docs/superpowers/specs/2026-07-21-developer-os-workflow-compiler-design.md`, approved 2026-08-10. Where this plan and that spec disagree, the spec wins and this plan is wrong — say so rather than implementing around it.
 
+**Corrections ruled by the founder on 2026-08-10, before Task 1 began.** Three of this plan's
+code blocks were checked against the repository and found internally inconsistent — Task 6 as
+written could not satisfy Task 10's tests. The rulings are recorded here because the tasks they
+change are far apart, and a reader who meets only one of them would not know a decision was made:
+
+1. **Task 6 — the capability check moves out of the unimplemented-verb branch.** As drafted,
+   `capability-undeclared` sat behind `if (footprint === undefined || footprint.implemented)
+   continue;`, so it could never fire for an implemented verb. Task 10's `missing-capability`
+   fixture uses `cli.run`, which *is* implemented, and would therefore have asserted a rule that
+   is unreachable. Whether a verb needs a capability has nothing to do with whether its handler
+   exists yet.
+2. **Task 6 — redaction caps fragments, not sentences.** `value(message)` capped the whole
+   message at 64 graphemes. The `scheduled` refusal is 152 characters with `DOS-P7` at index 85,
+   so Task 10's `toContain("DOS-P7")` would have read
+   ``triggers.0: `scheduled` is not a v1 trigger: the scheduler is la``. Interpolated
+   author-controlled fragments are capped at 64; the assembled message carries a 512-grapheme
+   backstop; every message is still screened for control characters.
+3. **Tasks 2 and 9 — the test wiring the plan never created.** Task 2 also writes
+   `packages/workflow-schema/vitest.config.ts` and registers it in the root `vitest.config.ts`
+   `projects` array; Task 9 adds `contracts/**/*.test.ts` to `tests/vitest.config.ts`, the
+   `contracts` tree to `tests/tsconfig.json`, and `@developer-os/workflow-schema` to
+   `tests/package.json`. Without these nothing runs this package's tests at all, and
+   `tests/contracts/` is invisible to `npm test` — the repository's own "a gate that can pass by
+   scanning nothing is not a gate" rule. Task 12 Step 1 noticed half of this ten tasks too late.
+
 ## Global Constraints
 
 - **Reviewer ≠ author.** Every task ends with a fresh-context review by an agent that did not write the code, before its commit is considered done.
@@ -62,16 +87,16 @@
 - Consumes: nothing.
 - Produces: `screenControlCharacters(value: string): string`, `capGraphemes(value: string, maxGraphemes: number): string`, `screenAndCap(value: string, maxGraphemes: number): string`, all exported from `@developer-os/security`.
 
-- [ ] **Step 1: Copy the module and its tests, unchanged, into `security`**
+- [x] **Step 1: Copy the module and its tests, unchanged, into `security`**
 
 `git mv packages/brain/src/redact.ts packages/security/src/screen.ts` and `git mv packages/brain/src/redact.test.ts packages/security/src/screen.test.ts`. Change the import in the test file from `./redact.js` to `./screen.js`. Change nothing else — the behaviour is already reviewed and pinned; a move that also edits is two changes a reviewer has to separate.
 
-- [ ] **Step 2: Run the moved tests to prove they still pass**
+- [x] **Step 2: Run the moved tests to prove they still pass** — PASS, 13 tests, the same count as before the move.
 
 Run: `npx vitest run packages/security/src/screen.test.ts`
 Expected: PASS, same case count as before the move.
 
-- [ ] **Step 3: Export it from `security`**
+- [x] **Step 3: Export it from `security`**
 
 ```typescript
 export { capGraphemes, screenAndCap, screenControlCharacters } from "./screen.js";
@@ -79,7 +104,7 @@ export { capGraphemes, screenAndCap, screenControlCharacters } from "./screen.js
 
 Append to `packages/security/src/index.ts`, keeping the file's existing alphabetical grouping.
 
-- [ ] **Step 4: Re-point `brain` at the shared copy**
+- [x] **Step 4: Re-point `brain` at the shared copy**
 
 Replace `packages/brain/src/redact.ts` with a re-export, so no brain call site changes in this task:
 
@@ -99,12 +124,18 @@ export {
 } from "@developer-os/security";
 ```
 
-- [ ] **Step 5: Run the gates**
+- [x] **Step 5: Run the gates** — PASS, 38 files / 821 tests.
 
 Run: `npm run check`
 Expected: PASS. `packages/brain` already depends on `@developer-os/security` (see its `package.json`), so no manifest change is needed.
 
-- [ ] **Step 6: Fresh-context review, then commit**
+- [x] **Step 6: Fresh-context review, then commit**
+
+The reviewer confirmed the move was byte-identical and that no brain call site changed, and
+raised one accepted finding: `docs/architecture/brain.md` §1 and §2.5 and
+`docs/architecture/foundation.md` §1 described `redact.ts` as the screen's home, which the
+move made false. All three lines were corrected in this task's commit, which is why its file
+list is longer than the one below.
 
 Dispatch a reviewer that did not write this task. Then:
 
