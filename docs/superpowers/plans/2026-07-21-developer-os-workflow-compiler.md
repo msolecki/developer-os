@@ -892,7 +892,7 @@ git commit -m "feat(workflow-schema): give every verb a footprint a machine can 
   and `compareScopes(declared: {read: readonly string[]; write: readonly string[]}, derived: DerivedScopes): ScopeMismatch[]` where
   `interface ScopeMismatch { readonly kind: "under-declared" | "over-declared"; readonly axis: "read" | "write"; readonly glob: string }`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `packages/workflow-schema/src/derive.test.ts`:
 
@@ -999,12 +999,12 @@ describe("compareScopes", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `npx vitest run packages/workflow-schema/src/derive.test.ts`
 Expected: FAIL — `Cannot find module './derive.js'`.
 
-- [ ] **Step 3: Implement derivation**
+- [x] **Step 3: Implement derivation**
 
 `packages/workflow-schema/src/derive.ts`:
 
@@ -1096,12 +1096,12 @@ export { compareScopes, deriveScopes } from "./derive.js";
 export type { DerivedScopes, ScopeMismatch } from "./derive.js";
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx vitest run packages/workflow-schema/src/derive.test.ts`
 Expected: PASS, 6 tests.
 
-- [ ] **Step 5: Run the gates, fresh-context review, then commit**
+- [x] **Step 5: Run the gates, fresh-context review, then commit**
 
 ```bash
 npm run check
