@@ -157,28 +157,16 @@ describe("index-drift", () => {
     const result = await lintVault(
       lintRequestFor(written, TODAY, buildRequestForFixture("legacy-shape", BUILD_CLOCK)),
     );
+    /**
+     * The number goes in the field, and the message says nothing about a line.
+     * `frontmatter` findings have always used the structured field; drift wrote
+     * "at line 6" into `message` and left `line` null, so a `--json` consumer
+     * had to parse English to recover a number the type already declares.
+     */
     const finding = of(result, "index-drift")[0];
     expect(finding?.line).toBe(6);
+    expect(finding?.message).not.toMatch(/\bline\b/iu);
     expect(finding?.message).not.toContain("Vault MAP");
-  });
-
-  it("puts the line in the field rather than in the prose", async () => {
-    /**
-     * One type, one concept, one convention. `frontmatter` findings have always
-     * used the structured field; drift wrote "at line 6" into `message` and left
-     * `line` null, so a `--json` consumer had to parse English to recover a
-     * number the type already has a field for.
-     */
-    const built = await buildIndex(buildRequestForFixture("legacy-shape", BUILD_CLOCK));
-    const written = { ...writtenArtifacts(built) };
-    written[PATHS.vaultMap] = (written[PATHS.vaultMap] ?? "").replace(
-      "# Vault map",
-      "# Vault MAP",
-    );
-    const result = await lintVault(
-      lintRequestFor(written, TODAY, buildRequestForFixture("legacy-shape", BUILD_CLOCK)),
-    );
-    expect(of(result, "index-drift")[0]?.message).not.toMatch(/\bline\b/iu);
   });
 
   it("reports a missing artifact as an error", async () => {
@@ -480,6 +468,26 @@ describe("duplicates", () => {
     expect(catalog).not.toContain("\u200B");
 
     const result = await lintMemory(files);
+    expect(of(result, "duplicates").filter((f) => f.key === "title")).toHaveLength(2);
+  });
+
+  it("calls two titles that both screen to nothing a duplicate, and means it", async () => {
+    /**
+     * The edge the screened key creates, pinned rather than left to be
+     * discovered: two titles made only of invisible characters key to the same
+     * empty string and are reported as duplicates of each other, even though
+     * they share no byte. That is the rule working, not failing — `catalog.md`
+     * renders both rows with empty link text, so they *are* the same row to
+     * everyone who opens the vault, which is the form this class is defined
+     * over.
+     *
+     * `note.ts` accepts such a title because `String#trim` removes neither
+     * U+200B nor U+00AD, which is a separate gap and is recorded as NEW-10.
+     */
+    const result = await lintMemory({
+      "content/DEV/a.md": note({ title: "\u200B" }, "one\n"),
+      "content/DEV/b.md": note({ title: "\u00AD" }, "two\n"),
+    });
     expect(of(result, "duplicates").filter((f) => f.key === "title")).toHaveLength(2);
   });
 
