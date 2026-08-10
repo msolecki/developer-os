@@ -134,6 +134,22 @@ describe("applyOverlay", () => {
     ]);
   });
 
+  it("screens and bounds a step key it names in a refusal", () => {
+    /**
+     * An overlay's step keys are unconstrained `z.string()`, unlike a contract's
+     * step ids — so the key is author-controlled text, and it was reaching the
+     * reason raw while every other message path in this package is screened.
+     */
+    const outcome = applyOverlay(base, {
+      extends: "brain-search@1.2.0",
+      steps: { [`ghost\u202E${"L".repeat(300)}`]: { prose: "x" } },
+    });
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.reason).not.toContain("\u202E");
+    expect(outcome.reason.length).toBeLessThan(160);
+  });
+
   it("returns the contract unchanged when the overlay patches nothing", () => {
     const outcome = applyOverlay(base, {
       extends: "brain-search@1.2.0",

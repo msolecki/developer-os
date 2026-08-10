@@ -1,7 +1,22 @@
+import { screenAndCap } from "@developer-os/security";
 import { z } from "zod";
 
 import type { WorkflowContractV1 } from "./contract.js";
 import { WORKFLOW_TRIGGERS } from "./contract.js";
+
+/**
+ * An overlay's step *keys* are `z.string()` with no slug constraint — unlike
+ * `WorkflowStep.id`, which is regex-bound — so a key is arbitrary
+ * author-controlled text that was being interpolated into a refusal reason raw,
+ * uncapped and unscreened, while every other message path in this package goes
+ * through the screen. Found by review after three sibling modules had already
+ * been corrected for the same class.
+ */
+const MAX_FRAGMENT = 64;
+
+function fragment(text: string): string {
+  return screenAndCap(text, MAX_FRAGMENT);
+}
 
 const EXTENDS = /^([a-z][a-z0-9-]*)@(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u;
 
@@ -69,12 +84,15 @@ export function applyOverlay(
   for (const stepId of patches.keys()) {
     const step = byId.get(stepId);
     if (step === undefined) {
-      return { ok: false, reason: `overlay patches step \`${stepId}\`, which does not exist` };
+      return {
+        ok: false,
+        reason: `overlay patches step \`${fragment(stepId)}\`, which does not exist`,
+      };
     }
     if (step.prose === undefined) {
       return {
         ok: false,
-        reason: `overlay patches step \`${stepId}\`, which is an effect step; an overlay is presentation only`,
+        reason: `overlay patches step \`${fragment(stepId)}\`, which is an effect step; an overlay is presentation only`,
       };
     }
   }

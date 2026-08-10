@@ -5,11 +5,26 @@ import { z } from "zod";
 export const WORKFLOW_TRIGGERS = ["manual", "session_start", "session_end"] as const;
 export type WorkflowTrigger = (typeof WORKFLOW_TRIGGERS)[number];
 
+/**
+ * The keys from product spec §11, spelled the way §11 spells them. Design §4
+ * says capabilities *are* those keys, and the first draft invented
+ * `session_start_hook` and `session_end_hook` for what §11 calls
+ * `session_start_injection` and `session_end_capture`. Renamed while nothing
+ * consumes either value; once an adapter keys on one, the rename stops being
+ * free.
+ *
+ * `file_write` is not in §11 and no verb footprint requires it, so no canonical
+ * workflow can legitimately declare it and `capability-undeclared` can never
+ * name it. Kept as a declared vocabulary entry rather than deleted, because the
+ * adapters decide in DOS-P4/P5 whether a vendor distinguishes file writing as a
+ * capability at all; recorded in `docs/architecture/workflow-schema.md` so it is
+ * not mistaken for something in use.
+ */
 export const WORKFLOW_CAPABILITIES = [
   "structured_result",
   "non_interactive_run",
-  "session_start_hook",
-  "session_end_hook",
+  "session_start_injection",
+  "session_end_capture",
   "file_write",
 ] as const;
 export type WorkflowCapability = (typeof WORKFLOW_CAPABILITIES)[number];
