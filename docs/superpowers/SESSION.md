@@ -22,6 +22,7 @@ Run all of these before deciding anything:
 ```bash
 git status --short
 git log --oneline -5
+gh pr list                 # is something already waiting on the founder?
 ```
 
 Read, in this order:
@@ -29,6 +30,14 @@ Read, in this order:
 1. `docs/superpowers/ORDER.md` — find the row marked `now`. That is the entry.
 2. The plan linked in that row. Read the whole task, not just the next unchecked step.
 3. `docs/superpowers/BACKLOG.md` §7 — the gates every commit must pass.
+4. The architecture note for any subsystem you are about to touch — `docs/architecture/`.
+   `brain.md` before Brain code, `foundation.md` before the CLI, transactions or the
+   manifest. These outlive the plans that produced them and they are the reason those plans
+   could be deleted.
+
+**An open pull request means the entry may be blocked on a human, not on you.** A spec
+awaiting approval is the normal case: check before starting anything, because writing a
+second thing on top of an unapproved first is how two documents start disagreeing.
 
 Do not read the plans you are not working on. Do not reconstruct history from git log
 beyond checking that the tree is where `ORDER.md` says it is.
@@ -75,9 +84,10 @@ Inside the entry, follow the plan step by step:
 - Do not skip ahead to the interesting step. The plans are ordered because later steps
   assume earlier evidence exists.
 
-## 5. Close the loop — all four, in one commit
+## 5. Close the loop — all five
 
-An entry is not finished until every one of these is true:
+An entry is not finished until every one of these is true. The first four happen in one
+commit; the fifth happens after it, on a machine that is not yours.
 
 1. **Gates pass.** `npm run check` — that is lint, tests, build, and `git diff --check`.
    Show failures only; a wall of passing output tells nobody anything.
@@ -96,6 +106,10 @@ An entry is not finished until every one of these is true:
 4. **Exact-path staging.** `git add <exact paths>`. Never `git add -A`, never `git add .`,
    never a wildcard. Then `git show --stat HEAD` and confirm it contains only what you
    meant to ship.
+5. **CI is green on the commit.** Push a topic branch, open a pull request, and read the
+   result — `gh pr checks <n>`. The default branch requires a pull request, so this is the
+   only route anything lands by. **A red run that nobody reads is worse than the no CI it
+   replaced**, so do not open a pull request you are not going to watch.
 
 ## 6. Report and stop
 
@@ -109,9 +123,17 @@ accident.
 
 These are not style preferences. Each one exists because it was already violated once.
 
-- **A green local tree is not evidence. A commit is.** This repository spent a week with a
-  finished, tested, entirely uncommitted transaction lock. Everything worked locally and
-  every other checkout was red.
+- **A green local tree is not evidence. A commit is, and a green CI run on that commit is
+  better.** This repository spent a week with a finished, tested, entirely uncommitted
+  transaction lock: everything worked locally and every other checkout was red. It then
+  spent twenty days with no CI at all, during which the capability scan silently stopped
+  covering a whole package and every gate stayed green.
+
+- **This repository is public.** `github.com/msolecki/developer-os`, deliberately, since
+  2026-08-10. Before writing anything into it, ask whether it should be readable by anyone —
+  the self-containment lint does **not** check this and never did, because it exists to stop
+  you *reading* the founder's machine, not to stop this repository *publishing* what is
+  already written down. `BACKLOG.md` §0 records what that decision already exposed.
 - **Never `git add -A`.** Stage named paths only.
 - **Never read `~/claude-shared`, `~/brain`, or any `DEVELOPER_OS_SOURCE_*` path.** Program
   Task 0 froze everything the build needs into `docs/migration/`. A missing legacy fact is
@@ -147,12 +169,22 @@ These are not style preferences. Each one exists because it was already violated
 
 ## Stop and ask — do not decide these yourself
 
-- Anything in **Track B or Track L** of `ORDER.md`. B1 credential rotation and L1 license
-  approval are the founder's, and no amount of context makes them yours.
+- Anything in **Track B or Track L** of `ORDER.md`. L1 license approval is the founder's and
+  no amount of context makes it yours. **B1 was decided on 2026-08-10 — declined, not
+  deferred** (`BACKLOG.md` §6); do not reopen it from a backlog, it is a conversation.
 - **A12's open decision**: whether the founder cutover gets its own plan. Recommendation is
   on record; the call is not made.
 - **Any live machine change** — `~/.claude`, `~/.codex`, launchd, a real remote.
-- **Any push.** Remote verification is still `blocked_by_environment`.
+- **Approving a spec.** Every subsystem needs an approved spec before its plan, and a plan
+  before code — a Global Constraint of the program plan. **Writing the spec is yours;
+  approving it is the founder's.** An agent that judges its own spec ready has removed the
+  only gate in the program that a machine cannot check.
+
+- **Merging to the default branch.** Pushing a topic branch and opening a pull request is
+  routine and needs no permission. Merging is where work becomes the trunk, and the
+  repository rule requiring a pull request exists so a human sees it first. (Remote
+  verification stopped being `blocked_by_environment` on 2026-08-10 — the remote exists, CI
+  runs on it, and Track L's L2 is what remains of that item.)
 - A plan step that turns out to be **wrong rather than merely hard**. Say so, propose the
   correction, and wait. Do not quietly implement a better idea; the plans were approved.
 
