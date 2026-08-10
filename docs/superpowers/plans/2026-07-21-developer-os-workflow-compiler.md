@@ -2342,7 +2342,7 @@ git commit -m "feat(workflows): ship the six canonical workflows the product spe
 - Consumes: `loadWorkflow`, `workflowOverlaySchema` from `@developer-os/workflow-schema`.
 - Produces: nothing; this task's deliverable is the refusals being proved.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/contracts/workflows/negative.test.ts`:
 
@@ -2437,12 +2437,12 @@ describe("negative fixtures", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `npx vitest run tests/contracts/workflows/negative.test.ts`
 Expected: FAIL — `ENOENT` on the fixtures directory.
 
-- [ ] **Step 3: Write the base fixture, then the seven variants**
+- [x] **Step 3: Write the base fixture, then the seven variants**
 
 Every fixture is this file with exactly one thing changed. Write it out in full for each
 directory rather than referencing this block — a fixture that has to be assembled from a
@@ -2495,12 +2495,12 @@ scopes:
     - /
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx vitest run tests/contracts/workflows/negative.test.ts`
 Expected: PASS, 8 tests.
 
-- [ ] **Step 5: Run the gates, fresh-context review, then commit**
+- [x] **Step 5: Run the gates, fresh-context review, then commit**
 
 ```bash
 npm run check
