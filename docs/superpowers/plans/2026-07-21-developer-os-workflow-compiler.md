@@ -1389,7 +1389,7 @@ git commit -m "feat(workflow-schema): report every finding, and never echo the f
 - Produces: `workflowOverlaySchema`, `WorkflowOverlayV1`, `applyOverlay(contract: WorkflowContractV1, overlay: WorkflowOverlayV1): OverlayOutcome` where
   `type OverlayOutcome = { readonly ok: true; readonly contract: WorkflowContractV1; readonly lifecycle: string | null } | { readonly ok: false; readonly reason: string }`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `packages/workflow-schema/src/overlay.test.ts`:
 
@@ -1510,12 +1510,12 @@ describe("applyOverlay", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `npx vitest run packages/workflow-schema/src/overlay.test.ts`
 Expected: FAIL — `Cannot find module './overlay.js'`.
 
-- [ ] **Step 3: Implement the overlay**
+- [x] **Step 3: Implement the overlay**
 
 `packages/workflow-schema/src/overlay.ts`:
 
@@ -1615,12 +1615,12 @@ export { applyOverlay, workflowOverlaySchema } from "./overlay.js";
 export type { OverlayOutcome, WorkflowOverlayV1 } from "./overlay.js";
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `npx vitest run packages/workflow-schema/src/overlay.test.ts`
 Expected: PASS, 8 tests.
 
-- [ ] **Step 5: Run the gates, fresh-context review, then commit**
+- [x] **Step 5: Run the gates, fresh-context review, then commit**
 
 ```bash
 npm run check

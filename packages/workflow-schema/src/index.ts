@@ -26,6 +26,8 @@ export type {
 } from "./contract.js";
 export { compareScopes, deriveScopes } from "./derive.js";
 export type { DerivedScopes, ScopeMismatch } from "./derive.js";
+export { applyOverlay, workflowOverlaySchema } from "./overlay.js";
+export type { OverlayOutcome, WorkflowOverlayV1 } from "./overlay.js";
 export { parseWorkflowYaml, WORKFLOW_PARSE_OPTIONS } from "./parse.js";
 export type { ParseOutcome, ParseRefusal } from "./parse.js";
 export { validateWorkflow } from "./validate.js";
