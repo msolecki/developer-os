@@ -1335,6 +1335,31 @@ git commit -m "feat: put one facade in front of the Brain"
 
 ### Task 9: The `brain` command group
 
+**Status: SHIPPED 2026-08-10, commit `8c9f4f6`.** The two obligations Task 7 left and the
+three Task 8 left are discharged; design spec §8 carries the amendment and `BACKLOG.md` §8
+registers it.
+
+**Three deviations recorded rather than fixed, and Task 10 should decide whether any of them
+belongs in the e2e suite:**
+
+1. **`reindex` does not call `assertRootsAnchored`, and `init` does.** `brainPath` is
+   validated only as an absolute path, so a hand-edited config pointing outside the home is
+   refused by `init` and accepted by `reindex`. Every write still passes `assertWritable`, so
+   the blast radius is four files at a non-protected absolute path for an attacker who can
+   already edit the config — but the asymmetry is exactly the kind that gets rediscovered
+   later as a finding.
+2. **`--dry-run` validates nothing.** It returns before staging, so it cannot fail where the
+   real run fails; and a real run now reconciles the manifest, which a dry run does not, so
+   it is no longer "the same plan without the write".
+3. **An unreadable artifact reports as a missing one.** `BrainService.readArtifact` catches
+   everything, so `EACCES` on `_indexes/` tells the user to run `reindex`, which will then
+   also fail.
+
+**Two checks are defence in depth that no reachable input exercises**, and both say so at the
+code rather than pretending a test covers them: the narrow `ownedRoots`, since every path
+reindex plans is inside the index directory by construction; and the `assertTarget` before
+`mkdir`, since discovery's own `assertReadable` refuses a protected vault first.
+
 **Files:**
 - Create: `apps/cli/src/commands/brain.ts`, `apps/cli/src/commands/brain.test.ts`
 - Modify: `apps/cli/src/main.ts`, `apps/cli/src/context.ts`, `apps/cli/src/main.test.ts`, `apps/cli/package.json`, `apps/cli/tsconfig.json`
@@ -1360,7 +1385,7 @@ export interface BrainOptions {
 
 Every one of the four result types carries `schemaVersion: 1` and a `subcommand` discriminant, so `--json` consumers can switch on one field. `BrainReindexResultV1` carries `written: readonly string[]` and `transactionId: string | null` — `null` under `--dry-run`, matching the convention `InitResultV1` already uses.
 
-- [ ] **Step 1: Write the failing dispatch tests**
+- [x] **Step 1: Write the failing dispatch tests**
 
 Extend `apps/cli/src/main.test.ts`:
 
@@ -1394,12 +1419,12 @@ it("refuses a search with no query", async () => {
 });
 ```
 
-- [ ] **Step 2: Run and confirm they fail**
+- [x] **Step 2: Run and confirm they fail**
 
 Run: `npx vitest run apps/cli/src/main.test.ts`
 Expected: FAIL — `parse` returns `null` for more than one positional, so every new case exits 2.
 
-- [ ] **Step 3: Widen dispatch without weakening it**
+- [x] **Step 3: Widen dispatch without weakening it**
 
 `parse` currently rejects `positionals.length > 1`. Replace that with a per-command positional arity, keeping strictness exactly as tight:
 
@@ -1424,7 +1449,7 @@ const BRAIN_SUBCOMMANDS: Readonly<Record<string, { readonly options: readonly Op
 
 Add `limit: { type: "string" }` to `OPTIONS` and to `OPTION_NAMES`. Validate the subcommand with `Object.hasOwn` for the same reason the existing code does — a prototype member name would otherwise pass the lookup. Reject a subcommand requiring a query when the second positional is absent, and reject a second positional when it does not. Normalize `developer-os search <query>` into the same `Invocation` the `brain search` path produces, so exactly one code path runs.
 
-- [ ] **Step 4: Implement the command**
+- [x] **Step 4: Implement the command**
 
 `apps/cli/src/commands/brain.ts` constructs a `BrainService` from the context, dispatches on the subcommand, and returns a version-stamped `schemaVersion: 1` result per subcommand. `reindex` stages its four files through `context.executor.execute({ kind: "brain-reindex", mutations })`, using `validateChangePlan` with the vault's index directory as the owned root and every other vault directory excluded — the same two-step shape `init` uses at `apps/cli/src/commands/init.ts:308`. `--dry-run` returns the planned paths and executes nothing.
 
@@ -1434,7 +1459,7 @@ Add the human renderers to `main.ts` beside the existing ones, and pass every re
 
 Add `@developer-os/brain` to `apps/cli/package.json` dependencies and a `{ "path": "../../packages/brain" }` reference to `apps/cli/tsconfig.json`. Extend the `USAGE` block with the four subcommands and `--limit`.
 
-- [ ] **Step 5: Run, gate, and commit**
+- [x] **Step 5: Run, gate, and commit**
 
 Run: `npx vitest run apps/cli` then `npm run check`
 
