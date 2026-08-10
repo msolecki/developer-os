@@ -26,6 +26,14 @@ export type {
 } from "./contract.js";
 export { compareScopes, deriveScopes } from "./derive.js";
 export type { DerivedScopes, ScopeMismatch } from "./derive.js";
+export { detectWorkflowDrift, firstDifferingLine, sourceMarker } from "./drift.js";
+export type {
+  RenderedArtifact,
+  WorkflowDriftFinding,
+  WorkflowRenderer,
+} from "./drift.js";
+export { loadWorkflow } from "./load.js";
+export type { WorkflowSource } from "./load.js";
 export { applyOverlay, workflowOverlaySchema } from "./overlay.js";
 export type { OverlayOutcome, WorkflowOverlayV1 } from "./overlay.js";
 export { parseWorkflowYaml, WORKFLOW_PARSE_OPTIONS } from "./parse.js";

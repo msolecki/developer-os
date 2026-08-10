@@ -1649,7 +1649,7 @@ git commit -m "feat(workflow-schema): give an overlay no field with which to wea
   `detectWorkflowDrift(expected: readonly RenderedArtifact[], onDisk: ReadonlyMap<string, string>): readonly WorkflowDriftFinding[]`, where
   `interface WorkflowDriftFinding { readonly path: string; readonly line: number | null; readonly message: string }`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `packages/workflow-schema/src/load.test.ts`:
 
@@ -1769,12 +1769,12 @@ describe("detectWorkflowDrift", () => {
 });
 ```
 
-- [ ] **Step 2: Run them to make sure they fail**
+- [x] **Step 2: Run them to make sure they fail**
 
 Run: `npx vitest run packages/workflow-schema/src/load.test.ts packages/workflow-schema/src/drift.test.ts`
 Expected: FAIL — modules not found.
 
-- [ ] **Step 3: Implement the loader**
+- [x] **Step 3: Implement the loader**
 
 `packages/workflow-schema/src/load.ts`:
 
@@ -1832,7 +1832,7 @@ export function loadWorkflow(source: WorkflowSource): WorkflowValidationResult {
 }
 ```
 
-- [ ] **Step 4: Implement the renderer interface and drift check**
+- [x] **Step 4: Implement the renderer interface and drift check**
 
 `packages/workflow-schema/src/drift.ts`:
 
@@ -1938,12 +1938,12 @@ export type {
 } from "./drift.js";
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx vitest run packages/workflow-schema/src/load.test.ts packages/workflow-schema/src/drift.test.ts`
 Expected: PASS, 8 tests.
 
-- [ ] **Step 6: Run the gates, fresh-context review, then commit**
+- [x] **Step 6: Run the gates, fresh-context review, then commit**
 
 ```bash
 npm run check
