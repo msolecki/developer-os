@@ -99,96 +99,24 @@ P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5
 
 ---
 
-### Tasks 0 and 1 — closed. What survives them is a boundary and three documents
+### Tasks 0, 1 and 2 — closed, and not described here
 
-**Task 0 — preserve sources and establish the publication boundary.** Closed 2026-07-21.
-**Task 1 — build the public foundation and CLI lifecycle.** Closed 2026-08-01, executed as a
-dedicated Foundation plan of 51 steps across 9 tasks, with the completion gate satisfied.
+| Task | Closed | What survives it |
+|---|---|---|
+| 0 — preserve sources, establish the publication boundary | 2026-07-21 | the three files in `docs/migration/`, and the self-containment constraint in Global Constraints above — enforced by `npm run lint` since 2026-08-01 rather than by prose |
+| 1 — public foundation and CLI lifecycle | 2026-08-01 | `docs/architecture/foundation.md`, `docs/architecture/foundation-constraints.md`, `docs/releases/foundation-checkpoint.md` |
+| 2 — Brain engine | 2026-08-10 | `docs/architecture/brain.md`, and `specs/2026-07-21-developer-os-brain-engine-design.md` as the design of record |
 
-Neither can be re-run and neither should be read as instruction. Task 0's inputs are
-deliberately out of reach; Task 1's plan was deleted when its last step closed. Their step
-lists are removed rather than kept as ticked boxes, because this plan holds only unfinished
-work. Recover them from `git show 9f82901:docs/superpowers/plans/2026-07-21-developer-os-program.md`
-and `git show c4f883f^:docs/superpowers/plans/2026-07-21-developer-os-foundation.md`.
+None can be re-run and none should be read as instruction: Task 0's inputs are deliberately out
+of reach, and the plans for Tasks 1 and 2 were deleted when their last steps closed. The
+recovery commits for all three are in `BACKLOG.md`'s rules, which is the one place that index
+lives — a second copy here is how two indexes come to disagree.
 
-**Task 0 produced the constraint the whole program runs under, and it is still binding.**
-Everything the build needs to know about the founder's legacy runtime is three files in
-`docs/migration/`: `source-manifest.json` (which admitted exactly three publication candidates,
-all planning documents), `exclusion-policy.md` (what may never cross into a public artifact),
-and `baseline-capabilities.json` (the frozen legacy capability surface, as booleans, versions
-and command names only). After Task 0 those legacy repositories are not build inputs, not
-review inputs, and not test inputs. Since 2026-08-01 `npm run lint` enforces that mechanically
-rather than by prose. The only later contact is Task 8, read-only, against the user's own vault
-as product data — and `docs/superpowers/BACKLOG.md` §6, which is machine housekeeping, not
-build work.
-
-**Task 1's durable output is `docs/architecture/foundation.md` (what the layer is and cannot
-do, plus nine known residuals), `docs/architecture/foundation-constraints.md` (verbatim
-per-task constraints and two still-open founder questions), and
-`docs/releases/foundation-checkpoint.md` (the gate evidence, dated).** Read the first before
-touching Foundation code and the second before changing any behaviour it describes. Residual 9
-— configuration cannot be changed after `init` — is owed by Task 7 and recorded in
-`BACKLOG.md` §3.
-
-Two facts from these tasks that later tasks still need: `remoteVerification` is
-`blocked_by_environment`, so no fetch, push, pull request, or public release; and the founder's
-2026-07-21 waiver of four historical credential rotations scoped *this product's* release gate
-only — it did not revoke a key, and the rotations are still owed as `BACKLOG.md` §6 EXIT-1.
-
----
-
-### Task 2: Specify and implement the Brain engine
-
-**Complexity:** L
-
-**Status: COMPLETE — closed 2026-08-10**, as ten commits from `4cd7224` onward. Its
-implementation plan is deleted, per the rule that `plans/` holds only unfinished work;
-recover it at `81e7e7d` if the reasoning is ever needed. What survives is
-`docs/architecture/brain.md` — what the layer is, what it deliberately cannot do, seven facts
-that outlive the plan, and six residuals with named owners. The bullets below are this task's
-own coarse steps and are kept only as the record of what it covered.
-
-**Files:**
-- Created: `docs/superpowers/specs/2026-07-21-developer-os-brain-engine-design.md`, `packages/brain/src/`, `templates/brain/`, `docs/architecture/brain.md`
-- Create: `packages/brain/src/discovery/` — a sixth source directory beyond the five this plan originally named, because folder policy is consumed by both `indexes/` and `lint/` and is not schema parsing (spec §15.2)
-- Create: `packages/brain/src/indexes/`
-- Create: `packages/brain/src/lint/`
-- Create: `packages/brain/src/retrieval/`
-- Create: `packages/brain/src/migrations/`
-- Create: `templates/brain/`
-- Create: `tests/contracts/brain/`, `tests/fixtures/brain/`, and `tests/integration/brain/`
-
-**Interfaces:**
-- Consumes: `DeveloperOsConfigV1`, `TransactionStore`, `SecurityPolicy`, and safe path primitives from Task 1.
-- Produces: `BrainConfigV1`, `NoteFrontmatterV1`, `CaptureEnvelopeV1`, `IndexBuildResult`, `LintResult`, `RetrievalQuery`, `RetrievalResult`, `BrainMigration`, and `BrainService`.
-
-**What:** Port the deterministic value of the current Brain into a generic, English, synthetic, locally owned vault engine.
-
-**Where:** `packages/brain/` and `templates/brain/` in the target repository.
-
-**How.** The spec cycle (`db8637a`) and the implementation plan (`9ef4b92`) are closed and their
-bullets are removed; what is left is the work:
-
-- [x] Implement note discovery without scanning quarantine or raw archives as canonical notes. — *schema parsing landed in `9f82901`; discovery is the brain plan's Task 3.*
-- [x] Implement deterministic `vault-map`, `catalog`, and graph generation.
-- [x] Implement lint classes for frontmatter, provenance, links, duplicates, staleness, and generated-index drift.
-- [x] Implement index-first retrieval with explicit maximum candidate counts and source paths.
-- [ ] Support `PROJEKTY` and `NARZEDZIA` as folder aliases without automatic renames. These are ordinary configurable vault folder names, not a legacy lookup: the implementation reads them from `BrainConfigV1`, never from a legacy repository.
-- [x] Build a synthetic template containing no founder names, clients, repositories, or real source text.
-- [ ] Author a synthetic structural fixture in `tests/fixtures/brain/legacy-shape/` and commit it. It encodes only the shape recorded in `docs/migration/baseline-capabilities.json` — Obsidian Markdown, `vault-map`, `catalog`, `graph`, index-first retrieval, the four command names — with invented notes, invented tags, and invented links. It must never be generated from, compared against, or refreshed from a real vault.
-- [ ] Run the compatibility harness read-only against that committed fixture. If the fixture turns out to miss a shape the product must support, extend the fixture and say so in the plan; do not open a real vault to find out.
-
-**Test:**
-
-- Index rebuilds are byte-for-byte deterministic under a frozen clock.
-- Raw, quarantine, outputs, templates, and Obsidian internals remain excluded as declared.
-- Every retrieval claim resolves to a selected canonical note.
-- Legacy aliases produce the same logical project/tool selection without modifying source folders.
-- Broken links, malformed frontmatter, duplicate IDs, unsupported schema versions, and stale generated indexes fail with path-specific diagnostics.
-
-**Checkpoint:** `developer-os` can initialize, validate, index, and search a synthetic or existing compatible Brain without an agent adapter.
-
----
+**Their step lists are deleted rather than kept as ticked boxes**, and Task 2 is why that rule
+is worth obeying. It stood marked COMPLETE while three of its boxes were still unticked and the
+work those boxes describe had landed days earlier — the synthetic fixture among them, which
+`BACKLOG.md` §5 records as created on 2026-08-08. A closed task carrying a stale checklist is a
+document inviting the next session to redo it.
 
 ### Task 3: Specify and implement the workflow compiler
 

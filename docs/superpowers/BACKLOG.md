@@ -325,10 +325,13 @@ names it as the design of record; its plan is deleted, recoverable at `81e7e7d`.
 - **Artifacts required (none exist):** `docs/migration/founder-cutover.md`,
   `founder-baseline-results.json`, `founder-shadow-results.json`,
   `founder-cutover-manifest.json`.
-- **Decision required:** the program plan enumerates ten steps inline and does not
-  mandate a dedicated spec or plan. **Recommendation: author a plan anyway.** This is the
-  only task that mutates the founder's live machine, and its rollback must be rehearsed
-  before cutover is declared complete.
+- **Decided 2026-08-10 by the founder: author a dedicated plan.** The program plan enumerates
+  ten steps inline and mandates neither a spec nor a plan; the ruling is that this task gets a
+  plan regardless, because it is the only one that mutates the founder's live machine and its
+  rollback must be rehearsed before cutover is declared complete. **Written against A11's
+  output, not before it** — a cutover plan authored ahead of the lifecycle it cuts over to
+  would specify commands that do not exist. No spec is required; the program verification
+  matrix and the hard invariants below are the contract it plans against.
 - **Hard invariants:** the founder's vault is not moved; legacy recovery data is not
   deleted; two copies of a mutating hook are never enabled at once; legacy hooks and jobs
   are disabled only after new evidence passes, and are never deleted.
@@ -345,8 +348,11 @@ names it as the design of record; its plan is deleted, recoverable at `81e7e7d`.
 - **Owes the pre-publication secret re-scan** recorded as a gate in §7. The repository now
   carries legacy machine detail it did not carry when Program Task 0 produced its evidence,
   so Task 0's clean result does not transfer.
-- **Decision required:** same as DOS-P8 — no dedicated plan is mandated. The program
-  verification matrix is probably sufficient here; confirm before starting.
+- **Decision required, and it is no longer "the same as DOS-P8".** No dedicated plan is
+  mandated here either, but DOS-P8's version of this question was settled on 2026-08-10 in
+  favour of writing one, on a reason that does not apply to DOS-P9: DOS-P8 mutates the
+  founder's live machine and DOS-P9 publishes a release. The program verification matrix is
+  probably sufficient here; confirm before starting rather than inheriting DOS-P8's answer.
 - **Two external blockers that are not engineering work:** L1 license and L2 remote
   verification, both in `ORDER.md` Track L.
 

@@ -43,12 +43,9 @@ So the queue below is genuinely what remains, and every entry at its head waits 
 A7 on the spec approval above, Track B on the founder's legacy machine, Track L on the
 founder and their counsel.
 
-**Closed, and not repeated below.** Foundation on 2026-08-01 — nine tasks, 51 steps —
-together with the kernel transaction lock and the self-containment lint that guards the
-clean-room boundary. A6/DOS-P2 on 2026-08-10 — ten tasks, the determinism gate satisfied
-under a frozen clock *and* a reversed directory reader, the four `brain` commands proved end
-to end against the compiled binary. Both plans are deleted and git history is the archive.
-What survives them:
+**Closed, and not repeated below.** Foundation on 2026-08-01, A6/DOS-P2 on 2026-08-10. Both
+plans are deleted and git history is the archive; what each proved is in its own checkpoint
+document rather than retold here. What survives them:
 
 | Read this | Before you |
 |---|---|
@@ -76,7 +73,7 @@ is approved.
 | A9 ‖ | DOS-P5 Codex adapter — S / P / I | to write | A7 | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | blocked |
 | A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | A8 **and** A9 | L | program plan Task 6 checkpoint, after independent security review | blocked |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
-| A12 | DOS-P8 Founder shadow migration | to write — see decision below | A11, **B1 B2 B3 B4**, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
+| A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, **B2 B3 B4**, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |
 
 **A7 has no unmet Needs**, and it is no longer parallel with anything: A6 closed, so the
@@ -86,10 +83,12 @@ is approved.
 DOS-P3 through DOS-P7 each need an approved spec *and* an implementation plan before any
 code, which is a Global Constraint of the program plan rather than a preference.
 
-**A12 decision, unresolved.** The program plan enumerates Task 8's ten steps inline and
-does not mandate a dedicated plan. Recommendation on record: write one anyway — it is the
-only task that mutates the live machine, and its rollback must be rehearsed before cutover
-is declared complete. Settle this before A11 finishes, not at A12.
+**A12 decision, settled 2026-08-10 by the founder: it gets its own plan.** The program plan
+enumerates Task 8's ten steps inline and does not mandate one; the founder ruled that it gets
+one anyway, because A12 is the only task that mutates the live machine and its rollback must
+be rehearsed before cutover is declared complete. The plan is authored against A11's output,
+not before it — writing it earlier would specify a cutover from a lifecycle that does not
+exist yet. `BACKLOG.md` §4 carries what it must contain.
 
 ---
 
