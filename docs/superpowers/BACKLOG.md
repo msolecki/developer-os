@@ -57,13 +57,17 @@ Open work only. Program Tasks 0 and 1 are closed and are not rows here.
 
 | Area | Where | What is left |
 |---|---|---|
-| Program (umbrella) | 1 plan | Task 2 **in progress**; Tasks 3–9 open |
-| DOS-P2 Brain engine | 1 spec + 1 plan | **8 of 10 plan tasks**; resume at Task 3 |
+| Program (umbrella) | 1 plan | Tasks 3–9 open; Tasks 0–2 closed and not rows here |
 | DOS-P3 … DOS-P7 | nothing written | 5 specs, 5 plans, 5 implementations |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | NEW-1, NEW-2, and one parser decision |
+| Repository-level | §1 | NEW-5 … NEW-9, all XS to S, none blocking |
+| Repository infrastructure | §5 | **no CI**, and six directories a later subsystem still owes |
 | Legacy runtime | 1 exit checklist | 4 items: two untouched since 2026-07-20, one nearly discharged, one new |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
+
+**Foundation and DOS-P2 are closed.** Neither is a row above. What each left behind is
+`docs/architecture/foundation.md` and `docs/architecture/brain.md`, plus §2 here for
+Foundation's open questions; their plans are deleted and git history is the archive.
 
 **Self-containment.** No Developer OS task reads the founder's legacy runtime. Program
 Task 0 froze everything the build needs into `docs/migration/`, and since 2026-08-01
@@ -76,37 +80,32 @@ founder's machine as user data, not as source material.
 
 ## 1. Open right now
 
-Everything in this section is genuinely open. Nothing here is bookkeeping.
+Everything in this section is genuinely open. Nothing here is bookkeeping, and nothing
+closed stays here — NEW-1 through NEW-4 were removed on 2026-08-10 when they closed. What a
+closed item leaves behind is a row in §8, a clause in a spec, or a test; if it left nothing,
+it was not worth recording. Git history is the archive.
 
-**NEW-1 closed 2026-08-10.** The capability scan in `tests/e2e/foundation.test.ts` now
-enumerates every workspace under `apps/` and `packages/` instead of a hardcoded list, which
-is what let `packages/brain` ship unscanned for three days. Verified by planting a network
-call in a Brain module and watching the scan refuse it. The per-package non-empty assertion
-stays, because a floor over the *sum* is satisfied by one populated workspace while every
-other goes unread — the exact shape of the gap. `docs/architecture/foundation.md` §7 now
-describes the scan by what it enumerates rather than by a module count no test pinned.
+### NEW-9 — nothing runs the gates except the machine that wrote the code
 
-### NEW-4 — parser contract and application tags · **CLOSED 2026-08-10, as adopted**
-
-- Settled inside DOS-P2 rather than deferred to DOS-P6, and settled the other way from how it
-  was written up. This entry claimed the clause "costs nothing to adopt" because
-  "`yaml@2.8.1` does no such thing, so nothing today depends on its absence and nothing can
-  regress." **Both halves of that were wrong**, and a five-line probe of the actual library
-  is what showed it: on the core schema it still resolves `!!binary` to a Node `Buffer`,
-  `!!timestamp` to a `Date`, and `!!set` to a constructed object, through its known-tags
-  fallback. A field the schema validated as a string could hold a `Buffer`.
-- Adopted as design spec §4.4 clause 5 — *frontmatter carries no explicitly tagged node, and
-  one is refused outright* — registered in §8 below, implemented as `firstExplicitTag` in
-  `packages/brain/src/schema/note.ts`, and covered by six tests plus two mutants.
-- **The lesson worth keeping is not about YAML.** A backlog entry asserting that a library
-  does not do something, written without running the library, stood for two days and would
-  have justified skipping the clause entirely. Probe before recording a premise as a fact.
-
-**NEW-2 and NEW-3 closed 2026-08-09.** `uniqueKeys: true` is pinned at the `parseAllDocuments`
-call, and a YAML failure now carries the line it happened on, through `NoteParseIssue.line` and
-`LintFinding.line`. Only `err.linePos` is read — `err.message` and `err.source` embed the
-offending note verbatim, and a test asserts a sentinel from the note reaches neither the
-message nor any serialized part of the issue.
+- **Status:** open, recorded 2026-08-10 when the branch was first pushed · **Owner:** the next
+  session, before DOS-P3 code · **Size:** S
+- There is no `.github/`, no workflow, no hook that runs `npm run check` or `pnpm test:e2e`
+  anywhere but locally. `feat/foundation` is now on `origin`, and nothing on the far side has
+  ever executed a test.
+- This contradicts a rule this repository already states twice. `SESSION.md`: *a green local
+  tree is not evidence, a commit is.* `docs/architecture/foundation.md` §7 leans on the
+  capability scan to enforce "no network" — enforcement that exists only where somebody runs
+  it. Right now that is one laptop.
+- It is not hypothetical for this codebase. DOS-P2 shipped three defects that a green local
+  gate did not see and a second reader did, and one of them — `packages/brain` going unscanned
+  for three days by the network gate — was invisible precisely because the check enumerated a
+  hardcoded list nobody re-derived. A gate that runs in one place is one `--no-verify` from
+  running nowhere.
+- **What it must run:** `npm run check` and `pnpm test:e2e` on Node 24.16 on macOS, on every
+  push and every pull request, with no network egress available to the job so the "no network"
+  claim is enforced by the environment rather than only asserted by a grep.
+- **Decide with it:** the repository has no `main` branch, locally or on `origin` — only
+  `feat/foundation`. A branch-protection story and a CI story are the same conversation.
 
 ### NEW-6 — `duplicates` groups on bytes the user is no longer shown
 
@@ -224,26 +223,14 @@ that subsystem in §3.
 
 ## 3. Missing specs and plans
 
-**Ten documents.** DOS-P2's spec and plan are written; DOS-P3 through DOS-P7 need both.
+**Ten documents, none of them written.** DOS-P3 through DOS-P7 each need a spec and a plan.
 Each subsystem after Foundation requires an approved spec **and** an implementation plan
 before any code work — this is a Global Constraint of the program plan, not a preference.
-Every spec starts with a brainstorming/approval cycle.
+Every spec starts with a brainstorming/approval cycle, and approval is the founder's.
 
-### DOS-P2 — Brain engine · **done 2026-08-10**
-
-- **Spec:** `specs/2026-07-21-developer-os-brain-engine-design.md` — retained while later
-  subsystems reference it; §7 and §8 carry dated amendments, registered in §8 below.
-- **Plan:** deleted when its last task closed, per the rule at the top of this file.
-  Recoverable at `81e7e7d`.
-- **Shipped as ten commits**, `4cd7224` through the Task 10 commit. What survives the plan is
-  `docs/architecture/brain.md`: what the layer is, what it deliberately cannot do, the five
-  facts that outlive the plan, and six known residuals with named owners.
-- **Produces, all present:** `BrainConfigV1`, `NoteFrontmatterV1`, `CaptureEnvelopeV1`,
-  `IndexBuildResult`, `LintResult`, `RetrievalQuery`, `RetrievalResult`, `BrainMigration`,
-  `BrainService`.
-- **Gate satisfied:** index rebuilds are byte-for-byte deterministic under a frozen clock and
-  under a reversed directory reader; every retrieval match resolves to a note that exists at
-  the returned path, asserted end to end against the compiled binary.
+DOS-P2 is not listed here any more. Its spec is retained at
+`specs/2026-07-21-developer-os-brain-engine-design.md` because `docs/architecture/brain.md`
+names it as the design of record; its plan is deleted, recoverable at `81e7e7d`.
 
 ### DOS-P3 — Workflow compiler
 
@@ -421,16 +408,24 @@ subproject; listed here so nothing is discovered late.
 | `tests/fixtures/` | Foundation onward | **created 2026-08-08** |
 | `tests/fixtures/brain/legacy-shape/` | DOS-P2 Task 3 | **created 2026-08-08**, plus eight one-concern `malformed/` fixtures for lint |
 | `tests/integration/` | Foundation onward | missing — DOS-P2's reindex/lint/search integration runs in `tests/e2e/brain.test.ts` against the compiled binary, which is the stronger of the two |
-| `tests/e2e/` | Foundation Task 9 | **created 2026-08-01** — `pnpm test:e2e` runs 31 cases |
+| `tests/e2e/` | Foundation Task 9 | **created 2026-08-01** — `pnpm test:e2e` runs 45 cases across `foundation.test.ts` and `brain.test.ts` |
 | `tests/security/` | DOS-P6 | missing |
 | `docs/architecture/` | Foundation Task 9, then per subsystem | **created 2026-08-01** — Foundation boundaries and constraints done; workflow schema, threat model, capability model still owed by later subsystems |
 | `docs/releases/` | DOS-P7 | **created 2026-08-01** by Foundation Task 9, ahead of its named owner |
-| `packages/brain/` | DOS-P2 | **complete 2026-08-10** — `schema/`, `discovery/`, `indexes/`, `lint/`, `retrieval/`, `migrations/`, `service.ts` |
+| `packages/brain/` | DOS-P2 | **complete 2026-08-10** — `schema/`, `discovery/`, `indexes/`, `lint/`, `retrieval/`, `migrations/`, `service.ts`, `redact.ts` |
 | `packages/workflow-schema/` | DOS-P3 | missing |
 | `packages/adapter-claude/`, `plugins/claude/` | DOS-P4 | missing |
 | `packages/adapter-codex/`, `plugins/codex/` | DOS-P5 | missing |
 | `templates/brain/` | DOS-P2 | **created 2026-08-10** — the vault skeleton `init` installs, embedded in `apps/cli/src/commands/brain-template.ts` so a shipped binary carries it, with a test that fails if the two drift |
 | `workflows/` | DOS-P3 | missing |
+| `.github/workflows/` | nobody — **that is the finding** | missing, and it is NEW-9. The program file map never named it, so no subsystem owes it and it has been nobody's job since 2026-07-21 |
+
+**`tests/repository/` gained a second rule on 2026-08-10.** Beside the self-containment
+enumerator there is now `control-bytes.test.ts`, which fails the build on a literal control
+character in any tracked or untracked text file. It exists because this repository shipped two
+— a NUL used as a map-key separator, and a ZERO WIDTH JOINER holding a comment's syntax
+together — both invisible in every diff that carried them, both found by accident. It found
+the second one within a minute of being written.
 
 **Two directories exist that the program file map never named:** `tests/helpers/` (the
 temporary HOME, the hash inventory, the process runner) and `tests/repository/` (the
