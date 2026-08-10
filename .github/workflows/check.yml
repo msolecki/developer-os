@@ -1,0 +1,69 @@
+name: check
+
+# Every push and every pull request. Not a schedule and not a manual trigger:
+# the point is that no commit reaches `origin` without something other than the
+# author's laptop having run the gates. DOS-P2 shipped three defects that a
+# green local gate did not see.
+on:
+  push:
+  pull_request:
+
+# Least privilege. This workflow reads the repository and writes nothing —
+# no packages, no releases, no comments, no commits.
+permissions:
+  contents: read
+
+# A superseded run proves nothing about the commit that replaced it.
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # macOS, and not a preference. `packages/platform-macos` shells out to
+    # `/usr/bin/lockf` for advisory locking, and the e2e suite drives the real
+    # provider rather than a double. On Linux the transaction lock has no
+    # implementation, so a green Linux run would be measuring a different
+    # product.
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # `npm run check` ends in `git diff --check`, which needs a real
+          # working tree. It does not need history, so the default shallow
+          # fetch is right — but `tests/repository/` enumerates files through
+          # `git ls-files`, so the repository must be a checkout and not an
+          # export.
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          # The range `package.json` declares, so CI tests what the product
+          # claims to support rather than one pinned patch. If a later 24.x
+          # breaks a gate, that is a fact worth learning here and not from a
+          # user — `Intl.Segmenter` in particular carries an ICU version, and
+          # `packages/brain` pins its locale for exactly that reason.
+          node-version: '24'
+
+      - name: Enable pnpm through corepack
+        # `packageManager` in `package.json` names the exact version, so this
+        # cannot drift from what the lockfile was written by.
+        run: corepack enable
+
+      - name: Install
+        # Frozen: a lockfile the install is allowed to rewrite is not a lockfile.
+        run: pnpm install --frozen-lockfile
+
+      - name: Gates
+        # `npm run check` is `lint && test && build && git diff --check`, and
+        # `lint` includes the self-containment enumerator and the control-byte
+        # scan. One command, so CI cannot drift from what a developer runs.
+        run: npm run check
+
+      - name: End to end
+        # Separate from `check` here as it is locally: these spawn the compiled
+        # binary under a temporary HOME and are the only tests that exercise
+        # the real transaction, the real lock, and the real filesystem.
+        run: pnpm test:e2e
