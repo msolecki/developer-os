@@ -32,10 +32,15 @@ that spec must decide and what it produces. Do not start `P` before `S` is appro
 not start `I` before `P` is written. **`S` ends with the founder approving it, not with an
 agent judging it ready** — that is where an agent working alone runs out of A7.
 
-**Do first, and it is not on Track A.** `BACKLOG.md` §1 **NEW-9**: nothing runs the gates
-except the machine that writes the code. The branch is on `origin` and nothing on the far
-side has ever executed a test. It is S-sized, it blocks nothing formally, and every
-subsystem after it inherits the exposure — so it is cheaper now than at any later point.
+**Do first, and it is not on Track A.** `BACKLOG.md` §1's repository defects — NEW-5, NEW-6
+and NEW-8 — are XS to S, they block nothing formally, and every one of them is a place where
+two parts of this product already disagree with each other. They are cheaper now than after
+another subsystem is built on top of them. NEW-7 is not in that set: it needs a machine with
+Obsidian, which is the founder's.
+
+**NEW-9 closed on 2026-08-10** (`c6d1ef1`) — the gates now run on `origin`, on `macos-15`,
+on every pull request. It stood here as the thing to do first for as long as nothing on the
+far side had ever executed a test.
 
 **Closed, and not repeated below.** Foundation on 2026-08-01 — nine tasks, 51 steps —
 together with the kernel transaction lock and the self-containment lint that guards the
