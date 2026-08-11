@@ -1,0 +1,22 @@
+{
+  "name": "@developer-os/adapter-claude",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@developer-os/core": "workspace:*",
+    "@developer-os/security": "workspace:*",
+    "@developer-os/workflow-schema": "workspace:*",
+    "zod": "4.4.3"
+  }
+}

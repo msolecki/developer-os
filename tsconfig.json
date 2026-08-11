@@ -17,6 +17,9 @@
       "path": "./packages/workflow-schema"
     },
     {
+      "path": "./packages/adapter-claude"
+    },
+    {
       "path": "./apps/cli"
     },
     {
