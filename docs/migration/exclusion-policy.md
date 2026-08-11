@@ -24,6 +24,16 @@ The following material is prohibited from public artifacts, prompts, reports, lo
 - Generated artifacts that have not received content review and independent approval.
 - Everything under `docs/superpowers/plans/legacy-runtime/`. These documents describe the owner's pre-Developer-OS machine, its repositories, its automation, and a credential-rotation checklist. They are tracked in this repository so the outstanding work has one home; they are never publication candidates and are never referenced from a public artifact.
 
+## Paths this repository does not create
+
+- **`.claude/`.** This repository creates no `.claude/` directory in version 1. Adapter output
+  lives in `plugins/claude/` and installs into the user's `~/.claude/skills/`, so no generated
+  artifact needs a home here; conveniences this repository would run on itself are declined rather
+  than deferred. Recorded so the absence is a decision rather than a gap: the repository is public,
+  and a `.claude/` here is inherited by every fork. Amended into this policy on 2026-08-11 by
+  `docs/superpowers/specs/2026-07-21-developer-os-claude-adapter-design.md` §12, which is the
+  reasoning of record; reopening it is an amendment, not a `mkdir`.
+
 ## Clean-room migration procedure
 
 1. Identify an approved candidate by its abstract source ID, exact repository-relative path, classification, destination, and evidence hash.
