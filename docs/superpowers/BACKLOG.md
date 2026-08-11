@@ -60,7 +60,7 @@ Open work only. Program Tasks 0 to 3 are closed and are not rows here.
 | Area | Where | What is left |
 |---|---|---|
 | Program (umbrella) | 1 plan | Tasks 4–9 open; Tasks 0–3 closed and not rows here |
-| DOS-P5 … DOS-P7 | DOS-P5 spec **approved** 2026-08-11; **DOS-P4 shipped** the same day | 2 specs, 3 plans, 3 implementations |
+| DOS-P5 … DOS-P7 | DOS-P5 spec approved **and planned** 2026-08-11; **DOS-P4 shipped** the same day | 2 specs, 2 plans, 3 implementations |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
 | Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian) and NEW-11 (S, the invisible-title rule stops at `title`) |
 | Repository infrastructure | §5 | two directories a later subsystem still owes; `packages/adapter-claude/`, `plugins/claude/` and `tests/integration/` landed with DOS-P4 on 2026-08-11 |
@@ -200,8 +200,8 @@ that subsystem in §3.
 
 ## 3. Missing specs and plans
 
-**Five documents left.** DOS-P6 and DOS-P7 need a spec and a plan each; DOS-P5 needs its plan, and
-its spec was approved on 2026-08-11 — writing that plan is the next document anyone writes.
+**Four documents left.** DOS-P6 and DOS-P7 need a spec and a plan each. DOS-P5 needs neither — its
+spec was approved and its plan written on 2026-08-11, so what remains of it is the code.
 DOS-P4 is closed and is not listed here any more: its spec is retained at
 `specs/2026-07-21-developer-os-claude-adapter-design.md` because
 `docs/architecture/claude-adapter.md` names it as the design of record; its plan is deleted,
@@ -228,8 +228,13 @@ names it as the design of record; its plan is deleted, recoverable at `81e7e7d`.
   the `AGENTS.md` decision, and the transcript refusal. Its §14 is normative — an implementation may
   not depend on a Codex surface not listed there. §12 is the table DOS-P6 inherits; §15 carries five
   items it does not close
-- **Plan:** `plans/2026-07-21-developer-os-codex-adapter.md` — **missing, and it is the next thing
-  anyone writes.** The `S` gate is closed and `P` is open
+- **Plan:** `plans/2026-07-21-developer-os-codex-adapter.md` — **written 2026-08-11, eighteen
+  tasks, unstarted.** Tasks 1 to 3 are not Codex work: they close four residuals
+  `claude-adapter.md` §9 assigned to "the point where a second adapter exists", by moving the
+  capability vocabulary into `packages/core`, the code-point ordering onto
+  `packages/workflow-schema`'s door, the Markdown display seam into `packages/security`, and the
+  vendor-neutral skill body into `packages/workflow-schema`. Two decisions in it are the founder's
+  and are in §8 of this file
 - **Program task:** 5 · **Complexity:** L · **Blocked by:** nothing
 - **Produces:** `CodexAdapter`, `CodexCapabilities`, `CodexInvocation`, `plugins/codex/`,
   managed hook plans, structured agent-run results.
@@ -494,6 +499,14 @@ amendment that would say otherwise.
 founder ratified all three implementer decisions taken while closing DOS-P4, and approved
 `specs/…-codex-adapter-design.md`, which discharged the two that rode on it. Every row is in the
 table below, each carrying the outcome rather than the question.
+
+**Two amendments are pending, both raised by DOS-P5's plan and neither startable without the
+founder's view.**
+
+| Amends | What changes | State |
+|---|---|---|
+| `specs/…-codex-adapter-design.md` §5.3, approved 2026-08-11 | **DOS-P5 ships no `hooks/hooks.json`; hooks for *both* adapters become DOS-P6's, in one change.** §5.3 says ship hooks. A `"type": "command"` handler names something executable, and the only command we could name without shipping a script we cannot mark executable — `RenderedArtifact` is `{path, contents}`, `ManagedArtifactV1` has `kind: "file"` and no mode — is the `developer-os` binary, whose capture entrypoint is DOS-P6's. A hook firing into a missing command errors at the end of every Codex session. This is the conclusion DOS-P4 reached and the founder ratified the same day, so it puts both adapters in one state rather than two, and `plugin_hooks` reports `unknown` throughout, which §15.1 already prescribes | **written into the plan 2026-08-11; awaiting founder ratification or reversal.** Reversing it means blocking DOS-P5 on DOS-P6, which has not started |
+| `docs/architecture/workflow-schema.md` §2.2 | **the vendor-neutral skill body moves into `packages/workflow-schema`.** That note says the package ships no renderer, and the reason it gives is that vendor behaviour belongs to the adapters. Codex's required skill frontmatter is `name` and `description` — exactly Claude's — and both write `skills/developer-os-<id>/SKILL.md`, so a second renderer written the obvious way would be byte-identical to the first: ~450 lines and twenty tests duplicated across peer packages, and two generated trees the same bytes. `WorkflowRenderer` stays an interface and each adapter still implements it; what moves is the half that comes from one contract and renders identically everywhere. DOS-P5's plan Task 3 makes the move and proves it with the existing drift gate — `plugins/claude/` must not change by a byte | **written into the plan 2026-08-11; awaiting founder ratification or reversal** |
 
 **Discharged. Listed because the amended document is still read, not because there is work
 left:**
