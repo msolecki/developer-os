@@ -98,4 +98,29 @@ describe("buildPluginTree", () => {
   it("emits exactly the skills plus the manifest", () => {
     expect(buildPluginTree(skills)).toHaveLength(skills.length + 1);
   });
+
+  /**
+   * A skill's path is built from the workflow's `id`, which comes from the YAML
+   * rather than from the directory it sits in, and nothing cross-checks the
+   * two. Two artifacts on one path is one file on disk and two entries in the
+   * tree — and the drift gate compares unique paths against artifact count, so
+   * the inflated total would mask an extra file. Found by fresh-context review,
+   * 2026-08-11.
+   */
+  it("refuses two artifacts claiming one path", () => {
+    expect(() =>
+      buildPluginTree([
+        { path: "skills/developer-os-capture/SKILL.md", contents: "a" },
+        { path: "skills/developer-os-capture/SKILL.md", contents: "b" },
+      ]),
+    ).toThrow(/one path/u);
+  });
+
+  it("refuses a skill colliding with the manifest's own path", () => {
+    expect(() =>
+      buildPluginTree([
+        { path: ".claude-plugin/plugin.json", contents: "{}" },
+      ]),
+    ).toThrow(/one path/u);
+  });
 });

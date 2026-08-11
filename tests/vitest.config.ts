@@ -18,6 +18,7 @@ export default defineProject({
       "integration/**/*.test.ts",
       "e2e/**/*.test.ts",
       "repository/**/*.test.ts",
+      "tools/**/*.test.ts",
     ],
     testTimeout: 120_000,
     hookTimeout: 120_000,

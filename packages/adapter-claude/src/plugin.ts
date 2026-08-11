@@ -100,7 +100,23 @@ export function buildPluginTree(
   if (skills.length === 0) {
     throw new Error("refusing to build a plugin tree with no skills");
   }
-  return [...skills, manifest()].sort((left, right) =>
+  const tree = [...skills, manifest()].sort((left, right) =>
     compareCodePoints(left.path, right.path),
   );
+  /**
+   * Two artifacts on one path is one file on disk and two entries in the tree.
+   * A skill's path is built from the workflow's `id`, which comes from the YAML
+   * rather than from the directory it sits in, and nothing cross-checks the
+   * two — so two directories declaring the same `id` silently render one file
+   * while the tree claims two. The drift gate compares a count of unique paths
+   * against a count of artifacts, so the inflated total would mask an extra
+   * file on disk. Found by fresh-context review, 2026-08-11.
+   */
+  const paths = new Set(tree.map((artifact) => artifact.path));
+  if (paths.size !== tree.length) {
+    throw new Error(
+      "refusing to build a plugin tree in which two artifacts claim one path; two workflows share an id",
+    );
+  }
+  return tree;
 }
