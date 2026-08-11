@@ -1,9 +1,9 @@
 # Developer OS — Codex Adapter Design
 
-**Status: awaiting founder approval.** Written 2026-08-11 for `ORDER.md` entry A9, program plan
-Task 5, DOS-P5. Not approved, therefore not implementable: an approved spec precedes the
-implementation plan, and the plan precedes code, which is a Global Constraint of the program plan
-rather than a preference.
+**Status: approved by the founder 2026-08-11.** Written the same day for `ORDER.md` entry A9,
+program plan Task 5, DOS-P5. The implementation plan comes next and code comes after it, which is a
+Global Constraint of the program plan rather than a preference. The two amendments this spec makes
+to earlier documents are discharged in `BACKLOG.md` §8 rather than pending.
 
 **Design inputs, all inside this repository:** the product design spec §6.6, §8, §10, §11, §14 and
 §17; `docs/architecture/workflow-schema.md` §6, §7 and §8, whose debts name DOS-P5 alongside
