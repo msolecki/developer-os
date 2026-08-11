@@ -5,6 +5,7 @@ packages:
   - packages/platform-macos
   - packages/brain
   - packages/workflow-schema
+  - packages/adapter-claude
   - tests
 # esbuild ships a prebuilt platform binary as an optional dependency, and vite
 # resolves it directly, so its postinstall script has nothing left to do here —
