@@ -1034,6 +1034,63 @@ git commit -m "feat(adapter-claude): the minimal manifest, and three hooks addre
 
 ---
 
+## Findings carried forward from the Tasks 1–5 review
+
+A fresh-context review on 2026-08-11 found four blockers, all fixed in `4420f24`
+with regression tests. These are what it also found and what is **not** fixed —
+recorded here rather than in a commit message, because each belongs to a task
+that has not run yet.
+
+**The one that needs a decision before Task 10, and it is not mine to make.**
+`hooks/hooks.json` points at `${CLAUDE_PLUGIN_ROOT}/bin/session-start`,
+`session-end` and `pre-compact`. **No task in this plan creates a `bin/`
+directory**, and `buildPluginTree` does not emit one, so the plugin as generated
+declares three hooks whose commands do not exist. `claude plugin validate`
+checks schema and not existence, so `plugin_hooks` can still resolve to `yes` —
+a verified-present claim over a dangling path. Three ways out: emit the three
+scripts from `buildPluginTree` (which means specifying what they run, and the
+capture contract is DOS-P6's), drop `hooks/hooks.json` until the task that
+writes them lands, or add a task between 5 and 10 that does it. **Ask the
+founder; do not pick one silently.**
+
+**Task 5 should also revisit two hook details.** `SessionEnd` uses
+`matcher: "*"`, but spec §14.2 enumerates that event's matchers as `clear`,
+`resume`, `logout`, `prompt_input_exit`, `bypass_permissions_disabled`, `other`
+— and the spec's own rule is that no surface may be used that §14 does not cite.
+If `*` is not honored for `SessionEnd`, the capture hook never fires and no test
+notices. `timeout: 30` is likewise uncited. Spell the documented matchers, or
+amend §14.2 with evidence.
+
+**Task 4 left three sharp edges.**
+
+1. `screenAndCap` truncates the preamble at 4096 graphemes and appends an
+   ellipsis, silently. Applied to the text carrying the prompt-injection
+   defence, truncation is content loss with no error. Refuse rather than
+   truncate for preamble text; capping is not what makes it safe, screening is.
+2. A `prose` or `recovery.resume` value that is itself a triple backtick opens
+   or closes a fence and swallows the surrounding structure — including the "Do
+   not run this automatically" warning. Neither reaches a command position, so
+   this is presentation rather than execution. Fence with a run longer than the
+   longest run in the payload.
+3. `screen` collapses all whitespace, so a real multi-paragraph `shared`
+   preamble renders as one bullet with every paragraph boundary gone. The test
+   fixture is single-line and cannot tell the difference. Split on blank lines
+   before screening each paragraph, and use a multi-paragraph fixture.
+
+**An unanswered question for Task 9 or 10.** `render` takes an overlay and
+discards it (`void overlay`), while spec §7 says the input is a contract plus
+its optional Claude overlay. If the caller is expected to run `applyOverlay`
+before calling `render`, the doc comment must say so — as written, a caller who
+passes an unapplied overlay loses it silently and no test fails.
+
+**Housekeeping.** `packages/adapter-claude/package.json` declares
+`@developer-os/core` and `zod`, and nothing in the package imports either yet.
+Task 6 consumes `zod` through `packages/core`; if `core` is still unused when
+Task 9 lands, drop the dependency rather than leaving a declaration that
+describes nothing.
+
+---
+
 ### Task 6: `agent.prompt` argument validation
 
 **Complexity:** S
