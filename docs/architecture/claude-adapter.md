@@ -32,7 +32,7 @@ replaces the implementation plan, deleted when its last step closed; git history
 ## 2. What it cannot do, on purpose
 
 1. **It ships no hooks.** `hooks/hooks.json` is not emitted; §5 of this note and `BACKLOG.md` §8
-   carry why, and the amendment is pending the founder's ratification.
+   carry why, and the founder ratified the amendment on 2026-08-11.
 2. **It writes to exactly one directory** — `~/.claude/skills/developer-os/`. Both the renderer
    and the install proposal refuse a path that would escape it, at both ends, and the integration
    test asserts no byte lands outside a temporary `HOME`.
@@ -105,8 +105,8 @@ never overwrites one.
 
 ## 5. `hooks/hooks.json` is not shipped, and the reason is not the obvious one
 
-Amends spec §6. Registered in `BACKLOG.md` §8 as **pending the founder's ratification or
-reversal**, decided by the implementer on 2026-08-11.
+Amends spec §6, decided by the implementer on 2026-08-11 and **ratified by the founder the same
+day**. `BACKLOG.md` §8 carries the row.
 
 The tree once declared three hooks whose commands lived under a `bin/` directory no task creates.
 `claude plugin validate` checks schema and not existence, so `plugin_hooks` could report `yes`
@@ -185,8 +185,8 @@ to the product. The composition itself stays in the package — `renderClaudePlu
 regenerator and the drift check call the same function. A generator and its gate that call
 different code check nothing.
 
-Registered in `BACKLOG.md` §8 as pending the founder's ratification, and reversible: restoring the
-CLI verb means deciding where it may write and how that write is owned.
+**Ratified by the founder on 2026-08-11**, and reversible: restoring the CLI verb means deciding
+where it may write and how that write is owned. `BACKLOG.md` §8 carries the row.
 
 ## 8. What the program checkpoint got, and what it did not
 

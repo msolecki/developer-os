@@ -169,9 +169,11 @@ These are not style preferences. Each one exists because it was already violated
 
 ## Stop and ask — do not decide these yourself
 
-- Anything in **Track B or Track L** of `ORDER.md`. L1 license approval is the founder's and
-  no amount of context makes it yours. **B1 was decided on 2026-08-10 — declined, not
-  deferred** (`BACKLOG.md` §6); do not reopen it from a backlog, it is a conversation.
+- Anything in **Track L** of `ORDER.md`. L1 license approval is the founder's and no amount of
+  context makes it yours. **Track B closed on 2026-08-10 and is no longer a section there** —
+  what a cutover still needs to know is `BACKLOG.md` §6, and the one live rule in it is that
+  EXIT-1, historical credential rotation, was **declined by the founder, not deferred**. Do not
+  reopen it from a backlog; it is a conversation.
 - **A12's open decision**: whether the founder cutover gets its own plan. Recommendation is
   on record; the call is not made.
 - **Any live machine change** — `~/.claude`, `~/.codex`, launchd, a real remote.

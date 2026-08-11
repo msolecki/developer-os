@@ -178,8 +178,8 @@ it never writes them.
 
 Product spec §11's example keys, resolved against the verified surface in §14:
 
-**Amended 2026-08-11, in place, by the implementation — the row contents below are superseded for
-`plugin_hooks` and `subagents`.** `claude plugin validate` reports one exit code for a whole
+**Amended 2026-08-11, in place, by the implementation and ratified by the founder the same day —
+the row contents below are superseded for `plugin_hooks` and `subagents`.** `claude plugin validate` reports one exit code for a whole
 directory, so reading it as an observation of a *particular* artifact grants a capability over a
 file that need not exist: the shipped tree contains a manifest and six skills, no `hooks/` and no
 `agents/`, and both keys resolved to `yes` on a clean exit anyway. Neither is settled by the probe
@@ -207,7 +207,7 @@ still worth reporting, and is not worth relying on.
 
 ## 6. Hooks and their payloads
 
-> **Amended 2026-08-11 during implementation, pending founder ratification —
+> **Amended 2026-08-11 during implementation and ratified by the founder the same day —
 > `hooks/hooks.json` is not shipped in DOS-P4.** The three hooks below named
 > commands under a `bin/` directory no task creates, and `claude plugin validate`
 > checks schema rather than existence, so `plugin_hooks` could report `yes` over a
