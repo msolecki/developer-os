@@ -107,6 +107,9 @@ importers:
 
   tests:
     dependencies:
+      '@developer-os/adapter-claude':
+        specifier: workspace:*
+        version: link:../packages/adapter-claude
       '@developer-os/cli':
         specifier: workspace:*
         version: link:../apps/cli
