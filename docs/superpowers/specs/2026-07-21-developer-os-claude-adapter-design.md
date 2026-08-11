@@ -1,9 +1,9 @@
 # Developer OS — Claude Code Adapter Design
 
-**Status: awaiting founder approval.** Written 2026-08-11 for `ORDER.md` entry A8, program plan
-Task 4, DOS-P4. Not approved, therefore not implementable: an approved spec precedes the
-implementation plan, and the plan precedes code, which is a Global Constraint of the program plan
-rather than a preference.
+**Status: approved by the founder on 2026-08-11.** Written the same day for `ORDER.md` entry A8,
+program plan Task 4, DOS-P4. This closes A8's `S` gate; the implementation plan may now be written,
+and code follows the plan, which is a Global Constraint of the program plan rather than a
+preference.
 
 **Design inputs, all inside this repository:** the product design spec §6.6, §8, §9, §10, §11,
 §14 and §17; `docs/architecture/workflow-schema.md`, whose §6, §7 and §8 are the debts DOS-P3
