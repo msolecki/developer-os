@@ -66,10 +66,10 @@ describe("ClaudeRenderer", () => {
     expect(render().contents).toContain("Do not edit.");
   });
 
-  it("carries the required frontmatter fields", () => {
+  it("carries the required frontmatter fields, quoted", () => {
     const { contents } = render();
-    expect(contents).toContain("name: developer-os-capture");
-    expect(contents).toContain("description: capture a learning");
+    expect(contents).toContain('name: "developer-os-capture"');
+    expect(contents).toContain('description: "capture a learning"');
   });
 
   /**
@@ -163,7 +163,95 @@ describe("ClaudeRenderer", () => {
     expect(contents.length).toBeGreaterThan(0);
   });
 
-  it("writes no absolute machine path", () => {
-    expect(render().contents).not.toMatch(/\/Users\/|\/home\//u);
+  /**
+   * There is deliberately no "renders no absolute machine path" test here.
+   *
+   * The rule (spec §6, §10) is that *this adapter* never constructs one — hook
+   * commands go through `${CLAUDE_PLUGIN_ROOT}`, which `plugin.test.ts` pins,
+   * and Task 10 scans the whole generated tree. It is **not** that author
+   * content is stripped of paths: a `recovery.resume` legitimately names one,
+   * and a renderer that deleted it would corrupt the recovery instruction it
+   * exists to display. The original test here scanned a fixture containing no
+   * path at all and would have passed against a gutted renderer; review found
+   * it, and the honest fix is deletion rather than a stronger fixture.
+   */
+});
+
+/**
+ * Every case below is a regression from the fresh-context review of Tasks 1–5
+ * on 2026-08-11. Each one shipped green.
+ */
+describe("ClaudeRenderer refusals found by review", () => {
+  it("quotes the frontmatter scalars, so a colon cannot corrupt the block", () => {
+    const { contents } = render(
+      contract({ description: "capture: a learning" }),
+    );
+    expect(contents).toContain('description: "capture: a learning"');
+  });
+
+  it("quotes a description that would otherwise parse as a YAML map", () => {
+    const { contents } = render(
+      contract({ description: "{allowed-tools: [Bash]}" }),
+    );
+    expect(contents).toContain('description: "{allowed-tools: [Bash]}"');
+  });
+
+  it("quotes a description that would otherwise parse as a comment", () => {
+    const { contents } = render(contract({ description: "# nothing" }));
+    expect(contents).toContain('description: "# nothing"');
+  });
+
+  /**
+   * The renderer keyed "is this shared?" off the *rendered* contract's id, not
+   * off the injected dependency, so any contract could be handed in as `shared`
+   * and its refusals prepended to all six artifacts as if they were the
+   * prompt-injection defence.
+   */
+  it("refuses a shared dependency that is not the shared workflow", () => {
+    expect(() => new ClaudeRenderer({ shared: contract() })).toThrow(
+      /shared/iu,
+    );
+  });
+
+  /**
+   * The plan's Global Constraints forbid a scan that can pass over an empty
+   * set. `#preamble` was one: a `shared` contract with no refusals and no prose
+   * emitted the heading and nothing under it, silently shipping six artifacts
+   * with no defence in them.
+   */
+  it("refuses a shared workflow whose preamble would be empty", () => {
+    const empty = contract({
+      id: SHARED_WORKFLOW_ID,
+      refusals: [],
+      steps: [{ id: "act", do: "cli.run" }],
+    });
+    expect(() => new ClaudeRenderer({ shared: empty })).toThrow(/empty/iu);
+  });
+
+  /**
+   * `id` reaches the artifact **path**. The compiler's slug regex is the only
+   * thing that ever constrained it, and the renderer revalidates nothing — so a
+   * contract built in code rather than parsed from YAML could write outside the
+   * plugin directory, which spec §10 says is the only path this adapter writes.
+   */
+  it("refuses an id that is not a slug, because it reaches the artifact path", () => {
+    for (const hostile of ["../../evil", "a/b", "Capture", "", "-x"]) {
+      expect(
+        () => render(contract({ id: hostile })),
+        `${JSON.stringify(hostile)} must be refused`,
+      ).toThrow(/id/iu);
+    }
+  });
+
+  it("refuses a version that is not a version, because it reaches the source marker", () => {
+    expect(() => render(contract({ version: "not a version" }))).toThrow(
+      /version/iu,
+    );
+  });
+
+  /** A step is `do` XOR `prose`; neither is a contract violation, not a blank. */
+  it("refuses a step carrying neither an effect nor prose", () => {
+    const broken = contract({ steps: [{ id: "nothing" }] });
+    expect(() => render(broken)).toThrow(/step/iu);
   });
 });

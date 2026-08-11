@@ -64,14 +64,39 @@ const DOCUMENTED_FLOORS: ReadonlyMap<ClaudeCapabilityKey, string | null> =
   ]);
 
 /**
- * Numeric per component. Not `localeCompare`, which varies with ICU, and not
- * string `<`, which orders `2.1.9` above `2.1.10`.
+ * Exactly three numeric components. A `v` prefix, a pre-release suffix, a
+ * two-part version and vendor text are all *not* versions, and saying so is the
+ * whole point — see `compareVersions`.
  */
-export function compareVersions(left: string, right: string): number {
-  const a = left.split(".");
-  const b = right.split(".");
+const VERSION = /^(\d+)\.(\d+)\.(\d+)$/u;
+
+function parseVersion(value: string): readonly number[] | null {
+  const match = VERSION.exec(value);
+  if (match === null) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+/**
+ * Numeric per component, and `null` when either side is not a version.
+ *
+ * Not `localeCompare`, which varies with ICU, and not string `<`, which orders
+ * `2.1.9` above `2.1.10`.
+ *
+ * **It returns `null` rather than `NaN`, and that is a fix rather than a
+ * style.** The first version did `Number(a[i] ?? 0) - Number(b[i] ?? 0)` and
+ * returned `NaN` for unparsable input. `NaN !== 0` is true, so it propagated;
+ * `NaN < 0` is **false**, so the floor check in `tablePermits` did not refuse;
+ * and every capability the probe had observed was granted on a version string
+ * nobody could parse. A comparison that cannot answer has to say so — a number
+ * that silently fails every inequality is the worst possible answer, because it
+ * fails open. Found by fresh-context review, 2026-08-11.
+ */
+export function compareVersions(left: string, right: string): number | null {
+  const a = parseVersion(left);
+  const b = parseVersion(right);
+  if (a === null || b === null) return null;
   for (let index = 0; index < 3; index += 1) {
-    const difference = Number(a[index] ?? 0) - Number(b[index] ?? 0);
+    const difference = (a[index] ?? 0) - (b[index] ?? 0);
     if (difference !== 0) return difference;
   }
   return 0;
@@ -92,7 +117,11 @@ export function tablePermits(
 ): boolean {
   const floor = DOCUMENTED_FLOORS.get(key);
   if (floor === undefined) return false;
-  if (compareVersions(version, CLAUDE_MINIMUM_VERSION) < 0) return false;
+
+  const aboveMinimum = compareVersions(version, CLAUDE_MINIMUM_VERSION);
+  if (aboveMinimum === null || aboveMinimum < 0) return false;
   if (floor === null) return true;
-  return compareVersions(version, floor) >= 0;
+
+  const aboveFloor = compareVersions(version, floor);
+  return aboveFloor !== null && aboveFloor >= 0;
 }

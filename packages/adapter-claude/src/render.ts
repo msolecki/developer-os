@@ -35,6 +35,48 @@ function screen(value: string): string {
 }
 
 /**
+ * A YAML plain scalar built from author text is a corruption waiting to happen.
+ * `description: capture: a learning` is a nested mapping and fails the whole
+ * frontmatter block, so the skill silently does not load;
+ * `description: {allowed-tools: [Bash]}` parses as a **map**, letting an author
+ * choose the parsed type of a frontmatter field; `description: # nothing`
+ * parses as null. Verified against `yaml@2.8.1`, the version this repository
+ * already depends on.
+ *
+ * `JSON.stringify` produces a valid YAML double-quoted scalar, which is why it
+ * is the fix rather than hand-rolled quoting. Found by fresh-context review,
+ * 2026-08-11.
+ */
+function yamlScalar(value: string): string {
+  return JSON.stringify(screen(value));
+}
+
+/** The compiler's own slug rule. */
+const SLUG = /^[a-z][a-z0-9-]*$/u;
+const SEMVER = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u;
+
+/**
+ * `id` reaches the artifact **path** and `version` reaches the source marker,
+ * and this class accepts anything typed as `WorkflowContractV1` — a value that
+ * came from `validateWorkflow` today and could come from code tomorrow. Spec
+ * §10 says the plugin directory is the only path this adapter writes; an `id`
+ * of `../../evil` would break that, and the render seam is where the rule "the
+ * first surface owns screening it" applies.
+ */
+function assertRenderable(contract: WorkflowContractV1): void {
+  if (!SLUG.test(contract.id)) {
+    throw new Error(
+      `workflow id is not a slug and reaches an artifact path: ${JSON.stringify(screen(contract.id))}`,
+    );
+  }
+  if (!SEMVER.test(contract.version)) {
+    throw new Error(
+      `workflow version is not MAJOR.MINOR.PATCH: ${JSON.stringify(screen(contract.version))}`,
+    );
+  }
+}
+
+/**
  * Spec §7.1. `shared` carries the entire prompt-injection defence, and
  * `WorkflowContractV1` has no composition field — `WorkflowOverlayV1.extends`
  * pins an overlay to its base, which is a different relation — so nothing in
@@ -50,8 +92,30 @@ export class ClaudeRenderer implements WorkflowRenderer {
   readonly vendor = "claude";
   readonly #shared: WorkflowContractV1;
 
+  /**
+   * The shared contract is checked here, not trusted.
+   *
+   * `render` used to key "is this shared?" off the *rendered* contract's id
+   * rather than off this dependency, so handing in any contract as `shared`
+   * silently prepended its refusals to all six artifacts as though they were
+   * the prompt-injection defence. And `#preamble` was a scan that could pass
+   * over an empty set — a `shared` with no refusals and no prose emitted a
+   * heading with nothing under it, shipping six artifacts with no defence and
+   * no error. Both found by fresh-context review, 2026-08-11.
+   */
   constructor(dependencies: ClaudeRendererDependencies) {
+    if (dependencies.shared.id !== SHARED_WORKFLOW_ID) {
+      throw new Error(
+        `the shared dependency must be the \`${SHARED_WORKFLOW_ID}\` workflow, not \`${screen(dependencies.shared.id)}\``,
+      );
+    }
+    assertRenderable(dependencies.shared);
     this.#shared = dependencies.shared;
+    if (preambleBody(dependencies.shared).length === 0) {
+      throw new Error(
+        "the shared workflow renders an empty preamble; it carries the prompt-injection defence and every other artifact depends on it being non-empty",
+      );
+    }
   }
 
   render(
@@ -59,10 +123,11 @@ export class ClaudeRenderer implements WorkflowRenderer {
     overlay: WorkflowOverlayV1 | null,
   ): readonly RenderedArtifact[] {
     void overlay;
+    assertRenderable(contract);
     const lines: string[] = [
       "---",
-      `name: developer-os-${screen(contract.id)}`,
-      `description: ${screen(contract.description)}`,
+      `name: ${yamlScalar(`developer-os-${contract.id}`)}`,
+      `description: ${yamlScalar(contract.description)}`,
       "---",
       "",
       `<!-- ${sourceMarker(contract, `workflows/${contract.id}/workflow.yaml`)} -->`,
@@ -87,18 +152,27 @@ export class ClaudeRenderer implements WorkflowRenderer {
   }
 
   #preamble(): readonly string[] {
-    const shared = this.#shared;
     return [
       `<!-- preamble from ${SHARED_WORKFLOW_ID}; concatenated, not referenced -->`,
       "",
       "## Always",
       "",
-      ...renderRefusals(shared),
-      ...shared.steps.flatMap((step) =>
-        step.prose === undefined ? [] : [`- ${screen(step.prose)}`],
-      ),
+      ...preambleBody(this.#shared),
     ];
   }
+}
+
+/**
+ * The preamble's actual content, separated from its heading so the constructor
+ * can require it to be non-empty. A heading is not a defence.
+ */
+function preambleBody(shared: WorkflowContractV1): readonly string[] {
+  return [
+    ...renderRefusals(shared),
+    ...shared.steps.flatMap((step) =>
+      step.prose === undefined ? [] : [`- ${screen(step.prose)}`],
+    ),
+  ];
 }
 
 function renderRefusals(contract: WorkflowContractV1): readonly string[] {
@@ -123,7 +197,15 @@ function renderSteps(contract: WorkflowContractV1): readonly string[] {
       lines.push(screen(step.prose), "");
       continue;
     }
-    lines.push(`Effect: \`${screen(step.do ?? "")}\``, "");
+    // The contract makes a step `do` XOR `prose`. If neither is present the
+    // value did not come from `validateWorkflow`, and rendering an empty
+    // `Effect: ``` would hide that in the artifact rather than report it.
+    if (step.do === undefined) {
+      throw new Error(
+        `step \`${screen(step.id)}\` carries neither an effect nor prose`,
+      );
+    }
+    lines.push(`Effect: \`${screen(step.do)}\``, "");
     if (step.with !== undefined) {
       lines.push("```json", screen(JSON.stringify(step.with)), "```", "");
     }

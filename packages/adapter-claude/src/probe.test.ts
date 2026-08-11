@@ -77,7 +77,13 @@ describe("probeClaude", () => {
     expect(seen.get("skills")).toBe("unavailable");
   });
 
-  it("marks a signal-killed probe unavailable, not absent", async () => {
+  /**
+   * Named for what it checks. A signal death surfaces in `ProcessResult` as a
+   * null exit code, and that null is what this asserts on — `probeClaude` never
+   * reads `signal`. The earlier name claimed the signal was the cause, which
+   * would have kept passing if signal handling were removed entirely.
+   */
+  it("marks a probe with no exit code unavailable, not absent", async () => {
     const seen = await probeClaude(installation, {
       runner: runner(() => ({ exitCode: null, signal: "SIGKILL" })),
       pluginDirectory,
