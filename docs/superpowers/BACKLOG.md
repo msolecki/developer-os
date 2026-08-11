@@ -107,23 +107,32 @@ if it left nothing, it was not worth recording. Git history is the archive.
 ### NEW-11 — the invisible-title rule stops at the title
 
 - **Status:** open, found 2026-08-11 by the review that closed NEW-10 · **Owner:** the next task
-  touching `packages/brain/src/render.ts` or `lint.ts` — DOS-P6 by default · **Size:** S
+  touching `packages/brain/src/indexes/render.ts` or `packages/brain/src/lint/lint.ts` — DOS-P6 by
+  default · **Size:** S
 - NEW-10 gave `title` a predicate that means *at least one visible character*. **Two neighbours
-  did not get it**, and both surface the same way NEW-10 did — a rendered row that says nothing:
+  did not get it**, and both surface the way NEW-10 did — a rendered row that says nothing:
   - **`tags`** is validated as a string array and nothing more, so `tags: [""]` and
-    `tags: ["\u200B"]` both pass. The tag cloud then renders `- (3)`: a count attached to no
-    label, and an empty entry between commas in the folder table's "Top tags" cell.
+    `tags: ["\u200B"]` both pass. The tag cloud then renders `-  (3)` — two spaces, a count
+    attached to no label — and the folder table's "Top tags" cell gets an empty entry between
+    commas.
   - **`summary`** is type-and-length only. `summary: "\u3164"` renders `- [Title](<path>) — ㅤ`,
     a dangling em-dash. Cosmetic, unlike the tag case.
 - **The `duplicates` key has the older, narrower definition.** `lint.ts` keys on the *screened*
   title, and the screen deletes `\p{Cf}` only — so `Deploy keys` and `Deploy\u3164keys` produce
   different keys and no duplicate is reported, while `catalog.md` shows two rows a human reads as
   identical. That is precisely the failure NEW-6 was opened for, one character class over.
-- **Do not fix it by widening the display screen.** `screenControlCharacters` must not delete
-  non-spacing marks: doing so would corrupt every legitimately accented title it touches. The
-  emptiness predicate is a *different* question from the display screen, which is why NEW-10's
-  lives in `note.ts`. When a second call site needs it, move it to `packages/security` beside the
-  screen rather than copying it — the rule that module's own header states.
+- **It is two fixes, not one, and the reviewer's correction is worth carrying.** `tags` and
+  `summary` want the *boolean* NEW-10 already wrote — move `isBlank` out of `note.ts` to
+  `packages/security` when that second call site appears, rather than copying it, which is the rule
+  that module's own header states. The duplicates key wants something `isBlank` cannot give: a
+  **perceptual grouping key**, a third function returning a string with invisibles removed and
+  marks untouched. Anyone who starts by reaching for `isBlank` there has started wrong.
+- **Do not fix either by widening the display screen.** `screenControlCharacters` must not delete
+  non-spacing marks: it would corrupt every accented and every Indic title it touches.
+- **A cheap interim exists for the half that is user-visible.** A `frontmatter`-class lint finding
+  for a blank tag needs no renderer change and no new module, and it does not prejudge the policy
+  question the full fix has to answer — whether an invisible tag is an error, a warning, or
+  silently dropped at index time.
 
 ### NEW-7 — a link destination's percent-encoding is unverified against Obsidian
 

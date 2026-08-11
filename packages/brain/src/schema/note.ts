@@ -209,6 +209,14 @@ function renderKey(key: string): string {
  * all carry a base character and pass. U+200D ZERO WIDTH JOINER needs no special
  * case here because it is itself default-ignorable — the joined emoji survives
  * on the strength of the two faces around it.
+ *
+ * **One drift worth naming, because `screen.ts` names the same one for
+ * `Intl.Segmenter`:** `\p{Cn}` is unassigned *in this runtime's ICU*, so validity
+ * is a function of the ICU version. The direction is the safe one and only the
+ * safe one — Unicode never un-assigns a code point, so a title that validates
+ * today cannot start failing, while one that fails today may start passing on a
+ * future Node. `engines.node` bounds it in practice. Nothing on a vault already
+ * on disk breaks either way.
  */
 const INVISIBLE_ONLY =
   /^[\p{Cf}\p{Default_Ignorable_Code_Point}\p{Mn}\p{Me}\p{Cc}\p{Cn}\s\u2800]*$/u;
