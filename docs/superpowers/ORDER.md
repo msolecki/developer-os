@@ -30,17 +30,25 @@ week of confusion.
 
 ## NOW
 
-**A9 — DOS-P5 Codex adapter, at its `P` gate.** The founder approved the spec on 2026-08-11, so
-the next thing anyone writes is `plans/2026-07-21-developer-os-codex-adapter.md`. Use
-`superpowers:writing-plans`. No code before that plan exists — a Global Constraint of the program
-plan, not a preference.
+**A9 — DOS-P5 Codex adapter, at its `I` gate.** The founder approved the spec on 2026-08-11 and
+the plan was written the same day: `plans/2026-07-21-developer-os-codex-adapter.md`, eighteen
+tasks, none started. Both document gates are closed, so what remains is code.
 
-**Read three documents before writing it**, in this order: the approved spec, whose §14 is
-normative and whose §12 is the table DOS-P6 inherits; `docs/architecture/claude-adapter.md`,
-because three of its residuals come due the moment a second adapter exists — the duplicated
-code-point sort, the missing `ClaudeAdapter` façade, and `detectWorkflowDrift` reporting drift in
-only one direction; and `docs/architecture/workflow-schema.md` §7 and §8, which both adapters
-inherit.
+**Start at Task 1, and read `docs/architecture/claude-adapter.md` first.** The plan's first three
+tasks are not Codex work at all — they move the capability vocabulary into `packages/core`, the
+code-point ordering onto `packages/workflow-schema`'s door, the Markdown display seam into
+`packages/security`, and the vendor-neutral skill body into `packages/workflow-schema`, because
+spec §1 forbids either adapter importing the other and four of the Claude adapter's residuals come
+due precisely here. Doing them first is what keeps the second renderer from being a copy of the
+first — which, measured against the shipped one, is exactly what it would otherwise be.
+
+**Two things in the plan are founder decisions, not an implementer's, and both are in `BACKLOG.md`
+§8.** Spec §5.3 says ship hooks; a command hook names something executable, and the only command we
+could name is the product binary, whose capture entrypoint is DOS-P6's — so the plan defers hooks
+for **both** adapters to DOS-P6, in one change, which is where DOS-P4 already left them. And the
+plan moves the vendor-neutral skill body into `packages/workflow-schema`, amending that package's
+architecture note, because Codex's required frontmatter is identical to Claude's and a second
+renderer written the obvious way would be a byte-for-byte copy of the first.
 
 **Two things the Codex spec settled that a reader of DOS-P4 would guess wrong.** Codex has no
 in-place plugin discovery, so the install is a **local marketplace** — which does resolve to real
@@ -71,7 +79,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A9 | DOS-P5 Codex adapter — S / P / I | `plans/…-codex-adapter.md` — **to write** | — | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | **now** — `S` approved 2026-08-11; `P` is the next document |
+| A9 | DOS-P5 Codex adapter — S / P / I | `plans/2026-07-21-developer-os-codex-adapter.md`, 18 tasks | — | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | **now** — `S` approved and `P` written 2026-08-11; `I` is 0/18 |
 | A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | A9 | L | program plan Task 6 checkpoint, after independent security review | blocked |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
@@ -134,7 +142,7 @@ request exists so a human sees it first.
 Foundation, DOS-P2, DOS-P3 and DOS-P4 are closed — four subsystems of eight, and the two that
 turn a canonical workflow into something an agent can actually load.
 
-**Eight milestones remain**, each L: DOS-P5's plan and implementation; DOS-P6's spec, plan and
+**Seven milestones remain**, each L: DOS-P5's implementation; DOS-P6's spec, plan and
 implementation; DOS-P7's spec, plan and implementation. Then two more entries that are not
 subsystems — the cutover (A12) and the release (A13) — plus Track L's two items, which are not
 engineering work at all.
