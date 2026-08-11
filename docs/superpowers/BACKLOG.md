@@ -60,10 +60,10 @@ Open work only. Program Tasks 0 to 3 are closed and are not rows here.
 | Area | Where | What is left |
 |---|---|---|
 | Program (umbrella) | 1 plan | Tasks 4–9 open; Tasks 0–3 closed and not rows here |
-| DOS-P4 … DOS-P7 | DOS-P4 spec approved and planned; DOS-P5 spec written, awaiting approval — both 2026-08-11 | 2 specs, 3 plans, 4 implementations |
+| DOS-P5 … DOS-P7 | DOS-P5 spec written 2026-08-11, awaiting approval; **DOS-P4 shipped 2026-08-11** | 2 specs, 3 plans, 3 implementations |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
 | Repository-level | §1 | NEW-7 and NEW-10 — both XS; NEW-7 needs a machine with Obsidian |
-| Repository infrastructure | §5 | four directories a later subsystem still owes; `tests/contracts/`, `packages/workflow-schema/` and `workflows/` landed with DOS-P3 on 2026-08-10 |
+| Repository infrastructure | §5 | two directories a later subsystem still owes; `packages/adapter-claude/`, `plugins/claude/` and `tests/integration/` landed with DOS-P4 on 2026-08-11 |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
 
@@ -187,8 +187,13 @@ that subsystem in §3.
 ## 3. Missing specs and plans
 
 **Five documents left.** DOS-P6 and DOS-P7 need a spec and a plan each; DOS-P5 needs its plan, and
-its spec is written and awaiting approval. DOS-P4 needs neither — its spec was approved and its plan
-written on 2026-08-11, so what remains of it is the code.
+its spec is written and awaiting approval.
+DOS-P4 is closed and is not listed here any more: its spec is retained at
+`specs/2026-07-21-developer-os-claude-adapter-design.md` because
+`docs/architecture/claude-adapter.md` names it as the design of record; its plan is deleted,
+recoverable at `17968cb`. **Read the architecture note before either remaining adapter task** —
+its §4 records why in-place discovery beat a marketplace copy, and its §9 the twelve residuals
+DOS-P4 leaves behind, six of them DOS-P6's.
 DOS-P3 is closed and is not listed here any more: its spec is retained at
 `specs/2026-07-21-developer-os-workflow-compiler-design.md` because
 `docs/architecture/workflow-schema.md` names it as the design of record; its plan is deleted,
@@ -200,43 +205,6 @@ Every spec starts with a brainstorming/approval cycle, and approval is the found
 DOS-P2 is not listed here any more. Its spec is retained at
 `specs/2026-07-21-developer-os-brain-engine-design.md` because `docs/architecture/brain.md`
 names it as the design of record; its plan is deleted, recoverable at `81e7e7d`.
-
-### DOS-P4 — Claude Code adapter
-
-- **Spec:** `specs/2026-07-21-developer-os-claude-adapter-design.md` — **approved 2026-08-11.** It
-  settles the install shape (a skills-directory plugin, discovered in place, zero settings keys),
-  the three-value capability model, the `shared` preamble delivery, and the `.claude/` question.
-  Its §14 is normative: an implementation may not depend on a Claude Code surface not listed there.
-  §15 carries four items it deliberately does not close
-- **Plan:** `plans/2026-07-21-developer-os-claude-adapter.md` — written 2026-08-11, unstarted
-- **Program task:** 4 · **Complexity:** L · **Blocked by:** DOS-P3 schemas frozen
-- **The spec must decide:** supported-version discovery, plugin structure, hook payloads,
-  wrapper behavior, semantic config merge, failure contracts, which lifecycle surfaces
-  are verified enough for SessionStart injection and automatic capture, and when to fall
-  back to `developer-os run claude`.
-- **Produces:** `ClaudeAdapter`, `ClaudeCapabilities`, `ClaudeInvocation`, `plugins/claude/`,
-  managed hook plans, structured agent-run results.
-- **Gate:** fake-CLI tests pin argv, stdin, environment, timeout, signal, exit and
-  malformed-output behavior; install/update/uninstall preserves unrelated Claude settings;
-  an unsupported version reports exact missing capabilities rather than partial success.
-- **Checkpoint:** a Claude-only user completes the full synthetic Brain workflow with no
-  Codex installed.
-- **First consumer of Foundation's conflict evidence.** The semantic config merge is what
-  `buildConflictEvidence` was built for (§2). The three-way *diff* the design spec §9.3
-  describes was deliberately deferred to this task; Foundation shipped the two-way form —
-  three recorded hashes, a current-versus-proposed diff.
-- **Also decides the first `.claude/` question this repository has ever had.** The founder's
-  own notes record an unresolved decision about whether small conveniences under `.claude/`
-  (a slash command, a hook) are worth a full approval-and-hash cycle as publication
-  artifacts. This repository has no `.claude/` directory today, and `exclusion-policy.md`
-  does not name the path. Settle it here, before the first adapter artifact wants a home.
-- **Reference reading, optional:** `phuryn/pm-skills/validate_plugins.py` (MIT) is a
-  working inventory of real-world Claude plugin-manifest checks — name matches directory,
-  semver, author object shape, description length floors, `use when` trigger phrasing,
-  50–3000 word bounds as a progressive-disclosure proxy, and dangling skill-reference
-  detection. Read it once when drafting this spec to avoid missing an obvious check. Note
-  what it omits, because those are precisely our requirements: it does not reject unknown
-  fields, does not check path traversal, and does not detect generated-vs-source drift.
 
 ### DOS-P5 — Codex adapter
 
@@ -363,14 +331,14 @@ subproject; listed here so nothing is discovered late.
 | `tests/contracts/` | Foundation onward | **created 2026-08-10** by DOS-P3 — `workflows/{canonical,negative,determinism}.test.ts`, 16 cases. DOS-P2 had put its contract cases beside the code they pin instead |
 | `tests/fixtures/` | Foundation onward | **created 2026-08-08** |
 | `tests/fixtures/brain/legacy-shape/` | DOS-P2 Task 3 | **created 2026-08-08**, plus eight one-concern `malformed/` fixtures for lint |
-| `tests/integration/` | Foundation onward | missing — DOS-P2's reindex/lint/search integration runs in `tests/e2e/brain.test.ts` against the compiled binary, which is the stronger of the two |
+| `tests/integration/` | Foundation onward | **created 2026-08-11** by DOS-P4 — `claude/plugin-loads.test.ts`, six cases against a real installation in a disposable `HOME`, skipped where no agent exists. DOS-P2's reindex/lint/search integration still runs in `tests/e2e/brain.test.ts` against the compiled binary, which is the stronger of the two |
 | `tests/e2e/` | Foundation Task 9 | **created 2026-08-01** — `pnpm test:e2e` runs 45 cases across `foundation.test.ts` and `brain.test.ts` |
 | `tests/security/` | DOS-P6 | missing |
 | `docs/architecture/` | Foundation Task 9, then per subsystem | **created 2026-08-01** — Foundation boundaries and constraints done, Brain and the workflow schema done; threat model and capability model still owed by later subsystems |
 | `docs/releases/` | DOS-P7 | **created 2026-08-01** by Foundation Task 9, ahead of its named owner |
 | `packages/brain/` | DOS-P2 | **complete 2026-08-10** — `schema/`, `discovery/`, `indexes/`, `lint/`, `retrieval/`, `migrations/`, `service.ts`, and `redact.ts` as a re-export of the screen that moved to `packages/security` in DOS-P3 |
 | `packages/workflow-schema/` | DOS-P3 | **complete 2026-08-10** — `parse`, `contract`, `vocabulary`, `derive`, `validate`, `overlay`, `load`, `drift` |
-| `packages/adapter-claude/`, `plugins/claude/` | DOS-P4 | missing |
+| `packages/adapter-claude/`, `plugins/claude/` | DOS-P4 | **complete 2026-08-11** — `discover`, `versions`, `probe`, `capabilities`, `render`, `plugin`, `compose`, `install`, `invoke`, and the six generated skills. `tests/tools/render-claude.ts` regenerates the tree; `docs/architecture/claude-adapter.md` is what replaced its plan |
 | `packages/adapter-codex/`, `plugins/codex/` | DOS-P5 | missing |
 | `templates/brain/` | DOS-P2 | **created 2026-08-10** — the vault skeleton `init` installs, embedded in `apps/cli/src/commands/brain-template.ts` so a shipped binary carries it, with a test that fails if the two drift |
 | `workflows/` | DOS-P3 | **created 2026-08-10** — the six canonical workflows |
@@ -508,12 +476,15 @@ documents and this was the reverse. DOS-P3's first draft invented `session_start
 current and untouched. Recorded here only so the next reader does not go looking for an
 amendment that would say otherwise.
 
-**Two amendments are pending, not discharged, because the document making them is not approved
-yet.** Both come from `specs/…-codex-adapter-design.md`, written 2026-08-11, and **both revert with
-it if the founder does not approve**:
+**Five amendments are pending, not discharged.** Two come from `specs/…-codex-adapter-design.md`,
+written 2026-08-11, and **revert with it if the founder does not approve**; three were decided by the
+implementer while closing DOS-P4 and await ratification or reversal on their own terms:
 
 | Amends | What changes | State |
 |---|---|---|
+| DOS-P4's plan, Task 10 — now deleted; the record is `docs/architecture/claude-adapter.md` §7 | **`developer-os workflow render` is not added, and regeneration is `npm run render:claude` instead.** The plan asked for a CLI verb; taken literally it contradicts spec §10, which says the adapter writes to exactly one directory — a shipped verb that writes `./plugins/claude` into whatever directory a user stands in writes outside the manifest, outside a transaction, and outside every guarantee Foundation makes about mutation. `plugins/claude/` exists only in a source checkout, so its regenerator is repository tooling rather than product surface. The composition stays in the package (`renderClaudePlugin`), so the regenerator and the drift check call the same function | **decided by the implementer 2026-08-11; awaiting founder ratification or reversal.** Restoring the verb means deciding where it may write and how that write is owned |
+| `specs/…-claude-adapter-design.md` §5.4, approved 2026-08-11 | **the probe settles `skills` only, and only over a directory observed to contain a `SKILL.md`.** One exit code from `claude plugin validate` covers a whole directory, so reading it as an observation of a particular artifact granted `plugin_hooks=yes` and `subagents=yes` over a tree containing neither — and `skills=yes` over one containing no skill. Restoring a key to that probe means shipping the artifact it names in the same change; for `plugin_hooks` that is the whole of §6's restoration, **owner DOS-P6** | **decided by the implementer 2026-08-11 after a fresh-context review found it; awaiting founder ratification or reversal.** The spec carries a dated in-place amendment above the superseded table |
+| Program plan Task 4's checkpoint, and two of its eight boxes | **the checkpoint is half met, and the other half is DOS-P6's.** Six skills load in a real installation; `capture`, `ingest` and `review` name verbs with no handler anywhere in this product. Lifecycle injection and `developer-os run claude` stay unticked with inline notes naming DOS-P6, rather than ticked to make the task look closed | recorded 2026-08-11 in the program plan and in `claude-adapter.md` §8; no founder decision is required unless the checkpoint is meant to gate A9 |
 | `specs/…-claude-adapter-design.md` §6, approved 2026-08-11 | **`hooks/hooks.json` is not shipped in DOS-P4.** The three hooks named commands under a `bin/` directory no task creates, and `claude plugin validate` checks schema rather than existence, so `plugin_hooks` could report `yes` over a dangling path. Emitting the scripts does not repair it: a command hook needs an executable file and nothing in the pipeline can express an executable bit — `RenderedArtifact` is `{path, contents}`, `ManagedArtifactV1` has `kind: "file"` and no mode. Nothing regresses; §6.1 already makes all three lifecycle capabilities `wrapper-required` until a hook is observed firing, which none could ever be. Restoring it needs the hook bodies, an executable-bit mechanism and a firing test, **in one change. Owner: DOS-P6** | **decided by the implementer 2026-08-11 after three requests to continue; awaiting founder ratification or reversal.** The spec carries a dated in-place amendment above the section it supersedes |
 | §2 of this file, a second time | `buildConflictEvidence` has **no consumer in either adapter**. DOS-P4 §4.3 dissolved its half; DOS-P5 §4.3 dissolves the other by delegating the config write to `codex plugin add`. It was built for a design both adapters declined. Whether it is retained, taken up by DOS-P7, or deleted belongs to the first subsystem with a real three-way merge | pending spec approval |
 | `specs/…-claude-adapter-design.md` §8.1, approved 2026-08-11 | the `agent.prompt` `with` schema moves from `packages/adapter-claude` to `packages/core`, so **both** adapters import one schema. Two adapters with two argument schemas for one verb is a workflow that validates against one vendor and not the other. DOS-P4's plan Task 6 is updated in the same change; it had not started | pending spec approval |

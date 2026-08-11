@@ -170,14 +170,14 @@ spec wins over the plan, and this is recorded rather than left as an apparent om
 
 **How:**
 
-- [ ] Approve exact supported-version discovery, plugin structure, hook payloads, wrapper behavior, config merge, and failure contracts.
-- [ ] Implement version and capability detection from documented CLI surfaces.
-- [ ] Render canonical workflows into namespaced Claude skills and plugin metadata.
-- [ ] Install through a dedicated managed plugin path and semantic config merge.
-- [ ] Implement safe agent invocation with argv arrays, bounded stdin, timeouts, and structured result validation.
-- [ ] Implement SessionStart injection and automatic capture only for verified lifecycle surfaces.
-- [ ] Use `developer-os run claude` when direct invocation cannot meet the capture contract.
-- [ ] Test against a fake CLI first and a disposable real installation second.
+- [x] Approve exact supported-version discovery, plugin structure, hook payloads, wrapper behavior, config merge, and failure contracts.
+- [x] Implement version and capability detection from documented CLI surfaces.
+- [x] Render canonical workflows into namespaced Claude skills and plugin metadata.
+- [x] Install through a dedicated managed plugin path and semantic config merge. — *the merge half is dissolved rather than done: a skills-directory plugin writes no foreign config file, so there is nothing to merge (spec §4.3, `docs/architecture/claude-adapter.md` §2).*
+- [x] Implement safe agent invocation with argv arrays, bounded stdin, timeouts, and structured result validation.
+- [ ] Implement SessionStart injection and automatic capture only for verified lifecycle surfaces. — *unearned rather than skipped: no lifecycle surface could be observed firing, so no hook ships and all three lifecycle capabilities report `wrapper-required`. Owner: DOS-P6 (`claude-adapter.md` §5).*
+- [ ] Use `developer-os run claude` when direct invocation cannot meet the capture contract. — *the capability model already tells users the wrapper is required; the verb has nothing to capture into until the capture contract exists. Owner: DOS-P6 (`claude-adapter.md` §9.2).*
+- [x] Test against a fake CLI first and a disposable real installation second.
 
 **Test:**
 
@@ -188,6 +188,13 @@ spec wins over the plan, and this is recorded rather than left as an apparent om
 - Unsupported Claude versions report exact missing capabilities rather than partial success.
 
 **Checkpoint:** A Claude-only user completes the full synthetic Brain workflow with no Codex installation.
+
+**Half met on 2026-08-11, and the other half is not this task's to meet.** The six skills load in a
+real installation and `doctor` and `brain search` name commands that exist. `capture`, `ingest` and
+`review` name verbs with **no handler anywhere in this product** — six of the seven unimplemented
+verbs belong to DOS-P6 — so a user following those three skills reaches a command that is not
+there. An adapter renders workflows and executes none of them, so DOS-P4 could not have closed
+this. Recorded in `docs/architecture/claude-adapter.md` §8 rather than left as an apparent pass.
 
 ---
 

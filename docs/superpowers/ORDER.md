@@ -26,23 +26,27 @@ week of confusion.
 
 ## NOW
 
-**A8 and A9 — DOS-P4 Claude adapter and DOS-P5 Codex adapter.** Both are `‖`, both unblock
-together now that DOS-P3's schemas are frozen, and both start at `S`: write the spec, get it
-approved by the founder, then the plan, then the code. Neither is code work today.
+**A9 — DOS-P5 Codex adapter, and it is waiting on the founder.** Its spec is written; nothing
+below it can start until that spec is approved, and approving it is not an agent's call. **The
+queue has nothing else startable that does not need the founder** — see the two `BACKLOG.md` §1
+items and Track L at the bottom of this file.
 
-**A8's spec was approved on 2026-08-11 and its plan was written the same day.** Both gates closed;
-what remains of A8 is `I`, fourteen tasks, none started. Four decisions were taken by the founder
-during the brainstorming cycle and are recorded in the spec rather than here: the
-install is a skills-directory plugin discovered in place and writes **no** settings key; a
-capability is `yes` only when a version floor permits it *and* a probe observes it; the `shared`
-preamble is concatenated into each artifact rather than referenced from one; and **this repository
-creates no `.claude/` directory in version 1**, which amends an approved Task 0 artifact and is
-registered in `BACKLOG.md` §8 as pending.
+**A8 closed on 2026-08-11.** All three gates: the spec was approved, the plan's fourteen tasks
+were implemented and reviewed, and `packages/adapter-claude` plus the generated `plugins/claude/`
+are committed. What survives it is `docs/architecture/claude-adapter.md` — read that before either
+remaining adapter task, and before any capture work, because six of its twelve residuals are
+DOS-P6's. Its plan is deleted and git history is the archive.
 
-**One thing that spec found is worth knowing before reading it.** A marketplace install copies a
-plugin into a cache, so the manifest would hash a source Claude Code does not read — drift
-detection blind by construction. In-place discovery makes the hashed bytes and the loaded bytes the
-same bytes, which is why the mechanism changed mid-cycle.
+**Three things A8 settled that a reader of the spec alone would not know.** A marketplace install
+copies a plugin into a cache, so the manifest would hash a source Claude Code does not read —
+drift detection blind by construction; in-place discovery makes the hashed bytes and the loaded
+bytes the same bytes, which is why the mechanism changed mid-cycle. **`hooks/hooks.json` is not
+shipped at all**, because a command hook needs an executable file and nothing in this pipeline can
+express an executable bit — so the claim could never have been true, and the capability model
+already said `wrapper-required`. And **the program checkpoint is half met on purpose**: the six
+skills load, but `capture`, `ingest` and `review` name verbs with no handler anywhere in this
+product. An adapter renders workflows and executes none of them. Both decisions are in
+`BACKLOG.md` §8, one of them awaiting ratification.
 
 **A9's spec was written on 2026-08-11 and is waiting on the founder.** Codex is not Claude-shaped
 and the spec's §12 is the table DOS-P6 inherits because of it: Codex has no in-place plugin
@@ -57,8 +61,8 @@ suppress the user's own instructions.
 
 **Two amendments ride on A9's approval**, both in `BACKLOG.md` §8 as pending: `buildConflictEvidence`
 turns out to have no consumer in *either* adapter, and the `agent.prompt` argument schema moves to
-`packages/core` so one verb has one schema. DOS-P4's plan was updated in the same change; it had not
-started.
+`packages/core` so one verb has one schema. Both landed with A8's code; if the spec is not approved
+they revert with it.
 
 **A7 closed on 2026-08-10.** All three gates. `packages/workflow-schema` ships the contract, the
 closed effect vocabulary, the scope-equality rule, the overlay boundary, the loader and the drift
@@ -96,6 +100,7 @@ document rather than retold here. What survives them:
 | `docs/releases/foundation-checkpoint.md` | ask what Foundation's gate evidence was |
 | `docs/architecture/brain.md` | touch Brain code |
 | `docs/architecture/workflow-schema.md` | touch a workflow, a verb, or either adapter — §7 and §8 are what DOS-P4 and DOS-P5 inherit |
+| `docs/architecture/claude-adapter.md` | touch adapter code, plan the Codex adapter, or start capture — §9 is twelve residuals, six of them DOS-P6's |
 | `specs/2026-07-21-developer-os-brain-engine-design.md` | change Brain *behaviour* |
 | `BACKLOG.md` §2 | assume Foundation left nothing open — it left two founder questions, one unconsumed interface, and one residual owed by A11 |
 
@@ -113,15 +118,15 @@ is approved.
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
 | A7 | DOS-P3 Workflow compiler — S / P / I | deleted; `docs/architecture/workflow-schema.md` is what it left | — | L | program plan Task 3 checkpoint: canonical workflows compile to abstract artifacts | **done** 2026-08-10 |
-| A8 ‖ | DOS-P4 Claude adapter — S / P / I | `plans/2026-07-21-developer-os-claude-adapter.md`, 14 tasks | A7 | L | program plan Task 4 checkpoint: a Claude-only user completes the full synthetic workflow | **now** — `S` approved and `P` written 2026-08-11; `I` is 0/14 |
+| A8 ‖ | DOS-P4 Claude adapter — S / P / I | deleted; `docs/architecture/claude-adapter.md` is what it left | A7 | L | program plan Task 4 checkpoint: a Claude-only user completes the full synthetic workflow | **done** 2026-08-11 — 14/14; the checkpoint's capture/ingest/review half is DOS-P6's, recorded in the program plan and `claude-adapter.md` §8 |
 | A9 ‖ | DOS-P5 Codex adapter — S / P / I | `specs/…-codex-adapter-design.md` written 2026-08-11; plan blocked on approving it | A7 | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | **now** — `S` written, **awaiting founder approval** |
 | A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | A8 **and** A9 | L | program plan Task 6 checkpoint, after independent security review | blocked |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |
 
-**A8 and A9 have no unmet Needs.** They are the `‖` pair, and they unblocked together when
-A7 froze the schemas they both render from.
+**A9 has no unmet Needs except the founder.** It was the `‖` pair's other half; A8 closed on
+2026-08-11 and A9's spec has been waiting for approval since the same day.
 
 **No Track A entry is code work today.** Every remaining one begins with a document —
 DOS-P4 through DOS-P7 each need an approved spec *and* an implementation plan before any
@@ -181,6 +186,7 @@ is not verification.
 | what a missing spec must decide, and what it produces | `BACKLOG.md` §3 |
 | what the Brain engine is, and its six residuals | `docs/architecture/brain.md` |
 | what the workflow compiler is, what it deliberately cannot do, and the four workflows that say less than the product spec does | `docs/architecture/workflow-schema.md` |
+| what the Claude adapter is, why it ships no hooks, and its twelve residuals | `docs/architecture/claude-adapter.md` |
 | what Foundation delivered, and what it deliberately cannot do | `docs/architecture/foundation.md` |
 | the per-task Foundation constraints, and two open founder questions | `docs/architecture/foundation-constraints.md` |
 | the Foundation gate evidence, as it stood on 2026-08-01 | `docs/releases/foundation-checkpoint.md` |
@@ -193,9 +199,9 @@ is not verification.
 
 ## Counting what is left
 
-Foundation, DOS-P2 and DOS-P3 are closed. Four subsystems need a spec, a plan and an
-implementation each — **twelve milestones left, and the next two are DOS-P4's and DOS-P5's
-specs, which may be written in parallel**. Then cutover, then release.
+Foundation, DOS-P2, DOS-P3 and DOS-P4 are closed. Three subsystems are left: DOS-P5 has its spec
+and needs a plan and an implementation; DOS-P6 and DOS-P7 need all three each — **eight milestones
+left, and the next one is the founder approving DOS-P5's spec**. Then cutover, then release.
 
 **Track B is closed entirely** and Track L is still two items outside this room. `BACKLOG.md`
 §1 is two repository-level defects, both XS, both with named owners, neither compounding.
