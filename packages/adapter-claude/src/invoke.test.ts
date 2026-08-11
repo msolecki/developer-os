@@ -160,25 +160,80 @@ describe("invokeClaude", () => {
     expect(result).toEqual({ ok: false, reason: "spawn-failed" });
   });
 
-  it("never passes a dangerous bypass flag, whatever the invocation asks for", async () => {
+  /**
+   * The version of this test that shipped asserted only that three exact
+   * strings were absent, which is why the hole below shipped with it: a
+   * denylist of literals is defeated by `--opt=value`, and the test could not
+   * go red for the property its own name claimed. It now asserts the property.
+   */
+  it("never puts an option-shaped token in a value position", async () => {
+    const hostile = [
+      "--permission-mode=bypassPermissions",
+      "--dangerously-skip-permissions=true",
+      "--add-dir",
+      "--mcp-config",
+      "-p",
+    ];
+    for (const tool of hostile) {
+      const { runner, seen } = capturing({ stdout: "{}" });
+      const result = await invokeClaude(
+        installation,
+        { ...invocation, allowedTools: [tool, "Read"] },
+        { runner },
+      );
+      expect(result.ok, `${tool} must be refused`).toBe(false);
+      expect(seen(), `${tool} must never reach a spawn`).toBeNull();
+    }
+  });
+
+  it("refuses an option-shaped prompt", async () => {
     const { runner, seen } = capturing({ stdout: "{}" });
-    await invokeClaude(
+    const result = await invokeClaude(
       installation,
-      {
-        ...invocation,
-        allowedTools: ["--dangerously-skip-permissions", "Read"],
-      },
+      { ...invocation, prompt: "--dangerously-skip-permissions" },
       { runner },
     );
-    const args = seen()?.args ?? [];
-    for (const forbidden of [
-      "--dangerously-skip-permissions",
-      "--permission-mode",
-      "bypassPermissions",
-    ]) {
-      expect(args, `${forbidden} must never be an argv element`).not.toContain(
-        forbidden,
+    expect(result).toMatchObject({ ok: false, reason: "refused" });
+    expect(seen()).toBeNull();
+  });
+
+  it("refuses a tool naming a permission surface even without a leading dash", async () => {
+    const { runner } = capturing({ stdout: "{}" });
+    const result = await invokeClaude(
+      installation,
+      { ...invocation, allowedTools: ["bypassPermissions"] },
+      { runner },
+    );
+    expect(result).toMatchObject({ ok: false, reason: "refused" });
+  });
+
+  /**
+   * `maxTurns` lands in a value position too, so `-1` is one more `-`-prefixed
+   * argv element and `NaN` is a string the vendor interprets however it likes.
+   */
+  it("refuses a maxTurns that is not a bounded integer", async () => {
+    for (const maxTurns of [-1, 0, 1.5, Number.NaN, 1000, Infinity]) {
+      const { runner, seen } = capturing({ stdout: "{}" });
+      const result = await invokeClaude(
+        installation,
+        { ...invocation, maxTurns },
+        { runner },
       );
+      expect(result.ok, `maxTurns ${String(maxTurns)} must be refused`).toBe(
+        false,
+      );
+      expect(seen()).toBeNull();
     }
+  });
+
+  it("still allows an ordinary tool list through", async () => {
+    const { runner, seen } = capturing({ stdout: "{}" });
+    const result = await invokeClaude(
+      installation,
+      { ...invocation, allowedTools: ["Read", "Bash(git log *)"] },
+      { runner },
+    );
+    expect(result.ok).toBe(true);
+    expect(seen()?.args).toContain("--allowedTools");
   });
 });

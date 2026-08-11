@@ -49,6 +49,19 @@ const schema = z
  * guarantee.
  */
 export function parseAgentPromptArgs(input: unknown): AgentPromptOutcome {
+  try {
+    return parse(input);
+  } catch {
+    // Total for any `unknown`, which the signature promises and the first
+    // version did not deliver: a throwing getter, a hostile Proxy and a revoked
+    // Proxy all escaped. Unreachable from parsed YAML, which carries no
+    // accessors — but the type says `unknown`, and a validator that aborts on
+    // one hostile input cannot report on the rest.
+    return { ok: false, message: "agent.prompt arguments failed validation" };
+  }
+}
+
+function parse(input: unknown): AgentPromptOutcome {
   if (input === null || typeof input !== "object" || Array.isArray(input)) {
     return { ok: false, message: "agent.prompt arguments must be an object" };
   }

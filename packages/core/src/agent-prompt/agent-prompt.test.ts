@@ -52,7 +52,30 @@ describe("parseAgentPromptArgs", () => {
     expect(parseAgentPromptArgs({ prompt: "x", maxTurns: 1.5 }).ok).toBe(false);
   });
 
-  it("is total for any unknown input", () => {
+  it("is total for any unknown input, including hostile objects", () => {
+    const throwingGetter = {};
+    Object.defineProperty(throwingGetter, "prompt", {
+      enumerable: true,
+      get() {
+        throw new Error("boom");
+      },
+    });
+
+    const hostileProxy = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error("boom");
+        },
+        ownKeys() {
+          throw new Error("boom");
+        },
+      },
+    );
+
+    const revocable = Proxy.revocable({}, {});
+    revocable.revoke();
+
     const inputs: readonly unknown[] = [
       null,
       undefined,
@@ -62,6 +85,9 @@ describe("parseAgentPromptArgs", () => {
       () => undefined,
       new Map(),
       Object.create(null),
+      throwingGetter,
+      hostileProxy,
+      revocable.proxy,
     ];
     for (const input of inputs) {
       expect(() => parseAgentPromptArgs(input)).not.toThrow();
