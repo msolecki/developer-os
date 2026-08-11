@@ -32,36 +32,35 @@ describe("buildPluginTree", () => {
     expect(JSON.parse(manifest.contents)).toEqual({ name: PLUGIN_NAME });
   });
 
-  it("emits hooks for exactly the three declared events", () => {
-    const hooks = find(buildPluginTree(skills), "hooks/hooks.json");
-    const parsed = JSON.parse(hooks.contents) as {
-      hooks: Record<string, unknown>;
-    };
-    expect(Object.keys(parsed.hooks).sort()).toEqual([
-      "PreCompact",
-      "SessionEnd",
-      "SessionStart",
-    ]);
-  });
-
-  it("uses only command handlers, which are the only kind that run", () => {
-    const hooks = find(buildPluginTree(skills), "hooks/hooks.json");
-    const types = [...hooks.contents.matchAll(/"type":\s*"([a-z_]+)"/gu)].map(
-      (match) => match[1],
-    );
-    expect(types.length).toBeGreaterThan(0);
-    expect(new Set(types)).toEqual(new Set(["command"]));
-  });
-
   /**
-   * A public repository must never carry an absolute machine path, and a hook
-   * command is the one place a generated artifact would naturally want one.
+   * Amends spec §6, pending founder ratification (`BACKLOG.md` §8).
+   *
+   * The tree declared three hooks whose commands lived under a `bin/` directory
+   * no task creates, and `claude plugin validate` checks schema rather than
+   * existence — so `plugin_hooks` could report `yes` over a dangling path. The
+   * obvious repair fails too: a command hook needs an executable file, and
+   * nothing in this pipeline can express an executable bit. `RenderedArtifact`
+   * is `{ path, contents }`; `ManagedArtifactV1` has `kind: "file"` and no mode.
+   *
+   * Nothing regresses by removing it. The three lifecycle capabilities are
+   * `wrapper-required` until a hook is observed firing (spec §6.1), and none
+   * ever could be. This test exists so restoring hooks is a deliberate change
+   * that has to delete an assertion, not an accident.
    */
-  it("addresses every hook command through CLAUDE_PLUGIN_ROOT", () => {
-    const hooks = find(buildPluginTree(skills), "hooks/hooks.json");
-    expect(hooks.contents).toContain("${CLAUDE_PLUGIN_ROOT}");
-    expect(hooks.contents).not.toMatch(/"command":\s*"\//u);
-    expect(hooks.contents).not.toMatch(/\/Users\/|\/home\//u);
+  it("emits no hooks, because nothing here can ship an executable hook body", () => {
+    const paths = buildPluginTree(skills).map((artifact) => artifact.path);
+    expect(paths).not.toContain("hooks/hooks.json");
+    expect(paths.some((path) => path.startsWith("bin/"))).toBe(false);
+  });
+
+  it("emits no absolute machine path anywhere in the tree", () => {
+    for (const artifact of buildPluginTree(skills)) {
+      expect(artifact.contents).not.toMatch(/\/Users\/|\/home\//u);
+    }
+  });
+
+  it("refuses to build a tree with no skills", () => {
+    expect(() => buildPluginTree([])).toThrow(/no skills/u);
   });
 
   it("carries every skill through unchanged", () => {
@@ -96,7 +95,7 @@ describe("buildPluginTree", () => {
     expect(buildPluginTree(skills).length).toBeGreaterThan(0);
   });
 
-  it("emits exactly the skills plus the manifest and the hooks", () => {
-    expect(buildPluginTree(skills)).toHaveLength(skills.length + 2);
+  it("emits exactly the skills plus the manifest", () => {
+    expect(buildPluginTree(skills)).toHaveLength(skills.length + 1);
   });
 });

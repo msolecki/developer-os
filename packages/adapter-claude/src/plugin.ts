@@ -58,39 +58,35 @@ function manifest(): RenderedArtifact {
 }
 
 /**
- * Spec §6. Three events, and `type: "command"` only — spec §14.2 records that
- * command hooks are what this design uses and that their contract is JSON on
- * stdin with exit `0` success, `2` blocking, anything else non-blocking.
+ * **`hooks/hooks.json` is deliberately not emitted, and this is the record of
+ * why.** Amends spec §6, which declares three events; pending the founder's
+ * ratification, registered in `BACKLOG.md` §8.
  *
- * Every command is addressed through `${CLAUDE_PLUGIN_ROOT}`, which is a hard
- * requirement rather than a tidiness preference: this repository is public and
- * a generated artifact carrying an absolute machine path would publish one.
+ * The first version emitted hooks whose commands were
+ * `${CLAUDE_PLUGIN_ROOT}/bin/session-start` and two siblings. A fresh-context
+ * review pointed out that **no task in this plan creates `bin/`**, so the
+ * plugin declared three hooks whose commands did not exist — and
+ * `claude plugin validate` checks schema, not existence, so `plugin_hooks`
+ * could still report `yes` over a dangling path.
+ *
+ * The obvious repair — emit the three scripts — does not work, for a reason
+ * that only appears once you try it. A `type: "command"` hook needs an
+ * executable file, and **nothing in this pipeline can express an executable
+ * bit**: `RenderedArtifact` is `{ path, contents }`, and `ManagedArtifactV1`
+ * has `kind: "file"` and no mode. A non-executable script fails exactly as a
+ * missing one does.
+ *
+ * So the honest state is: this adapter ships skills, and capture and injection
+ * go through the wrapper — which is what the capability model already reports,
+ * because `session_end_capture`, `session_start_injection` and
+ * `pre_compact_backup` are `wrapper-required` until a hook is *observed firing*
+ * (spec §6.1) and none ever could be. Nothing regresses; a claim that was
+ * always false stops being made.
+ *
+ * **What restoring it needs**, together, in one change: the hook bodies (whose
+ * behaviour is DOS-P6's capture contract), a way to mark a generated artifact
+ * executable, and a test that observes a hook actually firing. Owner: DOS-P6.
  */
-function hooks(): RenderedArtifact {
-  const command = (script: string) => ({
-    type: "command",
-    command: `\${CLAUDE_PLUGIN_ROOT}/bin/${script}`,
-    timeout: 30,
-  });
-  const configuration = {
-    hooks: {
-      SessionStart: [
-        {
-          matcher: "startup|resume|clear|compact|fork",
-          hooks: [command("session-start")],
-        },
-      ],
-      SessionEnd: [{ matcher: "*", hooks: [command("session-end")] }],
-      PreCompact: [
-        { matcher: "manual|auto", hooks: [command("pre-compact")] },
-      ],
-    },
-  };
-  return {
-    path: "hooks/hooks.json",
-    contents: `${JSON.stringify(configuration, null, 2)}\n`,
-  };
-}
 
 /**
  * The rendered skills plus the two files that make them a plugin, in a stable
@@ -101,7 +97,10 @@ function hooks(): RenderedArtifact {
 export function buildPluginTree(
   skills: readonly RenderedArtifact[],
 ): readonly RenderedArtifact[] {
-  return [...skills, manifest(), hooks()].sort((left, right) =>
+  if (skills.length === 0) {
+    throw new Error("refusing to build a plugin tree with no skills");
+  }
+  return [...skills, manifest()].sort((left, right) =>
     compareCodePoints(left.path, right.path),
   );
 }
