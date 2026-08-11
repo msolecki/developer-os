@@ -15,6 +15,7 @@ export default defineProject({
     environment: "node",
     include: [
       "contracts/**/*.test.ts",
+      "integration/**/*.test.ts",
       "e2e/**/*.test.ts",
       "repository/**/*.test.ts",
     ],
