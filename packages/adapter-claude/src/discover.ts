@@ -1,4 +1,7 @@
-import { cwd } from "node:process";
+import { constants } from "node:fs";
+import { access } from "node:fs/promises";
+import { delimiter, isAbsolute, join } from "node:path";
+import { cwd, env } from "node:process";
 import type { ProcessRunner } from "@developer-os/security";
 
 export interface ClaudeInstallation {
@@ -28,9 +31,60 @@ const VERSION_TIMEOUT_MS = 10_000;
  * reporting on an environment with nothing in it is precisely what spec §5.3
  * requires of it.
  */
+export interface ResolveDependencies {
+  readonly pathValue: string;
+  readonly isExecutable: (candidate: string) => Promise<boolean>;
+}
+
+function defaultIsExecutable(candidate: string): Promise<boolean> {
+  return access(candidate, constants.X_OK).then(
+    () => true,
+    () => false,
+  );
+}
+
+/**
+ * Turn a bare command name into the absolute path `discoverClaude` requires.
+ *
+ * This exists because of a defect the fresh-context review caught: the process
+ * request is built with `env: {}`, so a child has no `PATH` to resolve a bare
+ * name against, and `assertSafeCommand` refuses a non-absolute executable
+ * anyway. Resolution therefore has to happen here, in the parent, before a
+ * request is ever built.
+ *
+ * A relative `PATH` entry is skipped rather than resolved against the working
+ * directory: a directory named on `PATH` relative to wherever the process
+ * happens to be running is an executable an attacker can place.
+ */
+export async function resolveExecutable(
+  name: string,
+  dependencies: ResolveDependencies = {
+    pathValue: env["PATH"] ?? "",
+    isExecutable: defaultIsExecutable,
+  },
+): Promise<string | null> {
+  if (isAbsolute(name)) {
+    return (await dependencies.isExecutable(name)) ? name : null;
+  }
+  if (name === "" || name.includes("/")) return null;
+
+  for (const entry of dependencies.pathValue.split(delimiter)) {
+    if (entry === "" || !isAbsolute(entry)) continue;
+    const candidate = join(entry, name);
+    if (await dependencies.isExecutable(candidate)) return candidate;
+  }
+  return null;
+}
+
 export async function discoverClaude(
   dependencies: DiscoverDependencies,
 ): Promise<ClaudeInstallation | null> {
+  // `assertSafeCommand` refuses a non-absolute executable, and `env: {}` leaves
+  // a child no `PATH` to resolve one against. Refusing here rather than at the
+  // runner keeps the failure a reportable "no installation" instead of a
+  // security refusal thrown out of a diagnostic command.
+  if (!isAbsolute(dependencies.executable)) return null;
+
   let result;
   try {
     result = await dependencies.runner.run({

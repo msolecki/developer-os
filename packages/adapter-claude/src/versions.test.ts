@@ -19,7 +19,37 @@ describe("compareVersions", () => {
   });
 });
 
+describe("compareVersions on input that is not a version", () => {
+  /**
+   * Regression, found by fresh-context review of Tasks 1–5 on 2026-08-11.
+   *
+   * `Number("garbage")` is `NaN`, `NaN !== 0` is true, so the loop returned
+   * `NaN` — and `NaN < 0` is **false**, so the floor check in `tablePermits`
+   * did not refuse. Every capability the probe observed was then granted on a
+   * version string nobody could parse. A comparison that cannot answer must
+   * say so, not return a number that silently fails every inequality.
+   */
+  it("reports that it cannot compare, rather than returning NaN", () => {
+    expect(compareVersions("garbage", "2.1.142")).toBeNull();
+    expect(compareVersions("2.1.142", "garbage")).toBeNull();
+    expect(compareVersions("v2.1.216", "2.1.142")).toBeNull();
+    expect(compareVersions("2.1", "2.1.142")).toBeNull();
+    expect(compareVersions("2.1.216-rc.1", "2.1.142")).toBeNull();
+    expect(compareVersions("", "2.1.142")).toBeNull();
+  });
+});
+
 describe("tablePermits", () => {
+  /** The same regression, at the gate that actually grants a capability. */
+  it("fails closed on a version it cannot parse", () => {
+    for (const unparsable of ["garbage", "v2.1.216", "2.1", "", "2.1.216-rc.1"]) {
+      expect(
+        tablePermits("skills", unparsable),
+        `${JSON.stringify(unparsable)} must not permit`,
+      ).toBe(false);
+    }
+  });
+
   it("permits a version above the minimum", () => {
     expect(tablePermits("session_end_capture", "2.1.216")).toBe(true);
   });
