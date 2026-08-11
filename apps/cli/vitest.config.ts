@@ -5,6 +5,9 @@ import { defineProject } from "vitest/config";
 export default defineProject({
   resolve: {
     alias: {
+      "@developer-os/adapter-claude": fileURLToPath(
+        new URL("../../packages/adapter-claude/src/index.ts", import.meta.url),
+      ),
       "@developer-os/brain": fileURLToPath(
         new URL("../../packages/brain/src/index.ts", import.meta.url),
       ),

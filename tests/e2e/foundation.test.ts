@@ -76,6 +76,7 @@ const DOCTOR_CHECKS = [
   "drift",
   "brain",
   "agents",
+  "claude-capabilities",
 ] as const;
 
 /**
@@ -290,6 +291,7 @@ describe("Foundation temporary-HOME lifecycle", () => {
         "drift",
         "brain",
         "agents",
+        "claude-capabilities",
       ]);
       expect(
         checks.checks.filter((check) => check.status !== "pass"),
