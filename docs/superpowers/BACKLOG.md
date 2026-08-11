@@ -60,7 +60,7 @@ Open work only. Program Tasks 0 to 3 are closed and are not rows here.
 | Area | Where | What is left |
 |---|---|---|
 | Program (umbrella) | 1 plan | Tasks 4–9 open; Tasks 0–3 closed and not rows here |
-| DOS-P4 … DOS-P7 | nothing written | 4 specs, 4 plans, 4 implementations |
+| DOS-P4 … DOS-P7 | DOS-P4's spec written 2026-08-11, awaiting approval | 3 specs, 4 plans, 4 implementations |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
 | Repository-level | §1 | NEW-7 and NEW-10 — both XS; NEW-7 needs a machine with Obsidian |
 | Repository infrastructure | §5 | four directories a later subsystem still owes; `tests/contracts/`, `packages/workflow-schema/` and `workflows/` landed with DOS-P3 on 2026-08-10 |
@@ -172,6 +172,12 @@ unit-tested, and no command calls them. That is deliberate — the first consume
 semantic config merge in DOS-P4/DOS-P5 — but a later reader should not mistake unused for
 untested, or unused for dead.
 
+**That sentence is under amendment, pending approval of the Claude adapter spec** (§8). Its §4.3
+dissolves DOS-P4's half of the merge rather than answering it: a skills-directory plugin writes no
+foreign config file, so DOS-P4 has nothing to three-way merge and leaves `buildConflictEvidence`
+uncalled. DOS-P5 may still need it — Codex's documented surface includes `AGENTS.md`, which is
+shared in a way `~/.claude/skills/developer-os/` is not.
+
 **Residual 9 is owed by DOS-P7**, and it is the one residual that makes a shipped feature
 unusable rather than merely rough: configuration cannot be changed after `init`. Detail with
 that subsystem in §3.
@@ -180,7 +186,8 @@ that subsystem in §3.
 
 ## 3. Missing specs and plans
 
-**Eight documents left.** DOS-P4 through DOS-P7 need a spec and a plan each.
+**Seven documents left.** DOS-P5 through DOS-P7 need a spec and a plan each; DOS-P4 needs its plan,
+and its spec is written and awaiting approval.
 DOS-P3 is closed and is not listed here any more: its spec is retained at
 `specs/2026-07-21-developer-os-workflow-compiler-design.md` because
 `docs/architecture/workflow-schema.md` names it as the design of record; its plan is deleted,
@@ -195,8 +202,13 @@ names it as the design of record; its plan is deleted, recoverable at `81e7e7d`.
 
 ### DOS-P4 — Claude Code adapter
 
-- **Spec:** `specs/2026-07-21-developer-os-claude-adapter-design.md` — missing
-- **Plan:** `plans/2026-07-21-developer-os-claude-adapter.md` — missing
+- **Spec:** `specs/2026-07-21-developer-os-claude-adapter-design.md` — **written 2026-08-11,
+  awaiting founder approval.** It settles the install shape (a skills-directory plugin, discovered
+  in place, zero settings keys), the three-value capability model, the `shared` preamble delivery,
+  and the `.claude/` question. Its §14 is normative: an implementation may not depend on a Claude
+  Code surface not listed there. §15 carries four items it deliberately does not close
+- **Plan:** `plans/2026-07-21-developer-os-claude-adapter.md` — missing, and blocked on approval of
+  the spec above
 - **Program task:** 4 · **Complexity:** L · **Blocked by:** DOS-P3 schemas frozen
 - **The spec must decide:** supported-version discovery, plugin structure, hook payloads,
   wrapper behavior, semantic config merge, failure contracts, which lifecycle surfaces
@@ -490,6 +502,16 @@ documents and this was the reverse. DOS-P3's first draft invented `session_start
 `session_end_capture`; the **code** was corrected to match the spec on 2026-08-10, so §11 is
 current and untouched. Recorded here only so the next reader does not go looking for an
 amendment that would say otherwise.
+
+**Two amendments are pending, not discharged, because the document making them is not approved
+yet.** Both come from `specs/…-claude-adapter-design.md`, written 2026-08-11. They are listed here
+rather than in the table below so that nobody reads them as settled, and **if the founder does not
+approve that spec, both revert with it**:
+
+| Amends | What changes | State |
+|---|---|---|
+| `docs/migration/exclusion-policy.md` — an approved Task 0 artifact | gains "Paths this repository does not create": no `.claude/` in v1. **The line is already in the tree**, carrying a cross-reference to the spec's §12 | pending spec approval |
+| §2 of this file, and product spec §9.3's deferral | DOS-P4 is **not** the first consumer of `buildConflictEvidence` after all. The install shape merges no foreign config, so there is nothing to three-way merge. Conflict evidence is still produced for the plugin directory's own managed files | pending spec approval |
 
 **Discharged. Listed because the amended document is still read, not because there is work
 left:**
