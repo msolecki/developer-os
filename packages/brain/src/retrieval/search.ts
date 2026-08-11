@@ -75,9 +75,9 @@ export const FUNNEL_STAGES: readonly string[] = Object.freeze([
 /**
  * A match's `title` and `summary` are printed to a terminal and written to a
  * log by the CLI, and both are author-controlled: `note.ts` validates `title`
- * as a non-empty string with no length bound and no character screen, so a
- * 50,000 character title parses clean, as does one carrying `\r` or an ANSI
- * escape.
+ * as a string with at least one visible character, with no length bound and no
+ * character screen, so a 50,000 character title parses clean, as does one
+ * carrying `\r` or an ANSI escape.
  *
  * The screen itself is `../redact.js`. What differs here is which half applies:
  * lint caps at 64 because its values are incidental diagnostics, while here the
