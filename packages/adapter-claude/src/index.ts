@@ -35,7 +35,11 @@ export {
   PLUGIN_NAME,
 } from "./plugin.js";
 export { proposeClaudeInstall, proposeClaudeUninstall } from "./install.js";
-export type { ClaudeInstallProposal, InstallContext } from "./install.js";
+export type {
+  ClaudeInstallProposal,
+  InstallContext,
+  ManagedByPath,
+} from "./install.js";
 export { invokeClaude } from "./invoke.js";
 export type {
   ClaudeInvocation,

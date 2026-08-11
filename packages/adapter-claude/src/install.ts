@@ -1,7 +1,10 @@
 import { Buffer } from "node:buffer";
 import { posix } from "node:path";
 import { hashBytes } from "@developer-os/core";
-import type { ChangePlanOperationV1 } from "@developer-os/core";
+import type {
+  ChangePlanOperationV1,
+  ManagedArtifactV1,
+} from "@developer-os/core";
 import type { RenderedArtifact } from "@developer-os/workflow-schema";
 import { PLUGIN_INSTALL_SEGMENTS } from "./plugin.js";
 
@@ -43,15 +46,27 @@ function resolveWithin(root: string, relative: string): string {
     throw new Error(`artifact path escapes the plugin root: ${relative}`);
   }
   const resolved = posix.normalize(posix.join(root, relative));
-  if (resolved !== root && !resolved.startsWith(`${root}/`)) {
+  // The root itself is not a file target. `""`, `"."` and `"sub/.."` all
+  // normalize to it, and the result was a `create` with `kind: "file"` aimed at
+  // the plugin *directory* — which the validator accepts and the executor then
+  // fails on, late and obscurely.
+  if (!resolved.startsWith(`${root}/`)) {
     throw new Error(`artifact path escapes the plugin root: ${relative}`);
   }
   return resolved;
 }
 
+/**
+ * The manifest's record of what this adapter already owns, keyed by target
+ * path. Passed in rather than read here: `packages/core` owns the manifest, and
+ * an adapter that read it would be a second reader of a file with one owner.
+ */
+export type ManagedByPath = ReadonlyMap<string, ManagedArtifactV1>;
+
 export function proposeClaudeInstall(
   tree: readonly RenderedArtifact[],
   context: InstallContext,
+  managed: ManagedByPath = new Map(),
 ): ClaudeInstallProposal {
   // A plan with no operations applies cleanly and changes nothing, which is
   // indistinguishable from success. `validateChangePlan` refuses an empty
@@ -63,19 +78,27 @@ export function proposeClaudeInstall(
   return {
     schemaVersion: 1,
     productVersion: context.productVersion,
-    operations: tree.map((artifact) => ({
-      targetPath: resolveWithin(root, artifact.path),
-      operation: "create" as const,
-      owner: "claude" as const,
-      kind: "file" as const,
-      expectedBeforeHash: null,
-      source: artifact.path,
-      // `dedicated` because this adapter merges no foreign file. Spec §4.3
-      // dissolved the semantic config merge rather than answering it: the
-      // install shape writes only into a directory Developer OS owns wholly.
-      mergeStrategy: "dedicated" as const,
-      proposedHash: hashBytes(Buffer.from(artifact.contents, "utf8")),
-    })),
+    operations: tree.map((artifact) => {
+      const targetPath = resolveWithin(root, artifact.path);
+      const existing = managed.get(targetPath);
+      // `create` for a target nobody owns, `replace` for one this adapter
+      // already installed. Hardcoding `create` made `update` unrepresentable:
+      // `validateChangePlan` refuses a `create` over a managed artifact with
+      // `already_owned`, so a second install could never have run.
+      return {
+        targetPath,
+        operation: existing === undefined ? ("create" as const) : ("replace" as const),
+        owner: "claude" as const,
+        kind: "file" as const,
+        expectedBeforeHash: existing?.installedHash ?? null,
+        source: artifact.path,
+        // `dedicated` because this adapter merges no foreign file. Spec §4.3
+        // dissolved the semantic config merge rather than answering it: the
+        // install shape writes only into a directory Developer OS owns wholly.
+        mergeStrategy: "dedicated" as const,
+        proposedHash: hashBytes(Buffer.from(artifact.contents, "utf8")),
+      };
+    }),
   };
 }
 
@@ -87,21 +110,35 @@ export function proposeClaudeInstall(
  */
 export function proposeClaudeUninstall(
   context: InstallContext,
+  managed: ManagedByPath,
 ): ClaudeInstallProposal {
+  const root = pluginRoot(context);
+  const owned = [...managed.values()]
+    .filter((artifact) => artifact.path.startsWith(`${root}/`))
+    .sort((left, right) => (left.path < right.path ? -1 : 1));
+
+  if (owned.length === 0) {
+    throw new Error("refusing to propose an empty uninstall plan");
+  }
+
   return {
     schemaVersion: 1,
     productVersion: context.productVersion,
-    operations: [
-      {
-        targetPath: pluginRoot(context),
-        operation: "remove",
-        owner: "claude",
-        kind: "directory",
-        expectedBeforeHash: null,
-        source: "plugins/claude",
-        mergeStrategy: "dedicated",
-        proposedHash: null,
-      },
-    ],
+    operations: owned.map((artifact) => ({
+      targetPath: artifact.path,
+      operation: "remove" as const,
+      owner: artifact.owner,
+      kind: artifact.kind,
+      // `validateChangePlan` requires a real prior hash for any non-`create`
+      // operation, `source === ""` and `proposedHash === null` for a `remove`,
+      // and a matching managed artifact. The first version of this function
+      // violated all three at once and could never have been applied — and the
+      // test that guarded it asserted field values instead of calling the
+      // validator, so it stayed green. Found by fresh-context review.
+      expectedBeforeHash: artifact.installedHash,
+      source: "",
+      mergeStrategy: artifact.mergeStrategy,
+      proposedHash: null,
+    })),
   };
 }

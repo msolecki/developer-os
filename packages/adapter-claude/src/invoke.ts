@@ -26,24 +26,41 @@ export type ClaudeRunResult =
   | { readonly ok: false; readonly reason: "signal"; readonly signal: string }
   | { readonly ok: false; readonly reason: "exit"; readonly exitCode: number }
   | { readonly ok: false; readonly reason: "malformed-output" }
-  | { readonly ok: false; readonly reason: "spawn-failed" };
+  | { readonly ok: false; readonly reason: "spawn-failed" }
+  | { readonly ok: false; readonly reason: "refused"; readonly detail: string };
 
 export interface InvokeDependencies {
   readonly runner: ProcessRunner;
 }
 
+const MAX_TURNS_CEILING = 50;
+
 /**
- * Flags this adapter never passes, on any code path, for any invocation.
+ * Structural, not a denylist — and that is the whole fix.
  *
- * Implemented as a screen rather than as "we do not currently write them",
- * because `allowedTools` is caller-supplied and a rule nobody enforces is a
- * convention. A refusal that is only a habit is not a refusal.
+ * The first version screened three exact strings out of `allowedTools`. A
+ * fresh-context review defeated it in one line: `--permission-mode` is
+ * documented as taking a value (spec §14.3), every parser accepts
+ * `--opt=value`, and `"--permission-mode=bypassPermissions"` is not equal to
+ * any of the three literals. `--add-dir /` and `--mcp-config` were not on the
+ * list at all. A variadic `--allowedTools` stops at the first `-`-prefixed
+ * token, so each of those became a flag.
+ *
+ * The rule is now positional rather than nominal: **nothing this adapter puts
+ * in a value position may look like an option.** A denylist has to enumerate
+ * every dangerous flag the vendor will ever ship; this has to be right once.
+ * And it refuses the invocation rather than silently dropping the offending
+ * entry, because a caller that asked for a bypass has a bug worth reporting.
  */
-const FORBIDDEN_ARGUMENTS: ReadonlySet<string> = new Set([
-  "--dangerously-skip-permissions",
-  "--permission-mode",
-  "bypassPermissions",
-]);
+function screenValueArgument(value: string, field: string): string | null {
+  if (value.startsWith("-")) {
+    return `${field} may not begin with "-": it would be read as an option, not a value`;
+  }
+  if (/permission|dangerous/iu.test(value)) {
+    return `${field} names a permission or bypass surface this adapter refuses`;
+  }
+  return null;
+}
 
 export async function invokeClaude(
   installation: ClaudeInstallation,
@@ -57,6 +74,34 @@ export async function invokeClaude(
     return { ok: false, reason: "spawn-failed" };
   }
 
+  // `maxTurns` reaches argv as a value. `-1` is another `-`-prefixed token in a
+  // value position, and `NaN` is a string the vendor will interpret however it
+  // likes. Bounded here rather than trusted from the type, because
+  // `ClaudeInvocation` is constructed by callers and shares no type with
+  // `AgentPromptArgs`.
+  if (
+    !Number.isInteger(invocation.maxTurns) ||
+    invocation.maxTurns < 1 ||
+    invocation.maxTurns > MAX_TURNS_CEILING
+  ) {
+    return {
+      ok: false,
+      reason: "refused",
+      detail: `maxTurns must be an integer between 1 and ${String(MAX_TURNS_CEILING)}`,
+    };
+  }
+
+  const promptRefusal = screenValueArgument(invocation.prompt, "prompt");
+  if (promptRefusal !== null) {
+    return { ok: false, reason: "refused", detail: promptRefusal };
+  }
+  for (const tool of invocation.allowedTools) {
+    const refusal = screenValueArgument(tool, "an allowed tool");
+    if (refusal !== null) {
+      return { ok: false, reason: "refused", detail: refusal };
+    }
+  }
+
   const args = [
     "-p",
     invocation.prompt,
@@ -65,10 +110,9 @@ export async function invokeClaude(
     "--max-turns",
     String(invocation.maxTurns),
   ];
-  const allowed = invocation.allowedTools.filter(
-    (tool) => !FORBIDDEN_ARGUMENTS.has(tool),
-  );
-  if (allowed.length > 0) args.push("--allowedTools", ...allowed);
+  if (invocation.allowedTools.length > 0) {
+    args.push("--allowedTools", ...invocation.allowedTools);
+  }
 
   let result;
   try {
