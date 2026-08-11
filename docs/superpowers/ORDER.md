@@ -139,5 +139,6 @@ implementation; DOS-P7's spec, plan and implementation. Then two more entries th
 subsystems — the cutover (A12) and the release (A13) — plus Track L's two items, which are not
 engineering work at all.
 
-`BACKLOG.md` §1 is one XS repository defect, NEW-7, and it needs ten minutes with a machine that
-has Obsidian rather than an agent.
+`BACKLOG.md` §1 is two repository defects: NEW-7, which needs ten minutes with a machine that has
+Obsidian rather than an agent, and NEW-11, which is the same invisible-character rule that closed
+NEW-10 applied to `tags`, `summary` and the duplicates key.
