@@ -17,6 +17,7 @@ import type {
   InstallationManifestV1,
   RuntimePaths,
 } from "@developer-os/core";
+import { PLUGIN_INSTALL_SEGMENTS } from "@developer-os/adapter-claude";
 import { MacOsPlatformDiscoveryError } from "@developer-os/platform-macos";
 import type { AgentDiscovery, AgentName } from "@developer-os/platform-macos";
 
@@ -246,10 +247,7 @@ function describeAgents(agents: readonly AgentDiscovery[]): string {
  * doctor`. Different objects, same name. A missing agent is information, not a
  * failure, which is also why `agents` is excluded from `INIT_OWNED_CHECKS`.
  */
-async function checkClaudeCapabilities(
-  context: CliContext,
-  paths: RuntimePaths,
-): Promise<Finding> {
+async function checkClaudeCapabilities(context: CliContext): Promise<Finding> {
   // Discovery can refuse — `MacOsPlatformAdapter` rejects a `which` result it
   // cannot vouch for, and `checkAgents` already demotes that to a warning. A
   // refusal here is information about the environment, not a failure of this
@@ -265,7 +263,16 @@ async function checkClaudeCapabilities(
   const report = await reportClaudeCapabilities({
     executablePath,
     runner: context.runner,
-    pluginDirectory: join(paths.home, "plugins", "claude"),
+    /**
+     * The **user's** home, not the product's. This was
+     * `join(paths.home, "plugins", "claude")` — `~/.developer-os/plugins/claude`,
+     * a directory the installer never creates. Dead while `probe` defaults to
+     * false, and the moment anyone set it, validate would have failed on a path
+     * that never existed and reported `skills=wrapper-required` on a healthy
+     * install. `PLUGIN_INSTALL_SEGMENTS` is where the real location is decided.
+     * Found by fresh-context review, 2026-08-11.
+     */
+    pluginDirectory: join(context.userHome, ...PLUGIN_INSTALL_SEGMENTS),
   });
   return pass(
     "claude-capabilities",
@@ -573,7 +580,7 @@ async function collectFindings(
     ),
     await guarded(context, "agents", [], () => checkAgents(context)),
     await guarded(context, "claude-capabilities", [], () =>
-      checkClaudeCapabilities(context, paths),
+      checkClaudeCapabilities(context),
     ),
   ];
 }

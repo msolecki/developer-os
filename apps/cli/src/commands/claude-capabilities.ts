@@ -5,6 +5,8 @@ import {
   resolveCapabilities,
 } from "@developer-os/adapter-claude";
 import type { ClaudeCapabilities } from "@developer-os/adapter-claude";
+import { readdir } from "node:fs/promises";
+
 import type { ProcessRunner } from "@developer-os/security";
 
 export interface ClaudeCapabilityRequest {
@@ -28,6 +30,12 @@ export interface ClaudeCapabilityRequest {
    * what §9.2 means by it: we did not ask.
    */
   readonly probe?: boolean;
+  /**
+   * Lists the plugin directory, so the probe can require the artifact it is
+   * about to claim. Injected for tests; the default reads the real directory,
+   * which is a read and not a mutation.
+   */
+  readonly listPluginFiles?: () => Promise<readonly string[]>;
 }
 
 export interface ClaudeCapabilityReport {
@@ -89,13 +97,37 @@ export async function reportClaudeCapabilities(
     };
   };
 
+  /**
+   * A binary that is there and did not answer is **not** absent.
+   *
+   * `discoverClaude` returns `null` for a missing binary, a non-zero exit, a
+   * timeout and unparseable output alike, and all four used to become
+   * `claude=absent`. One `doctor` run then printed `agents: claude=present`
+   * and `claude-capabilities: claude=absent` about the same file — pinned
+   * green by an end-to-end fixture whose fake `claude` exits 97, because the
+   * assertions read check ids and not messages. It is also the wrong state by
+   * this product's own rule: "we could not ask" is `unknown`, which is what
+   * every capability already reports here. Found by fresh-context review,
+   * 2026-08-11.
+   */
+  const unreadable = (): ClaudeCapabilityReport => {
+    const capabilities = allUnknown();
+    return {
+      installed: true,
+      version: null,
+      capabilities,
+      captureVia: "wrapper",
+      summary: `claude=unreadable ${summarise(capabilities)}`,
+    };
+  };
+
   if (request.executablePath === null) return absent();
 
   const installation = await discoverClaude({
     runner: request.runner,
     executable: request.executablePath,
   });
-  if (installation === null) return absent();
+  if (installation === null) return unreadable();
 
   if (request.probe !== true) {
     const capabilities = allUnknown();
@@ -111,6 +143,9 @@ export async function reportClaudeCapabilities(
   const observations = await probeClaude(installation, {
     runner: request.runner,
     pluginDirectory: request.pluginDirectory,
+    listPluginFiles:
+      request.listPluginFiles ??
+      (() => readdir(request.pluginDirectory, { recursive: true })),
   });
   const capabilities = resolveCapabilities(installation.version, observations);
 

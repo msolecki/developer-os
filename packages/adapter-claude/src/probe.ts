@@ -6,22 +6,41 @@ import type { ClaudeInstallation } from "./discover.js";
 export interface ProbeDependencies {
   readonly runner: ProcessRunner;
   readonly pluginDirectory: string;
+  /**
+   * Every path under `pluginDirectory`, relative or absolute — only the
+   * suffixes are read. Injected rather than read here, because this package
+   * touches no filesystem and a probe that did would need a real directory to
+   * be testable at all.
+   */
+  readonly listPluginFiles: () => Promise<readonly string[]>;
 }
 
 const PROBE_TIMEOUT_MS = 30_000;
 
 /**
- * The capabilities `claude plugin validate` can settle. Spec §14.1: it checks
- * the manifest, skill/agent/command frontmatter and `hooks/hooks.json` for
- * syntax and schema errors.
+ * The capabilities `claude plugin validate` can settle **for the tree this
+ * adapter actually ships**. Spec §14.1: validate checks the manifest, skill,
+ * agent and command frontmatter, and `hooks/hooks.json`, for syntax and schema
+ * errors.
  *
  * It settles no lifecycle event, and this list is where that boundary is
  * enforced rather than remembered. A `SessionEnd` hook cannot be made to fire
  * without a real session (spec §6.1), so `session_end_capture` is absent here
  * on purpose and reaches `resolveCapabilities` as an unmentioned key — which
  * that function reports as `wrapper-required`.
+ *
+ * **`plugin_hooks` and `subagents` were on this list and are not any more.** The
+ * tree contains `.claude-plugin/plugin.json` and six `SKILL.md` files: no
+ * `hooks/` and no `agents/` directory exist in it, so a clean exit code cannot
+ * have observed either one — and both resolved to `yes` on the strength of that
+ * exit code. It is the same defect the removal of `hooks/hooks.json` was meant
+ * to close, one layer up: a verified-present claim about something that is not
+ * there. Restoring a key here means shipping the artifact it describes in the
+ * same change. Found by fresh-context review, 2026-08-11.
  */
-const VALIDATE_SETTLES = ["skills", "plugin_hooks", "subagents"] as const;
+const VALIDATE_SETTLES = [
+  { key: "skills", evidence: (file: string) => file.endsWith("SKILL.md") },
+] as const;
 
 /**
  * Probes only what a probe can honestly settle, and never throws.
@@ -56,6 +75,39 @@ export async function probeClaude(
   }
 
   const observations = new Map<string, ProbeObservation>();
-  for (const key of VALIDATE_SETTLES) observations.set(key, validated);
+  for (const settled of VALIDATE_SETTLES) {
+    observations.set(
+      settled.key,
+      await witness(validated, settled.evidence, dependencies),
+    );
+  }
   return observations;
+}
+
+/**
+ * A clean exit code is not an observation of the artifact.
+ *
+ * `claude plugin validate` exits 0 over a directory holding nothing but a
+ * schema-valid `.claude-plugin/plugin.json` — a partial install, or a user who
+ * deleted `skills/` — and `skills` then resolved to `yes` over a plugin that
+ * ships no skills. It is the narrower survivor of the defect that took
+ * `plugin_hooks` and `subagents` off the list above, and the fix is this
+ * repository's own rule applied to the one scan that did not follow it: every
+ * scan asserts a non-empty set. A directory that cannot be listed is
+ * `unavailable` — we could not ask — never `absent`. Found by fresh-context
+ * review, 2026-08-11.
+ */
+async function witness(
+  validated: ProbeObservation,
+  evidence: (file: string) => boolean,
+  dependencies: ProbeDependencies,
+): Promise<ProbeObservation> {
+  if (validated !== "observed") return validated;
+  let files: readonly string[];
+  try {
+    files = await dependencies.listPluginFiles();
+  } catch {
+    return "unavailable";
+  }
+  return files.some(evidence) ? "observed" : "absent";
 }

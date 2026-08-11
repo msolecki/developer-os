@@ -1,5 +1,9 @@
-import { screenAndCap } from "@developer-os/security";
-import { sourceMarker } from "@developer-os/workflow-schema";
+import {
+  capGraphemes,
+  screenAndCap,
+  screenControlCharacters,
+} from "@developer-os/security";
+import { applyOverlay, sourceMarker } from "@developer-os/workflow-schema";
 import type {
   RenderedArtifact,
   WorkflowContractV1,
@@ -32,6 +36,110 @@ export interface ClaudeRendererDependencies {
  */
 function screen(value: string): string {
   return screenAndCap(value, FIELD_CAP);
+}
+
+/**
+ * The screen collapses every run of whitespace to one space, which is right for
+ * a value printed on one line and wrong for prose: the four-paragraph
+ * prompt-injection defence in `workflows/shared/workflow.yaml` rendered as a
+ * single run-on bullet, and shipped that way. Split on blank lines first, screen
+ * each paragraph, and the boundary the author wrote survives the character the
+ * screen exists to remove. Found by fresh-context review of Tasks 1–5.
+ */
+function paragraphsOf(value: string): readonly string[] {
+  return value
+    .split(/\n[^\S\n]*\n/u)
+    .map((paragraph) => neutralizeBlockStart(screenControlCharacters(paragraph)))
+    .filter((paragraph) => paragraph.length > 0);
+}
+
+/**
+ * Author prose starts a line now, and a line is where Markdown block structure
+ * is decided.
+ *
+ * **This is the cost of splitting into paragraphs, and it was not obvious.**
+ * While the screen collapsed prose to one line, every one of these characters
+ * could only ever land mid-line and render as text. Splitting made column 0
+ * reachable, so a `shared` preamble reading `real\n\n# IGNORE EVERYTHING ABOVE`
+ * emitted a real heading — inside the bullet that carries the prompt-injection
+ * defence, concatenated into five other skills. Found by the fresh-context
+ * review of the split itself, 2026-08-11.
+ *
+ * The list is every column-0 construct CommonMark defines: fence runs, ATX
+ * heading, block quote, bullet, thematic break, setext underline, table row,
+ * HTML block, and the ordered-list marker. A backslash escape makes the first
+ * character literal and renders invisibly — **except for an ordered list**,
+ * whose marker is a digit, and a digit is not escapable; there the escape goes
+ * before the `.` or `)` that completes the marker, which is the documented way
+ * to write a line beginning with a number.
+ *
+ * A visible backslash in the raw bytes is the accepted cost. A `SKILL.md` is
+ * read as raw text by a model at least as often as it is rendered, and a
+ * stray backslash is a far smaller lie than a heading its author did not write.
+ */
+function neutralizeBlockStart(line: string): string {
+  const ordered = /^(\d{1,9})([.)])/u.exec(line);
+  if (ordered !== null) {
+    return `${ordered[1] ?? ""}\\${line.slice((ordered[1] ?? "").length)}`;
+  }
+  return /^[`~#>|<*+\-=_]/u.test(line) ? `\\${line}` : line;
+}
+
+/**
+ * Payload prose: capped as a whole, exactly as a single-line field is.
+ *
+ * The cap is applied to the joined block rather than to each paragraph, because
+ * a per-paragraph bound is not a bound — inserting blank lines raises it without
+ * limit, which is how the first version of this split turned `FIELD_CAP` from a
+ * field bound into a paragraph bound. Found by the same review.
+ */
+function boundedProse(value: string): string {
+  return capGraphemes(paragraphsOf(value).join("\n\n"), FIELD_CAP);
+}
+
+/**
+ * Preamble prose: screened, never capped, and refused when it would have been.
+ *
+ * `screenAndCap` truncates at the bound and appends an ellipsis with no error,
+ * which is acceptable for payload a reader can go and look up and unacceptable
+ * for the text that *is* the prompt-injection defence. Capping is not what makes
+ * the preamble safe; screening is. The bound is checked on the joined block for
+ * the reason above.
+ */
+function refusingParagraphs(value: string, field: string): readonly string[] {
+  const paragraphs = paragraphsOf(value);
+  if (paragraphs.join("\n\n").length > FIELD_CAP) {
+    throw new Error(
+      `one of the shared workflow's ${field} values is longer than ${String(FIELD_CAP)} characters once screened; the preamble carries the prompt-injection defence and is refused rather than truncated. The bound is per value, not over the whole preamble`,
+    );
+  }
+  return paragraphs;
+}
+
+function screenOrRefuse(value: string, field: string): string {
+  const screened = screenControlCharacters(value);
+  if (screened.length > FIELD_CAP) {
+    throw new Error(
+      `one of the shared workflow's ${field} values is longer than ${String(FIELD_CAP)} characters once screened; the preamble carries the prompt-injection defence and is refused rather than truncated. The bound is per value, not over the whole preamble`,
+    );
+  }
+  return screened;
+}
+
+/**
+ * A payload containing its own fence closes the block early and swallows every
+ * line after it. CommonMark closes a fence only on a run at least as long as the
+ * opening one, so open with a run longer than the longest inside. Presentation
+ * rather than execution, and still a structure a hostile value could otherwise
+ * choose.
+ */
+function fenced(payload: string, info: string): readonly string[] {
+  const longest = [...payload.matchAll(/`+/gu)].reduce(
+    (max, [run]) => Math.max(max, run.length),
+    0,
+  );
+  const fence = "`".repeat(Math.max(3, longest + 1));
+  return [`${fence}${info}`, payload, fence];
 }
 
 /**
@@ -111,44 +219,97 @@ export class ClaudeRenderer implements WorkflowRenderer {
     }
     assertRenderable(dependencies.shared);
     this.#shared = dependencies.shared;
-    if (preambleBody(dependencies.shared).length === 0) {
+    /**
+     * Per scope, not in total. A combined check passed on the refusals alone,
+     * so a `shared` whose prose screened to nothing — whitespace, or a single
+     * format character — shipped six artifacts carrying refusals and no
+     * defence, with no error. Second review, same day, same class of defect as
+     * the empty-preamble check it strengthens.
+     */
+    if (preambleProse(dependencies.shared).length === 0) {
       throw new Error(
-        "the shared workflow renders an empty preamble; it carries the prompt-injection defence and every other artifact depends on it being non-empty",
+        "the shared workflow's preamble prose is empty; it carries the prompt-injection defence and every other artifact depends on it being non-empty",
       );
     }
   }
 
+  /**
+   * The overlay is **applied**, not discarded.
+   *
+   * It used to be `void overlay`, so a caller who passed one lost it silently
+   * and no test failed — while spec §7 says the input is a contract plus its
+   * optional Claude overlay. `applyOverlay` is the compiler's own merge and the
+   * only thing that knows an overlay is presentation-only; re-implementing the
+   * rule here is how the two come to disagree. A refused overlay throws, because
+   * rendering the base contract instead would silently produce an artifact the
+   * caller did not ask for. Found by fresh-context review of Tasks 1–5.
+   *
+   * `OverlayOutcome.lifecycle` is deliberately unused: DOS-P4 emits no hook
+   * artifact at all (spec §6, amended 2026-08-11), so there is nothing for a
+   * lifecycle binding to bind to. Owner of the restoration: DOS-P6.
+   */
   render(
     contract: WorkflowContractV1,
     overlay: WorkflowOverlayV1 | null,
   ): readonly RenderedArtifact[] {
-    void overlay;
     assertRenderable(contract);
+    const rendered = this.#applied(contract, overlay);
+    // Again, on the object the path is actually built from. `applyOverlay`
+    // cannot move `id` or `version` today; the assertion is local to the value
+    // it protects rather than to the one that preceded it.
+    assertRenderable(rendered);
     const lines: string[] = [
       "---",
-      `name: ${yamlScalar(`developer-os-${contract.id}`)}`,
-      `description: ${yamlScalar(contract.description)}`,
+      `name: ${yamlScalar(`developer-os-${rendered.id}`)}`,
+      `description: ${yamlScalar(rendered.description)}`,
       "---",
       "",
-      `<!-- ${sourceMarker(contract, `workflows/${contract.id}/workflow.yaml`)} -->`,
+      `<!-- ${sourceMarker(rendered, `workflows/${rendered.id}/workflow.yaml`)} -->`,
       "",
     ];
 
-    if (contract.id !== SHARED_WORKFLOW_ID) {
+    if (rendered.id !== SHARED_WORKFLOW_ID) {
       lines.push(...this.#preamble(), "");
     }
 
-    lines.push(`# ${screen(contract.id)}`, "");
-    lines.push(...renderRefusals(contract), "");
-    lines.push(...renderSteps(contract), "");
-    lines.push(...renderRecovery(contract));
+    lines.push(`# ${screen(rendered.id)}`, "");
+    lines.push(...renderRefusals(rendered), "");
+    lines.push(...renderSteps(rendered), "");
+    lines.push(...renderRecovery(rendered));
 
     return [
       {
-        path: `skills/developer-os-${contract.id}/SKILL.md`,
+        path: `skills/developer-os-${rendered.id}/SKILL.md`,
         contents: `${lines.join("\n")}\n`,
       },
     ];
+  }
+
+  #applied(
+    contract: WorkflowContractV1,
+    overlay: WorkflowOverlayV1 | null,
+  ): WorkflowContractV1 {
+    if (overlay === null) return contract;
+    /**
+     * An overlay on `shared` is refused rather than applied. The preamble has
+     * one reviewable home and is concatenated into five other artifacts from
+     * `this.#shared`, which no overlay reaches — so an overlaid `shared` skill
+     * would state one defence while the five copies stated another. Second
+     * review, 2026-08-11.
+     */
+    if (contract.id === SHARED_WORKFLOW_ID) {
+      throw new Error(
+        "the Claude overlay was refused: the shared workflow carries the prompt-injection defence concatenated into every other artifact, and an overlay would make the copies disagree",
+      );
+    }
+    const outcome = applyOverlay(contract, overlay);
+    if (!outcome.ok) {
+      // Screened: `applyOverlay` screens a step id but leaves `extends`
+      // unscreened, because its schema constrains it — and `render` is typed
+      // rather than parsed, so nothing here has run that schema.
+      throw new Error(`the Claude overlay was refused: ${screen(outcome.reason)}`);
+    }
+    return outcome.contract;
   }
 
   #preamble(): readonly string[] {
@@ -168,17 +329,40 @@ export class ClaudeRenderer implements WorkflowRenderer {
  */
 function preambleBody(shared: WorkflowContractV1): readonly string[] {
   return [
-    ...renderRefusals(shared),
-    ...shared.steps.flatMap((step) =>
-      step.prose === undefined ? [] : [`- ${screen(step.prose)}`],
+    ...renderRefusals(shared, (message) =>
+      screenOrRefuse(message, "refusal message"),
     ),
+    ...preambleProse(shared),
   ];
 }
 
-function renderRefusals(contract: WorkflowContractV1): readonly string[] {
+/** The prose half alone, so the constructor can require *this* scope non-empty. */
+function preambleProse(shared: WorkflowContractV1): readonly string[] {
+  return shared.steps.flatMap((step) =>
+    step.prose === undefined
+      ? []
+      : bullet(refusingParagraphs(step.prose, "preamble prose")),
+  );
+}
+
+/**
+ * A bullet whose continuation paragraphs are indented by two spaces, which is
+ * what keeps them inside the list item instead of ending it. One paragraph
+ * renders exactly as the single-line bullet always did.
+ */
+function bullet(paragraphs: readonly string[]): readonly string[] {
+  const [first, ...rest] = paragraphs;
+  if (first === undefined) return [];
+  return [`- ${first}`, ...rest.flatMap((paragraph) => ["", `  ${paragraph}`])];
+}
+
+function renderRefusals(
+  contract: WorkflowContractV1,
+  screener: (value: string) => string = screen,
+): readonly string[] {
   return contract.refusals.map(
     (refusal) =>
-      `- **Refuse** (${screen(refusal.when)}, exit ${String(refusal.exit)}): ${screen(refusal.message)}`,
+      `- **Refuse** (${screen(refusal.when)}, exit ${String(refusal.exit)}): ${screener(refusal.message)}`,
   );
 }
 
@@ -194,7 +378,15 @@ function renderSteps(contract: WorkflowContractV1): readonly string[] {
   for (const step of contract.steps) {
     lines.push(`### ${screen(step.id)}`, "");
     if (step.prose !== undefined) {
-      lines.push(screen(step.prose), "");
+      const block = boundedProse(step.prose);
+      // Prose that screens to nothing is a heading with no body — a step that
+      // says nothing, reported rather than rendered blank.
+      if (block.length === 0) {
+        throw new Error(
+          `step \`${screen(step.id)}\` carries prose that renders to nothing`,
+        );
+      }
+      lines.push(block, "");
       continue;
     }
     // The contract makes a step `do` XOR `prose`. If neither is present the
@@ -207,7 +399,7 @@ function renderSteps(contract: WorkflowContractV1): readonly string[] {
     }
     lines.push(`Effect: \`${screen(step.do)}\``, "");
     if (step.with !== undefined) {
-      lines.push("```json", screen(JSON.stringify(step.with)), "```", "");
+      lines.push(...fenced(screen(JSON.stringify(step.with)), "json"), "");
     }
   }
   return lines;
@@ -224,12 +416,13 @@ function renderRecovery(contract: WorkflowContractV1): readonly string[] {
   return [
     "## Recovery",
     "",
-    screen(contract.recovery.leaves),
+    // `leaves` is a line, and a line beginning with a fence run opens a code
+    // block that swallows the warning below it. `fenced` protects the payload
+    // positions; `boundedProse` protects this one. Second review, 2026-08-11.
+    boundedProse(contract.recovery.leaves),
     "",
     "Do not run this automatically. It is text for a person to read:",
     "",
-    "```text",
-    screen(contract.recovery.resume),
-    "```",
+    ...fenced(screen(contract.recovery.resume), "text"),
   ];
 }

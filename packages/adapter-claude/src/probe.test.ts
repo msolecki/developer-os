@@ -26,21 +26,45 @@ function runner(
 const installation = { executable: "claude", version: "2.1.216" } as const;
 const pluginDirectory = "/synthetic/plugin";
 
+/** The shipped tree's shape: a manifest and six skills. */
+const skillsPresent = (): Promise<readonly string[]> =>
+  Promise.resolve([
+    ".claude-plugin/plugin.json",
+    "skills/developer-os-shared/SKILL.md",
+  ]);
+
 describe("probeClaude", () => {
   it("observes the validate-settled capabilities when validate succeeds", async () => {
     const seen = await probeClaude(installation, {
       runner: runner(() => ({ exitCode: 0, stdout: "OK" })),
       pluginDirectory,
+      listPluginFiles: skillsPresent,
     });
     expect(seen.get("skills")).toBe("observed");
-    expect(seen.get("plugin_hooks")).toBe("observed");
-    expect(seen.get("subagents")).toBe("observed");
+  });
+
+  /**
+   * The tree ships a manifest and six skills — no `hooks/`, no `agents/`. A
+   * clean exit code from `claude plugin validate` therefore cannot have
+   * observed either, and both used to be settled by it and resolve to `yes`.
+   * Restoring a key means shipping the artifact it describes in the same
+   * change. Found by fresh-context review, 2026-08-11.
+   */
+  it("settles nothing about artifacts the tree does not contain", async () => {
+    const seen = await probeClaude(installation, {
+      runner: runner(() => ({ exitCode: 0, stdout: "OK" })),
+      pluginDirectory,
+      listPluginFiles: skillsPresent,
+    });
+    expect(seen.has("plugin_hooks")).toBe(false);
+    expect(seen.has("subagents")).toBe(false);
   });
 
   it("marks them absent when validate exits non-zero", async () => {
     const seen = await probeClaude(installation, {
       runner: runner(() => ({ exitCode: 1, stderr: "bad manifest" })),
       pluginDirectory,
+      listPluginFiles: skillsPresent,
     });
     expect(seen.get("skills")).toBe("absent");
   });
@@ -53,6 +77,7 @@ describe("probeClaude", () => {
         },
       },
       pluginDirectory,
+      listPluginFiles: skillsPresent,
     });
     expect(seen.get("skills")).toBe("unavailable");
   });
@@ -65,6 +90,7 @@ describe("probeClaude", () => {
         },
       },
       pluginDirectory,
+      listPluginFiles: skillsPresent,
     });
     expect(seen.get("skills")).toBe("unavailable");
   });
@@ -73,6 +99,7 @@ describe("probeClaude", () => {
     const seen = await probeClaude(installation, {
       runner: runner(() => ({ timedOut: true, exitCode: null })),
       pluginDirectory,
+      listPluginFiles: skillsPresent,
     });
     expect(seen.get("skills")).toBe("unavailable");
   });
@@ -87,6 +114,7 @@ describe("probeClaude", () => {
     const seen = await probeClaude(installation, {
       runner: runner(() => ({ exitCode: null, signal: "SIGKILL" })),
       pluginDirectory,
+      listPluginFiles: skillsPresent,
     });
     expect(seen.get("skills")).toBe("unavailable");
   });
@@ -101,6 +129,7 @@ describe("probeClaude", () => {
     const seen = await probeClaude(installation, {
       runner: runner(() => ({ exitCode: 0 })),
       pluginDirectory,
+      listPluginFiles: skillsPresent,
     });
     for (const lifecycle of [
       "session_start_injection",
@@ -121,6 +150,7 @@ describe("probeClaude", () => {
         return { exitCode: 0 };
       }),
       pluginDirectory,
+      listPluginFiles: skillsPresent,
     });
     const seen = request as ProcessRequest | null;
     expect(seen?.args).toEqual(["plugin", "validate", pluginDirectory]);
@@ -132,6 +162,7 @@ describe("probeClaude", () => {
     const seen = await probeClaude(installation, {
       runner: runner(() => ({ exitCode: 0 })),
       pluginDirectory,
+      listPluginFiles: skillsPresent,
     });
     expect(seen.size).toBeGreaterThan(0);
   });

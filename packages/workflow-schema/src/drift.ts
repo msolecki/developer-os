@@ -62,6 +62,14 @@ export function firstDifferingLine(
  * would resolve an artifact path of `toString` through `Object.prototype` and
  * compare a `Function` as if it were file contents — the class of defect three
  * other modules in this package were corrected for.
+ *
+ * **It iterates `expected` only, so an unexpected file on disk produces no
+ * finding.** Set equality is the caller's job: an adapter's drift gate has to
+ * assert that the two key sets match, in the same case, or a hand-added file
+ * passes a check whose name says byte-for-byte. `tests/contracts/adapters/claude/
+ * generated.test.ts` is the worked example. Said here because DOS-P5's gate will
+ * call this function and reasonably assume otherwise. Found by fresh-context
+ * review, 2026-08-11.
  */
 export function detectWorkflowDrift(
   expected: readonly RenderedArtifact[],
