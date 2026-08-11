@@ -178,16 +178,27 @@ it never writes them.
 
 Product spec §11's example keys, resolved against the verified surface in §14:
 
+**Amended 2026-08-11, in place, by the implementation — the row contents below are superseded for
+`plugin_hooks` and `subagents`.** `claude plugin validate` reports one exit code for a whole
+directory, so reading it as an observation of a *particular* artifact grants a capability over a
+file that need not exist: the shipped tree contains a manifest and six skills, no `hooks/` and no
+`agents/`, and both keys resolved to `yes` on a clean exit anyway. Neither is settled by the probe
+any more, and the surviving `skills` row is settled only when the validated directory is also
+observed to contain at least one `SKILL.md`. **Restoring a key to the probe means shipping the
+artifact it names in the same change** — which for `plugin_hooks` is the whole of §6's restoration,
+owned by DOS-P6. Registered in `BACKLOG.md` §8; recorded here because a reader implementing against
+this table would otherwise reintroduce the defect. The original table follows.
+
 | Key | Surface it resolves to | Probe |
 |---|---|---|
-| `skills` | `skills/<name>/SKILL.md` in the plugin | `claude plugin validate` |
-| `plugin_hooks` | `hooks/hooks.json` bundled in the plugin | `claude plugin validate` |
+| `skills` | `skills/<name>/SKILL.md` in the plugin | `claude plugin validate`, **and a non-empty scan of the directory it validated** |
+| `plugin_hooks` | `hooks/hooks.json` bundled in the plugin | ~~`claude plugin validate`~~ — nothing; not shipped (§6, amended) |
 | `session_start_injection` | `SessionStart` hook → `hookSpecificOutput.additionalContext` | probe hook, §6.1 |
 | `session_end_capture` | `SessionEnd` hook | probe hook, §6.1 |
 | `pre_compact_backup` | `PreCompact` hook | probe hook, §6.1 |
 | `non_interactive_run` | `claude -p` | invocation probe |
 | `structured_result` | `claude -p --output-format json` | invocation probe |
-| `subagents` | `agents/` in the plugin | `claude plugin validate` |
+| `subagents` | `agents/` in the plugin | ~~`claude plugin validate`~~ — nothing; no `agents/` is shipped |
 | `durable_project_guidance` | **not used by this adapter** — see §7.1 | none |
 
 `durable_project_guidance` is reported for `doctor`'s matrix and depended on by nothing, because
