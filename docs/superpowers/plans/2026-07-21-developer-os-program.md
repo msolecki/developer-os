@@ -99,7 +99,7 @@ P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5
 
 ---
 
-### Tasks 0 to 3 — closed, and not described here
+### Tasks 0 to 4 — closed, and not described here
 
 | Task | Closed | What survives it |
 |---|---|---|
@@ -107,11 +107,21 @@ P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5
 | 1 — public foundation and CLI lifecycle | 2026-08-01 | `docs/architecture/foundation.md`, `docs/architecture/foundation-constraints.md`, `docs/releases/foundation-checkpoint.md` |
 | 2 — Brain engine | 2026-08-10 | `docs/architecture/brain.md`, and `specs/2026-07-21-developer-os-brain-engine-design.md` as the design of record |
 | 3 — workflow compiler | 2026-08-10 | `docs/architecture/workflow-schema.md`, and `specs/2026-07-21-developer-os-workflow-compiler-design.md` as the design of record |
+| 4 — Claude Code adapter | 2026-08-11 | `docs/architecture/claude-adapter.md`, and `specs/2026-07-21-developer-os-claude-adapter-design.md` as the design of record |
 
 None can be re-run and none should be read as instruction: Task 0's inputs are deliberately out
 of reach, and the plans for Tasks 1 and 2 were deleted when their last steps closed. The
 recovery commits for all three are in `BACKLOG.md`'s rules, which is the one place that index
 lives — a second copy here is how two indexes come to disagree.
+
+**Task 4 closed with two of its eight steps unearned, and they are Task 6's.** Recorded here
+because a reader of the checkpoint alone would read them as done: no lifecycle surface could be
+observed firing, so no hook ships and all three lifecycle capabilities report `wrapper-required`;
+and `developer-os run claude` has nothing to capture into until the capture contract exists.
+**Its checkpoint is likewise half met.** The six skills load in a real installation and `doctor`
+and `brain search` name commands that exist, while `capture`, `ingest` and `review` name verbs with
+no handler anywhere in this product — six of the seven unimplemented verbs are Task 6's. An adapter
+renders workflows and executes none of them, so Task 4 could not have closed that half.
 
 **Their step lists are deleted rather than kept as ticked boxes**, and Tasks 2 and 3 are both
 why that rule is worth obeying. Task 2 stood marked COMPLETE while three of its boxes were still
@@ -149,55 +159,6 @@ those are what shipped; `lint` and `reindex` are served by the `brain` CLI group
 which is a command surface rather than an agent workflow, and `test` is a repository gate. The
 spec wins over the plan, and this is recorded rather than left as an apparent omission.
 
-### Task 4: Specify and implement the Claude Code adapter
-
-**Complexity:** L
-
-**Files:**
-- Create: `docs/superpowers/specs/2026-07-21-developer-os-claude-adapter-design.md`
-- Create: `docs/superpowers/plans/2026-07-21-developer-os-claude-adapter.md`
-- Create: `packages/adapter-claude/src/`
-- Generate: `plugins/claude/`
-- Create: `tests/contracts/adapters/claude/`, `tests/fixtures/agents/claude/`, and `tests/integration/claude/`
-
-**Interfaces:**
-- Consumes: `WorkflowContractV1`, `WorkflowRenderer`, `BrainService`, `SecurityPolicy`, `PlatformAdapter`, and `InstallationManifestV1`.
-- Produces: `ClaudeAdapter`, `ClaudeCapabilities`, `ClaudeInvocation`, Claude plugin artifacts, managed hook plans, and structured agent-run results.
-
-**What:** Add Claude Code as a fully optional adapter using documented plugin, skill, hook, and non-interactive surfaces.
-
-**Where:** `packages/adapter-claude/` and generated `plugins/claude/`.
-
-**How:**
-
-- [x] Approve exact supported-version discovery, plugin structure, hook payloads, wrapper behavior, config merge, and failure contracts.
-- [x] Implement version and capability detection from documented CLI surfaces.
-- [x] Render canonical workflows into namespaced Claude skills and plugin metadata.
-- [x] Install through a dedicated managed plugin path and semantic config merge. — *the merge half is dissolved rather than done: a skills-directory plugin writes no foreign config file, so there is nothing to merge (spec §4.3, `docs/architecture/claude-adapter.md` §2).*
-- [x] Implement safe agent invocation with argv arrays, bounded stdin, timeouts, and structured result validation.
-- [ ] Implement SessionStart injection and automatic capture only for verified lifecycle surfaces. — *unearned rather than skipped: no lifecycle surface could be observed firing, so no hook ships and all three lifecycle capabilities report `wrapper-required`. Owner: DOS-P6 (`claude-adapter.md` §5).*
-- [ ] Use `developer-os run claude` when direct invocation cannot meet the capture contract. — *the capability model already tells users the wrapper is required; the verb has nothing to capture into until the capture contract exists. Owner: DOS-P6 (`claude-adapter.md` §9.2).*
-- [x] Test against a fake CLI first and a disposable real installation second.
-
-**Test:**
-
-- Plugin validation and generated drift checks pass.
-- Fake-CLI tests pin argv, stdin, environment, timeout, signal, exit, and malformed-output behavior.
-- Install/update/uninstall preserves unrelated Claude settings.
-- Capture redacts before persistence or model input.
-- Unsupported Claude versions report exact missing capabilities rather than partial success.
-
-**Checkpoint:** A Claude-only user completes the full synthetic Brain workflow with no Codex installation.
-
-**Half met on 2026-08-11, and the other half is not this task's to meet.** The six skills load in a
-real installation and `doctor` and `brain search` name commands that exist. `capture`, `ingest` and
-`review` name verbs with **no handler anywhere in this product** — six of the seven unimplemented
-verbs belong to DOS-P6 — so a user following those three skills reaches a command that is not
-there. An adapter renders workflows and executes none of them, so DOS-P4 could not have closed
-this. Recorded in `docs/architecture/claude-adapter.md` §8 rather than left as an apparent pass.
-
----
-
 ### Task 5: Specify and implement the Codex adapter
 
 **Complexity:** L
@@ -219,7 +180,7 @@ this. Recorded in `docs/architecture/claude-adapter.md` §8 rather than left as 
 
 **How:**
 
-- [ ] Approve exact supported Codex surfaces against current official documentation and verified local behavior.
+- [x] Approve exact supported Codex surfaces against current official documentation and verified local behavior. — *the spec was written 2026-08-11 and approved by the founder the same day; its §14 is the normative list, and an implementation may not depend on a surface it does not carry.*
 - [ ] Implement version and capability detection.
 - [ ] Render the canonical workflows into Codex skills and durable guidance at the smallest appropriate scope.
 - [ ] Install only dedicated managed artifacts and semantically merge required config.

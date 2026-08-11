@@ -60,9 +60,9 @@ Open work only. Program Tasks 0 to 3 are closed and are not rows here.
 | Area | Where | What is left |
 |---|---|---|
 | Program (umbrella) | 1 plan | Tasks 4–9 open; Tasks 0–3 closed and not rows here |
-| DOS-P5 … DOS-P7 | DOS-P5 spec written 2026-08-11, awaiting approval; **DOS-P4 shipped 2026-08-11** | 2 specs, 3 plans, 3 implementations |
+| DOS-P5 … DOS-P7 | DOS-P5 spec **approved** 2026-08-11; **DOS-P4 shipped** the same day | 2 specs, 3 plans, 3 implementations |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | NEW-7 and NEW-10 — both XS; NEW-7 needs a machine with Obsidian |
+| Repository-level | §1 | NEW-7 only — XS, and it needs a machine with Obsidian, which is the founder's |
 | Repository infrastructure | §5 | two directories a later subsystem still owes; `packages/adapter-claude/`, `plugins/claude/` and `tests/integration/` landed with DOS-P4 on 2026-08-11 |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -101,24 +101,8 @@ founder's machine as user data, not as source material.
 
 Everything in this section is genuinely open. Nothing here is bookkeeping, and nothing
 closed stays here — NEW-1 through NEW-6, NEW-8 and NEW-9 were removed on 2026-08-10 when
-they closed. What a closed item leaves behind is a row in §8, a clause in a spec, or a test;
+they closed, and NEW-10 on 2026-08-11. What a closed item leaves behind is a row in §8, a clause in a spec, or a test;
 if it left nothing, it was not worth recording. Git history is the archive.
-
-### NEW-10 — a title made only of invisible characters is a valid title
-
-- **Status:** open, found 2026-08-10 by the review of NEW-6 · **Owner:** the next task
-  touching `schema/note.ts` · **Size:** XS
-- `note.ts` refuses a title only when `title.trim().length === 0`, and `String#trim` removes
-  neither U+200B nor U+00AD. A note titled with nothing but invisibles therefore validates,
-  and every surface that screens it renders **empty**: the catalog row is `[](<path>)`, a
-  link with no text.
-- NEW-6 did not create this and does not depend on it. It made it *visible*: two such notes
-  now group as duplicates of each other, correctly — they are the same empty row — which is
-  pinned by a test that says so in as many words.
-- The fix is a screen-aware emptiness check in `note.ts`, not a change to lint: the class
-  that reports it is right, the value should not have been accepted. Decide it with NEW-6's
-  amendment to spec §7 in view, because both turn on the same question — which form of a
-  title the product treats as the title.
 
 ### NEW-7 — a link destination's percent-encoding is unverified against Obsidian
 
@@ -187,7 +171,7 @@ that subsystem in §3.
 ## 3. Missing specs and plans
 
 **Five documents left.** DOS-P6 and DOS-P7 need a spec and a plan each; DOS-P5 needs its plan, and
-its spec is written and awaiting approval.
+its spec was approved on 2026-08-11 — writing that plan is the next document anyone writes.
 DOS-P4 is closed and is not listed here any more: its spec is retained at
 `specs/2026-07-21-developer-os-claude-adapter-design.md` because
 `docs/architecture/claude-adapter.md` names it as the design of record; its plan is deleted,
@@ -208,30 +192,30 @@ names it as the design of record; its plan is deleted, recoverable at `81e7e7d`.
 
 ### DOS-P5 — Codex adapter
 
-- **Spec:** `specs/2026-07-21-developer-os-codex-adapter-design.md` — **written 2026-08-11,
-  awaiting founder approval.** It settles the install shape (a local marketplace installed by
+- **Spec:** `specs/2026-07-21-developer-os-codex-adapter-design.md` — **approved by the founder
+  2026-08-11.** It settles the install shape (a local marketplace registered and installed by
   Codex's own CLI, which never edits `~/.codex/config.toml`), capture against the hook trust gate,
-  the `AGENTS.md` decision, and the transcript refusal. Its §14 is normative; §12 is the table
-  DOS-P6 inherits; §15 carries five items it does not close
-- **Plan:** `plans/2026-07-21-developer-os-codex-adapter.md` — missing, and blocked on approval of
-  the spec above
-- **Program task:** 5 · **Complexity:** L · **Blocked by:** DOS-P3 schemas frozen
-- **The spec must decide:** exactly which Codex surfaces are supported, verified against
-  current official documentation *and* local behavior; how canonical workflows render into
-  Codex skills and `AGENTS.md` guidance at the smallest appropriate scope; and the
-  refusal rule — no transcript parsing unless a stable documented contract exists with a
-  regression fixture.
+  the `AGENTS.md` decision, and the transcript refusal. Its §14 is normative — an implementation may
+  not depend on a Codex surface not listed there. §12 is the table DOS-P6 inherits; §15 carries five
+  items it does not close
+- **Plan:** `plans/2026-07-21-developer-os-codex-adapter.md` — **missing, and it is the next thing
+  anyone writes.** The `S` gate is closed and `P` is open
+- **Program task:** 5 · **Complexity:** L · **Blocked by:** nothing
 - **Produces:** `CodexAdapter`, `CodexCapabilities`, `CodexInvocation`, `plugins/codex/`,
   managed hook plans, structured agent-run results.
 - **Gate:** direct and wrapper capability matrices are tested separately; a missing
   capture hook is classified `wrapper-required`, never a false `yes`.
 - **Absorbs:** legacy follow-up Step 8 (`Add stable Codex learning capture`), frozen on the
   legacy runtime 2026-07-27 and rebuilt here instead.
-- **There is no longer a legacy Codex implementation to compare against.** The founder's
-  legacy runtime removed its Codex parity layer on 2026-07-27, after
-  `baseline-capabilities.json` froze that surface on 2026-07-21. The frozen record remains
-  the only admissible statement about what the legacy runtime did; nothing is left to
-  observe, and this spec must not plan to observe it.
+- **Read `docs/architecture/claude-adapter.md` before writing the plan.** The two adapters are
+  consumed by one subsystem, and three of its residuals come due the moment a second one exists:
+  the duplicated code-point sort (§9.5), the absent `ClaudeAdapter` façade (§9.6), and
+  `detectWorkflowDrift` reporting only in one direction, which the Codex drift gate will also have
+  to compensate for.
+- **There is no legacy Codex implementation to compare against.** The founder's legacy runtime
+  removed its Codex parity layer on 2026-07-27, after `baseline-capabilities.json` froze that
+  surface on 2026-07-21. The frozen record is the only admissible statement about it, and the plan
+  must not schedule an observation of something that no longer exists.
 
 ### DOS-P6 — Knowledge pipeline hardening
 
@@ -476,24 +460,22 @@ documents and this was the reverse. DOS-P3's first draft invented `session_start
 current and untouched. Recorded here only so the next reader does not go looking for an
 amendment that would say otherwise.
 
-**Five amendments are pending, not discharged.** Two come from `specs/…-codex-adapter-design.md`,
-written 2026-08-11, and **revert with it if the founder does not approve**; three were decided by the
-implementer while closing DOS-P4 and await ratification or reversal on their own terms:
-
-| Amends | What changes | State |
-|---|---|---|
-| DOS-P4's plan, Task 10 — now deleted; the record is `docs/architecture/claude-adapter.md` §7 | **`developer-os workflow render` is not added, and regeneration is `npm run render:claude` instead.** The plan asked for a CLI verb; taken literally it contradicts spec §10, which says the adapter writes to exactly one directory — a shipped verb that writes `./plugins/claude` into whatever directory a user stands in writes outside the manifest, outside a transaction, and outside every guarantee Foundation makes about mutation. `plugins/claude/` exists only in a source checkout, so its regenerator is repository tooling rather than product surface. The composition stays in the package (`renderClaudePlugin`), so the regenerator and the drift check call the same function | **decided by the implementer 2026-08-11; awaiting founder ratification or reversal.** Restoring the verb means deciding where it may write and how that write is owned |
-| `specs/…-claude-adapter-design.md` §5.4, approved 2026-08-11 | **the probe settles `skills` only, and only over a directory observed to contain a `SKILL.md`.** One exit code from `claude plugin validate` covers a whole directory, so reading it as an observation of a particular artifact granted `plugin_hooks=yes` and `subagents=yes` over a tree containing neither — and `skills=yes` over one containing no skill. Restoring a key to that probe means shipping the artifact it names in the same change; for `plugin_hooks` that is the whole of §6's restoration, **owner DOS-P6** | **decided by the implementer 2026-08-11 after a fresh-context review found it; awaiting founder ratification or reversal.** The spec carries a dated in-place amendment above the superseded table |
-| Program plan Task 4's checkpoint, and two of its eight boxes | **the checkpoint is half met, and the other half is DOS-P6's.** Six skills load in a real installation; `capture`, `ingest` and `review` name verbs with no handler anywhere in this product. Lifecycle injection and `developer-os run claude` stay unticked with inline notes naming DOS-P6, rather than ticked to make the task look closed | recorded 2026-08-11 in the program plan and in `claude-adapter.md` §8; no founder decision is required unless the checkpoint is meant to gate A9 |
-| `specs/…-claude-adapter-design.md` §6, approved 2026-08-11 | **`hooks/hooks.json` is not shipped in DOS-P4.** The three hooks named commands under a `bin/` directory no task creates, and `claude plugin validate` checks schema rather than existence, so `plugin_hooks` could report `yes` over a dangling path. Emitting the scripts does not repair it: a command hook needs an executable file and nothing in the pipeline can express an executable bit — `RenderedArtifact` is `{path, contents}`, `ManagedArtifactV1` has `kind: "file"` and no mode. Nothing regresses; §6.1 already makes all three lifecycle capabilities `wrapper-required` until a hook is observed firing, which none could ever be. Restoring it needs the hook bodies, an executable-bit mechanism and a firing test, **in one change. Owner: DOS-P6** | **decided by the implementer 2026-08-11 after three requests to continue; awaiting founder ratification or reversal.** The spec carries a dated in-place amendment above the section it supersedes |
-| §2 of this file, a second time | `buildConflictEvidence` has **no consumer in either adapter**. DOS-P4 §4.3 dissolved its half; DOS-P5 §4.3 dissolves the other by delegating the config write to `codex plugin add`. It was built for a design both adapters declined. Whether it is retained, taken up by DOS-P7, or deleted belongs to the first subsystem with a real three-way merge | pending spec approval |
-| `specs/…-claude-adapter-design.md` §8.1, approved 2026-08-11 | the `agent.prompt` `with` schema moves from `packages/adapter-claude` to `packages/core`, so **both** adapters import one schema. Two adapters with two argument schemas for one verb is a workflow that validates against one vendor and not the other. DOS-P4's plan Task 6 is updated in the same change; it had not started | pending spec approval |
+**Nothing is pending.** The five amendments that stood here were resolved on 2026-08-11: the
+founder ratified all three implementer decisions taken while closing DOS-P4, and approved
+`specs/…-codex-adapter-design.md`, which discharged the two that rode on it. Every row is in the
+table below, each carrying the outcome rather than the question.
 
 **Discharged. Listed because the amended document is still read, not because there is work
 left:**
 
 | Amended | By | What changed | Where it landed |
 |---|---|---|---|
+| `specs/…-claude-adapter-design.md` §6, approved 2026-08-11 | DOS-P4, as shipped | **`hooks/hooks.json` is not shipped.** A `type: "command"` hook needs an executable file and nothing in the pipeline can express an executable bit — `RenderedArtifact` is `{path, contents}`, `ManagedArtifactV1` has `kind: "file"` and no mode — so the claim could never have been true, while §6.1 already reported all three lifecycle capabilities as `wrapper-required`. Restoring it needs the hook bodies, an executable-bit mechanism and a firing test, **in one change. Owner: DOS-P6** | **ratified by the founder 2026-08-11.** The spec carries a dated in-place amendment above the section it supersedes; `claude-adapter.md` §5 is the record |
+| `specs/…-claude-adapter-design.md` §5.4, approved 2026-08-11 | DOS-P4, as shipped | **the probe settles `skills` only, and only over a directory observed to contain a `SKILL.md`.** One `claude plugin validate` exit code covers a whole directory, so reading it as an observation of a particular artifact granted `plugin_hooks=yes` and `subagents=yes` over a tree containing neither, and `skills=yes` over one containing no skill. Restoring a key to that probe means shipping the artifact it names in the same change | **ratified by the founder 2026-08-11.** The spec carries a dated in-place amendment above the superseded table |
+| DOS-P4's plan, Task 10 — deleted with the plan | DOS-P4, as shipped | **no `developer-os workflow render` verb; regeneration is `npm run render:claude`.** A shipped verb writing `./plugins/claude` into whatever directory a user stands in contradicts spec §10's one-directory rule and writes outside the manifest and outside a transaction; `plugins/claude/` exists only in a source checkout. The composition stays in the package, so the regenerator and the drift check call one function | **ratified by the founder 2026-08-11.** `docs/architecture/claude-adapter.md` §7 is the record |
+| §2 of this file, a second time | the Codex adapter spec §4.3, **approved 2026-08-11** | `buildConflictEvidence` has **no consumer in either adapter**. DOS-P4 §4.3 dissolved its half; DOS-P5 §4.3 dissolves the other by delegating the config write to `codex plugin add`. It was built for a design both adapters declined. Whether it is retained, taken up by DOS-P7, or deleted belongs to the first subsystem with a real three-way merge | §2 above carries the note; the decision itself is still owed by that subsystem |
+| `specs/…-claude-adapter-design.md` §8.1, approved 2026-08-11 | the Codex adapter spec §7.3, **approved 2026-08-11** | the `agent.prompt` `with` schema lives in `packages/core`, not in `packages/adapter-claude`, so **both** adapters import one schema. Two adapters with two argument schemas for one verb is a workflow that validates against one vendor and not the other | code, DOS-P4 Task 6 (`d8afcca`) |
+| Program plan Task 4's checkpoint, and two of its eight boxes | DOS-P4, as closed | **the checkpoint is half met, and the other half is DOS-P6's.** Six skills load in a real installation; `capture`, `ingest` and `review` name verbs with no handler anywhere in this product. Lifecycle injection and `developer-os run claude` stay unticked with inline notes naming DOS-P6, rather than ticked to make the task look closed | the program plan, and `claude-adapter.md` §8 |
 | `docs/migration/exclusion-policy.md` — an approved Task 0 artifact | the Claude adapter spec §12, approved 2026-08-11 | gains "Paths this repository does not create": this repository creates no `.claude/` in v1. Adapter output lives in `plugins/claude/` and installs to the user's `~/.claude/skills/`, so no generated artifact wants a home here | the policy carries the decision and a cross-reference to the spec's §12 |
 | `docs/migration/exclusion-policy.md` §"Remote and release gates" | the founder's ruling of 2026-08-11 | the clause forbidding fetch, push and pull requests was conditional on remote verification being `blocked_by_environment`. **That condition ended on 2026-08-10** — the remote exists and CI runs on it — so the clause bound nothing while still reading as an absolute prohibition. Corrected to state the condition in the past tense and to name L2 as what remains | the policy, in place, as a status correction |
 | §2 of this file, and product spec §9.3's deferral | the Claude adapter spec §4.3, approved 2026-08-11 | DOS-P4 is **not** the first consumer of `buildConflictEvidence` after all. A skills-directory plugin writes no foreign config file, so DOS-P4 has nothing to three-way merge. Conflict evidence is still produced for the plugin directory's own managed files; whether DOS-P5 needs the three-way form is DOS-P5's decision, and `AGENTS.md` is shared in a way `~/.claude/skills/developer-os/` is not | §2 above carries the amendment note |
