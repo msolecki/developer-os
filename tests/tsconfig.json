@@ -9,7 +9,8 @@
     "e2e/**/*.ts",
     "helpers/**/*.ts",
     "integration/**/*.ts",
-    "repository/**/*.ts"
+    "repository/**/*.ts",
+    "tools/**/*.ts"
   ],
   "references": [
     {

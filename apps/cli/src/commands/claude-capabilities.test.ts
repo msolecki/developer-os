@@ -24,6 +24,13 @@ function runner(
   };
 }
 
+/** The shipped tree's shape: a manifest and at least one skill. */
+const skillsPresent = (): Promise<readonly string[]> =>
+  Promise.resolve([
+    ".claude-plugin/plugin.json",
+    "skills/developer-os-shared/SKILL.md",
+  ]);
+
 const version = (stdout: string) =>
   runner((request) =>
     request.args[0] === "--version" ? { stdout } : { exitCode: 0 },
@@ -45,6 +52,9 @@ describe("reportClaudeCapabilities", () => {
     });
     expect(report.installed).toBe(false);
     expect(report.version).toBeNull();
+    // Pinned in both directions: `unreadable` asserts it is not `absent`, so
+    // something has to assert that `absent` is what absence says.
+    expect(report.summary).toContain("claude=absent");
   });
 
   it("reports every capability key even with nothing installed", async () => {
@@ -73,6 +83,35 @@ describe("reportClaudeCapabilities", () => {
     );
   });
 
+  /**
+   * A binary that exists and does not answer used to report `claude=absent`,
+   * so one `doctor` run said `agents: claude=present` and
+   * `claude-capabilities: claude=absent` about the same file. "We could not
+   * ask" is `unknown`, and the two states must be distinguishable in the line
+   * a user reads.
+   */
+  it("distinguishes a present-but-unreadable binary from an absent one", async () => {
+    const report = await reportClaudeCapabilities({
+      executablePath: "/opt/synthetic/bin/claude",
+      runner: runner(() => ({ exitCode: 97 })),
+      pluginDirectory: "/synthetic/plugin",
+    });
+    expect(report.installed).toBe(true);
+    expect(report.version).toBeNull();
+    expect(report.summary).toContain("claude=unreadable");
+    expect(report.summary).not.toContain("claude=absent");
+  });
+
+  it("reports unreadable rather than absent when the version cannot be parsed", async () => {
+    const report = await reportClaudeCapabilities({
+      executablePath: "/opt/synthetic/bin/claude",
+      runner: version("not a version at all"),
+      pluginDirectory: "/synthetic/plugin",
+    });
+    expect(report.installed).toBe(true);
+    expect(report.summary).toContain("claude=unreadable");
+  });
+
   it("reads the version from a real executable path", async () => {
     const report = await reportClaudeCapabilities({
       executablePath: "/opt/synthetic/bin/claude",
@@ -89,6 +128,7 @@ describe("reportClaudeCapabilities", () => {
       runner: version("2.1.216"),
       pluginDirectory: "/synthetic/plugin",
       probe: true,
+      listPluginFiles: skillsPresent,
     });
     expect(report.capabilities.skills).toBe("yes");
     expect(report.capabilities.session_end_capture).toBe("wrapper-required");
@@ -100,6 +140,7 @@ describe("reportClaudeCapabilities", () => {
       runner: version("2.1.216"),
       pluginDirectory: "/synthetic/plugin",
       probe: true,
+      listPluginFiles: skillsPresent,
     });
     for (const key of [
       "session_start_injection",
@@ -108,6 +149,28 @@ describe("reportClaudeCapabilities", () => {
     ] as const) {
       expect(report.capabilities[key], `${key} must not be yes`).not.toBe("yes");
     }
+  });
+
+  /**
+   * The loop above enumerated three keys and the two that actually turned
+   * `yes` were not among them: a clean `claude plugin validate` settled
+   * `plugin_hooks` and `subagents`, neither of which exists in the shipped
+   * tree. Enumerate every key instead, and name the one artifact that is
+   * really there — a list that has to be edited to add a `yes` is the point.
+   * Found by fresh-context review, 2026-08-11.
+   */
+  it("reports yes for exactly the one capability the tree ships", async () => {
+    const report = await reportClaudeCapabilities({
+      executablePath: "/opt/synthetic/bin/claude",
+      runner: version("2.1.216"),
+      pluginDirectory: "/synthetic/plugin",
+      probe: true,
+      listPluginFiles: skillsPresent,
+    });
+    const granted = Object.entries(report.capabilities)
+      .filter(([, state]) => state === "yes")
+      .map(([key]) => key);
+    expect(granted).toEqual(["skills"]);
   });
 
   /**
@@ -121,6 +184,7 @@ describe("reportClaudeCapabilities", () => {
       runner: version("2.1.216"),
       pluginDirectory: "/synthetic/plugin",
       probe: true,
+      listPluginFiles: skillsPresent,
     });
     expect(report.captureVia).toBe("wrapper");
   });
@@ -135,10 +199,46 @@ describe("reportClaudeCapabilities", () => {
       },
       pluginDirectory: "/synthetic/plugin",
     });
-    expect(report.installed).toBe(false);
+    /**
+     * `installed` was `false` here until 2026-08-11, which is the defect the
+     * review found rather than a contract this test should keep: the binary
+     * was discovered by the platform adapter and only *executing* it failed.
+     * What this case pins is that the failure never propagates and never
+     * produces a capability claim.
+     */
+    expect(report.installed).toBe(true);
+    expect(report.summary).toContain("claude=unreadable");
     expect(new Set(Object.values(report.capabilities))).toEqual(
       new Set(["unknown"]),
     );
+  });
+
+  /**
+   * A clean `claude plugin validate` exits 0 over a directory holding nothing
+   * but a schema-valid manifest — a partial install, or a user who deleted
+   * `skills/`. The exit code is not an observation of the artifact.
+   */
+  it("does not report skills as yes over a directory that ships none", async () => {
+    const report = await reportClaudeCapabilities({
+      executablePath: "/opt/synthetic/bin/claude",
+      runner: version("2.1.216"),
+      pluginDirectory: "/synthetic/plugin",
+      probe: true,
+      listPluginFiles: () =>
+        Promise.resolve([".claude-plugin/plugin.json"]),
+    });
+    expect(report.capabilities.skills).toBe("wrapper-required");
+  });
+
+  it("reports unknown when the plugin directory cannot be listed at all", async () => {
+    const report = await reportClaudeCapabilities({
+      executablePath: "/opt/synthetic/bin/claude",
+      runner: version("2.1.216"),
+      pluginDirectory: "/synthetic/plugin",
+      probe: true,
+      listPluginFiles: () => Promise.reject(new Error("ENOENT")),
+    });
+    expect(report.capabilities.skills).toBe("unknown");
   });
 
   it("renders a matrix line naming every key", async () => {
@@ -197,6 +297,7 @@ describe("the probe is opt-in", () => {
       },
       pluginDirectory: "/synthetic/plugin",
       probe: true,
+      listPluginFiles: skillsPresent,
     });
     expect(seen).toHaveLength(2);
     expect(seen[1]?.[0]).toBe("plugin");

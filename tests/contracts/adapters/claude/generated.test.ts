@@ -11,6 +11,17 @@ describe("plugins/claude is a clean regeneration", () => {
     const expected = await renderAllForClaude();
     const onDisk = await readGeneratedTree();
     expect(detectWorkflowDrift(expected, onDisk)).toEqual([]);
+    /**
+     * `detectWorkflowDrift` iterates `expected` only, so an **extra** file on
+     * disk produces no finding. Set equality lives here, in the same case as
+     * the drift assertion, rather than resting on a count in a different `it`
+     * that a later edit could weaken without anyone noticing which guarantee
+     * they were deleting. Restoring `plugins/claude/hooks/hooks.json` by hand
+     * fails this line. Found by fresh-context review, 2026-08-11.
+     */
+    expect([...onDisk.keys()].sort()).toEqual(
+      expected.map((artifact) => artifact.path).sort(),
+    );
   });
 
   /**
@@ -62,10 +73,20 @@ describe("plugins/claude is a clean regeneration", () => {
     }
   });
 
+  /**
+   * Asserted over the **renderer** as well as the tree. Read from disk alone,
+   * this case would keep passing if hooks emission were restored and the tree
+   * simply not regenerated — it would be testing the artifact rather than the
+   * decision, and only the drift case would go red.
+   */
   it("ships no hooks, matching the amendment to spec §6", async () => {
-    const paths = [...(await readGeneratedTree()).keys()];
-    expect(paths).not.toContain("hooks/hooks.json");
-    expect(paths.some((path) => path.startsWith("bin/"))).toBe(false);
+    for (const paths of [
+      [...(await readGeneratedTree()).keys()],
+      (await renderAllForClaude()).map((artifact) => artifact.path),
+    ]) {
+      expect(paths).not.toContain("hooks/hooks.json");
+      expect(paths.some((path) => path.startsWith("bin/"))).toBe(false);
+    }
   });
 
   it("carries a source marker in every skill", async () => {

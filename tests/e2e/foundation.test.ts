@@ -296,6 +296,23 @@ describe("Foundation temporary-HOME lifecycle", () => {
       expect(
         checks.checks.filter((check) => check.status !== "pass"),
       ).toStrictEqual([]);
+
+      /**
+       * Two checks, one binary, and they have to agree.
+       *
+       * The fake `claude` planted above exits 97, so it is discovered and
+       * cannot be read. `agents` said `claude=present` while
+       * `claude-capabilities` said `claude=absent`, in the same report — and
+       * this suite passed, because it read check ids and statuses and never a
+       * message. Found by fresh-context review, 2026-08-11.
+       */
+      const byId = new Map(
+        checks.checks.map((check) => [check.id, check.message]),
+      );
+      expect(byId.get("agents")).toContain("claude=present");
+      expect(byId.get("claude-capabilities")).toContain("claude=unreadable");
+      expect(byId.get("claude-capabilities")).not.toContain("claude=absent");
+
       expect(await inventory(home.root)).toStrictEqual(beforeStatus);
 
       // --- init again: idempotent, declares nothing, changes nothing ----------
