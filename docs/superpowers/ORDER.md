@@ -30,9 +30,9 @@ week of confusion.
 together now that DOS-P3's schemas are frozen, and both start at `S`: write the spec, get it
 approved by the founder, then the plan, then the code. Neither is code work today.
 
-**A8's spec was written on 2026-08-11 and is waiting on the founder.** Nothing downstream of it may
-start until it is approved — not its plan, and certainly not code. Four decisions in it were taken
-by the founder during the brainstorming cycle and are recorded in the spec rather than here: the
+**A8's spec was approved on 2026-08-11 and its plan was written the same day.** Both gates closed;
+what remains of A8 is `I`, fourteen tasks, none started. Four decisions were taken by the founder
+during the brainstorming cycle and are recorded in the spec rather than here: the
 install is a skills-directory plugin discovered in place and writes **no** settings key; a
 capability is `yes` only when a version floor permits it *and* a probe observes it; the `shared`
 preamble is concatenated into each artifact rather than referenced from one; and **this repository
@@ -97,7 +97,7 @@ is approved.
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
 | A7 | DOS-P3 Workflow compiler — S / P / I | deleted; `docs/architecture/workflow-schema.md` is what it left | — | L | program plan Task 3 checkpoint: canonical workflows compile to abstract artifacts | **done** 2026-08-10 |
-| A8 ‖ | DOS-P4 Claude adapter — S / P / I | `specs/…-claude-adapter-design.md` written 2026-08-11; plan blocked on approving it | A7 | L | program plan Task 4 checkpoint: a Claude-only user completes the full synthetic workflow | **now** — `S` written, **awaiting founder approval** |
+| A8 ‖ | DOS-P4 Claude adapter — S / P / I | `plans/2026-07-21-developer-os-claude-adapter.md`, 14 tasks | A7 | L | program plan Task 4 checkpoint: a Claude-only user completes the full synthetic workflow | **now** — `S` approved and `P` written 2026-08-11; `I` is 0/14 |
 | A9 ‖ | DOS-P5 Codex adapter — S / P / I | to write | A7 | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | **now** — starts at `S`, parallel with A8 |
 | A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | A8 **and** A9 | L | program plan Task 6 checkpoint, after independent security review | blocked |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
