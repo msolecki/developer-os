@@ -196,6 +196,21 @@ still worth reporting, and is not worth relying on.
 
 ## 6. Hooks and their payloads
 
+> **Amended 2026-08-11 during implementation, pending founder ratification —
+> `hooks/hooks.json` is not shipped in DOS-P4.** The three hooks below named
+> commands under a `bin/` directory no task creates, and `claude plugin validate`
+> checks schema rather than existence, so `plugin_hooks` could report `yes` over a
+> dangling path. Emitting the scripts does not repair it: a command hook needs an
+> executable file and **nothing in this pipeline can express an executable bit** —
+> `RenderedArtifact` is `{ path, contents }` and `ManagedArtifactV1` has
+> `kind: "file"` and no mode. Nothing regresses, because §6.1 already makes all
+> three lifecycle capabilities `wrapper-required` until a hook is observed firing,
+> and none ever could be. Restoring it needs three things in one change: the hook
+> bodies (DOS-P6's capture contract), a way to mark a generated artifact
+> executable, and a test that observes a hook firing. **Owner: DOS-P6.**
+> Registered in `BACKLOG.md` §8. The section below stands as the design to
+> restore, not as what ships today.
+
 The plugin's `hooks/hooks.json` declares three events, and no others:
 
 | Event | Matchers used | Why |

@@ -1041,7 +1041,22 @@ with regression tests. These are what it also found and what is **not** fixed �
 recorded here rather than in a commit message, because each belongs to a task
 that has not run yet.
 
-**The one that needs a decision before Task 10, and it is not mine to make.**
+**~~The one that needs a decision before Task 10.~~ Decided 2026-08-11 by the
+implementer, after three requests to continue, and reversible in one commit.**
+`hooks/hooks.json` is no longer emitted. The deciding fact is one neither the
+review nor the plan had: emitting the missing scripts does not work either,
+because a command hook needs an **executable** file and nothing in this pipeline
+can express an executable bit — `RenderedArtifact` is `{ path, contents }` and
+`ManagedArtifactV1` has `kind: "file"` and no mode. So the choice was never
+"scripts or no scripts"; it was "ship a claim that cannot be true, or stop making
+it". Nothing regresses: §6.1 already reports all three lifecycle capabilities as
+`wrapper-required` until a hook is observed firing, and none could ever be.
+Restoring hooks needs the bodies, an executable-bit mechanism and a firing test,
+in one change — **owner DOS-P6**. Recorded as an amendment to spec §6 and in
+`BACKLOG.md` §8, both marked as awaiting the founder's ratification or reversal.
+The original text follows.
+
+**~~The one that needs a decision before Task 10, and it is not mine to make.~~**
 `hooks/hooks.json` points at `${CLAUDE_PLUGIN_ROOT}/bin/session-start`,
 `session-end` and `pre-compact`. **No task in this plan creates a `bin/`
 directory**, and `buildPluginTree` does not emit one, so the plugin as generated
