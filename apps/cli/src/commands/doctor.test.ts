@@ -70,6 +70,7 @@ describe("runDoctor", () => {
       "drift",
       "brain",
       "agents",
+      "claude-capabilities",
     ]);
   });
 

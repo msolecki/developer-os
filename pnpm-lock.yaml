@@ -29,6 +29,9 @@ importers:
 
   apps/cli:
     dependencies:
+      '@developer-os/adapter-claude':
+        specifier: workspace:*
+        version: link:../../packages/adapter-claude
       '@developer-os/brain':
         specifier: workspace:*
         version: link:../../packages/brain
