@@ -5,9 +5,10 @@
     "outDir": "dist"
   },
   "include": [
-    "helpers/**/*.ts",
     "contracts/**/*.ts",
     "e2e/**/*.ts",
+    "helpers/**/*.ts",
+    "integration/**/*.ts",
     "repository/**/*.ts"
   ],
   "references": [
