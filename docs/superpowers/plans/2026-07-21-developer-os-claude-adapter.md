@@ -37,7 +37,7 @@
 | `packages/adapter-claude/src/plugin.ts` | plugin tree layout, `plugin.json`, `hooks/hooks.json` |
 | `packages/adapter-claude/src/install.ts` | tree → Foundation `ChangePlanV1` |
 | `packages/adapter-claude/src/invoke.ts` | argv, bounded stdin, timeout, `--allowedTools`, structured result |
-| `packages/adapter-claude/src/agent-prompt.ts` | the `with` schema for the `agent.prompt` verb |
+| `packages/core/src/agent-prompt/` | the `with` schema for the `agent.prompt` verb — **in core, shared by both adapters** (spec §8.1, amended 2026-08-11) |
 | `packages/adapter-claude/src/index.ts` | the only public door |
 | `plugins/claude/**` | the generated tree, checked in |
 | `tests/contracts/adapters/claude/` | cross-package contract cases |
@@ -1039,21 +1039,24 @@ git commit -m "feat(adapter-claude): the minimal manifest, and three hooks addre
 **Complexity:** S
 
 **Files:**
-- Create: `packages/adapter-claude/src/agent-prompt.ts`, `src/agent-prompt.test.ts`
+- Create: `packages/core/src/agent-prompt/index.ts`, `packages/core/src/agent-prompt/agent-prompt.test.ts`
+- Modify: `packages/core/src/index.ts` — export `parseAgentPromptArgs` and its types
 
 **Interfaces:**
 - Consumes: `zod`.
-- Produces: `parseAgentPromptArgs`, `AgentPromptArgs`.
+- Produces: `parseAgentPromptArgs`, `AgentPromptArgs`, `AgentPromptOutcome`.
 
 **Why this task exists.** `workflow-schema.md` §8.6: `steps[].with` is `z.record(z.string(), z.unknown())`, contributes nothing to a derived footprint, and "whichever adapter first executes a verb owns validating that verb's arguments; this package cannot." DOS-P4 is that adapter (spec §8.1).
 
+**It lives in `packages/core`, not in this package.** Amended 2026-08-11 by the Codex adapter spec §7.3, before this task started: DOS-P5 executes the same verb, and two adapters with two argument schemas for one verb is a workflow that validates against one vendor and not the other. `packages/workflow-schema` would be the wrong home too — it is the compiler and deliberately does not know what a handler does with its arguments. The test file below is otherwise unchanged; only its import path and location move.
+
 - [ ] **Step 1: Write the failing test**
 
-`packages/adapter-claude/src/agent-prompt.test.ts`:
+`packages/core/src/agent-prompt/agent-prompt.test.ts`:
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { parseAgentPromptArgs } from "./agent-prompt.js";
+import { parseAgentPromptArgs } from "./index.js";
 
 describe("parseAgentPromptArgs", () => {
   it("accepts a well-formed argument object", () => {
@@ -1094,10 +1097,10 @@ describe("parseAgentPromptArgs", () => {
 
 - [ ] **Step 2: Run it and confirm it fails**
 
-Run: `pnpm vitest run packages/adapter-claude/src/agent-prompt.test.ts`
+Run: `pnpm vitest run packages/core/src/agent-prompt/agent-prompt.test.ts`
 Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement `agent-prompt.ts`**
+- [ ] **Step 3: Implement `packages/core/src/agent-prompt/index.ts`**
 
 ```ts
 import { z } from "zod";
@@ -1142,15 +1145,15 @@ export function parseAgentPromptArgs(input: unknown): AgentPromptOutcome {
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
-Run: `pnpm vitest run packages/adapter-claude/src/agent-prompt.test.ts`
+Run: `pnpm vitest run packages/core/src/agent-prompt/agent-prompt.test.ts`
 Expected: PASS, 7 tests.
 
 - [ ] **Step 5: Run the gate and commit**
 
 ```bash
 npm run check
-git add packages/adapter-claude/src/agent-prompt.ts packages/adapter-claude/src/agent-prompt.test.ts
-git commit -m "feat(adapter-claude): close the with-argument hole for the one verb we own"
+git add packages/core/src/agent-prompt packages/core/src/index.ts
+git commit -m "feat(core): close the with-argument hole for the one verb the adapters own"
 ```
 
 ---
@@ -1530,7 +1533,6 @@ describe("the public door", () => {
       "buildPluginTree",
       "discoverClaude",
       "invokeClaude",
-      "parseAgentPromptArgs",
       "planClaudeInstall",
       "planClaudeUninstall",
       "probeClaude",
@@ -1554,8 +1556,10 @@ Expected: FAIL — module not found.
  * schema behind it: a guarantee is better as a shape nothing can get around
  * than as a rule everyone has to remember.
  *
- * `parseAgentPromptArgs` is exported and its zod schema is not, for exactly
- * that reason — the schema alone does not refuse `__proto__`.
+ * `parseAgentPromptArgs` is NOT re-exported here. It lives in `packages/core`
+ * (spec §8.1, as amended) because both adapters execute `agent.prompt`, and a
+ * package that re-exports another package's guard gives consumers two import
+ * paths for one guarantee.
  */
 export { discoverClaude } from "./discover.js";
 export type { ClaudeInstallation, DiscoverDependencies } from "./discover.js";
@@ -1572,8 +1576,6 @@ export { planClaudeInstall, planClaudeUninstall } from "./install.js";
 export type { InstallContext } from "./install.js";
 export { invokeClaude } from "./invoke.js";
 export type { ClaudeInvocation, ClaudeRunResult, InvokeDependencies } from "./invoke.js";
-export { parseAgentPromptArgs } from "./agent-prompt.js";
-export type { AgentPromptArgs, AgentPromptOutcome } from "./agent-prompt.js";
 ```
 
 - [ ] **Step 4: Run the tests and confirm they pass**

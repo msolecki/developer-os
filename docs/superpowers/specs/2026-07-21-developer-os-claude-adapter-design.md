@@ -312,6 +312,13 @@ DOS-P4 is that adapter. This spec defines `agent.prompt`'s `with` schema — a s
 keys refused — and validates it before invocation. An `agent.prompt` step whose `with` does not
 validate is a refusal, not a best-effort call.
 
+**Amended 2026-08-11 by the Codex adapter spec §7.3 — the schema does not live in this package.**
+DOS-P5 executes the same verb, and two adapters with two argument schemas for one verb is a
+workflow that validates against one vendor and not the other. The schema lives in `packages/core`
+and both adapters import it. `packages/workflow-schema` would be wrong: it is the compiler, and it
+deliberately does not know what any handler does with its arguments. Registered in `BACKLOG.md` §8;
+this spec's §13 module list reads `agent-prompt.ts` as the adapter's *call site*, not its home.
+
 ### 8.2 When the wrapper is used
 
 `developer-os run claude` wraps the CLI when, and only when, a capability required for the capture

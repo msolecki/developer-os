@@ -60,7 +60,7 @@ Open work only. Program Tasks 0 to 3 are closed and are not rows here.
 | Area | Where | What is left |
 |---|---|---|
 | Program (umbrella) | 1 plan | Tasks 4–9 open; Tasks 0–3 closed and not rows here |
-| DOS-P4 … DOS-P7 | DOS-P4's spec approved and its plan written, both 2026-08-11 | 3 specs, 3 plans, 4 implementations |
+| DOS-P4 … DOS-P7 | DOS-P4 spec approved and planned; DOS-P5 spec written, awaiting approval — both 2026-08-11 | 2 specs, 3 plans, 4 implementations |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
 | Repository-level | §1 | NEW-7 and NEW-10 — both XS; NEW-7 needs a machine with Obsidian |
 | Repository infrastructure | §5 | four directories a later subsystem still owes; `tests/contracts/`, `packages/workflow-schema/` and `workflows/` landed with DOS-P3 on 2026-08-10 |
@@ -186,8 +186,9 @@ that subsystem in §3.
 
 ## 3. Missing specs and plans
 
-**Six documents left.** DOS-P5 through DOS-P7 need a spec and a plan each. DOS-P4 needs neither —
-its spec was approved and its plan written on 2026-08-11, so what remains of it is the code.
+**Five documents left.** DOS-P6 and DOS-P7 need a spec and a plan each; DOS-P5 needs its plan, and
+its spec is written and awaiting approval. DOS-P4 needs neither — its spec was approved and its plan
+written on 2026-08-11, so what remains of it is the code.
 DOS-P3 is closed and is not listed here any more: its spec is retained at
 `specs/2026-07-21-developer-os-workflow-compiler-design.md` because
 `docs/architecture/workflow-schema.md` names it as the design of record; its plan is deleted,
@@ -239,8 +240,13 @@ names it as the design of record; its plan is deleted, recoverable at `81e7e7d`.
 
 ### DOS-P5 — Codex adapter
 
-- **Spec:** `specs/2026-07-21-developer-os-codex-adapter-design.md` — missing
-- **Plan:** `plans/2026-07-21-developer-os-codex-adapter.md` — missing
+- **Spec:** `specs/2026-07-21-developer-os-codex-adapter-design.md` — **written 2026-08-11,
+  awaiting founder approval.** It settles the install shape (a local marketplace installed by
+  Codex's own CLI, which never edits `~/.codex/config.toml`), capture against the hook trust gate,
+  the `AGENTS.md` decision, and the transcript refusal. Its §14 is normative; §12 is the table
+  DOS-P6 inherits; §15 carries five items it does not close
+- **Plan:** `plans/2026-07-21-developer-os-codex-adapter.md` — missing, and blocked on approval of
+  the spec above
 - **Program task:** 5 · **Complexity:** L · **Blocked by:** DOS-P3 schemas frozen
 - **The spec must decide:** exactly which Codex surfaces are supported, verified against
   current official documentation *and* local behavior; how canonical workflows render into
@@ -501,6 +507,15 @@ documents and this was the reverse. DOS-P3's first draft invented `session_start
 `session_end_capture`; the **code** was corrected to match the spec on 2026-08-10, so §11 is
 current and untouched. Recorded here only so the next reader does not go looking for an
 amendment that would say otherwise.
+
+**Two amendments are pending, not discharged, because the document making them is not approved
+yet.** Both come from `specs/…-codex-adapter-design.md`, written 2026-08-11, and **both revert with
+it if the founder does not approve**:
+
+| Amends | What changes | State |
+|---|---|---|
+| §2 of this file, a second time | `buildConflictEvidence` has **no consumer in either adapter**. DOS-P4 §4.3 dissolved its half; DOS-P5 §4.3 dissolves the other by delegating the config write to `codex plugin add`. It was built for a design both adapters declined. Whether it is retained, taken up by DOS-P7, or deleted belongs to the first subsystem with a real three-way merge | pending spec approval |
+| `specs/…-claude-adapter-design.md` §8.1, approved 2026-08-11 | the `agent.prompt` `with` schema moves from `packages/adapter-claude` to `packages/core`, so **both** adapters import one schema. Two adapters with two argument schemas for one verb is a workflow that validates against one vendor and not the other. DOS-P4's plan Task 6 is updated in the same change; it had not started | pending spec approval |
 
 **Discharged. Listed because the amended document is still read, not because there is work
 left:**
