@@ -123,6 +123,25 @@ and the two still unticked when it closed were the two that had *actually* been 
 the founder approved the schema on 2026-08-10, and the six canonical workflows were written
 from the product spec. A checkbox nobody can trust is worse than no checkbox.
 
+**It happened a third time, and this one was in the open tasks rather than the closed ones.**
+`9a196c9` — a DOS-P2 commit — ticked thirteen boxes across Tasks 4, 5, 6 and 7 in the same pass
+that legitimately ticked Tasks 2 and 3. Corrected on 2026-08-11, all thirteen back to unticked,
+after checking each against the tree: there is no `packages/adapter-claude/`, no
+`packages/adapter-codex/`, no `capture/`, `review/` or `ingest/` under `packages/brain/src/`, no
+`tests/security/`, and no Git, `launchd`, update or release code anywhere. **One of the thirteen
+was not simply false and is worth stating**, because unticking it could otherwise read as a claim
+that the work regressed: Foundation did ship the transaction journal, per-file backup, atomic
+replacement, resume, rollback and concurrent-edit refusal. Task 6's box asks for that machinery
+hardened around capture and ingest, and those paths do not exist, so the box is unearned rather
+than the code missing. The inline note on that line says so.
+
+**The pattern in all three occurrences is the same**: a commit closing one task edited the
+checkboxes of tasks it was not doing. The two structural defences already in place — deleting a
+closed task's step list, and `SESSION.md` §5.3 — do not cover this direction, because the boxes
+that moved belonged to tasks that are still open and whose lists must therefore stay. What does
+cover it is the staging rule: `git add` the paths your own task owns, and read `git show --stat
+HEAD` before believing a commit contains only what you meant.
+
 **One thing Task 3's file list said that its checkpoint did not need.** It asked for the command
 names frozen in `docs/migration/baseline-capabilities.json` — `lint`, `reindex`, `ingest`,
 `test` — to be encoded as canonical workflows. The approved DOS-P3 spec names six workflows and
@@ -152,11 +171,11 @@ spec wins over the plan, and this is recorded rather than left as an apparent om
 **How:**
 
 - [ ] Approve exact supported-version discovery, plugin structure, hook payloads, wrapper behavior, config merge, and failure contracts.
-- [x] Implement version and capability detection from documented CLI surfaces.
+- [ ] Implement version and capability detection from documented CLI surfaces.
 - [ ] Render canonical workflows into namespaced Claude skills and plugin metadata.
 - [ ] Install through a dedicated managed plugin path and semantic config merge.
-- [x] Implement safe agent invocation with argv arrays, bounded stdin, timeouts, and structured result validation.
-- [x] Implement SessionStart injection and automatic capture only for verified lifecycle surfaces.
+- [ ] Implement safe agent invocation with argv arrays, bounded stdin, timeouts, and structured result validation.
+- [ ] Implement SessionStart injection and automatic capture only for verified lifecycle surfaces.
 - [ ] Use `developer-os run claude` when direct invocation cannot meet the capture contract.
 - [ ] Test against a fake CLI first and a disposable real installation second.
 
@@ -194,11 +213,11 @@ spec wins over the plan, and this is recorded rather than left as an apparent om
 **How:**
 
 - [ ] Approve exact supported Codex surfaces against current official documentation and verified local behavior.
-- [x] Implement version and capability detection.
+- [ ] Implement version and capability detection.
 - [ ] Render the canonical workflows into Codex skills and durable guidance at the smallest appropriate scope.
 - [ ] Install only dedicated managed artifacts and semantically merge required config.
-- [x] Implement safe non-interactive invocation and structured output validation.
-- [x] Implement documented hooks when available and wrapper-required capture otherwise.
+- [ ] Implement safe non-interactive invocation and structured output validation.
+- [ ] Implement documented hooks when available and wrapper-required capture otherwise.
 - [ ] Refuse transcript parsing unless a stable documented contract exists and has a regression fixture.
 - [ ] Test against a fake CLI first and a disposable real installation second.
 
@@ -237,12 +256,12 @@ spec wins over the plan, and this is recorded rather than left as an apparent om
 **How:**
 
 - [ ] Approve exact capture fields, lifecycle transitions, retention behavior, and redaction classes.
-- [x] Implement atomic quarantine writes and post-redaction deduplication.
-- [x] Implement accept/edit/reject review without automatic deletion.
+- [ ] Implement atomic quarantine writes and post-redaction deduplication.
+- [ ] Implement accept/edit/reject review without automatic deletion.
 - [ ] Invoke agents with source material marked as untrusted data and a staging-only write contract.
 - [ ] Validate schema, provenance, links, duplicates, confidence, secrets, indexes, generated artifacts, and write scope.
-- [x] Add per-file backup, atomic replacement, transaction journal, resume, rollback, and concurrent-edit refusal.
-- [x] Add sentinel secret, prompt injection, symlink escape, multiline command, malformed manifest, and interruption tests.
+- [ ] Add per-file backup, atomic replacement, transaction journal, resume, rollback, and concurrent-edit refusal. — *Foundation shipped the machinery in `packages/core/src/transactions/` and `packages/platform-macos/src/transaction-lock.ts`; what this box owes is the hardening of it against the capture and ingest paths, which do not exist yet.*
+- [ ] Add sentinel secret, prompt injection, symlink escape, multiline command, malformed manifest, and interruption tests. — *`tests/security/` does not exist; `BACKLOG.md` §5 records it as owed by this task.*
 - [ ] Run independent security review before accepting the checkpoint.
 
 **Test:**
@@ -281,9 +300,9 @@ spec wins over the plan, and this is recorded rather than left as an apparent om
 
 - [ ] Specify Git initialization, existing remote connection, scoped staging, commit, push, and error states.
 - [ ] Specify exact `launchd` jobs, schedules, logs, lock ownership, and opt-in boundaries.
-- [x] Implement Git against temporary repositories and bare remotes; never use real credentials in tests.
-- [x] Implement `launchd` plan/apply/status/disable through an injected filesystem/runner in tests.
-- [x] Implement signed/checksummed release metadata, dry-run updates, schema migration staging, and rollback.
+- [ ] Implement Git against temporary repositories and bare remotes; never use real credentials in tests.
+- [ ] Implement `launchd` plan/apply/status/disable through an injected filesystem/runner in tests.
+- [ ] Implement signed/checksummed release metadata, dry-run updates, schema migration staging, and rollback.
 - [ ] Ensure update refuses drift and uninstall removes only manifest-owned artifacts.
 - [ ] Test push failure, partial download, checksum mismatch, stale lock, concurrent edit, and migration failure.
 
