@@ -62,7 +62,7 @@ Open work only. Program Tasks 0 to 3 are closed and are not rows here.
 | Program (umbrella) | 1 plan | Tasks 4–9 open; Tasks 0–3 closed and not rows here |
 | DOS-P5 … DOS-P7 | DOS-P5 spec **approved** 2026-08-11; **DOS-P4 shipped** the same day | 2 specs, 3 plans, 3 implementations |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | NEW-7 only — XS, and it needs a machine with Obsidian, which is the founder's |
+| Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian) and NEW-11 (S, the invisible-title rule stops at `title`) |
 | Repository infrastructure | §5 | two directories a later subsystem still owes; `packages/adapter-claude/`, `plugins/claude/` and `tests/integration/` landed with DOS-P4 on 2026-08-11 |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -103,6 +103,27 @@ Everything in this section is genuinely open. Nothing here is bookkeeping, and n
 closed stays here — NEW-1 through NEW-6, NEW-8 and NEW-9 were removed on 2026-08-10 when
 they closed, and NEW-10 on 2026-08-11. What a closed item leaves behind is a row in §8, a clause in a spec, or a test;
 if it left nothing, it was not worth recording. Git history is the archive.
+
+### NEW-11 — the invisible-title rule stops at the title
+
+- **Status:** open, found 2026-08-11 by the review that closed NEW-10 · **Owner:** the next task
+  touching `packages/brain/src/render.ts` or `lint.ts` — DOS-P6 by default · **Size:** S
+- NEW-10 gave `title` a predicate that means *at least one visible character*. **Two neighbours
+  did not get it**, and both surface the same way NEW-10 did — a rendered row that says nothing:
+  - **`tags`** is validated as a string array and nothing more, so `tags: [""]` and
+    `tags: ["\u200B"]` both pass. The tag cloud then renders `- (3)`: a count attached to no
+    label, and an empty entry between commas in the folder table's "Top tags" cell.
+  - **`summary`** is type-and-length only. `summary: "\u3164"` renders `- [Title](<path>) — ㅤ`,
+    a dangling em-dash. Cosmetic, unlike the tag case.
+- **The `duplicates` key has the older, narrower definition.** `lint.ts` keys on the *screened*
+  title, and the screen deletes `\p{Cf}` only — so `Deploy keys` and `Deploy\u3164keys` produce
+  different keys and no duplicate is reported, while `catalog.md` shows two rows a human reads as
+  identical. That is precisely the failure NEW-6 was opened for, one character class over.
+- **Do not fix it by widening the display screen.** `screenControlCharacters` must not delete
+  non-spacing marks: doing so would corrupt every legitimately accented title it touches. The
+  emptiness predicate is a *different* question from the display screen, which is why NEW-10's
+  lives in `note.ts`. When a second call site needs it, move it to `packages/security` beside the
+  screen rather than copying it — the rule that module's own header states.
 
 ### NEW-7 — a link destination's percent-encoding is unverified against Obsidian
 

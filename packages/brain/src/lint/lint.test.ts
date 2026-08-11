@@ -471,24 +471,29 @@ describe("duplicates", () => {
     expect(of(result, "duplicates").filter((f) => f.key === "title")).toHaveLength(2);
   });
 
-  it("calls two titles that both screen to nothing a duplicate, and means it", async () => {
-    /**
-     * The edge the screened key creates, pinned rather than left to be
-     * discovered: two titles made only of invisible characters key to the same
-     * empty string and are reported as duplicates of each other, even though
-     * they share no byte. That is the rule working, not failing — `catalog.md`
-     * renders both rows with empty link text, so they *are* the same row to
-     * everyone who opens the vault, which is the form this class is defined
-     * over.
-     *
-     * `note.ts` accepts such a title because `String#trim` removes neither
-     * U+200B nor U+00AD, which is a separate gap and is recorded as NEW-10.
-     */
+  /**
+   * **This case changed when NEW-10 closed, and the change is the point.**
+   *
+   * It used to assert that two titles made only of invisible characters key to
+   * the same empty string and are reported as duplicates of each other — the
+   * screened-key rule working, since `catalog.md` rendered both rows with empty
+   * link text and they *were* the same row to anyone opening the vault. The
+   * reason such notes could reach the `duplicates` class at all was the gap
+   * recorded as NEW-10: `String#trim` removes neither U+200B nor U+00AD, so
+   * `note.ts` accepted the title.
+   *
+   * `note.ts` now refuses it, which is the fix that class of note needed —
+   * the value should never have been accepted, and the class that reported it
+   * was right. So the pin moves rather than disappears: such a note is a
+   * `frontmatter` error, and nothing downstream has to represent an empty row.
+   */
+  it("refuses a title that screens to nothing before duplicates ever sees it", async () => {
     const result = await lintMemory({
       "content/DEV/a.md": note({ title: "\u200B" }, "one\n"),
       "content/DEV/b.md": note({ title: "\u00AD" }, "two\n"),
     });
-    expect(of(result, "duplicates").filter((f) => f.key === "title")).toHaveLength(2);
+    expect(of(result, "frontmatter").filter((f) => f.key === "title")).toHaveLength(2);
+    expect(of(result, "duplicates").filter((f) => f.key === "title")).toHaveLength(0);
   });
 
   it("reports an identical content hash at warn", async () => {
