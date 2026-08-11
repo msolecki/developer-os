@@ -44,6 +44,22 @@ plugin into a cache, so the manifest would hash a source Claude Code does not re
 detection blind by construction. In-place discovery makes the hashed bytes and the loaded bytes the
 same bytes, which is why the mechanism changed mid-cycle.
 
+**A9's spec was written on 2026-08-11 and is waiting on the founder.** Codex is not Claude-shaped
+and the spec's §12 is the table DOS-P6 inherits because of it: Codex has no in-place plugin
+discovery, so the install is a **local** marketplace — which does resolve to real on-disk paths —
+registered and installed by `codex plugin` itself, because the vendor's tool should own the vendor's
+config rather than a hand-rolled TOML merge. Two consequences worth knowing before reading it.
+**Codex holds an installed hook inert until the user grants trust**, so capture reports
+`wrapper-required` on install and becomes `yes` only when a hook is observed firing — the platform
+supplying the honesty the gate asks for. And **`AGENTS.override.md` is never written at any scope**,
+because in global scope Codex reads it *instead of* `AGENTS.md` and creating it would silently
+suppress the user's own instructions.
+
+**Two amendments ride on A9's approval**, both in `BACKLOG.md` §8 as pending: `buildConflictEvidence`
+turns out to have no consumer in *either* adapter, and the `agent.prompt` argument schema moves to
+`packages/core` so one verb has one schema. DOS-P4's plan was updated in the same change; it had not
+started.
+
 **A7 closed on 2026-08-10.** All three gates. `packages/workflow-schema` ships the contract, the
 closed effect vocabulary, the scope-equality rule, the overlay boundary, the loader and the drift
 check; `workflows/` ships the six canonical workflows; `tests/fixtures/workflows/` holds the seven
@@ -98,7 +114,7 @@ is approved.
 |---|---|---|---|:---:|---|---|
 | A7 | DOS-P3 Workflow compiler — S / P / I | deleted; `docs/architecture/workflow-schema.md` is what it left | — | L | program plan Task 3 checkpoint: canonical workflows compile to abstract artifacts | **done** 2026-08-10 |
 | A8 ‖ | DOS-P4 Claude adapter — S / P / I | `plans/2026-07-21-developer-os-claude-adapter.md`, 14 tasks | A7 | L | program plan Task 4 checkpoint: a Claude-only user completes the full synthetic workflow | **now** — `S` approved and `P` written 2026-08-11; `I` is 0/14 |
-| A9 ‖ | DOS-P5 Codex adapter — S / P / I | to write | A7 | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | **now** — starts at `S`, parallel with A8 |
+| A9 ‖ | DOS-P5 Codex adapter — S / P / I | `specs/…-codex-adapter-design.md` written 2026-08-11; plan blocked on approving it | A7 | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | **now** — `S` written, **awaiting founder approval** |
 | A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | A8 **and** A9 | L | program plan Task 6 checkpoint, after independent security review | blocked |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
