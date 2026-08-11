@@ -22,6 +22,7 @@ describe("the public door", () => {
       "probeClaude",
       "proposeClaudeInstall",
       "proposeClaudeUninstall",
+      "renderClaudePlugin",
       "resolveCapabilities",
       "resolveExecutable",
     ]);

@@ -27,6 +27,7 @@ export type {
   ClaudeCapabilities,
   ProbeObservation,
 } from "./capabilities.js";
+export { renderClaudePlugin } from "./compose.js";
 export { ClaudeRenderer, SHARED_WORKFLOW_ID } from "./render.js";
 export type { ClaudeRendererDependencies } from "./render.js";
 export {
