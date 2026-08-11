@@ -490,7 +490,13 @@ Read 2026-08-11.
   `bypass_permissions_disabled`, `other`), `PreCompact` (matchers `manual`, `auto`).
 - Common payload fields on every event: `session_id`, `prompt_id`, `transcript_path`, `cwd`,
   `permission_mode`, `effort`, `hook_event_name`, and `agent_id`/`agent_type` for subagents.
-- Configuration shape: `hooks.<EventName>[] → { matcher, hooks: [{ type, ... }] }`.
+- Configuration shape: `hooks.<EventName>[] → { matcher, hooks: [{ type, ... }] }`, and a
+  handler accepts `timeout` in seconds.
+- **Matcher patterns, added 2026-08-11** after a review asked whether `"*"` was a cited surface:
+  `"*"`, `""` and an omitted matcher all mean *match all*, for any event; a value of letters,
+  digits, `_`, `-`, spaces, `,` or `|` is an exact string or a `|`-separated list; anything else
+  is an unanchored JavaScript regex. So `matcher: "*"` on `SessionEnd` is documented, and the
+  per-event matcher lists above are the *named* values rather than the only legal ones.
 - Handler types include `command`, `http`, `mcp_tool`, `prompt`, `agent`. This design uses
   `command` only.
 - Command-hook exit codes: `0` success and stdout parsed as JSON; `2` blocking error with stderr

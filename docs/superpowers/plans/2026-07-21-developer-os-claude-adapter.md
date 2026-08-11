@@ -1053,13 +1053,15 @@ capture contract is DOS-P6's), drop `hooks/hooks.json` until the task that
 writes them lands, or add a task between 5 and 10 that does it. **Ask the
 founder; do not pick one silently.**
 
-**Task 5 should also revisit two hook details.** `SessionEnd` uses
-`matcher: "*"`, but spec §14.2 enumerates that event's matchers as `clear`,
-`resume`, `logout`, `prompt_input_exit`, `bypass_permissions_disabled`, `other`
-— and the spec's own rule is that no surface may be used that §14 does not cite.
-If `*` is not honored for `SessionEnd`, the capture hook never fires and no test
-notices. `timeout: 30` is likewise uncited. Spell the documented matchers, or
-amend §14.2 with evidence.
+**~~Task 5 should also revisit two hook details.~~ Closed 2026-08-11, in favour
+of the code.** The review asked whether `matcher: "*"` on `SessionEnd` and
+`timeout: 30` were surfaces §14 cited. Re-reading the source: the matcher-pattern
+table defines `"*"`, `""` and an omitted matcher as *match all* for any event,
+and a handler takes `timeout`. Both were documented; the spec's §14.2 had
+recorded the per-event matcher *names* without the general rule, so the citation
+was missing rather than the surface. §14.2 now carries the matcher-pattern rule
+and says the per-event lists are the named values rather than the only legal
+ones. No code change.
 
 **Task 4 left three sharp edges.**
 
