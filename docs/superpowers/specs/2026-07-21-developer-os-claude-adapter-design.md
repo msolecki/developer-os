@@ -497,6 +497,12 @@ Read 2026-08-11.
   plugins v2.1.142+.
 - `claude plugin validate <dir> [--strict]` checks the manifest, skill/agent/command frontmatter
   and `hooks/hooks.json`.
+- **`claude plugin validate` is not read-only.** Observed 2026-08-11 against a real installation
+  in a disposable `HOME`: it creates `~/.claude.json` and a timestamped copy under
+  `~/.claude/backups/`. This is the vendor's own state, not ours — but `probeClaude` runs exactly
+  this command, so **the capability probe §5 depends on mutates the user's home**. Two
+  consequences: `doctor` may not claim to write nothing, and the probe is not safe to treat as a
+  pure read. Recorded rather than discovered later.
 
 ### 14.2 Hooks — `https://code.claude.com/docs/en/hooks`
 
