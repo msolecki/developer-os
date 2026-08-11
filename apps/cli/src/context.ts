@@ -50,6 +50,7 @@ import {
   redactText,
   SecurityRefusalError,
 } from "@developer-os/security";
+import type { ProcessRunner } from "@developer-os/security";
 
 import type { CliIo } from "./io.js";
 
@@ -145,6 +146,20 @@ export interface CliContext {
   readonly guards: CliGuards;
   readonly paths: RuntimePaths;
   readonly productVersion: string;
+  /**
+   * Added by DOS-P4, which is the first subsystem that needs to execute a
+   * process from a command rather than from the platform adapter.
+   *
+   * `doctor` reports a capability matrix, and spec §5 requires a *probe* — the
+   * version table alone never earns a `yes`. A probe is a process execution, so
+   * without a runner here the matrix could only ever report `unknown`, which is
+   * honest and useless. The real context already constructed one for
+   * `MacOsPlatformAdapter`; this exposes it rather than building a second.
+   *
+   * Injected rather than constructed at the call site so a command's tests can
+   * drive a fake, which is the discipline every other dependency here follows.
+   */
+  readonly runner: ProcessRunner;
 }
 
 export const NODE_FILE_SYSTEM: CliFileSystem = {
@@ -422,5 +437,6 @@ export function createProductionContext(
     guards,
     paths,
     productVersion: PRODUCT_VERSION,
+    runner,
   };
 }

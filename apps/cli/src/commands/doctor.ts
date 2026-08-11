@@ -20,6 +20,7 @@ import type {
 import { MacOsPlatformDiscoveryError } from "@developer-os/platform-macos";
 import type { AgentDiscovery, AgentName } from "@developer-os/platform-macos";
 
+import { reportClaudeCapabilities } from "./claude-capabilities.js";
 import { exitCodeOf, runtimePathsFor } from "../context.js";
 import type { CliContext } from "../context.js";
 
@@ -233,6 +234,44 @@ function describeAgents(agents: readonly AgentDiscovery[]): string {
   return agents
     .map((agent) => `${agent.name}=${agent.installed ? "present" : "absent"}`)
     .join(" ");
+}
+
+/**
+ * Product spec §11 asks `doctor` to print a capability matrix for the detected
+ * environment. This is that check, and it is `pass` in every branch.
+ *
+ * It reports and never refuses — `workflow-schema.md` §7 records the
+ * contradiction: the `doctor` *workflow* refuses when no installation is found,
+ * while `shared` tells a user in exactly that state to run `developer-os
+ * doctor`. Different objects, same name. A missing agent is information, not a
+ * failure, which is also why `agents` is excluded from `INIT_OWNED_CHECKS`.
+ */
+async function checkClaudeCapabilities(
+  context: CliContext,
+  paths: RuntimePaths,
+): Promise<Finding> {
+  // Discovery can refuse — `MacOsPlatformAdapter` rejects a `which` result it
+  // cannot vouch for, and `checkAgents` already demotes that to a warning. A
+  // refusal here is information about the environment, not a failure of this
+  // report, so it degrades to "nothing to examine" rather than propagating.
+  let executablePath: string | null = null;
+  try {
+    const agents = await discoverAgents(context);
+    const claude = agents.find((agent) => agent.name === "claude");
+    executablePath = claude?.installed === true ? claude.executablePath : null;
+  } catch {
+    executablePath = null;
+  }
+  const report = await reportClaudeCapabilities({
+    executablePath,
+    runner: context.runner,
+    pluginDirectory: join(paths.home, "plugins", "claude"),
+  });
+  return pass(
+    "claude-capabilities",
+    `${report.summary} capture-via=${report.captureVia}`,
+    [],
+  );
 }
 
 async function checkPlatform(context: CliContext): Promise<Finding> {
@@ -533,6 +572,9 @@ async function collectFindings(
       checkBrain(context, paths),
     ),
     await guarded(context, "agents", [], () => checkAgents(context)),
+    await guarded(context, "claude-capabilities", [], () =>
+      checkClaudeCapabilities(context, paths),
+    ),
   ];
 }
 
