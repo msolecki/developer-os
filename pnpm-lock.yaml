@@ -53,9 +53,6 @@ importers:
       '@developer-os/workflow-schema':
         specifier: workspace:*
         version: link:../workflow-schema
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
 
   packages/brain:
     dependencies:
