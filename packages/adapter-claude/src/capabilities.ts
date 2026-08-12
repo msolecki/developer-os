@@ -1,18 +1,7 @@
 import { CLAUDE_CAPABILITY_KEYS, tablePermits } from "./versions.js";
 import type { ClaudeCapabilityKey } from "./versions.js";
-
-/**
- * Spec §5.1. `yes` is earned by a documented floor **and** an observation;
- * everything uncertain degrades toward the wrapper; `unknown` is never `yes`.
- */
-export type CapabilityState = "yes" | "wrapper-required" | "unknown";
-
-/**
- * What the probe saw, which is a different question from what we report.
- * Keeping the two types distinct is deliberate: collapsing them is exactly how
- * a `yes` comes to be earned by an observation alone.
- */
-export type ProbeObservation = "observed" | "absent" | "unavailable";
+import type { CapabilityState, ProbeObservation } from "@developer-os/core";
+export type { CapabilityState, ProbeObservation } from "@developer-os/core";
 
 export type ClaudeCapabilities = Readonly<
   Record<ClaudeCapabilityKey, CapabilityState>
