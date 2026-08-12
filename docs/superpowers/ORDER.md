@@ -31,7 +31,7 @@ week of confusion.
 ## NOW
 
 **A9 — DOS-P5 Codex adapter, at its `I` gate. Start at Task 14.** Both document gates closed on
-2026-08-11. `plans/2026-07-21-developer-os-codex-adapter.md` is **15/19** as of 2026-08-12, each
+2026-08-11. `plans/2026-07-21-developer-os-codex-adapter.md` is **16/19** as of 2026-08-12, each
 task reviewed by an agent that did not write it. Closed tasks carry no step list, by the same rule
 that deletes a finished plan.
 
@@ -93,7 +93,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A9 | DOS-P5 Codex adapter — S / P / I | `plans/2026-07-21-developer-os-codex-adapter.md`, 19 tasks | — | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | **now** — `S` and `P` closed 2026-08-11; `I` is **15/19**, resume at Task 15 |
+| A9 | DOS-P5 Codex adapter — S / P / I | `plans/2026-07-21-developer-os-codex-adapter.md`, 19 tasks | — | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | **now** — `S` and `P` closed 2026-08-11; `I` is **16/19**, resume at Task 16 |
 | A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | A9 | L | program plan Task 6 checkpoint, after independent security review | blocked |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
@@ -156,7 +156,7 @@ request exists so a human sees it first.
 Foundation, DOS-P2, DOS-P3 and DOS-P4 are closed — four subsystems of eight, and the two that
 turn a canonical workflow into something an agent can actually load.
 
-**Seven milestones remain**, each L: DOS-P5's implementation, which is 15 of its 19 tasks done;
+**Seven milestones remain**, each L: DOS-P5's implementation, which is 16 of its 19 tasks done;
 DOS-P6's spec, plan and implementation; DOS-P7's spec, plan and implementation. Then two more entries that are not
 subsystems — the cutover (A12) and the release (A13) — plus Track L's two items, which are not
 engineering work at all.

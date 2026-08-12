@@ -2013,7 +2013,7 @@ git commit -m "feat(adapter-codex): generate the plugin tree, and fail on any dr
 **Files:**
 - Create: `tests/contracts/adapters/codex/determinism.test.ts`
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -2036,11 +2036,11 @@ describe("Codex artifacts are byte-identical", () => {
 });
 ```
 
-- [ ] **Step 2: Prove the reversal is observable**
+- [x] **Step 2: Prove the reversal is observable**
 
 Delete the `compareCodePoints` sort in `buildPluginTree`, rerun, confirm the second case goes RED, restore it. A determinism test that passes against an unsorted tree proves nothing.
 
-- [ ] **Step 3: Run the gate and commit**
+- [x] **Step 3: Run the gate and commit**
 
 ```bash
 npm run check
