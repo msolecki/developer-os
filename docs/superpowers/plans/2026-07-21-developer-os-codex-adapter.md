@@ -1915,7 +1915,7 @@ git commit -m "feat(adapter-codex): one door, one façade, and a test that fails
 - Create: `tests/tools/render-codex.ts`, `tests/tools/render-codex.test.ts`
 - Modify: root `package.json` (`render:codex`), `tests/package.json` (dependency on `@developer-os/adapter-codex`), `tests/tsconfig.json` (project reference)
 
-- [ ] **Step 1: Write the failing drift test**
+- [x] **Step 1: Write the failing drift test**
 
 `tests/contracts/adapters/codex/generated.test.ts`:
 
@@ -1974,27 +1974,27 @@ describe("plugins/codex is a clean regeneration", () => {
 
 `render-all.ts` exports `renderAllForCodex(options?: { reverseDirectoryOrder?: boolean })` and `readGeneratedTree()`, mirroring `tests/contracts/adapters/claude/render-all.ts` — which is where both helpers already exist and can be copied with two path changes.
 
-- [ ] **Step 2: Write the regenerator**
+- [x] **Step 2: Write the regenerator**
 
 `tests/tools/render-codex.ts` mirrors `tests/tools/render-claude.ts`, keeping all three of its guards: the repository root derived from `import.meta.url`, the working directory asserted equal to it, and the auto-run gated on `realpathSync(argv[1])` matching the module — because Node resolves `import.meta.url` to the real path while `argv[1]` keeps a symlink, and comparing them raw makes a symlinked entry point exit 0 having done nothing. Copy its test too, including the case that drives `regenerate` against a temporary tree and proves the refusal happens *before* the delete.
 
 Add to root `package.json`: `"render:codex": "tsc -b && node tests/dist/tools/render-codex.js"`.
 
-- [ ] **Step 3: Run it and confirm it fails**
+- [x] **Step 3: Run it and confirm it fails**
 
 Run: `pnpm vitest run tests/contracts/adapters/codex/generated.test.ts`
 Expected: FAIL — `plugins/codex` does not exist.
 
-- [ ] **Step 4: Generate the tree**
+- [x] **Step 4: Generate the tree**
 
 Run: `npm run render:codex`
 Expected: writes `plugins/codex/**`, seven artifacts.
 
-- [ ] **Step 5: Prove the drift check actually fails on drift, both ways**
+- [x] **Step 5: Prove the drift check actually fails on drift, both ways**
 
 Append a space to a file under `plugins/codex/`, rerun, confirm FAIL, restore. Then add a file no render produces, rerun, confirm FAIL on the set-equality line, remove it. **A gate nobody has watched go red is a gate about a false property.**
 
-- [ ] **Step 6: Run the gate and commit**
+- [x] **Step 6: Run the gate and commit**
 
 ```bash
 npm run check
