@@ -203,6 +203,48 @@ describe("invokeClaude", () => {
     }
   });
 
+  /**
+   * Regression, exercised through `invokeClaude`'s own real code path rather
+   * than only as a unit test of `parseStructuredPayload`
+   * (`packages/security/src/cli.test.ts`). The Codex adapter's `invoke.test.ts`
+   * pins all three of the shared screen's failure shapes end to end; this
+   * adapter had lost them when the screen moved to `@developer-os/security`.
+   */
+  it("reports unparseable stdout as malformed output", async () => {
+    const { runner } = capturing({ stdout: "not json at all" });
+    expect(await invokeClaude(installation, invocation, { runner })).toEqual({
+      ok: false,
+      reason: "malformed-output",
+    });
+  });
+
+  it("refuses a payload carrying a top-level __proto__ rather than returning it", async () => {
+    const { runner } = capturing({
+      stdout: '{"result":"x","__proto__":{"polluted":true}}',
+    });
+    expect(await invokeClaude(installation, invocation, { runner })).toEqual({
+      ok: false,
+      reason: "malformed-output",
+    });
+  });
+
+  /**
+   * Every surviving screen case above trips the leading-dash rule
+   * (`--dangerously-skip-permissions`, `--mcp-config`), so the word-list rule
+   * — `permission|danger|bypass`, catching a hostile value with no leading
+   * dash at all — was unexercised end to end on this adapter's own wiring.
+   */
+  it("refuses an allowed tool naming a permission surface even without a leading dash", async () => {
+    const { runner, seen } = capturing({ stdout: "{}" });
+    const result = await invokeClaude(
+      installation,
+      { ...invocation, allowedTools: ["bypassPermissions"] },
+      { runner },
+    );
+    expect(result).toMatchObject({ ok: false, reason: "refused" });
+    expect(seen()).toBeNull();
+  });
+
   it("still allows an ordinary tool list through", async () => {
     const { runner, seen } = capturing({ stdout: "{}" });
     const result = await invokeClaude(
