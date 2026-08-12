@@ -459,6 +459,38 @@ describe("Foundation temporary-HOME lifecycle", () => {
       expect(await inventory(home.root)).toStrictEqual(beforeSecondUninstall);
     });
   });
+
+  /**
+   * The lifecycle case above plants a fake `codex` so `agents` and
+   * `codex-capabilities` can be checked for agreement on a *present* binary —
+   * which means it no longer covers the absent shape at all. This is that
+   * coverage, restored: no `codex` fake on `PATH`, so both checks must report
+   * absence, and the doctor message (not just `report.agents`) must say so.
+   */
+  it("reports codex as absent when no codex binary is on PATH", async () => {
+    await withHome(async (home) => {
+      await installFakeExecutable(home, "claude");
+
+      await install(home);
+
+      const status = await runJson<StatusReportV1>(home, ["status", "--json"]);
+      expect(status.exitCode).toBe(EXIT_CODES.success);
+      expect(okData(status.result).agents).toContainEqual({
+        name: "codex",
+        installed: false,
+        executablePath: null,
+        version: null,
+      });
+
+      const doctor = await runJson<DoctorReportV1>(home, ["doctor", "--json"]);
+      expect(doctor.exitCode).toBe(EXIT_CODES.success);
+      const byId = new Map(
+        okData(doctor.result).checks.map((check) => [check.id, check.message]),
+      );
+      expect(byId.get("agents")).toContain("codex=absent");
+      expect(byId.get("codex-capabilities")).toContain("codex=absent");
+    });
+  });
 });
 
 describe("Foundation refusals", () => {

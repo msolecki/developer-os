@@ -303,6 +303,17 @@ async function checkClaudeCapabilities(context: CliContext): Promise<Finding> {
  * freshly resolved value are always equal.
  */
 async function checkCodexCapabilities(context: CliContext): Promise<Finding> {
+  // Discovery can refuse — `MacOsPlatformAdapter` rejects a `which` result it
+  // cannot vouch for, and `checkAgents` already demotes that to a warning. A
+  // refusal here is information about the environment, not a failure of this
+  // report, so it degrades to "nothing to examine" rather than propagating.
+  //
+  // The consequence is worth stating plainly: a platform-discovery refusal is
+  // rendered as `codex=absent` — "we could not ask" printed as "not
+  // installed", the same conflation `unreadable` exists to prevent, one layer
+  // up. This is a known residual, not an oversight: both adapters carry it,
+  // they must stay identical because DOS-P6 consumes both, and DOS-P6 owns
+  // closing it.
   let executablePath: string | null = null;
   try {
     const agents = await discoverAgents(context);
@@ -316,9 +327,21 @@ async function checkCodexCapabilities(context: CliContext): Promise<Finding> {
     runner: context.runner,
     pluginRoot: join(context.paths.home, ...PLUGIN_TREE_SEGMENTS),
   });
+  /**
+   * `report.recovery` is carried on every branch unconditionally —
+   * `codex-capabilities.ts` decided a *report* that omits it is not a
+   * report. But this is the *message*, the line a human reads, and advice to
+   * open a Codex session is not actionable on a machine that has no Codex to
+   * open one in. Gated on `installed` rather than on a specific capability
+   * reading `wrapper-required`: `doctor` never sets `probe: true` (see the
+   * comment on `CodexCapabilityRequest.probe`), so every installed branch —
+   * unreadable, not-probed, or probed — reports `captureVia: "wrapper"`
+   * today, and the advice is actionable in all of them; only `absent` is not.
+   */
+  const recovery = report.installed ? ` recovery="${report.recovery}"` : "";
   return pass(
     "codex-capabilities",
-    `${report.summary} capture-via=${report.captureVia} recovery="${report.recovery}"`,
+    `${report.summary} capture-via=${report.captureVia}${recovery}`,
     [],
   );
 }
