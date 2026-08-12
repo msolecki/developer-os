@@ -1,5 +1,6 @@
 import { isAbsolute } from "node:path";
 import { cwd } from "node:process";
+import { parseStructuredPayload, screenValueArgument } from "@developer-os/security";
 import type { ProcessRunner } from "@developer-os/security";
 import type { ClaudeInstallation } from "./discover.js";
 
@@ -34,33 +35,6 @@ export interface InvokeDependencies {
 }
 
 const MAX_TURNS_CEILING = 50;
-
-/**
- * Structural, not a denylist — and that is the whole fix.
- *
- * The first version screened three exact strings out of `allowedTools`. A
- * fresh-context review defeated it in one line: `--permission-mode` is
- * documented as taking a value (spec §14.3), every parser accepts
- * `--opt=value`, and `"--permission-mode=bypassPermissions"` is not equal to
- * any of the three literals. `--add-dir /` and `--mcp-config` were not on the
- * list at all. A variadic `--allowedTools` stops at the first `-`-prefixed
- * token, so each of those became a flag.
- *
- * The rule is now positional rather than nominal: **nothing this adapter puts
- * in a value position may look like an option.** A denylist has to enumerate
- * every dangerous flag the vendor will ever ship; this has to be right once.
- * And it refuses the invocation rather than silently dropping the offending
- * entry, because a caller that asked for a bypass has a bug worth reporting.
- */
-function screenValueArgument(value: string, field: string): string | null {
-  if (value.startsWith("-")) {
-    return `${field} may not begin with "-": it would be read as an option, not a value`;
-  }
-  if (/permission|dangerous/iu.test(value)) {
-    return `${field} names a permission or bypass surface this adapter refuses`;
-  }
-  return null;
-}
 
 export async function invokeClaude(
   installation: ClaudeInstallation,
@@ -138,30 +112,5 @@ export async function invokeClaude(
   if (result.exitCode !== 0) {
     return { ok: false, reason: "exit", exitCode: result.exitCode ?? 1 };
   }
-  return parsePayload(result.stdout);
-}
-
-/**
- * Structured output is validated, never best-effort parsed.
- *
- * A payload carrying `__proto__` at the top level is refused rather than
- * returned: `JSON.parse` does not pollute by itself, but this value is handed
- * to consumers that will spread and merge it, and the refusal belongs at the
- * boundary where the untrusted text becomes an object.
- */
-function parsePayload(stdout: string): ClaudeRunResult {
-  let payload: unknown;
-  try {
-    payload = JSON.parse(stdout);
-  } catch {
-    return { ok: false, reason: "malformed-output" };
-  }
-  if (
-    typeof payload === "object" &&
-    payload !== null &&
-    Object.prototype.hasOwnProperty.call(payload, "__proto__")
-  ) {
-    return { ok: false, reason: "malformed-output" };
-  }
-  return { ok: true, payload };
+  return parseStructuredPayload(result.stdout);
 }
