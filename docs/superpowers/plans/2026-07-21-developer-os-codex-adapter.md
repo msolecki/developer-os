@@ -1743,6 +1743,22 @@ argument, which is what makes `danger-full-access` unreachable rather than merel
 Structured output goes through `parseStructuredPayload`, also security's after Task 3.5 — which is
 where the top-level `__proto__` refusal lives.
 
+**`--json` emits JSONL, so stdout is reduced to one line before it is parsed. Found in review,
+2026-08-12.** Spec §14.1 documents the flag as "print events to stdout as JSONL" and §7 says
+`--output-schema` constrains the model's **final response**, not the stream. Handing raw stdout to
+`parseStructuredPayload` — which is `JSON.parse` — throws on any multi-event run, so **against the
+real CLI every successful invocation would have returned `malformed-output`**, the one outcome this
+plan calls a contract violation. The fixtures hid it: `"{}"` and `'{"result":"done"}'` are single
+objects, not event streams, so the tests pinned current behaviour rather than the vendor's contract.
+`probe.ts`'s precedent does not extend — `codex plugin list --json` is one listing object.
+
+The rule is: split on newlines, drop blank lines, take **the last line that parses as JSON**, hand
+that to `parseStructuredPayload`, and keep `malformed-output` when no line parses. **It is
+provisional and says so at the seam.** The spec documents that the output is JSONL but not the event
+vocabulary, so this is the best available rule and not a verified one — and inventing an event-type
+enum to filter on is forbidden, because an invented value a future version rejects is a failure only
+Task 17 would find. **Task 17 establishes the terminal event's real shape and amends §14.1.**
+
 `invocationFromAgentPrompt` calls `parseAgentPromptArgs` and maps its refusal to a `detail` that never echoes the rejected value, because a `with` block is author-controlled and the message reaches a log.
 
 Structured output is validated before any consumer sees it, and a top-level `__proto__` is refused rather than returned.
@@ -2153,6 +2169,16 @@ Point `CODEX_HOME` and `HOME` at temporary directories, write `renderCodexInstal
 - uninstall reverses both CLI steps and then removes the tree, and a simulated failure of either step leaves the tree in place.
 
 Pass the parent's `PATH` through rather than pinning `/usr/bin:/bin`: an npm-installed CLI with an `env node` shebang fails to spawn under a pinned `PATH`, which converts "installed differently" into "broken".
+
+- [ ] **Step 2b: Settle the JSONL terminal event, which Task 12 could only guess at**
+
+Run one `codex exec --json --output-schema <file>` and **capture the raw stdout**. Task 12 reduces
+the stream by taking the last line that parses as JSON, because §14.1 documents the output as JSONL
+and documents no event vocabulary. Record what the events actually are, whether the model's final
+response is the last line, and whether it carries a discriminating field worth filtering on. Amend
+§14.1 with the observed shape, dated, and correct `invoke.ts`'s provisional docblock to match. **If
+the last-line rule is wrong, this is where it is found** — it cannot be found anywhere else, and
+shipping it unverified was the deliberate choice recorded in Task 12.
 
 - [ ] **Step 3: Record what was observed about hooks**
 
