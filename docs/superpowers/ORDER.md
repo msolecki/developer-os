@@ -30,24 +30,21 @@ week of confusion.
 
 ## NOW
 
-**A9 — DOS-P5 Codex adapter, at its `I` gate.** The founder approved the spec on 2026-08-11 and
-the plan was written the same day: `plans/2026-07-21-developer-os-codex-adapter.md`, eighteen
-tasks, none started. Both document gates are closed, so what remains is code.
+**A9 — DOS-P5 Codex adapter, at its `I` gate. Start at Task 4.** Both document gates closed on
+2026-08-11 and the first three tasks landed on 2026-08-12, each reviewed by an agent that did not
+write it. `plans/2026-07-21-developer-os-codex-adapter.md` is **3/18**; its closed tasks carry no
+step list, by the same rule that deletes a finished plan.
 
-**Start at Task 1, and read `docs/architecture/claude-adapter.md` first.** The plan's first three
-tasks are not Codex work at all — they move the capability vocabulary into `packages/core`, the
-code-point ordering onto `packages/workflow-schema`'s door, the Markdown display seam into
-`packages/security`, and the vendor-neutral skill body into `packages/workflow-schema`, because
-spec §1 forbids either adapter importing the other and four of the Claude adapter's residuals come
-due precisely here. Doing them first is what keeps the second renderer from being a copy of the
-first — which, measured against the shipped one, is exactly what it would otherwise be.
+**Tasks 1 to 3 were not Codex work.** They moved what a second adapter would otherwise have
+copied: the capability vocabulary into `packages/core`, the code-point ordering onto
+`packages/workflow-schema`'s door, the Markdown display seam into `packages/security`, and the
+vendor-neutral skill body into `packages/workflow-schema`. Measured against the shipped renderer,
+a Codex renderer written the obvious way would have been a byte-for-byte copy of it; it is now
+about thirty lines. Every one of the three proved itself the same way — `plugins/claude`
+regenerates byte-identically — and any later task touching that shared code owes the same proof.
 
-**Two decisions the plan raised were ratified by the founder on 2026-08-12**, and both are
-discharged in `BACKLOG.md` §8. Neither adapter ships hooks — DOS-P6 restores them for both, in one
-change, which is where DOS-P4 already left them. And the vendor-neutral skill body moves into
-`packages/workflow-schema`, amending that package's architecture note, because Codex's required
-frontmatter is identical to Claude's and a second renderer written the obvious way would be a
-byte-for-byte copy of the first.
+**Task 4 is where `packages/adapter-codex` gets created.** Everything from there is vendor work
+with a shipped reference implementation beside it in `packages/adapter-claude`.
 
 **Two things the Codex spec settled that a reader of DOS-P4 would guess wrong.** Codex has no
 in-place plugin discovery, so the install is a **local marketplace** — which does resolve to real
@@ -78,7 +75,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A9 | DOS-P5 Codex adapter — S / P / I | `plans/2026-07-21-developer-os-codex-adapter.md`, 18 tasks | — | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | **now** — `S` approved and `P` written 2026-08-11; `I` is 0/18 |
+| A9 | DOS-P5 Codex adapter — S / P / I | `plans/2026-07-21-developer-os-codex-adapter.md`, 18 tasks | — | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | **now** — `S` and `P` closed 2026-08-11; `I` is **3/18**, resume at Task 4 |
 | A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | A9 | L | program plan Task 6 checkpoint, after independent security review | blocked |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
@@ -141,8 +138,8 @@ request exists so a human sees it first.
 Foundation, DOS-P2, DOS-P3 and DOS-P4 are closed — four subsystems of eight, and the two that
 turn a canonical workflow into something an agent can actually load.
 
-**Seven milestones remain**, each L: DOS-P5's implementation; DOS-P6's spec, plan and
-implementation; DOS-P7's spec, plan and implementation. Then two more entries that are not
+**Seven milestones remain**, each L: DOS-P5's implementation, which is 3 of its 18 tasks done;
+DOS-P6's spec, plan and implementation; DOS-P7's spec, plan and implementation. Then two more entries that are not
 subsystems — the cutover (A12) and the release (A13) — plus Track L's two items, which are not
 engineering work at all.
 

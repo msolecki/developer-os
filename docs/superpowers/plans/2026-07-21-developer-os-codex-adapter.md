@@ -37,9 +37,9 @@
 
 | Path | Responsibility |
 |---|---|
-| `packages/core/src/capabilities/index.ts` | `CapabilityState`, `ProbeObservation` — shared by both adapters (Task 1) |
-| `packages/security/src/markdown.ts` | the Markdown display seam: paragraph split, block-start neutralisation, payload-sized fences (Task 2) |
-| `packages/workflow-schema/src/skill.ts` | the **vendor-neutral skill body**: refusals, steps, recovery, the preamble (Task 3) |
+| `packages/core/src/capabilities/index.ts` | `CapabilityState`, `ProbeObservation` — shared by both adapters (Task 1, **done**) |
+| `packages/security/src/markdown.ts` | the Markdown display seam: paragraph split, block-start neutralisation, payload-sized fences (Task 2, **done**) |
+| `packages/workflow-schema/src/skill.ts` | the **vendor-neutral skill body**: refusals, steps, recovery, the preamble (Task 3, **done**) |
 | `packages/adapter-codex/src/discover.ts` | locate the CLI, read `codex --version` |
 | `packages/adapter-codex/src/versions.ts` | capability keys, the supported floor, semver comparison |
 | `packages/adapter-codex/src/probe.ts` | `codex plugin list --json` behind an injected runner |
@@ -70,406 +70,51 @@ This is the same conclusion DOS-P4 reached and the founder ratified on 2026-08-1
 
 Codex's required skill frontmatter is `name` and `description` (spec §14.3). Claude's is the same, and its artifact path is already `skills/developer-os-<id>/SKILL.md`. A second renderer written the obvious way would be byte-identical to the first — ~450 lines and twenty tests duplicated across peer packages, and `plugins/codex/skills/**` a byte-for-byte copy of `plugins/claude/skills/**`.
 
-So Task 3 extracts the body into `packages/workflow-schema/src/skill.ts` and migrates the Claude adapter onto it in the same change, with the existing drift check proving `plugins/claude/` does not move by a byte. **This amends `docs/architecture/workflow-schema.md` §2.2**, which says the package ships no renderer: `WorkflowRenderer` is still an interface, each adapter still implements it, and what moves is the vendor-*neutral* half — the refusals, steps and recovery every vendor renders identically because they come from one contract. Registered in `BACKLOG.md` §8.
+Task 3 did that on 2026-08-12: the body lives in `packages/workflow-schema/src/skill.ts`, the Claude adapter was migrated onto it in the same change, and `plugins/claude/` did not move by a byte. **It amended `docs/architecture/workflow-schema.md` §2.2 and §6**, which said the package ships no renderer: `WorkflowRenderer` is still an interface, each adapter still implements it, and what moved is the vendor-*neutral* half — the refusals, steps and recovery every vendor renders identically because they come from one contract. Ratified by the founder the same day; `BACKLOG.md` §8 carries the row.
 
 ---
 
-### Task 1: One capability vocabulary, one ordering rule
-
-**Complexity:** M
-
-**Why this task exists.** Spec §11 defines `CodexCapabilities` in terms of DOS-P4's `CapabilityState`, and spec §1 forbids importing that package. Both cannot be true while the type lives there. `claude-adapter.md` §9.5 records the same for `compareCodePoints`, duplicated in `adapter-claude/src/plugin.ts` and `workflow-schema/src/derive.ts`, and names DOS-P5 as its owner.
-
-**Files:**
-- Create: `packages/core/src/capabilities/index.ts`, `packages/core/src/capabilities/capabilities.test.ts`
-- Modify: `packages/core/src/index.ts`
-- Modify: `packages/workflow-schema/src/derive.ts`, `packages/workflow-schema/src/index.ts`
-- Modify: `packages/adapter-claude/src/capabilities.ts`, `src/probe.ts`, `src/capabilities.test.ts`, `src/plugin.ts`, `src/index.ts`
-
-**Interfaces:**
-- Produces: `CAPABILITY_STATES`, `CapabilityState = "yes" | "wrapper-required" | "unknown"`, `PROBE_OBSERVATIONS`, `ProbeObservation = "observed" | "absent" | "unavailable"`, and `compareCodePoints(left: string, right: string): number` on `@developer-os/workflow-schema`'s door.
-
-- [x] **Step 1: Write the failing test**
-
-`packages/core/src/capabilities/capabilities.test.ts`:
-
-```ts
-import { describe, expect, it } from "vitest";
-import { CAPABILITY_STATES, PROBE_OBSERVATIONS } from "./index.js";
-
-/**
- * The vocabulary lives here because two adapters share it and neither may
- * import the other (Codex spec §1). DOS-P6 consumes both, and two vocabularies
- * would make its own contract a translation layer.
- */
-describe("the shared capability vocabulary", () => {
-  it("has exactly three states, in the order the model reads them", () => {
-    expect([...CAPABILITY_STATES]).toEqual(["yes", "wrapper-required", "unknown"]);
-  });
-
-  it("keeps what a probe saw distinct from what we report", () => {
-    expect([...PROBE_OBSERVATIONS]).toEqual(["observed", "absent", "unavailable"]);
-    for (const observation of PROBE_OBSERVATIONS) {
-      expect(CAPABILITY_STATES).not.toContain(observation);
-    }
-  });
-});
-```
-
-- [x] **Step 2: Run it and confirm it fails**
-
-Run: `pnpm vitest run packages/core/src/capabilities/capabilities.test.ts`
-Expected: FAIL — the module does not exist.
-
-- [x] **Step 3: Implement `packages/core/src/capabilities/index.ts`**
-
-```ts
-/**
- * The capability vocabulary both adapters speak.
- *
- * It lived in `packages/adapter-claude` while there was one adapter. Codex spec
- * §1 forbids either adapter importing the other and §11 defines
- * `CodexCapabilities` in terms of this exact type, so it moves here rather than
- * being copied — which is how two vocabularies come to disagree.
- *
- * `CapabilityState` and `ProbeObservation` stay distinct on purpose: the probe
- * reports what it saw, the resolver reports what we claim, and collapsing them
- * is how a `yes` gets earned by an observation alone.
- */
-export const CAPABILITY_STATES = ["yes", "wrapper-required", "unknown"] as const;
-export type CapabilityState = (typeof CAPABILITY_STATES)[number];
-
-export const PROBE_OBSERVATIONS = ["observed", "absent", "unavailable"] as const;
-export type ProbeObservation = (typeof PROBE_OBSERVATIONS)[number];
-```
-
-In `packages/core/src/index.ts` add:
-
-```ts
-export { CAPABILITY_STATES, PROBE_OBSERVATIONS } from "./capabilities/index.js";
-export type { CapabilityState, ProbeObservation } from "./capabilities/index.js";
-```
-
-- [x] **Step 4: Export the ordering rule from the compiler**
-
-In `packages/workflow-schema/src/derive.ts`, change `function compareCodePoints` to `export function compareCodePoints`.
-
-In `packages/workflow-schema/src/index.ts` there is already a line reading `export { compareScopes, deriveScopes } from "./derive.js";` — **edit that line** to add the third name rather than adding a second export statement, which is a duplicate-export error:
-
-```ts
-export { compareCodePoints, compareScopes, deriveScopes } from "./derive.js";
-```
-
-- [x] **Step 5: Rewire the Claude adapter, all four files**
-
-`packages/adapter-claude/src/capabilities.ts` — delete the two local `export type` declarations and re-export them, so that `probe.ts` and `capabilities.test.ts`, which both import `ProbeObservation` **from this module**, keep working:
-
-```ts
-import type { CapabilityState, ProbeObservation } from "@developer-os/core";
-export type { CapabilityState, ProbeObservation } from "@developer-os/core";
-```
-
-`packages/adapter-claude/src/plugin.ts` — delete the local `compareCodePoints` and its docblock, and import it. Leave one line where the copy was:
-
-```ts
-// Ordering comes from the compiler, which owns the determinism contract.
-// The duplicate that lived here is gone — `claude-adapter.md` §9.5.
-import { compareCodePoints } from "@developer-os/workflow-schema";
-```
-
-`packages/adapter-claude/src/index.ts` — the two type re-exports it already carries now resolve through `capabilities.js` to core; no edit is needed unless `tsc` says otherwise.
-
-- [x] **Step 6: Verify with the compiler, not with the door test**
-
-Run: `npm run check`
-Expected: PASS. **`index.test.ts` cannot verify this step** — it asserts `Object.keys(module)`, and `CapabilityState`/`ProbeObservation` are type-only, so they never appear there. `tsc -b` inside `npm run lint` is what fails if a re-export is missing.
-
-- [x] **Step 7: Commit**
-
-```bash
-npm run check
-git add packages/core/src/capabilities packages/core/src/index.ts \
-        packages/workflow-schema/src/derive.ts packages/workflow-schema/src/index.ts \
-        packages/adapter-claude/src/capabilities.ts packages/adapter-claude/src/probe.ts \
-        packages/adapter-claude/src/capabilities.test.ts packages/adapter-claude/src/plugin.ts \
-        packages/adapter-claude/src/index.ts
-git commit -m "refactor(core): give both adapters one capability vocabulary and one ordering rule"
-```
-
----
-
-### Task 2: The Markdown display seam, shared
-
-**Complexity:** M
-
-**Why this task exists.** DOS-P4's renderer learned four rules the hard way (`claude-adapter.md` §6): split into paragraphs *before* screening, or the injection defence renders as one run-on line; bound the joined block, not each paragraph, or blank lines raise the cap without limit; size a fence to its payload, or a value containing a fence closes the block early; neutralise a line that begins with a block construct, or author prose forges a heading. `packages/security/src/screen.ts` states the rule for exactly this moment: *if a third site needs this, the three should become one helper rather than a third copy.*
-
-**Files:**
-- Create: `packages/security/src/markdown.ts`, `packages/security/src/markdown.test.ts`
-- Modify: `packages/security/src/index.ts`, `packages/adapter-claude/src/render.ts`
-
-**Interfaces:**
-- Produces: `screenParagraphs(value: string): readonly string[]`, `boundedProse(value: string, maxGraphemes: number): string`, `fenced(payload: string, info: string): readonly string[]`.
-
-- [x] **Step 1: Write the failing test**
-
-`packages/security/src/markdown.test.ts`:
-
-```ts
-import { describe, expect, it } from "vitest";
-import { boundedProse, fenced, screenParagraphs } from "./markdown.js";
-
-describe("screenParagraphs", () => {
-  it("keeps the boundary an author wrote", () => {
-    expect(screenParagraphs("one\n\ntwo")).toEqual(["one", "two"]);
-  });
-
-  it("splits before screening, because the two do not commute", () => {
-    expect(screenParagraphs("one\n \t \ntwo")).toEqual(["one", "two"]);
-    expect(screenParagraphs("one\r\n\r\ntwo")).toEqual(["one", "two"]);
-  });
-
-  it("does not split on a lone carriage return", () => {
-    expect(screenParagraphs("one\r\rtwo")).toEqual(["one two"]);
-  });
-
-  it("drops a paragraph that screens to nothing", () => {
-    expect(screenParagraphs("one\n\n\u200B\n\ntwo")).toEqual(["one", "two"]);
-  });
-
-  it("neutralizes every block construct a paragraph could open", () => {
-    const forgeries: readonly (readonly [string, string])[] = [
-      ["# heading", "\\# heading"],
-      ["> quote", "\\> quote"],
-      ["| a | b |", "\\| a | b |"],
-      ["```", "\\```"],
-      ["~~~", "\\~~~"],
-      ["---", "\\---"],
-      ["___", "\\___"],
-      ["* bullet", "\\* bullet"],
-      ["1. ordered", "1\\. ordered"],
-      ["9) ordered", "9\\) ordered"],
-      ["<script>x</script>", "\\<script>x</script>"],
-    ];
-    expect(forgeries.length).toBeGreaterThan(0);
-    for (const [forged, neutralized] of forgeries) {
-      expect(screenParagraphs(forged), forged).toEqual([neutralized]);
-    }
-  });
-
-  it("leaves ordinary prose alone, so the escape is not a tax on every line", () => {
-    expect(screenParagraphs("plain sentence.")).toEqual(["plain sentence."]);
-  });
-});
-
-describe("boundedProse", () => {
-  it("bounds the joined block, not each paragraph", () => {
-    const five = Array.from({ length: 5 }, () => "x".repeat(4000)).join("\n\n");
-    expect(boundedProse(five, 4096).length).toBeLessThanOrEqual(4097);
-    expect(boundedProse(five, 4096)).toContain("…");
-  });
-
-  it("returns an empty string when everything screened away", () => {
-    expect(boundedProse("\u200B \u00AD", 4096)).toBe("");
-  });
-});
-
-describe("fenced", () => {
-  it("opens with a run longer than the longest inside", () => {
-    expect(fenced("```", "text")).toEqual(["````text", "```", "````"]);
-  });
-
-  it("uses three backticks when the payload has none", () => {
-    expect(fenced("plain", "json")).toEqual(["```json", "plain", "```"]);
-  });
-
-  it("counts the longest run, not the first", () => {
-    expect(fenced("` and ````", "text")[0]).toBe("`````text");
-  });
-});
-```
-
-- [x] **Step 2: Run it and confirm it fails**
-
-Run: `pnpm vitest run packages/security/src/markdown.test.ts`
-Expected: FAIL — the module does not exist.
-
-- [x] **Step 3: Implement `packages/security/src/markdown.ts`**
-
-Move `paragraphsOf`, `neutralizeBlockStart`, `boundedProse` and `fenced` out of `packages/adapter-claude/src/render.ts` **verbatim, docblocks included** — the docblocks are where the reasons live. Two changes only: `boundedProse` takes the cap as a parameter instead of closing over a module constant, and `paragraphsOf` is exported as `screenParagraphs`.
-
-```ts
-import { capGraphemes, screenControlCharacters } from "./screen.js";
-
-export function screenParagraphs(value: string): readonly string[] {
-  return value
-    .split(/\n[^\S\n]*\n/u)
-    .map((paragraph) => neutralizeBlockStart(screenControlCharacters(paragraph)))
-    .filter((paragraph) => paragraph.length > 0);
-}
-
-function neutralizeBlockStart(line: string): string {
-  const ordered = /^(\d{1,9})([.)])/u.exec(line);
-  if (ordered !== null) {
-    return `${ordered[1] ?? ""}\\${line.slice((ordered[1] ?? "").length)}`;
-  }
-  return /^[`~#>|<*+\-=_]/u.test(line) ? `\\${line}` : line;
-}
-
-export function boundedProse(value: string, maxGraphemes: number): string {
-  return capGraphemes(screenParagraphs(value).join("\n\n"), maxGraphemes);
-}
-
-export function fenced(payload: string, info: string): readonly string[] {
-  const longest = [...payload.matchAll(/`+/gu)].reduce(
-    (max, [run]) => Math.max(max, run.length),
-    0,
-  );
-  const fence = "`".repeat(Math.max(3, longest + 1));
-  return [`${fence}${info}`, payload, fence];
-}
-```
-
-Export all three from `packages/security/src/index.ts`.
-
-- [x] **Step 4: Rewire the Claude renderer**
-
-In `packages/adapter-claude/src/render.ts`: delete the four local functions, import the three shared ones, pass `FIELD_CAP` at each `boundedProse` call site (there are two — the step-prose branch and `recovery.leaves`), and keep `refusingParagraphs` local, now calling `screenParagraphs`. **Check the import list afterwards:** `capGraphemes` becomes unused and an unused import fails `npm run lint`.
-
-- [x] **Step 5: Run both suites and confirm they pass unchanged**
-
-Run: `pnpm vitest run packages/security packages/adapter-claude tests/contracts/adapters`
-Expected: PASS. **No test in `render.test.ts` may change.** If one has to, the move was not verbatim.
-
-- [x] **Step 6: Confirm the generated tree did not move**
-
-Run: `npm run render:claude && git diff --stat plugins/claude`
-Expected: no diff. A refactor that changes the artifact is not a refactor.
-
-- [x] **Step 7: Commit**
-
-```bash
-npm run check
-git add packages/security/src/markdown.ts packages/security/src/markdown.test.ts \
-        packages/security/src/index.ts packages/adapter-claude/src/render.ts
-git commit -m "refactor(security): one Markdown display seam, before a second renderer copies it"
-```
-
----
-
-### Task 3: The vendor-neutral skill body
-
-**Complexity:** L
-
-**Why this task exists.** See "Two decisions taken before Task 1". Codex's required frontmatter is `name` and `description`, which is exactly Claude's, and both write `skills/developer-os-<id>/SKILL.md`. Written the obvious way the second renderer would be a byte-for-byte copy of the first. What is genuinely vendor-neutral — refusals, steps, recovery, and the concatenated preamble, all of which come from one contract — moves to the compiler; what is vendor behaviour — frontmatter fields, artifact path, plugin manifest — stays in each adapter.
-
-**Files:**
-- Create: `packages/workflow-schema/src/skill.ts`, `packages/workflow-schema/src/skill.test.ts`
-- Modify: `packages/workflow-schema/src/index.ts`
-- Modify: `packages/adapter-claude/src/render.ts`, `src/render.test.ts` (imports only)
-- Modify: `docs/architecture/workflow-schema.md` — **§2.2 and §6 both become false in this change**
-  and are amended in the same commit, dated. §2.2 says the package ships no renderer; §6 says
-  "This package ships no renderer, so it proves the narrower thing it can prove: the *inputs* a
-  renderer is handed are byte-identical". Both are amended to say what is now true — the interface
-  and every vendor artifact still belong to the adapters, and what lives here is the half that
-  comes from one contract and renders identically for every vendor
-
-**Interfaces:**
-- Consumes: `screenParagraphs`, `boundedProse`, `fenced`, `screenAndCap` from `@developer-os/security`; `applyOverlay`, `sourceMarker` from this package.
-- Produces:
-
-```ts
-export const SHARED_WORKFLOW_ID = "shared";
-export interface SkillBodyOptions {
-  /** The `shared` contract, whose refusals and prose become the preamble. */
-  readonly shared: WorkflowContractV1;
-}
-export function renderSkillBody(
-  contract: WorkflowContractV1,
-  overlay: WorkflowOverlayV1 | null,
-  options: SkillBodyOptions,
-): readonly string[];
-/** The cap every contract field is screened to, exported so no vendor invents a second one. */
-export const SKILL_FIELD_CAP: number;
-export function assertRenderableContract(contract: WorkflowContractV1): void;
-export function assertUsablePreamble(shared: WorkflowContractV1): void;
-```
-
-- [x] **Step 1: Write the failing test**
-
-`packages/workflow-schema/src/skill.test.ts` is `packages/adapter-claude/src/render.test.ts` with the frontmatter cases removed and every other case retargeted at `renderSkillBody`. Copy them: the preamble concatenation, the empty-prose refusals, the id and version refusals, the overlay cases, the fence and paragraph cases, the screening cases. They are the tests that already caught eight real defects, and they must keep failing for the same reasons here.
-
-**The copy is not literal in one respect:** `renderSkillBody` returns `readonly string[]` while
-every case in `render.test.ts` asserts against a joined `contents` string, so each copied case
-needs `.join("\n")` around the result. Nothing else about them changes.
-
-Add one case that is new, because this function is now shared:
-
-```ts
-it("emits the same body for two vendors, because the body is not vendor behaviour", () => {
-  const first = renderSkillBody(contract(), null, { shared });
-  const second = renderSkillBody(contract(), null, { shared });
-  expect(second).toEqual(first);
-  expect(first.length).toBeGreaterThan(0);
-});
-```
-
-- [x] **Step 2: Run it and confirm it fails**
-
-Run: `pnpm vitest run packages/workflow-schema/src/skill.test.ts`
-Expected: FAIL — the module does not exist.
-
-- [x] **Step 3: Implement `skill.ts` by moving, not rewriting**
-
-Everything below the closing `---` of the frontmatter in `packages/adapter-claude/src/render.ts` moves here unchanged: the source-marker line, the preamble block, the `# <id>` heading, `renderRefusals`, `renderSteps`, `renderRecovery`, `refusingParagraphs`, `bullet`, `FIELD_CAP`, and the two assertions. `assertUsablePreamble` is the constructor check DOS-P4 wrote — `shared.id` must equal `SHARED_WORKFLOW_ID`, and the preamble *prose* must be non-empty as its own scope, because a combined check passes on refusals alone and ships six artifacts with no defence.
-
-The overlay rules move with it: applied through `applyOverlay`, refused with a screened reason, and refused outright on the `shared` contract, whose five concatenated copies no overlay reaches.
-
-**Three details that decide whether the split is equivalent, and that a copy loses silently:**
-
-1. **The frontmatter is built pre-overlay and the body post-overlay, and that is safe by
-   construction rather than by luck.** `workflowOverlaySchema` is `.strict()` with exactly
-   `extends`, `steps`, `lifecycle` and `notes`, and a `steps` value is `{ prose }` alone — so an
-   overlay cannot reach `id`, `version` or `description`, which are the only fields the frontmatter
-   reads. Nothing else about this task would survive that schema gaining a field.
-2. **The source marker is derived here, not passed in.** It is
-   `sourceMarker(contract, \`workflows/${contract.id}/workflow.yaml\`)`, exactly as the shipped
-   renderer computes it. A caller-supplied string would let the two vendor trees carry different
-   markers, and neither adapter's drift gate can see the other's input.
-3. **`assertRenderableContract` runs twice** — once on the contract handed in and once on the
-   post-overlay object the path and marker are built from. The shipped renderer does this
-   deliberately, with a docblock; if the second call disappears into the copy, no test notices.
-
-**`SKILL_FIELD_CAP` is exported.** It is the bound every contract field is screened to, including
-the `description` each adapter puts in its own frontmatter — the one field the plan calls vendor
-behaviour that must still truncate identically in both trees. Two adapters inventing their own cap
-is two trees that differ on a long description and no test that compares them.
-
-Export from `index.ts`:
-
-```ts
-export { assertRenderableContract, assertUsablePreamble, renderSkillBody, SHARED_WORKFLOW_ID } from "./skill.js";
-export type { SkillBodyOptions } from "./skill.js";
-```
-
-- [x] **Step 4: Reduce `ClaudeRenderer` to its vendor half**
-
-`packages/adapter-claude/src/render.ts` keeps `yamlScalar`, the two frontmatter lines, the artifact path, and the `WorkflowRenderer` implementation. It calls `assertUsablePreamble` in its constructor and `renderSkillBody` in `render`. It re-exports `SHARED_WORKFLOW_ID` so its own door does not change shape.
-
-- [x] **Step 5: Run everything, and prove the artifact did not move**
-
-Run: `npm run check && npm run render:claude && git diff --stat plugins/claude`
-Expected: PASS, and **no diff**. The drift gate comparing the checked-in tree against a fresh render is the strongest available evidence that this extraction preserved behaviour byte for byte.
-
-- [x] **Step 6: Commit**
-
-```bash
-npm run check
-git add packages/workflow-schema/src/skill.ts packages/workflow-schema/src/skill.test.ts \
-        packages/workflow-schema/src/index.ts packages/adapter-claude/src/render.ts \
-        packages/adapter-claude/src/render.test.ts docs/architecture/workflow-schema.md
-git commit -m "refactor(workflow-schema): one skill body, two vendors, and a tree that did not move"
-```
+### Tasks 1 to 3 — closed 2026-08-12, and not described here
+
+**Their step lists are deleted**, which is this repository's defence against a later commit moving
+a closed task's checkboxes — it has happened three times in the program plan, always by a commit
+closing a different task. Recover them at `3dcbfc6`.
+
+None of the three was Codex work. They moved what a second adapter would otherwise have copied,
+and each was reviewed by an agent that did not write it:
+
+| Task | Commits | What it moved |
+|---|---|---|
+| 1 | `cc9702e` | the capability vocabulary into `packages/core`; `compareCodePoints` onto `packages/workflow-schema`'s door |
+| 2 | `5ddb7db` | the Markdown display seam into `packages/security/src/markdown.ts` |
+| 3 | `384a943`, `f130ad8`, `6ce3062` | the vendor-neutral skill body into `packages/workflow-schema/src/skill.ts`; `ClaudeRenderer` reduced to frontmatter and path |
+
+**What they produce, which later tasks consume by name:**
+
+| From | Names |
+|---|---|
+| `@developer-os/core` | `CAPABILITY_STATES`, `CapabilityState`, `PROBE_OBSERVATIONS`, `ProbeObservation` |
+| `@developer-os/security` | `screenParagraphs(value)`, `boundedProse(value, maxGraphemes)`, `fenced(payload, info)` |
+| `@developer-os/workflow-schema` | `compareCodePoints(left, right)`, `renderSkillBody(contract, overlay, { shared })`, `assertRenderableContract(contract)`, `assertUsablePreamble(shared)`, `SHARED_WORKFLOW_ID`, `SKILL_FIELD_CAP` |
+
+**Three things they settled that a later task would otherwise get wrong.**
+
+1. **The proof that all three preserved behaviour is one command**: `npm run render:claude` leaves
+   `plugins/claude` byte-identical. Any task that touches the shared code owes the same proof.
+2. **The frontmatter is built from the pre-overlay contract and the body from the post-overlay
+   one.** That is safe only because `workflowOverlaySchema` cannot reach `id`, `version` or
+   `description`, and `packages/workflow-schema/src/overlay.test.ts` now fails red if a field is
+   added to it. Task 8 inherits this split; do not "fix" it by moving the frontmatter.
+3. **Screening happens inside `renderSkillBody`**, not in a vendor renderer. A vendor renderer
+   screens only what it renders itself, which is `description` in its own frontmatter, bounded by
+   `SKILL_FIELD_CAP`. Both adapter specs carry a dated amendment saying so; re-screening in
+   `adapter-codex` would be the second copy of the seam these tasks existed to prevent.
+
+**Two things they left for the final review, deliberately unfixed:** `skill.test.ts` and
+`render.test.ts` overlap on about twenty body cases — that overlap *is* the evidence the move
+preserved behaviour, and it should be pruned to frontmatter, path and door cases once Task 8
+lands; and `packages/workflow-schema` has no exact-export door test, which this work made
+load-bearing by widening its surface by six names.
 
 ---
 
