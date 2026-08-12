@@ -32,6 +32,9 @@ importers:
       '@developer-os/adapter-claude':
         specifier: workspace:*
         version: link:../../packages/adapter-claude
+      '@developer-os/adapter-codex':
+        specifier: workspace:*
+        version: link:../../packages/adapter-codex
       '@developer-os/brain':
         specifier: workspace:*
         version: link:../../packages/brain
