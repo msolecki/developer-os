@@ -191,7 +191,7 @@ export function parseStructuredPayload(
  | { readonly ok: false; readonly reason: "malformed-output" };
 ```
 
-- [ ] **Step 1: Write the failing tests for `packages/core/src/versions`**
+- [x] **Step 1: Write the failing tests for `packages/core/src/versions`**
 
 Port every case from `packages/adapter-claude/src/versions.test.ts` that exercises
 `compareVersions` or the floor logic, and add the cases the generic form makes reachable: a table
@@ -199,13 +199,13 @@ whose `floors` map omits the key entirely (refuse — the `undefined` branch), a
 `toString` (refuse, not a `Function` off `Object.prototype` — the `Map` is the mechanism and a test
 must hold it there), a floor above the minimum, and a version between the two.
 
-- [ ] **Step 2: Run it, confirm it fails, implement, rerun**
+- [x] **Step 2: Run it, confirm it fails, implement, rerun**
 
 `compareVersions` moves **verbatim**, docblock included — the paragraph explaining `null` over
 `NaN` is the reason the function exists in that shape and must not be summarised away.
 `tablePermits` takes the table as its first argument and is otherwise unchanged.
 
-- [ ] **Step 3: Write the failing tests for `packages/security/src/cli.ts`**
+- [x] **Step 3: Write the failing tests for `packages/security/src/cli.ts`**
 
 Port the whole battery from `packages/adapter-claude/src/discover.test.ts` — the never-throw cases,
 the runner-throws case, and the argv/`env: {}`/`stdin` assertion.
@@ -216,7 +216,7 @@ for, each of which **must fail against the old `/permission|dangerous/iu`**:
 - a value containing `bypass` is refused;
 - `--dangerously-bypass-hook-trust` and `--ignore-user-config` are refused by the `-` rule.
 
-- [ ] **Step 4: Run it, confirm it fails, implement, rerun**
+- [x] **Step 4: Run it, confirm it fails, implement, rerun**
 
 `screenValueArgument`'s regex becomes `/permission|danger|bypass/iu` — strictly wider than what
 shipped, so **name the risk and check it**: nothing this product puts in a value position may match
@@ -227,7 +227,7 @@ the report must say what was checked rather than assert the property.
 refusal, the 10-second timeout, `VERSION_PATTERN`, and the never-throw contract, each with its
 docblock.
 
-- [ ] **Step 5: Migrate `packages/adapter-claude` onto the shared code**
+- [x] **Step 5: Migrate `packages/adapter-claude` onto the shared code**
 
 - `versions.ts` keeps `CLAUDE_CAPABILITY_KEYS`, `ClaudeCapabilityKey`, `CLAUDE_MINIMUM_VERSION` and
   the `DOCUMENTED_FLOORS` map, and exports one binding — `tablePermits(key, version)` closing over
@@ -253,7 +253,7 @@ Task 4 and Task 16 both inherit that split; neither may reintroduce a second PAT
 - Tests that moved are deleted from the adapter, not duplicated there. Say in the report how many
   cases moved and how many remain, so the reviewer can see nothing was quietly dropped.
 
-- [ ] **Step 6: Prove the move changed no behaviour**
+- [x] **Step 6: Prove the move changed no behaviour**
 
 ```bash
 npm run check
@@ -263,7 +263,7 @@ npm run render:claude && git status --short   # must print nothing
 `plugins/claude/` must not move by a byte. Nothing here touches a renderer, so a diff would mean
 something unintended moved.
 
-- [ ] **Step 7: Run the gate and commit**
+- [x] **Step 7: Run the gate and commit**
 
 ```bash
 npm run check
@@ -299,7 +299,7 @@ package owned the whole never-throw implementation. That battery now lives in
 cases, one failure case proving `discoverCodex` really is the never-throw one, and the argv
 assertion. **Delete the `resolveExecutable` describe block** — that function no longer exists.
 
-- [ ] **Step 1: Register the package in the three workspace files**
+- [x] **Step 1: Register the package in the three workspace files**
 
 `pnpm-workspace.yaml` **enumerates every package by path — there is no glob.** Add a line:
 
@@ -309,7 +309,7 @@ assertion. **Delete the `resolveExecutable` describe block** — that function n
 
 Root `tsconfig.json` gains `{ "path": "./packages/adapter-codex" }` in `references`; root `vitest.config.ts` gains the project entry beside `packages/adapter-claude`.
 
-- [ ] **Step 2: Write the three package files**
+- [x] **Step 2: Write the three package files**
 
 `packages/adapter-codex/package.json`:
 
@@ -342,7 +342,7 @@ Root `tsconfig.json` gains `{ "path": "./packages/adapter-codex" }` in `referenc
 
 Run `pnpm install` after this step so the workspace link exists.
 
-- [ ] **Step 3: Write the failing test**
+- [x] **Step 3: Write the failing test**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -447,24 +447,24 @@ describe("resolveExecutable", () => {
 });
 ```
 
-- [ ] **Step 4: Run it and confirm it fails**
+- [x] **Step 4: Run it and confirm it fails**
 
 Run: `pnpm vitest run packages/adapter-codex`
 Expected: FAIL — the module does not exist.
 
-- [ ] **Step 5: Implement `discover.ts`**
+- [x] **Step 5: Implement `discover.ts`**
 
 After Task 3.5 this file is the vendor binding and nothing else: `CodexInstallation` as an alias of
 `CliInstallation`, and `discoverCodex` bound to `discoverCli`. `packages/adapter-claude/src/discover.ts`
 is the reference for the shape and should be the same size. The argv is `["--version"]`, which is
 `discoverCli`'s own — this package supplies no argv of its own here.
 
-- [ ] **Step 6: Run the tests and confirm they pass**
+- [x] **Step 6: Run the tests and confirm they pass**
 
 Run: `pnpm vitest run packages/adapter-codex`
 Expected: PASS — the binding cases kept from step 3, not the ten the pre-Task-3.5 text assumed.
 
-- [ ] **Step 7: Run the gate and commit**
+- [x] **Step 7: Run the gate and commit**
 
 ```bash
 npm run check
@@ -490,7 +490,7 @@ git commit -m "feat(adapter-codex): find an installation without ever throwing"
 here; **delete its describe block from the step-1 test** — `packages/core/src/versions/index.test.ts`
 owns those cases. The `tablePermits` block stays: it pins this vendor's floor, which is vendor data.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -562,12 +562,12 @@ describe("tablePermits", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [x] **Step 2: Run it and confirm it fails**
 
 Run: `pnpm vitest run packages/adapter-codex/src/versions.test.ts`
 Expected: FAIL — the module does not exist.
 
-- [ ] **Step 3: Implement `versions.ts`**
+- [x] **Step 3: Implement `versions.ts`**
 
 ```ts
 /**
@@ -615,12 +615,12 @@ a key named `toString` resolves to a `Function` through `Object.prototype` and p
 `!== undefined` guard. The exported `tablePermits` is one line binding core's to
 `{ minimum: CODEX_MINIMUM_VERSION, floors: DOCUMENTED_FLOORS }`.
 
-- [ ] **Step 4: Run the tests and confirm they pass**
+- [x] **Step 4: Run the tests and confirm they pass**
 
 Run: `pnpm vitest run packages/adapter-codex/src/versions.test.ts`
 Expected: PASS, 7 tests.
 
-- [ ] **Step 5: Run the gate and commit**
+- [x] **Step 5: Run the gate and commit**
 
 ```bash
 npm run check
@@ -660,7 +660,7 @@ export function probeCodex(
 ): Promise<CodexProbeResult>;
 ```
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -810,12 +810,12 @@ describe("probeCodex", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [x] **Step 2: Run it and confirm it fails**
 
 Run: `pnpm vitest run packages/adapter-codex/src/probe.test.ts`
 Expected: FAIL — the module does not exist.
 
-- [ ] **Step 3: Implement `probe.ts`**
+- [x] **Step 3: Implement `probe.ts`**
 
 Parse with zod and treat every parse failure as `unavailable`:
 
@@ -833,12 +833,12 @@ const listingSchema = z
 
 `skills` is `observed` only when a plugin named `developer-os` is present **and** enabled **and** its resolved path equals `pluginRoot`. Anything else that parsed is `absent`; anything that did not parse, exited non-zero, or timed out is `unavailable`.
 
-- [ ] **Step 4: Run the tests and confirm they pass**
+- [x] **Step 4: Run the tests and confirm they pass**
 
 Run: `pnpm vitest run packages/adapter-codex/src/probe.test.ts`
 Expected: PASS, 14 tests.
 
-- [ ] **Step 5: Run the gate and commit**
+- [x] **Step 5: Run the gate and commit**
 
 ```bash
 npm run check
@@ -859,7 +859,7 @@ git commit -m "feat(adapter-codex): a probe that answers three questions and ove
 - Consumes: `CapabilityState`, `ProbeObservation` from `@developer-os/core`; `CODEX_CAPABILITY_KEYS`, `tablePermits` from `./versions.js`.
 - Produces: `CodexCapabilities = Readonly<Record<CodexCapabilityKey, CapabilityState>>`, `resolveCapabilities(version, observations)`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -923,12 +923,12 @@ describe("resolveCapabilities", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [x] **Step 2: Run it and confirm it fails**
 
 Run: `pnpm vitest run packages/adapter-codex/src/capabilities.test.ts`
 Expected: FAIL — the module does not exist.
 
-- [ ] **Step 3: Implement `capabilities.ts`**
+- [x] **Step 3: Implement `capabilities.ts`**
 
 Iterate over `CODEX_CAPABILITY_KEYS`, so a key the probe invented reaches nothing. One list is hard-coded:
 
@@ -943,12 +943,12 @@ Iterate over `CODEX_CAPABILITY_KEYS`, so a key the probe invented reaches nothin
 const UNSETTLED: readonly CodexCapabilityKey[] = ["plugin_hooks"];
 ```
 
-- [ ] **Step 4: Run the tests and confirm they pass**
+- [x] **Step 4: Run the tests and confirm they pass**
 
 Run: `pnpm vitest run packages/adapter-codex/src/capabilities.test.ts`
 Expected: PASS, 8 tests.
 
-- [ ] **Step 5: Run the gate and commit**
+- [x] **Step 5: Run the gate and commit**
 
 ```bash
 npm run check
@@ -969,7 +969,7 @@ git commit -m "feat(adapter-codex): earn every yes, and degrade toward the wrapp
 - Consumes: `renderSkillBody`, `assertRenderableContract`, `assertUsablePreamble`, `SHARED_WORKFLOW_ID`, `WorkflowRenderer`, `RenderedArtifact` from `@developer-os/workflow-schema`; `screenAndCap` from `@developer-os/security`.
 - Produces: `CodexRenderer`, and a re-export of `SHARED_WORKFLOW_ID`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -1078,21 +1078,21 @@ describe("CodexRenderer", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [x] **Step 2: Run it and confirm it fails**
 
 Run: `pnpm vitest run packages/adapter-codex/src/render.test.ts`
 Expected: FAIL — the module does not exist.
 
-- [ ] **Step 3: Implement `render.ts`**
+- [x] **Step 3: Implement `render.ts`**
 
 Under thirty lines of real code: `assertUsablePreamble` in the constructor, `assertRenderableContract` in `render`, the two frontmatter lines through `JSON.stringify` — which is a valid YAML double-quoted scalar, and the reason is that a bare `description: capture: a learning` is a nested mapping and the skill silently does not load — then `renderSkillBody`, then the artifact path.
 
-- [ ] **Step 4: Run the tests and confirm they pass**
+- [x] **Step 4: Run the tests and confirm they pass**
 
 Run: `pnpm vitest run packages/adapter-codex/src/render.test.ts`
 Expected: PASS, 10 tests.
 
-- [ ] **Step 5: Run the gate and commit**
+- [x] **Step 5: Run the gate and commit**
 
 ```bash
 npm run check
@@ -1113,7 +1113,7 @@ git commit -m "feat(adapter-codex): a renderer that is only its vendor half"
 - Consumes: `RenderedArtifact`, `compareCodePoints` from `@developer-os/workflow-schema`.
 - Produces: `PLUGIN_NAME`, `PLUGIN_TREE_SEGMENTS`, `CODEX_ROOT_SEGMENT`, `MARKETPLACE_RELATIVE_PATH`, `buildPluginTree(skills)`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -1174,12 +1174,12 @@ describe("buildPluginTree", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [x] **Step 2: Run it and confirm it fails**
 
 Run: `pnpm vitest run packages/adapter-codex/src/plugin.test.ts`
 Expected: FAIL — the module does not exist.
 
-- [ ] **Step 3: Implement `plugin.ts`**
+- [x] **Step 3: Implement `plugin.ts`**
 
 ```ts
 export const PLUGIN_NAME = "developer-os";
@@ -1204,12 +1204,12 @@ The manifest carries `name`, `version`, `description` and `skills` and nothing e
 
 **No `hooks/hooks.json`** — see the plan's opening decisions.
 
-- [ ] **Step 4: Run the tests and confirm they pass**
+- [x] **Step 4: Run the tests and confirm they pass**
 
 Run: `pnpm vitest run packages/adapter-codex/src/plugin.test.ts`
 Expected: PASS, 7 tests.
 
-- [ ] **Step 5: Run the gate and commit**
+- [x] **Step 5: Run the gate and commit**
 
 ```bash
 npm run check
@@ -1231,7 +1231,7 @@ git commit -m "feat(adapter-codex): the minimal manifest, and a tree that refuse
 **Interfaces:**
 - Produces: `MARKETPLACE_NAME`, `renderMarketplace(context: { home: string }): RenderedArtifact` whose `path` is `MARKETPLACE_RELATIVE_PATH` — relative to `<product-home>/codex`, the same root every other artifact in this adapter is relative to.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { posix } from "node:path";
@@ -1284,12 +1284,12 @@ describe("renderMarketplace", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [x] **Step 2: Run it and confirm it fails**
 
 Run: `pnpm vitest run packages/adapter-codex/src/marketplace.test.ts`
 Expected: FAIL — the module does not exist.
 
-- [ ] **Step 3: Implement `marketplace.ts`**
+- [x] **Step 3: Implement `marketplace.ts`**
 
 ```json
 {
@@ -1305,12 +1305,12 @@ Expected: FAIL — the module does not exist.
 
 Serialize with `JSON.stringify(value, null, 2)` plus a trailing newline, so the bytes are stable and a diff is readable. Refuse a non-absolute `home` rather than emitting a path that resolves against whatever directory Codex happens to run in.
 
-- [ ] **Step 4: Run the tests and confirm they pass**
+- [x] **Step 4: Run the tests and confirm they pass**
 
 Run: `pnpm vitest run packages/adapter-codex/src/marketplace.test.ts`
 Expected: PASS, 5 tests.
 
-- [ ] **Step 5: Run the gate and commit**
+- [x] **Step 5: Run the gate and commit**
 
 ```bash
 npm run check
@@ -1380,11 +1380,11 @@ export function proposeCodexUninstall(
 ): CodexInstallProposal;
 ```
 
-- [ ] **Step 1: Read the authority before writing a line**
+- [x] **Step 1: Read the authority before writing a line**
 
 `packages/core/src/plans/types.ts` defines `ChangePlanOperationV1`; `packages/core/src/manifest/types.ts:18-30` defines `ManagedArtifactV1`, which requires **eleven** fields — `owner`, `path`, `kind`, `productVersion`, `existedBefore`, `beforeHash`, `backupRelativePath`, `installedHash`, `source`, `mergeStrategy`, `verifiedAt`. `validateChangePlan` is **async, takes a context, and throws on refusal**: `validateChangePlan(value: unknown, context: ChangePlanContext): Promise<ChangePlanV1>` (`packages/core/src/plans/validate.ts:261`). A hash is a bare 64-character lowercase hex string — `/^[a-f0-9]{64}$/` at `validate.ts:102` — never `sha256:`-prefixed. **`packages/adapter-claude/src/install.test.ts` already builds the manifest and `planContext` fixtures this task needs; copy them.**
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -1535,23 +1535,23 @@ describe("proposeCodexUninstall", () => {
 });
 ```
 
-- [ ] **Step 3: Run it and confirm it fails**
+- [x] **Step 3: Run it and confirm it fails**
 
 Run: `pnpm vitest run packages/adapter-codex/src/install.test.ts`
 Expected: FAIL — the module does not exist.
 
-- [ ] **Step 4: Implement `install.ts`**
+- [x] **Step 4: Implement `install.ts`**
 
 `packages/adapter-claude/src/install.ts` is the reference for the proposal half — `resolveWithin`, the `create`/`replace` decision, `mergeStrategy: "dedicated"` — with `owner: "codex"` and the root built from `PLUGIN_TREE_SEGMENTS`. A `remove` needs `source: ""`, `proposedHash: null` and the real prior hash, which the validator checks.
 
 `registration` is new: an ordered list of `codex` argv arrays the caller runs in the apply phase, never a shell string. The adapter does not run them — it does not spawn processes (spec §2.3) — it proposes them exactly as it proposes file operations.
 
-- [ ] **Step 5: Run the tests and confirm they pass**
+- [x] **Step 5: Run the tests and confirm they pass**
 
 Run: `pnpm vitest run packages/adapter-codex/src/install.test.ts`
 Expected: PASS, 13 tests.
 
-- [ ] **Step 6: Run the gate and commit**
+- [x] **Step 6: Run the gate and commit**
 
 ```bash
 npm run check
@@ -1602,7 +1602,7 @@ export function invokeCodex(
 ): Promise<CodexRunResult>;
 ```
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 The file needs three fixtures before any case, and the two blocks below use all three:
 
@@ -1706,12 +1706,12 @@ describe("the three refused flags, and the sandbox that is never full access", (
 });
 ```
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [x] **Step 2: Run it and confirm it fails**
 
 Run: `pnpm vitest run packages/adapter-codex/src/invoke.test.ts`
 Expected: FAIL — the module does not exist.
 
-- [ ] **Step 3: Implement `invoke.ts`**
+- [x] **Step 3: Implement `invoke.ts`**
 
 The argv is spec §7's:
 
@@ -1769,12 +1769,12 @@ whichever subsystem executes the verb, which is DOS-P6. This adapter constrains 
 whatever schema it is handed and validates what comes back; a missing file is the caller's error
 and surfaces as a non-zero exit, not as a malformed result.
 
-- [ ] **Step 4: Run the tests and confirm they pass**
+- [x] **Step 4: Run the tests and confirm they pass**
 
 Run: `pnpm vitest run packages/adapter-codex/src/invoke.test.ts`
 Expected: PASS, 16 tests.
 
-- [ ] **Step 5: Run the gate and commit**
+- [x] **Step 5: Run the gate and commit**
 
 ```bash
 npm run check
@@ -1796,7 +1796,7 @@ git commit -m "feat(adapter-codex): a sandbox from the declared scopes, and one 
 **Interfaces:**
 - Produces: `renderCodexPlugin(contracts)`, `renderCodexInstallTree(contracts, context)`, `CodexAdapter`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 import { readdir, readFile } from "node:fs/promises";
@@ -1878,7 +1878,7 @@ describe("the package's public door", () => {
 });
 ```
 
-- [ ] **Step 2: Run it, confirm it fails, implement, rerun**
+- [x] **Step 2: Run it, confirm it fails, implement, rerun**
 
 `compose.ts` holds `renderCodexPlugin(contracts)` — find `shared`, render all six through `CodexRenderer`, hand the skills to `buildPluginTree` — and `renderCodexInstallTree(contracts, { home })`, which is that tree **plus** the marketplace descriptor, every path relative to `<product-home>/codex`. The second is what Task 11's proposal consumes and Task 17 installs; without it, nothing joins the two halves.
 
@@ -1894,7 +1894,7 @@ prefixes, not just the count. `renderCodexPlugin` keeps its own root and is what
 
 Expected: FAIL then PASS — three cases plus the four-name re-export guard.
 
-- [ ] **Step 3: Run the gate and commit**
+- [x] **Step 3: Run the gate and commit**
 
 ```bash
 npm run check
