@@ -20,6 +20,9 @@
       "path": "./packages/adapter-claude"
     },
     {
+      "path": "./packages/adapter-codex"
+    },
+    {
       "path": "./apps/cli"
     },
     {
