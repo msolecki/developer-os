@@ -130,9 +130,10 @@ describe("ClaudeRenderer", () => {
   });
 
   /**
-   * `workflow-schema.md` §8.7: the compiler deliberately does not screen
-   * contract fields, because they are payload rather than message. The first
-   * surface to display one owns screening it, and this is that surface.
+   * `workflow-schema.md` §8.7, amended 2026-08-12: the render seam is
+   * `renderSkillBody`, not this adapter — `ClaudeRenderer.render` never
+   * touches `recovery.resume` itself, only forwards it there. This pins that
+   * the screening survived the move, through the adapter's own render path.
    */
   it("screens a format character out of a contract field at the render seam", () => {
     const { contents } = render(
@@ -245,6 +246,8 @@ describe("ClaudeRenderer refusals found by review", () => {
     expect(line).toBeDefined();
     expect(line).toContain("…");
     expect(line?.length).toBeLessThan(longDescription.length);
+    const quoted = JSON.stringify(`${"d".repeat(SKILL_FIELD_CAP)}…`);
+    expect(line).toBe(`description: ${quoted}`);
   });
 
   /**

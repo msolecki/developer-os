@@ -119,9 +119,9 @@ describe("renderSkillBody", () => {
   });
 
   /**
-   * `workflow-schema.md` §8.7: the compiler deliberately does not screen
-   * contract fields, because they are payload rather than message. The first
-   * surface to display one owns screening it, and this is that surface.
+   * `workflow-schema.md` §8.7, amended 2026-08-12: rendering the body is now
+   * this package's job, and `renderSkillBody` screens a contract field as it
+   * assembles that body — this is the seam that moved here from the adapters.
    */
   it("screens a format character out of a contract field at the render seam", () => {
     const { contents } = render(
