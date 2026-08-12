@@ -2170,15 +2170,23 @@ Point `CODEX_HOME` and `HOME` at temporary directories, write `renderCodexInstal
 
 Pass the parent's `PATH` through rather than pinning `/usr/bin:/bin`: an npm-installed CLI with an `env node` shebang fails to spawn under a pinned `PATH`, which converts "installed differently" into "broken".
 
-- [ ] **Step 2b: Settle the JSONL terminal event, which Task 12 could only guess at**
+- [ ] **Step 2b: the JSONL terminal event — DEFERRED by the founder, 2026-08-12, and not attempted**
 
-Run one `codex exec --json --output-schema <file>` and **capture the raw stdout**. Task 12 reduces
-the stream by taking the last line that parses as JSON, because §14.1 documents the output as JSONL
-and documents no event vocabulary. Record what the events actually are, whether the model's final
-response is the last line, and whether it carries a discriminating field worth filtering on. Amend
-§14.1 with the observed shape, dated, and correct `invoke.ts`'s provisional docblock to match. **If
-the last-line rule is wrong, this is where it is found** — it cannot be found anywhere else, and
-shipping it unverified was the deliberate choice recorded in Task 12.
+Settling this needs one real `codex exec --json --output-schema <file>` run, which **invokes a model
+on the founder's credentials and costs money**. Every other command in this task is plugin
+management: offline, free, and confined to a temporary `CODEX_HOME`. The founder scoped Task 17 to
+those and declined the exec probe.
+
+**So the last-line reduction ships unverified, and this is the one thing DOS-P5 could not check.**
+Task 12 reduces the stream by taking the last line that parses as a non-null JSON object, because
+§14.1 documents the output as JSONL and documents no event vocabulary. Whether the model's final
+response really is the last such line is unknown, and no test in this repository can establish it.
+
+**Owner: DOS-P6**, as the first subsystem that actually executes a verb through `invokeCodex`. What
+it must do: capture raw stdout from one real run, record whether the final response is the last
+parsing line and whether it carries a discriminating field worth filtering on, amend §14.1 with the
+observed shape, dated, and correct `invoke.ts`'s provisional docblock. Until then the docblock at
+that seam is the honest statement of what is known. Do not quietly promote the rule to verified.
 
 - [ ] **Step 3: Record what was observed about hooks**
 
