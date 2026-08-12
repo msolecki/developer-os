@@ -1,13 +1,14 @@
 import * as nodeFs from "node:fs/promises";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import { EXIT_CODES } from "@developer-os/core";
+import { PLUGIN_TREE_PREFIX, proposeCodexInstall } from "@developer-os/adapter-codex";
 import { MacOsPlatformDiscoveryError } from "@developer-os/platform-macos";
 import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 
-import { runDoctor, runDoctorReport } from "./doctor.js";
+import { codexPluginRoot, runDoctor, runDoctorReport } from "./doctor.js";
 import { runInit } from "./init.js";
 import {
   createCommandFixture,
@@ -337,5 +338,43 @@ describe("agent discovery that refuses", () => {
     expect(report.checks.find((check) => check.id === "agents")?.status).toBe(
       "fail",
     );
+  });
+});
+
+/**
+ * `codexPluginRoot` computes the Codex plugin root independently of
+ * `packages/adapter-codex/src/install.ts`'s `marketplaceRoot` — same product
+ * home, different path module (platform `join` here, `posix.join` there).
+ * `doctor` never sets `probe: true`, so nothing exercises this value against
+ * anything; the Claude-side twin of exactly this failure (dead until the
+ * probe flips on, then wrong) was fixed elsewhere in this branch, and this
+ * pins the Codex side so it cannot regress the same way unnoticed.
+ *
+ * The expectation is derived from `proposeCodexInstall`'s own output — the
+ * plugin manifest's `targetPath`, walked up two directories — rather than
+ * restated as a second literal, so the two computations can never drift
+ * apart silently.
+ */
+describe("codexPluginRoot", () => {
+  it("names the same directory proposeCodexInstall targets for the plugin manifest", async () => {
+    const fixture = await createCommandFixture("doctor-codex-plugin-root");
+    const manifestRelativePath = posix.join(
+      PLUGIN_TREE_PREFIX,
+      ".codex-plugin/plugin.json",
+    );
+    const proposal = proposeCodexInstall(
+      [{ path: manifestRelativePath, contents: "{}" }],
+      { home: fixture.context.paths.home, productVersion: "0.0.0" },
+    );
+    const manifestOperation = proposal.operations.find(
+      (operation) => operation.source === manifestRelativePath,
+    );
+    expect(manifestOperation).toBeDefined();
+    if (manifestOperation === undefined) return;
+
+    const targetedRoot = posix.dirname(
+      posix.dirname(manifestOperation.targetPath),
+    );
+    expect(codexPluginRoot(fixture.context)).toBe(targetedRoot);
   });
 });
