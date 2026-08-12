@@ -45,4 +45,17 @@ describe("renderMarketplace", () => {
   it("is byte-identical across two renders", () => {
     expect(renderMarketplace({ home })).toEqual(renderMarketplace({ home }));
   });
+
+  /**
+   * Every other assertion in this file parses the JSON first, so the
+   * serialization format itself was unpinned. This case pins the exact bytes:
+   * two-space indentation and a trailing newline. A change to plain
+   * JSON.stringify(value) would break this test and be caught immediately,
+   * keeping diffs of the descriptor readable and its serialization stable.
+   */
+  it("serializes with 2-space indent and a trailing newline for stable diffs", () => {
+    const { contents } = renderMarketplace({ home });
+    expect(contents.startsWith("{\n  \"name\"")).toBe(true);
+    expect(contents.endsWith("\n}\n")).toBe(true);
+  });
 });
