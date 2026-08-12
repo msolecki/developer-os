@@ -1326,6 +1326,31 @@ git commit -m "feat(adapter-codex): a local marketplace, resolved against a real
 
 **Why this task exists.** Spec §4.1 and §8: our tree is a Foundation `ChangePlan`, and the two `codex plugin` invocations happen in the apply phase, where their failure is a transaction failure. Spec §4.2: uninstall reverses the CLI steps *before* deleting the tree, because a marketplace registered against a directory we removed is worse than leaving both.
 
+**Amended 2026-08-12, by the founder, after this plan contradicted itself.** The step-2 test block
+below roots every operation at `<home>/codex/plugins/developer-os`; Task 13 says
+`renderCodexInstallTree` emits the tree **plus** the marketplace descriptor with every path relative
+to `<product-home>/codex`, and that Task 11's proposal consumes it. Those roots differ, and the
+consequence was concrete: nothing ever proposed writing the descriptor, so `registration[0]` — which
+already points `codex plugin marketplace add` at `<home>/codex` — would have registered a directory
+containing no `marketplace.json`.
+
+**Both proposals now resolve against the marketplace root, `<home>/codex`.** A tree artifact is
+`plugins/developer-os/...` relative to it; the descriptor is `.agents/plugins/marketplace.json`.
+
+**This re-root fails silently if it is ever undone, and that is worth knowing.** The old root is a
+*descendant* of the new one, so codex-root-relative paths fed to the old code do not refuse —
+containment passes and everything double-nests, `<home>/codex/plugins/developer-os/plugins/developer-os/skills/…`,
+and it applies cleanly. Containment is not the guard here; the root constant is.
+
+Three things landed with the re-root, in `c67afba`. **`proposedHash` and `source` were pinned by
+nothing** — the hashed bytes could be changed from `artifact.contents` to `artifact.path` and all
+fourteen tests passed, while that hash is what the manifest carries and what verify and drift later
+compare against. **`CodexInstallProposal` gained a fifth field**, `registrationPhase`, because one
+type served both directions and an apply-phase caller had to infer the ordering from which function
+it called; getting it backwards on uninstall is the failure spec §4.2 names. And **uninstall now
+uses the same containment check as install**, rather than a raw string prefix, and refuses to
+propose removing an artifact whose manifest `owner` is not this adapter's.
+
 **Files:**
 - Create: `packages/adapter-codex/src/install.ts`, `src/install.test.ts`
 
@@ -1840,6 +1865,14 @@ describe("the package's public door", () => {
 - [ ] **Step 2: Run it, confirm it fails, implement, rerun**
 
 `compose.ts` holds `renderCodexPlugin(contracts)` — find `shared`, render all six through `CodexRenderer`, hand the skills to `buildPluginTree` — and `renderCodexInstallTree(contracts, { home })`, which is that tree **plus** the marketplace descriptor, every path relative to `<product-home>/codex`. The second is what Task 11's proposal consumes and Task 17 installs; without it, nothing joins the two halves.
+
+**Task 11's root was settled by the founder on 2026-08-12 and this function must match it.**
+`proposeCodexInstall` resolves against `<home>/codex`, so `renderCodexInstallTree` re-roots every
+artifact `renderCodexPlugin` produced by prefixing `PLUGIN_TREE_SEGMENTS` minus its leading
+`CODEX_ROOT_SEGMENT` — `plugins/developer-os/…` — and emits the descriptor at
+`MARKETPLACE_RELATIVE_PATH`. **Get this wrong and nothing refuses**: the plugin root is a descendant
+of the marketplace root, so an un-re-rooted path double-nests and applies cleanly. Assert the
+prefixes, not just the count. `renderCodexPlugin` keeps its own root and is what Task 14 checks in.
 
 `CodexAdapter` is a frozen object binding the functions. It is a value, not a class: there is nothing to construct, and a façade with state would be a second source of truth about an installation.
 
