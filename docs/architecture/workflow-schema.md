@@ -120,6 +120,10 @@ carries both the staging flag and a real vault write — different axes, not an 
   trees cannot differ in it at all. **The byte-identity of a whole vendor artifact — body plus
   that vendor's frontmatter, path and manifest — is still owed by DOS-P4 and DOS-P5**, each
   against its own generated tree. It is recorded here so it cannot be lost with the plan.
+  **Amended 2026-08-12: both halves are paid.** DOS-P4's is proved over the six real workflows and
+  the real Claude renderer (`claude-adapter.md` §6). DOS-P5's is proved the same way over the Codex
+  renderer, and against `npm run render:claude` staying byte-identical after the shared-body move
+  (`codex-adapter.md` §6). Neither note edited this paragraph directly, so it is corrected here.
 - **`recovery.resume` is a command string that nothing in this package executes.** Whichever
   adapter first surfaces it must treat it as data to display, never as a command to run.
 - **The first `.claude/` question.** DOS-P4 settles whether small conveniences under `.claude/`
