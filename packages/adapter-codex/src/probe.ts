@@ -13,7 +13,15 @@ export interface CodexProbeDependencies {
 
 export interface CodexProbeResult {
   readonly observations: ReadonlyMap<string, ProbeObservation>;
+  /**
+   * Raw vendor value from `codex plugin list --json`.
+   * May disagree with observations; use observations as the verified fact.
+   */
   readonly resolvedPath: string | null;
+  /**
+   * Raw vendor value from `codex plugin list --json`.
+   * May disagree with observations; use observations as the verified fact.
+   */
   readonly enabled: boolean | null;
 }
 
