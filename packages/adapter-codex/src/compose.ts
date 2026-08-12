@@ -64,9 +64,12 @@ export function renderCodexPlugin(
  *
  * The descriptor comes from `renderMarketplace(context)` unmodified — its own
  * path, `MARKETPLACE_RELATIVE_PATH`, is already relative to the marketplace
- * root, and `context.home` is the **product** home, the same value
- * `renderMarketplace` joins the full `PLUGIN_TREE_SEGMENTS` onto to build the
- * absolute path it writes into the descriptor's own contents.
+ * root. `context.home` is passed through for parity with `InstallContext`
+ * elsewhere in this adapter, but as of Task 17 (2026-08-12) `renderMarketplace`
+ * no longer writes it into the descriptor's contents: the real CLI silently
+ * drops a plugin entry whose `source.path` is absolute, so that field is now
+ * the fixed, marketplace-root-relative `./${PLUGIN_TREE_PREFIX}` — see
+ * `renderMarketplace`'s own doc comment for the observation.
  */
 export function renderCodexInstallTree(
   contracts: readonly WorkflowContractV1[],

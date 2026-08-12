@@ -43,7 +43,7 @@ describe("plugins/codex is a clean regeneration", () => {
     }
   });
 
-  it("ships no marketplace descriptor, which carries a machine path", async () => {
+  it("ships no marketplace descriptor, which belongs at the marketplace root, not the plugin root", async () => {
     expect([...(await readGeneratedTree()).keys()]).not.toContain(
       MARKETPLACE_RELATIVE_PATH,
     );

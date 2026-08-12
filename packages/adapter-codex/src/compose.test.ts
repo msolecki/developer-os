@@ -103,22 +103,20 @@ describe("renderCodexInstallTree", () => {
   });
 
   /**
-   * Path-only assertions above would stay green if `context` were re-rooted
-   * before reaching `renderMarketplace` — e.g. joining `CODEX_ROOT_SEGMENT`
-   * onto `home` a second time — because the descriptor's own *path* never
-   * changes, only the absolute path written inside its *contents*. That is
-   * exactly the seam the brief calls "get this wrong and nothing refuses":
-   * a doubled root here still applies cleanly.
+   * Task 17 (2026-08-12): the real CLI silently drops a plugin entry whose
+   * `source.path` is absolute, so the descriptor's contents point at the
+   * fixed, marketplace-root-relative `./${PLUGIN_TREE_PREFIX}` — never a
+   * `home`-derived absolute path, and never re-rooted a second time either
+   * (the doubled-root failure mode this test used to guard is now caught by
+   * the fact that only one string, `PLUGIN_TREE_PREFIX`, ever appears here).
    */
-  it("points the descriptor's contents at the product home, not a re-rooted one", () => {
+  it("points the descriptor's contents at the fixed, marketplace-root-relative plugin path", () => {
     const installed = renderCodexInstallTree(contracts, { home });
     const descriptor = installed.find((artifact) => artifact.path === MARKETPLACE_RELATIVE_PATH);
     const parsed = JSON.parse(descriptor?.contents ?? "{}") as {
       plugins: readonly { source: { path: string } }[];
     };
-    expect(parsed.plugins[0]?.source.path).toBe(
-      posix.join(home, ...PLUGIN_TREE_SEGMENTS),
-    );
+    expect(parsed.plugins[0]?.source.path).toBe(`./${PLUGIN_TREE_PREFIX}`);
   });
 
   it("returns exactly the plugin tree's artifact count plus one, the descriptor", () => {
