@@ -33,12 +33,19 @@ export interface SkillBodyOptions {
 }
 
 /**
- * The render seam.
+ * The render seam for the vendor-neutral body.
  *
- * `workflow-schema.md` §8.7: the compiler screens findings and deliberately
- * does **not** screen contract fields, because those are the payload a renderer
- * emits. The first surface to display one owns screening it, and this is that
- * surface.
+ * `workflow-schema.md` §8.7, amended 2026-08-12: this package used to screen
+ * only findings, on the theory that a contract field is payload a renderer
+ * emits rather than a message this package prints. That theory covered only
+ * findings because this package rendered nothing else. Now that
+ * `renderSkillBody` renders the body, this function *is* the screen for it —
+ * `id`, `refusals[].message`, `steps[].prose` (via `boundedProse`, below) and
+ * `recovery.resume` all pass through it before they reach an artifact.
+ * `description` is the one field that never does: it does not appear in the
+ * body at all, only in each vendor's frontmatter, so each adapter still
+ * screens its own copy — bounded by `SKILL_FIELD_CAP`, exported from this
+ * file, so two vendor trees truncate a long one at the same place.
  */
 function screen(value: string): string {
   return screenAndCap(value, SKILL_FIELD_CAP);

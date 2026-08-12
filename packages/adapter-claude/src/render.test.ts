@@ -3,6 +3,7 @@ import type {
   WorkflowContractV1,
   WorkflowOverlayV1,
 } from "@developer-os/workflow-schema";
+import { renderSkillBody, SKILL_FIELD_CAP } from "@developer-os/workflow-schema";
 import { ClaudeRenderer, SHARED_WORKFLOW_ID } from "./render.js";
 
 function contract(
@@ -167,6 +168,30 @@ describe("ClaudeRenderer", () => {
   });
 
   /**
+   * Pins the seam `render.ts`'s own docblock describes: two frontmatter
+   * lines wrapped in `---` fences, a blank line, then `renderSkillBody`'s
+   * output verbatim. Replaces a case that used to live in
+   * `workflow-schema/src/skill.test.ts` — "emits the same body for two
+   * vendors" — which called `renderSkillBody` twice with identical
+   * arguments, asserted nothing about a vendor at all, and passed against an
+   * implementation gutted to `return ["x"]`. This one imports
+   * `renderSkillBody` itself, so the adapter cannot start post-processing the
+   * body without this failing.
+   */
+  it("is exactly its frontmatter, a blank line, and renderSkillBody's own output, joined", () => {
+    const body = renderSkillBody(contract(), null, { shared });
+    const expected = `${[
+      "---",
+      'name: "developer-os-capture"',
+      'description: "capture a learning"',
+      "---",
+      "",
+      ...body,
+    ].join("\n")}\n`;
+    expect(render().contents).toBe(expected);
+  });
+
+  /**
    * There is deliberately no "renders no absolute machine path" test here.
    *
    * The rule (spec §6, §10) is that *this adapter* never constructs one — hook
@@ -202,6 +227,24 @@ describe("ClaudeRenderer refusals found by review", () => {
   it("quotes a description that would otherwise parse as a comment", () => {
     const { contents } = render(contract({ description: "# nothing" }));
     expect(contents).toContain('description: "# nothing"');
+  });
+
+  /**
+   * `SKILL_FIELD_CAP` is exported from the compiler so both vendors truncate
+   * a long `description` at the same place, and every other case in this
+   * file uses a short one. This pins the bound itself: a description longer
+   * than the cap must come out bounded, with the ellipsis `screenAndCap`
+   * appends on truncation, rather than reaching the frontmatter whole.
+   */
+  it("truncates a description longer than SKILL_FIELD_CAP, with an ellipsis", () => {
+    const longDescription = "d".repeat(SKILL_FIELD_CAP + 500);
+    const { contents } = render(contract({ description: longDescription }));
+    const line = contents
+      .split("\n")
+      .find((candidate) => candidate.startsWith("description: "));
+    expect(line).toBeDefined();
+    expect(line).toContain("…");
+    expect(line?.length).toBeLessThan(longDescription.length);
   });
 
   /**

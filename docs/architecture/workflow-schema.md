@@ -205,11 +205,31 @@ support becomes observable.
    a message this package prints. `recovery.resume` is the one to watch: it is a *command string*
    that nothing executes today, and the moment a surface prints it as "run this to recover", an
    author-controlled shell line has reached a terminal. **Owner: DOS-P4/P5.**
+
+   **Amended 2026-08-12, when the skill body moved into this package (`src/skill.ts`).** That
+   changed the premise above for four of the five fields: `id`, `refusals[].message`,
+   `steps[].prose` and `recovery.resume` are now screened at the render seam — `renderSkillBody`'s
+   `screen` (and, for prose, `boundedProse`) — because rendering the body is now this package's
+   job, not only the adapters'. `description` is the one field that still passes through here
+   unscreened: `renderSkillBody` never puts it in the body, only each vendor's frontmatter does,
+   so each adapter still screens its own copy, bounded by this package's exported
+   `SKILL_FIELD_CAP` so two vendor trees truncate a long one at the same place. `validators` is
+   likewise unrendered by `renderSkillBody` and stays whichever future surface's problem first
+   displays it. **Owner: DOS-P4/P5, narrowed to `description` and `validators`; the other three
+   fields are discharged.**
 8. **"Nothing interprets the input" is proved for validation and unproved for rendering.** The
    `prompt-injection` fixture shows an injected instruction surviving validation as inert data.
    The determinism stub renders only a source marker and step ids, so no test shows what happens
    when free text reaches a real vendor artifact an agent reads as instructions. Scope the claim
    that way rather than generally.
+
+   **Amended 2026-08-12.** `src/skill.test.ts` now covers this for the vendor-neutral body: 39
+   cases render hostile free text — forged Markdown headings, fence runs that would swallow the
+   recovery warning, an RTL override, oversized prose and preamble, a hostile overlay step key —
+   through `renderSkillBody` into the actual joined artifact and assert what a reader would see.
+   The claim is proved for the body that is byte-identical across vendors; a vendor's own
+   frontmatter (`description`) is each adapter's to prove, and
+   `packages/adapter-claude/src/render.test.ts` covers Claude's.
 9. **Over-declaring a capability is not an error, though over-declaring a scope is.**
    `validate.ts` checks only that a required capability is declared, never that a declared one is
    required — so §6's equality argument has no counterpart for capabilities. None of the six

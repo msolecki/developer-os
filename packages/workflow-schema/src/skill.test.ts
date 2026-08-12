@@ -150,18 +150,6 @@ describe("renderSkillBody", () => {
     expect(second).toEqual(first);
   });
 
-  /**
-   * The reason this function left the Claude adapter: the body is one
-   * contract's content, not a vendor's behaviour, so two vendors asking for it
-   * must get the same lines rather than two renderers that happen to agree.
-   */
-  it("emits the same body for two vendors, because the body is not vendor behaviour", () => {
-    const first = renderSkillBody(contract(), null, { shared });
-    const second = renderSkillBody(contract(), null, { shared });
-    expect(second).toEqual(first);
-    expect(first.length).toBeGreaterThan(0);
-  });
-
   it("emits a non-empty artifact, so a scan of it cannot pass on nothing", () => {
     const { contents } = render();
     expect(contents.length).toBeGreaterThan(0);
