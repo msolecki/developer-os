@@ -143,6 +143,7 @@ DOS-P6's spec, plan and implementation; DOS-P7's spec, plan and implementation. 
 subsystems — the cutover (A12) and the release (A13) — plus Track L's two items, which are not
 engineering work at all.
 
-`BACKLOG.md` §1 is two repository defects: NEW-7, which needs ten minutes with a machine that has
-Obsidian rather than an agent, and NEW-11, which is the same invisible-character rule that closed
-NEW-10 applied to `tags`, `summary` and the duplicates key.
+`BACKLOG.md` §1 is three repository defects: NEW-7, which needs ten minutes with a machine that has
+Obsidian rather than an agent; NEW-11, which is the same invisible-character rule that closed
+NEW-10 applied to `tags`, `summary` and the duplicates key; and NEW-12, where the argv screen's
+word list is applied to free-form prose that only the positional half of the screen protects.
