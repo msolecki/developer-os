@@ -291,6 +291,15 @@ contract fields by design, so the first surface to display one owns screening it
 emitted into `hooks.json`, never into a command, and never into anything a `!` prefix or a tool
 call could reach.
 
+**Amended 2026-08-12.** `workflow-schema.md` §8.7 carries its own amendment, dated the same day:
+the skill body — and the screening seam described above — moved into the compiler's
+`renderSkillBody` (`packages/workflow-schema/src/skill.ts`) when the body stopped being vendor
+behaviour. `ClaudeRenderer.render` no longer touches `recovery.resume` at all; it forwards the
+contract to `renderSkillBody`, which screens it along with `id`, `refusals[].message` and
+`steps[].prose` before this adapter ever sees the rendered body. What `ClaudeRenderer` still
+screens is only the field it renders itself outside that body: `description`, in the frontmatter
+(`yamlScalar` in `render.ts`), bounded by the compiler's exported `SKILL_FIELD_CAP`.
+
 ### 7.3 Byte-identity — the debt DOS-P3 handed over
 
 `workflow-schema.md` §6 records that product spec §13's requirement that six workflows "render

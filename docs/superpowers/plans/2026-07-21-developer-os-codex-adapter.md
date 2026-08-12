@@ -22,7 +22,10 @@
 - **`transcript_path` is never opened**, on any code path (spec §2.4).
 - **Three flags are refused on every path**: `--dangerously-bypass-approvals-and-sandbox`, `--dangerously-bypass-hook-trust`, `--ignore-user-config` (spec §7.2). Asserted by test, not by convention. `danger-full-access` is never passed as a sandbox mode (§7.1).
 - Redact before truncating, hashing, logging, or sending to a model.
-- Screen `recovery.resume` at the render seam; it is inert text, never a command (spec §6.2).
+- `recovery.resume` is inert text, never a command, screened inside the compiler's
+  `renderSkillBody` before either adapter sees it (spec §6.2, amended 2026-08-12). Do not screen
+  it again in `adapter-codex` — that would duplicate the seam. This package's own renderer screens
+  only `description`, the one field it renders itself, bounded by the compiler's `SKILL_FIELD_CAP`.
 - No absolute machine path in any artifact checked into this repository.
 - Every scan asserts a non-empty set, per scope. A gate that can pass by scanning nothing is not a gate.
 - Exact-path staging. Never `git add -A`. Before every commit: `npm run check`. Show failures only.

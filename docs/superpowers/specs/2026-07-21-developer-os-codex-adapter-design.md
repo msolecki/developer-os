@@ -218,6 +218,16 @@ payload, so the first surface to display one owns screening it. The renderer emi
 marked as text to read rather than run, screened through `packages/security`, and never into
 `hooks.json` or any command position.
 
+**Amended 2026-08-12.** `workflow-schema.md` §8.7 carries its own amendment, dated the same day:
+the skill body — and the screening seam that goes with it — moved into the compiler's
+`renderSkillBody` (`packages/workflow-schema/src/skill.ts`) when the body stopped being vendor
+behaviour. `recovery.resume`, along with `id`, `refusals[].message` and `steps[].prose`, is
+screened there, before either renderer sees it. `CodexRenderer` must not screen it again — a
+second copy of the same seam is the exact duplication this design exists to avoid. What
+`CodexRenderer` still screens is only the field it renders itself outside that body:
+`description`, in the frontmatter, bounded by the compiler's exported `SKILL_FIELD_CAP` so both
+vendor trees truncate a long one at the same place.
+
 ### 6.3 Byte-identity — the other half of DOS-P3's debt
 
 `workflow-schema.md` §6 assigned the byte-identity of real vendor artifacts to DOS-P4 **and**
