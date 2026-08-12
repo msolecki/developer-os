@@ -18,6 +18,7 @@ export type {
   ProcessRunner,
 } from "./process.js";
 export { capGraphemes, screenAndCap, screenControlCharacters } from "./screen.js";
+export { boundedProse, fenced, screenParagraphs } from "./markdown.js";
 
 export interface SecurityPolicy {
   assertReadable(path: string): Promise<void>;
