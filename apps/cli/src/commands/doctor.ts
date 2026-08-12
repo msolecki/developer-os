@@ -18,10 +18,12 @@ import type {
   RuntimePaths,
 } from "@developer-os/core";
 import { PLUGIN_INSTALL_SEGMENTS } from "@developer-os/adapter-claude";
+import { PLUGIN_TREE_SEGMENTS } from "@developer-os/adapter-codex";
 import { MacOsPlatformDiscoveryError } from "@developer-os/platform-macos";
 import type { AgentDiscovery, AgentName } from "@developer-os/platform-macos";
 
 import { reportClaudeCapabilities } from "./claude-capabilities.js";
+import { reportCodexCapabilities } from "./codex-capabilities.js";
 import { exitCodeOf, runtimePathsFor } from "../context.js";
 import type { CliContext } from "../context.js";
 
@@ -277,6 +279,43 @@ async function checkClaudeCapabilities(context: CliContext): Promise<Finding> {
   return pass(
     "claude-capabilities",
     `${report.summary} capture-via=${report.captureVia}`,
+    [],
+  );
+}
+
+/**
+ * Codex's half of the same check. Reports and never refuses, for the reason
+ * `checkClaudeCapabilities` above records.
+ *
+ * **The plugin root is under the *product* home, not the user's home** — the
+ * mirror image of the bug fixed above, where the product home was used for a
+ * path under the user's home. `install.ts`'s `marketplaceRoot` resolves
+ * `PLUGIN_TREE_SEGMENTS` against `InstallContext.home`, which callers supply
+ * as the product home (`checkProductHome` and every other check here read it
+ * as `paths.home`); `PLUGIN_TREE_SEGMENTS` already carries the full path from
+ * that root to the plugin tree itself, `<product-home>/codex/plugins/developer-os`.
+ * `context.paths.home` is used rather than a `paths` argument because
+ * `resolveRuntimePaths` computes `home` from the environment alone —
+ * configuration can only move the vault path — so `context.paths.home` and a
+ * freshly resolved value are always equal.
+ */
+async function checkCodexCapabilities(context: CliContext): Promise<Finding> {
+  let executablePath: string | null = null;
+  try {
+    const agents = await discoverAgents(context);
+    const codex = agents.find((agent) => agent.name === "codex");
+    executablePath = codex?.installed === true ? codex.executablePath : null;
+  } catch {
+    executablePath = null;
+  }
+  const report = await reportCodexCapabilities({
+    executablePath,
+    runner: context.runner,
+    pluginRoot: join(context.paths.home, ...PLUGIN_TREE_SEGMENTS),
+  });
+  return pass(
+    "codex-capabilities",
+    `${report.summary} capture-via=${report.captureVia} recovery=${report.recovery}`,
     [],
   );
 }
@@ -581,6 +620,9 @@ async function collectFindings(
     await guarded(context, "agents", [], () => checkAgents(context)),
     await guarded(context, "claude-capabilities", [], () =>
       checkClaudeCapabilities(context),
+    ),
+    await guarded(context, "codex-capabilities", [], () =>
+      checkCodexCapabilities(context),
     ),
   ];
 }

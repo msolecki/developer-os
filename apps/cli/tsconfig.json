@@ -12,6 +12,9 @@
       "path": "../../packages/adapter-claude"
     },
     {
+      "path": "../../packages/adapter-codex"
+    },
+    {
       "path": "../../packages/brain"
     },
     {
