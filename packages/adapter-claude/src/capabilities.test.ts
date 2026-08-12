@@ -90,4 +90,32 @@ describe("resolveCapabilities", () => {
     const resolved = resolveCapabilities("2.1.216", observed([]));
     expect(Object.values(resolved)).not.toContain("yes");
   });
+
+  /**
+   * Founder-ratified 2026-08-12: neither adapter ships a hooks file, and
+   * `plugin_hooks` reports `unknown` throughout — matching the `UNSETTLED`
+   * list on the Codex adapter's own `capabilities.ts`. `unknown` is what the
+   * model does with a fact nobody has established;
+   * `wrapper-required` would claim we asked and got an answer nobody gave.
+   */
+  it("reports plugin_hooks as unknown, matching the Codex adapter, because this adapter ships no hooks file either", () => {
+    const resolved = resolveCapabilities(
+      "2.1.216",
+      observed([["skills", "observed"]]),
+    );
+    expect(resolved.plugin_hooks).toBe("unknown");
+  });
+
+  /**
+   * Precedence: UNSETTLED beats any observation. If a refactor moved the
+   * observation lookup above the UNSETTLED check, a stray observation
+   * reporting `plugin_hooks` as "observed" would incorrectly become "yes".
+   */
+  it("returns unknown for plugin_hooks even if the probe reported observed", () => {
+    const resolved = resolveCapabilities(
+      "2.1.216",
+      observed([["plugin_hooks", "observed"]]),
+    );
+    expect(resolved.plugin_hooks).toBe("unknown");
+  });
 });

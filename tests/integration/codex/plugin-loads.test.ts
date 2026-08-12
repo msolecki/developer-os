@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ManagedArtifactV1 } from "@developer-os/core";
 import {
+  CODEX_ROOT_SEGMENT,
   PLUGIN_NAME,
   PLUGIN_TREE_SEGMENTS,
   proposeCodexInstall,
@@ -331,7 +332,7 @@ describe("the generated install tree against a real Codex installation", () => {
     "a simulated failure of the marketplace-remove step leaves the tree in place, and a real uninstall then removes it",
     async () => {
       const productHome = temporary().productHome;
-      const treeRoot = join(productHome, "codex");
+      const treeRoot = join(productHome, CODEX_ROOT_SEGMENT);
       const beforeUninstall = await inventory(productHome);
       expect(beforeUninstall.size).toBeGreaterThan(0);
 

@@ -3,17 +3,44 @@ import { describe, expect, it } from "vitest";
 import { CodexAdapter } from "./index.js";
 import * as door from "./index.js";
 
+/**
+ * Two module-specifier shapes, not the bare package-name word. The word alone
+ * matches prose too — a comment that merely *names* the sibling package, a
+ * spec quotation, a URL — and five such comments had to be reworded to
+ * satisfy the earlier version of this check. A real reference is shaped one
+ * of two ways: the scoped package name (how an import specifier or a
+ * `package.json` dependency names it), or a relative path ending in the
+ * sibling directory's name (how a `tsconfig.json` project reference names
+ * it). This repository's own references read `../../packages/<name>`, never
+ * a bare `../<name>`, so the second needle matches on the slash immediately
+ * before the directory name rather than on `../` immediately before it —
+ * matching on `../` alone would miss the exact form this repository uses.
+ *
+ * Line-based import matching was deliberately not used instead: it would miss
+ * `require`, a dynamic `import()` and a re-export, none of which the two
+ * needles below care how they are spelled.
+ *
+ * Assembled at runtime for the same reason the single needle used to be: this
+ * file is one of the files scanned, and a literal would match its own source.
+ */
+function forbiddenModuleSpecifiers(vendor: string): readonly [string, string] {
+  const segment = ["adapter", vendor].join("-");
+  return [`@developer-os/${segment}`, `/${segment}`];
+}
+
 describe("the package's public door", () => {
   it("exports exactly what spec §11 names, and nothing else", () => {
     expect(Object.keys(door).sort()).toEqual(
       [
         "CODEX_CAPABILITY_KEYS",
         "CODEX_MINIMUM_VERSION",
+        "CODEX_ROOT_SEGMENT",
         "CodexAdapter",
         "CodexRenderer",
         "MARKETPLACE_NAME",
         "MARKETPLACE_RELATIVE_PATH",
         "PLUGIN_NAME",
+        "PLUGIN_TREE_PREFIX",
         "PLUGIN_TREE_SEGMENTS",
         "SHARED_WORKFLOW_ID",
         "buildPluginTree",
@@ -95,19 +122,16 @@ describe("the package's public door", () => {
 
   /**
    * Spec §1, asserted across the package rather than one file.
-   *
-   * The needle is assembled at runtime because this file is one of the files
-   * scanned: written as a literal, the assertion matches its own source and the
-   * test can never pass.
    */
   it("imports nothing from the Claude adapter, anywhere in the package", async () => {
-    const forbidden = ["adapter", "claude"].join("-");
+    const [scoped, relative] = forbiddenModuleSpecifiers("claude");
     const files = await readdir(new URL(".", import.meta.url), { recursive: true });
     const sources = files.filter((name) => name.endsWith(".ts"));
     expect(sources.length).toBeGreaterThan(0);
     for (const name of sources) {
       const source = await readFile(new URL(name, import.meta.url), "utf8");
-      expect(source, name).not.toContain(forbidden);
+      expect(source, name).not.toContain(scoped);
+      expect(source, name).not.toContain(relative);
     }
   });
 
@@ -120,7 +144,7 @@ describe("the package's public door", () => {
    * importing each other) is a manifest fact as much as a source fact.
    */
   it("does not depend on the Claude adapter in its package manifest or tsconfig", async () => {
-    const forbidden = ["adapter", "claude"].join("-");
+    const [scoped, relative] = forbiddenModuleSpecifiers("claude");
     const packageJson = await readFile(
       new URL("../package.json", import.meta.url),
       "utf8",
@@ -131,7 +155,9 @@ describe("the package's public door", () => {
     // otherwise let it.
     expect(packageJson.length).toBeGreaterThan(0);
     expect(tsconfig.length).toBeGreaterThan(0);
-    expect(packageJson).not.toContain(forbidden);
-    expect(tsconfig).not.toContain(forbidden);
+    expect(packageJson).not.toContain(scoped);
+    expect(packageJson).not.toContain(relative);
+    expect(tsconfig).not.toContain(scoped);
+    expect(tsconfig).not.toContain(relative);
   });
 });

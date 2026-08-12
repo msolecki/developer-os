@@ -5,6 +5,7 @@ import type {
   ChangePlanOperationV1,
   ManagedArtifactV1,
 } from "@developer-os/core";
+import { compareCodePoints } from "@developer-os/workflow-schema";
 import type { RenderedArtifact } from "@developer-os/workflow-schema";
 import { PLUGIN_INSTALL_SEGMENTS } from "./plugin.js";
 
@@ -115,7 +116,7 @@ export function proposeClaudeUninstall(
   const root = pluginRoot(context);
   const owned = [...managed.values()]
     .filter((artifact) => artifact.path.startsWith(`${root}/`))
-    .sort((left, right) => (left.path < right.path ? -1 : 1));
+    .sort((left, right) => compareCodePoints(left.path, right.path));
 
   if (owned.length === 0) {
     throw new Error("refusing to propose an empty uninstall plan");
