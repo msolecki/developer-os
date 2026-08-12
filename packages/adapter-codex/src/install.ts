@@ -90,10 +90,10 @@ function containedWithin(root: string, candidate: string): string | undefined {
 }
 
 /**
- * Checked here rather than trusted from the renderer, matching the Claude
- * adapter's `install.ts`'s `resolveWithin`: this is the
- * boundary where a relative path becomes a real filesystem write, and it is
- * worth holding even though `buildPluginTree` already refuses a non-slug id
+ * Checked here rather than trusted from the renderer, matching
+ * `resolveWithin` in the Claude adapter's `install.ts`: this is the boundary
+ * where a relative path becomes a real filesystem write, and it is worth
+ * holding even though `buildPluginTree` already refuses a non-slug id
  * upstream.
  */
 function resolveWithin(root: string, relative: string): string {
