@@ -2061,7 +2061,7 @@ git commit -m "test(adapter-codex): pay the other half of DOS-P3's byte-identity
 - Modify: `apps/cli/src/commands/doctor.ts`, `apps/cli/package.json` (dependency on `@developer-os/adapter-codex`), `apps/cli/tsconfig.json` (project reference)
 - Modify: `tests/e2e/foundation.test.ts` — **the ordered check-id list is asserted in two places; both must be updated**
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `apps/cli/src/commands/claude-capabilities.test.ts` is the reference for the fixtures — it defines the `runner()` and `version()` helpers this test needs, and they can be copied. Cases:
 
@@ -2122,17 +2122,17 @@ it("does not probe unless asked, because the probe spawns the vendor's CLI", asy
 });
 ```
 
-- [ ] **Step 2: Run it, confirm it fails, implement, rerun**
+- [x] **Step 2: Run it, confirm it fails, implement, rerun**
 
 `apps/cli/src/commands/claude-capabilities.ts` is the reference, including its three branches — absent, unreadable, reported — and the reason `unreadable` exists: a binary that is there and did not answer is not absent, and one `doctor` run must not print `codex=present` and `codex=absent` about the same file.
 
 The plugin root is `join(context.userHome, ...)`? **No** — Codex's tree is under the *product* home, so it is `join(paths.home, ...PLUGIN_TREE_SEGMENTS)`. This is the mirror image of the Claude bug where the product home was used for a path under the user's home; check it against `install.ts` rather than against memory.
 
-- [ ] **Step 3: Extend the e2e assertions**
+- [x] **Step 3: Extend the e2e assertions**
 
 Add `codex-capabilities` to **both** ordered check-id lists in `tests/e2e/foundation.test.ts`, and assert that with a fake `codex` planted on `PATH` the `agents` line and the capability line agree — the contradiction the Claude side shipped once and an e2e test failed to catch because it read ids and never messages.
 
-- [ ] **Step 4: Run the gate and commit**
+- [x] **Step 4: Run the gate and commit**
 
 ```bash
 npm run check
