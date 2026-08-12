@@ -89,7 +89,7 @@ So Task 3 extracts the body into `packages/workflow-schema/src/skill.ts` and mig
 **Interfaces:**
 - Produces: `CAPABILITY_STATES`, `CapabilityState = "yes" | "wrapper-required" | "unknown"`, `PROBE_OBSERVATIONS`, `ProbeObservation = "observed" | "absent" | "unavailable"`, and `compareCodePoints(left: string, right: string): number` on `@developer-os/workflow-schema`'s door.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `packages/core/src/capabilities/capabilities.test.ts`:
 
@@ -116,12 +116,12 @@ describe("the shared capability vocabulary", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [x] **Step 2: Run it and confirm it fails**
 
 Run: `pnpm vitest run packages/core/src/capabilities/capabilities.test.ts`
 Expected: FAIL — the module does not exist.
 
-- [ ] **Step 3: Implement `packages/core/src/capabilities/index.ts`**
+- [x] **Step 3: Implement `packages/core/src/capabilities/index.ts`**
 
 ```ts
 /**
@@ -150,7 +150,7 @@ export { CAPABILITY_STATES, PROBE_OBSERVATIONS } from "./capabilities/index.js";
 export type { CapabilityState, ProbeObservation } from "./capabilities/index.js";
 ```
 
-- [ ] **Step 4: Export the ordering rule from the compiler**
+- [x] **Step 4: Export the ordering rule from the compiler**
 
 In `packages/workflow-schema/src/derive.ts`, change `function compareCodePoints` to `export function compareCodePoints`.
 
@@ -160,7 +160,7 @@ In `packages/workflow-schema/src/index.ts` there is already a line reading `expo
 export { compareCodePoints, compareScopes, deriveScopes } from "./derive.js";
 ```
 
-- [ ] **Step 5: Rewire the Claude adapter, all four files**
+- [x] **Step 5: Rewire the Claude adapter, all four files**
 
 `packages/adapter-claude/src/capabilities.ts` — delete the two local `export type` declarations and re-export them, so that `probe.ts` and `capabilities.test.ts`, which both import `ProbeObservation` **from this module**, keep working:
 
@@ -179,12 +179,12 @@ import { compareCodePoints } from "@developer-os/workflow-schema";
 
 `packages/adapter-claude/src/index.ts` — the two type re-exports it already carries now resolve through `capabilities.js` to core; no edit is needed unless `tsc` says otherwise.
 
-- [ ] **Step 6: Verify with the compiler, not with the door test**
+- [x] **Step 6: Verify with the compiler, not with the door test**
 
 Run: `npm run check`
 Expected: PASS. **`index.test.ts` cannot verify this step** — it asserts `Object.keys(module)`, and `CapabilityState`/`ProbeObservation` are type-only, so they never appear there. `tsc -b` inside `npm run lint` is what fails if a re-export is missing.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 npm run check
@@ -211,7 +211,7 @@ git commit -m "refactor(core): give both adapters one capability vocabulary and 
 **Interfaces:**
 - Produces: `screenParagraphs(value: string): readonly string[]`, `boundedProse(value: string, maxGraphemes: number): string`, `fenced(payload: string, info: string): readonly string[]`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `packages/security/src/markdown.test.ts`:
 
@@ -289,12 +289,12 @@ describe("fenced", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [x] **Step 2: Run it and confirm it fails**
 
 Run: `pnpm vitest run packages/security/src/markdown.test.ts`
 Expected: FAIL — the module does not exist.
 
-- [ ] **Step 3: Implement `packages/security/src/markdown.ts`**
+- [x] **Step 3: Implement `packages/security/src/markdown.ts`**
 
 Move `paragraphsOf`, `neutralizeBlockStart`, `boundedProse` and `fenced` out of `packages/adapter-claude/src/render.ts` **verbatim, docblocks included** — the docblocks are where the reasons live. Two changes only: `boundedProse` takes the cap as a parameter instead of closing over a module constant, and `paragraphsOf` is exported as `screenParagraphs`.
 
@@ -332,21 +332,21 @@ export function fenced(payload: string, info: string): readonly string[] {
 
 Export all three from `packages/security/src/index.ts`.
 
-- [ ] **Step 4: Rewire the Claude renderer**
+- [x] **Step 4: Rewire the Claude renderer**
 
 In `packages/adapter-claude/src/render.ts`: delete the four local functions, import the three shared ones, pass `FIELD_CAP` at each `boundedProse` call site (there are two — the step-prose branch and `recovery.leaves`), and keep `refusingParagraphs` local, now calling `screenParagraphs`. **Check the import list afterwards:** `capGraphemes` becomes unused and an unused import fails `npm run lint`.
 
-- [ ] **Step 5: Run both suites and confirm they pass unchanged**
+- [x] **Step 5: Run both suites and confirm they pass unchanged**
 
 Run: `pnpm vitest run packages/security packages/adapter-claude tests/contracts/adapters`
 Expected: PASS. **No test in `render.test.ts` may change.** If one has to, the move was not verbatim.
 
-- [ ] **Step 6: Confirm the generated tree did not move**
+- [x] **Step 6: Confirm the generated tree did not move**
 
 Run: `npm run render:claude && git diff --stat plugins/claude`
 Expected: no diff. A refactor that changes the artifact is not a refactor.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 npm run check
@@ -395,7 +395,7 @@ export function assertRenderableContract(contract: WorkflowContractV1): void;
 export function assertUsablePreamble(shared: WorkflowContractV1): void;
 ```
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `packages/workflow-schema/src/skill.test.ts` is `packages/adapter-claude/src/render.test.ts` with the frontmatter cases removed and every other case retargeted at `renderSkillBody`. Copy them: the preamble concatenation, the empty-prose refusals, the id and version refusals, the overlay cases, the fence and paragraph cases, the screening cases. They are the tests that already caught eight real defects, and they must keep failing for the same reasons here.
 
@@ -414,12 +414,12 @@ it("emits the same body for two vendors, because the body is not vendor behaviou
 });
 ```
 
-- [ ] **Step 2: Run it and confirm it fails**
+- [x] **Step 2: Run it and confirm it fails**
 
 Run: `pnpm vitest run packages/workflow-schema/src/skill.test.ts`
 Expected: FAIL — the module does not exist.
 
-- [ ] **Step 3: Implement `skill.ts` by moving, not rewriting**
+- [x] **Step 3: Implement `skill.ts` by moving, not rewriting**
 
 Everything below the closing `---` of the frontmatter in `packages/adapter-claude/src/render.ts` moves here unchanged: the source-marker line, the preamble block, the `# <id>` heading, `renderRefusals`, `renderSteps`, `renderRecovery`, `refusingParagraphs`, `bullet`, `FIELD_CAP`, and the two assertions. `assertUsablePreamble` is the constructor check DOS-P4 wrote — `shared.id` must equal `SHARED_WORKFLOW_ID`, and the preamble *prose* must be non-empty as its own scope, because a combined check passes on refusals alone and ships six artifacts with no defence.
 
@@ -452,16 +452,16 @@ export { assertRenderableContract, assertUsablePreamble, renderSkillBody, SHARED
 export type { SkillBodyOptions } from "./skill.js";
 ```
 
-- [ ] **Step 4: Reduce `ClaudeRenderer` to its vendor half**
+- [x] **Step 4: Reduce `ClaudeRenderer` to its vendor half**
 
 `packages/adapter-claude/src/render.ts` keeps `yamlScalar`, the two frontmatter lines, the artifact path, and the `WorkflowRenderer` implementation. It calls `assertUsablePreamble` in its constructor and `renderSkillBody` in `render`. It re-exports `SHARED_WORKFLOW_ID` so its own door does not change shape.
 
-- [ ] **Step 5: Run everything, and prove the artifact did not move**
+- [x] **Step 5: Run everything, and prove the artifact did not move**
 
 Run: `npm run check && npm run render:claude && git diff --stat plugins/claude`
 Expected: PASS, and **no diff**. The drift gate comparing the checked-in tree against a fresh render is the strongest available evidence that this extraction preserved behaviour byte for byte.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 npm run check
