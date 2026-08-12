@@ -61,19 +61,30 @@ import { resolveCapabilities } from "./capabilities.js";
 import { renderCodexInstallTree, renderCodexPlugin } from "./compose.js";
 import { discoverCodex } from "./discover.js";
 import { invokeCodex } from "./invoke.js";
-import { proposeCodexInstall } from "./install.js";
+import { proposeCodexInstall, proposeCodexUninstall } from "./install.js";
+import { probeCodex } from "./probe.js";
 
 /**
- * The package's only public door, bound rather than constructed. Spec §11
- * names this the interface DOS-P6 consumes instead of eleven loose functions;
- * `claude-adapter.md` §9.6 recorded that DOS-P4 shipped no equivalent façade
- * and deferred the question to "the point where a common interface has two
- * implementations" — this is that point.
+ * The bound interface DOS-P6 consumes, not eleven loose functions. Spec §11
+ * names `CodexAdapter` that interface; `claude-adapter.md` §9.6 recorded that
+ * DOS-P4 shipped no equivalent façade and deferred the question to "the
+ * point where a common interface has two implementations" — this is that
+ * point. (The file docblock above makes the "only door" claim for this
+ * package; that claim is about `index.ts`, not this one object.)
  *
  * A frozen object, not a class. There is nothing to construct — every bound
  * function is already free of instance state — and a façade that held state
  * would become a second source of truth about an installation, alongside the
  * manifest `@developer-os/core` already owns.
+ *
+ * `probe` and `capabilities` are both bound because they compose: `probe`
+ * (`probeCodex`) is the only producer of the `observations` map `capabilities`
+ * (`resolveCapabilities`) requires. A façade that bound `capabilities` alone
+ * would expose a member no façade-only consumer could ever call — its own
+ * argument would be unreachable. `proposeUninstall` (`proposeCodexUninstall`)
+ * is bound alongside `proposeInstall` for the same reason: an object with
+ * install but no uninstall is a partial lifecycle, not "the interface DOS-P6
+ * consumes".
  *
  * `renderPlugin` is `renderCodexPlugin`, not `renderCodexInstallTree` — its
  * output is plugin-root-relative, one level shallower than what
@@ -88,9 +99,11 @@ import { proposeCodexInstall } from "./install.js";
 export const CodexAdapter = Object.freeze({
   vendor: "codex" as const,
   discover: discoverCodex,
+  probe: probeCodex,
   capabilities: resolveCapabilities,
   renderPlugin: renderCodexPlugin,
   renderInstallTree: renderCodexInstallTree,
   proposeInstall: proposeCodexInstall,
+  proposeUninstall: proposeCodexUninstall,
   invoke: invokeCodex,
 });

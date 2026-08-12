@@ -52,10 +52,12 @@ describe("the package's public door", () => {
       [
         "vendor",
         "discover",
+        "probe",
         "capabilities",
         "renderPlugin",
         "renderInstallTree",
         "proposeInstall",
+        "proposeUninstall",
         "invoke",
       ].sort(),
     );
@@ -124,6 +126,11 @@ describe("the package's public door", () => {
       "utf8",
     );
     const tsconfig = await readFile(new URL("../tsconfig.json", import.meta.url), "utf8");
+    // Per file, not just in total: an empty or truncated manifest must not
+    // pass vacuously the way `readFile` rejecting on a missing file would
+    // otherwise let it.
+    expect(packageJson.length).toBeGreaterThan(0);
+    expect(tsconfig.length).toBeGreaterThan(0);
     expect(packageJson).not.toContain(forbidden);
     expect(tsconfig).not.toContain(forbidden);
   });
