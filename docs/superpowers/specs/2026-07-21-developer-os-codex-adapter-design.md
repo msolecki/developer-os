@@ -94,9 +94,17 @@ We generate one tree, under the product home:
 `init` runs, through the security runner and behind explicit consent:
 
 ```text
-codex plugin marketplace add developer-os <product-home>/codex
+codex plugin marketplace add <product-home>/codex
 codex plugin add developer-os@developer-os --json
 ```
+
+**Corrected 2026-08-12 by Task 17, against a real 0.147.0 binary.** `codex plugin marketplace add`
+takes exactly one positional argument — the source path — never a separate marketplace name; the
+name is read from `marketplace.json`'s own `name` field (already `developer-os`, via
+`renderMarketplace`). The two-argument form this section showed before was never run against a real
+installation and the CLI refuses it outright: `error: unexpected argument '<path>' found` (exit 2).
+See §14.4 for the rest of what Task 17 observed, including the marketplace document's own required
+shape.
 
 **We never parse, edit, or merge `~/.codex/config.toml`.** The vendor's tool owns the vendor's
 config, which is the same principle that kept DOS-P4 out of `settings.json` — reached there by
@@ -107,9 +115,19 @@ file's recognized fields change between versions (§14.4).
 ### 4.2 Uninstall
 
 ```text
-codex plugin remove developer-os
+codex plugin remove developer-os@developer-os
 codex plugin marketplace remove developer-os
 ```
+
+**Corrected 2026-08-12 by Task 17.** `codex plugin remove <plugin>` with a bare, unqualified plugin
+name refuses: `plugin requires --marketplace unless passed as <plugin>@<marketplace>` (exit 1). The
+qualified `<plugin>@<marketplace>` form — the same one `plugin add` already uses — is required.
+Separately observed and worth recording here: `plugin remove` does **not** verify the plugin was
+ever installed under that marketplace; removing a name that was never added still exits 0. A failure
+of this specific step therefore cannot be produced by naming the wrong plugin — Task 17's simulated
+failure of this uninstall sequence used a wrong *marketplace* name against `plugin marketplace
+remove` instead, which does refuse a name nothing registered (exit 1, "marketplace ... is not
+configured or installed").
 
 then delete `<product-home>/codex/`. Failure of either CLI step is reported and does **not** delete
 our tree — leaving a registered marketplace pointing at a directory we removed is a worse state
@@ -137,10 +155,12 @@ both, and two capability vocabularies would make its own contract a translation 
 ### 5.1 Supported-version discovery
 
 `codex --version` establishes the version. `baseline-capabilities.json` records `0.144.6` as of
-2026-07-21; the machine this spec was written against reports `0.147.0` (§14.1). **Neither is a
-supported-version floor** — the frozen record is a historical observation, and one local machine is
-not a range. The floor is established by probe and recorded when the integration test first runs
-(§15.1).
+2026-07-21; the machine this spec was written against reports `0.147.0` (§14.1). **Neither was a
+supported-version floor before Task 17** — the frozen record was a historical observation, and one
+local machine was not a range. Task 17 (2026-08-12) ran the integration test against the one Codex
+version available on this machine, `0.147.0`, and — after fixing two real install-path bugs the
+attempt itself surfaced (§4.1, §4.2, §14.4) — raised `CODEX_MINIMUM_VERSION` to `0.147.0`. Still one
+observation, not a range (§15 item 2).
 
 ### 5.2 The probe is better here than it is for Claude
 
@@ -443,6 +463,80 @@ surface absent from this section.
 - Observed: a locally-sourced marketplace resolves installed plugins to their real on-disk path
   rather than to a cache copy.
 
+**Task 17, 2026-08-12 — verified against a real 0.147.0 install in a disposable `CODEX_HOME`, plugin
+management only (no `codex exec`, no model invocation).** All of the following corrects or narrows
+what the two bullets above and §4.1/§4.2's pseudocode previously assumed, none of which had been run
+against a real installation before this task:
+
+- **`codex plugin marketplace add` takes exactly one positional argument, the source path** — never
+  a separate marketplace name. `["plugin", "marketplace", "add", "developer-os", "<path>"]` (spec
+  §4.1's prior text, and `installRegistration`'s prior argv) refuses: `error: unexpected argument
+  '<path>' found` (exit 2, a clap usage error). The marketplace's name is read from
+  `marketplace.json`'s own top-level `name` field.
+- **`codex plugin remove` requires the qualified `<plugin>@<marketplace>` form**, exactly like
+  `plugin add`. A bare plugin name refuses: `plugin requires --marketplace unless passed as
+  <plugin>@<marketplace>` (exit 1). Separately: `plugin remove` does **not** verify the plugin was
+  ever installed under that marketplace — removing a name nothing added still exits 0. `plugin
+  marketplace remove <name>` behaves differently: an unregistered name refuses with `marketplace
+  ... is not configured or installed` (exit 1).
+- **The marketplace document's `source.path`, for a `"local"` source, must be relative to the
+  marketplace root and carry a leading `./`.** `renderMarketplace` previously wrote an absolute path
+  (`posix.join(context.home, ...PLUGIN_TREE_SEGMENTS)`); the real CLI accepts that document (`plugin
+  marketplace add` exits 0, no parse error) but then silently omits the plugin entry from both
+  `codex plugin list --json`'s `available` and `installed` arrays — no warning, no error at add time
+  — and `codex plugin add developer-os@developer-os` then refuses with `plugin \`developer-os\` was
+  not found in marketplace \`developer-os\`` (exit 1). A relative path with no leading `./`
+  (`plugins/developer-os`) fails identically. Only `./plugins/developer-os` — matching the vendor's
+  own scaffolding tool, which always emits this exact `./plugins/<plugin-name>` form — resolves.
+  Resolution is against the **marketplace root** (the directory containing `marketplace.json`),
+  confirmed by running the CLI from a working directory outside that root entirely; it does not
+  depend on process `cwd`. Fixed in `renderMarketplace` (`marketplace.ts`) and
+  `installRegistration`/`uninstallRegistration` (`install.ts`) by this same task, since without both
+  fixes no step of the install this spec describes succeeds against a real CLI at all.
+- **`codex plugin list --json`'s actual top-level shape is `{ "installed": [...], "available":
+  [...] }`, not `{ "plugins": [...] }`.** Each entry carries `pluginId`, `name`, `marketplaceName`,
+  `version`, `installed` (boolean), `enabled` (boolean), `source: { source, path }`,
+  `marketplaceSource`, `installPolicy`, `authPolicy` — there is no top-level `status` or `path`
+  field on an entry; `path` is nested under `source`. **`packages/adapter-codex/src/probe.ts`'s
+  `listingSchema` was written against the shape this bullet corrects** (`{ plugins: [{ name, status?,
+  path? }] }`) and will fail to parse a real `codex plugin list --json` response — `probeCodex`
+  therefore currently reports the `skills` capability `unavailable` against every real installation,
+  never `observed`. Task 17's own integration test drives the raw CLI directly, the same way the
+  Claude adapter's equivalent test drives `claude plugin validate` directly, and does not call
+  `probeCodex` — so this was caught by inspection, not by the test failing, and is not fixed by this
+  task. **Flagged for DOS-P6**, the first subsystem to actually depend on `probeCodex` observing
+  `yes`.
+- **The property this whole install shape (§4) exists to prove, confirmed**: with the two fixes
+  above, `codex plugin list --json`'s `installed[].source.path` for our plugin is exactly
+  `<product-home>/codex/plugins/developer-os` — the real on-disk tree this adapter wrote — never
+  `$CODEX_HOME/plugins/cache/developer-os/developer-os/<version>`, a **separate cache copy** `codex
+  plugin add` also stages. That cache copy is not merely incidental: `codex debug prompt-input` (see
+  below) resolves each skill's file locator to the *cache* copy, not the source tree, meaning a
+  post-install edit to a skill file under `<product-home>/codex/...` would not reach the model until
+  some resync step — unobserved, and out of scope for a plugin-management-only task. The
+  `source.path` field is what `probeCodex` reads (once its schema is corrected, see above), and it is
+  the field the "resolves to the real on-disk path, not a cache copy" claim was always about.
+- **`codex debug prompt-input [PROMPT]` renders exactly what would be sent to the model, without
+  sending it** — no `codex exec`, no model invocation, no credentials required (it ran cleanly with
+  no auth configured), no cost. Its output includes a `<skills_instructions>` block naming every
+  discoverable skill with `name: description (file: <path>)`; a plugin-provided skill is prefixed
+  `<plugin_name>:`, e.g. `developer-os:developer-os-capture` — confirming the "Skill naming" rule the
+  vendor's own bundled `plugin-creator` skill documents. This is the mechanism Task 17 used to verify
+  all six skills are discoverable — offline, at no cost — without the `codex exec` probe the founder
+  deferred to DOS-P6 for the unrelated JSONL-terminal-event question.
+- **`$CODEX_HOME/config.toml` is written only by the vendor's own CLI**, confirmed by write-ordering:
+  a snapshot taken after this adapter wrote the plugin tree but before any `codex` invocation shows
+  no `config.toml`; one taken after `plugin marketplace add` shows it, containing a
+  `[marketplaces.developer-os]` table and, after `plugin add`, a `[plugins."developer-os@developer-os"]`
+  table. A correct, complete uninstall (both corrected CLI steps) leaves `config.toml` with neither
+  table — confirmed empty, not merely absent of our entry.
+- **Nothing was written outside `CODEX_HOME` and the product home** across the full
+  register-list-uninstall sequence, inventoried before and after. Every other write Codex's own CLI
+  makes on first use — `installation_id`, `shell_snapshots/`, `.sandbox_migration`, its own bundled
+  system skills under `skills/.system/` (`imagegen`, `openai-docs`, `plugin-creator`, `skill-creator`,
+  `skill-installer`, `review-agent`), its plugin cache under `plugins/cache/` — landed under
+  `CODEX_HOME`; nothing touched the isolated `$HOME` outside it or the product home.
+
 ### 14.5 `AGENTS.md` — `https://developers.openai.com/codex/guides/agents-md`
 
 - Codex reads `AGENTS.md` files before doing any work, building an instruction chain.
@@ -450,14 +544,27 @@ surface absent from this section.
 
 ## 15. Open items this spec does not close
 
-1. **The plugin-bundled hooks path is documented but unobserved.** §14.2 records
-   `hooks/hooks.json` as a discovery location, and the vendor's curated plugin inspected on
-   2026-08-11 ships no hooks, so neither the path within a plugin nor a manifest `hooks` key has
-   been seen in a real plugin. Settled by the integration test, which then amends §14.4. Until it
-   is settled, `plugin_hooks` reports `unknown` — which is what §5's model does with a fact nobody
-   has established, and is the correct behaviour rather than a gap.
-2. **The supported-version floor is established by probe** (§5.1), recorded when the integration
-   test first runs. `0.147.0` is one observation, not a range.
+1. **The plugin-bundled hooks path is documented but unobserved — still true after Task 17,
+   2026-08-12.** §14.2 records `hooks/hooks.json` as a discovery location, and the vendor's curated
+   plugin inspected on 2026-08-11 ships no hooks, so neither the path within a plugin nor a manifest
+   `hooks` key has been seen in a real plugin. This plan ships no `hooks/hooks.json` of its own (§4's
+   tree diagram shows one; the actual `buildPluginTree` does not emit it — see `plugin.ts`), so Task
+   17's integration test could not exercise that path either; it is a plugin-management-only task and
+   never wrote a hooks file to install. The one incidental observation it did make: a `plugin.json`
+   with no `hooks` key at all installs and lists cleanly, no error or warning about the absent key.
+   `plugin_hooks` continues to report `unknown` — which is what §5's model does with a fact nobody has
+   established, and is the correct behaviour rather than a gap. **Still owned by DOS-P6**, which
+   restores hooks for both adapters and is the first subsystem with an actual hooks file to install.
+2. **The supported-version floor, established by Task 17, 2026-08-12: `CODEX_MINIMUM_VERSION` is now
+   `0.147.0`.** One version was available on this machine and one was tested — not a range, and this
+   section says so rather than implying otherwise. It is a **raise**, not a confirmation, of the prior
+   provisional `0.144.6`: this task also fixed two real bugs in the adapter's own CLI argv and
+   marketplace document (§4.1, §4.2, §14.4) that made the install fail outright against 0.147.0 before
+   the fix, so nothing establishes those specific, corrected commands ever worked on `0.144.6` — that
+   version predates this observation entirely and may not even carry the `plugin`/`marketplace`
+   subcommands this design depends on. `0.147.0` is the only version this adapter's actual install
+   path has been proven against; `packages/adapter-codex/src/versions.ts` and its docblock are amended
+   accordingly.
 3. **`buildConflictEvidence` has no consumer in either adapter** (§4.3). Whether it is retained,
    taken up by DOS-P7, or deleted is the decision of the first subsystem with a real three-way
    merge. Not DOS-P5's to make, and no longer an open question about DOS-P5.

@@ -28,17 +28,25 @@ export const CODEX_CAPABILITY_KEYS = [
 export type CodexCapabilityKey = (typeof CODEX_CAPABILITY_KEYS)[number];
 
 /**
- * Provisional; the integration test (Task 17) confirms or raises it against a
- * real installation.
+ * Raised to `0.147.0` by Task 17, 2026-08-12 — the integration test run
+ * against a real installation, as this docblock always said would settle it.
  *
- * `baseline-capabilities.json` records `0.144.6` as a historical observation of
- * one machine on 2026-07-21, and the machine the spec was written against
- * reports `0.147.0`. **Neither is a documented floor** — spec §5.1 says so in
- * as many words. `0.144.6` is simply the lowest version anybody has recorded
- * working at all, which makes it the floor below which nothing here is worth
- * attempting.
+ * One version was available on this machine and one was tested; this is not
+ * a range, and spec §15 item 2 says so in as many words. It is a **raise**,
+ * not a confirmation, of the prior provisional `0.144.6`: Task 17 also fixed
+ * two real bugs in this adapter's own CLI argv (`install.ts`) and marketplace
+ * document (`marketplace.ts`) that made every install step fail against the
+ * real 0.147.0 binary before the fix — `codex plugin marketplace add` with a
+ * separate name argument refused with a clap usage error, `codex plugin
+ * remove` with an unqualified plugin name refused, and an absolute
+ * `source.path` in the marketplace document was silently dropped from the
+ * listing. Nothing establishes that those specific, corrected commands ever
+ * worked on `0.144.6` — that version predates this observation entirely, and
+ * may not even carry the `plugin`/`marketplace` subcommands this design
+ * depends on. `0.147.0` is the only version this adapter's actual install
+ * path has been proven against; see spec §14.4 and §15 for the full record.
  */
-export const CODEX_MINIMUM_VERSION = "0.144.6";
+export const CODEX_MINIMUM_VERSION = "0.147.0";
 
 /**
  * A documented floor per key, or `null` meaning "no documented floor above the

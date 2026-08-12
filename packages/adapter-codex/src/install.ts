@@ -116,11 +116,21 @@ export type ManagedByPath = ReadonlyMap<string, ManagedArtifactV1>;
 /**
  * Spec §4.1: registration is marketplace-add then plugin-add, in that order —
  * the plugin cannot be added from a marketplace that is not yet registered.
+ *
+ * `codex plugin marketplace add` takes exactly one positional argument, the
+ * source path — never a separate name. Task 17 ran the real 0.147.0 binary
+ * against `["plugin", "marketplace", "add", MARKETPLACE_NAME,
+ * marketplaceRoot(context)]` (the shape spec §4.1 documented before this
+ * observation) and it refused with `unexpected argument ... found` (exit 2):
+ * clap accepts one positional there, not two. The marketplace's *name* is
+ * read from the `name` field inside `marketplace.json` itself — already
+ * `MARKETPLACE_NAME`, via `renderMarketplace` — so the CLI never needs it on
+ * the command line. Amends spec §14.4, dated 2026-08-12.
  */
 function installRegistration(context: InstallContext): readonly CodexCliStep[] {
   return [
     {
-      args: ["plugin", "marketplace", "add", MARKETPLACE_NAME, marketplaceRoot(context)],
+      args: ["plugin", "marketplace", "add", marketplaceRoot(context)],
       description: `register the ${MARKETPLACE_NAME} marketplace with Codex`,
     },
     {
@@ -135,11 +145,17 @@ function installRegistration(context: InstallContext): readonly CodexCliStep[] {
  * marketplace-remove — and runs *before* the tree is deleted, because a
  * marketplace registered against a directory we already removed is worse than
  * leaving both in place.
+ *
+ * `codex plugin remove <PLUGIN[@MARKETPLACE]>` refuses a bare plugin name with
+ * more than one marketplace configured: Task 17 observed `codex plugin remove
+ * developer-os` exit 1 with `plugin requires --marketplace unless passed as
+ * <plugin>@<marketplace>`, the same qualified form `plugin add` already uses.
+ * Amends spec §14.4, dated 2026-08-12.
  */
 function uninstallRegistration(): readonly CodexCliStep[] {
   return [
     {
-      args: ["plugin", "remove", PLUGIN_NAME],
+      args: ["plugin", "remove", `${PLUGIN_NAME}@${MARKETPLACE_NAME}`],
       description: `remove the ${PLUGIN_NAME} plugin from Codex`,
     },
     {

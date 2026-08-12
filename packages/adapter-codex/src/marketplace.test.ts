@@ -1,7 +1,6 @@
-import { posix } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MARKETPLACE_NAME, renderMarketplace } from "./marketplace.js";
-import { MARKETPLACE_RELATIVE_PATH, PLUGIN_NAME } from "./plugin.js";
+import { MARKETPLACE_RELATIVE_PATH, PLUGIN_NAME, PLUGIN_TREE_PREFIX } from "./plugin.js";
 
 const home = "/synthetic/home/.developer-os";
 
@@ -10,6 +9,14 @@ describe("renderMarketplace", () => {
     expect(renderMarketplace({ home }).path).toBe(MARKETPLACE_RELATIVE_PATH);
   });
 
+  /**
+   * Marketplace-root-relative, never absolute — Task 17 (2026-08-12) found
+   * the real CLI silently drops a plugin entry whose `source.path` is
+   * absolute (the marketplace loads, `plugin add` then refuses with "not
+   * found in marketplace"), and requires the `./` prefix: a path of
+   * `plugins/developer-os` with no leading `./` fails the same way. See
+   * `renderMarketplace`'s doc comment for the full observation.
+   */
   it("describes one local plugin, at the path the installer actually writes", () => {
     const parsed = JSON.parse(renderMarketplace({ home }).contents) as {
       name: string;
@@ -19,8 +26,18 @@ describe("renderMarketplace", () => {
     expect(parsed.plugins).toHaveLength(1);
     expect(parsed.plugins[0]?.name).toBe(PLUGIN_NAME);
     expect(parsed.plugins[0]?.source.source).toBe("local");
-    expect(parsed.plugins[0]?.source.path).toBe(
-      posix.join(home, "codex", "plugins", PLUGIN_NAME),
+    expect(parsed.plugins[0]?.source.path).toBe(`./${PLUGIN_TREE_PREFIX}`);
+  });
+
+  /**
+   * `context.home` no longer reaches the descriptor's contents at all — see
+   * `renderMarketplace`'s doc comment — so two different homes must render
+   * byte-identical documents. Would have caught a regression to the old,
+   * absolute-path behaviour by itself.
+   */
+  it("renders the same document regardless of which home it is given", () => {
+    expect(renderMarketplace({ home })).toEqual(
+      renderMarketplace({ home: "/completely/different/home" }),
     );
   });
 
@@ -38,7 +55,13 @@ describe("renderMarketplace", () => {
     expect(Object.keys(plugin).sort()).toEqual(["name", "source"]);
   });
 
-  it("refuses a relative home, because the path it writes must resolve anywhere", () => {
+  /**
+   * `context.home` no longer builds the descriptor's `path`, but the guard
+   * stays: `InstallContext.home` elsewhere in this adapter must be absolute
+   * too, and a caller constructing both from the same value should not find
+   * this one silently laxer.
+   */
+  it("refuses a relative home, for parity with InstallContext elsewhere", () => {
     expect(() => renderMarketplace({ home: "relative/home" })).toThrow(/absolute/iu);
   });
 

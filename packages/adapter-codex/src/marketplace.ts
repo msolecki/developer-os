@@ -1,6 +1,6 @@
 import { posix } from "node:path";
 import type { RenderedArtifact } from "@developer-os/workflow-schema";
-import { MARKETPLACE_RELATIVE_PATH, PLUGIN_NAME, PLUGIN_TREE_SEGMENTS } from "./plugin.js";
+import { MARKETPLACE_RELATIVE_PATH, PLUGIN_NAME, PLUGIN_TREE_PREFIX } from "./plugin.js";
 
 export const MARKETPLACE_NAME = "developer-os";
 
@@ -9,12 +9,29 @@ export interface MarketplaceContext {
 }
 
 /**
- * The one artifact in this adapter carrying a real absolute path. Every other
- * `RenderedArtifact` this adapter produces is relative, resolved by the
- * installer against a root it is given; this one is a marketplace document
- * Codex's own CLI reads from disk, and `source.path` is how Codex finds the
- * plugin it names — so a relative `home` would resolve against whatever
- * directory Codex happens to run in, not the machine that generated the file.
+ * `source.path` is **marketplace-root-relative, never absolute** — corrected
+ * 2026-08-12 by Task 17 against the real 0.147.0 binary, which is the
+ * opposite of what this file previously claimed. An absolute path here does
+ * not error: the marketplace loads cleanly and the plugin entry is silently
+ * dropped from both `codex plugin list --json`'s `available` and `installed`
+ * arrays, and `codex plugin add developer-os@developer-os` then refuses with
+ * `plugin \`developer-os\` was not found in marketplace \`developer-os\`` (exit
+ * 1) — a real, reproducible install failure this test caught. A relative path
+ * *without* a leading `./` (`plugins/developer-os`) fails identically; only
+ * `./plugins/developer-os` — matching the vendor's own scaffolding tool and
+ * its documented `./plugins/<plugin-name>` form — resolves. Confirmed by
+ * running the CLI from a working directory outside the marketplace root
+ * entirely, so resolution is against the marketplace root (the directory
+ * `marketplace.json` itself lives in), never the process's cwd — which is
+ * what `context.home` was defending against under the old, disproven
+ * assumption. Amends spec §14.4, dated 2026-08-12.
+ *
+ * `context.home` is no longer read to build `path` — `PLUGIN_TREE_PREFIX` is
+ * a fixed, marketplace-root-relative constant — but the parameter and its
+ * absolute-path guard stay: every sibling context type in this adapter
+ * (`InstallContext`) requires an absolute product home, and a caller
+ * constructing both from the same value should not find one silently laxer
+ * than the other.
  */
 export function renderMarketplace(context: MarketplaceContext): RenderedArtifact {
   if (!posix.isAbsolute(context.home)) {
@@ -30,7 +47,7 @@ export function renderMarketplace(context: MarketplaceContext): RenderedArtifact
             name: PLUGIN_NAME,
             source: {
               source: "local",
-              path: posix.join(context.home, ...PLUGIN_TREE_SEGMENTS),
+              path: `./${PLUGIN_TREE_PREFIX}`,
             },
           },
         ],

@@ -140,10 +140,16 @@ describe("proposeCodexInstall", () => {
     expect(targets).toContain(`${marketplaceRoot}/${MARKETPLACE_RELATIVE_PATH}`);
   });
 
-  /** Spec §4.1: the vendor's tool is the only writer of the vendor's config. */
+  /**
+   * Spec §4.1: the vendor's tool is the only writer of the vendor's config.
+   * `codex plugin marketplace add` takes exactly one positional argument —
+   * the source path, never a separate name — confirmed against the real
+   * 0.147.0 binary by Task 17 (2026-08-12); the marketplace's name comes from
+   * `marketplace.json`'s own `name` field instead.
+   */
   it("registers the marketplace before installing the plugin", () => {
     expect(proposeCodexInstall(tree, context).registration.map((step) => step.args)).toEqual([
-      ["plugin", "marketplace", "add", "developer-os", `${home}/codex`],
+      ["plugin", "marketplace", "add", `${home}/codex`],
       ["plugin", "add", "developer-os@developer-os", "--json"],
     ]);
   });
@@ -208,9 +214,16 @@ describe("proposeCodexUninstall", () => {
   const owned = artifact(`${pluginRoot}/skills/developer-os-shared/SKILL.md`);
   const managed = new Map([[owned.path, owned]]);
 
+  /**
+   * `codex plugin remove <PLUGIN>` alone refuses with "plugin requires
+   * --marketplace unless passed as <plugin>@<marketplace>" (exit 1) —
+   * confirmed against the real 0.147.0 binary by Task 17 (2026-08-12); the
+   * qualified `<plugin>@<marketplace>` form matches what `plugin add` already
+   * uses.
+   */
   it("removes the plugin and the marketplace, in that order, before deleting anything", () => {
     expect(proposeCodexUninstall(context, managed).registration.map((s) => s.args)).toEqual([
-      ["plugin", "remove", "developer-os"],
+      ["plugin", "remove", "developer-os@developer-os"],
       ["plugin", "marketplace", "remove", "developer-os"],
     ]);
   });
