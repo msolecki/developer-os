@@ -56,4 +56,24 @@ describe("resolveCapabilities", () => {
     );
     expect(Object.keys(resolved)).not.toContain("invented");
   });
+
+  /**
+   * Precedence: UNSETTLED beats any observation. If a refactor moved the
+   * observation lookup (line 62) above the UNSETTLED check (line 58), a real
+   * signal reporting plugin_hooks as "observed" would incorrectly become "yes".
+   * This test pins that the UNSETTLED gate fires first.
+   */
+  it("returns unknown for UNSETTLED keys even if the probe reported observed", () => {
+    expect(
+      resolveCapabilities("0.147.0", new Map<string, ProbeObservation>([["plugin_hooks", "observed"]]))
+        .plugin_hooks,
+    ).toBe("unknown");
+  });
+
+  it("returns unknown for unavailable observations even on a below-floor version", () => {
+    expect(
+      resolveCapabilities("0.1.0", new Map<string, ProbeObservation>([["skills", "unavailable"]]))
+        .skills,
+    ).toBe("unknown");
+  });
 });
