@@ -9,6 +9,7 @@ export default defineConfig({
       "packages/brain/vitest.config.ts",
       "packages/workflow-schema/vitest.config.ts",
       "packages/adapter-claude/vitest.config.ts",
+      "packages/adapter-codex/vitest.config.ts",
       "apps/cli/vitest.config.ts",
       "tests/vitest.config.ts",
     ],
