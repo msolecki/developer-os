@@ -161,14 +161,30 @@ spec wins over the plan, and this is recorded rather than left as an apparent om
 
 ### Task 5: Specify and implement the Codex adapter
 
+**Closed 2026-08-12. What survives it: `docs/architecture/codex-adapter.md`, and
+`specs/2026-07-21-developer-os-codex-adapter-design.md` as the design of record.** Its
+implementation plan is deleted, per the rule that `plans/` holds only unfinished work.
+
+**Its step list is kept rather than deleted, unlike Tasks 0–4's, because one box is unearned and
+one is only half true.** A closed task's list is normally removed so a later commit cannot move its
+checkboxes; here the boxes carry the record of what did *not* close, which is the more valuable of
+the two protections. Do not tick the remaining box; it is Task 6's.
+
+**The checkpoint is half met.** The plugin installs and all six skills load in a real Codex
+installation, and `doctor` reports both adapters with their differences. But `capture`, `ingest` and
+`review` name verbs with no handler anywhere in this product, so three of the six shipped skills
+reference commands that do not exist — the same half `claude-adapter.md` §8 records for Task 4, and
+for the same reason: an adapter renders workflows and executes none of them. Six of the seven
+unimplemented verbs are Task 6's. `docs/architecture/codex-adapter.md` §10 is the full record.
+
 **Complexity:** L
 
 **Files:**
 - Create: `docs/superpowers/specs/2026-07-21-developer-os-codex-adapter-design.md`
-- Create: `docs/superpowers/plans/2026-07-21-developer-os-codex-adapter.md`
+- Create: `docs/superpowers/plans/2026-07-21-developer-os-codex-adapter.md` — *written 2026-08-11, nineteen tasks, deleted 2026-08-12 when its last step closed*
 - Create: `packages/adapter-codex/src/`
 - Generate: `plugins/codex/`
-- Create: `tests/contracts/adapters/codex/`, `tests/fixtures/agents/codex/`, and `tests/integration/codex/`
+- Create: `tests/contracts/adapters/codex/`, `tests/fixtures/agents/codex/`, and `tests/integration/codex/` — *`tests/fixtures/agents/codex/` was not created: every fake-CLI case injects its own `ProcessRunner` rather than reading a fixture file, which is how the Claude adapter's suites are built too*
 
 **Interfaces:**
 - Consumes: the same canonical workflow, Brain, security, platform, and ownership interfaces as Task 4.
@@ -181,13 +197,13 @@ spec wins over the plan, and this is recorded rather than left as an apparent om
 **How:**
 
 - [x] Approve exact supported Codex surfaces against current official documentation and verified local behavior. — *the spec was written 2026-08-11 and approved by the founder the same day; its §14 is the normative list, and an implementation may not depend on a surface it does not carry.*
-- [ ] Implement version and capability detection.
-- [ ] Render the canonical workflows into Codex skills and durable guidance at the smallest appropriate scope.
-- [ ] Install only dedicated managed artifacts and semantically merge required config.
-- [ ] Implement safe non-interactive invocation and structured output validation.
-- [ ] Implement documented hooks when available and wrapper-required capture otherwise.
-- [ ] Refuse transcript parsing unless a stable documented contract exists and has a regression fixture.
-- [ ] Test against a fake CLI first and a disposable real installation second.
+- [x] Implement version and capability detection. — *`discover.ts`, `versions.ts`, `probe.ts` and `capabilities.ts`; the floor is `0.147.0`, **one observed version and not a range**, which `docs/architecture/codex-adapter.md` §3 records as DOS-P9's to widen or narrow.*
+- [x] Render the canonical workflows into Codex skills and durable guidance at the smallest appropriate scope. — *six skills; **no `AGENTS.md` is written at any scope**, because the smallest appropriate scope turned out to be inside the skill itself — the approved spec §6.1 says so plainly rather than presenting it as compliance with the phrase. `AGENTS.override.md` is refused outright: in the global scope Codex reads it instead of `AGENTS.md`.*
+- [x] Install only dedicated managed artifacts and semantically merge required config. — *the first half is `mergeStrategy: "dedicated"` over one owned tree. **The second half is dissolved rather than performed**: the vendor's own CLI writes the vendor's config, so no foreign file is merged and `buildConflictEvidence` has no consumer in either adapter. Approved spec §4.3; `BACKLOG.md` §8.*
+- [x] Implement safe non-interactive invocation and structured output validation. — *`codex exec` through the security runner, sandbox from the declared scopes, three flags refused by test. **The JSONL reduction is provisional and unverified** — settling it needs a real model call, declined by the founder on 2026-08-12; owner DOS-P6, `codex-adapter.md` §7.*
+- [ ] Implement documented hooks when available and wrapper-required capture otherwise. — *the second half shipped and the first did not. **Neither adapter ships `hooks/hooks.json`**: a `type: "command"` handler needs an executable file and nothing in this pipeline can express an executable bit, so the only nameable command is the `developer-os` capture entrypoint, which is Task 6's. Ratified by the founder 2026-08-12 for both adapters at once. Restoring it needs the hook bodies, an executable-bit mechanism and a firing test, in one change. **Owner: Task 6 / DOS-P6.***
+- [x] Refuse transcript parsing unless a stable documented contract exists and has a regression fixture. — *nothing in the tree names `transcript_path` on any code path. The refusal is real and **unasserted**: no test pins the absence, and the integration test's write-scope inventory is the only thing that would catch a read.*
+- [x] Test against a fake CLI first and a disposable real installation second. — *both; the real run against `codex-cli 0.147.0` contradicted the approved spec four times and three of those stopped the install completing at all (`codex-adapter.md` §7).*
 
 **Test:**
 
@@ -197,7 +213,7 @@ spec wins over the plan, and this is recorded rather than left as an apparent om
 - A missing capture hook becomes `wrapper-required`, not a false `yes`.
 - A Codex-only user completes the same synthetic Brain outcome contract as Claude.
 
-**Checkpoint:** Claude-only, Codex-only, and dual-adapter installations all work, with explicit differences in `doctor`.
+**Checkpoint:** Claude-only, Codex-only, and dual-adapter installations all work, with explicit differences in `doctor`. — *half met, 2026-08-12; see the note above this task's file list.*
 
 ---
 

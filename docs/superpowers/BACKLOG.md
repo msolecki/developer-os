@@ -55,25 +55,26 @@ replacement text says where it went.
 
 ## 0. Status at a glance
 
-Open work only. Program Tasks 0 to 3 are closed and are not rows here.
+Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 
 | Area | Where | What is left |
 |---|---|---|
-| Program (umbrella) | 1 plan | Tasks 4–9 open; Tasks 0–3 closed and not rows here |
-| DOS-P5 … DOS-P7 | DOS-P5 is **18/19 implemented**; DOS-P6 and DOS-P7 have no documents yet | 2 specs, 2 plans, 3 implementations |
+| Program (umbrella) | 1 plan | Tasks 6–9 open; Tasks 0–5 closed and not rows here |
+| DOS-P6, DOS-P7 | neither has any document yet | 2 specs, 2 plans, 2 implementations |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
 | Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian), NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (S, the argv screen's word list also screens free-form prose) and NEW-13 (S, two artifact roots share one type) |
-| Repository infrastructure | §5 | two directories a later subsystem still owes; `packages/adapter-claude/`, `plugins/claude/` and `tests/integration/` landed with DOS-P4 on 2026-08-11 |
+| Repository infrastructure | §5 | one directory a later subsystem still owes — `tests/security/`, DOS-P6's; `packages/adapter-codex/` and `plugins/codex/` landed with DOS-P5 on 2026-08-12 |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
 
-**Foundation, DOS-P2 and DOS-P3 are closed.** None is a row above. What each left behind is
-`docs/architecture/foundation.md`, `docs/architecture/brain.md` and
-`docs/architecture/workflow-schema.md`, plus §2 here for Foundation's open questions; their plans
-are deleted and git history is the archive. DOS-P3's note is the one to read before either
-adapter — its §7 records four canonical workflows that say less than the product spec does, each
-with an owner, and its §8 records nine residuals — two of them explicitly the adapters',
-the rest unowned until somebody needs them.
+**Foundation, DOS-P2, DOS-P3, DOS-P4 and DOS-P5 are closed.** None is a row above. What each left
+behind is `docs/architecture/foundation.md`, `brain.md`, `workflow-schema.md`, `claude-adapter.md`
+and `codex-adapter.md`, plus §2 here for Foundation's open questions; every one of those plans is
+deleted and git history is the archive. **Both adapter notes are written for DOS-P6**, the one
+subsystem that consumes both — `codex-adapter.md` §9 carries the two-adapter table, and its §11 and
+`claude-adapter.md` §9 carry twenty-four residuals between them, thirteen of them DOS-P6's.
+DOS-P3's note is still the one to read before touching the compiler: its §7 records four canonical workflows that say less than the product
+spec does, each with an owner, and its §8 records nine residuals.
 
 **This repository is public, deliberately, as of 2026-08-10.** It was pushed to
 `github.com/msolecki/developer-os` and the founder confirmed the visibility after being shown
@@ -247,14 +248,19 @@ that subsystem in §3.
 
 ## 3. Missing specs and plans
 
-**Four documents left.** DOS-P6 and DOS-P7 need a spec and a plan each. DOS-P5 needs neither — its
-spec was approved and its plan written on 2026-08-11, so what remains of it is the code.
+**Four documents left, and they are the last two subsystems'.** DOS-P6 and DOS-P7 need a spec and a
+plan each. Nothing else on the product path is missing a document.
+DOS-P5 is closed and is not listed here any more: its spec is retained at
+`specs/2026-07-21-developer-os-codex-adapter-design.md` because
+`docs/architecture/codex-adapter.md` names it as the design of record — and that spec's §14 was
+amended four times on 2026-08-12 by first contact with a real binary, so read §8 here before
+trusting it. Its plan is deleted, recoverable at the commit that closed DOS-P5.
 DOS-P4 is closed and is not listed here any more: its spec is retained at
 `specs/2026-07-21-developer-os-claude-adapter-design.md` because
 `docs/architecture/claude-adapter.md` names it as the design of record; its plan is deleted,
-recoverable at `17968cb`. **Read the architecture note before either remaining adapter task** —
-its §4 records why in-place discovery beat a marketplace copy, and its §9 the twelve residuals
-DOS-P4 leaves behind, six of them DOS-P6's.
+recoverable at `17968cb`. **Read both architecture notes before starting DOS-P6** — between them
+they record why in-place discovery beat a marketplace copy on one vendor and a local marketplace won
+on the other, the two-adapter table DOS-P6 designs against, and thirteen residuals it inherits.
 DOS-P3 is closed and is not listed here any more: its spec is retained at
 `specs/2026-07-21-developer-os-workflow-compiler-design.md` because
 `docs/architecture/workflow-schema.md` names it as the design of record; its plan is deleted,
@@ -267,41 +273,12 @@ DOS-P2 is not listed here any more. Its spec is retained at
 `specs/2026-07-21-developer-os-brain-engine-design.md` because `docs/architecture/brain.md`
 names it as the design of record; its plan is deleted, recoverable at `81e7e7d`.
 
-### DOS-P5 — Codex adapter
-
-- **Spec:** `specs/2026-07-21-developer-os-codex-adapter-design.md` — **approved by the founder
-  2026-08-11.** It settles the install shape (a local marketplace registered and installed by
-  Codex's own CLI, which never edits `~/.codex/config.toml`), capture against the hook trust gate,
-  the `AGENTS.md` decision, and the transcript refusal. Its §14 is normative — an implementation may
-  not depend on a Codex surface not listed there. §12 is the table DOS-P6 inherits; §15 carries five
-  items it does not close
-- **Plan:** `plans/2026-07-21-developer-os-codex-adapter.md` — written 2026-08-11, eighteen tasks,
-  **3/18 done on 2026-08-12**, resume at Task 4. Tasks 1 to 3 closed four residuals
-  `claude-adapter.md` §9 assigned to "the point where a second adapter exists"; their step lists
-  are deleted and the plan carries what they produced. Both decisions they raised are ratified
-  and discharged in §8 of this file
-- **Program task:** 5 · **Complexity:** L · **Blocked by:** nothing
-- **Produces:** `CodexAdapter`, `CodexCapabilities`, `CodexInvocation`, `plugins/codex/`,
-  managed hook plans, structured agent-run results.
-- **Gate:** direct and wrapper capability matrices are tested separately; a missing
-  capture hook is classified `wrapper-required`, never a false `yes`.
-- **Absorbs:** legacy follow-up Step 8 (`Add stable Codex learning capture`), frozen on the
-  legacy runtime 2026-07-27 and rebuilt here instead.
-- **Read `docs/architecture/claude-adapter.md` before writing the plan.** The two adapters are
-  consumed by one subsystem, and three of its residuals come due the moment a second one exists:
-  the duplicated code-point sort (§9.5), the absent `ClaudeAdapter` façade (§9.6), and
-  `detectWorkflowDrift` reporting only in one direction, which the Codex drift gate will also have
-  to compensate for.
-- **There is no legacy Codex implementation to compare against.** The founder's legacy runtime
-  removed its Codex parity layer on 2026-07-27, after `baseline-capabilities.json` froze that
-  surface on 2026-07-21. The frozen record is the only admissible statement about it, and the plan
-  must not schedule an observation of something that no longer exists.
-
 ### DOS-P6 — Knowledge pipeline hardening
 
 - **Spec:** `specs/2026-07-21-developer-os-knowledge-pipeline-design.md` — missing
 - **Plan:** `plans/2026-07-21-developer-os-knowledge-pipeline.md` — missing
-- **Program task:** 6 · **Complexity:** L · **Blocked by:** DOS-P4 **and** DOS-P5
+- **Program task:** 6 · **Complexity:** L · **Blocked by:** nothing — DOS-P4 closed 2026-08-11 and
+  DOS-P5 on 2026-08-12
 - **The spec must decide:** exact capture fields, lifecycle transitions, retention
   behavior and redaction classes; atomic quarantine writes with post-redaction
   deduplication; accept/edit/reject review with no automatic deletion; the contract that
@@ -317,6 +294,15 @@ names it as the design of record; its plan is deleted, recoverable at `81e7e7d`.
   is required before the checkpoint.
 - **Absorbs:** legacy follow-up Steps 5, 7, 9 and 12, frozen on the legacy runtime
   2026-07-27 and rebuilt here instead.
+- **Inherits thirteen of the two adapters' twenty-four residuals** — `docs/architecture/claude-adapter.md` §9
+  and `docs/architecture/codex-adapter.md` §11, each with this subsystem named as owner. Four of
+  them belong in the spec rather than in the implementation: the **capture contract**, which is what
+  unblocks hooks for both adapters in one change (neither ships `hooks/hooks.json`, and both report
+  `plugin_hooks` as `unknown`); the **provisional JSONL terminal-event rule**, unverified because
+  settling it needs a real model call the founder declined on 2026-08-12; **`maxTurns`**, bounded
+  under Claude and silently dropped under Codex from one shared `agent.prompt` schema; and the fact
+  that the **two-gate capability machinery has no production caller today**, so DOS-P6 is the first
+  to exercise it.
 
 ### DOS-P7 — Git, automation, update and release lifecycle
 
@@ -395,15 +381,15 @@ subproject; listed here so nothing is discovered late.
 | `tests/contracts/` | Foundation onward | **created 2026-08-10** by DOS-P3 — `workflows/{canonical,negative,determinism}.test.ts`, 16 cases. DOS-P2 had put its contract cases beside the code they pin instead |
 | `tests/fixtures/` | Foundation onward | **created 2026-08-08** |
 | `tests/fixtures/brain/legacy-shape/` | DOS-P2 Task 3 | **created 2026-08-08**, plus eight one-concern `malformed/` fixtures for lint |
-| `tests/integration/` | Foundation onward | **created 2026-08-11** by DOS-P4 — `claude/plugin-loads.test.ts`, six cases against a real installation in a disposable `HOME`, skipped where no agent exists. DOS-P2's reindex/lint/search integration still runs in `tests/e2e/brain.test.ts` against the compiled binary, which is the stronger of the two |
+| `tests/integration/` | Foundation onward | **created 2026-08-11** by DOS-P4 — `claude/plugin-loads.test.ts`, six cases against a real installation in a disposable `HOME`, skipped where no agent exists. DOS-P5 added `codex/plugin-loads.test.ts` on 2026-08-12, which is the stronger of the two: it registers, installs, lists and uninstalls against a real `codex-cli` in a disposable `CODEX_HOME` and inventories every byte written around the operation. DOS-P2's reindex/lint/search integration still runs in `tests/e2e/brain.test.ts` against the compiled binary |
 | `tests/e2e/` | Foundation Task 9 | **created 2026-08-01** — `pnpm test:e2e` runs 45 cases across `foundation.test.ts` and `brain.test.ts` |
 | `tests/security/` | DOS-P6 | missing |
-| `docs/architecture/` | Foundation Task 9, then per subsystem | **created 2026-08-01** — Foundation boundaries and constraints done, Brain and the workflow schema done; threat model and capability model still owed by later subsystems |
+| `docs/architecture/` | Foundation Task 9, then per subsystem | **created 2026-08-01** — Foundation boundaries and constraints, Brain, the workflow schema and both adapter notes done. The **capability model** is now recorded twice, once per adapter (`claude-adapter.md` §3, `codex-adapter.md` §3), which is where it belongs while the two vocabularies are asserted identical; a consolidated **threat model** is still owed, by DOS-P6 at the earliest |
 | `docs/releases/` | DOS-P7 | **created 2026-08-01** by Foundation Task 9, ahead of its named owner |
 | `packages/brain/` | DOS-P2 | **complete 2026-08-10** — `schema/`, `discovery/`, `indexes/`, `lint/`, `retrieval/`, `migrations/`, `service.ts`, and `redact.ts` as a re-export of the screen that moved to `packages/security` in DOS-P3 |
 | `packages/workflow-schema/` | DOS-P3 | **complete 2026-08-10** — `parse`, `contract`, `vocabulary`, `derive`, `validate`, `overlay`, `load`, `drift` |
 | `packages/adapter-claude/`, `plugins/claude/` | DOS-P4 | **complete 2026-08-11** — `discover`, `versions`, `probe`, `capabilities`, `render`, `plugin`, `compose`, `install`, `invoke`, and the six generated skills. `tests/tools/render-claude.ts` regenerates the tree; `docs/architecture/claude-adapter.md` is what replaced its plan |
-| `packages/adapter-codex/`, `plugins/codex/` | DOS-P5 | missing |
+| `packages/adapter-codex/`, `plugins/codex/` | DOS-P5 | **complete 2026-08-12** — `discover`, `versions`, `probe`, `capabilities`, `render`, `plugin`, `marketplace`, `compose`, `install`, `invoke`, `index` with the `CodexAdapter` façade, and the six generated skills. `tests/tools/render-codex.ts` regenerates the tree; `docs/architecture/codex-adapter.md` is what replaced its plan |
 | `templates/brain/` | DOS-P2 | **created 2026-08-10** — the vault skeleton `init` installs, embedded in `apps/cli/src/commands/brain-template.ts` so a shipped binary carries it, with a test that fails if the two drift |
 | `workflows/` | DOS-P3 | **created 2026-08-10** — the six canonical workflows |
 | `.github/workflows/` | nobody owed it — **that was the finding** | **created and verified green 2026-08-10** — `check.yml`, run `31377323072` on `macos-15`, both gate steps executed. The program file map never named it, so no subsystem owed it and it was nobody's job for twenty days |
@@ -560,8 +546,9 @@ left:**
 
 | Amended | By | What changed | Where it landed |
 |---|---|---|---|
-| `plans/…-codex-adapter.md` Task 11, approved 2026-08-11 | Task 11, as built — the plan contradicting itself | **both Codex install proposals root at `<home>/codex`, the marketplace root, not at the plugin tree.** Task 11's step-2 tests rooted every operation at `<home>/codex/plugins/developer-os` while Task 13 emits the tree *plus* the marketplace descriptor relative to `<product-home>/codex` and says Task 11 consumes it. The consequence was concrete rather than cosmetic: nothing proposed writing the descriptor, so `registration[0]` would have run `codex plugin marketplace add` against a directory containing no `marketplace.json`. The old root is a *descendant* of the new one, so the wrong root does not refuse — it double-nests and applies cleanly | **decided by the founder 2026-08-12.** Code, `c67afba`, which also pinned `proposedHash` to the artifact's contents, added `registrationPhase` so the caller reads the CLI-step ordering rather than remembering it, and gave uninstall the same containment check as install. The plan's Task 11 carries the dated amendment |
-| `plans/…-codex-adapter.md`, approved 2026-08-11 | a pre-flight scan of the plan against its own Global Constraint 1, before Task 4 | **a Task 3.5 is inserted, and Tasks 4, 5, 12 and 13 shrink.** The plan told four tasks to copy some ninety lines of vendor-neutral logic — `resolveExecutable`, the whole never-throw `discoverX` (argv `["--version"]` on both sides, so byte-identical apart from two type names), `compareVersions`, `tablePermits`'s body, `screenValueArgument` and `parsePayload` — while Global Constraint 1 says anything both adapters need moves to `core`, `security` or `workflow-schema`. Two copies were load-bearing: `compareVersions` returns `null` rather than `NaN` **because a review caught it failing open on 2026-08-11**, and the two argv screens had already diverged in the plan — shipped Claude tests `/permission\|dangerous/iu`, so it does **not** catch `danger-full-access`, which is precisely what Task 12 specified `/permission\|danger\|bypass/iu` to catch | **decided by the founder 2026-08-12**, before Task 4 was dispatched. The plan carries decision 3 and the Task 3.5 step list; `packages/core/src/versions/` and `packages/security/src/cli.ts` are where it lands |
+| `specs/…-codex-adapter-design.md` §4.1, §4.2, §14.4 and §15.2 — **the section that spec declares normative** | DOS-P5 Task 17, 2026-08-12, first contact with a real `codex-cli 0.147.0` | **four corrections, three of which stopped the install completing at all.** `source.path` in the marketplace document must be `./`-prefixed and marketplace-root-relative — an absolute one does not error, it is **silently dropped** from `plugin list --json` and `plugin add` then reports the plugin not found; `plugin marketplace add` takes exactly one positional, the source path, and reads the name from the document itself; `plugin remove` requires the qualified `<plugin>@<marketplace>` form; and `plugin list --json` returns `{installed, available}` with `enabled` and a **nested** `source.path`, not the guessed `{plugins:[…]}` — against which the probe would have reported `skills: unavailable` on every real installation forever. §15.2 also raises `CODEX_MINIMUM_VERSION` to `0.147.0`, **one observed version and not a range** | the spec carries all four as dated in-place amendments, and 1–3 were corrected in production code (`marketplace.ts`, `install.ts`) rather than only documented. `docs/architecture/codex-adapter.md` §7 is the summary |
+| `plans/…-codex-adapter.md` Task 11, approved 2026-08-11 — deleted with the plan 2026-08-12 | Task 11, as built — the plan contradicting itself | **both Codex install proposals root at `<home>/codex`, the marketplace root, not at the plugin tree.** Task 11's step-2 tests rooted every operation at `<home>/codex/plugins/developer-os` while Task 13 emits the tree *plus* the marketplace descriptor relative to `<product-home>/codex` and says Task 11 consumes it. The consequence was concrete rather than cosmetic: nothing proposed writing the descriptor, so `registration[0]` would have run `codex plugin marketplace add` against a directory containing no `marketplace.json`. The old root is a *descendant* of the new one, so the wrong root does not refuse — it double-nests and applies cleanly | **decided by the founder 2026-08-12.** Code, `c67afba`, which also pinned `proposedHash` to the artifact's contents, added `registrationPhase` so the caller reads the CLI-step ordering rather than remembering it, and gave uninstall the same containment check as install. The plan's Task 11 carries the dated amendment |
+| `plans/…-codex-adapter.md`, approved 2026-08-11 — deleted with the plan 2026-08-12 | a pre-flight scan of the plan against its own Global Constraint 1, before Task 4 | **a Task 3.5 is inserted, and Tasks 4, 5, 12 and 13 shrink.** The plan told four tasks to copy some ninety lines of vendor-neutral logic — `resolveExecutable`, the whole never-throw `discoverX` (argv `["--version"]` on both sides, so byte-identical apart from two type names), `compareVersions`, `tablePermits`'s body, `screenValueArgument` and `parsePayload` — while Global Constraint 1 says anything both adapters need moves to `core`, `security` or `workflow-schema`. Two copies were load-bearing: `compareVersions` returns `null` rather than `NaN` **because a review caught it failing open on 2026-08-11**, and the two argv screens had already diverged in the plan — shipped Claude tests `/permission\|dangerous/iu`, so it does **not** catch `danger-full-access`, which is precisely what Task 12 specified `/permission\|danger\|bypass/iu` to catch | **decided by the founder 2026-08-12**, before Task 4 was dispatched. The plan carries decision 3 and the Task 3.5 step list; `packages/core/src/versions/` and `packages/security/src/cli.ts` are where it lands |
 | `specs/…-codex-adapter-design.md` §5.3, approved 2026-08-11 | DOS-P5's plan | **neither adapter ships `hooks/hooks.json`; DOS-P6 restores hooks for both, in one change.** A `"type": "command"` handler names something executable, and the only command we could name without shipping a script we cannot mark executable is the `developer-os` binary, whose capture entrypoint is DOS-P6's. A hook firing into a missing command errors at the end of every session. `plugin_hooks` reports `unknown` throughout, which §15.1 already prescribes | **ratified by the founder 2026-08-12.** It puts both adapters in one state rather than two coincidences |
 | `docs/architecture/workflow-schema.md` §2.2 and §6 | DOS-P5's plan, Task 3 | **the vendor-neutral skill body moves into `packages/workflow-schema`.** Codex's required frontmatter is `name` and `description` — exactly Claude's — and both write `skills/developer-os-<id>/SKILL.md`, so a second renderer written the obvious way is a byte-for-byte copy: some four hundred lines and twenty tests duplicated across packages that may not import each other. `WorkflowRenderer` stays an interface and each adapter still implements it; what moves is the half that comes from one contract and renders identically for every vendor | **ratified by the founder 2026-08-12.** The note is amended by the task that makes the move, and the existing drift gate is the evidence: `plugins/claude/` must not change by a byte |
 | `specs/…-codex-adapter-design.md` §6.2 and `specs/…-claude-adapter-design.md` §7.2 | the skill-body move, ratified by the founder 2026-08-12 (`workflow-schema.md` §8.7's own amendment) | **the screen seam both specs named moved into `renderSkillBody`.** Each said a vendor renderer screens `recovery.resume` "at the render seam"; the seam is the compiler's now, not either adapter's — `ClaudeRenderer.render` never touches `recovery.resume`, and a vendor renderer's own screening narrows to the field it renders itself: `description`, in the frontmatter | each spec carries a dated in-place amendment above the section it supersedes; the Codex plan's Global Constraints line is corrected in place, being a live document |
