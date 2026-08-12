@@ -181,10 +181,6 @@ export interface CliInstallation {
   readonly executable: string;
   readonly version: string;
 }
-export function resolveExecutable(
-  name: string,
-  dependencies?: ResolveExecutableDependencies,
-): Promise<string | null>;
 export function discoverCli(
   dependencies: DiscoverCliDependencies,
 ): Promise<CliInstallation | null>;
@@ -212,7 +208,7 @@ must hold it there), a floor above the minimum, and a version between the two.
 - [ ] **Step 3: Write the failing tests for `packages/security/src/cli.ts`**
 
 Port the whole battery from `packages/adapter-claude/src/discover.test.ts` — the never-throw cases,
-the runner-throws case, the argv/`env: {}`/`stdin` assertion, and both `resolveExecutable` cases.
+the runner-throws case, and the argv/`env: {}`/`stdin` assertion.
 Port `invoke.test.ts`'s screen and payload cases. Then add the regression cases decision 3 exists
 for, each of which **must fail against the old `/permission|dangerous/iu`**:
 
@@ -246,6 +242,14 @@ docblock.
   that re-exports another package's function hands consumers two import paths for one rule, which
   is the objection `index.test.ts` already records about `parseAgentPromptArgs`. **Update the
   expected-export list in `index.test.ts` in the same change** — it drops to fourteen names.
+
+**`resolveExecutable` was deleted outright, not moved — decided by the founder 2026-08-12**, on a
+fresh-context review finding that it had no production caller anywhere and never had one. Executable
+discovery is `MacOsPlatformAdapter.discoverExecutable`, which shells `/usr/bin/which` with a
+controlled `PATH` and already knows both agent names. The product's split is: **the platform adapter
+finds the executable, `discoverCli` reads its version** — which is how
+`apps/cli/src/commands/claude-capabilities.ts` already works, taking `executablePath` as an input.
+Task 4 and Task 16 both inherit that split; neither may reintroduce a second PATH walk.
 - Tests that moved are deleted from the adapter, not duplicated there. Say in the report how many
   cases moved and how many remain, so the reviewer can see nothing was quietly dropped.
 
@@ -284,15 +288,16 @@ git commit -m "refactor(core,security): one version comparison, one argv screen,
 - Consumes: `ProcessRunner`, `ProcessRequest`, `ProcessResult`, **`discoverCli`** and
   **`CliInstallation`** from `@developer-os/security`.
 - Produces: `CodexInstallation` (an alias of `CliInstallation`) and `discoverCodex` (bound to
-  `discoverCli`). **`resolveExecutable` is not produced here** — Task 3.5 moved it to
-  `@developer-os/security`, and re-exporting it would hand consumers two import paths for one rule.
+  `discoverCli`). **Nothing here resolves an executable path.** The path comes from
+  `MacOsPlatformAdapter.discoverExecutable`, which already knows the `codex` agent name; this
+  package only reads a version out of a path it is handed. Task 3.5 deleted the second PATH walk
+  and Task 16 consumes the same split.
 
 **Amended by Task 3.5.** The step-3 test below is written as it stood before that task, when this
 package owned the whole never-throw implementation. That battery now lives in
 `packages/security/src/cli.test.ts`. Keep here only what pins the *binding*: the two version-format
 cases, one failure case proving `discoverCodex` really is the never-throw one, and the argv
-assertion. **Delete the `resolveExecutable` describe block** — it tests a function this package no
-longer owns.
+assertion. **Delete the `resolveExecutable` describe block** — that function no longer exists.
 
 - [ ] **Step 1: Register the package in the three workspace files**
 
@@ -1808,7 +1813,6 @@ describe("the package's public door", () => {
     "compareCodePoints",
     "screenValueArgument",
     "compareVersions",
-    "resolveExecutable",
   ])("does not re-export %s, which belongs to another package", (name) => {
     expect(Object.keys(door)).not.toContain(name);
   });
@@ -1839,7 +1843,7 @@ describe("the package's public door", () => {
 
 `CodexAdapter` is a frozen object binding the functions. It is a value, not a class: there is nothing to construct, and a façade with state would be a second source of truth about an installation.
 
-Expected: FAIL then PASS — three cases plus the five-name re-export guard.
+Expected: FAIL then PASS — three cases plus the four-name re-export guard.
 
 - [ ] **Step 3: Run the gate and commit**
 
