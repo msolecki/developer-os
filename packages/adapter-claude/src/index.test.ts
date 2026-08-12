@@ -37,16 +37,6 @@ describe("the public door", () => {
     expect(Object.keys(pkg)).not.toContain("parseAgentPromptArgs");
   });
 
-  /**
-   * `resolveExecutable` moved to `@developer-os/security` (Task 3.5), for the
-   * same reason `parseAgentPromptArgs` above is not re-exported: a package
-   * that re-exports another package's function hands consumers two import
-   * paths for one rule.
-   */
-  it("does not re-export the shared resolveExecutable", () => {
-    expect(Object.keys(pkg)).not.toContain("resolveExecutable");
-  });
-
   it("exports no zod schema", () => {
     for (const name of Object.keys(pkg)) {
       expect(name.toLowerCase()).not.toContain("schema");

@@ -33,6 +33,24 @@ describe("compareVersions on input that is not a version", () => {
     expect(compareVersions("2.1.216-rc.1", "2.1.142")).toBeNull();
     expect(compareVersions("", "2.1.142")).toBeNull();
   });
+
+  /**
+   * Regression: `discoverCli`'s `VERSION_PATTERN`
+   * (`packages/security/src/cli.ts`) already forbids a leading zero per
+   * component (`(?:0|[1-9]\d*)`), and DOS-P3 narrowed workflow versions the
+   * same way (`packages/workflow-schema/src/contract.ts`). `compareVersions`
+   * disagreed: its `(\d+)` component accepted `01.2.3`, so
+   * `compareVersions("01.2.3", "1.2.3")` returned `0` instead of refusing to
+   * compare. Unreachable while this function was internal to one adapter;
+   * Task 3.5 put it on `@developer-os/core`'s public door, callable by
+   * anything.
+   */
+  it("reports that it cannot compare a version with a leading zero", () => {
+    expect(compareVersions("01.2.3", "1.2.3")).toBeNull();
+    expect(compareVersions("1.2.3", "01.2.3")).toBeNull();
+    expect(compareVersions("1.02.3", "1.2.3")).toBeNull();
+    expect(compareVersions("1.2.03", "1.2.3")).toBeNull();
+  });
 });
 
 /**

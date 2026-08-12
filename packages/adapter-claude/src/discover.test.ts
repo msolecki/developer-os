@@ -6,10 +6,10 @@ const CLAUDE = "/opt/synthetic/bin/claude";
 
 /**
  * The exhaustive discovery battery — never-throw cases, the timeout, the
- * argv/`env: {}`/`stdin` shape, `resolveExecutable` — moved to
- * `packages/security/src/cli.test.ts` (Task 3.5), because `discoverClaude` is
- * now `discoverCli` with no Claude-specific behaviour of its own. This is the
- * one test left here: that the binding actually wires through.
+ * argv/`env: {}`/`stdin` shape — moved to `packages/security/src/cli.test.ts`
+ * (Task 3.5), because `discoverClaude` is now `discoverCli` with no
+ * Claude-specific behaviour of its own. This is the one test left here: that
+ * the binding actually wires through.
  */
 describe("discoverClaude", () => {
   it("is discoverCli bound to Claude, reading the version from --version output", async () => {
