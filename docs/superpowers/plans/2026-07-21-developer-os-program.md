@@ -188,7 +188,7 @@ unimplemented verbs are Task 6's. `docs/architecture/codex-adapter.md` §10 is t
 
 **Interfaces:**
 - Consumes: the same canonical workflow, Brain, security, platform, and ownership interfaces as Task 4.
-- Produces: `CodexAdapter`, `CodexCapabilities`, `CodexInvocation`, Codex plugin/skill/`AGENTS.md` artifacts, managed hook plans, and structured agent-run results.
+- Produces: `CodexAdapter`, `CodexCapabilities`, `CodexInvocation`, Codex plugin/skill/`AGENTS.md` artifacts, managed hook plans, and structured agent-run results. — *no `AGENTS.md` artifact ships and no managed hook plan ships: `docs/architecture/codex-adapter.md` §2.2 refuses `AGENTS.md` and `AGENTS.override.md` outright, and §5 records that no `hooks/hooks.json` ships for either adapter, so there is no hook plan for this package to manage.*
 
 **What:** Add Codex as an independent adapter without claiming undocumented transcript or lifecycle parity.
 
@@ -202,7 +202,7 @@ unimplemented verbs are Task 6's. `docs/architecture/codex-adapter.md` §10 is t
 - [x] Install only dedicated managed artifacts and semantically merge required config. — *the first half is `mergeStrategy: "dedicated"` over one owned tree. **The second half is dissolved rather than performed**: the vendor's own CLI writes the vendor's config, so no foreign file is merged and `buildConflictEvidence` has no consumer in either adapter. Approved spec §4.3; `BACKLOG.md` §8.*
 - [x] Implement safe non-interactive invocation and structured output validation. — *`codex exec` through the security runner, sandbox from the declared scopes, three flags refused by test. **The JSONL reduction is provisional and unverified** — settling it needs a real model call, declined by the founder on 2026-08-12; owner DOS-P6, `codex-adapter.md` §7.*
 - [ ] Implement documented hooks when available and wrapper-required capture otherwise. — *the second half shipped and the first did not. **Neither adapter ships `hooks/hooks.json`**: a `type: "command"` handler needs an executable file and nothing in this pipeline can express an executable bit, so the only nameable command is the `developer-os` capture entrypoint, which is Task 6's. Ratified by the founder 2026-08-12 for both adapters at once. Restoring it needs the hook bodies, an executable-bit mechanism and a firing test, in one change. **Owner: Task 6 / DOS-P6.***
-- [x] Refuse transcript parsing unless a stable documented contract exists and has a regression fixture. — *nothing in the tree names `transcript_path` on any code path. The refusal is real and **unasserted**: no test pins the absence, and the integration test's write-scope inventory is the only thing that would catch a read.*
+- [x] Refuse transcript parsing unless a stable documented contract exists and has a regression fixture. — *nothing in the tree names `transcript_path` on any code path. **Amended 2026-08-12:** this was real and unasserted — no test pinned the absence — until a fresh-context review caught it; `tests/repository/transcript-path.test.ts` now pins it directly, so the tick is earned rather than backed by a grep nobody reruns.*
 - [x] Test against a fake CLI first and a disposable real installation second. — *both; the real run against `codex-cli 0.147.0` contradicted the approved spec four times and three of those stopped the install completing at all (`codex-adapter.md` §7).*
 
 **Test:**

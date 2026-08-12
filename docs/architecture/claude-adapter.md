@@ -247,6 +247,12 @@ which has nothing to capture into until the capture contract exists).
    Nothing consumes a façade yet, and inventing one before DOS-P5 shows what the two adapters
    actually share would fix the wrong shape. Owner: DOS-P5, at the point where a common interface
    has two implementations.
+   **Amended 2026-08-12, by DOS-P5:** `CodexAdapter` is that façade — `packages/adapter-codex/src/
+   index.ts`, `docs/architecture/codex-adapter.md` §1 and §9. It ships behind its own package's
+   `index.ts`, exactly as this residual asked. `ClaudeAdapter` still does not exist, so this
+   package's own half of the residual is not discharged by that — but the open half is now
+   *symmetry between two adapters that both lack a façade class*, not an absence with no
+   precedent to weigh against. `codex-adapter.md` §9 records the same fact from the other side.
 7. **`durable_project_guidance` is reported and used by nothing** (spec §15.2). Reporting a
    capability this adapter does not use is worth doing; relying on it is not, and §6's
    concatenation decision is what would have to be revisited first.
