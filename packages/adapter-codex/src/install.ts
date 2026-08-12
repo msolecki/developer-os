@@ -62,9 +62,15 @@ export interface CodexInstallProposal {
  *
  * The plugin-tree root (`<home>/codex/plugins/developer-os`, what
  * `buildPluginTree` itself uses) is a **descendant** of this root, which is
- * exactly why the prior reading was dangerous rather than merely wrong: a
- * plugin-tree-relative path fed here does not escape — containment still
- * passes — it just double-nests under `plugins/developer-os` a second time.
+ * exactly why an unprefixed reading is dangerous rather than merely wrong: a
+ * plugin-tree-relative path fed here as-is — `buildPluginTree`'s raw output,
+ * with no `plugins/developer-os/` prefix — does not escape and containment
+ * still passes, it just under-nests one level too shallow, landing at
+ * `<home>/codex/.codex-plugin/...` instead of
+ * `<home>/codex/plugins/developer-os/.codex-plugin/...`. A caller must join
+ * `PLUGIN_TREE_PREFIX` (`plugin.ts`) onto each `buildPluginTree` artifact's
+ * path before handing the tree here — the failure mode without it is silent
+ * under-nesting, not a refusal.
  */
 function marketplaceRoot(context: InstallContext): string {
   return posix.join(context.home, CODEX_ROOT_SEGMENT);

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildPluginTree, PLUGIN_NAME, PLUGIN_TREE_SEGMENTS } from "./plugin.js";
+import {
+  buildPluginTree,
+  PLUGIN_NAME,
+  PLUGIN_TREE_PREFIX,
+  PLUGIN_TREE_SEGMENTS,
+} from "./plugin.js";
 
 const skills = [
   { path: "skills/developer-os-shared/SKILL.md", contents: "shared\n" },
@@ -15,6 +20,11 @@ describe("buildPluginTree", () => {
 
   it("installs to <product-home>/codex/plugins/developer-os", () => {
     expect([...PLUGIN_TREE_SEGMENTS]).toEqual(["codex", "plugins", PLUGIN_NAME]);
+  });
+
+  it("derives the marketplace-root-relative plugin prefix from PLUGIN_TREE_SEGMENTS, not a literal", () => {
+    expect(PLUGIN_TREE_PREFIX).toBe("plugins/developer-os");
+    expect(PLUGIN_TREE_PREFIX).toBe(PLUGIN_TREE_SEGMENTS.slice(1).join("/"));
   });
 
   it("emits a manifest with exactly the fields spec §14.4 names and no others", () => {

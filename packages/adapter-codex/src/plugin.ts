@@ -17,6 +17,23 @@ export const PLUGIN_TREE_SEGMENTS: readonly string[] = [
 export const MARKETPLACE_RELATIVE_PATH = ".agents/plugins/marketplace.json";
 
 /**
+ * `PLUGIN_TREE_SEGMENTS` with the leading `CODEX_ROOT_SEGMENT` dropped —
+ * i.e. `plugins/developer-os`, relative to the **marketplace root**
+ * (`<product-home>/codex`), not the product home. `buildPluginTree`'s own
+ * output (`.codex-plugin/plugin.json`, `skills/...`) is relative to the
+ * plugin root, one level deeper than the marketplace root
+ * `proposeCodexInstall` resolves against — a caller must join this prefix
+ * onto each `buildPluginTree` artifact's path before handing the tree to
+ * `proposeCodexInstall`. Skip that join and the artifact still resolves:
+ * the plugin root is a descendant of the marketplace root, so containment
+ * still passes — it just lands one level too shallow. That is silent
+ * under-nesting, not a refusal, which is why this is computed from
+ * `PLUGIN_TREE_SEGMENTS` rather than typed again as a string literal
+ * wherever it is needed.
+ */
+export const PLUGIN_TREE_PREFIX = PLUGIN_TREE_SEGMENTS.slice(1).join("/");
+
+/**
  * This repository has not cut an independent release for any package — every
  * `package.json` in the workspace, including this adapter's own, is pinned at
  * `0.0.0`. The manifest's `version` tracks that convention rather than
