@@ -36,8 +36,10 @@ export { CodexRenderer, SHARED_WORKFLOW_ID } from "./render.js";
 export type { CodexRendererDependencies } from "./render.js";
 export {
   buildPluginTree,
+  CODEX_ROOT_SEGMENT,
   MARKETPLACE_RELATIVE_PATH,
   PLUGIN_NAME,
+  PLUGIN_TREE_PREFIX,
   PLUGIN_TREE_SEGMENTS,
 } from "./plugin.js";
 export { MARKETPLACE_NAME, renderMarketplace } from "./marketplace.js";

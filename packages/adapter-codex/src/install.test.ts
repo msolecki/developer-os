@@ -79,6 +79,25 @@ describe("proposeCodexInstall", () => {
     expect(() => proposeCodexInstall([], context)).toThrow(/empty/u);
   });
 
+  /**
+   * `PLUGIN_TREE_PREFIX`'s docblock: the plugin root is a **descendant** of
+   * the marketplace root this function resolves against, so an artifact fed
+   * here straight from `buildPluginTree` — no `plugins/developer-os/` prefix
+   * — does not escape and containment still passes; it silently under-nests
+   * one level too shallow instead of refusing. Before this guard existed, the
+   * requirement that plugin-tree artifacts arrive already prefixed was prose
+   * in a docblock only, and `install.ts` did not even import
+   * `PLUGIN_TREE_PREFIX` to check it.
+   */
+  it("refuses a plugin-tree artifact that arrives without PLUGIN_TREE_PREFIX, rather than silently under-nesting it", () => {
+    expect(() =>
+      proposeCodexInstall(
+        [{ path: ".codex-plugin/plugin.json", contents: "{}\n" }],
+        context,
+      ),
+    ).toThrow(/PLUGIN_TREE_PREFIX/u);
+  });
+
   it("creates what nobody owns and replaces what this adapter installed", () => {
     const owned = artifact(`${pluginRoot}/.codex-plugin/plugin.json`);
     const proposal = proposeCodexInstall(tree, context, new Map([[owned.path, owned]]));
