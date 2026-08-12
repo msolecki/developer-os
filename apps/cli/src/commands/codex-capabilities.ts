@@ -23,12 +23,15 @@ export interface CodexCapabilityRequest {
   /**
    * Whether to run the capability probe.
    *
-   * **Default `false`, and that is a finding rather than a preference** — the
-   * same reasoning `claude-capabilities.ts` records: `doctor` is a diagnostic
-   * and must not shell out to the vendor's CLI on every invocation. The probe
-   * here is `codex plugin list --json`, which spec §5.2 documents as a
-   * read-only structured query, but running any vendor process from a
-   * read-only command is a decision `doctor` should make once, not per call.
+   * **Default `false`, and that is a finding rather than a preference.**
+   * `doctor` is a diagnostic and must not shell out to the vendor's CLI on
+   * every invocation — `claude-capabilities.ts` settles the same question for
+   * Claude's probe, which spec §14.1 records as *mutating* (it writes
+   * `~/.claude.json` and a backup). This probe is different in kind: `codex
+   * plugin list --json` is a read-only structured query (spec §5.2), so
+   * nothing here is refusing a write. It stays opt-in anyway, because
+   * spawning any vendor process from a read-only command is a decision
+   * `doctor` should make once, explicitly, rather than on every run.
    */
   readonly probe?: boolean;
 }
