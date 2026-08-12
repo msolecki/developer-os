@@ -35,15 +35,34 @@ const PROBE_TIMEOUT_MS = 30_000;
  * stay strict, because those are ours to keep in sync; this one is not ours
  * to police.
  *
- * `status` and `path` are `optional`, not required, for the same reason —
- * spec §5.2 documents the fields this adapter reads, not a guarantee that
- * every entry in every Codex release carries them.
+ * Real shape, per spec §14.4 (Task 17, verified against a real 0.147.0
+ * binary): `{ installed: [...], available: [...] }`, never the guessed
+ * `{ plugins: [...] }` this schema previously expected. Each entry's path
+ * is nested under `source.path` — the marketplace-resolved *source*, not
+ * the `$CODEX_HOME/plugins/cache/...` copy Codex separately stages — never
+ * a top-level `path`. `enabled` is a boolean field on the entry, never the
+ * string `status` this schema previously expected.
+ *
+ * `enabled` and `source` are `optional`, not required, for the same reason
+ * as the `.loose()` above — spec §5.2 documents the fields this adapter
+ * reads, not a guarantee that every entry in every Codex release carries
+ * them. `installed` (the array) is required: without it there is nothing
+ * trustworthy to search, and a parse failure becomes `unavailable`, never
+ * `absent` (see `probeCodex`'s doc comment on why that distinction matters).
+ * `available` is read only to keep it out of the search — see `probeCodex`.
  */
+const pluginEntrySchema = z
+  .object({
+    name: z.string(),
+    enabled: z.boolean().optional(),
+    source: z.object({ path: z.string().optional() }).loose().optional(),
+  })
+  .loose();
+
 const listingSchema = z
   .object({
-    plugins: z.array(
-      z.object({ name: z.string(), status: z.string().optional(), path: z.string().optional() }).loose(),
-    ),
+    installed: z.array(pluginEntrySchema),
+    available: z.array(pluginEntrySchema).optional(),
   })
   .loose();
 
@@ -93,8 +112,9 @@ async function listPlugins(
  * `claude plugin validate` exit code as an observation of `skills`,
  * `plugin_hooks` and `subagents` at once, and reported `yes` for two artifacts
  * a clean exit code never inspected. `codex plugin list --json` is different
- * in kind, not just detail — it is structured output naming a specific
- * plugin, its `status`, and its resolved `path` — so this probe can settle
+ * in kind, not just detail — it is structured output listing `installed` (and
+ * separately, `available`) plugins, each naming a specific plugin, its
+ * `enabled` state, and its resolved `source.path` — so this probe can settle
  * *installed*, *enabled*, and *is the resolved path the tree we own* from one
  * call without over-claiming, because those three facts are exactly what the
  * listing reports.
@@ -107,13 +127,15 @@ async function listPlugins(
  * Task 7's resolver sees an unmentioned key rather than a false claim about
  * one that was never asked about.
  *
- * `observed` requires all three of: a plugin named `developer-os` present,
- * enabled, and resolved to `dependencies.pluginRoot`. A plugin under our name
- * resolved to a path we never wrote is not our tree — spec's local-marketplace
- * install shape exists precisely so this call can tell the two apart, and
- * reporting `observed` for someone else's tree would claim we verified an
- * artifact we did not write. Anything that parsed but fails one of the three
- * is `absent`. Anything that did not parse, exited non-zero, or timed out is
+ * `observed` requires all three of: a plugin named `developer-os` present in
+ * `installed` — never `available`, which lists what a marketplace offers,
+ * not what is installed (spec §14.4) — enabled, and resolved (`source.path`)
+ * to `dependencies.pluginRoot`. A plugin under our name resolved to a path we
+ * never wrote is not our tree — spec's local-marketplace install shape
+ * exists precisely so this call can tell the two apart, and reporting
+ * `observed` for someone else's tree would claim we verified an artifact we
+ * did not write. Anything that parsed but fails one of the three is
+ * `absent`. Anything that did not parse, exited non-zero, or timed out is
  * `unavailable` — never `absent`: "we could not ask" and "we asked and it is
  * not there" are different facts, and a `wrapper-required` state must never
  * be reached by conflating a refusal to answer with an answer of no.
@@ -135,9 +157,9 @@ export async function probeCodex(
     };
   }
 
-  const ours = listing.plugins.find((plugin) => plugin.name === "developer-os") ?? null;
-  const enabled = ours === null ? null : ours.status === "enabled";
-  const resolvedPath = ours === null ? null : (ours.path ?? null);
+  const ours = listing.installed.find((plugin) => plugin.name === "developer-os") ?? null;
+  const enabled = ours === null ? null : ours.enabled === true;
+  const resolvedPath = ours === null ? null : (ours.source?.path ?? null);
   const observed = enabled === true && resolvedPath === dependencies.pluginRoot;
 
   return {
