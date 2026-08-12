@@ -40,8 +40,10 @@
 | `packages/core/src/capabilities/index.ts` | `CapabilityState`, `ProbeObservation` — shared by both adapters (Task 1, **done**) |
 | `packages/security/src/markdown.ts` | the Markdown display seam: paragraph split, block-start neutralisation, payload-sized fences (Task 2, **done**) |
 | `packages/workflow-schema/src/skill.ts` | the **vendor-neutral skill body**: refusals, steps, recovery, the preamble (Task 3, **done**) |
-| `packages/adapter-codex/src/discover.ts` | locate the CLI, read `codex --version` |
-| `packages/adapter-codex/src/versions.ts` | capability keys, the supported floor, semver comparison |
+| `packages/core/src/versions/index.ts` | `compareVersions`, `tablePermits` over a vendor-supplied table (Task 3.5) |
+| `packages/security/src/cli.ts` | the **vendor-CLI boundary**: find the executable, never-throw version discovery, the positional argv screen, structured-output parsing (Task 3.5) |
+| `packages/adapter-codex/src/discover.ts` | the vendor binding onto `discoverCli` — argv and the installation type, nothing else |
+| `packages/adapter-codex/src/versions.ts` | capability keys, the supported floor, the documented-floor table |
 | `packages/adapter-codex/src/probe.ts` | `codex plugin list --json` behind an injected runner |
 | `packages/adapter-codex/src/capabilities.ts` | table plus observation into the three-value model |
 | `packages/adapter-codex/src/render.ts` | `CodexRenderer` — frontmatter, artifact path, and nothing else |
@@ -58,7 +60,7 @@
 
 ---
 
-## Two decisions taken before Task 1, and why
+## Three decisions taken before the tasks that depend on them, and why
 
 **1. DOS-P5 ships no `hooks/hooks.json`. Hooks for *both* adapters are DOS-P6's, in one change.**
 
@@ -71,6 +73,30 @@ This is the same conclusion DOS-P4 reached and the founder ratified on 2026-08-1
 Codex's required skill frontmatter is `name` and `description` (spec §14.3). Claude's is the same, and its artifact path is already `skills/developer-os-<id>/SKILL.md`. A second renderer written the obvious way would be byte-identical to the first — ~450 lines and twenty tests duplicated across peer packages, and `plugins/codex/skills/**` a byte-for-byte copy of `plugins/claude/skills/**`.
 
 Task 3 did that on 2026-08-12: the body lives in `packages/workflow-schema/src/skill.ts`, the Claude adapter was migrated onto it in the same change, and `plugins/claude/` did not move by a byte. **It amended `docs/architecture/workflow-schema.md` §2.2 and §6**, which said the package ships no renderer: `WorkflowRenderer` is still an interface, each adapter still implements it, and what moved is the vendor-*neutral* half — the refusals, steps and recovery every vendor renders identically because they come from one contract. Ratified by the founder the same day; `BACKLOG.md` §8 carries the row.
+
+**3. The last vendor-neutral logic moves too, in a Task 3.5 — decided by the founder 2026-08-12.**
+
+A pre-flight scan before Task 4 found this plan telling four tasks to copy what Global Constraint 1
+says must move. Task 4 would have copied `resolveExecutable` and the whole never-throw `discoverX`
+— whose argv is `["--version"]` on both sides, making it byte-identical apart from two type names.
+Task 5 would have copied the `VERSION` regex, `parseVersion`, `compareVersions` and `tablePermits`'s
+body, leaving only two constants vendor-specific. Task 12 would have copied `screenValueArgument`
+and `parsePayload`. About ninety lines of logic, across two packages that may not import each other.
+
+Two of those copies are load-bearing, which is what settled it:
+
+- `compareVersions` returns `null` rather than `NaN` **because a fresh-context review caught it
+  failing open on 2026-08-11** (`packages/adapter-claude/src/versions.ts`, the docblock). A second
+  copy is a second place that fix can regress.
+- **The two argv screens had already diverged in the plan.** Shipped Claude tests
+  `/permission|dangerous/iu`; Task 12 below specifies `/permission|danger|bypass/iu` and says why —
+  so `danger-full-access` is caught as a value. That means the shipped Claude screen does **not**
+  catch it, while the plan's own words about that screen are "this has to be right once."
+
+Task 3.5 moves both, plus the discovery shape and the structured-output parse, and migrates
+`packages/adapter-claude` onto them in the same change. **Amends this plan**, which was approved on
+2026-08-11; registered in `BACKLOG.md` §8. Tasks 4, 5, 12 and 13 below carry the consequences
+inline.
 
 ---
 
@@ -118,6 +144,133 @@ load-bearing by widening its surface by six names.
 
 ---
 
+### Task 3.5: Move the last vendor-neutral logic out of the adapters
+
+**Complexity:** M
+
+**Why this task exists.** The opening decision 3 above. This is the fourth and last move of the
+Tasks 1–3 shape, and it is the one that keeps a security screen and a fail-open fix single-copy.
+**No Codex file is created here** — `packages/adapter-codex` does not exist yet, and this task
+must not create it.
+
+**Files:**
+- Create: `packages/core/src/versions/index.ts`, `packages/core/src/versions/index.test.ts`
+- Create: `packages/security/src/cli.ts`, `packages/security/src/cli.test.ts`
+- Modify: `packages/core/src/index.ts`, `packages/security/src/index.ts`
+- Modify: `packages/adapter-claude/src/versions.ts`, `discover.ts`, `invoke.ts`, `index.ts`, and
+  the four test files that name what moved
+
+**Interfaces produced:**
+
+```ts
+// @developer-os/core
+export function compareVersions(left: string, right: string): number | null;
+export interface CapabilityVersionTable<Key extends string> {
+  readonly minimum: string;
+  /** A documented floor per key, or `null` for "the probe decides". */
+  readonly floors: ReadonlyMap<Key, string | null>;
+}
+export function tablePermits<Key extends string>(
+  table: CapabilityVersionTable<Key>,
+  key: Key,
+  version: string,
+): boolean;
+
+// @developer-os/security
+export interface CliInstallation {
+  readonly executable: string;
+  readonly version: string;
+}
+export function resolveExecutable(
+  name: string,
+  dependencies?: ResolveExecutableDependencies,
+): Promise<string | null>;
+export function discoverCli(
+  dependencies: DiscoverCliDependencies,
+): Promise<CliInstallation | null>;
+export function screenValueArgument(value: string, field: string): string | null;
+export function parseStructuredPayload(
+  stdout: string,
+): { readonly ok: true; readonly payload: unknown }
+ | { readonly ok: false; readonly reason: "malformed-output" };
+```
+
+- [ ] **Step 1: Write the failing tests for `packages/core/src/versions`**
+
+Port every case from `packages/adapter-claude/src/versions.test.ts` that exercises
+`compareVersions` or the floor logic, and add the cases the generic form makes reachable: a table
+whose `floors` map omits the key entirely (refuse — the `undefined` branch), a key named
+`toString` (refuse, not a `Function` off `Object.prototype` — the `Map` is the mechanism and a test
+must hold it there), a floor above the minimum, and a version between the two.
+
+- [ ] **Step 2: Run it, confirm it fails, implement, rerun**
+
+`compareVersions` moves **verbatim**, docblock included — the paragraph explaining `null` over
+`NaN` is the reason the function exists in that shape and must not be summarised away.
+`tablePermits` takes the table as its first argument and is otherwise unchanged.
+
+- [ ] **Step 3: Write the failing tests for `packages/security/src/cli.ts`**
+
+Port the whole battery from `packages/adapter-claude/src/discover.test.ts` — the never-throw cases,
+the runner-throws case, the argv/`env: {}`/`stdin` assertion, and both `resolveExecutable` cases.
+Port `invoke.test.ts`'s screen and payload cases. Then add the regression cases decision 3 exists
+for, each of which **must fail against the old `/permission|dangerous/iu`**:
+
+- `danger-full-access` in a value position is refused;
+- a value containing `bypass` is refused;
+- `--dangerously-bypass-hook-trust` and `--ignore-user-config` are refused by the `-` rule.
+
+- [ ] **Step 4: Run it, confirm it fails, implement, rerun**
+
+`screenValueArgument`'s regex becomes `/permission|danger|bypass/iu` — strictly wider than what
+shipped, so **name the risk and check it**: nothing this product puts in a value position may match
+it. At the time of writing `allowedTools` has no production caller — only tests construct it — and
+the report must say what was checked rather than assert the property.
+
+`discoverCli` is `discoverClaude` with the vendor names removed. It keeps the absolute-executable
+refusal, the 10-second timeout, `VERSION_PATTERN`, and the never-throw contract, each with its
+docblock.
+
+- [ ] **Step 5: Migrate `packages/adapter-claude` onto the shared code**
+
+- `versions.ts` keeps `CLAUDE_CAPABILITY_KEYS`, `ClaudeCapabilityKey`, `CLAUDE_MINIMUM_VERSION` and
+  the `DOCUMENTED_FLOORS` map, and exports one binding — `tablePermits(key, version)` closing over
+  its own table. `compareVersions` is imported from `@developer-os/core` by whatever still needs
+  it, and is **not** re-exported from this package.
+- `discover.ts` becomes the vendor binding: `discoverClaude` bound to `discoverCli`, and
+  `ClaudeInstallation` as an alias of `CliInstallation`. Nothing else.
+- `invoke.ts` drops its private `screenValueArgument` and `parsePayload` and calls the shared ones.
+  `MAX_TURNS_CEILING` and the `maxTurns` bound stay — `maxTurns` is a Claude argument and
+  `CodexInvocation` has no such field.
+- `index.ts` drops `resolveExecutable`, `DiscoverDependencies` and `ResolveDependencies`. A package
+  that re-exports another package's function hands consumers two import paths for one rule, which
+  is the objection `index.test.ts` already records about `parseAgentPromptArgs`. **Update the
+  expected-export list in `index.test.ts` in the same change** — it drops to fourteen names.
+- Tests that moved are deleted from the adapter, not duplicated there. Say in the report how many
+  cases moved and how many remain, so the reviewer can see nothing was quietly dropped.
+
+- [ ] **Step 6: Prove the move changed no behaviour**
+
+```bash
+npm run check
+npm run render:claude && git status --short   # must print nothing
+```
+
+`plugins/claude/` must not move by a byte. Nothing here touches a renderer, so a diff would mean
+something unintended moved.
+
+- [ ] **Step 7: Run the gate and commit**
+
+```bash
+npm run check
+git add packages/core/src/versions packages/core/src/index.ts \
+        packages/security/src/cli.ts packages/security/src/cli.test.ts \
+        packages/security/src/index.ts packages/adapter-claude/src
+git commit -m "refactor(core,security): one version comparison, one argv screen, one discovery"
+```
+
+---
+
 ### Task 4: Scaffold the package and discover an installation
 
 **Complexity:** M
@@ -128,8 +281,18 @@ load-bearing by widening its surface by six names.
 - Modify: `pnpm-workspace.yaml`, root `tsconfig.json`, root `vitest.config.ts`
 
 **Interfaces:**
-- Consumes: `ProcessRunner`, `ProcessRequest`, `ProcessResult` from **`@developer-os/security`**.
-- Produces: `CodexInstallation { executable: string; version: string }`, `discoverCodex`, `resolveExecutable`.
+- Consumes: `ProcessRunner`, `ProcessRequest`, `ProcessResult`, **`discoverCli`** and
+  **`CliInstallation`** from `@developer-os/security`.
+- Produces: `CodexInstallation` (an alias of `CliInstallation`) and `discoverCodex` (bound to
+  `discoverCli`). **`resolveExecutable` is not produced here** — Task 3.5 moved it to
+  `@developer-os/security`, and re-exporting it would hand consumers two import paths for one rule.
+
+**Amended by Task 3.5.** The step-3 test below is written as it stood before that task, when this
+package owned the whole never-throw implementation. That battery now lives in
+`packages/security/src/cli.test.ts`. Keep here only what pins the *binding*: the two version-format
+cases, one failure case proving `discoverCodex` really is the never-throw one, and the argv
+assertion. **Delete the `resolveExecutable` describe block** — it tests a function this package no
+longer owns.
 
 - [ ] **Step 1: Register the package in the three workspace files**
 
@@ -286,12 +449,15 @@ Expected: FAIL — the module does not exist.
 
 - [ ] **Step 5: Implement `discover.ts`**
 
-`packages/adapter-claude/src/discover.ts` is the reference implementation and may be read: same `VERSION_PATTERN`, same 10-second timeout, same never-throw contract, same `resolveExecutable` resolving in the parent because the request carries no `PATH` and `assertSafeCommand` refuses a non-absolute executable. The argv is `["--version"]`.
+After Task 3.5 this file is the vendor binding and nothing else: `CodexInstallation` as an alias of
+`CliInstallation`, and `discoverCodex` bound to `discoverCli`. `packages/adapter-claude/src/discover.ts`
+is the reference for the shape and should be the same size. The argv is `["--version"]`, which is
+`discoverCli`'s own — this package supplies no argv of its own here.
 
 - [ ] **Step 6: Run the tests and confirm they pass**
 
 Run: `pnpm vitest run packages/adapter-codex`
-Expected: PASS, 10 tests.
+Expected: PASS — the binding cases kept from step 3, not the ten the pre-Task-3.5 text assumed.
 
 - [ ] **Step 7: Run the gate and commit**
 
@@ -311,7 +477,13 @@ git commit -m "feat(adapter-codex): find an installation without ever throwing"
 - Create: `packages/adapter-codex/src/versions.ts`, `src/versions.test.ts`
 
 **Interfaces:**
-- Produces: `CODEX_CAPABILITY_KEYS`, `CodexCapabilityKey`, `CODEX_MINIMUM_VERSION`, `compareVersions`, `tablePermits`.
+- Consumes: `compareVersions`, `tablePermits`, `CapabilityVersionTable` from `@developer-os/core`.
+- Produces: `CODEX_CAPABILITY_KEYS`, `CodexCapabilityKey`, `CODEX_MINIMUM_VERSION`, and one binding
+  `tablePermits(key, version)` closing over this vendor's table.
+
+**Amended by Task 3.5.** `compareVersions` is core's and is neither implemented nor re-exported
+here; **delete its describe block from the step-1 test** — `packages/core/src/versions/index.test.ts`
+owns those cases. The `tablePermits` block stays: it pins this vendor's floor, which is vendor data.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -433,7 +605,10 @@ const DOCUMENTED_FLOORS: ReadonlyMap<CodexCapabilityKey, string | null> = new Ma
 );
 ```
 
-`compareVersions` and `tablePermits` copy the shape in `packages/adapter-claude/src/versions.ts` — including the `Map` rather than an object literal, for the reason recorded there: a key named `toString` resolves to a `Function` through `Object.prototype` and passes an `!== undefined` guard.
+`DOCUMENTED_FLOORS` stays a `Map` rather than an object literal, for the reason recorded in core:
+a key named `toString` resolves to a `Function` through `Object.prototype` and passes an
+`!== undefined` guard. The exported `tablePermits` is one line binding core's to
+`{ minimum: CODEX_MINIMUM_VERSION, floors: DOCUMENTED_FLOORS }`.
 
 - [ ] **Step 4: Run the tests and confirm they pass**
 
@@ -1366,7 +1541,8 @@ git commit -m "feat(adapter-codex): one owned tree, and two steps that belong to
 - Create: `packages/adapter-codex/src/invoke.ts`, `src/invoke.test.ts`
 
 **Interfaces:**
-- Consumes: `ProcessRunner` from `@developer-os/security`; `parseAgentPromptArgs` from `@developer-os/core`.
+- Consumes: `ProcessRunner`, **`screenValueArgument`** and **`parseStructuredPayload`** from
+  `@developer-os/security`; `parseAgentPromptArgs` from `@developer-os/core`.
 - Produces:
 
 ```ts
@@ -1525,7 +1701,17 @@ const args = [
 ];
 ```
 
-The screen on every value position is DOS-P4's and it is **positional, not nominal**: nothing this adapter puts in a value position may begin with `-`, and nothing may match `/permission|danger|bypass/iu` — `danger` rather than `dangerous`, so that `danger-full-access` is caught as a value too. A denylist has to enumerate every dangerous flag the vendor will ever ship; this has to be right once. The sandbox mode is chosen from the scope count and never from an argument, which is what makes `danger-full-access` unreachable rather than merely unwritten.
+The screen on every value position is **`screenValueArgument` from `@developer-os/security`** —
+Task 3.5 moved it there and widened it to `/permission|danger|bypass/iu` for exactly this task's
+reason: `danger` rather than `dangerous`, so `danger-full-access` is caught as a value too. It is
+**positional, not nominal**: nothing this adapter puts in a value position may begin with `-`, and
+nothing may match that pattern. A denylist has to enumerate every dangerous flag the vendor will
+ever ship; this has to be right once, and after Task 3.5 there is one copy of it to be right.
+**Do not re-implement it here.** The sandbox mode is chosen from the scope count and never from an
+argument, which is what makes `danger-full-access` unreachable rather than merely unwritten.
+
+Structured output goes through `parseStructuredPayload`, also security's after Task 3.5 — which is
+where the top-level `__proto__` refusal lives.
 
 `invocationFromAgentPrompt` calls `parseAgentPromptArgs` and maps its refusal to a `detail` that never echoes the rejected value, because a `with` block is author-controlled and the message reaches a log.
 
@@ -1596,7 +1782,6 @@ describe("the package's public door", () => {
         "renderCodexPlugin",
         "renderMarketplace",
         "resolveCapabilities",
-        "resolveExecutable",
       ].sort(),
     );
   });
@@ -1613,13 +1798,19 @@ describe("the package's public door", () => {
   /**
    * A guard, not a constant. `SHARED_WORKFLOW_ID` is re-exported deliberately —
    * it is a string, and a consumer that has it cannot get anything wrong with
-   * it. `parseAgentPromptArgs` and `compareCodePoints` are guarantees, and a
-   * package that re-exports another package's guard hands consumers two import
-   * paths for one rule.
+   * it. The four below are guarantees, and a package that re-exports another
+   * package's guard hands consumers two import paths for one rule. The last two
+   * are Task 3.5's: one argv screen and one version comparison, or they are not
+   * one.
    */
-  it("does not re-export another package's guard", () => {
-    expect(Object.keys(door)).not.toContain("parseAgentPromptArgs");
-    expect(Object.keys(door)).not.toContain("compareCodePoints");
+  it.each([
+    "parseAgentPromptArgs",
+    "compareCodePoints",
+    "screenValueArgument",
+    "compareVersions",
+    "resolveExecutable",
+  ])("does not re-export %s, which belongs to another package", (name) => {
+    expect(Object.keys(door)).not.toContain(name);
   });
 
   /**
@@ -1648,7 +1839,7 @@ describe("the package's public door", () => {
 
 `CodexAdapter` is a frozen object binding the functions. It is a value, not a class: there is nothing to construct, and a façade with state would be a second source of truth about an installation.
 
-Expected: FAIL then PASS, 4 tests.
+Expected: FAIL then PASS — three cases plus the five-name re-export guard.
 
 - [ ] **Step 3: Run the gate and commit**
 
