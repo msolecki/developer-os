@@ -4,7 +4,10 @@ import {
   probeCodex,
   resolveCapabilities,
 } from "@developer-os/adapter-codex";
-import type { CodexCapabilities } from "@developer-os/adapter-codex";
+import type {
+  CapabilityState,
+  CodexCapabilities,
+} from "@developer-os/adapter-codex";
 
 import type { ProcessRunner } from "@developer-os/security";
 
@@ -60,13 +63,17 @@ export interface CodexCapabilityReport {
 const HOOK_TRUST_RECOVERY =
   "inside a Codex session, run /hooks to review and trust the developer-os hooks";
 
+/**
+ * Mirrors `resolveCapabilities`'s accumulator shape, so a renamed key or a
+ * new `CapabilityState` value is a compile error here too, not just there.
+ */
 function allUnknown(): CodexCapabilities {
-  const resolved: Record<string, string> = Object.create(null) as Record<
+  const resolved: Record<string, CapabilityState> = Object.create(null) as Record<
     string,
-    string
+    CapabilityState
   >;
   for (const key of CODEX_CAPABILITY_KEYS) resolved[key] = "unknown";
-  return Object.freeze(resolved) as unknown as CodexCapabilities;
+  return Object.freeze(resolved);
 }
 
 function summarise(capabilities: CodexCapabilities): string {
