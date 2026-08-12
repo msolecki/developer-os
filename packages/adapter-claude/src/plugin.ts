@@ -1,3 +1,4 @@
+import { compareCodePoints } from "@developer-os/workflow-schema";
 import type { RenderedArtifact } from "@developer-os/workflow-schema";
 
 export const PLUGIN_NAME = "developer-os";
@@ -13,34 +14,8 @@ export const PLUGIN_INSTALL_SEGMENTS: readonly string[] = [
   PLUGIN_NAME,
 ];
 
-/**
- * By code point, which is the same order as UTF-8 bytes.
- *
- * Not the default `<`: it compares UTF-16 code units, so every code point at or
- * above U+10000 sorts *below* U+E000–U+FFFF. That is still deterministic inside
- * Node, which is why it survives a local test — and it is wrong the moment a
- * consumer in another language, a canonical hash, or a `sort`-based check
- * orders the same set.
- *
- * **Duplicated from `packages/workflow-schema/src/derive.ts`, deliberately and
- * temporarily.** That copy is private to the compiler. When DOS-P5 needs the
- * same ordering there will be three copies, and the right fix is one export
- * from `workflow-schema` — recorded as a residual for the architecture note
- * rather than done here, because widening a closed package's public door is not
- * this task's to decide.
- */
-function compareCodePoints(left: string, right: string): number {
-  let leftAt = 0;
-  let rightAt = 0;
-  while (leftAt < left.length && rightAt < right.length) {
-    const a = left.codePointAt(leftAt) ?? 0;
-    const b = right.codePointAt(rightAt) ?? 0;
-    if (a !== b) return a < b ? -1 : 1;
-    leftAt += a > 0xffff ? 2 : 1;
-    rightAt += b > 0xffff ? 2 : 1;
-  }
-  return left.length - leftAt - (right.length - rightAt);
-}
+// Ordering comes from the compiler, which owns the determinism contract.
+// The duplicate that lived here is gone — `claude-adapter.md` §9.5.
 
 /**
  * Spec §14.1: the manifest is optional and `name` is its only required field,
