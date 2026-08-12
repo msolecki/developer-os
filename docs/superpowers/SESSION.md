@@ -61,7 +61,7 @@ beyond checking that the tree is where `ORDER.md` says it is.
 
 | Entry shape | Skill to invoke first |
 |---|---|
-| Execute an existing plan — any entry whose **P** gate is already closed | `superpowers:executing-plans` |
+| Execute an existing plan — any entry whose **P** gate is already closed | `superpowers:subagent-driven-development`, or `superpowers:executing-plans` for a plan whose tasks are too coupled to hand out one at a time |
 | Write a spec — any entry whose **S** gate is still open | `superpowers:brainstorming`, then write the spec |
 | Write an implementation plan — the **P** gate | `superpowers:writing-plans` |
 | Any code step inside a plan | `superpowers:test-driven-development` |
@@ -69,6 +69,15 @@ beyond checking that the tree is where `ORDER.md` says it is.
 
 Announce which one you are using and why. If a plan step and a skill disagree on procedure,
 the plan wins — it was approved for this repository.
+
+**Prefer the subagent loop for plan execution, and it is not a preference about speed.** The gates
+require a fresh-context review per code-producing task, and that loop is what produces one: a
+different agent implements and reviews each task, and a task is not done until its reviewer says
+so. Across DOS-P4 and DOS-P5 those reviews caught, among others, a capability reported `yes` over
+an artifact that did not exist, a `doctor` run printing two contradictory statements about one
+binary, author prose able to forge a heading inside the prompt-injection defence, and a test that
+scanned its own source and could never have passed. A self-review would have caught none of them —
+it shares the author's assumptions, which is the whole reason the rule says reviewer ≠ author.
 
 ## 4. Do the work
 
