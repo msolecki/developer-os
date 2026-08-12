@@ -34,8 +34,10 @@ function manifest(): RenderedArtifact {
 
 /**
  * **`hooks/hooks.json` is deliberately not emitted, and this is the record of
- * why.** Amends spec §6, which declares three events; pending the founder's
- * ratification, registered in `BACKLOG.md` §8.
+ * why.** Amends spec §6, which declares three events. **Ratified by the founder
+ * on 2026-08-12**, and the ratified decision covers *both* adapters: neither
+ * this one nor Codex ships `hooks/hooks.json`, so the two are in one state
+ * rather than two coincidences. `BACKLOG.md` §8 carries the row.
  *
  * The first version emitted hooks whose commands were
  * `${CLAUDE_PLUGIN_ROOT}/bin/session-start` and two siblings. A fresh-context
