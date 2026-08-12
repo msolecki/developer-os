@@ -42,13 +42,12 @@ spec §1 forbids either adapter importing the other and four of the Claude adapt
 due precisely here. Doing them first is what keeps the second renderer from being a copy of the
 first — which, measured against the shipped one, is exactly what it would otherwise be.
 
-**Two things in the plan are founder decisions, not an implementer's, and both are in `BACKLOG.md`
-§8.** Spec §5.3 says ship hooks; a command hook names something executable, and the only command we
-could name is the product binary, whose capture entrypoint is DOS-P6's — so the plan defers hooks
-for **both** adapters to DOS-P6, in one change, which is where DOS-P4 already left them. And the
-plan moves the vendor-neutral skill body into `packages/workflow-schema`, amending that package's
-architecture note, because Codex's required frontmatter is identical to Claude's and a second
-renderer written the obvious way would be a byte-for-byte copy of the first.
+**Two decisions the plan raised were ratified by the founder on 2026-08-12**, and both are
+discharged in `BACKLOG.md` §8. Neither adapter ships hooks — DOS-P6 restores them for both, in one
+change, which is where DOS-P4 already left them. And the vendor-neutral skill body moves into
+`packages/workflow-schema`, amending that package's architecture note, because Codex's required
+frontmatter is identical to Claude's and a second renderer written the obvious way would be a
+byte-for-byte copy of the first.
 
 **Two things the Codex spec settled that a reader of DOS-P4 would guess wrong.** Codex has no
 in-place plugin discovery, so the install is a **local marketplace** — which does resolve to real
