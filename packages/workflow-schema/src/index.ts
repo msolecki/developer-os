@@ -38,6 +38,20 @@ export { applyOverlay, workflowOverlaySchema } from "./overlay.js";
 export type { OverlayOutcome, WorkflowOverlayV1 } from "./overlay.js";
 export { parseWorkflowYaml, WORKFLOW_PARSE_OPTIONS } from "./parse.js";
 export type { ParseOutcome, ParseRefusal } from "./parse.js";
+/**
+ * The half of a skill that is not vendor behaviour. `SKILL_FIELD_CAP` is on the
+ * door with it: the `description` an adapter puts in its own frontmatter is
+ * screened by that adapter, and two adapters inventing their own bound is two
+ * trees that differ on a long description with no test comparing them.
+ */
+export {
+  assertRenderableContract,
+  assertUsablePreamble,
+  renderSkillBody,
+  SHARED_WORKFLOW_ID,
+  SKILL_FIELD_CAP,
+} from "./skill.js";
+export type { SkillBodyOptions } from "./skill.js";
 export { validateWorkflow } from "./validate.js";
 export type {
   WorkflowFinding,

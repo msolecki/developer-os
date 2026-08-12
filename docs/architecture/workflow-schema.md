@@ -24,6 +24,7 @@ The compiler unions those footprints and requires the result to *equal* the decl
 | `src/overlay.ts` | `WorkflowOverlayV1` and the presentation-only merge |
 | `src/load.ts` | file text → parse → validate, without ever throwing |
 | `src/drift.ts` | `WorkflowRenderer`, `RenderedArtifact`, source markers, the drift check |
+| `src/skill.ts` | the vendor-neutral skill body: source marker, `shared` preamble, refusals, steps, recovery, and the screen seam every adapter shares (added 2026-08-12 — see §2.2) |
 | `src/index.ts` | the package's only public door, and the one file that decides what a consumer can reach — see §4 for why `workflowContractSchema` is not on it |
 | `packages/security/src/screen.ts` | the one display screen, **moved** here from `packages/brain/src/redact.ts` in DOS-P3, because two peer subsystems needed it and neither may depend on the other |
 | `workflows/<id>/workflow.yaml` | the six canonical workflows |
@@ -35,9 +36,15 @@ The compiler unions those footprints and requires the result to *equal* the decl
 1. **It emits and never executes.** No handler for any verb lives here. Scope enforcement is
    entirely compile-time: this package decides what a workflow is *allowed* to touch and never
    observes what it touches.
-2. **It ships no renderer.** `WorkflowRenderer` is an interface. Vendor behaviour belongs to
-   `adapter-claude` and `adapter-codex`, which consume an already-validated contract — which is
-   why this package is testable with neither agent installed.
+2. **It ships no vendor renderer.** *Amended 2026-08-12, when the skill body moved here.*
+   `WorkflowRenderer` is still an interface, and every vendor artifact — the frontmatter fields,
+   the artifact path, the plugin manifest — still belongs to `adapter-claude` and `adapter-codex`,
+   which consume an already-validated contract. What this package now renders is
+   `renderSkillBody` in `src/skill.ts`: the half of a skill that comes from one contract and is
+   byte-identical for every vendor, because Codex's required frontmatter turned out to be exactly
+   Claude's and a second renderer written the obvious way would have been a copy of the first.
+   The package is still testable with neither agent installed, because nothing it renders names
+   one.
 3. **It makes no network request** and imports no networking module.
 4. **`scheduled` is not a v1 trigger.** It is refused with an error naming DOS-P7, which adds
    the value in the same change that makes launchd fire it. A trigger that validates and never
@@ -103,13 +110,16 @@ carries both the staging flag and a real vault write — different axes, not an 
 
 ## 6. What DOS-P4 and DOS-P5 inherit
 
-- **Spec §13's byte-identity requirement is only half met, and deliberately so.** §13 asks that
-  six workflows "render byte-identically twice, and once under a reversed directory reader".
-  This package ships no renderer, so it proves the narrower thing it can prove: the *inputs* a
-  renderer is handed are byte-identical across two loads and under a reversed directory reader,
-  and the drift check is deterministic against a stub. **The byte-identity of real vendor
-  artifacts is owed by DOS-P4 and DOS-P5.** It is recorded here so it cannot be lost with the
-  plan.
+- **Spec §13's byte-identity requirement is met further than it was, and still not in full.**
+  *Amended 2026-08-12, when the skill body moved here.* §13 asks that six workflows "render
+  byte-identically twice, and once under a reversed directory reader". This package proved the
+  narrower thing it could prove while it rendered nothing: the *inputs* a renderer is handed are
+  byte-identical across two loads and under a reversed directory reader, and the drift check is
+  deterministic against a stub. It now also proves that the skill **body** those inputs become is
+  byte-identical across two renders, and it is one function rather than one per vendor, so two
+  trees cannot differ in it at all. **The byte-identity of a whole vendor artifact — body plus
+  that vendor's frontmatter, path and manifest — is still owed by DOS-P4 and DOS-P5**, each
+  against its own generated tree. It is recorded here so it cannot be lost with the plan.
 - **`recovery.resume` is a command string that nothing in this package executes.** Whichever
   adapter first surfaces it must treat it as data to display, never as a command to run.
 - **The first `.claude/` question.** DOS-P4 settles whether small conveniences under `.claude/`
