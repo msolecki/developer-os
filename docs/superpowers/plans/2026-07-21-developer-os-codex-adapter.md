@@ -2153,11 +2153,11 @@ git commit -m "feat(doctor): report Codex, and name the command that grants hook
 - Modify: `packages/adapter-codex/src/versions.ts`
 - Modify: `docs/superpowers/specs/2026-07-21-developer-os-codex-adapter-design.md` — §14.4, §15.1, §15.2
 
-- [ ] **Step 1: Skip cleanly when Codex is absent**
+- [x] **Step 1: Skip cleanly when Codex is absent**
 
 Resolve `codex` from `PATH` **at module load**, not in `beforeAll`: `it.skipIf(...)` is evaluated while the suite is constructed, before any hook runs. DOS-P4 shipped a suite that skipped unconditionally on every machine for exactly this reason and reported green.
 
-- [ ] **Step 2: Write the integration test**
+- [x] **Step 2: Write the integration test**
 
 Point `CODEX_HOME` and `HOME` at temporary directories, write `renderCodexInstallTree` into a temporary product home, and assert:
 
@@ -2188,15 +2188,15 @@ parsing line and whether it carries a discriminating field worth filtering on, a
 observed shape, dated, and correct `invoke.ts`'s provisional docblock. Until then the docblock at
 that seam is the honest statement of what is known. Do not quietly promote the rule to verified.
 
-- [ ] **Step 3: Record what was observed about hooks**
+- [x] **Step 3: Record what was observed about hooks**
 
 This plan ships no hooks file, so `plugin_hooks` stays `unknown`. If the run reveals anything about the plugin-bundled hooks path — that it exists, that a manifest key is required, that it is ignored — record it in spec §14.4 and §15.1, dated. **DOS-P6 restores hooks for both adapters and inherits whatever this test learned.**
 
-- [ ] **Step 4: Record the observed floor**
+- [x] **Step 4: Record the observed floor**
 
 Set `CODEX_MINIMUM_VERSION` to the lowest version at which the install was observed to work, and amend spec §15.2, dated. If only one version was available, say so rather than implying a range was explored.
 
-- [ ] **Step 5: Run the gate and commit**
+- [x] **Step 5: Run the gate and commit**
 
 ```bash
 npm run check
