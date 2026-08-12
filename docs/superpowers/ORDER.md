@@ -30,21 +30,39 @@ week of confusion.
 
 ## NOW
 
-**A9 — DOS-P5 Codex adapter, at its `I` gate. Start at Task 4.** Both document gates closed on
-2026-08-11 and the first three tasks landed on 2026-08-12, each reviewed by an agent that did not
-write it. `plans/2026-07-21-developer-os-codex-adapter.md` is **3/18**; its closed tasks carry no
-step list, by the same rule that deletes a finished plan.
+**A9 — DOS-P5 Codex adapter, at its `I` gate. Start at Task 14.** Both document gates closed on
+2026-08-11. `plans/2026-07-21-developer-os-codex-adapter.md` is **14/19** as of 2026-08-12, each
+task reviewed by an agent that did not write it. Closed tasks carry no step list, by the same rule
+that deletes a finished plan.
 
-**Tasks 1 to 3 were not Codex work.** They moved what a second adapter would otherwise have
+**The plan gained a Task 3.5 and has nineteen tasks, not eighteen.** A pre-flight scan found four
+tasks told to copy some ninety lines of vendor-neutral logic that Global Constraint 1 says must
+move — including a version comparison that had already been fixed once for failing open, and an
+argv screen whose two intended copies had *already* diverged in the plan text. The founder chose to
+extract; `BACKLOG.md` §8 carries the row.
+
+**Tasks 1 to 3.5 were not Codex work.** They moved what a second adapter would otherwise have
 copied: the capability vocabulary into `packages/core`, the code-point ordering onto
-`packages/workflow-schema`'s door, the Markdown display seam into `packages/security`, and the
-vendor-neutral skill body into `packages/workflow-schema`. Measured against the shipped renderer,
-a Codex renderer written the obvious way would have been a byte-for-byte copy of it; it is now
-about thirty lines. Every one of the three proved itself the same way — `plugins/claude`
-regenerates byte-identically — and any later task touching that shared code owes the same proof.
+`packages/workflow-schema`'s door, the Markdown display seam into `packages/security`, the
+vendor-neutral skill body into `packages/workflow-schema`, and then the version comparison, the
+CLI-discovery shape, the argv screen and the structured-output parse into `core` and `security`.
+Measured against the shipped renderer, a Codex renderer written the obvious way would have been a
+byte-for-byte copy; it is about thirty lines. Every one proved itself the same way —
+`plugins/claude` regenerates byte-identically — and any later task touching that shared code owes
+the same proof.
 
-**Task 4 is where `packages/adapter-codex` gets created.** Everything from there is vendor work
-with a shipped reference implementation beside it in `packages/adapter-claude`.
+**Tasks 4 to 13 built `packages/adapter-codex` and closed its door.** Discovery, the version table,
+the probe, the capability model, the renderer, the plugin tree, the marketplace descriptor, the
+install proposal, `codex exec`, and `CodexAdapter`. **Task 14 is where `plugins/codex/` gets
+generated and the drift gate goes in.**
+
+**Two things reviews caught that a reader of the plan alone would get wrong.** The install proposal
+roots at **`<home>/codex`**, the marketplace root, not at the plugin tree — the founder settled it
+after the plan contradicted itself, and the wrong root does not refuse, it silently under- or
+double-nests and applies cleanly (`BACKLOG.md` §1, NEW-13). And **`codex exec --json` emits JSONL**,
+so stdout is reduced to its last parsing line before it is parsed; against the real CLI the
+single-document parse would have made every successful run report `malformed-output`. That
+reduction is provisional and Task 17 settles it.
 
 **Two things the Codex spec settled that a reader of DOS-P4 would guess wrong.** Codex has no
 in-place plugin discovery, so the install is a **local marketplace** — which does resolve to real
@@ -75,7 +93,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A9 | DOS-P5 Codex adapter — S / P / I | `plans/2026-07-21-developer-os-codex-adapter.md`, 18 tasks | — | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | **now** — `S` and `P` closed 2026-08-11; `I` is **3/18**, resume at Task 4 |
+| A9 | DOS-P5 Codex adapter — S / P / I | `plans/2026-07-21-developer-os-codex-adapter.md`, 19 tasks | — | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | **now** — `S` and `P` closed 2026-08-11; `I` is **14/19**, resume at Task 14 |
 | A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | A9 | L | program plan Task 6 checkpoint, after independent security review | blocked |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
@@ -138,12 +156,14 @@ request exists so a human sees it first.
 Foundation, DOS-P2, DOS-P3 and DOS-P4 are closed — four subsystems of eight, and the two that
 turn a canonical workflow into something an agent can actually load.
 
-**Seven milestones remain**, each L: DOS-P5's implementation, which is 3 of its 18 tasks done;
+**Seven milestones remain**, each L: DOS-P5's implementation, which is 14 of its 19 tasks done;
 DOS-P6's spec, plan and implementation; DOS-P7's spec, plan and implementation. Then two more entries that are not
 subsystems — the cutover (A12) and the release (A13) — plus Track L's two items, which are not
 engineering work at all.
 
-`BACKLOG.md` §1 is three repository defects: NEW-7, which needs ten minutes with a machine that has
+`BACKLOG.md` §1 is four repository defects: NEW-7, which needs ten minutes with a machine that has
 Obsidian rather than an agent; NEW-11, which is the same invisible-character rule that closed
-NEW-10 applied to `tags`, `summary` and the duplicates key; and NEW-12, where the argv screen's
-word list is applied to free-form prose that only the positional half of the screen protects.
+NEW-10 applied to `tags`, `summary` and the duplicates key; NEW-12, where the argv screen's word
+list is applied to free-form prose that only the positional half of the screen protects; and
+NEW-13, where two artifact roots share one type and the wrong one installs cleanly rather than
+refusing.
