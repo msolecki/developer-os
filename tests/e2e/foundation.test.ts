@@ -76,6 +76,8 @@ const DOCTOR_CHECKS = [
   "drift",
   "brain",
   "agents",
+  "claude-capabilities",
+  "codex-capabilities",
 ] as const;
 
 /**
@@ -133,6 +135,7 @@ describe("Foundation temporary-HOME lifecycle", () => {
   it("installs, reports, repeats, and removes itself without touching anything else", async () => {
     await withHome(async (home) => {
       await installFakeExecutable(home, "claude");
+      await installFakeExecutable(home, "codex");
 
       const configFile = join(home.productHome, "config.toml");
       const manifestFile = join(home.productHome, "installation-manifest.json");
@@ -270,7 +273,12 @@ describe("Foundation temporary-HOME lifecycle", () => {
           executablePath: join(home.binDir, "claude"),
           version: null,
         },
-        { name: "codex", installed: false, executablePath: null, version: null },
+        {
+          name: "codex",
+          installed: true,
+          executablePath: join(home.binDir, "codex"),
+          version: null,
+        },
       ]);
       expect(await inventory(home.root)).toStrictEqual(beforeStatus);
 
@@ -290,10 +298,36 @@ describe("Foundation temporary-HOME lifecycle", () => {
         "drift",
         "brain",
         "agents",
+        "claude-capabilities",
+        "codex-capabilities",
       ]);
       expect(
         checks.checks.filter((check) => check.status !== "pass"),
       ).toStrictEqual([]);
+
+      /**
+       * Two checks, one binary, and they have to agree — for both agents.
+       *
+       * The fakes `claude` and `codex` planted above both exit 97, so each is
+       * discovered and cannot be read. `agents` said `claude=present` while
+       * `claude-capabilities` said `claude=absent`, in the same report — and
+       * this suite passed, because it read check ids and statuses and never a
+       * message. Found by fresh-context review, 2026-08-11. The same
+       * contradiction is checked for Codex here, because it is exactly the
+       * shape the Codex side had to avoid shipping once: an e2e fixture whose
+       * fake `codex` exits non-zero staying green because the assertions
+       * never read the capability line's own message.
+       */
+      const byId = new Map(
+        checks.checks.map((check) => [check.id, check.message]),
+      );
+      expect(byId.get("agents")).toContain("claude=present");
+      expect(byId.get("claude-capabilities")).toContain("claude=unreadable");
+      expect(byId.get("claude-capabilities")).not.toContain("claude=absent");
+      expect(byId.get("agents")).toContain("codex=present");
+      expect(byId.get("codex-capabilities")).toContain("codex=unreadable");
+      expect(byId.get("codex-capabilities")).not.toContain("codex=absent");
+
       expect(await inventory(home.root)).toStrictEqual(beforeStatus);
 
       // --- init again: idempotent, declares nothing, changes nothing ----------
@@ -423,6 +457,38 @@ describe("Foundation temporary-HOME lifecycle", () => {
       expect(failure.kind).toBe("doctor_failed");
       expect(failure.recovery).toBe("developer-os init");
       expect(await inventory(home.root)).toStrictEqual(beforeSecondUninstall);
+    });
+  });
+
+  /**
+   * The lifecycle case above plants a fake `codex` so `agents` and
+   * `codex-capabilities` can be checked for agreement on a *present* binary —
+   * which means it no longer covers the absent shape at all. This is that
+   * coverage, restored: no `codex` fake on `PATH`, so both checks must report
+   * absence, and the doctor message (not just `report.agents`) must say so.
+   */
+  it("reports codex as absent when no codex binary is on PATH", async () => {
+    await withHome(async (home) => {
+      await installFakeExecutable(home, "claude");
+
+      await install(home);
+
+      const status = await runJson<StatusReportV1>(home, ["status", "--json"]);
+      expect(status.exitCode).toBe(EXIT_CODES.success);
+      expect(okData(status.result).agents).toContainEqual({
+        name: "codex",
+        installed: false,
+        executablePath: null,
+        version: null,
+      });
+
+      const doctor = await runJson<DoctorReportV1>(home, ["doctor", "--json"]);
+      expect(doctor.exitCode).toBe(EXIT_CODES.success);
+      const byId = new Map(
+        okData(doctor.result).checks.map((check) => [check.id, check.message]),
+      );
+      expect(byId.get("agents")).toContain("codex=absent");
+      expect(byId.get("codex-capabilities")).toContain("codex=absent");
     });
   });
 });

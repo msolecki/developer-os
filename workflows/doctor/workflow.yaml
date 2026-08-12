@@ -1,0 +1,32 @@
+schemaVersion: 1
+id: doctor
+version: 1.0.0
+description: Report the installation's health and the agent capability matrix.
+triggers:
+  - manual
+inputs: {}
+output:
+  report:
+    type: string
+    required: true
+    description: The capability matrix and every failing check.
+capabilities: []
+scopes:
+  read: []
+  write: []
+refusals:
+  - when: vault-missing
+    exit: 1
+    message: No installation was found. Run developer-os init first.
+steps:
+  - id: report
+    do: doctor.report
+  - id: summarise
+    prose: |
+      List only the failing checks and what each one requires. A wall of
+      passing output tells nobody anything.
+validators:
+  - every failing check names a recovery command
+recovery:
+  leaves: nothing
+  resume: developer-os doctor

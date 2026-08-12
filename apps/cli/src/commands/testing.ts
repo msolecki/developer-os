@@ -21,6 +21,7 @@ import type {
   PlatformFacts,
 } from "@developer-os/platform-macos";
 import { ProtectedPathPolicy } from "@developer-os/security";
+import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 
 import {
   createGuards,
@@ -140,6 +141,12 @@ export interface CommandFixture {
 }
 
 export interface FixtureOptions {
+  /**
+   * A fake process runner. Omitted, the fixture supplies one that **rejects**,
+   * so a command that spawns unexpectedly fails loudly rather than reaching a
+   * real binary from a test.
+   */
+  readonly runner?: ProcessRunner;
   readonly answers?: readonly boolean[];
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly agents?: Readonly<Record<AgentName, AgentDiscovery>>;
@@ -175,6 +182,14 @@ export async function createCommandFixture(
   const guards = createGuards(policy, REDACTION_KEY);
   const paths = resolveRuntimePaths(pathEnvironmentFor({ userHome, env }));
   const lockProvider = new InProcessLockProvider();
+
+  const runner: ProcessRunner = options.runner ?? {
+    run(): Promise<ProcessResult> {
+      return Promise.reject(
+        new Error("this fixture has no process runner; pass one to spawn"),
+      );
+    },
+  };
 
   let sequence = 0;
   const now =
@@ -233,6 +248,7 @@ export async function createCommandFixture(
     guards,
     paths,
     productVersion: PRODUCT_VERSION,
+    runner,
   };
 
   return { root, userHome, paths, io, context };

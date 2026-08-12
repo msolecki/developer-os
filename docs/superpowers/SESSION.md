@@ -61,7 +61,7 @@ beyond checking that the tree is where `ORDER.md` says it is.
 
 | Entry shape | Skill to invoke first |
 |---|---|
-| Execute an existing plan — any entry whose **P** gate is already closed | `superpowers:executing-plans` |
+| Execute an existing plan — any entry whose **P** gate is already closed | `superpowers:subagent-driven-development`, or `superpowers:executing-plans` for a plan whose tasks are too coupled to hand out one at a time |
 | Write a spec — any entry whose **S** gate is still open | `superpowers:brainstorming`, then write the spec |
 | Write an implementation plan — the **P** gate | `superpowers:writing-plans` |
 | Any code step inside a plan | `superpowers:test-driven-development` |
@@ -69,6 +69,15 @@ beyond checking that the tree is where `ORDER.md` says it is.
 
 Announce which one you are using and why. If a plan step and a skill disagree on procedure,
 the plan wins — it was approved for this repository.
+
+**Prefer the subagent loop for plan execution, and it is not a preference about speed.** The gates
+require a fresh-context review per code-producing task, and that loop is what produces one: a
+different agent implements and reviews each task, and a task is not done until its reviewer says
+so. Across DOS-P4 and DOS-P5 those reviews caught, among others, a capability reported `yes` over
+an artifact that did not exist, a `doctor` run printing two contradictory statements about one
+binary, author prose able to forge a heading inside the prompt-injection defence, and a test that
+scanned its own source and could never have passed. A self-review would have caught none of them —
+it shares the author's assumptions, which is the whole reason the rule says reviewer ≠ author.
 
 ## 4. Do the work
 
@@ -169,9 +178,11 @@ These are not style preferences. Each one exists because it was already violated
 
 ## Stop and ask — do not decide these yourself
 
-- Anything in **Track B or Track L** of `ORDER.md`. L1 license approval is the founder's and
-  no amount of context makes it yours. **B1 was decided on 2026-08-10 — declined, not
-  deferred** (`BACKLOG.md` §6); do not reopen it from a backlog, it is a conversation.
+- Anything in **Track L** of `ORDER.md`. L1 license approval is the founder's and no amount of
+  context makes it yours. **Track B closed on 2026-08-10 and is no longer a section there** —
+  what a cutover still needs to know is `BACKLOG.md` §6, and the one live rule in it is that
+  EXIT-1, historical credential rotation, was **declined by the founder, not deferred**. Do not
+  reopen it from a backlog; it is a conversation.
 - **A12's open decision**: whether the founder cutover gets its own plan. Recommendation is
   on record; the call is not made.
 - **Any live machine change** — `~/.claude`, `~/.codex`, launchd, a real remote.

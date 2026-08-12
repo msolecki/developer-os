@@ -1,0 +1,153 @@
+import { isAbsolute } from "node:path";
+import { cwd } from "node:process";
+import type { ProcessRunner } from "./process.js";
+
+/**
+ * The vendor-CLI boundary both adapters cross the same way: discover its
+ * version without throwing, screen what reaches its argv, parse what comes
+ * back.
+ *
+ * It lived in `packages/adapter-claude` while there was one adapter. A
+ * security screen and a fail-open fix are exactly the kind of logic that must
+ * not exist twice — two copies drift, and a drifted copy is a hole neither
+ * adapter's tests can see.
+ *
+ * Finding the executable is not this module's job. `discoverCli` takes an
+ * absolute `executable` and only reads its version; production discovery is
+ * `MacOsPlatformAdapter.discoverExecutable` (`packages/platform-macos`),
+ * which shells `/usr/bin/which` with a controlled `PATH`. Two mechanisms that
+ * both resolve a bare name to a path is a duplicated door with two different
+ * security properties — one platform-specific and reached from
+ * `apps/cli/src/commands/doctor.ts`, the other unreachable from any
+ * production caller. `apps/cli/src/commands/claude-capabilities.ts` already
+ * follows this split: it takes `executablePath` as an input and calls
+ * `discoverClaude` only to read the version.
+ */
+
+export interface CliInstallation {
+  readonly executable: string;
+  readonly version: string;
+}
+
+export interface DiscoverCliDependencies {
+  readonly runner: ProcessRunner;
+  readonly executable: string;
+}
+
+/**
+ * `MAJOR.MINOR.PATCH`, no pre-release and no build metadata — the same
+ * narrowing DOS-P3 applied to workflow versions, for a related reason: a
+ * version is compared against a documented floor, and comparing `2.1.216-rc.1`
+ * against `2.1.216` there would mean nothing.
+ */
+const VERSION_PATTERN = /\b(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\b/u;
+
+const VERSION_TIMEOUT_MS = 10_000;
+
+/**
+ * Never throws. A missing binary, a non-zero exit, a timeout and unparseable
+ * output are all "no installation", because a discovery step that throws makes
+ * a diagnostic command unable to report on the environment it exists to
+ * describe — and reporting on an environment with nothing in it is precisely
+ * what such a command is for.
+ */
+export async function discoverCli(
+  dependencies: DiscoverCliDependencies,
+): Promise<CliInstallation | null> {
+  // `assertSafeCommand` refuses a non-absolute executable, and `env: {}` leaves
+  // a child no `PATH` to resolve one against. Refusing here rather than at the
+  // runner keeps the failure a reportable "no installation" instead of a
+  // security refusal thrown out of a diagnostic command.
+  if (!isAbsolute(dependencies.executable)) return null;
+
+  let result;
+  try {
+    result = await dependencies.runner.run({
+      executable: dependencies.executable,
+      args: ["--version"],
+      cwd: cwd(),
+      stdin: "",
+      timeoutMs: VERSION_TIMEOUT_MS,
+      env: {},
+    });
+  } catch {
+    return null;
+  }
+  if (result.timedOut || result.exitCode !== 0) return null;
+  const match = VERSION_PATTERN.exec(result.stdout);
+  if (match === null) return null;
+  return { executable: dependencies.executable, version: match[0] };
+}
+
+/**
+ * Two rules, stacked — one positional and complete, one nominal and
+ * best-effort. Neither subsumes the other; both are load-bearing.
+ *
+ * The first version screened three exact strings out of an adapter's
+ * `allowedTools`. A fresh-context review defeated it in one line:
+ * `--permission-mode` is documented as taking a value, every parser accepts
+ * `--opt=value`, and `"--permission-mode=bypassPermissions"` is not equal to
+ * any of the three literals. `--add-dir /` and `--mcp-config` were not on the
+ * list at all. A variadic flag stops at the first `-`-prefixed token, so each
+ * of those became a flag rather than a value.
+ *
+ * **Rule one, the dash rule, is positional and complete:** nothing a caller
+ * puts in a value position may look like an option. It needs no word list —
+ * a leading `-` is refused regardless of what follows — and it is what closed
+ * the `--opt=value` and variadic-flag gaps above. It refuses the invocation
+ * rather than silently dropping the offending entry, because a caller that
+ * asked for a bypass has a bug worth reporting.
+ *
+ * **Rule two, the word list, is nominal and best-effort:** `permission|danger|
+ * bypass`, wider than the `permission|dangerous` that first shipped. It
+ * exists because a value naming a permission or bypass surface can arrive
+ * without a leading dash at all (`"bypassPermissions"` as a bare
+ * `allowedTools` entry, for instance), which the dash rule cannot see. `danger`
+ * alone (not only the full word `dangerous`) and `bypass` both catch values a
+ * narrower pattern let through — see `cli.test.ts` for the exact strings that
+ * motivated each addition, ported forward from `adapter-claude` where the gap
+ * was found. Being a word list, it must grow whenever a vendor coins a new
+ * term; it is not, and cannot be made, complete the way the dash rule is.
+ */
+export function screenValueArgument(value: string, field: string): string | null {
+  if (value.startsWith("-")) {
+    return `${field} may not begin with "-": it would be read as an option, not a value`;
+  }
+  if (/permission|danger|bypass/iu.test(value)) {
+    return `${field} names a permission or bypass surface that is refused in a value position`;
+  }
+  return null;
+}
+
+/**
+ * Structured output is validated, never best-effort parsed.
+ *
+ * A payload carrying `__proto__` at its top level is refused rather than
+ * returned: `JSON.parse` does not pollute by itself, but this value is handed
+ * to consumers that will spread and merge it, and the refusal belongs at the
+ * boundary where the untrusted text becomes an object. **Only the top level is
+ * checked** — a nested `{"a":{"__proto__":{...}}}` is not walked and passes
+ * through. That was an acceptable boundary for one adapter's own result
+ * shape; a caller merging a nested field of the payload is responsible for
+ * its own guard.
+ */
+export function parseStructuredPayload(
+  stdout: string,
+):
+  | { readonly ok: true; readonly payload: unknown }
+  | { readonly ok: false; readonly reason: "malformed-output" } {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(stdout);
+  } catch {
+    return { ok: false, reason: "malformed-output" };
+  }
+  if (
+    typeof payload === "object" &&
+    payload !== null &&
+    Object.prototype.hasOwnProperty.call(payload, "__proto__")
+  ) {
+    return { ok: false, reason: "malformed-output" };
+  }
+  return { ok: true, payload };
+}

@@ -123,8 +123,15 @@ export async function removeTempHome(home: TempHome): Promise<void> {
 
 /**
  * Plants a fake agent binary on the child's `PATH`. It is a shell script that
- * prints and exits: Foundation discovers executables and never runs them, so
- * anything this writes would be evidence of a boundary violation.
+ * prints and exits.
+ *
+ * **It is executed, and it was not always.** Foundation's discovery never ran
+ * an executable, and this comment used to say that anything the fake wrote
+ * would be evidence of a boundary violation. DOS-P4's `doctor` capability check
+ * runs `claude --version` through the discovered path, so the fake now runs on
+ * every `doctor` invocation in the end-to-end suite — which is why its default
+ * body exits non-zero and writes nothing but a line on stderr. A body that
+ * touches the filesystem would now be a real side effect, not a tripwire.
  */
 export async function installFakeExecutable(
   home: TempHome,

@@ -40,6 +40,7 @@ Within those packages, one responsibility per path:
 | `packages/security/src/paths.ts` | canonicalization, disjointness, owned-path resolution (`containsPath` itself lives in `core/manifest/store.ts`) |
 | `packages/security/src/protected-paths.ts` | default deny policy |
 | `packages/security/src/redaction.ts` | redact-before-log primitives |
+| `packages/security/src/screen.ts` | the one display screen and grapheme cap, shared by `brain` and `workflow-schema` (moved here in DOS-P3 Task 1) |
 | `packages/security/src/process.ts` | shell-free process runner |
 | `packages/platform-macos/src/` | macOS facts and executable discovery |
 | `tests/helpers/` | temporary HOME, hash inventory, process runner |

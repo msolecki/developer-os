@@ -24,6 +24,16 @@ The following material is prohibited from public artifacts, prompts, reports, lo
 - Generated artifacts that have not received content review and independent approval.
 - Everything under `docs/superpowers/plans/legacy-runtime/`. These documents describe the owner's pre-Developer-OS machine, its repositories, its automation, and a credential-rotation checklist. They are tracked in this repository so the outstanding work has one home; they are never publication candidates and are never referenced from a public artifact.
 
+## Paths this repository does not create
+
+- **`.claude/`.** This repository creates no `.claude/` directory in version 1. Adapter output
+  lives in `plugins/claude/` and installs into the user's `~/.claude/skills/`, so no generated
+  artifact needs a home here; conveniences this repository would run on itself are declined rather
+  than deferred. Recorded so the absence is a decision rather than a gap: the repository is public,
+  and a `.claude/` here is inherited by every fork. Amended into this policy on 2026-08-11 by
+  `docs/superpowers/specs/2026-07-21-developer-os-claude-adapter-design.md` §12, which is the
+  reasoning of record; reopening it is an amendment, not a `mkdir`.
+
 ## Clean-room migration procedure
 
 1. Identify an approved candidate by its abstract source ID, exact repository-relative path, classification, destination, and evidence hash.
@@ -43,7 +53,11 @@ Task 0 is a control artifact task. Its publication candidates were deliberately 
 
 ## Remote and release gates
 
-Recording an origin is not remote verification. While remote verification is `blocked_by_environment`:
+Recording an origin is not remote verification.
+
+**Corrected 2026-08-11 — the condition below ended on 2026-08-10 and the prohibition it gated no longer binds.** This section was written while remote verification was `blocked_by_environment`, and every bullet under it was conditional on that state. The remote now exists, the repository is public and deliberately so, and CI runs on it. Fetching, pushing and opening a pull request are therefore ordinary work; merging to the default branch is not, and remains a human decision under the repository's own pull-request rule. What survives of the original item is `ORDER.md` Track L's **L2** — destination remote, visibility and branch protections verified by the founder outside this environment — and L2 alone still gates a public release. The bullets are left standing rather than deleted, because they state the correct procedure for any future environment that re-enters the blocked state. Registered in `docs/superpowers/BACKLOG.md` §8.
+
+While remote verification is `blocked_by_environment`:
 
 - Do not fetch, push, open a pull request, create a public release, or otherwise transmit repository content.
 - Do not access credential stores, SSH configuration, or private authentication material to work around the block.

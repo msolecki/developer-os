@@ -29,6 +29,12 @@ importers:
 
   apps/cli:
     dependencies:
+      '@developer-os/adapter-claude':
+        specifier: workspace:*
+        version: link:../../packages/adapter-claude
+      '@developer-os/adapter-codex':
+        specifier: workspace:*
+        version: link:../../packages/adapter-codex
       '@developer-os/brain':
         specifier: workspace:*
         version: link:../../packages/brain
@@ -41,6 +47,33 @@ importers:
       '@developer-os/security':
         specifier: workspace:*
         version: link:../../packages/security
+
+  packages/adapter-claude:
+    dependencies:
+      '@developer-os/core':
+        specifier: workspace:*
+        version: link:../core
+      '@developer-os/security':
+        specifier: workspace:*
+        version: link:../security
+      '@developer-os/workflow-schema':
+        specifier: workspace:*
+        version: link:../workflow-schema
+
+  packages/adapter-codex:
+    dependencies:
+      '@developer-os/core':
+        specifier: workspace:*
+        version: link:../core
+      '@developer-os/security':
+        specifier: workspace:*
+        version: link:../security
+      '@developer-os/workflow-schema':
+        specifier: workspace:*
+        version: link:../workflow-schema
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
 
   packages/brain:
     dependencies:
@@ -78,8 +111,29 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/workflow-schema:
+    dependencies:
+      '@developer-os/core':
+        specifier: workspace:*
+        version: link:../core
+      '@developer-os/security':
+        specifier: workspace:*
+        version: link:../security
+      yaml:
+        specifier: 2.8.1
+        version: 2.8.1
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   tests:
     dependencies:
+      '@developer-os/adapter-claude':
+        specifier: workspace:*
+        version: link:../packages/adapter-claude
+      '@developer-os/adapter-codex':
+        specifier: workspace:*
+        version: link:../packages/adapter-codex
       '@developer-os/cli':
         specifier: workspace:*
         version: link:../apps/cli
@@ -92,6 +146,9 @@ importers:
       '@developer-os/security':
         specifier: workspace:*
         version: link:../packages/security
+      '@developer-os/workflow-schema':
+        specifier: workspace:*
+        version: link:../packages/workflow-schema
 
 packages:
 

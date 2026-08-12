@@ -1,0 +1,42 @@
+schemaVersion: 1
+id: ingest
+version: 1.0.0
+description: Stage accepted captures outside the vault, validate them, then apply transactionally.
+triggers:
+  - manual
+inputs: {}
+output:
+  applied:
+    type: integer
+    required: true
+    description: How many notes were written.
+capabilities:
+  - structured_result
+scopes:
+  read:
+    - content/_raw/quarantine/**
+  write:
+    - content/**
+refusals:
+  - when: capability-missing
+    exit: 4
+    message: >-
+      This workflow needs a structured result and the agent does not provide one.
+  - when: vault-missing
+    exit: 1
+    message: No vault was found. Run developer-os init first.
+  - when: scope-violation
+    exit: 5
+    message: Staging is outside the vault; only apply writes into it.
+steps:
+  - id: stage
+    do: ingest.stage
+  - id: validate
+    do: ingest.validate
+  - id: apply
+    do: ingest.apply
+validators:
+  - a failed apply leaves every capture retryable and none marked ingested
+recovery:
+  leaves: a staged transaction that was never applied
+  resume: developer-os repair --resume <transaction-id>

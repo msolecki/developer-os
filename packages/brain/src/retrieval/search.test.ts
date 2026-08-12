@@ -565,7 +565,8 @@ describe("the output contract Task 9 will print", () => {
 
   it("strips control characters and collapses newlines out of both", () => {
     /**
-     * `note.ts` validates a title as a non-empty string — no length bound, no
+     * `note.ts` validates a title as a string with at least one visible
+     * character — no length bound, no
      * character screen — so an escape sequence or a carriage return survives
      * parsing, and a `\r` lets one result overwrite the row above it.
      */

@@ -139,9 +139,34 @@ describe("parseNote", () => {
     );
   });
 
+  /**
+   * BACKLOG NEW-10. `String#trim` removes neither U+200B nor U+00AD, so a title
+   * made of nothing but invisibles validated — and every surface that screens
+   * it rendered **empty**: the catalog row was `[](<path>)`, a link with no
+   * text. The product treats the *screened* title as the title, which is what
+   * the `duplicates` lint class already does after NEW-6, so emptiness is
+   * decided on the same value.
+   *
+   * The carriage-return case predates the fix — `String#trim` already removed it
+   * — and is kept as a regression guard rather than as evidence of what the
+   * change added. The rest were all accepted before it.
+   */
   it.each([
     { name: "empty", value: '""' },
     { name: "whitespace only", value: '"   "' },
+    { name: "a zero-width space only", value: '"\u200B"' },
+    { name: "a soft hyphen only", value: '"\u00AD"' },
+    { name: "a right-to-left override only", value: '"\u202E"' },
+    { name: "zero-width joiners only", value: '"\u200D\u200D"' },
+    { name: "a mix of invisibles and whitespace", value: '"\u200B \u00AD"' },
+    { name: "a Hangul filler only", value: '"\u3164"' },
+    { name: "the Hangul fillers only", value: '"\u115F\u1160\uFFA0"' },
+    { name: "a braille blank only", value: '"\u2800"' },
+    { name: "a variation selector only", value: '"\uFE0F"' },
+    { name: "a combining grapheme joiner only", value: '"\u034F"' },
+    { name: "a lone combining acute", value: '"\u0301"' },
+    { name: "an unassigned code point only", value: '"\u2065"' },
+    { name: "a carriage return only", value: '"\r"' },
   ])("rejects a title that is $name", ({ value }) => {
     const result = parseNote(
       VALID.replace("title: Widget cache invalidation", `title: ${value}`),
@@ -151,6 +176,37 @@ describe("parseNote", () => {
     expect(result.issues).toContainEqual(
       expect.objectContaining({ key: "title", code: "type" }),
     );
+  });
+
+  it("accepts a title that carries an invisible beside real text", () => {
+    const result = parseNote(
+      VALID.replace(
+        "title: Widget cache invalidation",
+        'title: "Widget\u200Bcache"',
+      ),
+    );
+
+    expect(result.ok).toBe(true);
+  });
+
+  /**
+   * The other half of the rule, and the half that decides whether it is usable:
+   * every one of these carries a base character, so every one is a title.
+   * A predicate that refused any of them would be worse than the hole it closes.
+   */
+  it.each([
+    { name: "a joined emoji", value: '"👩\u200D💻"' },
+    { name: "a single emoji", value: '"🧭"' },
+    { name: "a heart and its variation selector", value: '"❤\uFE0F"' },
+    { name: "Arabic letters", value: '"مرحبا"' },
+    { name: "a letter with a combining acute", value: '"e\u0301"' },
+    { name: "a Hangul filler beside real text", value: '"Deploy\u3164keys"' },
+  ])("accepts a title made of $name", ({ value }) => {
+    const result = parseNote(
+      VALID.replace("title: Widget cache invalidation", `title: ${value}`),
+    );
+
+    expect(result.ok).toBe(true);
   });
 
   it.each([

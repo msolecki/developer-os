@@ -11,6 +11,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@developer-os/adapter-claude": "workspace:*",
+    "@developer-os/adapter-codex": "workspace:*",
     "@developer-os/brain": "workspace:*",
     "@developer-os/core": "workspace:*",
     "@developer-os/platform-macos": "workspace:*",

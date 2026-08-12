@@ -5,13 +5,22 @@
     "outDir": "dist"
   },
   "include": [
-    "helpers/**/*.ts",
+    "contracts/**/*.ts",
     "e2e/**/*.ts",
-    "repository/**/*.ts"
+    "helpers/**/*.ts",
+    "integration/**/*.ts",
+    "repository/**/*.ts",
+    "tools/**/*.ts"
   ],
   "references": [
     {
       "path": "../apps/cli"
+    },
+    {
+      "path": "../packages/adapter-claude"
+    },
+    {
+      "path": "../packages/adapter-codex"
     },
     {
       "path": "../packages/core"
@@ -21,6 +30,9 @@
     },
     {
       "path": "../packages/security"
+    },
+    {
+      "path": "../packages/workflow-schema"
     }
   ]
 }

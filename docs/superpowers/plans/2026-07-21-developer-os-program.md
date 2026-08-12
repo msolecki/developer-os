@@ -99,120 +99,96 @@ P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5
 
 ---
 
-### Tasks 0, 1 and 2 — closed, and not described here
+### Tasks 0 to 4 — closed, and not described here
 
 | Task | Closed | What survives it |
 |---|---|---|
 | 0 — preserve sources, establish the publication boundary | 2026-07-21 | the three files in `docs/migration/`, and the self-containment constraint in Global Constraints above — enforced by `npm run lint` since 2026-08-01 rather than by prose |
 | 1 — public foundation and CLI lifecycle | 2026-08-01 | `docs/architecture/foundation.md`, `docs/architecture/foundation-constraints.md`, `docs/releases/foundation-checkpoint.md` |
 | 2 — Brain engine | 2026-08-10 | `docs/architecture/brain.md`, and `specs/2026-07-21-developer-os-brain-engine-design.md` as the design of record |
+| 3 — workflow compiler | 2026-08-10 | `docs/architecture/workflow-schema.md`, and `specs/2026-07-21-developer-os-workflow-compiler-design.md` as the design of record |
+| 4 — Claude Code adapter | 2026-08-11 | `docs/architecture/claude-adapter.md`, and `specs/2026-07-21-developer-os-claude-adapter-design.md` as the design of record |
 
 None can be re-run and none should be read as instruction: Task 0's inputs are deliberately out
 of reach, and the plans for Tasks 1 and 2 were deleted when their last steps closed. The
 recovery commits for all three are in `BACKLOG.md`'s rules, which is the one place that index
 lives — a second copy here is how two indexes come to disagree.
 
-**Their step lists are deleted rather than kept as ticked boxes**, and Task 2 is why that rule
-is worth obeying. It stood marked COMPLETE while three of its boxes were still unticked and the
-work those boxes describe had landed days earlier — the synthetic fixture among them, which
-`BACKLOG.md` §5 records as created on 2026-08-08. A closed task carrying a stale checklist is a
-document inviting the next session to redo it.
+**Task 4 closed with two of its eight steps unearned, and they are Task 6's.** Recorded here
+because a reader of the checkpoint alone would read them as done: no lifecycle surface could be
+observed firing, so no hook ships and all three lifecycle capabilities report `wrapper-required`;
+and `developer-os run claude` has nothing to capture into until the capture contract exists.
+**Its checkpoint is likewise half met.** The six skills load in a real installation and `doctor`
+and `brain search` name commands that exist, while `capture`, `ingest` and `review` name verbs with
+no handler anywhere in this product — six of the seven unimplemented verbs are Task 6's. An adapter
+renders workflows and executes none of them, so Task 4 could not have closed that half.
 
-### Task 3: Specify and implement the workflow compiler
+**Their step lists are deleted rather than kept as ticked boxes**, and Tasks 2 and 3 are both
+why that rule is worth obeying. Task 2 stood marked COMPLETE while three of its boxes were still
+unticked and the work those boxes describe had landed days earlier — the synthetic fixture among
+them, which `BACKLOG.md` §5 records as created on 2026-08-08. A closed task carrying a stale checklist is a
+document inviting the next session to redo it. Task 3 was the same failure in the other
+direction: four of its six boxes stood ticked while `packages/workflow-schema` did not exist,
+and the two still unticked when it closed were the two that had *actually* been done first —
+the founder approved the schema on 2026-08-10, and the six canonical workflows were written
+from the product spec. A checkbox nobody can trust is worse than no checkbox.
 
-**Complexity:** L
+**It happened a third time, and this one was in the open tasks rather than the closed ones.**
+`9a196c9` — a DOS-P2 commit — ticked thirteen boxes across Tasks 4, 5, 6 and 7 in the same pass
+that legitimately ticked Tasks 2 and 3. Corrected on 2026-08-11, all thirteen back to unticked,
+after checking each against the tree: there is no `packages/adapter-claude/`, no
+`packages/adapter-codex/`, no `capture/`, `review/` or `ingest/` under `packages/brain/src/`, no
+`tests/security/`, and no Git, `launchd`, update or release code anywhere. **One of the thirteen
+was not simply false and is worth stating**, because unticking it could otherwise read as a claim
+that the work regressed: Foundation did ship the transaction journal, per-file backup, atomic
+replacement, resume, rollback and concurrent-edit refusal. Task 6's box asks for that machinery
+hardened around capture and ingest, and those paths do not exist, so the box is unearned rather
+than the code missing. The inline note on that line says so.
 
-**Files:**
-- Create: `docs/superpowers/specs/2026-07-21-developer-os-workflow-compiler-design.md`
-- Create: `docs/superpowers/plans/2026-07-21-developer-os-workflow-compiler.md`
-- Create: `packages/workflow-schema/src/`
-- Create: `workflows/shared/`, `workflows/brain-search/`, `workflows/capture/`, `workflows/review/`, `workflows/ingest/`, and `workflows/doctor/`
-- Create: `tests/contracts/workflows/` and `tests/fixtures/workflows/`
+**The pattern in all three occurrences is the same**: a commit closing one task edited the
+checkboxes of tasks it was not doing. The two structural defences already in place — deleting a
+closed task's step list, and `SESSION.md` §5.3 — do not cover this direction, because the boxes
+that moved belonged to tasks that are still open and whose lists must therefore stay. What does
+cover it is the staging rule: `git add` the paths your own task owns, and read `git show --stat
+HEAD` before believing a commit contains only what you meant.
 
-**Interfaces:**
-- Consumes: stable `BrainService` read/write scopes and Foundation result/error types.
-- Produces: `WorkflowContractV1`, `WorkflowCapability`, `WorkflowInputSchema`, `WorkflowOutputSchema`, `WorkflowRenderer`, `RenderedArtifact`, and `WorkflowValidationResult`.
-
-**What:** Establish one canonical outcome contract while allowing explicit Claude and Codex overlays.
-
-**Where:** `packages/workflow-schema/` and `workflows/`.
-
-**How:**
-
-- [ ] Approve a dedicated schema covering identity, semantic version, triggers, inputs, read/write scopes, required capabilities, refusals, steps, structured result, validators, and recovery.
-- [x] Implement strict parsing and reject unknown fields for version 1 contracts.
-- [x] Implement renderer interfaces without embedding vendor behavior in canonical workflows.
-- [ ] Encode the Brain workflows from `docs/superpowers/specs/2026-07-21-developer-os-design.md` and the command names frozen in `docs/migration/baseline-capabilities.json` (`lint`, `reindex`, `ingest`, `test`). Write them as new canonical contracts; do not port a legacy script, and do not open a legacy repository to recover one. If the design does not specify a workflow you believe is needed, that is a spec gap to resolve in DOS-P3's approval cycle.
-- [x] Add generated-artifact markers and CI drift checks.
-- [x] Add negative fixtures for missing capability, excessive write scope, prompt instructions inside source data, and incompatible schema versions.
-
-**Test:**
-
-- Workflow validation is deterministic.
-- Every workflow declares exact read/write scope and at least one validator.
-- Vendor overlays cannot weaken a canonical refusal or widen write scope.
-- Generated output is idempotent and changes only when canonical source or renderer changes.
-
-**Checkpoint:** Canonical workflows compile into abstract adapter artifacts; no vendor plugin is installed yet.
-
----
-
-### Task 4: Specify and implement the Claude Code adapter
-
-**Complexity:** L
-
-**Files:**
-- Create: `docs/superpowers/specs/2026-07-21-developer-os-claude-adapter-design.md`
-- Create: `docs/superpowers/plans/2026-07-21-developer-os-claude-adapter.md`
-- Create: `packages/adapter-claude/src/`
-- Generate: `plugins/claude/`
-- Create: `tests/contracts/adapters/claude/`, `tests/fixtures/agents/claude/`, and `tests/integration/claude/`
-
-**Interfaces:**
-- Consumes: `WorkflowContractV1`, `WorkflowRenderer`, `BrainService`, `SecurityPolicy`, `PlatformAdapter`, and `InstallationManifestV1`.
-- Produces: `ClaudeAdapter`, `ClaudeCapabilities`, `ClaudeInvocation`, Claude plugin artifacts, managed hook plans, and structured agent-run results.
-
-**What:** Add Claude Code as a fully optional adapter using documented plugin, skill, hook, and non-interactive surfaces.
-
-**Where:** `packages/adapter-claude/` and generated `plugins/claude/`.
-
-**How:**
-
-- [ ] Approve exact supported-version discovery, plugin structure, hook payloads, wrapper behavior, config merge, and failure contracts.
-- [x] Implement version and capability detection from documented CLI surfaces.
-- [ ] Render canonical workflows into namespaced Claude skills and plugin metadata.
-- [ ] Install through a dedicated managed plugin path and semantic config merge.
-- [x] Implement safe agent invocation with argv arrays, bounded stdin, timeouts, and structured result validation.
-- [x] Implement SessionStart injection and automatic capture only for verified lifecycle surfaces.
-- [ ] Use `developer-os run claude` when direct invocation cannot meet the capture contract.
-- [ ] Test against a fake CLI first and a disposable real installation second.
-
-**Test:**
-
-- Plugin validation and generated drift checks pass.
-- Fake-CLI tests pin argv, stdin, environment, timeout, signal, exit, and malformed-output behavior.
-- Install/update/uninstall preserves unrelated Claude settings.
-- Capture redacts before persistence or model input.
-- Unsupported Claude versions report exact missing capabilities rather than partial success.
-
-**Checkpoint:** A Claude-only user completes the full synthetic Brain workflow with no Codex installation.
-
----
+**One thing Task 3's file list said that its checkpoint did not need.** It asked for the command
+names frozen in `docs/migration/baseline-capabilities.json` — `lint`, `reindex`, `ingest`,
+`test` — to be encoded as canonical workflows. The approved DOS-P3 spec names six workflows and
+those are what shipped; `lint` and `reindex` are served by the `brain` CLI group DOS-P2 shipped,
+which is a command surface rather than an agent workflow, and `test` is a repository gate. The
+spec wins over the plan, and this is recorded rather than left as an apparent omission.
 
 ### Task 5: Specify and implement the Codex adapter
+
+**Closed 2026-08-12. What survives it: `docs/architecture/codex-adapter.md`, and
+`specs/2026-07-21-developer-os-codex-adapter-design.md` as the design of record.** Its
+implementation plan is deleted, per the rule that `plans/` holds only unfinished work.
+
+**Its step list is kept rather than deleted, unlike Tasks 0–4's, because one box is unearned and
+one is only half true.** A closed task's list is normally removed so a later commit cannot move its
+checkboxes; here the boxes carry the record of what did *not* close, which is the more valuable of
+the two protections. Do not tick the remaining box; it is Task 6's.
+
+**The checkpoint is half met.** The plugin installs and all six skills load in a real Codex
+installation, and `doctor` reports both adapters with their differences. But `capture`, `ingest` and
+`review` name verbs with no handler anywhere in this product, so three of the six shipped skills
+reference commands that do not exist — the same half `claude-adapter.md` §8 records for Task 4, and
+for the same reason: an adapter renders workflows and executes none of them. Six of the seven
+unimplemented verbs are Task 6's. `docs/architecture/codex-adapter.md` §10 is the full record.
 
 **Complexity:** L
 
 **Files:**
 - Create: `docs/superpowers/specs/2026-07-21-developer-os-codex-adapter-design.md`
-- Create: `docs/superpowers/plans/2026-07-21-developer-os-codex-adapter.md`
+- Create: `docs/superpowers/plans/2026-07-21-developer-os-codex-adapter.md` — *written 2026-08-11, nineteen tasks, deleted 2026-08-12 when its last step closed*
 - Create: `packages/adapter-codex/src/`
 - Generate: `plugins/codex/`
-- Create: `tests/contracts/adapters/codex/`, `tests/fixtures/agents/codex/`, and `tests/integration/codex/`
+- Create: `tests/contracts/adapters/codex/`, `tests/fixtures/agents/codex/`, and `tests/integration/codex/` — *`tests/fixtures/agents/codex/` was not created: every fake-CLI case injects its own `ProcessRunner` rather than reading a fixture file, which is how the Claude adapter's suites are built too*
 
 **Interfaces:**
 - Consumes: the same canonical workflow, Brain, security, platform, and ownership interfaces as Task 4.
-- Produces: `CodexAdapter`, `CodexCapabilities`, `CodexInvocation`, Codex plugin/skill/`AGENTS.md` artifacts, managed hook plans, and structured agent-run results.
+- Produces: `CodexAdapter`, `CodexCapabilities`, `CodexInvocation`, Codex plugin/skill/`AGENTS.md` artifacts, managed hook plans, and structured agent-run results. — *no `AGENTS.md` artifact ships and no managed hook plan ships: `docs/architecture/codex-adapter.md` §2.2 refuses `AGENTS.md` and `AGENTS.override.md` outright, and §5 records that no `hooks/hooks.json` ships for either adapter, so there is no hook plan for this package to manage.*
 
 **What:** Add Codex as an independent adapter without claiming undocumented transcript or lifecycle parity.
 
@@ -220,14 +196,14 @@ document inviting the next session to redo it.
 
 **How:**
 
-- [ ] Approve exact supported Codex surfaces against current official documentation and verified local behavior.
-- [x] Implement version and capability detection.
-- [ ] Render the canonical workflows into Codex skills and durable guidance at the smallest appropriate scope.
-- [ ] Install only dedicated managed artifacts and semantically merge required config.
-- [x] Implement safe non-interactive invocation and structured output validation.
-- [x] Implement documented hooks when available and wrapper-required capture otherwise.
-- [ ] Refuse transcript parsing unless a stable documented contract exists and has a regression fixture.
-- [ ] Test against a fake CLI first and a disposable real installation second.
+- [x] Approve exact supported Codex surfaces against current official documentation and verified local behavior. — *the spec was written 2026-08-11 and approved by the founder the same day; its §14 is the normative list, and an implementation may not depend on a surface it does not carry.*
+- [x] Implement version and capability detection. — *`discover.ts`, `versions.ts`, `probe.ts` and `capabilities.ts`; the floor is `0.147.0`, **one observed version and not a range**, which `docs/architecture/codex-adapter.md` §3 records as DOS-P9's to widen or narrow.*
+- [x] Render the canonical workflows into Codex skills and durable guidance at the smallest appropriate scope. — *six skills; **no `AGENTS.md` is written at any scope**, because the smallest appropriate scope turned out to be inside the skill itself — the approved spec §6.1 says so plainly rather than presenting it as compliance with the phrase. `AGENTS.override.md` is refused outright: in the global scope Codex reads it instead of `AGENTS.md`.*
+- [x] Install only dedicated managed artifacts and semantically merge required config. — *the first half is `mergeStrategy: "dedicated"` over one owned tree. **The second half is dissolved rather than performed**: the vendor's own CLI writes the vendor's config, so no foreign file is merged and `buildConflictEvidence` has no consumer in either adapter. Approved spec §4.3; `BACKLOG.md` §8.*
+- [x] Implement safe non-interactive invocation and structured output validation. — *`codex exec` through the security runner, sandbox from the declared scopes, three flags refused by test. **The JSONL reduction is provisional and unverified** — settling it needs a real model call, declined by the founder on 2026-08-12; owner DOS-P6, `codex-adapter.md` §7.*
+- [ ] Implement documented hooks when available and wrapper-required capture otherwise. — *the second half shipped and the first did not. **Neither adapter ships `hooks/hooks.json`**: a `type: "command"` handler needs an executable file and nothing in this pipeline can express an executable bit, so the only nameable command is the `developer-os` capture entrypoint, which is Task 6's. Ratified by the founder 2026-08-12 for both adapters at once. Restoring it needs the hook bodies, an executable-bit mechanism and a firing test, in one change. **Owner: Task 6 / DOS-P6.***
+- [x] Refuse transcript parsing unless a stable documented contract exists and has a regression fixture. — *nothing in the tree names `transcript_path` on any code path. **Amended 2026-08-12:** this was real and unasserted — no test pinned the absence — until a fresh-context review caught it; `tests/repository/transcript-path.test.ts` now pins it directly, so the tick is earned rather than backed by a grep nobody reruns.*
+- [x] Test against a fake CLI first and a disposable real installation second. — *both; the real run against `codex-cli 0.147.0` contradicted the approved spec four times and three of those stopped the install completing at all (`codex-adapter.md` §7).*
 
 **Test:**
 
@@ -237,7 +213,7 @@ document inviting the next session to redo it.
 - A missing capture hook becomes `wrapper-required`, not a false `yes`.
 - A Codex-only user completes the same synthetic Brain outcome contract as Claude.
 
-**Checkpoint:** Claude-only, Codex-only, and dual-adapter installations all work, with explicit differences in `doctor`.
+**Checkpoint:** Claude-only, Codex-only, and dual-adapter installations all work, with explicit differences in `doctor`. — *half met, 2026-08-12; see the note above this task's file list.*
 
 ---
 
@@ -264,12 +240,12 @@ document inviting the next session to redo it.
 **How:**
 
 - [ ] Approve exact capture fields, lifecycle transitions, retention behavior, and redaction classes.
-- [x] Implement atomic quarantine writes and post-redaction deduplication.
-- [x] Implement accept/edit/reject review without automatic deletion.
+- [ ] Implement atomic quarantine writes and post-redaction deduplication.
+- [ ] Implement accept/edit/reject review without automatic deletion.
 - [ ] Invoke agents with source material marked as untrusted data and a staging-only write contract.
 - [ ] Validate schema, provenance, links, duplicates, confidence, secrets, indexes, generated artifacts, and write scope.
-- [x] Add per-file backup, atomic replacement, transaction journal, resume, rollback, and concurrent-edit refusal.
-- [x] Add sentinel secret, prompt injection, symlink escape, multiline command, malformed manifest, and interruption tests.
+- [ ] Add per-file backup, atomic replacement, transaction journal, resume, rollback, and concurrent-edit refusal. — *Foundation shipped the machinery in `packages/core/src/transactions/` and `packages/platform-macos/src/transaction-lock.ts`; what this box owes is the hardening of it against the capture and ingest paths, which do not exist yet.*
+- [ ] Add sentinel secret, prompt injection, symlink escape, multiline command, malformed manifest, and interruption tests. — *`tests/security/` does not exist; `BACKLOG.md` §5 records it as owed by this task.*
 - [ ] Run independent security review before accepting the checkpoint.
 
 **Test:**
@@ -308,9 +284,9 @@ document inviting the next session to redo it.
 
 - [ ] Specify Git initialization, existing remote connection, scoped staging, commit, push, and error states.
 - [ ] Specify exact `launchd` jobs, schedules, logs, lock ownership, and opt-in boundaries.
-- [x] Implement Git against temporary repositories and bare remotes; never use real credentials in tests.
-- [x] Implement `launchd` plan/apply/status/disable through an injected filesystem/runner in tests.
-- [x] Implement signed/checksummed release metadata, dry-run updates, schema migration staging, and rollback.
+- [ ] Implement Git against temporary repositories and bare remotes; never use real credentials in tests.
+- [ ] Implement `launchd` plan/apply/status/disable through an injected filesystem/runner in tests.
+- [ ] Implement signed/checksummed release metadata, dry-run updates, schema migration staging, and rollback.
 - [ ] Ensure update refuses drift and uninstall removes only manifest-owned artifacts.
 - [ ] Test push failure, partial download, checksum mismatch, stale lock, concurrent edit, and migration failure.
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { capGraphemes, screenAndCap, screenControlCharacters } from "./redact.js";
+import { capGraphemes, screenAndCap, screenControlCharacters } from "./screen.js";
 
 /** The same segmenter the module uses, for tests that count clusters. */
 const GRAPHEMES = new Intl.Segmenter("en", { granularity: "grapheme" });

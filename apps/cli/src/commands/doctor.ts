@@ -17,9 +17,13 @@ import type {
   InstallationManifestV1,
   RuntimePaths,
 } from "@developer-os/core";
+import { PLUGIN_INSTALL_SEGMENTS } from "@developer-os/adapter-claude";
+import { PLUGIN_TREE_SEGMENTS } from "@developer-os/adapter-codex";
 import { MacOsPlatformDiscoveryError } from "@developer-os/platform-macos";
 import type { AgentDiscovery, AgentName } from "@developer-os/platform-macos";
 
+import { reportClaudeCapabilities } from "./claude-capabilities.js";
+import { reportCodexCapabilities } from "./codex-capabilities.js";
 import { exitCodeOf, runtimePathsFor } from "../context.js";
 import type { CliContext } from "../context.js";
 
@@ -233,6 +237,124 @@ function describeAgents(agents: readonly AgentDiscovery[]): string {
   return agents
     .map((agent) => `${agent.name}=${agent.installed ? "present" : "absent"}`)
     .join(" ");
+}
+
+/**
+ * Product spec §11 asks `doctor` to print a capability matrix for the detected
+ * environment. This is that check, and it is `pass` in every branch.
+ *
+ * It reports and never refuses — `workflow-schema.md` §7 records the
+ * contradiction: the `doctor` *workflow* refuses when no installation is found,
+ * while `shared` tells a user in exactly that state to run `developer-os
+ * doctor`. Different objects, same name. A missing agent is information, not a
+ * failure, which is also why `agents` is excluded from `INIT_OWNED_CHECKS`.
+ */
+async function checkClaudeCapabilities(context: CliContext): Promise<Finding> {
+  // Discovery can refuse — `MacOsPlatformAdapter` rejects a `which` result it
+  // cannot vouch for, and `checkAgents` already demotes that to a warning. A
+  // refusal here is information about the environment, not a failure of this
+  // report, so it degrades to "nothing to examine" rather than propagating.
+  let executablePath: string | null = null;
+  try {
+    const agents = await discoverAgents(context);
+    const claude = agents.find((agent) => agent.name === "claude");
+    executablePath = claude?.installed === true ? claude.executablePath : null;
+  } catch {
+    executablePath = null;
+  }
+  const report = await reportClaudeCapabilities({
+    executablePath,
+    runner: context.runner,
+    /**
+     * The **user's** home, not the product's. This was
+     * `join(paths.home, "plugins", "claude")` — `~/.developer-os/plugins/claude`,
+     * a directory the installer never creates. Dead while `probe` defaults to
+     * false, and the moment anyone set it, validate would have failed on a path
+     * that never existed and reported `skills=wrapper-required` on a healthy
+     * install. `PLUGIN_INSTALL_SEGMENTS` is where the real location is decided.
+     * Found by fresh-context review, 2026-08-11.
+     */
+    pluginDirectory: join(context.userHome, ...PLUGIN_INSTALL_SEGMENTS),
+  });
+  return pass(
+    "claude-capabilities",
+    `${report.summary} capture-via=${report.captureVia}`,
+    [],
+  );
+}
+
+/**
+ * Codex's half of the same check. Reports and never refuses, for the reason
+ * `checkClaudeCapabilities` above records.
+ *
+ * **The plugin root is under the *product* home, not the user's home** — the
+ * mirror image of the bug fixed above, where the product home was used for a
+ * path under the user's home. Spec §4 puts the tree at
+ * `<product-home>/codex/plugins/developer-os`, and `install.ts`'s
+ * `marketplaceRoot` resolves the same `CODEX_ROOT_SEGMENT` against the
+ * product home for the same reason — `PLUGIN_TREE_SEGMENTS`
+ * (`packages/adapter-codex/src/plugin.ts`) already carries the full path from
+ * that root to the plugin tree itself, so joining it onto anything but the
+ * product home (`paths.home`, as every other check here reads it) would be
+ * this task's namesake mistake in reverse.
+ * `context.paths.home` is used rather than a `paths` argument because
+ * `resolveRuntimePaths` computes `home` from the environment alone —
+ * configuration can only move the vault path — so `context.paths.home` and a
+ * freshly resolved value are always equal.
+ */
+export function codexPluginRoot(context: CliContext): string {
+  return join(context.paths.home, ...PLUGIN_TREE_SEGMENTS);
+}
+
+async function checkCodexCapabilities(context: CliContext): Promise<Finding> {
+  // Discovery can refuse — `MacOsPlatformAdapter` rejects a `which` result it
+  // cannot vouch for, and `checkAgents` already demotes that to a warning. A
+  // refusal here is information about the environment, not a failure of this
+  // report, so it degrades to "nothing to examine" rather than propagating.
+  //
+  // The consequence is worth stating plainly: the catch above is bare, so
+  // any discovery error — a refusal, an unsupported platform, a security
+  // refusal from the process runner — is rendered as `codex=absent`, "we
+  // could not ask" printed as "not installed", the same conflation
+  // `unreadable` exists to prevent, one layer up. `checkAgents` in this file
+  // splits those on purpose (a refusal demotes to `warn`, anything else is
+  // `fail`), so the same failure can leave `agents` failing while
+  // `codex-capabilities` still prints `pass … codex=absent`. This is a known
+  // residual, not an oversight: both adapters carry it, they must stay
+  // identical because DOS-P6 consumes both, and DOS-P6 owns closing it.
+  let executablePath: string | null = null;
+  try {
+    const agents = await discoverAgents(context);
+    const codex = agents.find((agent) => agent.name === "codex");
+    executablePath = codex?.installed === true ? codex.executablePath : null;
+  } catch {
+    executablePath = null;
+  }
+  const report = await reportCodexCapabilities({
+    executablePath,
+    runner: context.runner,
+    pluginRoot: codexPluginRoot(context),
+  });
+  /**
+   * `report.recovery` is carried on every branch unconditionally —
+   * `codex-capabilities.ts` decided a *report* that omits it is not a
+   * report. But this is the *message*, the line a human reads, and advice to
+   * open a Codex session is not actionable on a machine that has no Codex to
+   * open one in. Gated on `installed` rather than on a specific capability
+   * reading `wrapper-required`: `doctor` never sets `probe: true` (see the
+   * comment on `CodexCapabilityRequest.probe`), so every installed branch it
+   * can reach — unreadable, not-probed — reports `captureVia: "wrapper"`
+   * today, and the advice is actionable in both of them; only `absent` is
+   * not. The probed branch can return `captureVia: "hook"`
+   * (`codex-capabilities.ts` does when `session_end_capture === "yes"`), but
+   * `doctor` never sets `probe: true`, so that branch is unreachable here.
+   */
+  const recovery = report.installed ? ` recovery="${report.recovery}"` : "";
+  return pass(
+    "codex-capabilities",
+    `${report.summary} capture-via=${report.captureVia}${recovery}`,
+    [],
+  );
 }
 
 async function checkPlatform(context: CliContext): Promise<Finding> {
@@ -533,6 +655,12 @@ async function collectFindings(
       checkBrain(context, paths),
     ),
     await guarded(context, "agents", [], () => checkAgents(context)),
+    await guarded(context, "claude-capabilities", [], () =>
+      checkClaudeCapabilities(context),
+    ),
+    await guarded(context, "codex-capabilities", [], () =>
+      checkCodexCapabilities(context),
+    ),
   ];
 }
 

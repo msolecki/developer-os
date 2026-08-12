@@ -18,6 +18,10 @@ nothing else; the detail behind each entry lives in `BACKLOG.md`.
 qualifier after an em dash — how far along, how long it has been open — because for the items
 that have sat longest that is the most useful thing on the row.
 
+**Closed entries are removed, not kept as rows.** Finished work leaves an architecture note and
+a line in the table below; git history is the archive. A queue that lists what is done stops
+answering the one question it exists for.
+
 **One rule that is not negotiable:** an entry is `done` only when its evidence is in a
 commit. A green local tree is the state this repository was already in once, and it cost a
 week of confusion.
@@ -26,102 +30,78 @@ week of confusion.
 
 ## NOW
 
-**A7 — DOS-P3 Workflow compiler. `S` closed on 2026-08-10**: the founder walked §15, ruled
-every decision — six as drafted, the `scheduled` trigger reversed into a refusal — and
-approved `specs/2026-07-21-developer-os-workflow-compiler-design.md`. That document is now
-the design of record.
+**A10 — DOS-P6 Knowledge pipeline, at its `S` gate. The next session writes the spec; approving it
+is the founder's.** Nothing else is in progress. DOS-P5 closed on 2026-08-12 and its plan is
+deleted; `docs/architecture/codex-adapter.md` is what replaced it.
 
-**`P` closed the same day.** `plans/2026-07-21-developer-os-workflow-compiler.md` is written:
-twelve tasks, TDD throughout, each ending in a fresh-context review and a commit. **`I` is the
-entry** — execute it with `superpowers:subagent-driven-development` or
-`superpowers:executing-plans`, one task at a time.
+**Read three documents before writing a line of that spec**, in this order:
+`docs/architecture/codex-adapter.md`, `docs/architecture/claude-adapter.md`, and
+`docs/architecture/brain.md`. DOS-P6 is the first subsystem that consumes *both* adapters, and the
+two notes are written for exactly that reader.
 
-Two things the plan settled that the spec left to it. The display screen moves from
-`packages/brain` into `@developer-os/security`, because `workflow-schema` needs the same screen
-and must not depend on a peer subsystem. And spec §13's demand that six workflows "render
-byte-identically" **cannot be met literally in DOS-P3**, which ships no renderer by design:
-Task 11 proves what this package can prove and names DOS-P4/P5 as owing the rest, rather than
-skipping the requirement quietly.
+**What DOS-P6 inherits, and it is the largest inheritance in the program.** Six of DOS-P4's twelve
+residuals and seven of DOS-P5's twelve are its. The two that shape the spec rather than merely
+appear in it:
 
-**Nothing else is startable without the founder.** `BACKLOG.md` §1's repository defects
-closed on 2026-08-10 — NEW-9 with CI (`c6d1ef1`), then NEW-5, NEW-8 and NEW-6, each a place
-where two parts of this product disagreed with each other. **What is left of §1's repository
-defects is NEW-7 and NEW-10** — the rest of §1 is EXIT-2, EXIT-4, L1 and L2, all below.
-NEW-7 is not agent work: it needs ten minutes with a machine that has Obsidian, which is the
-founder's. NEW-10 is XS and was found by the review that closed NEW-6.
+- **The capture contract is the keystone.** It decides what a hook body does, which is what unblocks
+  hooks, which is what makes a lifecycle capability observable, which is what turns
+  `wrapper-required` into `yes`. Neither adapter ships `hooks/hooks.json` and both report
+  `plugin_hooks` as `unknown`; restoring hooks needs the bodies, an executable-bit mechanism and a
+  firing test, in one change, for both adapters at once.
+- **`capture`, `ingest` and `review` name verbs with no handler anywhere in this product.** Three of
+  the six shipped skills reference commands that do not exist, in both vendor trees. That is the
+  half of Task 4's *and* Task 5's checkpoints that neither adapter could close, and it is the first
+  thing DOS-P6 makes true.
 
-**Track B closed the same day**, so the queue below is genuinely what remains: Track A, and
-Track L waiting on the founder and their counsel.
+**Also DOS-P6's, and easy to miss:** the entire two-gate capability machinery has no production
+caller today — `doctor` never turns probing on — so DOS-P6 is the first to exercise it; the
+`codex exec --json` JSONL terminal-event rule ships **provisional and unverified**, because settling
+it needs a real model call the founder declined on 2026-08-12; and `maxTurns` is bounded under
+Claude and silently dropped under Codex, one shared schema with two behaviours. `codex-adapter.md`
+§11 is the full list with owners.
 
-**Closed, and not repeated below.** Foundation on 2026-08-01, A6/DOS-P2 on 2026-08-10. Both
-plans are deleted and git history is the archive; what each proved is in its own checkpoint
-document rather than retold here. What survives them:
+**What is closed, and what each closure left behind.** Read the right-hand column before touching
+the subsystem it names; these documents are the reason the plans could be deleted.
 
-| Read this | Before you |
-|---|---|
-| `docs/architecture/foundation.md`, `…-constraints.md` | touch the CLI, transactions, or the manifest |
-| `docs/releases/foundation-checkpoint.md` | ask what Foundation's gate evidence was |
-| `docs/architecture/brain.md` | touch Brain code |
-| `specs/2026-07-21-developer-os-brain-engine-design.md` | change Brain *behaviour* |
-| `BACKLOG.md` §2 | assume Foundation left nothing open — it left two founder questions, one unconsumed interface, and one residual owed by A11 |
+| Closed | When | What survives it |
+|---|---|---|
+| Foundation | 2026-08-01 | `docs/architecture/foundation.md`, `…-constraints.md` — the CLI, transactions, the manifest, and two open founder questions. Gate evidence: `docs/releases/foundation-checkpoint.md` |
+| A6 · DOS-P2 Brain engine | 2026-08-10 | `docs/architecture/brain.md`, and `specs/…-brain-engine-design.md` as the design of record |
+| A7 · DOS-P3 Workflow compiler | 2026-08-10 | `docs/architecture/workflow-schema.md` — §7 records four canonical workflows that say less than the product spec does, §8 nine residuals |
+| A8 · DOS-P4 Claude adapter | 2026-08-11 | `docs/architecture/claude-adapter.md` — why in-place discovery beat a marketplace copy, why no hooks ship, and twelve residuals, six of them DOS-P6's |
+| A9 · DOS-P5 Codex adapter | 2026-08-12 | `docs/architecture/codex-adapter.md` — why the install is a local marketplace, the two roots that share one type, the four spec amendments the real binary forced, the two-adapter table DOS-P6 inherits, and twelve residuals, seven of them DOS-P6's. **Its checkpoint is half met and §10 says which half.** |
+| Track B · legacy exit | 2026-08-10 | `BACKLOG.md` §6 — what a cutover still has to know, and one decision (EXIT-1) that is a conversation with the founder rather than a backlog item |
 
 ---
 
 ## Track A — product
 
-Strictly sequential except where two rows are marked `‖`, which may run in parallel.
-
-Subsystem rows carry three gates: **S** = spec approved through a brainstorming cycle,
-**P** = implementation plan written, **I** = implemented, reviewed and committed. All three
-belong to that row; do not start `I` before `P` is written, and do not start `P` before `S`
-is approved.
+Strictly sequential. Subsystem rows carry three gates: **S** = spec approved through a
+brainstorming cycle, **P** = implementation plan written, **I** = implemented, reviewed and
+committed. All three belong to that row; do not start `I` before `P` is written, and do not start
+`P` before `S` is approved.
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A7 | DOS-P3 Workflow compiler — S / P / I | `plans/2026-07-21-developer-os-workflow-compiler.md` | — | L | program plan Task 3 checkpoint: canonical workflows compile to abstract artifacts | **now** — **S and P closed**; `I` is the entry, twelve tasks |
-| A8 ‖ | DOS-P4 Claude adapter — S / P / I | to write | A7 | L | program plan Task 4 checkpoint: a Claude-only user completes the full synthetic workflow | blocked |
-| A9 ‖ | DOS-P5 Codex adapter — S / P / I | to write | A7 | L | program plan Task 5 checkpoint: Claude-only, Codex-only and dual installs all work | blocked |
-| A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | A8 **and** A9 | L | program plan Task 6 checkpoint, after independent security review | blocked |
+| A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` open; the spec is the next session's work and its approval is the founder's |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |
 
-**A7 has no unmet Needs**, and it is no longer parallel with anything: A6 closed, so the
-`‖` pairing is gone.
-
-**No Track A entry is code work today.** Every remaining one begins with a document —
-DOS-P3 through DOS-P7 each need an approved spec *and* an implementation plan before any
-code, which is a Global Constraint of the program plan rather than a preference.
+**A10's dependencies are both discharged.** DOS-P4 closed 2026-08-11 and DOS-P5 on 2026-08-12, so
+nothing gates A10 but the founder's approval of its spec. Between them the two adapters hand DOS-P6
+thirteen of their twenty-four residuals — `claude-adapter.md` §9 and `codex-adapter.md` §11 — and
+the `NOW` block above names the two that shape the spec rather than merely appearing in it. Until they land, three of the
+six shipped skills name a command that does not exist, in both vendor trees.
 
 **A12 decision, settled 2026-08-10 by the founder: it gets its own plan.** The program plan
-enumerates Task 8's ten steps inline and does not mandate one; the founder ruled that it gets
-one anyway, because A12 is the only task that mutates the live machine and its rollback must
-be rehearsed before cutover is declared complete. The plan is authored against A11's output,
-not before it — writing it earlier would specify a cutover from a lifecycle that does not
-exist yet. `BACKLOG.md` §4 carries what it must contain.
+enumerates Task 8's ten steps inline and mandates neither a spec nor a plan; the founder ruled that
+it gets one anyway, because A12 is the only task that mutates the live machine and its rollback
+must be rehearsed before cutover is declared complete. Authored against A11's output, not before
+it — a cutover plan written ahead of the lifecycle it cuts over to would specify commands that do
+not exist. `BACKLOG.md` §4 carries what it must contain.
 
 ---
-
-## Track B — legacy exit
-
-**Closed on 2026-08-10. It no longer blocks A12.** Nothing further is planned, scheduled, or
-in progress on `~/claude-shared` or `~/brain`; both are frozen artifacts running the founder's
-machine until the DOS-P8 cutover retires them. The checklist that ran this track is deleted —
-`BACKLOG.md` §6 carries what a cutover still needs to know, and git history is the archive.
-
-| # | Entry | Closed how |
-|---|---|---|
-| B1 | EXIT-1 — rotate historical credential candidates | **declined by the founder**, not done and not deferred. `BACKLOG.md` §6 carries the decision and the reasons not to reopen it from a backlog |
-| B2 | EXIT-2 — the non-npm commit-gate contradiction | fixed. The npm-only absolute is a fail-closed ladder: `package.json` scripts, else the repository's documented suite, else blocked |
-| B3 | EXIT-3 — untracked entries | discharged. Three `.bak` files deleted as byte-identical to `ef4a972`, `docs/ROADMAP.md` committed. What remains untracked in the vault is one day of new captures awaiting the next scheduled run |
-| B4 | EXIT-4 — the failing weekly job | **already fixed when it was checked.** The run of 2026-08-09 succeeded — hooks `PASS=49 FAIL=0`, 52 files committed and pushed, the whole backlog drained. The item was written on 2026-08-08 and the next scheduled Sunday proved the two fix commits that preceded it |
-
-**What closing it cost, and it is worth knowing before the cutover.** B2's corrected rule
-immediately blocked its own commit, because the declared suite it points at was failing on 173
-findings — every one a raw capture in the language it was captured in, and no automation ran
-the check, so the red had been invisible while the weekly job reported green. Two exclusions
-settled it: `_raw` is out of scope, and quoted material — a fenced block, an inline code span,
-a price in `zł` — is not prose. `BACKLOG.md` §6 has the detail.
 
 ## Track L — long lead time, start early
 
@@ -131,10 +111,12 @@ Starting them at A13 adds their full lead time to the release date for no reason
 | # | Entry | Owner | Gates | Done when | Status |
 |---|---|---|---|---|---|
 | L1 | Select an OSI-approved license and obtain qualified legal approval | Founder + counsel | A13, public visibility | approved text committed as `LICENSE` | open, startable now |
-| L2 | Remote verification — destination remote, visibility, branch protections | Founder, outside this environment | A12, A13, any push | `remoteVerification` no longer `blocked_by_environment` | open, startable now |
+| L2 | Remote verification — destination remote, visibility, branch protections | Founder, outside this environment | A12, A13 | `remoteVerification` no longer `blocked_by_environment` | open, startable now |
 
-Until L2 clears: no fetch, no push, no pull request, no public release. Recording an origin
-is not verification.
+**L2 no longer blocks pushing.** The remote exists and CI runs on it, as of 2026-08-10; pushing a
+topic branch and opening a pull request is routine. What L2 still gates is the cutover and the
+public release — and merging remains the founder's, because the repository rule requiring a pull
+request exists so a human sees it first.
 
 ---
 
@@ -146,6 +128,9 @@ is not verification.
 | what to do next | this file |
 | what a missing spec must decide, and what it produces | `BACKLOG.md` §3 |
 | what the Brain engine is, and its six residuals | `docs/architecture/brain.md` |
+| what the workflow compiler is, what it deliberately cannot do, and the four workflows that say less than the product spec does | `docs/architecture/workflow-schema.md` |
+| what the Claude adapter is, why it ships no hooks, and its twelve residuals | `docs/architecture/claude-adapter.md` |
+| what the Codex adapter is, why the install is a local marketplace, and the two-adapter table DOS-P6 inherits | `docs/architecture/codex-adapter.md` |
 | what Foundation delivered, and what it deliberately cannot do | `docs/architecture/foundation.md` |
 | the per-task Foundation constraints, and two open founder questions | `docs/architecture/foundation-constraints.md` |
 | the Foundation gate evidence, as it stood on 2026-08-01 | `docs/releases/foundation-checkpoint.md` |
@@ -158,9 +143,17 @@ is not verification.
 
 ## Counting what is left
 
-Foundation and DOS-P2 are closed, and DOS-P3's spec is approved. Five subsystems need a plan
-and an implementation each, four of them a spec as well — **fourteen milestones left, and the
-next one is DOS-P3's plan**. Then cutover, then release.
+Foundation, DOS-P2, DOS-P3, DOS-P4 and DOS-P5 are closed — five subsystems of eight, and both of
+the ones that turn a canonical workflow into something an agent can actually load. **Neither of them
+can execute what it renders**, which is the whole of what remains on the product path.
 
-**Track B is closed entirely** and Track L is still two items outside this room. `BACKLOG.md`
-§1 is two repository-level defects, both XS, both with named owners, neither compounding.
+**Six milestones remain**, each L: DOS-P6's spec, plan and implementation; DOS-P7's spec, plan and
+implementation. Then two more entries that are not subsystems — the cutover (A12) and the release
+(A13) — plus Track L's two items, which are not engineering work at all.
+
+`BACKLOG.md` §1 is four repository defects: NEW-7, which needs ten minutes with a machine that has
+Obsidian rather than an agent; NEW-11, which is the same invisible-character rule that closed
+NEW-10 applied to `tags`, `summary` and the duplicates key; NEW-12, where the argv screen's word
+list is applied to free-form prose that only the positional half of the screen protects; and
+NEW-13, where two artifact roots share one type and the wrong one installs cleanly rather than
+refusing.

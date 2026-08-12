@@ -1,12 +1,14 @@
 import * as nodeFs from "node:fs/promises";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import { EXIT_CODES } from "@developer-os/core";
+import { PLUGIN_TREE_PREFIX, proposeCodexInstall } from "@developer-os/adapter-codex";
 import { MacOsPlatformDiscoveryError } from "@developer-os/platform-macos";
+import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 
-import { runDoctor, runDoctorReport } from "./doctor.js";
+import { codexPluginRoot, runDoctor, runDoctorReport } from "./doctor.js";
 import { runInit } from "./init.js";
 import {
   createCommandFixture,
@@ -70,7 +72,64 @@ describe("runDoctor", () => {
       "drift",
       "brain",
       "agents",
+      "claude-capabilities",
+      "codex-capabilities",
     ]);
+    /**
+     * No Codex is installed in this fixture, so the hook-trust command is not
+     * actionable — nothing is there to open a session in. Spec §5.3: the
+     * fix is one command, and a report that prints it unconditionally reads as
+     * advice to run `/hooks` inside a CLI the machine does not have.
+     */
+    const codexAbsent = result.data.checks.find(
+      (check) => check.id === "codex-capabilities",
+    );
+    expect(codexAbsent?.message).toContain("codex=absent");
+    expect(codexAbsent?.message).not.toContain("recovery=");
+  });
+
+  /**
+   * Spec §5.3: the fix is one command, and a report that omits it — where it
+   * is actionable — is not a report. `codex-capabilities.ts`'s own unit tests
+   * pin `report.recovery` one layer below the user; this pins the composed
+   * `DoctorCheck.message` the user actually reads.
+   */
+  it("names the hook-trust command when Codex is installed", async () => {
+    const runner: ProcessRunner = {
+      run(request): Promise<ProcessResult> {
+        return Promise.resolve({
+          stdout: request.args[0] === "--version" ? "codex-cli 0.147.0" : "",
+          stderr: "",
+          exitCode: 0,
+          signal: null,
+          timedOut: false,
+        });
+      },
+    };
+    const fixture = await createCommandFixture("doctor-codex-installed", {
+      runner,
+      agents: {
+        claude: { name: "claude", installed: false, executablePath: null, version: null },
+        codex: {
+          name: "codex",
+          installed: true,
+          executablePath: "/opt/synthetic/bin/codex",
+          version: null,
+        },
+      },
+    });
+    await runInit(fixture.context, ACCEPTED);
+
+    const result = await runDoctor(fixture.context);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const codex = result.data.checks.find(
+      (check) => check.id === "codex-capabilities",
+    );
+    expect(codex?.message).toContain("codex=0.147.0");
+    expect(codex?.message).toContain('recovery="');
+    expect(codex?.message).toContain("/hooks");
   });
 
   it("reports an uninitialized machine as an operational failure", async () => {
@@ -279,5 +338,43 @@ describe("agent discovery that refuses", () => {
     expect(report.checks.find((check) => check.id === "agents")?.status).toBe(
       "fail",
     );
+  });
+});
+
+/**
+ * `codexPluginRoot` computes the Codex plugin root independently of
+ * `packages/adapter-codex/src/install.ts`'s `marketplaceRoot` — same product
+ * home, different path module (platform `join` here, `posix.join` there).
+ * `doctor` never sets `probe: true`, so nothing exercises this value against
+ * anything; the Claude-side twin of exactly this failure (dead until the
+ * probe flips on, then wrong) was fixed elsewhere in this branch, and this
+ * pins the Codex side so it cannot regress the same way unnoticed.
+ *
+ * The expectation is derived from `proposeCodexInstall`'s own output — the
+ * plugin manifest's `targetPath`, walked up two directories — rather than
+ * restated as a second literal, so the two computations can never drift
+ * apart silently.
+ */
+describe("codexPluginRoot", () => {
+  it("names the same directory proposeCodexInstall targets for the plugin manifest", async () => {
+    const fixture = await createCommandFixture("doctor-codex-plugin-root");
+    const manifestRelativePath = posix.join(
+      PLUGIN_TREE_PREFIX,
+      ".codex-plugin/plugin.json",
+    );
+    const proposal = proposeCodexInstall(
+      [{ path: manifestRelativePath, contents: "{}" }],
+      { home: fixture.context.paths.home, productVersion: "0.0.0" },
+    );
+    const manifestOperation = proposal.operations.find(
+      (operation) => operation.source === manifestRelativePath,
+    );
+    expect(manifestOperation).toBeDefined();
+    if (manifestOperation === undefined) return;
+
+    const targetedRoot = posix.dirname(
+      posix.dirname(manifestOperation.targetPath),
+    );
+    expect(codexPluginRoot(fixture.context)).toBe(targetedRoot);
   });
 });

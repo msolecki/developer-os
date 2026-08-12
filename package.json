@@ -13,6 +13,8 @@
     "lint": "tsc -b --pretty false && eslint . && node tests/dist/repository/check.js",
     "test": "vitest run",
     "test:e2e": "vitest run tests/e2e",
+    "render:claude": "tsc -b && node tests/dist/tools/render-claude.js",
+    "render:codex": "tsc -b && node tests/dist/tools/render-codex.js",
     "check": "npm run lint && npm test && pnpm build && git diff --check"
   },
   "devDependencies": {

@@ -178,6 +178,53 @@ function renderKey(key: string): string {
   return screenAndCap(key, MAX_KEY_IN_MESSAGE);
 }
 
+/**
+ * A title has to contain something a reader can see.
+ *
+ * `String#trim` removes neither U+200B ZERO WIDTH SPACE nor U+00AD SOFT HYPHEN,
+ * so a title made of nothing but invisibles validated — and every surface that
+ * screens it rendered empty: the `catalog.md` row was `[](<path>)`, a link with
+ * no text, and two such notes grouped as duplicates of each other because they
+ * are the same empty row. That is BACKLOG NEW-10, and it is decided the same way
+ * NEW-6 decided the `duplicates` class: on the form the vault actually shows.
+ *
+ * **The first fix screened the title and asked whether anything survived, and
+ * that was too narrow.** The screen deletes `\p{Cf}` and nothing else, so
+ * U+3164 HANGUL FILLER — the character people actually use to make an invisible
+ * name — still passed, along with the Hangul fillers, a lone variation selector,
+ * a combining grapheme joiner and every unassigned code point. The message said
+ * "at least one visible character" while the predicate meant "at least one
+ * non-format character", which is a claim the code did not honour. Found by
+ * fresh-context review, 2026-08-11.
+ *
+ * So the class is spelled out instead: format characters, everything
+ * default-ignorable, non-spacing and enclosing marks, controls, unassigned code
+ * points, whitespace, and U+2800 BRAILLE PATTERN BLANK — which is the one blank
+ * glyph in none of those categories. A title needs one character outside all of
+ * them.
+ *
+ * It costs a title made *only* of combining marks, which renders as a stray
+ * diacritic over nothing, and that is intended. It costs nothing else: an emoji,
+ * a ZWJ sequence, a heart plus its variation selector, and any script's letters
+ * all carry a base character and pass. U+200D ZERO WIDTH JOINER needs no special
+ * case here because it is itself default-ignorable — the joined emoji survives
+ * on the strength of the two faces around it.
+ *
+ * **One drift worth naming, because `screen.ts` names the same one for
+ * `Intl.Segmenter`:** `\p{Cn}` is unassigned *in this runtime's ICU*, so validity
+ * is a function of the ICU version. The direction is the safe one and only the
+ * safe one — Unicode never un-assigns a code point, so a title that validates
+ * today cannot start failing, while one that fails today may start passing on a
+ * future Node. `engines.node` bounds it in practice. Nothing on a vault already
+ * on disk breaks either way.
+ */
+const INVISIBLE_ONLY =
+  /^[\p{Cf}\p{Default_Ignorable_Code_Point}\p{Mn}\p{Me}\p{Cc}\p{Cn}\s\u2800]*$/u;
+
+function isBlank(title: string): boolean {
+  return INVISIBLE_ONLY.test(title);
+}
+
 function issue(
   key: string | null,
   code: NoteIssueCode,
@@ -368,11 +415,14 @@ function validate(raw: Record<string, unknown>): ValidationOutcome {
   }
 
   const title = required("title");
-  if (
-    title !== undefined &&
-    (typeof title !== "string" || title.trim().length === 0)
-  ) {
-    issues.push(issue("title", "type", "title must be a non-empty string"));
+  if (title !== undefined && (typeof title !== "string" || isBlank(title))) {
+    issues.push(
+      issue(
+        "title",
+        "type",
+        "title must be a string with at least one visible character",
+      ),
+    );
   }
 
   const type = required("type");
