@@ -77,6 +77,7 @@ const DOCTOR_CHECKS = [
   "brain",
   "agents",
   "claude-capabilities",
+  "codex-capabilities",
 ] as const;
 
 /**
@@ -134,6 +135,7 @@ describe("Foundation temporary-HOME lifecycle", () => {
   it("installs, reports, repeats, and removes itself without touching anything else", async () => {
     await withHome(async (home) => {
       await installFakeExecutable(home, "claude");
+      await installFakeExecutable(home, "codex");
 
       const configFile = join(home.productHome, "config.toml");
       const manifestFile = join(home.productHome, "installation-manifest.json");
@@ -271,7 +273,12 @@ describe("Foundation temporary-HOME lifecycle", () => {
           executablePath: join(home.binDir, "claude"),
           version: null,
         },
-        { name: "codex", installed: false, executablePath: null, version: null },
+        {
+          name: "codex",
+          installed: true,
+          executablePath: join(home.binDir, "codex"),
+          version: null,
+        },
       ]);
       expect(await inventory(home.root)).toStrictEqual(beforeStatus);
 
@@ -292,19 +299,24 @@ describe("Foundation temporary-HOME lifecycle", () => {
         "brain",
         "agents",
         "claude-capabilities",
+        "codex-capabilities",
       ]);
       expect(
         checks.checks.filter((check) => check.status !== "pass"),
       ).toStrictEqual([]);
 
       /**
-       * Two checks, one binary, and they have to agree.
+       * Two checks, one binary, and they have to agree — for both agents.
        *
-       * The fake `claude` planted above exits 97, so it is discovered and
-       * cannot be read. `agents` said `claude=present` while
+       * The fakes `claude` and `codex` planted above both exit 97, so each is
+       * discovered and cannot be read. `agents` said `claude=present` while
        * `claude-capabilities` said `claude=absent`, in the same report — and
        * this suite passed, because it read check ids and statuses and never a
-       * message. Found by fresh-context review, 2026-08-11.
+       * message. Found by fresh-context review, 2026-08-11. The same
+       * contradiction is checked for Codex here, because it is exactly the
+       * shape the Codex side had to avoid shipping once: an e2e fixture whose
+       * fake `codex` exits non-zero staying green because the assertions
+       * never read the capability line's own message.
        */
       const byId = new Map(
         checks.checks.map((check) => [check.id, check.message]),
@@ -312,6 +324,9 @@ describe("Foundation temporary-HOME lifecycle", () => {
       expect(byId.get("agents")).toContain("claude=present");
       expect(byId.get("claude-capabilities")).toContain("claude=unreadable");
       expect(byId.get("claude-capabilities")).not.toContain("claude=absent");
+      expect(byId.get("agents")).toContain("codex=present");
+      expect(byId.get("codex-capabilities")).toContain("codex=unreadable");
+      expect(byId.get("codex-capabilities")).not.toContain("codex=absent");
 
       expect(await inventory(home.root)).toStrictEqual(beforeStatus);
 

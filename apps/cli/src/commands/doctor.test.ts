@@ -71,6 +71,7 @@ describe("runDoctor", () => {
       "brain",
       "agents",
       "claude-capabilities",
+      "codex-capabilities",
     ]);
   });
 
