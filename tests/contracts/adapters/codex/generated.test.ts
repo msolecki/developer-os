@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MARKETPLACE_RELATIVE_PATH } from "@developer-os/adapter-codex";
 import { detectWorkflowDrift } from "@developer-os/workflow-schema";
 import { readGeneratedTree, renderAllForCodex } from "./render-all.js";
 
@@ -44,7 +45,7 @@ describe("plugins/codex is a clean regeneration", () => {
 
   it("ships no marketplace descriptor, which carries a machine path", async () => {
     expect([...(await readGeneratedTree()).keys()]).not.toContain(
-      ".agents/plugins/marketplace.json",
+      MARKETPLACE_RELATIVE_PATH,
     );
   });
 });
