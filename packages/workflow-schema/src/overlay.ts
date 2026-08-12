@@ -30,6 +30,15 @@ const EXTENDS = /^([a-z][a-z0-9-]*)@(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d
  * already exists and is already prose. A genuine per-vendor structural
  * difference costs a schema version bump, which is a visible cost rather than a
  * subset check that fails open.
+ *
+ * **A second invariant rides on this exact key set, silently.** `ClaudeRenderer.render`
+ * (`packages/adapter-claude/src/render.ts`) builds its frontmatter from the contract
+ * *before* this overlay is applied and the body from the contract *after* — safe only
+ * because these four keys cannot reach `id`, `version` or `description`. Add a field
+ * here without checking every renderer's pre/post-overlay split and a vendor artifact
+ * can carry two different descriptions with no test failing. `overlay.test.ts`'s "has
+ * exactly these four keys" case is the tripwire for that; keep it in step with this
+ * schema.
  */
 export const workflowOverlaySchema = z
   .object({
