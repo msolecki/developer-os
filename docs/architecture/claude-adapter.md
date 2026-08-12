@@ -13,8 +13,8 @@ replaces the implementation plan, deleted when its last step closed; git history
 
 | File | Responsibility |
 |---|---|
-| `src/discover.ts` | resolve the executable from `PATH` in the parent, read `--version`, never throw |
-| `src/versions.ts` | the capability keys, the supported floor, and a numeric version comparison that can answer "I cannot tell" |
+| `src/discover.ts` | `discoverClaude`, bound to `@developer-os/security`'s `discoverCli`; `ClaudeInstallation` as an alias of `CliInstallation` (Task 3.5, see `docs/architecture/foundation.md`) |
+| `src/versions.ts` | the capability keys and the supported floor; `tablePermits(key, version)` closes over that table and calls `@developer-os/core`'s generic `tablePermits` |
 | `src/probe.ts` | run `claude plugin validate` behind an injected runner and report what it observed |
 | `src/capabilities.ts` | table plus observation into the three-value model |
 | `src/render.ts` | `ClaudeRenderer`: contract → `SKILL.md` frontmatter (`name`, `description`) and artifact path. The body — the `shared` preamble and the screen seam — moved to `packages/workflow-schema/src/skill.ts` on 2026-08-12; see §6 |
@@ -78,7 +78,8 @@ Two things worth knowing before changing this:
   version subtracted parsed components and returned `NaN` for unparsable input. `NaN < 0` is
   `false`, so the floor check did not refuse, and every capability the probe had observed was
   granted on a version string nobody could parse. A comparison that cannot answer must say so;
-  a number that fails every inequality fails open.
+  a number that fails every inequality fails open. It moved to `@developer-os/core/src/versions/`
+  on Task 3.5, verbatim, so Codex shares this fix rather than risking its own copy.
 - **The floor is deliberately low — `2.1.142`.** The manifest depends on none of `displayName`
   (2.1.143), `defaultEnabled` (2.1.154) or an object `metadata` (2.1.222). That absence is what
   keeps the floor low, and it is a design choice rather than an omission. A version above

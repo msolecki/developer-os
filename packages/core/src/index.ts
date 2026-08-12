@@ -52,6 +52,8 @@ export type {
   ChangePlanV1,
   ValidatedChangePlanOperationV1,
 } from "./plans/index.js";
+export { compareVersions, tablePermits } from "./versions/index.js";
+export type { CapabilityVersionTable } from "./versions/index.js";
 export {
   recoverTransaction,
   TransactionConflictError,

@@ -1,3 +1,6 @@
+import type { CapabilityVersionTable } from "@developer-os/core";
+import { tablePermits as tablePermitsGeneric } from "@developer-os/core";
+
 /**
  * Spec §5.4's capability keys.
  *
@@ -63,65 +66,19 @@ const DOCUMENTED_FLOORS: ReadonlyMap<ClaudeCapabilityKey, string | null> =
     ["durable_project_guidance", null],
   ]);
 
-/**
- * Exactly three numeric components. A `v` prefix, a pre-release suffix, a
- * two-part version and vendor text are all *not* versions, and saying so is the
- * whole point — see `compareVersions`.
- */
-const VERSION = /^(\d+)\.(\d+)\.(\d+)$/u;
-
-function parseVersion(value: string): readonly number[] | null {
-  const match = VERSION.exec(value);
-  if (match === null) return null;
-  return [Number(match[1]), Number(match[2]), Number(match[3])];
-}
+const TABLE: CapabilityVersionTable<ClaudeCapabilityKey> = {
+  minimum: CLAUDE_MINIMUM_VERSION,
+  floors: DOCUMENTED_FLOORS,
+};
 
 /**
- * Numeric per component, and `null` when either side is not a version.
- *
- * Not `localeCompare`, which varies with ICU, and not string `<`, which orders
- * `2.1.9` above `2.1.10`.
- *
- * **It returns `null` rather than `NaN`, and that is a fix rather than a
- * style.** The first version did `Number(a[i] ?? 0) - Number(b[i] ?? 0)` and
- * returned `NaN` for unparsable input. `NaN !== 0` is true, so it propagated;
- * `NaN < 0` is **false**, so the floor check in `tablePermits` did not refuse;
- * and every capability the probe had observed was granted on a version string
- * nobody could parse. A comparison that cannot answer has to say so — a number
- * that silently fails every inequality is the worst possible answer, because it
- * fails open. Found by fresh-context review, 2026-08-11.
+ * This adapter's one-line binding onto `@developer-os/core`'s generic
+ * `tablePermits`, closing over Claude's own table. `compareVersions` and the
+ * comparison-and-floor mechanism moved to `@developer-os/core` (Task 3.5) so
+ * both adapters share one copy; the table itself — `CLAUDE_MINIMUM_VERSION`
+ * and `DOCUMENTED_FLOORS` above — stays here, because the floors are a Claude
+ * fact, not a shared one.
  */
-export function compareVersions(left: string, right: string): number | null {
-  const a = parseVersion(left);
-  const b = parseVersion(right);
-  if (a === null || b === null) return null;
-  for (let index = 0; index < 3; index += 1) {
-    const difference = (a[index] ?? 0) - (b[index] ?? 0);
-    if (difference !== 0) return difference;
-  }
-  return 0;
-}
-
-/**
- * Whether the version table permits a capability to be *considered*. It never
- * grants one: spec §5.1 requires a probe to observe the capability before it is
- * reported `yes`, and this function is only the first of those two gates.
- *
- * A version above everything the table knows is permitted rather than refused —
- * a table that rejected unknown-newer versions would break on every Claude
- * release.
- */
-export function tablePermits(
-  key: ClaudeCapabilityKey,
-  version: string,
-): boolean {
-  const floor = DOCUMENTED_FLOORS.get(key);
-  if (floor === undefined) return false;
-
-  const aboveMinimum = compareVersions(version, CLAUDE_MINIMUM_VERSION);
-  if (aboveMinimum === null || aboveMinimum < 0) return false;
-  if (floor === null) return true;
-
-  const aboveFloor = compareVersions(version, floor);
-  return aboveFloor !== null && aboveFloor >= 0;
+export function tablePermits(key: ClaudeCapabilityKey, version: string): boolean {
+  return tablePermitsGeneric(TABLE, key, version);
 }

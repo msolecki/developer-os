@@ -10,13 +10,15 @@
  * `packages/core` because DOS-P4 and DOS-P5 both execute `agent.prompt` (spec
  * §8.1, as amended on 2026-08-11), and a package that re-exports another
  * package's guard hands consumers two import paths for one guarantee.
+ *
+ * `resolveExecutable`, `DiscoverDependencies` and `ResolveDependencies` were
+ * exported here and are not any more (Task 3.5): they moved to
+ * `@developer-os/security` as `resolveExecutable`/`ResolveExecutableDependencies`,
+ * for the same reason `parseAgentPromptArgs` above is not re-exported. Import
+ * them from `@developer-os/security` directly.
  */
-export { discoverClaude, resolveExecutable } from "./discover.js";
-export type {
-  ClaudeInstallation,
-  DiscoverDependencies,
-  ResolveDependencies,
-} from "./discover.js";
+export { discoverClaude } from "./discover.js";
+export type { ClaudeInstallation } from "./discover.js";
 export { CLAUDE_CAPABILITY_KEYS, CLAUDE_MINIMUM_VERSION } from "./versions.js";
 export type { ClaudeCapabilityKey } from "./versions.js";
 export { probeClaude } from "./probe.js";
