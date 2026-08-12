@@ -9,11 +9,17 @@
  */
 
 /**
- * Exactly three numeric components. A `v` prefix, a pre-release suffix, a
- * two-part version and vendor text are all *not* versions, and saying so is
- * the whole point — see `compareVersions`.
+ * Exactly three numeric components, none with a leading zero. A `v` prefix, a
+ * pre-release suffix, a two-part version, vendor text and a component like
+ * `01` are all *not* versions, and saying so is the whole point — see
+ * `compareVersions`. The no-leading-zero narrowing matches
+ * `discoverCli`'s `VERSION_PATTERN` (`packages/security/src/cli.ts`) and the
+ * workflow-version pattern DOS-P3 narrowed for the same reason
+ * (`packages/workflow-schema/src/contract.ts`): a version is compared against
+ * a documented floor, and two components a human would never write as
+ * *unequal* — `01` and `1` — must not compare equal here either.
  */
-const VERSION = /^(\d+)\.(\d+)\.(\d+)$/u;
+const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u;
 
 function parseVersion(value: string): readonly number[] | null {
   const match = VERSION.exec(value);
