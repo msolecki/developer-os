@@ -25,7 +25,7 @@ note says so rather than restating it as a coincidence.
 | `src/capabilities.ts` | table plus observation into the three-value model |
 | `src/render.ts` | `CodexRenderer`: contract → `SKILL.md` frontmatter (`name`, `description`) and artifact path. The body comes from `packages/workflow-schema/src/skill.ts` — see §6 |
 | `src/plugin.ts` | the plugin tree, its manifest, and `PLUGIN_TREE_PREFIX` — the single re-root (§4) |
-| `src/marketplace.ts` | `.agents/plugins/marketplace.json`, generated against a resolved product home and never checked in |
+| `src/marketplace.ts` | `.agents/plugins/marketplace.json`; `source.path` is a fixed marketplace-root-relative constant (§4), no longer built against `context.home`; never checked in because it lives at the marketplace root, outside the plugin root the checked-in `plugins/codex/` tree mirrors |
 | `src/compose.ts` | `renderCodexPlugin` (plugin-root-relative) and `renderCodexInstallTree` (marketplace-root-relative, descriptor included) |
 | `src/install.ts` | tree → an install *proposal* Foundation validates into a `ChangePlanV1`, plus the ordered `codex plugin` steps and the phase they run in |
 | `src/invoke.ts` | `codex exec` argv, the sandbox from the declared scopes, the JSONL reduction, structured result |
@@ -50,9 +50,13 @@ note says so rather than restating it as a coincidence.
    vendor's config (§4). Verified by write-ordering against a real installation: no `config.toml`
    exists after this adapter writes its tree, and one appears only after `codex plugin marketplace
    add` runs.
-4. **It never opens `transcript_path`**, on any code path. Codex puts it in every hook payload, so
-   the file is one `readFile` away at all times; the refusal may be lifted only by an amendment
-   naming a stable documented contract and landing a regression fixture in the same change.
+4. **It never opens `transcript_path`**, on any code path — enforced by
+   `tests/repository/transcript-path.test.ts`, added 2026-08-12, which fails if that field name
+   appears anywhere under `apps/`, `packages/`, `tests/` or `workflows/`. Before that test existed
+   this claim was backed by a grep a reviewer ran once, which is a convention, not a gate. Codex
+   puts the field in every hook payload, so the file is one `readFile` away at all times; the
+   refusal may be lifted only by an amendment naming a stable documented contract and landing a
+   regression fixture in the same change.
 5. **Three flags are refused permanently, by test rather than by convention:**
    `--dangerously-bypass-approvals-and-sandbox`, `--dangerously-bypass-hook-trust` and
    `--ignore-user-config`. `danger-full-access` is unreachable *by construction* rather than
@@ -135,10 +139,12 @@ on uninstall is exactly the failure the ordering exists to prevent.
 **The real binary confirmed what the shape was chosen for.** `codex plugin list --json`'s
 `installed[].source.path` for our plugin is the tree this adapter wrote, never the separate cache
 copy `codex plugin add` also stages. `probeCodex` compares against that field, which is the only
-reason it can tell our tree from an artifact somebody else installed under our name. **One caveat
-worth carrying:** `codex debug prompt-input` resolves each skill's file locator to the *cache* copy,
-so a post-install edit under the product home would not reach the model until some resync step —
-unobserved, and outside a plugin-management-only task.
+reason it can tell our tree from an artifact somebody else installed under our name. **This is a
+hazard, not a caveat, and it now has an owner.** `codex debug prompt-input` resolves each skill's
+file locator to the *cache* copy, not to the tree this adapter wrote and hashes — so an in-place
+re-render of the plugin tree may never reach the model until some unobserved resync. That is the
+update lifecycle, DOS-P7, and the cutover, DOS-P8: §11.14 carries the residual and §12 tells DOS-P8
+what it must know.
 
 **We never merge the vendor's config.** A hand-rolled TOML merge against a file whose schema we do
 not own is a drift generator, and `--strict-config` exists precisely because that file's recognized
@@ -266,6 +272,17 @@ Every value position goes through `screenValueArgument` from `@developer-os/secu
 shared with the Claude adapter since Task 3.5, and the reason `BACKLOG.md` §1 NEW-12 exists is that
 its *nominal* half is applied to free-form prose that only its positional half protects.
 
+**Nothing in this package writes the file `outputSchemaPath` points at.** It is a caller-supplied
+path — `invokeCodex` screens it and places it in argv, and never reads or creates it — so the
+schema's content belongs to whichever subsystem executes the verb, which is DOS-P6. The obligation
+exists nowhere else: `outputSchemaPath` appears in no code path outside `packages/adapter-codex`,
+`parseAgentPromptArgs` in `packages/core` does not accept it, and no fixture or test in `apps`,
+`tests` or `packages/workflow-schema` names it. A caller that points it at a missing file gets
+`codex exec`'s own non-zero exit — `CodexRunResult`'s `exit` variant — never `malformed-output`,
+because the schema is consulted by the vendor CLI before this package's JSONL reduction ever runs.
+A missing file is the caller's error, not this adapter's. **Owner: DOS-P6**, which must produce one
+schema file per verb before invoking. §11.13 carries the residual.
+
 **`agent.prompt` is one schema for one verb.** `parseAgentPromptArgs` lives in `packages/core` and
 both adapters import it; two adapters with two argument schemas would be a workflow that validates
 against one vendor and not the other. Refusals never echo the rejected value, because a `with`
@@ -275,9 +292,10 @@ block is author-controlled and the message reaches a log.
 `agent.prompt` schema, two behaviours, one of them silent: `parseAgentPromptArgs` accepts
 `maxTurns`, `invokeClaude` bounds it between 1 and a ceiling and refuses anything else, and
 `CodexInvocation` has no such field — so a workflow that sets it gets a turn limit on one vendor and
-none on the other, with no diagnostic. This appears in no backlog item and no spec; it existed only
-in a code comment and in the deleted plan. **Owner: the workflow compiler, which owns the shared
-schema, and DOS-P6 as the first subsystem that will execute the verb.**
+none on the other, with no diagnostic. `BACKLOG.md` §3's DOS-P6 entry now carries it, added in
+this same commit; before that it existed only in a code comment and in the deleted plan. **Owner:
+the workflow compiler, which owns the shared schema, and DOS-P6 as the first subsystem that will
+execute the verb.**
 
 **The JSONL terminal-event rule is provisional.** `codex exec --json` streams events as JSONL while
 `--output-schema` constrains only the final response, so stdout is reduced to **the last line that
@@ -310,8 +328,12 @@ that runs.
 2. **`codex plugin marketplace add` takes exactly one positional argument**, the source path. The
    two-argument form the spec showed refuses with a usage error; the marketplace's name is read from
    the document's own `name` field.
-3. **`codex plugin remove` requires the qualified `<plugin>@<marketplace>` form.** A bare name
-   refuses. Separately: it does not verify the plugin was ever installed under that marketplace, so
+3. **`codex plugin remove` requires the qualified `<plugin>@<marketplace>` form once more than one
+   marketplace is configured.** A bare name refuses only under that condition — Task 17 observed
+   `codex plugin remove developer-os` exit 1 with `plugin requires --marketplace unless passed as
+   <plugin>@<marketplace>` once a second marketplace existed to disambiguate against; `install.ts`
+   carries the condition precisely, and this note previously stated the refusal as unconditional.
+   Separately: it does not verify the plugin was ever installed under that marketplace, so
    removing a name nothing added still exits 0 — a failure of that step cannot be produced by naming
    the wrong plugin.
 4. **`codex plugin list --json` returns `{ installed, available }`**, each entry carrying `enabled`
@@ -401,7 +423,7 @@ and structured-output validation ships with a provisional reduction rule. A box 
 note would misdescribe the work; a box ticked to make the task look closed would misdescribe the
 product.
 
-## 11. Known residuals, each with an owner
+## 11. Known residuals — most with an owner, two deliberately without
 
 1. **Two artifact roots share one type** — §4. Structurally identical, semantically incompatible,
    and the wrong one applies cleanly. `proposeCodexInstall` now refuses a mislocated tree; the
@@ -445,6 +467,16 @@ product.
     remove` exits 0 for a plugin nothing installed, so a failure-injection test of the uninstall
     sequence must target the marketplace step. Recorded because a future test written against the
     plugin step would pass while proving nothing. No owner.
+13. **Nobody writes the file `outputSchemaPath` points at** — §7. It is caller-supplied and this
+    package only forwards it into argv after screening it. A missing file is the caller's error and
+    surfaces as a non-zero exit, never as `malformed-output`. **Owner: DOS-P6**, which must produce
+    one schema file per verb.
+14. **An in-place re-render of the plugin tree may never reach the model until some unobserved
+    resync** — §4. `codex debug prompt-input` resolves each skill's file locator to the *cache*
+    copy `codex plugin add` also stages, never to the tree this adapter wrote and hashes, so a
+    post-install edit under the product home is invisible to the model until Codex resyncs its
+    cache on some schedule this adapter has never observed. **Owner: DOS-P7**, whose update
+    lifecycle is what re-renders the tree in place.
 
 ## 12. What DOS-P8 must know
 
@@ -457,3 +489,8 @@ against a vendor CLI. Two consequences:
 - **The founder grants hook trust manually, once**, if and when hooks ship. It is a step in the
   cutover runbook rather than something a script can do honestly — the bypass exists and is refused
   (§2.6).
+- **A re-rendered plugin tree is not necessarily a re-loaded one.** The model reads skills through
+  Codex's cache copy, never the tree this adapter writes and hashes (§4, §11.14). A cutover step
+  that regenerates and reinstalls the plugin must not assume the new bytes are live the moment
+  install finishes — the runbook must say how to verify the cache has resynced before declaring the
+  cutover done.
