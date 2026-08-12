@@ -110,7 +110,47 @@ describe("the three refused flags, and the sandbox that is never full access", (
       { runner: runner((request) => { seen = request; return {}; }) },
     );
     expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("refused");
     expect(((seen as ProcessRequest | null)?.args ?? []).join(" ")).not.toContain(value);
+  });
+
+  it("refuses a hostile write scope even with a benign prompt, before the runner is called", async () => {
+    let called = false;
+    const result = await invokeCodex(
+      installation,
+      invocation({ prompt: "summarise the vault", writeScopes: ["danger-full-access"] }),
+      { runner: runner(() => { called = true; return {}; }) },
+    );
+    expect(result).toEqual({
+      ok: false,
+      reason: "refused",
+      detail: "a write scope names a permission or bypass surface that is refused in a value position",
+    });
+    expect(called).toBe(false);
+  });
+
+  it("refuses a hostile workingRoot before spawning", async () => {
+    let called = false;
+    const result = await invokeCodex(
+      installation,
+      invocation({ workingRoot: "--dangerously-bypass-approvals-and-sandbox" }),
+      { runner: runner(() => { called = true; return {}; }) },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("refused");
+    expect(called).toBe(false);
+  });
+
+  it("refuses a hostile outputSchemaPath before spawning", async () => {
+    let called = false;
+    const result = await invokeCodex(
+      installation,
+      invocation({ outputSchemaPath: "--ignore-user-config" }),
+      { runner: runner(() => { called = true; return {}; }) },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("refused");
+    expect(called).toBe(false);
   });
 
   it("chooses the sandbox from the scope count, so full access is unreachable by argument", async () => {
@@ -154,6 +194,18 @@ describe("invokeCodex argv", () => {
     expect(seen()?.args).toContain("read-only");
     expect(seen()?.args).not.toContain("--add-dir");
     expect(seen()?.args).not.toContain("workspace-write");
+  });
+
+  it("hands the runner the host cwd, no stdin, no environment, and the invocation's own timeout", async () => {
+    const { runner: capturingRunner, seen } = capturing();
+    await invokeCodex(installation, invocation({ timeoutMs: 12_345 }), {
+      runner: capturingRunner,
+    });
+    const request = seen();
+    expect(request?.cwd).toBe(process.cwd());
+    expect(request?.stdin).toBe("");
+    expect(request?.env).toEqual({});
+    expect(request?.timeoutMs).toBe(12_345);
   });
 });
 
@@ -202,6 +254,53 @@ describe("invokeCodex failure identity", () => {
       runner: runner(() => ({ exitCode: 0, stdout: '{"result":"done"}' })),
     });
     expect(result).toEqual({ ok: true, payload: { result: "done" } });
+  });
+
+  it("reduces a multi-line JSONL stream to the last object", async () => {
+    const stdout = [
+      '{"type":"item.completed","item":{"id":"1"}}',
+      '{"result":"done"}',
+    ].join("\n");
+    const result = await invokeCodex(installation, invocation(), {
+      runner: runner(() => ({ exitCode: 0, stdout })),
+    });
+    expect(result).toEqual({ ok: true, payload: { result: "done" } });
+  });
+
+  it("yields the result even when it is preceded by other event types", async () => {
+    const stdout = [
+      '{"type":"session.created","session_id":"abc"}',
+      '{"type":"item.completed","item":{"id":"1"}}',
+      '{"type":"turn.completed","usage":{"tokens":10}}',
+      '{"result":"final answer"}',
+    ].join("\n");
+    const result = await invokeCodex(installation, invocation(), {
+      runner: runner(() => ({ exitCode: 0, stdout })),
+    });
+    expect(result).toEqual({ ok: true, payload: { result: "final answer" } });
+  });
+
+  it("ignores leading, trailing and interleaved blank lines", async () => {
+    const stdout = '\n\n{"type":"session.created"}\n\n{"result":"done"}\n\n\n';
+    const result = await invokeCodex(installation, invocation(), {
+      runner: runner(() => ({ exitCode: 0, stdout })),
+    });
+    expect(result).toEqual({ ok: true, payload: { result: "done" } });
+  });
+
+  it("reports malformed output when no line in the stream parses", async () => {
+    const stdout = "not json\nalso not json\n";
+    const result = await invokeCodex(installation, invocation(), {
+      runner: runner(() => ({ exitCode: 0, stdout })),
+    });
+    expect(result).toEqual({ ok: false, reason: "malformed-output" });
+  });
+
+  it("still works against a single-object stdout, unchanged from before the JSONL reduction", async () => {
+    const result = await invokeCodex(installation, invocation(), {
+      runner: runner(() => ({ exitCode: 0, stdout: "{}" })),
+    });
+    expect(result).toEqual({ ok: true, payload: {} });
   });
 
   it("refuses a payload carrying a top-level __proto__ rather than returning it", async () => {
