@@ -59,6 +59,27 @@ describe("workflowOverlaySchema", () => {
       }).success,
     ).toBe(true);
   });
+
+  /**
+   * `packages/adapter-claude/src/render.ts` builds its frontmatter from the
+   * contract **before** this overlay is applied and the body from the
+   * contract **after** — safe only because these four keys cannot reach
+   * `id`, `version` or `description`, the only fields that renderer reads.
+   * Add a fifth key here — `description`, say — and nothing else in the
+   * repository fails: `ClaudeRenderer` would silently emit the pre-overlay
+   * description in frontmatter while the body carried the post-overlay one.
+   * This test is the tripwire: adding a key here is a red build with this
+   * comment attached, rather than a silent divergence between frontmatter
+   * and body.
+   */
+  it("has exactly extends, steps, lifecycle and notes as keys, because the pre/post-overlay split in ClaudeRenderer depends on it", () => {
+    expect(Object.keys(workflowOverlaySchema.shape).sort()).toStrictEqual([
+      "extends",
+      "lifecycle",
+      "notes",
+      "steps",
+    ]);
+  });
 });
 
 describe("applyOverlay", () => {

@@ -17,7 +17,7 @@ replaces the implementation plan, deleted when its last step closed; git history
 | `src/versions.ts` | the capability keys, the supported floor, and a numeric version comparison that can answer "I cannot tell" |
 | `src/probe.ts` | run `claude plugin validate` behind an injected runner and report what it observed |
 | `src/capabilities.ts` | table plus observation into the three-value model |
-| `src/render.ts` | `ClaudeRenderer`: contract → `SKILL.md`, the `shared` preamble, the screen seam |
+| `src/render.ts` | `ClaudeRenderer`: contract → `SKILL.md` frontmatter (`name`, `description`) and artifact path. The body — the `shared` preamble and the screen seam — moved to `packages/workflow-schema/src/skill.ts` on 2026-08-12; see §6 |
 | `src/plugin.ts` | the plugin tree and its minimal manifest |
 | `src/compose.ts` | `renderClaudePlugin` — find `shared`, render all six, order the tree |
 | `src/install.ts` | tree → an install *proposal* Foundation validates into a `ChangePlanV1` |
@@ -129,6 +129,15 @@ observes a hook actually firing. **Owner: DOS-P6.**
 
 ## 6. Rendering
 
+**Amended 2026-08-12: the body moved.** This section originally described `src/render.ts` in
+full, when that file held the preamble concatenation, the four rendering rules below and the
+`applyOverlay` call. All of that is now `renderSkillBody` in
+`packages/workflow-schema/src/skill.ts` — none of it was vendor behaviour, so it moved to the one
+place a Codex renderer could reuse it rather than copy it. `src/render.ts` keeps only the
+frontmatter (`name`, `description`) and the artifact path (§1). The rules below are still true of
+the *product*; a reader chasing the screen seam or the overlay call should read them there rather
+than in `ClaudeRenderer`.
+
 **The `shared` preamble is concatenated into every other artifact**, five times, by the founder's
 decision of 2026-08-11. It carries the entire prompt-injection defence, and `WorkflowContractV1`
 has no composition field. Concatenation makes the defence physically present in every file that
@@ -136,7 +145,8 @@ needs it, so no load order, surface availability or user setting can remove it. 
 alternative — one guidance artifact the others reference — makes the defence exactly as present
 as that surface's load guarantee, which trades a security property for a duplication cost.
 
-Four rendering rules, three of them written after a fresh-context review found the seam leaking:
+Four rendering rules, three of them written after a fresh-context review found the seam leaking
+(enforced in `renderSkillBody` since 2026-08-12, not in `ClaudeRenderer`):
 
 - **Split into paragraphs before screening, never after.** `screenControlCharacters` collapses
   every run of whitespace to a single space, which is right for a value printed on one line and
@@ -154,10 +164,15 @@ Four rendering rules, three of them written after a fresh-context review found t
 - **`recovery.resume` is inert text.** Fenced as `text` rather than `bash`, screened at the render
   seam, and never emitted into a command position.
 
-**The overlay is applied, not discarded.** `render` delegates to the compiler's own `applyOverlay`
-and throws when it refuses, because rendering the base contract instead would silently produce an
-artifact the caller did not ask for. `OverlayOutcome.lifecycle` is deliberately unused: no hook
-artifact ships, so there is nothing for a lifecycle binding to bind to.
+**The overlay is applied, not discarded.** `renderSkillBody` — itself part of the compiler since
+2026-08-12 — calls `applyOverlay` directly and throws when it refuses, because rendering the base
+contract instead would silently produce an artifact the caller did not ask for. `ClaudeRenderer.render`
+no longer touches the overlay at all; it passes the contract and the overlay straight through to
+`renderSkillBody` and builds frontmatter from the contract alone — safe only because
+`workflowOverlaySchema` (`packages/workflow-schema/src/overlay.ts`) cannot reach `id`, `version`
+or `description`, an invariant that schema's own docblock and `overlay.test.ts` now pin.
+`OverlayOutcome.lifecycle` is deliberately unused: no hook artifact ships, so there is nothing for
+a lifecycle binding to bind to.
 
 **Determinism.** `buildPluginTree` sorts by code point, so the six workflows produce the same
 bytes in any directory order. This is the byte-identity debt `workflow-schema.md` §6 assigned to
