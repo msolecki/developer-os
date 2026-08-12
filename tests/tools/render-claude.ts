@@ -40,8 +40,9 @@ const REPOSITORY_ROOT = resolve(
 );
 
 /**
- * The only recursive delete in this repository, and the guard on it has to be
- * worth something.
+ * One of two recursive deletes in this repository — `render-codex.ts` carries
+ * the other, guarded the same way — and the guard on it has to be worth
+ * something.
  *
  * The first version checked that the target path *ended with* `plugins/claude`
  * — which the expression that built it guarantees, so it could never throw for
