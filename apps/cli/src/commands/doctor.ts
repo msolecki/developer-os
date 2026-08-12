@@ -302,6 +302,10 @@ async function checkClaudeCapabilities(context: CliContext): Promise<Finding> {
  * configuration can only move the vault path — so `context.paths.home` and a
  * freshly resolved value are always equal.
  */
+export function codexPluginRoot(context: CliContext): string {
+  return join(context.paths.home, ...PLUGIN_TREE_SEGMENTS);
+}
+
 async function checkCodexCapabilities(context: CliContext): Promise<Finding> {
   // Discovery can refuse — `MacOsPlatformAdapter` rejects a `which` result it
   // cannot vouch for, and `checkAgents` already demotes that to a warning. A
@@ -329,7 +333,7 @@ async function checkCodexCapabilities(context: CliContext): Promise<Finding> {
   const report = await reportCodexCapabilities({
     executablePath,
     runner: context.runner,
-    pluginRoot: join(context.paths.home, ...PLUGIN_TREE_SEGMENTS),
+    pluginRoot: codexPluginRoot(context),
   });
   /**
    * `report.recovery` is carried on every branch unconditionally —

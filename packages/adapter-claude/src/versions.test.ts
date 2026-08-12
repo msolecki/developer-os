@@ -28,4 +28,25 @@ describe("tablePermits", () => {
   it("keeps the minimum below every documented gate we deliberately avoid", () => {
     expect(compareVersions(CLAUDE_MINIMUM_VERSION, "2.1.143")).toBeLessThan(0);
   });
+
+  /**
+   * Regression, exercised through Claude's own real table rather than the
+   * synthetic one in `packages/core/src/versions/index.test.ts`. The original
+   * defect was a comparison returning `NaN` for unparsable input: `NaN !== 0`
+   * propagated, `NaN < 0` was **false**, so the floor check did not refuse,
+   * and every capability the probe had observed was granted on a version
+   * string nobody could parse. `compareVersions` now returns `null` rather
+   * than `NaN` and `tablePermits` in `@developer-os/core` refuses on `null`
+   * — but nothing wired that fix to this adapter's own table until now, so a
+   * regression in the wiring here (not the shared function) would have gone
+   * unnoticed.
+   */
+  it("fails closed on a version it cannot parse, through Claude's own table", () => {
+    for (const unparsable of ["garbage", "v2.1.216", "2.1", "", "2.1.216-rc.1"]) {
+      expect(
+        tablePermits("skills", unparsable),
+        `${JSON.stringify(unparsable)} must not permit`,
+      ).toBe(false);
+    }
+  });
 });
