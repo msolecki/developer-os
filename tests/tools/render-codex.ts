@@ -8,9 +8,9 @@
  * composition — `.codex-plugin/plugin.json`, `skills/developer-os-<id>/SKILL.md`
  * — which is what gets checked in here. `renderCodexInstallTree` is a
  * different thing: it re-roots that same tree onto the marketplace root and
- * adds the marketplace descriptor, which carries a real absolute path
- * resolved against a product home at install time, so it has no place in a
- * checked-in tree and this tool never calls it.
+ * adds the marketplace descriptor, which lives at the marketplace root rather
+ * than inside the plugin root, so it has no place in a checked-in
+ * `plugins/codex/` tree and this tool never calls it.
  *
  * The composition itself is `renderCodexPlugin`, in the package, so this tool
  * and `tests/contracts/adapters/codex/generated.test.ts` regenerate through
