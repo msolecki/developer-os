@@ -251,7 +251,7 @@ describe("the probe is opt-in", () => {
           return Promise.resolve({
             stdout: request.args[0] === "--version"
               ? "codex-cli 0.147.0"
-              : '{"plugins":[]}',
+              : '{"installed":[],"available":[]}',
             stderr: "",
             exitCode: 0,
             signal: null,

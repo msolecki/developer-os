@@ -4,6 +4,7 @@ import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 import type { ProbeObservation } from "@developer-os/core";
 import { z } from "zod";
 import type { CodexInstallation } from "./discover.js";
+import { PLUGIN_NAME } from "./plugin.js";
 
 export interface CodexProbeDependencies {
   readonly runner: ProcessRunner;
@@ -49,7 +50,16 @@ const PROBE_TIMEOUT_MS = 30_000;
  * them. `installed` (the array) is required: without it there is nothing
  * trustworthy to search, and a parse failure becomes `unavailable`, never
  * `absent` (see `probeCodex`'s doc comment on why that distinction matters).
- * `available` is read only to keep it out of the search — see `probeCodex`.
+ * `available` is not read at all — `probeCodex` only ever searches
+ * `installed` (spec §14.4: `available` lists what a marketplace offers, not
+ * what is installed). It is typed `z.unknown()` rather than an array of
+ * `pluginEntrySchema`: a malformed `available` entry (say, missing `name`)
+ * must never fail the whole parse and turn a perfectly readable `installed`
+ * array into `unavailable` — the exact bug fixed in commit `eeae9ba`,
+ * re-entering through a field we do not even use. `.loose()` on the outer
+ * object would already tolerate the key being dropped entirely; it is kept
+ * here, unvalidated, only so the schema still documents that the vendor
+ * sends it.
  */
 const pluginEntrySchema = z
   .object({
@@ -62,7 +72,7 @@ const pluginEntrySchema = z
 const listingSchema = z
   .object({
     installed: z.array(pluginEntrySchema),
-    available: z.array(pluginEntrySchema).optional(),
+    available: z.unknown().optional(),
   })
   .loose();
 
@@ -157,7 +167,7 @@ export async function probeCodex(
     };
   }
 
-  const ours = listing.installed.find((plugin) => plugin.name === "developer-os") ?? null;
+  const ours = listing.installed.find((plugin) => plugin.name === PLUGIN_NAME) ?? null;
   const enabled = ours === null ? null : ours.enabled === true;
   const resolvedPath = ours === null ? null : (ours.source?.path ?? null);
   const observed = enabled === true && resolvedPath === dependencies.pluginRoot;
