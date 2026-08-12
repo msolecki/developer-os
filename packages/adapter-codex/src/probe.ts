@@ -55,7 +55,7 @@ type PluginListing = z.infer<typeof listingSchema>;
  * collapses to one outcome the caller can act on — "we could not ask".
  *
  * `parseStructuredPayload` (from `@developer-os/security`) is the same
- * top-level `__proto__` guard `adapter-claude`'s `invokeClaude` applies to
+ * top-level `__proto__` guard the Claude adapter's `invokeClaude` applies to
  * this vendor's structured stdout; a payload merged into other objects
  * downstream gets that guard at the one place it can be applied once.
  */
@@ -89,7 +89,7 @@ async function listPlugins(
  * One structured call settles three separate questions, and this function
  * keeps them separate rather than collapsing them into the single exit code
  * the Claude adapter's probe was corrected out of doing (`claude-adapter.md`
- * §3, `packages/adapter-claude/src/probe.ts`): that probe read one
+ * §3, the Claude adapter's own `probe.ts`): that probe read one
  * `claude plugin validate` exit code as an observation of `skills`,
  * `plugin_hooks` and `subagents` at once, and reported `yes` for two artifacts
  * a clean exit code never inspected. `codex plugin list --json` is different

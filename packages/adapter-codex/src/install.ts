@@ -20,9 +20,9 @@ export interface CodexCliStep {
 }
 
 /**
- * What this module produces is a **proposal**, not a `ChangePlanV1` — see
- * `packages/adapter-claude/src/install.ts` for why. `registration` is the part
- * with no adapter-claude analogue: Claude never registers with a marketplace,
+ * What this module produces is a **proposal**, not a `ChangePlanV1` — see the
+ * Claude adapter's `install.ts` for why. `registration` is the part with no
+ * analogue on that side: Claude never registers with a marketplace,
  * but Codex's own CLI is the only writer of `~/.codex/config.toml` (spec
  * §4.1), so registering and unregistering happen through `codex plugin`, not
  * through a file this adapter writes. The adapter proposes the argv; the
@@ -90,8 +90,8 @@ function containedWithin(root: string, candidate: string): string | undefined {
 }
 
 /**
- * Checked here rather than trusted from the renderer, matching
- * `packages/adapter-claude/src/install.ts`'s `resolveWithin`: this is the
+ * Checked here rather than trusted from the renderer, matching the Claude
+ * adapter's `install.ts`'s `resolveWithin`: this is the
  * boundary where a relative path becomes a real filesystem write, and it is
  * worth holding even though `buildPluginTree` already refuses a non-slug id
  * upstream.
