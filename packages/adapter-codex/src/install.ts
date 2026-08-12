@@ -5,9 +5,15 @@ import type {
   ChangePlanOperationV1,
   ManagedArtifactV1,
 } from "@developer-os/core";
+import { compareCodePoints } from "@developer-os/workflow-schema";
 import type { RenderedArtifact } from "@developer-os/workflow-schema";
 import { MARKETPLACE_NAME } from "./marketplace.js";
-import { CODEX_ROOT_SEGMENT, PLUGIN_NAME } from "./plugin.js";
+import {
+  CODEX_ROOT_SEGMENT,
+  MARKETPLACE_RELATIVE_PATH,
+  PLUGIN_NAME,
+  PLUGIN_TREE_PREFIX,
+} from "./plugin.js";
 
 export interface InstallContext {
   readonly home: string;
@@ -108,6 +114,25 @@ function resolveWithin(root: string, relative: string): string {
 }
 
 /**
+ * `PLUGIN_TREE_PREFIX`'s docblock records the mistake this closes: the
+ * plugin root is a **descendant** of the marketplace root this function's
+ * caller resolves against, so a `buildPluginTree` artifact fed here without
+ * the `plugins/developer-os/` prefix does not escape — containment still
+ * passes — it silently under-nests one level too shallow instead. This is
+ * checked on the artifact's own relative path, not the already-joined
+ * `targetPath`: the escape check above must run first, so an escaping path
+ * still throws for escaping rather than for a missing prefix.
+ */
+function assertWithinPluginTree(relative: string): void {
+  if (relative === MARKETPLACE_RELATIVE_PATH || relative.startsWith(`${PLUGIN_TREE_PREFIX}/`)) {
+    return;
+  }
+  throw new Error(
+    `artifact path must be prefixed with PLUGIN_TREE_PREFIX ("${PLUGIN_TREE_PREFIX}/") or equal MARKETPLACE_RELATIVE_PATH ("${MARKETPLACE_RELATIVE_PATH}"), or it silently under-nests one level too shallow: ${relative}`,
+  );
+}
+
+/**
  * The manifest's record of what this adapter already owns, keyed by target
  * path. Passed in rather than read here: `packages/core` owns the manifest.
  */
@@ -183,6 +208,7 @@ export function proposeCodexInstall(
     registrationPhase: "after-operations",
     operations: tree.map((artifact) => {
       const targetPath = resolveWithin(root, artifact.path);
+      assertWithinPluginTree(artifact.path);
       const existing = managed.get(targetPath);
       // `create` for a target nobody owns, `replace` for one this adapter
       // already installed. `validateChangePlan` refuses a `create` over a
@@ -231,7 +257,7 @@ export function proposeCodexUninstall(
       const targetPath = containedWithin(root, artifact.path);
       return targetPath === undefined ? [] : [{ artifact, targetPath }];
     })
-    .sort((left, right) => (left.targetPath < right.targetPath ? -1 : 1));
+    .sort((left, right) => compareCodePoints(left.targetPath, right.targetPath));
 
   if (owned.length === 0) {
     throw new Error("refusing to propose an empty uninstall plan");
