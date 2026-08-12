@@ -75,7 +75,7 @@ function manifest(): RenderedArtifact {
 }
 
 /**
- * No `hooks/hooks.json` — see `packages/adapter-claude/src/plugin.ts` for the
+ * No `hooks/hooks.json` — see the Claude adapter's `plugin.ts` for the
  * full record. The decision is ratified for both adapters in one change:
  * neither ships a hook whose command names an executable this pipeline can
  * produce, since `RenderedArtifact` is `{ path, contents }` with no mode and

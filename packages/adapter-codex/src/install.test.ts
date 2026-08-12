@@ -91,9 +91,9 @@ describe("proposeCodexInstall", () => {
    * The test above asserts `operation` labels only; it would stay green even
    * if `expectedBeforeHash` on the `replace` branch were wrong, which
    * `validateChangePlan` refuses with `hash_expectation`. Calling the real
-   * validator here closes that gap — see the identical regression class
-   * `packages/adapter-claude/src/install.test.ts` documents for its own
-   * "replace" branch.
+   * validator here closes that gap — see the identical regression class the
+   * Claude adapter's `install.test.ts` documents for its own "replace"
+   * branch.
    */
   it("produces a replace the real validator accepts against the prior manifest", async () => {
     const owned = artifact(`${pluginRoot}/.codex-plugin/plugin.json`);
