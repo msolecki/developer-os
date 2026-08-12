@@ -128,6 +128,9 @@ importers:
       '@developer-os/adapter-claude':
         specifier: workspace:*
         version: link:../packages/adapter-claude
+      '@developer-os/adapter-codex':
+        specifier: workspace:*
+        version: link:../packages/adapter-codex
       '@developer-os/cli':
         specifier: workspace:*
         version: link:../apps/cli

@@ -1,0 +1,6 @@
+{
+  "name": "developer-os",
+  "version": "0.0.0",
+  "description": "Local-first Developer OS workflows for Codex, rendered from the shared workflow contract.",
+  "skills": "skills"
+}
