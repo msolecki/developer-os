@@ -57,6 +57,21 @@ importers:
         specifier: workspace:*
         version: link:../workflow-schema
 
+  packages/adapter-codex:
+    dependencies:
+      '@developer-os/core':
+        specifier: workspace:*
+        version: link:../core
+      '@developer-os/security':
+        specifier: workspace:*
+        version: link:../security
+      '@developer-os/workflow-schema':
+        specifier: workspace:*
+        version: link:../workflow-schema
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+
   packages/brain:
     dependencies:
       '@developer-os/core':
