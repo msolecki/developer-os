@@ -24,7 +24,7 @@ export type {
   WorkflowStep,
   WorkflowTrigger,
 } from "./contract.js";
-export { compareScopes, deriveScopes } from "./derive.js";
+export { compareCodePoints, compareScopes, deriveScopes } from "./derive.js";
 export type { DerivedScopes, ScopeMismatch } from "./derive.js";
 export { detectWorkflowDrift, firstDifferingLine, sourceMarker } from "./drift.js";
 export type {

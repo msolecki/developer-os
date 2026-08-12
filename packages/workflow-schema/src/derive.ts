@@ -24,7 +24,7 @@ export interface ScopeMismatch {
  * canonical hash, a `sort`-based check — orders the same set and disagrees. The
  * comment used to claim UTF-8 byte order while the code did not provide it.
  */
-function compareCodePoints(left: string, right: string): number {
+export function compareCodePoints(left: string, right: string): number {
   let leftAt = 0;
   let rightAt = 0;
   while (leftAt < left.length && rightAt < right.length) {

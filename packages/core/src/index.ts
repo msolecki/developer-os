@@ -3,6 +3,8 @@ export type {
   AgentPromptArgs,
   AgentPromptOutcome,
 } from "./agent-prompt/index.js";
+export { CAPABILITY_STATES, PROBE_OBSERVATIONS } from "./capabilities/index.js";
+export type { CapabilityState, ProbeObservation } from "./capabilities/index.js";
 export { EXIT_CODES, failure, formatJsonResult, success } from "./result.js";
 export type { CliError, CliResult, ExitCode } from "./result.js";
 export { loadConfig, resolveRuntimePaths, serializeConfig } from "./config/index.js";
