@@ -4,7 +4,7 @@ import type {
   ProcessResult,
   ProcessRunner,
 } from "@developer-os/security";
-import { invocationFromAgentPrompt, invokeCodex } from "./invoke.js";
+import { DEFAULT_TIMEOUT_MS, invocationFromAgentPrompt, invokeCodex } from "./invoke.js";
 import type { CodexInvocation } from "./invoke.js";
 
 const installation = { executable: "/opt/synthetic/bin/codex", version: "0.147.0" } as const;
@@ -15,7 +15,7 @@ function invocation(overrides: Partial<CodexInvocation> = {}): CodexInvocation {
     workingRoot: "/synthetic/work",
     writeScopes: [],
     outputSchemaPath: "/synthetic/work/schema.json",
-    timeoutMs: 30_000,
+    timeoutMs: DEFAULT_TIMEOUT_MS,
     ...overrides,
   };
 }
@@ -84,6 +84,15 @@ describe("invocationFromAgentPrompt", () => {
     expect(built.ok).toBe(false);
   });
 
+  it("applies the default timeout, since no with-block field can override it", () => {
+    const built = invocationFromAgentPrompt(
+      { prompt: "summarise" },
+      { workingRoot: "/synthetic/work", writeScopes: [], outputSchemaPath: "/synthetic/s.json" },
+    );
+    expect(built.ok).toBe(true);
+    if (built.ok) expect(built.invocation.timeoutMs).toBe(DEFAULT_TIMEOUT_MS);
+  });
+
   it("never echoes the rejected value, which reaches a log", () => {
     const built = invocationFromAgentPrompt(
       { prompt: "x", secret: "hunter2" },
@@ -136,8 +145,26 @@ describe("the three refused flags, and the sandbox that is never full access", (
       invocation({ workingRoot: "--dangerously-bypass-approvals-and-sandbox" }),
       { runner: runner(() => { called = true; return {}; }) },
     );
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe("refused");
+    expect(result).toEqual({
+      ok: false,
+      reason: "refused",
+      detail: 'the working root may not begin with "-": it would be read as an option, not a value',
+    });
+    expect(called).toBe(false);
+  });
+
+  it("refuses a workingRoot naming a permission or bypass surface, with no leading dash to trip the positional rule first", async () => {
+    let called = false;
+    const result = await invokeCodex(
+      installation,
+      invocation({ workingRoot: "permission-cache" }),
+      { runner: runner(() => { called = true; return {}; }) },
+    );
+    expect(result).toEqual({
+      ok: false,
+      reason: "refused",
+      detail: "the working root names a permission or bypass surface that is refused in a value position",
+    });
     expect(called).toBe(false);
   });
 
@@ -148,8 +175,26 @@ describe("the three refused flags, and the sandbox that is never full access", (
       invocation({ outputSchemaPath: "--ignore-user-config" }),
       { runner: runner(() => { called = true; return {}; }) },
     );
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe("refused");
+    expect(result).toEqual({
+      ok: false,
+      reason: "refused",
+      detail: 'the output schema path may not begin with "-": it would be read as an option, not a value',
+    });
+    expect(called).toBe(false);
+  });
+
+  it("refuses an outputSchemaPath naming a permission or bypass surface, with no leading dash to trip the positional rule first", async () => {
+    let called = false;
+    const result = await invokeCodex(
+      installation,
+      invocation({ outputSchemaPath: "danger-zone.json" }),
+      { runner: runner(() => { called = true; return {}; }) },
+    );
+    expect(result).toEqual({
+      ok: false,
+      reason: "refused",
+      detail: "the output schema path names a permission or bypass surface that is refused in a value position",
+    });
     expect(called).toBe(false);
   });
 
@@ -286,6 +331,14 @@ describe("invokeCodex failure identity", () => {
       runner: runner(() => ({ exitCode: 0, stdout })),
     });
     expect(result).toEqual({ ok: true, payload: { result: "done" } });
+  });
+
+  it("skips a trailing scalar line and keeps the real result, since a bare value is never the payload", async () => {
+    const stdout = ['{"result":"final answer"}', "123"].join("\n");
+    const result = await invokeCodex(installation, invocation(), {
+      runner: runner(() => ({ exitCode: 0, stdout })),
+    });
+    expect(result).toEqual({ ok: true, payload: { result: "final answer" } });
   });
 
   it("reports malformed output when no line in the stream parses", async () => {
