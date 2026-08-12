@@ -183,8 +183,6 @@ These are not style preferences. Each one exists because it was already violated
   what a cutover still needs to know is `BACKLOG.md` §6, and the one live rule in it is that
   EXIT-1, historical credential rotation, was **declined by the founder, not deferred**. Do not
   reopen it from a backlog; it is a conversation.
-- **A12's open decision**: whether the founder cutover gets its own plan. Recommendation is
-  on record; the call is not made.
 - **Any live machine change** — `~/.claude`, `~/.codex`, launchd, a real remote.
 - **Approving a spec.** Every subsystem needs an approved spec before its plan, and a plan
   before code — a Global Constraint of the program plan. **Writing the spec is yours;
