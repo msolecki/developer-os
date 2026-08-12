@@ -7,7 +7,7 @@ import type {
 } from "@developer-os/core";
 import type { RenderedArtifact } from "@developer-os/workflow-schema";
 import { MARKETPLACE_NAME } from "./marketplace.js";
-import { CODEX_ROOT_SEGMENT, PLUGIN_NAME, PLUGIN_TREE_SEGMENTS } from "./plugin.js";
+import { CODEX_ROOT_SEGMENT, PLUGIN_NAME } from "./plugin.js";
 
 export interface InstallContext {
   readonly home: string;
@@ -34,30 +34,53 @@ export interface CodexInstallProposal {
   readonly productVersion: string;
   readonly operations: readonly ChangePlanOperationV1[];
   readonly registration: readonly CodexCliStep[];
+  /**
+   * Which side of `operations` `registration` belongs on. Spec §4.1: the
+   * plugin cannot be added from a marketplace that has no files at the path
+   * it names, so install registers *after* the tree is written. Spec §4.2:
+   * uninstall reverses that, unregistering *before* the tree is deleted,
+   * because a marketplace registered against a directory already removed is
+   * worse than leaving both in place. `CodexInstallProposal` is one type for
+   * both directions with nothing else distinguishing them, so an apply-phase
+   * caller had to infer the order from which function it called — this field
+   * makes the ordering data the caller reads instead of prose it must
+   * remember, and get it backwards on uninstall by inference and you leave a
+   * dangling registration behind.
+   */
+  readonly registrationPhase: "after-operations" | "before-operations";
 }
 
 /**
- * `tree` is resolved **only** against the plugin-tree root — every path in it
- * is `buildPluginTree`'s own convention (`.codex-plugin/plugin.json`,
- * `skills/...`), the same convention the brief's test suite fixes with
- * `${home}/codex/plugins/developer-os` as `root`. The marketplace descriptor
- * (`renderMarketplace`, relative to `<product-home>/codex` — a *different*
- * root, per the docblock on `RenderedArtifact` and the risk Task 10 carried
- * forward) is deliberately **not** accepted here: this function has no way to
- * tell a marketplace-root artifact from a plugin-tree-root one inside a flat
- * `RenderedArtifact[]` without guessing at its path, and no test in this
- * task's brief exercises that case. Whatever composes the marketplace
- * descriptor's own create/replace/remove operation (Task 13's
- * `renderCodexInstallTree`, per the plan) must build it separately, against
- * `marketplaceRoot`, not by widening `tree` here.
+ * Founder decision, 2026-08-12: `tree` is resolved against the **marketplace
+ * root**, `<home>/codex` — the same directory `codex plugin marketplace add`
+ * registers (see `installRegistration` below). A plugin-tree artifact's path
+ * therefore carries the `plugins/developer-os/...` prefix relative to this
+ * root, and a marketplace-descriptor artifact's path is
+ * `.agents/plugins/marketplace.json` — Task 13's `renderCodexInstallTree`
+ * emits both in one list, every path relative to this same root, and this
+ * function is what that list is fed into.
+ *
+ * The plugin-tree root (`<home>/codex/plugins/developer-os`, what
+ * `buildPluginTree` itself uses) is a **descendant** of this root, which is
+ * exactly why the prior reading was dangerous rather than merely wrong: a
+ * plugin-tree-relative path fed here does not escape — containment still
+ * passes — it just double-nests under `plugins/developer-os` a second time.
  */
-function pluginRoot(context: InstallContext): string {
-  return posix.join(context.home, ...PLUGIN_TREE_SEGMENTS);
-}
-
-/** Relative to `<product-home>/codex` — the marketplace root `renderMarketplace` targets. */
 function marketplaceRoot(context: InstallContext): string {
   return posix.join(context.home, CODEX_ROOT_SEGMENT);
+}
+
+/**
+ * Shared by both `resolveWithin` (install: joins a relative artifact path
+ * onto `root` first) and `proposeCodexUninstall` (uninstall: called directly
+ * on an already-absolute manifest path). Normalizing before the prefix check
+ * matters on the uninstall side: a manifest path of `<root>/../evil` starts
+ * with `${root}/` as a raw string, but normalizes to a directory *outside*
+ * `root` — the same class of escape `resolveWithin` refuses here.
+ */
+function containedWithin(root: string, candidate: string): string | undefined {
+  const resolved = posix.normalize(candidate);
+  return resolved.startsWith(`${root}/`) ? resolved : undefined;
 }
 
 /**
@@ -69,11 +92,11 @@ function marketplaceRoot(context: InstallContext): string {
  */
 function resolveWithin(root: string, relative: string): string {
   if (posix.isAbsolute(relative)) {
-    throw new Error(`artifact path escapes the plugin root: ${relative}`);
+    throw new Error(`artifact path escapes the marketplace root: ${relative}`);
   }
-  const resolved = posix.normalize(posix.join(root, relative));
-  if (!resolved.startsWith(`${root}/`)) {
-    throw new Error(`artifact path escapes the plugin root: ${relative}`);
+  const resolved = containedWithin(root, posix.join(root, relative));
+  if (resolved === undefined) {
+    throw new Error(`artifact path escapes the marketplace root: ${relative}`);
   }
   return resolved;
 }
@@ -131,10 +154,11 @@ export function proposeCodexInstall(
   if (tree.length === 0) {
     throw new Error("refusing to propose an empty install plan");
   }
-  const root = pluginRoot(context);
+  const root = marketplaceRoot(context);
   return {
     schemaVersion: 1,
     productVersion: context.productVersion,
+    registrationPhase: "after-operations",
     operations: tree.map((artifact) => {
       const targetPath = resolveWithin(root, artifact.path);
       const existing = managed.get(targetPath);
@@ -170,10 +194,22 @@ export function proposeCodexUninstall(
   context: InstallContext,
   managed: ManagedByPath,
 ): CodexInstallProposal {
-  const root = pluginRoot(context);
+  const root = marketplaceRoot(context);
+  // Two checks, both closing the same gap the install side already refuses
+  // via `resolveWithin`: `owner !== "codex"` refuses a foreign-owned artifact
+  // parked under our root (copied verbatim from the manifest entry, so
+  // `validateChangePlan` cannot catch it — it compares the operation against
+  // that same entry); `containedWithin` refuses a manifest path that passes a
+  // raw string-prefix test but normalizes outside `root`.
   const owned = [...managed.values()]
-    .filter((artifact) => artifact.path.startsWith(`${root}/`))
-    .sort((left, right) => (left.path < right.path ? -1 : 1));
+    .flatMap((artifact) => {
+      if (artifact.owner !== "codex") {
+        return [];
+      }
+      const targetPath = containedWithin(root, artifact.path);
+      return targetPath === undefined ? [] : [{ artifact, targetPath }];
+    })
+    .sort((left, right) => (left.targetPath < right.targetPath ? -1 : 1));
 
   if (owned.length === 0) {
     throw new Error("refusing to propose an empty uninstall plan");
@@ -182,8 +218,9 @@ export function proposeCodexUninstall(
   return {
     schemaVersion: 1,
     productVersion: context.productVersion,
-    operations: owned.map((artifact) => ({
-      targetPath: artifact.path,
+    registrationPhase: "before-operations",
+    operations: owned.map(({ artifact, targetPath }) => ({
+      targetPath,
       operation: "remove" as const,
       owner: artifact.owner,
       kind: artifact.kind,
