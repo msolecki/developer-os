@@ -220,10 +220,11 @@ which has nothing to capture into until the capture contract exists).
    2026-08-11 and recorded in spec §14.1. Two consequences: **`doctor` may not claim to write
    nothing**, and the probe is not safe to treat as a pure read. Owner: whichever task next
    states `doctor`'s write behaviour.
-5. **The code-point sort is duplicated** in `plugin.ts` and `packages/workflow-schema/src/derive.ts`.
-   The second copy is private to the compiler; when DOS-P5 needs the same ordering there will be
-   three, and the fix is one export from `workflow-schema`. Owner: DOS-P5, because widening a
-   closed package's public door is that task's decision to make once it has two callers.
+5. **The code-point sort was duplicated — closed on 2026-08-12.** The copy in `plugin.ts` is gone;
+   the ordering is `compareCodePoints` in `packages/workflow-schema/src/derive.ts`, on that
+   package's public door, and `plugin.ts` imports it. The fix landed a task early because the
+   Codex adapter would have made it a third copy, which is the cost the residual was recording.
+   No owner: nothing is outstanding.
 6. **There is no `ClaudeAdapter` object.** Spec §13 names one as a produced interface; the package
    ships the eight modules that spec names — plus `compose.ts`, which is the composition both the
    regenerator and the drift check call — behind one `index.ts`, and no façade class over them.
@@ -265,8 +266,8 @@ which has nothing to capture into until the capture contract exists).
 (§4) is the property that keeps drift detection meaningful, and Codex has no in-place plugin
 discovery — its spec answers this with a local marketplace, which resolves to real on-disk paths.
 The `agent.prompt` argument schema is already in `packages/core`, so DOS-P5 imports it rather than
-writing a second one. The code-point sort and the façade question (§9.5, §9.6) both come due when
-there are two adapters.
+writing a second one. The code-point sort came due early and is closed (§9.5); the façade question
+(§9.6) still comes due when there are two adapters.
 
 **DOS-P6, and it is the larger inheritance:** every one of §9.1 through §9.3. The capture contract
 decides what a hook body does, which is what unblocks hooks, which is what makes a lifecycle
