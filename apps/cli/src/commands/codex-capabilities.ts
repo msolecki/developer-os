@@ -64,8 +64,14 @@ const HOOK_TRUST_RECOVERY =
   "inside a Codex session, run /hooks to review and trust the developer-os hooks";
 
 /**
- * Mirrors `resolveCapabilities`'s accumulator shape, so a renamed key or a
- * new `CapabilityState` value is a compile error here too, not just there.
+ * Mirrors `resolveCapabilities`'s accumulator shape. Only half of that
+ * mirroring is a compile-time guarantee: dropping `"unknown"` from
+ * `CapabilityState` breaks `resolved[key] = "unknown"` below, but a renamed
+ * or dropped key in `CODEX_CAPABILITY_KEYS` does not — `Record<string,
+ * CapabilityState>`'s index signature satisfies `CodexCapabilities`'s
+ * required named properties, so this compiles even if the loop never
+ * assigns a required key. Same gap as the equivalent uncast return in
+ * `packages/adapter-codex/src/capabilities.ts`.
  */
 function allUnknown(): CodexCapabilities {
   const resolved: Record<string, CapabilityState> = Object.create(null) as Record<

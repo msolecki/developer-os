@@ -4,7 +4,10 @@ import {
   probeClaude,
   resolveCapabilities,
 } from "@developer-os/adapter-claude";
-import type { ClaudeCapabilities } from "@developer-os/adapter-claude";
+import type {
+  CapabilityState,
+  ClaudeCapabilities,
+} from "@developer-os/adapter-claude";
 import { readdir } from "node:fs/promises";
 
 import type { ProcessRunner } from "@developer-os/security";
@@ -49,12 +52,12 @@ export interface ClaudeCapabilityReport {
 }
 
 function allUnknown(): ClaudeCapabilities {
-  const resolved: Record<string, string> = Object.create(null) as Record<
+  const resolved: Record<string, CapabilityState> = Object.create(null) as Record<
     string,
-    string
+    CapabilityState
   >;
   for (const key of CLAUDE_CAPABILITY_KEYS) resolved[key] = "unknown";
-  return Object.freeze(resolved) as unknown as ClaudeCapabilities;
+  return Object.freeze(resolved);
 }
 
 function summarise(capabilities: ClaudeCapabilities): string {

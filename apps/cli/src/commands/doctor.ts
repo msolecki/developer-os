@@ -308,12 +308,16 @@ async function checkCodexCapabilities(context: CliContext): Promise<Finding> {
   // refusal here is information about the environment, not a failure of this
   // report, so it degrades to "nothing to examine" rather than propagating.
   //
-  // The consequence is worth stating plainly: a platform-discovery refusal is
-  // rendered as `codex=absent` — "we could not ask" printed as "not
-  // installed", the same conflation `unreadable` exists to prevent, one layer
-  // up. This is a known residual, not an oversight: both adapters carry it,
-  // they must stay identical because DOS-P6 consumes both, and DOS-P6 owns
-  // closing it.
+  // The consequence is worth stating plainly: the catch above is bare, so
+  // any discovery error — a refusal, an unsupported platform, a security
+  // refusal from the process runner — is rendered as `codex=absent`, "we
+  // could not ask" printed as "not installed", the same conflation
+  // `unreadable` exists to prevent, one layer up. `checkAgents` in this file
+  // splits those on purpose (a refusal demotes to `warn`, anything else is
+  // `fail`), so the same failure can leave `agents` failing while
+  // `codex-capabilities` still prints `pass … codex=absent`. This is a known
+  // residual, not an oversight: both adapters carry it, they must stay
+  // identical because DOS-P6 consumes both, and DOS-P6 owns closing it.
   let executablePath: string | null = null;
   try {
     const agents = await discoverAgents(context);
@@ -334,9 +338,12 @@ async function checkCodexCapabilities(context: CliContext): Promise<Finding> {
    * open a Codex session is not actionable on a machine that has no Codex to
    * open one in. Gated on `installed` rather than on a specific capability
    * reading `wrapper-required`: `doctor` never sets `probe: true` (see the
-   * comment on `CodexCapabilityRequest.probe`), so every installed branch —
-   * unreadable, not-probed, or probed — reports `captureVia: "wrapper"`
-   * today, and the advice is actionable in all of them; only `absent` is not.
+   * comment on `CodexCapabilityRequest.probe`), so every installed branch it
+   * can reach — unreadable, not-probed — reports `captureVia: "wrapper"`
+   * today, and the advice is actionable in both of them; only `absent` is
+   * not. The probed branch can return `captureVia: "hook"`
+   * (`codex-capabilities.ts` does when `session_end_capture === "yes"`), but
+   * `doctor` never sets `probe: true`, so that branch is unreachable here.
    */
   const recovery = report.installed ? ` recovery="${report.recovery}"` : "";
   return pass(
