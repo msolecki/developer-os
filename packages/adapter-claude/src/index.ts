@@ -12,10 +12,13 @@
  * package's guard hands consumers two import paths for one guarantee.
  *
  * `resolveExecutable`, `DiscoverDependencies` and `ResolveDependencies` were
- * exported here and are not any more (Task 3.5): they moved to
- * `@developer-os/security` as `resolveExecutable`/`ResolveExecutableDependencies`,
- * for the same reason `parseAgentPromptArgs` above is not re-exported. Import
- * them from `@developer-os/security` directly.
+ * exported here and are not any more (Task 3.5). `resolveExecutable` had no
+ * production caller anywhere in the repository and was deleted rather than
+ * relocated: production executable discovery is
+ * `MacOsPlatformAdapter.discoverExecutable` (`packages/platform-macos`),
+ * reached from `apps/cli/src/commands/doctor.ts`. The split is now explicit —
+ * the platform adapter finds the executable, `discoverCli` (from
+ * `@developer-os/security`) reads its version.
  */
 export { discoverClaude } from "./discover.js";
 export type { ClaudeInstallation } from "./discover.js";

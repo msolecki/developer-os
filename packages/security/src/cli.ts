@@ -1,18 +1,27 @@
-import { constants } from "node:fs";
-import { access } from "node:fs/promises";
-import { delimiter, isAbsolute, join } from "node:path";
-import { cwd, env } from "node:process";
+import { isAbsolute } from "node:path";
+import { cwd } from "node:process";
 import type { ProcessRunner } from "./process.js";
 
 /**
- * The vendor-CLI boundary both adapters cross the same way: find the
- * executable, discover its version without throwing, screen what reaches its
- * argv, parse what comes back.
+ * The vendor-CLI boundary both adapters cross the same way: discover its
+ * version without throwing, screen what reaches its argv, parse what comes
+ * back.
  *
  * It lived in `packages/adapter-claude` while there was one adapter. A
  * security screen and a fail-open fix are exactly the kind of logic that must
  * not exist twice — two copies drift, and a drifted copy is a hole neither
  * adapter's tests can see.
+ *
+ * Finding the executable is not this module's job. `discoverCli` takes an
+ * absolute `executable` and only reads its version; production discovery is
+ * `MacOsPlatformAdapter.discoverExecutable` (`packages/platform-macos`),
+ * which shells `/usr/bin/which` with a controlled `PATH`. Two mechanisms that
+ * both resolve a bare name to a path is a duplicated door with two different
+ * security properties — one platform-specific and reached from
+ * `apps/cli/src/commands/doctor.ts`, the other unreachable from any
+ * production caller. `apps/cli/src/commands/claude-capabilities.ts` already
+ * follows this split: it takes `executablePath` as an input and calls
+ * `discoverClaude` only to read the version.
  */
 
 export interface CliInstallation {
@@ -25,11 +34,6 @@ export interface DiscoverCliDependencies {
   readonly executable: string;
 }
 
-export interface ResolveExecutableDependencies {
-  readonly pathValue: string;
-  readonly isExecutable: (candidate: string) => Promise<boolean>;
-}
-
 /**
  * `MAJOR.MINOR.PATCH`, no pre-release and no build metadata — the same
  * narrowing DOS-P3 applied to workflow versions, for a related reason: a
@@ -39,46 +43,6 @@ export interface ResolveExecutableDependencies {
 const VERSION_PATTERN = /\b(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\b/u;
 
 const VERSION_TIMEOUT_MS = 10_000;
-
-function defaultIsExecutable(candidate: string): Promise<boolean> {
-  return access(candidate, constants.X_OK).then(
-    () => true,
-    () => false,
-  );
-}
-
-/**
- * Turn a bare command name into the absolute path `discoverCli` requires.
- *
- * This exists because of a defect the fresh-context review caught: the process
- * request is built with `env: {}`, so a child has no `PATH` to resolve a bare
- * name against, and `assertSafeCommand` refuses a non-absolute executable
- * anyway. Resolution therefore has to happen here, in the parent, before a
- * request is ever built.
- *
- * A relative `PATH` entry is skipped rather than resolved against the working
- * directory: a directory named on `PATH` relative to wherever the process
- * happens to be running is an executable an attacker can place.
- */
-export async function resolveExecutable(
-  name: string,
-  dependencies: ResolveExecutableDependencies = {
-    pathValue: env["PATH"] ?? "",
-    isExecutable: defaultIsExecutable,
-  },
-): Promise<string | null> {
-  if (isAbsolute(name)) {
-    return (await dependencies.isExecutable(name)) ? name : null;
-  }
-  if (name === "" || name.includes("/")) return null;
-
-  for (const entry of dependencies.pathValue.split(delimiter)) {
-    if (entry === "" || !isAbsolute(entry)) continue;
-    const candidate = join(entry, name);
-    if (await dependencies.isExecutable(candidate)) return candidate;
-  }
-  return null;
-}
 
 /**
  * Never throws. A missing binary, a non-zero exit, a timeout and unparseable
@@ -116,7 +80,8 @@ export async function discoverCli(
 }
 
 /**
- * Structural, not a denylist — and that is the whole fix.
+ * Two rules, stacked — one positional and complete, one nominal and
+ * best-effort. Neither subsumes the other; both are load-bearing.
  *
  * The first version screened three exact strings out of an adapter's
  * `allowedTools`. A fresh-context review defeated it in one line:
@@ -126,17 +91,23 @@ export async function discoverCli(
  * list at all. A variadic flag stops at the first `-`-prefixed token, so each
  * of those became a flag rather than a value.
  *
- * The rule is positional rather than nominal: **nothing a caller puts in a
- * value position may look like an option.** A denylist has to enumerate every
- * dangerous flag a vendor will ever ship; this has to be right once. And it
- * refuses the invocation rather than silently dropping the offending entry,
- * because a caller that asked for a bypass has a bug worth reporting.
+ * **Rule one, the dash rule, is positional and complete:** nothing a caller
+ * puts in a value position may look like an option. It needs no word list —
+ * a leading `-` is refused regardless of what follows — and it is what closed
+ * the `--opt=value` and variadic-flag gaps above. It refuses the invocation
+ * rather than silently dropping the offending entry, because a caller that
+ * asked for a bypass has a bug worth reporting.
  *
- * The word list is `permission|danger|bypass`, wider than the
- * `permission|dangerous` that first shipped. `danger` alone (not only the full
- * word `dangerous`) and `bypass` both catch values a narrower pattern let
- * through — see `cli.test.ts` for the exact strings that motivated each
- * addition, ported forward from `adapter-claude` where the gap was found.
+ * **Rule two, the word list, is nominal and best-effort:** `permission|danger|
+ * bypass`, wider than the `permission|dangerous` that first shipped. It
+ * exists because a value naming a permission or bypass surface can arrive
+ * without a leading dash at all (`"bypassPermissions"` as a bare
+ * `allowedTools` entry, for instance), which the dash rule cannot see. `danger`
+ * alone (not only the full word `dangerous`) and `bypass` both catch values a
+ * narrower pattern let through — see `cli.test.ts` for the exact strings that
+ * motivated each addition, ported forward from `adapter-claude` where the gap
+ * was found. Being a word list, it must grow whenever a vendor coins a new
+ * term; it is not, and cannot be made, complete the way the dash rule is.
  */
 export function screenValueArgument(value: string, field: string): string | null {
   if (value.startsWith("-")) {

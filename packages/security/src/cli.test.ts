@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  discoverCli,
-  parseStructuredPayload,
-  resolveExecutable,
-  screenValueArgument,
-} from "./cli.js";
+import { discoverCli, parseStructuredPayload, screenValueArgument } from "./cli.js";
 import type { ProcessRequest, ProcessResult, ProcessRunner } from "./process.js";
 
 const EXECUTABLE = "/opt/synthetic/bin/vendor-cli";
@@ -157,70 +152,6 @@ describe("discoverCli", () => {
   });
 });
 
-/**
- * Resolution is a separate concern from discovery, and it exists because
- * `discoverCli` requires an absolute path. Without it nothing could ever find
- * a real installation, which is the defect the review caught.
- */
-describe("resolveExecutable", () => {
-  const isExecutable = (allowed: readonly string[]) => (candidate: string) =>
-    Promise.resolve(allowed.includes(candidate));
-
-  it("returns the first PATH entry that holds an executable", async () => {
-    const found = await resolveExecutable("vendor-cli", {
-      pathValue: "/a:/b:/c",
-      isExecutable: isExecutable(["/b/vendor-cli", "/c/vendor-cli"]),
-    });
-    expect(found).toBe("/b/vendor-cli");
-  });
-
-  it("returns null when no entry holds it", async () => {
-    const found = await resolveExecutable("vendor-cli", {
-      pathValue: "/a:/b",
-      isExecutable: isExecutable([]),
-    });
-    expect(found).toBeNull();
-  });
-
-  it("returns null for an empty PATH rather than searching the whole filesystem", async () => {
-    const found = await resolveExecutable("vendor-cli", {
-      pathValue: "",
-      isExecutable: isExecutable(["/vendor-cli"]),
-    });
-    expect(found).toBeNull();
-  });
-
-  it("returns an absolute path already given, without searching", async () => {
-    let searched = false;
-    const found = await resolveExecutable("/opt/bin/vendor-cli", {
-      pathValue: "/a",
-      isExecutable: (candidate) => {
-        searched = true;
-        return Promise.resolve(candidate === "/opt/bin/vendor-cli");
-      },
-    });
-    expect(found).toBe("/opt/bin/vendor-cli");
-    expect(searched).toBe(true);
-  });
-
-  /** A name with a separator is not a name to look up on PATH. */
-  it("refuses a relative name containing a separator", async () => {
-    const found = await resolveExecutable("../vendor-cli", {
-      pathValue: "/a",
-      isExecutable: isExecutable(["/a/../vendor-cli"]),
-    });
-    expect(found).toBeNull();
-  });
-
-  it("skips a relative PATH entry rather than resolving against the cwd", async () => {
-    const found = await resolveExecutable("vendor-cli", {
-      pathValue: "relative:/b",
-      isExecutable: isExecutable(["relative/vendor-cli", "/b/vendor-cli"]),
-    });
-    expect(found).toBe("/b/vendor-cli");
-  });
-});
-
 describe("screenValueArgument", () => {
   /**
    * The version of this test that shipped in `adapter-claude` asserted only
@@ -278,11 +209,14 @@ describe("screenValueArgument", () => {
    * Unlike the two cases above, these are refused under the **old** code too
    * — `dangerously` contains `dangerous`, and both begin with `-`, so the
    * leading-dash rule alone already caught them. Included for completeness:
-   * the two real vendor flags decision 3 names are covered, whichever
-   * mechanism does it.
+   * all three real vendor flags decision 3 names are covered, whichever
+   * mechanism does it. Pinned together so an edit to the dash rule cannot
+   * regress one of the three unnoticed because only the other two were
+   * asserted.
    */
-  it("refuses --dangerously-bypass-hook-trust and --ignore-user-config via the leading-dash rule", () => {
+  it("refuses --dangerously-bypass-approvals-and-sandbox, --dangerously-bypass-hook-trust and --ignore-user-config via the leading-dash rule", () => {
     for (const flag of [
+      "--dangerously-bypass-approvals-and-sandbox",
       "--dangerously-bypass-hook-trust",
       "--ignore-user-config",
     ]) {
