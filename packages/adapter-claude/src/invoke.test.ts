@@ -42,6 +42,15 @@ function capturing(result: Partial<ProcessResult>): {
   };
 }
 
+/**
+ * `screenValueArgument` and `parseStructuredPayload` moved to
+ * `packages/security/src/cli.ts` (Task 3.5) — their own batteries, including the
+ * exhaustive hostile-value matrix and the payload/`__proto__` cases, live in
+ * `packages/security/src/cli.test.ts`. What remains here is Claude-specific:
+ * the argv shape, `maxTurns`, and the process-result handling this function
+ * still owns, plus two minimal tests proving the shared screen is actually
+ * wired in at both of its call sites (prompt and each allowed tool).
+ */
 describe("invokeClaude", () => {
   it("passes argv as an array, in print mode, asking for json", async () => {
     const { runner, seen } = capturing({ stdout: '{"result":"ok"}' });
@@ -107,14 +116,6 @@ describe("invokeClaude", () => {
     });
   });
 
-  it("reports malformed output as a failure, never a best-effort parse", async () => {
-    const { runner } = capturing({ stdout: "not json at all" });
-    expect(await invokeClaude(installation, invocation, { runner })).toEqual({
-      ok: false,
-      reason: "malformed-output",
-    });
-  });
-
   it("reports a spawn failure rather than throwing", async () => {
     const runner: ProcessRunner = {
       run(): Promise<ProcessResult> {
@@ -135,21 +136,6 @@ describe("invokeClaude", () => {
     });
   });
 
-  /**
-   * A JSON payload whose top level is `__proto__` must not reach a consumer as
-   * a prototype mutation. `JSON.parse` does not pollute by itself, but anything
-   * that later spreads or merges the payload would.
-   */
-  it("refuses a payload carrying a reserved key", async () => {
-    const { runner } = capturing({
-      stdout: '{"__proto__":{"polluted":true},"result":"x"}',
-    });
-    expect(await invokeClaude(installation, invocation, { runner })).toEqual({
-      ok: false,
-      reason: "malformed-output",
-    });
-  });
-
   it("refuses a non-absolute executable rather than spawning it", async () => {
     const { runner } = capturing({ stdout: "{}" });
     const result = await invokeClaude(
@@ -160,33 +146,7 @@ describe("invokeClaude", () => {
     expect(result).toEqual({ ok: false, reason: "spawn-failed" });
   });
 
-  /**
-   * The version of this test that shipped asserted only that three exact
-   * strings were absent, which is why the hole below shipped with it: a
-   * denylist of literals is defeated by `--opt=value`, and the test could not
-   * go red for the property its own name claimed. It now asserts the property.
-   */
-  it("never puts an option-shaped token in a value position", async () => {
-    const hostile = [
-      "--permission-mode=bypassPermissions",
-      "--dangerously-skip-permissions=true",
-      "--add-dir",
-      "--mcp-config",
-      "-p",
-    ];
-    for (const tool of hostile) {
-      const { runner, seen } = capturing({ stdout: "{}" });
-      const result = await invokeClaude(
-        installation,
-        { ...invocation, allowedTools: [tool, "Read"] },
-        { runner },
-      );
-      expect(result.ok, `${tool} must be refused`).toBe(false);
-      expect(seen(), `${tool} must never reach a spawn`).toBeNull();
-    }
-  });
-
-  it("refuses an option-shaped prompt", async () => {
+  it("refuses before spawning when the prompt fails the shared screen", async () => {
     const { runner, seen } = capturing({ stdout: "{}" });
     const result = await invokeClaude(
       installation,
@@ -197,14 +157,31 @@ describe("invokeClaude", () => {
     expect(seen()).toBeNull();
   });
 
-  it("refuses a tool naming a permission surface even without a leading dash", async () => {
-    const { runner } = capturing({ stdout: "{}" });
+  it("refuses before spawning when an allowed tool fails the shared screen", async () => {
+    const { runner, seen } = capturing({ stdout: "{}" });
     const result = await invokeClaude(
       installation,
-      { ...invocation, allowedTools: ["bypassPermissions"] },
+      { ...invocation, allowedTools: ["--dangerously-skip-permissions=true", "Read"] },
       { runner },
     );
-    expect(result).toMatchObject({ ok: false, reason: "refused" });
+    expect(result.ok, "a hostile tool must be refused").toBe(false);
+    expect(seen(), "a refused invocation must never reach a spawn").toBeNull();
+  });
+
+  /** The hostile entry sits after an ordinary one, so this also pins that the
+   * loop over `allowedTools` keeps checking past the first element rather
+   * than stopping once one tool has passed the screen. */
+  it("refuses when a later allowed tool fails the shared screen, not only the first", async () => {
+    const { runner, seen } = capturing({ stdout: "{}" });
+    const result = await invokeClaude(
+      installation,
+      { ...invocation, allowedTools: ["Read", "--mcp-config"] },
+      { runner },
+    );
+    expect(result.ok, "a hostile tool later in the list must be refused").toBe(
+      false,
+    );
+    expect(seen(), "a refused invocation must never reach a spawn").toBeNull();
   });
 
   /**

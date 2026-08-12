@@ -17,6 +17,17 @@ export type {
   ProcessResult,
   ProcessRunner,
 } from "./process.js";
+export {
+  discoverCli,
+  parseStructuredPayload,
+  resolveExecutable,
+  screenValueArgument,
+} from "./cli.js";
+export type {
+  CliInstallation,
+  DiscoverCliDependencies,
+  ResolveExecutableDependencies,
+} from "./cli.js";
 export { capGraphemes, screenAndCap, screenControlCharacters } from "./screen.js";
 export { boundedProse, fenced, screenParagraphs } from "./markdown.js";
 
