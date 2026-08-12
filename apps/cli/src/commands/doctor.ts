@@ -289,11 +289,14 @@ async function checkClaudeCapabilities(context: CliContext): Promise<Finding> {
  *
  * **The plugin root is under the *product* home, not the user's home** — the
  * mirror image of the bug fixed above, where the product home was used for a
- * path under the user's home. `install.ts`'s `marketplaceRoot` resolves
- * `PLUGIN_TREE_SEGMENTS` against `InstallContext.home`, which callers supply
- * as the product home (`checkProductHome` and every other check here read it
- * as `paths.home`); `PLUGIN_TREE_SEGMENTS` already carries the full path from
- * that root to the plugin tree itself, `<product-home>/codex/plugins/developer-os`.
+ * path under the user's home. Spec §4 puts the tree at
+ * `<product-home>/codex/plugins/developer-os`, and `install.ts`'s
+ * `marketplaceRoot` resolves the same `CODEX_ROOT_SEGMENT` against the
+ * product home for the same reason — `PLUGIN_TREE_SEGMENTS`
+ * (`packages/adapter-codex/src/plugin.ts`) already carries the full path from
+ * that root to the plugin tree itself, so joining it onto anything but the
+ * product home (`paths.home`, as every other check here reads it) would be
+ * this task's namesake mistake in reverse.
  * `context.paths.home` is used rather than a `paths` argument because
  * `resolveRuntimePaths` computes `home` from the environment alone —
  * configuration can only move the vault path — so `context.paths.home` and a
@@ -315,7 +318,7 @@ async function checkCodexCapabilities(context: CliContext): Promise<Finding> {
   });
   return pass(
     "codex-capabilities",
-    `${report.summary} capture-via=${report.captureVia} recovery=${report.recovery}`,
+    `${report.summary} capture-via=${report.captureVia} recovery="${report.recovery}"`,
     [],
   );
 }
