@@ -1,19 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { validateChangePlan } from "@developer-os/core";
 import type { InstallationManifestV1, ManagedArtifactV1 } from "@developer-os/core";
-import { MARKETPLACE_RELATIVE_PATH } from "./plugin.js";
+import { MARKETPLACE_RELATIVE_PATH, PLUGIN_TREE_PREFIX } from "./plugin.js";
 import { proposeCodexInstall, proposeCodexUninstall } from "./install.js";
 
 const home = "/synthetic/home/.developer-os";
 const context = { home, productVersion: "0.0.0" };
 /** The marketplace root — spec §4.1 — is what `codex plugin marketplace add` registers, and Founder decision 2026-08-12 is that both proposals resolve against it. */
 const marketplaceRoot = `${home}/codex`;
-const pluginRoot = `${marketplaceRoot}/plugins/developer-os`;
+/** Derived from `PLUGIN_TREE_PREFIX`, never typed — see that constant's docblock for why. */
+const pluginRoot = `${marketplaceRoot}/${PLUGIN_TREE_PREFIX}`;
 const hash = "a".repeat(64);
 
 const tree = [
-  { path: "plugins/developer-os/.codex-plugin/plugin.json", contents: "{}\n" },
-  { path: "plugins/developer-os/skills/developer-os-shared/SKILL.md", contents: "shared\n" },
+  { path: `${PLUGIN_TREE_PREFIX}/.codex-plugin/plugin.json`, contents: "{}\n" },
+  { path: `${PLUGIN_TREE_PREFIX}/skills/developer-os-shared/SKILL.md`, contents: "shared\n" },
 ];
 
 function artifact(path: string): ManagedArtifactV1 {
@@ -62,6 +63,14 @@ describe("proposeCodexInstall", () => {
     { name: "an escaping relative path", path: "../../evil" },
     { name: "an absolute path", path: "/etc/passwd" },
     { name: "the root itself", path: "." },
+    /**
+     * `codex-evil` shares the `codex` prefix with the marketplace root as a
+     * raw string but is a sibling directory, not a descendant. Only the
+     * trailing slash in `containedWithin`'s `${root}/` check tells the two
+     * apart — see the uninstall-side case of the same name for the RED
+     * evidence that this character is load-bearing.
+     */
+    { name: "a sibling of the root sharing its prefix", path: "../codex-evil/x" },
   ])("refuses $name", ({ path }) => {
     expect(() => proposeCodexInstall([{ path, contents: "x" }], context)).toThrow(/escapes/u);
   });
@@ -171,6 +180,7 @@ describe("proposeCodexInstall", () => {
       [{ path: "plugins/developer-os/c/d.md", contents: "same" }],
       context,
     ).operations;
+    expect(first?.proposedHash).toMatch(/^[0-9a-f]{64}$/u);
     expect(first?.proposedHash).toBe(second?.proposedHash);
   });
 
@@ -251,8 +261,33 @@ describe("proposeCodexUninstall", () => {
         [owned.path, owned],
       ]),
     ).operations;
+    expect(operations.length).toBeGreaterThan(0);
     const targets = operations.map((operation) => operation.targetPath);
     expect(targets).not.toContain(poisoned.path);
+    for (const target of targets) {
+      expect(target.startsWith(`${marketplaceRoot}/`)).toBe(true);
+    }
+  });
+
+  /**
+   * A manifest path of `<home>/codex-evil/x` shares the `${home}/codex`
+   * prefix with the marketplace root as a raw string, but `codex-evil` is a
+   * sibling directory, not a descendant of `codex`. Only the trailing slash
+   * in `containedWithin`'s `${root}/` check refuses it — the same character
+   * the install-side "a sibling of the root sharing its prefix" case pins.
+   */
+  it("refuses a managed path that is a sibling of the marketplace root sharing its prefix", () => {
+    const sibling = artifact(`${home}/codex-evil/x`);
+    const operations = proposeCodexUninstall(
+      context,
+      new Map([
+        [sibling.path, sibling],
+        [owned.path, owned],
+      ]),
+    ).operations;
+    expect(operations.length).toBeGreaterThan(0);
+    const targets = operations.map((operation) => operation.targetPath);
+    expect(targets).not.toContain(sibling.path);
     for (const target of targets) {
       expect(target.startsWith(`${marketplaceRoot}/`)).toBe(true);
     }
