@@ -56,8 +56,11 @@ describe("probeCodex", () => {
    * `observed` for it claims we verified an artifact somebody else installed.
    * The path that must equal `pluginRoot` is `source.path` — the marketplace
    * source the listing resolves — never the `$CODEX_HOME/plugins/cache/...`
-   * copy Codex also stages (spec §14.4); this fixture uses a path shaped
-   * like that cache copy to prove the check does not accidentally accept it.
+   * copy Codex also stages (spec §14.4). This fixture puts a cache-shaped
+   * path in `source.path` — the only field `probeCodex` reads — so it proves
+   * only that a non-matching `source.path` yields `absent`; it cannot show
+   * the probe would resist reading some other cache-bearing field, because
+   * there is no such field in the code or in the spec's documented shape.
    */
   it("reports absent when our name resolves to a path we do not own", async () => {
     const probed = await probeCodex(installation, {
@@ -151,6 +154,24 @@ describe("probeCodex", () => {
           },
         ],
         available: [],
+      }),
+      pluginRoot,
+    });
+    expect(probed.observations.get("skills")).toBe("observed");
+  });
+
+  /**
+   * `probeCodex` never reads `available` — only `installed` settles
+   * `skills`. A future Codex release shipping an `available` entry without a
+   * string `name` must not poison a perfectly readable `installed` array
+   * back into `unavailable`; that would be the exact bug commit `eeae9ba`
+   * fixed, re-entering through a field we do not even use.
+   */
+  it("still observes our plugin when `available` carries a malformed entry", async () => {
+    const probed = await probeCodex(installation, {
+      runner: listing({
+        installed: [{ name: "developer-os", enabled: true, source: { path: pluginRoot } }],
+        available: [{ enabled: true, source: { path: "/some/other/path" } }],
       }),
       pluginRoot,
     });

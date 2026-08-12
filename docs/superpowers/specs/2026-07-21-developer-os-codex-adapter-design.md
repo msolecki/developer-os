@@ -523,6 +523,16 @@ against a real installation before this task:
   `probeCodex` — so this was caught by inspection, not by the test failing, and is not fixed by this
   task. **Flagged for DOS-P6**, the first subsystem to actually depend on `probeCodex` observing
   `yes`.
+
+  **Amended 2026-08-12, by the fresh-context review that followed Task 17's own trueing-up commit.**
+  The paragraph above is stale: `probeCodex`'s `listingSchema` now parses exactly this shape —
+  `{ installed: [...], available: [...] }`, `.loose()` at both levels, each entry's path read from
+  `source.path` — fixed in `packages/adapter-codex/src/probe.ts` by commit `eeae9ba` ("fix(adapter-codex):
+  parse the listing the vendor actually returns"). `probeCodex` reports `skills: observed` against a
+  real installation when the listed entry is present, enabled, and its `source.path` equals
+  `dependencies.pluginRoot` — the real on-disk tree this adapter wrote, never the
+  `$CODEX_HOME/plugins/cache/...` copy. This is no longer flagged for DOS-P6; a DOS-P6 maintainer can
+  depend on `probeCodex` observing `yes`.
 - **The property this whole install shape (§4) exists to prove, confirmed**: with the two fixes
   above, `codex plugin list --json`'s `installed[].source.path` for our plugin is exactly
   `<product-home>/codex/plugins/developer-os` — the real on-disk tree this adapter wrote — never
