@@ -52,6 +52,7 @@ describe("reportCodexCapabilities", () => {
     });
     expect(report.installed).toBe(false);
     expect(new Set(Object.values(report.capabilities))).toEqual(new Set(["unknown"]));
+    expect(report.summary).toContain("codex=absent");
   });
 
   it("distinguishes a present-but-unreadable binary from an absent one", async () => {

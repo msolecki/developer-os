@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { EXIT_CODES } from "@developer-os/core";
 import { MacOsPlatformDiscoveryError } from "@developer-os/platform-macos";
+import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 
 import { runDoctor, runDoctorReport } from "./doctor.js";
 import { runInit } from "./init.js";
@@ -73,6 +74,61 @@ describe("runDoctor", () => {
       "claude-capabilities",
       "codex-capabilities",
     ]);
+    /**
+     * No Codex is installed in this fixture, so the hook-trust command is not
+     * actionable — nothing is there to open a session in. Spec §5.3: the
+     * fix is one command, and a report that prints it unconditionally reads as
+     * advice to run `/hooks` inside a CLI the machine does not have.
+     */
+    const codexAbsent = result.data.checks.find(
+      (check) => check.id === "codex-capabilities",
+    );
+    expect(codexAbsent?.message).toContain("codex=absent");
+    expect(codexAbsent?.message).not.toContain("recovery=");
+  });
+
+  /**
+   * Spec §5.3: the fix is one command, and a report that omits it — where it
+   * is actionable — is not a report. `codex-capabilities.ts`'s own unit tests
+   * pin `report.recovery` one layer below the user; this pins the composed
+   * `DoctorCheck.message` the user actually reads.
+   */
+  it("names the hook-trust command when Codex is installed", async () => {
+    const runner: ProcessRunner = {
+      run(request): Promise<ProcessResult> {
+        return Promise.resolve({
+          stdout: request.args[0] === "--version" ? "codex-cli 0.147.0" : "",
+          stderr: "",
+          exitCode: 0,
+          signal: null,
+          timedOut: false,
+        });
+      },
+    };
+    const fixture = await createCommandFixture("doctor-codex-installed", {
+      runner,
+      agents: {
+        claude: { name: "claude", installed: false, executablePath: null, version: null },
+        codex: {
+          name: "codex",
+          installed: true,
+          executablePath: "/opt/synthetic/bin/codex",
+          version: null,
+        },
+      },
+    });
+    await runInit(fixture.context, ACCEPTED);
+
+    const result = await runDoctor(fixture.context);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const codex = result.data.checks.find(
+      (check) => check.id === "codex-capabilities",
+    );
+    expect(codex?.message).toContain("codex=0.147.0");
+    expect(codex?.message).toContain('recovery="');
+    expect(codex?.message).toContain("/hooks");
   });
 
   it("reports an uninitialized machine as an operational failure", async () => {
