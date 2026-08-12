@@ -223,13 +223,13 @@ support becomes observable.
    when free text reaches a real vendor artifact an agent reads as instructions. Scope the claim
    that way rather than generally.
 
-   **Amended 2026-08-12.** `src/skill.test.ts` now covers this for the vendor-neutral body: 39
+   **Amended 2026-08-12.** `src/skill.test.ts` now covers this for the vendor-neutral body: 38
    cases render hostile free text — forged Markdown headings, fence runs that would swallow the
-   recovery warning, an RTL override, oversized prose and preamble, a hostile overlay step key —
-   through `renderSkillBody` into the actual joined artifact and assert what a reader would see.
-   The claim is proved for the body that is byte-identical across vendors; a vendor's own
-   frontmatter (`description`) is each adapter's to prove, and
-   `packages/adapter-claude/src/render.test.ts` covers Claude's.
+   recovery warning, an RTL override, oversized prose and preamble — through `renderSkillBody`
+   into the actual joined artifact and assert what a reader would see, plus overlay cases covering
+   a mismatched `extends`, a hostile `extends`, and an overlay on `shared`. The claim is proved for
+   the body that is byte-identical across vendors; a vendor's own frontmatter (`description`) is
+   each adapter's to prove, and `packages/adapter-claude/src/render.test.ts` covers Claude's.
 9. **Over-declaring a capability is not an error, though over-declaring a scope is.**
    `validate.ts` checks only that a required capability is declared, never that a declared one is
    required — so §6's equality argument has no counterpart for capabilities. None of the six
