@@ -29,14 +29,22 @@ const version = (stdout: string) =>
     request.args[0] === "--version" ? { stdout } : { exitCode: 0 },
   );
 
-/** A `codex plugin list --json` response naming our plugin, resolved at `pluginRoot`. */
+/**
+ * A `codex plugin list --json` response naming our plugin, resolved at
+ * `pluginRoot`. Real top-level shape, per spec §14.4 (Task 17, verified
+ * against a real 0.147.0 binary): `{ installed: [...], available: [...] }`,
+ * each entry's path nested under `source.path` and `enabled` a boolean field
+ * — never the guessed `{ plugins: [{ name, status?, path? }] }` shape this
+ * fixture previously used.
+ */
 const ourTreeAt = (pluginRoot: string) =>
   runner((request) => {
     if (request.args[0] === "--version") return { stdout: "codex-cli 0.147.0" };
     if (request.args[0] === "plugin" && request.args[1] === "list") {
       return {
         stdout: JSON.stringify({
-          plugins: [{ name: "developer-os", status: "enabled", path: pluginRoot }],
+          installed: [{ name: "developer-os", enabled: true, source: { path: pluginRoot } }],
+          available: [],
         }),
       };
     }

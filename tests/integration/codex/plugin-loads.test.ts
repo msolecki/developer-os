@@ -6,7 +6,6 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ManagedArtifactV1 } from "@developer-os/core";
 import {
-  MARKETPLACE_NAME,
   PLUGIN_NAME,
   PLUGIN_TREE_SEGMENTS,
   proposeCodexInstall,
@@ -257,7 +256,7 @@ describe("the generated install tree against a real Codex installation", () => {
       expect(contracts.length).toBe(6);
       for (const contract of contracts) {
         expect(stdout, `missing skill for ${contract.id}`).toContain(
-          `${MARKETPLACE_NAME}:developer-os-${contract.id}`,
+          `${PLUGIN_NAME}:developer-os-${contract.id}`,
         );
       }
     },
@@ -366,9 +365,11 @@ describe("the generated install tree against a real Codex installation", () => {
         throw new Error("proposeCodexUninstall produced fewer than two registration steps");
       }
 
-      // Step one, real and correct: succeeds.
-      const removeResult = await runCodex(removeStep.args);
-      expect(removeResult.stdout.length).toBeGreaterThanOrEqual(0);
+      // Step one, real and correct: succeeds. `runCodex` rejects on a
+      // non-zero exit, so the `await` completing without throwing is the
+      // success check; there is no `exitCode` field on the resolved value
+      // to assert against.
+      await runCodex(removeStep.args);
 
       // Step two, deliberately wrong: a marketplace name nothing registered.
       // A real refusal from 0.147.0, not a mock.
@@ -384,9 +385,9 @@ describe("the generated install tree against a real Codex installation", () => {
       // must still survive, exactly as spec §4.2 requires.
       expect(await inventory(productHome)).toEqual(beforeUninstall);
 
-      // Now the real step two, correct: succeeds.
-      const unregisterResult = await runCodex(unregisterStep.args);
-      expect(unregisterResult.stdout.length).toBeGreaterThanOrEqual(0);
+      // Now the real step two, correct: succeeds — same reasoning as step
+      // one above, the `await` not throwing is the success check.
+      await runCodex(unregisterStep.args);
 
       // Both real CLI steps have now succeeded — remove the tree, exactly as
       // spec §4.2 orders it.
