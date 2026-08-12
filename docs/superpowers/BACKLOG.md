@@ -62,7 +62,7 @@ Open work only. Program Tasks 0 to 3 are closed and are not rows here.
 | Program (umbrella) | 1 plan | Tasks 4–9 open; Tasks 0–3 closed and not rows here |
 | DOS-P5 … DOS-P7 | DOS-P5 is **3/18 implemented**; DOS-P6 and DOS-P7 have no documents yet | 2 specs, 2 plans, 3 implementations |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian) and NEW-11 (S, the invisible-title rule stops at `title`) |
+| Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian), NEW-11 (S, the invisible-title rule stops at `title`) and NEW-12 (S, the argv screen's word list also screens free-form prose) |
 | Repository infrastructure | §5 | two directories a later subsystem still owes; `packages/adapter-claude/`, `plugins/claude/` and `tests/integration/` landed with DOS-P4 on 2026-08-11 |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -133,6 +133,29 @@ if it left nothing, it was not worth recording. Git history is the archive.
   for a blank tag needs no renderer change and no new module, and it does not prejudge the policy
   question the full fix has to answer — whether an invisible tag is an error, a warning, or
   silently dropped at index time.
+
+### NEW-12 — the argv screen's word list also screens free-form prose
+
+- **Status:** open, found 2026-08-12 by the fresh-context review of DOS-P5 Task 3.5 · **Owner:**
+  whichever subsystem first gives `agent.prompt` a production caller — DOS-P6 by default ·
+  **Size:** S
+- `screenValueArgument` in `packages/security/src/cli.ts` applies **two** rules to every value
+  reaching a vendor CLI: a *positional* one (nothing may begin with `-`, so it cannot be reread as
+  an option) and a *nominal* one (nothing may match `/permission|danger|bypass/iu`). Both are
+  applied to `invocation.prompt`, which is free-form prose written by a workflow author.
+- **Only the positional rule is load-bearing for a prompt.** Prose cannot be reinterpreted as a
+  CLI option, so the word list buys nothing there while refusing legitimate text — a prompt asking
+  a model to "check for dangerous patterns" is refused, and the workflow's failure is a `refused`
+  with a message about permission surfaces.
+- **Not a regression and not reachable today.** The narrower `/permission|dangerous/iu` that
+  shipped with DOS-P4 refused that same sentence, and `invokeClaude` has no production caller —
+  only tests construct an invocation. Task 3.5 widened the pattern to `danger`, which enlarges the
+  false-positive surface without changing the shape of the problem.
+- **The fix is to split the screen by position, not to narrow the pattern.** An argument that
+  *becomes* a flag if it looks like one (a tool name, a directory, a sandbox mode) needs both
+  rules; a terminal prose argument needs the dash rule alone. Narrowing the word list instead
+  would weaken the values that do need it, which is the direction DOS-P5 Task 12 exists to
+  prevent.
 
 ### NEW-7 — a link destination's percent-encoding is unverified against Obsidian
 
