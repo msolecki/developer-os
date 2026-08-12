@@ -7,9 +7,10 @@ import type { CodexInstallation } from "./discover.js";
 
 /**
  * Spec §7: the shape a compiled `agent.prompt` step and its derived scopes
- * become before they reach `invokeCodex`. `prompt` and `writeScopes` still
- * need `screenValueArgument` before they reach argv — this type only
- * describes the *shape*, not that the values are already safe.
+ * become before they reach `invokeCodex`. Every field here that reaches an
+ * argv value position still needs `screenValueArgument` before it gets
+ * there — this type only describes the *shape*, not that the values are
+ * already safe.
  */
 export interface CodexInvocation {
   readonly prompt: string;
@@ -45,7 +46,7 @@ export interface InvocationContext {
  * this package. A named constant so a future change to it shows as a diff
  * here, rather than as a silent edit inside a literal nothing else points at.
  */
-const DEFAULT_TIMEOUT_MS = 30_000;
+export const DEFAULT_TIMEOUT_MS = 30_000;
 
 /**
  * The one door from a workflow's `agent.prompt` `with` block to a
@@ -55,8 +56,11 @@ const DEFAULT_TIMEOUT_MS = 30_000;
  * workflow that validates against one vendor and not the other.
  *
  * `context` carries what the compiler already derived — `workingRoot`,
- * `writeScopes`, `outputSchemaPath` — and is never author-controlled the way
- * `args` is, so it is trusted as given rather than re-validated here.
+ * `writeScopes`, `outputSchemaPath` — rather than anything read directly out
+ * of `args`. That is not a trust boundary: `invokeCodex` screens every one
+ * of these fields with `screenValueArgument` before they reach argv
+ * regardless of where they came from, because the positional rule it
+ * enforces does not take provenance as an input.
  */
 export function invocationFromAgentPrompt(
   args: unknown,
@@ -94,26 +98,44 @@ export function invocationFromAgentPrompt(
  *
  * **Provisional, and this must stay visible at the call site.** The spec
  * documents that the output is JSONL but does not document the event
- * vocabulary, so "the last line that parses as JSON" is the best available
- * rule, not a verified one — there is no confirmed guarantee that the
- * terminal event is always the final response rather than, say, a trailing
- * usage or session-close event on some Codex version. Establishing the real
- * terminal event's shape, and amending this spec with it, is the integration
- * task's job (against a real installation), not this unit-tested module's.
- * No event-type value is filtered on here for the same reason: inventing one
- * risks silently mismatching a future vendor version, a failure only that
- * integration test would catch.
+ * vocabulary, so "the last line that parses to a non-null JSON object" is
+ * the best available rule, not a verified one — there is no confirmed
+ * guarantee that the terminal event is always the final response rather
+ * than, say, a trailing usage or session-close event on some Codex version.
+ * Establishing the real terminal event's shape, and amending this spec with
+ * it, is the integration task's job (against a real installation), not this
+ * unit-tested module's. No event-type value is filtered on here for the same
+ * reason: inventing one risks silently mismatching a future vendor version,
+ * a failure only that integration test would catch.
+ *
+ * The object requirement guards the same risk from the other side: a stray
+ * scalar or `null` line after the real result — a `123` or `"done"` emitted
+ * by some event type this module has not seen — must not be read as the
+ * payload just because it parses.
+ *
+ * This rule also **narrows** an input class the direct
+ * `parseStructuredPayload(stdout)` call it replaced could still handle: a
+ * pretty-printed single JSON document spread over several lines parses fine
+ * as one string, but split by line here, no individual line parses on its
+ * own, so this function returns `""` and the call now fails as
+ * `malformed-output`. Harmless today because this module's argv always
+ * passes `--json`, which Codex documents as one event per line (spec
+ * §14.1), and the failure is closed rather than open — but whoever changes
+ * this rule next should know it already gave something up, not only that it
+ * might give up more.
  */
 function finalJsonlLine(stdout: string): string {
   let last = "";
   for (const line of stdout.split(/\r?\n/u)) {
     const trimmed = line.trim();
     if (trimmed.length === 0) continue;
+    let parsed: unknown;
     try {
-      JSON.parse(trimmed);
+      parsed = JSON.parse(trimmed);
     } catch {
       continue;
     }
+    if (typeof parsed !== "object" || parsed === null) continue;
     last = trimmed;
   }
   return last;
