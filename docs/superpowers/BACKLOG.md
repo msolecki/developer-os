@@ -60,7 +60,7 @@ Open work only. Program Tasks 0 to 3 are closed and are not rows here.
 | Area | Where | What is left |
 |---|---|---|
 | Program (umbrella) | 1 plan | Tasks 4–9 open; Tasks 0–3 closed and not rows here |
-| DOS-P5 … DOS-P7 | DOS-P5 spec approved **and planned** 2026-08-11; **DOS-P4 shipped** the same day | 2 specs, 2 plans, 3 implementations |
+| DOS-P5 … DOS-P7 | DOS-P5 is **3/18 implemented**; DOS-P6 and DOS-P7 have no documents yet | 2 specs, 2 plans, 3 implementations |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
 | Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian) and NEW-11 (S, the invisible-title rule stops at `title`) |
 | Repository infrastructure | §5 | two directories a later subsystem still owes; `packages/adapter-claude/`, `plugins/claude/` and `tests/integration/` landed with DOS-P4 on 2026-08-11 |
@@ -228,13 +228,11 @@ names it as the design of record; its plan is deleted, recoverable at `81e7e7d`.
   the `AGENTS.md` decision, and the transcript refusal. Its §14 is normative — an implementation may
   not depend on a Codex surface not listed there. §12 is the table DOS-P6 inherits; §15 carries five
   items it does not close
-- **Plan:** `plans/2026-07-21-developer-os-codex-adapter.md` — **written 2026-08-11, eighteen
-  tasks, unstarted.** Tasks 1 to 3 are not Codex work: they close four residuals
-  `claude-adapter.md` §9 assigned to "the point where a second adapter exists", by moving the
-  capability vocabulary into `packages/core`, the code-point ordering onto
-  `packages/workflow-schema`'s door, the Markdown display seam into `packages/security`, and the
-  vendor-neutral skill body into `packages/workflow-schema`. Two decisions in it are the founder's
-  and are in §8 of this file
+- **Plan:** `plans/2026-07-21-developer-os-codex-adapter.md` — written 2026-08-11, eighteen tasks,
+  **3/18 done on 2026-08-12**, resume at Task 4. Tasks 1 to 3 closed four residuals
+  `claude-adapter.md` §9 assigned to "the point where a second adapter exists"; their step lists
+  are deleted and the plan carries what they produced. Both decisions they raised are ratified
+  and discharged in §8 of this file
 - **Program task:** 5 · **Complexity:** L · **Blocked by:** nothing
 - **Produces:** `CodexAdapter`, `CodexCapabilities`, `CodexInvocation`, `plugins/codex/`,
   managed hook plans, structured agent-run results.
