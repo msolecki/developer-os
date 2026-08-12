@@ -86,8 +86,13 @@ We generate one tree, under the product home:
     │   ├── developer-os-ingest/SKILL.md
     │   ├── developer-os-brain-search/SKILL.md
     │   └── developer-os-doctor/SKILL.md
-    └── hooks/hooks.json
+    └── hooks/hooks.json  ← aspirational, not shipped — see the note below
 ```
+
+**Amended 2026-08-12, by the fresh-context review of Task 17.** `hooks/hooks.json` above is
+aspirational: `buildPluginTree` (`plugin.ts`) does not emit it, and no step of this plan writes it.
+§15 item 1 records why and defers restoring it to DOS-P6; this diagram previously showed it
+unmarked, which read as shipped.
 
 ### 4.1 Codex's CLI is the only writer of Codex's config
 
@@ -164,10 +169,12 @@ observation, not a range (§15 item 2).
 
 ### 5.2 The probe is better here than it is for Claude
 
-`codex plugin list --json` reports installed plugins with their status and resolved path (§14.4),
-which settles three things in one call: whether our plugin is installed, whether it is enabled, and
-whether the path it resolves to is the tree we own. DOS-P4 needed a separate settings read to
-distinguish presence from enablement; here it is one structured result.
+`codex plugin list --json` reports installed plugins with an `enabled` field and a resolved path
+nested under `source.path` — never a top-level `status` or `path` (§14.4, amended 2026-08-12 by
+Task 17 against a real 0.147.0 binary), which settles three things in one call: whether our plugin
+is installed, whether it is enabled, and whether the path it resolves to is the tree we own. DOS-P4
+needed a separate settings read to distinguish presence from enablement; here it is one structured
+result.
 
 ### 5.3 Capture, and the trust gate
 
@@ -488,9 +495,19 @@ against a real installation before this task:
   not found in marketplace \`developer-os\`` (exit 1). A relative path with no leading `./`
   (`plugins/developer-os`) fails identically. Only `./plugins/developer-os` — matching the vendor's
   own scaffolding tool, which always emits this exact `./plugins/<plugin-name>` form — resolves.
-  Resolution is against the **marketplace root** (the directory containing `marketplace.json`),
-  confirmed by running the CLI from a working directory outside that root entirely; it does not
-  depend on process `cwd`. Fixed in `renderMarketplace` (`marketplace.ts`) and
+  Resolution is against the **marketplace root**, confirmed by running the CLI from a working
+  directory outside that root entirely; it does not depend on process `cwd`.
+
+  **Amended 2026-08-12, by the fresh-context review of Task 17.** The marketplace root is **not**
+  "the directory containing `marketplace.json`" — `MARKETPLACE_RELATIVE_PATH` is
+  `.agents/plugins/marketplace.json`, so that directory is `<product-home>/codex/.agents/plugins/`,
+  two levels below the root. The marketplace root is the directory passed to `codex plugin
+  marketplace add` — `<product-home>/codex`, the directory *containing* `.agents/plugins/`. A
+  relative `./plugins/developer-os` resolves correctly only against that directory; resolved
+  against `.agents/plugins/` itself it would look for the non-existent
+  `.agents/plugins/plugins/developer-os`. The code was always correct (`PLUGIN_TREE_PREFIX` is
+  relative to `<product-home>/codex`, per `plugin.ts`); only this parenthetical was wrong. Fixed in
+  `renderMarketplace` (`marketplace.ts`) and
   `installRegistration`/`uninstallRegistration` (`install.ts`) by this same task, since without both
   fixes no step of the install this spec describes succeeds against a real CLI at all.
 - **`codex plugin list --json`'s actual top-level shape is `{ "installed": [...], "available":
