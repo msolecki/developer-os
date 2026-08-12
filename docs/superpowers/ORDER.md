@@ -88,18 +88,9 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |
 
-**A10's dependencies are both discharged.** DOS-P4 closed 2026-08-11 and DOS-P5 on 2026-08-12, so
-nothing gates A10 but the founder's approval of its spec. Between them the two adapters hand DOS-P6
-thirteen of their twenty-four residuals — `claude-adapter.md` §9 and `codex-adapter.md` §11 — and
-the `NOW` block above names the two that shape the spec rather than merely appearing in it. Until they land, three of the
-six shipped skills name a command that does not exist, in both vendor trees.
-
-**A12 decision, settled 2026-08-10 by the founder: it gets its own plan.** The program plan
-enumerates Task 8's ten steps inline and mandates neither a spec nor a plan; the founder ruled that
-it gets one anyway, because A12 is the only task that mutates the live machine and its rollback
-must be rehearsed before cutover is declared complete. Authored against A11's output, not before
-it — a cutover plan written ahead of the lifecycle it cuts over to would specify commands that do
-not exist. `BACKLOG.md` §4 carries what it must contain.
+**A10's dependencies are both discharged**, so nothing gates it but the founder's approval of its
+spec. **A12 gets its own plan** — settled by the founder 2026-08-10, authored against A11's output
+and not before it; `BACKLOG.md` §4 carries the reasoning and what it must contain.
 
 ---
 

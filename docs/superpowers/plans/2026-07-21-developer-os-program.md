@@ -99,7 +99,7 @@ P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5
 
 ---
 
-### Tasks 0 to 4 — closed, and not described here
+### Tasks 0 to 5 — closed, and not described here
 
 | Task | Closed | What survives it |
 |---|---|---|
@@ -108,49 +108,36 @@ P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5
 | 2 — Brain engine | 2026-08-10 | `docs/architecture/brain.md`, and `specs/2026-07-21-developer-os-brain-engine-design.md` as the design of record |
 | 3 — workflow compiler | 2026-08-10 | `docs/architecture/workflow-schema.md`, and `specs/2026-07-21-developer-os-workflow-compiler-design.md` as the design of record |
 | 4 — Claude Code adapter | 2026-08-11 | `docs/architecture/claude-adapter.md`, and `specs/2026-07-21-developer-os-claude-adapter-design.md` as the design of record |
+| 5 — Codex adapter | 2026-08-12 | `docs/architecture/codex-adapter.md`, and `specs/2026-07-21-developer-os-codex-adapter-design.md` as the design of record |
 
 None can be re-run and none should be read as instruction: Task 0's inputs are deliberately out
-of reach, and the plans for Tasks 1 and 2 were deleted when their last steps closed. The
-recovery commits for all three are in `BACKLOG.md`'s rules, which is the one place that index
-lives — a second copy here is how two indexes come to disagree.
+of reach, and every plan behind these six was deleted when its last step closed. The recovery
+commits are in `BACKLOG.md`'s rules, which is the one place that index lives — a second copy here
+is how two indexes come to disagree.
 
-**Task 4 closed with two of its eight steps unearned, and they are Task 6's.** Recorded here
-because a reader of the checkpoint alone would read them as done: no lifecycle surface could be
-observed firing, so no hook ships and all three lifecycle capabilities report `wrapper-required`;
-and `developer-os run claude` has nothing to capture into until the capture contract exists.
-**Its checkpoint is likewise half met.** The six skills load in a real installation and `doctor`
-and `brain search` name commands that exist, while `capture`, `ingest` and `review` name verbs with
-no handler anywhere in this product — six of the seven unimplemented verbs are Task 6's. An adapter
-renders workflows and executes none of them, so Task 4 could not have closed that half.
+**Their step lists are deleted rather than kept as ticked boxes.** A closed task carrying a
+checklist is a document inviting the next session to redo it, and a checkbox nobody can trust is
+worse than no checkbox — this repository has produced both, in both directions, three times.
+The last occurrence was in the *open* tasks: `9a196c9` ticked thirteen boxes across Tasks 4 to 7
+while none of the code existed, corrected 2026-08-11. Deleting a closed list does not defend
+against that direction; the staging rule does. `git add` the paths your own task owns, and read
+`git show --stat HEAD` before believing a commit contains only what you meant.
 
-**Their step lists are deleted rather than kept as ticked boxes**, and Tasks 2 and 3 are both
-why that rule is worth obeying. Task 2 stood marked COMPLETE while three of its boxes were still
-unticked and the work those boxes describe had landed days earlier — the synthetic fixture among
-them, which `BACKLOG.md` §5 records as created on 2026-08-08. A closed task carrying a stale checklist is a
-document inviting the next session to redo it. Task 3 was the same failure in the other
-direction: four of its six boxes stood ticked while `packages/workflow-schema` did not exist,
-and the two still unticked when it closed were the two that had *actually* been done first —
-the founder approved the schema on 2026-08-10, and the six canonical workflows were written
-from the product spec. A checkbox nobody can trust is worse than no checkbox.
+**Tasks 4 and 5 both closed half met, and the missing half is Task 6's.** Recorded here because a
+reader of the two checkpoints alone would read them as whole. What landed: six skills load in a
+real Claude installation and in a real Codex one, and `doctor` reports both adapters with their
+differences. What did not, in both vendor trees:
 
-**It happened a third time, and this one was in the open tasks rather than the closed ones.**
-`9a196c9` — a DOS-P2 commit — ticked thirteen boxes across Tasks 4, 5, 6 and 7 in the same pass
-that legitimately ticked Tasks 2 and 3. Corrected on 2026-08-11, all thirteen back to unticked,
-after checking each against the tree: there is no `packages/adapter-claude/`, no
-`packages/adapter-codex/`, no `capture/`, `review/` or `ingest/` under `packages/brain/src/`, no
-`tests/security/`, and no Git, `launchd`, update or release code anywhere. **One of the thirteen
-was not simply false and is worth stating**, because unticking it could otherwise read as a claim
-that the work regressed: Foundation did ship the transaction journal, per-file backup, atomic
-replacement, resume, rollback and concurrent-edit refusal. Task 6's box asks for that machinery
-hardened around capture and ingest, and those paths do not exist, so the box is unearned rather
-than the code missing. The inline note on that line says so.
+- **`capture`, `ingest` and `review` name verbs with no handler anywhere in this product** — six of
+  the seven unimplemented verbs are Task 6's. An adapter renders workflows and executes none of
+  them, so neither task could have closed that half.
+- **Neither ships `hooks/hooks.json`**, ratified for both adapters at once on 2026-08-12: a
+  `type: "command"` handler needs an executable file, nothing in this pipeline can express an
+  executable bit, and the only nameable command is the `developer-os` capture entrypoint, which is
+  Task 6's. All three lifecycle capabilities therefore report `wrapper-required` and `plugin_hooks`
+  reports `unknown`.
 
-**The pattern in all three occurrences is the same**: a commit closing one task edited the
-checkboxes of tasks it was not doing. The two structural defences already in place — deleting a
-closed task's step list, and `SESSION.md` §5.3 — do not cover this direction, because the boxes
-that moved belonged to tasks that are still open and whose lists must therefore stay. What does
-cover it is the staging rule: `git add` the paths your own task owns, and read `git show --stat
-HEAD` before believing a commit contains only what you meant.
+`claude-adapter.md` §8 and §9 and `codex-adapter.md` §10 and §11 are the full record, with owners.
 
 **One thing Task 3's file list said that its checkpoint did not need.** It asked for the command
 names frozen in `docs/migration/baseline-capabilities.json` — `lint`, `reindex`, `ingest`,
@@ -158,64 +145,6 @@ names frozen in `docs/migration/baseline-capabilities.json` — `lint`, `reindex
 those are what shipped; `lint` and `reindex` are served by the `brain` CLI group DOS-P2 shipped,
 which is a command surface rather than an agent workflow, and `test` is a repository gate. The
 spec wins over the plan, and this is recorded rather than left as an apparent omission.
-
-### Task 5: Specify and implement the Codex adapter
-
-**Closed 2026-08-12. What survives it: `docs/architecture/codex-adapter.md`, and
-`specs/2026-07-21-developer-os-codex-adapter-design.md` as the design of record.** Its
-implementation plan is deleted, per the rule that `plans/` holds only unfinished work.
-
-**Its step list is kept rather than deleted, unlike Tasks 0–4's, because one box is unearned and
-one is only half true.** A closed task's list is normally removed so a later commit cannot move its
-checkboxes; here the boxes carry the record of what did *not* close, which is the more valuable of
-the two protections. Do not tick the remaining box; it is Task 6's.
-
-**The checkpoint is half met.** The plugin installs and all six skills load in a real Codex
-installation, and `doctor` reports both adapters with their differences. But `capture`, `ingest` and
-`review` name verbs with no handler anywhere in this product, so three of the six shipped skills
-reference commands that do not exist — the same half `claude-adapter.md` §8 records for Task 4, and
-for the same reason: an adapter renders workflows and executes none of them. Six of the seven
-unimplemented verbs are Task 6's. `docs/architecture/codex-adapter.md` §10 is the full record.
-
-**Complexity:** L
-
-**Files:**
-- Create: `docs/superpowers/specs/2026-07-21-developer-os-codex-adapter-design.md`
-- Create: `docs/superpowers/plans/2026-07-21-developer-os-codex-adapter.md` — *written 2026-08-11, nineteen tasks, deleted 2026-08-12 when its last step closed*
-- Create: `packages/adapter-codex/src/`
-- Generate: `plugins/codex/`
-- Create: `tests/contracts/adapters/codex/`, `tests/fixtures/agents/codex/`, and `tests/integration/codex/` — *`tests/fixtures/agents/codex/` was not created: every fake-CLI case injects its own `ProcessRunner` rather than reading a fixture file, which is how the Claude adapter's suites are built too*
-
-**Interfaces:**
-- Consumes: the same canonical workflow, Brain, security, platform, and ownership interfaces as Task 4.
-- Produces: `CodexAdapter`, `CodexCapabilities`, `CodexInvocation`, Codex plugin/skill/`AGENTS.md` artifacts, managed hook plans, and structured agent-run results. — *no `AGENTS.md` artifact ships and no managed hook plan ships: `docs/architecture/codex-adapter.md` §2.2 refuses `AGENTS.md` and `AGENTS.override.md` outright, and §5 records that no `hooks/hooks.json` ships for either adapter, so there is no hook plan for this package to manage.*
-
-**What:** Add Codex as an independent adapter without claiming undocumented transcript or lifecycle parity.
-
-**Where:** `packages/adapter-codex/` and generated `plugins/codex/`.
-
-**How:**
-
-- [x] Approve exact supported Codex surfaces against current official documentation and verified local behavior. — *the spec was written 2026-08-11 and approved by the founder the same day; its §14 is the normative list, and an implementation may not depend on a surface it does not carry.*
-- [x] Implement version and capability detection. — *`discover.ts`, `versions.ts`, `probe.ts` and `capabilities.ts`; the floor is `0.147.0`, **one observed version and not a range**, which `docs/architecture/codex-adapter.md` §3 records as DOS-P9's to widen or narrow.*
-- [x] Render the canonical workflows into Codex skills and durable guidance at the smallest appropriate scope. — *six skills; **no `AGENTS.md` is written at any scope**, because the smallest appropriate scope turned out to be inside the skill itself — the approved spec §6.1 says so plainly rather than presenting it as compliance with the phrase. `AGENTS.override.md` is refused outright: in the global scope Codex reads it instead of `AGENTS.md`.*
-- [x] Install only dedicated managed artifacts and semantically merge required config. — *the first half is `mergeStrategy: "dedicated"` over one owned tree. **The second half is dissolved rather than performed**: the vendor's own CLI writes the vendor's config, so no foreign file is merged and `buildConflictEvidence` has no consumer in either adapter. Approved spec §4.3; `BACKLOG.md` §8.*
-- [x] Implement safe non-interactive invocation and structured output validation. — *`codex exec` through the security runner, sandbox from the declared scopes, three flags refused by test. **The JSONL reduction is provisional and unverified** — settling it needs a real model call, declined by the founder on 2026-08-12; owner DOS-P6, `codex-adapter.md` §7.*
-- [ ] Implement documented hooks when available and wrapper-required capture otherwise. — *the second half shipped and the first did not. **Neither adapter ships `hooks/hooks.json`**: a `type: "command"` handler needs an executable file and nothing in this pipeline can express an executable bit, so the only nameable command is the `developer-os` capture entrypoint, which is Task 6's. Ratified by the founder 2026-08-12 for both adapters at once. Restoring it needs the hook bodies, an executable-bit mechanism and a firing test, in one change. **Owner: Task 6 / DOS-P6.***
-- [x] Refuse transcript parsing unless a stable documented contract exists and has a regression fixture. — *nothing in the tree names `transcript_path` on any code path. **Amended 2026-08-12:** this was real and unasserted — no test pinned the absence — until a fresh-context review caught it; `tests/repository/transcript-path.test.ts` now pins it directly, so the tick is earned rather than backed by a grep nobody reruns.*
-- [x] Test against a fake CLI first and a disposable real installation second. — *both; the real run against `codex-cli 0.147.0` contradicted the approved spec four times and three of those stopped the install completing at all (`codex-adapter.md` §7).*
-
-**Test:**
-
-- Codex artifacts regenerate idempotently and validate against the supported plugin/skill schema.
-- Direct and wrapper capability matrices are separately tested.
-- Install/update/uninstall preserves unrelated Codex configuration.
-- A missing capture hook becomes `wrapper-required`, not a false `yes`.
-- A Codex-only user completes the same synthetic Brain outcome contract as Claude.
-
-**Checkpoint:** Claude-only, Codex-only, and dual-adapter installations all work, with explicit differences in `doctor`. — *half met, 2026-08-12; see the note above this task's file list.*
-
----
 
 ### Task 6: Harden capture, review, ingest, security, and recovery
 
@@ -227,6 +156,8 @@ unimplemented verbs are Task 6's. `docs/architecture/codex-adapter.md` §10 is t
 - Extend: `packages/brain/src/capture/`, `packages/brain/src/review/`, and `packages/brain/src/ingest/`
 - Extend: `packages/security/src/`
 - Extend: `packages/core/src/transactions/`
+- Extend: `apps/cli/src/commands/` — the `capture`, `ingest` and `review` verbs both vendor trees already name
+- Extend: `packages/adapter-claude/` and `packages/adapter-codex/` — hook bodies only; both façades are frozen
 - Create: `tests/security/` and `tests/e2e/knowledge-lifecycle/`
 
 **Interfaces:**
@@ -239,7 +170,9 @@ unimplemented verbs are Task 6's. `docs/architecture/codex-adapter.md` §10 is t
 
 **How:**
 
-- [ ] Approve exact capture fields, lifecycle transitions, retention behavior, and redaction classes.
+- [ ] Approve exact capture fields, lifecycle transitions, retention behavior, and redaction classes. — *this is the keystone the two adapters wait on: it decides what a hook body does, which is what makes a lifecycle capability observable.*
+- [ ] Ship the `capture`, `ingest` and `review` verbs that the six shipped skills already name, in both vendor trees. — *inherited from Tasks 4 and 5; six of the seven unimplemented verbs are this task's. `claude-adapter.md` §8, `codex-adapter.md` §10.*
+- [ ] Restore `hooks/hooks.json` for both adapters in one change — hook bodies, a mechanism that can express an executable bit, and a test that observes a hook firing. — *inherited from Tasks 4 and 5, ratified for both adapters 2026-08-12. Until it lands, all three lifecycle capabilities report `wrapper-required` and `plugin_hooks` reports `unknown`. `claude-adapter.md` §5, `codex-adapter.md` §5.*
 - [ ] Implement atomic quarantine writes and post-redaction deduplication.
 - [ ] Implement accept/edit/reject review without automatic deletion.
 - [ ] Invoke agents with source material marked as untrusted data and a staging-only write contract.
