@@ -159,7 +159,7 @@ function assertValidRoot(root: string, field: "contentRoot" | "indexesDir"): voi
 }
 
 /**
- * Escapes the nine ASCII characters picomatch (and glob syntax generally)
+ * Escapes the ten ASCII characters picomatch (and glob syntax generally)
  * treats specially, so a root containing one is matched as a literal
  * directory name rather than as a pattern. `pathSegmentViolation` never
  * refuses these characters in a root — `!inbox`, `PROJECTS (2024)`, and
@@ -169,8 +169,23 @@ function assertValidRoot(root: string, field: "contentRoot" | "indexesDir"): voi
  * a live risk. A root can never contain the backslash used to escape with:
  * `pathSegmentViolation` refuses `\` unconditionally as a separator, so this
  * function never has to escape an escape.
+ *
+ * `|` belongs in this class and was missing from an earlier version of it.
+ * picomatch compiles a glob segment straight into a regular expression, and
+ * an unescaped `|` survives that compilation as a top-level alternation —
+ * not a character class member like the other nine, but no less a way for a
+ * root to name more than the one directory it claims to. `contentRoot =
+ * "a|b"` used to resolve `content/**` to `a|b/**`, which matched neither the
+ * directory the user actually configured (`a|b`, since `|` is the
+ * alternation operator, not a literal pipe, once unescaped) nor stayed
+ * inside it: `b`, `b/x.md`, and everything under any sibling literally named
+ * `b` all matched too. The degenerate case is worse — `contentRoot = "|"`
+ * compiles an alternation with an empty left branch, matching every path
+ * outright, including one starting at the filesystem root. A reviewer
+ * confirmed by exhaustive sweep over the printable ASCII range that these
+ * ten are now the complete class picomatch requires.
  */
-const GLOB_METACHARACTERS = /[*?[\]{}()!]/gu;
+const GLOB_METACHARACTERS = /[*?[\]{}()!|]/gu;
 
 function escapeGlobSegment(segment: string): string {
   return segment.replace(GLOB_METACHARACTERS, (character) => `\\${character}`);

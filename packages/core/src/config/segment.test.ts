@@ -51,6 +51,7 @@ describe("pathSegmentViolation", () => {
     "content (v2)",
     "_indexes!",
     "Notatki (stare)",
+    "Notes | Drafts",
   ])("accepts the ordinary directory name %s, a glob metacharacter alone is not a violation", (name) => {
     expect(pathSegmentViolation(name)).toBeNull();
   });

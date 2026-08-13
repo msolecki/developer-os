@@ -333,7 +333,7 @@ describe("resolveScopeGlob", () => {
   });
 
   /**
-   * Reversed from a second cut of this function, which refused these nine
+   * Reversed from a second cut of this function, which refused these
    * characters in `pathSegmentViolation` — the schema `contentRoot`,
    * `indexesDir`, `topicFolders`, and `topicAliases` all share — and so also
    * refused `!inbox`, the standard Obsidian convention for sorting a folder
@@ -346,7 +346,7 @@ describe("resolveScopeGlob", () => {
    * throw", so a regression that drops the escaping (leaving the character
    * live in the resolved glob) fails this test rather than passing silently.
    */
-  it.each(["*", "?", "[", "]", "{", "}", "(", ")", "!"])(
+  it.each(["*", "?", "[", "]", "{", "}", "(", ")", "!", "|"])(
     "accepts a root containing the glob metacharacter %s, escaped in the resolved glob",
     (character) => {
       expect(resolveScopeGlob("content/**", { ...config, contentRoot: character })).toBe(
@@ -359,6 +359,23 @@ describe("resolveScopeGlob", () => {
     expect(
       resolveScopeGlob("content/_raw/quarantine/**", { ...config, contentRoot: "notes!" }),
     ).toBe("notes\\!/_raw/quarantine/**");
+  });
+
+  /**
+   * `|` is not a character-class member the way the other nine are — an
+   * unescaped `|` inside a picomatch-compiled segment survives as a
+   * top-level regex alternation. `contentRoot = "a|b"` used to resolve
+   * `content/**` to `a|b/**`, matching neither the configured directory (the
+   * literal name `a|b`) nor staying inside it — `b` and everything under any
+   * sibling literally named `b` also matched. The degenerate case is worse:
+   * `contentRoot = "|"` alone compiles an alternation with an empty left
+   * branch, matching every path, including one rooted outside the vault
+   * entirely — this is the case that would have caught `|`'s absence, since
+   * the previous suite iterated the same nine characters it needed to and no
+   * more.
+   */
+  it("escapes a lone '|' root rather than producing an alternation that matches everything", () => {
+    expect(resolveScopeGlob("content/**", { ...config, contentRoot: "|" })).toBe("\\|/**");
   });
 
   it("refuses a root containing a NUL byte", () => {
