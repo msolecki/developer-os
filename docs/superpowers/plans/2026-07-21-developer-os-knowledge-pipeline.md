@@ -855,8 +855,20 @@ The rendered skill's **effect block** prints `Effect: capture.write` and names n
 **The invariant is not `implemented`.** A verb needs a command precisely so the rendered skill can name the invocation an agent runs — which must be true *before* the handler exists, since spec §4's whole point is that three shipped skills already name commands that do not. Two verbs carry no command, and the test names both with their reason, so adding a verb forces a decision rather than a default:
 
 ```ts
-/** The only two verbs with no command, each for its own reason. */
-const COMMANDLESS = ["agent.prompt", "cli.run"] as const;
+/**
+ * The four verbs with no command, each for its own reason. `brain.readIndex`
+ * and `brain.readNote` are here because `BRAIN_SUBCOMMANDS` in `main.ts` is
+ * `reindex | lint | search | status` — there is no `developer-os brain
+ * read-index` and no `read-note`, and inventing one would render a skill
+ * telling an agent to run a command that does not exist, which is the whole
+ * defect spec §4 closes.
+ */
+const COMMANDLESS = [
+  "agent.prompt",
+  "cli.run",
+  "brain.readIndex",
+  "brain.readNote",
+] as const;
 
 it("gives every verb a developer-os command, except the two that cannot have one", () => {
   const table = { ...EFFECT_VOCABULARY };
@@ -886,7 +898,9 @@ it("knows capture.edit, whose scopes match the review workflow's declared ones",
 });
 ```
 
-`agent.prompt` is the adapters', and there is no `developer-os` subcommand behind it. `cli.run` *is* the CLI — a command name for it would be the binary with no verb, which names nothing an agent could run. Both are `null`, and the second case is what stops a third joining them silently.
+`agent.prompt` is the adapters', and there is no `developer-os` subcommand behind it. `cli.run` *is* the CLI — a command name for it would be the binary with no verb, which names nothing an agent could run. `brain.readIndex` and `brain.readNote` have no subcommand either: `BRAIN_SUBCOMMANDS` (`apps/cli/src/main.ts:101-108`) is `reindex`, `lint`, `search` and `status`, and **no task in this plan adds one**. All four are `null`, and the second case is what stops a fifth joining them silently.
+
+**This matters beyond the table.** Task 7 adds `brain.readNote` as a *step* in `brain-search`, so if it carried an invented command the rendered skill would print an invocation that runs nothing — the exact defect spec §4 exists to close, reintroduced by the task closing it. If a later subsystem ships `developer-os brain read-note`, it removes the verb from `COMMANDLESS` **in the same change as the subcommand**, which is the rule `NOT_USED` already carries one layer up.
 
 In `skill.test.ts`, the rendering assertion, **positional** because the string it looks for is already in the artifact under `## Recovery`:
 
@@ -907,13 +921,17 @@ Run this against the current renderer first and watch it fail with `commandAt` *
 
 - [ ] **Step 2: Run them, watch them fail, implement, rerun**
 
-Seven verbs gain commands (spec §4): `capture.write` → `developer-os capture`; `capture.list`, `capture.setStatus` and `capture.edit` → `developer-os review`; `ingest.stage`, `ingest.validate` and `ingest.apply` → `developer-os ingest`. `brain.*` gain the `developer-os brain …` commands that already exist and `doctor.report` gains `developer-os doctor`. `agent.prompt` and `cli.run` keep `command: null`.
+Seven verbs gain commands (spec §4): `capture.write` → `developer-os capture`; `capture.list`, `capture.setStatus` and `capture.edit` → `developer-os review`; `ingest.stage`, `ingest.validate` and `ingest.apply` → `developer-os ingest`. Three more take the `brain` subcommands that already exist — `brain.search` → `developer-os brain search`, `brain.reindex` → `developer-os brain reindex`, `brain.lint` → `developer-os brain lint` — and `doctor.report` gains `developer-os doctor`. **`agent.prompt`, `cli.run`, `brain.readIndex` and `brain.readNote` keep `command: null`**, per the list above.
 
 **`implemented` stays `false` on all seven here**, and is set `true` only in the task that ships each handler — Task 9 for `capture.write`, Task 10 for the three review verbs, Task 13 for the three ingest verbs. A table that claims a handler before one exists is exactly the defect the `NOT_USED` rule exists to prevent one layer up. The command and the handler are different facts, which is why the test above no longer keys one on the other.
 
 `sealVocabulary` copies `command` through with the rest; it is a scalar, so no extra freeze is needed, but confirm the null-prototype and deep-freeze properties still hold with a case.
 
-**Two existing tests break here and must be updated in this task, not worked around.** `packages/workflow-schema/src/vocabulary.test.ts` pins the whole table with one `toStrictEqual` over all fourteen entries, and pins the unimplemented set with another. Adding `command` to every footprint breaks the first; adding `capture.edit` breaks both. Update both pins to the new expected values, and **update the second pin again in Tasks 9, 10 and 13** as each moves verbs out of the unimplemented set — that test's name ("marks the seven unimplemented verbs…") changes with its contents.
+**Two existing tests break here and must be updated in this task, not worked around.** `packages/workflow-schema/src/vocabulary.test.ts` pins the whole table with one `toStrictEqual` over all fourteen entries (`:32-47`), and pins the unimplemented set with another (`:104-126`). Adding `command` to every footprint breaks the first; adding `capture.edit` breaks both.
+
+**Both pins break again in Tasks 9, 10 and 13, not just the second one.** The whole-table pin builds its expectations from a shared `const capture = { …, implemented: false }` at line 29, so flipping `capture.write` in Task 9 breaks it exactly as it breaks the unimplemented-set pin. Each of those three tasks updates **both**, and each stages `vocabulary.test.ts` alongside `vocabulary.ts` — the staging lists in Tasks 9, 10 and 13 name only the source file, which makes the local gate green and the commit red.
+
+A test edited to go green is the shape SESSION.md §4 warns about, so state in each of those four task reports **what the pin asserted before and after**, and confirm the change is the table's new truth rather than the pin bending to the code.
 
 A test edited to go green is the shape SESSION.md §4 warns about, so state in each of those four task reports **what the pin asserted before and after**, and confirm the change is the table's new truth rather than the pin bending to the code.
 
@@ -1355,7 +1373,8 @@ Set `capture.write.implemented = true` in `EFFECT_VOCABULARY`; Task 5's test the
 npm run check
 git add apps/cli/src/commands/capture.ts apps/cli/src/commands/capture.test.ts \
         apps/cli/src/main.ts apps/cli/src/main.test.ts \
-        packages/workflow-schema/src/vocabulary.ts
+        packages/workflow-schema/src/vocabulary.ts \
+        packages/workflow-schema/src/vocabulary.test.ts
 git commit -m "feat(cli): developer-os capture writes one quarantined observation"
 ```
 
@@ -1478,7 +1497,8 @@ npm run check
 git add packages/brain/src/review packages/brain/src/index.ts \
         apps/cli/src/commands/review.ts apps/cli/src/commands/review.test.ts \
         apps/cli/src/main.ts apps/cli/src/main.test.ts \
-        packages/workflow-schema/src/vocabulary.ts
+        packages/workflow-schema/src/vocabulary.ts \
+        packages/workflow-schema/src/vocabulary.test.ts
 git commit -m "feat(cli): review accepts, rejects, and brings a hand edit back under redaction"
 ```
 
@@ -1806,7 +1826,8 @@ Set `ingest.stage`, `ingest.validate` and `ingest.apply` to `implemented: true`.
 npm run check
 git add packages/brain/src/ingest apps/cli/src/commands/ingest.ts \
         apps/cli/src/commands/ingest.test.ts apps/cli/src/main.ts apps/cli/src/main.test.ts \
-        packages/workflow-schema/src/vocabulary.ts
+        packages/workflow-schema/src/vocabulary.ts \
+        packages/workflow-schema/src/vocabulary.test.ts
 git commit -m "feat(cli): ingest applies one capture per transaction and ends indexed"
 ```
 
