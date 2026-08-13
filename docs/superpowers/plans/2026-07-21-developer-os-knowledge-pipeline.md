@@ -963,7 +963,7 @@ git commit -m "feat(workflow-schema): a verb names the command that runs it"
 - Modify: `packages/workflow-schema/src/vocabulary.ts`, `src/index.ts`
 - Test: `packages/workflow-schema/src/vocabulary.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 **`packages/workflow-schema` may not import `packages/brain`** — the dependency direction is `core ← security ← workflow-schema`, and brain is not on it. `BrainConfigV1` comes from `@developer-os/core`, where its type lives (`packages/core/src/config/types.ts`). The *default* value, `DEFAULT_BRAIN_CONFIG`, lives in `packages/brain/src/schema/config.ts` and must **not** be imported here: the test builds its own literal of the type, and asserts the two roots it depends on (`contentRoot: "content"`, `indexesDir: "_indexes"`) match the globs in `EFFECT_VOCABULARY`, which is the coupling that actually matters.
 
@@ -1008,7 +1008,7 @@ it("refuses a configuration whose roots contain a path separator or a traversal"
 
 The last case matters more than it looks: `contentRoot` is user configuration, and a glob is about to become a path check. A root carrying `..` or `/` would widen every scope derived from it.
 
-- [ ] **Step 2: Implement, rerun, commit**
+- [x] **Step 2: Implement, rerun, commit**
 
 Segment-wise replacement of the first segment and of an `_indexes` segment, never a substring replace — `content` appears inside `contents` and a `String.replace` here is a defect waiting for a vault named `my-content`.
 
