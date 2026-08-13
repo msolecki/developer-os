@@ -627,7 +627,7 @@ With no hooks and no wrapper, six of the nine capability keys describe surfaces 
 - Produces: `CapabilityState = "yes" | "unknown" | "not-used"`. Every consumer of the old union is a compile error until it is updated, which is the point.
 - Produces: a third discovery outcome, per Step 3 — today `checkClaudeCapabilities` and `checkCodexCapabilities` (`doctor.ts:274`, `:342`) swallow a discovery **throw** and pass `executablePath: null`, which reports `absent`. `unreadable` is reachable only when the path is non-null *and* `discoverX` returns `null`, so nothing can currently produce it from a failing discovery.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In each adapter's `capabilities.test.ts`:
 
@@ -665,7 +665,7 @@ In `apps/cli/src/adapter-capability-parity.test.ts`, beside the existing asserti
 
 In `codex-capabilities.test.ts`: **no report carries the `/hooks` trust-recovery string.** `reportCodexCapabilities` attaches it on every branch today, so a report can never omit it (`codex-adapter.md` §5); with no hooks shipped, the advice is removed rather than reworded, and its test with it.
 
-- [ ] **Step 2: Run them, watch them fail, implement, rerun**
+- [x] **Step 2: Run them, watch them fail, implement, rerun**
 
 `CAPABILITY_STATES` substitutes one member. Each adapter's `UNSETTLED` is renamed `NOT_USED`, extended to the six keys, exported, and resolved before the table or the observation is consulted — which is exactly what `UNSETTLED` already did, with an honest word. The remaining `wrapper-required` branch in each `resolveCapabilities` becomes `unknown`.
 
@@ -673,7 +673,7 @@ Carry the docblock forward with the rule it protects, verbatim in force: **remov
 
 `captureVia` on both report types loses its `"hook"` branch: `session_end_capture` is now `not-used` unconditionally, so the ternary is dead code that would read as a live possibility. Replace the field with `captureVia: "command"` on every branch and update both tests — a capture reaches the vault because somebody ran a command, and the report should say so rather than name a wrapper.
 
-- [ ] **Step 3: Write the failing tests for the two defects in the same files**
+- [x] **Step 3: Write the failing tests for the two defects in the same files**
 
 Spec §7.5's remaining pair. They live in these two files, they are duplicated across both vendors, and **they must change together** — which is why they are folded in here rather than given their own task.
 
@@ -720,7 +720,7 @@ it.each(["claude", "codex"] as const)(
 
 This is the defect a fresh-context review caught on 2026-08-11 for Claude, which DOS-P5 then reproduced for Codex by symmetry. Both are fixed here, in one change, and every assertion is written against the *messages* rather than the check ids — because the end-to-end fixture that pinned the old behaviour green read ids and not messages.
 
-- [ ] **Step 4: Run the gate and commit**
+- [x] **Step 4: Run the gate and commit**
 
 ```bash
 npm run check
