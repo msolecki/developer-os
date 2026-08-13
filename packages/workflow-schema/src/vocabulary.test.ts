@@ -68,7 +68,7 @@ describe("EFFECT_VOCABULARY", () => {
     "brain.readNote",
   ] as const;
 
-  it("gives every verb a developer-os command, except the two that cannot have one", () => {
+  it("gives every verb a developer-os command, except the four that cannot have one", () => {
     const table = { ...EFFECT_VOCABULARY };
     expect(Object.keys(table).length).toBeGreaterThan(10);
 
@@ -81,7 +81,15 @@ describe("EFFECT_VOCABULARY", () => {
     }
   });
 
-  it("names exactly the two commandless verbs, so a third cannot appear by omission", () => {
+  /**
+   * Named "a fifth cannot appear by omission" rather than "a third": the task-5
+   * brief's original prose said "two verbs carry no command" and left that word
+   * in these two test names after `COMMANDLESS` grew to four during the
+   * pre-flight correction. Fixed here per the Task-5 fix-pass review, so the
+   * miscount is not copied forward into a later task that reads this file as a
+   * template.
+   */
+  it("names exactly the four commandless verbs, so a fifth cannot appear by omission", () => {
     const without = Object.entries({ ...EFFECT_VOCABULARY })
       .filter(([, footprint]) => footprint.command === null)
       .map(([verb]) => verb)
@@ -93,6 +101,48 @@ describe("EFFECT_VOCABULARY", () => {
     const footprint = lookupVerb("capture.edit");
     expect(footprint?.read).toStrictEqual(["content/_raw/quarantine/**"]);
     expect(footprint?.write).toStrictEqual(["content/_raw/quarantine/**"]);
+  });
+
+  /**
+   * Transcribed from `apps/cli/src/main.ts`, not imported: `packages/workflow-
+   * schema` is a dependency of the CLI, not the other way around, so this list
+   * cannot be `import`ed without inverting that direction. `KNOWN_CLI_COMMANDS`
+   * is `Object.keys(COMMAND_POSITIONALS)` (`main.ts:89-99`) — the arity table is
+   * the actual dispatch surface, not the prose in `USAGE` — and
+   * `KNOWN_BRAIN_SUBCOMMANDS` is `Object.keys(BRAIN_SUBCOMMANDS)`
+   * (`main.ts:101-108`). If `main.ts` adds or renames a command, this list goes
+   * stale by hand rather than by import; that is the cost of not inverting the
+   * dependency, accepted because a command name was previously checked by
+   * nothing at all — a comment and a list, per the fix-pass review.
+   */
+  const KNOWN_CLI_COMMANDS = [
+    "init",
+    "status",
+    "doctor",
+    "repair",
+    "uninstall",
+    "brain",
+    "search",
+  ] as const;
+  const KNOWN_BRAIN_SUBCOMMANDS = ["reindex", "lint", "search", "status"] as const;
+
+  it("names a real CLI command once a verb's handler ships, and a real brain subcommand for brain *", () => {
+    /**
+     * Scoped to `implemented && command !== null`, deliberately narrower than
+     * "every verb with a command": a verb can be commanded before it is
+     * implemented (all seven from this task are), and the CLI genuinely does
+     * not have that subcommand yet — that is not a typo, it is the plan. This
+     * check is the gate Tasks 9, 10 and 13 must satisfy in the same change that
+     * flips `implemented` to `true`.
+     */
+    for (const [verb, footprint] of Object.entries({ ...EFFECT_VOCABULARY })) {
+      if (!footprint.implemented || footprint.command === null) continue;
+      const [, first, second] = footprint.command.split(" ");
+      expect(KNOWN_CLI_COMMANDS as readonly string[], verb).toContain(first);
+      if (first === "brain") {
+        expect(KNOWN_BRAIN_SUBCOMMANDS as readonly string[], verb).toContain(second);
+      }
+    }
   });
 
   it("holds no prototype member, so an inherited name is not a verb", () => {

@@ -179,6 +179,44 @@ describe("renderSkillBody", () => {
     expect(commandAt).toBeGreaterThan(effectAt);
     expect(commandAt).toBeLessThan(recoveryAt);
   });
+
+  /**
+   * Fix-pass addition: mutation-verified. Changing `"text"` to `"bash"` at the
+   * command's `fenced()` call in `skill.ts` left the full suite green —
+   * `renders recovery.resume as inert fenced text` only asserts `toContain("
+   * ```text")`, which the *recovery* block's own fence satisfies on its own,
+   * so the command's fence was unguarded. `nothing downstream should offer to
+   * run it` is the reason this fence exists; this is the case that holds it.
+   */
+  it("fences the command as text, never bash, so nothing downstream offers to run it", () => {
+    const captureContract = contract({
+      recovery: { leaves: "the capture unwritten", resume: "developer-os capture" },
+    });
+    const { contents } = render(captureContract);
+    expect(contents).toMatch(/```text\ndeveloper-os capture\n```/u);
+    expect(contents).not.toContain("```bash");
+  });
+
+  /**
+   * Fix-pass addition: mutation-verified. Replacing the `command != null`
+   * guard in `skill.ts` with an unconditional push left the full suite green,
+   * rendering an empty ` ```text\n``` ` fence under `Effect:
+   * \`brain.readIndex\``. `COMMANDLESS`'s whole point — asserted only in
+   * `vocabulary.test.ts` before this case — is that four verbs render no
+   * command at all; this is the render-seam half of that guarantee.
+   * `brain.readIndex` goes live as a step in Task 7's `brain-search` workflow.
+   */
+  it("renders no fence for a commandless verb", () => {
+    const noCommand = contract({
+      steps: [{ id: "read-index", do: "brain.readIndex" }],
+    });
+    const { contents } = render(noCommand);
+    const effectAt = contents.indexOf("Effect: `brain.readIndex`");
+    const recoveryAt = contents.indexOf("## Recovery", effectAt);
+    expect(effectAt).toBeGreaterThanOrEqual(0);
+    expect(recoveryAt).toBeGreaterThan(effectAt);
+    expect(contents.slice(effectAt, recoveryAt)).not.toContain("```");
+  });
 });
 
 /**
