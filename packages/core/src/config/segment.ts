@@ -1,41 +1,40 @@
 /**
  * The one predicate for "is this string safe to join onto a real path", used
  * by both the config loader (`loader.ts`'s `pathSegmentSchema`, over
- * `contentRoot`, `indexesDir` and every `topicFolders` entry) and
- * `packages/workflow-schema`'s `resolveScopeGlob`, which splices `contentRoot`
- * and `indexesDir` into a glob before a handler checks a real file against it.
+ * `contentRoot`, `indexesDir`, every `topicFolders` entry, and every
+ * `topicAliases` key and value) and `packages/workflow-schema`'s
+ * `resolveScopeGlob`, which splices `contentRoot` and `indexesDir` into a
+ * glob before a handler checks a real file against it.
  *
  * It used to be two implementations: `loader.ts` had its own inline
  * `pathSegmentSchema` refinement, and `workflow-schema`'s first cut of this
  * task re-derived the same rule from `BrainConfigV1`'s docblock rather than
  * from this code, landing three of its four clauses and inverting the
- * separator check into "single segment" without ever finding the metacharacter
- * gap below. Two guards over one value that disagree is not defense in depth —
- * it means neither one is the authority a reviewer can point at. This module
- * is now that authority; both call sites import it.
+ * separator check into "single segment" without ever finding a genuine gap:
+ * a bare glob metacharacter was a valid segment by every rule here and still
+ * widened a glob it was later spliced into unescaped. Two guards over one
+ * value that disagree is not defense in depth — it means neither one is the
+ * authority a reviewer can point at. This module is now that authority; both
+ * call sites import it.
  *
- * **Glob metacharacters are refused here, not only where the value becomes a
- * glob.** A `contentRoot` of a single asterisk is a valid path segment by
- * every rule above — no separator, no traversal, not empty, no NUL — and
- * `loader.ts`'s schema accepted it before this clause existed. Once
- * `workflow-schema`'s `resolveScopeGlob` substitutes it as the leading
- * segment of a two-star vocabulary glob, the result is a two-segment glob
- * whose first segment is a bare wildcard: it matches every sibling of the
- * vault root, not only the vault, so a real glob matcher resolves it against
- * transaction staging, `.git`, and anything else next to the vault directory.
- * The config loader has no concept of a glob and never will, but the same
- * string this schema accepts is the string `resolveScopeGlob` later treats as
- * one — so the rule belongs at the value's only validation point, not at each
- * place that happens to build a glob from it today. `topicFolders` gets the
- * same protection for the same reason: it is validated by the identical
- * schema, and nothing pins it to staying glob-free forever either.
- */
-const GLOB_METACHARACTERS = /[*?[\]{}()!]/u;
-
-/**
- * `null` means valid; a non-null return is a human-readable reason, so a
- * caller that wants a message (`RangeError`, a zod issue) does not have to
- * invent one and a caller that only wants a boolean can compare to `null`.
+ * **Glob metacharacters are deliberately not refused here.** A prior version
+ * of this file added a clause rejecting `* ? [ ] { } ( ) !` at this layer,
+ * on the theory that the rule belongs at the value's one validation point.
+ * Run against every real caller, that clause refuses ordinary directory
+ * names: `!inbox` (the standard convention for sorting a folder to the top
+ * of an alphabetical listing), `PROJECTS (2024)`, `[archive]`,
+ * `notes{drafts}`. This schema governs `topicFolders` and `topicAliases`,
+ * not only the two roots that end up in a glob, so the refusal was total —
+ * `configSchema.parse` throws inside `loadConfig` for any vault already
+ * using one of those names, the CLI cannot start, and `serializeConfig`
+ * throws on the same value, so the file cannot be rewritten to fix it either.
+ * A value is not unsafe for being *named* with a glob metacharacter; it is
+ * unsafe only once it is spliced **unescaped** into a pattern. That splice
+ * happens in exactly one place — `resolveScopeGlob`, over exactly the two
+ * fields that ever become a glob — so that is where the metacharacter is
+ * escaped, the same way a value going into a shell command or a SQL string
+ * is escaped at the boundary rather than forbidden as a name everywhere it
+ * might ever be typed.
  */
 export function pathSegmentViolation(value: string): string | null {
   if (value.length === 0) return "must not be empty";
@@ -46,12 +45,5 @@ export function pathSegmentViolation(value: string): string | null {
   if (value === "." || value === "..") {
     return "must not be a relative-directory segment";
   }
-  if (GLOB_METACHARACTERS.test(value)) {
-    return "must not contain a glob metacharacter (* ? [ ] { } ( ) !)";
-  }
   return null;
-}
-
-export function isValidPathSegment(value: string): boolean {
-  return pathSegmentViolation(value) === null;
 }

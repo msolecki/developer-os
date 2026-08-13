@@ -25,7 +25,6 @@ describe("the package's public door", () => {
         "failure",
         "formatJsonResult",
         "success",
-        "isValidPathSegment",
         "loadConfig",
         "pathSegmentViolation",
         "resolveRuntimePaths",

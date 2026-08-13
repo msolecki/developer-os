@@ -332,14 +332,34 @@ describe("resolveScopeGlob", () => {
     );
   });
 
+  /**
+   * Reversed from a second cut of this function, which refused these nine
+   * characters in `pathSegmentViolation` — the schema `contentRoot`,
+   * `indexesDir`, `topicFolders`, and `topicAliases` all share — and so also
+   * refused `!inbox`, the standard Obsidian convention for sorting a folder
+   * to the top of an alphabetical listing, and any other ordinary directory
+   * name using one of these characters. `loadConfig` threw for a vault
+   * already named that way, with no way to rewrite the file to fix it either.
+   * The value is a legitimate name; only being spliced unescaped into a glob
+   * was ever the risk, so each character is now escaped at that splice
+   * instead — this asserts the exact escaped output, not merely "does not
+   * throw", so a regression that drops the escaping (leaving the character
+   * live in the resolved glob) fails this test rather than passing silently.
+   */
   it.each(["*", "?", "[", "]", "{", "}", "(", ")", "!"])(
-    "refuses a root containing the glob metacharacter %s, which passes every character-shape check above",
+    "accepts a root containing the glob metacharacter %s, escaped in the resolved glob",
     (character) => {
-      expect(() =>
-        resolveScopeGlob("content/**", { ...config, contentRoot: character }),
-      ).toThrow(RangeError);
+      expect(resolveScopeGlob("content/**", { ...config, contentRoot: character })).toBe(
+        `\\${character}/**`,
+      );
     },
   );
+
+  it("escapes a metacharacter root only where it is substituted, leaving the rest of the glob untouched", () => {
+    expect(
+      resolveScopeGlob("content/_raw/quarantine/**", { ...config, contentRoot: "notes!" }),
+    ).toBe("notes\\!/_raw/quarantine/**");
+  });
 
   it("refuses a root containing a NUL byte", () => {
     expect(() =>

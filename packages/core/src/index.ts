@@ -8,7 +8,6 @@ export type { CapabilityState, ProbeObservation } from "./capabilities/index.js"
 export { EXIT_CODES, failure, formatJsonResult, success } from "./result.js";
 export type { CliError, CliResult, ExitCode } from "./result.js";
 export {
-  isValidPathSegment,
   loadConfig,
   pathSegmentViolation,
   resolveRuntimePaths,

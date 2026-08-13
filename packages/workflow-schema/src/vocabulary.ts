@@ -141,16 +141,39 @@ export function isKnownVerb(verb: string): boolean {
  * declared `content/**` scope would resolve to a grant over the whole vault —
  * staging and `.git` included. Two independent guards over one value that
  * disagree means neither is the authority; `pathSegmentViolation` is now the
- * one place this rule lives, and it also refuses a value the first cut never
- * considered: a bare glob metacharacter (`*`, `?`, …), which is a single
- * valid path segment by every character-shape rule and would otherwise widen
- * a glob it is spliced into — see that module's docblock.
+ * one place this rule lives.
+ *
+ * `pathSegmentViolation` does **not** refuse a glob metacharacter (`*`, `?`,
+ * …). A second cut of this function added that clause there, which also
+ * governs `topicFolders` and `topicAliases` and made ordinary directory names
+ * like `!inbox` fail to load. A metacharacter is a fine *name*; it is
+ * dangerous only once spliced unescaped into a *pattern*, and that splice
+ * happens below, in `escapeGlobSegment` — which is where the mitigation now
+ * lives instead.
  */
 function assertValidRoot(root: string, field: "contentRoot" | "indexesDir"): void {
   const violation = pathSegmentViolation(root);
   if (violation !== null) {
     throw new RangeError(`BrainConfigV1.${field} (${JSON.stringify(root)}) ${violation}`);
   }
+}
+
+/**
+ * Escapes the nine ASCII characters picomatch (and glob syntax generally)
+ * treats specially, so a root containing one is matched as a literal
+ * directory name rather than as a pattern. `pathSegmentViolation` never
+ * refuses these characters in a root — `!inbox`, `PROJECTS (2024)`, and
+ * `notes{drafts}` are all valid, ordinary directory names — so a root
+ * reaching this function can legitimately contain any of them, and this is
+ * the one place, right before the splice into a glob, where that stops being
+ * a live risk. A root can never contain the backslash used to escape with:
+ * `pathSegmentViolation` refuses `\` unconditionally as a separator, so this
+ * function never has to escape an escape.
+ */
+const GLOB_METACHARACTERS = /[*?[\]{}()!]/gu;
+
+function escapeGlobSegment(segment: string): string {
+  return segment.replace(GLOB_METACHARACTERS, (character) => `\\${character}`);
 }
 
 /**
@@ -195,6 +218,12 @@ function assertValidRoot(root: string, field: "contentRoot" | "indexesDir"): voi
  * gap for every consumer at once and is the more complete fix — out of this
  * task's scope (`vocabulary.ts`/`index.ts` only), left for whoever wires the
  * first real caller.
+ *
+ * **Escaped, then substituted.** `escapeGlobSegment` runs on the root after
+ * normalization and before it is spliced in, so a root of `!inbox` produces
+ * a literal `\!inbox` segment that matches only a directory named `!inbox` —
+ * not the "any sibling of the vault root" a bare `!inbox` would read as once
+ * a real glob matcher resolved it.
  */
 export function resolveScopeGlob(glob: string, config: BrainConfigV1): string {
   assertValidRoot(config.contentRoot, "contentRoot");
@@ -203,9 +232,9 @@ export function resolveScopeGlob(glob: string, config: BrainConfigV1): string {
   const segments = glob.split("/");
   if (segments[0] !== "content") return glob;
 
-  const resolved = [config.contentRoot.normalize("NFC")];
+  const resolved = [escapeGlobSegment(config.contentRoot.normalize("NFC"))];
   if (segments[1] === "_indexes") {
-    resolved.push(config.indexesDir.normalize("NFC"), ...segments.slice(2));
+    resolved.push(escapeGlobSegment(config.indexesDir.normalize("NFC")), ...segments.slice(2));
   } else {
     resolved.push(...segments.slice(1));
   }
