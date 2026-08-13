@@ -28,12 +28,11 @@ async function directories(): Promise<string[]> {
 }
 
 function mustLoad(relativePath: string): WorkflowContractV1 {
-  const file = relativePath;
   const text = readFileSync(join(ROOT, relativePath), "utf8");
-  const result = loadWorkflow({ file, text });
+  const result = loadWorkflow({ file: relativePath, text });
   if (result.contract === null) {
     throw new Error(
-      `${file} did not validate: ${result.findings.map((finding) => finding.message).join("; ")}`,
+      `${relativePath} did not validate: ${result.findings.map((finding) => finding.message).join("; ")}`,
     );
   }
   return result.contract;
