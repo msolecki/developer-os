@@ -752,7 +752,7 @@ Both are `codex-adapter.md` §11 residuals owned by this subsystem, and both hav
 - Modify: `packages/adapter-codex/src/invoke.ts`, `packages/adapter-claude/src/invoke.ts` if either constructs `maxTurns` from parsed arguments
 - Test: `packages/adapter-codex/src/install.test.ts`, `packages/core/src/agent-prompt/agent-prompt.test.ts`
 
-- [ ] **Step 1: Write the failing test for the artifact roots**
+- [x] **Step 1: Write the failing test for the artifact roots**
 
 `RenderedArtifact` is `{path, contents}` for paths relative to the plugin root *and* the marketplace root. The plugin root is a descendant of the marketplace root, so a wrongly-rooted tree **applies cleanly instead of refusing** (`BACKLOG.md` §1 NEW-13). `proposeCodexInstall` refuses a mislocated tree at runtime today; the durable fix is nominal.
 
@@ -770,7 +770,7 @@ Every argument other than the branded one must be correctly typed, so the brand 
 
 `@ts-expect-error` is the assertion: `tsc -b` fails if the error stops being an error, so the test goes red the day the brand is removed. Keep the runtime refusal beside it — a brand is erased at runtime and this is a published surface.
 
-- [ ] **Step 2: Implement the brands**
+- [x] **Step 2: Implement the brands**
 
 ```ts
 declare const pluginRoot: unique symbol;
@@ -786,7 +786,7 @@ export type MarketplaceRootArtifact = RenderedArtifact & { readonly [marketplace
 
 **`CodexAdapter` (`packages/adapter-codex/src/index.ts:102-110`) freezes all three functions into one object**, so its inferred shape changes with them. `index.ts` is already in the Files list; check `index.test.ts`'s export assertions too.
 
-- [ ] **Step 3: Write the failing test for `maxTurns`**
+- [x] **Step 3: Write the failing test for `maxTurns`**
 
 ```ts
 it("refuses maxTurns rather than honouring it on one vendor and dropping it on the other", () => {
@@ -803,7 +803,7 @@ it("still accepts a prompt on its own", () => {
 });
 ```
 
-- [ ] **Step 4: Implement the refusal**
+- [x] **Step 4: Implement the refusal**
 
 `maxTurns` leaves the schema, and `.strict()` then refuses it — but with the schema's generic message, which tells nobody why. Screen for the key before parsing, as the `__proto__` check already does, and return a message naming who would implement a turn bound on both vendors:
 
@@ -823,7 +823,7 @@ This is the repository's own precedent: the `scheduled` trigger is refused with 
 
 **But deleting the field also deletes the only default anyone was supplying.** `parseAgentPromptArgs` was where `maxTurns` got its value, and `ClaudeInvocation.maxTurns` is required — so whatever eventually builds a `ClaudeInvocation` from a workflow step now has nothing to put there. **Export a named constant from `packages/adapter-claude` for it** rather than leaving a literal at a future call site, and give it the docblock explaining what an unbounded agentic loop inside a declared-scope workflow would mean — that reasoning currently lives only on the schema field being removed and would otherwise be lost with it.
 
-- [ ] **Step 5: Run the gate and commit**
+- [x] **Step 5: Run the gate and commit**
 
 ```bash
 npm run check
