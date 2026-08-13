@@ -384,20 +384,9 @@ export function redactText(
     candidates,
   );
   /**
-   * `~/.aws/credentials`, `.netrc` and `.npmrc` value shapes. The ini-style
-   * `key = value`/`key=value` call covers the AWS and npm files by exact
-   * key name, so it never fires on ordinary prose. `.netrc`'s
-   * space-separated `password <value>` cannot be named that way — it has
-   * no fixed key — so it is anchored by context instead: `password` as the
-   * first token on a line, or preceded on the same line by one of
-   * `.netrc`'s own record keywords (`machine`, `login`, `account`,
-   * `default`). A bare `\bpassword\b` with no such anchor previously
-   * matched "the password must be...", "if (password === input)", and
-   * similar prose, and — because it ran before `user-pattern` — could claim
-   * part of a configured pattern's span and leave the rest unredacted.
-   * There is no length floor on the captured value: context is what
-   * distinguishes a credential from prose here, not an arbitrary minimum
-   * length, so a real one-character `.netrc` password is still covered.
+   * `~/.aws/credentials` and `.npmrc` value shapes, by exact key name — so
+   * this never fires on ordinary prose and can safely run ahead of
+   * `user-pattern`.
    */
   addCapturedMatches(
     normalizedText,
@@ -406,6 +395,35 @@ export function redactText(
     1,
     candidates,
   );
+  /**
+   * `user-pattern` runs before `.netrc`'s two `password`-anchored patterns
+   * below, not after (fix pass 2 review): fix pass 1 anchored those
+   * patterns to context so they stopped matching prose, but `(\S+)` still
+   * captures only the *first token* after "password" — so on a real
+   * netrc-shaped match, a configured multi-token pattern that overlaps the
+   * captured token was still shadowed, with the remaining tokens leaking
+   * into plaintext (`"password Acme Corp Holdings"` →
+   * `"password [REDACTED:credential-store] Corp Holdings"`, "Corp
+   * Holdings" left in the clear). Running `user-pattern` first means it
+   * claims the full configured span, so the password pattern's later,
+   * narrower attempt at the same region is the one the overlap resolver
+   * drops. `addUserPatterns` still no-ops when no patterns are configured,
+   * so this reordering does not change output for any of the calls that
+   * pass none (the two production call sites, today).
+   */
+  addUserPatterns(normalizedText, options.userPatterns ?? [], candidates);
+  /**
+   * `.netrc`'s space-separated `password <value>` cannot be named by a
+   * fixed key, so it is anchored by context instead: `password` as the
+   * first token on a line, or preceded on the same line by one of
+   * `.netrc`'s own record keywords (`machine`, `login`, `account`,
+   * `default`). A bare `\bpassword\b` with no such anchor previously
+   * matched "the password must be...", "if (password === input)", and
+   * similar prose. There is no length floor on the captured value: context
+   * is what distinguishes a credential from prose here, not an arbitrary
+   * minimum length, so a real one-character `.netrc` password is still
+   * covered.
+   */
   addCapturedMatches(
     normalizedText,
     /(?:^|[\r\n])[ \t]*password\s*[:=]?\s*(\S+)/giu,
@@ -420,7 +438,6 @@ export function redactText(
     1,
     candidates,
   );
-  addUserPatterns(normalizedText, options.userPatterns ?? [], candidates);
 
   for (const match of normalizedText.matchAll(/[A-Za-z0-9+/=_-]{40,}/gu)) {
     if (!looksHighEntropy(match[0])) {

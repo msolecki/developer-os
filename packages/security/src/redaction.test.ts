@@ -321,6 +321,33 @@ describe("redactText", () => {
       expect(text).not.toContain("Corp Holdings");
       expect(findings.map((f) => f.class)).toEqual(["user-pattern"]);
     });
+
+    /**
+     * Critical 2, fix pass 2 review: narrowing the trigger in fix pass 1
+     * left the leak mechanism itself in place. Both password patterns ran
+     * before `addUserPatterns`, so a real netrc-shaped match still let
+     * `(\S+)` claim only the first token of a multi-token user pattern —
+     * the case above doesn't exercise this because neither password
+     * pattern fires on "Reset the password ...". These two do fire: the
+     * first is the line-start form, the second the machine/login-record
+     * form. Pinned against the ordering, not one string — moving
+     * `addUserPatterns` back below the password patterns must fail both.
+     */
+    it.each([
+      "password Acme Corp Holdings",
+      "machine x login y password Acme Corp Holdings",
+    ])(
+      "does not let a credential-store password pattern claim one token of an overlapping user pattern: %s",
+      (source) => {
+        const { text, findings } = redactText(source, deterministicKey, {
+          userPatterns: ["acme corp holdings"],
+        });
+
+        expect(text).toContain("[REDACTED:user-pattern]");
+        expect(text).not.toContain("Corp Holdings");
+        expect(findings.map((f) => f.class)).toEqual(["user-pattern"]);
+      },
+    );
   });
 
   describe("service-credential", () => {
@@ -387,12 +414,23 @@ describe("redactText", () => {
       ]);
     });
 
-    it("keeps a JWT triplet as one service-credential finding despite an overlapping user pattern", () => {
-      const { findings } = redactText(jwtTriplet, deterministicKey, {
-        userPatterns: ["synthetic-user"],
-      });
+    /**
+     * Fix pass 2 review: the previous version of this test passed
+     * `userPatterns: ["synthetic-user"]` against the JWT fixture, but that
+     * literal never occurs in the text — it is base64 *inside* the token,
+     * not a substring of it — so the assertion held with or without the
+     * pattern and proved nothing. This one uses a pattern that genuinely
+     * occurs in the text and genuinely competes with credential-store's
+     * password anchor for the same region (the Critical-2 fix pass 2 case).
+     */
+    it("keeps a configured user pattern intact when credential-store's password anchor would otherwise claim part of it", () => {
+      const { findings } = redactText(
+        "machine x login y password Acme Corp Holdings",
+        deterministicKey,
+        { userPatterns: ["acme corp holdings"] },
+      );
 
-      expect(findings.map((f) => f.class)).toEqual(["service-credential"]);
+      expect(findings.map((f) => f.class)).toEqual(["user-pattern"]);
     });
   });
 
@@ -434,12 +472,21 @@ describe("redactText", () => {
     });
 
     /**
-     * Important 5 (fix pass 1 review): the first shipped implementation
-     * re-sliced and re-lowered a window at every text position for every
-     * pattern — O(n·m) per pattern. Measured before the fix: 2 MB of text
-     * with 10 patterns took 533 ms; this pins a generous ceiling so a
-     * regression back to that shape fails the suite rather than only
-     * showing up as a slow `capture`.
+     * Important 5 (fix pass 1 review, ceiling corrected in fix pass 2):
+     * the first shipped implementation re-sliced and re-lowered a window
+     * at every text position for every pattern — O(n·m) per pattern. The
+     * first ceiling here was 1,000 ms, which the *pre-fix* code also
+     * satisfies (measured 665-711 ms across two independent
+     * reproductions) — a regression back to that shape would not have
+     * failed this test. Measured post-fix, in this file's full suite
+     * (not in isolation — isolation undercounts the JIT/GC pressure a
+     * regression would actually run under): consistently 250-420 ms, one
+     * observed outlier at 538 ms. 600 ms sits below the slowest pre-fix
+     * measurement with margin above the observed post-fix outlier, so it
+     * separates the two implementations without flaking on ordinary
+     * hardware variance. This proves the *shape* changed back to a
+     * per-position rescan if it regresses; it does not certify a specific
+     * throughput bound for arbitrary text or pattern sizes.
      */
     it("scales to large text and several patterns without a per-position rescan", () => {
       const text = "x".repeat(2 * 1024 * 1024);
@@ -449,7 +496,7 @@ describe("redactText", () => {
       );
       const started = performance.now();
       redactText(text, deterministicKey, { userPatterns: patterns });
-      expect(performance.now() - started).toBeLessThan(1_000);
+      expect(performance.now() - started).toBeLessThan(600);
     });
 
     it("keeps overlap resolution: the first candidate wins and the second is dropped", () => {
