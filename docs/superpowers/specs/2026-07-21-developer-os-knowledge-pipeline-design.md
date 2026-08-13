@@ -293,6 +293,22 @@ Re-capturing something already ingested writes nothing and says where it went.
 
 ### 5.3 Envelope fields — where each comes from, and which survive a hand edit
 
+> **Amended 2026-08-13 by the founder, on a pre-flight scan of the implementation plan.** The
+> `captureId` row below and its closing paragraph say the id is **recomputed** on a hand edit and a
+> mismatch is a refusal. Taken together with §5.6 that makes `capture.edit` impossible: the id is
+> `H(redacted content)`, so *any* content-changing edit changes it, so every edit refuses — and the
+> secret the user pasted stays in the vault file, which is the one outcome the verb exists to
+> prevent.
+>
+> **`captureId` is now immutable.** It is assigned once, at capture time, and never recomputed.
+> `deduplicationHash` still tracks content, so `edit` re-redacts and rewrites in place, the filename
+> stays valid, and no refusal fires. The mismatch refusal keeps the job it was really for: the
+> frontmatter `captureId` not matching the filename — a rename, or a hand-edited id field.
+>
+> **The cost, accepted:** two captures whose text converges after an edit can both exist. `BACKLOG.md`
+> §8 carries the row. The `deduplicationHash` row is unchanged, and so is the rule that `content`,
+> `deduplicationHash` and `redaction` are recomputed rather than trusted.
+
 `CaptureEnvelopeV1` is frozen in `packages/brain/src/schema/capture.ts` and this subsystem fills it
 in rather than redesigning it.
 
@@ -370,6 +386,13 @@ seventh member into a frozen ordered list to record something the file's own mti
 `capture.edit` is a separate verb from `capture.setStatus` (§5.6).
 
 ### 5.6 Review
+
+> **Amended 2026-08-13 by the founder**, with §5.3. The clause below — "refuses if the recomputed
+> `captureId` no longer matches the filename" — is replaced: the id is not recomputed, so an edit
+> that changes content **succeeds** and rewrites the file in place with the re-redacted body,
+> recomputed `deduplicationHash` and recomputed `redaction`. The refusal remains for a frontmatter
+> `captureId` that does not match the filename. Everything else in this section stands, including
+> the refusal to spawn `$EDITOR`.
 
 ```text
 developer-os review                                  list quarantined captures

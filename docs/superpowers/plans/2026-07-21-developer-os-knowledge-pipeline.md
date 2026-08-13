@@ -1149,17 +1149,32 @@ it("round-trips an envelope through the file it renders", () => {
   expect(parsed.ok && parsed.envelope).toEqual(built.envelope);
 });
 
-it("refuses a file whose recomputed id no longer matches its name, rather than renaming it", () => {
+it("accepts a content edit and keeps the id, which is assigned once and never recomputed", () => {
   const built = buildCapture(request);
   const edited = built.contents.replace("observation", "different observation");
   const parsed = parseCaptureFile(built.fileName, edited, redact);
-  expect(parsed).toEqual({ ok: false, reason: "id-mismatch" });
+  expect(parsed.ok).toBe(true);
+  expect(parsed.ok && parsed.envelope.captureId).toBe(built.envelope.captureId);
+  expect(parsed.ok && parsed.envelope.deduplicationHash).not.toBe(built.envelope.deduplicationHash);
+});
+
+it("refuses a file whose frontmatter id does not match its name, rather than renaming it", () => {
+  const built = buildCapture(request);
+  const renamed = built.contents.replace(built.envelope.captureId, "0".repeat(16));
+  expect(parseCaptureFile(built.fileName, renamed, redact))
+    .toEqual({ ok: false, reason: "id-mismatch" });
 });
 
 it("re-redacts a hand edit, so a pasted secret does not survive the review path", () => {
   const built = buildCapture(request);
   const edited = built.contents.replace("observation", "ghp_" + "a".repeat(36));
   const parsed = parseCaptureFile(built.fileName, edited, redact);
+  // The assertion is on the ACCEPTED envelope, not on a refusal object. A
+  // refusal carries no content, so asserting `not.toContain` over one passes
+  // for an implementation that never redacts — which is what this test said
+  // before the id became immutable.
+  expect(parsed.ok).toBe(true);
+  expect(parsed.ok && parsed.envelope.content).toContain("[REDACTED:provider-token]");
   expect(JSON.stringify(parsed)).not.toContain("ghp_");
 });
 
@@ -1187,6 +1202,10 @@ Frontmatter is emitted with the same discipline `packages/brain/src/schema/note.
 The fence regex is the other inherited correction: `(?:([\s\S]*?)\r?\n)?---`, which anchors the newline to the content group. The earlier form let a literal `---` inside a value split the block and push reserved keys into the body unvalidated.
 
 `parseCaptureFile` takes the **file name** as its first argument for one reason: the id is the filename and the check is a comparison against it, not against a field the file could carry twice.
+
+**Refusal precedence is part of the contract, and the `it.each` table above depends on it.** Structural refusals — `unparseable`, `schema-version`, `unknown-status` — are decided **before** the id comparison, because a file whose frontmatter cannot be read has no id to compare. Without that ordering the fixture filename `"abc.md"` makes `id-mismatch` a legal answer for every row and the table stops pinning anything. Add a case that pins the order: a file that is both `schemaVersion: 2` **and** carries a wrong id refuses as `schema-version`.
+
+**Re-redaction empties the redaction record, and nothing else says so.** `redaction` is recomputed on every parse (spec §5.3), and re-redacting already-redacted content finds nothing — `[REDACTED:provider-token]` matches no pattern. So a capture written with one finding reads back with `redaction: []` the first time `review` touches it. That is not a defect to fix here: the fingerprints were only ever comparable within the run that produced them, and the placeholder in `content` is the durable evidence. It is a fact the Task 19 architecture note must carry, because a later reader will otherwise treat an empty `redaction` as "nothing was ever redacted".
 
 - [ ] **Step 5: Write the failing test for agent detection, and ship it empty**
 
@@ -1376,9 +1395,20 @@ it("re-redacts on edit, so a secret pasted into the vault does not survive revie
   expect(await readFile(path, "utf8")).toContain("[REDACTED:provider-token]");
 });
 
-it("refuses an edit whose recomputed id no longer matches the filename", async () => {
+it("keeps the id and updates the hash on a content edit, because the id is assigned once", async () => {
   const { path, id } = await seedCapture({ text: "an observation" });
+  const before = await envelopeOf(path);
   await appendToFile(path, "\nmore words\n");
+  const result = await runReview(context, { id, decision: "edit" });
+  expect(result.code).toBe(EXIT_CODES.success);
+  const after = await envelopeOf(path);
+  expect(after.captureId).toBe(before.captureId);
+  expect(after.deduplicationHash).not.toBe(before.deduplicationHash);
+});
+
+it("refuses an edit whose frontmatter id stops matching the filename", async () => {
+  const { path, id } = await seedCapture({ text: "an observation" });
+  await replaceInFile(path, `captureId: ${id}`, `captureId: ${"0".repeat(16)}`);
   const result = await runReview(context, { id, decision: "edit" });
   expect(result.code).toBe(EXIT_CODES.invalidInput);
   expect(result.ok).toBe(false);
@@ -1396,7 +1426,11 @@ it("does not open an editor, on any decision", async () => {
 });
 ```
 
-The third case deserves its own sentence, because it is a real product edge: **a hand edit that changes the observation's words changes its id, and a capture whose recomputed id no longer matches its filename is refused with the mismatch named — not silently renamed, because a rename would make one capture look like two** (spec §5.3). Tell the user what to do about it in the refusal's `recovery` string: capture the new observation, and reject the old one.
+**These two cases are the founder's amendment of 2026-08-13, and the pair only works because of it** (spec §5.3 and §5.6, `BACKLOG.md` §8). As the spec was approved, the id was recomputed on every hand edit and a mismatch refused — and since the id is `H(redacted content)`, *any* content-changing edit refused. So the two tests above this line were the same input with opposite expectations, the refusal won, and **the pasted secret stayed in the vault file** while the returned value looked clean because a refusal object carries no content.
+
+`captureId` is now assigned once and never recomputed. An edit succeeds, rewrites in place, and updates `deduplicationHash` and `redaction`. The refusal keeps the job it was really for: a frontmatter id that no longer matches the filename — a rename, or a hand-edited id field. Its `recovery` string should say so: restore the id, or reject the capture and take a fresh one.
+
+**Two captures whose text converges after an edit can both exist.** That is the accepted cost, and the architecture note in Task 19 records it.
 
 The last two are the workflow's own validators becoming code: `no source file is removed by any decision`, and spec §5.6's refusal to spawn `$EDITOR` — the command must stay `--json`- and `--yes`-driveable.
 

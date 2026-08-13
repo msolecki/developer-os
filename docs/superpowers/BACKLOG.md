@@ -557,6 +557,13 @@ were put to the founder with the other four.
 | product design spec §13.4, "the staged result" | the `deterministic reindex` validator runs over an **in-memory projection** of vault plus proposal, not over a staging directory. §13.4 and the knowledge-pipeline spec's own §6.3 preamble contradict each other — nothing is staged at the point the preamble names — and staging first would make every file in staging attacker-influenced content the validators must re-read as hostile | 12 |
 | product design spec §17.5, and the knowledge-pipeline spec §9 | §9 narrows §17.5's security cases to six suites and drops two the standing gate in §7 of this file still requires from DOS-P6 onward: a **network** suite, and **concurrent user edits**. The plan ships eight suites rather than six and registers the narrowing rather than inheriting it | 15 |
 
+**One row is the founder correcting the spec after a pre-flight scan**, and it is the most
+consequential amendment DOS-P6 has taken:
+
+| Amended | By | What changed |
+|---|---|---|
+| `specs/…-knowledge-pipeline-design.md` §5.3 and §5.6 | an adversarial pre-flight scan of Tasks 3–19, **settled by the founder 2026-08-13** | **`captureId` becomes immutable** — assigned once at capture time, never recomputed. As written, §5.3 recomputed it on every hand edit and §5.6 refused on a mismatch; since the id is `H(redacted content)`, *any* content-changing edit changed it, so **every** edit refused and the pasted secret stayed in the vault file. The verb decision 1 bumped `review` to `2.0.0` for could never do the one thing it exists for, and Task 8's parse-level assertion would have looked clean because a refusal object carries no content. Now `deduplicationHash` tracks content, `edit` re-redacts and rewrites in place, and the mismatch refusal keeps the job it was really for: a renamed file or a hand-edited id field. **Cost accepted:** two captures whose text converges after an edit can both exist |
+
 **One row is the plan correcting itself**, which is the shape the DOS-P5 note below warns to expect:
 
 | Amended | By | What changed |
