@@ -8,7 +8,7 @@ preference. **Approving this document was the founder's and was not delegable** 
 judges its own spec ready has removed the only gate in the program a machine cannot check.
 
 **The plan takes five decisions this document did not, and its tasks raised two more.** Six of those
-seven are registered in `BACKLOG.md` §8 as pending the founder's ratification — the seventh is
+seven are registered in `BACKLOG.md` §8 and were ratified by the founder on 2026-08-13 — the seventh is
 carved out below: **five** canonical workflows change version
 rather than the two §12 names, because `review` must also declare the `capture.edit` step §5.6
 creates; §7.1's globs resolve at the handler boundary rather than becoming template syntax in the

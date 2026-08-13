@@ -51,7 +51,8 @@ requires without reading `transcript_path`, which this product refuses on both v
 the founder accepted — no hooks ship in v1, `developer-os run claude|codex` is never built,
 `wrapper-required` is replaced by `not-used`, and **nothing automatic captures anything**. The
 plan's five decisions are what it had to settle that the spec did not; four of them, and two more
-its tasks raised, sit as pending rows in `BACKLOG.md` §8 beside the spec's six ratified ones.
+its tasks raised, are ratified rows in `BACKLOG.md` §8 beside the spec's own six — twelve rows, all
+ratified 2026-08-13, each leaving the table when the task named beside it lands.
 
 **Read three documents before touching the code**, in this order:
 `docs/architecture/codex-adapter.md`, `docs/architecture/claude-adapter.md`, and

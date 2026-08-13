@@ -38,7 +38,7 @@ Every task's requirements implicitly include this section. Each line is the spec
 
 ## Five decisions this plan takes before the tasks that depend on them
 
-Each is recorded with its cost. Four of the five are registered in `BACKLOG.md` §8 as **pending the founder's ratification** in the commit that lands this plan — an approved document is not silently rewritten. Decision 3 is not registered and says why.
+Each is recorded with its cost. Four of the five are registered in `BACKLOG.md` §8 and were **ratified by the founder on 2026-08-13**, together with the two more that Tasks 12 and 15 raised — an approved document is not silently rewritten. Decision 3 is not registered and says why.
 
 **1. Five canonical workflows change version, not two.**
 

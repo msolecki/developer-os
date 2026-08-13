@@ -284,7 +284,8 @@ first contact with a real binary.
   `developer-os run claude|codex` is never built, and **nothing automatic captures anything**. §12
   lists the six documents it amends; §8 carries them as ratified.
 - **Plan:** `plans/2026-07-21-developer-os-knowledge-pipeline.md` — **written 2026-08-13**,
-  nineteen tasks. It takes five decisions the spec did not; six rows are pending in §8. **Task 17 stops
+  nineteen tasks. It takes five decisions the spec did not; six rows in §8 carry them, all ratified
+  2026-08-13. **Task 17 stops
   and asks**: it is the real model call §10.2 says this subsystem can no longer avoid.
 - **Program task:** 6 · **Complexity:** L · **Blocked by:** nothing — DOS-P4 closed 2026-08-11 and
   DOS-P5 on 2026-08-12
@@ -532,20 +533,22 @@ carries the cross-reference, not when the decision is taken.
 | `specs/…-claude-adapter-design.md` §6.1 | hooks **declined**, not deferred; the three lifecycle keys report `not-used` | DOS-P6 Task 3 |
 | `specs/…-codex-adapter-design.md` §5.3 | the same, in one decision covering both adapters. **This supersedes the ratified amendment below**, which deferred hooks to DOS-P6 rather than closing them | DOS-P6 Task 3 |
 | `specs/…-codex-adapter-design.md` §14.1 | the JSONL terminal-event rule promoted from provisional to observed, dated, with the shape seen — ingest forces the real `codex exec` call that DOS-P5 could not justify | DOS-P6 Task 17 |
-| `specs/…-workflow-compiler-design.md` §6 | scope globs stop being literals, which `workflow-schema.md` §8.1 made due at the first handler that resolves one. **Narrowed by the plan** — see the pending row below | DOS-P6 Task 6 |
+| `specs/…-workflow-compiler-design.md` §6 | scope globs stop being literals, which `workflow-schema.md` §8.1 made due at the first handler that resolves one. **Narrowed by the plan** — see the ratified row below | DOS-P6 Task 6 |
 
-**Six are pending, and every one is the implementation plan's rather than the spec's.** They ride on
-`plans/2026-07-21-developer-os-knowledge-pipeline.md`, written 2026-08-13; its "Five decisions this
-plan takes" section is the authoritative statement for the first four, and Tasks 12 and 15 for the
-last two. Each amends an approved document, which is why they are here rather than only in the plan.
-If one is refused, the row is deleted rather than left as history and the plan changes before the
-task that depends on it runs.
+**Six were ratified by the founder on 2026-08-13**, in the same session that approved the spec and
+received the plan. Every one is the implementation plan's rather than the spec's: they ride on
+`plans/2026-07-21-developer-os-knowledge-pipeline.md`, whose "Five decisions this plan takes"
+section is the authoritative statement for the first four, and Tasks 12 and 15 for the last two.
+Each amends an approved document, which is why they are here rather than only in the plan. **A row
+leaves this table when the amended document carries the cross-reference**, not when the decision was
+taken — so all six stay until the task named beside them lands.
 
 **Two rows exist because a fresh-context review found them missing on 2026-08-13**, before this plan
 was committed: the narrowing of design spec §13.4's "staged result", and the narrowing of §17.5's
-security cases to spec §9's six suites. Both were decisions the plan was taking silently.
+security cases to spec §9's six suites. Both were decisions the plan was taking silently, and both
+were put to the founder with the other four.
 
-| Pending against | What the plan proposes | Task |
+| Amended | Outcome, ratified 2026-08-13 | Discharged by |
 |---|---|---|
 | the knowledge-pipeline spec §12 | **five** canonical workflows go to `2.0.0`, not two. `ingest` gains a step and widens its write scopes, `brain-search` gains one and widens its read scopes, and `review` gains the `capture.edit` step its `decision` input already advertises — with its scopes unchanged, which is what makes it easy to miss. A step list and a scope set are the contract, and `extends` pins `id@version` exactly | 7 |
 | `specs/…-workflow-compiler-design.md` §6, again | the globs resolve at the **handler boundary** through `resolveScopeGlob(glob, config)`; the contract keeps canonical names. Templating them inside the YAML was rejected: it invents a substitution syntax in the workflow schema and puts a configuration value in the one document meant to be comparable across installs. Leaves a display gap — a skill shows `content/**` while the handler enforces the user's own root | 6 |
@@ -566,7 +569,7 @@ status:
 **Two canonical workflows change by the spec's own decision, and that is a contract change rather
 than an amendment:** `workflows/capture/workflow.yaml` drops `session_end` and
 `workflows/shared/workflow.yaml` drops `session_start` — both name triggers nothing can fire.
-**Three more change by the plan's**, which is the first pending row above: `ingest`, `brain-search`
+**Three more change by the plan's**, which is the first ratified row above: `ingest`, `brain-search`
 and `review`. All five go to `2.0.0`.
 
 **Every amendment raised through DOS-P5 was ratified** by the founder on or before 2026-08-12, and
