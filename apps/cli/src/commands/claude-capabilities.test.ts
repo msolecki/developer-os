@@ -131,7 +131,7 @@ describe("reportClaudeCapabilities", () => {
       listPluginFiles: skillsPresent,
     });
     expect(report.capabilities.skills).toBe("yes");
-    expect(report.capabilities.session_end_capture).toBe("wrapper-required");
+    expect(report.capabilities.session_end_capture).toBe("not-used");
   });
 
   it("never reports a lifecycle capability as yes", async () => {
@@ -174,11 +174,11 @@ describe("reportClaudeCapabilities", () => {
   });
 
   /**
-   * Spec §8.2: capture falls back to the wrapper whenever
-   * `session_end_capture` is not `yes`, and `doctor` reports that rather than
-   * failing.
+   * A capture reaches the vault because somebody ran a command. Spec §8.2's
+   * fallback to the wrapper, and the `hook` branch beside it, both name paths
+   * this product is not building (knowledge-pipeline spec §3.1).
    */
-  it("names the wrapper as the capture route", async () => {
+  it("names the command as the capture route", async () => {
     const report = await reportClaudeCapabilities({
       executablePath: "/opt/synthetic/bin/claude",
       runner: version("2.1.216"),
@@ -186,7 +186,7 @@ describe("reportClaudeCapabilities", () => {
       probe: true,
       listPluginFiles: skillsPresent,
     });
-    expect(report.captureVia).toBe("wrapper");
+    expect(report.captureVia).toBe("command");
   });
 
   it("never throws when the runner fails outright", async () => {
@@ -227,7 +227,7 @@ describe("reportClaudeCapabilities", () => {
       listPluginFiles: () =>
         Promise.resolve([".claude-plugin/plugin.json"]),
     });
-    expect(report.capabilities.skills).toBe("wrapper-required");
+    expect(report.capabilities.skills).toBe("unknown");
   });
 
   it("reports unknown when the plugin directory cannot be listed at all", async () => {
@@ -239,6 +239,23 @@ describe("reportClaudeCapabilities", () => {
       listPluginFiles: () => Promise.reject(new Error("ENOENT")),
     });
     expect(report.capabilities.skills).toBe("unknown");
+  });
+
+  /**
+   * A discovery that raised is a third input, not a second spelling of an
+   * absent path: `doctor` used to flatten it into `executablePath: null` and
+   * print `claude=absent` about a binary nothing had managed to ask.
+   */
+  it("reports a raised discovery as unreadable, never absent", async () => {
+    const report = await reportClaudeCapabilities({
+      executablePath: null,
+      discoveryFailed: true,
+      runner: version("2.1.216"),
+      pluginDirectory: "/synthetic/plugin",
+    });
+    expect(report.installed).toBe(true);
+    expect(report.summary).toContain("claude=unreadable");
+    expect(report.summary).not.toContain("claude=absent");
   });
 
   it("renders a matrix line naming every key", async () => {

@@ -6,9 +6,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import { EXIT_CODES } from "@developer-os/core";
 import { PLUGIN_TREE_PREFIX, proposeCodexInstall } from "@developer-os/adapter-codex";
 import { MacOsPlatformDiscoveryError } from "@developer-os/platform-macos";
+import type {
+  AgentDiscovery,
+  AgentName,
+  PlatformAdapter,
+} from "@developer-os/platform-macos";
 import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 
 import { codexPluginRoot, runDoctor, runDoctorReport } from "./doctor.js";
+import type { DoctorReportV1 } from "./doctor.js";
 import { runInit } from "./init.js";
 import {
   createCommandFixture,
@@ -77,10 +83,11 @@ describe("runDoctor", () => {
       "codex-capabilities",
     ]);
     /**
-     * No Codex is installed in this fixture, so the hook-trust command is not
-     * actionable — nothing is there to open a session in. Spec §5.3: the
-     * fix is one command, and a report that prints it unconditionally reads as
-     * advice to run `/hooks` inside a CLI the machine does not have.
+     * No Codex is installed in this fixture, and no `recovery=` is printed for
+     * one that is either: the advice named `/hooks`, the command that grants
+     * Codex's hook trust gate, and no hooks ship for it to gate
+     * (knowledge-pipeline spec §3.1). The suite below pins that for the
+     * installed case, where the advice used to be printed.
      */
     const codexAbsent = result.data.checks.find(
       (check) => check.id === "codex-capabilities",
@@ -233,12 +240,13 @@ describe("runDoctor", () => {
   );
 
   /**
-   * Spec §5.3: the fix is one command, and a report that omits it — where it
-   * is actionable — is not a report. `codex-capabilities.ts`'s own unit tests
-   * pin `report.recovery` one layer below the user; this pins the composed
-   * `DoctorCheck.message` the user actually reads.
+   * The line a human reads, for an **installed** Codex — the case that used to
+   * print `recovery="… run /hooks …"`. `codex-capabilities.test.ts` pins the
+   * report one layer below; this pins the composed `DoctorCheck.message`,
+   * because advice to open a trust gate in front of a hook nobody ships is
+   * worse than silence: it is a command that appears to be worth running.
    */
-  it("names the hook-trust command when Codex is installed", async () => {
+  it("names no hook-trust command when Codex is installed", async () => {
     const runner: ProcessRunner = {
       run(request): Promise<ProcessResult> {
         return Promise.resolve({
@@ -272,8 +280,8 @@ describe("runDoctor", () => {
       (check) => check.id === "codex-capabilities",
     );
     expect(codex?.message).toContain("codex=0.147.0");
-    expect(codex?.message).toContain('recovery="');
-    expect(codex?.message).toContain("/hooks");
+    expect(codex?.message).not.toContain("recovery=");
+    expect(codex?.message).not.toContain("/hooks");
   });
 
   it("reports an uninitialized machine as an operational failure", async () => {
@@ -482,6 +490,103 @@ describe("agent discovery that refuses", () => {
     expect(report.checks.find((check) => check.id === "agents")?.status).toBe(
       "fail",
     );
+  });
+});
+
+/**
+ * "We could not ask" printed as "not installed", one layer above the
+ * conflation `unreadable` exists to prevent (`codex-adapter.md` §11.6).
+ *
+ * Every assertion here reads a check **message**, never an id or a status: the
+ * end-to-end fixture that kept the same bug green for the discoverable case
+ * read ids and statuses, and passed while one report said `agents:
+ * claude=present` and `claude-capabilities: claude=absent` about one file.
+ *
+ * The positive form is deliberate. `expect(a.includes("present") &&
+ * b.includes("absent")).toBe(false)` is green against the unfixed code — a
+ * throwing discovery leaves the `agents` message holding the redacted *error*,
+ * which contains neither word, so the conjunction holds and would keep holding
+ * after a revert.
+ */
+describe("discovery that throws for one agent", () => {
+  const REFUSED = new MacOsPlatformDiscoveryError(
+    "Agent discovery returned an unusable executable path",
+  );
+
+  const versionRunner: ProcessRunner = {
+    run(request): Promise<ProcessResult> {
+      return Promise.resolve({
+        stdout: request.args[0] === "--version" ? "codex-cli 0.147.0" : "",
+        stderr: "",
+        exitCode: 0,
+        signal: null,
+        timedOut: false,
+      });
+    },
+  };
+
+  const installed = (name: AgentName): AgentDiscovery => ({
+    name,
+    installed: true,
+    executablePath: `/opt/synthetic/bin/${name}`,
+    version: null,
+  });
+
+  /**
+   * Refuses discovery for one agent and answers honestly for the other, which
+   * the fixture's own `discoveryFailure` cannot express — it refuses for every
+   * agent, and a suite that only ever fails both cannot see one agent
+   * inheriting the other's failure.
+   */
+  async function runDoctorWhereDiscoveryThrows(
+    agent: AgentName,
+  ): Promise<DoctorReportV1> {
+    const fixture = await createCommandFixture(`doctor-throws-${agent}`, {
+      runner: versionRunner,
+      agents: { claude: installed("claude"), codex: installed("codex") },
+    });
+    const real = fixture.context.platform;
+    const platform: PlatformAdapter = {
+      inspect: () => real.inspect(),
+      discoverExecutable: (name) =>
+        name === agent
+          ? Promise.reject(REFUSED)
+          : real.discoverExecutable(name),
+      productStateRoot: (home) => real.productStateRoot(home),
+      proposedBrainRoot: (home) => real.proposedBrainRoot(home),
+    };
+
+    return runDoctorReport({ ...fixture.context, platform });
+  }
+
+  it.each(["claude", "codex"] as const)(
+    "says %s is present and unreadable when discovery threw, never absent",
+    async (agent) => {
+      const report = await runDoctorWhereDiscoveryThrows(agent);
+      const agents = report.checks.find((check) => check.id === "agents");
+      const capabilities = report.checks.find(
+        (check) => check.id === `${agent}-capabilities`,
+      );
+
+      expect(agents?.message).toContain(`${agent}=present`);
+      expect(capabilities?.message).toContain(`${agent}=unreadable`);
+    },
+  );
+
+  /**
+   * The serial loop aborted on the first throw, so a refusing `claude` left
+   * `codex` reported absent when nothing had asked it. Both agents are
+   * discovered independently or the second inherits the first one's failure.
+   */
+  it("still reports the other agent when one agent's discovery throws", async () => {
+    const report = await runDoctorWhereDiscoveryThrows("claude");
+    const byId = new Map(
+      report.checks.map((check) => [check.id, check.message]),
+    );
+
+    expect(byId.get("agents")).toContain("codex=present");
+    expect(byId.get("codex-capabilities")).toContain("codex=0.147.0");
+    expect(byId.get("codex-capabilities")).not.toContain("codex=absent");
   });
 });
 

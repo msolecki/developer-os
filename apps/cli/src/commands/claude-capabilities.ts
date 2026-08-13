@@ -4,10 +4,7 @@ import {
   probeClaude,
   resolveCapabilities,
 } from "@developer-os/adapter-claude";
-import type {
-  CapabilityState,
-  ClaudeCapabilities,
-} from "@developer-os/adapter-claude";
+import type { ClaudeCapabilities } from "@developer-os/adapter-claude";
 import { readdir } from "node:fs/promises";
 
 import type { ProcessRunner } from "@developer-os/security";
@@ -15,6 +12,20 @@ import type { ProcessRunner } from "@developer-os/security";
 export interface ClaudeCapabilityRequest {
   /** From `discoverExecutable`; `null` when Claude Code is not installed. */
   readonly executablePath: string | null;
+  /**
+   * Discovery itself raised rather than answering, so no path was produced and
+   * the binary was never asked anything.
+   *
+   * It is a third input, not a second reading of `executablePath`, because
+   * `null` already means "the machine has no Claude Code" and a raised
+   * discovery means the opposite of settled: `MacOsPlatformAdapter` refuses a
+   * `which` result it cannot vouch for — it found something. `doctor` used to
+   * flatten that into `executablePath: null` and print `claude=absent`, which
+   * is "we could not ask" reported as "not installed" — the same conflation
+   * `unreadable` exists to prevent, one layer up (`codex-adapter.md` §11.6).
+   * When set, it decides the report before `executablePath` is read at all.
+   */
+  readonly discoveryFailed?: boolean;
   readonly runner: ProcessRunner;
   readonly pluginDirectory: string;
   /**
@@ -45,18 +56,48 @@ export interface ClaudeCapabilityReport {
   readonly installed: boolean;
   readonly version: string | null;
   readonly capabilities: ClaudeCapabilities;
-  /** How capture reaches the vault on this machine, today. */
-  readonly captureVia: "hook" | "wrapper";
+  /**
+   * How capture reaches the vault on this machine, today: a command the user
+   * ran, and nothing else.
+   *
+   * A single-member union rather than a dropped field, because the line
+   * `doctor` prints still has to say it. It was `"hook" | "wrapper"`, chosen by
+   * `session_end_capture === "yes"`; that key is `not-used` unconditionally now
+   * (knowledge-pipeline spec §3.1 declines both automatic paths), so the
+   * ternary was dead code that read as a live possibility.
+   */
+  readonly captureVia: "command";
   /** One line, for a `DoctorCheck.message`. */
   readonly summary: string;
 }
 
+/**
+ * Every key `unknown`: the matrix for a machine nothing was asked about.
+ *
+ * **Written out key by key, and that is the type check rather than a style.**
+ * The accumulator was `Record<string, CapabilityState>`, whose index signature
+ * satisfies `ClaudeCapabilities`'s named properties, so this compiled even if
+ * the loop never assigned a required key — a renamed or dropped capability key
+ * was not a compile error (`codex-adapter.md` §11.7). The same fix is applied
+ * to `resolveCapabilities` in both adapters and to `allUnknown` in the Codex
+ * command beside this one; all four sites are the same gap.
+ *
+ * The six `not-used` keys stay `unknown` here on purpose. `not-used` is a claim
+ * about a resolved matrix; this one resolves nothing, and spec §9.2's rule is
+ * that a report about an install nobody examined says only that.
+ */
 function allUnknown(): ClaudeCapabilities {
-  const resolved: Record<string, CapabilityState> = Object.create(null) as Record<
-    string,
-    CapabilityState
-  >;
-  for (const key of CLAUDE_CAPABILITY_KEYS) resolved[key] = "unknown";
+  const resolved: ClaudeCapabilities = {
+    skills: "unknown",
+    plugin_hooks: "unknown",
+    session_start_injection: "unknown",
+    session_end_capture: "unknown",
+    pre_compact_backup: "unknown",
+    non_interactive_run: "unknown",
+    structured_result: "unknown",
+    subagents: "unknown",
+    durable_project_guidance: "unknown",
+  };
   return Object.freeze(resolved);
 }
 
@@ -95,7 +136,7 @@ export async function reportClaudeCapabilities(
       installed: false,
       version: null,
       capabilities,
-      captureVia: "wrapper",
+      captureVia: "command",
       summary: `claude=absent ${summarise(capabilities)}`,
     };
   };
@@ -112,6 +153,11 @@ export async function reportClaudeCapabilities(
    * this product's own rule: "we could not ask" is `unknown`, which is what
    * every capability already reports here. Found by fresh-context review,
    * 2026-08-11.
+   *
+   * A raised discovery reports it too, and until DOS-P6 Task 3 nothing did:
+   * this branch needed a non-null path *and* a `discoverClaude` that returned
+   * `null`, while `doctor` caught the raise and passed `executablePath: null`,
+   * so the one state that had a word for "we could not ask" had no producer.
    */
   const unreadable = (): ClaudeCapabilityReport => {
     const capabilities = allUnknown();
@@ -119,11 +165,12 @@ export async function reportClaudeCapabilities(
       installed: true,
       version: null,
       capabilities,
-      captureVia: "wrapper",
+      captureVia: "command",
       summary: `claude=unreadable ${summarise(capabilities)}`,
     };
   };
 
+  if (request.discoveryFailed === true) return unreadable();
   if (request.executablePath === null) return absent();
 
   const installation = await discoverClaude({
@@ -138,7 +185,7 @@ export async function reportClaudeCapabilities(
       installed: true,
       version: installation.version,
       capabilities,
-      captureVia: "wrapper",
+      captureVia: "command",
       summary: `claude=${installation.version} not-probed ${summarise(capabilities)}`,
     };
   }
@@ -156,9 +203,10 @@ export async function reportClaudeCapabilities(
     installed: true,
     version: installation.version,
     capabilities,
-    // Spec §8.2: the wrapper is used whenever the capture surface is not `yes`,
-    // and §6.1 makes that the state until a hook is observed firing.
-    captureVia: capabilities.session_end_capture === "yes" ? "hook" : "wrapper",
+    // A capture reaches the vault because somebody ran a command. Spec §8.2
+    // used to name the wrapper here, chosen by `session_end_capture === "yes"`;
+    // that key is `not-used` unconditionally now, so the branch was dead.
+    captureVia: "command",
     summary: `claude=${installation.version} ${summarise(capabilities)}`,
   };
 }

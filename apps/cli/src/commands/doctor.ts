@@ -235,20 +235,121 @@ export async function detectManagedDrift(
   });
 }
 
+/**
+ * One agent's discovery, or the error that stopped it. A union rather than a
+ * nullable field with a loose `error`, so no branch can read a discovery that
+ * never happened.
+ */
+export type AgentOutcome =
+  | { readonly name: AgentName; readonly discovery: AgentDiscovery }
+  | {
+      readonly name: AgentName;
+      readonly discovery: null;
+      readonly error: unknown;
+    };
+
+/**
+ * Every agent asked, independently of every other.
+ *
+ * The loop this replaces pushed straight into an array and let the first raise
+ * escape, so a refusing `claude` meant `codex` was **never asked** and was then
+ * reported absent — one agent's failure printed as the other's absence. Asking
+ * separately is the whole fix; the callers below decide what a raise means.
+ */
+export async function discoverEachAgent(
+  context: CliContext,
+): Promise<readonly AgentOutcome[]> {
+  const outcomes: AgentOutcome[] = [];
+  for (const name of AGENT_NAMES) {
+    try {
+      outcomes.push({
+        name,
+        discovery: await context.platform.discoverExecutable(name),
+      });
+    } catch (error) {
+      outcomes.push({ name, discovery: null, error });
+    }
+  }
+  return outcomes;
+}
+
+/**
+ * The discoveries, or the first error, rethrown.
+ *
+ * `status` takes this shape and reports agents as data, with a warning when
+ * discovery fails; `doctor` needs the per-agent outcomes and reads
+ * `discoverEachAgent` directly. Both agents are still asked before anything is
+ * rethrown, which is the difference that matters — the raise is now a report
+ * about one agent rather than a reason the next one goes unexamined.
+ */
 export async function discoverAgents(
   context: CliContext,
 ): Promise<readonly AgentDiscovery[]> {
   const discovered: AgentDiscovery[] = [];
-  for (const name of AGENT_NAMES) {
-    discovered.push(await context.platform.discoverExecutable(name));
+  for (const outcome of await discoverEachAgent(context)) {
+    if (outcome.discovery === null) throw outcome.error;
+    discovered.push(outcome.discovery);
   }
   return discovered;
 }
 
-function describeAgents(agents: readonly AgentDiscovery[]): string {
-  return agents
-    .map((agent) => `${agent.name}=${agent.installed ? "present" : "absent"}`)
+/** Narrows to the raised half of the union, so `error` is reachable. */
+function raised(
+  outcome: AgentOutcome,
+): outcome is Extract<AgentOutcome, { readonly discovery: null }> {
+  return outcome.discovery === null;
+}
+
+/**
+ * **A discovery that raised reads `present`, never `absent`.**
+ *
+ * `MacOsPlatformAdapter` reports a binary it could not find as data — an
+ * `AgentDiscovery` with `installed: false` — and raises only once it has
+ * something it cannot vouch for: a `which` result it refuses, a call that did
+ * not complete. None of those is "not installed", and printing them as absence
+ * is the conflation `unreadable` exists to prevent, one layer down. The
+ * capability check says `unreadable` about the same agent in the same report;
+ * this line says which agent the pair is about, and `checkAgents` still grades
+ * the raise itself and names it in the same message.
+ */
+function describeAgents(outcomes: readonly AgentOutcome[]): string {
+  return outcomes
+    .map((outcome) => {
+      const installed =
+        outcome.discovery === null || outcome.discovery.installed;
+      return `${outcome.name}=${installed ? "present" : "absent"}`;
+    })
     .join(" ");
+}
+
+/**
+ * What one agent's discovery leaves for its capability report to say.
+ *
+ * Three outcomes, because there are three: a path to ask, nothing to ask, and
+ * a discovery that raised. **The third one used to be folded into the second**
+ * — the bare `catch` below passed `executablePath: null`, so any discovery
+ * error, a refusal included, printed as `claude=absent`: "we could not ask"
+ * rendered as "not installed", the same conflation `unreadable` exists to
+ * prevent one layer up, and the exact residual `codex-adapter.md` §11.6 left
+ * for DOS-P6 to close. `checkAgents` grades the raise itself, so nothing is
+ * swallowed by threading it here — this check still reports and never fails.
+ */
+function capabilityInput(outcome: AgentOutcome | undefined): {
+  readonly executablePath: string | null;
+  readonly discoveryFailed: boolean;
+} {
+  if (outcome === undefined) {
+    return { executablePath: null, discoveryFailed: false };
+  }
+  if (outcome.discovery === null) {
+    return { executablePath: null, discoveryFailed: true };
+  }
+  return {
+    executablePath: outcome.discovery.installed
+      ? outcome.discovery.executablePath
+      : null,
+    discoveryFailed: false,
+  };
 }
 
 /**
@@ -262,20 +363,11 @@ function describeAgents(agents: readonly AgentDiscovery[]): string {
  * failure, which is also why `agents` is excluded from `INIT_OWNED_CHECKS`.
  */
 async function checkClaudeCapabilities(context: CliContext): Promise<Finding> {
-  // Discovery can refuse — `MacOsPlatformAdapter` rejects a `which` result it
-  // cannot vouch for, and `checkAgents` already demotes that to a warning. A
-  // refusal here is information about the environment, not a failure of this
-  // report, so it degrades to "nothing to examine" rather than propagating.
-  let executablePath: string | null = null;
-  try {
-    const agents = await discoverAgents(context);
-    const claude = agents.find((agent) => agent.name === "claude");
-    executablePath = claude?.installed === true ? claude.executablePath : null;
-  } catch {
-    executablePath = null;
-  }
+  const outcome = (await discoverEachAgent(context)).find(
+    (candidate) => candidate.name === "claude",
+  );
   const report = await reportClaudeCapabilities({
-    executablePath,
+    ...capabilityInput(outcome),
     runner: context.runner,
     /**
      * The **user's** home, not the product's. This was
@@ -319,52 +411,25 @@ export function codexPluginRoot(context: CliContext): string {
 }
 
 async function checkCodexCapabilities(context: CliContext): Promise<Finding> {
-  // Discovery can refuse — `MacOsPlatformAdapter` rejects a `which` result it
-  // cannot vouch for, and `checkAgents` already demotes that to a warning. A
-  // refusal here is information about the environment, not a failure of this
-  // report, so it degrades to "nothing to examine" rather than propagating.
-  //
-  // The consequence is worth stating plainly: the catch above is bare, so
-  // any discovery error — a refusal, an unsupported platform, a security
-  // refusal from the process runner — is rendered as `codex=absent`, "we
-  // could not ask" printed as "not installed", the same conflation
-  // `unreadable` exists to prevent, one layer up. `checkAgents` in this file
-  // splits those on purpose (a refusal demotes to `warn`, anything else is
-  // `fail`), so the same failure can leave `agents` failing while
-  // `codex-capabilities` still prints `pass … codex=absent`. This is a known
-  // residual, not an oversight: both adapters carry it, they must stay
-  // identical because DOS-P6 consumes both, and DOS-P6 owns closing it.
-  let executablePath: string | null = null;
-  try {
-    const agents = await discoverAgents(context);
-    const codex = agents.find((agent) => agent.name === "codex");
-    executablePath = codex?.installed === true ? codex.executablePath : null;
-  } catch {
-    executablePath = null;
-  }
+  const outcome = (await discoverEachAgent(context)).find(
+    (candidate) => candidate.name === "codex",
+  );
   const report = await reportCodexCapabilities({
-    executablePath,
+    ...capabilityInput(outcome),
     runner: context.runner,
     pluginRoot: codexPluginRoot(context),
   });
   /**
-   * `report.recovery` is carried on every branch unconditionally —
-   * `codex-capabilities.ts` decided a *report* that omits it is not a
-   * report. But this is the *message*, the line a human reads, and advice to
-   * open a Codex session is not actionable on a machine that has no Codex to
-   * open one in. Gated on `installed` rather than on a specific capability
-   * reading `wrapper-required`: `doctor` never sets `probe: true` (see the
-   * comment on `CodexCapabilityRequest.probe`), so every installed branch it
-   * can reach — unreadable, not-probed — reports `captureVia: "wrapper"`
-   * today, and the advice is actionable in both of them; only `absent` is
-   * not. The probed branch can return `captureVia: "hook"`
-   * (`codex-capabilities.ts` does when `session_end_capture === "yes"`), but
-   * `doctor` never sets `probe: true`, so that branch is unreachable here.
+   * No `recovery=` any more. It named the one command that grants Codex's hook
+   * trust gate, and knowledge-pipeline spec §3.1 ships no hooks, so the gate
+   * opens onto nothing — advice to run `/hooks` for a hook that does not exist
+   * is the same defect as a capability word naming a wrapper nobody can run.
+   * Removed from the report itself rather than hidden here, so no reader of
+   * either layer can act on it.
    */
-  const recovery = report.installed ? ` recovery="${report.recovery}"` : "";
   return pass(
     "codex-capabilities",
-    `${report.summary} capture-via=${report.captureVia}${recovery}`,
+    `${report.summary} capture-via=${report.captureVia}`,
     [],
   );
 }
@@ -658,24 +723,43 @@ async function checkRedactionKey(
  * has always degraded this to a warning; this is `doctor` agreeing with it.
  */
 async function checkAgents(context: CliContext): Promise<Finding> {
-  try {
-    const agents = await discoverAgents(context);
-    return pass("agents", describeAgents(agents), []);
-  } catch (error) {
-    const message = context.guards.redactDiagnostic(
-      error instanceof Error ? error.message : "agent discovery failed",
-    );
+  const outcomes = await discoverEachAgent(context);
+  const failed = outcomes.filter(raised);
+  const described = describeAgents(outcomes);
+  if (failed.length === 0) return pass("agents", described, []);
 
-    /**
-     * Only the refusal is demoted. `discoverExecutable` can also raise an
-     * unsupported platform, invalid input, or a security refusal from the
-     * process runner, and flattening those into a warning would erase the one
-     * signal that says a guard fired.
-     */
-    return error instanceof MacOsPlatformDiscoveryError
-      ? warn("agents", message, [])
-      : fail("agents", message, [], exitCodeOf(error));
-  }
+  /**
+   * The matrix **and** the diagnostics, not one or the other. This check used
+   * to replace its whole message with the error, which is how a refusing
+   * `claude` erased what was known about `codex` from the line a user reads.
+   * Each failure is named with its agent, so two refusals for different
+   * reasons cannot read as one.
+   */
+  const message = [
+    described,
+    ...failed.map(
+      (outcome) =>
+        `${outcome.name}: ${context.guards.redactDiagnostic(
+          outcome.error instanceof Error
+            ? outcome.error.message
+            : "agent discovery failed",
+        )}`,
+    ),
+  ].join("; ");
+
+  /**
+   * Only the refusal is demoted. `discoverExecutable` can also raise an
+   * unsupported platform, invalid input, or a security refusal from the
+   * process runner, and flattening those into a warning would erase the one
+   * signal that says a guard fired. The exit code comes from the first
+   * non-refusal, for the same reason: it is the error that earned the failure.
+   */
+  const graver = failed.find(
+    (outcome) => !(outcome.error instanceof MacOsPlatformDiscoveryError),
+  );
+  return graver === undefined
+    ? warn("agents", message, [])
+    : fail("agents", message, [], exitCodeOf(graver.error));
 }
 
 /**

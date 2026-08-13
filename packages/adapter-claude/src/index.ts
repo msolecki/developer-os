@@ -26,7 +26,13 @@ export { CLAUDE_CAPABILITY_KEYS, CLAUDE_MINIMUM_VERSION } from "./versions.js";
 export type { ClaudeCapabilityKey } from "./versions.js";
 export { probeClaude } from "./probe.js";
 export type { ProbeDependencies } from "./probe.js";
-export { resolveCapabilities } from "./capabilities.js";
+/**
+ * `CLAUDE_NOT_USED_KEYS` is exported for one consumer:
+ * `apps/cli/src/adapter-capability-parity.test.ts`, the only place both
+ * adapters are legally visible at once (spec §1 forbids either importing the
+ * other, so neither package can assert parity about itself).
+ */
+export { CLAUDE_NOT_USED_KEYS, resolveCapabilities } from "./capabilities.js";
 export type {
   CapabilityState,
   ClaudeCapabilities,

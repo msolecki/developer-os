@@ -88,8 +88,10 @@ describe("discoverCli", () => {
    * `2.1.216-rc.1` may lack what `2.1.216` ships, so granting it the release's
    * documented floor would be a lie — except that a floor never earns a `yes`
    * on its own (spec §5.1). The probe still has to observe every capability, so
-   * the worst this truncation can produce is a `wrapper-required` where a
-   * stricter parse would have produced `unknown`.
+   * the worst this truncation can produce is a `yes` where a stricter parse
+   * would have produced `unknown`, and only for a capability a probe already
+   * observed. (It read `wrapper-required` until DOS-P6 Task 3, which replaced
+   * that state with `unknown` throughout.)
    *
    * If the table is ever allowed to grant a capability without a probe, this
    * test must be revisited in the same change.

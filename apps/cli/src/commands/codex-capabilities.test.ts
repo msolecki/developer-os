@@ -74,18 +74,6 @@ describe("reportCodexCapabilities", () => {
     expect(report.summary).not.toContain("codex=absent");
   });
 
-  /** Spec §5.3: the fix is one command, and a report that omits it is not a report. */
-  it("names the command that grants hook trust", async () => {
-    const report = await reportCodexCapabilities({
-      executablePath: "/opt/synthetic/bin/codex",
-      runner: version("codex-cli 0.147.0"),
-      pluginRoot: "/synthetic/plugin",
-      probe: true,
-    });
-    expect(report.captureVia).toBe("wrapper");
-    expect(report.recovery).toContain("/hooks");
-  });
-
   it("reports every capability key, so the matrix is complete", async () => {
     const report = await reportCodexCapabilities({
       executablePath: null,
@@ -170,22 +158,22 @@ describe("reportCodexCapabilities", () => {
       pluginRoot: "/synthetic/plugin",
       probe: true,
     });
-    expect(report.capabilities.skills).toBe("wrapper-required");
+    expect(report.capabilities.skills).toBe("unknown");
   });
 
   /**
-   * `plugin_hooks` is UNSETTLED (spec §15.1: the plugin-bundled hooks path is
-   * documented but unobserved) and must report `unknown` regardless of what the
-   * probe observed for anything else.
+   * `plugin_hooks` is on the not-used list — no hooks file ships
+   * (knowledge-pipeline spec §3.1) — and must report that regardless of what
+   * the probe observed for anything else.
    */
-  it("reports plugin_hooks as unknown even when the probe observes our tree", async () => {
+  it("reports plugin_hooks as not-used even when the probe observes our tree", async () => {
     const report = await reportCodexCapabilities({
       executablePath: "/opt/synthetic/bin/codex",
       runner: ourTreeAt("/synthetic/plugin"),
       pluginRoot: "/synthetic/plugin",
       probe: true,
     });
-    expect(report.capabilities.plugin_hooks).toBe("unknown");
+    expect(report.capabilities.plugin_hooks).toBe("not-used");
   });
 
   it("renders a matrix line naming every key", async () => {
@@ -199,24 +187,74 @@ describe("reportCodexCapabilities", () => {
     }
   });
 
-  it("names the wrapper as the capture route even once probed", async () => {
+  /**
+   * A capture reaches the vault because somebody ran a command. The route was
+   * `wrapper` on every branch and `hook` on one unreachable one; neither of
+   * those two things is being built (knowledge-pipeline spec §3.1).
+   */
+  it("names the command as the capture route even once probed", async () => {
     const report = await reportCodexCapabilities({
       executablePath: "/opt/synthetic/bin/codex",
       runner: ourTreeAt("/synthetic/plugin"),
       pluginRoot: "/synthetic/plugin",
       probe: true,
     });
-    expect(report.captureVia).toBe("wrapper");
+    expect(report.captureVia).toBe("command");
   });
 
-  it("carries the hook-trust recovery even when nothing is installed", async () => {
+  /**
+   * A discovery that raised is a third input, not a second spelling of an
+   * absent path: `doctor` used to flatten it into `executablePath: null` and
+   * print `codex=absent` about a binary nothing had managed to ask.
+   */
+  it("reports a raised discovery as unreadable, never absent", async () => {
     const report = await reportCodexCapabilities({
       executablePath: null,
+      discoveryFailed: true,
       runner: version("codex-cli 0.147.0"),
       pluginRoot: "/synthetic/plugin",
     });
-    expect(report.recovery).toContain("/hooks");
+    expect(report.installed).toBe(true);
+    expect(report.summary).toContain("codex=unreadable");
+    expect(report.summary).not.toContain("codex=absent");
   });
+});
+
+/**
+ * No hooks file ships (knowledge-pipeline spec §3.1), so the one command that
+ * would grant Codex's hook trust gate opens a gate onto nothing. The advice
+ * was carried on **every** branch precisely so a report could never omit it
+ * (`codex-adapter.md` §5); with nothing behind the gate it is removed rather
+ * than reworded, on every branch, for the same reason.
+ */
+describe("the hook-trust advice", () => {
+  const branches = {
+    absent: { executablePath: null, runner: version("codex-cli 0.147.0") },
+    unreadable: {
+      executablePath: "/opt/synthetic/bin/codex",
+      runner: runner(() => ({ exitCode: 97 })),
+    },
+    "not-probed": {
+      executablePath: "/opt/synthetic/bin/codex",
+      runner: version("codex-cli 0.147.0"),
+    },
+    probed: {
+      executablePath: "/opt/synthetic/bin/codex",
+      runner: ourTreeAt("/synthetic/plugin"),
+      probe: true,
+    },
+  } as const;
+
+  it.each(Object.keys(branches) as readonly (keyof typeof branches)[])(
+    "is nowhere in the %s report",
+    async (branch) => {
+      const report = await reportCodexCapabilities({
+        ...branches[branch],
+        pluginRoot: "/synthetic/plugin",
+      });
+      expect(JSON.stringify(report)).not.toContain("/hooks");
+    },
+  );
 });
 
 describe("the probe is opt-in", () => {

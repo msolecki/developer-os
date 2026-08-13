@@ -4,16 +4,22 @@ import {
   probeCodex,
   resolveCapabilities,
 } from "@developer-os/adapter-codex";
-import type {
-  CapabilityState,
-  CodexCapabilities,
-} from "@developer-os/adapter-codex";
+import type { CodexCapabilities } from "@developer-os/adapter-codex";
 
 import type { ProcessRunner } from "@developer-os/security";
 
 export interface CodexCapabilityRequest {
   /** From `discoverExecutable`; `null` when Codex is not installed. */
   readonly executablePath: string | null;
+  /**
+   * Discovery itself raised rather than answering, so no path was produced and
+   * the binary was never asked anything. Mirrors
+   * `ClaudeCapabilityRequest.discoveryFailed`, which carries the reasoning:
+   * `null` means "this machine has no Codex", a raised discovery means the
+   * opposite of settled, and flattening the second into the first printed "we
+   * could not ask" as "not installed" (`codex-adapter.md` §11.6).
+   */
+  readonly discoveryFailed?: boolean;
   readonly runner: ProcessRunner;
   /**
    * The absolute path the plugin tree is installed to — the tree's own root,
@@ -43,42 +49,44 @@ export interface CodexCapabilityReport {
   readonly installed: boolean;
   readonly version: string | null;
   readonly capabilities: CodexCapabilities;
-  /** How capture reaches the vault on this machine, today. */
-  readonly captureVia: "hook" | "wrapper";
+  /**
+   * How capture reaches the vault on this machine, today: a command the user
+   * ran, and nothing else. `ClaudeCapabilityReport.captureVia` carries the
+   * reasoning; the two must say the same thing, because one `doctor` report
+   * prints both.
+   */
+  readonly captureVia: "command";
   /** One line, for a `DoctorCheck.message`. */
   readonly summary: string;
-  /**
-   * The command that grants Codex's hook trust gate. Spec §5.3: Codex holds a
-   * non-managed command hook inert until the user reviews and trusts it, so a
-   * freshly installed plugin reports `wrapper-required` for every hook-backed
-   * capability until one fires. That is not a degraded state — capture already
-   * works through `developer-os run codex`, which needs no trust at all — but a
-   * capability report that never names the one command that closes the gap is
-   * useless to whoever reads it. Carried on every report, not only the ones a
-   * probe found something to fix, so a report can never omit it.
-   */
-  readonly recovery: string;
 }
 
-const HOOK_TRUST_RECOVERY =
-  "inside a Codex session, run /hooks to review and trust the developer-os hooks";
-
 /**
- * Mirrors `resolveCapabilities`'s accumulator shape. Only half of that
- * mirroring is a compile-time guarantee: dropping `"unknown"` from
- * `CapabilityState` breaks `resolved[key] = "unknown"` below, but a renamed
- * or dropped key in `CODEX_CAPABILITY_KEYS` does not — `Record<string,
- * CapabilityState>`'s index signature satisfies `CodexCapabilities`'s
- * required named properties, so this compiles even if the loop never
- * assigns a required key. Same gap as the equivalent uncast return in
- * `packages/adapter-codex/src/capabilities.ts`.
+ * Every key `unknown`: the matrix for a machine nothing was asked about.
+ *
+ * **Written out key by key, and that is the type check rather than a style.**
+ * The accumulator was `Record<string, CapabilityState>`, whose index signature
+ * satisfies `CodexCapabilities`'s required named properties, so this compiled
+ * even if the loop never assigned a required key — a renamed or dropped
+ * capability key was not a compile error (`codex-adapter.md` §11.7). The same
+ * fix is applied to `resolveCapabilities` in both adapters and to `allUnknown`
+ * in the Claude command beside this one; all four sites are the same gap.
+ *
+ * The six `not-used` keys stay `unknown` here for the reason the Claude twin
+ * records: `not-used` is a claim about a resolved matrix, and this one resolves
+ * nothing.
  */
 function allUnknown(): CodexCapabilities {
-  const resolved: Record<string, CapabilityState> = Object.create(null) as Record<
-    string,
-    CapabilityState
-  >;
-  for (const key of CODEX_CAPABILITY_KEYS) resolved[key] = "unknown";
+  const resolved: CodexCapabilities = {
+    skills: "unknown",
+    plugin_hooks: "unknown",
+    session_start_injection: "unknown",
+    session_end_capture: "unknown",
+    pre_compact_backup: "unknown",
+    non_interactive_run: "unknown",
+    structured_result: "unknown",
+    subagents: "unknown",
+    durable_project_guidance: "unknown",
+  };
   return Object.freeze(resolved);
 }
 
@@ -111,24 +119,29 @@ export async function reportCodexCapabilities(
       installed: false,
       version: null,
       capabilities,
-      captureVia: "wrapper",
+      captureVia: "command",
       summary: `codex=absent ${summarise(capabilities)}`,
-      recovery: HOOK_TRUST_RECOVERY,
     };
   };
 
+  /**
+   * A binary that is there and did not answer is **not** absent, and neither
+   * is one whose discovery raised — until DOS-P6 Task 3 that second case had
+   * no producer at all, because `doctor` caught the raise and passed
+   * `executablePath: null`. The Claude twin carries the full record.
+   */
   const unreadable = (): CodexCapabilityReport => {
     const capabilities = allUnknown();
     return {
       installed: true,
       version: null,
       capabilities,
-      captureVia: "wrapper",
+      captureVia: "command",
       summary: `codex=unreadable ${summarise(capabilities)}`,
-      recovery: HOOK_TRUST_RECOVERY,
     };
   };
 
+  if (request.discoveryFailed === true) return unreadable();
   if (request.executablePath === null) return absent();
 
   const installation = await discoverCodex({
@@ -143,9 +156,8 @@ export async function reportCodexCapabilities(
       installed: true,
       version: installation.version,
       capabilities,
-      captureVia: "wrapper",
+      captureVia: "command",
       summary: `codex=${installation.version} not-probed ${summarise(capabilities)}`,
-      recovery: HOOK_TRUST_RECOVERY,
     };
   }
 
@@ -159,11 +171,10 @@ export async function reportCodexCapabilities(
     installed: true,
     version: installation.version,
     capabilities,
-    // Spec §5.3: the wrapper is the route whenever `session_end_capture` is
-    // not `yes`, and it stays that way until a hook is observed firing —
-    // which requires the trust gate `recovery` names to be granted first.
-    captureVia: capabilities.session_end_capture === "yes" ? "hook" : "wrapper",
+    // A capture reaches the vault because somebody ran a command. Spec §5.3
+    // used to name the wrapper here, chosen by `session_end_capture === "yes"`;
+    // that key is `not-used` unconditionally now, so the branch was dead.
+    captureVia: "command",
     summary: `codex=${installation.version} ${summarise(capabilities)}`,
-    recovery: HOOK_TRUST_RECOVERY,
   };
 }
