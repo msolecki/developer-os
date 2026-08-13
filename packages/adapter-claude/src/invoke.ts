@@ -36,6 +36,21 @@ export interface InvokeDependencies {
 
 const MAX_TURNS_CEILING = 50;
 
+/**
+ * `packages/core/src/agent-prompt/index.ts` refuses `maxTurns` outright
+ * rather than half-honouring it on one vendor and dropping it on the other
+ * (owner DOS-P7) — so `parseAgentPromptArgs`, which used to default the
+ * value, no longer produces one at all. `ClaudeInvocation.maxTurns` is still
+ * required, though: bounded because an unbounded agentic loop inside a
+ * workflow with declared scopes is a workflow whose cost and reach are
+ * decided by the model, not by the workflow's author. Exported as a named
+ * constant, not left as a literal at whatever future call site builds a
+ * `ClaudeInvocation` from a workflow step, so that reasoning travels with the
+ * value instead of being re-invented — or silently dropped — the day
+ * DOS-P7's real turn bound needs somewhere to start from.
+ */
+export const DEFAULT_MAX_TURNS = 5;
+
 export async function invokeClaude(
   installation: ClaudeInstallation,
   invocation: ClaudeInvocation,

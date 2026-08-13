@@ -6,7 +6,6 @@ import type {
   ManagedArtifactV1,
 } from "@developer-os/core";
 import { compareCodePoints } from "@developer-os/workflow-schema";
-import type { RenderedArtifact } from "@developer-os/workflow-schema";
 import { MARKETPLACE_NAME } from "./marketplace.js";
 import {
   CODEX_ROOT_SEGMENT,
@@ -14,6 +13,7 @@ import {
   PLUGIN_NAME,
   PLUGIN_TREE_PREFIX,
 } from "./plugin.js";
+import type { MarketplaceRootArtifact } from "./plugin.js";
 
 export interface InstallContext {
   readonly home: string;
@@ -190,8 +190,19 @@ function uninstallRegistration(): readonly CodexCliStep[] {
   ];
 }
 
+/**
+ * `tree` is `readonly MarketplaceRootArtifact[]`, not `RenderedArtifact[]` —
+ * the nominal fix for `BACKLOG.md` §1 NEW-13. `RenderedArtifact` used to
+ * describe paths relative to both this root and the plugin root
+ * `renderCodexPlugin` produces one level down, so a plugin-root tree fed
+ * here satisfied the type checker and only `assertWithinPluginTree` below
+ * caught it at runtime. The brand carries no runtime marker, so that runtime
+ * guard is still load-bearing on its own — this parameter type only refuses
+ * the mistake earlier, at the call site, for anyone still holding a type
+ * checker.
+ */
 export function proposeCodexInstall(
-  tree: readonly RenderedArtifact[],
+  tree: readonly MarketplaceRootArtifact[],
   context: InstallContext,
   managed: ManagedByPath = new Map(),
 ): CodexInstallProposal {

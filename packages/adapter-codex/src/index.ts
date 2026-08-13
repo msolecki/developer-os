@@ -48,6 +48,7 @@ export {
   PLUGIN_TREE_PREFIX,
   PLUGIN_TREE_SEGMENTS,
 } from "./plugin.js";
+export type { MarketplaceRootArtifact, PluginRootArtifact } from "./plugin.js";
 export { MARKETPLACE_NAME, renderMarketplace } from "./marketplace.js";
 export type { MarketplaceContext } from "./marketplace.js";
 export { proposeCodexInstall, proposeCodexUninstall } from "./install.js";

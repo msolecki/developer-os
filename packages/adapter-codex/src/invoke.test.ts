@@ -61,7 +61,7 @@ function capturing(result: Partial<ProcessResult> = {}): {
 describe("invocationFromAgentPrompt", () => {
   it("accepts a well-formed with block through the shared schema", () => {
     const built = invocationFromAgentPrompt(
-      { prompt: "summarise", maxTurns: 3 },
+      { prompt: "summarise" },
       { workingRoot: "/synthetic/work", writeScopes: [], outputSchemaPath: "/synthetic/s.json" },
     );
     expect(built.ok).toBe(true);
@@ -73,7 +73,11 @@ describe("invocationFromAgentPrompt", () => {
       name: "a prototype-polluting key",
       args: JSON.parse('{"prompt":"x","__proto__":{"a":1}}') as unknown,
     },
-    { name: "a missing prompt", args: { maxTurns: 3 } },
+    { name: "a missing prompt", args: {} },
+    {
+      name: "maxTurns, bounded under Claude and silently dropped under Codex",
+      args: { prompt: "x", maxTurns: 3 },
+    },
     { name: "a non-object", args: "just a string" },
   ])("refuses $name, through the one schema both adapters use", ({ args }) => {
     const built = invocationFromAgentPrompt(args, {

@@ -73,11 +73,12 @@ export function invocationFromAgentPrompt(
     // it by `parseAgentPromptArgs`.
     return { ok: false, detail: parsed.message };
   }
-  // `parsed.args.maxTurns` is bounded by the shared schema but has nowhere to
-  // go from here: `CodexInvocation` carries no field for it and the argv this
-  // module builds has no flag for it (spec §7 does not name one). A workflow
-  // author writing `maxTurns: 3` under Codex gets no error and no effect —
-  // a known plan-level gap, not one this task closes.
+  // `parsed` can no longer carry a `maxTurns`: `parseAgentPromptArgs` refuses
+  // the key outright (owner DOS-P7) rather than accepting a value this module
+  // would have had nowhere to put — `CodexInvocation` carries no field for it
+  // and the argv built below has no flag for it either (spec §7 names none).
+  // A workflow author writing `maxTurns: 3` now gets a refusal naming DOS-P7
+  // instead of the silent no-op this comment used to describe.
   return {
     ok: true,
     invocation: {

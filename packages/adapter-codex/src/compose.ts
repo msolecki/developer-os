@@ -1,11 +1,9 @@
 import { posix } from "node:path";
-import type {
-  RenderedArtifact,
-  WorkflowContractV1,
-} from "@developer-os/workflow-schema";
+import type { WorkflowContractV1 } from "@developer-os/workflow-schema";
 import { renderMarketplace } from "./marketplace.js";
 import type { MarketplaceContext } from "./marketplace.js";
 import { buildPluginTree, PLUGIN_TREE_PREFIX } from "./plugin.js";
+import type { MarketplaceRootArtifact, PluginRootArtifact } from "./plugin.js";
 import { CodexRenderer, SHARED_WORKFLOW_ID } from "./render.js";
 
 /**
@@ -30,7 +28,7 @@ import { CodexRenderer, SHARED_WORKFLOW_ID } from "./render.js";
  */
 export function renderCodexPlugin(
   contracts: readonly WorkflowContractV1[],
-): readonly RenderedArtifact[] {
+): readonly PluginRootArtifact[] {
   const shared = contracts.find(
     (contract) => contract.id === SHARED_WORKFLOW_ID,
   );
@@ -49,7 +47,16 @@ export function renderCodexPlugin(
   const skills = contracts.flatMap((contract) => [
     ...renderer.render(contract, null),
   ]);
-  return buildPluginTree(skills);
+  // The one brand-injection point for `PluginRootArtifact`: `buildPluginTree`
+  // stays root-agnostic (it only assembles and validates a tree, it does not
+  // know which root it is relative to), and this function's own docblock
+  // above is where the "relative to the plugin root" claim is actually made.
+  // The brand carries no runtime marker, so this changes nothing at runtime —
+  // only what the type checker accepts downstream, in `renderCodexInstallTree`
+  // and `proposeCodexInstall`. `as unknown as` because a `unique symbol` key
+  // TypeScript never sees assigned makes the two array types "not sufficiently
+  // overlap" for `tsc` to allow the direct two-step cast.
+  return buildPluginTree(skills) as unknown as readonly PluginRootArtifact[];
 }
 
 /**
@@ -74,11 +81,22 @@ export function renderCodexPlugin(
 export function renderCodexInstallTree(
   contracts: readonly WorkflowContractV1[],
   context: MarketplaceContext,
-): readonly RenderedArtifact[] {
+): readonly MarketplaceRootArtifact[] {
   const pluginTree = renderCodexPlugin(contracts);
+  // Two brand-injection points, not one — an earlier version of this task's
+  // plan cast only the `.map()` output and missed the second. `.map()`
+  // builds new object literals, which do not inherit `pluginTree`'s brand
+  // even though every value is now marketplace-root-relative; `renderMarketplace`
+  // separately returns an unbranded `RenderedArtifact` spread into the same
+  // array. Casting only the first would have let the return statement widen
+  // back to a plain `RenderedArtifact[]` and silently defeated the guard
+  // `PluginRootArtifact`/`MarketplaceRootArtifact` exist to add. Both go
+  // through `unknown` first, for the same reason as `renderCodexPlugin`'s
+  // cast above: a `unique symbol` key `tsc` never sees assigned is not
+  // "sufficiently overlapping" for the direct two-step form.
   const rerooted = pluginTree.map((artifact) => ({
     path: posix.join(PLUGIN_TREE_PREFIX, artifact.path),
     contents: artifact.contents,
-  }));
-  return [...rerooted, renderMarketplace(context)];
+  })) as unknown as readonly MarketplaceRootArtifact[];
+  return [...rerooted, renderMarketplace(context) as unknown as MarketplaceRootArtifact];
 }

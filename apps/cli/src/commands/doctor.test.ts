@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { EXIT_CODES } from "@developer-os/core";
 import { PLUGIN_TREE_PREFIX, proposeCodexInstall } from "@developer-os/adapter-codex";
+import type { MarketplaceRootArtifact } from "@developer-os/adapter-codex";
 import { MacOsPlatformDiscoveryError } from "@developer-os/platform-macos";
 import type {
   AgentDiscovery,
@@ -611,10 +612,16 @@ describe("codexPluginRoot", () => {
       PLUGIN_TREE_PREFIX,
       ".codex-plugin/plugin.json",
     );
-    const proposal = proposeCodexInstall(
-      [{ path: manifestRelativePath, contents: "{}" }],
-      { home: fixture.context.paths.home, productVersion: "0.0.0" },
-    );
+    // A synthetic single-artifact tree, not one `renderCodexInstallTree`
+    // produced — this test only needs `proposeCodexInstall`'s own path math,
+    // so it never renders a real plugin. The cast stands in for that missing
+    // render: `MarketplaceRootArtifact`'s brand carries no runtime marker, so
+    // this changes nothing the function under test observes.
+    const tree = [{ path: manifestRelativePath, contents: "{}" }] as unknown as readonly MarketplaceRootArtifact[];
+    const proposal = proposeCodexInstall(tree, {
+      home: fixture.context.paths.home,
+      productVersion: "0.0.0",
+    });
     const manifestOperation = proposal.operations.find(
       (operation) => operation.source === manifestRelativePath,
     );
