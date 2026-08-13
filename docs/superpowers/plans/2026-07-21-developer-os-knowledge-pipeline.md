@@ -850,7 +850,7 @@ The rendered skill's **effect block** prints `Effect: capture.write` and names n
 **Interfaces:**
 - Produces: `EffectFootprint.command: string | null`, and a seventh Brain-adjacent verb `capture.edit` with the same `content/_raw/quarantine/**` read and write footprint as `capture.setStatus` plus that directory as a read.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 **The invariant is not `implemented`.** A verb needs a command precisely so the rendered skill can name the invocation an agent runs — which must be true *before* the handler exists, since spec §4's whole point is that three shipped skills already name commands that do not. Two verbs carry no command, and the test names both with their reason, so adding a verb forces a decision rather than a default:
 
@@ -870,7 +870,7 @@ const COMMANDLESS = [
   "brain.readNote",
 ] as const;
 
-it("gives every verb a developer-os command, except the two that cannot have one", () => {
+it("gives every verb a developer-os command, except the four that cannot have one", () => {
   const table = { ...EFFECT_VOCABULARY };
   expect(Object.keys(table).length).toBeGreaterThan(10);
 
@@ -883,7 +883,7 @@ it("gives every verb a developer-os command, except the two that cannot have one
   }
 });
 
-it("names exactly the two commandless verbs, so a third cannot appear by omission", () => {
+it("names exactly the four commandless verbs, so a fifth cannot appear by omission", () => {
   const without = Object.entries({ ...EFFECT_VOCABULARY })
     .filter(([, footprint]) => footprint.command === null)
     .map(([verb]) => verb)
@@ -919,7 +919,7 @@ it("renders the command inside the effect block, not only in the recovery block"
 
 Run this against the current renderer first and watch it fail with `commandAt` **greater** than `recoveryAt` — that failure is the proof the assertion is about the new rendering rather than the string that was always there.
 
-- [ ] **Step 2: Run them, watch them fail, implement, rerun**
+- [x] **Step 2: Run them, watch them fail, implement, rerun**
 
 Seven verbs gain commands (spec §4): `capture.write` → `developer-os capture`; `capture.list`, `capture.setStatus` and `capture.edit` → `developer-os review`; `ingest.stage`, `ingest.validate` and `ingest.apply` → `developer-os ingest`. Three more take the `brain` subcommands that already exist — `brain.search` → `developer-os brain search`, `brain.reindex` → `developer-os brain reindex`, `brain.lint` → `developer-os brain lint` — and `doctor.report` gains `developer-os doctor`. **`agent.prompt`, `cli.run`, `brain.readIndex` and `brain.readNote` keep `command: null`**, per the list above.
 
@@ -937,7 +937,7 @@ A test edited to go green is the shape SESSION.md §4 warns about, so state in e
 
 `renderSkillBody` renders the command in a `text` fence, never `bash` — same rule as `recovery.resume`, for the same reason: **nothing downstream should offer to run it.** It is screened through the same `screen()` seam as every other body field.
 
-- [ ] **Step 3: Regenerate both vendor trees and commit**
+- [x] **Step 3: Regenerate both vendor trees and commit**
 
 ```bash
 npm run check
@@ -994,8 +994,8 @@ it("leaves a glob that names neither root alone", () => {
 it("is identity under the default configuration, so the checked-in contracts are unchanged", () => {
   const globs = Object.values({ ...EFFECT_VOCABULARY })
     .flatMap((footprint) => [...footprint.read, ...footprint.write]);
-  // Half the table has empty read *and* write arrays, so without this the loop
-  // below is a no-op that passes by scanning nothing.
+  // Four of the fourteen entries have empty read *and* write arrays, so without
+  // this the loop below can quietly shrink toward a no-op that scans nothing.
   expect(globs.length).toBeGreaterThan(5);
   for (const glob of globs) expect(resolveScopeGlob(glob, DEFAULT)).toBe(glob);
 });
