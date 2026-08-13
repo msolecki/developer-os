@@ -30,9 +30,24 @@ week of confusion.
 
 ## NOW
 
-**A10 — DOS-P6 Knowledge pipeline, at its `S` gate. The next session writes the spec; approving it
-is the founder's.** Nothing else is in progress. DOS-P5 closed on 2026-08-12 and its plan is
+**A10 — DOS-P6 Knowledge pipeline, still at its `S` gate. The spec is written and the gate is now
+the founder's signature, not anyone's keyboard.** `specs/2026-07-21-developer-os-knowledge-pipeline-design.md`,
+written 2026-08-13. Nothing else is in progress. DOS-P5 closed on 2026-08-12 and its plan is
 deleted; `docs/architecture/codex-adapter.md` is what replaced it.
+
+**The next session does one of two things and nothing else.** If the founder has approved the spec,
+invoke `superpowers:writing-plans` and write DOS-P6's implementation plan — the `P` gate. If they
+have not, stop and say so; writing a plan against an unapproved spec is how two documents start
+disagreeing, and no amount of context makes that approval yours.
+
+**Read the spec's §3 before anything else.** Five decisions, each recorded with its cost. The one
+that reshapes the subsystem is 3.1: capture content is **agent-authored**, because `capture`'s
+declared `session_end` trigger cannot supply the `text` that same contract requires without reading
+`transcript_path`, which this product refuses on both vendors. Consequences the founder accepted —
+no hooks ship in v1, `developer-os run claude|codex` is never built, `wrapper-required` is replaced
+by `not-used`, and **nothing automatic captures anything**. The spec's §12 lists the six approved
+documents it amends; they sit as pending rows in `BACKLOG.md` §8 until approval, and are deleted
+rather than kept as history if the spec is refused.
 
 **Read three documents before writing a line of that spec**, in this order:
 `docs/architecture/codex-adapter.md`, `docs/architecture/claude-adapter.md`, and
@@ -83,7 +98,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` open; the spec is the next session's work and its approval is the founder's |
+| A10 | DOS-P6 Knowledge pipeline — S / P / I | `specs/…-knowledge-pipeline-design.md` written 2026-08-13; plan to write | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` written, awaiting the founder's approval; `P` blocked on it |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |
@@ -118,6 +133,7 @@ request exists so a human sees it first.
 | how to run a session start to finish | `SESSION.md` |
 | what to do next | this file |
 | what a missing spec must decide, and what it produces | `BACKLOG.md` §3 |
+| what the knowledge pipeline is, why nothing captures automatically, and the six documents it amends | `specs/2026-07-21-developer-os-knowledge-pipeline-design.md` — **awaiting approval** |
 | what the Brain engine is, and its six residuals | `docs/architecture/brain.md` |
 | what the workflow compiler is, what it deliberately cannot do, and the four workflows that say less than the product spec does | `docs/architecture/workflow-schema.md` |
 | what the Claude adapter is, why it ships no hooks, and its twelve residuals | `docs/architecture/claude-adapter.md` |
@@ -141,6 +157,10 @@ can execute what it renders**, which is the whole of what remains on the product
 **Six milestones remain**, each L: DOS-P6's spec, plan and implementation; DOS-P7's spec, plan and
 implementation. Then two more entries that are not subsystems — the cutover (A12) and the release
 (A13) — plus Track L's two items, which are not engineering work at all.
+
+**The first of the six is written but not closed.** DOS-P6's spec exists as of 2026-08-13; a spec
+is done when the founder approves it, not when an agent finishes typing it, so the count above is
+unchanged until then.
 
 `BACKLOG.md` §1 is four repository defects: NEW-7, which needs ten minutes with a machine that has
 Obsidian rather than an agent; NEW-11, which is the same invisible-character rule that closed

@@ -249,8 +249,9 @@ that subsystem in §3.
 
 ## 3. Missing specs and plans
 
-**Four documents left, and they are the last two subsystems'.** DOS-P6 and DOS-P7 need a spec and a
-plan each. Nothing else on the product path is missing a document.
+**Three documents left.** DOS-P6's spec was written 2026-08-13 and is **awaiting the founder's
+approval**; its plan comes after that approval and not before. DOS-P7 still needs both. Nothing else
+on the product path is missing a document.
 
 Each subsystem after Foundation requires an approved spec **and** an implementation plan
 before any code work — this is a Global Constraint of the program plan, not a preference.
@@ -274,8 +275,15 @@ first contact with a real binary.
 
 ### DOS-P6 — Knowledge pipeline hardening
 
-- **Spec:** `specs/2026-07-21-developer-os-knowledge-pipeline-design.md` — missing
-- **Plan:** `plans/2026-07-21-developer-os-knowledge-pipeline.md` — missing
+- **Spec:** `specs/2026-07-21-developer-os-knowledge-pipeline-design.md` — **written 2026-08-13,
+  awaiting the founder's approval.** Read its §3 first: five decisions, each with what it costs.
+  The one that reshapes the subsystem is 3.1 — capture content is **agent-authored**, because the
+  `session_end` trigger the canonical workflow declares cannot supply the `text` that same contract
+  requires without reading `transcript_path`, which this product refuses on both vendors. So no
+  hooks ship, `developer-os run claude|codex` is never built, and **nothing automatic captures
+  anything**. §12 lists the six documents it amends; they are pending rows in §8 until approval.
+- **Plan:** `plans/2026-07-21-developer-os-knowledge-pipeline.md` — missing, and blocked on that
+  approval rather than on any engineering
 - **Program task:** 6 · **Complexity:** L · **Blocked by:** nothing — DOS-P4 closed 2026-08-11 and
   DOS-P5 on 2026-08-12
 - **The spec must decide:** exact capture fields, lifecycle transitions, retention
@@ -510,8 +518,28 @@ amended one; only code and status lines are edited in place. This section is the
 it before trusting any approved document, because it is the only place that says whether the
 one in front of you is still current.
 
-**Nothing is pending.** Every amendment raised through DOS-P5 was ratified by the founder on or
-before 2026-08-12, and every row below carries its outcome rather than its question.
+**Six are pending, and they are the first pending rows since 2026-08-12.** All six ride on
+`specs/2026-07-21-developer-os-knowledge-pipeline-design.md`, written 2026-08-13 and **awaiting the
+founder's approval**; its §12 is their authoritative statement. They are listed here *before*
+approval on purpose, because §8 exists so that a reader of an approved document learns its status —
+and a reader of product spec §11 today should know a document proposing to supersede it is on the
+table. If the spec is not approved, these rows are deleted rather than left as history.
+
+| Pending against | What the knowledge-pipeline spec proposes |
+|---|---|
+| product design spec §11 | there is neither a lifecycle hook nor a `developer-os run claude\|codex` wrapper. `CapabilityState` **replaces** `wrapper-required` with `not-used`, and six of the nine keys resolve to it |
+| product design spec §14.3 | "user-configured patterns" narrowed to literal case-insensitive substrings — a user-supplied regex over capture text is a ReDoS surface and this codebase bounds no expression anywhere |
+| `specs/…-claude-adapter-design.md` §6.1 | hooks **declined**, not deferred; the three lifecycle keys report `not-used` |
+| `specs/…-codex-adapter-design.md` §5.3 | the same, in one decision covering both adapters. **This supersedes the ratified amendment below**, which deferred hooks to DOS-P6 rather than closing them |
+| `specs/…-codex-adapter-design.md` §14.1 | the JSONL terminal-event rule promoted from provisional to observed, dated, with the shape seen — ingest forces the real `codex exec` call that DOS-P5 could not justify |
+| `specs/…-workflow-compiler-design.md` §6 | scope globs derived from `BrainConfigV1` rather than written as literals, which `workflow-schema.md` §8.1 made due at the first handler that resolves one |
+
+**Two canonical workflows also change, and that is a contract change rather than an amendment:**
+`workflows/capture/workflow.yaml` drops `session_end` and `workflows/shared/workflow.yaml` drops
+`session_start` — both name triggers nothing can fire — and both go to `2.0.0`.
+
+**Every amendment raised through DOS-P5 was ratified** by the founder on or before 2026-08-12, and
+every row in the table below carries its outcome rather than its question.
 
 **One thing that is deliberately *not* a row here**, because §8 is amendments to approved
 documents and this was the reverse. DOS-P3's first draft invented `session_start_hook` and
