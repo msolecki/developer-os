@@ -1,6 +1,6 @@
 schemaVersion: 1
 id: review
-version: 1.0.0
+version: 2.0.0
 description: Accept, edit, or reject quarantined captures. Never deletes a source.
 triggers:
   - manual
@@ -37,6 +37,8 @@ steps:
     do: capture.setStatus
     with:
       decision: $input.decision
+  - id: edit
+    do: capture.edit
 validators:
   - no source file is removed by any decision
 recovery:

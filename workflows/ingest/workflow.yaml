@@ -1,6 +1,6 @@
 schemaVersion: 1
 id: ingest
-version: 1.0.0
+version: 2.0.0
 description: Stage accepted captures outside the vault, validate them, then apply transactionally.
 triggers:
   - manual
@@ -14,9 +14,11 @@ capabilities:
   - structured_result
 scopes:
   read:
+    - content/**
     - content/_raw/quarantine/**
   write:
     - content/**
+    - content/_indexes/**
 refusals:
   - when: capability-missing
     exit: 4
@@ -35,6 +37,8 @@ steps:
     do: ingest.validate
   - id: apply
     do: ingest.apply
+  - id: reindex
+    do: brain.reindex
 validators:
   - a failed apply leaves every capture retryable and none marked ingested
 recovery:

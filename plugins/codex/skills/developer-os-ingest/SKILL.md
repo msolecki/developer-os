@@ -3,7 +3,7 @@ name: "developer-os-ingest"
 description: "Stage accepted captures outside the vault, validate them, then apply transactionally."
 ---
 
-<!-- Generated from workflows/ingest/workflow.yaml (ingest@1.0.0). Do not edit. -->
+<!-- Generated from workflows/ingest/workflow.yaml (ingest@2.0.0). Do not edit. -->
 
 <!-- preamble from shared; concatenated, not referenced -->
 
@@ -48,6 +48,14 @@ Effect: `ingest.apply`
 
 ```text
 developer-os ingest
+```
+
+### reindex
+
+Effect: `brain.reindex`
+
+```text
+developer-os brain reindex
 ```
 
 

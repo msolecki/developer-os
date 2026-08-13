@@ -3,7 +3,7 @@ name: "developer-os-brain-search"
 description: "Search the vault index and return ranked matches with their source paths."
 ---
 
-<!-- Generated from workflows/brain-search/workflow.yaml (brain-search@1.0.0). Do not edit. -->
+<!-- Generated from workflows/brain-search/workflow.yaml (brain-search@2.0.0). Do not edit. -->
 
 <!-- preamble from shared; concatenated, not referenced -->
 
@@ -40,6 +40,10 @@ developer-os brain search
 ```json
 {"query":"$input.query","limit":"$input.limit"}
 ```
+
+### read-notes
+
+Effect: `brain.readNote`
 
 ### explain
 

@@ -3,7 +3,7 @@ name: "developer-os-shared"
 description: "The common preamble and refusal set every other workflow extends."
 ---
 
-<!-- Generated from workflows/shared/workflow.yaml (shared@1.0.0). Do not edit. -->
+<!-- Generated from workflows/shared/workflow.yaml (shared@2.0.0). Do not edit. -->
 
 # shared
 

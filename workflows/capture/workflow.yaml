@@ -1,10 +1,9 @@
 schemaVersion: 1
 id: capture
-version: 1.0.0
+version: 2.0.0
 description: Write an observation into quarantine, where nothing reads it as canonical.
 triggers:
   - manual
-  - session_end
 inputs:
   text:
     type: string

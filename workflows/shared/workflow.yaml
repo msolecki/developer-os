@@ -1,9 +1,9 @@
 schemaVersion: 1
 id: shared
-version: 1.0.0
+version: 2.0.0
 description: The common preamble and refusal set every other workflow extends.
 triggers:
-  - session_start
+  - manual
 inputs: {}
 output:
   acknowledged:

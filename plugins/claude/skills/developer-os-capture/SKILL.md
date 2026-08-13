@@ -3,7 +3,7 @@ name: "developer-os-capture"
 description: "Write an observation into quarantine, where nothing reads it as canonical."
 ---
 
-<!-- Generated from workflows/capture/workflow.yaml (capture@1.0.0). Do not edit. -->
+<!-- Generated from workflows/capture/workflow.yaml (capture@2.0.0). Do not edit. -->
 
 <!-- preamble from shared; concatenated, not referenced -->
 

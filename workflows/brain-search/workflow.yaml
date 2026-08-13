@@ -1,6 +1,6 @@
 schemaVersion: 1
 id: brain-search
-version: 1.0.0
+version: 2.0.0
 description: Search the vault index and return ranked matches with their source paths.
 triggers:
   - manual
@@ -21,6 +21,7 @@ output:
 capabilities: []
 scopes:
   read:
+    - content/**
     - content/_indexes/**
   write: []
 refusals:
@@ -38,6 +39,8 @@ steps:
     with:
       query: $input.query
       limit: $input.limit
+  - id: read-notes
+    do: brain.readNote
   - id: explain
     prose: |
       Summarise why each match was returned. Name the source path for every
