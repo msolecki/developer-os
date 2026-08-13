@@ -1250,7 +1250,11 @@ it("refuses a second YAML document, as the note parser does", () => {
 });
 ```
 
-Note the ordering the third and second cases force together: **re-redaction happens before the id is recomputed.** A hand edit that pastes a secret must be redacted, and the id must then be computed over the redacted text — which will not match the filename, so the file is refused with `id-mismatch` and the secret is already gone from the parsed value. Both properties hold at once only in that order; write a case that pins the order rather than the outcomes separately.
+> **Corrected 2026-08-13, before dispatch.** The paragraph that stood here survived the founder's `captureId` immutability decision and contradicted it — and contradicted the fourth case directly above, which requires `parsed.ok === true`. It said a hand edit that pastes a secret "is refused with `id-mismatch`", which is the exact behaviour spec §5.3's amendment removed: the id is `H(redacted content)`, so under recomputation *every* content-changing edit refuses and the pasted secret stays in the vault file. An implementer following it would have built id recomputation, failed the fourth case, and been tempted to change the test instead.
+
+**The ordering that matters is re-redaction before `deduplicationHash` is recomputed** — not before the id, which is never recomputed. A hand edit that pastes a secret is redacted, the hash is then computed over the redacted text, and the parse **succeeds**: `captureId` is unchanged, `deduplicationHash` has moved, and the secret is gone from the parsed value. Write a case that pins that order rather than the outcomes separately — asserting only that the content is clean passes for an implementation that redacts at the wrong point, and asserting only that the hash moved passes for one that never redacts at all.
+
+`id-mismatch` keeps the narrower job it was always really for: the frontmatter `captureId` disagreeing with the filename, which is a rename or a hand-edited id field, and is what the third case pins.
 
 - [ ] **Step 4: Implement rendering and parsing**
 
