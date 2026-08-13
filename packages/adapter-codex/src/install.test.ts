@@ -28,7 +28,7 @@ const hash = "a".repeat(64);
  * testing.
  */
 function asInstallTree(tree: readonly RenderedArtifact[]): readonly MarketplaceRootArtifact[] {
-  return tree as unknown as readonly MarketplaceRootArtifact[];
+  return tree as readonly MarketplaceRootArtifact[];
 }
 
 const tree = asInstallTree([

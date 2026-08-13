@@ -473,42 +473,67 @@ describe("redactText", () => {
 
     /**
      * Important 5 (fix pass 1 review, ceiling corrected in fix pass 2,
-     * ceiling replaced in fix pass 3 review): the first shipped
-     * implementation re-sliced and re-lowered a window at every text
-     * position for every pattern — O(n·m) per pattern. An absolute
-     * wall-clock ceiling here is a race against whatever else the machine
-     * is doing: a cold run measured 697 ms against a 600 ms ceiling on
-     * hardware where every other measurement in this suite passed — the
-     * *implementation* had not regressed, the *ceiling* was gambling
-     * against process-launch and JIT-warmup variance it had no way to
-     * account for.
+     * ceiling replaced with a same-run ratio in fix pass 3, baseline
+     * corrected to share the ratio's allocation profile in fix pass 4):
+     * the first shipped implementation re-sliced and re-lowered a window at
+     * every text position for every pattern — O(n·m) per pattern. An
+     * absolute wall-clock ceiling here is a race against whatever else the
+     * machine is doing: a cold run measured 697 ms against a 600 ms
+     * ceiling on hardware where every other measurement in this suite
+     * passed — the *implementation* had not regressed, the *ceiling* was
+     * gambling against process-launch and JIT-warmup variance it had no
+     * way to account for.
      *
-     * Replaced with a same-run ratio: `withPatterns` against a `baseline`
-     * measured in the same process, immediately before it, over the same
-     * text. Both share whatever cold-start or GC pressure this run happens
-     * to be under, so the *ratio* stays stable even when neither absolute
-     * number does. Each of `baseline` and `withPatterns` is the minimum of
-     * five repetitions, not a single sample — `Math.min` over repeated
-     * calls is the standard defence against a one-off GC pause inflating a
-     * single measurement, and it was necessary here: single-sample ratios
-     * measured 7.6-18.1 for the real, fixed implementation, wide enough to
-     * overlap the reintroduced-bug range below, while min-of-5 ratios
-     * tightened that to 11.1-12.1 with no overlap observed.
+     * Fix pass 3 replaced the absolute ceiling with a same-run ratio
+     * against a zero-pattern `baseline`, reasoning that both measurements
+     * would share the same run's cold-start/GC profile. They did not:
+     * `addUserPatterns` returns immediately at `patterns.length === 0`
+     * before `buildFoldedHaystack` ever runs, so `baseline` was CPU-bound
+     * regex work (~25-35 ms) while `withPatterns` additionally allocated a
+     * 2-million-element `string[]` and a 2-million-entry `Map` — an
+     * allocation- and GC-bound cost the CPU-bound baseline never paid.
+     * External memory pressure inflates the numerator far more than a
+     * denominator that never touches the allocator, which is exactly the
+     * profile mismatch that makes a ratio unstable: measured under 16-way
+     * background CPU load (`node -e 'while(true){Math.sqrt(Math.random())}'`
+     * ×16, `pkill` after), the *fixed* implementation's ratio against a
+     * zero-pattern baseline rose to 1.2-1.3× its no-load range — nowhere
+     * near the failure the coordinator's reviewer reported (20.3, vs. an 18
+     * ceiling), but the same direction of drift, confirming the mechanism.
      *
-     * Calibrated by temporarily reintroducing the exact pre-fix shape
-     * (`text.slice(at, at + needle.length).toLowerCase()` compared per
-     * position, replacing the `indexOf`-over-a-once-folded-haystack scan
-     * below) and running both implementations under this same test, min-of-5,
-     * four separate process launches each: the real implementation measured
-     * a ratio of 11.1-12.1; the reintroduced bug measured 24.3-26.4. 18 sits
-     * roughly in the middle of that gap — comfortably above every fixed
-     * measurement observed, comfortably below every buggy one. This proves
-     * the *shape* changed back to a per-position rescan if it regresses; it
-     * does not certify a specific throughput bound for arbitrary text or
-     * pattern sizes.
+     * `baseline` now uses **one** user pattern instead of zero, so both
+     * measurements run `buildFoldedHaystack` and pay the same allocation —
+     * the only difference left between them is 1 native `indexOf` call
+     * versus 10. That difference is now the *entire* signal a ratio can
+     * detect, which is also why it does not need the `Math.min`-of-5
+     * defence at nearly the margin fix pass 3 did: with the allocation cost
+     * shared, single-sample ratios were already tight.
+     *
+     * Recalibrated, min-of-5, by temporarily reintroducing the exact
+     * pre-fix shape (`text.slice(at, at + needle.length).toLowerCase()`
+     * compared per position, replacing the `indexOf`-over-a-once-folded-
+     * haystack scan below) and running both implementations under this
+     * methodology:
+     * - Fixed, no load, 13 samples across independent process launches:
+     *   ratio 0.92-1.20.
+     * - Fixed, under the same 16-way background CPU load described above,
+     *   3 samples: ratio 1.11-1.21 — no measurable drift, confirming the
+     *   shared-allocation-profile fix actually closes the load-sensitivity
+     *   gap fix pass 3 left open.
+     * - Buggy (reintroduced), no load, 5 samples: ratio 6.85-7.83.
+     * - Buggy, under load, 3 samples: ratio 8.38-8.54.
+     * Every fixed measurement, loaded or not, stayed under 1.3; every buggy
+     * measurement, loaded or not, stayed over 6.8. 3 sits with wide margin
+     * on both sides — roughly 2.3× the highest fixed measurement observed
+     * and well under half the lowest buggy one — rather than splitting the
+     * gap narrowly the way the previous 18-against-a-mismatched-baseline
+     * ceiling did. This proves the *shape* changed back to a per-position
+     * rescan if it regresses; it does not certify a specific throughput
+     * bound for arbitrary text or pattern sizes.
      */
-    it("adds bounded per-pattern overhead over the pattern-free baseline, not a per-position rescan", () => {
+    it("adds bounded per-pattern overhead over a single-pattern baseline, not a per-position rescan", () => {
       const text = "x".repeat(2 * 1024 * 1024);
+      const baselinePattern = ["pattern-0-not-present-in-text-xyz"];
       const patterns = Array.from(
         { length: 10 },
         (_, index) => `pattern-${String(index)}-not-present-in-text-xyz`,
@@ -528,19 +553,22 @@ describe("redactText", () => {
       // One untimed warm-up call each, so the first *timed* repetition is
       // not the one absorbing JIT compilation for a code path the rest of
       // this suite may not have exercised yet.
-      redactText(text, deterministicKey);
+      redactText(text, deterministicKey, { userPatterns: baselinePattern });
       redactText(text, deterministicKey, { userPatterns: patterns });
 
-      const baseline = minElapsed(() => redactText(text, deterministicKey), 5);
+      const baseline = minElapsed(
+        () => redactText(text, deterministicKey, { userPatterns: baselinePattern }),
+        5,
+      );
       const withPatterns = minElapsed(
         () => redactText(text, deterministicKey, { userPatterns: patterns }),
         5,
       );
 
-      // `+ 25` absorbs timer-resolution noise when `baseline` itself is
-      // small (observed 20-35 ms here); the multiplier is what actually
-      // separates the two implementations, per the calibration above.
-      expect(withPatterns).toBeLessThan(baseline * 18 + 25);
+      // `+ 20` absorbs timer-resolution noise when `baseline` itself is
+      // small; the multiplier is what actually separates the two
+      // implementations, per the calibration above.
+      expect(withPatterns).toBeLessThan(baseline * 3 + 20);
     });
 
     it("keeps overlap resolution: the first candidate wins and the second is dropped", () => {
