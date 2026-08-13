@@ -585,12 +585,24 @@ export async function runInit(
   dependencies: InitDependencies = DEFAULT_DEPENDENCIES,
 ): Promise<CliResult<InitResultV1>> {
   /**
-   * The context's guards close over whatever key existed when the context was
-   * built, which on the machine `init` is initializing is an ephemeral one.
-   * From the moment this run creates the durable key, everything `init`
-   * redacts uses *that* — so a fingerprint this command produces is comparable
-   * with every later one. `capture`, `review` and `ingest` copy the pattern
-   * (DOS-P6 Task 8); it exists here first so there is something to copy.
+   * `context.guards` closes over whatever key existed when the context was
+   * built — an ephemeral one on the machine `init` is initializing.
+   *
+   * **This rebinding covers `runInit`'s own terminal diagnostic and nothing
+   * else, and the limit is structural rather than an oversight.** The helpers
+   * below take `context` and redact through the guards it carries;
+   * `context.executor` and `context.runner` closed over the ephemeral key when
+   * the context was constructed, and neither can be corrected from here
+   * without rebuilding them. Nothing `init` persists carries a fingerprint, so
+   * what is left is a cosmetic difference in an error message, not a
+   * comparability bug.
+   *
+   * **The pattern Task 8 copies is the rule, not this binding: redact with the
+   * key you loaded, at the point you loaded it.** `capture`, `review` and
+   * `ingest` must hand their own key to `redactText` for the content they
+   * persist a fingerprint of. A command that swapped guards only on its error
+   * path would fingerprint captured content with the ephemeral key, which is
+   * the exact defect this task exists to kill.
    */
   let guards = context.guards;
 
@@ -612,7 +624,24 @@ export async function runInit(
       transactionId: null,
     };
 
-    if (options.dryRun || plan.created.length === 0) return success(settled);
+    if (options.dryRun) return success(settled);
+
+    if (plan.created.length === 0) {
+      /**
+       * Nothing to install — and still not a no-op, because the key may be
+       * the one thing missing. `doctor` names `init` as the recovery for
+       * every unusable-key state it reports, so `init` has to be one on a
+       * machine where there is nothing else left to do; below the early
+       * return, the only production caller of `loadOrCreateRedactionKey` in
+       * the tree was unreachable on exactly those machines.
+       *
+       * `stateDir` is guaranteed to exist here: it is one of
+       * `productDirectoriesOf`, so a missing one would have put it in
+       * `plan.created` and this branch would not have been taken.
+       */
+      loadOrCreateRedactionKey(plan.paths.stateDir);
+      return success(settled);
+    }
 
     const operations = await validateOperations(context, plan);
 
@@ -634,11 +663,16 @@ export async function runInit(
      * managed artifact, so it never appears in `installation-manifest.json`
      * and a drift report never hashes it (DOS-P6 Task 1, spec §3.5, §8.4).
      *
-     * It is not in `plan.created` either, and that gap is deliberate: the path
-     * would then reach `--json` through `InitResultV1.created`, which is the
-     * one place every layer of this task agrees the key must never appear —
-     * `uninstall` withholds it from `removed` for the same reason. Like the
+     * It is not in `plan.created` either, and that gap is deliberate:
+     * `created` enumerates the *managed artifacts* a run installs, so naming a
+     * non-artifact there would imply the manifest owns it — the one claim
+     * `installation-manifest.json` must never make about this file. Like the
      * journals and lock files beside it, the key is internal to `stateDir`.
+     *
+     * The path itself is not a secret, and no rule here says otherwise:
+     * `doctor --json` publishes it deliberately, because a diagnostic that
+     * cannot name the file it is reporting on is not a diagnostic. What must
+     * never appear in any output is the key's *bytes*.
      */
     const durableKey = loadOrCreateRedactionKey(plan.paths.stateDir);
     guards = {

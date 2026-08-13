@@ -72,6 +72,13 @@ const EXIT_PRECEDENCE: readonly ExitCode[] = [
   EXIT_CODES.operationalFailure,
 ];
 
+/**
+ * The one command that creates a redaction key. Written once so the four
+ * remedies below cannot drift apart, or away from the command that has to
+ * honour them.
+ */
+const REDACTION_KEY_RECOVERY = "developer-os init";
+
 function isMissingEntry(error: unknown): boolean {
   return (
     typeof error === "object" &&
@@ -569,6 +576,12 @@ async function checkBrain(
  * `doctor` reports and never repairs, so the over-permissive case is a warning
  * too rather than a chmod. The next command that needs a durable key tightens
  * it, which is where a repair belongs.
+ *
+ * Every remedy below names `init`, and that has to stay true of `init`: these
+ * messages were briefly false in both directions, because `runInit` returned
+ * before it reached the key on a machine with nothing else to install. A
+ * remedy nobody can follow is worse than no remedy — this check exits 0, so
+ * nothing escalates when the user follows it and nothing happens.
  */
 async function checkRedactionKey(
   context: CliContext,
@@ -582,7 +595,7 @@ async function checkRedactionKey(
     if (isMissingEntry(error)) {
       return warn(
         "redaction-key",
-        "no redaction key exists yet; one will be created on next use, and prior fingerprints will no longer be comparable to it",
+        `no redaction key exists yet; ${REDACTION_KEY_RECOVERY} creates one, and prior fingerprints will no longer be comparable to it`,
         [],
       );
     }
@@ -592,34 +605,44 @@ async function checkRedactionKey(
   if (stats.isSymbolicLink()) {
     return warn(
       "redaction-key",
-      "the redaction key path is a symlink, which this product will not read; remove it, and a new key is created on next use, with prior fingerprints no longer comparable",
+      `the redaction key path is a symlink, which this product will not read; remove it and run ${REDACTION_KEY_RECOVERY}, and prior fingerprints will no longer be comparable`,
       [file],
     );
   }
   if (!stats.isFile()) {
     return warn(
       "redaction-key",
-      "the redaction key path is not a regular file, which this product will not read; remove it, and a new key is created on next use, with prior fingerprints no longer comparable",
+      `the redaction key path is not a regular file, which this product will not read; remove it and run ${REDACTION_KEY_RECOVERY}, and prior fingerprints will no longer be comparable`,
       [file],
     );
   }
   if (stats.size < REDACTION_KEY_BYTES) {
     return warn(
       "redaction-key",
-      "the redaction key is too short to be a key; remove it, and a new key is created on next use, with prior fingerprints no longer comparable",
+      `the redaction key is too short to be a key; remove it and run ${REDACTION_KEY_RECOVERY}, and prior fingerprints will no longer be comparable`,
       [file],
     );
   }
 
   const mode = stats.mode & 0o777;
   const rendered = `present, 0${mode.toString(8).padStart(3, "0")}`;
-  return mode === 0o600
-    ? pass("redaction-key", rendered, [file])
-    : warn(
-        "redaction-key",
-        `${rendered}, which is more permissive than 0600; the next command that needs the key tightens it`,
-        [file],
-      );
+  if (mode === 0o600) return pass("redaction-key", rendered, [file]);
+
+  /**
+   * Only the group and other bits make a mode *permissive*. `0400` and `0000`
+   * are stricter than `0600`, not looser, and saying otherwise about `0000` is
+   * the worst of the two: `readRedactionKey` cannot open it, so that run is on
+   * an ephemeral key, while `lstat` needs no read permission at all and this
+   * check reports the file as fine apart from being "more permissive".
+   */
+  const permissive = (mode & 0o077) !== 0;
+  return warn(
+    "redaction-key",
+    permissive
+      ? `${rendered}, which is more permissive than 0600; the next command that needs the key tightens it`
+      : `${rendered}, which is not 0600`,
+    [file],
+  );
 }
 
 /**

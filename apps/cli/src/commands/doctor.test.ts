@@ -126,7 +126,7 @@ describe("runDoctor", () => {
    * "something is wrong with your key" is not a diagnosis.
    */
   it.each([
-    ["absent", null, "created on next use"],
+    ["absent", null, "developer-os init"],
     ["a symlink", "symlink" as const, "is a symlink"],
     ["a directory", "directory" as const, "not a regular file"],
     ["too short", "short" as const, "too short"],
@@ -200,8 +200,37 @@ describe("runDoctor", () => {
     );
     expect(check?.status).toBe("warn");
     expect(check?.message).toContain("0644");
+    expect(check?.message).toContain("more permissive than 0600");
     expect((await nodeFs.stat(keyFile)).mode & 0o777).toBe(0o644);
   });
+
+  /**
+   * "More permissive than 0600" is a claim about the group and other bits, and
+   * `0400` and `0000` have none set — they are *stricter*. The mode is still
+   * wrong, and `doctor` still says so; it does not say the opposite of what is
+   * true while doing it.
+   */
+  it.each([0o400, 0o000])(
+    "does not call mode %s more permissive than 0600",
+    async (mode) => {
+      const fixture = await createCommandFixture(
+        `doctor-redaction-key-${mode.toString(8)}`,
+      );
+      await runInit(fixture.context, ACCEPTED);
+      const keyFile = join(fixture.paths.stateDir, "redaction.key");
+      await nodeFs.chmod(keyFile, mode);
+
+      const report = await runDoctorReport(fixture.context);
+      await nodeFs.chmod(keyFile, 0o600);
+
+      const check = report.checks.find(
+        (candidate) => candidate.id === "redaction-key",
+      );
+      expect(check?.status).toBe("warn");
+      expect(check?.message).not.toContain("more permissive");
+      expect(check?.message).toContain("is not 0600");
+    },
+  );
 
   /**
    * Spec §5.3: the fix is one command, and a report that omits it — where it

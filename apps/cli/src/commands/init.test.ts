@@ -142,14 +142,11 @@ describe("runInit", () => {
    * **The decision, pinned.** `init --dry-run` neither creates the key nor
    * names it in `plan.created`, and the gap is accepted rather than closed.
    *
-   * Naming it would put the key's path into `InitResultV1.created`, which is
-   * `--json` output — and the one thing every layer of this task agrees on is
-   * that the key stays out of machine-readable reports: `uninstall` does not
-   * name it in `removed` either, for the same reason. `created` is the list of
-   * *managed artifacts* a run installs, and the key is deliberately not one;
-   * it belongs with the transaction journals and lock files under `stateDir`
-   * that the end-to-end suite already tolerates as internal. Reversing this
-   * means reversing `uninstall` too, and both tests say so.
+   * `created` enumerates the *managed artifacts* a run installs, and naming a
+   * non-artifact there would imply the manifest owns it — which is precisely
+   * the claim `installation-manifest.json` must never make about this file.
+   * The key belongs with the transaction journals and lock files under
+   * `stateDir` that the end-to-end suite already tolerates as internal.
    */
   it("neither creates nor declares the redaction key on a dry run", async () => {
     const fixture = await createCommandFixture("init-redaction-key-dry-run");
@@ -167,13 +164,60 @@ describe("runInit", () => {
   });
 
   /**
+   * **`init` is the recovery `doctor` names, so it has to be one.** On an
+   * installed machine whose key was deleted, `plan.created` is empty — and the
+   * key creation used to sit below `runInit`'s early return for that case, so
+   * the one production caller of `loadOrCreateRedactionKey` in the tree was
+   * unreachable on exactly the machines that needed it. `doctor` then reported
+   * "one will be created on next use" forever, and every broken-state remedy
+   * it prints ("remove it, and run init") moved a machine from a reportable
+   * state into a permanent one. Nothing escalated: `doctor` exits 0 for all of
+   * them.
+   */
+  it("restores a deleted redaction key on an already installed machine", async () => {
+    const fixture = await createCommandFixture("init-redaction-key-restore");
+    await runInit(fixture.context, ACCEPTED);
+    const keyFile = join(fixture.paths.stateDir, "redaction.key");
+    await nodeFs.unlink(keyFile);
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.created).toEqual([]);
+    expect(result.data.transactionId).toBeNull();
+    expect(await exists(keyFile)).toBe(true);
+    expect(fsSync.statSync(keyFile).mode & 0o777).toBe(0o600);
+  });
+
+  /** The companion: recovery is a real run, never a dry one. */
+  it("restores nothing on a dry run, even when the key is the only thing missing", async () => {
+    const fixture = await createCommandFixture("init-redaction-key-restore-dry");
+    await runInit(fixture.context, ACCEPTED);
+    const keyFile = join(fixture.paths.stateDir, "redaction.key");
+    await nodeFs.unlink(keyFile);
+    const before = await inventory(fixture.root);
+
+    const result = await runInit(fixture.context, {
+      dryRun: true,
+      assumeYes: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(await exists(keyFile)).toBe(false);
+    expect(await inventory(fixture.root)).toEqual(before);
+  });
+
+  /**
    * `createGuards` and `NodeProcessRunner.redact` close over whatever key
    * existed when the context was built — an ephemeral one on a machine `init`
-   * is about to initialize. Harmless while `init` persists no fingerprint, and
-   * the task's own defect the moment Task 8 lets anything be captured during
-   * an install. `init` therefore redacts with the key it just created, and
-   * `capture`, `review` and `ingest` copy this pattern rather than reaching for
-   * `context.guards`.
+   * is about to initialize.
+   *
+   * What this pins is `runInit`'s terminal diagnostic specifically, which is
+   * the extent of the rebinding: the executor and the runner were built with
+   * the ephemeral key and cannot be corrected from inside the command. The
+   * rule Task 8 inherits is the one `init.ts` states — redact with the key you
+   * loaded, at the point you loaded it — not "swap the guards".
    */
   it("redacts with the key it just created, not with the context's", async () => {
     const fixture = await createCommandFixture("init-redaction-key-point-of-use");

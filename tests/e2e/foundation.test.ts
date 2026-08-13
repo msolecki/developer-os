@@ -527,6 +527,63 @@ describe("Foundation temporary-HOME lifecycle", () => {
       expect(byId.get("codex-capabilities")).toContain("codex=absent");
     });
   });
+
+  /**
+   * `doctor` tells the user to run `init`, so `init` has to be the recovery it
+   * claims. Driven through the built binary rather than a fixture, because the
+   * defect this pins was invisible to every unit test: on an installed machine
+   * `plan.created` is empty, `runInit` returned before it reached the only
+   * production call to `loadOrCreateRedactionKey` in the tree, and the key
+   * stayed gone while `doctor` kept promising it would come back.
+   */
+  it("restores a deleted redaction key when init is run again", async () => {
+    await withHome(async (home) => {
+      await install(home);
+      const redactionKeyFile = join(
+        home.productHome,
+        "state",
+        "redaction.key",
+      );
+      await rm(redactionKeyFile);
+
+      const dry = await runJson<InitResultV1>(home, [
+        "init",
+        "--dry-run",
+        "--json",
+      ]);
+      expect(dry.exitCode).toBe(EXIT_CODES.success);
+      expect(
+        (await inventory(home.root)).has(redactionKeyFile),
+        "a dry run recreated the key",
+      ).toBe(false);
+
+      const repeated = await runJson<InitResultV1>(home, [
+        "init",
+        "--yes",
+        "--json",
+      ]);
+
+      expect(repeated.exitCode).toBe(EXIT_CODES.success);
+      const result = okData(repeated.result);
+      expect(result.created).toStrictEqual([]);
+      expect(result.transactionId).toBeNull();
+
+      const after = await inventory(home.root);
+      expect(after.has(redactionKeyFile), "init did not recreate the key").toBe(
+        true,
+      );
+      /** Nothing but the key: recovery is not a second install. */
+      expect(after.has(join(home.productHome, "config.toml"))).toBe(true);
+
+      const doctor = await runJson<DoctorReportV1>(home, ["doctor", "--json"]);
+      expect(doctor.exitCode).toBe(EXIT_CODES.success);
+      const key = okData(doctor.result).checks.find(
+        (check) => check.id === "redaction-key",
+      );
+      expect(key?.status).toBe("pass");
+      expect(key?.message).toBe("present, 0600");
+    });
+  });
 });
 
 describe("Foundation refusals", () => {
