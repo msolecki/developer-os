@@ -284,7 +284,7 @@ export function loadOrCreateRedactionKey(stateDir: string): Uint8Array;
 
 **Both are synchronous, and that is forced:** `main.ts` calls `createContext(io)` synchronously before dispatch, and `CliGuards.redactDiagnostic` is a synchronous `(text: string) => string`. A promise here would either break `run`'s `Promise<ExitCode>` contract or make every redaction site async.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `apps/cli/src/context.test.ts`, in a temporary state directory per case:
 
@@ -376,7 +376,7 @@ it("fingerprints with the durable key, not with a per-process one", () => {
 
 Without it the fix is unverified: the first implementation could have had its one wiring line reverted to `randomBytes(…)` with the entire suite still green, because every other case tested the loader rather than the thing the loader was for.
 
-- [ ] **Step 2: Run them and watch every one fail**
+- [x] **Step 2: Run them and watch every one fail**
 
 ```bash
 pnpm vitest run apps/cli/src/context.test.ts
@@ -384,7 +384,7 @@ pnpm vitest run apps/cli/src/context.test.ts
 
 Expected: `loadOrCreateRedactionKey is not exported`. A test that passes here has not pinned anything.
 
-- [ ] **Step 3: Implement the loader**
+- [x] **Step 3: Implement the loader**
 
 In `apps/cli/src/context.ts`, using `node:fs` synchronous calls at the composition root:
 
@@ -437,7 +437,7 @@ export function loadOrCreateRedactionKey(stateDir: string): Uint8Array {
 
 `readRedactionKey` is the same open sequence with three differences and no others: it returns `null` where the loader creates, `null` where the loader throws, and it never chmods. **It performs no mutation of any kind**, which is what lets `doctor` report the states it detects instead of dying on them.
 
-- [ ] **Step 4: Wire the two doors to their own callers**
+- [x] **Step 4: Wire the two doors to their own callers**
 
 ```ts
 // apps/cli/src/context.ts — the composition root
@@ -457,7 +457,7 @@ const redactionKey = durable ?? randomBytes(REDACTION_KEY_BYTES);
 
 **Nothing persists a fingerprint from the ephemeral key**, and Task 8 must keep that true: `capture` calls `loadOrCreateRedactionKey` at its own point of use and redacts with *that*, never with `context.guards`. Wire it that way here, in `init`, so the pattern exists before three commands copy it.
 
-- [ ] **Step 5: Wire init, uninstall and doctor**
+- [x] **Step 5: Wire init, uninstall and doctor**
 
 - `init` calls **`loadOrCreateRedactionKey`** while creating the state directory, so a fresh install has a durable key before anything can want one. It is **not** added to `recordArtifacts` — a test asserts the manifest does not name it. `init --dry-run` must not create it, and its `plan.created` list either names the key or the dry run is one file short of true; pick one and pin it.
 - `uninstall` removes it by exact path — **decision 5** above, registered in `BACKLOG.md` §8 against the gate it excepts. Two tests, not one: the key is gone, and every *other* path `uninstall` removed came from the manifest, so the exception stays one path wide.
@@ -474,7 +474,7 @@ it("leaves every quarantined capture in place, because a capture is never delete
 ```
 - `doctor` gains a check reporting presence and mode. `warn` when absent — a missing key regenerates on next use, so it is not a failure — with the message that prior fingerprints are no longer comparable. **`warn` for every state `readRedactionKey` returns `null` for**, each named in the message: absent, symlinked, not a regular file, too short. That branch is only reachable because the composition root stopped throwing, which is the amendment's whole point — so a test must drive `doctor` through all four and see four distinct messages.
 
-- [ ] **Step 6: Run the gate and commit**
+- [x] **Step 6: Run the gate and commit**
 
 ```bash
 npm run check
