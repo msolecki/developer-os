@@ -139,8 +139,14 @@ export type NoteParseResult =
  * dashes would close the block and every key below it would be silently
  * reclassified as body. A reviewer proposed that shorter form; this is why it
  * was declined.
+ *
+ * Exported so `capture/parse.ts` reads the same fence rather than deriving a
+ * second one. A capture is not a note — `_raw` is private, and its frontmatter
+ * satisfies a different schema — but it is the same file format, and the two
+ * corrections above were both bought with a bug. A copy would carry them until
+ * the day one copy was fixed.
  */
-const FRONTMATTER =
+export const FRONTMATTER =
   /^\uFEFF?---[ \t]*\r?\n(?:([\s\S]*?)\r?\n)?---[ \t]*(?:\r?\n|$)([\s\S]*)$/u;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/u;
 
