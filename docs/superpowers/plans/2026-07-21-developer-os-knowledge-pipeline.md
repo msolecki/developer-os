@@ -756,12 +756,17 @@ Both are `codex-adapter.md` §11 residuals owned by this subsystem, and both hav
 
 `RenderedArtifact` is `{path, contents}` for paths relative to the plugin root *and* the marketplace root. The plugin root is a descendant of the marketplace root, so a wrongly-rooted tree **applies cleanly instead of refusing** (`BACKLOG.md` §1 NEW-13). `proposeCodexInstall` refuses a mislocated tree at runtime today; the durable fix is nominal.
 
+**Get the call exactly right, because `@ts-expect-error` suppresses *every* error on its line.** The real signatures are `renderCodexPlugin(contracts: readonly WorkflowContractV1[])` — **one** parameter (`compose.ts:31`) — and `proposeCodexInstall(tree, context, managed?)` — **positional, two required** (`install.ts:193`). A call with the wrong arity satisfies the directive today *and* after the brands are removed, which would make this task's only assertion incapable of ever going red. Read both signatures before writing the line.
+
 ```ts
 it("refuses a plugin-root tree where a marketplace-root tree is required, at compile time", () => {
+  const pluginTree = renderCodexPlugin(contracts);
   // @ts-expect-error a PluginRootArtifact[] is not a MarketplaceRootArtifact[]
-  proposeCodexInstall({ artifacts: renderCodexPlugin(contracts, shared) });
+  proposeCodexInstall(pluginTree, installContext);
 });
 ```
+
+Every argument other than the branded one must be correctly typed, so the brand mismatch is the **only** error on that line. **Verify that by deleting the two brands locally and confirming `tsc -b` then reports the directive as unused** (`TS2578`) — that is the proof it pins the brand and not an arity mistake. Record it in the report.
 
 `@ts-expect-error` is the assertion: `tsc -b` fails if the error stops being an error, so the test goes red the day the brand is removed. Keep the runtime refusal beside it — a brand is erased at runtime and this is a published surface.
 
@@ -775,7 +780,11 @@ export type PluginRootArtifact = RenderedArtifact & { readonly [pluginRoot]: tru
 export type MarketplaceRootArtifact = RenderedArtifact & { readonly [marketplaceRoot]: true };
 ```
 
-`renderCodexPlugin` returns `readonly PluginRootArtifact[]`, `renderCodexInstallTree` returns `readonly MarketplaceRootArtifact[]`, and each brands at its own single construction site. Nothing else casts.
+`renderCodexPlugin` returns `readonly PluginRootArtifact[]` and `renderCodexInstallTree` returns `readonly MarketplaceRootArtifact[]`.
+
+**There are necessarily *two* cast sites, not one**, and the plan said one: `renderCodexInstallTree` re-roots `renderCodexPlugin`'s output through a `.map()`, so it must re-brand what it produces, and `renderMarketplace` returns an unbranded `RenderedArtifact` that is spread into the same array. Brand at both, name both in the report, and cast nowhere else.
+
+**`CodexAdapter` (`packages/adapter-codex/src/index.ts:102-110`) freezes all three functions into one object**, so its inferred shape changes with them. `index.ts` is already in the Files list; check `index.test.ts`'s export assertions too.
 
 - [ ] **Step 3: Write the failing test for `maxTurns`**
 
@@ -786,6 +795,9 @@ it("refuses maxTurns rather than honouring it on one vendor and dropping it on t
   expect(outcome.ok === false && outcome.message).toContain("DOS-P7");
 });
 
+// A regression pin, not a failing test: `maxTurns` carries `.default(5)`, so
+// this is green before the change. Say so in the report — the other case is the
+// one that must be watched red.
 it("still accepts a prompt on its own", () => {
   expect(parseAgentPromptArgs({ prompt: "hello" }).ok).toBe(true);
 });
@@ -805,7 +817,11 @@ if (Object.prototype.hasOwnProperty.call(input, "maxTurns")) {
 }
 ```
 
-This is the repository's own precedent: the `scheduled` trigger is refused with an error naming DOS-P7, because "a value that validates while the property it names is false" is what this codebase refuses. **No canonical workflow sets `maxTurns`**, so nothing regresses — confirm that with `grep -rn "maxTurns" workflows/` returning nothing and say so in the report. `AgentPromptArgs.maxTurns` disappears; `invokeClaude` keeps its own bound, because `ClaudeInvocation` is constructed by callers and shares no type with `AgentPromptArgs`.
+This is the repository's own precedent: the `scheduled` trigger is refused with an error naming DOS-P7, because "a value that validates while the property it names is false" is what this codebase refuses. **No canonical workflow sets `maxTurns`**, so nothing regresses — confirm that with `grep -rn "maxTurns" workflows/` returning nothing and say so in the report.
+
+`AgentPromptArgs.maxTurns` disappears; `invokeClaude` keeps its own bound, because `ClaudeInvocation` is constructed by callers and shares no type with `AgentPromptArgs`.
+
+**But deleting the field also deletes the only default anyone was supplying.** `parseAgentPromptArgs` was where `maxTurns` got its value, and `ClaudeInvocation.maxTurns` is required — so whatever eventually builds a `ClaudeInvocation` from a workflow step now has nothing to put there. **Export a named constant from `packages/adapter-claude` for it** rather than leaving a literal at a future call site, and give it the docblock explaining what an unbounded agentic loop inside a declared-scope workflow would mean — that reasoning currently lives only on the schema field being removed and would otherwise be lost with it.
 
 - [ ] **Step 5: Run the gate and commit**
 
