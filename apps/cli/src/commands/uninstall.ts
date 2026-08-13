@@ -531,6 +531,15 @@ export async function runUninstall(
   try {
     const manifest = await context.manifests.readOptional();
     if (manifest === null) {
+      /**
+       * **Above the early return, deliberately.** The key is not a managed
+       * artifact, so it is the one thing `uninstall` removes that an absent
+       * manifest says nothing about — and below this return it was
+       * unreachable: an `init` that failed and reverted, or a second
+       * `uninstall`, left an orphaned secret that nothing in the product would
+       * ever clean up again.
+       */
+      if (!options.dryRun) await removeRedactionKeyFile(context);
       return success({
         schemaVersion: 1,
         removed: [],
@@ -583,9 +592,15 @@ export async function runUninstall(
       });
     }
 
+    /**
+     * **Before `revertArtifacts`**, so `rmdir(stateDir)` can succeed when the
+     * directory is otherwise empty. The reverse order leaves a state directory
+     * holding one secret and nothing else, which `rmdir` refuses — and then the
+     * key is removed anyway, so the directory survives for no reason at all.
+     */
+    await removeRedactionKeyFile(context);
     const outcome = await revertArtifacts(context, request);
     await removeManifestFile(context);
-    await removeRedactionKeyFile(context);
 
     return success({ schemaVersion: 1, ...outcome });
   } catch (error) {

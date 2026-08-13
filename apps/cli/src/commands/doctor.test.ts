@@ -89,6 +89,13 @@ describe("runDoctor", () => {
     expect(codexAbsent?.message).not.toContain("recovery=");
   });
 
+  /**
+   * The leak assertions read the **whole serialized report**, not the one
+   * message. Asserting `not.toContain` on a string already asserted equal to a
+   * thirteen-character literal proves nothing, and a leak would surface where
+   * a leak actually surfaces: somewhere in the `--json` document the user pipes
+   * to a colleague.
+   */
   it("reports the redaction key as present with its mode, never a byte of it", async () => {
     const fixture = await createCommandFixture("doctor-redaction-key-present");
     await runInit(fixture.context, ACCEPTED);
@@ -103,16 +110,88 @@ describe("runDoctor", () => {
     );
     expect(check?.status).toBe("pass");
     expect(check?.message).toBe("present, 0600");
-    expect(check?.message).not.toContain(Buffer.from(key).toString("hex"));
-    expect(check?.message).not.toContain(
-      Buffer.from(key).toString("base64"),
-    );
+
+    const serialized = JSON.stringify(report);
+    for (const encoding of ["hex", "base64", "base64url", "latin1"] as const) {
+      expect(serialized).not.toContain(Buffer.from(key).toString(encoding));
+    }
   });
 
-  it("warns rather than fails when no redaction key exists yet", async () => {
-    const fixture = await createCommandFixture("doctor-redaction-key-absent");
+  /**
+   * The four states `readRedactionKey` returns `null` for, each reported and
+   * each named. This branch is only reachable because the composition root
+   * stopped creating and stopped throwing — before the split, a symlink or a
+   * truncated key failed every command including this one, so `doctor` could
+   * never have said any of these things. Four distinct messages, because
+   * "something is wrong with your key" is not a diagnosis.
+   */
+  it.each([
+    ["absent", null, "created on next use"],
+    ["a symlink", "symlink" as const, "is a symlink"],
+    ["a directory", "directory" as const, "not a regular file"],
+    ["too short", "short" as const, "too short"],
+  ])(
+    "warns rather than fails when the redaction key is %s",
+    async (name, plant, expected) => {
+      const fixture = await createCommandFixture(
+        `doctor-key-${name.replace(/\s+/gu, "-")}`,
+      );
+      await runInit(fixture.context, ACCEPTED);
+      const keyFile = join(fixture.paths.stateDir, "redaction.key");
+      await nodeFs.unlink(keyFile);
+      if (plant === "symlink") await nodeFs.symlink("/etc/passwd", keyFile);
+      if (plant === "directory") await nodeFs.mkdir(keyFile, { mode: 0o700 });
+      if (plant === "short") {
+        await nodeFs.writeFile(keyFile, Buffer.alloc(8), { mode: 0o600 });
+      }
+
+      const report = await runDoctorReport(fixture.context);
+
+      const check = report.checks.find(
+        (candidate) => candidate.id === "redaction-key",
+      );
+      expect(check?.status).toBe("warn");
+      expect(check?.message).toContain(expected);
+
+      const result = await runDoctor(fixture.context);
+      expect(result.ok).toBe(true);
+    },
+  );
+
+  it("gives each unusable redaction-key state its own message", async () => {
+    const messages = new Set<string>();
+    for (const plant of ["absent", "symlink", "directory", "short"] as const) {
+      const fixture = await createCommandFixture(`doctor-key-distinct-${plant}`);
+      await runInit(fixture.context, ACCEPTED);
+      const keyFile = join(fixture.paths.stateDir, "redaction.key");
+      await nodeFs.unlink(keyFile);
+      if (plant === "symlink") await nodeFs.symlink("/etc/passwd", keyFile);
+      if (plant === "directory") await nodeFs.mkdir(keyFile, { mode: 0o700 });
+      if (plant === "short") {
+        await nodeFs.writeFile(keyFile, Buffer.alloc(8), { mode: 0o600 });
+      }
+
+      const report = await runDoctorReport(fixture.context);
+      const check = report.checks.find(
+        (candidate) => candidate.id === "redaction-key",
+      );
+      messages.add(check?.message ?? "");
+    }
+
+    expect(messages.size).toBe(4);
+  });
+
+  /**
+   * The case the first implementation made unreachable: `readRedactionKey`
+   * never chmods, so an over-permissive key survives context construction and
+   * reaches this check. `doctor` reports it and repairs nothing — the next
+   * command that needs a durable key is what tightens it.
+   */
+  it("warns about an over-permissive redaction key without tightening it", async () => {
+    const fixture = await createCommandFixture("doctor-redaction-key-0644");
     await runInit(fixture.context, ACCEPTED);
-    await nodeFs.unlink(join(fixture.paths.stateDir, "redaction.key"));
+    const keyFile = join(fixture.paths.stateDir, "redaction.key");
+    await nodeFs.chmod(keyFile, 0o644);
 
     const report = await runDoctorReport(fixture.context);
 
@@ -120,10 +199,8 @@ describe("runDoctor", () => {
       (candidate) => candidate.id === "redaction-key",
     );
     expect(check?.status).toBe("warn");
-    expect(check?.message).toContain("no longer be comparable");
-
-    const result = await runDoctor(fixture.context);
-    expect(result.ok).toBe(true);
+    expect(check?.message).toContain("0644");
+    expect((await nodeFs.stat(keyFile)).mode & 0o777).toBe(0o644);
   });
 
   /**

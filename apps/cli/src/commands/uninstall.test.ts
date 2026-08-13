@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { EXIT_CODES } from "@developer-os/core";
 import type { ManagedArtifactV1 } from "@developer-os/core";
 
+import { loadOrCreateRedactionKey } from "../context.js";
 import { runInit } from "./init.js";
 import {
   createCommandFixture,
@@ -457,6 +458,95 @@ describe("runUninstall", () => {
           manifestPaths.has(path),
       ).toBe(true);
     }
+  });
+
+  /**
+   * The trap the first implementation left behind, and the reason removal moved
+   * above `runUninstall`'s early return. `uninstall` removed the key, the next
+   * command of any kind put it back — and from then on the key could never be
+   * removed again, because with the manifest already gone `runUninstall`
+   * returns before it reaches the removal. The same trap caught an `init` that
+   * failed and reverted: an orphaned secret nothing in the product would ever
+   * clean up.
+   */
+  it("removes the redaction key even when no manifest is left to read", async () => {
+    const fixture = await createCommandFixture("uninstall-key-no-manifest");
+    await runInit(fixture.context, ACCEPTED);
+    await runUninstall(fixture.context, ACCEPTED);
+    const keyFile = join(fixture.paths.stateDir, "redaction.key");
+    loadOrCreateRedactionKey(fixture.paths.stateDir);
+    expect(await exists(keyFile)).toBe(true);
+    expect(await fixture.context.manifests.readOptional()).toBeNull();
+
+    const result = await runUninstall(fixture.context, ACCEPTED);
+
+    expect(result.ok).toBe(true);
+    expect(await exists(keyFile)).toBe(false);
+  });
+
+  it.each([true, false])(
+    "leaves the redaction key alone on a dry run (manifest present: %s)",
+    async (withManifest) => {
+      const fixture = await createCommandFixture(
+        `uninstall-key-dry-run-${String(withManifest)}`,
+      );
+      await runInit(fixture.context, ACCEPTED);
+      const keyFile = join(fixture.paths.stateDir, "redaction.key");
+      if (!withManifest) {
+        await nodeFs.unlink(fixture.paths.manifestFile);
+        loadOrCreateRedactionKey(fixture.paths.stateDir);
+      }
+
+      const result = await runUninstall(fixture.context, {
+        dryRun: true,
+        assumeYes: true,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(await exists(keyFile)).toBe(true);
+    },
+  );
+
+  /**
+   * Ordering, pinned directly rather than inferred from an outcome. The key is
+   * removed *before* `revertArtifacts`, so `rmdir(stateDir)` can succeed when
+   * the directory is otherwise empty; the reverse order leaves a state
+   * directory holding one secret and nothing else, which `rmdir` then refuses
+   * forever.
+   */
+  it("removes the redaction key before it reverts a single artifact", async () => {
+    const fixture = await createCommandFixture("uninstall-key-ordering");
+    await runInit(fixture.context, ACCEPTED);
+    const keyFile = join(fixture.paths.stateDir, "redaction.key");
+    const order: string[] = [];
+    const context = {
+      ...fixture.context,
+      fs: {
+        ...fixture.context.fs,
+        unlink: async (
+          path: Parameters<typeof nodeFs.unlink>[0],
+        ): Promise<void> => {
+          order.push(`unlink ${String(path)}`);
+          await fixture.context.fs.unlink(path);
+        },
+        rmdir: async (
+          path: Parameters<typeof nodeFs.rmdir>[0],
+          options?: Parameters<typeof nodeFs.rmdir>[1],
+        ): Promise<void> => {
+          order.push(`rmdir ${String(path)}`);
+          await fixture.context.fs.rmdir(path, options);
+        },
+      },
+    };
+
+    await runUninstall(context, ACCEPTED);
+
+    const removedKeyAt = order.indexOf(`unlink ${keyFile}`);
+    const firstRevert = order.findIndex(
+      (entry) => entry !== `unlink ${keyFile}`,
+    );
+    expect(removedKeyAt).toBe(0);
+    expect(firstRevert).toBeGreaterThan(removedKeyAt);
   });
 
   /**

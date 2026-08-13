@@ -454,15 +454,14 @@ describe("Foundation temporary-HOME lifecycle", () => {
       });
 
       /**
-       * Not quite a no-op: `state` survived the first uninstall (it still
-       * holds that transaction's own journal and lock files), so building a
-       * context for *this* invocation — before `uninstall` even decides there
-       * is nothing left to own — finds `stateDir` present and the key
-       * missing, and `loadOrCreateRedactionKey` regenerates it. This is
-       * `doctor.ts`'s own words for the check added in this task: "a missing
-       * key regenerates on next use, so it is not a failure." The key file
-       * is the *only* thing this run adds; `uninstall`'s own decision is
-       * still a true no-op.
+       * A true no-op, in both directions, and it took the amendment to Task 1
+       * to make it one. Building a context for this invocation used to call
+       * `loadOrCreateRedactionKey`, so the very command that had just removed
+       * the key put it back — and could then never remove it again, because
+       * `runUninstall` returns early when the manifest is absent and the
+       * removal sat below that return. The composition root now *reads*, and
+       * the removal now sits above the return, so the second uninstall neither
+       * regenerates the secret nor leaves one orphaned.
        */
       const afterSecondUninstall = await inventory(home.root);
       expect(
@@ -473,7 +472,8 @@ describe("Foundation temporary-HOME lifecycle", () => {
       ).toStrictEqual([]);
       expect(
         addedPaths(beforeSecondUninstall, afterSecondUninstall),
-      ).toStrictEqual([redactionKeyFile]);
+      ).toStrictEqual([]);
+      expect(afterSecondUninstall.has(redactionKeyFile)).toBe(false);
 
       // --- doctor on the emptied machine: reports, never repairs --------------
 

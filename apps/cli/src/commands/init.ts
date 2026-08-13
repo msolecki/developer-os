@@ -21,6 +21,7 @@ import type {
 import {
   assertDisjointPaths,
   canonicalizePlannedPath,
+  redactText,
 } from "@developer-os/security";
 
 import {
@@ -583,6 +584,16 @@ export async function runInit(
   options: InitOptions,
   dependencies: InitDependencies = DEFAULT_DEPENDENCIES,
 ): Promise<CliResult<InitResultV1>> {
+  /**
+   * The context's guards close over whatever key existed when the context was
+   * built, which on the machine `init` is initializing is an ephemeral one.
+   * From the moment this run creates the durable key, everything `init`
+   * redacts uses *that* — so a fingerprint this command produces is comparable
+   * with every later one. `capture`, `review` and `ingest` copy the pattern
+   * (DOS-P6 Task 8); it exists here first so there is something to copy.
+   */
+  let guards = context.guards;
+
   try {
     await context.platform.inspect();
     await assertNoIncompleteTransaction(context);
@@ -622,8 +633,19 @@ export async function runInit(
      * Deliberately outside `mutationsFor`/`recordArtifacts`: it is not a
      * managed artifact, so it never appears in `installation-manifest.json`
      * and a drift report never hashes it (DOS-P6 Task 1, spec §3.5, §8.4).
+     *
+     * It is not in `plan.created` either, and that gap is deliberate: the path
+     * would then reach `--json` through `InitResultV1.created`, which is the
+     * one place every layer of this task agrees the key must never appear —
+     * `uninstall` withholds it from `removed` for the same reason. Like the
+     * journals and lock files beside it, the key is internal to `stateDir`.
      */
-    loadOrCreateRedactionKey(plan.paths.stateDir);
+    const durableKey = loadOrCreateRedactionKey(plan.paths.stateDir);
+    guards = {
+      ...context.guards,
+      redactDiagnostic: (text: string): string =>
+        redactText(text, durableKey).text,
+    };
 
     const journal = await context.executor.execute({
       kind: "init",
@@ -673,7 +695,7 @@ export async function runInit(
     return success({ ...settled, transactionId: journal.id }, advisories);
   } catch (error) {
     return failureFrom(
-      context,
+      { guards },
       error,
       error instanceof InitRefusal ? error.paths : [],
       error instanceof InitRefusal ? error.recovery : undefined,

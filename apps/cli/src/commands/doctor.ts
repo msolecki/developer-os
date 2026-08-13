@@ -24,7 +24,12 @@ import type { AgentDiscovery, AgentName } from "@developer-os/platform-macos";
 
 import { reportClaudeCapabilities } from "./claude-capabilities.js";
 import { reportCodexCapabilities } from "./codex-capabilities.js";
-import { exitCodeOf, redactionKeyPath, runtimePathsFor } from "../context.js";
+import {
+  exitCodeOf,
+  REDACTION_KEY_BYTES,
+  redactionKeyPath,
+  runtimePathsFor,
+} from "../context.js";
 import type { CliContext } from "../context.js";
 
 const AGENT_NAMES: readonly AgentName[] = ["claude", "codex"];
@@ -547,10 +552,23 @@ async function checkBrain(
 }
 
 /**
- * Presence and mode only, never contents: `lstat` neither follows a symlink
- * nor discloses a byte of what the file holds, which is the whole point of a
- * check for a secret this product must be able to report on without reading
- * it (DOS-P6 Task 1).
+ * Presence, type and mode only, never contents: `lstat` neither follows a
+ * symlink nor discloses a byte of what the file holds, which is the whole point
+ * of a check for a secret this product must be able to report on without
+ * reading it (DOS-P6 Task 1).
+ *
+ * **Every state is a warning, and each one says which state it is.** This
+ * check exists to be reachable: it grades exactly the outcomes
+ * `readRedactionKey` returns `null` for, and until the composition root stopped
+ * creating and stopped throwing, three of the four could not reach `doctor` at
+ * all — a symlinked or truncated key failed *every* command, including this
+ * one. A lost key degrades a diagnostic, never the knowledge: nothing is
+ * encrypted with it, only fingerprints are derived from it, so none of this is
+ * a failure and none of it earns a non-zero exit.
+ *
+ * `doctor` reports and never repairs, so the over-permissive case is a warning
+ * too rather than a chmod. The next command that needs a durable key tightens
+ * it, which is where a repair belongs.
  */
 async function checkRedactionKey(
   context: CliContext,
@@ -562,12 +580,6 @@ async function checkRedactionKey(
     stats = await context.fs.lstat(file);
   } catch (error) {
     if (isMissingEntry(error)) {
-      /**
-       * Absent regenerates on next use (`loadOrCreateRedactionKey`), so this
-       * is not a failure — most often `init` has simply never run. Still
-       * worth saying: every fingerprint recorded under a key this product
-       * later replaces becomes incomparable to one recorded after.
-       */
       return warn(
         "redaction-key",
         "no redaction key exists yet; one will be created on next use, and prior fingerprints will no longer be comparable to it",
@@ -577,17 +589,37 @@ async function checkRedactionKey(
     throw error;
   }
 
-  if (stats.isSymbolicLink() || !stats.isFile()) {
-    return fail(
+  if (stats.isSymbolicLink()) {
+    return warn(
       "redaction-key",
-      "the redaction key path is not a regular file",
+      "the redaction key path is a symlink, which this product will not read; remove it, and a new key is created on next use, with prior fingerprints no longer comparable",
       [file],
-      EXIT_CODES.securityRefusal,
+    );
+  }
+  if (!stats.isFile()) {
+    return warn(
+      "redaction-key",
+      "the redaction key path is not a regular file, which this product will not read; remove it, and a new key is created on next use, with prior fingerprints no longer comparable",
+      [file],
+    );
+  }
+  if (stats.size < REDACTION_KEY_BYTES) {
+    return warn(
+      "redaction-key",
+      "the redaction key is too short to be a key; remove it, and a new key is created on next use, with prior fingerprints no longer comparable",
+      [file],
     );
   }
 
-  const mode = (stats.mode & 0o777).toString(8).padStart(3, "0");
-  return pass("redaction-key", `present, 0${mode}`, [file]);
+  const mode = stats.mode & 0o777;
+  const rendered = `present, 0${mode.toString(8).padStart(3, "0")}`;
+  return mode === 0o600
+    ? pass("redaction-key", rendered, [file])
+    : warn(
+        "redaction-key",
+        `${rendered}, which is more permissive than 0600; the next command that needs the key tightens it`,
+        [file],
+      );
 }
 
 /**

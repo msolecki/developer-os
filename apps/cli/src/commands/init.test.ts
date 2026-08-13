@@ -2,9 +2,10 @@ import fsSync from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EXIT_CODES, loadConfig, serializeConfig } from "@developer-os/core";
+import type * as SecurityModule from "@developer-os/security";
 
 import { runInit } from "./init.js";
 import type { InitDependencies } from "./init.js";
@@ -14,6 +15,31 @@ import {
   inventory,
   removeCommandFixtures,
 } from "./testing.js";
+
+/**
+ * Which key a redaction used is not observable from any value the CLI returns —
+ * the replacement text is identical under every key — so the key `redactText`
+ * is handed is recorded here. The fixture's own guards carry a constant key
+ * that is deliberately not the one on disk, which is what makes "init redacts
+ * with the key it just created" a claim this file can fail on. The wrapper
+ * delegates, so every other suite here runs production behaviour unchanged.
+ */
+const { redactionKeyUses } = vi.hoisted(() => ({
+  redactionKeyUses: [] as Uint8Array[],
+}));
+
+vi.mock("@developer-os/security", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof SecurityModule>();
+
+  return {
+    ...actual,
+    redactText: (text: string, key: Uint8Array) => {
+      redactionKeyUses.push(Uint8Array.from(key));
+      return actual.redactText(text, key);
+    },
+  };
+});
 
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
 
@@ -110,6 +136,62 @@ describe("runInit", () => {
       "utf8",
     );
     expect(serializedManifest).not.toContain("redaction.key");
+  });
+
+  /**
+   * **The decision, pinned.** `init --dry-run` neither creates the key nor
+   * names it in `plan.created`, and the gap is accepted rather than closed.
+   *
+   * Naming it would put the key's path into `InitResultV1.created`, which is
+   * `--json` output — and the one thing every layer of this task agrees on is
+   * that the key stays out of machine-readable reports: `uninstall` does not
+   * name it in `removed` either, for the same reason. `created` is the list of
+   * *managed artifacts* a run installs, and the key is deliberately not one;
+   * it belongs with the transaction journals and lock files under `stateDir`
+   * that the end-to-end suite already tolerates as internal. Reversing this
+   * means reversing `uninstall` too, and both tests say so.
+   */
+  it("neither creates nor declares the redaction key on a dry run", async () => {
+    const fixture = await createCommandFixture("init-redaction-key-dry-run");
+    const keyFile = join(fixture.paths.stateDir, "redaction.key");
+
+    const result = await runInit(fixture.context, {
+      dryRun: true,
+      assumeYes: true,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.created).not.toContain(keyFile);
+    expect(await exists(keyFile)).toBe(false);
+  });
+
+  /**
+   * `createGuards` and `NodeProcessRunner.redact` close over whatever key
+   * existed when the context was built — an ephemeral one on a machine `init`
+   * is about to initialize. Harmless while `init` persists no fingerprint, and
+   * the task's own defect the moment Task 8 lets anything be captured during
+   * an install. `init` therefore redacts with the key it just created, and
+   * `capture`, `review` and `ingest` copy this pattern rather than reaching for
+   * `context.guards`.
+   */
+  it("redacts with the key it just created, not with the context's", async () => {
+    const fixture = await createCommandFixture("init-redaction-key-point-of-use");
+    redactionKeyUses.length = 0;
+
+    const result = await runInit(
+      fixture.context,
+      ACCEPTED,
+      failingVerifier(),
+    );
+
+    expect(result.ok).toBe(false);
+    const durable = await nodeFs.readFile(
+      join(fixture.paths.stateDir, "redaction.key"),
+    );
+    const used = redactionKeyUses.at(-1);
+    expect(used).toBeDefined();
+    expect([...(used ?? [])]).toEqual([...durable]);
   });
 
   it("records the Brain skeleton it created so a failed init can undo it", async () => {
