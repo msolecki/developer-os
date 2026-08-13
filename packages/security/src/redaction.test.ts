@@ -211,6 +211,32 @@ describe("redactText", () => {
 
       expect(result.findings).toHaveLength(0);
     });
+
+    it.each([
+      "CERTIFICATE REQUEST",
+      "NEW CERTIFICATE REQUEST",
+      "TRUSTED CERTIFICATE",
+    ])("redacts a PEM block labeled %s (finding 8)", (label) => {
+      const source = `-----BEGIN ${label}-----\nQUJDREVGR0g=\n-----END ${label}-----`;
+      const result = redactText(source, deterministicKey);
+
+      expect(result.findings.map((f) => f.class)).toEqual(["certificate"]);
+    });
+
+    /**
+     * Finding 8 (fix pass 1 review): `PUBLIC KEY` shares no label word with
+     * `CERTIFICATE`, so it is out of scope for this class rather than a
+     * miss — DOS-P6's ratified nine classes have no `public-key` entry, and
+     * inventing one is a decision for a future task, not a silent widening
+     * here.
+     */
+    it("does not redact a PUBLIC KEY block, which is out of scope for this class", () => {
+      const source =
+        "-----BEGIN PUBLIC KEY-----\nQUJDREVGR0g=\n-----END PUBLIC KEY-----";
+      const result = redactText(source, deterministicKey);
+
+      expect(result.findings).toHaveLength(0);
+    });
   });
 
   describe("credential-store", () => {
@@ -242,6 +268,58 @@ describe("redactText", () => {
       );
 
       expect(result.findings).toHaveLength(0);
+    });
+
+    it("redacts a password value that uses a colon separator", () => {
+      const result = redactText(
+        "machine example.test login syntheticuser password: synthetic-colon-secret",
+        deterministicKey,
+      );
+
+      expectRedacted(result, "synthetic-colon-secret");
+      expect(result.findings.map((f) => f.class)).toEqual([
+        "credential-store",
+      ]);
+    });
+
+    it("redacts a real one-character .netrc password value", () => {
+      const result = redactText(
+        "machine example.test login syntheticuser password x",
+        deterministicKey,
+      );
+
+      expect(result.findings.map((f) => f.class)).toEqual([
+        "credential-store",
+      ]);
+    });
+
+    /**
+     * Critical 2 (fix pass 1 review): `\bpassword\s+(\S{3,})` fired on
+     * ordinary prose because it had no context requirement beyond the word
+     * itself. Anchoring to a line-start or a `machine`/`login`/`account`/
+     * `default` record — the shapes `.netrc` actually uses — closes that
+     * without a length floor standing in for context.
+     */
+    it.each([
+      "Rotate the password every 90 days",
+      "// the password must be at least 12",
+      "if (password === input)",
+    ])("does not redact ordinary prose containing the word password: %s", (prose) => {
+      const result = redactText(prose, deterministicKey);
+
+      expect(result.findings).toHaveLength(0);
+    });
+
+    it("does not let a bare 'password' in prose shadow an overlapping user pattern (Critical 2)", () => {
+      const { text, findings } = redactText(
+        "Reset the password Acme Corp Holdings account",
+        deterministicKey,
+        { userPatterns: ["acme corp holdings"] },
+      );
+
+      expect(text).toBe("Reset the password [REDACTED:user-pattern] account");
+      expect(text).not.toContain("Corp Holdings");
+      expect(findings.map((f) => f.class)).toEqual(["user-pattern"]);
     });
   });
 
@@ -279,6 +357,43 @@ describe("redactText", () => {
 
       expect(result.findings).toHaveLength(0);
     });
+
+    it("redacts an alg:none JWT, whose signature segment is empty", () => {
+      const algNoneJwt =
+        "eyJhbGciOiJub25lIn0.eyJzdWIiOiJzeW50aGV0aWMtdXNlciJ9."; // gitleaks:allow -- synthetic test fixture, no signature by construction
+      const result = redactText(algNoneJwt, deterministicKey);
+
+      expect(result.findings.map((f) => f.class)).toEqual([
+        "service-credential",
+      ]);
+    });
+  });
+
+  describe("overlap resolution guards the four new classes against each other", () => {
+    /**
+     * Finding 7 (fix pass 1 review): service-credential is the strictly
+     * more specific shape and must run first, or an AWS-shaped value that
+     * happens to sit after the word "password" gets classified under the
+     * looser credential-store pattern instead.
+     */
+    it("classifies an AWS-shaped netrc password as service-credential, not credential-store", () => {
+      const result = redactText(
+        "machine example.test login syntheticuser password AKIAIOSFODNN7EXAMPLE",
+        deterministicKey,
+      );
+
+      expect(result.findings.map((f) => f.class)).toEqual([
+        "service-credential",
+      ]);
+    });
+
+    it("keeps a JWT triplet as one service-credential finding despite an overlapping user pattern", () => {
+      const { findings } = redactText(jwtTriplet, deterministicKey, {
+        userPatterns: ["synthetic-user"],
+      });
+
+      expect(findings.map((f) => f.class)).toEqual(["service-credential"]);
+    });
   });
 
   describe("user-pattern", () => {
@@ -301,11 +416,39 @@ describe("redactText", () => {
       ).toBe("literal [REDACTED:user-pattern] here");
     });
 
+    /**
+     * Finding 10 (fix pass 1 review): this proves the pattern is never
+     * *compiled* as a regular expression — an unescaped `(a+)+$` catastrophically
+     * backtracks in well under 50,000 characters if it reaches `RegExp`, so
+     * a sub-second result here is evidence the literal path was taken. It
+     * does **not** prove the literal-matching implementation itself is
+     * linear in text size or pattern count — see the `indexOf`-performance
+     * tests below for that.
+     */
     it("does not backtrack on a pathological pattern", () => {
       const started = performance.now();
       redactText("a".repeat(50_000), deterministicKey, {
         userPatterns: ["(a+)+$"],
       });
+      expect(performance.now() - started).toBeLessThan(1_000);
+    });
+
+    /**
+     * Important 5 (fix pass 1 review): the first shipped implementation
+     * re-sliced and re-lowered a window at every text position for every
+     * pattern — O(n·m) per pattern. Measured before the fix: 2 MB of text
+     * with 10 patterns took 533 ms; this pins a generous ceiling so a
+     * regression back to that shape fails the suite rather than only
+     * showing up as a slow `capture`.
+     */
+    it("scales to large text and several patterns without a per-position rescan", () => {
+      const text = "x".repeat(2 * 1024 * 1024);
+      const patterns = Array.from(
+        { length: 10 },
+        (_, index) => `pattern-${String(index)}-not-present-in-text-xyz`,
+      );
+      const started = performance.now();
+      redactText(text, deterministicKey, { userPatterns: patterns });
       expect(performance.now() - started).toBeLessThan(1_000);
     });
 
@@ -327,12 +470,143 @@ describe("redactText", () => {
       expect(findings).toHaveLength(1);
     });
 
+    /**
+     * Important 3 (fix pass 1 review): a pattern that IS the U+0130 shape
+     * must match its own exact occurrence — the fixed shape here is that
+     * `toLowerCase()` expands `İ` into two code units (`i` + U+0307
+     * COMBINING DOT ABOVE) whether it appears in the pattern or the text,
+     * and a single materialized haystack folds both the same way, so the
+     * expanded forms line up byte-for-byte.
+     */
+    it("matches a user pattern that is itself the U+0130 shape, against its own exact occurrence", () => {
+      const { text, findings } = redactText(
+        "client İstanbul group",
+        deterministicKey,
+        { userPatterns: ["İstanbul"] },
+      );
+
+      expect(text).toBe("client [REDACTED:user-pattern] group");
+      expect(findings).toHaveLength(1);
+    });
+
+    /**
+     * Documented gap, not a regression: `toLowerCase()` folds `İ` to
+     * `i` + U+0307, never to bare `i` — so a *dotless* pattern can never
+     * match *dotted* text that folds through U+0130, in either direction.
+     * Closing this needs Turkish-locale-aware or mark-stripping folding,
+     * which would also fold unrelated diacritics away (e.g. `cafe` would
+     * start matching `café`) and so widen "case-insensitive" (spec §8.2)
+     * into "diacritic-insensitive" — a decision for a future task, not a
+     * silent behavior change here.
+     */
+    it("does not match a dotless pattern against text that folds through U+0130", () => {
+      const result = redactText("client İSTANBUL group", deterministicKey, {
+        userPatterns: ["istanbul"],
+      });
+
+      expect(result.findings).toHaveLength(0);
+    });
+
     it("does not redact when no configured pattern occurs in the text", () => {
       const result = redactText("nothing to see here", deterministicKey, {
         userPatterns: ["acme corp"],
       });
 
       expect(result.findings).toHaveLength(0);
+    });
+  });
+
+  describe("NFC normalization is applied once, over the whole input (Critical 1)", () => {
+    /**
+     * The first shipped fix folded case per user-pattern window but still
+     * normalized the whole haystack to NFC as a separate pass, then used
+     * NFC-space offsets directly against the un-normalized `text` — the
+     * same category of bug as the toLowerCase one, just with NFC's
+     * *shortening* instead of toLowerCase's lengthening. NFC composes an
+     * NFD "e" + combining acute accent (2 code units) into one precomposed
+     * "é" (1 code unit): every offset after such a character was off by
+     * one per composed character, in the original, un-normalized `text`
+     * that both the "secret" field and the final splice used.
+     *
+     * Reproduced against the pre-fix code: `redactText("café/report
+     * ACME-CORP-SECRET end", key, { userPatterns: ["ACME-CORP-SECRET"] })`
+     * returned `"café/report[REDACTED:user-pattern]T end"` — the trailing
+     * "T" of "SECRET" survived in plaintext.
+     */
+    it("does not leak a trailing character of a matched secret behind an NFD-decomposed prefix", () => {
+      const nfdCafe = "café"; // "café" decomposed: "e" + U+0301 COMBINING ACUTE ACCENT
+      const source = `${nfdCafe}/report ACME-CORP-SECRET end`;
+      const { text } = redactText(source, deterministicKey, {
+        userPatterns: ["ACME-CORP-SECRET"],
+      });
+
+      expect(text).not.toContain("SECRET");
+      expect(text).not.toContain("T end");
+      expect(text).toBe(
+        `${nfdCafe.normalize("NFC")}/report [REDACTED:user-pattern] end`,
+      );
+    });
+
+    it("does not leak a fragment behind two NFD-decomposed characters ahead of the match", () => {
+      const nfdNaive = "naïve"; // "naïve" decomposed: "i" + U+0308 COMBINING DIAERESIS
+      const nfdCafe = "café";
+      const source = `${nfdCafe} ${nfdNaive} ACME-CORP-SECRET end`;
+      const { text } = redactText(source, deterministicKey, {
+        userPatterns: ["ACME-CORP-SECRET"],
+      });
+
+      expect(text).not.toContain("SECRET");
+      expect(text).not.toContain("ET end");
+    });
+
+    it("fingerprints a matched value identically regardless of an NFD-decomposed prefix", () => {
+      const withoutPrefix = redactText("ACME-CORP-SECRET end", deterministicKey, {
+        userPatterns: ["ACME-CORP-SECRET"],
+      });
+      const withNfdPrefix = redactText(
+        `café/report ACME-CORP-SECRET end`,
+        deterministicKey,
+        { userPatterns: ["ACME-CORP-SECRET"] },
+      );
+
+      expect(withoutPrefix.findings).toHaveLength(1);
+      expect(withNfdPrefix.findings).toHaveLength(1);
+      expect(withNfdPrefix.findings[0]?.fingerprint).toBe(
+        withoutPrefix.findings[0]?.fingerprint,
+      );
+    });
+
+    it("returns NFC-normalized text even when nothing is redacted", () => {
+      const nfdCafe = "café";
+      const result = redactText(nfdCafe, deterministicKey);
+
+      expect(result.text).toBe(nfdCafe.normalize("NFC"));
+      expect(result.text).not.toBe(nfdCafe);
+    });
+  });
+
+  describe("certificate and private-key bodies do not go quadratic (Important 6)", () => {
+    /**
+     * The lazy `[\s\S]*?` body rescans to end-of-input for every unmatched
+     * `BEGIN`. Measured before the fix: 8,000 unterminated markers took
+     * 482 ms, 16,000 took 1,765 ms — worse than linear, heading toward
+     * multi-second stalls at realistic capture sizes. 16,000 is the size
+     * used here because 8,000 stays under the 1 s ceiling even unfixed and
+     * would not have caught this — bounding the body length caps each
+     * failed attempt's rescan instead of letting it run to end-of-string.
+     */
+    it("does not go quadratic on many unterminated certificate markers", () => {
+      const source = "-----BEGIN CERTIFICATE-----\n".repeat(16_000);
+      const started = performance.now();
+      redactText(source, deterministicKey);
+      expect(performance.now() - started).toBeLessThan(1_000);
+    });
+
+    it("does not go quadratic on many unterminated private-key markers", () => {
+      const source = "-----BEGIN PRIVATE KEY-----\n".repeat(16_000);
+      const started = performance.now();
+      redactText(source, deterministicKey);
+      expect(performance.now() - started).toBeLessThan(1_000);
     });
   });
 
