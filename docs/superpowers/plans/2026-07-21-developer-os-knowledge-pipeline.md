@@ -1035,10 +1035,12 @@ Read **decision 1** above: all five go to `2.0.0`.
 | Workflow | Change | Why |
 |---|---|---|
 | `capture` | drops the `session_end` trigger | nothing can fire it; a `session_end` hook cannot supply the required `text` without `transcript_path` (spec §3.1) |
-| `shared` | drops the `session_start` trigger | same, and there is no hook to inject with |
-| `ingest` | gains a `reindex` step doing `brain.reindex`; declared write scopes gain `content/_indexes/**` | a note is ingested and `brain search` cannot find it until somebody reindexes (spec §6.5) |
-| `brain-search` | gains a `read-notes` step doing `brain.readNote`; declared read scopes widen to `content/**` | the workflow summarises from index metadata while design spec §13.5 specifies `vault-map → catalog section → selected notes → sourced answer` (spec §7.3) |
+| `shared` | drops `session_start`, **gains `manual`** | nothing can fire `session_start` and there is no hook to inject with — but the contract schema is `z.array(triggerSchema).min(1)` (`packages/workflow-schema/src/contract.ts:210`), so dropping it without a replacement makes `shared` **fail to load**, before any assertion in this task can run. `manual` is the only other valid value. **Settled by the founder 2026-08-13** |
+| `ingest` | gains a `reindex` step doing `brain.reindex`; declared **write** scopes gain `content/_indexes/**` **and declared read scopes gain `content/**`** | a note is ingested and `brain search` cannot find it until somebody reindexes (spec §6.5). `brain.reindex` reads `content/**` as well as writing the indexes, and `compareScopes` is exact set equality — declaring only the write half leaves an `under-declared` finding |
+| `brain-search` | gains a `read-notes` step doing `brain.readNote`; declared read scopes become **the union `{content/**, content/_indexes/**}`** | the workflow summarises from index metadata while design spec §13.5 specifies `vault-map → catalog section → selected notes → sourced answer` (spec §7.3). Read literally as "widen to `content/**`" this **replaces** the existing glob and leaves an `over-declared` finding for `content/_indexes/**`, which `brain.readIndex` still derives |
 | `review` | gains an `edit` step doing `capture.edit`; **declared scopes are unchanged** | its `decision` input advertises `edit` while its only mutating verb is `capture.setStatus` — the residual `workflow-schema.md` §7 names, and the reason `capture.edit` exists at all (spec §5.6) |
+
+**`shared` gaining `manual` has a product consequence, and it is accepted rather than unnoticed.** `shared` exists to be concatenated into every other workflow — it carries the prompt-injection defence and nothing else. A `manual` trigger makes it a skill an agent can invoke on its own, returning the preamble alone. That is harmless (it grants nothing, declares no scopes, and its steps are prose) but it is a surface that did not exist before, so the rendered `shared` skill must read as something a person could deliberately run. The two alternatives were weighed and rejected: relaxing the schema to allow zero triggers changes the workflow contract for every workflow, which is wider than this task; and keeping `session_start` preserves a trigger nothing can fire, which is the shape spec §3.1 exists to remove.
 
 **The `review` row is the one that will be skipped.** Its scopes do not move, so the equality assertion below stays green whether or not the step is added, and Task 5 will already have shipped the verb. Assert the step directly:
 
@@ -1054,14 +1056,14 @@ it("declares the edit verb its decision input advertises", () => {
 In `tests/contracts/workflows/canonical.test.ts`. **`canonicalContracts()` does not exist — this task writes it**, in that file, because three assertions below need the same set and today the suite reaches `loadWorkflow` per case:
 
 ```ts
-const CANONICAL_IDS = ["shared", "capture", "review", "ingest", "brain-search", "doctor"] as const;
-
 function canonicalContracts(): readonly WorkflowContractV1[] {
-  return CANONICAL_IDS.map((id) => mustLoad(`workflows/${id}/workflow.yaml`));
+  // `readFileSync`, not `await readFile`: the assertions below are synchronous
+  // `it` bodies, and `loadWorkflow` takes text rather than a path.
+  return EXPECTED.map((id) => mustLoad(`workflows/${id}/workflow.yaml`));
 }
 ```
 
-The id list is written out rather than globbed, so a workflow that stops being loaded fails a length assertion instead of quietly leaving the set. `loadWorkflow`, `deriveScopes` and `compareScopes` are all on `packages/workflow-schema`'s `index.ts` door already; nothing here reaches past it.
+**Reuse the file's existing `EXPECTED` id list rather than adding a second one** — `tests/contracts/workflows/canonical.test.ts:11` already enumerates the six, and two id lists in one file that must agree is how they come to disagree. The list is written out rather than globbed, so a workflow that stops being loaded fails a length assertion instead of quietly leaving the set. `loadWorkflow`, `deriveScopes` and `compareScopes` are all on `packages/workflow-schema`'s `index.ts` door already; nothing here reaches past it.
 
 ```ts
 it("declares no trigger nothing can fire", () => {
