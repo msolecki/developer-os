@@ -1051,7 +1051,7 @@ it("declares the edit verb its decision input advertises", () => {
 });
 ```
 
-- [ ] **Step 1: Write the failing assertions first**
+- [x] **Step 1: Write the failing assertions first**
 
 In `tests/contracts/workflows/canonical.test.ts`. **`canonicalContracts()` does not exist — this task writes it**, in that file, because three assertions below need the same set and today the suite reaches `loadWorkflow` per case:
 
@@ -1087,7 +1087,7 @@ it("declares scopes equal to what its steps derive", () => {
 
 The scope assertion is the mechanism for this task: **the widening of `ingest` and `brain-search` is checked arithmetic, not a judgement.** Add the step first, watch the equality assertion go red with an `under-declared` finding naming the exact glob, then widen the declared scopes until it is green.
 
-- [ ] **Step 2: Edit all five contracts, rerun, regenerate**
+- [x] **Step 2: Edit all five contracts, rerun, regenerate**
 
 ```bash
 npm run check
@@ -1095,9 +1095,15 @@ npm run render:claude && npm run render:codex
 git status --short   # both trees must show changes; a clean tree here means the render did not run
 ```
 
-Every skill regenerates, because all five non-shared workflows concatenate `shared`'s preamble and `shared` itself changed. Confirm the count: five skills per tree, ten artifacts, plus each tree's manifest.
+> **Corrected 2026-08-13, by the fresh-context review of this task.** The two sentences that stood here were both false, and Task 19's architecture note must not inherit them.
+>
+> **The rendered set is seven artifacts per tree, fourteen in total** — six `SKILL.md` plus one manifest. `shared` has always rendered as its own skill *as well as* being concatenated into the other five (`renderClaudePlugin`, `compose.ts:23-41`), and `buildPluginTree` appends the manifest. The old count, "five skills per tree, ten artifacts", happened to match the *changed* set on this task and would have read as the whole tree to anyone counting later.
+>
+> **The regeneration is not caused by `shared`.** The preamble block is built only from `shared`'s `refusals[].message` and `steps[].prose` (`skill.ts:254-270`); its `version` and `triggers` reach no concatenated preamble, so this task's change to `shared` propagated into none. The four other skills changed because of **their own** version bumps. Two consequences follow and both are correct, not missed renders: `doctor` is byte-identical and does not change, and neither `.claude-plugin/plugin.json` nor `.codex-plugin/plugin.json` changes, because `manifest()` emits a static `{"name":"developer-os"}` (`plugin.ts:28-33`) and no workflow version reaches it.
+>
+> So the expectation for this step is **five changed `SKILL.md` per tree, ten in total, and no manifest.** The drift gate is what proves the render was complete: it byte-compares every expected artifact, asserts key-set equality in both directions, and pins `skills === 6 && total === 7` per tree (`tests/contracts/adapters/claude/generated.test.ts:10-48`).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add workflows plugins/claude plugins/codex tests/contracts

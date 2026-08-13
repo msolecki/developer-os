@@ -37,12 +37,17 @@ the founder on 2026-08-13 and its implementation plan was written the same day.*
 closed on 2026-08-12 and its plan is deleted; `docs/architecture/codex-adapter.md` is what replaced
 it.
 
-**The next session executes that plan, one task at a time**, under
-`superpowers:subagent-driven-development` — a different agent implements and reviews each task, and
-a task is not done until its reviewer says so. Start at Task 1: the redaction key is generated per
-process today, so every fingerprint a capture would persist means nothing until it lands. **Task 17
-stops and asks** — it spends the founder's credits on a real model call, which is the only way the
-JSONL terminal-event rule gets settled.
+**Sessions execute that plan one task at a time**, under `superpowers:subagent-driven-development` —
+a different agent implements and reviews each task, and a task is not done until its reviewer says
+so. **Seven of the nineteen have landed** (Tasks 1–7, 2026-08-13); **the next session starts at Task
+8**, the capture envelope and the pipeline that fills it in. **Task 17 stops and asks** — it spends
+the founder's credits on a real model call, which is the only way the JSONL terminal-event rule gets
+settled.
+
+**Read `.superpowers/sdd/preflight-findings.md` before dispatching any task.** An adversarial scan
+on 2026-08-13 found thirty-eight defects across Tasks 3–19, and twelve of the remaining tasks need a
+plan edit before their brief is extracted. Tasks 14, 17, 18 and 19 are the ones it found clean.
+That file is local scratch and not repository state; if it is gone, the scan is owed again.
 
 **Read the spec's §3 and then the plan's five decisions.** The spec's five decisions each carry
 their cost; the one that reshapes the subsystem is 3.1: capture content is **agent-authored**,
@@ -103,7 +108,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is nineteen tasks, none started |
+| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **7 of 19**, next is Task 8 |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |
