@@ -1,6 +1,10 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { redactText, type RedactionResult } from "./redaction.js";
+import {
+  REDACTION_CLASSES,
+  redactText,
+  type RedactionResult,
+} from "./redaction.js";
 
 const deterministicKey = new Uint8Array(32).fill(7);
 const environmentSecret = "synthetic-environment-value-91Xq";
@@ -14,6 +18,22 @@ const bearerSecret = "synthetic.Bearer_8vR2pL5mN9qT4xK7"; // gitleaks:allow -- s
 const highEntropySecret = "Z7qP2mN9vR4xK8cT1wH6jL3sF0dG5bY2uI7oE9aQ4zX8"; // gitleaks:allow -- synthetic test fixture
 const lowercaseHexSecret = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"; // gitleaks:allow -- synthetic test fixture
 const lowercaseAlphanumericSecret = "m7q2v9k4n8c3x6b1z5j0h7d2s9f4g8l3p6r1t5w0y7u2"; // gitleaks:allow -- synthetic test fixture
+const certificateBlock = [
+  "-----BEGIN CERTIFICATE-----",
+  "QUJDREVGR0g=",
+  "-----END CERTIFICATE-----",
+].join("\n");
+const awsAccessKeyId = "AKIAIOSFODNN7EXAMPLE"; // gitleaks:allow -- AWS's own published placeholder shape, not a real key
+const stripeLiveKey = "sk_live_0123456789abcdef"; // gitleaks:allow -- synthetic test fixture
+const googleApiKey = "AIzasYnTh3ticKeyMaterial0000-Example_9x"; // gitleaks:allow -- synthetic test fixture
+const jwtTriplet =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzeW50aGV0aWMtdXNlciJ9.c3ludGhldGljLXNpZ25hdHVyZS12YWx1ZQ"; // gitleaks:allow -- synthetic test fixture, decodes to a made-up subject and signature
+const awsCredentialLine =
+  "aws_secret_access_key = synthetic/AwsSecretMaterial+ExampleKey00"; // gitleaks:allow -- synthetic test fixture
+const netrcLine =
+  "machine example.test login syntheticuser password synthetic-netrc-secret-99"; // gitleaks:allow -- synthetic test fixture
+const npmrcLine =
+  "//registry.example.test/:_authToken=synthetic-npm-token-abc123"; // gitleaks:allow -- synthetic test fixture
 
 function expectRedacted(result: RedactionResult, secret: string): void {
   expect(result.text).not.toContain(secret);
@@ -128,6 +148,233 @@ describe("redactText", () => {
     expect(redactText(source, deterministicKey)).toEqual({
       text: source,
       findings: [],
+    });
+  });
+
+  describe("overlap resolution guards the five existing classes", () => {
+    it("does not let the certificate pattern intercept a private key block", () => {
+      const result = redactText(
+        `before\n${privateKeyBlock}\nafter`,
+        deterministicKey,
+      );
+
+      expect(result.findings.map((f) => f.class)).toEqual(["private-key"]);
+    });
+
+    it("does not let credential-store intercept an env secret assignment", () => {
+      const result = redactText(
+        `API_TOKEN=${environmentSecret}`,
+        deterministicKey,
+      );
+
+      expect(result.findings.map((f) => f.class)).toEqual(["env-secret"]);
+    });
+
+    it("does not let service-credential intercept an Authorization bearer value", () => {
+      const result = redactText(
+        `Authorization: Bearer ${bearerSecret}`,
+        deterministicKey,
+      );
+
+      expect(result.findings.map((f) => f.class)).toEqual(["bearer-token"]);
+    });
+
+    it("does not let service-credential intercept a provider token", () => {
+      const result = redactText(`token: ${providerToken}`, deterministicKey);
+
+      expect(result.findings.map((f) => f.class)).toEqual(["provider-token"]);
+    });
+
+    it("does not let service-credential intercept a high-entropy value", () => {
+      const result = redactText(
+        `opaque value ${highEntropySecret}`,
+        deterministicKey,
+      );
+
+      expect(result.findings.map((f) => f.class)).toEqual(["high-entropy"]);
+    });
+  });
+
+  describe("certificate", () => {
+    it("redacts a PEM certificate block, which the private-key pattern does not match", () => {
+      const source = `-----BEGIN CERTIFICATE-----\nQUJDREVGR0g=\n-----END CERTIFICATE-----`;
+      const { text, findings } = redactText(source, deterministicKey);
+      expect(text).toBe("[REDACTED:certificate]");
+      expect(findings.map((f) => f.class)).toEqual(["certificate"]);
+    });
+
+    it("does not redact plain text that merely mentions a certificate", () => {
+      const result = redactText(
+        "Please renew the certificate before Friday",
+        deterministicKey,
+      );
+
+      expect(result.findings).toHaveLength(0);
+    });
+  });
+
+  describe("credential-store", () => {
+    it("redacts an ~/.aws/credentials secret access key value", () => {
+      const result = redactText(awsCredentialLine, deterministicKey);
+
+      expectRedacted(result, "synthetic/AwsSecretMaterial+ExampleKey00");
+      expect(result.findings.map((f) => f.class)).toEqual(["credential-store"]);
+    });
+
+    it("redacts a .netrc password value", () => {
+      const result = redactText(netrcLine, deterministicKey);
+
+      expectRedacted(result, "synthetic-netrc-secret-99");
+      expect(result.findings.map((f) => f.class)).toEqual(["credential-store"]);
+    });
+
+    it("redacts a .npmrc auth token value", () => {
+      const result = redactText(npmrcLine, deterministicKey);
+
+      expectRedacted(result, "synthetic-npm-token-abc123");
+      expect(result.findings.map((f) => f.class)).toEqual(["credential-store"]);
+    });
+
+    it("does not redact an unrelated identifier that merely contains the word password", () => {
+      const result = redactText(
+        "my_password_manager=strongvalue",
+        deterministicKey,
+      );
+
+      expect(result.findings).toHaveLength(0);
+    });
+  });
+
+  describe("service-credential", () => {
+    it("redacts an AWS access key id and a Stripe live key", () => {
+      const { findings } = redactText(
+        `${awsAccessKeyId} and ${stripeLiveKey}`,
+        deterministicKey,
+      );
+      expect(findings.map((f) => f.class)).toEqual([
+        "service-credential",
+        "service-credential",
+      ]);
+    });
+
+    it("redacts a Google API key and a JWT triplet", () => {
+      const result = redactText(
+        `key=${googleApiKey} token=${jwtTriplet}`,
+        deterministicKey,
+      );
+
+      expect(result.findings.map((f) => f.class)).toEqual([
+        "service-credential",
+        "service-credential",
+      ]);
+      expectRedacted(result, googleApiKey);
+      expectRedacted(result, jwtTriplet);
+    });
+
+    it("does not redact a Stripe test key, which is not a live credential", () => {
+      const result = redactText(
+        "sk_test_0123456789abcdef",
+        deterministicKey,
+      );
+
+      expect(result.findings).toHaveLength(0);
+    });
+  });
+
+  describe("user-pattern", () => {
+    it("matches a user pattern case-insensitively and as a literal, never as a regex", () => {
+      const { text, findings } = redactText("The ACME Corp report", deterministicKey, {
+        userPatterns: ["acme corp"],
+      });
+      expect(text).toBe("The [REDACTED:user-pattern] report");
+      expect(findings).toHaveLength(1);
+    });
+
+    it("treats regex metacharacters in a user pattern as literal text", () => {
+      expect(
+        redactText("a.c", deterministicKey, { userPatterns: [".*"] }).text,
+      ).toBe("a.c");
+      expect(
+        redactText("literal .* here", deterministicKey, {
+          userPatterns: [".*"],
+        }).text,
+      ).toBe("literal [REDACTED:user-pattern] here");
+    });
+
+    it("does not backtrack on a pathological pattern", () => {
+      const started = performance.now();
+      redactText("a".repeat(50_000), deterministicKey, {
+        userPatterns: ["(a+)+$"],
+      });
+      expect(performance.now() - started).toBeLessThan(1_000);
+    });
+
+    it("keeps overlap resolution: the first candidate wins and the second is dropped", () => {
+      const { findings } = redactText(awsAccessKeyId, deterministicKey, {
+        userPatterns: [awsAccessKeyId],
+      });
+      expect(findings).toHaveLength(1);
+    });
+
+    it("does not misalign offsets when a preceding character's lowercase form is longer, e.g. U+0130", () => {
+      const marker = "synthetic-marker-value";
+      const source = `İ ${marker} here`;
+      const { text, findings } = redactText(source, deterministicKey, {
+        userPatterns: [marker],
+      });
+
+      expect(text).toBe("İ [REDACTED:user-pattern] here");
+      expect(findings).toHaveLength(1);
+    });
+
+    it("does not redact when no configured pattern occurs in the text", () => {
+      const result = redactText("nothing to see here", deterministicKey, {
+        userPatterns: ["acme corp"],
+      });
+
+      expect(result.findings).toHaveLength(0);
+    });
+  });
+
+  describe("REDACTION_CLASSES", () => {
+    it("is frozen and has nine members enumerated from real findings, not a hand-written list", () => {
+      const fixtures: Record<string, () => RedactionResult> = {
+        "private-key": () =>
+          redactText(`before\n${privateKeyBlock}\nafter`, deterministicKey),
+        "env-secret": () =>
+          redactText(`API_TOKEN=${environmentSecret}`, deterministicKey),
+        "bearer-token": () =>
+          redactText(
+            `Authorization: Bearer ${bearerSecret}`,
+            deterministicKey,
+          ),
+        "provider-token": () =>
+          redactText(`token: ${providerToken}`, deterministicKey),
+        "high-entropy": () =>
+          redactText(`opaque value ${highEntropySecret}`, deterministicKey),
+        certificate: () => redactText(certificateBlock, deterministicKey),
+        "credential-store": () =>
+          redactText(awsCredentialLine, deterministicKey),
+        "service-credential": () =>
+          redactText(awsAccessKeyId, deterministicKey),
+        "user-pattern": () =>
+          redactText("The ACME Corp report", deterministicKey, {
+            userPatterns: ["acme corp"],
+          }),
+      };
+
+      const observedClasses = new Set<string>();
+      for (const runFixture of Object.values(fixtures)) {
+        for (const finding of runFixture().findings) {
+          observedClasses.add(finding.class);
+        }
+      }
+
+      expect(Object.isFrozen(REDACTION_CLASSES)).toBe(true);
+      expect(REDACTION_CLASSES).toHaveLength(9);
+      expect([...observedClasses].sort()).toEqual(
+        [...REDACTION_CLASSES].sort(),
+      );
     });
   });
 });
