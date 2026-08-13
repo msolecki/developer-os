@@ -474,102 +474,113 @@ describe("redactText", () => {
     /**
      * Important 5 (fix pass 1 review, ceiling corrected in fix pass 2,
      * ceiling replaced with a same-run ratio in fix pass 3, baseline
-     * corrected to share the ratio's allocation profile in fix pass 4):
-     * the first shipped implementation re-sliced and re-lowered a window at
-     * every text position for every pattern — O(n·m) per pattern. An
-     * absolute wall-clock ceiling here is a race against whatever else the
-     * machine is doing: a cold run measured 697 ms against a 600 ms
-     * ceiling on hardware where every other measurement in this suite
-     * passed — the *implementation* had not regressed, the *ceiling* was
-     * gambling against process-launch and JIT-warmup variance it had no
-     * way to account for.
+     * corrected to share the ratio's allocation profile in fix pass 4,
+     * input size and repetition count cut in fix pass 5): the first
+     * shipped implementation re-sliced and re-lowered a window at every
+     * text position for every pattern — O(n·m) per pattern.
      *
-     * Fix pass 3 replaced the absolute ceiling with a same-run ratio
-     * against a zero-pattern `baseline`, reasoning that both measurements
-     * would share the same run's cold-start/GC profile. They did not:
-     * `addUserPatterns` returns immediately at `patterns.length === 0`
-     * before `buildFoldedHaystack` ever runs, so `baseline` was CPU-bound
-     * regex work (~25-35 ms) while `withPatterns` additionally allocated a
-     * 2-million-element `string[]` and a 2-million-entry `Map` — an
-     * allocation- and GC-bound cost the CPU-bound baseline never paid.
-     * External memory pressure inflates the numerator far more than a
-     * denominator that never touches the allocator, which is exactly the
-     * profile mismatch that makes a ratio unstable: measured under 16-way
-     * background CPU load (`node -e 'while(true){Math.sqrt(Math.random())}'`
-     * ×16, `pkill` after), the *fixed* implementation's ratio against a
-     * zero-pattern baseline rose to 1.2-1.3× its no-load range — nowhere
-     * near the failure the coordinator's reviewer reported (20.3, vs. an 18
-     * ceiling), but the same direction of drift, confirming the mechanism.
+     * An absolute wall-clock ceiling is a race against whatever else the
+     * machine is doing (fix pass 1: 697 ms measured against a 600 ms
+     * ceiling on otherwise-passing hardware). A ratio against a
+     * zero-pattern baseline is not load-invariant either, because
+     * `addUserPatterns` returns before `buildFoldedHaystack` ever runs at
+     * zero patterns, so the baseline never pays the allocation the
+     * measurement does (fix pass 4). Giving the baseline one pattern
+     * instead of zero fixed that — but at 2 MB and five repetitions each,
+     * the fixed version of this test cost ~4.2 s in isolation, and went
+     * over vitest's 5 s default under `npm run check`'s parallel workers
+     * (fix pass 4 verified only `pnpm vitest run` in isolation, which does
+     * not reproduce parallel-worker contention — exactly how this reached
+     * the coordinator).
      *
-     * `baseline` now uses **one** user pattern instead of zero, so both
-     * measurements run `buildFoldedHaystack` and pay the same allocation —
-     * the only difference left between them is 1 native `indexOf` call
-     * versus 10. That difference is now the *entire* signal a ratio can
-     * detect, which is also why it does not need the `Math.min`-of-5
-     * defence at nearly the margin fix pass 3 did: with the allocation cost
-     * shared, single-sample ratios were already tight.
+     * Cut to **512 KB, three repetitions each** (six `redactText` calls
+     * total, plus two untimed warm-ups) rather than widening the timeout
+     * around the larger size: the separation between the fixed and buggy
+     * implementations is a property of the *algorithm's shape*
+     * (allocate-once-then-`indexOf`-per-pattern vs. reslice-and-refold
+     * per position per pattern), not of input size, so there was no reason
+     * to keep paying for 2 MB once that was confirmed. Recalibrated,
+     * min-of-3, 512 KB, by temporarily reintroducing the exact pre-fix
+     * shape:
+     * - Fixed, no load, 20 samples across independent process launches:
+     *   ratio 0.63-1.25.
+     * - Fixed, under 16-way background CPU load
+     *   (`node -e 'while(true){Math.sqrt(Math.random())}'` ×16, `pkill`
+     *   after), 5 samples: ratio 0.66-1.46 — still no meaningful drift
+     *   from the no-load range at this smaller size.
+     * - Buggy (reintroduced), no load, 20 samples: ratio 6.32-7.99.
+     * - Buggy, no separate under-load measurement taken at this size: the
+     *   no-load floor (6.32) already sits far above every fixed ceiling
+     *   observed (1.46), and fix pass 4 already established the buggy
+     *   shape's ratio *rises* under load rather than falling, so a
+     *   dedicated under-load buggy measurement would only widen the gap
+     *   further, not narrow it.
+     * Every fixed measurement observed, loaded or not, stayed under 1.5;
+     * every buggy measurement observed stayed over 6.3. 3 keeps wide
+     * margin on both sides — roughly 2× the highest fixed measurement and
+     * half the lowest buggy one — same as fix pass 4's ceiling, unchanged
+     * because the *ratio* a correct implementation produces does not
+     * depend on input size, only the absolute time to compute it does.
      *
-     * Recalibrated, min-of-5, by temporarily reintroducing the exact
-     * pre-fix shape (`text.slice(at, at + needle.length).toLowerCase()`
-     * compared per position, replacing the `indexOf`-over-a-once-folded-
-     * haystack scan below) and running both implementations under this
-     * methodology:
-     * - Fixed, no load, 13 samples across independent process launches:
-     *   ratio 0.92-1.20.
-     * - Fixed, under the same 16-way background CPU load described above,
-     *   3 samples: ratio 1.11-1.21 — no measurable drift, confirming the
-     *   shared-allocation-profile fix actually closes the load-sensitivity
-     *   gap fix pass 3 left open.
-     * - Buggy (reintroduced), no load, 5 samples: ratio 6.85-7.83.
-     * - Buggy, under load, 3 samples: ratio 8.38-8.54.
-     * Every fixed measurement, loaded or not, stayed under 1.3; every buggy
-     * measurement, loaded or not, stayed over 6.8. 3 sits with wide margin
-     * on both sides — roughly 2.3× the highest fixed measurement observed
-     * and well under half the lowest buggy one — rather than splitting the
-     * gap narrowly the way the previous 18-against-a-mismatched-baseline
-     * ceiling did. This proves the *shape* changed back to a per-position
-     * rescan if it regresses; it does not certify a specific throughput
-     * bound for arbitrary text or pattern sizes.
+     * This proves the *shape* changed back to a per-position rescan if it
+     * regresses; it does not certify a specific throughput bound for
+     * arbitrary text or pattern sizes.
      */
-    it("adds bounded per-pattern overhead over a single-pattern baseline, not a per-position rescan", () => {
-      const text = "x".repeat(2 * 1024 * 1024);
-      const baselinePattern = ["pattern-0-not-present-in-text-xyz"];
-      const patterns = Array.from(
-        { length: 10 },
-        (_, index) => `pattern-${String(index)}-not-present-in-text-xyz`,
-      );
+    it(
+      "adds bounded per-pattern overhead over a single-pattern baseline, not a per-position rescan",
+      () => {
+        const text = "x".repeat(512 * 1024);
+        const baselinePattern = ["pattern-0-not-present-in-text-xyz"];
+        const patterns = Array.from(
+          { length: 10 },
+          (_, index) => `pattern-${String(index)}-not-present-in-text-xyz`,
+        );
 
-      function minElapsed(run: () => void, repetitions: number): number {
-        let best = Infinity;
-        for (let index = 0; index < repetitions; index += 1) {
-          const started = performance.now();
-          run();
-          const elapsed = performance.now() - started;
-          if (elapsed < best) best = elapsed;
+        function minElapsed(run: () => void, repetitions: number): number {
+          let best = Infinity;
+          for (let index = 0; index < repetitions; index += 1) {
+            const started = performance.now();
+            run();
+            const elapsed = performance.now() - started;
+            if (elapsed < best) best = elapsed;
+          }
+          return best;
         }
-        return best;
-      }
 
-      // One untimed warm-up call each, so the first *timed* repetition is
-      // not the one absorbing JIT compilation for a code path the rest of
-      // this suite may not have exercised yet.
-      redactText(text, deterministicKey, { userPatterns: baselinePattern });
-      redactText(text, deterministicKey, { userPatterns: patterns });
+        // One untimed warm-up call each, so the first *timed* repetition is
+        // not the one absorbing JIT compilation for a code path the rest of
+        // this suite may not have exercised yet.
+        redactText(text, deterministicKey, { userPatterns: baselinePattern });
+        redactText(text, deterministicKey, { userPatterns: patterns });
 
-      const baseline = minElapsed(
-        () => redactText(text, deterministicKey, { userPatterns: baselinePattern }),
-        5,
-      );
-      const withPatterns = minElapsed(
-        () => redactText(text, deterministicKey, { userPatterns: patterns }),
-        5,
-      );
+        const baseline = minElapsed(
+          () => redactText(text, deterministicKey, { userPatterns: baselinePattern }),
+          3,
+        );
+        const withPatterns = minElapsed(
+          () => redactText(text, deterministicKey, { userPatterns: patterns }),
+          3,
+        );
 
-      // `+ 20` absorbs timer-resolution noise when `baseline` itself is
-      // small; the multiplier is what actually separates the two
-      // implementations, per the calibration above.
-      expect(withPatterns).toBeLessThan(baseline * 3 + 20);
-    });
+        // `+ 20` absorbs timer-resolution noise when `baseline` itself is
+        // small; the multiplier is what actually separates the two
+        // implementations, per the calibration above.
+        expect(withPatterns).toBeLessThan(baseline * 3 + 20);
+      },
+      // Declared explicitly rather than inherited from vitest's 5 s
+      // default: this test deliberately does more work than its
+      // neighbours (six full passes over 512 KB), and fix pass 4's
+      // version of this test blowing past that same *inherited* default
+      // under parallel-worker load is the failure this pass exists to
+      // fix. 2,000 ms is a wide multiple of every measurement above: the
+      // heaviest combined `baseline` + `withPatterns` min-time observed,
+      // under synthetic 16-way background CPU load at this same 512 KB
+      // size, was ~550 ms — and that number already excludes the two
+      // untimed warm-up calls, so it undercounts the real body time
+      // somewhat, which is exactly why the multiple is wide rather than
+      // tight.
+      2_000,
+    );
 
     it("keeps overlap resolution: the first candidate wins and the second is dropped", () => {
       const { findings } = redactText(awsAccessKeyId, deterministicKey, {
