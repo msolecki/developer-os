@@ -71,6 +71,7 @@ describe("runDoctor", () => {
       "transactions",
       "drift",
       "brain",
+      "redaction-key",
       "agents",
       "claude-capabilities",
       "codex-capabilities",
@@ -86,6 +87,43 @@ describe("runDoctor", () => {
     );
     expect(codexAbsent?.message).toContain("codex=absent");
     expect(codexAbsent?.message).not.toContain("recovery=");
+  });
+
+  it("reports the redaction key as present with its mode, never a byte of it", async () => {
+    const fixture = await createCommandFixture("doctor-redaction-key-present");
+    await runInit(fixture.context, ACCEPTED);
+    const key = await nodeFs.readFile(
+      join(fixture.paths.stateDir, "redaction.key"),
+    );
+
+    const report = await runDoctorReport(fixture.context);
+
+    const check = report.checks.find(
+      (candidate) => candidate.id === "redaction-key",
+    );
+    expect(check?.status).toBe("pass");
+    expect(check?.message).toBe("present, 0600");
+    expect(check?.message).not.toContain(Buffer.from(key).toString("hex"));
+    expect(check?.message).not.toContain(
+      Buffer.from(key).toString("base64"),
+    );
+  });
+
+  it("warns rather than fails when no redaction key exists yet", async () => {
+    const fixture = await createCommandFixture("doctor-redaction-key-absent");
+    await runInit(fixture.context, ACCEPTED);
+    await nodeFs.unlink(join(fixture.paths.stateDir, "redaction.key"));
+
+    const report = await runDoctorReport(fixture.context);
+
+    const check = report.checks.find(
+      (candidate) => candidate.id === "redaction-key",
+    );
+    expect(check?.status).toBe("warn");
+    expect(check?.message).toContain("no longer be comparable");
+
+    const result = await runDoctor(fixture.context);
+    expect(result.ok).toBe(true);
   });
 
   /**

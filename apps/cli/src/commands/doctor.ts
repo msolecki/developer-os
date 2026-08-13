@@ -24,7 +24,7 @@ import type { AgentDiscovery, AgentName } from "@developer-os/platform-macos";
 
 import { reportClaudeCapabilities } from "./claude-capabilities.js";
 import { reportCodexCapabilities } from "./codex-capabilities.js";
-import { exitCodeOf, runtimePathsFor } from "../context.js";
+import { exitCodeOf, redactionKeyPath, runtimePathsFor } from "../context.js";
 import type { CliContext } from "../context.js";
 
 const AGENT_NAMES: readonly AgentName[] = ["claude", "codex"];
@@ -547,6 +547,50 @@ async function checkBrain(
 }
 
 /**
+ * Presence and mode only, never contents: `lstat` neither follows a symlink
+ * nor discloses a byte of what the file holds, which is the whole point of a
+ * check for a secret this product must be able to report on without reading
+ * it (DOS-P6 Task 1).
+ */
+async function checkRedactionKey(
+  context: CliContext,
+  paths: RuntimePaths,
+): Promise<Finding> {
+  const file = redactionKeyPath(paths.stateDir);
+  let stats;
+  try {
+    stats = await context.fs.lstat(file);
+  } catch (error) {
+    if (isMissingEntry(error)) {
+      /**
+       * Absent regenerates on next use (`loadOrCreateRedactionKey`), so this
+       * is not a failure — most often `init` has simply never run. Still
+       * worth saying: every fingerprint recorded under a key this product
+       * later replaces becomes incomparable to one recorded after.
+       */
+      return warn(
+        "redaction-key",
+        "no redaction key exists yet; one will be created on next use, and prior fingerprints will no longer be comparable to it",
+        [],
+      );
+    }
+    throw error;
+  }
+
+  if (stats.isSymbolicLink() || !stats.isFile()) {
+    return fail(
+      "redaction-key",
+      "the redaction key path is not a regular file",
+      [file],
+      EXIT_CODES.securityRefusal,
+    );
+  }
+
+  const mode = (stats.mode & 0o777).toString(8).padStart(3, "0");
+  return pass("redaction-key", `present, 0${mode}`, [file]);
+}
+
+/**
  * Discovery that refuses is a warning, never a failure.
  *
  * `MacOsPlatformAdapter` rejects a `which` result it cannot vouch for — most
@@ -653,6 +697,9 @@ async function collectFindings(
     ),
     await guarded(context, "brain", [paths.brain], () =>
       checkBrain(context, paths),
+    ),
+    await guarded(context, "redaction-key", [], () =>
+      checkRedactionKey(context, paths),
     ),
     await guarded(context, "agents", [], () => checkAgents(context)),
     await guarded(context, "claude-capabilities", [], () =>

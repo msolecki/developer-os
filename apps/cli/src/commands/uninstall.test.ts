@@ -404,4 +404,93 @@ describe("runUninstall", () => {
     expect(result.data.transactionId).toBeNull();
     expect(await inventory(fixture.root)).toEqual(before);
   });
+
+  it("removes the redaction key file, which the manifest never named", async () => {
+    const fixture = await createCommandFixture("uninstall-redaction-key");
+    await runInit(fixture.context, ACCEPTED);
+    const keyFile = join(fixture.paths.stateDir, "redaction.key");
+    expect(await exists(keyFile)).toBe(true);
+
+    const result = await runUninstall(fixture.context, {
+      dryRun: false,
+      assumeYes: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(await exists(keyFile)).toBe(false);
+  });
+
+  /**
+   * Decision 5: `uninstall` removes exactly one path outside the manifest.
+   * This pins the width of that exception directly, rather than trusting the
+   * previous test's absence check alone — every *other* path this run removed
+   * must have come from the manifest it read.
+   */
+  it("removes no path beyond the manifest and the redaction key", async () => {
+    const fixture = await createCommandFixture("uninstall-redaction-key-scope");
+    await runInit(fixture.context, ACCEPTED);
+    const manifest = await fixture.context.manifests.read();
+    const manifestPaths = new Set(
+      manifest.artifacts.map((artifact) => artifact.path),
+    );
+    const keyFile = join(fixture.paths.stateDir, "redaction.key");
+    const before = await inventory(fixture.root);
+
+    await runUninstall(fixture.context, { dryRun: false, assumeYes: true });
+
+    const after = new Set(await inventory(fixture.root));
+    const removed = before
+      .filter((entry) => !after.has(entry))
+      .map((entry) => join(fixture.root, entry));
+
+    /**
+     * The manifest file itself is the other unavoidable exception: it never
+     * names itself as a managed artifact, and removing it is what makes the
+     * machine look uninitialized again. `redaction.key` is the only exception
+     * this task adds.
+     */
+    expect(removed).toContain(keyFile);
+    for (const path of removed) {
+      expect(
+        path === keyFile ||
+          path === fixture.paths.manifestFile ||
+          manifestPaths.has(path),
+      ).toBe(true);
+    }
+  });
+
+  /**
+   * Spec §2.5: uninstall never deletes a capture. There is no `capture`
+   * command yet (DOS-P6 builds it after this task), so this plants a
+   * synthetic quarantined file at the path captures will live at and checks
+   * the same guarantee the Brain-preservation tests above already exercise
+   * generally — the vault is an excluded root uninstall never writes into —
+   * pinned specifically for the one directory a capture is never allowed to
+   * vanish from.
+   */
+  it("leaves every quarantined capture in place, because a capture is never deleted", async () => {
+    const fixture = await createCommandFixture("uninstall-quarantine");
+    await runInit(fixture.context, ACCEPTED);
+    const quarantineDir = join(
+      fixture.paths.brain,
+      "content",
+      "_raw",
+      "quarantine",
+    );
+    await nodeFs.mkdir(quarantineDir, { recursive: true, mode: 0o700 });
+    const capturePath = join(quarantineDir, "synthetic-capture.md");
+    await nodeFs.writeFile(capturePath, "synthetic quarantined capture\n", {
+      mode: 0o600,
+    });
+
+    const result = await runUninstall(fixture.context, {
+      dryRun: false,
+      assumeYes: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(await nodeFs.readFile(capturePath, "utf8")).toBe(
+      "synthetic quarantined capture\n",
+    );
+  });
 });

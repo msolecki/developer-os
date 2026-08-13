@@ -17,7 +17,12 @@ import type {
   PlannedFileMutation,
 } from "@developer-os/core";
 
-import { failureFrom, renderPath, runtimePathsFor } from "../context.js";
+import {
+  failureFrom,
+  redactionKeyPath,
+  renderPath,
+  runtimePathsFor,
+} from "../context.js";
 import type { CliContext } from "../context.js";
 import { readConfigFile } from "./doctor.js";
 
@@ -491,6 +496,26 @@ export async function removeManifestFile(context: CliContext): Promise<void> {
   }
 }
 
+/**
+ * The one path `uninstall` removes that the manifest never named — the
+ * redaction key is deliberately not a managed artifact (see
+ * `loadOrCreateRedactionKey` in `../context.js`), so `revertArtifacts` above
+ * has no record of it and would leave it behind forever otherwise. Removed by
+ * the exact path `redactionKeyPath` computes, never by pattern or by walking
+ * `stateDir`, so this exception cannot widen into "and anything else that
+ * happens to live next to it". Missing is success: nothing this product ever
+ * shipped guarantees the key exists before `init` completes.
+ */
+export async function removeRedactionKeyFile(
+  context: CliContext,
+): Promise<void> {
+  try {
+    await context.fs.unlink(redactionKeyPath(context.paths.stateDir));
+  } catch (error) {
+    if (!isMissing(error)) throw error;
+  }
+}
+
 function describePlan(removable: readonly ResolvedArtifact[]): string {
   return [
     "Developer OS will remove the following managed artifacts:",
@@ -560,6 +585,7 @@ export async function runUninstall(
 
     const outcome = await revertArtifacts(context, request);
     await removeManifestFile(context);
+    await removeRedactionKeyFile(context);
 
     return success({ schemaVersion: 1, ...outcome });
   } catch (error) {

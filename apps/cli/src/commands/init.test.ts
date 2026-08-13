@@ -1,3 +1,4 @@
+import fsSync from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { join } from "node:path";
 
@@ -88,6 +89,27 @@ describe("runInit", () => {
     const managed = manifest.artifacts.map((artifact) => artifact.path).sort();
     expect(managed).toContain(fixture.paths.configFile);
     expect(managed).toContain(fixture.paths.home);
+  });
+
+  it("creates a redaction key that installation-manifest.json does not name", async () => {
+    const fixture = await createCommandFixture("init-redaction-key");
+    const keyFile = join(fixture.paths.stateDir, "redaction.key");
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    expect(result.ok).toBe(true);
+    expect(await exists(keyFile)).toBe(true);
+    expect(fsSync.statSync(keyFile).mode & 0o777).toBe(0o600);
+
+    const manifest = await fixture.context.manifests.read();
+    const managed = manifest.artifacts.map((artifact) => artifact.path);
+    expect(managed).not.toContain(keyFile);
+
+    const serializedManifest = await nodeFs.readFile(
+      fixture.paths.manifestFile,
+      "utf8",
+    );
+    expect(serializedManifest).not.toContain("redaction.key");
   });
 
   it("records the Brain skeleton it created so a failed init can undo it", async () => {

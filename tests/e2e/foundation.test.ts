@@ -144,6 +144,7 @@ describe("Foundation temporary-HOME lifecycle", () => {
       const backupsDir = join(home.productHome, "backups");
       const logsDir = join(home.productHome, "logs");
       const brainKeep = join(home.brain, ".gitkeep");
+      const redactionKeyFile = join(stateDir, "redaction.key");
 
       const internalRoots = internalRootsOf(home);
 
@@ -297,6 +298,7 @@ describe("Foundation temporary-HOME lifecycle", () => {
         "transactions",
         "drift",
         "brain",
+        "redaction-key",
         "agents",
         "claude-capabilities",
         "codex-capabilities",
@@ -406,6 +408,13 @@ describe("Foundation temporary-HOME lifecycle", () => {
       expect(afterUninstall.has(configFile)).toBe(false);
       expect(afterUninstall.has(manifestFile)).toBe(false);
       expect(afterUninstall.has(logsDir)).toBe(false);
+      /**
+       * DOS-P6 Task 1: the redaction key is removed by exact path, the one
+       * exception to "everything uninstall removes came from the manifest".
+       * `removal.removed` above never names it — spec forbids the key from
+       * ever appearing in `--json` output — so this is checked on disk.
+       */
+      expect(afterUninstall.has(redactionKeyFile)).toBe(false);
       expect(afterUninstall.get(home.brain)).toBe("dir");
       expect(afterUninstall.get(brainKeep)).toBe(
         "file:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -443,7 +452,28 @@ describe("Foundation temporary-HOME lifecycle", () => {
         preserved: [],
         transactionId: null,
       });
-      expect(await inventory(home.root)).toStrictEqual(beforeSecondUninstall);
+
+      /**
+       * Not quite a no-op: `state` survived the first uninstall (it still
+       * holds that transaction's own journal and lock files), so building a
+       * context for *this* invocation — before `uninstall` even decides there
+       * is nothing left to own — finds `stateDir` present and the key
+       * missing, and `loadOrCreateRedactionKey` regenerates it. This is
+       * `doctor.ts`'s own words for the check added in this task: "a missing
+       * key regenerates on next use, so it is not a failure." The key file
+       * is the *only* thing this run adds; `uninstall`'s own decision is
+       * still a true no-op.
+       */
+      const afterSecondUninstall = await inventory(home.root);
+      expect(
+        removedPaths(beforeSecondUninstall, afterSecondUninstall),
+      ).toStrictEqual([]);
+      expect(
+        changedPaths(beforeSecondUninstall, afterSecondUninstall),
+      ).toStrictEqual([]);
+      expect(
+        addedPaths(beforeSecondUninstall, afterSecondUninstall),
+      ).toStrictEqual([redactionKeyFile]);
 
       // --- doctor on the emptied machine: reports, never repairs --------------
 
@@ -456,7 +486,13 @@ describe("Foundation temporary-HOME lifecycle", () => {
       const failure: CliError = errorOf(afterAllCommands.result);
       expect(failure.kind).toBe("doctor_failed");
       expect(failure.recovery).toBe("developer-os init");
-      expect(await inventory(home.root)).toStrictEqual(beforeSecondUninstall);
+      /**
+       * The key already exists by this point (regenerated above), so
+       * `doctor` — true to "reports and never repairs" — makes no further
+       * change; the baseline is `afterSecondUninstall`, not
+       * `beforeSecondUninstall`, because that regeneration already happened.
+       */
+      expect(await inventory(home.root)).toStrictEqual(afterSecondUninstall);
     });
   });
 

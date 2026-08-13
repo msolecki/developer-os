@@ -26,6 +26,7 @@ import {
 import {
   assertRootsAnchored,
   failureFrom,
+  loadOrCreateRedactionKey,
   ownershipAnchorsFor,
   renderPath,
   runtimePathsFor,
@@ -613,6 +614,16 @@ export async function runInit(
     }
 
     await createDirectories(context, plan);
+
+    /**
+     * Created now, immediately after `stateDir` exists, so an installation
+     * never completes without a durable redaction key — every fingerprint
+     * `capture` ever records depends on this being the same key every run.
+     * Deliberately outside `mutationsFor`/`recordArtifacts`: it is not a
+     * managed artifact, so it never appears in `installation-manifest.json`
+     * and a drift report never hashes it (DOS-P6 Task 1, spec §3.5, §8.4).
+     */
+    loadOrCreateRedactionKey(plan.paths.stateDir);
 
     const journal = await context.executor.execute({
       kind: "init",

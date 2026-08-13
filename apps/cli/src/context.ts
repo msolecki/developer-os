@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import fsSync from "node:fs";
 import {
   chmod,
   link,
@@ -381,6 +382,119 @@ export function failureFrom(
   });
 }
 
+const REDACTION_KEY_FILE = "redaction.key";
+
+/**
+ * The one path `uninstall` removes outside the manifest (spec's decision 5,
+ * `BACKLOG.md` §8). Centralized so that exception stays exactly one path
+ * wide: `init`, `uninstall`, and `doctor` all name the key through this
+ * function rather than each spelling `"redaction.key"` again, which would
+ * leave the literal free to drift out of sync with what `loadOrCreateRedactionKey`
+ * actually reads and writes.
+ */
+export function redactionKeyPath(stateDir: string): string {
+  return join(stateDir, REDACTION_KEY_FILE);
+}
+
+/**
+ * Writes a fresh key with `O_CREAT | O_EXCL`, so this call either creates the
+ * file or discovers that another process already has. On `EEXIST` it does not
+ * retry the write — it falls back into `loadOrCreateRedactionKey`'s own read
+ * branch, the same guarded path (`O_NOFOLLOW`, regular-file check, minimum
+ * length) that every other caller reads the key through. Two processes racing
+ * their first `init` therefore converge on whichever one won the create, and
+ * neither can silently overwrite the other's bytes.
+ */
+function createRedactionKey(file: string): Uint8Array {
+  let handle: number;
+  try {
+    handle = fsSync.openSync(
+      file,
+      fsSync.constants.O_CREAT | fsSync.constants.O_EXCL | fsSync.constants.O_WRONLY,
+      0o600,
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      return loadOrCreateRedactionKey(dirname(file));
+    }
+    throw error;
+  }
+  try {
+    const key = randomBytes(REDACTION_KEY_BYTES);
+    fsSync.writeSync(handle, key);
+    return key;
+  } finally {
+    fsSync.closeSync(handle);
+  }
+}
+
+/**
+ * The product's first secret at rest, and deliberately **not** a managed
+ * artifact: absent from `installation-manifest.json`, so it is never hashed into
+ * a drift report and never printed by a diagnostic that enumerates manifest
+ * contents (spec §3.5, §8.4).
+ *
+ * Losing it makes old fingerprints incomparable, never captures unreadable —
+ * content is not encrypted with it, only fingerprints are derived from it.
+ */
+export function loadOrCreateRedactionKey(stateDir: string): Uint8Array {
+  const file = redactionKeyPath(stateDir);
+  let handle: number;
+  try {
+    handle = fsSync.openSync(
+      file,
+      fsSync.constants.O_RDONLY | fsSync.constants.O_NOFOLLOW,
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ELOOP") {
+      throw new SecurityRefusalError("the redaction key is a symlink");
+    }
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    return createRedactionKey(file);
+  }
+  try {
+    const stats = fsSync.fstatSync(handle);
+    if (!stats.isFile()) {
+      throw new SecurityRefusalError("the redaction key is not a regular file");
+    }
+    const key = fsSync.readFileSync(handle);
+    if (key.byteLength < REDACTION_KEY_BYTES) {
+      throw new SecurityRefusalError("the redaction key is too short");
+    }
+    if ((stats.mode & 0o777) !== 0o600) fsSync.fchmodSync(handle, 0o600);
+    return key;
+  } finally {
+    fsSync.closeSync(handle);
+  }
+}
+
+/**
+ * Falls back to an ephemeral, per-process key exactly when `stateDir` itself
+ * does not exist yet — before the first `init`, or after an `uninstall` that
+ * also took an empty state directory with it. `loadOrCreateRedactionKey`
+ * cannot create the file in a directory that is not there, and it must not:
+ * `doctor` and `status` run on an uninitialized machine by contract
+ * (`doctor.ts`'s "reports and never repairs"), and creating `stateDir` as a
+ * side effect of asking what is wrong would make that contract a lie for this
+ * one file. `init` is what creates `stateDir`, and it calls the loader itself
+ * right after, so the durable key exists from then on and this branch stops
+ * being taken.
+ *
+ * Narrowed to `ENOENT` specifically: a symlink or a too-short key at a path
+ * whose directory *does* exist is this product's own secret at a location it
+ * owns, and that refusal must still reach the caller, not be swallowed here.
+ */
+function redactionKeyFor(stateDir: string): Uint8Array {
+  try {
+    return loadOrCreateRedactionKey(stateDir);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return randomBytes(REDACTION_KEY_BYTES);
+    }
+    throw error;
+  }
+}
+
 export interface ProductionContextOptions {
   readonly io: CliIo;
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -392,14 +506,18 @@ export interface ProductionContextOptions {
  * adapter. Nothing here inspects the host: `platform.inspect()` throws on an
  * unsupported one, and `doctor` must be able to report that as a check rather
  * than fail before dispatch.
+ *
+ * `paths` is resolved before the redaction key rather than after: the key is
+ * persisted under `paths.stateDir` now (DOS-P6 Task 1), where it used to be a
+ * per-process `randomBytes()` call that owed nothing to the filesystem.
  */
 export function createProductionContext(
   options: ProductionContextOptions,
 ): CliContext {
   const policy = new ProtectedPathPolicy(options.userHome);
-  const redactionKey = randomBytes(REDACTION_KEY_BYTES);
-  const guards = createGuards(policy, redactionKey);
   const paths = resolveRuntimePaths(pathEnvironmentFor(options));
+  const redactionKey = redactionKeyFor(paths.stateDir);
+  const guards = createGuards(policy, redactionKey);
   const lockProvider = new MacOsTransactionLockProvider();
   const runner = new NodeProcessRunner({
     assertCommand: assertSafeCommand,
