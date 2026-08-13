@@ -610,37 +610,46 @@ With no hooks and no wrapper, six of the nine capability keys describe surfaces 
 
 | Key | Before | After |
 |---|---|---|
-| `skills` | probe-settled | unchanged, and the only probe-settled key |
-| `non_interactive_run`, `structured_result` | `wrapper-required` | `yes` when observed, `unknown` when not |
+| `skills` | probe-settled | unchanged |
+| `non_interactive_run`, `structured_result` | `wrapper-required` | `yes` when observed, `unknown` when not — **also probe-settled**, which spec §3.2's "the only probe-settled key" gets wrong; three keys are, after this task |
 | `plugin_hooks` | `unknown`, via `UNSETTLED` | `not-used` |
 | `session_start_injection`, `session_end_capture`, `pre_compact_backup` | `wrapper-required` | `not-used` |
 | `subagents`, `durable_project_guidance` | `wrapper-required` | `not-used` |
 
-**Files:**
+**Files** — the last three were missing and the commit is red without them, because `git add` here is exact-path:
 - Modify: `packages/core/src/capabilities/index.ts`
 - Modify: `packages/adapter-claude/src/capabilities.ts`, `packages/adapter-codex/src/capabilities.ts`
 - Modify: `apps/cli/src/commands/claude-capabilities.ts`, `apps/cli/src/commands/codex-capabilities.ts`
-- Test: the four adjacent `.test.ts` files, plus `apps/cli/src/adapter-capability-parity.test.ts`
+- Modify: **`apps/cli/src/commands/doctor.ts`** — `:364` reads `report.recovery`, which this task deletes (a compile error), and `:293`/`:367` interpolate `report.captureVia`, whose value changes
+- Test: the four adjacent `.test.ts` files, plus `apps/cli/src/adapter-capability-parity.test.ts`, **`apps/cli/src/commands/doctor.test.ts`** (Step 3 adds cases there), and **`tests/e2e/foundation.test.ts`** — `:328`, `:331`, `:526`, `:527` assert on `claude=absent`/`codex=absent` in capability messages
 
 **Interfaces:**
 - Produces: `CapabilityState = "yes" | "unknown" | "not-used"`. Every consumer of the old union is a compile error until it is updated, which is the point.
+- Produces: a third discovery outcome, per Step 3 — today `checkClaudeCapabilities` and `checkCodexCapabilities` (`doctor.ts:274`, `:342`) swallow a discovery **throw** and pass `executablePath: null`, which reports `absent`. `unreadable` is reachable only when the path is non-null *and* `discoverX` returns `null`, so nothing can currently produce it from a failing discovery.
 
 - [ ] **Step 1: Write the failing tests**
 
 In each adapter's `capabilities.test.ts`:
 
+**Type the fixtures**, or none of this compiles under strict: a bare `new Map([[key, "observed"]])` infers `Map<string, string>` rather than `ReadonlyMap<string, ProbeObservation>`, and a `key` typed `string` from `it.each` cannot index `Readonly<Record<ClaudeCapabilityKey, …>>`.
+
 ```ts
-it.each([
+const NOT_USED_KEYS = [
   "plugin_hooks",
   "session_start_injection",
   "session_end_capture",
   "pre_compact_backup",
   "subagents",
   "durable_project_guidance",
-])("reports %s as not-used, before the table or an observation is consulted", (key) => {
-  const resolved = resolveCapabilities("99.0.0", new Map([[key, "observed"]]));
-  expect(resolved[key]).toBe("not-used");
-});
+] as const satisfies readonly ClaudeCapabilityKey[];
+
+it.each(NOT_USED_KEYS)(
+  "reports %s as not-used, before the table or an observation is consulted",
+  (key) => {
+    const observations: ReadonlyMap<string, ProbeObservation> = new Map([[key, "observed"]]);
+    expect(resolveCapabilities("99.0.0", observations)[key]).toBe("not-used");
+  },
+);
 
 it("degrades an unobserved but permitted key to unknown, never to a wrapper", () => {
   expect(resolveCapabilities("99.0.0", new Map()).structured_result).toBe("unknown");
@@ -672,40 +681,44 @@ Spec §7.5's remaining pair. They live in these two files, they are duplicated a
 
 **The fix must make a dropped key fail to compile; a test that merely checks the current keys would restate the bug.**
 
+**This defect has no automatable test, and pretending otherwise is worse than admitting it.** The obvious one —
+
 ```ts
-it("fails to compile when a capability key is dropped from the matrix", () => {
-  // @ts-expect-error a matrix missing `skills` is not a ClaudeCapabilities
-  const incomplete: ClaudeCapabilities = { plugin_hooks: "not-used" };
-  expect(incomplete).toBeDefined();
-});
+// @ts-expect-error a matrix missing `skills` is not a ClaudeCapabilities
+const incomplete: ClaudeCapabilities = { plugin_hooks: "not-used" };
 ```
 
-The assertion is written against a **literal** rather than against `allUnknown()`, because `allUnknown` is module-private in both command modules (`claude-capabilities.ts:54`, `codex-capabilities.ts:76`) and exporting a helper so a test can reach it widens a surface for no gain. What the test pins is the *type*, which is exported; what pins the helper is that it must return that type without a cast.
+— is **green today, green after the fix, and green after a revert**, because an object literal missing eight required properties is already an error and `@ts-expect-error` suppresses every error on its line. It certifies nothing. Do not write it.
+
+The evidence for this fix is a **manual run, recorded in the task report**: delete one key from `CLAUDE_CAPABILITY_KEYS`, run `tsc -b`, confirm it now fails at all four sites, restore it. Name the four sites in the report — `allUnknown` in both command modules and the `resolveCapabilities` return in both adapters — and say what the error was at each. A reviewer can rerun exactly that.
 
 The implementation drops the cast: build the record with `Object.fromEntries` over the key tuple and let the return type check it, or assign each key explicitly. Whichever shape ships, `tsc -b` must fail when a key leaves `CLAUDE_CAPABILITY_KEYS` without leaving the type — verify that by deleting a key locally, watching the build go red, and restoring it. **Say in the report that you did, for all four sites.**
 
 *`doctor` renders any discovery error as `absent`* (`codex-adapter.md` §11.6) — "we could not ask" printed as "not installed", the same conflation `unreadable` exists to prevent, one layer up. `checkAgents` splits those on purpose, so the same failure can leave `agents` failing while `codex-capabilities` passes saying "not installed".
 
-```ts
-it.each([
-  ["claude", runDoctorWithFailingDiscovery("claude")],
-  ["codex", runDoctorWithFailingDiscovery("codex")],
-])("never says %s is absent when discovery itself failed", async (agent, run) => {
-  const report = await run();
-  const summaries = report.checks.map((c) => c.message).join("\n");
-  expect(summaries).toContain(`${agent}=unreadable`);
-  expect(summaries).not.toContain(`${agent}=absent`);
-});
+**Neither of these can be written as a `not.toContain` and mean anything** — that shape is how the first draft of this task passed against unfixed code. Assert the **positive** form, on both checks at once:
 
-it("never prints two contradictory statements about one binary", async () => {
-  const report = await runDoctorWithFailingDiscovery("codex");
-  const agents = report.checks.find((c) => c.id === "agents");
-  const capabilities = report.checks.find((c) => c.id === "codex-capabilities");
-  expect(agents?.message.includes("present") && capabilities?.message.includes("absent")).toBe(false);
-});
+```ts
+it.each(["claude", "codex"] as const)(
+  "says %s is present and unreadable when discovery threw, never absent",
+  async (agent) => {
+    const report = await runDoctorWhereDiscoveryThrows(agent);
+    const agents = report.checks.find((c) => c.id === "agents");
+    const capabilities = report.checks.find((c) => c.id === `${agent}-capabilities`);
+
+    expect(agents?.message).toContain(`${agent}=present`);
+    expect(capabilities?.message).toContain(`${agent}=unreadable`);
+  },
+);
 ```
 
-The second case is the exact defect a fresh-context review caught on 2026-08-11 for Claude and that DOS-P5 then reproduced for Codex by symmetry. Both are fixed here, in one change, and the assertion is written against the *messages* rather than the check ids — because the end-to-end fixture that pinned the old behaviour green read ids and not messages.
+**Run it against today's code before writing a line of implementation and watch it fail on the second assertion**, with the capability check reporting `absent`. A version phrased as `expect(a?.message.includes("present") && b?.message.includes("absent")).toBe(false)` is **green today**: under a throwing discovery, `checkAgents` (`doctor.ts:660-679`) returns the redacted *error message*, which contains neither word, so the left operand is `false` and the conjunction holds. It would keep holding after a revert.
+
+**`unreadable` has no producer yet, and creating one is most of this step.** `reportXCapabilities` reaches `unreadable()` only when `executablePath !== null` **and** `discoverX` returns `null`. When discovery *throws*, `doctor.ts:274` and `:342` catch it and pass `executablePath: null`, which is `absent()`. So the fix is a third outcome threaded from `discoverAgents` into the capability check — "present but unreadable" — not a message change.
+
+**And `discoverAgents` (`doctor.ts:238-246`) is a serial loop that aborts on the first throw**, so a failing `claude` currently leaves `codex` reported `absent` when it was never asked. Both agents must be discovered independently, or the second one inherits the first one's failure. Add the case: discovery throws for `claude` only, and `codex` still reports its real state.
+
+This is the defect a fresh-context review caught on 2026-08-11 for Claude, which DOS-P5 then reproduced for Codex by symmetry. Both are fixed here, in one change, and every assertion is written against the *messages* rather than the check ids — because the end-to-end fixture that pinned the old behaviour green read ids and not messages.
 
 - [ ] **Step 4: Run the gate and commit**
 
@@ -715,6 +728,8 @@ git add packages/core/src/capabilities packages/adapter-claude/src/capabilities.
         packages/adapter-claude/src/capabilities.test.ts \
         packages/adapter-codex/src/capabilities.ts \
         packages/adapter-codex/src/capabilities.test.ts \
+        apps/cli/src/commands/doctor.ts apps/cli/src/commands/doctor.test.ts \
+        tests/e2e/foundation.test.ts \
         apps/cli/src/commands/claude-capabilities.ts \
         apps/cli/src/commands/claude-capabilities.test.ts \
         apps/cli/src/commands/codex-capabilities.ts \
