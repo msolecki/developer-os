@@ -1,4 +1,5 @@
 import type { BrainConfigV1 } from "@developer-os/core";
+import { pathSegmentViolation } from "@developer-os/core";
 
 import type { WorkflowCapability } from "./contract.js";
 
@@ -128,63 +129,85 @@ export function isKnownVerb(verb: string): boolean {
  * a scope glob against a real filesystem must resolve it through here rather
  * than hardcode `content/` and `_indexes` a second time.
  *
- * A root is rejected, not silently accepted, when it could widen every scope
- * derived from it once joined onto a real path:
- * - **empty** — joining onto `""` collapses the leading segment out of the
- *   glob entirely, e.g. `"" + "/_indexes/**"` reads as an absolute path from
- *   the filesystem root once a path library joins it.
- * - **contains `/` or `\`** — multi-segment or absolute (`/etc`, `./content`,
- *   `C:\x`) roots stop being "one directory under the vault" and become a path
- *   of their own, which is exactly what `BrainConfigV1`'s docblock in
- *   `packages/core/src/config/types.ts` says this member must never be.
- * - **exactly `..`** — a parent-traversal segment with no separator in sight,
- *   so it survives a check that only looks for `/`.
- *
- * A root of `.` is accepted: a single current-directory segment joins back
- * onto the vault root and cannot leave it, so it carries none of the risk the
- * three checks above exist to catch.
+ * Validation is `pathSegmentViolation` from `@developer-os/core`, not a local
+ * reimplementation. A first cut of this function rebuilt the rule from
+ * `BrainConfigV1`'s docblock rather than from the config loader that actually
+ * enforces it (`packages/core/src/config/loader.ts`'s `pathSegmentSchema`),
+ * landed three of its four clauses, and — critically — accepted `.`, which
+ * the loader has always rejected. A root of `.` reads as "one segment that
+ * cannot leave the vault", which is true and is the wrong property: the
+ * guarantee this function owes is that the declared *subtree* is not widened,
+ * and `./**` matches the entire vault root, not the content root, so every
+ * declared `content/**` scope would resolve to a grant over the whole vault —
+ * staging and `.git` included. Two independent guards over one value that
+ * disagree means neither is the authority; `pathSegmentViolation` is now the
+ * one place this rule lives, and it also refuses a value the first cut never
+ * considered: a bare glob metacharacter (`*`, `?`, …), which is a single
+ * valid path segment by every character-shape rule and would otherwise widen
+ * a glob it is spliced into — see that module's docblock.
  */
 function assertValidRoot(root: string, field: "contentRoot" | "indexesDir"): void {
-  if (root.length === 0) {
-    throw new RangeError(`BrainConfigV1.${field} must not be empty`);
-  }
-  if (root.includes("/") || root.includes("\\")) {
-    throw new RangeError(
-      `BrainConfigV1.${field} (${JSON.stringify(root)}) must be a single path segment, not a path`,
-    );
-  }
-  if (root === "..") {
-    throw new RangeError(`BrainConfigV1.${field} must not be a parent-directory traversal`);
+  const violation = pathSegmentViolation(root);
+  if (violation !== null) {
+    throw new RangeError(`BrainConfigV1.${field} (${JSON.stringify(root)}) ${violation}`);
   }
 }
 
 /**
- * Rewrites the leading `content` segment and any `_indexes` segment of a
- * vocabulary glob to the roots a real `BrainConfigV1` names, so a vault
- * configured with `contentRoot: "notes"` gets a grant naming `notes/**`
- * instead of a `content/**` directory that does not exist in it.
+ * Rewrites the leading `content` segment, and an immediately-following
+ * `_indexes` segment, of a vocabulary glob to the roots a real `BrainConfigV1`
+ * names, so a vault configured with `contentRoot: "notes"` gets a grant
+ * naming `notes/**` instead of a `content/**` directory that does not exist
+ * in it.
  *
- * Segment-wise, never `String.replace`: `content` is a substring of
- * `contents`, so a vault folder named `my-content` would have its glob
- * corrupted mid-word by a substring replace. Splitting on `/` and comparing
- * whole segments is what makes that impossible.
+ * Both substitutions are pinned to a position, not a bare segment match:
+ * - `content` only at index 0. `content` is a substring of `contents`, and
+ *   `String.replace` or an unpositioned segment match would rewrite either
+ *   one — a vault folder literally named `content` nested under `staging/`
+ *   would be corrupted the same way. Requiring index 0 makes both defects
+ *   structurally impossible rather than merely untested.
+ * - `_indexes` only at index 1, and only once index 0 was actually `content`.
+ *   Brain's real indexes directory is one level under the content root
+ *   (`packages/brain/src/indexes/artifacts.ts`); an `_indexes` folder a user
+ *   made two levels down, or a `staging/_indexes/**` path that never named
+ *   the content root at all, is not that directory, and rewriting it anyway
+ *   would point a grant at a directory that does not exist (or, worse, apply
+ *   Brain's configuration to a path that was never Brain's to begin with).
+ *   Gating on index 0 is what keeps this from firing on either case.
  *
- * Both roots are validated on every call, not only when a glob happens to
- * reference them — resolving `EFFECT_VOCABULARY` entries one glob at a time
- * against a bad config would otherwise throw for some globs and silently
- * succeed for others in the same run, which is a config error surfacing as
- * a heisenbug instead of a refusal.
+ * A glob whose first segment is not `content` is returned unchanged — no
+ * substitution applies. Both roots are still validated on every call before
+ * that check runs, not only when a glob happens to reference them: resolving
+ * `EFFECT_VOCABULARY` entries one glob at a time against a bad config would
+ * otherwise throw for some globs and silently succeed for others in the same
+ * run, which is a config error surfacing as a heisenbug instead of a refusal.
+ *
+ * **NFC, on the way in.** Every Brain consumer that builds a real path from
+ * `contentRoot`/`indexesDir` normalizes to NFC first (`indexes/artifacts.ts`,
+ * `indexes/build.ts`, `discovery/discover.ts`, `lint/lint.ts`, `service.ts`),
+ * but `loadConfig` does not — a TOML file can hand either form to this
+ * function. Normalizing the substituted root here makes this function's
+ * output match what Brain actually writes to disk, which is the property
+ * that matters for a byte-comparing scope check. It is a partial fix: a
+ * caller that reads `config.contentRoot` directly, without going through
+ * `resolveScopeGlob`, still sees whatever normalization form the TOML file
+ * happened to use. `loadConfig` normalizing at load time would close that
+ * gap for every consumer at once and is the more complete fix — out of this
+ * task's scope (`vocabulary.ts`/`index.ts` only), left for whoever wires the
+ * first real caller.
  */
 export function resolveScopeGlob(glob: string, config: BrainConfigV1): string {
   assertValidRoot(config.contentRoot, "contentRoot");
   assertValidRoot(config.indexesDir, "indexesDir");
 
-  return glob
-    .split("/")
-    .map((segment, index) => {
-      if (index === 0 && segment === "content") return config.contentRoot;
-      if (segment === "_indexes") return config.indexesDir;
-      return segment;
-    })
-    .join("/");
+  const segments = glob.split("/");
+  if (segments[0] !== "content") return glob;
+
+  const resolved = [config.contentRoot.normalize("NFC")];
+  if (segments[1] === "_indexes") {
+    resolved.push(config.indexesDir.normalize("NFC"), ...segments.slice(2));
+  } else {
+    resolved.push(...segments.slice(1));
+  }
+  return resolved.join("/");
 }

@@ -157,6 +157,26 @@ describe("brain configuration section", () => {
       name: "a current-directory topic folder",
       source: brainToml.replace('["DEV", "PROJECTS"]', '["."]'),
     },
+    /**
+     * A configuration a reviewer proved this schema accepted before
+     * `pathSegmentSchema` grew a metacharacter clause: `contentRoot = "*"` has
+     * no separator and is not `.` or `..`, so it passed every check above and
+     * was then spliced into a workflow-schema glob, matching every sibling of
+     * the vault root once resolved. `topicFolders` shares the same schema, so
+     * it carries the same exposure and the same fix.
+     */
+    {
+      name: "a content root that is a glob metacharacter",
+      source: brainToml.replace('contentRoot = "content"', 'contentRoot = "*"'),
+    },
+    {
+      name: "an index directory that is a glob metacharacter",
+      source: brainToml.replace('indexesDir = "_indexes"', 'indexesDir = "?"'),
+    },
+    {
+      name: "a topic folder that is a glob metacharacter",
+      source: brainToml.replace('["DEV", "PROJECTS"]', '["*"]'),
+    },
     {
       name: "an alias key that is a path",
       source: brainToml.replace("PROJEKTY =", '"../escape" ='),

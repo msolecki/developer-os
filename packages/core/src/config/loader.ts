@@ -3,6 +3,7 @@ import { isAbsolute } from "node:path";
 import { parse, stringify } from "smol-toml";
 import { z } from "zod";
 
+import { isValidPathSegment } from "./segment.js";
 import type { DeveloperOsConfigV1 } from "./types.js";
 
 const absolutePathSchema = z
@@ -19,20 +20,14 @@ const absolutePathSchema = z
  * A single path segment, never a path. Topic folders, the content root, and the
  * index directory are joined onto the vault root, so accepting `..` or a
  * separator here would let a configuration file walk out of the vault before any
- * guard sees the resulting path.
+ * guard sees the resulting path. `isValidPathSegment` is `./segment.js`, shared
+ * with `packages/workflow-schema`'s `resolveScopeGlob` rather than
+ * reimplemented here a second time — see that module's docblock for why a
+ * second implementation is the defect, not a safety margin.
  */
-const pathSegmentSchema = z
-  .string()
-  .min(1)
-  .refine(
-    (value) =>
-      !value.includes("\0") &&
-      !value.includes("/") &&
-      !value.includes("\\") &&
-      value !== "." &&
-      value !== "..",
-    { message: "Must be a single path segment" },
-  );
+const pathSegmentSchema = z.string().min(1).refine(isValidPathSegment, {
+  message: "Must be a single path segment",
+});
 
 /**
  * `z.record` silently *drops* these keys before the key schema ever runs, so

@@ -315,7 +315,89 @@ describe("resolveScopeGlob", () => {
     );
   });
 
-  it("accepts a root of '.', since one current-directory segment cannot leave the vault", () => {
-    expect(resolveScopeGlob("content/**", { ...config, contentRoot: "." })).toBe("./**");
+  /**
+   * Reversed from the first cut of this function, which accepted `.` on the
+   * theory that a single current-directory segment "cannot leave the vault".
+   * True, and the wrong property: `./**` matches the entire vault root, not
+   * the content root, so a declared `content/**` scope would resolve to a
+   * grant over everything in the vault, staging and `.git` included — a
+   * widening of the declared subtree even though nothing left the vault. The
+   * config loader (`packages/core/src/config/loader.ts`) has always rejected
+   * `.` for `contentRoot`/`indexesDir`; this function now agrees with it via
+   * the same shared validator instead of contradicting it.
+   */
+  it("refuses a root of '.', which widens content/** to the whole vault rather than leaving it", () => {
+    expect(() => resolveScopeGlob("content/**", { ...config, contentRoot: "." })).toThrow(
+      RangeError,
+    );
+  });
+
+  it.each(["*", "?", "[", "]", "{", "}", "(", ")", "!"])(
+    "refuses a root containing the glob metacharacter %s, which passes every character-shape check above",
+    (character) => {
+      expect(() =>
+        resolveScopeGlob("content/**", { ...config, contentRoot: character }),
+      ).toThrow(RangeError);
+    },
+  );
+
+  it("refuses a root containing a NUL byte", () => {
+    expect(() =>
+      resolveScopeGlob("content/**", { ...config, indexesDir: "a\0b" }),
+    ).toThrow(RangeError);
+  });
+
+  /**
+   * Mutation-killing cases. A reviewer copied a `String.replace("content", cr)`
+   * mutant of this function and an "unpin index 0" mutant, and both passed
+   * every test that existed before these three cases — the earlier suite only
+   * asserted what a segment-wise replace produces, never what a substring
+   * replace would have produced differently. `my-content` and `contents` each
+   * contain `content` as a substring but are not equal to it; `staging/
+   * content/**` has `content` as a non-leading whole segment. All three must
+   * survive resolution completely untouched.
+   */
+  it.each(["my-content/**", "contents/**", "staging/content/**"])(
+    "leaves %s untouched — content only substitutes as the whole leading segment",
+    (glob) => {
+      expect(resolveScopeGlob(glob, config)).toBe(glob);
+    },
+  );
+
+  /**
+   * `_indexes` only substitutes at index 1, and only once index 0 was the
+   * content root — never as a bare segment match anywhere else. Brain's real
+   * indexes directory is one level under the content root
+   * (`packages/brain/src/indexes/artifacts.ts`), so an `_indexes` segment
+   * two levels down is a user's own folder, and one under a path that never
+   * named the content root at all is not Brain's directory to begin with.
+   */
+  it("leaves a nested _indexes segment alone, substituting only the content root ahead of it", () => {
+    expect(resolveScopeGlob("content/DEV/_indexes/notes.md", config)).toBe(
+      "notes/DEV/_indexes/notes.md",
+    );
+  });
+
+  it("leaves _indexes untouched under a root that never names the content root", () => {
+    expect(resolveScopeGlob("staging/_indexes/**", config)).toBe("staging/_indexes/**");
+  });
+
+  /**
+   * Every Brain consumer that turns `contentRoot`/`indexesDir` into a real
+   * path normalizes to NFC first; `loadConfig` does not, so an NFD root here
+   * must still resolve to the NFC form Brain actually writes to disk.
+   * `decomposed` is the letter e followed by a standalone combining acute
+   * (U+0065 U+0301); `composed` is the single precomposed code point
+   * (U+00E9). Both escapes, not literal characters, so the byte-level
+   * distinction this test exists to exercise cannot be silently folded away
+   * by an editor or a normalizing paste.
+   */
+  it("normalizes a decomposed root to NFC, matching what Brain itself writes to disk", () => {
+    const decomposed = "cafe\u0301";
+    const composed = "caf\u00e9";
+    expect(decomposed).not.toBe(composed);
+    expect(resolveScopeGlob("content/**", { ...config, contentRoot: decomposed })).toBe(
+      `${composed}/**`,
+    );
   });
 });
