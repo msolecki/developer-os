@@ -1,6 +1,7 @@
+import type { BrainConfigV1 } from "@developer-os/core";
 import { describe, expect, it } from "vitest";
 
-import { EFFECT_VOCABULARY, isKnownVerb, lookupVerb } from "./vocabulary.js";
+import { EFFECT_VOCABULARY, isKnownVerb, lookupVerb, resolveScopeGlob } from "./vocabulary.js";
 
 describe("EFFECT_VOCABULARY", () => {
   it("is not empty, and every entry is fully specified", () => {
@@ -238,5 +239,83 @@ describe("EFFECT_VOCABULARY", () => {
   it("recognises only vocabulary verbs", () => {
     expect(isKnownVerb("brain.search")).toBe(true);
     expect(isKnownVerb("brain.deleteEverything")).toBe(false);
+  });
+});
+
+describe("resolveScopeGlob", () => {
+  /**
+   * Not imported from `@developer-os/brain` — `packages/workflow-schema` is not
+   * on that dependency edge (`core ← security ← workflow-schema`), so this is a
+   * hand-built literal of the same shape as `DEFAULT_BRAIN_CONFIG` rather than
+   * that constant itself. Only the two roots this suite exercises are varied.
+   */
+  const DEFAULT: BrainConfigV1 = {
+    schemaVersion: 1,
+    contentRoot: "content",
+    topicFolders: ["DEV"],
+    topicAliases: {},
+    indexesDir: "_indexes",
+    retrieval: { maxCandidates: 10 },
+    staleness: { reviewAfterDays: 365 },
+  };
+  const config: BrainConfigV1 = { ...DEFAULT, contentRoot: "notes", indexesDir: "_idx" };
+
+  it.each([
+    ["content/_raw/quarantine/**", "notes/_raw/quarantine/**"],
+    ["content/_indexes/**", "notes/_idx/**"],
+    ["content/**", "notes/**"],
+  ])("resolves %s to %s", (glob, expected) => {
+    expect(resolveScopeGlob(glob, config)).toBe(expected);
+  });
+
+  it("leaves a glob that names neither root alone", () => {
+    expect(resolveScopeGlob("staging/**", config)).toBe("staging/**");
+  });
+
+  it("is identity under the default configuration, so the checked-in contracts are unchanged", () => {
+    const globs = Object.values({ ...EFFECT_VOCABULARY }).flatMap((footprint) => [
+      ...footprint.read,
+      ...footprint.write,
+    ]);
+    /**
+     * Four of the fourteen entries have empty read *and* write arrays, so
+     * without this the loop below can quietly shrink toward a no-op that scans
+     * nothing.
+     */
+    expect(globs.length).toBeGreaterThan(5);
+    for (const glob of globs) expect(resolveScopeGlob(glob, DEFAULT)).toBe(glob);
+  });
+
+  it("refuses a configuration whose roots contain a path separator or a traversal", () => {
+    expect(() =>
+      resolveScopeGlob("content/**", { ...config, contentRoot: "../escape" }),
+    ).toThrow(RangeError);
+  });
+
+  /**
+   * Beyond the brief's `../escape` case: four more shapes a user could put in
+   * `BrainConfigV1.contentRoot`/`indexesDir`, each a deliberate decision rather
+   * than an oversight.
+   */
+  it("refuses an empty root, since joining onto it collapses the leading glob segment", () => {
+    expect(() => resolveScopeGlob("content/**", { ...config, contentRoot: "" })).toThrow(
+      RangeError,
+    );
+  });
+
+  it("refuses an absolute root, caught by the same separator check as a relative traversal", () => {
+    expect(() => resolveScopeGlob("content/**", { ...config, indexesDir: "/etc" })).toThrow(
+      RangeError,
+    );
+  });
+
+  it("refuses a lone '..' root even with no separator present to catch it otherwise", () => {
+    expect(() => resolveScopeGlob("content/**", { ...config, contentRoot: ".." })).toThrow(
+      RangeError,
+    );
+  });
+
+  it("accepts a root of '.', since one current-directory segment cannot leave the vault", () => {
+    expect(resolveScopeGlob("content/**", { ...config, contentRoot: "." })).toBe("./**");
   });
 });

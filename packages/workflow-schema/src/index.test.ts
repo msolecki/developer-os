@@ -43,6 +43,7 @@ describe("the package's public door", () => {
         "EFFECT_VOCABULARY",
         "isKnownVerb",
         "lookupVerb",
+        "resolveScopeGlob",
       ].sort(),
     );
   });

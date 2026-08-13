@@ -1,3 +1,5 @@
+import type { BrainConfigV1 } from "@developer-os/core";
+
 import type { WorkflowCapability } from "./contract.js";
 
 export interface EffectFootprint {
@@ -114,4 +116,75 @@ export function lookupVerb(verb: string): EffectFootprint | undefined {
 
 export function isKnownVerb(verb: string): boolean {
   return lookupVerb(verb) !== undefined;
+}
+
+/**
+ * `EFFECT_VOCABULARY`'s globs are literal vault-relative paths — `content/**`,
+ * not `$brain.contentRoot/**` — deliberately: a substitution syntax inside the
+ * workflow contract would need its own validator and would put a configuration
+ * value inside the one document meant to be comparable across installs (spec
+ * §6, `workflow-schema.md` §8.1). This function is the resolution step §8.1
+ * named as its own acceptance condition: the first handler or adapter to check
+ * a scope glob against a real filesystem must resolve it through here rather
+ * than hardcode `content/` and `_indexes` a second time.
+ *
+ * A root is rejected, not silently accepted, when it could widen every scope
+ * derived from it once joined onto a real path:
+ * - **empty** — joining onto `""` collapses the leading segment out of the
+ *   glob entirely, e.g. `"" + "/_indexes/**"` reads as an absolute path from
+ *   the filesystem root once a path library joins it.
+ * - **contains `/` or `\`** — multi-segment or absolute (`/etc`, `./content`,
+ *   `C:\x`) roots stop being "one directory under the vault" and become a path
+ *   of their own, which is exactly what `BrainConfigV1`'s docblock in
+ *   `packages/core/src/config/types.ts` says this member must never be.
+ * - **exactly `..`** — a parent-traversal segment with no separator in sight,
+ *   so it survives a check that only looks for `/`.
+ *
+ * A root of `.` is accepted: a single current-directory segment joins back
+ * onto the vault root and cannot leave it, so it carries none of the risk the
+ * three checks above exist to catch.
+ */
+function assertValidRoot(root: string, field: "contentRoot" | "indexesDir"): void {
+  if (root.length === 0) {
+    throw new RangeError(`BrainConfigV1.${field} must not be empty`);
+  }
+  if (root.includes("/") || root.includes("\\")) {
+    throw new RangeError(
+      `BrainConfigV1.${field} (${JSON.stringify(root)}) must be a single path segment, not a path`,
+    );
+  }
+  if (root === "..") {
+    throw new RangeError(`BrainConfigV1.${field} must not be a parent-directory traversal`);
+  }
+}
+
+/**
+ * Rewrites the leading `content` segment and any `_indexes` segment of a
+ * vocabulary glob to the roots a real `BrainConfigV1` names, so a vault
+ * configured with `contentRoot: "notes"` gets a grant naming `notes/**`
+ * instead of a `content/**` directory that does not exist in it.
+ *
+ * Segment-wise, never `String.replace`: `content` is a substring of
+ * `contents`, so a vault folder named `my-content` would have its glob
+ * corrupted mid-word by a substring replace. Splitting on `/` and comparing
+ * whole segments is what makes that impossible.
+ *
+ * Both roots are validated on every call, not only when a glob happens to
+ * reference them — resolving `EFFECT_VOCABULARY` entries one glob at a time
+ * against a bad config would otherwise throw for some globs and silently
+ * succeed for others in the same run, which is a config error surfacing as
+ * a heisenbug instead of a refusal.
+ */
+export function resolveScopeGlob(glob: string, config: BrainConfigV1): string {
+  assertValidRoot(config.contentRoot, "contentRoot");
+  assertValidRoot(config.indexesDir, "indexesDir");
+
+  return glob
+    .split("/")
+    .map((segment, index) => {
+      if (index === 0 && segment === "content") return config.contentRoot;
+      if (segment === "_indexes") return config.indexesDir;
+      return segment;
+    })
+    .join("/");
 }
