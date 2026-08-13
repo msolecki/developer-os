@@ -30,13 +30,25 @@ description: "Stage accepted captures outside the vault, validate them, then app
 
 Effect: `ingest.stage`
 
+```text
+developer-os ingest
+```
+
 ### validate
 
 Effect: `ingest.validate`
 
+```text
+developer-os ingest
+```
+
 ### apply
 
 Effect: `ingest.apply`
+
+```text
+developer-os ingest
+```
 
 
 ## Recovery

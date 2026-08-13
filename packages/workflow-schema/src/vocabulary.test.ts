@@ -21,6 +21,11 @@ describe("EFFECT_VOCABULARY", () => {
      * `read: ["/**"]` — the entire filesystem — and `capture.write` to the whole
      * vault, and every test in this package still passed. A derived scope is only
      * as true as this table, so the table is checked whole or not at all.
+     *
+     * Task 5 added `command` to every entry and added `capture.edit` as a
+     * fifteenth verb, so this pin now carries both: every footprint below gained
+     * a `command` field, and `capture.edit` is a new row rather than a change to
+     * an existing one.
      */
     const indexes = ["content/_indexes/**"];
     const notes = ["content/**"];
@@ -30,21 +35,64 @@ describe("EFFECT_VOCABULARY", () => {
 
     /** Spread, because `toStrictEqual` compares prototypes and this table has none. */
     expect({ ...EFFECT_VOCABULARY }).toStrictEqual({
-      "brain.readIndex": { read: indexes, write: [], ...brain },
-      "brain.search": { read: indexes, write: [], ...brain },
-      "brain.readNote": { read: notes, write: [], ...brain },
-      "brain.reindex": { read: notes, write: indexes, ...brain },
-      "brain.lint": { read: notes, write: [], ...brain },
-      "capture.write": { read: [], write: quarantine, ...capture },
-      "capture.list": { read: quarantine, write: [], ...capture },
-      "capture.setStatus": { read: [], write: quarantine, ...capture },
-      "ingest.stage": { read: quarantine, write: [], staging: true, capability: "structured_result", owner: "DOS-P6", implemented: false },
-      "ingest.validate": { read: [], write: [], staging: true, capability: null, owner: "DOS-P6", implemented: false },
-      "ingest.apply": { read: [], write: notes, staging: true, capability: null, owner: "DOS-P6", implemented: false },
-      "doctor.report": { read: [], write: [], staging: false, capability: null, owner: "Foundation", implemented: true },
-      "cli.run": { read: [], write: [], staging: false, capability: "non_interactive_run", owner: "Foundation", implemented: true },
-      "agent.prompt": { read: [], write: [], staging: false, capability: null, owner: "adapters", implemented: false },
+      "brain.readIndex": { read: indexes, write: [], ...brain, command: null },
+      "brain.search": { read: indexes, write: [], ...brain, command: "developer-os brain search" },
+      "brain.readNote": { read: notes, write: [], ...brain, command: null },
+      "brain.reindex": { read: notes, write: indexes, ...brain, command: "developer-os brain reindex" },
+      "brain.lint": { read: notes, write: [], ...brain, command: "developer-os brain lint" },
+      "capture.write": { read: [], write: quarantine, ...capture, command: "developer-os capture" },
+      "capture.list": { read: quarantine, write: [], ...capture, command: "developer-os review" },
+      "capture.setStatus": { read: [], write: quarantine, ...capture, command: "developer-os review" },
+      "capture.edit": { read: quarantine, write: quarantine, ...capture, command: "developer-os review" },
+      "ingest.stage": { read: quarantine, write: [], staging: true, capability: "structured_result", owner: "DOS-P6", implemented: false, command: "developer-os ingest" },
+      "ingest.validate": { read: [], write: [], staging: true, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os ingest" },
+      "ingest.apply": { read: [], write: notes, staging: true, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os ingest" },
+      "doctor.report": { read: [], write: [], staging: false, capability: null, owner: "Foundation", implemented: true, command: "developer-os doctor" },
+      "cli.run": { read: [], write: [], staging: false, capability: "non_interactive_run", owner: "Foundation", implemented: true, command: null },
+      "agent.prompt": { read: [], write: [], staging: false, capability: null, owner: "adapters", implemented: false, command: null },
     });
+  });
+
+  /**
+   * The four verbs with no command, each for its own reason. `brain.readIndex`
+   * and `brain.readNote` are here because `BRAIN_SUBCOMMANDS` in `main.ts` is
+   * `reindex | lint | search | status` — there is no `developer-os brain
+   * read-index` and no `read-note`, and inventing one would render a skill
+   * telling an agent to run a command that does not exist, which is the whole
+   * defect spec §4 closes.
+   */
+  const COMMANDLESS = [
+    "agent.prompt",
+    "cli.run",
+    "brain.readIndex",
+    "brain.readNote",
+  ] as const;
+
+  it("gives every verb a developer-os command, except the two that cannot have one", () => {
+    const table = { ...EFFECT_VOCABULARY };
+    expect(Object.keys(table).length).toBeGreaterThan(10);
+
+    for (const [verb, footprint] of Object.entries(table)) {
+      if ((COMMANDLESS as readonly string[]).includes(verb)) {
+        expect(footprint.command, verb).toBeNull();
+        continue;
+      }
+      expect(footprint.command, verb).toMatch(/^developer-os [a-z]/u);
+    }
+  });
+
+  it("names exactly the two commandless verbs, so a third cannot appear by omission", () => {
+    const without = Object.entries({ ...EFFECT_VOCABULARY })
+      .filter(([, footprint]) => footprint.command === null)
+      .map(([verb]) => verb)
+      .sort();
+    expect(without).toStrictEqual([...COMMANDLESS].sort());
+  });
+
+  it("knows capture.edit, whose scopes match the review workflow's declared ones", () => {
+    const footprint = lookupVerb("capture.edit");
+    expect(footprint?.read).toStrictEqual(["content/_raw/quarantine/**"]);
+    expect(footprint?.write).toStrictEqual(["content/_raw/quarantine/**"]);
   });
 
   it("holds no prototype member, so an inherited name is not a verb", () => {
@@ -101,13 +149,19 @@ describe("EFFECT_VOCABULARY", () => {
     expect(EFFECT_VOCABULARY["ingest.apply"]?.write).toStrictEqual(["content/**"]);
   });
 
-  it("marks the seven unimplemented verbs with their owning subsystem", () => {
+  it("marks the eight unimplemented verbs with their owning subsystem", () => {
+    /**
+     * Task 5 adds `capture.edit`, unimplemented like its two `capture` siblings
+     * until Task 10 ships the review handler, so the pinned set grows from
+     * seven to eight without changing any of the original seven.
+     */
     const pending = Object.entries(EFFECT_VOCABULARY)
       .filter(([, footprint]) => !footprint.implemented)
       .map(([verb]) => verb)
       .sort();
     expect(pending).toStrictEqual([
       "agent.prompt",
+      "capture.edit",
       "capture.list",
       "capture.setStatus",
       "capture.write",

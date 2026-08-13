@@ -33,6 +33,10 @@ Effect: `brain.readIndex`
 
 Effect: `brain.search`
 
+```text
+developer-os brain search
+```
+
 ```json
 {"query":"$input.query","limit":"$input.limit"}
 ```

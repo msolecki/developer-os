@@ -16,6 +16,17 @@ export interface EffectFootprint {
   /** The subsystem that owes the handler. A verb with no handler is a promise. */
   readonly owner: string;
   readonly implemented: boolean;
+  /**
+   * The `developer-os` invocation a rendered skill names for this verb, or
+   * `null` when none exists to name. `command` and `implemented` are
+   * different facts: a command is a declaration of what an agent would run,
+   * `implemented` is whether running it does anything yet. Claiming a handler
+   * before one exists is the defect `implemented` guards against one layer
+   * down; naming no command for a verb that has one is the defect spec §4
+   * records against three shipped skills, in both vendor trees, before this
+   * field existed.
+   */
+  readonly command: string | null;
 }
 
 const INDEXES = ["content/_indexes/**"] as const;
@@ -66,20 +77,27 @@ function sealVocabulary(
 
 export const EFFECT_VOCABULARY: Readonly<Record<string, EffectFootprint>> =
   sealVocabulary({
-    "brain.readIndex": { read: INDEXES, write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true },
-    "brain.search": { read: INDEXES, write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true },
-    "brain.readNote": { read: ["content/**"], write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true },
-    "brain.reindex": { read: ["content/**"], write: ["content/_indexes/**"], staging: false, capability: null, owner: "DOS-P2", implemented: true },
-    "brain.lint": { read: ["content/**"], write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true },
-    "capture.write": { read: [], write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: false },
-    "capture.list": { read: QUARANTINE, write: [], staging: false, capability: null, owner: "DOS-P6", implemented: false },
-    "capture.setStatus": { read: [], write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: false },
-    "ingest.stage": { read: QUARANTINE, write: [], staging: true, capability: "structured_result", owner: "DOS-P6", implemented: false },
-    "ingest.validate": { read: [], write: [], staging: true, capability: null, owner: "DOS-P6", implemented: false },
-    "ingest.apply": { read: [], write: ["content/**"], staging: true, capability: null, owner: "DOS-P6", implemented: false },
-    "doctor.report": { read: [], write: [], staging: false, capability: null, owner: "Foundation", implemented: true },
-    "cli.run": { read: [], write: [], staging: false, capability: "non_interactive_run", owner: "Foundation", implemented: true },
-    "agent.prompt": { read: [], write: [], staging: false, capability: null, owner: "adapters", implemented: false },
+    "brain.readIndex": { read: INDEXES, write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true, command: null },
+    "brain.search": { read: INDEXES, write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true, command: "developer-os brain search" },
+    "brain.readNote": { read: ["content/**"], write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true, command: null },
+    "brain.reindex": { read: ["content/**"], write: ["content/_indexes/**"], staging: false, capability: null, owner: "DOS-P2", implemented: true, command: "developer-os brain reindex" },
+    "brain.lint": { read: ["content/**"], write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true, command: "developer-os brain lint" },
+    "capture.write": { read: [], write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os capture" },
+    "capture.list": { read: QUARANTINE, write: [], staging: false, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os review" },
+    "capture.setStatus": { read: [], write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os review" },
+    /**
+     * Spec §4's seventh Brain-adjacent verb. Same quarantine footprint as
+     * `capture.setStatus` — a review edit only ever touches a quarantined
+     * observation — plus the read the edit itself needs to show the author
+     * what they are changing.
+     */
+    "capture.edit": { read: QUARANTINE, write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os review" },
+    "ingest.stage": { read: QUARANTINE, write: [], staging: true, capability: "structured_result", owner: "DOS-P6", implemented: false, command: "developer-os ingest" },
+    "ingest.validate": { read: [], write: [], staging: true, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os ingest" },
+    "ingest.apply": { read: [], write: ["content/**"], staging: true, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os ingest" },
+    "doctor.report": { read: [], write: [], staging: false, capability: null, owner: "Foundation", implemented: true, command: "developer-os doctor" },
+    "cli.run": { read: [], write: [], staging: false, capability: "non_interactive_run", owner: "Foundation", implemented: true, command: null },
+    "agent.prompt": { read: [], write: [], staging: false, capability: null, owner: "adapters", implemented: false, command: null },
   });
 
 /**

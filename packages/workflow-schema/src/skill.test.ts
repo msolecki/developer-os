@@ -154,6 +154,31 @@ describe("renderSkillBody", () => {
     const { contents } = render();
     expect(contents.length).toBeGreaterThan(0);
   });
+
+  /**
+   * Positional, because `developer-os capture` is already in the rendered
+   * artifact — under `## Recovery`, from `recovery.resume` — before this task
+   * adds anything. A `toContain` would be green before a line of `skill.ts`
+   * changed. `captureContract` mirrors `workflows/capture/workflow.yaml`,
+   * whose `recovery.resume` is literally `developer-os capture` (`:42`), so
+   * `indexOf` finds a real pre-existing occurrence in the Recovery block
+   * before this task renders the command anywhere else. `commandAt` must land
+   * after the effect block and before `## Recovery`, which is only true once
+   * the command is rendered there too.
+   */
+  it("renders the command inside the effect block, not only in the recovery block", () => {
+    const captureContract = contract({
+      recovery: { leaves: "the capture unwritten", resume: "developer-os capture" },
+    });
+    const body = renderSkillBody(captureContract, null, { shared }).join("\n");
+    const effectAt = body.indexOf("Effect: `capture.write`");
+    const recoveryAt = body.indexOf("## Recovery");
+    const commandAt = body.indexOf("developer-os capture");
+
+    expect(effectAt).toBeGreaterThanOrEqual(0);
+    expect(commandAt).toBeGreaterThan(effectAt);
+    expect(commandAt).toBeLessThan(recoveryAt);
+  });
 });
 
 /**

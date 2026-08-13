@@ -10,6 +10,7 @@ import type { WorkflowContractV1 } from "./contract.js";
 import { sourceMarker } from "./drift.js";
 import { applyOverlay } from "./overlay.js";
 import type { WorkflowOverlayV1 } from "./overlay.js";
+import { lookupVerb } from "./vocabulary.js";
 
 export const SHARED_WORKFLOW_ID = "shared";
 
@@ -321,6 +322,23 @@ function renderSteps(contract: WorkflowContractV1): readonly string[] {
       );
     }
     lines.push(`Effect: \`${screen(step.do)}\``, "");
+    /**
+     * The command an agent would run for this verb, named right beside the
+     * effect it names — the fix for spec §4's finding that three shipped
+     * skills, in both vendor trees, named commands that do not exist because
+     * nothing in the pipeline mapped a verb to an invocation. `lookupVerb`
+     * returns `undefined` for a verb outside the vocabulary and `null` for
+     * one of the four the vocabulary itself declares commandless
+     * (`agent.prompt`, `cli.run`, `brain.readIndex`, `brain.readNote`); both
+     * cases render nothing rather than a line with nothing in it. Fenced as
+     * `text`, never `bash` — the same rule `renderRecovery` applies to
+     * `recovery.resume`, for the same reason: nothing downstream should offer
+     * to run it.
+     */
+    const command = lookupVerb(step.do)?.command;
+    if (command != null) {
+      lines.push(...fenced(screen(command), "text"), "");
+    }
     if (step.with !== undefined) {
       lines.push(...fenced(screen(JSON.stringify(step.with)), "json"), "");
     }

@@ -30,6 +30,10 @@ description: "Write an observation into quarantine, where nothing reads it as ca
 
 Effect: `capture.write`
 
+```text
+developer-os capture
+```
+
 ```json
 {"text":"$input.text"}
 ```

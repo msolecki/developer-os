@@ -30,9 +30,17 @@ description: "Accept, edit, or reject quarantined captures. Never deletes a sour
 
 Effect: `capture.list`
 
+```text
+developer-os review
+```
+
 ### decide
 
 Effect: `capture.setStatus`
+
+```text
+developer-os review
+```
 
 ```json
 {"decision":"$input.decision"}

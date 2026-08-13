@@ -28,6 +28,10 @@ description: "Report the installation's health and the agent capability matrix."
 
 Effect: `doctor.report`
 
+```text
+developer-os doctor
+```
+
 ### summarise
 
 List only the failing checks and what each one requires. A wall of passing output tells nobody anything.
