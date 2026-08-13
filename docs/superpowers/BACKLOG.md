@@ -61,7 +61,8 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | Area | Where | What is left |
 |---|---|---|
 | Program (umbrella) | 1 plan | Tasks 6–9 open; Tasks 0–5 closed and not rows here |
-| DOS-P6, DOS-P7 | neither has any document yet | 2 specs, 2 plans, 2 implementations |
+| DOS-P6 | spec approved and plan written, both 2026-08-13 | the implementation — nineteen tasks, none started |
+| DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
 | Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian), NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (S, the argv screen's word list also screens free-form prose) and NEW-13 (S, two artifact roots share one type) |
 | Repository infrastructure | §5 | two things a later subsystem still owes, both DOS-P6's — `tests/security/`, and a consolidated threat model |
@@ -249,9 +250,9 @@ that subsystem in §3.
 
 ## 3. Missing specs and plans
 
-**Three documents left.** DOS-P6's spec was written 2026-08-13 and is **awaiting the founder's
-approval**; its plan comes after that approval and not before. DOS-P7 still needs both. Nothing else
-on the product path is missing a document.
+**Two documents left, both DOS-P7's.** DOS-P6's spec was approved by the founder on 2026-08-13 and
+its implementation plan was written the same day. Nothing else on the product path is missing a
+document.
 
 Each subsystem after Foundation requires an approved spec **and** an implementation plan
 before any code work — this is a Global Constraint of the program plan, not a preference.
@@ -275,15 +276,16 @@ first contact with a real binary.
 
 ### DOS-P6 — Knowledge pipeline hardening
 
-- **Spec:** `specs/2026-07-21-developer-os-knowledge-pipeline-design.md` — **written 2026-08-13,
-  awaiting the founder's approval.** Read its §3 first: five decisions, each with what it costs.
-  The one that reshapes the subsystem is 3.1 — capture content is **agent-authored**, because the
-  `session_end` trigger the canonical workflow declares cannot supply the `text` that same contract
-  requires without reading `transcript_path`, which this product refuses on both vendors. So no
-  hooks ship, `developer-os run claude|codex` is never built, and **nothing automatic captures
-  anything**. §12 lists the six documents it amends; they are pending rows in §8 until approval.
-- **Plan:** `plans/2026-07-21-developer-os-knowledge-pipeline.md` — missing, and blocked on that
-  approval rather than on any engineering
+- **Spec:** `specs/2026-07-21-developer-os-knowledge-pipeline-design.md` — **approved by the founder
+  2026-08-13.** Read its §3 first: five decisions, each with what it costs. The one that reshapes
+  the subsystem is 3.1 — capture content is **agent-authored**, because the `session_end` trigger
+  the canonical workflow declares cannot supply the `text` that same contract requires without
+  reading `transcript_path`, which this product refuses on both vendors. So no hooks ship,
+  `developer-os run claude|codex` is never built, and **nothing automatic captures anything**. §12
+  lists the six documents it amends; §8 carries them as ratified.
+- **Plan:** `plans/2026-07-21-developer-os-knowledge-pipeline.md` — **written 2026-08-13**,
+  nineteen tasks. It takes five decisions the spec did not; six rows are pending in §8. **Task 17 stops
+  and asks**: it is the real model call §10.2 says this subsystem can no longer avoid.
 - **Program task:** 6 · **Complexity:** L · **Blocked by:** nothing — DOS-P4 closed 2026-08-11 and
   DOS-P5 on 2026-08-12
 - **The spec must decide:** exact capture fields, lifecycle transitions, retention
@@ -518,25 +520,54 @@ amended one; only code and status lines are edited in place. This section is the
 it before trusting any approved document, because it is the only place that says whether the
 one in front of you is still current.
 
-**Six are pending, and they are the first pending rows since 2026-08-12.** All six ride on
-`specs/2026-07-21-developer-os-knowledge-pipeline-design.md`, written 2026-08-13 and **awaiting the
-founder's approval**; its §12 is their authoritative statement. They are listed here *before*
-approval on purpose, because §8 exists so that a reader of an approved document learns its status —
-and a reader of product spec §11 today should know a document proposing to supersede it is on the
-table. If the spec is not approved, these rows are deleted rather than left as history.
+**The knowledge-pipeline spec's six were ratified on 2026-08-13**, in the same conversation that
+approved the spec. They are listed below with their outcome rather than their question, and each is
+discharged by the DOS-P6 task named beside it — a row leaves this table when the amended document
+carries the cross-reference, not when the decision is taken.
 
-| Pending against | What the knowledge-pipeline spec proposes |
-|---|---|
-| product design spec §11 | there is neither a lifecycle hook nor a `developer-os run claude\|codex` wrapper. `CapabilityState` **replaces** `wrapper-required` with `not-used`, and six of the nine keys resolve to it |
-| product design spec §14.3 | "user-configured patterns" narrowed to literal case-insensitive substrings — a user-supplied regex over capture text is a ReDoS surface and this codebase bounds no expression anywhere |
-| `specs/…-claude-adapter-design.md` §6.1 | hooks **declined**, not deferred; the three lifecycle keys report `not-used` |
-| `specs/…-codex-adapter-design.md` §5.3 | the same, in one decision covering both adapters. **This supersedes the ratified amendment below**, which deferred hooks to DOS-P6 rather than closing them |
-| `specs/…-codex-adapter-design.md` §14.1 | the JSONL terminal-event rule promoted from provisional to observed, dated, with the shape seen — ingest forces the real `codex exec` call that DOS-P5 could not justify |
-| `specs/…-workflow-compiler-design.md` §6 | scope globs derived from `BrainConfigV1` rather than written as literals, which `workflow-schema.md` §8.1 made due at the first handler that resolves one |
+| Amended | Outcome, ratified 2026-08-13 | Discharged by |
+|---|---|---|
+| product design spec §11 | there is neither a lifecycle hook nor a `developer-os run claude\|codex` wrapper. `CapabilityState` **replaces** `wrapper-required` with `not-used`, and six of the nine keys resolve to it | DOS-P6 Task 3 |
+| product design spec §14.3 | "user-configured patterns" narrowed to literal case-insensitive substrings — a user-supplied regex over capture text is a ReDoS surface and this codebase bounds no expression anywhere | DOS-P6 Task 2 |
+| `specs/…-claude-adapter-design.md` §6.1 | hooks **declined**, not deferred; the three lifecycle keys report `not-used` | DOS-P6 Task 3 |
+| `specs/…-codex-adapter-design.md` §5.3 | the same, in one decision covering both adapters. **This supersedes the ratified amendment below**, which deferred hooks to DOS-P6 rather than closing them | DOS-P6 Task 3 |
+| `specs/…-codex-adapter-design.md` §14.1 | the JSONL terminal-event rule promoted from provisional to observed, dated, with the shape seen — ingest forces the real `codex exec` call that DOS-P5 could not justify | DOS-P6 Task 17 |
+| `specs/…-workflow-compiler-design.md` §6 | scope globs stop being literals, which `workflow-schema.md` §8.1 made due at the first handler that resolves one. **Narrowed by the plan** — see the pending row below | DOS-P6 Task 6 |
 
-**Two canonical workflows also change, and that is a contract change rather than an amendment:**
-`workflows/capture/workflow.yaml` drops `session_end` and `workflows/shared/workflow.yaml` drops
-`session_start` — both name triggers nothing can fire — and both go to `2.0.0`.
+**Six are pending, and every one is the implementation plan's rather than the spec's.** They ride on
+`plans/2026-07-21-developer-os-knowledge-pipeline.md`, written 2026-08-13; its "Five decisions this
+plan takes" section is the authoritative statement for the first four, and Tasks 12 and 15 for the
+last two. Each amends an approved document, which is why they are here rather than only in the plan.
+If one is refused, the row is deleted rather than left as history and the plan changes before the
+task that depends on it runs.
+
+**Two rows exist because a fresh-context review found them missing on 2026-08-13**, before this plan
+was committed: the narrowing of design spec §13.4's "staged result", and the narrowing of §17.5's
+security cases to spec §9's six suites. Both were decisions the plan was taking silently.
+
+| Pending against | What the plan proposes | Task |
+|---|---|---|
+| the knowledge-pipeline spec §12 | **five** canonical workflows go to `2.0.0`, not two. `ingest` gains a step and widens its write scopes, `brain-search` gains one and widens its read scopes, and `review` gains the `capture.edit` step its `decision` input already advertises — with its scopes unchanged, which is what makes it easy to miss. A step list and a scope set are the contract, and `extends` pins `id@version` exactly | 7 |
+| `specs/…-workflow-compiler-design.md` §6, again | the globs resolve at the **handler boundary** through `resolveScopeGlob(glob, config)`; the contract keeps canonical names. Templating them inside the YAML was rejected: it invents a substitution syntax in the workflow schema and puts a configuration value in the one document meant to be comparable across installs. Leaves a display gap — a skill shows `content/**` while the handler enforces the user's own root | 6 |
+| **program plan Task 6**, third box | "Restore `hooks/hooks.json` for both adapters in one change" cannot be ticked — spec §3.1 declines hooks and corrects the stated blocker: a `"type": "command"` handler needs no executable bit, and what hooks lacked was content to capture. **Spec §12 omits the program plan from its amendment list; that gap was found while writing the plan.** The box is rewritten to record the decline, not ticked | 19 |
+| **§7 of this file**, the DOS-P7 gate "uninstall removes only manifest-owned artifacts" | one named exception: the redaction key, which spec §3.5 keeps out of the manifest and spec §8.4 requires `uninstall` to remove. Making it a hash-exempt manifest artifact was rejected — it would put the key's path in a file every enumerating diagnostic reads. The exception is one path wide and asserted by test | 1 |
+| product design spec §13.4, "the staged result" | the `deterministic reindex` validator runs over an **in-memory projection** of vault plus proposal, not over a staging directory. §13.4 and the knowledge-pipeline spec's own §6.3 preamble contradict each other — nothing is staged at the point the preamble names — and staging first would make every file in staging attacker-influenced content the validators must re-read as hostile | 12 |
+| product design spec §17.5, and the knowledge-pipeline spec §9 | §9 narrows §17.5's security cases to six suites and drops two the standing gate in §7 of this file still requires from DOS-P6 onward: a **network** suite, and **concurrent user edits**. The plan ships eight suites rather than six and registers the narrowing rather than inheriting it | 15 |
+
+**Two approved architecture notes are corrected by this work, and the correction is the spec's
+rather than the plan's**, recorded here because §8 is where a reader of either note learns its
+status:
+
+| Amended | By | What changed |
+|---|---|---|
+| `docs/architecture/claude-adapter.md` §5 and `docs/architecture/codex-adapter.md` §5 | the knowledge-pipeline spec §3.1, approved 2026-08-13 | both state that restoring hooks needs "the hook bodies, a mechanism for marking a generated artifact executable, and a test that observes a hook firing". **The middle requirement was never needed** — a `"type": "command"` handler names a command string, so nothing executable ships. What hooks lacked was content to capture. Hooks are now **declined**, not owed |
+| `docs/architecture/workflow-schema.md` §7 and §8.1 | the same spec, and this plan's decision 2 | three of §7's four recorded gaps close here — the `review` workflow's missing `capture.edit`, `ingest` stopping at apply, and `brain-search` never reading a note. §8.1's glob residual is discharged in the narrower `resolveScopeGlob` form rather than by templating the contract |
+
+**Two canonical workflows change by the spec's own decision, and that is a contract change rather
+than an amendment:** `workflows/capture/workflow.yaml` drops `session_end` and
+`workflows/shared/workflow.yaml` drops `session_start` — both name triggers nothing can fire.
+**Three more change by the plan's**, which is the first pending row above: `ingest`, `brain-search`
+and `review`. All five go to `2.0.0`.
 
 **Every amendment raised through DOS-P5 was ratified** by the founder on or before 2026-08-12, and
 every row in the table below carries its outcome rather than its question.

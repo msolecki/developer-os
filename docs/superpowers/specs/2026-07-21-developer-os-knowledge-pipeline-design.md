@@ -1,10 +1,28 @@
 # Developer OS — Knowledge Pipeline Design
 
-**Status: awaiting founder approval.** Written 2026-08-13 for `ORDER.md` entry A10, program plan
-Task 6, DOS-P6. The implementation plan comes next and code comes after it, which is a Global
-Constraint of the program plan rather than a preference. **Approving this document is the founder's
-and is not delegable** — an agent that judges its own spec ready has removed the only gate in the
-program a machine cannot check.
+**Status: approved by the founder 2026-08-13**, the day it was written, for `ORDER.md` entry A10,
+program plan Task 6, DOS-P6. Its implementation plan is
+`plans/2026-07-21-developer-os-knowledge-pipeline.md`, written against this document the same day;
+code comes after that plan, which is a Global Constraint of the program plan rather than a
+preference. **Approving this document was the founder's and was not delegable** — an agent that
+judges its own spec ready has removed the only gate in the program a machine cannot check.
+
+**The plan takes five decisions this document did not, and its tasks raised two more.** Six of those
+seven are registered in `BACKLOG.md` §8 as pending the founder's ratification — the seventh is
+carved out below: **five** canonical workflows change version
+rather than the two §12 names, because `review` must also declare the `capture.edit` step §5.6
+creates; §7.1's globs resolve at the handler boundary rather than becoming template syntax in the
+contract; the program plan's Task 6 hook box — which §12 omits from its amendment list — is
+rewritten to record the decline rather than ticked; `uninstall` gets one named exception to
+`BACKLOG.md` §7's manifest-only rule, for the key §3.5 keeps out of the manifest; §6.3's
+`deterministic reindex` runs over an in-memory projection, because this document's own preamble and
+its table disagree about whether anything is staged when it runs; and §9's six suites become eight,
+because `BACKLOG.md` §7 requires a network suite this document does not name.
+
+**A sixth thing this document is missing, recorded rather than routed around:** §10.3's requirement
+that an unobserved vendor records `"unknown"` means every capture written before the plan's Task 17
+carries `sourceAgent: "unknown"`. That is this document's rule rather than an amendment to it, so it
+has no §8 row — but it is a cost, and the plan states it where a reader will meet it.
 
 **Design inputs, all inside this repository:** the product design spec §11, §13, §14, §15 and §17;
 `docs/architecture/claude-adapter.md` and `docs/architecture/codex-adapter.md`, which between them
