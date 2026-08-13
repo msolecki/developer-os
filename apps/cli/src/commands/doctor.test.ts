@@ -24,6 +24,26 @@ import {
 } from "./testing.js";
 import type { CommandFixture } from "./testing.js";
 
+/**
+ * `apps/cli` carries no `@developer-os/workflow-schema` dependency (checked:
+ * not in `package.json`), so `RenderedArtifact` itself isn't importable here
+ * — this is the local, structural stand-in `codexPluginRoot`'s test below
+ * needs. `asSyntheticInstallTree` seals the `MarketplaceRootArtifact` cast
+ * inside one function whose *parameter* is checked against this shape, so a
+ * typo'd fixture (`{ paht: ... }`) is a `TS2353` at the call site rather than
+ * silently passing through an unchecked inline cast.
+ */
+interface SyntheticArtifact {
+  readonly path: string;
+  readonly contents: string;
+}
+
+function asSyntheticInstallTree(
+  tree: readonly SyntheticArtifact[],
+): readonly MarketplaceRootArtifact[] {
+  return tree as readonly MarketplaceRootArtifact[];
+}
+
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
 
 afterEach(removeCommandFixtures);
@@ -614,10 +634,12 @@ describe("codexPluginRoot", () => {
     );
     // A synthetic single-artifact tree, not one `renderCodexInstallTree`
     // produced — this test only needs `proposeCodexInstall`'s own path math,
-    // so it never renders a real plugin. The cast stands in for that missing
-    // render: `MarketplaceRootArtifact`'s brand carries no runtime marker, so
-    // this changes nothing the function under test observes.
-    const tree = [{ path: manifestRelativePath, contents: "{}" }] as unknown as readonly MarketplaceRootArtifact[];
+    // so it never renders a real plugin. `MarketplaceRootArtifact`'s brand
+    // carries no runtime marker, so this changes nothing the function under
+    // test observes.
+    const tree = asSyntheticInstallTree([
+      { path: manifestRelativePath, contents: "{}" },
+    ]);
     const proposal = proposeCodexInstall(tree, {
       home: fixture.context.paths.home,
       productVersion: "0.0.0",

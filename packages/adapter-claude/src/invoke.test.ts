@@ -4,7 +4,7 @@ import type {
   ProcessResult,
   ProcessRunner,
 } from "@developer-os/security";
-import { invokeClaude } from "./invoke.js";
+import { DEFAULT_MAX_TURNS, invokeClaude } from "./invoke.js";
 import type { ClaudeInvocation } from "./invoke.js";
 
 const installation = {
@@ -201,6 +201,33 @@ describe("invokeClaude", () => {
       );
       expect(seen()).toBeNull();
     }
+  });
+
+  /**
+   * `DEFAULT_MAX_TURNS` is `packages/core/src/agent-prompt/index.ts`'s
+   * removed default, moved here now that `maxTurns` is refused outright there
+   * (owner DOS-P7) rather than defaulted. Pinned against the bound
+   * `invokeClaude` enforces above, not against a second copy of the private
+   * `MAX_TURNS_CEILING` — re-declaring that value here would let the two
+   * drift independently and prove nothing about what this module actually
+   * does with it. A default outside `[1, MAX_TURNS_CEILING]` would make
+   * every default-configured invocation refuse, which this test would catch
+   * as `result.ok === false`; deleting the constant altogether breaks this
+   * file's import instead of leaving the change silently green.
+   */
+  it("keeps DEFAULT_MAX_TURNS within the bound invokeClaude enforces on every invocation", async () => {
+    const { runner, seen } = capturing({ stdout: "{}" });
+    const result = await invokeClaude(
+      installation,
+      { ...invocation, maxTurns: DEFAULT_MAX_TURNS },
+      { runner },
+    );
+    expect(
+      result.ok,
+      "DEFAULT_MAX_TURNS must not be refused as out of bounds",
+    ).toBe(true);
+    expect(seen()?.args).toContain("--max-turns");
+    expect(seen()?.args).toContain(String(DEFAULT_MAX_TURNS));
   });
 
   /**

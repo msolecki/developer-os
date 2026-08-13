@@ -52,7 +52,7 @@ export type {
   InstallContext,
   ManagedByPath,
 } from "./install.js";
-export { invokeClaude } from "./invoke.js";
+export { DEFAULT_MAX_TURNS, invokeClaude } from "./invoke.js";
 export type {
   ClaudeInvocation,
   ClaudeRunResult,

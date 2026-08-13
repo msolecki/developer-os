@@ -472,31 +472,75 @@ describe("redactText", () => {
     });
 
     /**
-     * Important 5 (fix pass 1 review, ceiling corrected in fix pass 2):
-     * the first shipped implementation re-sliced and re-lowered a window
-     * at every text position for every pattern — O(n·m) per pattern. The
-     * first ceiling here was 1,000 ms, which the *pre-fix* code also
-     * satisfies (measured 665-711 ms across two independent
-     * reproductions) — a regression back to that shape would not have
-     * failed this test. Measured post-fix, in this file's full suite
-     * (not in isolation — isolation undercounts the JIT/GC pressure a
-     * regression would actually run under): consistently 250-420 ms, one
-     * observed outlier at 538 ms. 600 ms sits below the slowest pre-fix
-     * measurement with margin above the observed post-fix outlier, so it
-     * separates the two implementations without flaking on ordinary
-     * hardware variance. This proves the *shape* changed back to a
-     * per-position rescan if it regresses; it does not certify a specific
-     * throughput bound for arbitrary text or pattern sizes.
+     * Important 5 (fix pass 1 review, ceiling corrected in fix pass 2,
+     * ceiling replaced in fix pass 3 review): the first shipped
+     * implementation re-sliced and re-lowered a window at every text
+     * position for every pattern — O(n·m) per pattern. An absolute
+     * wall-clock ceiling here is a race against whatever else the machine
+     * is doing: a cold run measured 697 ms against a 600 ms ceiling on
+     * hardware where every other measurement in this suite passed — the
+     * *implementation* had not regressed, the *ceiling* was gambling
+     * against process-launch and JIT-warmup variance it had no way to
+     * account for.
+     *
+     * Replaced with a same-run ratio: `withPatterns` against a `baseline`
+     * measured in the same process, immediately before it, over the same
+     * text. Both share whatever cold-start or GC pressure this run happens
+     * to be under, so the *ratio* stays stable even when neither absolute
+     * number does. Each of `baseline` and `withPatterns` is the minimum of
+     * five repetitions, not a single sample — `Math.min` over repeated
+     * calls is the standard defence against a one-off GC pause inflating a
+     * single measurement, and it was necessary here: single-sample ratios
+     * measured 7.6-18.1 for the real, fixed implementation, wide enough to
+     * overlap the reintroduced-bug range below, while min-of-5 ratios
+     * tightened that to 11.1-12.1 with no overlap observed.
+     *
+     * Calibrated by temporarily reintroducing the exact pre-fix shape
+     * (`text.slice(at, at + needle.length).toLowerCase()` compared per
+     * position, replacing the `indexOf`-over-a-once-folded-haystack scan
+     * below) and running both implementations under this same test, min-of-5,
+     * four separate process launches each: the real implementation measured
+     * a ratio of 11.1-12.1; the reintroduced bug measured 24.3-26.4. 18 sits
+     * roughly in the middle of that gap — comfortably above every fixed
+     * measurement observed, comfortably below every buggy one. This proves
+     * the *shape* changed back to a per-position rescan if it regresses; it
+     * does not certify a specific throughput bound for arbitrary text or
+     * pattern sizes.
      */
-    it("scales to large text and several patterns without a per-position rescan", () => {
+    it("adds bounded per-pattern overhead over the pattern-free baseline, not a per-position rescan", () => {
       const text = "x".repeat(2 * 1024 * 1024);
       const patterns = Array.from(
         { length: 10 },
         (_, index) => `pattern-${String(index)}-not-present-in-text-xyz`,
       );
-      const started = performance.now();
+
+      function minElapsed(run: () => void, repetitions: number): number {
+        let best = Infinity;
+        for (let index = 0; index < repetitions; index += 1) {
+          const started = performance.now();
+          run();
+          const elapsed = performance.now() - started;
+          if (elapsed < best) best = elapsed;
+        }
+        return best;
+      }
+
+      // One untimed warm-up call each, so the first *timed* repetition is
+      // not the one absorbing JIT compilation for a code path the rest of
+      // this suite may not have exercised yet.
+      redactText(text, deterministicKey);
       redactText(text, deterministicKey, { userPatterns: patterns });
-      expect(performance.now() - started).toBeLessThan(600);
+
+      const baseline = minElapsed(() => redactText(text, deterministicKey), 5);
+      const withPatterns = minElapsed(
+        () => redactText(text, deterministicKey, { userPatterns: patterns }),
+        5,
+      );
+
+      // `+ 25` absorbs timer-resolution noise when `baseline` itself is
+      // small (observed 20-35 ms here); the multiplier is what actually
+      // separates the two implementations, per the calibration above.
+      expect(withPatterns).toBeLessThan(baseline * 18 + 25);
     });
 
     it("keeps overlap resolution: the first candidate wins and the second is dropped", () => {

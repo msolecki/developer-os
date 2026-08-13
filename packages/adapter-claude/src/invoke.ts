@@ -47,7 +47,11 @@ const MAX_TURNS_CEILING = 50;
  * constant, not left as a literal at whatever future call site builds a
  * `ClaudeInvocation` from a workflow step, so that reasoning travels with the
  * value instead of being re-invented — or silently dropped — the day
- * DOS-P7's real turn bound needs somewhere to start from.
+ * DOS-P7's real turn bound needs somewhere to start from. Re-exported through
+ * `index.ts`, this package's only door: the future call site this constant
+ * exists for is outside this package (wherever a workflow step becomes a
+ * `ClaudeInvocation`), so a package-internal export alone would leave it
+ * unreachable by the one consumer it was added for.
  */
 export const DEFAULT_MAX_TURNS = 5;
 
