@@ -507,7 +507,7 @@ Design spec §14.3 requires four classes beyond the five that exist (`private-ke
 | `service-credential` | AWS `AKIA`/`ASIA`, Google `AIza`, Stripe `sk_live`/`rk_live`, JWT triplets |
 | `user-pattern` | literal case-insensitive substrings from configuration (spec §8.2) |
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 One `describe` per class, each with a positive case and a negative case, and every fixture synthetic:
 
@@ -559,7 +559,7 @@ The pathological-pattern case is the one that must exist. **User patterns are li
 
 Add a negative case per existing class too, proving the four new patterns did not widen an old one — the overlap resolver drops a candidate that intersects an accepted one, so a wrong pattern shows up as a *missing* finding somewhere else rather than as an extra one.
 
-- [ ] **Step 2: Run them, watch them fail, implement, rerun**
+- [x] **Step 2: Run them, watch them fail, implement, rerun**
 
 Each new class is another `addWholeMatches` or `addCapturedMatches` call in `redactText`, before the `high-entropy` sweep so a structured match wins the overlap against a generic one. `user-pattern` is not a regex path at all:
 
@@ -589,7 +589,7 @@ function addUserPatterns(
 
 `REDACTION_CLASSES` is exported and frozen, and a test asserts it has nine members and that every class a redaction can emit is in it — enumerated from the findings of a fixture per class, not from a hand-written list, so a tenth class cannot be added without appearing here.
 
-- [ ] **Step 3: Run the gate and commit**
+- [x] **Step 3: Run the gate and commit**
 
 ```bash
 npm run check
