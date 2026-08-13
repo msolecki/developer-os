@@ -557,6 +557,12 @@ were put to the founder with the other four.
 | product design spec §13.4, "the staged result" | the `deterministic reindex` validator runs over an **in-memory projection** of vault plus proposal, not over a staging directory. §13.4 and the knowledge-pipeline spec's own §6.3 preamble contradict each other — nothing is staged at the point the preamble names — and staging first would make every file in staging attacker-influenced content the validators must re-read as hostile | 12 |
 | product design spec §17.5, and the knowledge-pipeline spec §9 | §9 narrows §17.5's security cases to six suites and drops two the standing gate in §7 of this file still requires from DOS-P6 onward: a **network** suite, and **concurrent user edits**. The plan ships eight suites rather than six and registers the narrowing rather than inheriting it | 15 |
 
+**One row is the plan correcting itself**, which is the shape the DOS-P5 note below warns to expect:
+
+| Amended | By | What changed |
+|---|---|---|
+| `plans/…-knowledge-pipeline.md` Task 1, Step 3 | the fresh-context review of Task 1's first implementation, **settled by the founder 2026-08-13** | the instruction "`createProductionContext` replaces `randomBytes(…)` with `loadOrCreateRedactionKey(paths.stateDir)`" was **wrong, not merely awkward**. Context is built before dispatch for every command, so a create-if-missing load there made `doctor`, `status` and both `--dry-run` commands write a new secret — against Foundation's "`doctor` reports rather than repairs", which that plan's own Global Constraints carry. Three consequences followed: `uninstall` removed the key and the next command put it back permanently, because `runUninstall` early-returns on an absent manifest; a symlinked or truncated key failed **every** command including the diagnostic that would have reported it; and a FIFO at that path hung the CLI forever, since `open(O_RDONLY)` blocks before the file-type guard runs. **The load splits in two** — a read-only, never-create, never-throw `readRedactionKey` at the composition root, and the create-capable `loadOrCreateRedactionKey` at each command's own point of use |
+
 **Two approved architecture notes are corrected by this work, and the correction is the spec's
 rather than the plan's**, recorded here because §8 is where a reader of either note learns its
 status:

@@ -250,6 +250,10 @@ Declared inside the task that produces them, and listed here because a neighbour
 
 **This is a latent defect, not a feature.** `CaptureEnvelopeV1.redaction[].fingerprint` is persisted in every capture. `createProductionContext` generates the HMAC key with `randomBytes()` **per process** (`apps/cli/src/context.ts:400`), which was correct while the only consumer was transaction diagnostics inside one run. Left alone, the same secret fingerprints differently on every invocation: the field would populate, look correct, and mean nothing. Nothing downstream of Task 8 is trustworthy until this lands, which is why it is first.
 
+> **Amended 2026-08-13, by the fresh-context review of this task's first implementation, and settled by the founder the same day.** The original Step 3 said `createProductionContext` replaces `randomBytes(…)` with `loadOrCreateRedactionKey(paths.stateDir)`. **That instruction was wrong, and the wrongness is not stylistic.** Context is built before dispatch for *every* command, so a create-if-missing load there means `doctor`, `status` and both `--dry-run` commands write a new secret to disk — contradicting Foundation's "`doctor` reports rather than repairs", which this plan's own Global Constraints carry. Three more followed from it: `uninstall` removed the key and the next command of any kind put it back, permanently, because `runUninstall` early-returns when the manifest is absent; a symlinked or truncated key failed **every** command including the diagnostic that would have reported it, against the spec's "a lost key degrades a diagnostic rather than the knowledge"; and a FIFO at that path hung the CLI forever, because `open(O_RDONLY)` blocks before the file-type guard runs.
+>
+> **The load splits in two.** A read-only, never-create, never-throw `readRedactionKey` at the composition root, and the create-capable `loadOrCreateRedactionKey` called by the commands that genuinely need a durable key. Registered in `BACKLOG.md` §8. The steps below are the amended ones.
+
 **Files:**
 - Modify: `apps/cli/src/context.ts` — `createProductionContext`, plus the new loader
 - Modify: `apps/cli/src/commands/init.ts` — generate at install
@@ -258,8 +262,27 @@ Declared inside the task that produces them, and listed here because a neighbour
 - Test: `apps/cli/src/context.test.ts`, `commands/init.test.ts`, `commands/uninstall.test.ts`, `commands/doctor.test.ts`
 
 **Interfaces:**
-- Consumes: `RuntimePaths.stateDir`, `SecurityRefusalError`.
-- Produces: `loadOrCreateRedactionKey(stateDir: string): Uint8Array`, exported from `context.ts` and used by `createProductionContext`. **Synchronous, and that is forced:** `main.ts` calls `createContext(io)` synchronously before dispatch, and `CliGuards.redactDiagnostic` is a synchronous `(text: string) => string`. A promise here would either break `run`'s `Promise<ExitCode>` contract or make every redaction site async.
+- Consumes: `RuntimePaths.stateDir`, `SecurityRefusalError`, `CliIo`.
+- Produces **two** functions, and the split is the amendment above:
+
+```ts
+/**
+ * The composition root's door. **Never creates, never throws, never repairs.**
+ * `null` for absent, unreadable, symlinked, wrong-typed, or too short — every
+ * one of which `doctor` must be able to *report*, which it cannot do if
+ * building the context already threw.
+ */
+export function readRedactionKey(stateDir: string): Uint8Array | null;
+
+/**
+ * The point-of-use door, for the commands that genuinely need a durable key:
+ * `init`, and later `capture`, `review` and `ingest`. Creates when absent,
+ * refuses a symlink or a non-regular file, tightens an over-permissive mode.
+ */
+export function loadOrCreateRedactionKey(stateDir: string): Uint8Array;
+```
+
+**Both are synchronous, and that is forced:** `main.ts` calls `createContext(io)` synchronously before dispatch, and `CliGuards.redactDiagnostic` is a synchronous `(text: string) => string`. A promise here would either break `run`'s `Promise<ExitCode>` contract or make every redaction site async.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -305,9 +328,53 @@ describe("loadOrCreateRedactionKey", () => {
 });
 ```
 
-The last case is a decision worth naming in the review: **a secret this product owns, at a mode this product got wrong, is tightened rather than refused.** Refusing would take down `doctor`, which is the one command that reports the problem — a fail-closed rule that disables its own diagnostic fails closed on the wrong thing. Refusing a *symlink* is the opposite case and stays a refusal: that file is not ours.
+The last case is a decision worth naming in the review: **a secret this product owns, at a mode this product got wrong, is tightened rather than refused.** Refusing a *symlink* is the opposite case and stays a refusal: that file is not ours.
 
-In `commands/init.test.ts`: `init` creates the key, and `installation-manifest.json` **does not name it**. In `commands/uninstall.test.ts`: the key file is gone afterwards. In `commands/doctor.test.ts`: a check reports `present, 0600` and its message contains no byte of the key.
+**And the companion battery for `readRedactionKey`, which is where the amendment lives:**
+
+```ts
+describe("readRedactionKey", () => {
+  it.each([
+    ["absent", () => {}],
+    ["a symlink", () => symlinkSync("/etc/passwd", keyFile)],
+    ["a directory", () => mkdirSync(keyFile)],
+    ["too short", () => writeFileSync(keyFile, Buffer.alloc(8), { mode: 0o600 })],
+    ["a FIFO", () => execFileSync("mkfifo", ["-m", "600", keyFile])],
+  ])("returns null for %s, and never throws", (_name, plant) => {
+    plant();
+    expect(readRedactionKey(stateDir)).toBeNull();
+  });
+
+  it("creates nothing, ever — not even when the state directory is missing", () => {
+    rmSync(stateDir, { recursive: true, force: true });
+    expect(readRedactionKey(stateDir)).toBeNull();
+    expect(existsSync(stateDir)).toBe(false);
+  });
+
+  it("returns the durable bytes when they are there", () => {
+    const written = loadOrCreateRedactionKey(stateDir);
+    expect([...(readRedactionKey(stateDir) ?? [])]).toEqual([...written]);
+  });
+});
+```
+
+**The FIFO case is not hypothetical and must not be dropped.** `open(O_RDONLY)` on a FIFO blocks until a writer appears, and the file-type guard is downstream of the open — so without `O_NONBLOCK` in the flags the CLI hangs forever with no output, on a path an attacker with write access to `stateDir` controls. Same actor as the symlink case the spec already guards; worse outcome. Both doors pass `O_NONBLOCK`.
+
+In `commands/init.test.ts`: `init` creates the key, and `installation-manifest.json` **does not name it**. In `commands/uninstall.test.ts`: the key file is gone afterwards, and the removal is one path wide. In `commands/doctor.test.ts`: a check reports `present, 0600` and its message contains no byte of the key — **and reports rather than refuses for each of the five states above**, which is the branch the old placement made unreachable.
+
+**One test carries the whole task and must exist**: that `createProductionContext` actually uses the durable bytes.
+
+```ts
+it("fingerprints with the durable key, not with a per-process one", () => {
+  const durable = loadOrCreateRedactionKey(paths.stateDir);
+  const context = createProductionContext({ io, env, userHome });
+  const secret = "ghp_" + "a".repeat(36);
+  expect(context.guards.redactDiagnostic(secret)).toBe(redactText(secret, durable).text);
+  expect(fingerprintOf(context, secret)).toBe(redactText(secret, durable).findings[0]?.fingerprint);
+});
+```
+
+Without it the fix is unverified: the first implementation could have had its one wiring line reverted to `randomBytes(…)` with the entire suite still green, because every other case tested the loader rather than the thing the loader was for.
 
 - [ ] **Step 2: Run them and watch every one fail**
 
@@ -338,7 +405,10 @@ export function loadOrCreateRedactionKey(stateDir: string): Uint8Array {
   const file = join(stateDir, REDACTION_KEY_FILE);
   let handle: number;
   try {
-    handle = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+    handle = openSync(
+      file,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ELOOP") {
       throw new SecurityRefusalError("the redaction key is a symlink");
@@ -363,14 +433,35 @@ export function loadOrCreateRedactionKey(stateDir: string): Uint8Array {
 }
 ```
 
-`createRedactionKey` writes `randomBytes(32)` with `O_CREAT | O_EXCL | O_WRONLY` and `mode: 0o600`, and re-reads through the same door on `EEXIST` so two concurrent first runs converge on one key rather than one overwriting the other.
+`createRedactionKey` writes `randomBytes(32)` with `O_CREAT | O_EXCL | O_WRONLY` and `mode: 0o600`, **checks the `writeSync` return so a short write cannot leave a truncated key**, `fsyncSync` before close so a crash cannot leave a zero-length one, and re-reads through the same door on `EEXIST` so two concurrent first runs converge on one key rather than one overwriting the other. The re-read is a single bounded retry, not mutual recursion — a process deleting the file between the two calls must produce a terminal error, not an infinite loop.
 
-`createProductionContext` replaces `const redactionKey = randomBytes(REDACTION_KEY_BYTES)` with `loadOrCreateRedactionKey(paths.stateDir)`. Note the ordering: `paths` is resolved after the key today, so move the `resolveRuntimePaths` call above it.
+`readRedactionKey` is the same open sequence with three differences and no others: it returns `null` where the loader creates, `null` where the loader throws, and it never chmods. **It performs no mutation of any kind**, which is what lets `doctor` report the states it detects instead of dying on them.
 
-- [ ] **Step 4: Wire init, uninstall and doctor**
+- [ ] **Step 4: Wire the two doors to their own callers**
 
-- `init` calls the loader while creating the state directory, so a fresh install has a key before anything can want one. It is **not** added to `recordArtifacts` — a test asserts the manifest does not name it.
+```ts
+// apps/cli/src/context.ts — the composition root
+const paths = resolveRuntimePaths(pathEnvironmentFor(options));
+const durable = readRedactionKey(paths.stateDir);
+if (durable === null) {
+  options.io.stderr(
+    "warning: no comparable redaction key; fingerprints from this run cannot be compared with earlier ones",
+  );
+}
+const redactionKey = durable ?? randomBytes(REDACTION_KEY_BYTES);
+```
+
+`paths` is resolved after the key today, so the `resolveRuntimePaths` call moves above it.
+
+**The ephemeral fallback is a real key, not a stub**, so diagnostics are still redacted on a machine that has never been initialized — and the warning is emitted every time, because the spec requires the user to be told that prior fingerprints are no longer comparable. It is exactly what the old per-process behaviour was, now scoped to the one case where nothing durable exists.
+
+**Nothing persists a fingerprint from the ephemeral key**, and Task 8 must keep that true: `capture` calls `loadOrCreateRedactionKey` at its own point of use and redacts with *that*, never with `context.guards`. Wire it that way here, in `init`, so the pattern exists before three commands copy it.
+
+- [ ] **Step 5: Wire init, uninstall and doctor**
+
+- `init` calls **`loadOrCreateRedactionKey`** while creating the state directory, so a fresh install has a durable key before anything can want one. It is **not** added to `recordArtifacts` — a test asserts the manifest does not name it. `init --dry-run` must not create it, and its `plan.created` list either names the key or the dry run is one file short of true; pick one and pin it.
 - `uninstall` removes it by exact path — **decision 5** above, registered in `BACKLOG.md` §8 against the gate it excepts. Two tests, not one: the key is gone, and every *other* path `uninstall` removed came from the manifest, so the exception stays one path wide.
+- **`uninstall` removes the key *before* `revertArtifacts`**, so `rmdir(stateDir)` can succeed when the directory is otherwise empty. And the removal must sit **above** `runUninstall`'s early return for an absent manifest — otherwise an install that failed and reverted, or a second `uninstall`, leaves an orphaned secret nothing in the product will ever clean up. Both are one-line orderings and both need a test.
 - **`uninstall` deletes no capture**, which is spec §2.5's "not on uninstall" and belongs in the task that touches `uninstall.ts`:
 
 ```ts
@@ -381,9 +472,9 @@ it("leaves every quarantined capture in place, because a capture is never delete
   expect(await listQuarantine()).toEqual(before);
 });
 ```
-- `doctor` gains a check reporting presence and mode. `warn` when absent — a missing key regenerates on next use, so it is not a failure — with the message that prior fingerprints are no longer comparable.
+- `doctor` gains a check reporting presence and mode. `warn` when absent — a missing key regenerates on next use, so it is not a failure — with the message that prior fingerprints are no longer comparable. **`warn` for every state `readRedactionKey` returns `null` for**, each named in the message: absent, symlinked, not a regular file, too short. That branch is only reachable because the composition root stopped throwing, which is the amendment's whole point — so a test must drive `doctor` through all four and see four distinct messages.
 
-- [ ] **Step 5: Run the gate and commit**
+- [ ] **Step 6: Run the gate and commit**
 
 ```bash
 npm run check
