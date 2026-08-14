@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "notes": [
+    {
+      "path": "DEV/vitest-fake-timers.md",
+      "contents": "---\nschemaVersion: 1\ntitle: Vitest fake timers leak across files\ntype: knowledge-note\ncreated: 2026-07-30\ntags: [dev]\nsummary: Fake timers installed in one file stay installed for the next one unless a hook restores the real clock.\nstage: emerging\nauthor: agent\nreviewed: null\n---\n\nRestore the clock in an after-each hook, so the next file starts on a real one.\n",
+      "sourceCaptureId": "__CAPTURE_ID__"
+    }
+  ]
+}
