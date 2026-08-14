@@ -411,9 +411,8 @@ describe("runReview", () => {
    * asserts the code rather than merely that the run failed.
    *
    * The recovery is asserted **in the order it must be followed**, by position
-   * and not by presence: an unresolved transaction stops being resolvable once
-   * the file moves on again, and a second review is what moves it, so `repair`
-   * comes first.
+   * and not by presence: `repair` first, because a second review moves the file
+   * the incomplete transaction is still holding.
    */
   it("refuses, keeping the newer file, when a hand edit lands mid-transaction", async () => {
     let onClock: (() => void) | null = null;

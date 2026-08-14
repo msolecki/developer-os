@@ -346,8 +346,8 @@ async function readCapture(
  * **The message promises nothing about the file**, because the refusal can
  * arrive from before or after the bytes were written and cannot tell which. All
  * it claims is that the decision did not complete. **The recovery is ordered**:
- * `repair` first, because an unresolved transaction stops being resolvable once
- * the file moves on again, and a second review is what moves it.
+ * `repair` first, because a second review moves the file the incomplete
+ * transaction is still holding.
  *
  * The conflict behaviour itself — where it is raised, and in which phases — is
  * defined in `packages/core/src/transactions/executor.ts` and is not restated
