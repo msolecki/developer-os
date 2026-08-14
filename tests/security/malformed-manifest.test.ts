@@ -285,8 +285,10 @@ describe("a schema-valid manifest claiming a path the run actually writes", () =
  * the opposite.
  *
  * The one filtered form that *does* redden is a pattern matching this case's own
- * name too. `--shard` never triggers it at all — vitest shards at file
- * granularity, so a selected file runs whole.
+ * name too: `npx vitest run tests/security/malformed-manifest.test.ts
+ * -t "review|reached"` gives `1 failed | 1 passed | 4 skipped (6)`, the diff
+ * naming the four labels that went unrecorded. `--shard` never triggers it at
+ * all — vitest shards at file granularity, so a selected file runs whole.
  */
 describe("what this suite covered", () => {
   it("reached every case it declares, and every path this subsystem adds", () => {
