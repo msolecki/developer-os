@@ -26,6 +26,8 @@ row fall short of that, and each says so where it appears:**
 2. **Some evidence cells name a suite file rather than a case**, where the property is asserted
    across many cases in that file and picking one would understate the coverage. Where a boundary
    rests on a *particular* case, the case is named.
+   Separately, a few cells point at a **`BACKLOG.md` §1 row** — those are *records* naming who owns a
+   gap, never a mechanism standing in for a line.
 3. **Where a boundary rests on a `tests/security/` case that carries no watched-failure
    demonstration, the cell says `(§8: no watched failure)`.** 18 of that directory's 59 cases are in
    that position, and citing one without the marker would let a reader take it for evidence — the
@@ -57,12 +59,13 @@ a user to their face: that a capture is contained, and that `review --decision e
 secret they pasted. The third means one of two vendors runs an unbounded agentic loop under a
 120-second wall clock and nothing else.
 
-**Two further gaps were found while writing this document**, both registered as `BACKLOG.md` §1 rows
-in the same change: **NEW-15**, the discovered vendor binary is executed without the owner and mode
-check its own type says its executor owes (§5.11); and **NEW-16**, the `user-pattern` redaction class
-has no production caller and no configuration key, so spec §8.2's user-configured patterns are
-unreachable (§5.7). Neither was fixed here — this is a documentation task and no production file is
-in its scope.
+**Three further gaps were found while writing this document**, all registered as `BACKLOG.md` §1
+rows: **NEW-15**, the discovered vendor binary is executed without the owner and mode check its own
+type says its executor owes (§5.11); **NEW-16**, the `user-pattern` redaction class has no production
+caller and no configuration key, so spec §8.2's user-configured patterns are unreachable (§5.7); and
+**NEW-17**, a TOML parse failure on a `brain` run reaches the user through the heuristic redactor
+alone, because that command does not use the wrapper the other five do (§5.7, §5.12). None was fixed
+here — this is a documentation task and no production file is in its scope.
 
 ---
 
@@ -168,7 +171,7 @@ watched-failure demonstration, §8 is what says so.
 
 **The sentinel suite asserts per artifact, never in total** — the rule is stated at
 `tests/security/sentinel.test.ts:24-28` and enforced by `it.each(ARTIFACTS)` at `:188`, over the
-eight-name array at `:38-48`.
+eight-name array at `:39-48`.
 A single assertion over a concatenation of all eight would pass while seven were empty, which is the
 shape of gate this repository has shipped and regretted twice.
 
@@ -214,7 +217,7 @@ an escape already known.
 | Boundary | Mechanism | Evidence |
 |---|---|---|
 | The **ingest prompt** marks captured material as data, never as instruction | the heading and the four sentences under it (`packages/brain/src/ingest/prompt.ts:95-102`) | `tests/security/prompt-injection.test.ts:144-145` — the positive control asserts both that the injected text reached the model and that the literal `untrusted data, not instruction` is in the prompt. **That literal is this prompt's own heading (`packages/brain/src/ingest/prompt.ts:95`), not the shared preamble** |
-| The **shared skill preamble** carrying the full injection defence cannot be removed | it is **concatenated** into every rendered skill rather than referenced, and `assertUsablePreamble` refuses a `shared` that is the wrong workflow or whose prose screens to nothing — an empty preamble is a heading over nothing (`packages/workflow-schema/src/skill.ts:126-143`) | **Mechanism only — no `tests/security/` case exercises it.** The row above proves a different artifact. `packages/workflow-schema/src/skill.test.ts` covers the preamble at the rendering layer |
+| The **shared skill preamble** carrying the full injection defence cannot be removed | it is **concatenated** into every rendered skill rather than referenced — `renderSkillBody` splices `preamble(options.shared)` into the body of every non-`shared` workflow (`packages/workflow-schema/src/skill.ts:200-201`), and the emitted block says so in its own comment, `concatenated, not referenced` (`:239-241`). `assertUsablePreamble` separately refuses a `shared` that is the wrong workflow or whose prose screens to nothing — an empty preamble is a heading over nothing (`:126-143`) | **Mechanism only — no `tests/security/` case exercises it.** The row above proves a different artifact. `packages/workflow-schema/src/skill.test.ts` covers the preamble at the rendering layer |
 | There is no code path from raw capture text to a model | `buildIngestPrompt` takes two parameters — an envelope and a config — and `envelope.content` is post-redaction by the type's own contract (`packages/brain/src/ingest/prompt.ts:67-70`). A third parameter carrying a transcript or a raw fallback is what would turn this back into a promise | the sentinel suite's `the model input` case |
 | A payload cannot forge Markdown structure in the prompt | `boundedProse` first, then `fenced` over its output, and the order is the defence: `neutralizeBlockStart` escapes every column-0 CommonMark construct (`packages/security/src/markdown.ts:43-49`), `fenced` only sizes the opening run so a payload carrying its own fence cannot close the block early (`:69-76`) | `tests/security/prompt-injection.test.ts` — `a forged System heading`, `a fence escape carrying a URL` **(§8: neither carries a watched failure)**; `packages/security/src/markdown.test.ts` covers both constructs at the unit layer |
 | The prompt is bounded by one envelope, not by one file | `MAX_PROMPT_CONTENT_GRAPHEMES` = 16,384, applied to the joined block rather than per paragraph, because a per-paragraph bound is not a bound (`packages/brain/src/ingest/prompt.ts:13`, `packages/security/src/markdown.ts:51-61`) | `packages/brain/src/ingest/prompt.test.ts` |
@@ -267,7 +270,8 @@ The vendor CLI is the only outbound process this product makes, and the only pla
 |---|---|---|
 | The model is invoked with zero declared write scopes | `writeScopes: []` at the call site (`apps/cli/src/commands/ingest.ts:606`); Codex derives `-s read-only` **from the count and never from an argument**, which is what makes `danger-full-access` unreachable rather than merely unwritten (`packages/adapter-codex/src/invoke.ts:145-151`); Claude is passed `["Read","Grep","Glob"]` with no write tool, so the vendor's own permission system enforces it before the model runs (`apps/cli/src/commands/ingest.ts:166-182`) | `apps/cli/src/commands/ingest.test.ts:928` — `gives claude no write tool in --allowedTools`; `packages/adapter-codex/src/invoke.test.ts:238` — `uses read-only and adds no --add-dir when there are no write scopes`; `tests/security/network.test.ts` — `spawns exactly one process during ingest, and it is the discovered vendor binary` |
 | No shell is ever involved | `spawn(..., { shell: false })` (`packages/security/src/process.ts:87-93`) | `packages/security/src/process.test.ts` |
-| The executable is absolute and NUL-free | `assertSafeCommand` refuses anything else, and refuses a NUL in `cwd`, in any argument or on stdin (`packages/security/src/process.ts:46-61`). Separately, the request carries no `PATH`, so a child has nothing to resolve a bare name against | `packages/security/src/process.test.ts` for the NUL and absoluteness refusals; `tests/security/network.test.ts:176-179` asserts **absoluteness only** — nothing there exercises a NUL |
+| The executable is absolute | `assertSafeCommand` refuses a non-absolute executable (`packages/security/src/process.ts:47-54`). Separately, the request carries no `PATH`, so a child has nothing to resolve a bare name against | `packages/security/src/process.test.ts:80-97` — `rejects foreign-platform executable syntax that is not locally absolute`, an `it.skipIf` that runs wherever `C:\tools\curl.exe` is not absolute, so it executes on the supported platform; `tests/security/network.test.ts:176-179` asserts absoluteness across every classified spawn |
+| The executable, `cwd`, every argument and stdin are NUL-free | `assertSafeCommand`'s three NUL branches (`packages/security/src/process.ts:48-61`) | **Mechanism only — no test in this repository exercises a NUL through `assertSafeCommand`.** Its `describe` block holds two cases (`packages/security/src/process.test.ts:63`, `:80`) and neither is about a NUL; the NUL refusals that *are* tested belong to other functions (`packages/security/src/paths.test.ts`, `packages/security/src/protected-paths.test.ts`). Stated rather than papered over: the branches exist and are unproven |
 | The child inherits nothing from the parent environment | the runner passes only `{...request.env}` (`packages/security/src/process.ts:91`), and both adapters pass `env: {}` — stricter than the spec asks | `tests/security/network.test.ts` — `does not pass a proxy the parent process was given`, asserted by *inheritance* rather than by an expectation that could be edited to match a leak |
 | Output cannot exhaust memory | 1 MiB per stream, after which the child is `SIGKILL`ed and the call is a security refusal (`packages/security/src/process.ts:6,195-216`) | `packages/security/src/process.test.ts` |
 | A run is bounded in wall clock | `SIGTERM`, then `SIGKILL` 100 ms later, to the process *group* on darwin (`packages/security/src/process.ts:111-128,168-179`); `INGEST_TIMEOUT_MS` is 120 s (`apps/cli/src/commands/ingest.ts:192-198`) | `packages/security/src/process.test.ts` |
@@ -314,7 +318,7 @@ way back is, which is what §5.4's secret scan is for.
 | Boundary | Mechanism | Evidence |
 |---|---|---|
 | The Brain never writes | `BrainServiceDependencies` is seven members and **none of them is a write channel** (`packages/brain/src/service.ts:33-41`), so "reindex does not mutate a user's notes" is a sentence the type refuses to express rather than a promise the implementation keeps | `packages/brain/src/service.test.ts` — the whole file runs the service against an injected reader and asserts on returned bytes; there is no write to assert about |
-| Frontmatter resolves no YAML tag | the first explicitly tagged node is found and refused, and *any* tag counts, because which tags construct values is the library's decision and "frontmatter carries no tags" is this product's (`packages/brain/src/schema/note.ts:300-314,600`); `maxAliasCount` is pinned at the same seam (`:608`) | `packages/brain/src/schema/note.test.ts` |
+| Frontmatter resolves no YAML tag | the first explicitly tagged node is found and refused, and *any* tag counts, because which tags construct values is the library's decision and "frontmatter carries no tags" is this product's (`packages/brain/src/schema/note.ts:300-314,600`); `maxAliasCount` is pinned at the same seam (`:616`) | `packages/brain/src/schema/note.test.ts` |
 | A frontmatter block cannot make parsing superlinear | `MAX_FRONTMATTER_CHARS` is 64 KiB, counted in UTF-16 code units because the cost is quadratic in *entries* and an entry costs at least five code units in any script (`packages/brain/src/indexes/build.ts:168,558`) | `packages/brain/src/indexes/build.test.ts` |
 | Vault text cannot reorder a rendered line or repaint a terminal | one display screen for the whole product, covering `\p{Cf}` as well as `\p{Cc}` (`packages/security/src/screen.ts:72,96,110`); `escapeLeadingBlock` in the index renderer is a **different** rule — it stops text becoming Markdown structure where the screen stops characters reordering a line — and both run, in that order (`packages/brain/src/indexes/render.ts:112-121`) | `tests/e2e/brain.test.ts`, which crosses the seam so a future divergence fails rather than merely looking wrong |
 | Paths are byte-exact everywhere and screened at the terminal instead | a path is an identifier the user must be able to act on, and link destinations must resolve; `renderPath` screens at the boundary (`apps/cli/src/context.ts:102`, `foundation.md` §5) | `apps/cli/src/context.test.ts` |
@@ -332,11 +336,18 @@ not against Obsidian, because there is no Obsidian in this environment to ask.
 
 ### 5.7 Redaction, and what it can and cannot promise
 
+**One headline this section used to carry is false, and correcting it is the point of the second row
+below.** "Redaction is never the only thing standing anywhere" is the design rule, and it holds on
+seven of the eight commands that read configuration. **On a `brain` run it does not**: there the
+heuristic redactor is the only thing between a TOML parse failure and the user. **Record:
+`BACKLOG.md` §1 NEW-17.**
+
 | Boundary | Mechanism | Evidence |
 |---|---|---|
 | Nine redaction classes, and a tenth cannot be added unreachably | `REDACTION_CLASSES` is frozen and a test asserts membership against findings **actually produced**, not against the list (`packages/security/src/redaction.ts:24-40`) | `packages/security/src/redaction.test.ts` |
 | A user-supplied pattern cannot backtrack | user patterns are literal, case-insensitive substrings over NFC-normalized text — never regular expressions, because this codebase bounds no expression anywhere and a pathological pattern would hang the one operation that must not fail quietly (`packages/security/src/redaction.ts:13-22`) | `packages/security/src/redaction.test.ts:448-469` — `.*` and `(a+)+$` asserted to behave as literals |
-| Redaction is a heuristic and is never the only thing standing anywhere | the worked example is configuration: a `loadConfig` throw becomes a content-free `ConfigurationError` rather than being handed to the redactor, because `smol-toml` embeds three raw source lines in `TomlError.message` (`apps/cli/src/commands/doctor.ts:188-193,227-231`) — §5.12 carries the rest of that seam | `tests/e2e/foundation.test.ts:1250` — `never quotes the configuration it failed to parse` |
+| Redaction is a heuristic and is not the only thing standing — **on seven of the eight commands that read configuration** | the worked example is configuration: a `loadConfig` throw becomes a content-free `ConfigurationError` rather than being handed to the redactor, because `smol-toml` embeds three raw source lines in `TomlError.message` (`apps/cli/src/commands/doctor.ts:188-193,227-231`). `status`, `doctor`, `init`, `capture`, `uninstall`, `review` and `ingest` all reach configuration through that wrapper (`status.ts:42`, `doctor.ts:535,859`, `init.ts:236`, `capture.ts:293`, `uninstall.ts:560`, `review.ts:159`, `ingest.ts:317`) | `tests/e2e/foundation.test.ts:1250` — `never quotes the configuration it failed to parse` |
+| The same, on a `brain` run | **partial — the wrapper is not on this path.** `resolveBrainConfigFile` wraps only the *read*; `loadConfig(serialized)` is the return statement outside that `try` (`apps/cli/src/commands/brain.ts:100-109`), so a `TomlError` is not a `BrainRefusal` and falls through to `failureFrom` (`:334`), which emits `redactDiagnostic(error.message)` (`apps/cli/src/context.ts:367-383`) | **none, and none is possible for a property that does not hold.** The e2e case above drives `doctor`, not `brain`. **Record: `BACKLOG.md` §1 NEW-17** |
 
 **A gap found while writing this document, recorded and not fixed.** `redactText`'s `userPatterns`
 option **has no production caller.** Every production call passes two arguments
@@ -441,7 +452,7 @@ the "every managed mutation is transactional" sentence has a stated exception.
 | Discovery runs one absolute helper and gives it nothing but a search path | `/usr/bin/which`, spawned with `env: { PATH: <search path> }` and nothing else (`packages/platform-macos/src/macos.ts:17,175-182`) | `tests/security/network.test.ts` — every classified spawn asserted absolute, and the classification asserted total in both directions (`:164-179`) |
 | A discovered path that is not usable is refused rather than reported | must be absolute, free of every control character, and must not carry a redaction marker — because the runner redacts its own output and a high-entropy path segment comes back rewritten but still absolute (`packages/platform-macos/src/macos.ts:86-106`) | `packages/platform-macos/src/macos.test.ts` |
 | An empty `PATH` does not become an unbounded search | a fixed fallback of the four system directories (`packages/platform-macos/src/macos.ts:20,143-145`) | `packages/platform-macos/src/macos.test.ts` |
-| The *platform boundary* never executes what it found | `AgentDiscovery.version` is permanently `null` there, because determining it requires running the binary (`packages/platform-macos/src/types.ts:19-25`, `foundation.md` §7). **A layer above does execute it**: `discoverCli` runs `<exe> --version` (`packages/security/src/cli.ts:54-80`) and `doctor` calls it on every invocation, which retired the Foundation-era invariant — `claude-adapter.md` §9 residual 10 records exactly that | `packages/platform-macos/src/macos.test.ts`; `tests/security/network.test.ts` classifies the version probe rather than forbidding it |
+| The *platform boundary* never executes what it found | `AgentDiscovery.version` is permanently `null` there, because determining it requires running the binary (`packages/platform-macos/src/types.ts:19-24`, `foundation.md` §7). **A layer above does execute it**: `discoverCli` runs `<exe> --version` (`packages/security/src/cli.ts:54-80`) and `doctor` calls it on every invocation, which retired the Foundation-era invariant — `claude-adapter.md` §9 residual 10 records exactly that | `packages/platform-macos/src/macos.test.ts`; `tests/security/network.test.ts` classifies the version probe rather than forbidding it |
 | A hostile entry for one vendor does not cost the user the other | a discovery that refuses is treated as "not this one" and the next vendor is tried (`apps/cli/src/commands/ingest.ts:366-370,378-386`) | `apps/cli/src/commands/ingest.test.ts` |
 | **The executed binary is vouched for by something** | **absent** | see below |
 
@@ -467,14 +478,16 @@ a boundary this document must carry, and carrying it accurately means saying whi
 ### 5.12 Configuration
 
 `config.toml` is a file the user edits by hand, and a parse of it happens on every `doctor`, `status`
-and `brain` run.
+and `brain` run. **Those runs do not all reach it the same way**, and the difference is a boundary
+rather than a detail — see the last row.
 
 | Boundary | Mechanism | Evidence |
 |---|---|---|
 | Configuration is read through the protected-path policy, never with a bare `readFile` | the guarded reader canonicalizes, refuses a protected name, opens `O_NOFOLLOW` and re-checks `dev`/`ino` after the open (`packages/security/src/protected-paths.ts:47-88`), reached through `context.guards.readText` (`apps/cli/src/context.ts:319`, `apps/cli/src/commands/doctor.ts:225`) | `packages/security/src/protected-paths.test.ts` |
 | Absence is distinguished from a refusal | `lstat` is checked *first*, because the guarded reader reports a missing file as a security refusal — the right answer for a read and the wrong one for "this machine has never been initialized" (`apps/cli/src/commands/doctor.ts:218-223`) | `apps/cli/src/commands/doctor.test.ts` |
 | An unknown key is refused rather than ignored | `configSchema` is `.strict()`, as is every nested table (`packages/core/src/config/loader.ts:130-153`, `:77-91`) — so a typo'd or injected key fails the load instead of being silently dropped | `packages/core/src/config/config.test.ts` |
-| A parse failure never prints the file it failed on | any `loadConfig` throw becomes a content-free `ConfigurationError`, because `smol-toml` embeds three raw source lines in `TomlError.message` and propagating it printed whatever was read into `status`, `doctor` and their `--json` (`apps/cli/src/commands/doctor.ts:188-193,227-231`). **Redaction is a heuristic and is deliberately not the only thing standing here** | `tests/e2e/foundation.test.ts:1250` — `never quotes the configuration it failed to parse` |
+| A parse failure never prints the file it failed on — **through `readConfigFile`** | a `loadConfig` throw becomes a content-free `ConfigurationError`, because `smol-toml` embeds three raw source lines in `TomlError.message` and propagating it printed whatever was read into `status`, `doctor` and their `--json` (`apps/cli/src/commands/doctor.ts:188-193,227-231`). Redaction is deliberately not the only thing standing on this path | `tests/e2e/foundation.test.ts:1250` — `never quotes the configuration it failed to parse` |
+| **The same boundary on a `brain` run — PARTIAL** | **`brain` does not use that wrapper.** `resolveBrainConfigFile`'s `try` covers the read alone and `loadConfig(serialized)` is the return statement after it (`apps/cli/src/commands/brain.ts:100-109`); a `TomlError` is not a `BrainRefusal`, so the handler falls through to `failureFrom` (`:334`) and the message reaches the user through `redactDiagnostic` (`apps/cli/src/context.ts:367-383`) — **the heuristic redactor as the only thing standing, which is exactly what the row above exists to prevent.** Record: `BACKLOG.md` §1 NEW-17 | none |
 | Telemetry cannot be switched on by editing the file | the key is `z.literal(false)` (`packages/core/src/config/loader.ts:151`), so `telemetry = true` fails the load | `packages/core/src/config/config.test.ts` |
 
 **What configuration does *not* carry, and §5.7 explains why it matters:** there is no redaction
