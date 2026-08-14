@@ -315,72 +315,43 @@ async function readCapture(
  * makes "atomic quarantine writes" true rather than aspirational.
  *
  * **`validateChangePlan` is not on this path, and its absence is a decision.**
- * A change plan's `replace` requires the target to be a managed artifact and
- * refuses `unmanaged_target` otherwise (`plans/validate.ts:248`), and a capture
- * is deliberately absent from `installation-manifest.json`: it is the user's own
- * content, editable in Obsidian by design (spec §3.4), so recording it as a
- * managed artifact would report every legitimate edit as drift. The ownership
- * checks a change plan would have run are replaced here by
- * `resolveCapturePath` — the writable-path guard, plus a canonical containment
- * check against the quarantine directory — and by the executor's own
- * `assertTarget` and snapshot (`executor.ts:200-201`).
- *
- * The one check with no equivalent here is `excludedRoots`. Containment in
- * quarantine is a positive constraint and strictly narrower than "inside an
- * owned root", so it covers the case in practice — but if the vault, or a tree
- * containing it, were ever declared an excluded root, the plan layer would have
- * refused a write this path still performs.
+ * That layer decides ownership from the manifest, and a capture is deliberately
+ * absent from it: a capture is the user's own content, editable in Obsidian by
+ * design (spec §3.4), so recording it as a managed artifact would report every
+ * legitimate edit as drift. What stands in for it is `resolveCapturePath` — the
+ * writable-path guard plus a canonical containment check against the quarantine
+ * directory — which is a narrower constraint than ownership, though not the
+ * same one.
  *
  * **There is a lost-update window between the read and this call, and on this
- * path it is not benign.** `PlannedFileMutation` is `{targetPath, operation,
- * content}` (`transactions/types.ts:54-58`): a caller cannot supply a
- * precondition. The executor computes `expectedBeforeHash` from the snapshot it
- * takes inside `execute()` (`executor.ts:201,216`), so its protection begins
- * there and not at this command's read. This command reads the file,
- * re-redacts, re-hashes and renders first; a hand edit landing in between is
- * picked up by that snapshot, hashed as if it were the expected state, and then
- * overwritten by content derived from the older read.
+ * path it is not benign.** This command reads the file, re-redacts, re-hashes
+ * and renders, and only then asks for the write; a hand edit landing in between
+ * is overwritten by content derived from the older read. What is lost is the
+ * user's own hand edit — silently, by the verb whose whole purpose is to bring
+ * a hand edit back under the product's guarantees. Unlike `capture`'s residual
+ * race, that is not idempotent: a capture collision writes the same observation
+ * twice because the id is the content hash, while here the two writers hold
+ * different content. The window is narrowed to in-process work by reading as
+ * late as possible and cannot be closed from here; `docs/superpowers/ORDER.md`
+ * carries the Foundation change that would close it.
  *
- * What is lost is exactly the user's own hand edit — silently, by the verb
- * whose whole purpose is to bring a hand edit back under the product's
- * guarantees. Unlike `capture`'s residual race, that is not idempotent: a
- * capture collision writes the same observation twice because the id is the
- * content hash, while here the two writers hold different content.
+ * **A conflict is translated rather than leaked, and keeps the class's own exit
+ * code.** When the executor finds the file changed under it, it refuses — the
+ * good outcome, and the user meets it as a sentence about their own capture
+ * rather than as a class name. `exitCodeOf` propagates the code
+ * `TransactionConflictError` declares rather than this command choosing one: a
+ * command inventing its own code for a shared error class is how a stable exit
+ * table stops being one.
  *
- * The window is narrowed to in-process work by reading as late as possible, and
- * it cannot be closed from here: an optional caller-supplied precondition on
- * `PlannedFileMutation` is a Foundation change, and it is raised to the founder
- * in `docs/superpowers/ORDER.md` together with `capture`'s `O_EXCL` request,
- * because both have that one cause.
+ * **The message promises nothing about the file**, because the refusal can
+ * arrive from before or after the bytes were written and cannot tell which. All
+ * it claims is that the decision did not complete. **The recovery is ordered**:
+ * `repair` first, because an unresolved transaction stops being resolvable once
+ * the file moves on again, and a second review is what moves it.
  *
- * **What the executor does catch is translated rather than leaked, and keeps
- * the class's own exit code.** An edit landing after `execute()`'s snapshot
- * raises `TransactionConflictError` — the executor protecting the newer file by
- * refusing, which is the good outcome — and a user meets it as a sentence about
- * their own capture rather than as an opaque class name. The code is propagated
- * through `exitCodeOf` rather than chosen here: the class declares
- * `EXIT_CODES.decisionRequired` (`executor.ts:39-41`), the exit table is part
- * of Foundation's contract, and a command inventing its own code for a shared
- * error class is how a stable table stops being one.
- *
- * **The message promises nothing about the file, because one throw site is past
- * the point of no return.** The executor raises this error from several places
- * (`executor.ts:357,456,549,552,608`), and `verifyDesired` at `:608` fires
- * *after* this mutation's bytes are renamed into place, on any divergence of
- * content, mode or mtime (`:601-607`), leaving the journal at `applied` and the
- * target already rewritten. The error carries no phase and a failed `execute()`
- * returns no journal id, so this catch cannot tell the sites apart, and
- * "nothing was written" would be a promise it cannot keep. What is true
- * wherever it fires is that the decision did not complete.
- *
- * **The recovery is ordered because the journal stops being repairable, not
- * because anything would overwrite the newer file.** Once the target has moved
- * on, a journal that reached `validated` or later can be resolved by neither
- * path: resume re-verifies against the desired bytes and conflicts (`:608`),
- * and rollback's `restoreMutation` conflicts too (`:653`) — it writes the
- * backup back only while the target still hashes to this transaction's own
- * output (`:696`, behind `:653-662`), and refuses outright once it holds
- * anything else. So `repair` first, while it can still act.
+ * The conflict behaviour itself — where it is raised, and in which phases — is
+ * defined in `packages/core/src/transactions/executor.ts` and is not restated
+ * here.
  */
 async function writeCapture(
   context: CliContext,
@@ -414,11 +385,8 @@ async function writeCapture(
  *
  * ```text
  * read → redact → normalize → deduplicationHash → status → render
- *      → transaction: plan → backup → stage → validate → apply → verify → finalize
+ *      → through one transaction
  * ```
- *
- * The second line is the executor's own phase sequence, not a restatement of
- * the plan's vocabulary (`executor.ts:247-264`).
  *
  * **Every decision re-redacts, not only `edit`.** `parseCaptureFile` recomputes
  * `content`, `deduplicationHash` and `redaction` on the way in, and this
@@ -428,21 +396,13 @@ async function writeCapture(
  * get it because the rule is "redact before persisting", not "redact when
  * asked".
  *
- * **The secret leaves the vault; it does not leave the machine.** `backUp`
- * writes the target's current bytes to
- * `~/.developer-os/backups/transactions/<id>/0.bin` at mode `0600`
- * (`executor.ts:459-467`), and no call site ever removes them —
- * `backupDirectory` is only made, written and read (`:372,391,459,614,681`).
- * The pre-edit file, pasted secret and all, stays there. Measured rather than
- * assumed: sweeping a fixture root after an edit finds the token in exactly
- * that one file and nowhere in the vault.
- *
- * **Those bytes are dead, not a restore capability.** `rollbackLocked` throws
- * `TransactionStateError` on a finalized journal (`:280`), so once `finalize`
- * runs the backup can never be used for anything. The fix is correspondingly
- * small and belongs to Foundation rather than to this command: prune
- * `backupDirectory(id)` on the transition into `finalized`. No ordering inside
- * this command can substitute for it.
+ * **The secret leaves the vault; it does not leave the machine.** A transaction
+ * backs its target up before it writes, and nothing prunes those backups, so a
+ * copy of the pre-edit file — pasted secret and all — survives under the
+ * product's own state directory. Measured rather than assumed: sweeping a
+ * fixture root after an edit finds the token in exactly one file there and
+ * nowhere in the vault. `docs/superpowers/ORDER.md` carries the fix; no
+ * ordering inside this command substitutes for it.
  *
  * **`captureId` is never recomputed** (spec §5.3, amended by the founder on
  * 2026-08-13), so the file keeps its name and an edit rewrites it in place.
@@ -454,8 +414,7 @@ async function writeCapture(
  * parsed, and no decision removes a source file — spec §5.6's own validator,
  * and the reason a `remove` mutation appears nowhere in this command. The one
  * refusal that cannot make that promise is `writeCapture`'s transaction
- * conflict, which can fire after the bytes were renamed into place
- * (`executor.ts:608`) and says so where it is raised.
+ * conflict, and it says so where it is raised.
  */
 async function decideOne(
   context: CliContext,

@@ -392,11 +392,11 @@ describe("runReview", () => {
    * The other half of the race `writeCapture`'s docblock describes — the half
    * the executor *does* catch — driven rather than argued.
    *
-   * `execute()` snapshots the target and computes `expectedBeforeHash`, then
-   * `backUp` re-snapshots and refuses on any change. The fixture's clock is the
-   * seam: the executor calls it for the journal's `createdAt` after the
-   * snapshot and before `backUp`, so a write from inside it lands exactly in
-   * that window and nowhere else.
+   * The fixture's clock is the seam the race is staged through: the executor
+   * calls it once between taking its own snapshot of the target and re-checking
+   * it, so a write from inside the clock lands in that window. That ordering is
+   * checked by this test rather than only described by it — if it changes,
+   * `raced` still holds and the assertions below fail.
    *
    * The user must meet this as a sentence about their capture rather than as an
    * opaque class name, and the newer file must survive — the lost update this
@@ -411,12 +411,9 @@ describe("runReview", () => {
    * asserts the code rather than merely that the run failed.
    *
    * The recovery is asserted **in the order it must be followed**, by position
-   * and not by presence: `repair` comes first because a journal that reached
-   * `validated` or later stops being repairable once the target moves on —
-   * resume conflicts at `executor.ts:608` and rollback at `:653` — so the
-   * window to resolve it closes, and a second review is what moves the target.
-   * Nothing would overwrite the newer file; `restoreMutation` refuses rather
-   * than clobbers.
+   * and not by presence: an unresolved transaction stops being resolvable once
+   * the file moves on again, and a second review is what moves it, so `repair`
+   * comes first.
    */
   it("refuses, keeping the newer file, when a hand edit lands mid-transaction", async () => {
     let onClock: (() => void) | null = null;
