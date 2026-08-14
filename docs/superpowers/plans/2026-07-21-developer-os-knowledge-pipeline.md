@@ -1585,7 +1585,7 @@ developer-os review --id <id> --decision reject      status → rejected, source
 developer-os review --id <id> --decision edit        re-read, re-redact, re-hash, record
 ```
 
-- [ ] **Step 1: Write the failing tests for the transition table**
+- [x] **Step 1: Write the failing tests for the transition table**
 
 Spec §5.5, asserted as a table rather than as prose:
 
@@ -1617,7 +1617,7 @@ it("changes content and not status under edit, because no status means edited", 
 
 **`rejected` is terminal for automation and not for the user.** Nothing transitions out of it automatically; a user may edit the file's status by hand, which the review path re-validates. Add a case: a hand-set `status: quarantined` on a rejected capture parses and is accepted, because the user's decision is the user's.
 
-- [ ] **Step 2: Write the failing tests for the command**
+- [x] **Step 2: Write the failing tests for the command**
 
 ```ts
 it("lists quarantined captures and nothing else", async () => {
@@ -1673,13 +1673,13 @@ it("does not open an editor, on any decision", async () => {
 
 The last two are the workflow's own validators becoming code: `no source file is removed by any decision`, and spec §5.6's refusal to spawn `$EDITOR` — the command must stay `--json`- and `--yes`-driveable.
 
-- [ ] **Step 3: Implement, rerun**
+- [x] **Step 3: Implement, rerun**
 
 Every mutation of a capture file goes through the transaction executor, exactly as the write did. An edit is a `replace` with `expectedBeforeHash` set, which is what makes a concurrent edit a refusal rather than a lost update. — **False; see correction 1 above.** The caller cannot set that field, the executor computes it from its own snapshot at `execute()` time, and the read-to-execute window is a real lost-update window. Build what correction 1 describes and document what is lost.
 
 `review` with no `--id` lists and changes nothing; `--decision` without `--id` is invalid input, not "apply to all". Set `capture.list`, `capture.setStatus` and `capture.edit` to `implemented: true`.
 
-- [ ] **Step 4: Run the gate and commit**
+- [x] **Step 4: Run the gate and commit**
 
 ```bash
 npm run check

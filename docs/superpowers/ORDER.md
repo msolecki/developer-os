@@ -39,12 +39,20 @@ it.
 
 **Sessions execute that plan one task at a time**, under `superpowers:subagent-driven-development` —
 a different agent implements and reviews each task, and a task is not done until its reviewer says
-so. **Nine of the nineteen have landed** (Tasks 1–9, 2026-08-13/14); **the next session starts at
-Task 10**, `developer-os review` and the edit path — whose two blocking pre-flight findings are that
-its two edit tests contradicted each other (settled by the founder's `captureId` immutability
-decision, recorded at the end of the pre-flight file) and that its `main.ts` wiring is unspecified
-where Tasks 9 and 13 name theirs exactly. **Task 17 stops and asks** — it spends the founder's
-credits on a real model call, which is the only way the JSONL terminal-event rule gets settled.
+so. **Ten of the nineteen have landed** (Tasks 1–10, 2026-08-13/14); **the next session starts at
+Task 11**, the output schemas and the first model call — whose blocking pre-flight findings are that
+`apps/cli` has no `@developer-os/workflow-schema` dependency though `structuredResultVerbs()` must
+derive from `EFFECT_VOCABULARY` (a dependency-graph decision, not an implementer's), and that the
+forged-heading assertion names the wrong screen function. **Task 17 stops and asks** — it spends the
+founder's credits on a real model call, which is the only way the JSONL terminal-event rule gets
+settled.
+
+**A flaky case in the gate, found by Task 10 and belonging to nobody in DOS-P6.**
+`apps/cli/src/commands/doctor.test.ts:191` — the redaction-key plant loop — failed once under
+`npm run check` on a two-comment-line diff in files it does not import, then passed on a full re-run
+and twice more in isolation. `npm run check` is this repository's declared validation and the
+evidence every commit rests on, so a case that reddens for no reason is a gate nobody can read when
+it goes green. Not investigated by the task that found it, deliberately: it never touched that file.
 
 **Tasks 9 and 10 raise one question with one cause, and it is the founder's.** `PlannedFileMutation`
 is `{targetPath, operation, content}`: **a command cannot supply a precondition.** The executor
@@ -63,6 +71,19 @@ found a task apart:
 **Closing this is either an amendment to spec §5.2 plus an accepted window for `edit`, or one change
 to Foundation — an optional caller-supplied precondition on `PlannedFileMutation`.** It is raised as
 a pair rather than twice, because a session that fixes one and not the other has fixed neither.
+
+**A third Foundation request, from Task 10's review, and it is the one with a security cost.**
+`review --decision edit` exists to remove a secret a user pasted into a vault file by hand. It does
+remove it — and `TransactionExecutor.backUp` writes the pre-edit file, raw, to
+`~/.developer-os/backups/transactions/<id>/0.bin` at mode `0600` (`executor.ts:449-467`), where
+nothing ever removes it. The user is told the secret is gone; a second copy survives in a directory
+they have no reason to know about.
+
+**This is a missing prune, not an inherent cost.** `rollbackLocked` throws on a finalized journal
+(`executor.ts:280`), so once `finalize` runs that backup can never be used for anything — it is dead
+bytes. The fix is to prune `backupDirectory(id)` in the `finalized` transition, which is a smaller
+change than the precondition above and independent of it. **No DOS-P6 task's file list reaches
+`packages/core`**, so no session can do it without being told to.
 
 **Read `.superpowers/sdd/preflight-findings.md` before dispatching any task.** An adversarial scan
 on 2026-08-13 found thirty-eight defects across Tasks 3–19, and twelve of the remaining tasks need a
@@ -128,7 +149,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **9 of 19**, next is Task 10 |
+| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **10 of 19**, next is Task 11 |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |
