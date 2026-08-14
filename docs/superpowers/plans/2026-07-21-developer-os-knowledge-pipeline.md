@@ -1698,13 +1698,70 @@ git commit -m "feat(cli): review accepts, rejects, and brings a hand edit back u
 **Complexity:** L
 
 **Files:**
-- Create: `templates/schemas/ingest.stage.schema.json` — **the filename is the verb**, which is what the test below derives and what the invocation points `--output-schema` at
+- Create: `templates/schemas/ingest.stage.schema.json` — **the filename is the verb**, which is what the test below derives and what the invocation points `--output-schema` at. This is the *reviewable* copy; see correction 3
+- Create: `apps/cli/src/commands/output-schemas.ts`, `output-schemas.test.ts` — the embedded copy `init` actually installs, and the parity test against the file above
 - Create: `packages/brain/src/ingest/proposal.ts`, `prompt.ts`, `index.ts`, and their tests
 - Modify: `apps/cli/src/commands/init.ts` — install the schemas as managed artifacts
-- Test: `apps/cli/src/commands/init.test.ts`
+- Modify: `packages/workflow-schema/src/vocabulary.ts`, `packages/workflow-schema/src/index.ts` — `structuredResultVerbs`; see correction 1
+- Modify: `apps/cli/package.json` **and** `apps/cli/tsconfig.json` — the new dependency edge needs both, and a `package.json` without the matching project reference is a local gate that passes and a `tsc -b` that does not
+- Modify: `packages/brain/src/index.ts`
+- Test: `apps/cli/src/commands/init.test.ts`, `packages/workflow-schema/src/vocabulary.test.ts`
 
 **Interfaces:**
-- Produces: `IngestProposal`, `ProposedNote`, `parseIngestProposal(payload: unknown)`, `buildIngestPrompt(envelope, options)`.
+- Produces: `IngestProposal`, `ProposedNote`, `parseIngestProposal(payload: unknown)`, `buildIngestPrompt(envelope, options)`, `structuredResultVerbs(): readonly string[]`.
+
+> **Corrected 2026-08-14, before dispatch**, against pre-flight findings 25 and 26 and two more found
+> while checking them, each verified in the tree at `2284801`.
+>
+> **1. The dependency edge finding 25 names is taken, not routed around.** `apps/cli` carries no
+> `@developer-os/workflow-schema` dependency — `doctor.test.ts:28-35` already works around the
+> absence with a local structural stand-in — while `structuredResultVerbs()` must derive from
+> `EFFECT_VOCABULARY`, which lives there. **Ruling: `apps/cli` gains the dependency, and
+> `structuredResultVerbs()` is exported from `@developer-os/workflow-schema`**, beside the table it
+> derives from.
+>
+> Nothing is inverted by this. The Global Constraint states `core ← security ← workflow-schema ←
+> each adapter` and does not place `apps/cli`, which sits above all of them and already depends on
+> both adapters — so `workflow-schema` is in its transitive graph today and the edge only makes it
+> direct. `foundation.md` §1's "may depend on all three" is a Foundation-era snapshot already
+> superseded, without a `BACKLOG.md` §8 row, by the `brain` and both adapter edges that DOS-P2, P4
+> and P5 added; this edge is the same class and gets no row either. The one alternative is the
+> literal verb list Step 1 forbids in its own words.
+>
+> **Task 13 needs the same edge** for `resolveScopeGlob` in `apps/cli/src/commands/ingest.ts`, so it
+> is added once here rather than twice. **It does not help Task 12**, whose `packages/brain` still
+> cannot reach `workflow-schema`; pre-flight finding 28 is untouched and stays Task 12's.
+>
+> **2. Finding 26's correction, stated as an ordering.** Step 3's forged-heading assertion is
+> `fenced`'s to satisfy only in the fence-escape half; `fenced` (`markdown.ts:69-76`) sizes the fence
+> and neutralizes nothing. The column-0 construct is neutralized by `neutralizeBlockStart`
+> (`markdown.ts:42-48`), which is reachable only through `screenParagraphs` (`:11-16`) and therefore
+> through `boundedProse` (`:58-60`), which composes screen → neutralize → cap. **Order: `boundedProse`
+> first, `fenced` over its output.** Reversed, the fence is sized against unscreened bytes and the
+> heading still starts a line, which is the exact assertion Step 3 makes.
+>
+> **The side effect is stated because it reaches a model.** `screenControlCharacters` collapses every
+> whitespace run, so blank-line paragraph boundaries survive `screenParagraphs`'s split while single
+> line breaks *inside* a paragraph become spaces. A multi-line observation therefore reaches the
+> model with its intra-paragraph line breaks gone. That is the same trade `markdown.ts:3-10` already
+> records for the shared preamble; it is not new here, and it is not a defect to fix in this task.
+>
+> **3. `templates/` is not readable by a shipped binary, so the schema is embedded.** Step 1 installs
+> the schema from `templates/schemas/`, but `templates/` sits outside `apps/cli` and a published
+> package would not carry it. This is settled precedent rather than a new judgement:
+> `apps/cli/src/commands/brain-template.ts:1-12` embeds the Brain skeleton for exactly this reason,
+> keeps `templates/brain/` as the reviewable copy, and `brain-template.test.ts:40` fails if the two
+> differ. **The schema follows that pattern** — `output-schemas.ts` carries the bytes, `templates/schemas/`
+> stays reviewable, and the parity test is the gate. Without it `init` installs a file a shipped
+> binary does not have, or ships a schema nobody reviews.
+>
+> **4. Step 4's "wire the invocation" has no file in this task to wire it into, and is narrowed.**
+> `packages/brain` depends on `core` and `security` only, so nothing under `src/ingest/` can reach an
+> adapter; and this task's file list has no CLI command. **Task 13 owns the invocation** — its own
+> pipeline block is where `adapter.invoke(scopes, outputSchema)` appears, in
+> `apps/cli/src/commands/ingest.ts`. Step 4 here **specifies** the shape Task 13 wires and builds the
+> parser, the prompt and the schema; it wires nothing. The scope literal below is that specification,
+> and it is Task 13 that passes it.
 
 `codex-adapter.md` §11.13: **nothing writes the file `outputSchemaPath` points at.** `invokeCodex` only screens the path and forwards it into argv, so a caller pointing the vendor CLI at a missing file gets the CLI's own non-zero exit — which would be diagnosed as the wrong failure entirely. One JSON Schema file per agent-invoking verb ships with the product and is written to the product home at `init` (spec §6.6).
 
@@ -1774,11 +1831,12 @@ it("marks the captured material as data and never as instruction", () => {
 
 **There is no code path from raw capture text to a model** (spec §6.2), because raw text is never persisted and the envelope is the only thing ingest reads. The sentinel gate's "absent from model input" clause is met structurally rather than by a second redaction pass that could be forgotten — assert the structure, by proving the prompt builder takes an envelope and has no parameter that could carry raw text.
 
-The capture body is embedded through `packages/security`'s Markdown display seam — `fenced` with a payload-sized fence and `screenParagraphs` — which is the machinery `src/skill.test.ts` already covers for forged headings and fence escapes. This task carries those shapes through an actual invocation rather than through a rendering.
+The capture body is embedded through `packages/security`'s Markdown display seam, **in the order correction 2 fixes**: `boundedProse` first — which is `screenParagraphs` and therefore `neutralizeBlockStart`, the thing that actually stops a forged heading starting a line — then `fenced` over its output for a payload-sized fence. This is the machinery `src/skill.test.ts` already covers for forged headings and fence escapes; this task carries those shapes through an actual invocation rather than through a rendering.
 
-- [ ] **Step 4: Implement, and wire the invocation**
+- [ ] **Step 4: Implement, and specify the invocation Task 13 wires**
 
-One capture, one agent call, one transaction (spec §6.1). The adapter is invoked with:
+One capture, one agent call, one transaction (spec §6.1). The adapter is invoked with — **by Task 13,
+per correction 4; this step writes the specification and the code it calls, not the call site**:
 
 ```ts
 { read: [resolveScopeGlob("content/**", brainConfig)], write: [] }
@@ -1793,7 +1851,11 @@ The agent has read-only access to the vault, which may contain secrets the user 
 ```bash
 npm run check
 git add templates/schemas packages/brain/src/ingest apps/cli/src/commands/init.ts \
-        apps/cli/src/commands/init.test.ts packages/brain/src/index.ts
+        apps/cli/src/commands/init.test.ts packages/brain/src/index.ts \
+        apps/cli/src/commands/output-schemas.ts apps/cli/src/commands/output-schemas.test.ts \
+        apps/cli/package.json apps/cli/tsconfig.json \
+        packages/workflow-schema/src/vocabulary.ts packages/workflow-schema/src/vocabulary.test.ts \
+        packages/workflow-schema/src/index.ts pnpm-lock.yaml
 git commit -m "feat(brain): an ingest proposal, from a model invoked with no write scope"
 ```
 
