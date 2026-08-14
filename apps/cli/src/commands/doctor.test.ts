@@ -451,6 +451,19 @@ describe("runDoctor --probe", () => {
    */
   const isProbe = (spawn: Spawn): boolean => spawn.args[0] !== "--version";
 
+  /**
+   * Every probe one agent's binary received.
+   *
+   * Counting probes **per executable** rather than in total is what makes the
+   * two-agent assertions mean anything: `--probe` turns both reporters on, and
+   * a total of two is also what one agent probed twice would produce.
+   */
+  const probesOf = (
+    spawned: readonly Spawn[],
+    executable: string,
+  ): readonly Spawn[] =>
+    spawned.filter((spawn) => isProbe(spawn) && spawn.executable === executable);
+
   interface ProbeFixture {
     readonly fixture: CommandFixture;
     /** Every spawn since `init` finished. */
@@ -593,15 +606,27 @@ describe("runDoctor --probe", () => {
    * and nothing else. If the options parameter ever stops defaulting to no
    * probe, `init` starts writing to the user's Claude home as a side effect of
    * verifying its own install.
+   *
+   * **Both entry points, because both carry the default.** Every other case in
+   * this suite passes options explicitly and `main.ts` always does too, so
+   * `runDoctor`'s own `= NO_PROBE` was pinned by nothing — flipping it to
+   * `{ probe: true }` broke no test. The `runDoctor` half below is that pin.
    */
-  it("probes nothing when no options are passed, which is how init calls it", async () => {
-    const probed = await createProbeFixture("doctor-probe-default");
+  it("probes nothing when no options are passed, on either entry point", async () => {
+    const report = await createProbeFixture("doctor-probe-default-report");
 
-    await runDoctorReport(probed.fixture.context);
+    await runDoctorReport(report.fixture.context);
 
-    expect(probed.duringInit.filter(isProbe)).toEqual([]);
-    expect(probed.spawned.filter(isProbe)).toEqual([]);
-    expect(probed.spawned.filter((spawn) => !isProbe(spawn))).toHaveLength(1);
+    expect(report.duringInit.filter(isProbe)).toEqual([]);
+    expect(report.spawned.filter(isProbe)).toEqual([]);
+    expect(report.spawned.filter((spawn) => !isProbe(spawn))).toHaveLength(1);
+
+    const result = await createProbeFixture("doctor-probe-default-result");
+
+    await runDoctor(result.fixture.context);
+
+    expect(result.spawned.filter(isProbe)).toEqual([]);
+    expect(result.spawned.filter((spawn) => !isProbe(spawn))).toHaveLength(1);
   });
 
   it("states before it runs that --probe writes to the Claude home", async () => {
@@ -614,13 +639,31 @@ describe("runDoctor --probe", () => {
     expect(stderr).toContain(".claude.json");
   });
 
+  /**
+   * **Every sub-case asserts a probe was spawned, not only the one that ends in
+   * `yes`.** `unknown` is also what comes back when the probe never ran at all
+   * (`claude-capabilities.ts`'s `not-probed` branch), when discovery failed, and
+   * when the executable is absent — so a sub-case asserting only `unknown` is a
+   * scan that passes over an empty set. Concretely: a change that skipped
+   * `probeClaude` below the floor would leave `belowFloor` green while the
+   * sentence above it — the probe observed, the table refused — became false.
+   */
   it("settles skills to yes only when the table permits and a probe observed", async () => {
-    const observing = await createProbeFixture("doctor-probe-observes");
+    const observing = await createProbeFixture("doctor-probe-observes", {
+      codexInstalled: true,
+    });
     const observed = reportOf(
       await runDoctor(observing.fixture.context, { probe: true }),
     );
     expect(capabilityIn(observed, "skills")).toBe("yes");
-    expect(observing.spawned.filter(isProbe)).toHaveLength(1);
+    /**
+     * One flag, both reporters. Codex's probe is a different call to a
+     * different binary (`codex plugin list --json`, which writes nothing), and
+     * until it was counted here `checkCodexCapabilities(context, true)` had no
+     * run behind it at all.
+     */
+    expect(probesOf(observing.spawned, CLAUDE)).toHaveLength(1);
+    expect(probesOf(observing.spawned, CODEX)).toHaveLength(1);
 
     /**
      * The probe ran and saw no `SKILL.md`. A clean exit code over a directory
@@ -634,6 +677,7 @@ describe("runDoctor --probe", () => {
       await runDoctor(silent.fixture.context, { probe: true }),
     );
     expect(capabilityIn(unobserved, "skills")).toBe("unknown");
+    expect(probesOf(silent.spawned, CLAUDE)).toHaveLength(1);
 
     /**
      * `2.1.100` is below `CLAUDE_MINIMUM_VERSION`. The probe still observes the
@@ -647,6 +691,7 @@ describe("runDoctor --probe", () => {
       await runDoctor(old.fixture.context, { probe: true }),
     );
     expect(capabilityIn(belowFloor, "skills")).toBe("unknown");
+    expect(probesOf(old.spawned, CLAUDE)).toHaveLength(1);
   });
 });
 

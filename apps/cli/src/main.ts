@@ -79,26 +79,24 @@ const OPTIONS = {
 type OptionName = keyof typeof OPTIONS;
 
 /**
- * Every name in `OPTIONS`, and the two lists must not drift apart:
- * `suppliedOptions` filters *this* list, and the per-command allow-list is
- * checked against what it returns. An option present in `OPTIONS` and absent
- * here is invisible to that check, so `status --text hi` would parse and run —
- * strict dispatch silently holed for every command, not only the new one.
+ * Every name in `OPTIONS`, **derived rather than restated**.
+ *
+ * `suppliedOptions` filters this list, and the per-command allow-list is checked
+ * against what it returns, so an option present in `OPTIONS` and missing here is
+ * invisible to that check: `status --text hi` would parse and run, and strict
+ * dispatch would be holed for every command rather than only the new one. It
+ * was a hand-maintained copy, and three consecutive tasks — `text`, `agent`,
+ * `probe` — each needed a correction telling them to update it. A list whose
+ * type makes a *missing* entry perfectly legal is a defect that recurs by
+ * design; the fix is to remove the second list, not to pin it a fourth time.
+ *
+ * **The cast is the safe direction.** `OptionName` *is* `keyof typeof OPTIONS`,
+ * so `Object.keys(OPTIONS)` can only fail to be `OptionName[]` if `OPTIONS`
+ * gains a key that is not one of its own keys — not a state the type system
+ * permits. `Object.keys` preserves insertion order for string keys, so this is
+ * the curated list exactly, and adding an option to `OPTIONS` now adds it here.
  */
-const OPTION_NAMES: readonly OptionName[] = [
-  "dry-run",
-  "agent",
-  "decision",
-  "id",
-  "json",
-  "yes",
-  "limit",
-  "probe",
-  "resume",
-  "rollback",
-  "text",
-  "version",
-];
+const OPTION_NAMES = Object.keys(OPTIONS) as readonly OptionName[];
 
 const COMMAND_OPTIONS: Readonly<Record<string, readonly OptionName[]>> = {
   brain: ["dry-run", "json", "limit"],
