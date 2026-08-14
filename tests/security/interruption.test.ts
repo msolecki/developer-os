@@ -114,13 +114,33 @@ async function assertDoctorReports(
 
 afterEach(removeSecurityFixtures);
 
-describe("an interruption at every forward phase", () => {
-  it("names seven forward phases and excludes rolled_back", () => {
-    expect(PHASES).toHaveLength(7);
-    expect(PHASES).not.toContain("rolled_back");
-    expect(CASES).toHaveLength(14);
-  });
+/**
+ * **What the cases below actually drove**, recorded as each one runs.
+ *
+ * It replaces two assertions over the constants the case list was generated
+ * from — `PHASES.length === 7`, `CASES.length === 14` — which could not fail,
+ * inside the one directory whose subject is gates that pass by scanning
+ * nothing. `EXPECTED_COVERAGE` is derived independently of `CASES`, from the
+ * `TransactionPhase` union written out by hand, so the two can disagree.
+ */
+const drove = new Set<string>();
 
+const EXPECTED_COVERAGE: readonly string[] = [
+  "the capture write",
+  "the ingest apply",
+].flatMap((target) =>
+  [
+    "planned",
+    "backed_up",
+    "staged",
+    "validated",
+    "applied",
+    "verified",
+    "finalized",
+  ].map((phase) => `${target}|${phase}`),
+);
+
+describe("an interruption at every forward phase", () => {
   it.each(CASES)(
     "leaves %s retryable when it is killed at %s",
     async (target, phase) => {
@@ -165,6 +185,21 @@ describe("an interruption at every forward phase", () => {
       expect(statuses).not.toContain("ingested");
 
       await assertDoctorReports(fixture, phase);
+      drove.add(`${target}|${phase}`);
     },
   );
+});
+
+/**
+ * Last in the file, and measured rather than declared. `rolled_back` cannot
+ * appear because no case adds it; if a case is deleted or silently skipped the
+ * set shrinks and this goes red, which is the whole reason it is here rather
+ * than being a `toHaveLength` over the array the cases were generated from.
+ */
+describe("what this suite drove", () => {
+  it("interrupted both writes at each of the seven forward phases, and nothing else", () => {
+    expect(drove.size, "a suite that drove nothing is not a suite").toBeGreaterThan(0);
+    expect([...drove].sort()).toStrictEqual([...EXPECTED_COVERAGE].sort());
+    expect([...drove].some((entry) => entry.endsWith("|rolled_back"))).toBe(false);
+  });
 });

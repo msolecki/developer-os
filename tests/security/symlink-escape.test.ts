@@ -1,9 +1,9 @@
-import { mkdir, readFile, rename, symlink } from "node:fs/promises";
+import { lstat, mkdir, readFile, rename, symlink } from "node:fs/promises";
 import { join } from "node:path";
 
 import { EXIT_CODES } from "@developer-os/core";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import {
   filesUnder,
@@ -64,16 +64,22 @@ describe("a symlink out of the content root", () => {
   /**
    * The other direction, and the one that is about the capture rather than the
    * proposal: **one capture file inside quarantine replaced by a link out of the
-   * vault.** A symlink is not a capture. `captureFileNames` enumerates with
+   * vault.**
+   *
+   * A symlink is not a capture. `captureFileNames` enumerates with
    * `withFileTypes` and keeps `entry.isFile()`, which is false for a symlink, so
    * the entry is never selected, never read, and never written back — the link
-   * is not followed at all rather than followed and then refused.
+   * is not followed at all rather than followed and then refused. **That is the
+   * guard this case pins**, which is why the assertions are `ok` with an empty
+   * `order` rather than a refusal: there is nothing to refuse.
    *
-   * The distinction matters because the refusal that *would* catch it,
-   * `resolveCapturePath`, cannot: `canonicalizePlannedPath` resolves a path's
-   * directory components and keeps its final segment, so a link at the leaf
-   * survives canonicalization unchanged and compares as inside quarantine.
-   * Selection is the guard here, and this case is what pins it.
+   * **There is a second guard behind it, measured rather than assumed.**
+   * Widening the filter to `!entry.isDirectory()` makes the entry selectable,
+   * and `resolveCapturePath` then refuses it at exit 5 — "the capture resolves
+   * outside the quarantine directory" — because `canonicalizePlannedPath` does
+   * resolve the link. Recorded here because an earlier version of this comment
+   * claimed the opposite, and a wrong reason beside a right assertion is how the
+   * next reader deletes the wrong one.
    */
   it("never follows a symlink standing where a capture file should be", async () => {
     const fixture = await installSecurityFixture("symlink-capture");
@@ -100,36 +106,90 @@ describe("a symlink out of the content root", () => {
     expect(outsideBefore).toContain("status: accepted");
   });
 
-  /**
-   * **A finding, parked rather than asserted.** Replacing the *quarantine
-   * directory itself* with a link out of the vault is followed, not refused:
-   * `resolveCapturePath` canonicalizes both the quarantine root and the target
-   * and compares them against each other, so a quarantine that has moved takes
-   * its containment check with it — and `ProtectedPathPolicy` is a protected-name
-   * policy rather than a containment one, returning early for any path outside
-   * `$HOME` (`packages/security/src/protected-paths.ts:125`). `ingest` therefore
-   * completes, and the capture file it rewrites is the one outside the vault.
-   *
-   * Recorded as `it.fails` rather than corrected here, because correcting it is
-   * a production change this task may not make. It goes red the day the
-   * behaviour changes, which is the notification a comment alone cannot give.
-   */
-  it.fails(
-    "does not yet refuse a quarantine directory that resolves outside the vault",
-    async () => {
-      const fixture = await installSecurityFixture("symlink-quarantine");
-      const seeded = await fixture.seedAccepted("an observation in real quarantine");
+});
 
-      const stolen = join(fixture.root, "stolen");
-      await mkdir(stolen, { recursive: true, mode: 0o700 });
-      await rename(fixture.quarantine, join(stolen, "quarantine"));
-      await symlink(join(stolen, "quarantine"), fixture.quarantine);
+/**
+ * **A finding, parked — and the parking has to show the damage, not only the
+ * absence of a refusal.**
+ *
+ * Replacing the *quarantine directory itself* with a link out of the vault is
+ * followed, not refused: `resolveCapturePath` canonicalizes both the quarantine
+ * root and the target and compares them **against each other**, so a quarantine
+ * that has moved takes its containment check with it; and `ProtectedPathPolicy`
+ * is a protected-**name** policy rather than a containment one, returning early
+ * for any path outside `$HOME` (`packages/security/src/protected-paths.ts:125`).
+ * `ingest` therefore completes and rewrites the capture file outside the vault.
+ *
+ * **Why this is two cases and not one `it.fails`.** `it.fails` passes on *any*
+ * throw, including one from fixture setup, so a case that did the whole
+ * scenario inside it would report the known defect even when nothing had been
+ * set up at all. The scenario runs once in `beforeAll`; the first case is an
+ * ordinary one that asserts the setup reached the state the finding is about
+ * **and asserts the harm**, so a broken fixture fails loudly and a real fix
+ * announces itself here whatever exit code it chooses; the second holds the one
+ * assertion that is expected to fail, and nothing else it could swallow.
+ */
+describe("a quarantine directory that resolves outside the vault", () => {
+  interface Observed {
+    readonly quarantineIsALink: boolean;
+    readonly relocatedInsideVault: boolean;
+    readonly before: string;
+    readonly after: string;
+    readonly code: number;
+    readonly vaultNotes: readonly string[];
+  }
 
-      fixture.runner.reply(() => oneNote(seeded.id));
+  let observed: Observed;
 
-      const result = await fixture.ingest();
+  beforeAll(async () => {
+    const fixture = await installSecurityFixture("symlink-quarantine");
+    const seeded = await fixture.seedAccepted("an observation in real quarantine");
 
-      expect(result.code).toBe(EXIT_CODES.securityRefusal);
-    },
-  );
+    const stolen = join(fixture.root, "stolen");
+    await mkdir(stolen, { recursive: true, mode: 0o700 });
+    await rename(fixture.quarantine, join(stolen, "quarantine"));
+    await symlink(join(stolen, "quarantine"), fixture.quarantine);
+
+    const relocated = join(stolen, "quarantine", `${seeded.id}.md`);
+    const before = await readFile(relocated, "utf8");
+
+    fixture.runner.reply(() => oneNote(seeded.id, "DEV/escaped-quarantine.md"));
+    const result = await fixture.ingest();
+
+    observed = {
+      quarantineIsALink: (await lstat(fixture.quarantine)).isSymbolicLink(),
+      relocatedInsideVault: relocated.startsWith(`${fixture.paths.brain}/`),
+      before,
+      after: await readFile(relocated, "utf8"),
+      code: result.code,
+      vaultNotes: (await filesUnder(fixture.content)).map((path) =>
+        path.slice(fixture.content.length),
+      ),
+    };
+  }, 120_000);
+
+  afterAll(removeSecurityFixtures);
+
+  it("reaches the state the finding is about, and the escape happens", () => {
+    /** The setup, asserted where a failure cannot be mistaken for the defect. */
+    expect(observed.quarantineIsALink, "quarantine must be a symlink").toBe(true);
+    expect(observed.relocatedInsideVault, "the target must be outside the vault").toBe(
+      false,
+    );
+    expect(observed.before).toContain("status: accepted");
+
+    /**
+     * **The harm.** A file outside the vault was rewritten by a run that had no
+     * business reaching it, and a note was written from it. Both go red the day
+     * the escape is refused — with any exit code — which is the announcement a
+     * case asserting only `code === 5` could never make.
+     */
+    expect(observed.after).not.toBe(observed.before);
+    expect(observed.after).toContain("status: ingested");
+    expect(observed.vaultNotes).toContain("/DEV/escaped-quarantine.md");
+  });
+
+  it.fails("is not yet refused", () => {
+    expect(observed.code).toBe(EXIT_CODES.securityRefusal);
+  });
 });

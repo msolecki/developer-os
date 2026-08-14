@@ -61,15 +61,20 @@ import type { CliResult } from "@developer-os/core";
  */
 export const SENTINEL = `ghp_${"S3nt1nel".repeat(5)}`;
 
-/** Synthetic paths, like every fixture here: no real vendor is ever spawned. */
+/**
+ * Synthetic paths, like every fixture here: no real vendor is ever spawned.
+ * These are also **the only executables discovery ever hands back**, which is
+ * what `isVersionProbe` binds to — see there.
+ */
 export const CLAUDE = "/synthetic/bin/claude";
-export const CODEX = "/synthetic/bin/codex";
+const CODEX = "/synthetic/bin/codex";
+const DISCOVERABLE: readonly string[] = [CLAUDE, CODEX];
 
 const REDACTION_KEY = new Uint8Array(32).fill(11);
 const PROJECT_DIRECTORY = "Sample Project";
 const CAPTURE_FILE_SUFFIX = ".md";
 
-export const ACCEPTED = { dryRun: false, assumeYes: true } as const;
+const ACCEPTED = { dryRun: false, assumeYes: true } as const;
 
 /**
  * Advisory locking through `/usr/bin/lockf` is the production provider. Most
@@ -77,7 +82,7 @@ export const ACCEPTED = { dryRun: false, assumeYes: true } as const;
  * one; `concurrent-edit.test.ts` asks for the real one by name, because the lock
  * is the subject there.
  */
-export class InProcessLockProvider implements TransactionLockProvider {
+class InProcessLockProvider implements TransactionLockProvider {
   readonly #held = new Set<string>();
 
   acquire(path: string): Promise<TransactionLockHandle> {
@@ -191,20 +196,32 @@ export function createRecordingRunner(): RecordingRunner {
 }
 
 /** `/usr/bin/which <name>`: the platform adapter locating a vendor binary. */
-export function isDiscoveryProbe(call: VendorCall): boolean {
+function isDiscoveryProbe(call: VendorCall): boolean {
   return call.executable === "/usr/bin/which";
 }
 
-/** `<exe> --version`: `discoverCli` reading a version and nothing else. */
+/**
+ * `<exe> --version`: `discoverCli` reading a version and nothing else.
+ *
+ * **Bound to an executable discovery actually hands back**, not to the argument
+ * alone. A classifier that accepted any binary invoked with a lone `--version`
+ * would grade a spawn of something the product had no business discovering as
+ * local — which, in a suite whose whole job is deciding which spawns are
+ * legitimate, is the filter passing by filtering everything.
+ */
 export function isVersionProbe(call: VendorCall): boolean {
-  return call.args.length === 1 && call.args[0] === "--version";
+  return (
+    call.args.length === 1 &&
+    call.args[0] === "--version" &&
+    DISCOVERABLE.includes(call.executable)
+  );
 }
 
 export function isDiscoveryOrVersionProbe(call: VendorCall): boolean {
   return isDiscoveryProbe(call) || isVersionProbe(call);
 }
 
-export function discovery(
+function discovery(
   name: AgentName,
   executable: string | null,
 ): AgentDiscovery {
@@ -497,12 +514,28 @@ export function clearCalls(runner: RecordingRunner): void {
   (runner.calls as VendorCall[]).length = 0;
 }
 
+function isMissingEntry(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error.code === "ENOENT" || error.code === "ENOTDIR")
+  );
+}
+
 /** Absolute paths of every regular file beneath `root`, sorted by code point. */
 export async function filesUnder(root: string): Promise<readonly string[]> {
   let entries;
   try {
     entries = await nodeFs.readdir(root, { recursive: true, withFileTypes: true });
-  } catch {
+  } catch (error) {
+    /**
+     * An absent directory is an empty one; **anything else is raised**. A helper
+     * that answered `[]` for "could not look" would make every
+     * `toStrictEqual([])` below vacuous on a permission error — the failure mode
+     * this whole directory exists to refuse, in its own instrument.
+     */
+    if (!isMissingEntry(error)) throw error;
     return [];
   }
   return entries

@@ -85,10 +85,19 @@ describe("a pipe-to-shell in captured text", () => {
         expect(argument).not.toBe("-c");
       }
       /**
-       * The strongest form available from here: the fake runner is what recorded
-       * these, so it did not apply the policy. Replaying each request through the
-       * real `assertSafeCommand` is what the production runner would have done
-       * before spawning, and none of them is refused.
+       * **This replay does not reach the pipe-to-shell rule, and saying so is
+       * the point.** `assertSafeCommand` returns early unless
+       * `basename(executable)` is `curl` or `wget` (`process.ts:66-74`), and
+       * every call this run recorded is the vendor binary — so what is verified
+       * here is the part of the policy that applies to *every* spawn: no NUL
+       * byte in the executable, cwd, args or stdin, an absolute executable, and
+       * a finite timeout. That is worth asserting, because those are the fields
+       * the capture text reaches; it is not the suite's subject.
+       *
+       * The subject is carried by the direct cases below, which invoke the rule
+       * on the executable it applies to. Nothing about a hostile capture can
+       * make the product spawn `curl`, which is exactly why the rule has to be
+       * exercised directly rather than hoped for through this path.
        */
       expect(() => {
         assertSafeCommand(requestOf(call));
@@ -97,7 +106,8 @@ describe("a pipe-to-shell in captured text", () => {
   });
 
   /**
-   * The guard itself, with the newline in the position that defeats a
+   * **The suite's real weight is here**, on the executable the rule applies to:
+   * the guard itself, with the newline in the position that defeats a
    * line-oriented pattern. `\r\n` too, because a pasted Windows line ending is
    * the same attack and a pattern anchored on `\n` alone would let it through.
    */

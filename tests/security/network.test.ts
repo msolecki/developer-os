@@ -123,6 +123,15 @@ const COMMANDS: readonly CommandCase[] = [
       }),
   },
   {
+    /**
+     * **Eight pins the triple discovery, deliberately.** `discoverEachAgent` is
+     * called three times per run — `doctor.ts:410` for the Claude capability
+     * reporter, `:462` for the Codex one, `:775` for the `agents` check — which
+     * is six `which` calls plus one `--version` per installed vendor. The task
+     * report carries that as a memoization opportunity, so whoever takes it
+     * should know **this row reddens with the fix**: memoizing discovery makes
+     * the count four, and this number is the place to change.
+     */
     label: "doctor",
     localSpawns: 8,
     run: (fixture) => runDoctor(fixture.context),
