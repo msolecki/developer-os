@@ -1357,7 +1357,9 @@ git commit -m "feat(brain): build, render and parse a capture envelope"
 > in `OPTIONS` but absent from `OPTION_NAMES` is invisible to the check, so `status --text hi` would
 > parse and run — strict dispatch silently holed for every command, not just this one.
 >
-> **3. Two vocabulary pins break, not one.** `capture.write` flipping to `implemented: true` breaks
+> **3. Two vocabulary pins break, not one.** *(Three, in fact — the implementer found a third,
+> `"marks the eight unimplemented verbs…"`, whose pinned array and its own name both had to change.
+> Corrected here so a later task reading this correction as a template does not copy the miscount.)* `capture.write` flipping to `implemented: true` breaks
 > the whole-table `toStrictEqual`, because the shared `capture` const (`vocabulary.test.ts:35`)
 > carries `implemented: false` for all four `capture.*` verbs — `capture.write` splits out of it.
 > It also breaks *"names a real CLI command once a verb's handler ships"*, which is scoped to
@@ -1375,7 +1377,7 @@ git commit -m "feat(brain): build, render and parse a capture envelope"
 - Consumes: `buildCapture`, `renderCaptureFile`, `detectSourceAgent` from `@developer-os/brain`; `TransactionExecutor`, `redactText`, the loaded redaction key, `CliContext`.
 - Produces: `CaptureResultV1 { schemaVersion: 1; captureId: string; path: string; duplicate: boolean; status: CaptureStatus; redactionCount: number }`. **`redactionCount`, never the findings** — a `--json` consumer learns that four things were redacted and nothing about them.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it("writes one quarantine file through a transaction, not a bare write", () => {
@@ -1443,7 +1445,7 @@ it("never writes the raw text anywhere, not even into a diagnostic", async () =>
 
 The duplicate cases are spec §5.2: **duplicate detection is a filesystem property, not a directory scan.** The create is `O_EXCL`; a duplicate is that create failing, which two concurrent captures cannot race each other through. Assert the mechanism, not only the outcome — a test that seeds a file and then checks a scan would pass over an implementation with the race in it.
 
-- [ ] **Step 2: Run them, watch them fail, implement, rerun**
+- [x] **Step 2: Run them, watch them fail, implement, rerun**
 
 The command: resolve the vault, load configuration, build the envelope with `detectSourceAgent` and the adapter's own `discoverX` for the version, then plan one `create` mutation and execute it.
 
@@ -1455,7 +1457,35 @@ The command: resolve the vault, load configuration, build the envelope with `det
 
 The `O_EXCL` create belongs in the transaction plan as `operation: "create"`, which `TransactionExecutor` already refuses when the target exists — check that before adding a second mechanism, and if it does not, the duplicate check is an explicit `open` with `O_CREAT | O_EXCL` at the stage phase rather than an `lstat` followed by a write.
 
-- [ ] **Step 3: Wire dispatch**
+> **Corrected 2026-08-14, after Task 9's review. Both halves of that paragraph are false, and the
+> fallback it authorises is impossible.** The executor's `create` precondition is a snapshot, not an
+> exclusive create (`executor.ts:199-204`); its lock is keyed on a per-execution `generateId()`
+> (`store.ts:195-207`), so two concurrent captures never contend; and its apply ends in an
+> unconditional `rename` (`executor.ts:113-135`), which replaces a file that appeared after the
+> snapshot. So the executor does **not** refuse a racing create.
+>
+> The authorised fallback cannot be built either: creating the target with `O_CREAT | O_EXCL` first
+> makes that same precondition refuse the mutation, and writing the contents through the exclusive
+> handle instead bypasses `TransactionExecutor`, which the Global Constraints forbid outright. A
+> separate lock file in the vault is the second mechanism this paragraph warns against, and lock
+> lifecycle there is Foundation's design rather than this command's.
+>
+> **What shipped instead:** `capture` states the property it actually has — a plan-time snapshot, an
+> apply-time re-snapshot that throws `TransactionConflictError`, and a narrow residual window — and
+> writes down why that window is tolerable *here specifically*: `captureId` is the first 16 hex of
+> the hash of the redacted content, so two captures collide only when their redacted bytes are
+> identical, and the losing overwrite leaves the same observation. What the loser forfeits is
+> provenance — `createdAt`, `projectSlug`, `workingDirectoryFingerprint`, `sourceAgent`,
+> `sourceAgentVersion`, `captureMethod` and the `redaction` fingerprints — and nothing records that a
+> second run happened. **The same tolerance does not extend to `review` or `ingest`**, which mutate a
+> capture whose content is not their input; Tasks 10 and 13 do not inherit this reasoning.
+>
+> **Spec §5.2 is left unsatisfied and this plan does not amend it.** It says "a duplicate is an
+> `O_EXCL` create that fails", and no transaction-mediated write can deliver that against the shipped
+> executor. Closing it is a founder decision — either an amendment to §5.2 or a change to
+> Foundation's create path — and it is raised as one rather than settled here.
+
+- [x] **Step 3: Wire dispatch**
 
 `main.ts` gains `capture` with options `["text", "json"]` and positionals `{ min: 0, max: 0 }`, and `text` joins **both** `OPTIONS` (as a string) and `OPTION_NAMES` — correction 2 above says what the second one costs if it is missed. Update `USAGE` in the same edit — a command absent from the help text is a command nobody finds — and add a `main.test.ts` case that `capture --limit 5` is refused at parse time, because strict dispatch is the contract. Add a second case that `status --text hi` is refused too: that is the one that goes red if `OPTION_NAMES` is forgotten, and the `--limit` case would stay green through it.
 
@@ -1463,7 +1493,7 @@ The `O_EXCL` create belongs in the transaction plan as `operation: "create"`, wh
 
 Set `capture.write.implemented = true` in `EFFECT_VOCABULARY`, and fix the two pins correction 3 names — split `capture.write` out of the shared `capture` const, and add `capture` to `KNOWN_CLI_COMMANDS`. Task 5's test then requires the verb to carry a command, which it does.
 
-- [ ] **Step 4: Run the gate and commit**
+- [x] **Step 4: Run the gate and commit**
 
 ```bash
 npm run check
