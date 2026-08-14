@@ -2380,7 +2380,91 @@ The directory `BACKLOG.md` §5 has recorded as missing since the program file ma
 **Files:**
 - Create: `tests/security/sentinel.test.ts`, `prompt-injection.test.ts`, `symlink-escape.test.ts`, `multiline-command.test.ts`, `malformed-manifest.test.ts`, `interruption.test.ts`, `network.test.ts`, `concurrent-edit.test.ts`
 - Create: `tests/security/helpers.ts` — the planted sentinel, the synthetic vault, the fake vendor
-- Modify: `tests/vitest.config.ts` if the project list is enumerated rather than globbed
+- Modify: `tests/vitest.config.ts` — it **is** enumerated; see correction 3
+
+> **Corrected 2026-08-14, before dispatch**, against pre-flight findings 34, 35 and 36 — the only
+> remaining task the scan graded **blocking** — and three more found while checking them, each
+> verified in the tree at `00c36d8`. Two of the three new ones are in Step 8, and both would have
+> shipped a test that pins a property this product does not have.
+>
+> **1. `doctor` and `status` do spawn, so Step 7's first case is false as written** (finding 34).
+> `discoverEachAgent` (`doctor.ts:259-274`) runs `/usr/bin/which` once per agent and both capability
+> reporters then run `<exe> --version`; `status.ts:73` discovers too, and `capture` spawns once for
+> `sourceAgentVersion` (Task 9). `expect(runner.spawned).toEqual([])` is true only for `review`,
+> `brain reindex` and `brain search`.
+>
+> **The property the suite is really about is "nothing reaches a network", and a local `which` is not
+> that.** So classify rather than forbid: every spawn must be a discovery probe or a version probe,
+> and **the classification must be total** — assert the unclassified set is empty *and*, for the
+> commands that do spawn, that the classified set is not. A filter with nothing behind it passes by
+> filtering everything, which is the rule this plan states in its own Global Constraints. Name the
+> expected count per command rather than accepting any number: `doctor` without `--probe` is two
+> `which` calls and two `--version` calls, `status` and `capture` are one each.
+>
+> **2. Step 7's two `HTTP_PROXY` lines are dead, and the fix is not to delete them** (finding 35).
+> `expect(spawned[0]?.env).toEqual(expectedVendorEnvironment)` subsumes both `not.toContain` lines
+> exactly. The comment above them is **not** an argument against exact equality — it argues against
+> `toEqual({})` specifically, and exact equality against a declared expectation is what it asks for.
+> Keep it; drop the two subsumed lines.
+>
+> **Replace them with the case exact equality cannot make.** Set `HTTP_PROXY` and `HTTPS_PROXY` in
+> the environment the CLI itself runs under, then assert they are absent from the child's. That tests
+> the *inheritance* path, and exact equality does not: if the runner leaked the parent environment,
+> `expectedVendorEnvironment` would simply have been written to include it and the test would have
+> been "fixed" by editing the expectation — the failure mode `SESSION.md` names as encoding a bug.
+>
+> **3. `tests/vitest.config.ts` is enumerated, and `tests/security/` joins the existing project**
+> (finding 36). Its `include` lists five globs and `security/**` is not among them, so the suites
+> would silently never run — a gate that scans nothing, in the file whose whole subject is gates that
+> scan nothing. Add `"security/**/*.test.ts"` to that list.
+>
+> **No aliases, no separate project, and no new precondition.** That config resolves imports to
+> `dist` deliberately, and mixing compiled-binary runs with in-process imports is already how `tests/`
+> works — `tests/e2e/brain.test.ts` and `tests/helpers/temp-home.ts` both import `@developer-os/*`
+> today and both resolve to `dist`. `npm run check` runs `lint` before `test`, and `lint` begins with
+> `tsc -b`, which emits `dist`; so the built output is fresh by the time any suite starts. **Say this
+> in the suite's header comment**, because it is exactly the thing a developer running
+> `npx vitest run tests/security` on its own will get wrong: that invocation tests whatever `dist`
+> last held.
+>
+> **4. Step 8's first case asserts the wrong exit code *and* pins a property the product does not
+> have.** Both halves are load-bearing.
+>
+> `TransactionConflictError` declares `code = EXIT_CODES.decisionRequired` — **3, not 6**
+> (`executor.ts:39-46`), and `review` propagates the class's own code rather than choosing one
+> (`review.ts:373-380`). `recoveryRequired` is what `doctor` returns for an *incomplete transaction*,
+> which is Step 6's subject, not this one.
+>
+> The larger defect is the ordering. The case reads, holds, lets a competing write land, then lets the
+> review finish — and **that is the lost-update window, not the conflict.** The executor snapshots
+> when `execute()` runs (`executor.ts:216`) and re-checks at apply (`:548`), so a write landing
+> *before* the snapshot is adopted as the expected state and then overwritten. Task 10 documented that
+> window as a real, unclosed residual and `ORDER.md` carries the Foundation change that would close
+> it. Written as it stands, this case either fails or gets "fixed" by asserting the overwrite — which
+> would encode the bug as the contract.
+>
+> **The competing write must land between the snapshot and the apply**, which means driving it from
+> `TransactionExecutor`'s `afterPhase` hook (`types.ts:92`, `executor.ts:866`) at `planned`,
+> `backed_up`, `staged` or `validated`. That is what makes the refusal the executor's own
+> `expectedBeforeHash` check firing rather than a race the test happened to win.
+>
+> **5. Step 8's second case cannot be two `ingest` runs.** After Task 13, `ingest` performs **four
+> sequential transactions per capture** and the lock is keyed per execution, so it is released between
+> them: two concurrent runs interleave, and neither refuses. The second execution has to begin while
+> the first is *inside* one — `afterPhase` again, holding at a phase while the second is attempted.
+> Say in the report which phase was held, because "two ingests, one lock" describes a test that would
+> pass for the wrong reason on a fast machine and fail on a slow one.
+>
+> **6. The sentinel suite must not sweep `backups/transactions/`, and the reason is not that it would
+> be out of scope — it is that the suite would be right and would go red.** Task 10's review measured
+> it: `TransactionExecutor.backUp` writes the pre-edit file **raw** to
+> `~/.developer-os/backups/transactions/<id>/0.bin` and nothing prunes it, so a planted secret removed
+> from a vault file by `review --decision edit` survives there. That is a known defect with a named
+> fix pending in Foundation — `ORDER.md` carries it as the third of four Foundation requests — and it
+> is not a property this task gets to assert or to work around. Step 1's eight artifacts are the list;
+> **"the staging directory" in it means the executor's staging temporaries beside each target**, which
+> `finalize` removes, and not the product home at large. Sweeping the product home wholesale would
+> make this suite red for a reason nobody in DOS-P6 can fix.
 
 - [ ] **Step 1: The sentinel suite, asserted per artifact**
 
@@ -2472,13 +2556,23 @@ it.each(PHASES)("leaves the capture retryable when killed at %s", async (phase) 
 `BACKLOG.md` §7's gate, and the reason it matters here more than anywhere before: **this subsystem is the first thing in the program that makes an outbound process call.** Spec §2.7 is the property — nothing reaches a network except the vendor's own agent CLI, through `packages/security`'s runner, during ingest.
 
 ```ts
-it.each(["capture", "review", "brain reindex", "brain search x", "doctor", "status"])(
-  "makes no outbound call at all during %s",
-  async (command) => {
-    await cli(command.split(" "));
-    expect(runner.spawned).toEqual([]);
-  },
-);
+// Correction 1: `doctor`, `status` and `capture` all spawn locally. The
+// property is "nothing reaches a network", and a `which` is not that — so the
+// classification is asserted total in both directions rather than the spawn
+// list being asserted empty.
+it.each([
+  ["capture", 1],
+  ["review", 0],
+  ["brain reindex", 0],
+  ["brain search x", 0],
+  ["doctor", 4],
+  ["status", 2],
+] as const)("makes no outbound call at all during %s", async (command, localSpawns) => {
+  await cli(command.split(" "));
+  const local = runner.spawned.filter(isDiscoveryOrVersionProbe);
+  expect(runner.spawned.filter((r) => !isDiscoveryOrVersionProbe(r))).toEqual([]);
+  expect(local).toHaveLength(localSpawns);
+});
 
 it("spawns exactly one process during ingest, and it is the discovered vendor binary", async () => {
   await runIngest(context, {});
@@ -2488,9 +2582,18 @@ it("spawns exactly one process during ingest, and it is the discovered vendor bi
   // Not `toEqual({})`: an empty environment is stricter than spec §2.7 asks
   // and would fail this suite for an unrelated reason the day a vendor CLI
   // needs `HOME`. What matters is that nothing *we* did not put there is there.
-  expect(Object.keys(spawned[0]?.env ?? {})).not.toContain("HTTP_PROXY");
-  expect(Object.keys(spawned[0]?.env ?? {})).not.toContain("HTTPS_PROXY");
   expect(spawned[0]?.env).toEqual(expectedVendorEnvironment);
+});
+
+// Correction 2. The two `not.toContain` lines this replaces were exactly
+// subsumed by the equality above. This one is not: it drives the inheritance
+// path, which an equality against a declared expectation can never fail on —
+// a leak would have been absorbed into `expectedVendorEnvironment` instead.
+it("does not pass a proxy the parent process was given", async () => {
+  const spawned = await ingestUnder({ HTTP_PROXY: "http://proxy.invalid:8080", HTTPS_PROXY: "http://proxy.invalid:8080" });
+  expect(Object.keys(spawned.env)).not.toContain("HTTP_PROXY");
+  expect(Object.keys(spawned.env)).not.toContain("HTTPS_PROXY");
+  expect(Object.keys(spawned.env).length).toBeGreaterThan(0);
 });
 ```
 
@@ -2501,19 +2604,35 @@ it("spawns exactly one process during ingest, and it is the discovered vendor bi
 Design spec §17.5, and the half of program plan Task 6's eighth box that nothing else covers.
 
 ```ts
+// Corrections 4 and 5. The competing write lands from `afterPhase`, *after*
+// the executor took its snapshot and before it applies — a write that lands
+// earlier is adopted as the expected state and silently overwritten, which is
+// the lost-update residual Task 10 documented and ORDER.md still carries. And
+// the code is 3: `TransactionConflictError` declares `decisionRequired`.
 it("refuses a review edit whose capture changed under it, rather than overwriting", async () => {
   const { id, path } = await seedCapture({ text: "an observation" });
-  const started = beginReviewEdit(context, id);          // reads, holds
-  await writeFile(path, await renderCaptureFile(otherEnvelope), "utf8");
-  const result = await started;
-  expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+  const result = await reviewEditWritingDuring("staged", async () => {
+    await writeFile(path, renderCaptureFile(otherEnvelope), "utf8");
+  }, context, id);
+  expect(result.code).toBe(EXIT_CODES.decisionRequired);
   expect(await readFile(path, "utf8")).toContain(otherEnvelope.content);
 });
 
-it("refuses a second transaction while one holds the lock", async () => { /* two ingests, one lock */ });
+// The lock is keyed per execution and `ingest` runs four of them per capture,
+// so two concurrent runs interleave and neither refuses. The second attempt
+// has to begin while the first is *inside* an execution. Report which phase
+// was held: "two ingests, one lock" describes a test that passes for the wrong
+// reason on a fast machine.
+it("refuses a second transaction while one holds the lock", async () => {
+  const held = ingestHoldingAt("staged", context);
+  await expect(runIngest(secondContext, {})).rejects.toThrow(/lock/u);
+  await held.release();
+});
 ```
 
 This is `expectedBeforeHash` and the macOS transaction lock doing what they were built for — the suite exists because neither has ever been exercised by two writers racing for one capture file.
+
+**Both cases assert a property the first case above proves is not free.** The refusal is the executor's own check firing inside the window it guards, not a race the test happened to win; a case whose outcome depends on scheduling would pass here and fail in CI, which is the one thing a security suite must not do.
 
 - [ ] **Step 9: Prove each suite fails without the code it tests**
 
