@@ -72,9 +72,25 @@ export interface CaptureDependencies {
    * process-global and would leak between suites.
    */
   readonly cwd: () => string;
+  /**
+   * Which agent produced this capture, from the environment it ran in.
+   *
+   * Injected for the reason `matchObservedAgent` is tested against synthetic
+   * rows one layer down: `AGENT_DETECTION_ROWS` is empty by decision until
+   * Task 17 observes a real vendor, so a detection that is only ever reached
+   * through the real table can never be seen to *succeed*. With this, the
+   * whole command — probe, envelope, `captureMethod` — is exercisable in the
+   * state Task 17 will put it in, rather than only in today's.
+   */
+  readonly detect: (
+    env: Readonly<Record<string, string | undefined>>,
+  ) => string;
 }
 
-const DEFAULT_DEPENDENCIES: CaptureDependencies = { cwd: () => processCwd() };
+const DEFAULT_DEPENDENCIES: CaptureDependencies = {
+  cwd: () => processCwd(),
+  detect: detectSourceAgent,
+};
 
 /**
  * The bound on one observation, in bytes, and a **refusal** past it rather than
@@ -98,6 +114,15 @@ export const MAX_CAPTURE_INPUT_BYTES = 64 * 1024;
  * absent one, because it is a fact a later reader will trust.
  */
 const UNKNOWN = "unknown";
+
+/**
+ * The slug's own sentinel, deliberately **not** `UNKNOWN`. A working directory
+ * whose basename carries no letter or digit is a nameless directory, not a
+ * failed detection, and writing `projectSlug: unknown` beside
+ * `sourceAgent: unknown` would invite a reader to conclude that something went
+ * wrong when nothing did.
+ */
+const UNNAMED_PROJECT = "unnamed";
 
 /** Vault-relative, under the configured content root. Spec §3.4. */
 const QUARANTINE_SEGMENTS = ["_raw", "quarantine"] as const;
@@ -221,15 +246,22 @@ export async function discoverSourceAgent(
  * every other interpolated string in this product (`buildCapture` applies
  * `screenEnvelopeScalar`; this function can only ever hand it letters, digits
  * and hyphens).
+ *
+ * **Sliced before it is trimmed, not after.** Trimming first left the slice
+ * free to cut through a separator run and end the slug on a hyphen, so a
+ * basename over the bound produced `long-project-name-` — a trailing separator
+ * that says a word was removed rather than that the name was too long. One
+ * trim, after the cut, is correct in both directions.
  */
 function slugify(value: string): string {
   const slug = value
     .normalize("NFC")
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .slice(0, MAX_PROJECT_SLUG_LENGTH)
     .replace(/^-+|-+$/gu, "");
 
-  return slug.length === 0 ? UNKNOWN : slug.slice(0, MAX_PROJECT_SLUG_LENGTH);
+  return slug.length === 0 ? UNNAMED_PROJECT : slug;
 }
 
 /**
@@ -345,6 +377,13 @@ function assertWritableContent(content: string): void {
 }
 
 interface ExistingCapture {
+  /**
+   * Whether the file read back as a capture *of this id*. `parseCaptureFile`
+   * is given the file name, and refuses a frontmatter `captureId` that does
+   * not match it, so `parsed` already carries the id comparison the recovery
+   * path in `runCapture` needs — it never has to re-derive one.
+   */
+  readonly parsed: boolean;
   readonly status: CaptureStatus;
   readonly warning: string | null;
 }
@@ -389,11 +428,31 @@ async function readExistingCapture(
   );
 
   return outcome.ok
-    ? { status: outcome.envelope.status, warning: null }
+    ? { parsed: true, status: outcome.envelope.status, warning: null }
     : {
+        parsed: false,
         status: "failed",
         warning: `the capture already at this path could not be read (${outcome.reason})`,
       };
+}
+
+/**
+ * `readExistingCapture` on the recovery path, where a second failure must never
+ * replace the first. A read that itself refuses — a symlink now at the target,
+ * a vanished directory — answers "no capture here", which rethrows the original
+ * error rather than this one.
+ */
+async function readCaptureQuietly(
+  context: CliContext,
+  target: string,
+  fileName: string,
+  key: Uint8Array,
+): Promise<ExistingCapture | null> {
+  try {
+    return await readExistingCapture(context, target, fileName, key);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -401,13 +460,42 @@ async function readExistingCapture(
  * is not a special case that may append directly, which is what makes "atomic
  * quarantine writes" true rather than aspirational.
  *
- * **The `O_EXCL` semantics spec §5.2 requires are the executor's own**: it
- * snapshots each target under the transaction lock and refuses a `create` whose
- * target already exists (`packages/core/src/transactions/executor.ts`), so the
- * duplicate check needs no second mechanism beside it. `readExistingCapture` is
- * how a duplicate is *reported* at exit 0, not how it is prevented; a file that
- * appears between that read and this write surfaces as a refused transaction
- * rather than as a silent overwrite.
+ * **What this does and does not give you, because spec §5.2 asks for more than
+ * a transaction-mediated create can provide.** §5.2 wants a duplicate to be an
+ * `O_EXCL` create that fails. It is not one, and saying otherwise here would be
+ * the more dangerous of the two mistakes:
+ *
+ * - `TransactionExecutor.execute` **snapshots** each target and refuses a
+ *   `create` whose target exists (`executor.ts:199-204`). A snapshot is a
+ *   `stat`, not an exclusive create.
+ * - The transaction lock is taken on a per-execution `generateId()`
+ *   (`store.ts:195-207`), so two concurrent captures hold two different locks
+ *   and exclude each other from nothing.
+ * - `writeDurableFile` ends in an unconditional `rename` (`executor.ts:113-135`),
+ *   which replaces rather than refuses.
+ *
+ * A genuine `O_EXCL` create of the final target is not available from here: it
+ * would make the target exist, which the executor's own `create` precondition
+ * then refuses, and writing through that handle instead would bypass the
+ * transaction model outright. A separate lock file in the vault is the second
+ * mechanism the plan warned against, and lock lifecycle is Foundation's design
+ * rather than this command's.
+ *
+ * **What is left is a narrow window, and it is tolerable here for a reason
+ * specific to captures.** The plan-time snapshot and the apply-time re-check
+ * (which raises `TransactionConflictError` on any hash change) leave a window
+ * in which two processes can both decide the target is absent. `captureId` is
+ * the first 16 hex of `sha256` over the *redacted, normalized content*, so two
+ * captures can only ever collide when their content is byte-identical: the
+ * losing write replaces a file with the same observation in it. The race is
+ * idempotent — no observation is lost, no vault state is corrupted, and the
+ * only visible difference is which run's `createdAt` survives. That is why the
+ * same window would be unacceptable for `review` or `ingest`, which write
+ * *different* content to a shared path, and is acceptable for this one.
+ *
+ * `readExistingCapture` is how a duplicate is *reported* at exit 0, and
+ * `runCapture` re-reads it if this call fails, so the loser of a race still
+ * reports the duplicate rather than an error nobody can act on.
  *
  * **Nothing is recorded in `installation-manifest.json`.** A capture is the
  * user's own content, editable in Obsidian by design (spec §3.4) — recording it
@@ -536,7 +624,7 @@ export async function runCapture(
     );
     const source = await discoverSourceAgent(
       context,
-      detectSourceAgent(context.env),
+      dependencies.detect(context.env),
     );
 
     const built = buildCapture({
@@ -564,27 +652,48 @@ export async function runCapture(
     const target = join(quarantine, built.fileName);
     const redactionCount = built.envelope.redaction.length;
 
+    const duplicate = (found: ExistingCapture): CliResult<CaptureResultV1> =>
+      success(
+        {
+          schemaVersion: 1,
+          captureId: built.envelope.captureId,
+          path: target,
+          duplicate: true,
+          status: found.status,
+          redactionCount,
+        },
+        found.warning === null ? [] : [found.warning],
+      );
+
     const existing = await readExistingCapture(
       context,
       target,
       built.fileName,
       key,
     );
-    if (existing !== null) {
-      return success(
-        {
-          schemaVersion: 1,
-          captureId: built.envelope.captureId,
-          path: target,
-          duplicate: true,
-          status: existing.status,
-          redactionCount,
-        },
-        existing.warning === null ? [] : [existing.warning],
-      );
-    }
+    if (existing !== null) return duplicate(existing);
 
-    await writeCapture(context, paths, quarantine, target, built.contents);
+    try {
+      await writeCapture(context, paths, quarantine, target, built.contents);
+    } catch (error) {
+      /**
+       * The loser of the race `writeCapture`'s docblock describes. The write
+       * failed; if what is now at the target is a *parseable capture of this
+       * id*, the observation is recorded and this run is a duplicate like any
+       * other, so it says so at exit 0 rather than reporting a failure the
+       * user can neither act on nor distinguish from a real one.
+       *
+       * **This interprets no error and masks none.** It does not inspect the
+       * thrown value at all — it asks the filesystem a question with one
+       * answer, and rethrows the original error unless that answer is yes. A
+       * refused guard, a full disk, an unreadable staging directory: every one
+       * of them still surfaces as itself, because none of them leaves a
+       * parseable capture behind.
+       */
+      const raced = await readCaptureQuietly(context, target, built.fileName, key);
+      if (raced === null || !raced.parsed) throw error;
+      return duplicate(raced);
+    }
 
     return success({
       schemaVersion: 1,

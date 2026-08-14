@@ -1,6 +1,12 @@
 import * as nodeFs from "node:fs/promises";
 import { join } from "node:path";
 
+import { detectSourceAgent } from "@developer-os/brain";
+import type {
+  AgentDiscovery,
+  AgentName,
+  PlatformAdapter,
+} from "@developer-os/platform-macos";
 import { redactText } from "@developer-os/security";
 import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 
@@ -28,7 +34,15 @@ interface CaptureFixture extends CommandFixture {
   run(
     context: CliContext,
     options: { readonly text?: string },
+    /** Overrides the real (empty-table) detection, for the probe cases. */
+    detect?: (env: Readonly<Record<string, string | undefined>>) => string,
   ): ReturnType<typeof runCapture>;
+}
+
+interface InstalledFixtureOptions {
+  readonly fixture?: Parameters<typeof createCommandFixture>[1];
+  /** The working directory's basename, and therefore the project slug. */
+  readonly projectDirectory?: string;
 }
 
 /**
@@ -38,20 +52,23 @@ interface CaptureFixture extends CommandFixture {
  */
 async function installedFixture(
   label: string,
-  options: Parameters<typeof createCommandFixture>[1] = {},
+  options: InstalledFixtureOptions = {},
 ): Promise<CaptureFixture> {
-  const fixture = await createCommandFixture(label, options);
+  const fixture = await createCommandFixture(label, options.fixture ?? {});
   const installed = await runInit(fixture.context, ACCEPTED);
   expect(installed.ok, "the fixture must install before it captures").toBe(true);
 
-  const project = join(fixture.root, PROJECT_DIRECTORY);
+  const project = join(
+    fixture.root,
+    options.projectDirectory ?? PROJECT_DIRECTORY,
+  );
   await nodeFs.mkdir(project, { recursive: true, mode: 0o700 });
 
   return {
     ...fixture,
     project,
-    run: (context, captureOptions) =>
-      runCapture(context, captureOptions, { cwd: () => project }),
+    run: (context, captureOptions, detect = detectSourceAgent) =>
+      runCapture(context, captureOptions, { cwd: () => project, detect }),
   };
 }
 
@@ -111,6 +128,43 @@ function stdinIo(
   readStdin: () => Promise<string | null>,
 ): CliContext {
   return { ...fixture.context, io: { ...fixture.context.io, readStdin } };
+}
+
+/**
+ * A machine with Claude Code on it. The tests that assert *no* spawn need this:
+ * with nothing installed, "no spawn" holds for a second reason that has nothing
+ * to do with the detection table, and the assertion would stay green against an
+ * implementation that probes whenever detection matches.
+ */
+const CLAUDE_INSTALLED: Readonly<Record<AgentName, AgentDiscovery>> = {
+  claude: {
+    name: "claude",
+    installed: true,
+    executablePath: "/synthetic/bin/claude",
+    version: null,
+  },
+  codex: { name: "codex", installed: false, executablePath: null, version: null },
+};
+
+/**
+ * Records which agents were asked about, so "asks nothing at all" is an
+ * observation rather than a restatement of the fake's default answer. A wrapper
+ * rather than a spread: `FakePlatformAdapter`'s methods live on its prototype,
+ * which a spread would drop.
+ */
+function countingPlatform(
+  inner: PlatformAdapter,
+  asked: string[],
+): PlatformAdapter {
+  return {
+    inspect: () => inner.inspect(),
+    discoverExecutable: (name: AgentName): Promise<AgentDiscovery> => {
+      asked.push(name);
+      return inner.discoverExecutable(name);
+    },
+    productStateRoot: (userHome: string) => inner.productStateRoot(userHome),
+    proposedBrainRoot: (userHome: string) => inner.proposedBrainRoot(userHome),
+  };
 }
 
 function runnerReturning(stdout: string): ProcessRunner {
@@ -219,6 +273,97 @@ describe("runCapture", () => {
     expect(await captureTransactions(fixture)).toStrictEqual(before);
   });
 
+  /**
+   * The race `writeCapture`'s docblock describes, driven rather than argued.
+   *
+   * `TransactionExecutor` gives a transaction-mediated `create` a snapshot, not
+   * an `O_EXCL` create, so a second process can put the file there between this
+   * command's duplicate read and its write. The hook re-creates the file at
+   * exactly that moment — inside the guard `writeCapture` calls before it plans
+   * anything — so the executor's own `create` precondition refuses the
+   * mutation, which is the real error this recovery path sees.
+   *
+   * The loser must report the duplicate at exit 0, because the observation *is*
+   * recorded: the id is a hash of the content, so the winner wrote the same
+   * bytes this run would have.
+   */
+  it("reports the duplicate at exit 0 when it loses a race to write it", async () => {
+    const fixture = await installedFixture("capture-race");
+    const first = await fixture.run(fixture.context, { text: OBSERVATION });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const contents = await nodeFs.readFile(first.data.path, "utf8");
+    await nodeFs.rm(first.data.path);
+    const before = await captureTransactions(fixture);
+
+    let restored = false;
+    const racing: CliContext = {
+      ...fixture.context,
+      guards: {
+        ...fixture.context.guards,
+        transaction: {
+          ...fixture.context.guards.transaction,
+          assertTarget: async (path: string): Promise<void> => {
+            await fixture.context.guards.transaction.assertTarget(path);
+            if (restored) return;
+            restored = true;
+            await nodeFs.writeFile(first.data.path, contents, { mode: 0o600 });
+          },
+        },
+      },
+    };
+
+    const second = await fixture.run(racing, { text: OBSERVATION });
+
+    expect(restored, "the race must actually have been staged").toBe(true);
+    expect(second.code).toBe(0);
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.data.duplicate).toBe(true);
+    expect(second.data.status).toBe("quarantined");
+    expect(second.data.path).toBe(first.data.path);
+    expect(await captureTransactions(fixture)).toStrictEqual(before);
+  });
+
+  /**
+   * The same race, lost to something that is *not* a capture of this id. The
+   * recovery path asks the filesystem one question and rethrows unless the
+   * answer is yes, so a failure that merely happens to leave a file behind is
+   * still the failure it was.
+   */
+  it("still fails when the write fails and no capture of this id is there", async () => {
+    const fixture = await installedFixture("capture-race-unparseable");
+    const first = await fixture.run(fixture.context, { text: OBSERVATION });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    await nodeFs.rm(first.data.path);
+
+    let restored = false;
+    const racing: CliContext = {
+      ...fixture.context,
+      guards: {
+        ...fixture.context.guards,
+        transaction: {
+          ...fixture.context.guards.transaction,
+          assertTarget: async (path: string): Promise<void> => {
+            await fixture.context.guards.transaction.assertTarget(path);
+            if (restored) return;
+            restored = true;
+            await nodeFs.writeFile(first.data.path, "not a capture\n", {
+              mode: 0o600,
+            });
+          },
+        },
+      },
+    };
+
+    const second = await fixture.run(racing, { text: OBSERVATION });
+
+    expect(restored).toBe(true);
+    expect(second.ok).toBe(false);
+    expect(second.code).not.toBe(0);
+  });
+
   it("reads stdin when --text is absent", async () => {
     const fixture = await installedFixture("capture-stdin");
     const piped = stdinIo(fixture, () => Promise.resolve("from a pipe"));
@@ -305,7 +450,7 @@ describe("runCapture", () => {
     const result = await runCapture(
       fixture.context,
       { text: OBSERVATION },
-      { cwd: () => fixture.root },
+      { cwd: () => fixture.root, detect: detectSourceAgent },
     );
 
     expect(result.code).toBe(1);
@@ -399,34 +544,133 @@ describe("runCapture", () => {
   });
 
   /**
-   * Decision 3 of the plan: `AGENT_DETECTION_ROWS` is deliberately empty until
-   * Task 17 observes a real vendor row, so every capture written today records
-   * `unknown`. The fixture's runner rejects, which is what proves no version
-   * probe was spawned to reach that answer.
+   * A basename longer than the bound: the cut lands inside the separator run
+   * between the two words, so trimming before slicing left `…aaa-`, a trailing
+   * separator that reads as a removed word rather than a shortened name.
    */
-  it("records an unknown agent, spawning nothing, while the detection table is empty", async () => {
-    const spawned: string[] = [];
-    const fixture = await installedFixture("capture-unknown-agent", {
-      env: { CLAUDECODE: "1", CODEX_SANDBOX: "seatbelt" },
-      runner: {
-        run: (request): Promise<ProcessResult> => {
-          spawned.push(request.executable);
-          return Promise.reject(new Error("nothing should spawn here"));
-        },
-      },
+  it("does not leave a trailing separator when the basename is cut at the bound", async () => {
+    const stem = "a".repeat(63);
+    const fixture = await installedFixture("capture-long-slug", {
+      projectDirectory: `${stem} project`,
     });
-    const before = spawned.length;
 
     const result = await fixture.run(fixture.context, { text: OBSERVATION });
 
-    expect(spawned.slice(before)).toStrictEqual([]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(await nodeFs.readFile(result.data.path, "utf8")).toContain(
+      `projectSlug: ${stem}\n`,
+    );
+  });
 
+  /** A basename with no letter or digit is nameless, not a failed detection. */
+  it("names a slugless working directory unnamed, never unknown", async () => {
+    const fixture = await installedFixture("capture-slugless", {
+      projectDirectory: "+++",
+    });
+
+    const result = await fixture.run(fixture.context, { text: OBSERVATION });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const written = await nodeFs.readFile(result.data.path, "utf8");
+    expect(written).toContain("projectSlug: unnamed");
+    expect(written).not.toContain("projectSlug: unknown");
+  });
+
+  /**
+   * Decision 3 of the plan: `AGENT_DETECTION_ROWS` is deliberately empty until
+   * Task 17 observes a real vendor row, so every capture written today records
+   * `unknown` and spawns nothing. Task 15's suite is going to lean on that, so
+   * it is pinned so that **exactly one** thing keeps it true.
+   *
+   * The machine here has Claude Code installed and the environment carries both
+   * vendors' markers; the platform is asked nothing and the runner is never
+   * called, so the only thing standing between this code and a probe is the
+   * empty table. Against an implementation that probed whenever the environment
+   * looked like an agent's — or that hardcoded a vendor — this goes red.
+   */
+  it("records an unknown agent, spawning nothing, while the detection table is empty", async () => {
+    const spawned: string[] = [];
+    const asked: string[] = [];
+    const fixture = await installedFixture("capture-unknown-agent", {
+      fixture: {
+        env: { CLAUDECODE: "1", CODEX_SANDBOX: "seatbelt" },
+        agents: CLAUDE_INSTALLED,
+        runner: {
+          run: (request): Promise<ProcessResult> => {
+            spawned.push(request.executable);
+            return Promise.reject(new Error("nothing should spawn here"));
+          },
+        },
+      },
+    });
+    const counted: CliContext = {
+      ...fixture.context,
+      platform: countingPlatform(fixture.context.platform, asked),
+    };
+    /**
+     * `init`'s own post-install verification reads the agent's version, so on
+     * a machine with one installed the log is not empty before the capture
+     * runs. Only what the capture spawns is this test's business.
+     */
+    spawned.length = 0;
+
+    const result = await fixture.run(counted, { text: OBSERVATION });
+
+    expect(asked).toStrictEqual([]);
+    expect(spawned).toStrictEqual([]);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const written = await nodeFs.readFile(result.data.path, "utf8");
     expect(written).toContain("sourceAgent: unknown");
     expect(written).toContain("sourceAgentVersion: unknown");
     expect(written).toContain("captureMethod: manual");
+  });
+
+  /**
+   * The other half of the same fact, and the state Task 17 will put this
+   * command in: once detection names a vendor, the capture probes that vendor
+   * **once** and records what it found — including `captureMethod`, which
+   * moves with detection rather than independently of it.
+   */
+  it("probes the detected agent exactly once and records it as agent-authored", async () => {
+    const spawned: string[] = [];
+    const asked: string[] = [];
+    const fixture = await installedFixture("capture-detected-agent", {
+      fixture: {
+        agents: CLAUDE_INSTALLED,
+        runner: {
+          run: (request): Promise<ProcessResult> => {
+            spawned.push(request.executable);
+            return Promise.resolve({
+              stdout: "2.1.216 (Claude Code)\n",
+              stderr: "",
+              exitCode: 0,
+              signal: null,
+              timedOut: false,
+            });
+          },
+        },
+      },
+    });
+    const counted: CliContext = {
+      ...fixture.context,
+      platform: countingPlatform(fixture.context.platform, asked),
+    };
+    /** As above: `init` verified this installation and read the version once. */
+    spawned.length = 0;
+
+    const result = await fixture.run(counted, { text: OBSERVATION }, () => "claude");
+
+    expect(asked).toStrictEqual(["claude"]);
+    expect(spawned).toStrictEqual(["/synthetic/bin/claude"]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const written = await nodeFs.readFile(result.data.path, "utf8");
+    expect(written).toContain("sourceAgent: claude");
+    expect(written).toContain("sourceAgentVersion: 2.1.216");
+    expect(written).toContain("captureMethod: agent-authored");
   });
 });
 
@@ -462,13 +706,28 @@ describe("discoverSourceAgent", () => {
     });
   });
 
+  /**
+   * The machine has Claude Code on it and the runner would answer, so the
+   * return value alone cannot carry this test: `asked` is what distinguishes
+   * "no row named an agent, so nothing was asked" from "something was asked
+   * and said no".
+   */
   it("asks nothing at all about an agent no row named", async () => {
-    const fixture = await createCommandFixture("probe-unknown");
+    const asked: string[] = [];
+    const fixture = await createCommandFixture("probe-unknown", {
+      agents: CLAUDE_INSTALLED,
+      runner: runnerReturning("2.1.216 (Claude Code)\n"),
+    });
+    const counted: CliContext = {
+      ...fixture.context,
+      platform: countingPlatform(fixture.context.platform, asked),
+    };
 
-    expect(await discoverSourceAgent(fixture.context, "unknown")).toStrictEqual({
+    expect(await discoverSourceAgent(counted, "unknown")).toStrictEqual({
       sourceAgent: "unknown",
       sourceAgentVersion: "unknown",
     });
+    expect(asked).toStrictEqual([]);
   });
 
   it.each([
