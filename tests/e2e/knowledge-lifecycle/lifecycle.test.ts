@@ -46,7 +46,9 @@ const QUERY = "fake timers";
 const PROPOSED_NOTE = "DEV/vitest-fake-timers.md";
 /** The canned proposal's title, which restates the observation. */
 const PROPOSED_TITLE = OBSERVATION;
-const INGEST_SCHEMA_FILE = "ingest.stage.schema.json";
+/** The canned proposal's body, verbatim: what the vault must end up holding. */
+const PROPOSED_BODY =
+  "Restore the clock in an after-each hook, so the next file starts on a real one.";
 
 const PROPOSAL_FIXTURE = fileURLToPath(
   new URL("../../fixtures/knowledge/ingest-proposal.json", import.meta.url),
@@ -188,6 +190,12 @@ describe("the knowledge pipeline, against the compiled binary", () => {
        * is refused by the `source-and-provenance` validator. The placeholder is
        * asserted present before it is replaced, so a fixture that stopped
        * carrying it fails here rather than at that validator.
+       *
+       * **The `JSON.parse` → `JSON.stringify` round trip is load-bearing**, not
+       * tidiness: it collapses the pretty-printed fixture onto one line, which
+       * is what makes the reply JSONL. Writing the template through would leave
+       * a document no single line of which parses, and `invokeCodex` would read
+       * it as `malformed-output`.
        */
       const template = await readFile(PROPOSAL_FIXTURE, "utf8");
       expect(template).toContain(CAPTURE_ID_PLACEHOLDER);
@@ -230,16 +238,15 @@ describe("the knowledge pipeline, against the compiled binary", () => {
         notes: [PROPOSED_NOTE],
       });
 
-      /** The note is in the vault, written by the product and not by the model. */
+      /** The note is in the vault, carrying the body the proposal named. */
       const note = join(sandbox.brain, "content", PROPOSED_NOTE);
-      expect((await readFile(note, "utf8")).length).toBeGreaterThan(0);
+      expect(await readFile(note, "utf8")).toContain(PROPOSED_BODY);
 
       /**
-       * And the model was invoked the way the workflow declares: through the
-       * runner, once, in its vendor's read-only sandbox with no write scope and
-       * with the output schema `init` installed. Asserted from the vendor's own
-       * argv, which is the only place this is observable from outside the
-       * process.
+       * And the model was invoked **once**, with the flags the workflow
+       * declares: its vendor's read-only sandbox, no write scope, and the output
+       * schema `init` installed. Asserted from the vendor's own argv, which is
+       * where those three are observable from outside the process.
        */
       const calls = callsFrom(await readFile(argvLog, "utf8"));
       const modelCalls = calls.filter((call) => !isVersionProbe(call));
@@ -253,10 +260,13 @@ describe("the knowledge pipeline, against the compiled binary", () => {
       expect(invoked).not.toContain("--add-dir");
       expect(valueAfter(invoked, "-s")).toBe("read-only");
 
+      /**
+       * Tied to invocation 1's own report rather than to a path this file
+       * reassembles: `init` names every file it installed, so the schema the
+       * vendor was pointed at is the schema `init` says it wrote.
+       */
       const schemaFile = valueAfter(invoked, "--output-schema");
-      expect(schemaFile).toBe(
-        join(sandbox.productHome, "schemas", INGEST_SCHEMA_FILE),
-      );
+      expect(dataOf(initialized).created).toContain(schemaFile);
       expect((await readFile(schemaFile, "utf8")).length).toBeGreaterThan(0);
       expect(invoked.at(-1)).toContain(OBSERVATION);
 
