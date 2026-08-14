@@ -2182,7 +2182,7 @@ accepted capture
   → status → ingested
 ```
 
-- [ ] **Step 1: Write the failing tests for the status ladder**
+- [x] **Step 1: Write the failing tests for the status ladder**
 
 ```ts
 it("moves accepted → staging on entering the transaction, and → ingested only after finalize", async () => {
@@ -2245,7 +2245,7 @@ it("bounds one invocation with --limit, leaving the rest accepted", async () => 
 
 The fourth case is the distinction that is load-bearing and easy to collapse: **`failed` is not what an ingest refusal produces.** Every validator refusal leaves the capture `accepted`, because the capture is fine and the proposal was not. `failed` describes a capture whose *own* envelope is unreadable — a truncated write, a hand edit that broke the frontmatter — which no retry can fix without the user looking at the file. Collapsing the two would make a transient model failure look like data loss (spec §5.5).
 
-- [ ] **Step 2: Implement, rerun**
+- [x] **Step 2: Implement, rerun**
 
 One capture, one agent call, **four transactions** — correction 4 above is the authority on which mutations share one, and spec §6.1's "one transaction" is what it corrects. Failure isolates to a single capture instead of poisoning a batch, and the prompt stays bounded by one envelope rather than by however many the user accepted. `--limit` bounds how many captures one invocation processes; the default is all accepted ones, in `captureId` order.
 
@@ -2253,7 +2253,7 @@ The reindex step reuses `BrainService.reindex()`, which **returns bytes and cann
 
 Set `ingest.stage`, `ingest.validate` and `ingest.apply` to `implemented: true`. That closes the last of the six verbs `claude-adapter.md` §9.3 and `codex-adapter.md` §10 record as having no handler.
 
-- [ ] **Step 3: Wire dispatch, run the gate, commit**
+- [x] **Step 3: Wire dispatch, run the gate, commit**
 
 `main.ts` gains `ingest` in `COMMAND_OPTIONS` with `["limit", "json", "yes", "agent"]` and in `COMMAND_POSITIONALS` with `{ min: 0, max: 0 }`; **`agent` joins `OPTIONS` as a string and `OPTION_NAMES`** — the second list is not bookkeeping, and Task 10's correction 2 records what a name missing from it does to every other command's allow-list. `limit`, `json` and `yes` are already in both. `USAGE` gains its line.
 

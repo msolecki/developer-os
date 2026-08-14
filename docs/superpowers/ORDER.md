@@ -39,27 +39,29 @@ it.
 
 **Sessions execute that plan one task at a time**, under `superpowers:subagent-driven-development` —
 a different agent implements and reviews each task, and a task is not done until its reviewer says
-so. **Twelve of the nineteen have landed** (Tasks 1–12, 2026-08-13/14); **the next session starts at
-Task 13**, `developer-os ingest` — whose pre-flight finding 32 is graded *should fix* rather than
-blocking, and says "one capture, one agent call, one transaction" cannot hold: `accepted → staging`,
-the apply, the reindex and `→ ingested` is three or four transactions, and the capture file is itself
-inside `content/_raw/quarantine/**`. **Task 13 must say which mutations share a transaction**, because
-Task 15 then asserts a second transaction is refused while one holds the lock. **Task 17 stops and
-asks** — it spends the founder's credits on a real model call, which is the only way the JSONL
-terminal-event rule gets settled.
+so. **Thirteen of the nineteen have landed** (Tasks 1–13, 2026-08-13/14); **the next session starts at
+Task 14**, `doctor --probe`. **Task 17 stops and asks** — it spends the founder's credits on a real
+model call, which is the only way the JSONL terminal-event rule gets settled.
 
-**Task 13 carries two obligations Task 12 handed it, and the plan's Task 13 section states both.**
-Nothing yet proves the write-scope validator's hand-written scope strings are what `resolveScopeGlob`
-actually yields for `workflows/ingest/workflow.yaml` — Task 13 compiles the resolved set in and pins
-it against that file. And the validation report is **written and logged** while `finding.path` is
-deliberately kept byte-exact, so Task 13's report writer screens it or a model-chosen path carrying
-control bytes reaches a file as bytes.
+**Two decisions are awaiting the founder** and are the only unratified rows in `BACKLOG.md` §8.
 
-**One decision from Task 12 is awaiting the founder** and is the only unratified row in
-`BACKLOG.md` §8: the `confidence-and-lifecycle` validator's rule. The spec names the validator and
+The first is Task 12's `confidence-and-lifecycle` validator rule. The spec names the validator and
 never says which frontmatter each stage requires, so the rule shipped is defensible but invented —
 `established` requires a `reviewed` date, `deprecated` requires `updated`, `emerging` requires
 nothing. Overturning it is two `if`s and migrates nothing, because that validator writes no data.
+
+The second is Task 13's, and it corrects a headline sentence of the approved spec. **§6.1's "one
+capture, one agent call, one transaction" is false and cannot be made true.** `ingest` ships as four
+transactions per capture — `ingest-stage`, `ingest-apply`, `ingest-reindex`, `ingest-ingested` — plus
+a compensating `ingest-rollback` on failure. Two independent reasons no two of them merge:
+`BrainService.reindex()` **reads** the vault, so it cannot run until the apply has finalized; and
+`validateChangePlan` grants ownership from the manifest, where the index artifacts are recorded and a
+capture is deliberately absent, because spec §3.4 keeps a capture hand-editable in Obsidian. **The
+residual is accepted rather than closed:** a crash between the apply and the last transaction leaves a
+capture at `staging` with its notes already applied — inert, since the next run selects only
+`accepted` captures and cannot double-apply, and recoverable by `repair` plus a hand edit. Task 15's
+"a second transaction is refused while one holds the lock" tests a concurrent second *process*, not a
+nested execution.
 
 **A flaky case in the gate, and it has now fired twice on two unrelated diffs. It belongs to nobody
 in DOS-P6 and needs an owner.** `apps/cli/src/commands/doctor.test.ts:191` — the redaction-key plant
@@ -71,6 +73,11 @@ duration rather than at anything the diff changed. `npm run check` is this repos
 validation and the evidence every commit rests on, so a case that reddens for no reason is a gate
 nobody can read when it goes green. Neither task investigated it, deliberately — neither touched
 that file — but two observations are no longer a coincidence.
+
+**Task 13 ran the full gate three times, on 2026-08-14, and it did not fire once.** That is the
+third data point and it is a negative one: whatever the trigger is, it is not "any full run". Two
+failures in two of five full runs, both on diffs that import nothing from `doctor.ts`, with one of
+them a timeout — the case's own duration remains the best hypothesis and nothing has tested it.
 
 **Tasks 9 and 10 raise one question with one cause, and it is the founder's.** `PlannedFileMutation`
 is `{targetPath, operation, content}`: **a command cannot supply a precondition.** The executor
@@ -103,10 +110,30 @@ bytes. The fix is to prune `backupDirectory(id)` in the `finalized` transition, 
 change than the precondition above and independent of it. **No DOS-P6 task's file list reaches
 `packages/core`**, so no session can do it without being told to.
 
+**A fourth Foundation request, from Task 13, and it is the cheapest of the four.** `CliResult`'s
+failure arm is `{ok, code, error}` with no `data` slot (`result.ts:29-33`), so **a command that
+partly succeeded cannot report machine-readably what moved.** `ingest` processes a batch and
+contains each capture's refusal to that capture; when any of them refuses, the run ends on the
+failure arm, and the per-capture outcomes ship as lines inside the error's `message` — the precedent
+`brain lint` already set under the identical constraint. A consumer parses prose where it should read
+fields. The fix is a `data` slot on `CliError`, or a partial-success arm on `CliResult`; it changes no
+existing caller, because nothing populates a field that does not exist yet.
+
+**One product gap Task 13 exposed, and it is DOS-P7's rather than Foundation's.** `applyReviewDecision`
+permits a decision only from `quarantined` (`decide.ts:REVIEWABLE`), so **nothing moves a capture from
+`accepted` to `rejected`.** A user who accepts a capture and then changes their mind — or whose
+capture refuses ingest deterministically — has only a hand edit of the file's frontmatter, which is
+what both of `ingest`'s recovery strings now have to tell them to do. Adding the transition is a
+decision about spec §5.5's table, not a bug fix.
+
 **Read `.superpowers/sdd/preflight-findings.md` before dispatching any task.** An adversarial scan
-on 2026-08-13 found thirty-eight defects across Tasks 3–19, and twelve of the remaining tasks need a
-plan edit before their brief is extracted. Tasks 14, 17, 18 and 19 are the ones it found clean.
-That file is local scratch and not repository state; if it is gone, the scan is owed again.
+on 2026-08-13 found thirty-eight defects across Tasks 3–19. **Two of the remaining six carry its
+findings** — Task 15, graded blocking, and Task 16, graded should-fix. Tasks 14, 17, 18 and 19 are
+the ones it found clean, **which is not the same as needing no correction**: Task 14's Step 2 says
+`--probe` joins `OPTIONS` and `COMMAND_OPTIONS.doctor` and omits `OPTION_NAMES`, which is the defect
+Task 10 had to correct and Task 13 after it — a name missing from that second list is invisible to
+the per-command allow-list, and every other command silently accepts it. That file is local scratch
+and not repository state; if it is gone, the scan is owed again.
 
 **Read the spec's §3 and then the plan's five decisions.** The spec's five decisions each carry
 their cost; the one that reshapes the subsystem is 3.1: capture content is **agent-authored**,
@@ -167,7 +194,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **12 of 19**, next is Task 13 |
+| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **13 of 19**, next is Task 14 |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |
