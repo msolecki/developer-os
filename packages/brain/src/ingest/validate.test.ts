@@ -149,6 +149,13 @@ afterAll(async () => {
 async function makeVault(): Promise<string> {
   const root = await sandbox("dos-brain-ingest-");
   await mkdir(join(root, "content", "DEV"), { recursive: true });
+  /**
+   * A real quarantine directory, because the private-folder cases below are
+   * about what a path *resolves to*: on a case-insensitive volume
+   * `_RAW/quarantine` canonicalizes into this one, and a case that never
+   * created it would be measuring a path with no destination.
+   */
+  await mkdir(join(root, "content", "_raw", "quarantine"), { recursive: true });
   await writeFile(join(root, "content", "DEV", "existing.md"), EXISTING_NOTE, "utf8");
   return root;
 }
@@ -779,6 +786,40 @@ describe("write-scope", () => {
       const result = await validateProposal(proposal(note(path)), context);
       expect(validators(result), path).toContain("write-scope");
     }
+  });
+
+  /**
+   * **The private-folder subtraction on the resolved destination, which is the
+   * twin `generated-output-consistency` already has.** Both cases below name a
+   * path whose segments spell no private folder and whose destination is inside
+   * the content root, so every check that reads the written path alone passes
+   * them — and both land in `content/_raw/`, where the next run would read the
+   * model's own output back as an `accepted` capture.
+   */
+  it("refuses a path whose case differs from the private folder it resolves into", async () => {
+    const result = await validateProposal(
+      proposal(note("_RAW/quarantine/aaaaaaaaaaaaaaaa.md")),
+      contextFor(await makeVault()),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(validators(result)).toContain("write-scope");
+  });
+
+  it("refuses a path that resolves through a symlink into a private folder", async () => {
+    const vault = await makeVault();
+    await symlink(
+      join(vault, "content", "_raw"),
+      join(vault, "content", "notes"),
+    );
+
+    const result = await validateProposal(
+      proposal(note("notes/quarantine/bbbbbbbbbbbbbbbb.md")),
+      contextFor(vault),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(validators(result)).toContain("write-scope");
   });
 
   it("refuses a path naming a dot-segment, which discovery never indexes", async () => {

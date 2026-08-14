@@ -1,7 +1,11 @@
 import { isAbsolute } from "node:path";
 import { cwd } from "node:process";
 import { parseAgentPromptArgs } from "@developer-os/core";
-import { parseStructuredPayload, screenValueArgument } from "@developer-os/security";
+import {
+  parseStructuredPayload,
+  screenProseArgument,
+  screenValueArgument,
+} from "@developer-os/security";
 import type { ProcessRunner } from "@developer-os/security";
 import type { CodexInstallation } from "./discover.js";
 
@@ -161,7 +165,10 @@ export async function invokeCodex(
     return { ok: false, reason: "spawn-failed" };
   }
 
-  const promptRefusal = screenValueArgument(invocation.prompt, "prompt");
+  // Prose, so the positional rule alone (BACKLOG NEW-12): the word list would
+  // refuse a prompt for containing an ordinary English word, and DOS-P6 puts a
+  // capture body in this terminal argument.
+  const promptRefusal = screenProseArgument(invocation.prompt, "prompt");
   if (promptRefusal !== null) {
     return { ok: false, reason: "refused", detail: promptRefusal };
   }

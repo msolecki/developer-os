@@ -127,6 +127,25 @@ describe("the three refused flags, and the sandbox that is never full access", (
     expect(((seen as ProcessRequest | null)?.args ?? []).join(" ")).not.toContain(value);
   });
 
+  /**
+   * **The prompt is prose and is screened as prose** (BACKLOG NEW-12). It keeps
+   * the positional rule — the case above still refuses every `-`-prefixed
+   * prompt — and loses the word list, which cannot be reread as anything: the
+   * terminal argument of this argv is a *capture body* under DOS-P6, and an
+   * ordinary `EACCES` message names a permission.
+   */
+  it("invokes rather than refusing when the prompt is prose naming a permission", async () => {
+    const { runner: capture, seen } = capturing({ stdout: '{"result":"done"}' });
+    const prompt = "npm ERR! EACCES: permission denied, open /usr/local/lib";
+
+    const result = await invokeCodex(installation, invocation({ prompt }), {
+      runner: capture,
+    });
+
+    expect(result).toEqual({ ok: true, payload: { result: "done" } });
+    expect(seen()?.args).toContain(prompt);
+  });
+
   it("refuses a hostile write scope even with a benign prompt, before the runner is called", async () => {
     let called = false;
     const result = await invokeCodex(

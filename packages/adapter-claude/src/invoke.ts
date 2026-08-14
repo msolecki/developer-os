@@ -1,6 +1,10 @@
 import { isAbsolute } from "node:path";
 import { cwd } from "node:process";
-import { parseStructuredPayload, screenValueArgument } from "@developer-os/security";
+import {
+  parseStructuredPayload,
+  screenProseArgument,
+  screenValueArgument,
+} from "@developer-os/security";
 import type { ProcessRunner } from "@developer-os/security";
 import type { ClaudeInstallation } from "./discover.js";
 
@@ -84,7 +88,10 @@ export async function invokeClaude(
     };
   }
 
-  const promptRefusal = screenValueArgument(invocation.prompt, "prompt");
+  // Prose, so the positional rule alone (BACKLOG NEW-12): the word list would
+  // refuse a prompt for containing an ordinary English word, and DOS-P6 puts a
+  // capture body here.
+  const promptRefusal = screenProseArgument(invocation.prompt, "prompt");
   if (promptRefusal !== null) {
     return { ok: false, reason: "refused", detail: promptRefusal };
   }

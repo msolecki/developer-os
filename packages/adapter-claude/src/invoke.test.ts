@@ -157,6 +157,24 @@ describe("invokeClaude", () => {
     expect(seen()).toBeNull();
   });
 
+  /**
+   * **The prompt is prose and is screened as prose** (BACKLOG NEW-12). The
+   * positional rule above still applies to it; the word list does not, because
+   * prose cannot be reread as a CLI option and DOS-P6 puts a *capture body* in
+   * this position — an ordinary `EACCES` message names a permission, and a
+   * capture carrying one could never be ingested while both rules applied here.
+   */
+  it("invokes rather than refusing when the prompt is prose naming a permission", async () => {
+    const { runner, seen } = capturing({ stdout: '{"result":"done"}' });
+    const prompt = "npm ERR! EACCES: permission denied, open /usr/local/lib";
+    const result = await invokeClaude(installation, { ...invocation, prompt }, {
+      runner,
+    });
+
+    expect(result).toEqual({ ok: true, payload: { result: "done" } });
+    expect(seen()?.args).toContain(prompt);
+  });
+
   it("refuses before spawning when an allowed tool fails the shared screen", async () => {
     const { runner, seen } = capturing({ stdout: "{}" });
     const result = await invokeClaude(

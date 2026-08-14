@@ -20,8 +20,8 @@ import {
 import type { InstalledFixture } from "./helpers.js";
 
 /**
- * **Interruption after each of the seven forward phases, for both the capture
- * write and the ingest apply — fourteen cases.**
+ * **Interruption after each of the seven forward phases, for every forward
+ * transaction this subsystem writes — thirty-five cases.**
  *
  * **It is an in-process `afterPhase` throw, not a real signal.** `afterPhase`
  * raises at a phase boundary, which simulates the process dying there without
@@ -37,7 +37,7 @@ import type { InstalledFixture } from "./helpers.js";
  * **`finalized` is the one phase that leaves nothing to recover**, and that is a
  * property rather than an exception: the throw lands after the transition to
  * `finalized` has been written, so the journal is complete and `doctor` has
- * nothing to report. Branching on it is what keeps the other thirteen cases
+ * nothing to report. Branching on it is what keeps the other thirty cases
  * honest — a suite that asserted exit 6 everywhere would have to be made green
  * by weakening the assertion.
  */
@@ -52,13 +52,67 @@ const PHASES: readonly TransactionPhase[] = [
   "finalized",
 ];
 
-/** The two mutations this subsystem makes, by the transaction kind each uses. */
+/**
+ * **Every forward transaction kind this subsystem writes**, by the label its
+ * cases carry.
+ *
+ * The suite reached two of five until DOS-P6 Task 19's review: `capture` and
+ * `ingest-apply`. The criterion it is evidence for is "every interruption point
+ * returns either the pre-transaction state or a deterministic recoverable
+ * state", and three of the five points had no case at all — including the two
+ * that leave a capture at `staging`, which is the state the recovery text is
+ * most easily wrong about.
+ *
+ * `ingest-rollback` is deliberately absent: it is the compensating transaction,
+ * not a forward one, and interrupting it is what `expectedStatus`'s `staging`
+ * expectations already describe from the other side.
+ */
 const TARGETS = {
   "the capture write": "capture",
+  "the ingest stage": "ingest-stage",
   "the ingest apply": "ingest-apply",
+  "the ingest reindex": "ingest-reindex",
+  "the ingest ingested write": "ingest-ingested",
 } as const;
 
 type Target = keyof typeof TARGETS;
+
+/**
+ * **What the capture's own file must say afterwards**, per target and phase, and
+ * it is a real expectation rather than one value repeated: the whole point of
+ * the criterion is that some of these are the pre-transaction state and some are
+ * a recoverable one, and a suite that expected `accepted` everywhere would have
+ * to be made green by weakening it.
+ *
+ * - **`ingest-stage`**: the status write is rolled back at every phase, so the
+ *   capture is `accepted` and the next run tries it again.
+ * - **`ingest-apply`**: `accepted` while nothing has been written — `planned`
+ *   through `validated` — and `staging` from `applied` on, because the notes
+ *   exist from that phase and a capture claiming `accepted` beside its own notes
+ *   sends the next run at a path `create` refuses.
+ * - **`ingest-reindex`**: the notes landed before this transaction began, so
+ *   every phase leaves `staging`.
+ * - **`ingest-ingested`**: the same, until this transaction's own write lands —
+ *   from `applied` on the capture says `ingested`, which is the truth: the work
+ *   finished and only the exit code says otherwise.
+ */
+const WRITTEN_FROM: TransactionPhase[] = ["applied", "verified", "finalized"];
+
+function expectedStatus(target: Target, phase: TransactionPhase): string {
+  const written = WRITTEN_FROM.includes(phase);
+  switch (target) {
+    case "the ingest stage":
+      return "accepted";
+    case "the ingest apply":
+      return written ? "staging" : "accepted";
+    case "the ingest reindex":
+      return "staging";
+    case "the ingest ingested write":
+      return written ? "ingested" : "staging";
+    default:
+      return "accepted";
+  }
+}
 
 const CASES: readonly (readonly [Target, TransactionPhase])[] = (
   Object.keys(TARGETS) as readonly Target[]
@@ -118,7 +172,8 @@ afterEach(removeSecurityFixtures);
  * **What the cases below actually drove**, recorded as each one runs.
  *
  * It replaces two assertions over the constants the case list was generated
- * from — `PHASES.length === 7`, `CASES.length === 14` — which could not fail,
+ * from — `PHASES.length === 7`, `CASES.length === 14` at the time — which could not
+ * fail,
  * inside the one directory whose subject is gates that pass by scanning
  * nothing. `EXPECTED_COVERAGE` is derived independently of `CASES`, from the
  * `TransactionPhase` union written out by hand, so the two can disagree.
@@ -127,7 +182,10 @@ const drove = new Set<string>();
 
 const EXPECTED_COVERAGE: readonly string[] = [
   "the capture write",
+  "the ingest stage",
   "the ingest apply",
+  "the ingest reindex",
+  "the ingest ingested write",
 ].flatMap((target) =>
   [
     "planned",
@@ -165,13 +223,15 @@ describe("an interruption at every forward phase", () => {
         const result = await fixture.ingest();
         expect(result.ok, "the interruption must reach the caller").toBe(false);
         /**
-         * Retryable, in the only sense the product offers: the capture is back
-         * at `accepted`, never at `ingested`. At `finalized` the notes are on
-         * disk while the capture says `accepted`, which is the residual the
-         * four-transaction ladder documents and no arrangement of these
-         * transactions removes.
+         * Either the pre-transaction state or a deterministic recoverable one,
+         * decided per target and phase rather than assumed uniform — see
+         * `expectedStatus`. What is never true of any of them is a capture at
+         * `accepted` while its own notes are in the vault: that is the state
+         * whose retry can only refuse.
          */
-        expect(await fixture.statusOf(seeded.id)).toBe("accepted");
+        expect(await fixture.statusOf(seeded.id)).toBe(
+          expectedStatus(target, phase),
+        );
       }
 
       /**
@@ -182,7 +242,14 @@ describe("an interruption at every forward phase", () => {
        * and below, on the journal `doctor` must find.
        */
       const statuses = await statusesInQuarantine(fixture);
-      expect(statuses).not.toContain("ingested");
+      /**
+       * `ingest-ingested` is the one target whose own write *is* the transition
+       * to `ingested`, so from `applied` on the status on disk is the one the
+       * run was trying to reach. Every other target must not have reached it.
+       */
+      if (expectedStatus(target, phase) !== "ingested") {
+        expect(statuses).not.toContain("ingested");
+      }
 
       await assertDoctorReports(fixture, phase);
       drove.add(`${target}|${phase}`);
@@ -212,7 +279,7 @@ describe("an interruption at every forward phase", () => {
  * runs whole.
  */
 describe("what this suite drove", () => {
-  it("interrupted both writes at each of the seven forward phases, and nothing else", () => {
+  it("interrupted every forward transaction at each of the seven phases, and nothing else", () => {
     expect(drove.size, "a suite that drove nothing is not a suite").toBeGreaterThan(0);
     expect([...drove].sort()).toStrictEqual([...EXPECTED_COVERAGE].sort());
     expect([...drove].some((entry) => entry.endsWith("|rolled_back"))).toBe(false);

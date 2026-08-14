@@ -1,6 +1,6 @@
 import { isAbsolute, join, relative, sep, win32 } from "node:path";
 
-import { containsPath } from "@developer-os/core";
+import { containsPath, containsPathLoosely } from "@developer-os/core";
 import type { BrainConfigV1 } from "@developer-os/core";
 import {
   canonicalizePlannedPath,
@@ -525,6 +525,7 @@ function writeScope(
   resolved: readonly ResolvedNote[],
   context: IngestValidationContext,
   contentRootCanonical: string | null,
+  privateRootsCanonical: readonly string[],
 ): readonly IngestValidationFinding[] {
   const findings: IngestValidationFinding[] = [];
   const { config } = context.brain;
@@ -586,16 +587,46 @@ function writeScope(
      * thing that makes those differ. A check on the written path is the bug
      * this branch exists to prevent.
      */
+    const canonical = entry.canonical;
     if (
       contentRootCanonical === null ||
-      entry.canonical === null ||
-      !containsPath(contentRootCanonical, entry.canonical)
+      canonical === null ||
+      !containsPath(contentRootCanonical, canonical)
     ) {
       findings.push(
         finding(
           "write-scope",
           note.path,
           "this path resolves outside the content root once symlinks are followed",
+        ),
+      );
+      continue;
+    }
+
+    /**
+     * And the private-folder subtraction on the **destination** too, which is
+     * the twin `generatedOutputConsistency` has for the indexes directory. The
+     * segment check above reads the path the model wrote; two things make that
+     * path disagree with where the bytes land — a case-insensitive volume, on
+     * which `_RAW/quarantine` resolves into the real `_raw/quarantine`, and a
+     * symlink inside the vault whose destination is a private folder. Either
+     * one puts a note in `content/_raw/quarantine/`, where the next `ingest`
+     * reads it back as an `accepted` capture: the model's own output returned
+     * to the model, with the human review step skipped.
+     *
+     * `containsPathLoosely` rather than `containsPath`, because this denies
+     * rather than grants — the same reason `packages/core/src/plans/validate.ts`
+     * uses it for its excluded roots — and because the case-insensitive volume
+     * is precisely one of the two routes.
+     */
+    if (
+      privateRootsCanonical.some((root) => containsPathLoosely(root, canonical))
+    ) {
+      findings.push(
+        finding(
+          "write-scope",
+          note.path,
+          "this path resolves into a private folder, which a proposal may not write",
         ),
       );
     }
@@ -744,6 +775,21 @@ export async function validateProposal(
   const indexesRootCanonical = await canonicalizeOrNull(
     join(vaultRoot, config.contentRoot, config.indexesDir),
   );
+  /**
+   * One canonical root per private folder, resolved here beside the other two
+   * because this is the function that owns the filesystem question and
+   * `writeScope` is handed the answers. A folder that does not exist still
+   * yields a root — `canonicalizePlannedPath` resolves the deepest existing
+   * ancestor — so the subtraction holds on a vault that has never quarantined
+   * anything.
+   */
+  const privateRootsCanonical = (
+    await Promise.all(
+      PRIVATE_FOLDERS.map((folder) =>
+        canonicalizeOrNull(join(vaultRoot, config.contentRoot, folder)),
+      ),
+    )
+  ).filter((root): root is string => root !== null);
 
   let projection: Projection | null = null;
   try {
@@ -781,7 +827,7 @@ export async function validateProposal(
     ...secretScan(notes, context.redact),
     ...deterministicReindex(projection),
     ...generatedOutputConsistency(resolved, config, indexesRootCanonical),
-    ...writeScope(resolved, context, contentRootCanonical),
+    ...writeScope(resolved, context, contentRootCanonical, privateRootsCanonical),
   ];
 
   return { ok: findings.length === 0, findings };

@@ -87,13 +87,21 @@ interface RefusedCaptureV1 {
    */
   readonly recovery: string | null;
   /**
-   * The notes already written when the failure landed — empty unless
-   * `ingest-apply` had finalized, in which case the capture is at `staging` with
-   * these files in the vault. It is a different event from a refusal that wrote
+   * The notes already written when the failure landed — empty unless the apply
+   * transaction wrote them, in which case the capture is at `staging` with these
+   * files in the vault. It is a different event from a refusal that wrote
    * nothing and it is labelled differently, because a user reading the line has
    * to know their vault changed.
    */
   readonly appliedNotes: readonly string[];
+  /**
+   * Where this capture's **own file** was left, which is not derivable from
+   * `appliedNotes`: a rollback that itself fails leaves the capture at `staging`
+   * with nothing applied, and telling that user their capture "is still
+   * accepted, so the next run tries it again" sends them to a run that will
+   * never select it.
+   */
+  readonly leftAt: "untouched" | "staging";
 }
 
 type CaptureOutcome =
@@ -253,14 +261,41 @@ const RETRY_LATER =
   "run developer-os ingest again; the capture is unchanged and still accepted";
 
 /**
- * The run-level escape, and it has to be true of **both** outcomes a capture can
- * be left in. An earlier version said only "still accepted and will be tried
- * again", which is false of exactly the case a user most needs guidance on: a
- * failure after `ingest-apply` finalizes leaves the capture at `staging`, and
- * `selectCaptures` never selects `staging`, so no later run will touch it.
+ * One line per state a refused capture can be left in. An earlier version was a
+ * single constant carrying all of them; `refusedRecovery` below picks the ones
+ * this run actually produced.
+ */
+const UNTOUCHED_RECOVERY =
+  "a capture reported as refused wrote nothing and its status is unchanged, so the next run tries it again while it is accepted; to stop retrying one, set its status back to quarantined by hand and then developer-os review --id <id> --decision reject";
+
+const PARTLY_APPLIED_RECOVERY =
+  "a capture reported as partly applied is at staging with the notes named on its line already in the vault, and ingest never selects staging: read those notes, then set the status by hand — ingested if they are what you wanted, or accepted after removing them to try the capture again";
+
+/**
+ * The third state, and the one the two lines above between them described
+ * wrongly: a capture whose status reached `staging` and whose notes never
+ * landed. It is reached when the rollback itself fails, and it is the state a
+ * run killed after `ingest-stage` finalizes leaves behind — `staging` with an
+ * empty vault, which "wrote nothing and is still accepted" and "the notes named
+ * on its line are already in the vault" are both false of.
+ */
+const STRANDED_RECOVERY =
+  "a capture reported as left at staging wrote no notes and did not get its status back, and ingest never selects staging: set its status back to accepted by hand to try it again";
+
+const INCOMPLETE_TRANSACTION_RECOVERY =
+  "if developer-os status reports an incomplete transaction, resolve it with developer-os repair first";
+
+/**
+ * The run-level escape, **assembled from the states this run actually left**
+ * rather than listed in full every time.
  *
- * The `reject` half names the full escape rather than the `review` command
- * alone: a capture is only rejectable from `quarantined`
+ * An earlier version was a constant carrying every line, so at least one
+ * sentence in it was false on every run — and the one a user most needs is the
+ * one about the state their capture is really in. Each line is emitted only if
+ * some refusal in this run is in the state it describes.
+ *
+ * The `reject` half of the first line names the full escape rather than the
+ * `review` command alone: a capture is only rejectable from `quarantined`
  * (`applyReviewDecision`'s own table), so the status has to go back by hand
  * first, and naming only the second half would send a user to a command that
  * refuses.
@@ -268,11 +303,24 @@ const RETRY_LATER =
  * Per-capture advice is printed beside each capture by `reportLines`; this is
  * what applies to the run.
  */
-const REFUSED_RECOVERY = [
-  "a capture reported as refused wrote nothing and is still accepted, so the next run tries it again; to stop retrying one, set its status back to quarantined by hand and then developer-os review --id <id> --decision reject",
-  "a capture reported as partly applied is at staging with the notes named on its line already in the vault, and ingest never selects staging: read those notes, then set the status by hand — ingested if they are what you wanted, or accepted after removing them to try the capture again",
-  "if developer-os status reports an incomplete transaction, resolve it with developer-os repair before either",
-].join("\n");
+function refusedRecovery(refused: readonly RefusedCaptureV1[]): string {
+  const lines: string[] = [];
+  if (refused.some((refusal) => refusal.leftAt === "untouched")) {
+    lines.push(UNTOUCHED_RECOVERY);
+  }
+  if (refused.some((refusal) => refusal.appliedNotes.length > 0)) {
+    lines.push(PARTLY_APPLIED_RECOVERY);
+  }
+  if (
+    refused.some(
+      (refusal) => refusal.leftAt === "staging" && refusal.appliedNotes.length === 0,
+    )
+  ) {
+    lines.push(STRANDED_RECOVERY);
+  }
+  lines.push(INCOMPLETE_TRANSACTION_RECOVERY);
+  return lines.join("\n");
+}
 
 type FailureExitCode = Exclude<ExitCode, typeof EXIT_CODES.success>;
 
@@ -473,11 +521,48 @@ async function selectCaptures(
 /* ------------------------------------------------------- reading and writing */
 
 /**
+ * The quarantine directory itself, canonicalized and **proven inside the
+ * configured content root** before anything is measured against it.
+ *
+ * The check the two capture commands used to make compared the canonical
+ * quarantine root with the canonical target — against each other, never against
+ * anything absolute — so a quarantine directory replaced by a link out of the
+ * vault carried its own containment check along with it and every target under
+ * it passed. `ProtectedPathPolicy` does not catch that either: it is a
+ * protected-*name* policy and returns early for any path outside `$HOME`
+ * (`packages/security/src/protected-paths.ts:125`).
+ *
+ * Resolved once per run and handed on, so every later containment question is
+ * anchored to a root that has itself been proven rather than assumed.
+ */
+async function resolveQuarantineRoot(
+  context: CliContext,
+  contentRoot: string,
+  quarantine: string,
+): Promise<string> {
+  const canonicalContentRoot = await context.guards.canonicalize(contentRoot);
+  const canonicalQuarantine = await context.guards.canonicalize(quarantine);
+  if (!containsPath(canonicalContentRoot, canonicalQuarantine)) {
+    throw new IngestRefusal(
+      EXIT_CODES.securityRefusal,
+      "the quarantine directory resolves outside the content root",
+      [quarantine],
+      "restore the quarantine directory inside the vault's content root; nothing is read or written through a quarantine path that leaves it",
+    );
+  }
+  return canonicalQuarantine;
+}
+
+/**
  * The capture's own path, canonicalized and proven to still be inside
  * quarantine — `review.ts` records the argument in full. The file name comes
  * from a directory listing here rather than from `--id`, so the shape check that
  * makes the path unbuildable is upstream; this is the check that makes a
  * *symlinked* component resolving out of the vault unusable.
+ *
+ * **`quarantine` is the canonical root `resolveQuarantineRoot` returned**, which
+ * is what makes this containment check absolute rather than relative to whatever
+ * the quarantine path happens to resolve to today.
  */
 async function resolveCapturePath(
   context: CliContext,
@@ -487,9 +572,8 @@ async function resolveCapturePath(
   const target = join(quarantine, fileName);
   await context.guards.transaction.assertTarget(target);
 
-  const canonicalQuarantine = await context.guards.canonicalize(quarantine);
   const canonicalTarget = await context.guards.canonicalize(target);
-  if (!containsPath(canonicalQuarantine, canonicalTarget)) {
+  if (!containsPath(quarantine, canonicalTarget)) {
     throw new IngestRefusal(
       EXIT_CODES.securityRefusal,
       "the capture resolves outside the quarantine directory",
@@ -617,10 +701,20 @@ async function invokeVendor(
    * a user: a timeout is retryable, a refusal is a bug in what this command
    * built, a non-zero exit is the vendor's own complaint. None of them is a
    * reason to touch the capture, which stays `accepted`.
+   *
+   * **A refusal carries its own detail**, which the adapters supply and this
+   * used to drop. `refused` is the one reason whose name says nothing about
+   * what went wrong — the adapters return it for a prompt, a write scope, a
+   * working root, an output schema path and a turn bound — and a user told only
+   * that the run "did not return a usable proposal (refused)" learns nothing
+   * and retries forever. The detail names the **field**, never the value:
+   * `screenValueArgument` composes its message from the caller's own field
+   * label, so nothing model-chosen is interpolated here.
    */
+  const detail = result.reason === "refused" ? `: ${result.detail}` : "";
   throw new IngestRefusal(
     EXIT_CODES.operationalFailure,
-    `the ${vendor.name} agent did not return a usable proposal (${result.reason})`,
+    `the ${vendor.name} agent did not return a usable proposal (${result.reason}${detail})`,
     [],
     RETRY_LATER,
   );
@@ -684,6 +778,20 @@ function refusalFrom(
 
 /* ------------------------------------------------- applying and reindexing */
 
+/**
+ * What the apply transaction left on disk, and whether it finished.
+ *
+ * **Returned rather than thrown**, because the caller has two questions with
+ * different answers: *what happened* is `reason`, which is what the user is told
+ * and what decides the exit code, and *what is on disk* is `notes`, which
+ * decides whether the capture may be rolled back to `accepted`. A failure that
+ * wrote nothing still throws — there is nothing to report about it that the
+ * error itself does not carry.
+ */
+type ApplyOutcome =
+  | { readonly ok: true; readonly notes: readonly string[] }
+  | { readonly ok: false; readonly notes: readonly string[]; readonly reason: unknown };
+
 async function exists(context: CliContext, path: string): Promise<boolean> {
   try {
     await context.fs.lstat(path);
@@ -716,8 +824,10 @@ async function applyNotes(
   context: CliContext,
   contentRoot: string,
   writes: readonly PlannedNoteWriteV1[],
-): Promise<void> {
+): Promise<ApplyOutcome> {
   const mutations: PlannedFileMutation[] = [];
+  /** Each mutation's canonical target beside the note name it was planned for. */
+  const planned: { readonly path: string; readonly target: string }[] = [];
 
   for (const write of writes) {
     const target = join(contentRoot, write.path);
@@ -752,12 +862,43 @@ async function applyNotes(
       operation: "create",
       content: write.bytes,
     });
+    planned.push({ path: write.path, target: canonical });
   }
 
-  await context.executor.execute({
-    kind: TRANSACTION_KINDS.apply,
-    mutations,
-  });
+  /**
+   * **A throw out of `execute` does not mean "wrote nothing".** `apply()` writes
+   * every mutation and transitions the journal to `applied` before
+   * `verifyDesired` runs, and that verify raises `TransactionConflictError`
+   * (`packages/core/src/transactions/executor.ts:586-611`) with the files
+   * already on disk; a crash lands in the same place. Reporting "nothing was
+   * written" there rolls the capture back to `accepted`, and the next run then
+   * meets its own output at a path `create` refuses — permanently, under advice
+   * promising a retry.
+   *
+   * **Which notes landed is asked of the filesystem rather than inferred from
+   * the journal**, because the journal is not in hand: `execute` throws instead
+   * of returning it, and its id is not recoverable from the error. The question
+   * "is this path occupied" is also the exact question the next run will ask, so
+   * an answer taken from the disk cannot disagree with it — where a phase read
+   * from the journal could, if a later phase had removed what an earlier one
+   * wrote. An empty answer leaves `applied` unset and the capture retryable,
+   * which is the pre-transaction state and the correct one.
+   */
+  try {
+    await context.executor.execute({
+      kind: TRANSACTION_KINDS.apply,
+      mutations,
+    });
+  } catch (error) {
+    const landed: string[] = [];
+    for (const entry of planned) {
+      if (await exists(context, entry.target)) landed.push(entry.path);
+    }
+    if (landed.length === 0) throw error;
+    return { ok: false, notes: landed, reason: error };
+  }
+
+  return { ok: true, notes: writes.map((write) => write.path) };
 }
 
 /**
@@ -822,14 +963,19 @@ interface IngestEnvironment {
  * transient model failure look like data loss — the capture is fine and the
  * proposal was not.
  *
- * - **Before `ingest-apply` finalizes**, the capture is rolled back to
- *   `accepted` and the next run tries it again.
- * - **After it finalizes**, the notes are on disk and the capture stays at
- *   `staging`, which `selectCaptures` never selects. `accepted` would be a lie
- *   there — a second run would meet this run's own output and refuse — so the
- *   capture is left in the state that is true, is reported as *partly applied*
- *   rather than as refused, and waits for a person. The rollback branch below
- *   records the same reasoning at the point it acts on it.
+ * - **While no note of this proposal exists on disk**, the capture is rolled
+ *   back to `accepted` and the next run tries it again.
+ * - **Once any of them does** — which is from the moment `ingest-apply` writes
+ *   its mutations, *before* it verifies them and well before it finalizes — the
+ *   capture stays at `staging`, which `selectCaptures` never selects.
+ *   `accepted` would be a lie there — a second run would meet this run's own
+ *   output and refuse — so the capture is left in the state that is true, is
+ *   reported as *partly applied*, and waits for a person. `applyNotes` decides
+ *   this by asking the filesystem which of its targets exist, because a throw
+ *   out of `execute` says nothing about how far it got.
+ * - **A rollback that itself fails** leaves the capture at `staging` with
+ *   nothing applied. It is a third state, labelled and given its own recovery
+ *   line rather than folded into either of the two above.
  *
  * **The apply and the reindex are skipped when the proposal proposes nothing.**
  * An empty `notes` array is a correct answer — it means this capture is not
@@ -931,8 +1077,17 @@ async function ingestOne(
 
     const written = plan.writes.map((write) => write.path);
     if (plan.writes.length > 0) {
-      await applyNotes(context, environment.contentRoot, plan.writes);
-      applied = written;
+      /**
+       * **`applied` is assigned before the failure is raised, not after the
+       * call returns.** The version this replaces assigned it on the line after
+       * `applyNotes` — which can only run when nothing threw, and a transaction
+       * that wrote its notes and then failed to verify throws with the notes on
+       * disk. The capture then went back to `accepted` beside its own output,
+       * and every later run refused it.
+       */
+      const outcome = await applyNotes(context, environment.contentRoot, plan.writes);
+      applied = outcome.notes.length === 0 ? null : outcome.notes;
+      if (!outcome.ok) throw outcome.reason;
       await reindexVault(context, environment.config, paths, brainConfig);
     }
 
@@ -961,9 +1116,9 @@ async function ingestOne(
      * partly applied, and waiting for a person — which is exactly the inert
      * residual `TRANSACTION_KINDS` describes, reached here by a caught failure
      * rather than by a crash. `reportLines` labels it as such, and
-     * `REFUSED_RECOVERY` describes both states rather than only this one's
-     * opposite.
+     * `refusedRecovery` emits the line for the state this capture is really in.
      */
+    let rolledBack = false;
     if (applied === null && capturePath !== null && staged !== null) {
       try {
         await writeCaptureFile(
@@ -972,10 +1127,13 @@ async function ingestOne(
           capturePath,
           renderCaptureFile(staged),
         );
+        rolledBack = true;
       } catch {
         /**
          * The refusal that got us here is the one worth reporting, and a second
-         * failure must not replace it. What is left is the same residual.
+         * failure must not replace it. What is left is a capture at `staging`
+         * with nothing applied — reported as such rather than as untouched,
+         * because the two need different advice.
          */
       }
     }
@@ -991,6 +1149,15 @@ async function ingestOne(
         recovery:
           error instanceof IngestRefusal ? (error.recovery ?? null) : null,
         appliedNotes: applied ?? [],
+        /**
+         * `untouched` means the capture file holds what it held before this run:
+         * either nothing was ever written to it, or the rollback put it back.
+         * Everything else is at `staging`, with or without notes.
+         */
+        leftAt:
+          rolledBack || capturePath === null || staged === null
+            ? "untouched"
+            : "staging",
       },
     };
   }
@@ -1091,9 +1258,18 @@ function reportLines(report: RunReport): readonly string[] {
     const refusal = refusalById.get(captureId);
     if (refusal === undefined) continue;
     const partly = refusal.appliedNotes.length > 0;
-    lines.push(
-      `  ${captureId} ${partly ? "partly applied, left at staging" : "refused"} (exit ${String(refusal.code)})`,
-    );
+    /**
+     * Three labels, and the third is the one a rollback that itself failed
+     * leaves: `staging` with nothing applied. Calling that "refused" would tell
+     * a user the next run will try it again, and `selectCaptures` never selects
+     * `staging`.
+     */
+    const label = partly
+      ? "partly applied, left at staging"
+      : refusal.leftAt === "staging"
+        ? "refused, left at staging"
+        : "refused";
+    lines.push(`  ${captureId} ${label} (exit ${String(refusal.code)})`);
     if (partly) {
       lines.push(
         `    these notes are already in the vault: ${screenNotes(refusal.appliedNotes)}`,
@@ -1132,13 +1308,14 @@ function reportLines(report: RunReport): readonly string[] {
  * remaining capture is still attempted. The prompt stays bounded by one envelope
  * rather than by however many captures the user accepted.
  *
- * **A capture that could not finish is left in one of two states, and the report
- * distinguishes them.** One whose notes never landed is rolled back to
- * `accepted` and is retried by the next run; one that failed *after*
- * `ingest-apply` finalized keeps its notes and stays at `staging`, which
- * `selectCaptures` never selects, so it waits for a person rather than for
- * another run. Promising a retry for both would misdescribe exactly the case a
- * user most needs guidance on.
+ * **A capture that could not finish is left in one of three states, and the
+ * report distinguishes all three.** One whose notes never landed is rolled back
+ * to `accepted` and is retried by the next run; one whose notes are on disk
+ * keeps them and stays at `staging`, which `selectCaptures` never selects, so it
+ * waits for a person rather than for another run; and one whose rollback itself
+ * failed is at `staging` with nothing applied. Promising a retry for all three
+ * would misdescribe exactly the cases a user most needs guidance on, which is
+ * why `refusedRecovery` emits only the lines this run's outcomes earn.
  *
  * **The run's exit code is the severest refusal, and its message is the whole
  * run** — one line per selected capture, ingested or refused. `CliResult`
@@ -1173,7 +1350,11 @@ export async function runIngest(
 
     const brainConfig = resolveBrainConfig(config);
     const contentRoot = join(paths.brain, brainConfig.contentRoot);
-    const quarantine = join(contentRoot, ...QUARANTINE_SEGMENTS);
+    const quarantine = await resolveQuarantineRoot(
+      context,
+      contentRoot,
+      join(contentRoot, ...QUARANTINE_SEGMENTS),
+    );
 
     const key = loadOrCreateRedactionKey(paths.stateDir);
     guards = guardsWith(context.guards, key);
@@ -1242,7 +1423,7 @@ export async function runIngest(
           warnings: selection.warnings,
         }).join("\n"),
         [...new Set(refused.flatMap((refusal) => refusal.paths))],
-        REFUSED_RECOVERY,
+        refusedRecovery(refused),
       );
     }
 
@@ -1280,7 +1461,14 @@ export function renderIngest(result: IngestResultV1): readonly string[] {
     `Ingested ${String(result.applied.length)} capture${result.applied.length === 1 ? "" : "s"} through ${result.agent}:`,
     ...result.captures.map(
       (capture) =>
-        `  ${capture.captureId}  ${capture.status}${
+        /**
+         * The id through `renderPath` too, not only the notes. Every id that
+         * came through `parseCaptureFile` is provably sixteen hex characters,
+         * but an **unreadable** capture's id is sliced out of a file name that
+         * nothing checked (`selectCaptures`), so this is the one value on this
+         * line that can carry a byte a human never chose.
+         */
+        `  ${renderPath(capture.captureId)}  ${capture.status}${
           capture.notes.length === 0
             ? ""
             : `  ${capture.notes.map(renderPath).join(" ")}`

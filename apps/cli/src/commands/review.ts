@@ -260,6 +260,32 @@ async function listQuarantined(
 }
 
 /**
+ * The quarantine directory itself, canonicalized and **proven inside the
+ * configured content root** before anything is measured against it.
+ *
+ * `ingest.ts` carries the same function and the same reasoning: a check that
+ * compares the quarantine root with the target and nothing else lets a
+ * quarantine directory replaced by a link out of the vault take its own
+ * containment check with it.
+ */
+async function resolveQuarantineRoot(
+  context: CliContext,
+  contentRoot: string,
+  quarantine: string,
+): Promise<string> {
+  const canonicalContentRoot = await context.guards.canonicalize(contentRoot);
+  const canonicalQuarantine = await context.guards.canonicalize(quarantine);
+  if (!containsPath(canonicalContentRoot, canonicalQuarantine)) {
+    throw new ReviewRefusal(
+      EXIT_CODES.securityRefusal,
+      "the quarantine directory resolves outside the content root",
+      [quarantine],
+    );
+  }
+  return canonicalQuarantine;
+}
+
+/**
  * The capture's own path, canonicalized and proven to still be inside
  * quarantine.
  *
@@ -269,6 +295,10 @@ async function listQuarantined(
  * path reached through one. Two independent checks over one value, deliberately:
  * the shape check makes the path unbuildable and this one makes the resolved
  * path unusable, and a mistake in either alone is not enough.
+ *
+ * **`quarantine` is the canonical root `resolveQuarantineRoot` returned**, which
+ * is what makes this containment check absolute rather than relative to whatever
+ * the quarantine path happens to resolve to today.
  */
 async function resolveCapturePath(
   context: CliContext,
@@ -278,9 +308,8 @@ async function resolveCapturePath(
   const target = join(quarantine, fileName);
   await context.guards.transaction.assertTarget(target);
 
-  const canonicalQuarantine = await context.guards.canonicalize(quarantine);
   const canonicalTarget = await context.guards.canonicalize(target);
-  if (!containsPath(canonicalQuarantine, canonicalTarget)) {
+  if (!containsPath(quarantine, canonicalTarget)) {
     throw new ReviewRefusal(
       EXIT_CODES.securityRefusal,
       "the capture resolves outside the quarantine directory",
@@ -510,10 +539,11 @@ export async function runReview(
     const config = await readConfiguration(context);
     const paths = runtimePathsFor(context, config);
     await assertVaultPresent(context, paths);
-    const quarantine = join(
-      paths.brain,
-      resolveBrainConfig(config).contentRoot,
-      ...QUARANTINE_SEGMENTS,
+    const contentRoot = join(paths.brain, resolveBrainConfig(config).contentRoot);
+    const quarantine = await resolveQuarantineRoot(
+      context,
+      contentRoot,
+      join(contentRoot, ...QUARANTINE_SEGMENTS),
     );
 
     const key = loadOrCreateRedactionKey(paths.stateDir);

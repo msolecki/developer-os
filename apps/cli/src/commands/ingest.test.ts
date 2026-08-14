@@ -525,6 +525,61 @@ describe("runIngest, the status ladder", () => {
   });
 
   /**
+   * **The apply that wrote its notes and then failed to verify.** `execute`
+   * writes every mutation and transitions to `applied` *before* `verifyDesired`
+   * runs, and that call can raise `TransactionConflictError`
+   * (`packages/core/src/transactions/executor.ts:586-611`) with the files already
+   * on disk — so a throw out of `applyNotes` does **not** mean "wrote nothing".
+   * Rolling the capture back to `accepted` there sends the next run at a path
+   * that is now occupied, which `applyNotes` refuses permanently, while the
+   * recovery text tells the user this run wrote nothing.
+   *
+   * Driven at the `applied` phase because that is the first phase the mutations
+   * exist at, and by interruption because that is the shape of the event: the
+   * verify failing and the process dying between the two are the same question
+   * asked of the same code.
+   */
+  it("leaves a capture at staging when the apply wrote its notes and then threw", async () => {
+    const fixture = await installedFixture("ingest-apply-verified-late", {
+      interruptAfter: "applied",
+      interruptKind: "ingest-apply",
+    });
+    const seeded = await fixture.seedAccepted("an observation applied then unverified");
+    fixture.reply(() => oneNote(seeded.id, "DEV/unverified.md", "Unverified note"));
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    /** The notes are there, which is what makes `accepted` a lie. */
+    expect(await vaultNotes(fixture)).toContain("DEV/unverified.md");
+    expect(await fixture.statusOf(seeded.id)).toBe("staging");
+    if (result.ok) return;
+    expect(result.error.message).toContain("partly applied, left at staging");
+    expect(result.error.message).toContain("DEV/unverified.md");
+  });
+
+  /**
+   * The other side of that judgement, and the reason it is not simply "any
+   * throw means applied": a failure *before* the mutations exist leaves the
+   * vault untouched, and the capture must go back to `accepted` so the next run
+   * retries it. `staged` is the last phase at which nothing has been written.
+   */
+  it("still rolls back to accepted when the apply threw before writing anything", async () => {
+    const fixture = await installedFixture("ingest-apply-before-writing", {
+      interruptAfter: "staged",
+      interruptKind: "ingest-apply",
+    });
+    const seeded = await fixture.seedAccepted("an observation whose apply never wrote");
+    fixture.reply(() => oneNote(seeded.id, "DEV/never-written.md", "Never written"));
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    expect(await vaultNotes(fixture)).not.toContain("DEV/never-written.md");
+    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
+  });
+
+  /**
    * A capture parked at `staging` with its notes already written is **not the
    * same event as a refusal that wrote nothing**, and the report has to say so:
    * `selectCaptures` never selects `staging`, so no later run will touch it, and
@@ -558,6 +613,33 @@ describe("runIngest, the status ladder", () => {
     expect(recovery).toContain("staging");
     expect(recovery).toContain("ingest never selects staging");
     expect(await fixture.statusOf(seeded.id)).toBe("staging");
+    /**
+     * And it describes **this** run rather than every run: no capture here was
+     * left untouched, so the sentence promising a retry is absent. A recovery
+     * that lists both states always is a recovery in which one of the two lines
+     * is a lie on every run.
+     */
+    expect(recovery).not.toContain("wrote nothing");
+  });
+
+  /**
+   * The mirror of the case above, and the state neither recovery line used to
+   * describe: a capture refused *before* the apply is untouched and retryable,
+   * and must not be told its notes are already in the vault.
+   */
+  it("gives a refusal that wrote nothing the recovery for that state alone", async () => {
+    const fixture = await installedFixture("ingest-recovery-split");
+    const seeded = await fixture.seedAccepted("an observation with a bad reply");
+    fixture.reply(() => "not json at all");
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const recovery = result.error.recovery ?? "";
+    expect(recovery).toContain("wrote nothing");
+    expect(recovery).not.toContain("already in the vault");
+    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
   });
 
   /**
@@ -993,6 +1075,58 @@ describe("runIngest, the agent call", () => {
     expect(await vaultNotes(fixture)).not.toContain("escape.md");
   });
 
+  /**
+   * **A capture body is prose, and prose reaches an argv value position.** The
+   * shared argv screen carries two rules; only the positional one means anything
+   * for prose, and applying the word list to it made any capture containing the
+   * word `permission` — an `EACCES` message is the ordinary way to acquire one —
+   * refuse on both vendors, forever, while telling the user to run `ingest`
+   * again. Driven through both vendors, because each adapter screens its own
+   * prompt and a fix to one is not a fix to the other.
+   */
+  it.each(["claude", "codex"] as const)(
+    "ingests a capture whose body names a permission, through %s",
+    async (agent) => {
+      const fixture = await installedFixture(`ingest-prose-body-${agent}`);
+      const seeded = await fixture.seedAccepted(
+        "npm ERR! EACCES: permission denied, open /usr/local/lib",
+      );
+      fixture.reply(() => oneNote(seeded.id, `DEV/${agent}-note.md`));
+
+      const result = await fixture.run({ agent });
+
+      expect(dataOf(result).applied).toHaveLength(1);
+      expect(await fixture.statusOf(seeded.id)).toBe("ingested");
+      const prompt = fixture.calls.map((call) => call.args.join("\n")).join("\n");
+      expect(prompt, "the body must have reached the model").toContain(
+        "permission denied",
+      );
+    },
+  );
+
+  /**
+   * The other half of the same seam: a value position that *does* keep the word
+   * list, and whose refusal detail used to be discarded. `workingRoot` is this
+   * vault's own content root, so a user whose vault path contains one of the
+   * three words meets this — which is why the message has to say which value was
+   * refused rather than only that something was.
+   */
+  it("names the value a vendor refusal was about, rather than dropping the reason", async () => {
+    const fixture = await installedFixture("ingest-danger-in-the-path");
+    const seeded = await fixture.seedAccepted("an observation under a danger path");
+    fixture.reply(() => oneNote(seeded.id));
+
+    const result = await fixture.run({ agent: "codex" });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain("refused");
+    expect(result.error.message).toContain("the working root");
+    /** And nothing was spawned, so the detail is the only account of the run. */
+    expect(fixture.calls).toStrictEqual([]);
+    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
+  });
+
   it("makes one agent call per capture, so a prompt is bounded by one envelope", async () => {
     const fixture = await installedFixture("ingest-one-call-each");
     await fixture.seedAccepted("the first observation");
@@ -1119,6 +1253,32 @@ describe("renderIngest, what a human is shown", () => {
     expect(text).toContain("QA/two.md");
     /** The unreadable one is shown too, at the status it holds. */
     expect(text).toContain("00112233445566aa");
+    expect(text).toContain("failed");
+  });
+
+  /**
+   * **An unreadable capture's id is a file name, not a hash.** `selectCaptures`
+   * slices it out of whatever `*.md` is sitting in quarantine, with no shape
+   * check — every other id in this payload has been through `parseCaptureFile`
+   * and is provably sixteen hex characters, and this one has not. Reaching it
+   * needs local write access to the quarantine directory, which the model does
+   * not have, so this is the smallest of the screens and still the one place a
+   * byte a human never chose reaches stdout unmangled.
+   */
+  it("screens a control byte and a bidi override out of an unreadable capture's id", () => {
+    const lines = renderIngest({
+      schemaVersion: 1,
+      agent: "claude",
+      order: [],
+      captures: [
+        { captureId: `a${BELL}b${OVERRIDE}c`, status: "failed", notes: [] },
+      ],
+      applied: [],
+    });
+
+    const text = lines.join("\n");
+    expect(text).not.toContain(BELL);
+    expect(text).not.toContain(OVERRIDE);
     expect(text).toContain("failed");
   });
 

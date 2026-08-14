@@ -109,25 +109,23 @@ describe("a symlink out of the content root", () => {
 });
 
 /**
- * **A finding, parked — and the parking has to show the damage, not only the
- * absence of a refusal.**
+ * **The quarantine directory itself replaced by a link out of the vault** —
+ * NEW-14, parked here as an `it.fails` until DOS-P6 Task 19's review closed it.
  *
- * Replacing the *quarantine directory itself* with a link out of the vault is
- * followed, not refused: `resolveCapturePath` canonicalizes both the quarantine
- * root and the target and compares them **against each other**, so a quarantine
- * that has moved takes its containment check with it; and `ProtectedPathPolicy`
- * is a protected-**name** policy rather than a containment one, returning early
- * for any path outside `$HOME` (`packages/security/src/protected-paths.ts:125`).
- * `ingest` therefore completes and rewrites the capture file outside the vault.
+ * What made it work: `resolveCapturePath` canonicalized both the quarantine root
+ * and the target and compared them **against each other**, so a quarantine that
+ * had moved took its containment check along with it and every target under it
+ * passed. `ProtectedPathPolicy` did not catch it either — it is a
+ * protected-**name** policy rather than a containment one, and returns early for
+ * any path outside `$HOME` (`packages/security/src/protected-paths.ts:125`). What
+ * closes it is an absolute anchor: `resolveQuarantineRoot` proves the quarantine
+ * directory is inside the configured content root before anything is measured
+ * against it.
  *
- * **Why this is two cases and not one `it.fails`.** `it.fails` passes on *any*
- * throw, including one from fixture setup, so a case that did the whole
- * scenario inside it would report the known defect even when nothing had been
- * set up at all. The scenario runs once in `beforeAll`; the first case is an
- * ordinary one that asserts the setup reached the state the finding is about
- * **and asserts the harm**, so a broken fixture fails loudly and a real fix
- * announces itself here whatever exit code it chooses; the second holds the one
- * assertion that is expected to fail, and nothing else it could swallow.
+ * **Still two cases, and still for the reason the parking needed.** The scenario
+ * runs once in `beforeAll`; the first asserts the setup reached the state the
+ * finding is about, so a broken fixture fails where it cannot be mistaken for
+ * the defect, and the second holds the refusal and the absence of the harm.
  */
 describe("a quarantine directory that resolves outside the vault", () => {
   interface Observed {
@@ -168,26 +166,26 @@ describe("a quarantine directory that resolves outside the vault", () => {
     };
   }, 120_000);
 
-  it("reaches the state the finding is about, and the escape happens", () => {
+  it("reaches the state the finding is about", () => {
     /** The setup, asserted where a failure cannot be mistaken for the defect. */
     expect(observed.quarantineIsALink, "quarantine must be a symlink").toBe(true);
     expect(observed.relocatedInsideVault, "the target must be outside the vault").toBe(
       false,
     );
     expect(observed.before).toContain("status: accepted");
-
-    /**
-     * **The harm.** A file outside the vault was rewritten by a run that had no
-     * business reaching it, and a note was written from it. Both go red the day
-     * the escape is refused — with any exit code — which is the announcement a
-     * case asserting only `code === 5` could never make.
-     */
-    expect(observed.after).not.toBe(observed.before);
-    expect(observed.after).toContain("status: ingested");
-    expect(observed.vaultNotes).toContain("/DEV/escaped-quarantine.md");
+    expect(observed.vaultNotes.length, "a sweep over an empty vault is not a sweep")
+      .toBeGreaterThan(0);
   });
 
-  it.fails("is not yet refused", () => {
+  it("is refused at exit 5, and neither the capture nor the vault is touched", () => {
     expect(observed.code).toBe(EXIT_CODES.securityRefusal);
+
+    /**
+     * **The harm, asserted absent.** The file outside the vault is byte for byte
+     * what it was — status included — and no note was written from it.
+     */
+    expect(observed.after).toBe(observed.before);
+    expect(observed.after).toContain("status: accepted");
+    expect(observed.vaultNotes).not.toContain("/DEV/escaped-quarantine.md");
   });
 });
