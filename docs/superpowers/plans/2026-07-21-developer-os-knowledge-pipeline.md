@@ -1877,7 +1877,71 @@ Design spec §13.4, each run on the proposal before a single byte reaches stagin
 
 **Files:**
 - Create: `packages/brain/src/ingest/validate.ts`, `validate.test.ts`
-- Modify: `packages/brain/src/ingest/index.ts`
+- Modify: `packages/brain/src/ingest/index.ts`, `packages/brain/src/index.ts` — the package is entered
+  only through its `index.ts`, and Task 13 consumes `validateProposal` and `VALIDATOR_IDS` from there.
+  **`packages/brain` has no `src/index.test.ts`** (checked at `246b231`; `service.test.ts` is the only
+  test beside `index.ts`), so unlike Task 11 in `workflow-schema` there is no export-list equality pin
+  to move here — do not go looking for one
+
+> **Corrected 2026-08-14, before dispatch**, against pre-flight findings 27–31 and one more found
+> while checking them, each verified in the tree at `246b231`.
+>
+> **1. `proposalFailingEveryValidator` cannot exist, and the reason is worth keeping.** No payload
+> makes a deterministic builder non-deterministic — `deterministic-reindex` is the one validator
+> whose trigger is not in the proposal at all. **Replace the single fixture with per-validator
+> fixtures whose union equals `VALIDATOR_IDS`**, and trigger `deterministic-reindex` the only way it
+> can be triggered: by injecting a builder that returns different bytes on the second call.
+> `BrainService.reindex()` reads through injected dependencies (`service.ts:220`), so a fake reader
+> is the seam and no filesystem is involved. All nine stay covered and every one of the nine can
+> actually go red.
+>
+> **Say what that validator really protects**, because its name misleads. It does not judge the
+> proposal; it re-runs `brain.md` §5's determinism invariant over *this* content, which the fixture
+> suite has never seen. It catches a builder regression at ingest time, not a bad model.
+>
+> **2. `packages/brain` does not gain a `workflow-schema` dependency** (finding 28). It depends on
+> `core` and `security` only and that stays true, so `WorkflowContractV1` and `resolveScopeGlob` are
+> both out of reach here. **`context.ingestContract` carries plain, already-resolved strings** —
+> `readonly string[]` — and the caller resolves them. Task 11 added the `workflow-schema` edge to
+> `apps/cli` and deliberately did not extend it to `brain`; this task does not reopen that.
+>
+> **3. Nothing supplies the ingest contract at runtime, and Task 13 owns fixing that** (finding 29).
+> `init` installs config, the Brain skeleton, the redaction key and the output schemas — no
+> `workflow.yaml`. **Ruling: the resolved scope set is compiled in as a constant in `apps/cli`,
+> pinned by a test against `workflows/ingest/workflow.yaml`**, which is the embed-plus-parity-test
+> precedent `brain-template.ts` set and Task 11's `output-schemas.ts` followed. Rejected: making the
+> contract a managed artifact — it buys a runtime read at the cost of a new manifest entry and a new
+> drift surface, for a value that cannot change between releases. **Task 12 sources nothing**; its
+> tests construct the strings directly.
+>
+> **4. "The same globs by construction" is false, and Step 2's own tests disprove it** (finding 30).
+> After Task 7 the `ingest` contract declares `write: [content/**, content/_indexes/**]`. Both
+> `_indexes/index.json` and `_raw/quarantine/evil.md` are inside those globs, and Step 2's `it.each`
+> requires **both to be refused**. So the declared scopes cannot be the check.
+>
+> **They are the upper bound; the validator is strictly narrower.** The declared set describes what
+> Developer OS writes across the whole workflow — `content/_indexes/**` is there because the
+> `reindex` step writes it — while `write-scope` constrains what *the model may propose*, which
+> excludes generated outputs and private folders. The narrowing is subtraction, and the last test in
+> Step 2 still holds: narrowing the contract to `content/QA/**` refuses `DEV/a.md`, because the bound
+> is still consulted. **This is the write-side twin of the read-side distinction Task 11 recorded in
+> `packages/brain/src/ingest/index.ts`; state it in the same place, in the same terms.**
+>
+> **5. `validateProposal` is asynchronous, and Step 3's "pure functions" is wrong twice**
+> (found here, not in the scan). `canonicalizePlannedPath` is `async` (`paths.ts:45`) and
+> `BrainService.reindex()` is `async` (`service.ts:220`), so the function cannot be synchronous —
+> yet Step 1 and four of Step 2's five cases call it without `await` while the symlink case awaits
+> it. **Every call site awaits.** And the validators are not pure: canonicalization resolves real
+> symlinks against a real filesystem, which is the whole point of the symlink case. They are
+> *total and side-effect-free*, which is the property actually wanted; say that instead.
+>
+> **6. The positive fixture is the heaviest in the plan and must be proven, not assumed**
+> (finding 31). The `allowed` case asserts `ok === true`, which means one synthetic note satisfying
+> all nine validators at once — valid `NoteFrontmatterV1`, a resolving wiki-link, no duplicate, the
+> frontmatter its declared stage requires, nothing the redactor finds, a path inside the narrowed
+> allowlist. **Build it once, share it, and assert `findings` is empty rather than only `ok`** — a
+> positive case that passes because a validator silently failed to run is the "gate that can pass by
+> scanning nothing" this repository has already been caught by twice.
 
 | Validator | Refuses when |
 |---|---|
@@ -1896,20 +1960,27 @@ Design spec §13.4, each run on the proposal before a single byte reaches stagin
 Nine `describe` blocks, and a tenth assertion that the validator list is exhaustive:
 
 ```ts
-it("runs every validator the design spec names, and the set is non-empty", () => {
+it("runs every validator the design spec names, and the set is non-empty", async () => {
   expect(VALIDATOR_IDS).toHaveLength(9);
-  const findings = validateProposal(proposalFailingEveryValidator, context);
-  expect(new Set(findings.findings.map((f) => f.validator))).toEqual(new Set(VALIDATOR_IDS));
+  // Per correction 1: the union of the per-validator fixtures, not one payload.
+  // `deterministic-reindex`'s fixture is the injected non-deterministic builder,
+  // because no proposal content can trigger it.
+  const fired = new Set<string>();
+  for (const { proposal, context: c } of everyValidatorFixture) {
+    const result = await validateProposal(proposal, c);
+    for (const finding of result.findings) fired.add(finding.validator);
+  }
+  expect(fired).toEqual(new Set(VALIDATOR_IDS));
 });
 ```
 
-That last case is the shape `SESSION.md`'s "a gate that can pass by scanning nothing" rule asks for: it fails if a validator is added to the list and never runs, and it fails if one is dropped.
+That last case is the shape `SESSION.md`'s "a gate that can pass by scanning nothing" rule asks for: it fails if a validator is added to the list and never runs, and it fails if one is dropped. **`everyValidatorFixture` must be non-empty and its length asserted equal to `VALIDATOR_IDS.length`**, or an empty fixture list makes the union trivially match nothing and the loop scans zero proposals.
 
 The secret-scan case, which the sentinel suite will re-assert end to end:
 
 ```ts
-it("refuses a proposal carrying anything the redactor finds", () => {
-  const result = validateProposal(proposalContaining("ghp_" + "a".repeat(36)), context);
+it("refuses a proposal carrying anything the redactor finds", async () => {
+  const result = await validateProposal(proposalContaining("ghp_" + "a".repeat(36)), context);
   expect(result.ok).toBe(false);
   expect(result.findings.map((f) => f.validator)).toContain("secret-scan");
   expect(JSON.stringify(result)).not.toContain("ghp_");
@@ -1929,8 +2000,8 @@ it.each([
   ["names the indexes directory", "_indexes/index.json"],
   ["traverses at any segment", "DEV/../../escape.md"],
   ["is absolute", "/tmp/escape.md"],
-])("refuses a proposal whose path %s", (_name, path) => {
-  const result = validateProposal({ schemaVersion: 1, notes: [note(path)] }, context);
+])("refuses a proposal whose path %s", async (_name, path) => {
+  const result = await validateProposal({ schemaVersion: 1, notes: [note(path)] }, context);
   expect(result.ok).toBe(false);
   expect(result.findings.map((f) => f.validator)).toContain("write-scope");
 });
@@ -1941,27 +2012,38 @@ it("refuses a path that resolves through a symlink out of the vault, checking th
   expect(result.ok).toBe(false);
 });
 
-it("checks against the ingest workflow's declared write scopes, not a hardcoded root", () => {
-  const allowed = validateProposal({ schemaVersion: 1, notes: [note("DEV/a.md")] }, context);
+it("checks against the ingest workflow's declared write scopes, not a hardcoded root", async () => {
+  const allowed = await validateProposal({ schemaVersion: 1, notes: [note("DEV/a.md")] }, context);
   expect(allowed.ok).toBe(true);
+  expect(allowed.findings).toStrictEqual([]);   // correction 6: prove all nine ran and passed
 
   // The same note, against a contract whose declared write scopes were narrowed.
   // Nothing about the path changed, so a failure here can only come from the
   // declared scopes being what is consulted.
   const narrowed = { ...context, ingestContract: withWriteScopes(["content/QA/**"]) };
-  const refused = validateProposal({ schemaVersion: 1, notes: [note("DEV/a.md")] }, narrowed);
+  const refused = await validateProposal({ schemaVersion: 1, notes: [note("DEV/a.md")] }, narrowed);
   expect(refused.ok).toBe(false);
   expect(refused.findings.map((f) => f.validator)).toContain("write-scope");
+});
+
+it("refuses a generated or private path the declared write scopes permit", async () => {
+  // Correction 4: `content/_indexes/**` is inside the contract's declared write
+  // scopes and must still be refused, which is what makes the declared set a
+  // bound rather than the check.
+  for (const path of ["_indexes/index.json", "_raw/quarantine/evil.md"]) {
+    const result = await validateProposal({ schemaVersion: 1, notes: [note(path)] }, context);
+    expect(result.findings.map((f) => f.validator)).toContain("write-scope");
+  }
 });
 ```
 
 **The symlink check is on the resolved destination, not on the written path**, because a symlink is exactly the thing that makes those differ. A check on the written path is the bug this test exists to catch, and Task 15 asserts the same property again from the outside.
 
-The last condition is the one that closes the loop with Task 6: the proposal's paths are checked against the `ingest` workflow's declared write scopes, **resolved through `resolveScopeGlob` against this install's Brain configuration.** The declared contract and the enforced check are then the same globs by construction.
+The last condition is the one that closes the loop with Task 6: the proposal's paths are checked against the `ingest` workflow's declared write scopes, **resolved through `resolveScopeGlob` against this install's Brain configuration by the caller, and injected here as plain strings** (corrections 2 and 3). Per correction 4 the declared set is the **upper bound and not the check** — the validator subtracts generated outputs and private folders, and the sentence this replaces claimed an equality Step 2's own cases disprove.
 
 - [ ] **Step 3: Implement, rerun**
 
-Validators are pure functions over `(proposal, context)` returning findings, run in the table's order, and **all nine run** — the result carries every finding rather than stopping at the first. A model that produced one bad path probably produced others, and a caller fixing them one exit code at a time is a caller we made do nine round trips.
+Validators are **total and side-effect-free** — not pure, per correction 5, because canonicalization resolves real symlinks — asynchronous over `(proposal, context)` returning findings, run in the table's order, and **all nine run** — the result carries every finding rather than stopping at the first. A model that produced one bad path probably produced others, and a caller fixing them one exit code at a time is a caller we made do nine round trips.
 
 `deterministic-reindex` builds the index from the **projection** described above — a `DirectoryReader` over the current vault plus the proposed notes — and compares it to a rebuild of the same projection, byte for byte. Nothing is staged to run it. `BrainService.reindex()` returns bytes and reads through injected dependencies, so the projection is constructible without touching a filesystem; `packages/brain`'s determinism machinery already exists (`tests/contracts/workflows/determinism.test.ts` is the pattern) and this consumes it rather than growing a second one.
 
