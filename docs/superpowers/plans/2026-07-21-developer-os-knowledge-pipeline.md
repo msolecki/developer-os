@@ -2654,26 +2654,89 @@ git commit -m "test(security): eight suites, each watched fail before it was bel
 
 **Files:**
 - Create: `tests/e2e/knowledge-lifecycle/lifecycle.test.ts`
-- Create: `tests/fixtures/knowledge/` — a synthetic vault
+- Create: `tests/fixtures/knowledge/` — the scripted vendor's canned proposal; see correction 2
 
 Against the **compiled binary** in a disposable home, using `tests/helpers/temp-home.ts` and `run-cli.ts`, which already exist for exactly this.
+
+> **Corrected 2026-08-14, before dispatch**, against pre-flight findings 37 and 38 and two more found
+> while checking them, each verified in the tree at `c13eb40`.
+>
+> **1. The test below calls an API that does not exist** (finding 37). `runCli` returns
+> `CliRun` — `{exitCode, signal, stdout, stderr, timedOut}` (`run-cli.ts:30-36`). There is no `code`
+> and no `json`. **The door is `runJson<T>(sandbox, args, options)`** (`:214`), which returns
+> `CliRun & { result: CliResult<T> }` and throws if stdout is not exactly one JSON line — strictness
+> that is the point, because a second line means the CLI printed something a machine consumer cannot
+> parse. The payload is under `result.data`, and `result.code` exists on **both** arms of `CliResult`
+> (`result.ts:22-33`); `exitCode` is the process's. Assert both: they agreeing is part of the
+> contract.
+>
+> The payload field names, verified rather than assumed: `CaptureResultV1.captureId`
+> (`capture.ts:49-56`), `IngestResultV1.applied` — a **readonly array** of `IngestedCaptureV1`, so
+> `toHaveLength(1)` is right (`ingest.ts:103-120`) — and `BrainSearchResultV1.matches`
+> (`brain.ts:38-41`).
+>
+> **2. `init` comes first, and `tests/fixtures/knowledge/` is not a vault** (finding 38). `capture`
+> refuses with exit 1 when no vault exists, and Task 11 installs the ingest **output schema** at
+> `init`, which `ingest` needs to point `--output-schema` at. So the run is five invocations, not
+> four, and `init --yes --json` is the first. That also settles what the fixture directory holds: not
+> a synthetic vault — `init` creates the vault — but the **canned proposal the scripted vendor
+> returns**, which is the only pre-made input this suite needs.
+>
+> **3. The scripted vendor must be named for a real vendor, and be discoverable as one.** Task 13's
+> `ingest` selects the first *installed* vendor in `VENDOR_ORDER` (`claude`, then `codex`) unless
+> `--agent` names one. `runCli` seals `PATH` to the disposable home's `binDir` (`run-cli.ts:47-56`), so the fake goes
+> there under a vendor's own name and must answer the discovery probe **and** the `--version` probe;
+> a script that only answers the model call is discovered as absent and the command exits 4. **Pass
+> `--agent` explicitly** rather than relying on the default: the suite then says which vendor it is
+> exercising, and stops depending on an ordering constant it does not own.
+>
+> The scripted response must be that vendor's own dialect — Codex's `codex exec --json` streams JSONL
+> and Claude's does not — and `apps/cli/src/commands/ingest.test.ts` already has a fake that speaks
+> both. **Do not spawn a real vendor binary**: Task 17 is the only task that does, and it stops and
+> asks the founder first.
+>
+> **4. Name the disposable home `sandbox`, or `npm run lint` fails on your own test file.** The
+> self-containment check forbids a quoted vault-directory name within 40 characters of a home lookup,
+> and a bare `\bhome\b` is one of the three lookups it recognises
+> (`tests/repository/self-containment.ts:61-64`). A call that passes a fixture under the shorter name
+> as its first argument, and the vault subcommand as its second, therefore trips a rule that exists
+> to stop an agent reading the founder's machine — fired by a line that does nothing of the kind.
+> **This correction hit that check three times while being written**: in its own example, then in the
+> sentence quoting the offending call, then in the sentence explaining the quote. Which is why the
+> shape is described here and never shown, and why the fix is a variable name rather than an
+> allowlist entry. `tests/e2e/brain.test.ts`
+> already calls its fixture `sandbox` and passes; follow it. Do not add the new file to `ALLOWLIST` —
+> that list is for documents that cannot express the rule without containing the strings it forbids,
+> and a test that can simply be named differently is not one of them.
+>
+> **5. Step 2's `npm run test:e2e` is redundant and should stay anyway.** `npm run check` runs
+> `vitest run` over every project including `tests/`, so the e2e suite has already run by the time the
+> second command starts. Keeping it costs one extra run of one directory and gives the failure a
+> readable scope when it is this suite that broke. Say in the report which of the two you watched
+> fail — a suite believed on the strength of a run nobody isolated is the thing Step 1 exists to
+> prevent.
 
 - [ ] **Step 1: Write the failing test**
 
 ```ts
-it("captures, reviews, ingests and retrieves in four invocations", async () => {
-  const captured = await cli(["capture", "--text", "Vitest fake timers leak across files", "--json"]);
-  expect(captured.code).toBe(0);
+it("initializes, captures, reviews, ingests and retrieves in five invocations", async () => {
+  const initialized = await runJson<InitResultV1>(sandbox, ["init", "--yes", "--json"]);
+  expect(initialized.exitCode).toBe(0);
 
-  const reviewed = await cli(["review", "--id", captured.json.captureId, "--decision", "accept", "--json"]);
-  expect(reviewed.code).toBe(0);
+  const captured = await runJson<CaptureResultV1>(sandbox, ["capture", "--text", "Vitest fake timers leak across files", "--json"]);
+  expect(captured.exitCode).toBe(0);
+  expect(captured.result.ok).toBe(true);
+  const { captureId } = dataOf(captured);
 
-  const ingested = await cli(["ingest", "--json"]);
-  expect(ingested.code).toBe(0);
-  expect(ingested.json.applied).toHaveLength(1);
+  const reviewed = await runJson<ReviewResultV1>(sandbox, ["review", "--id", captureId, "--decision", "accept", "--json"]);
+  expect(reviewed.exitCode).toBe(0);
 
-  const found = await cli(["brain", "search", "fake timers", "--json"]);
-  expect(found.json.matches.length).toBeGreaterThan(0);
+  const ingested = await runJson<IngestResultV1>(sandbox, ["ingest", "--agent", VENDOR, "--json"]);
+  expect(ingested.exitCode).toBe(0);
+  expect(dataOf(ingested).applied).toHaveLength(1);
+
+  const found = await runJson<BrainSearchResultV1>(sandbox, ["brain", "search", "fake timers", "--json"]);
+  expect(dataOf(found).matches.length).toBeGreaterThan(0);
 });
 ```
 
