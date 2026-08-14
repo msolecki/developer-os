@@ -93,19 +93,34 @@ const INVISIBLE_FORMAT = /(?!\u{200D})\p{Cf}/gu;
  * text. `redactText` normalizes at its own top for its own offset arithmetic;
  * this is the normalization the *stored* form is guaranteed by.
  *
- * The trim is what makes the round trip stable rather than cosmetic: the file
- * renders `content` after a blank line and ends it with a newline, so the body
- * the parser reads back carries whitespace the builder never saw. Trimming is
- * idempotent, so `parse(render(x))` returns `x` instead of a value that grows a
- * newline on every review.
+ * **Trimming stops at one leading newline, plus whatever trailing whitespace
+ * there is — not a full `String#trim()`.** `String#trim()` strips leading
+ * whitespace from the *first line only*, which is fine for a one-line scalar
+ * and wrong for a Markdown body: a body opening with an indented code block or
+ * a nested list item is a paragraph followed by an orphaned indented block
+ * once line one's own indentation is gone, which is Markdown that renders
+ * wrong and reads wrong (Task 8 review, I-1). Trimming is still required —
+ * not cosmetic — because `renderCaptureFile` emits `content` after a blank
+ * line and ends it with a newline, so the body `parseCaptureFile` recovers is
+ * exactly `\n${content}\n`; without stripping that wrapper the round trip
+ * would grow a leading blank line on every review. Stripping *one* leading
+ * newline is exactly enough to undo that wrapper and no more: it cannot touch
+ * the indentation the finding is about, because indentation is spaces and
+ * tabs, never the newline this strips. `trimEnd()` handles the trailing `\n`
+ * the same wrapper adds, and a real capture has no trailing whitespace worth
+ * preserving.
  */
 function normalizeBody(text: string): string {
-  return text
-    .replace(LINE_ENDINGS, "\n")
+  const foldedLineEndings = text.replace(LINE_ENDINGS, "\n");
+  const withoutWrapperNewline = foldedLineEndings.startsWith("\n")
+    ? foldedLineEndings.slice(1)
+    : foldedLineEndings;
+
+  return withoutWrapperNewline
     .replace(STRUCTURAL_CONTROLS, " ")
     .replace(INVISIBLE_FORMAT, "")
     .normalize("NFC")
-    .trim();
+    .trimEnd();
 }
 
 /**

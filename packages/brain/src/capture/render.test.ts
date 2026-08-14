@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import type { CaptureEnvelopeV1 } from "../schema/capture.js";
+import type {
+  CaptureEnvelopeV1,
+  CaptureRedactionFinding,
+} from "../schema/capture.js";
 import { renderCaptureFile } from "./render.js";
 
 /**
@@ -96,6 +99,41 @@ describe("renderCaptureFile", () => {
     expect(frontmatter).toContain("- class: provider-token");
     expect(frontmatter).toContain("fingerprint: abcdef0123456789");
     expect(frontmatter).not.toMatch(/line|column|offset|location|value/u);
+  });
+
+  it("keeps a finding narrowed even when the caller's own object already carries a third key", () => {
+    /**
+     * Regression for M-1 (Task 8 review): `CaptureRedactionFinding` is frozen
+     * to exactly `class` and `fingerprint` today, so the assertion above
+     * cannot fail — narrowing and spreading are indistinguishable while every
+     * finding this codebase constructs carries only those two keys. This
+     * builds the widened shape the renderer's own docblock says a spread
+     * would ship silently: a finding that already carries a third key before
+     * it reaches `renderCaptureFile`, rather than one this test's own object
+     * literal would have to carry — which `CaptureRedactionFinding` would
+     * refuse at compile time. No cast: `FindingWithLocation` is a structural
+     * extension of `CaptureRedactionFinding`, assigned through a typed
+     * variable rather than a literal in the `redaction` array position, so
+     * TypeScript's excess-property check does not fire and defeat the
+     * simulation. Replace the narrowing `.map` in `renderCaptureFile` with a
+     * spread and `location` survives into the frontmatter; this test is what
+     * turns that red.
+     */
+    interface FindingWithLocation extends CaptureRedactionFinding {
+      readonly location: string;
+    }
+    const widenedFinding: FindingWithLocation = {
+      class: "provider-token",
+      fingerprint: "abcdef0123456789",
+      location: "line 3, column 8",
+    };
+
+    const { frontmatter } = split(
+      renderCaptureFile({ ...envelope, redaction: [widenedFinding] }),
+    );
+
+    expect(frontmatter).not.toContain("location");
+    expect(frontmatter).not.toContain("line 3, column 8");
   });
 
   it("ends the file with exactly one newline", () => {

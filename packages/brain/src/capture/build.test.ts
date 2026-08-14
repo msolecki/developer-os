@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 
-import { redactText, type RedactionResult } from "@developer-os/security";
+import {
+  redactText,
+  type RedactionFinding,
+  type RedactionResult,
+} from "@developer-os/security";
 import { describe, expect, it } from "vitest";
 
 import { buildCapture, type CaptureBuildRequest } from "./build.js";
@@ -155,6 +159,39 @@ describe("buildCapture", () => {
     expect(windows.envelope.captureId).toBe(unix.envelope.captureId);
   });
 
+  it("keeps an indented code block's indentation on its first line", () => {
+    /**
+     * Regression for a `.trim()` defect (Task 8 review, I-1): `String#trim`
+     * strips leading whitespace from the *first line only*, so a body that
+     * opens with an indented code block lost its indentation on line one and
+     * kept it on line two — a paragraph followed by an orphaned indented
+     * block, which is broken Markdown. Every other line's indentation was
+     * always safe; this is the one line `.trim()` could reach.
+     */
+    const built = buildCapture({
+      ...request,
+      text: "    const x = 1;\n    const y = 2;\n\nprose",
+    });
+
+    expect(built.envelope.content).toBe(
+      "    const x = 1;\n    const y = 2;\n\nprose",
+    );
+  });
+
+  it("keeps a leading nested list item unpromoted", () => {
+    /** Same defect as above, different Markdown construct: a body whose
+     * first line is `  - nested item` had its two-space indent stripped,
+     * promoting it to a top-level list item nothing else in the body agrees
+     * with.
+     */
+    const built = buildCapture({
+      ...request,
+      text: "  - nested item\n- top level",
+    });
+
+    expect(built.envelope.content).toBe("  - nested item\n- top level");
+  });
+
   it("replaces a structural control with a space rather than deleting it", () => {
     /**
      * `screen.ts`'s policy and its reason: deleting a control silently joins
@@ -222,6 +259,44 @@ describe("buildCapture", () => {
 
   it("records nothing when nothing was redacted", () => {
     expect(buildCapture(request).envelope.redaction).toEqual([]);
+  });
+
+  it("narrows a finding to class and fingerprint even when the redactor's own result already carries a third key", () => {
+    /**
+     * Regression for M-1 (Task 8 review): `RedactionFinding` is frozen to
+     * exactly `class` and `fingerprint` today, so the two existing
+     * "class and fingerprint only" assertions cannot fail — narrowing and
+     * spreading are indistinguishable while upstream carries only those two
+     * keys. This constructs the widened shape `redactAndNormalize` is
+     * documented to defend against: an upstream `RedactionResult` whose
+     * finding already carries a third key, simulating a future widening
+     * rather than waiting for one. No cast: `FindingWithLocation` is a
+     * structural supertype-safe extension of `RedactionFinding`, assigned
+     * through a typed variable rather than a literal in the `findings`
+     * position, so TypeScript's own excess-property check — which would
+     * otherwise catch this at compile time and defeat the point — does not
+     * fire. Replace the narrowing `.map` in `redactAndNormalize` with a
+     * spread and `location` survives into `finding` below; this test is
+     * what turns that red.
+     */
+    interface FindingWithLocation extends RedactionFinding {
+      readonly location: string;
+    }
+    const widenedFinding: FindingWithLocation = {
+      class: "provider-token",
+      fingerprint: "abcdef0123456789",
+      location: "line 3, column 8",
+    };
+    const redactWidened = (text: string): RedactionResult => ({
+      text,
+      findings: [widenedFinding],
+    });
+
+    const built = buildCapture({ ...request, redact: redactWidened });
+    const [finding] = built.envelope.redaction;
+
+    expect(Object.keys(finding ?? {})).toEqual(["class", "fingerprint"]);
+    expect(JSON.stringify(built.envelope)).not.toContain("line 3, column 8");
   });
 
   it("renders the file it names", () => {
