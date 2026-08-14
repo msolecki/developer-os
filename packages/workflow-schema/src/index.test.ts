@@ -44,6 +44,7 @@ describe("the package's public door", () => {
         "isKnownVerb",
         "lookupVerb",
         "resolveScopeGlob",
+        "structuredResultVerbs",
       ].sort(),
     );
   });

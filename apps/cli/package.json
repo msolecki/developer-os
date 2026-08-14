@@ -16,6 +16,7 @@
     "@developer-os/brain": "workspace:*",
     "@developer-os/core": "workspace:*",
     "@developer-os/platform-macos": "workspace:*",
-    "@developer-os/security": "workspace:*"
+    "@developer-os/security": "workspace:*",
+    "@developer-os/workflow-schema": "workspace:*"
   }
 }

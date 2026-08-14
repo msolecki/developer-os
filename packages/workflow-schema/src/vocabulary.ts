@@ -128,6 +128,38 @@ export function isKnownVerb(verb: string): boolean {
 }
 
 /**
+ * The verbs that need a JSON Schema file shipped with the product, derived
+ * from the table rather than written down beside it.
+ *
+ * **The derivation is narrower than the phrase the spec uses, and deliberately
+ * so.** Knowledge-pipeline spec §6.6 says "one JSON Schema file per
+ * agent-invoking verb"; this returns the `structured_result` set, which is not
+ * the same words. `agent.prompt` also invokes an agent and needs no schema of
+ * ours — the adapters own that verb and its caller supplies
+ * `outputSchemaPath`. The set that needs a file the product ships is the set
+ * that *names* one, and naming one is what `structured_result` means.
+ *
+ * Today that is exactly one verb, `ingest.stage`. A second is a decision
+ * somebody has to make in this table, beside the schema file it obliges the
+ * product to write — which is the whole reason this is a derivation and not a
+ * literal list `init` could disagree with.
+ *
+ * **The order is this table's declaration order, not a re-sort.** Sorting by
+ * code point would mean importing `compareCodePoints` from `derive.js`, which
+ * already imports this module — a cycle through the one file every other
+ * module in this package reads. The table is a frozen literal, so its own
+ * order is already a stated total order, and `init` writing one file per verb
+ * needs determinism rather than any particular collation.
+ */
+export function structuredResultVerbs(): readonly string[] {
+  return Object.freeze(
+    Object.entries(EFFECT_VOCABULARY)
+      .filter(([, footprint]) => footprint.capability === "structured_result")
+      .map(([verb]) => verb),
+  );
+}
+
+/**
  * `EFFECT_VOCABULARY`'s globs are literal vault-relative paths — `content/**`,
  * not `$brain.contentRoot/**` — deliberately: a substitution syntax inside the
  * workflow contract would need its own validator and would put a configuration

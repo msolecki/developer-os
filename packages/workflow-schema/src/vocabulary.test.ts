@@ -1,7 +1,13 @@
 import type { BrainConfigV1 } from "@developer-os/core";
 import { describe, expect, it } from "vitest";
 
-import { EFFECT_VOCABULARY, isKnownVerb, lookupVerb, resolveScopeGlob } from "./vocabulary.js";
+import {
+  EFFECT_VOCABULARY,
+  isKnownVerb,
+  lookupVerb,
+  resolveScopeGlob,
+  structuredResultVerbs,
+} from "./vocabulary.js";
 
 describe("EFFECT_VOCABULARY", () => {
   it("is not empty, and every entry is fully specified", () => {
@@ -444,5 +450,49 @@ describe("resolveScopeGlob", () => {
     expect(resolveScopeGlob("content/**", { ...config, contentRoot: decomposed })).toBe(
       `${composed}/**`,
     );
+  });
+});
+
+describe("structuredResultVerbs", () => {
+  it("names every verb whose capability is structured_result, and only those", () => {
+    /**
+     * Equality rather than a non-empty check, and the member is pinned. A
+     * non-empty check over a one-element set proves nothing, and pinning the
+     * member makes a second structured-result verb a decision somebody has to
+     * make here — beside the schema file it obliges the product to ship.
+     */
+    expect(structuredResultVerbs()).toStrictEqual(["ingest.stage"]);
+  });
+
+  it("derives from the table rather than from a list, so a capability change moves it", () => {
+    /**
+     * The one property a literal list cannot have. Every returned verb is a
+     * verb the table agrees carries the capability, and every verb the table
+     * says carries it is returned — checked in both directions against
+     * `EFFECT_VOCABULARY` itself, so a hand-maintained copy that drifted from
+     * the table would fail here rather than ship a schema for a verb that no
+     * longer names one.
+     */
+    const derived = Object.entries(EFFECT_VOCABULARY)
+      .filter(([, footprint]) => footprint.capability === "structured_result")
+      .map(([verb]) => verb);
+    expect(derived.length).toBeGreaterThan(0);
+    expect([...structuredResultVerbs()].sort()).toStrictEqual([...derived].sort());
+  });
+
+  it("returns the table's own order, frozen, and the same array on every call", () => {
+    /**
+     * The order is `EFFECT_VOCABULARY`'s declaration order rather than a
+     * re-sort, so it is checked here as a property a caller may rely on:
+     * `init` writes one file per verb and a run that ordered them differently
+     * would write the same install two ways. Frozen because this is a
+     * published surface and the array is shared, exactly as the table's own
+     * glob arrays are.
+     */
+    const verbs = structuredResultVerbs();
+    expect(verbs.length).toBeGreaterThan(0);
+    expect(Object.isFrozen(verbs)).toBe(true);
+    expect(structuredResultVerbs()).toStrictEqual(verbs);
+    expect(() => (verbs as string[]).push("ingest.apply")).toThrow(TypeError);
   });
 });

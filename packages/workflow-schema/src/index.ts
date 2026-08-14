@@ -63,5 +63,6 @@ export {
   isKnownVerb,
   lookupVerb,
   resolveScopeGlob,
+  structuredResultVerbs,
 } from "./vocabulary.js";
 export type { EffectFootprint } from "./vocabulary.js";

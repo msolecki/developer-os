@@ -143,6 +143,15 @@ describe("Foundation temporary-HOME lifecycle", () => {
       const stagingDir = join(home.productHome, "staging");
       const backupsDir = join(home.productHome, "backups");
       const logsDir = join(home.productHome, "logs");
+      const schemasDir = join(home.productHome, "schemas");
+      /**
+       * DOS-P6 Task 11: one JSON Schema file per structured-result verb ships
+       * with the product and is installed here, because `invokeCodex` only
+       * screens the path it is given and never writes it. Named rather than
+       * pattern-matched, since the set is derived from `EFFECT_VOCABULARY` and
+       * `output-schemas.test.ts` is what pins the derivation.
+       */
+      const ingestSchemaFile = join(schemasDir, "ingest.stage.schema.json");
       const brainKeep = join(home.brain, ".gitkeep");
       const redactionKeyFile = join(stateDir, "redaction.key");
 
@@ -195,17 +204,19 @@ describe("Foundation temporary-HOME lifecycle", () => {
        * are pinned by `brain-template.test.ts` and restating them here would
        * make every template edit a two-file change with one of them silent.
        */
-      expect(planned.created.slice(0, 8)).toStrictEqual([
+      expect(planned.created.slice(0, 10)).toStrictEqual([
         home.productHome,
         stateDir,
         stagingDir,
         backupsDir,
         logsDir,
+        schemasDir,
         configFile,
+        ingestSchemaFile,
         home.brain,
         brainKeep,
       ]);
-      const template = planned.created.slice(8);
+      const template = planned.created.slice(10);
       expect(template.length).toBeGreaterThan(0);
       /** The content root itself is the first entry, then everything under it. */
       expect(template[0]).toBe(`${home.brain}/content`);
@@ -262,8 +273,10 @@ describe("Foundation temporary-HOME lifecycle", () => {
          * count now covers the vault's directories and files as well as the
          * product's. Left as an exact number rather than a floor: this suite
          * exists to notice that an install created something nobody declared.
+         * Two more as of DOS-P6 Task 11 — `schemas/` and the one output
+         * schema in it.
          */
-        managedArtifacts: 34,
+        managedArtifacts: 36,
         driftCount: 0,
         incompleteTransactions: [],
       });
@@ -350,7 +363,9 @@ describe("Foundation temporary-HOME lifecycle", () => {
         stagingDir,
         backupsDir,
         logsDir,
+        schemasDir,
         configFile,
+        ingestSchemaFile,
         home.brain,
       ]);
       expect(await inventory(home.root)).toStrictEqual(beforeStatus);
@@ -366,7 +381,16 @@ describe("Foundation temporary-HOME lifecycle", () => {
 
       expect(uninstalled.exitCode).toBe(EXIT_CODES.success);
       const removal = okData(uninstalled.result);
-      expect(removal.removed).toStrictEqual([configFile, logsDir]);
+      /**
+       * Deepest first: the schema file before the directory that holds it,
+       * which is what makes `rmdir` succeed where it refuses `state` below.
+       */
+      expect(removal.removed).toStrictEqual([
+        configFile,
+        ingestSchemaFile,
+        schemasDir,
+        logsDir,
+      ]);
       expect(removal.restored).toStrictEqual([]);
       /**
        * `state`, `staging`, and `backups` hold the journal and backups of the very

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EXIT_CODES, loadConfig, serializeConfig } from "@developer-os/core";
+import { structuredResultVerbs } from "@developer-os/workflow-schema";
 import type * as SecurityModule from "@developer-os/security";
 
 import { runInit } from "./init.js";
@@ -115,6 +116,64 @@ describe("runInit", () => {
     const managed = manifest.artifacts.map((artifact) => artifact.path).sort();
     expect(managed).toContain(fixture.paths.configFile);
     expect(managed).toContain(fixture.paths.home);
+  });
+
+  it("installs one output schema per structured-result verb, as managed artifacts", async () => {
+    /**
+     * `codex-adapter.md` §11.13: **nothing writes the file `outputSchemaPath`
+     * points at.** `invokeCodex` only screens the path and forwards it into
+     * argv, so a caller pointing the vendor CLI at a missing file gets the
+     * CLI's own non-zero exit — diagnosed as the wrong failure entirely. The
+     * set is derived from `EFFECT_VOCABULARY` rather than listed, and the
+     * assertion is an equality rather than a non-empty check: a non-empty
+     * check over a one-element set proves nothing, and pinning the member
+     * makes a second one a decision somebody has to make here.
+     */
+    const fixture = await createCommandFixture("init-output-schemas");
+
+    const result = await runInit(fixture.context, ACCEPTED);
+    expect(result.ok).toBe(true);
+
+    const verbs = structuredResultVerbs();
+    expect(verbs).toStrictEqual(["ingest.stage"]);
+
+    const manifest = await fixture.context.manifests.read();
+    const managed = manifest.artifacts.map((artifact) => artifact.path);
+    expect(managed).toContain(join(fixture.paths.home, "schemas"));
+
+    for (const verb of verbs) {
+      const file = join(fixture.paths.home, "schemas", `${verb}.schema.json`);
+      expect(await nodeFs.readFile(file, "utf8")).toContain('"$schema"');
+      expect(managed).toContain(file);
+      expect(result.ok && result.data.created).toContain(file);
+    }
+  });
+
+  it("leaves an installed output schema alone on a second run", async () => {
+    /**
+     * `init` is the upgrade path as well as the install path, so the schemas
+     * are planned per file rather than gated on "this run created the vault".
+     * The second run must find them unchanged: a `create` operation over a
+     * file that already exists is refused by the change-plan validator, so an
+     * unconditional plan would make `init` fail on every machine it had
+     * already succeeded on.
+     */
+    const fixture = await createCommandFixture("init-output-schemas-twice");
+    const file = join(
+      fixture.paths.home,
+      "schemas",
+      "ingest.stage.schema.json",
+    );
+
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    const first = await nodeFs.readFile(file, "utf8");
+
+    const repeated = await runInit(fixture.context, ACCEPTED);
+    expect(repeated.ok).toBe(true);
+    if (!repeated.ok) return;
+    expect(repeated.data.created).toStrictEqual([]);
+    expect(repeated.data.unchanged).toContain(file);
+    expect(await nodeFs.readFile(file, "utf8")).toBe(first);
   });
 
   it("creates a redaction key that installation-manifest.json does not name", async () => {

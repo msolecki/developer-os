@@ -38,6 +38,12 @@ import {
 } from "./brain-template.js";
 import type { CliContext } from "../context.js";
 import {
+  OUTPUT_SCHEMA_DIRECTORY,
+  OUTPUT_SCHEMAS,
+  outputSchemaFileName,
+  outputSchemaPath,
+} from "./output-schemas.js";
+import {
   advisoryWarnings,
   detectManagedDrift,
   hasBlockingFailure,
@@ -51,6 +57,7 @@ import { removeManifestFile, revertArtifacts } from "./uninstall.js";
 
 const BRAIN_KEEP_FILE = ".gitkeep";
 const CONFIG_SOURCE = "generated/config.toml";
+const SCHEMA_SOURCE_PREFIX = "generated/schemas";
 const BRAIN_KEEP_SOURCE = "generated/brain/.gitkeep";
 const DIRECTORY_SOURCE = "generated/directory";
 
@@ -120,6 +127,15 @@ function productDirectoriesOf(paths: RuntimePaths): readonly string[] {
     paths.stagingDir,
     paths.backupsDir,
     paths.logsDir,
+    /**
+     * Derived here rather than added to `RuntimePaths`, and the location of
+     * the derivation is `output-schemas.ts` so that `init` writing the file
+     * and `ingest` naming it cannot drift apart. It belongs in this list
+     * because it is owned, created and mode-corrected exactly like the
+     * others — the difference is only that it holds installed content rather
+     * than runtime state, which no consumer of this list distinguishes.
+     */
+    join(paths.home, OUTPUT_SCHEMA_DIRECTORY),
   ];
 }
 
@@ -174,6 +190,20 @@ async function assertUsableDirectory(
     );
   }
   return directory === true;
+}
+
+/**
+ * `true` only for a regular file. A symlink where a managed artifact belongs
+ * reports `false` and is therefore planned as a `create`, which the transaction
+ * executor's own target assertion then refuses — the refusal a caller can act
+ * on, rather than a silent write through the link.
+ */
+async function isFile(context: CliContext, path: string): Promise<boolean> {
+  try {
+    return (await context.fs.lstat(path)).isFile();
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -244,6 +274,29 @@ async function buildPlan(context: CliContext): Promise<InitPlan> {
     created.push(paths.configFile);
   } else {
     unchanged.push(paths.configFile);
+  }
+
+  /**
+   * One JSON Schema file per structured-result verb (knowledge-pipeline spec
+   * §6.6), planned **per file** rather than gated on "this run created the
+   * home". `init` is the upgrade path as well as the install path, so a run on
+   * a machine that already has a home is the run that has to install a schema
+   * added since — while an unconditional plan would emit a `create` over a
+   * file that exists, which the change-plan validator refuses, and `init`
+   * would fail on every machine it had already succeeded on.
+   */
+  for (const schema of OUTPUT_SCHEMAS) {
+    const path = outputSchemaPath(paths.home, schema.verb);
+    if (await isFile(context, path)) {
+      unchanged.push(path);
+      continue;
+    }
+    productFiles.push({
+      path,
+      content: new TextEncoder().encode(schema.content),
+      source: `${SCHEMA_SOURCE_PREFIX}/${outputSchemaFileName(schema.verb)}`,
+    });
+    created.push(path);
   }
 
   const brainPresent = await inspectBrain(context, paths.brain);
