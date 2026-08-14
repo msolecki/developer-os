@@ -1,27 +1,44 @@
-import { describe, expect, it } from "vitest";
+import type { BrainConfigV1 } from "@developer-os/core";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { DEFAULT_BRAIN_CONFIG } from "../schema/config.js";
 import type { CaptureEnvelopeV1 } from "../schema/capture.js";
 import { MAX_PROPOSED_NOTES } from "./proposal.js";
+import type { IngestPromptOptions } from "./prompt.js";
 import { buildIngestPrompt, MAX_PROMPT_CONTENT_GRAPHEMES } from "./prompt.js";
 
 const OPTIONS = { config: DEFAULT_BRAIN_CONFIG } as const;
+
+/**
+ * A synthetic marker shaped like a provider token, planted in **every envelope
+ * field `buildIngestPrompt` must not read**. Not a credential and not a
+ * realistic one — the `ghp_` prefix is the whole point, because it is what the
+ * absence assertion below matches on.
+ *
+ * The assertion it powers is the structural half of spec §6.2: the prompt is
+ * built from `envelope.content` and nothing else. Asserting the absence of a
+ * marker that appears nowhere in the fixture would be unfalsifiable; planting
+ * it in the unread fields makes the assertion fail the moment the builder
+ * widens beyond `content`, which is the property "there is no code path from
+ * raw capture text to a model" actually names.
+ */
+const UNREAD_FIELD_MARKER = "ghp_synthetic_fixture_never_read";
 
 function envelopeWhoseContentIs(content: string): CaptureEnvelopeV1 {
   return {
     schemaVersion: 1,
     captureId: "0123456789abcdef",
     sourceAgent: "claude-code",
-    sourceAgentVersion: "0.0.0",
-    captureMethod: "agent-authored",
-    sourceSessionId: null,
-    projectSlug: "example-project",
-    workingDirectoryFingerprint: "fedcba9876543210",
+    sourceAgentVersion: UNREAD_FIELD_MARKER,
+    captureMethod: UNREAD_FIELD_MARKER,
+    sourceSessionId: UNREAD_FIELD_MARKER,
+    projectSlug: UNREAD_FIELD_MARKER,
+    workingDirectoryFingerprint: UNREAD_FIELD_MARKER,
     createdAt: "2026-08-14T00:00:00.000Z",
     content,
-    deduplicationHash: "0".repeat(64),
+    deduplicationHash: UNREAD_FIELD_MARKER,
     status: "accepted",
-    redaction: [{ class: "provider-token", fingerprint: "abcdef0123456789" }],
+    redaction: [{ class: UNREAD_FIELD_MARKER, fingerprint: UNREAD_FIELD_MARKER }],
   };
 }
 
@@ -32,6 +49,11 @@ describe("buildIngestPrompt", () => {
      * text is never persisted and the envelope is the only thing ingest reads.
      * The sentinel gate's "absent from model input" clause is met structurally
      * rather than by a second redaction pass that could be forgotten.
+     *
+     * `UNREAD_FIELD_MARKER` is what makes the second assertion falsifiable:
+     * every envelope field this builder must not read carries it, so reading
+     * one — a `projectSlug` in a heading, a `sourceSessionId` for continuity —
+     * puts `ghp_` in the prompt and fails here.
      */
     const prompt = buildIngestPrompt(
       envelopeWhoseContentIs("the token was [REDACTED:provider-token] all along"),
@@ -40,6 +62,7 @@ describe("buildIngestPrompt", () => {
 
     expect(prompt).toContain("[REDACTED:provider-token]");
     expect(prompt).not.toContain("ghp_");
+    expect(prompt).not.toContain(UNREAD_FIELD_MARKER);
   });
 
   it("takes an envelope and a config, and no parameter that could carry raw text", () => {
@@ -49,9 +72,18 @@ describe("buildIngestPrompt", () => {
      * type's own contract, and a `BrainConfigV1`, which carries folder names.
      * A third parameter — a transcript, a path, a "raw" fallback — is what
      * would make the sentinel gate a promise instead of a shape.
+     *
+     * The options half binds the **interface**, not this file's fixture. An
+     * earlier version asserted `Object.keys(OPTIONS)`, which is a property of
+     * the const declared at the top of this file: adding `rawText?: string` to
+     * `IngestPromptOptions` left it green, and a gate that can pass by
+     * scanning its own fixture is not a gate. `expectTypeOf` is checked by
+     * `tsc -b`, which compiles this file as part of the lint step, so a
+     * widened interface fails the build.
      */
     expect(buildIngestPrompt.length).toBe(2);
-    expect(Object.keys(OPTIONS)).toStrictEqual(["config"]);
+    expectTypeOf<keyof IngestPromptOptions>().toEqualTypeOf<"config">();
+    expectTypeOf<IngestPromptOptions["config"]>().toEqualTypeOf<BrainConfigV1>();
   });
 
   it("marks the captured material as data and never as instruction", () => {

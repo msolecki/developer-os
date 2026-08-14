@@ -25,10 +25,14 @@ import {
 import type { CommandFixture } from "./testing.js";
 
 /**
- * `apps/cli` carries no `@developer-os/workflow-schema` dependency (checked:
- * not in `package.json`), so `RenderedArtifact` itself isn't importable here
- * — this is the local, structural stand-in `codexPluginRoot`'s test below
- * needs. `asSyntheticInstallTree` seals the `MarketplaceRootArtifact` cast
+ * A local, structural stand-in for `RenderedArtifact`, which
+ * `codexPluginRoot`'s test below needs. It was originally a workaround for
+ * `apps/cli` carrying no `@developer-os/workflow-schema` dependency; DOS-P6
+ * Task 11 added that edge, so the type *is* importable now and the stand-in is
+ * kept on its own merits rather than out of necessity — this file's fixtures
+ * describe the two fields the cast actually needs, and importing the full
+ * published type would tie them to fields the test never sets.
+ * `asSyntheticInstallTree` seals the `MarketplaceRootArtifact` cast
  * inside one function whose *parameter* is checked against this shape, so a
  * typo'd fixture (`{ paht: ... }`) is a `TS2353` at the call site rather than
  * silently passing through an unchecked inline cast.

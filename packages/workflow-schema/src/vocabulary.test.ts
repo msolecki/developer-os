@@ -480,14 +480,19 @@ describe("structuredResultVerbs", () => {
     expect([...structuredResultVerbs()].sort()).toStrictEqual([...derived].sort());
   });
 
-  it("returns the table's own order, frozen, and the same array on every call", () => {
+  it("returns the table's own order, frozen, and equal contents on every call", () => {
     /**
      * The order is `EFFECT_VOCABULARY`'s declaration order rather than a
      * re-sort, so it is checked here as a property a caller may rely on:
      * `init` writes one file per verb and a run that ordered them differently
      * would write the same install two ways. Frozen because this is a
-     * published surface and the array is shared, exactly as the table's own
-     * glob arrays are.
+     * published surface.
+     *
+     * **Equal contents, not the same array.** A fresh array is built on every
+     * call and nothing here memoizes one; `toStrictEqual` is deep equality and
+     * is the property being asserted. Nothing needs referential identity, and
+     * claiming it in the name while asserting equality is how a test comes to
+     * describe behaviour the code does not have.
      */
     const verbs = structuredResultVerbs();
     expect(verbs.length).toBeGreaterThan(0);

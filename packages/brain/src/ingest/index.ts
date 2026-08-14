@@ -17,6 +17,18 @@
  * { read: [resolveScopeGlob("content/**", brainConfig)], write: [] }
  * ```
  *
+ * **That read scope is wider than `ingest.stage`'s declared footprint, and the
+ * two are not the same kind of statement.** `EFFECT_VOCABULARY` gives
+ * `ingest.stage` `read: content/_raw/quarantine/**` — the files *Developer OS*
+ * itself opens to perform the step. The literal above is the *model's* sandbox,
+ * and spec §6.2 sets it deliberately wider: "the agent has read-only access to
+ * the vault", because a model that cannot see the vault cannot propose notes
+ * that link to existing ones or notice it is duplicating one. Nothing is
+ * over-declared by this — a declared footprint is not a permission set, and the
+ * write side carries the same distinction for Task 12, where the workflow's
+ * declared write scopes describe what Developer OS writes across the workflow
+ * rather than what the model was ever allowed to do.
+ *
  * **Zero write scopes, and the sandbox follows from the count rather than
  * from an argument.** `invokeCodex` derives `-s read-only` from
  * `writeScopes.length === 0`, and the Claude side passes no write tool in

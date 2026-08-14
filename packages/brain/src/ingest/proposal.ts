@@ -5,8 +5,16 @@
  */
 export interface ProposedNote {
   /**
-   * Vault-relative, POSIX-separated, ending in `.md`, and carried through
-   * **byte for byte**. Paths are byte-exact everywhere in this package
+   * **Relative to the content root**, not to the vault — `DEV/a.md` under a
+   * default configuration resolves to `<vault>/content/DEV/a.md`. The prompt
+   * and the JSON Schema both say so to the model in those words, and whoever
+   * turns this field into a real filesystem path joins it to
+   * `BrainConfigV1.contentRoot`; joining it to the vault root instead writes
+   * every proposed note one directory too high, outside the only subtree
+   * `ingest` is allowed to touch.
+   *
+   * POSIX-separated, ending in `.md`, and carried through **byte for byte**.
+   * Paths are byte-exact everywhere in this package
    * (`docs/architecture/brain.md` §5): a path is an identifier a user has to
    * be able to act on, and a normalizing parser would hand the transaction a
    * different filename than the one the model named.
