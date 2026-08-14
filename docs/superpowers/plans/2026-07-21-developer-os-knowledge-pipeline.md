@@ -1515,6 +1515,68 @@ git commit -m "feat(cli): developer-os capture writes one quarantined observatio
 - Create: `packages/brain/src/review/decide.ts`, `index.ts`, `decide.test.ts`
 - Create: `apps/cli/src/commands/review.ts`, `apps/cli/src/commands/review.test.ts`
 - Modify: `apps/cli/src/main.ts`, `packages/brain/src/index.ts`, `packages/workflow-schema/src/vocabulary.ts`
+- Test: `apps/cli/src/main.test.ts`, `packages/workflow-schema/src/vocabulary.test.ts` — both are in Step 4's `git add` and were missing here, which is the defect that makes a local gate green and the commit red
+
+> **Corrected 2026-08-14, before dispatch**, against pre-flight finding 24 and four more found while
+> checking it, each verified in the tree at `1925110`. Pre-flight finding 23 needs nothing: the
+> founder's `captureId` immutability amendment is already written into Step 2's cases and the
+> paragraph below them.
+>
+> **1. Step 3's concurrency claim is false, and it is the same root cause as Task 9's `O_EXCL`
+> paragraph.** It says an edit is "a `replace` with `expectedBeforeHash` set, which is what makes a
+> concurrent edit a refusal rather than a lost update". **A caller cannot set it.**
+> `PlannedFileMutation` is `{targetPath, operation, content}` (`types.ts:54-58`); the executor
+> computes `expectedBeforeHash` itself, from the snapshot it takes when `execute()` runs
+> (`executor.ts:216`), and re-checks it at apply (`executor.ts:548`).
+>
+> So the protection is real but it starts later than the sentence implies, and the window it leaves
+> is the one that matters here: the command reads the file, redacts, re-hashes and renders, and
+> **only then** does `execute()` snapshot. A hand edit that lands inside that window is picked up by
+> the executor's own snapshot, hashed as if it were the expected state, and then overwritten by
+> content derived from the older read. That is a lost update — precisely what the sentence promises
+> cannot happen.
+>
+> **Unlike Task 9's residual race, this one is not benign.** A capture collision is idempotent
+> because the id is the content hash, so the loser writes the same observation. Here the loser is the
+> user's own hand edit, silently discarded by the verb whose entire purpose is to bring a hand edit
+> back under the product's guarantees. Say that plainly in the code rather than repeating the
+> sentence above.
+>
+> **What to build:** read the file as late as possible, so the window is in-process work only, and
+> document the residual honestly — including what is lost, not just that something is. Do **not**
+> add a caller-supplied precondition to `PlannedFileMutation`: that is a Foundation change, it is not
+> in this task's file list, and it is the second request of its kind. **Both go to the founder
+> together**, because they have one cause — the executor exposes no caller-supplied precondition, so
+> neither an exclusive create (spec §5.2) nor a read-time compare-and-swap can be expressed by a
+> command. `ORDER.md` carries the pair.
+>
+> **2. `main.ts` wiring, named exactly, because `parse` requires entries in two tables.** `review`
+> joins `COMMAND_OPTIONS` with `["id", "decision", "json"]` and `COMMAND_POSITIONALS` with
+> `{ min: 0, max: 0 }`; `id` and `decision` join `OPTIONS` as strings **and** `OPTION_NAMES`. The
+> second list is not optional bookkeeping: `suppliedOptions` filters `OPTION_NAMES`, so an option
+> missing from it is invisible to the per-command allow-list and every other command silently accepts
+> it — Task 9 shipped a `status --text hi` case for exactly this, and this task needs its own
+> (`status --id x` refused at parse time). Update `USAGE` in the same edit.
+>
+> **3. Three vocabulary pins break, not one.** Flipping `capture.list`, `capture.setStatus` and
+> `capture.edit` to `implemented: true` empties the shared `capture` const in the whole-table
+> `toStrictEqual` (`vocabulary.test.ts:39`) — after Task 9 split `captureWrite` out of it, this task
+> makes the split pointless and the const should be folded back. `KNOWN_CLI_COMMANDS`
+> (`vocabulary.test.ts:124`) gains `review`, or the "names a real CLI command once a verb's handler
+> ships" check fails. And `"marks the seven unimplemented verbs with their owning subsystem"`
+> (`vocabulary.test.ts:209`) becomes four, its pinned array and **its own name** both changing — that
+> third pin is the one Tasks 5 and 9 each missed in turn.
+>
+> **4. The `$EDITOR` test cannot fail as written.** `expect(runner.spawned).toEqual([])` holds
+> trivially if nothing in the fixture could ever spawn an editor. Set `EDITOR` and `VISUAL` in the
+> fixture's env to synthetic paths, so an implementation that honours either one would actually
+> spawn and redden the case. Assert the fixture supplies them, too — otherwise a later change that
+> drops them silently disarms the test.
+>
+> **5. The "deletes no source" case can pass over an empty directory.** `before[0]` is `undefined`
+> when nothing is seeded and `expect([]).toEqual([])` holds, so the case proves nothing about
+> deletion. Seed captures for all three decisions and assert `before.length` is what you seeded
+> before running any of them — a gate that can pass by scanning nothing is not a gate.
 
 ```text
 developer-os review                                  list quarantined captures
@@ -1613,7 +1675,7 @@ The last two are the workflow's own validators becoming code: `no source file is
 
 - [ ] **Step 3: Implement, rerun**
 
-Every mutation of a capture file goes through the transaction executor, exactly as the write did. An edit is a `replace` with `expectedBeforeHash` set, which is what makes a concurrent edit a refusal rather than a lost update.
+Every mutation of a capture file goes through the transaction executor, exactly as the write did. An edit is a `replace` with `expectedBeforeHash` set, which is what makes a concurrent edit a refusal rather than a lost update. — **False; see correction 1 above.** The caller cannot set that field, the executor computes it from its own snapshot at `execute()` time, and the read-to-execute window is a real lost-update window. Build what correction 1 describes and document what is lost.
 
 `review` with no `--id` lists and changes nothing; `--decision` without `--id` is invalid input, not "apply to all". Set `capture.list`, `capture.setStatus` and `capture.edit` to `implemented: true`.
 

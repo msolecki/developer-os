@@ -46,14 +46,23 @@ decision, recorded at the end of the pre-flight file) and that its `main.ts` wir
 where Tasks 9 and 13 name theirs exactly. **Task 17 stops and asks** — it spends the founder's
 credits on a real model call, which is the only way the JSONL terminal-event rule gets settled.
 
-**Task 9 left one question that is the founder's, not a session's.** Spec §5.2 says a duplicate
-capture "is an `O_EXCL` create that fails". No transaction-mediated write can deliver that against
-the shipped `TransactionExecutor` — its `create` precondition is a snapshot, its lock is keyed per
-execution, and its apply ends in an unconditional `rename` — and the fallback the plan authorised is
-impossible for the same reason. `capture` therefore documents the property it really has and why the
-residual window is tolerable for captures specifically. **Closing the gap is an amendment to §5.2 or
-a change to Foundation's create path**, and Tasks 10 and 13 must not inherit the tolerance: they
-mutate a capture whose content is not their input.
+**Tasks 9 and 10 raise one question with one cause, and it is the founder's.** `PlannedFileMutation`
+is `{targetPath, operation, content}`: **a command cannot supply a precondition.** The executor
+computes `expectedBeforeHash` from the snapshot it takes when `execute()` runs. Two consequences,
+found a task apart:
+
+- **`capture` (Task 9, shipped).** Spec §5.2 says a duplicate "is an `O_EXCL` create that fails". No
+  transaction-mediated write can deliver that — the `create` precondition is a snapshot, the lock is
+  keyed per execution, and apply ends in an unconditional `rename`. `capture` documents the property
+  it really has and why the residual window is tolerable *there*: the id is the content hash, so
+  colliding captures are byte-identical and the loser writes the same observation.
+- **`review --decision edit` (Task 10, next).** The same missing precondition leaves a read-to-execute
+  window, and here the loss is **not** benign: the discarded content is the user's own hand edit, in
+  the verb that exists to bring a hand edit back under the product's guarantees.
+
+**Closing this is either an amendment to spec §5.2 plus an accepted window for `edit`, or one change
+to Foundation — an optional caller-supplied precondition on `PlannedFileMutation`.** It is raised as
+a pair rather than twice, because a session that fixes one and not the other has fixed neither.
 
 **Read `.superpowers/sdd/preflight-findings.md` before dispatching any task.** An adversarial scan
 on 2026-08-13 found thirty-eight defects across Tasks 3–19, and twelve of the remaining tasks need a
