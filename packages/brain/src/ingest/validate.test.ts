@@ -305,6 +305,58 @@ describe("validateProposal", () => {
     expect(validators(result)).toContain("write-scope");
     expect(validators(result)).toContain("schema-and-frontmatter");
   });
+
+  it("refuses rather than reporting clean when a vault directory cannot be read", async () => {
+    /**
+     * The projection may treat a *missing* directory as empty — a proposal
+     * legitimately names folders the vault does not have yet. It may not treat
+     * an **unreadable** one that way: the model chooses the path that puts a
+     * virtual entry under the failing directory, so failing open here is a
+     * condition the proposal controls. An `EACCES` on `content/DEV` while the
+     * proposal writes into it would hide every existing note in that folder,
+     * and `duplicate-detection` would certify a twin it never saw.
+     */
+    const vault = await makeVault();
+    const base = contextFor(vault);
+    const denied = join(vault, "content", "DEV");
+    const context: IngestValidationContext = {
+      ...base,
+      brain: {
+        ...base.brain,
+        reader: {
+          readDir: (path: string) =>
+            path === denied
+              ? Promise.reject(
+                  Object.assign(new Error("EACCES: permission denied"), {
+                    code: "EACCES",
+                  }),
+                )
+              : nodeReader.readDir(path),
+        },
+      },
+    };
+
+    const result = await validateProposal(
+      proposal(note("DEV/twin.md", { title: "Existing note" })),
+      context,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(validators(result)).toContain("duplicate-detection");
+  });
+
+  it("still treats a directory the vault does not have yet as empty", async () => {
+    /**
+     * The other half of the same branch: a proposal writing into a folder that
+     * does not exist is ordinary, and must not be refused for it.
+     */
+    const result = await validateProposal(
+      proposal(note("DEV/sub/deep.md")),
+      contextFor(await makeVault()),
+    );
+
+    expect(result.findings).toStrictEqual([]);
+  });
 });
 
 describe("schema-and-frontmatter", () => {
@@ -361,6 +413,32 @@ describe("source-and-provenance", () => {
     );
 
     expect(JSON.stringify(result)).not.toContain("fedcba9876543210");
+  });
+
+  it("refuses a note citing a source that resolves to nothing", async () => {
+    /**
+     * `sources` is optional frontmatter a model is free to emit, and `lint.ts`
+     * grades an unresolved entry `provenance` at severity **error**. Without
+     * this the proposal passes all nine, gets applied, and then makes the
+     * user's own `brain lint` fail on a note the user did not write — the one
+     * outcome this gate exists to prevent.
+     */
+    const result = await validateProposal(
+      proposal(note("DEV/cited.md", { sources: "[a-note-that-does-not-exist]" })),
+      contextFor(await makeVault()),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(validators(result)).toContain("source-and-provenance");
+  });
+
+  it("accepts a note citing a source that resolves to a note in the vault", async () => {
+    const result = await validateProposal(
+      proposal(note("DEV/cited.md", { sources: "[DEV/existing.md]" })),
+      contextFor(await makeVault()),
+    );
+
+    expect(validators(result)).not.toContain("source-and-provenance");
   });
 
   it("accepts a note naming the capture it came from", async () => {
@@ -631,6 +709,37 @@ describe("write-scope", () => {
       proposal(note("DEV/escape/x.md")),
       contextFor(vault),
     );
+
+    expect(result.ok).toBe(false);
+    expect(validators(result)).toContain("write-scope");
+  });
+
+  it("resolves the destination with Foundation's canonicalizer, never an injected one", async () => {
+    /**
+     * `BrainServiceDependencies.canonicalize` exists so a wholly in-memory
+     * build touches no real path, and Task 13 is exactly the caller that will
+     * supply that bag. Honouring it here would let an indexing convenience
+     * replace the security primitive the whole destination check rests on — so
+     * this validator reads `canonicalizePlannedPath` unconditionally.
+     *
+     * The injected liar below is an identity function, so discovery does not
+     * refuse the escaping symlink either. Nothing but `write-scope` can produce
+     * the refusal, which is what isolates the property.
+     */
+    const vault = await makeVault();
+    const outside = await sandbox("dos-brain-outside-");
+    await symlink(outside, join(vault, "content", "DEV", "escape"));
+
+    const base = contextFor(vault);
+    const context: IngestValidationContext = {
+      ...base,
+      brain: {
+        ...base.brain,
+        canonicalize: (path: string) => Promise.resolve(path),
+      },
+    };
+
+    const result = await validateProposal(proposal(note("DEV/escape/x.md")), context);
 
     expect(result.ok).toBe(false);
     expect(validators(result)).toContain("write-scope");

@@ -17,6 +17,7 @@ import { parseNote } from "../schema/note.js";
 import type { NoteParseResult } from "../schema/note.js";
 import { BrainService } from "../service.js";
 import type { BrainArtifacts, BrainServiceDependencies } from "../service.js";
+import { globMatches } from "./glob.js";
 import type { IngestProposal, ProposedNote } from "./proposal.js";
 
 /**
@@ -144,103 +145,25 @@ function unsafeRelativePath(path: string): boolean {
     .some((segment) => segment === "" || segment === "." || segment === "..");
 }
 
-/* ------------------------------------------------------------ glob matching */
-
-type GlobPart =
-  | { readonly kind: "text"; readonly value: string }
-  | { readonly kind: "star" };
-
-/**
- * `\` escapes the next character to a literal, because `resolveScopeGlob`
- * escapes the ten glob metacharacters when it splices a configured root into a
- * vocabulary glob — a `contentRoot` of `!inbox` arrives here as `\!inbox` and
- * has to match the one directory it names.
- */
-function parseGlobSegment(segment: string): readonly GlobPart[] {
-  const parts: GlobPart[] = [];
-  let text = "";
-  for (let index = 0; index < segment.length; index += 1) {
-    const character = segment[index];
-    if (character === "\\" && index + 1 < segment.length) {
-      text += segment[index + 1] ?? "";
-      index += 1;
-      continue;
-    }
-    if (character !== "*") {
-      text += character ?? "";
-      continue;
-    }
-    if (text.length > 0) {
-      parts.push({ kind: "text", value: text });
-      text = "";
-    }
-    if (parts[parts.length - 1]?.kind !== "star") parts.push({ kind: "star" });
-  }
-  if (text.length > 0) parts.push({ kind: "text", value: text });
-  return parts;
-}
-
-/**
- * Memoized on the visited `(part, offset)` pairs rather than backtracked
- * freely. A glob is not user input here — it comes from this product's own
- * vocabulary — but a matcher whose cost is exponential in the number of stars
- * is a hazard nobody has to accept for twelve lines.
- */
-function segmentMatches(parts: readonly GlobPart[], value: string): boolean {
-  const visited = new Set<number>();
-  const walk = (partIndex: number, offset: number): boolean => {
-    const key = partIndex * (value.length + 1) + offset;
-    if (visited.has(key)) return false;
-    visited.add(key);
-
-    const part = parts[partIndex];
-    if (part === undefined) return offset === value.length;
-    if (part.kind === "text") {
-      return (
-        value.startsWith(part.value, offset) &&
-        walk(partIndex + 1, offset + part.value.length)
-      );
-    }
-    for (let next = offset; next <= value.length; next += 1) {
-      if (walk(partIndex + 1, next)) return true;
-    }
-    return false;
-  };
-  return walk(0, 0);
-}
-
-/** `**` spans whole segments; `*` never crosses a `/`. */
-function globMatches(pattern: string, path: string): boolean {
-  const patternSegments = pattern.split("/");
-  const pathSegments = path.split("/");
-  const visited = new Set<number>();
-
-  const walk = (patternIndex: number, pathIndex: number): boolean => {
-    const key = patternIndex * (pathSegments.length + 1) + pathIndex;
-    if (visited.has(key)) return false;
-    visited.add(key);
-
-    const segment = patternSegments[patternIndex];
-    if (segment === undefined) return pathIndex === pathSegments.length;
-    if (segment === "**") {
-      for (let next = pathIndex; next <= pathSegments.length; next += 1) {
-        if (walk(patternIndex + 1, next)) return true;
-      }
-      return false;
-    }
-
-    const value = pathSegments[pathIndex];
-    if (value === undefined) return false;
-    return (
-      segmentMatches(parseGlobSegment(segment), value) &&
-      walk(patternIndex + 1, pathIndex + 1)
-    );
-  };
-
-  return walk(0, 0);
-}
-
 /* ---------------------------------------------------------- the projection */
+
+/**
+ * `ENOENT` and nothing else.
+ *
+ * A local twin of `security`'s module-private `isMissingPathError` rather than
+ * a shared one, because sharing it means exporting a new symbol from
+ * `@developer-os/security` and moving that package's export-list pin — a wider
+ * diff than this task's file list. The two are deliberately not identical
+ * either: `security`'s accepts `ENOTDIR` as well, which is right for planning a
+ * path and wrong for reading a directory in a gate.
+ */
+function isMissingDirectory(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error as { readonly code?: unknown }).code === "ENOENT"
+  );
+}
 
 /**
  * The vault as it would be **if this proposal were applied**, assembled in
@@ -297,12 +220,25 @@ function projectionOf(
         existing = await deps.reader.readDir(path);
       } catch (error: unknown) {
         /**
-         * A proposal may name a folder the vault does not have yet, and the
-         * only entry under it is virtual. Swallowing the error unconditionally
-         * would instead turn an unreadable *real* directory into an empty one
-         * and silently index a vault that is missing notes.
+         * **Fails closed, and the distinction is the whole point.** A proposal
+         * may name a folder the vault does not have yet, and the only entries
+         * under it are then virtual — that is `ENOENT`, and treating it as an
+         * empty directory is correct.
+         *
+         * Anything else is not. An `EACCES` on `content/DEV` while the proposal
+         * writes `content/DEV/x.md` would make the projection see that folder
+         * as holding nothing but the proposed note, so `duplicate-detection`
+         * could not see the twin already there and would certify it. **The
+         * model chooses the path**, so it also chooses which directory has a
+         * virtual entry under it — which made an earlier version of this branch
+         * fail open on a condition the proposal controls. Rethrowing here
+         * surfaces as the "could not be indexed" findings, which is a refusal.
+         *
+         * Narrower than `security`'s own `isMissingPathError`, which also
+         * accepts `ENOTDIR`: a *file* where the proposal wants a directory is a
+         * real conflict, not an absent folder, and this is a gate.
          */
-        if (projected.length === 0) throw error;
+        if (!isMissingDirectory(error)) throw error;
         existing = [];
       }
 
@@ -429,17 +365,43 @@ function schemaAndFrontmatter(
 function sourceAndProvenance(
   notes: readonly ProposedNote[],
   captureId: string,
+  projection: Projection | null,
+  proposedByVaultPath: ReadonlyMap<string, string>,
 ): readonly IngestValidationFinding[] {
-  return notes
-    .filter((note) => note.sourceCaptureId !== captureId)
-    .map((note) =>
-      finding(
-        "source-and-provenance",
-        note.path,
-        /** Neither id is echoed: one is model-chosen and the report is logged. */
-        "this note does not name the capture it came from",
+  return [
+    ...notes
+      .filter((note) => note.sourceCaptureId !== captureId)
+      .map((note) =>
+        finding(
+          "source-and-provenance",
+          note.path,
+          /** Neither id is echoed: one is model-chosen and the report is logged. */
+          "this note does not name the capture it came from",
+        ),
       ),
-    );
+    /**
+     * **The `sources:` half, and it is not decoration.** `sources` is optional
+     * frontmatter a model is free to emit, and `lint.ts` grades an entry that
+     * is neither a note in this vault nor a URL with an allowed scheme as
+     * `provenance` at severity **error**. A proposal citing a note that does
+     * not exist would otherwise pass all nine, be applied, and then make the
+     * user's own `brain lint` fail on a note the user did not write — leaving
+     * the vault in a state this product's own lint calls broken, which is the
+     * outcome this gate exists to prevent. The data was already in
+     * `projection.lint.findings` and was being filtered out silently.
+     *
+     * The `warn` row of the same class stays out: "written by an agent and
+     * never reviewed by a human" describes **every** note this pipeline can
+     * produce, and refusing on it would refuse every proposal.
+     */
+    ...fromLint(
+      projection,
+      proposedByVaultPath,
+      "source-and-provenance",
+      (entry) => entry.class === "provenance" && entry.severity === "error",
+      "the vault with this proposal applied could not be indexed, so its sources could not be resolved",
+    ),
+  ];
 }
 
 function confidenceAndLifecycle(
@@ -454,19 +416,27 @@ function confidenceAndLifecycle(
 
     /**
      * `NoteFrontmatterV1` requires the same keys whatever the stage, so "the
-     * frontmatter a stage requires" is a policy this validator states rather
-     * than one the schema already carries. Two rules, each closing a claim the
-     * frontmatter would otherwise contradict:
+     * frontmatter a stage requires" is a policy **this validator states**
+     * rather than one the schema already carries. Registered in `BACKLOG.md` §8
+     * for ratification. Two rules, each closing a claim the frontmatter would
+     * otherwise contradict:
      *
      * - `established` with `reviewed: null` says "this is settled knowledge"
-     *   and "nobody has read this" in the same block. Spec §4.2 makes
-     *   `reviewed: null` an explicit *deliberate* "nobody has reviewed this",
-     *   not an absent key, which is exactly what makes the pair a contradiction
+     *   and "nobody has read this" in one block. Spec §4.2 makes `reviewed:
+     *   null` a *deliberate* "nobody has reviewed this" rather than an absent
+     *   key — which is what makes the pair a contradiction inside the note
      *   rather than an omission — and a model must not promote its own proposal
      *   past the review the user is about to perform.
      * - `deprecated` with no `updated` retires a note without recording when.
      *   Nothing else in the vocabulary carries that date, and `created` is the
      *   wrong one.
+     *
+     * **The rule is deliberately narrow, and the wider one would be wrong.**
+     * `lint.ts`'s `provenance` class grades `author: agent` with `reviewed:
+     * null` at severity `warn`, not `error` — and rightly, because that pair
+     * describes *every* note this pipeline can produce, so refusing on it would
+     * refuse every proposal ingest can make. What is refused here is the
+     * narrower `established`-while-never-reviewed claim.
      *
      * `emerging` requires nothing beyond the schema, because it is the stage a
      * new proposal belongs in.
@@ -673,16 +643,22 @@ function generatedOutputConsistency(
 /* ------------------------------------------------------------------- entry */
 
 /**
+ * **`canonicalizePlannedPath` unconditionally, never
+ * `context.brain.canonicalize`.** That field exists so a wholly in-memory index
+ * build touches no real path, and discovery honours it for exactly that reason
+ * — but the destination check is the only thing standing between a symlinked
+ * `content/DEV/escape` and a write outside the vault, and Task 13 is precisely
+ * the caller that will supply a `BrainServiceDependencies` bag for indexing
+ * reasons. An indexing convenience must not be able to replace a security
+ * primitive by being passed in the same object.
+ *
  * `null` rather than a throw, because `validateProposal` is **total**: a
  * canonicalizer that refuses is an answer, and the write-scope branch reads a
  * missing canonical form as "resolves outside the content root".
  */
-async function canonicalizeOrNull(
-  canonicalize: (path: string) => Promise<string>,
-  path: string,
-): Promise<string | null> {
+async function canonicalizeOrNull(path: string): Promise<string | null> {
   try {
-    return await canonicalize(path);
+    return await canonicalizePlannedPath(path);
   } catch {
     return null;
   }
@@ -691,7 +667,6 @@ async function canonicalizeOrNull(
 async function resolveNotes(
   notes: readonly ProposedNote[],
   context: IngestValidationContext,
-  canonicalize: (path: string) => Promise<string>,
 ): Promise<readonly ResolvedNote[]> {
   const { vaultRoot, config } = context.brain;
   const resolved: ResolvedNote[] = [];
@@ -705,7 +680,6 @@ async function resolveNotes(
       canonical: unsafe
         ? null
         : await canonicalizeOrNull(
-            canonicalize,
             join(vaultRoot, config.contentRoot, note.path),
           ),
     });
@@ -758,19 +732,16 @@ export async function validateProposal(
   context: IngestValidationContext,
 ): Promise<IngestValidationResult> {
   const { config, vaultRoot } = context.brain;
-  const canonicalize = context.brain.canonicalize ?? canonicalizePlannedPath;
   const notes = proposal.notes;
 
   const parsed = new Map<ProposedNote, NoteParseResult>();
   for (const note of notes) parsed.set(note, parseNote(note.contents));
 
-  const resolved = await resolveNotes(notes, context, canonicalize);
+  const resolved = await resolveNotes(notes, context);
   const contentRootCanonical = await canonicalizeOrNull(
-    canonicalize,
     join(vaultRoot, config.contentRoot),
   );
   const indexesRootCanonical = await canonicalizeOrNull(
-    canonicalize,
     join(vaultRoot, config.contentRoot, config.indexesDir),
   );
 
@@ -798,7 +769,12 @@ export async function validateProposal(
 
   const findings: IngestValidationFinding[] = [
     ...schemaAndFrontmatter(notes, parsed),
-    ...sourceAndProvenance(notes, context.captureId),
+    ...sourceAndProvenance(
+      notes,
+      context.captureId,
+      projection,
+      proposedByVaultPath,
+    ),
     ...linkAndGraph(projection, proposedByVaultPath),
     ...duplicateDetection(projection, proposedByVaultPath),
     ...confidenceAndLifecycle(notes, parsed),
