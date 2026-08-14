@@ -39,22 +39,27 @@ it.
 
 **Sessions execute that plan one task at a time**, under `superpowers:subagent-driven-development` —
 a different agent implements and reviews each task, and a task is not done until its reviewer says
-so. **Eleven of the nineteen have landed** (Tasks 1–11, 2026-08-13/14); **the next session starts at
-Task 12**, the nine validators — whose blocking pre-flight findings are five, and two of them are
-decisions rather than defects: `packages/brain` cannot reach `resolveScopeGlob` or
-`WorkflowContractV1` (finding 28 — Task 11 added the `workflow-schema` edge to `apps/cli` only, and
-deliberately did **not** extend it to `brain`), and nothing supplies the ingest contract at runtime,
-since `init` installs config, the Brain skeleton, the redaction key and now the output schemas, but
-no `workflow.yaml` (finding 29 — compile the scopes in, or make the contract a managed artifact with
-a new drift surface). **Task 17 stops and asks** — it spends the founder's credits on a real model
-call, which is the only way the JSONL terminal-event rule gets settled.
+so. **Twelve of the nineteen have landed** (Tasks 1–12, 2026-08-13/14); **the next session starts at
+Task 13**, `developer-os ingest` — whose pre-flight finding 32 is graded *should fix* rather than
+blocking, and says "one capture, one agent call, one transaction" cannot hold: `accepted → staging`,
+the apply, the reindex and `→ ingested` is three or four transactions, and the capture file is itself
+inside `content/_raw/quarantine/**`. **Task 13 must say which mutations share a transaction**, because
+Task 15 then asserts a second transaction is refused while one holds the lock. **Task 17 stops and
+asks** — it spends the founder's credits on a real model call, which is the only way the JSONL
+terminal-event rule gets settled.
 
-**Task 11 also left Task 12 a distinction it must not re-litigate.** `EFFECT_VOCABULARY`'s
-`ingest.stage` declares `read: content/_raw/quarantine/**` while the model is invoked with
-`read: content/**`, and the two are not in conflict: the verb's declared footprint is what Developer
-OS reads to perform the step, the invocation scope is the *model's* sandbox, and spec §6.2 grants
-the agent read-only access to the vault. `packages/brain/src/ingest/index.ts` names it. Pre-flight
-finding 30 is the same distinction on the write side, and it is still Task 12's to state.
+**Task 13 carries two obligations Task 12 handed it, and the plan's Task 13 section states both.**
+Nothing yet proves the write-scope validator's hand-written scope strings are what `resolveScopeGlob`
+actually yields for `workflows/ingest/workflow.yaml` — Task 13 compiles the resolved set in and pins
+it against that file. And the validation report is **written and logged** while `finding.path` is
+deliberately kept byte-exact, so Task 13's report writer screens it or a model-chosen path carrying
+control bytes reaches a file as bytes.
+
+**One decision from Task 12 is awaiting the founder** and is the only unratified row in
+`BACKLOG.md` §8: the `confidence-and-lifecycle` validator's rule. The spec names the validator and
+never says which frontmatter each stage requires, so the rule shipped is defensible but invented —
+`established` requires a `reviewed` date, `deprecated` requires `updated`, `emerging` requires
+nothing. Overturning it is two `if`s and migrates nothing, because that validator writes no data.
 
 **A flaky case in the gate, and it has now fired twice on two unrelated diffs. It belongs to nobody
 in DOS-P6 and needs an owner.** `apps/cli/src/commands/doctor.test.ts:191` — the redaction-key plant
@@ -162,7 +167,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **11 of 19**, next is Task 12 |
+| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **12 of 19**, next is Task 13 |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |

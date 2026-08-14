@@ -1955,7 +1955,7 @@ Design spec §13.4, each run on the proposal before a single byte reaches stagin
 | `generated-output-consistency` | a proposed write targets a generated artifact under the indexes directory |
 | `write-scope` | §6.4 — the five conditions below |
 
-- [ ] **Step 1: Write one failing test per validator, each with a positive case**
+- [x] **Step 1: Write one failing test per validator, each with a positive case**
 
 Nine `describe` blocks, and a tenth assertion that the validator list is exhaustive:
 
@@ -1989,7 +1989,7 @@ it("refuses a proposal carrying anything the redactor finds", async () => {
 
 Note what the second assertion pins: **the finding names the class and the file, never the value.** A validation report is written and logged.
 
-- [ ] **Step 2: Write the failing tests for write-scope enforcement**
+- [x] **Step 2: Write the failing tests for write-scope enforcement**
 
 Spec §6.4. Every path in the proposal is canonicalized through Foundation and refused if it:
 
@@ -2041,7 +2041,7 @@ it("refuses a generated or private path the declared write scopes permit", async
 
 The last condition is the one that closes the loop with Task 6: the proposal's paths are checked against the `ingest` workflow's declared write scopes, **resolved through `resolveScopeGlob` against this install's Brain configuration by the caller, and injected here as plain strings** (corrections 2 and 3). Per correction 4 the declared set is the **upper bound and not the check** — the validator subtracts generated outputs and private folders, and the sentence this replaces claimed an equality Step 2's own cases disprove.
 
-- [ ] **Step 3: Implement, rerun**
+- [x] **Step 3: Implement, rerun**
 
 Validators are **total and side-effect-free** — not pure, per correction 5, because canonicalization resolves real symlinks — asynchronous over `(proposal, context)` returning findings, run in the table's order, and **all nine run** — the result carries every finding rather than stopping at the first. A model that produced one bad path probably produced others, and a caller fixing them one exit code at a time is a caller we made do nine round trips.
 
@@ -2049,7 +2049,7 @@ Validators are **total and side-effect-free** — not pure, per correction 5, be
 
 **What the projection does not cover, so nobody has to derive it:** it proves the builder is deterministic over the intended bytes, not that the bytes written to staging equal them. The transaction's own `verify` phase is what covers that, which is why nothing is lost by validating before staging rather than after.
 
-- [ ] **Step 4: Run the gate and commit**
+- [x] **Step 4: Run the gate and commit**
 
 ```bash
 npm run check
@@ -2067,6 +2067,29 @@ git commit -m "feat(brain): nine validators between a model's proposal and the v
 - Create: `packages/brain/src/ingest/apply.ts`, `apply.test.ts`
 - Create: `apps/cli/src/commands/ingest.ts`, `apps/cli/src/commands/ingest.test.ts`
 - Modify: `apps/cli/src/main.ts`, `packages/workflow-schema/src/vocabulary.ts`
+
+> **Two obligations inherited from Task 12, recorded 2026-08-14** when its review raised each as
+> something it could not verify from its own diff. Neither is optional and neither has an owner
+> before this task. This paragraph exists because the scratch ledger that raised them is deleted
+> when the plan closes.
+>
+> **1. Supply the declared write scopes, and prove they are the contract's.** Task 12's `write-scope`
+> validator takes `context.ingestContract` as plain resolved strings and **sources nothing** — its
+> tests hand-write `DECLARED_WRITE_SCOPES`, so nothing today proves those strings are what
+> `resolveScopeGlob` actually yields for `workflows/ingest/workflow.yaml`. Per the Task 12 ruling:
+> **compile the resolved set in as a constant in `apps/cli`, pinned by a test against that
+> `workflow.yaml`** — the embed-plus-parity-test precedent of `brain-template.ts` and Task 11's
+> `output-schemas.ts`. Rejected there and still rejected here: making the contract a managed
+> artifact, which buys a runtime read for a new manifest entry and a new drift surface, over a value
+> that cannot change between releases.
+>
+> **2. Screen `finding.path` in whatever writes the validation report.** Task 12 deliberately keeps
+> paths byte-exact and delegates screening to the terminal, which is `brain.md` §5's stated
+> exemption and correct there. But spec §6.3 says the validation report is **written and logged**,
+> and the path in a finding is model-chosen. Unscreened, a path carrying control bytes reaches a
+> file as bytes — against "control characters are written as escapes, never as bytes", which
+> `tests/repository/control-bytes.test.ts` exists to hold and which has already caught two literal
+> control characters in this repository. Screen at the write seam, not in the validator.
 
 ```text
 accepted capture
