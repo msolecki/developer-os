@@ -53,6 +53,47 @@ export interface IncompleteTransaction {
   readonly phase: string;
 }
 
+export interface DoctorOptions {
+  /**
+   * Whether to ask each agent CLI what it supports, rather than reporting every
+   * probe-settled capability as `unknown`.
+   *
+   * **Opt-in, and that is a finding rather than a preference.** Claude's probe
+   * is `claude plugin validate`, which writes `~/.claude.json` and a timestamped
+   * backup under `~/.claude/backups/` (spec §14.1, observed against a real
+   * installation on 2026-08-11). `doctor` reports and never repairs, and
+   * Foundation's end-to-end suite asserts it touches nothing outside the
+   * product's own paths — probing by default broke that assertion, which is how
+   * the side effect was found in the first place.
+   */
+  readonly probe: boolean;
+}
+
+/**
+ * The default, named once. `runDoctor` and `runDoctorReport` both take these
+ * options *optionally*, because `runDoctorReport` is `init`'s injected `verify`
+ * dependency and is typed there as `(context) => Promise<DoctorReportV1>`: a
+ * required parameter would put `init` in this flag's blast radius and let it
+ * start writing to the user's Claude home as a side effect of verifying its own
+ * install.
+ */
+const NO_PROBE: DoctorOptions = { probe: false };
+
+/**
+ * Said before the probe runs, on `stderr` — never `stdout`, which carries
+ * `--json`, and never the result's warnings, which `main.ts` renders after the
+ * command has already returned. A user who reads a mutation notice after the
+ * mutation has been told, not warned. `context.ts`'s `EPHEMERAL_KEY_WARNING` is
+ * the precedent for the channel.
+ *
+ * **It names Claude rather than the agents in general.** Codex's probe is
+ * `codex plugin list --json`, a read-only structured query that writes nothing
+ * (`codex-capabilities.ts`), so a notice covering both would be false about half
+ * of it.
+ */
+const PROBE_MUTATION_WARNING =
+  "warning: --probe runs Claude's capability probe, which writes ~/.claude.json and a timestamped backup under ~/.claude/backups/; no check changes anything else";
+
 /**
  * A check plus the exit code it claims when it fails. The code is kept off
  * `DoctorCheck` because that shape is fixed by the Foundation plan and is what
@@ -362,13 +403,17 @@ function capabilityInput(outcome: AgentOutcome | undefined): {
  * doctor`. Different objects, same name. A missing agent is information, not a
  * failure, which is also why `agents` is excluded from `INIT_OWNED_CHECKS`.
  */
-async function checkClaudeCapabilities(context: CliContext): Promise<Finding> {
+async function checkClaudeCapabilities(
+  context: CliContext,
+  probe: boolean,
+): Promise<Finding> {
   const outcome = (await discoverEachAgent(context)).find(
     (candidate) => candidate.name === "claude",
   );
   const report = await reportClaudeCapabilities({
     ...capabilityInput(outcome),
     runner: context.runner,
+    probe,
     /**
      * The **user's** home, not the product's. This was
      * `join(paths.home, "plugins", "claude")` — `~/.developer-os/plugins/claude`,
@@ -410,13 +455,17 @@ export function codexPluginRoot(context: CliContext): string {
   return join(context.paths.home, ...PLUGIN_TREE_SEGMENTS);
 }
 
-async function checkCodexCapabilities(context: CliContext): Promise<Finding> {
+async function checkCodexCapabilities(
+  context: CliContext,
+  probe: boolean,
+): Promise<Finding> {
   const outcome = (await discoverEachAgent(context)).find(
     (candidate) => candidate.name === "codex",
   );
   const report = await reportCodexCapabilities({
     ...capabilityInput(outcome),
     runner: context.runner,
+    probe,
     pluginRoot: codexPluginRoot(context),
   });
   /**
@@ -791,7 +840,18 @@ async function guarded(
 
 async function collectFindings(
   context: CliContext,
+  options: DoctorOptions,
 ): Promise<readonly Finding[]> {
+  /**
+   * Emitted here, before the first check, and unconditionally on the flag
+   * rather than on whether a Claude installation was discovered. Warning about
+   * a mutation that then does not happen is noise a user forgives; staying
+   * silent because discovery happened to fail is the failure this notice exists
+   * to prevent, and it would make the warning depend on the order the checks
+   * below run in.
+   */
+  if (options.probe) context.io.stderr(PROBE_MUTATION_WARNING);
+
   const platform = await checkPlatform(context);
 
   let config: DeveloperOsConfigV1 | null = null;
@@ -842,10 +902,10 @@ async function collectFindings(
     ),
     await guarded(context, "agents", [], () => checkAgents(context)),
     await guarded(context, "claude-capabilities", [], () =>
-      checkClaudeCapabilities(context),
+      checkClaudeCapabilities(context, options.probe),
     ),
     await guarded(context, "codex-capabilities", [], () =>
-      checkCodexCapabilities(context),
+      checkCodexCapabilities(context, options.probe),
     ),
   ];
 }
@@ -865,8 +925,9 @@ export function doctorExitCode(findings: readonly Finding[]): ExitCode {
 
 export async function runDoctorReport(
   context: CliContext,
+  options: DoctorOptions = NO_PROBE,
 ): Promise<DoctorReportV1> {
-  const findings = await collectFindings(context);
+  const findings = await collectFindings(context, options);
   return {
     schemaVersion: 1,
     checks: findings.map((finding) => finding.check),
@@ -923,8 +984,9 @@ export function advisoryWarnings(report: DoctorReportV1): readonly string[] {
  */
 export async function runDoctor(
   context: CliContext,
+  options: DoctorOptions = NO_PROBE,
 ): Promise<CliResult<DoctorReportV1>> {
-  const findings = await collectFindings(context);
+  const findings = await collectFindings(context, options);
   const report: DoctorReportV1 = {
     schemaVersion: 1,
     checks: findings.map((finding) => finding.check),

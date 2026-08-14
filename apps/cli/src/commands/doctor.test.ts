@@ -4,6 +4,8 @@ import { join, posix } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { EXIT_CODES } from "@developer-os/core";
+import type { CliResult } from "@developer-os/core";
+import { PLUGIN_INSTALL_SEGMENTS } from "@developer-os/adapter-claude";
 import { PLUGIN_TREE_PREFIX, proposeCodexInstall } from "@developer-os/adapter-codex";
 import type { MarketplaceRootArtifact } from "@developer-os/adapter-codex";
 import { MacOsPlatformDiscoveryError } from "@developer-os/platform-macos";
@@ -412,6 +414,239 @@ describe("runDoctor", () => {
     expect(await nodeFs.readFile(fixture.paths.configFile, "utf8")).toBe(
       "schemaVersion = 1\n",
     );
+  });
+});
+
+/**
+ * The two-gate model's first production caller, and why it is opt-in.
+ *
+ * `probeClaude` runs `claude plugin validate`, which spec §14.1 records as
+ * writing `~/.claude.json` and a timestamped backup under `~/.claude/backups/`
+ * — observed against a real installation on 2026-08-11. A default-on probe
+ * would make `doctor` a silently mutating command, which contradicts the rule
+ * that it reports rather than repairs.
+ *
+ * The first two cases are **regression pins**: they hold before `--probe`
+ * exists, and exist so that adding it cannot quietly flip the default. The
+ * rest are the new behaviour.
+ *
+ * Every process this fixture answers is synthetic. No vendor binary is spawned
+ * here, and the plugin directory the probe lists is one this suite wrote.
+ */
+describe("runDoctor --probe", () => {
+  const CLAUDE = "/opt/synthetic/bin/claude";
+  const CODEX = "/opt/synthetic/bin/codex";
+
+  interface Spawn {
+    readonly executable: string;
+    readonly args: readonly string[];
+  }
+
+  /**
+   * Anything that is not the version read. `discoverCli` asks `--version` and
+   * nothing else, so every other call either capability check makes is a probe
+   * — `claude plugin validate <dir>` or `codex plugin list --json`. Written as
+   * the complement rather than a list of the two probe argv shapes, so a third
+   * probe added later is caught rather than ignored.
+   */
+  const isProbe = (spawn: Spawn): boolean => spawn.args[0] !== "--version";
+
+  interface ProbeFixture {
+    readonly fixture: CommandFixture;
+    /** Every spawn since `init` finished. */
+    readonly spawned: readonly Spawn[];
+    /** Every spawn `init` itself made, which must contain no probe. */
+    readonly duringInit: readonly Spawn[];
+  }
+
+  interface ProbeFixtureOptions {
+    /** What the synthetic `claude --version` reports. */
+    readonly claudeVersion?: string;
+    /** Whether the plugin directory holds a `SKILL.md` for the probe to see. */
+    readonly skill?: boolean;
+    readonly codexInstalled?: boolean;
+  }
+
+  async function createProbeFixture(
+    label: string,
+    options: ProbeFixtureOptions = {},
+  ): Promise<ProbeFixture> {
+    const claudeVersion = options.claudeVersion ?? "2.1.216";
+    const spawned: Spawn[] = [];
+    const runner: ProcessRunner = {
+      run(request): Promise<ProcessResult> {
+        spawned.push({
+          executable: request.executable,
+          args: [...request.args],
+        });
+        const version =
+          request.executable === CODEX
+            ? "codex-cli 0.147.0"
+            : `${claudeVersion} (Claude Code)`;
+        return Promise.resolve({
+          stdout: request.args[0] === "--version" ? version : "",
+          stderr: "",
+          exitCode: 0,
+          signal: null,
+          timedOut: false,
+        });
+      },
+    };
+
+    const fixture = await createCommandFixture(label, {
+      runner,
+      agents: {
+        claude: {
+          name: "claude",
+          installed: true,
+          executablePath: CLAUDE,
+          version: null,
+        },
+        codex:
+          options.codexInstalled === true
+            ? {
+                name: "codex",
+                installed: true,
+                executablePath: CODEX,
+                version: null,
+              }
+            : {
+                name: "codex",
+                installed: false,
+                executablePath: null,
+                version: null,
+              },
+      },
+    });
+    await runInit(fixture.context, ACCEPTED);
+    const duringInit = [...spawned];
+    spawned.length = 0;
+
+    /**
+     * The directory `checkClaudeCapabilities` points the probe at, resolved
+     * from the adapter's own segments rather than restated, and written into
+     * the fixture's synthetic home. `init` installs no agent integration
+     * (Foundation ships none), so nothing but this suite puts a file here.
+     */
+    const pluginDirectory = join(fixture.userHome, ...PLUGIN_INSTALL_SEGMENTS);
+    await nodeFs.mkdir(pluginDirectory, { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(
+      join(pluginDirectory, options.skill === false ? "README.md" : "SKILL.md"),
+      "# synthetic\n",
+      { mode: 0o600 },
+    );
+
+    return { fixture, spawned, duringInit };
+  }
+
+  /**
+   * One Claude capability's state, read out of the composed
+   * `DoctorCheck.message` — the line a user actually reads, rather than a
+   * structure only this suite would see. `null` when the key is absent from the
+   * matrix entirely, which is a different failure from any state it can hold.
+   */
+  function capabilityIn(report: DoctorReportV1, key: string): string | null {
+    const message =
+      report.checks.find((check) => check.id === "claude-capabilities")
+        ?.message ?? "";
+    const token = message
+      .split(" ")
+      .find((candidate) => candidate.startsWith(`${key}=`));
+    return token?.slice(key.length + 1) ?? null;
+  }
+
+  function reportOf(result: CliResult<DoctorReportV1>): DoctorReportV1 {
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error("doctor failed on a healthy fixture");
+    return result.data;
+  }
+
+  it("does not spawn a vendor probe without --probe", async () => {
+    const probed = await createProbeFixture("doctor-probe-off", {
+      codexInstalled: true,
+    });
+
+    await runDoctor(probed.fixture.context, { probe: false });
+
+    /**
+     * The non-empty half of the gate: a run that spawned nothing at all would
+     * satisfy the assertion below while proving nothing. Both agents are
+     * installed, so both version reads must have happened.
+     */
+    expect(probed.spawned.filter((spawn) => !isProbe(spawn))).toHaveLength(2);
+    expect(probed.spawned.filter(isProbe)).toEqual([]);
+  });
+
+  it("reports skills as unknown without --probe, which is what 'we did not ask' means", async () => {
+    const probed = await createProbeFixture("doctor-probe-unasked");
+
+    const report = reportOf(
+      await runDoctor(probed.fixture.context, { probe: false }),
+    );
+
+    expect(capabilityIn(report, "skills")).toBe("unknown");
+  });
+
+  /**
+   * Correction 3's blast radius, pinned where it can be seen: `runDoctorReport`
+   * is `init`'s injected `verify` dependency, and `init` calls it with a context
+   * and nothing else. If the options parameter ever stops defaulting to no
+   * probe, `init` starts writing to the user's Claude home as a side effect of
+   * verifying its own install.
+   */
+  it("probes nothing when no options are passed, which is how init calls it", async () => {
+    const probed = await createProbeFixture("doctor-probe-default");
+
+    await runDoctorReport(probed.fixture.context);
+
+    expect(probed.duringInit.filter(isProbe)).toEqual([]);
+    expect(probed.spawned.filter(isProbe)).toEqual([]);
+    expect(probed.spawned.filter((spawn) => !isProbe(spawn))).toHaveLength(1);
+  });
+
+  it("states before it runs that --probe writes to the Claude home", async () => {
+    const probed = await createProbeFixture("doctor-probe-warns");
+
+    await runDoctor(probed.fixture.context, { probe: true });
+
+    const stderr = probed.fixture.io.err.join("\n");
+    expect(stderr).toContain("writes");
+    expect(stderr).toContain(".claude.json");
+  });
+
+  it("settles skills to yes only when the table permits and a probe observed", async () => {
+    const observing = await createProbeFixture("doctor-probe-observes");
+    const observed = reportOf(
+      await runDoctor(observing.fixture.context, { probe: true }),
+    );
+    expect(capabilityIn(observed, "skills")).toBe("yes");
+    expect(observing.spawned.filter(isProbe)).toHaveLength(1);
+
+    /**
+     * The probe ran and saw no `SKILL.md`. A clean exit code over a directory
+     * holding no skill is not an observation of one — the scan asserts its own
+     * set is non-empty, which is why this is `unknown` rather than `yes`.
+     */
+    const silent = await createProbeFixture("doctor-probe-silent", {
+      skill: false,
+    });
+    const unobserved = reportOf(
+      await runDoctor(silent.fixture.context, { probe: true }),
+    );
+    expect(capabilityIn(unobserved, "skills")).toBe("unknown");
+
+    /**
+     * `2.1.100` is below `CLAUDE_MINIMUM_VERSION`. The probe still observes the
+     * skill; the version gate refuses it, which is the half of the two-gate
+     * model a probe alone cannot supply.
+     */
+    const old = await createProbeFixture("doctor-probe-below-floor", {
+      claudeVersion: "2.1.100",
+    });
+    const belowFloor = reportOf(
+      await runDoctor(old.fixture.context, { probe: true }),
+    );
+    expect(capabilityIn(belowFloor, "skills")).toBe("unknown");
   });
 });
 

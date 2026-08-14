@@ -55,6 +55,7 @@ const USAGE = [
   "  --id <id>        the capture to decide on (review)",
   "  --decision <d>   accept, reject or edit (review)",
   "  --agent <name>   claude or codex; the first installed one by default (ingest)",
+  "  --probe          probe each agent CLI; Claude's probe writes ~/.claude.json (doctor)",
   "  --resume <id>    finish an incomplete transaction (repair)",
   "  --rollback <id>  undo an incomplete transaction (repair)",
   "  --version        print the product version",
@@ -68,6 +69,7 @@ const OPTIONS = {
   json: { type: "boolean" },
   yes: { type: "boolean" },
   limit: { type: "string" },
+  probe: { type: "boolean" },
   resume: { type: "string" },
   rollback: { type: "string" },
   text: { type: "string" },
@@ -91,6 +93,7 @@ const OPTION_NAMES: readonly OptionName[] = [
   "json",
   "yes",
   "limit",
+  "probe",
   "resume",
   "rollback",
   "text",
@@ -105,7 +108,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly OptionName[]>> = {
   ingest: ["limit", "json", "yes", "agent"],
   init: ["dry-run", "yes", "json"],
   status: ["json"],
-  doctor: ["json"],
+  doctor: ["json", "probe"],
   repair: ["resume", "rollback", "json"],
   uninstall: ["dry-run", "yes", "json"],
 };
@@ -520,7 +523,14 @@ async function dispatch(
     case "status":
       return emit(io, await runStatus(context), json, renderStatus);
     case "doctor":
-      return emit(io, await runDoctor(context), json, renderDoctor);
+      return emit(
+        io,
+        await runDoctor(context, {
+          probe: invocation.values.probe === true,
+        }),
+        json,
+        renderDoctor,
+      );
     case "repair":
       return emit(
         io,

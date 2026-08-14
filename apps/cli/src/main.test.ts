@@ -444,6 +444,43 @@ describe("ingest dispatch", () => {
   });
 });
 
+describe("doctor dispatch", () => {
+  /**
+   * The case that goes red if `probe` joins `OPTIONS` without joining
+   * `OPTION_NAMES`: `suppliedOptions` filters `OPTION_NAMES`, so an option
+   * missing from it is invisible to the per-command allow-list and *every*
+   * command silently accepts it — strict dispatch holed for all of them rather
+   * than only the one that gained the flag. It is the third task in a row to
+   * need this pin, which is why it is written rather than assumed.
+   */
+  it("refuses --probe on a command that does not take it", async () => {
+    await refuses(["status", "--probe"]);
+    await refuses(["ingest", "--probe"]);
+    await refuses(["init", "--probe"]);
+    await refuses(["brain", "lint", "--probe"]);
+  });
+
+  it("refuses an option doctor does not accept", async () => {
+    await refuses(["doctor", "--dry-run"]);
+    await refuses(["doctor", "--agent", "claude"]);
+  });
+
+  /**
+   * Dispatch has to *thread* the flag, not merely parse it. The mutation notice
+   * is what proves it arrived: `runDoctor` emits it on stderr before any check
+   * runs, and only when probing was asked for.
+   */
+  it("threads --probe through to the command, and only when it is passed", async () => {
+    const quiet = await createHarness("main-doctor-no-probe");
+    expect(await quiet.invoke(["doctor"])).toBe(1);
+    expect(quiet.err.join("\n")).not.toContain(".claude.json");
+
+    const probing = await createHarness("main-doctor-probe");
+    expect(await probing.invoke(["doctor", "--probe"])).toBe(1);
+    expect(probing.err.join("\n")).toContain(".claude.json");
+  });
+});
+
 describe("brain dispatch", () => {
   it("refuses an unknown brain subcommand", async () => {
     await refuses(["brain", "reticulate"]);
