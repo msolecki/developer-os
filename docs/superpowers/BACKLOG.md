@@ -61,11 +61,11 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | Area | Where | What is left |
 |---|---|---|
 | Program (umbrella) | 1 plan | Tasks 6–9 open; Tasks 0–5 closed and not rows here |
-| DOS-P6 | spec approved and plan written, both 2026-08-13 | the implementation — nineteen tasks, none started |
+| DOS-P6 | spec approved and plan written, both 2026-08-13 | the implementation — nineteen tasks, **fifteen landed** 2026-08-13/14; next is Task 16 |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian), NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (S, the argv screen's word list also screens free-form prose) and NEW-13 (S, two artifact roots share one type) |
-| Repository infrastructure | §5 | two things a later subsystem still owes, both DOS-P6's — `tests/security/`, and a consolidated threat model |
+| Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian), NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (S, the argv screen's word list also screens free-form prose), NEW-13 (S, two artifact roots share one type) and **NEW-14 (S, security — a relocated quarantine takes its own containment check with it)** |
+| Repository infrastructure | §5 | one thing a later subsystem still owes, DOS-P6's — a consolidated threat model, Task 18. `tests/security/` **landed** in Task 15 with eight suites |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
 
@@ -136,6 +136,31 @@ if it left nothing, it was not worth recording. Git history is the archive.
   for a blank tag needs no renderer change and no new module, and it does not prejudge the policy
   question the full fix has to answer — whether an invisible tag is an error, a warning, or
   silently dropped at index time.
+
+### NEW-14 — a relocated quarantine takes its own containment check with it
+
+- **Status:** open, found 2026-08-14 by DOS-P6 Task 15's `tests/security/symlink-escape.test.ts`,
+  which parks it as the suite's one `it.fails` · **Owner:** unassigned; **not** Task 19, which is the
+  independent security review and must not be what discovers it · **Size:** S · **Security**
+- **The escape.** Replace `content/_raw/quarantine` with a symbolic link to a directory outside the
+  vault, and `ingest` completes and rewrites the capture file **outside the vault**. Nothing refuses.
+- **Why the guard misses it.** `resolveCapturePath` (`apps/cli/src/commands/ingest.ts:482-501`, and
+  the same shape in `review.ts`) canonicalizes the quarantine root and the target and compares them
+  with `containsPath(canonicalQuarantine, canonicalTarget)` — **against each other, never against the
+  content root.** A quarantine that has moved therefore carries its own containment check along with
+  it, and the comparison holds at the new location exactly as it did at the old one. The
+  writable-path guard does not catch it either: `ProtectedPathPolicy` is a protected-*name* policy
+  and returns early for any path outside `$HOME` (`packages/security/src/protected-paths.ts:125`).
+- **A leaf symlink is refused, and that is a different guard.** `captureFileNames` filters
+  `entry.isFile()`, which `readdir(withFileTypes)` reports false for a symlink — so a capture *file*
+  that is a link is skipped at selection, before `resolveCapturePath` is reached. The directory case
+  has no equivalent. Anyone reading the leaf refusal as evidence the directory case is covered has
+  read the wrong guard, which is why the two are named separately here.
+- **The fix is an absolute anchor, not a relative one.** The quarantine root must be proven inside
+  the configured content root before it is used, rather than being trusted as the reference the
+  target is measured against. Both commands need it; `review` has the identical construction.
+- **Do not close this by deleting the parked case.** `it.fails` is what makes the day the behaviour
+  changes visible; a comment cannot.
 
 ### NEW-13 — two artifact roots share one type, and only prose separates them
 
@@ -400,7 +425,7 @@ inventory of what was built, and the architecture notes say what is in it.
 
 | Path | First owner | Status |
 |---|---|---|
-| `tests/security/` | DOS-P6 | missing — sentinel secret, prompt injection, symlink escape, multiline command, malformed manifest, interruption |
+| `tests/security/` | DOS-P6 | **exists** since 2026-08-14, DOS-P6 Task 15 — eight suites: sentinel, prompt injection, symlink escape, multiline command, malformed manifest, interruption, network and concurrent edit. Each was watched fail before it was believed, and one case is parked `it.fails` over NEW-14 |
 | a consolidated threat model under `docs/architecture/` | DOS-P6 at the earliest | missing — the **capability model** is deliberately recorded twice instead, once per adapter (`claude-adapter.md` §3, `codex-adapter.md` §3), which is where it belongs while the two vocabularies are asserted identical |
 
 Everything else the file map names exists, most recently `packages/adapter-codex/` and

@@ -39,10 +39,10 @@ it.
 
 **Sessions execute that plan one task at a time**, under `superpowers:subagent-driven-development` —
 a different agent implements and reviews each task, and a task is not done until its reviewer says
-so. **Fourteen of the nineteen have landed** (Tasks 1–14, 2026-08-13/14); **the next session starts at
-Task 15**, `tests/security/` — eight suites, and the one the pre-flight scan graded blocking.
-**Task 17 stops and asks** — it spends the founder's credits on a real model call, which is the only
-way the JSONL terminal-event rule gets settled.
+so. **Fifteen of the nineteen have landed** (Tasks 1–15, 2026-08-13/14); **the next session starts at
+Task 16**, `tests/e2e/knowledge-lifecycle/` — one run of the whole pipeline against the compiled
+binary. **Task 17 stops and asks** — it spends the founder's credits on a real model call, which is
+the only way the JSONL terminal-event rule gets settled.
 
 **Two decisions are awaiting the founder** and are the only unratified rows in `BACKLOG.md` §8.
 
@@ -64,25 +64,36 @@ capture at `staging` with its notes already applied — inert, since the next ru
 "a second transaction is refused while one holds the lock" tests a concurrent second *process*, not a
 nested execution.
 
-**A flaky case in the gate, and it has now fired twice on two unrelated diffs. It belongs to nobody
-in DOS-P6 and needs an owner.** `apps/cli/src/commands/doctor.test.ts:191` — the redaction-key plant
-loop — failed once under `npm run check` on a two-comment-line diff in files it does not import,
-then passed on a full re-run and twice more in isolation (Task 10, 2026-08-14). It failed a second
-time under Task 11's first full run, as `Test timed out in 20000ms`, and passed again on an isolated
-re-run. A timeout on the second observation is the useful detail: it points at the case's own
-duration rather than at anything the diff changed. `npm run check` is this repository's declared
-validation and the evidence every commit rests on, so a case that reddens for no reason is a gate
-nobody can read when it goes green. Neither task investigated it, deliberately — neither touched
-that file — but two observations are no longer a coincidence.
+**The flaky case in the gate was diagnosed on 2026-08-14, and the answer is starvation.**
+`apps/cli/src/commands/doctor.test.ts:195` — the redaction-key plant loop — reddened twice in twelve
+full runs across Tasks 10 and 11, on diffs importing nothing from `doctor.ts`, once as
+`Test timed out in 20000ms`. **Task 15 turned it from intermittent into reproducible and then
+measured it**, because adding eight fsync-heavy suites under `tests/security/` made it fire almost
+every time:
 
-**Tasks 13 and 14 ran the full gate seven times between them, on 2026-08-14, and it did not fire
-once.** Those are negative data points and the second set is the informative one: **Task 14 is the
-first task in DOS-P6 to actually edit `doctor.test.ts`**, and it added seven more
-`createInitFixture`/`runInit` pairs to that file — roughly 3.6 seconds — without provoking the case.
-Two failures in two of twelve full runs, both on diffs importing nothing from `doctor.ts`, one of
-them a timeout. **The case's own duration remains the only hypothesis anyone has stated**, and it now
-has a cheap test nobody has run: raise that one case's timeout and see whether the failures stop. It
-still belongs to nobody.
+| configuration | full runs | result |
+|---|---|---|
+| `security/**` included, default parallelism | 6 | 1 green, **5 red** |
+| `security/**` excluded (control) | 3 | 3 green |
+| that case alone | 1 | green, 3.19 s |
+| `doctor.test.ts` alone, whole file | 1 | green, **20.94 s against a 20 s per-test budget** |
+| `security/**` included, `maxForks: 2` | 3 | 1 green, 2 red |
+| `security/**` included, `fileParallelism: false` | 4 | **4 green** |
+
+The case does four full installs with real transactions and sits on its own budget with nothing else
+running; under load it goes over. **The fix is `fileParallelism: false` in `tests/vitest.config.ts`**,
+which also drops *total* test time from roughly 1000 s to 700 s while costing about 60 s of wall
+clock — `npm run check` is now nearer four minutes than three. Nobody's timeout was raised and
+`doctor.test.ts` was not touched: a larger budget hides starvation rather than removing it.
+
+**One symptom is explicitly *not* covered by that diagnosis.** Two of the red runs also produced
+`ENOTEMPTY: rmdir …/backups/transactions/tx_fixture_001` during that fixture's own cleanup, which is
+a filesystem race in recursive removal rather than CPU starvation. Serializing may only have made it
+rarer. It is unmeasured and possibly still live.
+
+**The underlying fragility is unowned and stays that way:** a case that needs 3.19 s of a 20 s budget
+on an idle machine is one contended run from red, and this is the second gate-integrity item this
+program has paid for.
 
 **Tasks 9 and 10 raise one question with one cause, and it is the founder's.** `PlannedFileMutation`
 is `{targetPath, operation, content}`: **a command cannot supply a precondition.** The executor
@@ -115,6 +126,18 @@ bytes. The fix is to prune `backupDirectory(id)` in the `finalized` transition, 
 change than the precondition above and independent of it. **No DOS-P6 task's file list reaches
 `packages/core`**, so no session can do it without being told to.
 
+**A containment escape in shipped DOS-P6 code, found by Task 15's own suite and registered as
+`BACKLOG.md` §1 NEW-14.** Replace `content/_raw/quarantine` with a symbolic link out of the vault and
+`ingest` completes, rewriting the capture file outside it. `resolveCapturePath` canonicalizes the
+quarantine root and the target and compares them **against each other, never against the content
+root**, so a quarantine that has moved carries its own containment check with it; the writable-path
+guard does not catch it either, because `ProtectedPathPolicy` is a protected-*name* policy that
+returns early outside `$HOME`. A capture *file* that is a symlink **is** refused — by
+`captureFileNames`'s `entry.isFile()` filter at selection, a different guard — so the leaf case is no
+evidence about the directory case. It is parked as the security suite's one `it.fails`, which reddens
+the day the behaviour changes. **It is deliberately not Task 19's**: that is the independent security
+review, and it must not be what discovers an escape already known here.
+
 **A fourth Foundation request, from Task 13, and it is the cheapest of the four.** `CliResult`'s
 failure arm is `{ok, code, error}` with no `data` slot (`result.ts:29-33`), so **a command that
 partly succeeded cannot report machine-readably what moved.** `ingest` processes a batch and
@@ -132,9 +155,8 @@ what both of `ingest`'s recovery strings now have to tell them to do. Adding the
 decision about spec §5.5's table, not a bug fix.
 
 **Read `.superpowers/sdd/preflight-findings.md` before dispatching any task.** An adversarial scan
-on 2026-08-13 found thirty-eight defects across Tasks 3–19. **Two of the remaining five carry its
-findings** — Task 15, graded blocking, and Task 16, graded should-fix. Tasks 17, 18 and 19 are the
-ones it found clean, **which is not the same as needing no correction**: it graded Task 14 clean too,
+on 2026-08-13 found thirty-eight defects across Tasks 3–19. **One of the remaining four carries its
+findings** — Task 16, graded should-fix. Tasks 17, 18 and 19 are the ones it found clean, **which is not the same as needing no correction**: it graded Task 14 clean too,
 and three things it does not say still had to be written before dispatch. That file is local scratch
 and not repository state; if it is gone, the scan is owed again.
 
@@ -206,7 +228,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **14 of 19**, next is Task 15 |
+| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **15 of 19**, next is Task 16 |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |

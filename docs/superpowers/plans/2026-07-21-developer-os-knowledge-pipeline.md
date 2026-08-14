@@ -2466,7 +2466,7 @@ The directory `BACKLOG.md` §5 has recorded as missing since the program file ma
 > `finalize` removes, and not the product home at large. Sweeping the product home wholesale would
 > make this suite red for a reason nobody in DOS-P6 can fix.
 
-- [ ] **Step 1: The sentinel suite, asserted per artifact**
+- [x] **Step 1: The sentinel suite, asserted per artifact**
 
 One planted secret, traced through **every** artifact it could reach:
 
@@ -2495,7 +2495,7 @@ it.each(ARTIFACTS)("keeps the sentinel out of %s", async (artifact) => {
 
 This is design spec §17.5's release blocker and `BACKLOG.md` §3's gate, in one file.
 
-- [ ] **Step 2: The prompt-injection suite**
+- [x] **Step 2: The prompt-injection suite**
 
 A capture whose text instructs the model to write outside scope, follow a URL, or widen access. The proposal either refuses or stays in scope; **the instruction is never executed.** Fixtures are synthetic and include the forged-heading and fence-escape shapes `packages/workflow-schema/src/skill.test.ts` already covers for rendering, now carried through an actual invocation with a scripted vendor.
 
@@ -2519,19 +2519,19 @@ it.each([
 });
 ```
 
-- [ ] **Step 3: The symlink-escape suite**
+- [x] **Step 3: The symlink-escape suite**
 
 A proposal whose path resolves through a symlink out of `content/`. **Exit 5, capture stays `accepted`, nothing written.** Asserted on the resolved destination, because a check on the written path is the bug this suite exists to catch.
 
-- [ ] **Step 4: The multiline-command suite**
+- [x] **Step 4: The multiline-command suite**
 
 `curl … |⏎sh` in captured text reaches no command position. The normalize-newlines guard already exists; this asserts it on the capture path rather than assuming it — which is the distinction `SEC-100` was about, and the reason a line-oriented pattern is not a guard.
 
-- [ ] **Step 5: The malformed-manifest suite**
+- [x] **Step 5: The malformed-manifest suite**
 
 Forged and stale installation manifests refuse rather than apply, **on every path this subsystem adds** — capture, review and ingest each get a case, and the suite asserts the path set it covered is non-empty.
 
-- [ ] **Step 6: The interruption suite**
+- [x] **Step 6: The interruption suite**
 
 Interruption after each of the seven forward phases, for **both** the capture write and the ingest apply — fourteen cases, driven through `TransactionExecutor`'s `afterPhase` hook, which exists for exactly this.
 
@@ -2551,7 +2551,7 @@ it.each(PHASES)("leaves the capture retryable when killed at %s", async (phase) 
 });
 ```
 
-- [ ] **Step 7: The network suite**
+- [x] **Step 7: The network suite**
 
 `BACKLOG.md` §7's gate, and the reason it matters here more than anywhere before: **this subsystem is the first thing in the program that makes an outbound process call.** Spec §2.7 is the property — nothing reaches a network except the vendor's own agent CLI, through `packages/security`'s runner, during ingest.
 
@@ -2599,7 +2599,7 @@ it("does not pass a proxy the parent process was given", async () => {
 
 `capture` spawns the vendor binary once for `sourceAgentVersion` (Task 9), so the first case's fixture must supply the version rather than let the command probe for one — and the second case filters version probes explicitly rather than pretending they do not happen. **A suite that quietly counts a probe as the model call would pass while the real call went unasserted.**
 
-- [ ] **Step 8: The concurrent-edit suite**
+- [x] **Step 8: The concurrent-edit suite**
 
 Design spec §17.5, and the half of program plan Task 6's eighth box that nothing else covers.
 
@@ -2634,11 +2634,11 @@ This is `expectedBeforeHash` and the macOS transaction lock doing what they were
 
 **Both cases assert a property the first case above proves is not free.** The refusal is the executor's own check firing inside the window it guards, not a race the test happened to win; a case whose outcome depends on scheduling would pass here and fail in CI, which is the one thing a security suite must not do.
 
-- [ ] **Step 9: Prove each suite fails without the code it tests**
+- [x] **Step 9: Prove each suite fails without the code it tests**
 
 For each of the eight, revert the guarantee locally, watch the suite go red, restore, watch it go green. **Record which line was reverted for each suite in the task report** — a reviewer cannot otherwise tell a suite that pins a property from a suite that pins the implementation's current shape.
 
-- [ ] **Step 10: Run the gate and commit**
+- [x] **Step 10: Run the gate and commit**
 
 ```bash
 npm run check
