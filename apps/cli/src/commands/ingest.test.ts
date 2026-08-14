@@ -2,9 +2,18 @@ import * as nodeFs from "node:fs/promises";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { EXIT_CODES, formatJsonResult } from "@developer-os/core";
+import {
+  EXIT_CODES,
+  formatJsonResult,
+  loadConfig,
+  serializeConfig,
+} from "@developer-os/core";
 import type { CliResult, TransactionPhase } from "@developer-os/core";
-import { detectSourceAgent, parseCaptureFile } from "@developer-os/brain";
+import {
+  DEFAULT_BRAIN_CONFIG,
+  detectSourceAgent,
+  parseCaptureFile,
+} from "@developer-os/brain";
 import type { CaptureStatus, ProposedNote } from "@developer-os/brain";
 import { redactText } from "@developer-os/security";
 import type { ProcessResult, ProcessRunner } from "@developer-os/security";
@@ -16,15 +25,17 @@ import { afterEach, describe, expect, it } from "vitest";
 import { runCapture } from "./capture.js";
 import {
   INGEST_DECLARED_WRITE_SCOPES,
+  renderIngest,
   renderValidationFinding,
   runIngest,
 } from "./ingest.js";
 import type { IngestOptions, IngestResultV1 } from "./ingest.js";
 import { runInit } from "./init.js";
 import { runReview } from "./review.js";
-import { createCommandFixture, removeCommandFixtures } from "./testing.js";
+import { createCommandFixture, exists, removeCommandFixtures } from "./testing.js";
 import type { CommandFixture } from "./testing.js";
 import { loadOrCreateRedactionKey } from "../context.js";
+import { run } from "../main.js";
 
 afterEach(removeCommandFixtures);
 
@@ -90,6 +101,14 @@ interface FixtureOptions {
   readonly codex?: boolean;
   readonly interruptAfter?: TransactionPhase;
   readonly interruptKind?: string;
+  /**
+   * A `[brain]` section naming a content root that is not `content`, written
+   * after `init` and applied by renaming the directory `init`'s template
+   * created. Every glob this command declares is vault-relative and has to be
+   * resolved against *this* value; a fixture that only ever uses the default
+   * cannot tell a resolution from a passthrough.
+   */
+  readonly contentRoot?: string;
 }
 
 function discovery(name: AgentName, executable: string | null): AgentDiscovery {
@@ -209,7 +228,26 @@ async function installedFixture(
   /** `init` verifies the installation; only what `ingest` spawns is at issue. */
   calls.length = 0;
 
-  const content = join(fixture.paths.brain, "content");
+  const contentRoot = options.contentRoot ?? "content";
+  if (options.contentRoot !== undefined) {
+    const config = loadConfig(
+      await nodeFs.readFile(fixture.paths.configFile, "utf8"),
+    );
+    await nodeFs.writeFile(
+      fixture.paths.configFile,
+      serializeConfig({
+        ...config,
+        brain: { ...DEFAULT_BRAIN_CONFIG, contentRoot: options.contentRoot },
+      }),
+      { mode: 0o600 },
+    );
+    await nodeFs.rename(
+      join(fixture.paths.brain, "content"),
+      join(fixture.paths.brain, options.contentRoot),
+    );
+  }
+
+  const content = join(fixture.paths.brain, contentRoot);
   const quarantine = join(content, "_raw", "quarantine");
 
   const statusOf = async (id: string): Promise<CaptureStatus> => {
@@ -576,6 +614,171 @@ describe("runIngest, the status ladder", () => {
   });
 });
 
+describe("runIngest, a batch that is not uniform", () => {
+  /**
+   * **Containment, and the head-of-line blocking it prevents.** Without it the
+   * middle capture's refusal propagates out of the loop and the third capture is
+   * never attempted — and since the refused one stays `accepted` and sorts in the
+   * same place next run, it blocks everything behind it forever, with `--limit`
+   * bounding the same blocked head of the same list.
+   *
+   * "Nothing is left blocking" is observable as the second run's `order`: it
+   * holds the refused capture **and nothing else**, because the two that ingested
+   * are done rather than waiting behind it.
+   */
+  it("ingests around a capture that refuses, and blocks nothing behind it", async () => {
+    const fixture = await installedFixture("ingest-mixed-batch");
+    const seeded = [
+      await fixture.seedAccepted("the first observation"),
+      await fixture.seedAccepted("the second observation"),
+      await fixture.seedAccepted("the third observation"),
+    ].sort(byId);
+    const middle = seeded[1];
+    expect(middle, "the batch must have three distinct captures").toBeDefined();
+    if (middle === undefined) return;
+
+    const cleanNote = (id: string): VendorReply =>
+      oneNote(id, `DEV/note-${id}.md`, `Note ${id}`, `The note for ${id}.`);
+    fixture.reply((call) => {
+      const target = seeded.find((capture) =>
+        call.args.join("\n").includes(capture.id),
+      );
+      if (target === undefined) return nothingProposed();
+      return target.id === middle.id
+        ? oneNote(target.id, "DEV/leaky.md", "Leaky note", `token ${SECRET}`)
+        : cleanNote(target.id);
+    });
+
+    const first = await fixture.run();
+
+    expect(first.ok).toBe(false);
+    if (first.ok) return;
+    /** The refusal is the secret scan, so the run's code is 5 rather than 1. */
+    expect(first.code).toBe(EXIT_CODES.securityRefusal);
+    const statuses = await Promise.all(
+      seeded.map((capture) => fixture.statusOf(capture.id)),
+    );
+    expect(statuses).toStrictEqual(["ingested", "accepted", "ingested"]);
+    /** The message is the payload: every selected capture appears in it once. */
+    for (const capture of seeded) {
+      expect(first.error.message, capture.id).toContain(capture.id);
+    }
+    expect(first.error.message).toContain("ingested");
+    expect(first.error.message).toContain("refused (exit 5)");
+    expect(first.error.message).toContain("secret-scan");
+    const notes = await vaultNotes(fixture);
+    expect(notes).toContain(`DEV/note-${seeded[0]?.id ?? ""}.md`);
+    expect(notes).toContain(`DEV/note-${seeded[2]?.id ?? ""}.md`);
+
+    /** Retried on its own, with nothing queued behind it. */
+    fixture.reply(() => cleanNote(middle.id));
+    const second = await fixture.run();
+
+    expect(dataOf(second).order).toStrictEqual([middle.id]);
+    expect(dataOf(second).applied).toHaveLength(1);
+    expect(await fixture.statusOf(middle.id)).toBe("ingested");
+  });
+
+  /**
+   * The reason the code is the **severest** refusal rather than the first one in
+   * order: here the operational refusal sorts first and the security refusal
+   * sorts last, so `refused[0].code` would report 1 and hide the escape attempt.
+   */
+  it("reports the severest refusal, not the one that happened first", async () => {
+    const fixture = await installedFixture("ingest-severest");
+    const seeded = [
+      await fixture.seedAccepted("the first observation"),
+      await fixture.seedAccepted("the second observation"),
+    ].sort(byId);
+    const [earlier, later] = seeded;
+    expect(earlier?.id).toBeDefined();
+    expect(later?.id).toBeDefined();
+    if (earlier === undefined || later === undefined) return;
+
+    fixture.reply((call) => {
+      const prompt = call.args.join("\n");
+      if (prompt.includes(later.id)) {
+        return oneNote(later.id, "DEV/leaky.md", "Leaky note", `token ${SECRET}`);
+      }
+      return {
+        schemaVersion: 1,
+        notes: [
+          {
+            path: "DEV/broken.md",
+            contents: "---\nschemaVersion: 1\ntitle: only a title\n---\n\nbody\n",
+            sourceCaptureId: earlier.id,
+          },
+        ],
+      };
+    });
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(EXIT_CODES.securityRefusal);
+    expect(result.error.message).toContain("refused (exit 1)");
+    expect(result.error.message).toContain("refused (exit 5)");
+    /** Both are still accepted, and both were attempted. */
+    expect(await fixture.statusOf(earlier.id)).toBe("accepted");
+    expect(await fixture.statusOf(later.id)).toBe("accepted");
+    expect(fixture.calls).toHaveLength(2);
+  });
+
+  /**
+   * `order` is the set this invocation **selected**, not the set that ingested.
+   * The two were the same expression until a selected capture could end
+   * somewhere other than `ingested`, and the field's docblock already said the
+   * former.
+   */
+  it("puts every selected capture in order, whatever became of it", async () => {
+    const fixture = await installedFixture("ingest-order-is-selection");
+    const seeded = [
+      await fixture.seedAccepted("the first observation"),
+      await fixture.seedAccepted("the second observation"),
+    ].sort(byId);
+    fixture.reply(() => nothingProposed());
+
+    const result = await fixture.run();
+
+    expect(dataOf(result).order).toStrictEqual(seeded.map((capture) => capture.id));
+  });
+});
+
+describe("runIngest, resolved against this vault rather than a default", () => {
+  /**
+   * **The per-install resolution, driven.** Every other fixture uses the default
+   * `contentRoot`, where `resolveScopeGlob("content/**", brainConfig)` returns
+   * its input unchanged — so all of them stay green if the resolution is deleted
+   * and the declared globs are used raw. A user whose `config.toml` names a
+   * different root would then have `write-scope` refuse every note the model
+   * proposes, which is a total silent failure of the command.
+   */
+  it("resolves the declared write scopes against a non-default contentRoot", async () => {
+    const fixture = await installedFixture("ingest-content-root", {
+      contentRoot: "vault",
+    });
+    const seeded = await fixture.seedAccepted("an observation in a renamed root");
+    fixture.reply(() => oneNote(seeded.id, "DEV/renamed.md", "Renamed root note"));
+
+    const result = await fixture.run();
+
+    expect(dataOf(result).applied).toHaveLength(1);
+    expect(await fixture.statusOf(seeded.id)).toBe("ingested");
+    expect(await vaultNotes(fixture)).toContain("DEV/renamed.md");
+    /**
+     * And there is no `content/` left to have matched by accident, so a
+     * hard-coded root could not have produced this pass.
+     */
+    expect(await exists(join(fixture.paths.brain, "content"))).toBe(false);
+    const index = await nodeFs.readFile(
+      join(fixture.content, "_indexes", "index.json"),
+      "utf8",
+    );
+    expect(index).toContain("DEV/renamed.md");
+  });
+});
+
 describe("runIngest, the agent call", () => {
   it("invokes the first installed vendor in the fixed order claude, then codex", async () => {
     const fixture = await installedFixture("ingest-default-vendor");
@@ -846,6 +1049,97 @@ describe("runIngest, the contract it is pinned against", () => {
     const payload = formatJsonResult(result);
     expect(payload).not.toContain(BELL);
     expect(payload).not.toContain(OVERRIDE);
+  });
+});
+
+describe("renderIngest, what a human is shown", () => {
+  it("names the vendor, every capture, and the notes each one wrote", () => {
+    const lines = renderIngest({
+      schemaVersion: 1,
+      agent: "codex",
+      order: ["0f1e2d3c4b5a6978"],
+      captures: [
+        {
+          captureId: "0f1e2d3c4b5a6978",
+          status: "ingested",
+          notes: ["DEV/one.md", "QA/two.md"],
+        },
+        { captureId: "00112233445566aa", status: "failed", notes: [] },
+      ],
+      applied: [
+        {
+          captureId: "0f1e2d3c4b5a6978",
+          status: "ingested",
+          notes: ["DEV/one.md", "QA/two.md"],
+        },
+      ],
+    });
+
+    const text = lines.join("\n");
+    expect(text).toContain("codex");
+    expect(text).toContain("1 capture");
+    expect(text).toContain("0f1e2d3c4b5a6978");
+    expect(text).toContain("DEV/one.md");
+    expect(text).toContain("QA/two.md");
+    /** The unreadable one is shown too, at the status it holds. */
+    expect(text).toContain("00112233445566aa");
+    expect(text).toContain("failed");
+  });
+
+  it("says nothing was waiting rather than printing an empty list", () => {
+    const lines = renderIngest({
+      schemaVersion: 1,
+      agent: "claude",
+      order: [],
+      captures: [],
+      applied: [],
+    });
+
+    expect(lines).toStrictEqual(["No captures are waiting to be ingested."]);
+  });
+
+  /**
+   * Through `main.ts` rather than by calling the renderer, because the renderer
+   * is only half of what a human sees: dispatch, `emit` and `renderPath` are the
+   * rest, and `main.test.ts`'s ingest cases all stop at "not initialized".
+   */
+  it("reaches stdout through dispatch on a successful run", async () => {
+    const fixture = await installedFixture("ingest-render-success");
+    const seeded = await fixture.seedAccepted("an observation to render");
+    fixture.reply(() => oneNote(seeded.id, "DEV/rendered.md", "Rendered note"));
+
+    const code = await run(["ingest"], fixture.io, () => fixture.context);
+
+    expect(code).toBe(EXIT_CODES.success);
+    const text = fixture.io.out.join("\n");
+    expect(text).toContain("Ingested 1 capture through claude");
+    expect(text).toContain(seeded.id);
+    expect(text).toContain("DEV/rendered.md");
+  });
+
+  /**
+   * The other half, and the one where a screened `finding.path` reaches a
+   * person: a refusal is not rendered by `renderIngest` at all — `emit` writes
+   * the message and its paths to stderr, line by line, through `renderPath`.
+   */
+  it("puts the refusal, its validator and its path on stderr through dispatch", async () => {
+    const fixture = await installedFixture("ingest-render-refusal");
+    const seeded = await fixture.seedAccepted("an observation that escapes");
+    fixture.reply(() =>
+      oneNote(seeded.id, "_raw/quarantine/evil.md", "Evil note"),
+    );
+
+    const code = await run(["ingest"], fixture.io, () => fixture.context);
+
+    expect(code).toBe(EXIT_CODES.securityRefusal);
+    const text = fixture.io.err.join("\n");
+    expect(text).toContain(seeded.id);
+    expect(text).toContain("refused (exit 5)");
+    expect(text).toContain("write-scope");
+    expect(text).toContain("_raw/quarantine/evil.md");
+    /** And the recovery names an escape that a user can actually follow. */
+    expect(text).toContain("--decision reject");
+    expect(fixture.io.out).toStrictEqual([]);
   });
 });
 

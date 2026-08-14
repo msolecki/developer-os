@@ -3,18 +3,13 @@ import { dirname, join } from "node:path";
 import {
   containsPath,
   EXIT_CODES,
-  foldPath,
-  hashBytes,
   success,
   TransactionConflictError,
-  validateChangePlan,
 } from "@developer-os/core";
 import type {
   CliResult,
   DeveloperOsConfigV1,
   ExitCode,
-  InstallationManifestV1,
-  ManagedArtifactV1,
   PlannedFileMutation,
   RuntimePaths,
 } from "@developer-os/core";
@@ -33,9 +28,7 @@ import {
 } from "@developer-os/brain";
 import type {
   BrainConfigV1,
-  BrainServiceDependencies,
   CaptureStatus,
-  DirectoryEntry,
   IngestValidationFinding,
   PlannedNoteWriteV1,
   ValidatorId,
@@ -54,6 +47,7 @@ import {
 import type { CliContext, CliGuards } from "../context.js";
 import { isDirectory, readConfigFile } from "./doctor.js";
 import { outputSchemaPath } from "./output-schemas.js";
+import { dependenciesFor, writeIndexArtifacts } from "./reindex.js";
 
 /**
  * What `--json` publishes per capture: an id, the status it now holds, and the
@@ -65,6 +59,21 @@ export interface IngestedCaptureV1 {
   readonly captureId: string;
   readonly status: CaptureStatus;
   readonly notes: readonly string[];
+}
+
+/**
+ * One capture this invocation could not finish, and why.
+ *
+ * It is reported in the failure's **message** rather than in a `data` field
+ * because `CliResult` carries no data on a failure — `brain lint` records the
+ * same constraint and answers it the same way. Closing that properly is a
+ * Foundation change to `CliError`, not this command's to make.
+ */
+interface RefusedCaptureV1 {
+  readonly captureId: string;
+  readonly code: FailureExitCode;
+  readonly message: string;
+  readonly paths: readonly string[];
 }
 
 export interface IngestResultV1 {
@@ -214,17 +223,20 @@ const TRANSACTION_KINDS = {
  */
 const SECURITY_VALIDATORS: readonly ValidatorId[] = ["secret-scan", "write-scope"];
 
-const EMPTY_MANIFEST: InstallationManifestV1 = {
-  schemaVersion: 1,
-  productVersion: "0.0.0",
-  installedAt: "1970-01-01T00:00:00.000Z",
-  artifacts: [],
-};
-
 const NOT_INITIALIZED = "developer-os init";
 
 const RETRY_LATER =
   "run developer-os ingest again; the capture is unchanged and still accepted";
+
+/**
+ * The escape from a capture whose proposal refuses every time — which "run it
+ * again" is not. A capture is only rejectable from `quarantined`
+ * (`applyReviewDecision`'s own table), so the status has to go back by hand
+ * first; naming only the `review` half would send a user to a command that
+ * refuses.
+ */
+const REFUSED_RECOVERY =
+  "each refused capture is still accepted and will be tried again; to stop retrying one, set its status back to quarantined by hand and then developer-os review --id <id> --decision reject";
 
 type FailureExitCode = Exclude<ExitCode, typeof EXIT_CODES.success>;
 
@@ -496,39 +508,6 @@ async function writeCaptureFile(
   }
 }
 
-/**
- * Notes are read through the protected-path policy, not through the raw
- * filesystem — the same wiring `brain` uses, and for the same reason: they are
- * user files in a user-writable tree, and `readText` is the channel that opens
- * with `O_NOFOLLOW` and re-checks `dev`/`ino` after open.
- */
-function dependenciesFor(
-  context: CliContext,
-  vaultRoot: string,
-  config: DeveloperOsConfigV1,
-): BrainServiceDependencies {
-  return {
-    vaultRoot,
-    config: resolveBrainConfig(config),
-    reader: {
-      readDir: async (path: string): Promise<readonly DirectoryEntry[]> => {
-        const entries = await context.fs.readdir(path, { withFileTypes: true });
-        return entries.map((entry) => ({
-          name: entry.name,
-          isDirectory: entry.isDirectory(),
-          isFile: entry.isFile(),
-          isSymbolicLink: entry.isSymbolicLink(),
-        }));
-      },
-    },
-    readFile: (path: string) => context.guards.readText(path),
-    assertReadable: async (path: string): Promise<void> => {
-      await context.guards.manifest.assertReadable(path);
-    },
-    now: context.now,
-  };
-}
-
 /* ---------------------------------------------------------- the agent call */
 
 interface AgentOutcome {
@@ -669,188 +648,6 @@ function refusalFrom(
 
 /* ------------------------------------------------- applying and reindexing */
 
-/**
- * Ported from `apps/cli/src/commands/brain.ts`'s `stageArtifacts`, which is
- * private to that file, and it must be changed with it — as must
- * `recordIndexArtifacts` and `dependenciesFor` above, ported from the same file
- * for the same reason.
- *
- * Every branch below — the canonicalization before anything keys off a path, the
- * manifest reconciliation that adopts files on disk nobody owns and forgets
- * entries whose files are gone, the `existedBefore: false` on a generated
- * artifact, the `expectedBeforeHash` that compares the manifest against itself —
- * has its reasoning recorded there and is not restated here. What differs is the
- * transaction kind the caller then uses: this path's is `ingest-reindex`, which
- * is what makes the four-transaction ladder visible in the journals `repair` and
- * `status` read. Sharing one implementation needs a module both commands can
- * import, which is a wider change than this task's file list.
- */
-async function stageIndexArtifacts(
-  context: CliContext,
-  vaultRoot: string,
-  files: Readonly<Record<string, string>>,
-  indexesDir: string,
-): Promise<{
-  readonly mutations: readonly PlannedFileMutation[];
-  readonly artifacts: readonly ManagedArtifactV1[];
-}> {
-  const encoder = new TextEncoder();
-  const verifiedAt = context.now().toISOString();
-
-  const planned = await Promise.all(
-    Object.entries(files).map(async ([vaultPath, text]) => {
-      const targetPath = await context.guards.canonicalize(
-        join(vaultRoot, vaultPath),
-      );
-      let onDisk: string | null = null;
-      try {
-        onDisk = hashBytes(
-          encoder.encode(await context.guards.readText(targetPath)),
-        );
-      } catch {
-        onDisk = null;
-      }
-      return { vaultPath, targetPath, content: encoder.encode(text), onDisk };
-    }),
-  );
-
-  const existing = (await context.manifests.readOptional()) ?? {
-    ...EMPTY_MANIFEST,
-    productVersion: context.productVersion,
-    installedAt: verifiedAt,
-  };
-  const recorded = new Map(
-    existing.artifacts.map((artifact) => [foldPath(artifact.path), artifact]),
-  );
-
-  const adopted: ManagedArtifactV1[] = [];
-  const forgotten = new Set<string>();
-  for (const entry of planned) {
-    const key = foldPath(entry.targetPath);
-    const managed = recorded.get(key);
-    if (entry.onDisk !== null && managed === undefined) {
-      adopted.push({
-        owner: "core",
-        path: entry.targetPath,
-        kind: "file",
-        productVersion: context.productVersion,
-        existedBefore: false,
-        beforeHash: null,
-        backupRelativePath: null,
-        installedHash: entry.onDisk,
-        source: entry.vaultPath,
-        mergeStrategy: "dedicated",
-        verifiedAt,
-      });
-    }
-    if (entry.onDisk === null && managed !== undefined) forgotten.add(key);
-  }
-
-  const manifest: InstallationManifestV1 = {
-    ...existing,
-    artifacts: [
-      ...existing.artifacts.filter(
-        (artifact) => !forgotten.has(foldPath(artifact.path)),
-      ),
-      ...adopted,
-    ],
-  };
-  const owned = new Map(
-    manifest.artifacts.map((artifact) => [foldPath(artifact.path), artifact]),
-  );
-
-  const operations = planned.map((entry) => ({
-    ...entry,
-    operation: entry.onDisk === null ? ("create" as const) : ("replace" as const),
-    expectedBeforeHash: owned.get(foldPath(entry.targetPath))?.installedHash ?? null,
-    proposedHash: hashBytes(entry.content),
-  }));
-
-  const validated = await validateChangePlan(
-    {
-      schemaVersion: 1,
-      productVersion: context.productVersion,
-      operations: operations.map((operation) => ({
-        targetPath: operation.targetPath,
-        operation: operation.operation,
-        owner: "core",
-        kind: "file",
-        expectedBeforeHash: operation.expectedBeforeHash,
-        source: operation.vaultPath,
-        mergeStrategy: "dedicated",
-        proposedHash: operation.proposedHash,
-      })),
-    },
-    {
-      manifest,
-      ownedRoots: [join(vaultRoot, indexesDir)],
-      excludedRoots: [context.paths.home],
-      canonicalize: context.guards.canonicalize,
-    },
-  );
-
-  const contentByPath = new Map(
-    operations.map((operation) => [operation.targetPath, operation]),
-  );
-
-  const mutations: PlannedFileMutation[] = [];
-  const artifacts: ManagedArtifactV1[] = [];
-
-  for (const operation of validated.operations) {
-    const staged = contentByPath.get(operation.targetPath);
-    if (staged === undefined) {
-      throw new IngestRefusal(
-        EXIT_CODES.operationalFailure,
-        "the validated change plan lost its staged content",
-        [operation.canonicalTargetPath],
-      );
-    }
-    mutations.push({
-      targetPath: operation.canonicalTargetPath,
-      operation: operation.operation === "remove" ? "replace" : operation.operation,
-      content: staged.content,
-    });
-    artifacts.push({
-      owner: "core",
-      path: operation.canonicalTargetPath,
-      kind: "file",
-      productVersion: context.productVersion,
-      existedBefore: false,
-      beforeHash: null,
-      backupRelativePath: null,
-      installedHash: operation.proposedHash ?? hashBytes(staged.content),
-      source: operation.source,
-      mergeStrategy: "dedicated",
-      verifiedAt,
-    });
-  }
-
-  return { mutations, artifacts };
-}
-
-/** Ported from `brain.ts`'s `recordArtifacts`; see `stageIndexArtifacts` above. */
-async function recordIndexArtifacts(
-  context: CliContext,
-  artifacts: readonly ManagedArtifactV1[],
-): Promise<void> {
-  const manifest = (await context.manifests.readOptional()) ?? {
-    ...EMPTY_MANIFEST,
-    productVersion: context.productVersion,
-    installedAt: context.now().toISOString(),
-  };
-
-  const written = new Set(artifacts.map((artifact) => foldPath(artifact.path)));
-  await context.manifests.write({
-    ...manifest,
-    artifacts: [
-      ...manifest.artifacts.filter(
-        (artifact) => !written.has(foldPath(artifact.path)),
-      ),
-      ...artifacts,
-    ],
-  });
-}
-
 async function exists(context: CliContext, path: string): Promise<boolean> {
   try {
     await context.fs.lstat(path);
@@ -910,7 +707,7 @@ async function applyNotes(
         EXIT_CODES.operationalFailure,
         "the proposal names a path that already holds a file; ingest creates notes and never replaces one",
         [screenAndCap(write.path, MAX_PROPOSED_PATH_CHARS)],
-        "move or delete the existing note if the proposal should replace it, then run developer-os ingest again",
+        "ingest will refuse this capture again until something changes: move or delete the existing note if the proposal should replace it, or set the capture's status back to quarantined by hand and then developer-os review --id <id> --decision reject",
       );
     }
 
@@ -944,24 +741,15 @@ async function reindexVault(
   const service = new BrainService(
     dependenciesFor(context, paths.brain, config),
   );
-  const artifacts = await service.reindex();
 
-  const indexesDir = join(brainConfig.contentRoot, brainConfig.indexesDir);
-  const indexDirectory = join(paths.brain, indexesDir);
-  await context.guards.transaction.assertTarget(indexDirectory);
-  await context.fs.mkdir(indexDirectory, { recursive: true, mode: 0o700 });
-
-  const staged = await stageIndexArtifacts(
-    context,
-    paths.brain,
-    artifacts.files,
-    indexesDir,
-  );
-  await context.executor.execute({
+  await writeIndexArtifacts(context, {
+    vaultRoot: paths.brain,
+    indexesDir: join(brainConfig.contentRoot, brainConfig.indexesDir),
+    files: (await service.reindex()).files,
     kind: TRANSACTION_KINDS.reindex,
-    mutations: staged.mutations,
+    refuse: (message, paths_) =>
+      new IngestRefusal(EXIT_CODES.operationalFailure, message, paths_),
   });
-  await recordIndexArtifacts(context, staged.artifacts);
 }
 
 /* ------------------------------------------------------------ one capture */
@@ -1147,6 +935,60 @@ function compareIds(left: IngestedCaptureV1, right: IngestedCaptureV1): number {
 }
 
 /**
+ * **The numerically highest exit code among the refusals, not the first one in
+ * order** — the exit table is ordered by how much the caller has to care, so
+ * `securityRefusal` (5) outranks `capabilityUnavailable` (4), which outranks
+ * `decisionRequired` (3), `invalidInput` (2) and `operationalFailure` (1), and
+ * `recoveryRequired` (6) outranks all of them because it is the state that
+ * blocks every later run. Taking the first would let a security refusal on a
+ * capture that happens to sort last be masked by an operational one that sorts
+ * first, which is the whole reason this is not `refused[0].code`.
+ */
+function severestOf(refused: readonly RefusedCaptureV1[]): FailureExitCode {
+  return refused.reduce<FailureExitCode>(
+    (worst, refusal) => (refusal.code > worst ? refusal.code : worst),
+    EXIT_CODES.operationalFailure,
+  );
+}
+
+/**
+ * The whole run, one capture per entry, in the order it was processed — what a
+ * machine consumer needs in order to learn what moved when the result cannot
+ * carry data. Every capture the invocation selected appears exactly once,
+ * whether it ingested or refused, so "A ingested and B refused" is readable
+ * rather than inferable from B's error alone.
+ */
+function reportLines(
+  order: readonly string[],
+  ingested: readonly IngestedCaptureV1[],
+  refused: readonly RefusedCaptureV1[],
+): readonly string[] {
+  const byId = new Map(ingested.map((capture) => [capture.captureId, capture]));
+  const refusalById = new Map(
+    refused.map((refusal) => [refusal.captureId, refusal]),
+  );
+
+  const lines = [
+    `ingest refused ${String(refused.length)} of ${String(order.length)} capture${order.length === 1 ? "" : "s"}; ${String(ingested.length)} reached ingested`,
+  ];
+  for (const captureId of order) {
+    const done = byId.get(captureId);
+    if (done !== undefined) {
+      const notes = done.notes.map((note) => screenAndCap(note, MAX_PROPOSED_PATH_CHARS));
+      lines.push(
+        `  ${captureId} ingested${notes.length === 0 ? "" : ` ${notes.join(" ")}`}`,
+      );
+      continue;
+    }
+    const refusal = refusalById.get(captureId);
+    if (refusal === undefined) continue;
+    lines.push(`  ${captureId} refused (exit ${String(refusal.code)})`);
+    for (const line of refusal.message.split("\n")) lines.push(`    ${line}`);
+  }
+  return lines;
+}
+
+/**
  * `developer-os ingest`, spec §6.
  *
  * ```text
@@ -1156,11 +998,16 @@ function compareIds(left: IngestedCaptureV1, right: IngestedCaptureV1): number {
  * ```
  *
  * **One capture, one agent call, four transactions.** Failure isolates to a
- * single capture rather than poisoning a batch: a refusal stops the run at that
- * capture, everything already ingested stays ingested, and everything after it
- * is untouched and still `accepted` for the next invocation. The prompt stays
- * bounded by one envelope rather than by however many captures the user
- * accepted.
+ * single capture rather than poisoning a batch, and that is containment rather
+ * than a stop: a refusal is recorded against its own capture, which stays
+ * `accepted` and retryable, and every remaining capture is still attempted. The
+ * prompt stays bounded by one envelope rather than by however many captures the
+ * user accepted.
+ *
+ * **The run's exit code is the severest refusal, and its message is the whole
+ * run** — one line per selected capture, ingested or refused. `CliResult`
+ * carries no data on a failure, so a mixed batch that reported only the first
+ * error would leave a caller unable to learn that anything was written at all.
  *
  * **The model writes nothing.** It is invoked with zero declared write scopes,
  * inside its vendor's own read-only sandbox, and returns a proposal that nine
@@ -1214,17 +1061,61 @@ export async function runIngest(
       ),
     };
 
+    /**
+     * **Contained per capture**, which is what "failure isolates to a single
+     * capture instead of poisoning a batch" has to mean if it means anything.
+     * An uncontained throw would let one capture whose proposal refuses
+     * deterministically — a path that already holds a note is the plausible
+     * one — sort first again on every later run and block every capture behind
+     * it forever, with `--limit` bounding the same blocked head of the same
+     * list. Everything is attempted; the refusals are collected and reported
+     * together.
+     *
+     * Every error is contained, not only an `IngestRefusal`: a capture whose
+     * own read hit `EACCES` is exactly as much "one capture's problem" as a
+     * refused proposal, and it keeps its own exit code through `exitCodeOf`.
+     */
     const ingested: IngestedCaptureV1[] = [];
+    const refused: RefusedCaptureV1[] = [];
+    const order: string[] = [];
+
     for (const fileName of selection.accepted) {
-      ingested.push(await ingestOne(context, environment, fileName));
+      const captureId = fileName.slice(0, -CAPTURE_FILE_SUFFIX.length);
+      order.push(captureId);
+      try {
+        ingested.push(await ingestOne(context, environment, fileName));
+      } catch (error) {
+        refused.push({
+          captureId,
+          code: exitCodeOf(error),
+          message:
+            error instanceof Error ? error.message : "an unexpected failure occurred",
+          paths: error instanceof IngestRefusal ? error.paths : [],
+        });
+      }
     }
 
     const captures = [...ingested, ...selection.unreadable].sort(compareIds);
+    if (refused.length > 0) {
+      /**
+       * Thrown rather than returned, so it takes the redacting path below —
+       * `brain lint` does the same, and for the same reason its own docblock
+       * gives: `CliResult` cannot carry data on a failure, so a command whose
+       * whole job is to say what happened has to say it in the message.
+       */
+      throw new IngestRefusal(
+        severestOf(refused),
+        reportLines(order, ingested, refused).join("\n"),
+        [...new Set(refused.flatMap((refusal) => refusal.paths))],
+        REFUSED_RECOVERY,
+      );
+    }
+
     return success(
       {
         schemaVersion: 1,
         agent: vendor.name,
-        order: ingested.map((capture) => capture.captureId),
+        order,
         captures,
         applied: captures.filter((capture) => capture.status === "ingested"),
       },
