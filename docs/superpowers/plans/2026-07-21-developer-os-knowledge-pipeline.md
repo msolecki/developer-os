@@ -2853,7 +2853,7 @@ The second thing `BACKLOG.md` §5 records this subsystem as owing. It consolidat
 > first left with Task 15. Whoever runs Task 19 should read that sentence as already half discharged
 > rather than looking for a row that is gone.
 
-- [ ] **Step 1: Write it**
+- [x] **Step 1: Write it**
 
 Contents, per spec §8.5: the trust boundaries; what is untrusted and why; and **which mechanism enforces each boundary** — a boundary named without its enforcement is a paragraph, not a threat model. At minimum: vault content, capture text, model output, the vendor CLI, configuration, the installation manifest, and `PATH`.
 
@@ -2861,7 +2861,7 @@ Contents, per spec §8.5: the trust boundaries; what is untrusted and why; and *
 
 Every claim points at the code or the test that enforces it. A threat model that cannot be checked against the tree rots in the first refactor.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add docs/architecture/threat-model.md docs/superpowers/BACKLOG.md

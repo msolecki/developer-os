@@ -39,15 +39,26 @@ it.
 
 **Sessions execute that plan one task at a time**, under `superpowers:subagent-driven-development` —
 a different agent implements and reviews each task, and a task is not done until its reviewer says
-so. **Sixteen of the nineteen have landed** (Tasks 1–16, 2026-08-13/14). **Task 17 is next in the
-plan's order and it stops and asks** — it spends the founder's credits on a real model call against
+so. **Seventeen of the nineteen have landed** — Tasks 1–16 and 18, 2026-08-13/14. **Task 17 is next
+in the plan's order and it stops and asks** — it spends the founder's credits on a real model call against
 both vendor binaries, which is the only way the `codex exec --json` terminal-event rule stops being
 provisional. Nothing else in the plan can settle it and no agent may decide it.
 
-**Task 18 does not wait on Task 17**, and taking it first is not skipping ahead. The threat model
-names the JSONL rule as provisional, which is what it is; nothing in Task 18 consumes evidence Task 17
-produces. Task 19 does wait: its Step 5 requires every `BACKLOG.md` §8 row to carry an outcome, and
-the Codex spec §14.1 row is discharged by Task 17 alone.
+**Task 18 landed first, and taking it out of order was not skipping ahead.** The threat model names
+the JSONL rule as provisional, which is what it is; nothing in it consumed evidence Task 17 produces.
+`docs/architecture/threat-model.md` is what it left. **Task 19 does wait** on Task 17: its Step 5
+requires every `BACKLOG.md` §8 row to carry an outcome, and the Codex spec §14.1 row is discharged by
+Task 17 alone.
+
+**Writing that threat model found four defects nobody had looked for, all now `BACKLOG.md` §1 rows.**
+`NEW-15` — the first thing to execute a discovered binary pays none of the owner and mode check
+`platform-macos`'s own type says its executor owes. `NEW-16` — spec §8.2's user-configured redaction
+patterns are unreachable: no production caller passes them and the config schema has no table for
+them. `NEW-17` — `brain` is the one command of eight whose config parse failure is **not**
+content-free, so smol-toml's three raw source lines reach the user with the heuristic redactor as the
+only thing standing. `NEW-18` — `assertSafeCommand`'s four NUL branches have no test anywhere, found
+because the document tried to cite that coverage and a reviewer checked whether it existed. **None is
+fixed**; a documentation task may not edit the product.
 
 **Two decisions are awaiting the founder** and are the only unratified rows in `BACKLOG.md` §8.
 
@@ -233,7 +244,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **16 of 19**; Task 17 needs the founder, Task 18 does not |
+| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **17 of 19** — only Task 17, which needs the founder, and Task 19, which closes the subsystem |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |

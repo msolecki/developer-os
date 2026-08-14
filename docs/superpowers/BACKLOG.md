@@ -61,10 +61,10 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | Area | Where | What is left |
 |---|---|---|
 | Program (umbrella) | 1 plan | Tasks 6–9 open; Tasks 0–5 closed and not rows here |
-| DOS-P6 | spec approved and plan written, both 2026-08-13 | the implementation — nineteen tasks, **fifteen landed** 2026-08-13/14; next is Task 16 |
+| DOS-P6 | spec approved and plan written, both 2026-08-13 | the implementation — nineteen tasks, **seventeen landed** 2026-08-13/14. **Task 17 needs the founder** — one real model call per vendor; Task 19 closes the subsystem |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian), NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (S, the argv screen's word list also screens free-form prose), NEW-13 (S, two artifact roots share one type) and **NEW-14 (S, security — a relocated quarantine takes its own containment check with it)** |
+| Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian), NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (S, the argv screen's word list also screens free-form prose), NEW-13 (S, two artifact roots share one type), **NEW-14 (S, security — a relocated quarantine takes its own containment check with it)**, **NEW-15 (S, security — the first executor of a discovered binary pays none of the check its type demands)**, NEW-16 (S, spec §8.2's user-configured redaction patterns are unreachable), **NEW-17 (XS, security — `brain` is the one command whose config parse failure is not content-free)** and NEW-18 (XS, `assertSafeCommand`'s NUL branches have no test) |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -136,6 +136,76 @@ if it left nothing, it was not worth recording. Git history is the archive.
   for a blank tag needs no renderer change and no new module, and it does not prejudge the policy
   question the full fix has to answer — whether an invisible tag is an error, a warning, or
   silently dropped at index time.
+
+### NEW-17 — `brain` is the one command whose config parse failure is not content-free
+
+- **Status:** open, found 2026-08-14 by the fresh-context re-review of DOS-P6 Task 18 · **Owner:**
+  DOS-P7 · **Size:** XS · **Security**
+- **Seven of the eight commands refuse content-free.** `status`, `doctor`, `init`, `capture`,
+  `uninstall`, `review` and `ingest` route their config read through `readConfigFile`
+  (`apps/cli/src/commands/doctor.ts:209`), which
+  catches the parse error and raises a `ConfigurationError` that quotes nothing —
+  `tests/e2e/foundation.test.ts:1250` pins exactly that, as
+  `it("never quotes the configuration it failed to parse")`.
+- **`brain` does not.** `apps/cli/src/commands/brain.ts:109` calls `loadConfig(serialized)` outside
+  any `try`. The `TomlError` is not a `BrainRefusal`, so it falls through to `failureFrom`, which
+  emits `context.guards.redactDiagnostic(error.message)` — and smol-toml puts **three raw source
+  lines** of the file into that message.
+- **So a hand-edited `config.toml` containing a secret is echoed back on a `brain` run, with the
+  heuristic redactor as the only thing standing.** That is the one place in this product where
+  redaction is the sole defence rather than the last of several, which is the property
+  `docs/architecture/threat-model.md` §5.7 otherwise states as absolute — and now states as partial,
+  naming this row.
+- **The fix is the size of the defect:** route `brain`'s read through `readConfigFile` like every
+  other command, or wrap the call. Extend `foundation.test.ts:1250`'s case to cover `brain` in the
+  same change, or the next command to be added inherits the gap.
+
+### NEW-18 — `assertSafeCommand`'s NUL branches have no test anywhere
+
+- **Status:** open, found 2026-08-14 while checking a citation in the Task 18 threat model ·
+  **Owner:** whoever next touches `packages/security/src/process.ts` · **Size:** XS
+- `assertSafeCommand` refuses a NUL byte in the executable, the working directory, any argument and
+  stdin (`packages/security/src/process.ts:48-61`). **No test in this repository exercises any of the
+  four.** `process.test.ts`'s `assertSafeCommand` block holds two cases — the pipe-to-shell
+  normalization and a non-absolute executable — and a search for NUL cases across every test file
+  finds them for other functions only.
+- Found because the threat model tried to cite the coverage and the re-review checked whether it
+  existed. **The guard is correct; only the evidence is missing**, which is why this is XS and not a
+  security row. Four cases, one file.
+
+### NEW-15 — the first thing to execute a discovered binary pays none of the check its type demands
+
+- **Status:** open, found 2026-08-14 while writing `docs/architecture/threat-model.md`, verified
+  independently by that task's review · **Owner:** unassigned; DOS-P7 by default, as the first
+  subsystem after the one that introduced the execution · **Size:** S · **Security**
+- `packages/platform-macos/src/types.ts:13-18` states the contract in its own words: **whoever
+  executes a discovered binary owes an owner and mode check first.** `discoverExecutable` finds a
+  name on `PATH` and returns a path; it does not vouch for it.
+- **DOS-P6 is the first executor and pays nothing.** `selectVendor` returns
+  `discovery.executablePath` (`apps/cli/src/commands/ingest.ts:378-386`) and `invokeVendor` spawns it
+  (`:1172`); no `stat`, no uid comparison and no mode comparison exists anywhere on that path — the
+  only `lstat` in the file is on a note path and the only mode is a `mkdir`.
+- **What it is not:** privilege escalation. The binary runs as the user either way, and a user who
+  can write their own `PATH` can already run anything. **What it is:** the product hands that binary
+  the user's captured observations and read access to the whole vault, on the strength of a name
+  match. A world-writable directory earlier on `PATH` is the ordinary way this goes wrong.
+- The nearest existing record is `claude-adapter.md` §9 residual 10, which notes the execution and
+  **not** the check — which is why this row exists rather than a pointer to it.
+
+### NEW-16 — spec §8.2's user-configured redaction patterns are unreachable
+
+- **Status:** open, found 2026-08-14 while writing the threat model, verified independently by that
+  task's review · **Owner:** DOS-P7 · **Size:** S
+- `redactText`'s `userPatterns` parameter **has no production caller.** All thirteen call sites across
+  `apps/` and `packages/` pass two arguments; the parameter appears only in
+  `packages/security/src/redaction.test.ts` and in built type declarations.
+- The other half is missing too: `configSchema` is `.strict()`
+  (`packages/core/src/config/loader.ts:130-153`) and carries no redaction table, so there is no
+  `config.toml` key a user could set even if a caller existed.
+- **The consequence is narrow and worth stating precisely.** The four built-in redaction classes work
+  and are tested; what is unreachable is the *user-extensible* class the knowledge-pipeline spec §8.2
+  describes — the one a founder would use to redact a client name that no generic pattern catches.
+  Nothing regressed; it was specified and never wired.
 
 ### NEW-14 — a relocated quarantine takes its own containment check with it
 
@@ -437,9 +507,12 @@ durable behind as they closed:
   symlink escape, multiline command, malformed manifest and interruption from §9, plus **network** and
   **concurrent edit**, the two §7's standing gate requires and §9 dropped. Every suite was watched
   fail before it was believed, and thirteen reverts are recorded with the line each disabled. **41 of
-  its 59 cases carry that evidence and 18 do not**, which the suites say about themselves rather than
-  leaving a reader to assume. One case is parked `it.fails` over NEW-14, so the day that escape is
-  closed the suite announces it.
+  its 59 cases carry that evidence and 18 do not.** That split is recorded **here and nowhere else** —
+  a correction to an earlier version of this sentence, which claimed the suites say it about
+  themselves. They do not: `grep -rniE "revert" tests/security/` returns nothing, and the per-case
+  itemization lived only in a scratch report that does not survive this plan. Anyone tightening the
+  count has to re-derive it from the suites. One case is parked `it.fails` over NEW-14, so the day
+  that escape is closed the suite announces it.
 
 - **`tests/contracts/` holds only DOS-P3's cases.** DOS-P2 put its contract cases beside the code
   they pin instead, which is why that directory looks thinner than the file map implies.
