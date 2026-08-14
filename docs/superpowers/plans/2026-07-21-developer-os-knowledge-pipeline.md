@@ -2319,7 +2319,7 @@ git commit -m "feat(cli): ingest applies one capture per transaction and ends in
 > accept `probe?: boolean` (`claude-capabilities.ts:46`, `codex-capabilities.ts:45`). The task's
 > claim that this "is the whole change on that side" is accurate.
 
-- [ ] **Step 1: Write the tests, and know which two are new**
+- [x] **Step 1: Write the tests, and know which two are new**
 
 **Two of these four pass before you start, and that is correct.** `doctor` never turns probing on today, so "does not spawn a vendor probe without `--probe`" and "reports skills as unknown without `--probe`" are **regression pins**: they hold now, and they exist so that adding the flag cannot quietly flip the default. The other two are the new behaviour and must fail first — there is no `--probe` to pass, so they fail at the option parser. Say which is which in the task report; a step that says "write failing tests" and ships two green ones has not pinned what it claims.
 
@@ -2356,7 +2356,7 @@ it("settles skills to yes only when the table permits and a probe observed", asy
 
 The warning is emitted **before** the probe runs, not alongside its result. A user who reads a mutation notice after the mutation has been told, not warned.
 
-- [ ] **Step 2: Implement, rerun, commit**
+- [x] **Step 2: Implement, rerun, commit**
 
 `--probe` joins `OPTIONS`, **`OPTION_NAMES`** and `COMMAND_OPTIONS.doctor` — correction 1 above is why the middle one is not optional bookkeeping — and `USAGE` gains its line naming the side effect in the help text itself. Both capability reporters already take `probe?: boolean`; this passes it through, which is the whole change on that side.
 

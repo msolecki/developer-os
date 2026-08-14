@@ -39,9 +39,10 @@ it.
 
 **Sessions execute that plan one task at a time**, under `superpowers:subagent-driven-development` —
 a different agent implements and reviews each task, and a task is not done until its reviewer says
-so. **Thirteen of the nineteen have landed** (Tasks 1–13, 2026-08-13/14); **the next session starts at
-Task 14**, `doctor --probe`. **Task 17 stops and asks** — it spends the founder's credits on a real
-model call, which is the only way the JSONL terminal-event rule gets settled.
+so. **Fourteen of the nineteen have landed** (Tasks 1–14, 2026-08-13/14); **the next session starts at
+Task 15**, `tests/security/` — eight suites, and the one the pre-flight scan graded blocking.
+**Task 17 stops and asks** — it spends the founder's credits on a real model call, which is the only
+way the JSONL terminal-event rule gets settled.
 
 **Two decisions are awaiting the founder** and are the only unratified rows in `BACKLOG.md` §8.
 
@@ -74,10 +75,14 @@ validation and the evidence every commit rests on, so a case that reddens for no
 nobody can read when it goes green. Neither task investigated it, deliberately — neither touched
 that file — but two observations are no longer a coincidence.
 
-**Task 13 ran the full gate three times, on 2026-08-14, and it did not fire once.** That is the
-third data point and it is a negative one: whatever the trigger is, it is not "any full run". Two
-failures in two of five full runs, both on diffs that import nothing from `doctor.ts`, with one of
-them a timeout — the case's own duration remains the best hypothesis and nothing has tested it.
+**Tasks 13 and 14 ran the full gate seven times between them, on 2026-08-14, and it did not fire
+once.** Those are negative data points and the second set is the informative one: **Task 14 is the
+first task in DOS-P6 to actually edit `doctor.test.ts`**, and it added seven more
+`createInitFixture`/`runInit` pairs to that file — roughly 3.6 seconds — without provoking the case.
+Two failures in two of twelve full runs, both on diffs importing nothing from `doctor.ts`, one of
+them a timeout. **The case's own duration remains the only hypothesis anyone has stated**, and it now
+has a cheap test nobody has run: raise that one case's timeout and see whether the failures stop. It
+still belongs to nobody.
 
 **Tasks 9 and 10 raise one question with one cause, and it is the founder's.** `PlannedFileMutation`
 is `{targetPath, operation, content}`: **a command cannot supply a precondition.** The executor
@@ -127,13 +132,20 @@ what both of `ingest`'s recovery strings now have to tell them to do. Adding the
 decision about spec §5.5's table, not a bug fix.
 
 **Read `.superpowers/sdd/preflight-findings.md` before dispatching any task.** An adversarial scan
-on 2026-08-13 found thirty-eight defects across Tasks 3–19. **Two of the remaining six carry its
-findings** — Task 15, graded blocking, and Task 16, graded should-fix. Tasks 14, 17, 18 and 19 are
-the ones it found clean, **which is not the same as needing no correction**: Task 14's Step 2 says
-`--probe` joins `OPTIONS` and `COMMAND_OPTIONS.doctor` and omits `OPTION_NAMES`, which is the defect
-Task 10 had to correct and Task 13 after it — a name missing from that second list is invisible to
-the per-command allow-list, and every other command silently accepts it. That file is local scratch
+on 2026-08-13 found thirty-eight defects across Tasks 3–19. **Two of the remaining five carry its
+findings** — Task 15, graded blocking, and Task 16, graded should-fix. Tasks 17, 18 and 19 are the
+ones it found clean, **which is not the same as needing no correction**: it graded Task 14 clean too,
+and three things it does not say still had to be written before dispatch. That file is local scratch
 and not repository state; if it is gone, the scan is owed again.
+
+**`OPTION_NAMES` no longer exists as a list to join, and nothing should tell a task to join it.**
+Three tasks in a row — 10, 13 and 14 — needed the identical pre-dispatch correction: an option added
+to `main.ts`'s `OPTIONS` and to `COMMAND_OPTIONS` but not to the hand-maintained `OPTION_NAMES`
+became invisible to `suppliedOptions`, and the per-command allow-list then admitted it on **every**
+command. Task 14's review found the class rather than the instance, and the list is now derived from
+`Object.keys(OPTIONS)`. A new option is visible to the allow-list the moment it is declared. Older
+task sections in the plan still carry the instruction; they are records of corrections already made,
+and a task copying the pattern would go looking for a list that is gone.
 
 **Read the spec's §3 and then the plan's five decisions.** The spec's five decisions each carry
 their cost; the one that reshapes the subsystem is 3.1: capture content is **agent-authored**,
@@ -194,7 +206,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **13 of 19**, next is Task 14 |
+| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **14 of 19**, next is Task 15 |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |
