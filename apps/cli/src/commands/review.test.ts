@@ -410,10 +410,13 @@ describe("runReview", () => {
    * happened. This case exists partly to keep that propagation honest, so it
    * asserts the code rather than merely that the run failed.
    *
-   * The recovery is asserted in the order it must be followed: `verifyDesired`
-   * can raise the same error *after* the rename, and a second review run over a
-   * capture with an unfinalized journal risks a later rollback restoring the
-   * pre-edit backup over the newer file.
+   * The recovery is asserted **in the order it must be followed**, by position
+   * and not by presence: `repair` comes first because a journal that reached
+   * `validated` or later stops being repairable once the target moves on —
+   * resume conflicts at `executor.ts:608` and rollback at `:653` — so the
+   * window to resolve it closes, and a second review is what moves the target.
+   * Nothing would overwrite the newer file; `restoreMutation` refuses rather
+   * than clobbers.
    */
   it("refuses, keeping the newer file, when a hand edit lands mid-transaction", async () => {
     let onClock: (() => void) | null = null;
@@ -449,8 +452,12 @@ describe("runReview", () => {
     expect(result.code).toBe(EXIT_CODES.decisionRequired);
     expect(result.error.message).toContain("changed on disk");
     expect(result.error.message).toContain("did not complete");
-    expect(result.error.recovery).toContain("developer-os repair");
-    expect(result.error.recovery).toContain("run the same review again");
+    const recovery = result.error.recovery ?? "";
+    const repairAt = recovery.indexOf("developer-os repair");
+    const reviewAgainAt = recovery.indexOf("run the same review again");
+    expect(repairAt).toBeGreaterThan(-1);
+    expect(reviewAgainAt).toBeGreaterThan(-1);
+    expect(repairAt, recovery).toBeLessThan(reviewAgainAt);
     /** The hand edit survived, and nothing was applied. */
     expect(await nodeFs.readFile(seeded.path, "utf8")).toBe(concurrent);
     const transactions = await reviewTransactions(fixture);

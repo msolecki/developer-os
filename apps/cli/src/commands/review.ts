@@ -316,14 +316,14 @@ async function readCapture(
  *
  * **`validateChangePlan` is not on this path, and its absence is a decision.**
  * A change plan's `replace` requires the target to be a managed artifact and
- * refuses `unmanaged_target` otherwise (`plans/validate.ts`), and a capture is
- * deliberately absent from `installation-manifest.json`: it is the user's own
+ * refuses `unmanaged_target` otherwise (`plans/validate.ts:248`), and a capture
+ * is deliberately absent from `installation-manifest.json`: it is the user's own
  * content, editable in Obsidian by design (spec §3.4), so recording it as a
  * managed artifact would report every legitimate edit as drift. The ownership
  * checks a change plan would have run are replaced here by
  * `resolveCapturePath` — the writable-path guard, plus a canonical containment
  * check against the quarantine directory — and by the executor's own
- * `assertTarget` and snapshot.
+ * `assertTarget` and snapshot (`executor.ts:200-201`).
  *
  * The one check with no equivalent here is `excludedRoots`. Containment in
  * quarantine is a positive constraint and strictly narrower than "inside an
@@ -333,13 +333,13 @@ async function readCapture(
  *
  * **There is a lost-update window between the read and this call, and on this
  * path it is not benign.** `PlannedFileMutation` is `{targetPath, operation,
- * content}` (`transactions/types.ts`): a caller cannot supply a precondition.
- * The executor computes `expectedBeforeHash` from the snapshot it takes when
- * `execute()` runs and re-checks it at apply, so its protection begins at
- * `execute()` and not at the read. This command reads the file, re-redacts,
- * re-hashes and renders first; a hand edit landing in that window is picked up
- * by the executor's own snapshot, hashed as if it were the expected state, and
- * then overwritten by content derived from the older read.
+ * content}` (`transactions/types.ts:54-58`): a caller cannot supply a
+ * precondition. The executor computes `expectedBeforeHash` from the snapshot it
+ * takes inside `execute()` (`executor.ts:201,216`), so its protection begins
+ * there and not at this command's read. This command reads the file,
+ * re-redacts, re-hashes and renders first; a hand edit landing in between is
+ * picked up by that snapshot, hashed as if it were the expected state, and then
+ * overwritten by content derived from the older read.
  *
  * What is lost is exactly the user's own hand edit — silently, by the verb
  * whose whole purpose is to bring a hand edit back under the product's
@@ -353,31 +353,34 @@ async function readCapture(
  * in `docs/superpowers/ORDER.md` together with `capture`'s `O_EXCL` request,
  * because both have that one cause.
  *
- * **The half the executor does catch is translated rather than leaked, and it
- * keeps the class's own exit code.** An edit landing after `execute()`'s
- * snapshot raises `TransactionConflictError` — the executor protecting the
- * newer file by refusing, which is the good outcome — and a user meets it as a
- * sentence about their own capture rather than as an opaque class name. The
- * code is propagated through `exitCodeOf` rather than chosen here:
- * `TransactionConflictError` declares `EXIT_CODES.decisionRequired`, the exit
- * table glosses 3 as "user decision or conflict resolution required", which is
- * exactly what this is, and a command inventing its own code for a shared error
- * class is how a table that is "part of the contract" stops being one.
+ * **What the executor does catch is translated rather than leaked, and keeps
+ * the class's own exit code.** An edit landing after `execute()`'s snapshot
+ * raises `TransactionConflictError` — the executor protecting the newer file by
+ * refusing, which is the good outcome — and a user meets it as a sentence about
+ * their own capture rather than as an opaque class name. The code is propagated
+ * through `exitCodeOf` rather than chosen here: the class declares
+ * `EXIT_CODES.decisionRequired` (`executor.ts:39-41`), the exit table is part
+ * of Foundation's contract, and a command inventing its own code for a shared
+ * error class is how a stable table stops being one.
  *
- * **There are three such windows and one of them is post-apply, which is why
- * the message promises nothing about the file.** `backUp`'s re-snapshot and
- * `applyMutation`'s re-check both fire before this mutation's bytes are renamed
- * into place; `verifyDesired` fires *after* the rename, leaving the journal at
- * `applied` and the target already rewritten — and rewritten again by whoever
- * raced it, which is why the verify failed. The error carries no phase and a
- * failed `execute()` returns no journal id, so this catch cannot tell the three
- * apart, and "nothing was written" would be a promise it cannot keep.
+ * **The message promises nothing about the file, because one throw site is past
+ * the point of no return.** The executor raises this error from several places
+ * (`executor.ts:357,456,549,552,608`), and `verifyDesired` at `:608` fires
+ * *after* this mutation's bytes are renamed into place, on any divergence of
+ * content, mode or mtime (`:601-607`), leaving the journal at `applied` and the
+ * target already rewritten. The error carries no phase and a failed `execute()`
+ * returns no journal id, so this catch cannot tell the sites apart, and
+ * "nothing was written" would be a promise it cannot keep. What is true
+ * wherever it fires is that the decision did not complete.
  *
- * So it says what is true in all three — the decision did not complete — and
- * **orders the recovery so the post-apply case is safe**: an incomplete
- * transaction is resolved with `repair` before a second review runs over the
- * same capture, because a later rollback would otherwise restore the pre-edit
- * backup over the newer file.
+ * **The recovery is ordered because the journal stops being repairable, not
+ * because anything would overwrite the newer file.** Once the target has moved
+ * on, a journal that reached `validated` or later can be resolved by neither
+ * path: resume re-verifies against the desired bytes and conflicts (`:608`),
+ * and rollback's `restoreMutation` conflicts too (`:653`) — it writes the
+ * backup back only while the target still hashes to this transaction's own
+ * output (`:696`, behind `:653-662`), and refuses outright once it holds
+ * anything else. So `repair` first, while it can still act.
  */
 async function writeCapture(
   context: CliContext,
@@ -414,6 +417,9 @@ async function writeCapture(
  *      → transaction: plan → backup → stage → validate → apply → verify → finalize
  * ```
  *
+ * The second line is the executor's own phase sequence, not a restatement of
+ * the plan's vocabulary (`executor.ts:247-264`).
+ *
  * **Every decision re-redacts, not only `edit`.** `parseCaptureFile` recomputes
  * `content`, `deduplicationHash` and `redaction` on the way in, and this
  * command writes what it read back rather than patching a status line in place,
@@ -422,19 +428,19 @@ async function writeCapture(
  * get it because the rule is "redact before persisting", not "redact when
  * asked".
  *
- * **The secret leaves the vault; it does not leave the machine.** The
- * transaction backs the target up before it applies, and nothing removes a
- * backup after `finalize` (`transactions/executor.ts`), so the pre-edit file —
- * pasted secret and all — remains at
- * `~/.developer-os/backups/transactions/<id>/0.bin`, mode `0600`, under the
- * product's own state directory. Measured rather than assumed: sweeping a
- * fixture root after an edit finds the token in exactly that one file and
- * nowhere in the vault.
+ * **The secret leaves the vault; it does not leave the machine.** `backUp`
+ * writes the target's current bytes to
+ * `~/.developer-os/backups/transactions/<id>/0.bin` at mode `0600`
+ * (`executor.ts:459-467`), and no call site ever removes them —
+ * `backupDirectory` is only made, written and read (`:372,391,459,614,681`).
+ * The pre-edit file, pasted secret and all, stays there. Measured rather than
+ * assumed: sweeping a fixture root after an edit finds the token in exactly
+ * that one file and nowhere in the vault.
  *
  * **Those bytes are dead, not a restore capability.** `rollbackLocked` throws
- * `TransactionStateError` on a finalized journal, so once `finalize` runs the
- * backup can never be used for anything. The fix is correspondingly small and
- * belongs to Foundation rather than to this command: prune
+ * `TransactionStateError` on a finalized journal (`:280`), so once `finalize`
+ * runs the backup can never be used for anything. The fix is correspondingly
+ * small and belongs to Foundation rather than to this command: prune
  * `backupDirectory(id)` on the transition into `finalized`. No ordering inside
  * this command can substitute for it.
  *
@@ -448,8 +454,8 @@ async function writeCapture(
  * parsed, and no decision removes a source file — spec §5.6's own validator,
  * and the reason a `remove` mutation appears nowhere in this command. The one
  * refusal that cannot make that promise is `writeCapture`'s transaction
- * conflict, which can fire after the bytes were renamed into place and says so
- * where it is raised.
+ * conflict, which can fire after the bytes were renamed into place
+ * (`executor.ts:608`) and says so where it is raised.
  */
 async function decideOne(
   context: CliContext,
