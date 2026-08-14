@@ -2716,7 +2716,7 @@ Against the **compiled binary** in a disposable home, using `tests/helpers/temp-
 > fail — a suite believed on the strength of a run nobody isolated is the thing Step 1 exists to
 > prevent.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 it("initializes, captures, reviews, ingests and retrieves in five invocations", async () => {
@@ -2744,7 +2744,7 @@ it("initializes, captures, reviews, ingests and retrieves in five invocations", 
 
 The vendor is a scripted fake on `PATH` in the disposable home returning a fixed proposal — real vendor behaviour is Task 17's, and an end-to-end suite that needs credentials is an end-to-end suite CI cannot run.
 
-- [ ] **Step 2: Run the gate and commit**
+- [x] **Step 2: Run the gate and commit**
 
 ```bash
 npm run check && npm run test:e2e
@@ -2805,6 +2805,53 @@ The second thing `BACKLOG.md` §5 records this subsystem as owing. It consolidat
 **Files:**
 - Create: `docs/architecture/threat-model.md`
 - Modify: `docs/superpowers/BACKLOG.md` §5 — the row leaves the section
+
+> **Corrected 2026-08-14, before dispatch.** The pre-flight scan graded this task clean and it is;
+> what follows is what the tree learned after the scan was written, and one instruction about §5 that
+> the controller got wrong for itself first.
+>
+> **1. Three boundaries in this list are known *not* to hold, and a threat model that claims they do
+> is worse than none.** Every one was found by work that landed after this task was written, and each
+> has a durable record to point at:
+>
+> - **Quarantine containment does not hold against a relocated quarantine** — `BACKLOG.md` §1
+>   **NEW-14**. Replace `content/_raw/quarantine` with a symlink out of the vault and `ingest`
+>   rewrites the capture file outside it, because `resolveCapturePath` compares the canonicalized
+>   quarantine root and target *against each other* and never against the content root. A capture
+>   *file* that is a symlink is refused, by a different guard (`captureFileNames`'s `entry.isFile()`
+>   at selection), so the leaf case is no evidence about the directory case. `tests/security/`
+>   parks it as its one `it.fails`.
+> - **A secret removed from a vault file survives in the transaction backup** — `ORDER.md`'s third
+>   Foundation request. `TransactionExecutor.backUp` writes the pre-edit file raw to
+>   `~/.developer-os/backups/transactions/<id>/0.bin` and nothing prunes it, so
+>   `review --decision edit` tells the user the secret is gone while a copy remains under the
+>   product's own state directory.
+> - **`maxTurns` is bounded under Claude and silently dropped under Codex** — one shared schema,
+>   two behaviours (`codex-adapter.md` §11).
+>
+> Name each as a boundary whose enforcement is **absent or partial**, with the record that owns it.
+> "A boundary named without its enforcement is a paragraph, not a threat model" cuts both ways: a
+> boundary named with an enforcement it does not have is worse than a paragraph.
+>
+> **2. Point at `tests/security/` as it actually is.** Eight suites, 59 cases, and **41 of them carry
+> a watched-failure demonstration while 18 do not** — the suites say so about themselves. Cite the
+> evidenced ones by name where a boundary rests on them, and do not cite the suite as a whole as if
+> every case were evidence. Task 15 went to some trouble to make that distinction legible; a threat
+> model that flattens it undoes the work.
+>
+> **3. §5's rule is "the row leaves", and the controller broke it two commits ago.** The section says
+> a row leaves *when the directory exists*, because its job is to stop something being discovered
+> late. Marking the row "exists" leaves a row whose work is done sitting in a list of work that is
+> not — which is what happened to `tests/security/`'s row and had to be undone. **Delete the threat
+> model's row**, and carry what is durable about it into the prose beneath, beside the three entries
+> that closed the same way. The durable part here is the one the row already states: **the capability
+> model stays recorded per adapter and is not moved into the threat model**, because that is where it
+> belongs while the two vocabularies are asserted identical and Task 3's parity test is what keeps
+> that true.
+>
+> **4. After this task §5 has one row, not two.** Task 19's Step 5 says "§5's two rows leave"; the
+> first left with Task 15. Whoever runs Task 19 should read that sentence as already half discharged
+> rather than looking for a row that is gone.
 
 - [ ] **Step 1: Write it**
 

@@ -65,7 +65,7 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
 | Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian), NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (S, the argv screen's word list also screens free-form prose), NEW-13 (S, two artifact roots share one type) and **NEW-14 (S, security — a relocated quarantine takes its own containment check with it)** |
-| Repository infrastructure | §5 | one thing a later subsystem still owes, DOS-P6's — a consolidated threat model, Task 18. `tests/security/` **landed** in Task 15 with eight suites |
+| Repository infrastructure | §5 | one thing a later subsystem still owes, DOS-P6's — a consolidated threat model, Task 18 |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
 
@@ -425,11 +425,18 @@ inventory of what was built, and the architecture notes say what is in it.
 
 | Path | First owner | Status |
 |---|---|---|
-| `tests/security/` | DOS-P6 | **exists** since 2026-08-14, DOS-P6 Task 15 — eight suites: sentinel, prompt injection, symlink escape, multiline command, malformed manifest, interruption, network and concurrent edit. Each was watched fail before it was believed, and one case is parked `it.fails` over NEW-14 |
 | a consolidated threat model under `docs/architecture/` | DOS-P6 at the earliest | missing — the **capability model** is deliberately recorded twice instead, once per adapter (`claude-adapter.md` §3, `codex-adapter.md` §3), which is where it belongs while the two vocabularies are asserted identical |
 
-Everything else the file map names exists, most recently `packages/adapter-codex/` and
-`plugins/codex/` on 2026-08-12. Two rows left something durable behind as they closed:
+Everything else the file map names exists, most recently `tests/security/` on 2026-08-14. Three rows
+left something durable behind as they closed:
+
+- **`tests/security/` holds eight suites, not the six spec §9 names** — sentinel, prompt injection,
+  symlink escape, multiline command, malformed manifest and interruption from §9, plus **network** and
+  **concurrent edit**, the two §7's standing gate requires and §9 dropped. Every suite was watched
+  fail before it was believed, and thirteen reverts are recorded with the line each disabled. **41 of
+  its 59 cases carry that evidence and 18 do not**, which the suites say about themselves rather than
+  leaving a reader to assume. One case is parked `it.fails` over NEW-14, so the day that escape is
+  closed the suite announces it.
 
 - **`tests/contracts/` holds only DOS-P3's cases.** DOS-P2 put its contract cases beside the code
   they pin instead, which is why that directory looks thinner than the file map implies.
