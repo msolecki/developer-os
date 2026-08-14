@@ -27,12 +27,17 @@ describe("EFFECT_VOCABULARY", () => {
      * fifteenth verb, so this pin now carries both: every footprint below gained
      * a `command` field, and `capture.edit` is a new row rather than a change to
      * an existing one.
+     *
+     * Task 9 shipped `developer-os capture`, so `capture.write` splits out of
+     * the shared `capture` const: it is the one `capture.*` verb with a handler,
+     * and folding it back in would silently unpin the flip.
      */
     const indexes = ["content/_indexes/**"];
     const notes = ["content/**"];
     const quarantine = ["content/_raw/quarantine/**"];
     const brain = { staging: false, capability: null, owner: "DOS-P2", implemented: true };
     const capture = { staging: false, capability: null, owner: "DOS-P6", implemented: false };
+    const captureWrite = { ...capture, implemented: true };
 
     /** Spread, because `toStrictEqual` compares prototypes and this table has none. */
     expect({ ...EFFECT_VOCABULARY }).toStrictEqual({
@@ -41,7 +46,7 @@ describe("EFFECT_VOCABULARY", () => {
       "brain.readNote": { read: notes, write: [], ...brain, command: null },
       "brain.reindex": { read: notes, write: indexes, ...brain, command: "developer-os brain reindex" },
       "brain.lint": { read: notes, write: [], ...brain, command: "developer-os brain lint" },
-      "capture.write": { read: [], write: quarantine, ...capture, command: "developer-os capture" },
+      "capture.write": { read: [], write: quarantine, ...captureWrite, command: "developer-os capture" },
       "capture.list": { read: quarantine, write: [], ...capture, command: "developer-os review" },
       "capture.setStatus": { read: [], write: quarantine, ...capture, command: "developer-os review" },
       "capture.edit": { read: quarantine, write: quarantine, ...capture, command: "developer-os review" },
@@ -124,6 +129,7 @@ describe("EFFECT_VOCABULARY", () => {
     "uninstall",
     "brain",
     "search",
+    "capture",
   ] as const;
   const KNOWN_BRAIN_SUBCOMMANDS = ["reindex", "lint", "search", "status"] as const;
 
@@ -200,11 +206,13 @@ describe("EFFECT_VOCABULARY", () => {
     expect(EFFECT_VOCABULARY["ingest.apply"]?.write).toStrictEqual(["content/**"]);
   });
 
-  it("marks the eight unimplemented verbs with their owning subsystem", () => {
+  it("marks the seven unimplemented verbs with their owning subsystem", () => {
     /**
-     * Task 5 adds `capture.edit`, unimplemented like its two `capture` siblings
-     * until Task 10 ships the review handler, so the pinned set grows from
-     * seven to eight without changing any of the original seven.
+     * Task 5 added `capture.edit`, unimplemented like its two `capture`
+     * siblings until Task 10 ships the review handler, which grew the pinned
+     * set from seven to eight. Task 9 shipped `developer-os capture` and took
+     * `capture.write` back out of it, which is the whole point of the pin: a
+     * verb leaves this list in the same change as the handler that closes it.
      */
     const pending = Object.entries(EFFECT_VOCABULARY)
       .filter(([, footprint]) => !footprint.implemented)
@@ -215,7 +223,6 @@ describe("EFFECT_VOCABULARY", () => {
       "capture.edit",
       "capture.list",
       "capture.setStatus",
-      "capture.write",
       "ingest.apply",
       "ingest.stage",
       "ingest.validate",

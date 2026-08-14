@@ -91,12 +91,40 @@ function collectingIo(lines: string[]): CliIo {
     stdout: (line: string) => lines.push(line),
     stderr: (line: string) => lines.push(`error:${line}`),
     confirm: () => Promise.resolve(false),
+    readStdin: () => Promise.resolve(null),
   };
 }
 
 function neverCreatesContext(): never {
   throw new Error("dispatch built a context for a command that needs none");
 }
+
+/**
+ * Dispatch only — every case using this is refused before a context is built,
+ * so none of them needs an installed product. `neverCreatesContext` is what
+ * proves the refusal happened at parse time rather than inside the command.
+ */
+async function refuses(argv: readonly string[]): Promise<void> {
+  const lines: string[] = [];
+  const code = await run(argv, collectingIo(lines), neverCreatesContext);
+  expect(code, argv.join(" ")).toBe(2);
+  /**
+   * The exit code alone proves nothing here: `neverCreatesContext` throwing
+   * also yields 2, so a parse rule that stopped working would look identical.
+   * The usage block is emitted only by the parse-level refusal.
+   */
+  expect(lines.join("\n"), argv.join(" ")).toContain(
+    "Usage: developer-os <command>",
+  );
+}
+
+/**
+ * A command name nothing will ever dispatch. These cases used to spell it
+ * `capture`, which stopped being unknown the moment DOS-P6 Task 9 shipped the
+ * command — an "unknown command" case that quietly started exercising a real
+ * one.
+ */
+const UNKNOWN_COMMAND = "reticulate";
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -135,7 +163,11 @@ describe("run", () => {
   it("rejects an unknown command without building a context", async () => {
     const lines: string[] = [];
 
-    const code = await run(["capture"], collectingIo(lines), neverCreatesContext);
+    const code = await run(
+      [UNKNOWN_COMMAND],
+      collectingIo(lines),
+      neverCreatesContext,
+    );
 
     expect(code).toBe(2);
     expect(lines[0]).toContain("Usage: developer-os <command> [options]");
@@ -145,7 +177,7 @@ describe("run", () => {
     const lines: string[] = [];
 
     const code = await run(
-      ["capture", "--json"],
+      [UNKNOWN_COMMAND, "--json"],
       collectingIo(lines),
       neverCreatesContext,
     );
@@ -162,7 +194,7 @@ describe("run", () => {
   it("prints the usage block as separate lines", async () => {
     const lines: string[] = [];
 
-    await run(["capture"], collectingIo(lines), neverCreatesContext);
+    await run([UNKNOWN_COMMAND], collectingIo(lines), neverCreatesContext);
 
     expect(lines.length).toBeGreaterThan(10);
     expect(lines.join("\n")).not.toContain("�");
@@ -288,26 +320,28 @@ describe("run", () => {
   });
 });
 
-describe("brain dispatch", () => {
-  /**
-   * Dispatch only — every case here is refused before a context is built, so
-   * none of them needs an installed product. `neverCreatesContext` is what
-   * proves the refusal happened at parse time rather than inside the command.
-   */
-  async function refuses(argv: readonly string[]): Promise<void> {
-    const lines: string[] = [];
-    const code = await run(argv, collectingIo(lines), neverCreatesContext);
-    expect(code, argv.join(" ")).toBe(2);
-    /**
-     * The exit code alone proves nothing here: `neverCreatesContext` throwing
-     * also yields 2, so a parse rule that stopped working would look identical.
-     * The usage block is emitted only by the parse-level refusal.
-     */
-    expect(lines.join("\n"), argv.join(" ")).toContain(
-      "Usage: developer-os <command>",
-    );
-  }
+describe("capture dispatch", () => {
+  it("refuses an option capture does not accept", async () => {
+    await refuses(["capture", "--limit", "5"]);
+  });
 
+  /**
+   * The case that goes red if `text` joins `OPTIONS` without joining
+   * `OPTION_NAMES`: `suppliedOptions` filters `OPTION_NAMES`, so an option
+   * missing from it is invisible to the per-command allow-list and every
+   * command silently accepts it. The `--limit` case above stays green through
+   * that hole, which is why both are here.
+   */
+  it("refuses --text on a command that does not take it", async () => {
+    await refuses(["status", "--text", "hi"]);
+  });
+
+  it("refuses a positional, because capture takes none", async () => {
+    await refuses(["capture", "an observation"]);
+  });
+});
+
+describe("brain dispatch", () => {
   it("refuses an unknown brain subcommand", async () => {
     await refuses(["brain", "reticulate"]);
   });

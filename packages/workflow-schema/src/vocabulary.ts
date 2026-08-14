@@ -85,7 +85,8 @@ export const EFFECT_VOCABULARY: Readonly<Record<string, EffectFootprint>> =
     "brain.readNote": { read: ["content/**"], write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true, command: null },
     "brain.reindex": { read: ["content/**"], write: ["content/_indexes/**"], staging: false, capability: null, owner: "DOS-P2", implemented: true, command: "developer-os brain reindex" },
     "brain.lint": { read: ["content/**"], write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true, command: "developer-os brain lint" },
-    "capture.write": { read: [], write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os capture" },
+    /** The one `capture.*` verb with a handler: DOS-P6 Task 9 shipped `developer-os capture`. */
+    "capture.write": { read: [], write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: true, command: "developer-os capture" },
     "capture.list": { read: QUARANTINE, write: [], staging: false, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os review" },
     "capture.setStatus": { read: [], write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os review" },
     /**

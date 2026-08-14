@@ -130,6 +130,14 @@ export class RecordingIo implements CliIo {
     this.questions.push(question);
     return Promise.resolve(this.#answers.shift() ?? false);
   };
+
+  /**
+   * Nothing piped, for the same reason `confirm` declines by default: a fake
+   * must not appear to have been handed input nobody supplied. A suite that
+   * needs a pipe overrides this member on the context it passes, which keeps
+   * the fixture from carrying a channel almost nothing uses.
+   */
+  readonly readStdin = (): Promise<string | null> => Promise.resolve(null);
 }
 
 export interface CommandFixture {

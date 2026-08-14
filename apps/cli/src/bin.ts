@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
+import { Buffer } from "node:buffer";
 import { createInterface } from "node:readline/promises";
 
+import { MAX_CAPTURE_INPUT_BYTES } from "./commands/capture.js";
 import { createProductionContext } from "./context.js";
 import type { CliIo } from "./io.js";
 import { run } from "./main.js";
@@ -31,6 +33,31 @@ const io: CliIo = {
     } finally {
       prompt.close();
     }
+  },
+  /**
+   * `null` on a terminal, for the reason the docblock above gives: an
+   * interactive `developer-os capture` with no `--text` must refuse rather
+   * than hang on a terminal that will never send EOF.
+   *
+   * **Reading stops one byte past the bound rather than continuing.** The
+   * command owns the refusal — `MAX_CAPTURE_INPUT_BYTES` is its constant — but
+   * the channel owns the memory, and `cat huge.log | developer-os capture`
+   * must not be buffered whole to be told it is too large. One byte past is
+   * exactly enough for the command to tell "at the bound" from "over it", and
+   * nothing over the bound is ever written: it is refused, never shortened.
+   */
+  readStdin: async (): Promise<string | null> => {
+    if (process.stdin.isTTY) return null;
+
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of process.stdin) {
+      const bytes = chunk as Buffer;
+      chunks.push(bytes);
+      size += bytes.byteLength;
+      if (size > MAX_CAPTURE_INPUT_BYTES) break;
+    }
+    return Buffer.concat(chunks).toString("utf8");
   },
 };
 

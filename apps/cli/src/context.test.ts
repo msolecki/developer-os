@@ -381,6 +381,11 @@ describe("readRedactionKey", () => {
   });
 });
 
+/**
+ * `readStdin` returns `null` — nothing piped — for the same reason `confirm`
+ * answers `false`: an unattended fake must not appear to have been handed
+ * input nobody supplied.
+ */
 const NULL_IO: CliIo = {
   stdout: () => {
     /* discarded */
@@ -389,6 +394,7 @@ const NULL_IO: CliIo = {
     /* discarded */
   },
   confirm: () => Promise.resolve(false),
+  readStdin: () => Promise.resolve(null),
 };
 
 function recordingIo(): CliIo & { readonly err: string[] } {
@@ -402,6 +408,7 @@ function recordingIo(): CliIo & { readonly err: string[] } {
       err.push(line);
     },
     confirm: () => Promise.resolve(false),
+    readStdin: () => Promise.resolve(null),
   };
 }
 

@@ -10,6 +10,8 @@ import type { CliResult, ExitCode } from "@developer-os/core";
 
 import { renderBrain, runBrain } from "./commands/brain.js";
 import type { BrainResultV1, BrainSubcommand } from "./commands/brain.js";
+import { runCapture } from "./commands/capture.js";
+import type { CaptureResultV1 } from "./commands/capture.js";
 import { runDoctor } from "./commands/doctor.js";
 import type { DoctorReportV1 } from "./commands/doctor.js";
 import { runInit } from "./commands/init.js";
@@ -33,6 +35,7 @@ const USAGE = [
   "  init       install product state and a Brain skeleton",
   "  brain      reindex | lint | search <query> | status",
   "  search     alias for brain search <query>",
+  "  capture    quarantine one observation, redacted before it is written",
   "  status     report the current installation without changing it",
   "  doctor     run every health check without repairing anything",
   "  repair     resume or roll back one incomplete transaction",
@@ -43,6 +46,7 @@ const USAGE = [
   "  --yes            accept ordinary confirmations (init, uninstall)",
   "  --json           emit one machine-readable line",
   "  --limit <n>      most matches to return (brain search)",
+  "  --text <text>    the observation to capture; stdin when absent (capture)",
   "  --resume <id>    finish an incomplete transaction (repair)",
   "  --rollback <id>  undo an incomplete transaction (repair)",
   "  --version        print the product version",
@@ -55,11 +59,19 @@ const OPTIONS = {
   limit: { type: "string" },
   resume: { type: "string" },
   rollback: { type: "string" },
+  text: { type: "string" },
   version: { type: "boolean" },
 } as const;
 
 type OptionName = keyof typeof OPTIONS;
 
+/**
+ * Every name in `OPTIONS`, and the two lists must not drift apart:
+ * `suppliedOptions` filters *this* list, and the per-command allow-list is
+ * checked against what it returns. An option present in `OPTIONS` and absent
+ * here is invisible to that check, so `status --text hi` would parse and run —
+ * strict dispatch silently holed for every command, not only the new one.
+ */
 const OPTION_NAMES: readonly OptionName[] = [
   "dry-run",
   "json",
@@ -67,12 +79,14 @@ const OPTION_NAMES: readonly OptionName[] = [
   "limit",
   "resume",
   "rollback",
+  "text",
   "version",
 ];
 
 const COMMAND_OPTIONS: Readonly<Record<string, readonly OptionName[]>> = {
   brain: ["dry-run", "json", "limit"],
   search: ["json", "limit"],
+  capture: ["text", "json"],
   init: ["dry-run", "yes", "json"],
   status: ["json"],
   doctor: ["json"],
@@ -90,6 +104,7 @@ const COMMAND_POSITIONALS: Readonly<
   Record<string, { readonly min: number; readonly max: number }>
 > = {
   init: { min: 0, max: 0 },
+  capture: { min: 0, max: 0 },
   status: { min: 0, max: 0 },
   doctor: { min: 0, max: 0 },
   repair: { min: 0, max: 0 },
@@ -232,6 +247,21 @@ function renderInit(result: InitResultV1): readonly string[] {
       ? "Developer OS would create:"
       : "Developer OS created:",
     ...result.created.map((path) => `  ${renderPath(path)}`),
+  ];
+}
+
+/**
+ * A duplicate says so and names the status it already holds, because that is
+ * the whole answer: re-capturing something already rejected does not resurrect
+ * it, and the user needs to see which decision stands.
+ */
+function renderCapture(result: CaptureResultV1): readonly string[] {
+  return [
+    result.duplicate
+      ? `Already captured, at status ${result.status}:`
+      : "Captured:",
+    `  ${renderPath(result.path)}`,
+    `redactions          ${String(result.redactionCount)}`,
   ];
 }
 
@@ -399,6 +429,19 @@ async function dispatch(
         json,
         renderInit,
       );
+    case "capture": {
+      /**
+       * Omitted rather than passed as `undefined`: `exactOptionalPropertyTypes`
+       * distinguishes the two, and `runCapture` reads *absent* as "read stdin".
+       */
+      const text = optionString(invocation.values.text);
+      return emit(
+        io,
+        await runCapture(context, text === null ? {} : { text }),
+        json,
+        renderCapture,
+      );
+    }
     case "status":
       return emit(io, await runStatus(context), json, renderStatus);
     case "doctor":
