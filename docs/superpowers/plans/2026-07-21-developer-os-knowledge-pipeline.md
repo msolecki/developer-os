@@ -1137,7 +1137,7 @@ The pipeline, spec §5.1, in this order and no other:
   → envelope + Markdown body
 ```
 
-- [ ] **Step 1: Write the failing tests for `buildCapture`**
+- [x] **Step 1: Write the failing tests for `buildCapture`**
 
 ```ts
 const redact = (text: string): RedactionResult => redactText(text, TEST_KEY);
@@ -1191,13 +1191,13 @@ The third case is the one a reviewer should look hardest at. Two different secre
 
 The U+200D exemption is load-bearing and crosses three layers already (`packages/brain/src/redact.ts`, `apps/cli/src/context.ts`'s `renderPath`, and now this). Add a case: a family emoji survives `buildCapture` intact. If it does not, this screen disagrees with the two that exist and the divergence is the defect, not the emoji.
 
-- [ ] **Step 2: Run them, watch them fail, implement, rerun**
+- [x] **Step 2: Run them, watch them fail, implement, rerun**
 
 `buildCapture` is one function of about thirty lines with no branches worth hiding: redact, normalize, screen, hash, assemble. Every field's source is spec §5.3's table and nothing is invented here — `sourceAgent`, `sourceAgentVersion`, `captureMethod`, `projectSlug`, `workingDirectoryFingerprint` and `createdAt` all arrive on the request, because each one needs something this package must not touch (an environment, a process, a clock, a key).
 
 `sourceSessionId` is `null`. Spec §5.3: unless the adapter exposes one *stably*, and today neither does.
 
-- [ ] **Step 3: Write the failing tests for `renderCaptureFile` and `parseCaptureFile`**
+- [x] **Step 3: Write the failing tests for `renderCaptureFile` and `parseCaptureFile`**
 
 ```ts
 it("round-trips an envelope through the file it renders", () => {
@@ -1244,11 +1244,27 @@ it.each([
     .toEqual({ ok: false, reason });
 });
 
+// Corrected 2026-08-14 — see the note below. The second document must be
+// INSIDE the block, and the file must be named after its own id.
 it("refuses a second YAML document, as the note parser does", () => {
-  expect(parseCaptureFile("abc.md", `${built.contents}\n---\nstatus: accepted\n`, redact))
+  const file = fileFrom([...BASE_FRONTMATTER, "...", "status: accepted"]);
+  expect(parseCaptureFile(`${SAMPLE_ID}.md`, file, redact))
     .toEqual({ ok: false, reason: "unparseable" });
 });
+
+// The case the corrected one displaced, kept because it is a real property.
+it("reads a body that opens with a fence as a body, not as a second block", () => {
+  const parsed = parseCaptureFile(built.fileName, `${built.contents}\n---\nstatus: accepted\n`, redact);
+  expect(parsed.ok).toBe(true);
+  expect(parsed.ok && parsed.envelope.deduplicationHash).not.toBe(built.envelope.deduplicationHash);
+});
 ```
+
+> **Corrected 2026-08-14, by the fresh-context review of this task, which verified it empirically rather than by reading.** The snippet that stood here **could not fail for the reason it claimed**, and it is replaced rather than left for a later reader to re-derive.
+>
+> It appended `\n---\nstatus: accepted\n` to the whole *file*. The fence regex closes the block at the first `---` line, so that text lands in the **body**: the file parses cleanly, and the only refusal available came from its `"abc.md"` fixture name. Run as written it returned `id-mismatch`, not `unparseable` — a test that pinned the filename rather than the parser, and that would have stayed green against an implementation with no multi-document check at all.
+>
+> **A `...` end marker inside the block is what starts a second YAML document**, which `parseDocument` returns with no error while silently discarding everything after it — so a capture could carry a second envelope that nothing validated. `parseAllDocuments` sees both and the count refuses. Deleting `documents.length > 1 ||` from the implementation turns the corrected test red, which the original could never do.
 
 > **Corrected 2026-08-13, before dispatch.** The paragraph that stood here survived the founder's `captureId` immutability decision and contradicted it — and contradicted the fourth case directly above, which requires `parsed.ok === true`. It said a hand edit that pastes a secret "is refused with `id-mismatch`", which is the exact behaviour spec §5.3's amendment removed: the id is `H(redacted content)`, so under recomputation *every* content-changing edit refuses and the pasted secret stays in the vault file. An implementer following it would have built id recomputation, failed the fourth case, and been tempted to change the test instead.
 
@@ -1256,7 +1272,7 @@ it("refuses a second YAML document, as the note parser does", () => {
 
 `id-mismatch` keeps the narrower job it was always really for: the frontmatter `captureId` disagreeing with the filename, which is a rename or a hand-edited id field, and is what the third case pins.
 
-- [ ] **Step 4: Implement rendering and parsing**
+- [x] **Step 4: Implement rendering and parsing**
 
 Frontmatter is emitted with the same discipline `packages/brain/src/schema/note.ts` reads: a `---` fence, one YAML document, and no reserved key. Parse with `parseAllDocuments` and **refuse `documents.length > 1`** — `parseDocument` with `logLevel: "silent"` silently discards content after a `...` end-marker, which is the correction `note.ts` already carries. Reuse `FRONTMATTER_PARSE_OPTIONS` rather than writing a second options object.
 
@@ -1268,7 +1284,7 @@ The fence regex is the other inherited correction: `(?:([\s\S]*?)\r?\n)?---`, wh
 
 **Re-redaction empties the redaction record, and nothing else says so.** `redaction` is recomputed on every parse (spec §5.3), and re-redacting already-redacted content finds nothing — `[REDACTED:provider-token]` matches no pattern. So a capture written with one finding reads back with `redaction: []` the first time `review` touches it. That is not a defect to fix here: the fingerprints were only ever comparable within the run that produced them, and the placeholder in `content` is the durable evidence. It is a fact the Task 19 architecture note must carry, because a later reader will otherwise treat an empty `redaction` as "nothing was ever redacted".
 
-- [ ] **Step 5: Write the failing test for agent detection, and ship it empty**
+- [x] **Step 5: Write the failing test for agent detection, and ship it empty**
 
 Read **decision 3** above. The table is empty until Task 17 observes a row.
 
@@ -1285,7 +1301,7 @@ it("carries no row that Task 17 has not observed", () => {
 
 The second assertion is deliberately the shape that *fails* the day a row is added — which is correct, because adding a row is Task 17's job and Task 17 updates this test with the observation that justifies it. **A guessed row is worse than an absent one: it is a fact a later reader will trust** (spec §5.4).
 
-- [ ] **Step 6: Run the gate and commit**
+- [x] **Step 6: Run the gate and commit**
 
 ```bash
 npm run check
