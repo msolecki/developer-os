@@ -24,10 +24,19 @@
  * and spec §6.2 sets it deliberately wider: "the agent has read-only access to
  * the vault", because a model that cannot see the vault cannot propose notes
  * that link to existing ones or notice it is duplicating one. Nothing is
- * over-declared by this — a declared footprint is not a permission set, and the
- * write side carries the same distinction for Task 12, where the workflow's
- * declared write scopes describe what Developer OS writes across the workflow
- * rather than what the model was ever allowed to do.
+ * over-declared by this — a declared footprint is not a permission set.
+ *
+ * **The write side carries the same distinction, and it is now code.** After
+ * Task 7 the `ingest` contract declares `write: [content/**, content/_indexes/**]`,
+ * which describes what *Developer OS* writes across the whole workflow — the
+ * indexes directory is in there because the `reindex` step writes it. What the
+ * *model* may propose is strictly narrower, so `validateProposal`'s
+ * `write-scope` treats the declared set as an **upper bound and subtracts**
+ * generated outputs and private folders from it: `_indexes/index.json` and
+ * `_raw/quarantine/evil.md` are both inside the declared globs and both
+ * refused. "The same globs by construction" would be the natural reading and it
+ * is false; the bound is still consulted, which is why narrowing the contract
+ * to `content/QA/**` refuses a note in `DEV/`.
  *
  * **Zero write scopes, and the sandbox follows from the count rather than
  * from an argument.** `invokeCodex` derives `-s read-only` from
@@ -58,3 +67,10 @@ export type {
 } from "./proposal.js";
 export { buildIngestPrompt, MAX_PROMPT_CONTENT_GRAPHEMES } from "./prompt.js";
 export type { IngestPromptOptions } from "./prompt.js";
+export { validateProposal, VALIDATOR_IDS } from "./validate.js";
+export type {
+  IngestValidationContext,
+  IngestValidationFinding,
+  IngestValidationResult,
+  ValidatorId,
+} from "./validate.js";

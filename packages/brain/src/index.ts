@@ -95,13 +95,19 @@ export {
   MAX_PROPOSED_NOTES,
   MAX_PROPOSED_PATH_CHARS,
   parseIngestProposal,
+  validateProposal,
+  VALIDATOR_IDS,
 } from "./ingest/index.js";
 export type {
   IngestProposal,
   IngestProposalOutcome,
   IngestProposalRefusal,
   IngestPromptOptions,
+  IngestValidationContext,
+  IngestValidationFinding,
+  IngestValidationResult,
   ProposedNote,
+  ValidatorId,
 } from "./ingest/index.js";
 export { CAPTURE_STATUSES } from "./schema/capture.js";
 export type {
