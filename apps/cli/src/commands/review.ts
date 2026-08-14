@@ -24,6 +24,7 @@ import type { CaptureStatus, ReviewDecision } from "@developer-os/brain";
 import { redactText } from "@developer-os/security";
 
 import {
+  exitCodeOf,
   failureFrom,
   loadOrCreateRedactionKey,
   runtimePathsFor,
@@ -352,14 +353,31 @@ async function readCapture(
  * in `docs/superpowers/ORDER.md` together with `capture`'s `O_EXCL` request,
  * because both have that one cause.
  *
- * **The half the executor does catch is translated rather than leaked.** An
- * edit landing after `execute()`'s snapshot — between it and `backUp`, or
- * between `backUp` and the apply-time re-check — raises
- * `TransactionConflictError`, which is the executor protecting the newer file
- * by refusing. That is the good outcome, and a user meets it as a sentence
- * about their own capture rather than as an opaque class name: nothing was
- * written, the file on disk is the newer one, and running the same review again
- * reads it.
+ * **The half the executor does catch is translated rather than leaked, and it
+ * keeps the class's own exit code.** An edit landing after `execute()`'s
+ * snapshot raises `TransactionConflictError` — the executor protecting the
+ * newer file by refusing, which is the good outcome — and a user meets it as a
+ * sentence about their own capture rather than as an opaque class name. The
+ * code is propagated through `exitCodeOf` rather than chosen here:
+ * `TransactionConflictError` declares `EXIT_CODES.decisionRequired`, the exit
+ * table glosses 3 as "user decision or conflict resolution required", which is
+ * exactly what this is, and a command inventing its own code for a shared error
+ * class is how a table that is "part of the contract" stops being one.
+ *
+ * **There are three such windows and one of them is post-apply, which is why
+ * the message promises nothing about the file.** `backUp`'s re-snapshot and
+ * `applyMutation`'s re-check both fire before this mutation's bytes are renamed
+ * into place; `verifyDesired` fires *after* the rename, leaving the journal at
+ * `applied` and the target already rewritten — and rewritten again by whoever
+ * raced it, which is why the verify failed. The error carries no phase and a
+ * failed `execute()` returns no journal id, so this catch cannot tell the three
+ * apart, and "nothing was written" would be a promise it cannot keep.
+ *
+ * So it says what is true in all three — the decision did not complete — and
+ * **orders the recovery so the post-apply case is safe**: an incomplete
+ * transaction is resolved with `repair` before a second review runs over the
+ * same capture, because a later rollback would otherwise restore the pre-edit
+ * backup over the newer file.
  */
 async function writeCapture(
   context: CliContext,
@@ -380,10 +398,10 @@ async function writeCapture(
   } catch (error) {
     if (!(error instanceof TransactionConflictError)) throw error;
     throw new ReviewRefusal(
-      EXIT_CODES.operationalFailure,
-      "the capture changed on disk while this review was reading it, so nothing was written",
+      exitCodeOf(error),
+      "the capture changed on disk while this review was running, so the decision did not complete",
       [target],
-      "run the same review again; it will read the newer file",
+      "if developer-os status reports an incomplete transaction, resolve it with developer-os repair first; otherwise run the same review again, which reads the newer file",
     );
   }
 }
@@ -425,10 +443,13 @@ async function writeCapture(
  * `id-mismatch` keeps the narrower job it was really for: a frontmatter id that
  * disagrees with the filename, from a rename or a hand-edited id field.
  *
- * **A refusal leaves the capture exactly as it was.** Nothing here is written
- * before the decision is legal and the envelope has parsed, and no decision
- * removes a source file — spec §5.6's own validator, and the reason a
- * `remove` mutation appears nowhere in this command.
+ * **Every refusal raised in this function leaves the capture exactly as it
+ * was.** Nothing is written before the decision is legal and the envelope has
+ * parsed, and no decision removes a source file — spec §5.6's own validator,
+ * and the reason a `remove` mutation appears nowhere in this command. The one
+ * refusal that cannot make that promise is `writeCapture`'s transaction
+ * conflict, which can fire after the bytes were renamed into place and says so
+ * where it is raised.
  */
 async function decideOne(
   context: CliContext,

@@ -402,6 +402,18 @@ describe("runReview", () => {
    * opaque class name, and the newer file must survive — the lost update this
    * command is at greatest risk of is precisely the one the user just made by
    * hand.
+   *
+   * **Exit 3, which is `TransactionConflictError`'s own.** The exit table is
+   * part of Foundation's contract and glosses 3 as "user decision or conflict
+   * resolution required"; a command that reported some other code for a shared
+   * executor event would make two commands disagree about one thing that
+   * happened. This case exists partly to keep that propagation honest, so it
+   * asserts the code rather than merely that the run failed.
+   *
+   * The recovery is asserted in the order it must be followed: `verifyDesired`
+   * can raise the same error *after* the rename, and a second review run over a
+   * capture with an unfinalized journal risks a later rollback restoring the
+   * pre-edit backup over the newer file.
    */
   it("refuses, keeping the newer file, when a hand edit lands mid-transaction", async () => {
     let onClock: (() => void) | null = null;
@@ -434,9 +446,11 @@ describe("runReview", () => {
     expect(raced, "the concurrent edit must actually have been staged").toBe(true);
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.code).toBe(EXIT_CODES.operationalFailure);
+    expect(result.code).toBe(EXIT_CODES.decisionRequired);
     expect(result.error.message).toContain("changed on disk");
-    expect(result.error.recovery).toContain("again");
+    expect(result.error.message).toContain("did not complete");
+    expect(result.error.recovery).toContain("developer-os repair");
+    expect(result.error.recovery).toContain("run the same review again");
     /** The hand edit survived, and nothing was applied. */
     expect(await nodeFs.readFile(seeded.path, "utf8")).toBe(concurrent);
     const transactions = await reviewTransactions(fixture);
