@@ -341,6 +341,54 @@ describe("capture dispatch", () => {
   });
 });
 
+describe("review dispatch", () => {
+  it("refuses an option review does not accept", async () => {
+    await refuses(["review", "--limit", "5"]);
+    await refuses(["review", "--text", "hi"]);
+  });
+
+  /**
+   * The two cases that go red if `id` or `decision` joins `OPTIONS` without
+   * joining `OPTION_NAMES`: `suppliedOptions` filters `OPTION_NAMES`, so an
+   * option missing from it is invisible to the per-command allow-list and
+   * *every* command silently accepts it — strict dispatch holed for all of
+   * them, not only the new one. The `--limit` case above stays green through
+   * that hole, which is why these are here.
+   */
+  it("refuses --id and --decision on a command that does not take them", async () => {
+    await refuses(["status", "--id", "0f1e2d3c4b5a6978"]);
+    await refuses(["status", "--decision", "accept"]);
+    await refuses(["capture", "--decision", "accept"]);
+  });
+
+  it("refuses a positional, because review names its capture with --id", async () => {
+    await refuses(["review", "0f1e2d3c4b5a6978"]);
+  });
+
+  it("accepts every well-formed review invocation", async () => {
+    /**
+     * These reach the command, which then refuses because the fixture has no
+     * configuration — exit 2 either way, so the assertion that distinguishes
+     * parse from command is the stderr text. A loop rather than `it.each`,
+     * matching the brain suite below: the three argv arrays share a first
+     * element, and `%s` would name all three cases `review`.
+     */
+    for (const argv of [
+      ["review"],
+      ["review", "--json"],
+      ["review", "--id", "0f1e2d3c4b5a6978", "--decision", "accept"],
+      ["review", "--id", "0f1e2d3c4b5a6978", "--decision", "edit"],
+    ]) {
+      const fixture = await createCommandFixture(`ok-${argv.join("-")}`);
+      const lines: string[] = [];
+      await run(argv, collectingIo(lines), () => fixture.context);
+      expect(lines.join("\n"), argv.join(" ")).toContain(
+        "Developer OS is not initialized",
+      );
+    }
+  });
+});
+
 describe("brain dispatch", () => {
   it("refuses an unknown brain subcommand", async () => {
     await refuses(["brain", "reticulate"]);

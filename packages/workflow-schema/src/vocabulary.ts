@@ -85,17 +85,24 @@ export const EFFECT_VOCABULARY: Readonly<Record<string, EffectFootprint>> =
     "brain.readNote": { read: ["content/**"], write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true, command: null },
     "brain.reindex": { read: ["content/**"], write: ["content/_indexes/**"], staging: false, capability: null, owner: "DOS-P2", implemented: true, command: "developer-os brain reindex" },
     "brain.lint": { read: ["content/**"], write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true, command: "developer-os brain lint" },
-    /** The one `capture.*` verb with a handler: DOS-P6 Task 9 shipped `developer-os capture`. */
+    /** DOS-P6 Task 9 shipped `developer-os capture`. */
     "capture.write": { read: [], write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: true, command: "developer-os capture" },
-    "capture.list": { read: QUARANTINE, write: [], staging: false, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os review" },
-    "capture.setStatus": { read: [], write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os review" },
     /**
-     * Spec §4's seventh Brain-adjacent verb. Same quarantine footprint as
-     * `capture.setStatus` — a review edit only ever touches a quarantined
-     * observation — plus the read the edit itself needs to show the author
-     * what they are changing.
+     * The three `developer-os review` verbs, all shipped by DOS-P6 Task 10:
+     * listing what is quarantined, moving a status, and the edit that re-reads
+     * a hand-edited capture.
      */
-    "capture.edit": { read: QUARANTINE, write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os review" },
+    "capture.list": { read: QUARANTINE, write: [], staging: false, capability: null, owner: "DOS-P6", implemented: true, command: "developer-os review" },
+    "capture.setStatus": { read: [], write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: true, command: "developer-os review" },
+    /**
+     * Spec §4's seventh Brain-adjacent verb, and a separate verb from
+     * `capture.setStatus` because an edit is a *content* transition: spec §5.5
+     * has no status meaning "edited", and adding one would put a seventh
+     * member into a frozen ordered list to say what the file's own mtime
+     * already says. Same quarantine footprint as `capture.setStatus`, plus the
+     * read the edit itself needs.
+     */
+    "capture.edit": { read: QUARANTINE, write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: true, command: "developer-os review" },
     "ingest.stage": { read: QUARANTINE, write: [], staging: true, capability: "structured_result", owner: "DOS-P6", implemented: false, command: "developer-os ingest" },
     "ingest.validate": { read: [], write: [], staging: true, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os ingest" },
     "ingest.apply": { read: [], write: ["content/**"], staging: true, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os ingest" },

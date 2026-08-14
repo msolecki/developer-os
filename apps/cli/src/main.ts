@@ -18,6 +18,8 @@ import { runInit } from "./commands/init.js";
 import type { InitResultV1 } from "./commands/init.js";
 import { runRepair } from "./commands/repair.js";
 import type { RepairResultV1 } from "./commands/repair.js";
+import { runReview } from "./commands/review.js";
+import type { ReviewResultV1 } from "./commands/review.js";
 import { runStatus } from "./commands/status.js";
 import type { StatusReportV1 } from "./commands/status.js";
 import { runUninstall } from "./commands/uninstall.js";
@@ -36,6 +38,7 @@ const USAGE = [
   "  brain      reindex | lint | search <query> | status",
   "  search     alias for brain search <query>",
   "  capture    quarantine one observation, redacted before it is written",
+  "  review     list quarantined captures, or decide on one",
   "  status     report the current installation without changing it",
   "  doctor     run every health check without repairing anything",
   "  repair     resume or roll back one incomplete transaction",
@@ -47,6 +50,8 @@ const USAGE = [
   "  --json           emit one machine-readable line",
   "  --limit <n>      most matches to return (brain search)",
   "  --text <text>    the observation to capture; stdin when absent (capture)",
+  "  --id <id>        the capture to decide on (review)",
+  "  --decision <d>   accept, reject or edit (review)",
   "  --resume <id>    finish an incomplete transaction (repair)",
   "  --rollback <id>  undo an incomplete transaction (repair)",
   "  --version        print the product version",
@@ -54,6 +59,8 @@ const USAGE = [
 
 const OPTIONS = {
   "dry-run": { type: "boolean" },
+  decision: { type: "string" },
+  id: { type: "string" },
   json: { type: "boolean" },
   yes: { type: "boolean" },
   limit: { type: "string" },
@@ -74,6 +81,8 @@ type OptionName = keyof typeof OPTIONS;
  */
 const OPTION_NAMES: readonly OptionName[] = [
   "dry-run",
+  "decision",
+  "id",
   "json",
   "yes",
   "limit",
@@ -87,6 +96,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly OptionName[]>> = {
   brain: ["dry-run", "json", "limit"],
   search: ["json", "limit"],
   capture: ["text", "json"],
+  review: ["id", "decision", "json"],
   init: ["dry-run", "yes", "json"],
   status: ["json"],
   doctor: ["json"],
@@ -105,6 +115,7 @@ const COMMAND_POSITIONALS: Readonly<
 > = {
   init: { min: 0, max: 0 },
   capture: { min: 0, max: 0 },
+  review: { min: 0, max: 0 },
   status: { min: 0, max: 0 },
   doctor: { min: 0, max: 0 },
   repair: { min: 0, max: 0 },
@@ -262,6 +273,27 @@ function renderCapture(result: CaptureResultV1): readonly string[] {
       : "Captured:",
     `  ${renderPath(result.path)}`,
     `redactions          ${String(result.redactionCount)}`,
+  ];
+}
+
+/**
+ * A listing names the ids a decision can be taken on; a decision names what it
+ * moved. Neither prints the observation: the capture is Markdown in the user's
+ * own vault, and a reviewer reads it there rather than through a terminal that
+ * would have to re-screen every line of it.
+ */
+function renderReview(result: ReviewResultV1): readonly string[] {
+  if (result.reviewed > 0) {
+    return result.captures.map(
+      (capture) => `Reviewed ${capture.captureId}, now ${capture.status}.`,
+    );
+  }
+  if (result.captures.length === 0) {
+    return ["No captures are waiting for review."];
+  }
+  return [
+    "Quarantined captures:",
+    ...result.captures.map((capture) => `  ${capture.captureId}`),
   ];
 }
 
@@ -440,6 +472,23 @@ async function dispatch(
         await runCapture(context, text === null ? {} : { text }),
         json,
         renderCapture,
+      );
+    }
+    case "review": {
+      /**
+       * Omitted rather than passed as `undefined`: `exactOptionalPropertyTypes`
+       * distinguishes the two, and `runReview` reads *both* absent as "list".
+       */
+      const id = optionString(invocation.values.id);
+      const decision = optionString(invocation.values.decision);
+      return emit(
+        io,
+        await runReview(context, {
+          ...(id === null ? {} : { id }),
+          ...(decision === null ? {} : { decision }),
+        }),
+        json,
+        renderReview,
       );
     }
     case "status":

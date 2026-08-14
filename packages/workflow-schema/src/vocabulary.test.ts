@@ -28,16 +28,17 @@ describe("EFFECT_VOCABULARY", () => {
      * a `command` field, and `capture.edit` is a new row rather than a change to
      * an existing one.
      *
-     * Task 9 shipped `developer-os capture`, so `capture.write` splits out of
-     * the shared `capture` const: it is the one `capture.*` verb with a handler,
-     * and folding it back in would silently unpin the flip.
+     * Task 9 shipped `developer-os capture`, so `capture.write` split out of
+     * the shared `capture` const into a `captureWrite` of its own. Task 10
+     * shipped `developer-os review` — the other three — which makes every
+     * `capture.*` verb implemented and the split pointless, so it is folded
+     * back rather than left as two consts that say the same thing.
      */
     const indexes = ["content/_indexes/**"];
     const notes = ["content/**"];
     const quarantine = ["content/_raw/quarantine/**"];
     const brain = { staging: false, capability: null, owner: "DOS-P2", implemented: true };
-    const capture = { staging: false, capability: null, owner: "DOS-P6", implemented: false };
-    const captureWrite = { ...capture, implemented: true };
+    const capture = { staging: false, capability: null, owner: "DOS-P6", implemented: true };
 
     /** Spread, because `toStrictEqual` compares prototypes and this table has none. */
     expect({ ...EFFECT_VOCABULARY }).toStrictEqual({
@@ -46,7 +47,7 @@ describe("EFFECT_VOCABULARY", () => {
       "brain.readNote": { read: notes, write: [], ...brain, command: null },
       "brain.reindex": { read: notes, write: indexes, ...brain, command: "developer-os brain reindex" },
       "brain.lint": { read: notes, write: [], ...brain, command: "developer-os brain lint" },
-      "capture.write": { read: [], write: quarantine, ...captureWrite, command: "developer-os capture" },
+      "capture.write": { read: [], write: quarantine, ...capture, command: "developer-os capture" },
       "capture.list": { read: quarantine, write: [], ...capture, command: "developer-os review" },
       "capture.setStatus": { read: [], write: quarantine, ...capture, command: "developer-os review" },
       "capture.edit": { read: quarantine, write: quarantine, ...capture, command: "developer-os review" },
@@ -130,6 +131,7 @@ describe("EFFECT_VOCABULARY", () => {
     "brain",
     "search",
     "capture",
+    "review",
   ] as const;
   const KNOWN_BRAIN_SUBCOMMANDS = ["reindex", "lint", "search", "status"] as const;
 
@@ -206,13 +208,15 @@ describe("EFFECT_VOCABULARY", () => {
     expect(EFFECT_VOCABULARY["ingest.apply"]?.write).toStrictEqual(["content/**"]);
   });
 
-  it("marks the seven unimplemented verbs with their owning subsystem", () => {
+  it("marks the four unimplemented verbs with their owning subsystem", () => {
     /**
      * Task 5 added `capture.edit`, unimplemented like its two `capture`
-     * siblings until Task 10 ships the review handler, which grew the pinned
-     * set from seven to eight. Task 9 shipped `developer-os capture` and took
-     * `capture.write` back out of it, which is the whole point of the pin: a
-     * verb leaves this list in the same change as the handler that closes it.
+     * siblings, which grew the pinned set from seven to eight. Task 9 shipped
+     * `developer-os capture` and took `capture.write` back out of it; Task 10
+     * shipped `developer-os review` and took the remaining three. That is the
+     * whole point of the pin — a verb leaves this list in the same change as
+     * the handler that closes it — and it is why the test's own name is part
+     * of what each of those tasks had to update.
      */
     const pending = Object.entries(EFFECT_VOCABULARY)
       .filter(([, footprint]) => !footprint.implemented)
@@ -220,9 +224,6 @@ describe("EFFECT_VOCABULARY", () => {
       .sort();
     expect(pending).toStrictEqual([
       "agent.prompt",
-      "capture.edit",
-      "capture.list",
-      "capture.setStatus",
       "ingest.apply",
       "ingest.stage",
       "ingest.validate",

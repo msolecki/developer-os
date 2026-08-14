@@ -82,6 +82,12 @@ export type {
   CaptureFileOutcome,
   CaptureFileRefusal,
 } from "./capture/index.js";
+export {
+  applyReviewDecision,
+  isReviewDecision,
+  REVIEW_DECISIONS,
+} from "./review/index.js";
+export type { ReviewDecision, ReviewOutcome } from "./review/index.js";
 export { CAPTURE_STATUSES } from "./schema/capture.js";
 export type {
   CaptureEnvelopeV1,
