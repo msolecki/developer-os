@@ -2067,29 +2067,108 @@ git commit -m "feat(brain): nine validators between a model's proposal and the v
 - Create: `packages/brain/src/ingest/apply.ts`, `apply.test.ts`
 - Create: `apps/cli/src/commands/ingest.ts`, `apps/cli/src/commands/ingest.test.ts`
 - Modify: `apps/cli/src/main.ts`, `packages/workflow-schema/src/vocabulary.ts`
+- Modify: `packages/brain/src/ingest/index.ts`, `packages/brain/src/index.ts` — `apply.ts` is
+  unreachable from `apps/cli` without both, and a package whose new module is not on its own export
+  list is a compile error in the consumer, not in the producer
+- Test: `apps/cli/src/main.test.ts`, `packages/workflow-schema/src/vocabulary.test.ts` — both are in
+  Step 3's `git add` and were missing here, the same defect Task 10 had to correct
 
-> **Two obligations inherited from Task 12, recorded 2026-08-14** when its review raised each as
-> something it could not verify from its own diff. Neither is optional and neither has an owner
-> before this task. This paragraph exists because the scratch ledger that raised them is deleted
-> when the plan closes.
+> **Corrected 2026-08-14, before dispatch**, against pre-flight findings 32 and 33, the two
+> obligations Task 12 handed over, and four more found while checking them — each verified in the
+> tree at `3ff30a4`. The two inherited obligations are corrections 1 and 2; **the first of them is
+> restated because the Task 12 ruling that produced it is not implementable as written.**
 >
-> **1. Supply the declared write scopes, and prove they are the contract's.** Task 12's `write-scope`
-> validator takes `context.ingestContract` as plain resolved strings and **sources nothing** — its
-> tests hand-write `DECLARED_WRITE_SCOPES`, so nothing today proves those strings are what
-> `resolveScopeGlob` actually yields for `workflows/ingest/workflow.yaml`. Per the Task 12 ruling:
-> **compile the resolved set in as a constant in `apps/cli`, pinned by a test against that
-> `workflow.yaml`** — the embed-plus-parity-test precedent of `brain-template.ts` and Task 11's
-> `output-schemas.ts`. Rejected there and still rejected here: making the contract a managed
-> artifact, which buys a runtime read for a new manifest entry and a new drift surface, over a value
-> that cannot change between releases.
+> **1. `DECLARED_WRITE_SCOPES` cannot be a compiled-in *resolved* set, because resolution is
+> per-install.** The Task 12 ruling said "compile the resolved set in as a constant in `apps/cli`".
+> `resolveScopeGlob(glob, config)` (`vocabulary.ts:283-297`) splices `config.contentRoot` and
+> `config.indexesDir` into the glob, so the resolved strings depend on the user's `config.toml` and
+> nothing about them is knowable at build time. What *is* fixed between releases is the **declared,
+> unresolved** list, and that is what gets compiled in:
 >
-> **2. Screen `finding.path` in whatever writes the validation report.** Task 12 deliberately keeps
-> paths byte-exact and delegates screening to the terminal, which is `brain.md` §5's stated
-> exemption and correct there. But spec §6.3 says the validation report is **written and logged**,
-> and the path in a finding is model-chosen. Unscreened, a path carrying control bytes reaches a
-> file as bytes — against "control characters are written as escapes, never as bytes", which
-> `tests/repository/control-bytes.test.ts` exists to hold and which has already caught two literal
-> control characters in this repository. Screen at the write seam, not in the validator.
+> ```ts
+> const INGEST_DECLARED_WRITE_SCOPES = ["content/**", "content/_indexes/**"] as const;
+> ```
+>
+> **The parity test is against the file, exactly as the ruling intended** — read
+> `workflows/ingest/workflow.yaml` through `parseWorkflowYaml`/`loadWorkflow` (the repo-root URL
+> precedent is `output-schemas.test.ts:24-25`) and assert its `scopes.write` equals that constant, so
+> a contract edit that does not update the constant goes red. **Resolution happens at the call site**,
+> once per invocation, against the same `resolveBrainConfig(config)` every other Brain consumer uses:
+> `INGEST_DECLARED_WRITE_SCOPES.map((glob) => resolveScopeGlob(glob, brainConfig))` is what reaches
+> `IngestValidationContext.ingestContract`. Still rejected, and for the ruling's own reason: making
+> the contract a managed artifact, which buys a runtime read for a new manifest entry and a new drift
+> surface.
+>
+> **2. Screen `finding.path` where the report is assembled — and the report is not a file.** Task 12
+> keeps paths byte-exact and delegates screening to the terminal, which is `brain.md` §5's stated
+> exemption and correct there. Spec §6.3 calls the validation report "written and logged" and
+> **defines no file for it**; searching both specs finds no path, no directory and no format. This
+> task does not invent one. The report is the `IngestValidationFinding[]` carried into the `CliResult`
+> — warnings on stderr and the `--json` payload — and *that* is the write seam: screen
+> `finding.path` with `screenAndCap(path, MAX_PROPOSED_PATH_CHARS)` from `@developer-os/security`
+> where a finding becomes a result string, never in the validator. `finding.message` is already
+> screened upstream and is not re-screened here. The covering test puts a `U+0007` and a `U+202E` in a
+> proposed path and asserts the rendered warning and the `--json` payload carry neither byte —
+> the rule `tests/repository/control-bytes.test.ts` exists to hold.
+>
+> **3. Nothing says which vendor `ingest` invokes, and the spec does not answer it.** §6.1's ladder
+> says `adapter.invoke` and §10.2 requires "one real run per vendor" at Task 17; `apps/cli` invokes
+> no adapter today, and `invokeClaude`/`invokeCodex` share neither an invocation type nor a result
+> type. **Ruling: `ingest` gains `--agent`, and its default is the first installed vendor in the
+> fixed order `claude`, then `codex`.** A fixed order with no override would make Task 17's second
+> real run reachable only by uninstalling a vendor, which is not a thing to ask of the founder's
+> machine; an explicit flag costs one entry in `OPTIONS` and one in `OPTION_NAMES` and makes the
+> choice reportable. **Cost if wrong:** an option that DOS-P7 renames. `--json` reports the vendor
+> that produced the proposal under an `agent` field, so a run is attributable without re-deriving it.
+>
+> **Neither vendor installed is `capabilityUnavailable` (exit 4)**, which is the contract's own
+> `capability-missing` refusal in the only sense this command can honour. **`ingest` does not
+> probe.** Probing is opt-in and its first production caller is Task 14; making the central path
+> spend a probe to learn what the two-gate table already claims would be the expensive half of a
+> capability check for none of its value. A vendor that returns something `parseIngestProposal`
+> refuses is `malformed-output` → `operationalFailure`, which is where a missing structured result
+> actually surfaces.
+>
+> **4. "One capture, one agent call, one transaction" is false, and the correction is the point of
+> the task** (finding 32). The ladder performs four distinct mutations against two different
+> ownership regimes, and the executor's lock is per-execution, so they cannot be one transaction.
+> **Four transactions per capture, in this order, each with its own `kind`:**
+>
+> | # | `kind` | Mutations | Why it is its own transaction |
+> |---|---|---|---|
+> | 1 | `ingest-stage` | the capture file, `accepted → staging` | the status must be durable before the apply, or a crash cannot be told from a run that never started |
+> | 2 | `ingest-apply` | one `create` per proposed note | the vault write spec §6.1 names |
+> | 3 | `ingest-reindex` | the index artifacts | `BrainService.reindex()` **reads the vault**, so it cannot run until 2 has finalized |
+> | 4 | `ingest-ingested` | the capture file, `staging → ingested` | `ingested` may not be claimed before the note is findable |
+>
+> A failure after 1 runs a fifth, compensating transaction — `ingest-rollback`, the capture file
+> `staging → accepted` — which is what Step 1's "never to `failed`" case observes.
+>
+> **The residual, stated rather than closed:** a crash between 2 and 4 leaves a capture at `staging`
+> with its notes already applied. `staging` is not `accepted`, so the next run does not select it and
+> cannot double-apply; it is visible and it is inert, and `repair` plus a hand edit of the status is
+> what moves it. No arrangement of these four removes that window, because no two of them can share a
+> transaction: 3 depends on 2 having finalized, and 4's target is deliberately not a managed artifact
+> while 3's targets are (`validateChangePlan` grants ownership from the manifest, and a capture is
+> absent from it by design — `review.ts:317-324` records why).
+>
+> **There is no staging *directory*.** "Developer OS writes staging" in §6.1 and the `staging: true`
+> flags in `EFFECT_VOCABULARY` name the executor's own `stage` phase — the temporary file it writes
+> beside each target — and `CaptureStatus.staging` names the capture's status while transactions 2
+> and 3 run. Two things, not three. Task 15's sentinel list says "the staging directory"; what it
+> must sweep is the executor's staging temporaries and its backup directory.
+>
+> **5. Transaction 3 is `brain reindex`'s path, not a second one.** Reuse `runReindex`'s shape from
+> `apps/cli/src/commands/brain.ts:419-479`: `service.reindex()` for the bytes, `assertTarget` plus
+> `mkdir` for the indexes directory, `stageArtifacts` (which runs `validateChangePlan` with
+> `ownedRoots: [<indexes dir>]`), `executor.execute`, then `recordArtifacts`. **Do not add a write
+> channel to `BrainService`** — its absence is the design, and Step 2 already says so.
+>
+> **6. Step 1's first case names its array `phases` and fills it with `CaptureStatus` values**
+> (finding 33), two tasks away from Task 15's `PHASES` of `TransactionPhase` — `plan`, `backup`,
+> `stage`, `validate`, `apply`, `verify`, `finalize`. Renamed to `statuses` below. The collision is
+> worse than cosmetic here because `staging` is a member of one list and `stage` of the other, and
+> correction 4 exists to keep them apart.
 
 ```text
 accepted capture
@@ -2107,9 +2186,9 @@ accepted capture
 
 ```ts
 it("moves accepted → staging on entering the transaction, and → ingested only after finalize", async () => {
-  const phases: string[] = [];
-  await runIngest(contextRecordingPhases(phases), {});
-  expect(phases).toEqual(["accepted", "staging", "ingested"]);
+  const statuses: CaptureStatus[] = [];
+  await runIngest(contextRecordingStatuses(statuses), {});
+  expect(statuses).toEqual(["accepted", "staging", "ingested"]);
 });
 
 it.each([
@@ -2168,7 +2247,7 @@ The fourth case is the distinction that is load-bearing and easy to collapse: **
 
 - [ ] **Step 2: Implement, rerun**
 
-One capture, one agent call, one transaction. Failure isolates to a single capture instead of poisoning a batch, and the prompt stays bounded by one envelope rather than by however many the user accepted. `--limit` bounds how many captures one invocation processes; the default is all accepted ones, in `captureId` order.
+One capture, one agent call, **four transactions** — correction 4 above is the authority on which mutations share one, and spec §6.1's "one transaction" is what it corrects. Failure isolates to a single capture instead of poisoning a batch, and the prompt stays bounded by one envelope rather than by however many the user accepted. `--limit` bounds how many captures one invocation processes; the default is all accepted ones, in `captureId` order.
 
 The reindex step reuses `BrainService.reindex()`, which **returns bytes and cannot write** — the CLI stages them through the executor, exactly as `brain reindex` already does. Do not add a write channel to `BrainService`; its absence is the design.
 
@@ -2176,11 +2255,12 @@ Set `ingest.stage`, `ingest.validate` and `ingest.apply` to `implemented: true`.
 
 - [ ] **Step 3: Wire dispatch, run the gate, commit**
 
-`main.ts` gains `ingest` with options `["limit", "json", "yes"]` and no positionals, and `USAGE` gains its line.
+`main.ts` gains `ingest` in `COMMAND_OPTIONS` with `["limit", "json", "yes", "agent"]` and in `COMMAND_POSITIONALS` with `{ min: 0, max: 0 }`; **`agent` joins `OPTIONS` as a string and `OPTION_NAMES`** — the second list is not bookkeeping, and Task 10's correction 2 records what a name missing from it does to every other command's allow-list. `limit`, `json` and `yes` are already in both. `USAGE` gains its line.
 
 ```bash
 npm run check
-git add packages/brain/src/ingest apps/cli/src/commands/ingest.ts \
+git add packages/brain/src/ingest packages/brain/src/index.ts \
+        apps/cli/src/commands/ingest.ts \
         apps/cli/src/commands/ingest.test.ts apps/cli/src/main.ts apps/cli/src/main.test.ts \
         packages/workflow-schema/src/vocabulary.ts \
         packages/workflow-schema/src/vocabulary.test.ts
