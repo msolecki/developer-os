@@ -1,6 +1,11 @@
 import { join } from "node:path";
 
-import { containsPath, EXIT_CODES, success } from "@developer-os/core";
+import {
+  containsPath,
+  EXIT_CODES,
+  success,
+  TransactionConflictError,
+} from "@developer-os/core";
 import type {
   CliResult,
   DeveloperOsConfigV1,
@@ -319,6 +324,12 @@ async function readCapture(
  * check against the quarantine directory — and by the executor's own
  * `assertTarget` and snapshot.
  *
+ * The one check with no equivalent here is `excludedRoots`. Containment in
+ * quarantine is a positive constraint and strictly narrower than "inside an
+ * owned root", so it covers the case in practice — but if the vault, or a tree
+ * containing it, were ever declared an excluded root, the plan layer would have
+ * refused a write this path still performs.
+ *
  * **There is a lost-update window between the read and this call, and on this
  * path it is not benign.** `PlannedFileMutation` is `{targetPath, operation,
  * content}` (`transactions/types.ts`): a caller cannot supply a precondition.
@@ -340,22 +351,41 @@ async function readCapture(
  * `PlannedFileMutation` is a Foundation change, and it is raised to the founder
  * in `docs/superpowers/ORDER.md` together with `capture`'s `O_EXCL` request,
  * because both have that one cause.
+ *
+ * **The half the executor does catch is translated rather than leaked.** An
+ * edit landing after `execute()`'s snapshot — between it and `backUp`, or
+ * between `backUp` and the apply-time re-check — raises
+ * `TransactionConflictError`, which is the executor protecting the newer file
+ * by refusing. That is the good outcome, and a user meets it as a sentence
+ * about their own capture rather than as an opaque class name: nothing was
+ * written, the file on disk is the newer one, and running the same review again
+ * reads it.
  */
 async function writeCapture(
   context: CliContext,
   target: string,
   contents: string,
 ): Promise<void> {
-  await context.executor.execute({
-    kind: REVIEW_TRANSACTION,
-    mutations: [
-      {
-        targetPath: target,
-        operation: "replace",
-        content: new TextEncoder().encode(contents),
-      },
-    ],
-  });
+  try {
+    await context.executor.execute({
+      kind: REVIEW_TRANSACTION,
+      mutations: [
+        {
+          targetPath: target,
+          operation: "replace",
+          content: new TextEncoder().encode(contents),
+        },
+      ],
+    });
+  } catch (error) {
+    if (!(error instanceof TransactionConflictError)) throw error;
+    throw new ReviewRefusal(
+      EXIT_CODES.operationalFailure,
+      "the capture changed on disk while this review was reading it, so nothing was written",
+      [target],
+      "run the same review again; it will read the newer file",
+    );
+  }
 }
 
 /**
@@ -381,9 +411,14 @@ async function writeCapture(
  * `~/.developer-os/backups/transactions/<id>/0.bin`, mode `0600`, under the
  * product's own state directory. Measured rather than assumed: sweeping a
  * fixture root after an edit finds the token in exactly that one file and
- * nowhere in the vault. It is inherent to a backup that must be able to restore
- * the previous content, so no ordering inside this command can avoid it; only a
- * backup lifecycle in Foundation can, and that is not this task's to write.
+ * nowhere in the vault.
+ *
+ * **Those bytes are dead, not a restore capability.** `rollbackLocked` throws
+ * `TransactionStateError` on a finalized journal, so once `finalize` runs the
+ * backup can never be used for anything. The fix is correspondingly small and
+ * belongs to Foundation rather than to this command: prune
+ * `backupDirectory(id)` on the transition into `finalized`. No ordering inside
+ * this command can substitute for it.
  *
  * **`captureId` is never recomputed** (spec §5.3, amended by the founder on
  * 2026-08-13), so the file keeps its name and an edit rewrites it in place.
@@ -461,10 +496,20 @@ function guardsWith(guards: CliGuards, key: Uint8Array): CliGuards {
  * developer-os review --id <id> --decision edit        re-read, re-redact, re-hash
  * ```
  *
- * **Listing changes nothing**, and no decision deletes a source. The command
+ * **Listing changes no capture**, and no decision deletes a source. The command
  * never opens an editor: the capture is Markdown in the user's own vault, and
  * spawning `$EDITOR` would add an interactive escape hatch to a command that
  * must stay `--json`- and `--yes`-driveable.
+ *
+ * **A listing is not read-only in the strict sense, and saying so plainly is
+ * the honest half of that claim.** Parsing a capture re-redacts it, so every
+ * path here loads the durable key through `loadOrCreateRedactionKey`, which
+ * creates one when `init`'s is missing. `readRedactionKey` is the read-only
+ * door and it cannot serve this path: it answers `null` for a missing key, and
+ * a listing that cannot parse a capture has nothing to list. Creating the
+ * product's own key is what `capture` and `ingest` do at the same point, and
+ * the alternative — refusing to list until the key is restored — is the larger
+ * surprise. Nothing in the vault is written either way.
  */
 export async function runReview(
   context: CliContext,

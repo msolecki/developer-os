@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { writeFileSync } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { basename, join } from "node:path";
 
@@ -56,10 +58,14 @@ interface ReviewFixture extends CommandFixture {
  * user gets, and a hand-built envelope would let a rendering change pass
  * unnoticed here and fail on a real machine.
  */
-async function installedFixture(label: string): Promise<ReviewFixture> {
+async function installedFixture(
+  label: string,
+  options: { readonly now?: () => Date } = {},
+): Promise<ReviewFixture> {
   const spawned: string[] = [];
   const fixture = await createCommandFixture(label, {
     env: { EDITOR, VISUAL },
+    ...(options.now === undefined ? {} : { now: options.now }),
     runner: {
       run: (request): Promise<ProcessResult> => {
         spawned.push(request.executable);
@@ -140,15 +146,20 @@ async function reviewTransactions(
   fixture: CommandFixture,
 ): Promise<readonly { readonly id: string; readonly phase: string }[]> {
   const journalDir = join(fixture.paths.stateDir, "transactions");
-  let entries: readonly string[];
-  try {
-    entries = await nodeFs.readdir(journalDir);
-  } catch {
-    return [];
-  }
+  const entries = (await nodeFs.readdir(journalDir))
+    .filter((name) => name.endsWith(".json"))
+    .sort();
+  /**
+   * The negative direction of "a gate that can pass by scanning nothing is not
+   * a gate": every `toStrictEqual([])` below concludes that *no* journal was a
+   * review, and an unread — or absent — directory would say the same thing.
+   * `init` wrote one before any of these cases ran, so an empty read here is a
+   * fixture that never installed rather than a run that wrote nothing.
+   */
+  expect(entries.length, "a sweep over no journals is not a sweep").toBeGreaterThan(0);
 
   const journals: { readonly id: string; readonly phase: string }[] = [];
-  for (const entry of entries.filter((name) => name.endsWith(".json")).sort()) {
+  for (const entry of entries) {
     const journal = await fixture.context.transactions.read(
       entry.slice(0, -".json".length),
     );
@@ -175,6 +186,25 @@ async function readWholeVault(fixture: ReviewFixture): Promise<string> {
     ),
   );
   return contents.join("\n");
+}
+
+/**
+ * The `deduplicationHash` **as the file carries it**, quotes stripped — the
+ * emitter quotes any scalar whose plain form would resolve as another type, and
+ * a 64-character hex digest can be one.
+ *
+ * This exists because `parseCaptureFile` *recomputes* `deduplicationHash`,
+ * `content` and `redaction` from the body rather than reading them
+ * (`packages/brain/src/capture/parse.ts`), so an envelope parsed back off disk
+ * cannot see a stale frontmatter hash at all: it reports what the bytes *should*
+ * hash to, not what the file says they do. Only the raw line distinguishes a
+ * command that rewrote the envelope from one that wrote the file's own bytes
+ * back.
+ */
+function persistedHash(text: string): string {
+  const match = /^deduplicationHash: (.*)$/mu.exec(text);
+  expect(match, "the capture must carry a deduplicationHash line").not.toBeNull();
+  return (match?.[1] ?? "").replace(/^["']|["']$/gu, "");
 }
 
 async function appendToFile(path: string, text: string): Promise<void> {
@@ -324,7 +354,7 @@ describe("runReview", () => {
   it("keeps the id and updates the hash on a content edit, because the id is assigned once", async () => {
     const fixture = await installedFixture("review-edit-id");
     const seeded = await fixture.seed(OBSERVATION);
-    const before = await envelopeOf(fixture, seeded.path);
+    const before = await nodeFs.readFile(seeded.path, "utf8");
     await appendToFile(seeded.path, "\nmore words\n");
 
     const result = await fixture.run(fixture.context, {
@@ -333,13 +363,85 @@ describe("runReview", () => {
     });
 
     expect(result.code).toBe(EXIT_CODES.success);
-    const after = await envelopeOf(fixture, seeded.path);
-    expect(after.captureId).toBe(before.captureId);
-    expect(after.deduplicationHash).not.toBe(before.deduplicationHash);
-    /** The file keeps its name, which is what makes the id worth preserving. */
-    expect(await listQuarantine(fixture)).toStrictEqual([`${before.captureId}.md`]);
-    expect(after.content).toContain("more words");
-    expect(after.status).toBe("quarantined");
+    const after = await nodeFs.readFile(seeded.path, "utf8");
+    /**
+     * The persisted line, never the parsed field: `parseCaptureFile` recomputes
+     * the hash from the body, so a command that wrote the file's own bytes back
+     * — leaving a frontmatter hash describing the pre-edit body — is invisible
+     * to a parsed envelope and visible here.
+     */
+    expect(persistedHash(after)).not.toBe(persistedHash(before));
+    /** And what it now says is what the persisted body actually hashes to. */
+    const envelope = await envelopeOf(fixture, seeded.path);
+    expect(persistedHash(after)).toBe(
+      createHash("sha256").update(envelope.content, "utf8").digest("hex"),
+    );
+    expect(envelope.content).toContain("more words");
+    /**
+     * `captureId` **is** read from frontmatter rather than recomputed, and
+     * `parseCaptureFile` refuses when it disagrees with the filename — so a
+     * parsed envelope carrying the seeded id is the persisted id, and the file
+     * still answers to its own name.
+     */
+    expect(envelope.captureId).toBe(seeded.id);
+    expect(await listQuarantine(fixture)).toStrictEqual([`${seeded.id}.md`]);
+    expect(envelope.status).toBe("quarantined");
+  });
+
+  /**
+   * The other half of the race `writeCapture`'s docblock describes — the half
+   * the executor *does* catch — driven rather than argued.
+   *
+   * `execute()` snapshots the target and computes `expectedBeforeHash`, then
+   * `backUp` re-snapshots and refuses on any change. The fixture's clock is the
+   * seam: the executor calls it for the journal's `createdAt` after the
+   * snapshot and before `backUp`, so a write from inside it lands exactly in
+   * that window and nowhere else.
+   *
+   * The user must meet this as a sentence about their capture rather than as an
+   * opaque class name, and the newer file must survive — the lost update this
+   * command is at greatest risk of is precisely the one the user just made by
+   * hand.
+   */
+  it("refuses, keeping the newer file, when a hand edit lands mid-transaction", async () => {
+    let onClock: (() => void) | null = null;
+    let tick = 0;
+    const fixture = await installedFixture("review-conflict", {
+      now: (): Date => {
+        const hook = onClock;
+        onClock = null;
+        hook?.();
+        tick += 1;
+        return new Date(Date.UTC(2026, 6, 30, 12, 0, 0) + tick);
+      },
+    });
+    const seeded = await fixture.seed(OBSERVATION);
+    const concurrent = (await nodeFs.readFile(seeded.path, "utf8")).replace(
+      OBSERVATION,
+      "an observation someone edited by hand a moment later",
+    );
+    let raced = false;
+    onClock = (): void => {
+      raced = true;
+      writeFileSync(seeded.path, concurrent, { mode: 0o600 });
+    };
+
+    const result = await fixture.run(fixture.context, {
+      id: seeded.id,
+      decision: "accept",
+    });
+
+    expect(raced, "the concurrent edit must actually have been staged").toBe(true);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(EXIT_CODES.operationalFailure);
+    expect(result.error.message).toContain("changed on disk");
+    expect(result.error.recovery).toContain("again");
+    /** The hand edit survived, and nothing was applied. */
+    expect(await nodeFs.readFile(seeded.path, "utf8")).toBe(concurrent);
+    const transactions = await reviewTransactions(fixture);
+    expect(transactions).toHaveLength(1);
+    expect(transactions[0]?.phase).toBe("planned");
   });
 
   /**
