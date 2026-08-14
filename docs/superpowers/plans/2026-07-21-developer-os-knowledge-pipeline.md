@@ -2278,6 +2278,47 @@ git commit -m "feat(cli): ingest applies one capture per transaction and ends in
 - Modify: `apps/cli/src/commands/doctor.ts`, `apps/cli/src/main.ts`
 - Test: `apps/cli/src/commands/doctor.test.ts`, `apps/cli/src/main.test.ts`
 
+> **Corrected 2026-08-14, before dispatch.** The pre-flight scan graded this task clean and it is the
+> cleanest remaining, but "clean" was a scan for defects in what the task *says* — three things it
+> does not say are needed, each verified in the tree at `bb419c9`.
+>
+> **1. `--probe` joins `OPTION_NAMES`, not only `OPTIONS` and `COMMAND_OPTIONS.doctor`.** Step 2 names
+> the first and third lists and omits the second. `suppliedOptions` filters `OPTION_NAMES`
+> (`main.ts:171`) and the per-command allow-list is checked against what it returns, so an option
+> present in `OPTIONS` and absent there is invisible to that check — `status --probe` would parse and
+> run, and strict dispatch would be holed for **every** command rather than only this one. This is the
+> third task in a row to need the same correction (Task 10's correction 2, Task 13's Step 3), which is
+> why it is written here rather than assumed. Add the `main.test.ts` case that would catch it:
+> a command that does not take `--probe` refusing it at parse time.
+>
+> **2. The pre-run warning goes through `context.io.stderr`, not the result's warnings.** Step 1's
+> third case asserts the mutation notice is on stderr, and the task's own sentence says "a user who
+> reads a mutation notice after the mutation has been told, not warned" — a `CliResult`'s warnings are
+> rendered by `main.ts` *after* the command returns, which is exactly the after case. `CliIo.stderr`
+> is the channel that writes during a run, and `context.ts:607`'s `EPHEMERAL_KEY_WARNING` is the
+> precedent for using it for exactly this kind of notice.
+>
+> **Emit it whenever `--probe` is passed, before any check runs, unconditionally** — not only when a
+> Claude installation was discovered. Warning about a mutation that then does not happen is noise a
+> user forgives; staying silent because discovery happened to fail is the failure this warning exists
+> to prevent, and it would make the notice depend on the order in which checks run. **It names Claude
+> specifically:** `codex-capabilities.ts:33-45` records that Codex's probe is different in kind and
+> writes nothing, so a warning covering both would be false about half of it.
+>
+> **3. Keep the new parameter optional, so `init` is not in this task's blast radius.**
+> `runDoctorReport` is `init`'s injected `verify` dependency (`init.ts:53`, `:96`,
+> `DEFAULT_DEPENDENCIES`), and its type is `(context) => Promise<DoctorReportV1>`. Give both
+> `runDoctor` and `runDoctorReport` an **optional** options parameter defaulting to no probe: `init`
+> then needs no edit, its dependency type still matches, and `init` cannot start mutating the user's
+> Claude home as a side effect of verifying its own install. `apps/cli/src/commands/init.ts` is
+> deliberately **not** in the Files list above, and if you find yourself editing it, that is the
+> signal the parameter was not optional.
+>
+> The threading itself is `collectFindings` → `checkClaudeCapabilities` / `checkCodexCapabilities`
+> (`doctor.ts:367-430`), whose `reportClaudeCapabilities` / `reportCodexCapabilities` calls already
+> accept `probe?: boolean` (`claude-capabilities.ts:46`, `codex-capabilities.ts:45`). The task's
+> claim that this "is the whole change on that side" is accurate.
+
 - [ ] **Step 1: Write the tests, and know which two are new**
 
 **Two of these four pass before you start, and that is correct.** `doctor` never turns probing on today, so "does not spawn a vendor probe without `--probe`" and "reports skills as unknown without `--probe`" are **regression pins**: they hold now, and they exist so that adding the flag cannot quietly flip the default. The other two are the new behaviour and must fail first — there is no `--probe` to pass, so they fail at the option parser. Say which is which in the task report; a step that says "write failing tests" and ships two green ones has not pinned what it claims.
@@ -2317,7 +2358,7 @@ The warning is emitted **before** the probe runs, not alongside its result. A us
 
 - [ ] **Step 2: Implement, rerun, commit**
 
-`--probe` joins `OPTIONS` and `COMMAND_OPTIONS.doctor`, and `USAGE` gains its line naming the side effect in the help text itself. Both capability reporters already take `probe?: boolean`; this passes it through, which is the whole change on that side.
+`--probe` joins `OPTIONS`, **`OPTION_NAMES`** and `COMMAND_OPTIONS.doctor` — correction 1 above is why the middle one is not optional bookkeeping — and `USAGE` gains its line naming the side effect in the help text itself. Both capability reporters already take `probe?: boolean`; this passes it through, which is the whole change on that side.
 
 ```bash
 npm run check
