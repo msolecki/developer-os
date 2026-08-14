@@ -196,11 +196,20 @@ describe("an interruption at every forward phase", () => {
  * set shrinks and this goes red, which is the whole reason it is here rather
  * than being a `toHaveLength` over the array the cases were generated from.
  *
- * **A filtered or sharded run reddens this case.** `npx vitest run
- * security/interruption.test.ts -t "planned"` drives two of the fourteen and
- * this one complains about the other twelve. That is the accepted cost of
- * measuring coverage rather than declaring it, not a regression: run the file
- * whole, or expect this one to complain.
+ * **A filtered run does not redden this case — it hides it, which is worse.**
+ * Vitest 4.1.8 *skips* non-matching cases rather than failing them, and a `-t`
+ * pattern chosen to select the cases below will not normally select this one:
+ * `npx vitest run security/interruption.test.ts -t "planned"` reports
+ * `2 passed | 13 skipped`, **green**, having driven two of fourteen
+ * interruptions. This case cannot warn about that, because it was filtered out
+ * along with the coverage it measures. Measured, not assumed — an earlier
+ * version of this paragraph claimed the opposite.
+ *
+ * The one filtered form that *does* redden is a pattern matching this case's own
+ * name too: `-t "killed at planned|nothing else"` gives `1 failed | 2 passed |
+ * 12 skipped`, naming the twelve labels that went unrecorded. `--shard` never
+ * triggers it at all — vitest shards at file granularity, so a selected file
+ * runs whole.
  */
 describe("what this suite drove", () => {
   it("interrupted both writes at each of the seven forward phases, and nothing else", () => {

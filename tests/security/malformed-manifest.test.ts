@@ -179,7 +179,7 @@ describe("a schema-valid manifest claiming a path the run actually writes", () =
    * `validateChangePlan` reads it and `assertOwnership` refuses a `create` over
    * a managed path (`packages/core/src/plans/validate.ts:244-246`). On the
    * ingest path it is **inert** — `applyNotes` runs no `validateChangePlan` at
-   * all, and says so in terms (`apps/cli/src/commands/ingest.ts:506-511`),
+   * all, and says so in terms (`apps/cli/src/commands/ingest.ts:706-713`),
    * because a note is the user's own content and recording one as managed would
    * report every legitimate edit as drift. What refuses there is the
    * create-never-replace `exists()` check, which owes nothing to the manifest.
@@ -275,11 +275,18 @@ describe("a schema-valid manifest claiming a path the run actually writes", () =
  * against — a second copy on purpose, because a set compared against its own
  * producer is the gate this directory exists to refuse.
  *
- * **A filtered or sharded run reddens this case.** `npx vitest run
- * security/malformed-manifest.test.ts -t "review"` leaves four labels unrecorded
- * and this goes red. That is the accepted cost of measuring coverage rather than
- * declaring it, not a regression: run the file whole, or expect this one to
- * complain.
+ * **A filtered run does not redden this case — it hides it, which is worse.**
+ * Vitest 4.1.8 *skips* non-matching cases rather than failing them, and a `-t`
+ * pattern chosen to select the cases above will not normally select this one:
+ * `npx vitest run security/malformed-manifest.test.ts -t "review"` reports
+ * `1 passed | 5 skipped`, **green**, having driven one case of five. This case
+ * cannot warn about that, because it was filtered out along with the coverage it
+ * measures. Measured, not assumed — an earlier version of this paragraph claimed
+ * the opposite.
+ *
+ * The one filtered form that *does* redden is a pattern matching this case's own
+ * name too. `--shard` never triggers it at all — vitest shards at file
+ * granularity, so a selected file runs whole.
  */
 describe("what this suite covered", () => {
   it("reached every case it declares, and every path this subsystem adds", () => {
