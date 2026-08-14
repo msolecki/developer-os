@@ -142,17 +142,18 @@ bytes. The fix is to prune `backupDirectory(id)` in the `finalized` transition, 
 change than the precondition above and independent of it. **No DOS-P6 task's file list reaches
 `packages/core`**, so no session can do it without being told to.
 
-**A containment escape in shipped DOS-P6 code, found by Task 15's own suite and registered as
-`BACKLOG.md` §1 NEW-14.** Replace `content/_raw/quarantine` with a symbolic link out of the vault and
-`ingest` completes, rewriting the capture file outside it. `resolveCapturePath` canonicalizes the
-quarantine root and the target and compares them **against each other, never against the content
-root**, so a quarantine that has moved carries its own containment check with it; the writable-path
-guard does not catch it either, because `ProtectedPathPolicy` is a protected-*name* policy that
-returns early outside `$HOME`. A capture *file* that is a symlink **is** refused — by
-`captureFileNames`'s `entry.isFile()` filter at selection, a different guard — so the leaf case is no
-evidence about the directory case. It is parked as the security suite's one `it.fails`, which reddens
-the day the behaviour changes. **It is deliberately not Task 19's**: that is the independent security
-review, and it must not be what discovers an escape already known here.
+**A containment escape in shipped DOS-P6 code, found by Task 15's own suite, registered as
+`BACKLOG.md` §1 NEW-14 — and closed on 2026-08-15 by the fix round after Task 19's review, which
+found the same defect a second time in `writeScope`.** Replacing `content/_raw/quarantine` with a
+symbolic link out of the vault used to let `ingest` complete and rewrite the capture file outside it:
+`resolveCapturePath` canonicalized the quarantine root and the target and compared them **against
+each other, never against the content root**, so a quarantine that had moved carried its own
+containment check with it; the writable-path guard did not catch it either, because
+`ProtectedPathPolicy` is a protected-*name* policy that returns early outside `$HOME`. A capture
+*file* that is a symlink **is** refused — by `captureFileNames`'s `entry.isFile()` filter at
+selection, a different guard — so the leaf case was never evidence about the directory case. Both
+commands now anchor on the configured content root through `resolveQuarantineRoot`, and the security
+suite's parked `it.fails` is an ordinary passing case.
 
 **A fourth Foundation request, from Task 13, and it is the cheapest of the four.** `CliResult`'s
 failure arm is `{ok, code, error}` with no `data` slot (`result.ts:29-33`), so **a command that

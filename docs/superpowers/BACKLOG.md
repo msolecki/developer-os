@@ -64,7 +64,7 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P6 | spec approved and plan written, both 2026-08-13 | the implementation — nineteen tasks, **seventeen landed** 2026-08-13/14. **Task 17 needs the founder** — one real model call per vendor; Task 19 closes the subsystem |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian), NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (S, the argv screen's word list also screens free-form prose), NEW-13 (S, two artifact roots share one type), **NEW-14 (S, security — a relocated quarantine takes its own containment check with it)**, **NEW-15 (S, security — the first executor of a discovered binary pays none of the check its type demands)**, NEW-16 (S, spec §8.2's user-configured redaction patterns are unreachable), **NEW-17 (XS, security — `brain` is the one command whose config parse failure is not content-free)** and NEW-18 (XS, `assertSafeCommand`'s NUL branches have no test) |
+| Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian), NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (XS, half closed — the argv screen's word list still screens a user's own path), NEW-13 (S, two artifact roots share one type), **NEW-15 (S, security — the first executor of a discovered binary pays none of the check its type demands)**, NEW-16 (S, spec §8.2's user-configured redaction patterns are unreachable), **NEW-17 (XS, security — `brain` is the one command whose config parse failure is not content-free)** and NEW-18 (XS, `assertSafeCommand`'s NUL branches have no test) |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -104,7 +104,7 @@ founder's machine as user data, not as source material.
 
 Everything in this section is genuinely open. Nothing here is bookkeeping, and nothing
 closed stays here — NEW-1 through NEW-6, NEW-8 and NEW-9 were removed on 2026-08-10 when
-they closed, and NEW-10 on 2026-08-11. What a closed item leaves behind is a row in §8, a clause in a spec, or a test;
+they closed, NEW-10 on 2026-08-11, and NEW-14 on 2026-08-15 when DOS-P6 Task 19's review closed it. What a closed item leaves behind is a row in §8, a clause in a spec, or a test;
 if it left nothing, it was not worth recording. Git history is the archive.
 
 ### NEW-11 — the invisible-title rule stops at the title
@@ -182,8 +182,8 @@ if it left nothing, it was not worth recording. Git history is the archive.
   executes a discovered binary owes an owner and mode check first.** `discoverExecutable` finds a
   name on `PATH` and returns a path; it does not vouch for it.
 - **DOS-P6 is the first executor and pays nothing.** `selectVendor` returns
-  `discovery.executablePath` (`apps/cli/src/commands/ingest.ts:378-386`) and `invokeVendor` spawns it
-  (`:1172`); no `stat`, no uid comparison and no mode comparison exists anywhere on that path — the
+  `discovery.executablePath` (`apps/cli/src/commands/ingest.ts:426-434`) and the run spawns it
+  through `invokeVendor` (`:1349`, `:663`); no `stat`, no uid comparison and no mode comparison exists anywhere on that path — the
   only `lstat` in the file is on a note path and the only mode is a `mkdir`.
 - **What it is not:** privilege escalation. The binary runs as the user either way, and a user who
   can write their own `PATH` can already run anything. **What it is:** the product hands that binary
@@ -206,31 +206,6 @@ if it left nothing, it was not worth recording. Git history is the archive.
   and are tested; what is unreachable is the *user-extensible* class the knowledge-pipeline spec §8.2
   describes — the one a founder would use to redact a client name that no generic pattern catches.
   Nothing regressed; it was specified and never wired.
-
-### NEW-14 — a relocated quarantine takes its own containment check with it
-
-- **Status:** open, found 2026-08-14 by DOS-P6 Task 15's `tests/security/symlink-escape.test.ts`,
-  which parks it as the suite's one `it.fails` · **Owner:** unassigned; **not** Task 19, which is the
-  independent security review and must not be what discovers it · **Size:** S · **Security**
-- **The escape.** Replace `content/_raw/quarantine` with a symbolic link to a directory outside the
-  vault, and `ingest` completes and rewrites the capture file **outside the vault**. Nothing refuses.
-- **Why the guard misses it.** `resolveCapturePath` (`apps/cli/src/commands/ingest.ts:482-501`, and
-  the same shape in `review.ts`) canonicalizes the quarantine root and the target and compares them
-  with `containsPath(canonicalQuarantine, canonicalTarget)` — **against each other, never against the
-  content root.** A quarantine that has moved therefore carries its own containment check along with
-  it, and the comparison holds at the new location exactly as it did at the old one. The
-  writable-path guard does not catch it either: `ProtectedPathPolicy` is a protected-*name* policy
-  and returns early for any path outside `$HOME` (`packages/security/src/protected-paths.ts:125`).
-- **A leaf symlink is refused, and that is a different guard.** `captureFileNames` filters
-  `entry.isFile()`, which `readdir(withFileTypes)` reports false for a symlink — so a capture *file*
-  that is a link is skipped at selection, before `resolveCapturePath` is reached. The directory case
-  has no equivalent. Anyone reading the leaf refusal as evidence the directory case is covered has
-  read the wrong guard, which is why the two are named separately here.
-- **The fix is an absolute anchor, not a relative one.** The quarantine root must be proven inside
-  the configured content root before it is used, rather than being trusted as the reference the
-  target is measured against. Both commands need it; `review` has the identical construction.
-- **Do not close this by deleting the parked case.** `it.fails` is what makes the day the behaviour
-  changes visible; a comment cannot.
 
 ### NEW-13 — two artifact roots share one type, and only prose separates them
 
@@ -256,9 +231,31 @@ if it left nothing, it was not worth recording. Git history is the archive.
   docblock and a test asserting the two façade bindings are not the same function — which stays
   green under the misuse it describes.
 
-### NEW-12 — the argv screen's word list also screens free-form prose
+### NEW-12 — the argv screen's word list also screens a value nobody chose
 
-- **Status:** open, found 2026-08-12 by the fresh-context review of DOS-P5 Task 3.5 · **Owner:**
+- **Status:** **half closed 2026-08-15** by DOS-P6 Task 19's review — the prose half is fixed and
+  the *path* half is what is left · **Owner:** whoever next touches
+  `packages/security/src/cli.ts` — DOS-P7 by default · **Size:** XS · **Security-adjacent**
+- **What closed.** The prompt is screened by `screenProseArgument`, which keeps the positional dash
+  rule and drops the word list; `screenValueArgument` is unchanged and is still what a tool name, a
+  write scope, a working root and an output schema path get. `packages/security/src/cli.test.ts`
+  pins both, and `apps/cli/src/commands/ingest.test.ts` drives a capture body reading
+  `npm ERR! EACCES: permission denied, open /usr/local/lib` through **both** vendors.
+- **It had become reachable and severe, which the paragraph below understated.** Task 13 gave
+  `agent.prompt` a production caller, and `buildIngestPrompt` puts the capture body in an argv value
+  position: every capture containing `permission`, `danger` or `bypass` refused on both vendors,
+  forever, under a recovery line telling the user to run `ingest` again — and it blocked the head of
+  every `--limit` run.
+- **What is left is one class of value, and it is reachable today.** `workingRoot` and
+  `outputSchemaPath` are **the user's own paths**, and they keep the word list by design: a vault at
+  `~/Danger/DeveloperBrain` refuses every `codex` ingest with "the working root names a permission
+  or bypass surface". That refusal is now at least legible — `invokeVendor` propagates
+  `result.detail`, which it used to discard — and `ingest.test.ts`'s
+  `names the value a vendor refusal was about` pins it by putting the word in the fixture's own
+  path. Closing it properly means asking whether a path this product derived itself belongs under a
+  word list at all; do not close it by narrowing the pattern.
+- Original registration, kept because it is the reasoning the split rests on:
+- **Was:** open, found 2026-08-12 by the fresh-context review of DOS-P5 Task 3.5 · **Owner:**
   whichever subsystem first gives `agent.prompt` a production caller — DOS-P6 by default ·
   **Size:** S
 - `screenValueArgument` in `packages/security/src/cli.ts` applies **two** rules to every value
@@ -269,10 +266,11 @@ if it left nothing, it was not worth recording. Git history is the archive.
   CLI option, so the word list buys nothing there while refusing legitimate text — a prompt asking
   a model to "check for dangerous patterns" is refused, and the workflow's failure is a `refused`
   with a message about permission surfaces.
-- **Not a regression and not reachable today.** The narrower `/permission|dangerous/iu` that
-  shipped with DOS-P4 refused that same sentence, and `invokeClaude` has no production caller —
-  only tests construct an invocation. Task 3.5 widened the pattern to `danger`, which enlarges the
-  false-positive surface without changing the shape of the problem.
+- **Not a regression and not reachable today** — *stale on both counts from Task 13 onward, which
+  is why the status above is where this row's severity now lives.* The narrower
+  `/permission|dangerous/iu` that shipped with DOS-P4 refused that same sentence, and `invokeClaude`
+  had no production caller — only tests constructed an invocation. Task 3.5 widened the pattern to
+  `danger`, which enlarges the false-positive surface without changing the shape of the problem.
 - **The fix is to split the screen by position, not to narrow the pattern.** An argument that
   *becomes* a flag if it looks like one (a tool name, a directory, a sandbox mode) needs both
   rules; a terminal prose argument needs the dash rule alone. Narrowing the word list instead
@@ -506,13 +504,15 @@ durable behind as they closed:
 - **`tests/security/` holds eight suites, not the six spec §9 names** — sentinel, prompt injection,
   symlink escape, multiline command, malformed manifest and interruption from §9, plus **network** and
   **concurrent edit**, the two §7's standing gate requires and §9 dropped. Every suite was watched
-  fail before it was believed, and thirteen reverts are recorded with the line each disabled. **41 of
-  its 59 cases carry that evidence and 18 do not.** That split is recorded **here and nowhere else** —
+  fail before it was believed, and thirteen reverts are recorded with the line each disabled. **46 of
+  its 81 cases carry that evidence and 35 do not**, after the fix round following Task 19's review
+  added twenty-three cases of which four were watched fail. That split is recorded **here and nowhere else** —
   a correction to an earlier version of this sentence, which claimed the suites say it about
   themselves. They do not: `grep -rniE "revert" tests/security/` returns nothing, and the per-case
   itemization lived only in a scratch report that does not survive this plan. Anyone tightening the
-  count has to re-derive it from the suites. One case is parked `it.fails` over NEW-14, so the day
-  that escape is closed the suite announces it.
+  count has to re-derive it from the suites. The one case parked `it.fails` over NEW-14 is an
+  ordinary passing case since 2026-08-15: the escape it announced was closed by Task 19's review,
+  and the suite went red the day it changed exactly as the parking intended.
 
 - **`tests/contracts/` holds only DOS-P3's cases.** DOS-P2 put its contract cases beside the code
   they pin instead, which is why that directory looks thinner than the file map implies.
