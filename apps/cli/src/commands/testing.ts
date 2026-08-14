@@ -10,6 +10,7 @@ import {
 } from "@developer-os/core";
 import type {
   RuntimePaths,
+  TransactionJournalV1,
   TransactionLockHandle,
   TransactionLockProvider,
   TransactionPhase,
@@ -167,6 +168,13 @@ export interface FixtureOptions {
    * produce the state `repair` exists for.
    */
   readonly interruptAfter?: TransactionPhase;
+  /**
+   * Narrows `interruptAfter` to one transaction kind. Without it the first
+   * transaction of a run is interrupted, which is `init`'s — so a suite that
+   * needs an installed product *and* an interrupted command has nothing to
+   * exercise. Absent means every kind, which is what `repair`'s suite wants.
+   */
+  readonly interruptKind?: string;
 }
 
 const fixtureRoots: string[] = [];
@@ -247,10 +255,18 @@ export async function createCommandFixture(
       },
       guards: guards.transaction,
       lockProvider,
-      afterPhase: (phase: TransactionPhase): void => {
-        if (phase === options.interruptAfter) {
-          throw new Error(`synthetic interruption after ${phase}`);
+      afterPhase: (
+        phase: TransactionPhase,
+        journal: TransactionJournalV1,
+      ): void => {
+        if (phase !== options.interruptAfter) return;
+        if (
+          options.interruptKind !== undefined &&
+          journal.kind !== options.interruptKind
+        ) {
+          return;
         }
+        throw new Error(`synthetic interruption after ${phase}`);
       },
     }),
     guards,

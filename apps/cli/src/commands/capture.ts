@@ -243,9 +243,19 @@ export async function discoverSourceAgent(
  *
  * It can therefore carry a client name, which is acceptable because the vault
  * is local and private — and it is screened on the way into the envelope like
- * every other interpolated string in this product (`buildCapture` applies
- * `screenEnvelopeScalar`; this function can only ever hand it letters, digits
- * and hyphens).
+ * every other interpolated string in this product: `buildCapture` applies
+ * `screenEnvelopeScalar` to it regardless of what arrives here.
+ *
+ * **The "letters, digits and hyphens" that the fold produces is true of the
+ * characters it keeps and not quite true of the string it returns.** `slice`
+ * counts UTF-16 code units, so a basename made of astral characters — emoji,
+ * or any script above the BMP — can be cut between a surrogate pair and leave
+ * a lone surrogate at the end. It is written to the vault as such: neither
+ * this fold nor `screenControlCharacters` treats an unpaired surrogate as a
+ * character to remove. Recorded rather than fixed here, deliberately: the
+ * exposure predates this bound (the slice only moved when the trim order was
+ * corrected), and grapheme-safe truncation is a decision for the whole branch
+ * rather than for one command's slug.
  *
  * **Sliced before it is trimmed, not after.** Trimming first left the slice
  * free to cut through a separator run and end the slug on a hyphen, so a
@@ -386,6 +396,13 @@ interface ExistingCapture {
   readonly parsed: boolean;
   readonly status: CaptureStatus;
   readonly warning: string | null;
+  /**
+   * The file's bytes, verbatim. The recovery path in `runCapture` compares
+   * them against what this run rendered, which is the one question that
+   * separates "another process wrote this" from "this process wrote it and
+   * then failed".
+   */
+  readonly contents: string;
 }
 
 /**
@@ -428,11 +445,12 @@ async function readExistingCapture(
   );
 
   return outcome.ok
-    ? { parsed: true, status: outcome.envelope.status, warning: null }
+    ? { parsed: true, status: outcome.envelope.status, warning: null, contents: text }
     : {
         parsed: false,
         status: "failed",
         warning: `the capture already at this path could not be read (${outcome.reason})`,
+        contents: text,
       };
 }
 
@@ -482,16 +500,27 @@ async function readCaptureQuietly(
  * rather than this command's.
  *
  * **What is left is a narrow window, and it is tolerable here for a reason
- * specific to captures.** The plan-time snapshot and the apply-time re-check
- * (which raises `TransactionConflictError` on any hash change) leave a window
- * in which two processes can both decide the target is absent. `captureId` is
- * the first 16 hex of `sha256` over the *redacted, normalized content*, so two
- * captures can only ever collide when their content is byte-identical: the
- * losing write replaces a file with the same observation in it. The race is
- * idempotent — no observation is lost, no vault state is corrupted, and the
- * only visible difference is which run's `createdAt` survives. That is why the
- * same window would be unacceptable for `review` or `ingest`, which write
- * *different* content to a shared path, and is acceptable for this one.
+ * specific to captures — but it is not free, and what it costs is worth saying
+ * exactly.** The plan-time snapshot and the apply-time re-check (which raises
+ * `TransactionConflictError` on any hash change) leave a window in which two
+ * processes can both decide the target is absent.
+ *
+ * `captureId` is the first 16 hex of `sha256` over the *redacted, normalized
+ * content* and nothing else (`build.ts:176,209`), so two captures can only ever
+ * collide when their **observations** are byte-identical: the losing write
+ * replaces a file holding the same text. That much is idempotent — no
+ * observation is lost and no vault state is corrupted.
+ *
+ * **The provenance is not.** The id hashes content alone, so the two runs need
+ * not agree on anything else: the same text captured from two working
+ * directories, or under two agents, is one id. The loser forfeits its
+ * `createdAt`, `projectSlug`, `workingDirectoryFingerprint`, `sourceAgent` and
+ * `sourceAgentVersion` to the winner's, and nothing records that a second run
+ * happened. That is the accepted cost, and it is bounded to metadata about a
+ * duplicate observation.
+ *
+ * The same window would be unacceptable for `review` or `ingest`, which write
+ * *different* content to a shared path, and it is acceptable for this one.
  *
  * `readExistingCapture` is how a duplicate is *reported* at exit 0, and
  * `runCapture` re-reads it if this call fails, so the loser of a race still
@@ -678,20 +707,36 @@ export async function runCapture(
     } catch (error) {
       /**
        * The loser of the race `writeCapture`'s docblock describes. The write
-       * failed; if what is now at the target is a *parseable capture of this
-       * id*, the observation is recorded and this run is a duplicate like any
-       * other, so it says so at exit 0 rather than reporting a failure the
-       * user can neither act on nor distinguish from a real one.
+       * failed; if what is now at the target is a parseable capture of this id
+       * that **another run wrote**, the observation is recorded and this run is
+       * a duplicate like any other, so it says so at exit 0 rather than
+       * reporting a failure the user can neither act on nor distinguish from a
+       * real one.
+       *
+       * **`raced.contents !== built.contents` is what makes "another run"
+       * checkable, and it is not a nicety.** `applyMutation` renames the staged
+       * bytes onto the target before the transaction finalizes
+       * (`executor.ts:571-577`), and `execute` rolls nothing back on its own, so
+       * a failure in the metadata write, in a later phase transition, or in the
+       * journal write leaves *this run's own capture* at the target with an
+       * unfinalized journal beside it. Without this comparison that state read
+       * as `duplicate: true` at exit 0 — a command reporting success over a
+       * transaction that did not finalize, hiding the very journal `repair`
+       * exists for. A real winner rendered its own `createdAt` (and, per
+       * `writeCapture`'s docblock, possibly its own `projectSlug`, fingerprint
+       * and agent), so its bytes differ from ours; ours, byte for byte, is
+       * ours.
        *
        * **This interprets no error and masks none.** It does not inspect the
-       * thrown value at all — it asks the filesystem a question with one
-       * answer, and rethrows the original error unless that answer is yes. A
-       * refused guard, a full disk, an unreadable staging directory: every one
-       * of them still surfaces as itself, because none of them leaves a
-       * parseable capture behind.
+       * thrown value at all — it asks the filesystem two questions with one
+       * answer each, and rethrows the original error unless both say yes. A
+       * refused guard, a full disk, an unreadable staging directory, an
+       * interrupted apply: every one of them still surfaces as itself.
        */
       const raced = await readCaptureQuietly(context, target, built.fileName, key);
-      if (raced === null || !raced.parsed) throw error;
+      if (raced === null || !raced.parsed || raced.contents === built.contents) {
+        throw error;
+      }
       return duplicate(raced);
     }
 

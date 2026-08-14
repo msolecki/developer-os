@@ -326,6 +326,36 @@ describe("runCapture", () => {
   });
 
   /**
+   * The other side of the recovery, and the one that matters most: a
+   * transaction that fails **after** apply has already put this run's own
+   * bytes at the target. The file is there and parses, so without comparing it
+   * against what this run rendered the recovery would report `duplicate: true`
+   * at exit 0 — success declared over a transaction that never finalized,
+   * hiding the unfinalized journal `repair` exists for.
+   *
+   * The interrupt is scoped to `kind: "capture"` so the installation that
+   * precedes it still completes; interrupting every transaction would take
+   * `init` with it and leave nothing to capture into.
+   */
+  it("still fails when the transaction fails after its own bytes are on disk", async () => {
+    const fixture = await installedFixture("capture-post-apply", {
+      fixture: { interruptAfter: "applied", interruptKind: "capture" },
+    });
+
+    const result = await fixture.run(fixture.context, { text: OBSERVATION });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).not.toBe(0);
+    /** This run's own capture: written by apply, never finalized. */
+    const written = await nodeFs.readdir(quarantineDirectory(fixture));
+    expect(written.filter((name) => name.endsWith(".md"))).toHaveLength(1);
+    /** And the journal `repair` is for, which exit 0 would have hidden. */
+    const journals = await captureTransactions(fixture);
+    expect(journals).toHaveLength(1);
+    expect(journals[0]?.phase).toBe("applied");
+  });
+
+  /**
    * The same race, lost to something that is *not* a capture of this id. The
    * recovery path asks the filesystem one question and rethrows unless the
    * answer is yes, so a failure that merely happens to leave a file behind is
