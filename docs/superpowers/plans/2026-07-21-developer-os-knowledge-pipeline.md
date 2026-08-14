@@ -1765,7 +1765,7 @@ git commit -m "feat(cli): review accepts, rejects, and brings a hand edit back u
 
 `codex-adapter.md` §11.13: **nothing writes the file `outputSchemaPath` points at.** `invokeCodex` only screens the path and forwards it into argv, so a caller pointing the vendor CLI at a missing file gets the CLI's own non-zero exit — which would be diagnosed as the wrong failure entirely. One JSON Schema file per agent-invoking verb ships with the product and is written to the product home at `init` (spec §6.6).
 
-- [ ] **Step 1: Write the failing test for the installed schema**
+- [x] **Step 1: Write the failing test for the installed schema**
 
 ```ts
 it("installs one output schema per structured-result verb, as managed artifacts", async () => {
@@ -1784,7 +1784,7 @@ it("installs one output schema per structured-result verb, as managed artifacts"
 
 Spec §6.6 calls these "agent-invoking verbs", and the derivation is deliberately narrower than that phrase: `agent.prompt` invokes an agent and needs no schema of ours, because the adapters own it and its caller supplies `outputSchemaPath`. **The set that needs a shipped file is the set that names one**, which is the `structured_result` set. Say so in the code, because the spec's phrase and the derivation are not the same words.
 
-- [ ] **Step 2: Write the failing tests for the proposal parser**
+- [x] **Step 2: Write the failing tests for the proposal parser**
 
 ```ts
 it("accepts a proposal of notes, each naming the capture it came from", () => {
@@ -1812,7 +1812,7 @@ it("is total over any unknown, including a hostile proxy", () => {
 
 The `__proto__` case is not theoretical here and must not be dropped: `zod@4.4.3` strips `__proto__` **before** its own strictness check, so a hostile object carrying one passes `.strict()` and the key silently disappears. `packages/core/src/agent-prompt/index.ts` and `packages/workflow-schema/src/index.ts` both carry the same screen-then-parse correction. **This payload comes from a model**, which makes it the one place in the product where hostile input is the expected case rather than the edge one.
 
-- [ ] **Step 3: Write the failing tests for the prompt**
+- [x] **Step 3: Write the failing tests for the prompt**
 
 ```ts
 it("builds the prompt from the redacted envelope field, never from a raw source", () => {
@@ -1833,7 +1833,7 @@ it("marks the captured material as data and never as instruction", () => {
 
 The capture body is embedded through `packages/security`'s Markdown display seam, **in the order correction 2 fixes**: `boundedProse` first — which is `screenParagraphs` and therefore `neutralizeBlockStart`, the thing that actually stops a forged heading starting a line — then `fenced` over its output for a payload-sized fence. This is the machinery `src/skill.test.ts` already covers for forged headings and fence escapes; this task carries those shapes through an actual invocation rather than through a rendering.
 
-- [ ] **Step 4: Implement, and specify the invocation Task 13 wires**
+- [x] **Step 4: Implement, and specify the invocation Task 13 wires**
 
 One capture, one agent call, one transaction (spec §6.1). The adapter is invoked with — **by Task 13,
 per correction 4; this step writes the specification and the code it calls, not the call site**:
@@ -1846,7 +1846,7 @@ per correction 4; this step writes the specification and the code it calls, not 
 
 The agent has read-only access to the vault, which may contain secrets the user wrote into their own notes. Redacting the user's canonical content is not this product's business; **catching it on the way back is**, which is Task 12's secret scan.
 
-- [ ] **Step 5: Run the gate and commit**
+- [x] **Step 5: Run the gate and commit**
 
 ```bash
 npm run check

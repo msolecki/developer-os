@@ -330,6 +330,18 @@ first contact with a real binary.
   uninstall removes only manifest-owned artifacts.
 - **Absorbs:** legacy follow-up Step 6 (real-Git integration coverage), frozen on the
   legacy runtime 2026-07-27 and rebuilt here instead.
+- **Must also decide how a managed artifact changes across product versions**, raised by DOS-P6
+  Task 11's review on 2026-08-14 and ruled out of that task's scope. `init` plans an artifact only
+  when it is absent: the config file (`init.ts:276`), the Brain skeleton (`:290`) and the vault
+  (`:307`) all take the same `isFile` → `unchanged` branch, and the docblock at `:284` states the
+  intent. So an installation upgraded across a version that changes the shipped bytes keeps the old
+  file indefinitely, and `assertNoDrift` cannot notice, because the content still matches the hash
+  the manifest recorded. **Task 11 made this concrete rather than theoretical**: the output schema
+  it installs is the file a vendor CLI is pointed at with `--output-schema`, so a stale copy is a
+  model refused against a bound the product no longer ships. The repository copy is protected by a
+  parity test; nothing protects the installed one. The fix is an `update` operation carrying
+  `expectedBeforeHash` — which the change-plan validator already supports — and it is this entry's
+  because `update` is what this entry is.
 - **Must also close Foundation residual 9.** Configuration cannot be changed after `init`:
   `config.toml` is a hash-tracked managed artifact and no command edits it, so changing
   `git.enabled` or `automation.enabled` today means hand-editing a file that then drifts

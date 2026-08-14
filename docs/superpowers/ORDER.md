@@ -39,20 +39,33 @@ it.
 
 **Sessions execute that plan one task at a time**, under `superpowers:subagent-driven-development` —
 a different agent implements and reviews each task, and a task is not done until its reviewer says
-so. **Ten of the nineteen have landed** (Tasks 1–10, 2026-08-13/14); **the next session starts at
-Task 11**, the output schemas and the first model call — whose blocking pre-flight findings are that
-`apps/cli` has no `@developer-os/workflow-schema` dependency though `structuredResultVerbs()` must
-derive from `EFFECT_VOCABULARY` (a dependency-graph decision, not an implementer's), and that the
-forged-heading assertion names the wrong screen function. **Task 17 stops and asks** — it spends the
-founder's credits on a real model call, which is the only way the JSONL terminal-event rule gets
-settled.
+so. **Eleven of the nineteen have landed** (Tasks 1–11, 2026-08-13/14); **the next session starts at
+Task 12**, the nine validators — whose blocking pre-flight findings are five, and two of them are
+decisions rather than defects: `packages/brain` cannot reach `resolveScopeGlob` or
+`WorkflowContractV1` (finding 28 — Task 11 added the `workflow-schema` edge to `apps/cli` only, and
+deliberately did **not** extend it to `brain`), and nothing supplies the ingest contract at runtime,
+since `init` installs config, the Brain skeleton, the redaction key and now the output schemas, but
+no `workflow.yaml` (finding 29 — compile the scopes in, or make the contract a managed artifact with
+a new drift surface). **Task 17 stops and asks** — it spends the founder's credits on a real model
+call, which is the only way the JSONL terminal-event rule gets settled.
 
-**A flaky case in the gate, found by Task 10 and belonging to nobody in DOS-P6.**
-`apps/cli/src/commands/doctor.test.ts:191` — the redaction-key plant loop — failed once under
-`npm run check` on a two-comment-line diff in files it does not import, then passed on a full re-run
-and twice more in isolation. `npm run check` is this repository's declared validation and the
-evidence every commit rests on, so a case that reddens for no reason is a gate nobody can read when
-it goes green. Not investigated by the task that found it, deliberately: it never touched that file.
+**Task 11 also left Task 12 a distinction it must not re-litigate.** `EFFECT_VOCABULARY`'s
+`ingest.stage` declares `read: content/_raw/quarantine/**` while the model is invoked with
+`read: content/**`, and the two are not in conflict: the verb's declared footprint is what Developer
+OS reads to perform the step, the invocation scope is the *model's* sandbox, and spec §6.2 grants
+the agent read-only access to the vault. `packages/brain/src/ingest/index.ts` names it. Pre-flight
+finding 30 is the same distinction on the write side, and it is still Task 12's to state.
+
+**A flaky case in the gate, and it has now fired twice on two unrelated diffs. It belongs to nobody
+in DOS-P6 and needs an owner.** `apps/cli/src/commands/doctor.test.ts:191` — the redaction-key plant
+loop — failed once under `npm run check` on a two-comment-line diff in files it does not import,
+then passed on a full re-run and twice more in isolation (Task 10, 2026-08-14). It failed a second
+time under Task 11's first full run, as `Test timed out in 20000ms`, and passed again on an isolated
+re-run. A timeout on the second observation is the useful detail: it points at the case's own
+duration rather than at anything the diff changed. `npm run check` is this repository's declared
+validation and the evidence every commit rests on, so a case that reddens for no reason is a gate
+nobody can read when it goes green. Neither task investigated it, deliberately — neither touched
+that file — but two observations are no longer a coincidence.
 
 **Tasks 9 and 10 raise one question with one cause, and it is the founder's.** `PlannedFileMutation`
 is `{targetPath, operation, content}`: **a command cannot supply a precondition.** The executor
@@ -149,7 +162,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **10 of 19**, next is Task 11 |
+| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **11 of 19**, next is Task 12 |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |
