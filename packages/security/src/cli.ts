@@ -130,12 +130,17 @@ export function screenValueArgument(value: string, field: string): string | null
 }
 
 /**
- * Rule one alone, for an argument that is **prose**: a prompt, and nothing that
- * a vendor CLI could reread as a flag if it happened to look like one.
+ * **The weaker of the two screens, and the wrong default.** Reach for
+ * `screenValueArgument` unless the value is prose that a vendor CLI cannot
+ * reread as a flag — a prompt, and nothing else in this codebase today. A caller
+ * choosing between them by which one accepts its string has chosen wrongly by
+ * construction, which is the one hazard of exporting both: the name says what
+ * the argument must *be*, not that this function asks less of it.
  *
- * It is a narrowing of `screenValueArgument` rather than a second policy beside
- * it — the complete rule is kept and the best-effort one is dropped — so a
- * prompt beginning with `-` is refused here exactly as it was before.
+ * Rule one alone, then: it is a narrowing of `screenValueArgument` rather than a
+ * second policy beside it — the complete rule is kept and the best-effort one is
+ * dropped — so a prompt beginning with `-` is refused here exactly as it was
+ * before.
  */
 export function screenProseArgument(value: string, field: string): string | null {
   if (value.startsWith("-")) {

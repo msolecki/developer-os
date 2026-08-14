@@ -623,6 +623,66 @@ describe("runIngest, the status ladder", () => {
   });
 
   /**
+   * **The third state, which had reporting and no coverage until now.** A
+   * rollback that itself fails leaves the capture at `staging` with nothing
+   * applied — reachable in production from a `replace` whose
+   * `expectedBeforeHash` no longer matches, or a full disk. It is driven here by
+   * interrupting the compensating transaction and nothing else: the vendor's
+   * reply is what refuses the capture, so the rollback is reached for an
+   * ordinary reason and then denied.
+   */
+  it("labels a capture whose rollback failed as left at staging, with no notes", async () => {
+    const fixture = await installedFixture("ingest-rollback-fails", {
+      interruptAfter: "planned",
+      interruptKind: "ingest-rollback",
+    });
+    const seeded = await fixture.seedAccepted("an observation whose rollback fails");
+    fixture.reply(() => "not json at all");
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    /** The state: at staging, and its vault untouched. */
+    expect(await fixture.statusOf(seeded.id)).toBe("staging");
+    expect(await vaultNotes(fixture)).not.toContain("DEV/proposed-note.md");
+    if (result.ok) return;
+    expect(result.error.message).toContain("refused, left at staging");
+    expect(result.error.message).not.toContain("partly applied");
+    const recovery = result.error.recovery ?? "";
+    expect(recovery).toContain("wrote no notes and did not get its status back");
+    /** And not the line for the state it is not in. */
+    expect(recovery).not.toContain("already in the vault");
+  });
+
+  /**
+   * **The fourth transaction is the one whose failure leaves a *finished*
+   * capture**, and the report has to say so rather than inferring `staging` from
+   * "notes were applied and no rollback ran". `ingest-ingested` writes the
+   * status and then verifies it; interrupted after `applied`, the bytes on disk
+   * say `ingested` while the run reports a failure.
+   */
+  it("reads the capture's own status rather than inferring it, when the last write landed", async () => {
+    const fixture = await installedFixture("ingest-ingested-verify-fails", {
+      interruptAfter: "applied",
+      interruptKind: "ingest-ingested",
+    });
+    const seeded = await fixture.seedAccepted("an observation whose last write threw");
+    fixture.reply(() => oneNote(seeded.id, "DEV/finished.md", "Finished note"));
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    expect(await fixture.statusOf(seeded.id)).toBe("ingested");
+    expect(await vaultNotes(fixture)).toContain("DEV/finished.md");
+    if (result.ok) return;
+    expect(result.error.message).toContain("applied and ingested");
+    /** The two labels that would be false of it. */
+    expect(result.error.message).not.toContain("left at staging");
+    const recovery = result.error.recovery ?? "";
+    expect(recovery).toContain("nothing to redo");
+  });
+
+  /**
    * The mirror of the case above, and the state neither recovery line used to
    * describe: a capture refused *before* the apply is untouched and retryable,
    * and must not be told its notes are already in the vault.

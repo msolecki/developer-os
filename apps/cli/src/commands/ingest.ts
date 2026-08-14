@@ -43,6 +43,7 @@ import {
   failureFrom,
   loadOrCreateRedactionKey,
   renderPath,
+  resolveQuarantineRoot,
   runtimePathsFor,
 } from "../context.js";
 import type { CliContext, CliGuards } from "../context.js";
@@ -95,13 +96,18 @@ interface RefusedCaptureV1 {
    */
   readonly appliedNotes: readonly string[];
   /**
-   * Where this capture's **own file** was left, which is not derivable from
-   * `appliedNotes`: a rollback that itself fails leaves the capture at `staging`
-   * with nothing applied, and telling that user their capture "is still
-   * accepted, so the next run tries it again" sends them to a run that will
-   * never select it.
+   * Where this capture's **own file** was left — **read back from disk**, not
+   * derived from how far the run got.
+   *
+   * Neither `appliedNotes` nor the transaction that threw answers this. A
+   * rollback that itself fails leaves the capture at `staging` with nothing
+   * applied, and telling that user their capture "is still accepted, so the next
+   * run tries it again" sends them to a run that will never select it. And when
+   * the *fourth* transaction writes `ingested` and then fails to verify, the
+   * notes are applied and no rollback runs — an inference from those two facts
+   * says `staging` while the bytes on disk say `ingested`.
    */
-  readonly leftAt: "untouched" | "staging";
+  readonly leftAt: "untouched" | "staging" | "ingested";
 }
 
 type CaptureOutcome =
@@ -282,6 +288,15 @@ const PARTLY_APPLIED_RECOVERY =
 const STRANDED_RECOVERY =
   "a capture reported as left at staging wrote no notes and did not get its status back, and ingest never selects staging: set its status back to accepted by hand to try it again";
 
+/**
+ * The fourth state, which is a *success* wearing a failure's exit code: the
+ * ladder completed and something after the last write threw. Nothing needs
+ * doing to the capture, and saying otherwise would send a user to undo work
+ * they wanted.
+ */
+const INGESTED_RECOVERY =
+  "a capture reported as applied and ingested has its notes in the vault and its status at ingested, so there is nothing to redo for it: the failure printed beside its line happened after the work was finished";
+
 const INCOMPLETE_TRANSACTION_RECOVERY =
   "if developer-os status reports an incomplete transaction, resolve it with developer-os repair first";
 
@@ -317,6 +332,9 @@ function refusedRecovery(refused: readonly RefusedCaptureV1[]): string {
     )
   ) {
     lines.push(STRANDED_RECOVERY);
+  }
+  if (refused.some((refusal) => refusal.leftAt === "ingested")) {
+    lines.push(INGESTED_RECOVERY);
   }
   lines.push(INCOMPLETE_TRANSACTION_RECOVERY);
   return lines.join("\n");
@@ -519,39 +537,6 @@ async function selectCaptures(
 }
 
 /* ------------------------------------------------------- reading and writing */
-
-/**
- * The quarantine directory itself, canonicalized and **proven inside the
- * configured content root** before anything is measured against it.
- *
- * The check the two capture commands used to make compared the canonical
- * quarantine root with the canonical target — against each other, never against
- * anything absolute — so a quarantine directory replaced by a link out of the
- * vault carried its own containment check along with it and every target under
- * it passed. `ProtectedPathPolicy` does not catch that either: it is a
- * protected-*name* policy and returns early for any path outside `$HOME`
- * (`packages/security/src/protected-paths.ts:125`).
- *
- * Resolved once per run and handed on, so every later containment question is
- * anchored to a root that has itself been proven rather than assumed.
- */
-async function resolveQuarantineRoot(
-  context: CliContext,
-  contentRoot: string,
-  quarantine: string,
-): Promise<string> {
-  const canonicalContentRoot = await context.guards.canonicalize(contentRoot);
-  const canonicalQuarantine = await context.guards.canonicalize(quarantine);
-  if (!containsPath(canonicalContentRoot, canonicalQuarantine)) {
-    throw new IngestRefusal(
-      EXIT_CODES.securityRefusal,
-      "the quarantine directory resolves outside the content root",
-      [quarantine],
-      "restore the quarantine directory inside the vault's content root; nothing is read or written through a quarantine path that leaves it",
-    );
-  }
-  return canonicalQuarantine;
-}
 
 /**
  * The capture's own path, canonicalized and proven to still be inside
@@ -776,6 +761,34 @@ function refusalFrom(
   );
 }
 
+/**
+ * The capture's status **as the file now holds it**, or `null` when that cannot
+ * be read.
+ *
+ * Called once, on the failure path, so the report can say where the capture was
+ * left without inferring it from which transaction threw. `parseCaptureFile`
+ * rather than a status-line regular expression, because this file is the thing
+ * whose parse decides `failed` everywhere else in this command and a second,
+ * looser reader is a second answer to one question.
+ */
+async function statusOnDisk(
+  context: CliContext,
+  path: string,
+  fileName: string,
+  key: Uint8Array,
+): Promise<CaptureStatus | null> {
+  try {
+    const parsed = parseCaptureFile(
+      fileName,
+      await context.guards.readText(path),
+      (value) => redactText(value, key),
+    );
+    return parsed.ok ? parsed.envelope.status : null;
+  } catch {
+    return null;
+  }
+}
+
 /* ------------------------------------------------- applying and reindexing */
 
 /**
@@ -927,6 +940,38 @@ async function reindexVault(
     refuse: (message, paths_) =>
       new IngestRefusal(EXIT_CODES.operationalFailure, message, paths_),
   });
+}
+
+/**
+ * Where the capture was left, **read first and inferred only if the read
+ * fails**.
+ *
+ * The three statuses this maps from are the only ones a failed run can leave:
+ * the capture's own file is written by exactly two transactions here and put
+ * back by a third. Anything else — `quarantined`, or an `accepted` that a
+ * rollback restored — means the file holds what it held before this run, which
+ * is what `untouched` says.
+ *
+ * The fallback exists because the file may be unreadable at exactly the moment
+ * this asks; it is the inference the read replaces, and it is wrong in the one
+ * case the read was added for, so it is a last resort rather than a shortcut.
+ */
+async function leftAtOf(
+  context: CliContext,
+  key: Uint8Array,
+  fileName: string,
+  capturePath: string | null,
+  progress: { readonly movedToStaging: boolean; readonly rolledBack: boolean },
+): Promise<RefusedCaptureV1["leftAt"]> {
+  const status =
+    capturePath === null
+      ? null
+      : await statusOnDisk(context, capturePath, fileName, key);
+
+  if (status === "ingested") return "ingested";
+  if (status === "staging") return "staging";
+  if (status !== null) return "untouched";
+  return progress.movedToStaging && !progress.rolledBack ? "staging" : "untouched";
 }
 
 /* ------------------------------------------------------------ one capture */
@@ -1149,15 +1194,10 @@ async function ingestOne(
         recovery:
           error instanceof IngestRefusal ? (error.recovery ?? null) : null,
         appliedNotes: applied ?? [],
-        /**
-         * `untouched` means the capture file holds what it held before this run:
-         * either nothing was ever written to it, or the rollback put it back.
-         * Everything else is at `staging`, with or without notes.
-         */
-        leftAt:
-          rolledBack || capturePath === null || staged === null
-            ? "untouched"
-            : "staging",
+        leftAt: await leftAtOf(context, key, fileName, capturePath, {
+          movedToStaging: capturePath !== null && staged !== null,
+          rolledBack,
+        }),
       },
     };
   }
@@ -1219,12 +1259,15 @@ function screenNotes(notes: readonly string[]): string {
  * "A ingested and B refused" is readable rather than inferable from B's error
  * alone.
  *
- * **Three outcomes, three labels, because they are three different events.** A
- * capture that ingested; one that refused and wrote nothing, which is still
- * `accepted` and will be tried again; and one that was *partly applied* — its
- * notes are in the vault and it is parked at `staging`, which no later run
- * selects. Labelling the third as merely "refused" would tell a user their vault
- * was untouched when it was not.
+ * **Five outcomes, five labels, because they are five different events.** A
+ * capture that ingested; one that refused and wrote nothing, which is unchanged
+ * and will be tried again; one that was *partly applied* — its notes are in the
+ * vault and it is parked at `staging`, which no later run selects; one *left at
+ * staging* with nothing applied, which a failed rollback leaves and which no
+ * later run selects either; and one *applied and ingested*, where the ladder
+ * finished and something after the last write threw. Labelling any of the last
+ * three as merely "refused" would tell a user their vault was untouched when it
+ * was not, or that a retry is coming when it is not.
  *
  * **Each capture's own recovery is printed beside it.** Nearly every refusal on
  * this path carries advice specific to the capture — repair *this* frontmatter,
@@ -1264,11 +1307,14 @@ function reportLines(report: RunReport): readonly string[] {
      * a user the next run will try it again, and `selectCaptures` never selects
      * `staging`.
      */
-    const label = partly
-      ? "partly applied, left at staging"
-      : refusal.leftAt === "staging"
-        ? "refused, left at staging"
-        : "refused";
+    const label =
+      refusal.leftAt === "ingested"
+        ? "applied and ingested"
+        : partly
+          ? "partly applied, left at staging"
+          : refusal.leftAt === "staging"
+            ? "refused, left at staging"
+            : "refused";
     lines.push(`  ${captureId} ${label} (exit ${String(refusal.code)})`);
     if (partly) {
       lines.push(
@@ -1354,6 +1400,13 @@ export async function runIngest(
       context,
       contentRoot,
       join(contentRoot, ...QUARANTINE_SEGMENTS),
+      (message, paths_) =>
+        new IngestRefusal(
+          EXIT_CODES.securityRefusal,
+          message,
+          paths_,
+          "restore the quarantine directory inside the vault's content root; nothing is read or written through a quarantine path that leaves it",
+        ),
     );
 
     const key = loadOrCreateRedactionKey(paths.stateDir);

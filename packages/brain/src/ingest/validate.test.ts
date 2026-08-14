@@ -682,6 +682,24 @@ describe("generated-output-consistency", () => {
     expect(validators(result)).toContain("generated-output-consistency");
   });
 
+  /**
+   * **The same case-folding the private-folder subtraction needed, in the
+   * validator that was cited as already having the twin.** `_INDEXES` is the
+   * indexes directory on any case-insensitive volume, and on a vault where
+   * `content/_indexes` has not been created yet it is not even a resolution
+   * question — the exact comparisons on both the name and the destination miss
+   * it, and nothing else in the gate refuses it.
+   */
+  it("refuses the indexes directory spelled in another case", async () => {
+    const result = await validateProposal(
+      proposal(note("_INDEXES/index.json")),
+      contextFor(await makeVault()),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(validators(result)).toContain("generated-output-consistency");
+  });
+
   it("accepts a note outside the indexes directory", async () => {
     const result = await validateProposal(proposal(validNote()), contextFor(await makeVault()));
     expect(validators(result)).not.toContain("generated-output-consistency");
@@ -815,6 +833,45 @@ describe("write-scope", () => {
 
     const result = await validateProposal(
       proposal(note("notes/quarantine/bbbbbbbbbbbbbbbb.md")),
+      contextFor(vault),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(validators(result)).toContain("write-scope");
+  });
+
+  /**
+   * **The destination's own segments, at every depth.** The private roots
+   * canonicalized in `validateProposal` are the ones directly under the content
+   * root, which is where quarantine is; discovery excludes a private folder at
+   * *any* depth, and a link into a deep one leaves a note the index will never
+   * see. Harm is a note nobody can find rather than a review-gate bypass, which
+   * is why these are separate cases and not part of the critical one.
+   */
+  it("refuses a path resolving into a private folder below the top level", async () => {
+    const vault = await makeVault();
+    await mkdir(join(vault, "content", "DEV", "_raw"), { recursive: true });
+    await symlink(
+      join(vault, "content", "DEV", "_raw"),
+      join(vault, "content", "DEV", "notes"),
+    );
+
+    const result = await validateProposal(
+      proposal(note("DEV/notes/x.md")),
+      contextFor(vault),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(validators(result)).toContain("write-scope");
+  });
+
+  it("refuses a path resolving into a dot-segment", async () => {
+    const vault = await makeVault();
+    await mkdir(join(vault, "content", ".hidden"), { recursive: true });
+    await symlink(join(vault, "content", ".hidden"), join(vault, "content", "shown"));
+
+    const result = await validateProposal(
+      proposal(note("shown/x.md")),
       contextFor(vault),
     );
 

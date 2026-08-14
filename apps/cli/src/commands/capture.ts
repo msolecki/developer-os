@@ -34,6 +34,7 @@ import type {
 import {
   failureFrom,
   loadOrCreateRedactionKey,
+  resolveQuarantineRoot,
   runtimePathsFor,
 } from "../context.js";
 import type { CliContext, CliGuards } from "../context.js";
@@ -673,10 +674,35 @@ export async function runCapture(
     });
     assertWritableContent(built.envelope.content);
 
-    const quarantine = join(
-      paths.brain,
-      resolveBrainConfig(config).contentRoot,
-      ...QUARANTINE_SEGMENTS,
+    /**
+     * **Before the directory is created, read, or written**, because every one
+     * of those follows the link. `ingest` and `review` refuse a relocated
+     * quarantine at exit 5; this command wrote into it happily, which is both a
+     * silent exfiltration primitive — one redacted observation per capture, into
+     * a directory an attacker chose — and an operational absurdity, since the
+     * captures it files there are somewhere no later run will ever read.
+     *
+     * `validateChangePlan` does not stand in for this. It is handed `quarantine`
+     * as an owned root below, and a **sideways** relocation is something that
+     * validator permits *by design*: `assertUsableRoots` refuses a root that
+     * grew authority or sits inside `excludedRoots`
+     * (`packages/core/src/plans/validate.ts:199-206`), and its own comment names
+     * `~/.claude -> ~/Dropbox/claude` as the legitimate relocation it must not
+     * break (`:186-188`). Which root is legitimate is this command's question,
+     * not that validator's.
+     */
+    const contentRoot = join(paths.brain, resolveBrainConfig(config).contentRoot);
+    const quarantine = await resolveQuarantineRoot(
+      context,
+      contentRoot,
+      join(contentRoot, ...QUARANTINE_SEGMENTS),
+      (message, paths_) =>
+        new CaptureRefusal(
+          EXIT_CODES.securityRefusal,
+          message,
+          paths_,
+          "restore the quarantine directory inside the vault's content root; an observation is never written through a quarantine path that leaves it",
+        ),
     );
     const target = join(quarantine, built.fileName);
     const redactionCount = built.envelope.redaction.length;

@@ -2,6 +2,7 @@ import { lstat, mkdir, readFile, rename, symlink } from "node:fs/promises";
 import { join } from "node:path";
 
 import { EXIT_CODES } from "@developer-os/core";
+import { runCapture } from "@developer-os/cli/dist/commands/capture.js";
 
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -187,5 +188,94 @@ describe("a quarantine directory that resolves outside the vault", () => {
     expect(observed.after).toBe(observed.before);
     expect(observed.after).toContain("status: accepted");
     expect(observed.vaultNotes).not.toContain("/DEV/escaped-quarantine.md");
+  });
+});
+
+/**
+ * **The same relocation, met by the command that *writes* the capture.**
+ *
+ * `ingest` and `review` refuse it; `capture` did not, because it built its
+ * quarantine path textually and handed it straight to `validateChangePlan` as an
+ * owned root (`apps/cli/src/commands/capture.ts:578`). A **sideways** relocation
+ * passes every check that validator makes — the root neither grows authority nor
+ * lands in `excludedRoots` — so `developer-os capture` wrote the user's redacted
+ * observation into an attacker-chosen directory, one file per capture, forever.
+ *
+ * **The primitive is bounded and worth stating so the case is not read as more
+ * than it is.** The model cannot reach it: it holds zero write scopes and every
+ * path it proposes is refused out of the private folders, so planting the link
+ * needs prior local write access to the vault. What it then buys is silent
+ * exfiltration of every future capture — into a synced folder, say. It cannot
+ * overwrite, cannot choose the file name, and cannot reach outside a directory
+ * the attacker already controls.
+ *
+ * The operational absurdity is its own reason to refuse: with two of the three
+ * commands refusing at exit 5 and the third writing happily, captures pile up
+ * somewhere nothing will ever read them.
+ */
+describe("a quarantine directory that resolves outside the vault, met by capture", () => {
+  interface Captured {
+    readonly quarantineIsALink: boolean;
+    readonly relocatedInsideVault: boolean;
+    readonly code: number;
+    readonly destinationBefore: readonly string[];
+    readonly destinationAfter: readonly string[];
+    readonly filesInTheVault: readonly string[];
+  }
+
+  let captured: Captured;
+
+  beforeAll(async () => {
+    const fixture = await installSecurityFixture("symlink-quarantine-capture");
+
+    const stolen = join(fixture.root, "stolen");
+    await mkdir(stolen, { recursive: true, mode: 0o700 });
+    await rename(fixture.quarantine, join(stolen, "quarantine"));
+    await symlink(join(stolen, "quarantine"), fixture.quarantine);
+
+    /**
+     * The relocation carries `init`'s own `.gitkeep` with it, so "nothing was
+     * written" is the set being **unchanged** rather than empty — an empty
+     * expectation here would be false on both sides of the fix.
+     */
+    const destination = join(stolen, "quarantine");
+    const destinationBefore = await filesUnder(destination);
+
+    const result = await runCapture(
+      fixture.context,
+      { text: "an observation nobody agreed to relocate" },
+      { cwd: () => fixture.project, detect: () => "unknown" },
+    );
+
+    captured = {
+      quarantineIsALink: (await lstat(fixture.quarantine)).isSymbolicLink(),
+      relocatedInsideVault: destination.startsWith(`${fixture.paths.brain}/`),
+      code: result.code,
+      destinationBefore,
+      destinationAfter: await filesUnder(destination),
+      filesInTheVault: await filesUnder(fixture.content),
+    };
+  }, 120_000);
+
+  it("reaches the state the finding is about", () => {
+    expect(captured.quarantineIsALink, "quarantine must be a symlink").toBe(true);
+    expect(captured.relocatedInsideVault, "the target must be outside the vault").toBe(
+      false,
+    );
+    /** The vault is real, so "nothing was written" is measured against a vault. */
+    expect(
+      captured.filesInTheVault.length,
+      "a sweep over an empty vault is not a sweep",
+    ).toBeGreaterThan(0);
+  });
+
+  it("is refused at exit 5, and no observation is written at the destination", () => {
+    /** The harm first, so a failure here names the file that was written. */
+    expect(captured.destinationAfter).toStrictEqual(captured.destinationBefore);
+    expect(
+      captured.destinationAfter.some((path) => path.endsWith(".md")),
+      "no capture file may exist at the destination",
+    ).toBe(false);
+    expect(captured.code).toBe(EXIT_CODES.securityRefusal);
   });
 });

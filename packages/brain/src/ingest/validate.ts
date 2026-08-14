@@ -521,6 +521,41 @@ function excludedSegment(
   });
 }
 
+/**
+ * The same subtraction, case-folded, for the **resolved destination**.
+ *
+ * Separate from `excludedSegment` rather than replacing it, and the split is
+ * deliberate. That one reads the path the *model wrote*, where exact case is the
+ * honest comparison: on a case-sensitive volume a topic folder named `Templates`
+ * is not the private `templates`, and refusing a proposal into it would be this
+ * gate inventing a rule discovery does not hold. This one reads where the bytes
+ * *land*, where the volume has already decided the question — so folding is the
+ * only comparison that can be right on both kinds of volume.
+ *
+ * It covers every depth, because discovery excludes a private folder, the
+ * indexes directory and a dot-segment at every depth (`discover.ts:88-111`), and
+ * the canonical roots `validateProposal` resolves are the top-level ones alone.
+ */
+function excludedSegmentLoosely(
+  segments: readonly string[],
+  config: BrainConfigV1,
+): boolean {
+  const indexesDir = foldSegment(config.indexesDir);
+  return segments.some((raw) => {
+    const segment = foldSegment(raw);
+    return (
+      segment.startsWith(".") ||
+      segment === indexesDir ||
+      PRIVATE_FOLDERS.includes(segment)
+    );
+  });
+}
+
+/** NFC then lowercase, which is `foldPath`'s rule for one segment. */
+function foldSegment(value: string): string {
+  return value.normalize("NFC").toLowerCase();
+}
+
 function writeScope(
   resolved: readonly ResolvedNote[],
   context: IngestValidationContext,
@@ -629,6 +664,33 @@ function writeScope(
           "this path resolves into a private folder, which a proposal may not write",
         ),
       );
+      continue;
+    }
+
+    /**
+     * And the destination's own segments, which is the same subtraction asked
+     * of the resolved path rather than of the canonical roots.
+     *
+     * **Both are needed, and neither subsumes the other.** The roots above
+     * follow `content/_raw` itself when *it* is a link — a proposal into
+     * `content/hidden` where `content/_raw → content/hidden` lands in the real
+     * quarantine and has no private segment to find. This one covers the depths
+     * the roots do not: `content/DEV/_raw` is a private folder to discovery and
+     * is not a root anything canonicalized.
+     */
+    if (
+      excludedSegmentLoosely(
+        relative(contentRootCanonical, canonical).split(sep),
+        config,
+      )
+    ) {
+      findings.push(
+        finding(
+          "write-scope",
+          note.path,
+          "this path resolves into a private folder, the indexes directory, or a dot-segment, none of which a proposal may write",
+        ),
+      );
     }
   }
 
@@ -644,8 +706,17 @@ function generatedOutputConsistency(
   const findings: IngestValidationFinding[] = [];
 
   for (const entry of resolved) {
+    /**
+     * Folded, on both halves. `_INDEXES` is this directory on any volume that
+     * ignores case, and on a vault where it has not been created yet the
+     * resolved comparison below cannot see that either — `canonicalizePlannedPath`
+     * has no on-disk name to fold against and returns the spelling it was given.
+     * Exact comparison here let a proposal write `_INDEXES/index.json` past both
+     * halves of this validator; this is the twin `writeScope` cites, so a gap in
+     * it is a gap in the thing that was held up as already correct.
+     */
     const named = entry.segments.some(
-      (segment) => segment.normalize("NFC") === indexesDir,
+      (segment) => foldSegment(segment) === foldSegment(indexesDir),
     );
     /**
      * The resolved destination too, so a link named innocently but pointing at
@@ -656,7 +727,7 @@ function generatedOutputConsistency(
     const resolves =
       indexesRootCanonical !== null &&
       entry.canonical !== null &&
-      containsPath(indexesRootCanonical, entry.canonical);
+      containsPathLoosely(indexesRootCanonical, entry.canonical);
 
     if (!named && !resolves) continue;
     findings.push(

@@ -27,6 +27,7 @@ import {
   exitCodeOf,
   failureFrom,
   loadOrCreateRedactionKey,
+  resolveQuarantineRoot,
   runtimePathsFor,
 } from "../context.js";
 import type { CliContext, CliGuards } from "../context.js";
@@ -257,32 +258,6 @@ async function listQuarantined(
   }
 
   return { captures, warnings };
-}
-
-/**
- * The quarantine directory itself, canonicalized and **proven inside the
- * configured content root** before anything is measured against it.
- *
- * `ingest.ts` carries the same function and the same reasoning: a check that
- * compares the quarantine root with the target and nothing else lets a
- * quarantine directory replaced by a link out of the vault take its own
- * containment check with it.
- */
-async function resolveQuarantineRoot(
-  context: CliContext,
-  contentRoot: string,
-  quarantine: string,
-): Promise<string> {
-  const canonicalContentRoot = await context.guards.canonicalize(contentRoot);
-  const canonicalQuarantine = await context.guards.canonicalize(quarantine);
-  if (!containsPath(canonicalContentRoot, canonicalQuarantine)) {
-    throw new ReviewRefusal(
-      EXIT_CODES.securityRefusal,
-      "the quarantine directory resolves outside the content root",
-      [quarantine],
-    );
-  }
-  return canonicalQuarantine;
 }
 
 /**
@@ -544,6 +519,8 @@ export async function runReview(
       context,
       contentRoot,
       join(contentRoot, ...QUARANTINE_SEGMENTS),
+      (message, paths_) =>
+        new ReviewRefusal(EXIT_CODES.securityRefusal, message, paths_),
     );
 
     const key = loadOrCreateRedactionKey(paths.stateDir);

@@ -261,6 +261,50 @@ export async function assertRootsAnchored(
 }
 
 /**
+ * The quarantine directory, canonicalized and **proven inside the configured
+ * content root** before anything is measured against it.
+ *
+ * **One implementation for the three commands that touch quarantine**, because
+ * this is a containment check and this repository's own rule for those is that
+ * they must not exist twice (`packages/security/src/cli.ts:10-13`). It arrived
+ * as two copies in `ingest` and `review`, and `capture` — the command that
+ * *writes* the capture — had no check at all; a third copy is how the next
+ * command to be added inherits two of the three.
+ *
+ * **What it catches.** Every caller builds this path textually from
+ * `contentRoot` plus `_raw/quarantine`, so a quarantine directory replaced by a
+ * symbolic link carries any check measured *relative to itself* along with it:
+ * `containsPath(canonicalQuarantine, canonicalTarget)` holds at the new location
+ * exactly as it did at the old one, and `validateChangePlan`'s `ownedRoots` is
+ * satisfied by a **sideways** relocation because such a root neither grows
+ * authority nor lands in `excludedRoots`. Anchoring on the content root is what
+ * makes the question absolute. `ProtectedPathPolicy` answers a different one —
+ * it is a protected-*name* policy and returns early for any path outside `$HOME`
+ * (`packages/security/src/protected-paths.ts:125`).
+ *
+ * **`refuse` is injected** for the reason `writeIndexArtifacts` states at
+ * `apps/cli/src/commands/reindex.ts:93-99`: each command raises its own refusal
+ * class carrying its own exit code and recovery text, and a shared module
+ * inventing a third would throw every caller an error its catch clause does not
+ * recognise.
+ */
+export async function resolveQuarantineRoot(
+  context: CliContext,
+  contentRoot: string,
+  quarantine: string,
+  refuse: (message: string, paths: readonly string[]) => Error,
+): Promise<string> {
+  const canonicalContentRoot = await context.guards.canonicalize(contentRoot);
+  const canonicalQuarantine = await context.guards.canonicalize(quarantine);
+  if (!containsPath(canonicalContentRoot, canonicalQuarantine)) {
+    throw refuse("the quarantine directory resolves outside the content root", [
+      quarantine,
+    ]);
+  }
+  return canonicalQuarantine;
+}
+
+/**
  * The `ManifestGuards.assertReadable` shape Task 6 specified: refuse protected
  * paths, then return the path with every ancestor canonicalized and the final
  * component preserved verbatim.
