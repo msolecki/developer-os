@@ -1317,9 +1317,59 @@ git commit -m "feat(brain): build, render and parse a capture envelope"
 
 **Files:**
 - Create: `apps/cli/src/commands/capture.ts`, `apps/cli/src/commands/capture.test.ts`
-- Modify: `apps/cli/src/main.ts` — `USAGE`, `OPTIONS`, `COMMAND_OPTIONS`, `COMMAND_POSITIONALS`, `dispatch`
+- Modify: `apps/cli/src/io.ts` — `CliIo` gains the stdin channel
+- Modify: `apps/cli/src/bin.ts` — the production implementation of that channel
+- Modify: `apps/cli/src/main.ts` — `USAGE`, `OPTIONS`, `OPTION_NAMES`, `COMMAND_OPTIONS`, `COMMAND_POSITIONALS`, `dispatch`
 - Modify: `packages/workflow-schema/src/vocabulary.ts` — `capture.write` becomes `implemented: true`
-- Test: `apps/cli/src/main.test.ts`
+- Test: `apps/cli/src/main.test.ts`, `apps/cli/src/context.test.ts`, `packages/workflow-schema/src/vocabulary.test.ts`
+
+> **Corrected 2026-08-14, before dispatch**, against the pre-flight scan's findings 21, 22 and 12,
+> each re-verified in the tree at `78690dc`. Four things this task needs did not exist in its brief.
+>
+> **1. There is no stdin channel, and spec §5.1's first line depends on one.** `CliIo` is
+> `{stdout, stderr, confirm}` (`apps/cli/src/io.ts`) and `CliContext` has no stdin member, so
+> "reads stdin when `--text` is absent" had nothing to read from and neither the channel nor its
+> `bin.ts` wiring was in the file list. **`CliIo` gains
+> `readonly readStdin: () => Promise<string | null>`**, and `null` means *nothing was piped*.
+>
+> It returns `null` rather than blocking when `process.stdin.isTTY`, for the reason the `confirm`
+> docblock right above it already gives: an unattended run must never be answered by whatever
+> happens to be on stdin, and an interactive `developer-os capture` with no `--text` must refuse
+> rather than hang on a terminal that will never send EOF. `--text` **wins when both are present**
+> and stdin is then not read at all, because §5.1 reads stdin only *when `--text` is absent* — a
+> pipe the command never consumes is the honest reading of that sentence. Nothing piped and no
+> `--text` is the same door as empty input: exit 2.
+>
+> It is on `CliIo` and not on `CliContext` because it is a channel to the process, which is what
+> that interface is for, and because `bin.ts` is already the only place that binds one.
+> **Both existing fakes must gain the member or `apps/cli` stops compiling** —
+> `recordingIo` (`context.test.ts:394`) and `collectingIo` (`main.test.ts:89`). That is why
+> `context.test.ts` is in the file list for a task that changes nothing else about it.
+>
+> **The read is bounded at 64 KiB and refuses past it rather than truncating.** This is the plan's
+> call, not the spec's, and it amends nothing: it bounds an implementation, and `MAX_FRONTMATTER_CHARS`
+> (`packages/brain/src/indexes/build.ts:168`) is the same bound for the same reason. A refusal, not a
+> truncation — a silently shortened observation is a capture that lies about what was observed, and
+> `cat huge.log | developer-os capture` is the accident this stops.
+>
+> **2. `text` joins `OPTION_NAMES`, not only `OPTIONS`.** `suppliedOptions` filters `OPTION_NAMES`
+> (`main.ts:62-70`), and the per-command allow-list is checked against what that returns. An option
+> in `OPTIONS` but absent from `OPTION_NAMES` is invisible to the check, so `status --text hi` would
+> parse and run — strict dispatch silently holed for every command, not just this one.
+>
+> **3. Two vocabulary pins break, not one.** `capture.write` flipping to `implemented: true` breaks
+> the whole-table `toStrictEqual`, because the shared `capture` const (`vocabulary.test.ts:35`)
+> carries `implemented: false` for all four `capture.*` verbs — `capture.write` splits out of it.
+> It also breaks *"names a real CLI command once a verb's handler ships"*, which is scoped to
+> `implemented && command !== null` and checks the first word against `KNOWN_CLI_COMMANDS`
+> (`vocabulary.test.ts:120-127`): `capture` joins that list. Both are in the same commit as the flip,
+> which is why `vocabulary.test.ts` is staged with `vocabulary.ts` and not after it.
+>
+> **4. The version probe this task introduces collides with Task 15, and Task 15 is where it is
+> fixed.** Step 2 spawns the vendor binary once per capture; the network suite's "no spawn"
+> assertion is already untrue of `doctor` and `status` (pre-flight finding 34) and this makes it
+> untrue of `capture` too. Recorded here because this task creates the third spawner; the assertion
+> becomes "no spawn that is not a discovery probe" when Task 15 is corrected before *its* dispatch.
 
 **Interfaces:**
 - Consumes: `buildCapture`, `renderCaptureFile`, `detectSourceAgent` from `@developer-os/brain`; `TransactionExecutor`, `redactText`, the loaded redaction key, `CliContext`.
@@ -1353,8 +1403,24 @@ it.each(["rejected", "ingested"])(
 );
 
 it("reads stdin when --text is absent", async () => {
-  const result = await runCapture({ ...context, stdin: "from a pipe" }, {});
+  const piped = { ...context, io: { ...context.io, readStdin: async () => "from a pipe" } };
+  const result = await runCapture(piped, {});
   expect(result.ok).toBe(true);
+});
+
+it("does not read stdin when --text is present", async () => {
+  let read = false;
+  const piped = {
+    ...context,
+    io: { ...context.io, readStdin: async () => { read = true; return "from a pipe"; } },
+  };
+  await runCapture(piped, { text: "an observation" });
+  expect(read).toBe(false);
+});
+
+it("refuses at exit 2 when nothing is piped and --text is absent", async () => {
+  const bare = { ...context, io: { ...context.io, readStdin: async () => null } };
+  expect((await runCapture(bare, {})).code).toBe(EXIT_CODES.invalidInput);
 });
 
 it("refuses empty input as invalid, at exit 2", async () => {
@@ -1391,16 +1457,19 @@ The `O_EXCL` create belongs in the transaction plan as `operation: "create"`, wh
 
 - [ ] **Step 3: Wire dispatch**
 
-`main.ts` gains `capture` with options `["text", "json"]` and positionals `{ min: 0, max: 0 }`, and `text` joins `OPTIONS` as a string. Update `USAGE` in the same edit — a command absent from the help text is a command nobody finds — and add a `main.test.ts` case that `capture --limit 5` is refused at parse time, because strict dispatch is the contract.
+`main.ts` gains `capture` with options `["text", "json"]` and positionals `{ min: 0, max: 0 }`, and `text` joins **both** `OPTIONS` (as a string) and `OPTION_NAMES` — correction 2 above says what the second one costs if it is missed. Update `USAGE` in the same edit — a command absent from the help text is a command nobody finds — and add a `main.test.ts` case that `capture --limit 5` is refused at parse time, because strict dispatch is the contract. Add a second case that `status --text hi` is refused too: that is the one that goes red if `OPTION_NAMES` is forgotten, and the `--limit` case would stay green through it.
 
-Set `capture.write.implemented = true` in `EFFECT_VOCABULARY`; Task 5's test then requires it to carry a command, which it does.
+`bin.ts` binds `readStdin` in the same edit as the interface change, or the production binary does not compile against its own `CliIo`.
+
+Set `capture.write.implemented = true` in `EFFECT_VOCABULARY`, and fix the two pins correction 3 names — split `capture.write` out of the shared `capture` const, and add `capture` to `KNOWN_CLI_COMMANDS`. Task 5's test then requires the verb to carry a command, which it does.
 
 - [ ] **Step 4: Run the gate and commit**
 
 ```bash
 npm run check
 git add apps/cli/src/commands/capture.ts apps/cli/src/commands/capture.test.ts \
-        apps/cli/src/main.ts apps/cli/src/main.test.ts \
+        apps/cli/src/io.ts apps/cli/src/bin.ts \
+        apps/cli/src/main.ts apps/cli/src/main.test.ts apps/cli/src/context.test.ts \
         packages/workflow-schema/src/vocabulary.ts \
         packages/workflow-schema/src/vocabulary.test.ts
 git commit -m "feat(cli): developer-os capture writes one quarantined observation"
