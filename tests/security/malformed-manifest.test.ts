@@ -48,15 +48,37 @@ import type { InstalledFixture } from "./helpers.js";
 const FORGERY = "not json at all\n";
 
 /**
- * **The commands this suite reached, recorded by the cases that reached them.**
+ * **What this suite reached, recorded by the case that reached it.**
  *
  * It was a literal compared against itself, which is a gate that passes by
  * scanning nothing — inside the one directory whose subject is exactly that.
- * Each case now adds its own command as it runs, and the last case in the file
- * asserts the set is non-empty and complete. Delete a case and the set shrinks;
- * that is the whole point.
+ *
+ * **Keyed by the case, not by the command.** Keying it by the command made the
+ * promise below false for two of the five cases: `capture` was recorded twice
+ * and `ingest` twice, so deleting either forgery case left the set complete and
+ * this gate green. A label per case is what makes "delete a case and the set
+ * shrinks" true.
+ *
+ * **Each `add` runs after the assertions it vouches for**, so a case that fails
+ * part-way does not record itself — which is what makes the coverage case go red
+ * beside the case that broke, rather than reporting coverage the run did not
+ * have.
  */
 const exercised = new Set<string>();
+
+/**
+ * Written out here rather than derived from the cases, so the two can disagree.
+ * The command each case exercises is the prefix, which is how the brief's own
+ * requirement — capture, review and ingest each get a case — is still checked
+ * without a second literal to drift.
+ */
+const EVERY_CASE: readonly string[] = [
+  "capture · unreadable manifest",
+  "review · unreadable manifest",
+  "ingest · unreadable manifest",
+  "capture · forged ownership claim",
+  "ingest · forged ownership claim",
+];
 
 const EVERY_PATH: readonly string[] = ["capture", "review", "ingest"];
 
@@ -90,11 +112,11 @@ describe("an unreadable installation manifest", () => {
     expect(result.code).toBe(EXIT_CODES.recoveryRequired);
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    exercised.add("capture");
     expect(result.error.message).toContain("manifest");
     /** No capture was written, and the manifest was not repaired under us. */
     expect(await filesUnder(fixture.quarantine)).toStrictEqual(before);
     expect(await manifestBytes(fixture)).toBe(FORGERY);
+    exercised.add("capture · unreadable manifest");
   });
 
   it("stops ingest at exit 6, and leaves the forgery for a person to look at", async () => {
@@ -105,10 +127,10 @@ describe("an unreadable installation manifest", () => {
 
     const result = await fixture.ingest();
 
-    exercised.add("ingest");
     expect(result.code).toBe(EXIT_CODES.recoveryRequired);
     expect(await fixture.statusOf(seeded.id)).not.toBe("ingested");
     expect(await manifestBytes(fixture)).toBe(FORGERY);
+    exercised.add("ingest · unreadable manifest");
   });
 
   /**
@@ -131,12 +153,12 @@ describe("an unreadable installation manifest", () => {
       decision: "accept",
     });
 
-    exercised.add("review");
     expect(result.ok).toBe(true);
     expect(await fixture.statusOf(seeded.id)).toBe("accepted");
     /** Exactly the files that were there before: one changed, none added. */
     expect(await filesUnder(fixture.paths.brain)).toStrictEqual(before);
     expect(await manifestBytes(fixture)).toBe(FORGERY);
+    exercised.add("review · unreadable manifest");
   });
 });
 
@@ -148,10 +170,23 @@ describe("a schema-valid manifest claiming a path the run actually writes", () =
    * entirely, so the assertion "the claimed path was not created" held for a
    * path nothing had ever named — true, and about nothing.
    *
-   * A manifest entry does not cause a file to be created. It grants *ownership*
-   * to `validateChangePlan`, and ownership is what decides whether a write over
-   * that path is allowed. So each case below points the claim at the exact path
-   * its run is about to write, and asserts the write is refused anyway.
+   * A manifest entry does not cause a file to be created; it is an ownership
+   * record. So each case below points the claim at the exact path its run is
+   * about to write, and asserts the write is refused anyway.
+   *
+   * **The two paths refuse for different reasons, and the difference is the
+   * point.** On the capture path the forged entry really is consulted:
+   * `validateChangePlan` reads it and `assertOwnership` refuses a `create` over
+   * a managed path (`packages/core/src/plans/validate.ts:244-246`). On the
+   * ingest path it is **inert** — `applyNotes` runs no `validateChangePlan` at
+   * all, and says so in terms (`apps/cli/src/commands/ingest.ts:506-511`),
+   * because a note is the user's own content and recording one as managed would
+   * report every legitimate edit as drift. What refuses there is the
+   * create-never-replace `exists()` check, which owes nothing to the manifest.
+   *
+   * A reader who took "ownership guards both" from this comment would be taking
+   * the ingest path's safety on credit for a mechanism that is not running on
+   * it.
    */
   it("refuses to create a capture at a path a forged manifest claims to own", async () => {
     const fixture = await installSecurityFixture("manifest-claim-capture");
@@ -188,10 +223,10 @@ describe("a schema-valid manifest claiming a path the run actually writes", () =
       { cwd: () => fixture.project, detect: () => "unknown" },
     );
 
-    exercised.add("capture");
     expect(result.ok).toBe(false);
     /** The write was attempted at the claimed path, and refused there. */
     expect(await filesUnder(fixture.quarantine)).not.toContain(first.path);
+    exercised.add("capture · forged ownership claim");
   });
 
   it("refuses to replace a note a forged manifest claims to own", async () => {
@@ -223,27 +258,40 @@ describe("a schema-valid manifest claiming a path the run actually writes", () =
 
     const result = await fixture.ingest();
 
-    exercised.add("ingest");
     /** The user's bytes, untouched: `ingest` creates notes and never replaces one. */
     expect(await readFile(claimed, "utf8")).toBe(theirs);
     expect(result.ok).toBe(false);
     expect(await fixture.statusOf(seeded.id)).toBe("accepted");
     if (result.ok) return;
     expect(result.error.message).toContain("ingest creates notes and never replaces one");
+    exercised.add("ingest · forged ownership claim");
   });
 });
 
 /**
  * Last in the file, and derived rather than declared: the set is whatever the
- * cases above actually reached. `EVERY_PATH` is the independent list it is
- * measured against — a second copy on purpose, because a set compared against
- * its own producer is the gate this directory exists to refuse.
+ * cases above actually reached, recorded by each of them after its own
+ * assertions passed. `EVERY_CASE` is the independent list it is measured
+ * against — a second copy on purpose, because a set compared against its own
+ * producer is the gate this directory exists to refuse.
+ *
+ * **A filtered or sharded run reddens this case.** `npx vitest run
+ * security/malformed-manifest.test.ts -t "review"` leaves four labels unrecorded
+ * and this goes red. That is the accepted cost of measuring coverage rather than
+ * declaring it, not a regression: run the file whole, or expect this one to
+ * complain.
  */
 describe("what this suite covered", () => {
-  it("reached every path this subsystem adds, and at least one", () => {
+  it("reached every case it declares, and every path this subsystem adds", () => {
     expect(exercised.size, "a suite that reached nothing is not a suite").toBeGreaterThan(
       0,
     );
-    expect([...exercised].sort()).toStrictEqual([...EVERY_PATH].sort());
+    expect([...exercised].sort()).toStrictEqual([...EVERY_CASE].sort());
+    /**
+     * And the brief's own requirement, read back off the labels rather than off
+     * a third literal: capture, review and ingest each got a case.
+     */
+    const paths = new Set([...exercised].map((label) => label.split(" · ")[0]));
+    expect([...paths].sort()).toStrictEqual([...EVERY_PATH].sort());
   });
 });

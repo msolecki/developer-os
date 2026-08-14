@@ -195,6 +195,12 @@ describe("an interruption at every forward phase", () => {
  * appear because no case adds it; if a case is deleted or silently skipped the
  * set shrinks and this goes red, which is the whole reason it is here rather
  * than being a `toHaveLength` over the array the cases were generated from.
+ *
+ * **A filtered or sharded run reddens this case.** `npx vitest run
+ * security/interruption.test.ts -t "planned"` drives two of the fourteen and
+ * this one complains about the other twelve. That is the accepted cost of
+ * measuring coverage rather than declaring it, not a regression: run the file
+ * whole, or expect this one to complain.
  */
 describe("what this suite drove", () => {
   it("interrupted both writes at each of the seven forward phases, and nothing else", () => {

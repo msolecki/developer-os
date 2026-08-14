@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { EXIT_CODES } from "@developer-os/core";
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import {
   filesUnder,
@@ -167,8 +167,6 @@ describe("a quarantine directory that resolves outside the vault", () => {
       ),
     };
   }, 120_000);
-
-  afterAll(removeSecurityFixtures);
 
   it("reaches the state the finding is about, and the escape happens", () => {
     /** The setup, asserted where a failure cannot be mistaken for the defect. */
