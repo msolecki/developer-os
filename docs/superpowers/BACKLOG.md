@@ -65,7 +65,7 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
 | Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian), NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (S, the argv screen's word list also screens free-form prose), NEW-13 (S, two artifact roots share one type) and **NEW-14 (S, security — a relocated quarantine takes its own containment check with it)** |
-| Repository infrastructure | §5 | one thing a later subsystem still owes, DOS-P6's — a consolidated threat model, Task 18 |
+| Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
 
@@ -423,12 +423,15 @@ Named in the program file map and still missing. A row leaves this section when 
 exists, because the section's job is to stop something being discovered late — the tree is the
 inventory of what was built, and the architecture notes say what is in it.
 
-| Path | First owner | Status |
-|---|---|---|
-| a consolidated threat model under `docs/architecture/` | DOS-P6 at the earliest | missing — the **capability model** is deliberately recorded twice instead, once per adapter (`claude-adapter.md` §3, `codex-adapter.md` §3), which is where it belongs while the two vocabularies are asserted identical |
+**Nothing the file map names is missing, so there is no table.** The last two rows left on
+2026-08-14: `tests/security/`, then `docs/architecture/threat-model.md`. Four rows left something
+durable behind as they closed:
 
-Everything else the file map names exists, most recently `tests/security/` on 2026-08-14. Three rows
-left something durable behind as they closed:
+- **The capability model stays recorded per adapter and was not moved into the threat model** —
+  `claude-adapter.md` §3 and `codex-adapter.md` §3, twice on purpose, which is where it belongs while
+  the two vocabularies are asserted identical and `apps/cli/src/adapter-capability-parity.test.ts` is
+  what keeps that true. `docs/architecture/threat-model.md` §9 points at both rather than restating
+  either; a third copy is how three descriptions of one model come to disagree.
 
 - **`tests/security/` holds eight suites, not the six spec §9 names** — sentinel, prompt injection,
   symlink escape, multiline command, malformed manifest and interruption from §9, plus **network** and
