@@ -151,9 +151,11 @@ each other, never against the content root**, so a quarantine that had moved car
 containment check with it; the writable-path guard did not catch it either, because
 `ProtectedPathPolicy` is a protected-*name* policy that returns early outside `$HOME`. A capture
 *file* that is a symlink **is** refused — by `captureFileNames`'s `entry.isFile()` filter at
-selection, a different guard — so the leaf case was never evidence about the directory case. Both
-commands now anchor on the configured content root through `resolveQuarantineRoot`, and the security
-suite's parked `it.fails` is an ordinary passing case.
+selection, a different guard — so the leaf case was never evidence about the directory case. All three
+commands that touch quarantine — `capture` included, which had no such check at all and wrote the
+user's observation into the relocated directory — now anchor on the configured content root through
+one shared `resolveQuarantineRoot`, and the security suite's parked `it.fails` is an ordinary passing
+case.
 
 **A fourth Foundation request, from Task 13, and it is the cheapest of the four.** `CliResult`'s
 failure arm is `{ok, code, error}` with no `data` slot (`result.ts:29-33`), so **a command that

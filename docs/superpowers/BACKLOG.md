@@ -64,7 +64,7 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P6 | spec approved and plan written, both 2026-08-13 | the implementation — nineteen tasks, **seventeen landed** 2026-08-13/14. **Task 17 needs the founder** — one real model call per vendor; Task 19 closes the subsystem |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian), NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (XS, half closed — the argv screen's word list still screens a user's own path), NEW-13 (S, two artifact roots share one type), **NEW-15 (S, security — the first executor of a discovered binary pays none of the check its type demands)**, NEW-16 (S, spec §8.2's user-configured redaction patterns are unreachable), **NEW-17 (XS, security — `brain` is the one command whose config parse failure is not content-free)** and NEW-18 (XS, `assertSafeCommand`'s NUL branches have no test) |
+| Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian), **NEW-19 (XS, security — `reindex` builds its owned root textually)**, NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (XS, half closed — the argv screen's word list still screens a user's own path), NEW-13 (S, two artifact roots share one type), **NEW-15 (S, security — the first executor of a discovered binary pays none of the check its type demands)**, NEW-16 (S, spec §8.2's user-configured redaction patterns are unreachable), **NEW-17 (XS, security — `brain` is the one command whose config parse failure is not content-free)** and NEW-18 (XS, `assertSafeCommand`'s NUL branches have no test) |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -106,6 +106,32 @@ Everything in this section is genuinely open. Nothing here is bookkeeping, and n
 closed stays here — NEW-1 through NEW-6, NEW-8 and NEW-9 were removed on 2026-08-10 when
 they closed, NEW-10 on 2026-08-11, and NEW-14 on 2026-08-15 when DOS-P6 Task 19's review closed it. What a closed item leaves behind is a row in §8, a clause in a spec, or a test;
 if it left nothing, it was not worth recording. Git history is the archive.
+
+### NEW-19 — `reindex` builds its owned root textually, like `capture` did
+
+- **Status:** open, found 2026-08-15 by the survey Task 19's second fix round ran over every
+  `ownedRoots` caller after `capture.ts` was fixed · **Owner:** whoever next touches
+  `apps/cli/src/commands/reindex.ts` — DOS-P7 by default · **Size:** XS · **Security**
+- `writeIndexArtifacts` passes `ownedRoots: [join(vaultRoot, indexesDir)]`
+  (`apps/cli/src/commands/reindex.ts:283`) — built from strings, never proven to resolve inside the
+  vault. **It is the same shape `capture.ts:579` had**, and the same three checks miss it for the
+  same reasons. `assertUsableRoots` refuses a root that *grew* authority or sits inside
+  `excludedRoots` (`packages/core/src/plans/validate.ts:199-206`) and **permits a sideways
+  relocation on purpose** — its own comment names `~/.claude -> ~/Dropbox/claude` as the legitimate
+  case it must not break (`:186-188`). `ProtectedPathPolicy` returns early outside `$HOME`. Nothing
+  else on that path asks where the directory resolves.
+- **What it buys is narrower than `capture`'s**, which is why it is XS and was registered rather than
+  fixed in the same round. Replace `content/_indexes` with a link out of the vault and
+  `brain reindex` — and `ingest`'s third transaction — write the four generated artifacts there:
+  `index.json`, `catalog.md`, `tags.md`, `topics.md`. Those are derived rather than raw, but they
+  carry every note's title, path, summary and tags, so it is vault-metadata disclosure into an
+  attacker-chosen directory rather than the capture text itself.
+- **Traced by reading, not driven.** The three misses above were each read at their line; no test was
+  written, so nobody should treat this row as demonstrated the way
+  `tests/security/symlink-escape.test.ts` demonstrates the other two.
+- **The fix already exists**: `resolveQuarantineRoot` (`apps/cli/src/context.ts:262-305`) is the
+  same check one directory over, and its `refuse` injection means a caller keeps its own exit code.
+  Generalize its name when the second caller shape appears rather than copying it.
 
 ### NEW-11 — the invisible-title rule stops at the title
 
@@ -182,8 +208,8 @@ if it left nothing, it was not worth recording. Git history is the archive.
   executes a discovered binary owes an owner and mode check first.** `discoverExecutable` finds a
   name on `PATH` and returns a path; it does not vouch for it.
 - **DOS-P6 is the first executor and pays nothing.** `selectVendor` returns
-  `discovery.executablePath` (`apps/cli/src/commands/ingest.ts:426-434`) and the run spawns it
-  through `invokeVendor` (`:1349`, `:663`); no `stat`, no uid comparison and no mode comparison exists anywhere on that path — the
+  `discovery.executablePath` (`apps/cli/src/commands/ingest.ts:444-452`) and the run spawns it
+  through `invokeVendor` (`:1395`, `:648`); no `stat`, no uid comparison and no mode comparison exists anywhere on that path — the
   only `lstat` in the file is on a note path and the only mode is a `mkdir`.
 - **What it is not:** privilege escalation. The binary runs as the user either way, and a user who
   can write their own `PATH` can already run anything. **What it is:** the product hands that binary
@@ -504,9 +530,12 @@ durable behind as they closed:
 - **`tests/security/` holds eight suites, not the six spec §9 names** — sentinel, prompt injection,
   symlink escape, multiline command, malformed manifest and interruption from §9, plus **network** and
   **concurrent edit**, the two §7's standing gate requires and §9 dropped. Every suite was watched
-  fail before it was believed, and thirteen reverts are recorded with the line each disabled. **46 of
-  its 81 cases carry that evidence and 35 do not**, after the fix round following Task 19's review
-  added twenty-three cases of which four were watched fail. That split is recorded **here and nowhere else** —
+  fail before it was believed, and thirteen reverts are recorded with the line each disabled. **47 of
+  its 83 cases carry that evidence and 36 do not** — the total counted by collection
+  (`npx vitest list --root tests security`), the split derived per suite in
+  `docs/architecture/threat-model.md` §8. The two fix rounds after Task 19's review added twenty-four
+  cases between them, five of which were watched fail, and converted one parked `it.fails` into a
+  sixth. That split is recorded **here and nowhere else** —
   a correction to an earlier version of this sentence, which claimed the suites say it about
   themselves. They do not: `grep -rniE "revert" tests/security/` returns nothing, and the per-case
   itemization lived only in a scratch report that does not survive this plan. Anyone tightening the
