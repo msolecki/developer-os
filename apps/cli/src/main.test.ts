@@ -389,6 +389,61 @@ describe("review dispatch", () => {
   });
 });
 
+describe("ingest dispatch", () => {
+  it("refuses an option ingest does not accept", async () => {
+    await refuses(["ingest", "--text", "hi"]);
+    await refuses(["ingest", "--id", "0f1e2d3c4b5a6978"]);
+    await refuses(["ingest", "--dry-run"]);
+  });
+
+  /**
+   * The case that goes red if `agent` joins `OPTIONS` without joining
+   * `OPTION_NAMES`: `suppliedOptions` filters `OPTION_NAMES`, so an option
+   * missing from it is invisible to the per-command allow-list and *every*
+   * command silently accepts it — strict dispatch holed for all of them, not
+   * only the new one. The cases above stay green through that hole, which is
+   * why this one is here.
+   */
+  it("refuses --agent on a command that does not take it", async () => {
+    await refuses(["status", "--agent", "claude"]);
+    await refuses(["review", "--agent", "claude"]);
+    await refuses(["brain", "lint", "--agent", "claude"]);
+  });
+
+  it("refuses a positional, because ingest names no capture", async () => {
+    await refuses(["ingest", "0f1e2d3c4b5a6978"]);
+  });
+
+  it("refuses a --limit that is not a positive integer", async () => {
+    await refuses(["ingest", "--limit", "0"]);
+    await refuses(["ingest", "--limit", "-1"]);
+    await refuses(["ingest", "--limit", "many"]);
+  });
+
+  it("accepts every well-formed ingest invocation", async () => {
+    /**
+     * These reach the command, which then refuses because the fixture has no
+     * configuration — so the assertion that distinguishes parse from command is
+     * the stderr text rather than the exit code.
+     */
+    for (const argv of [
+      ["ingest"],
+      ["ingest", "--json"],
+      ["ingest", "--yes"],
+      ["ingest", "--limit", "2"],
+      ["ingest", "--agent", "codex"],
+      ["ingest", "--agent", "claude", "--limit", "1", "--json", "--yes"],
+    ]) {
+      const fixture = await createCommandFixture(`ok-${argv.join("-")}`);
+      const lines: string[] = [];
+      await run(argv, collectingIo(lines), () => fixture.context);
+      expect(lines.join("\n"), argv.join(" ")).toContain(
+        "Developer OS is not initialized",
+      );
+    }
+  });
+});
+
 describe("brain dispatch", () => {
   it("refuses an unknown brain subcommand", async () => {
     await refuses(["brain", "reticulate"]);

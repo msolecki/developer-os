@@ -95,10 +95,12 @@ export {
   MAX_PROPOSED_NOTES,
   MAX_PROPOSED_PATH_CHARS,
   parseIngestProposal,
+  planIngestApply,
   validateProposal,
   VALIDATOR_IDS,
 } from "./ingest/index.js";
 export type {
+  ApplyResult,
   IngestProposal,
   IngestProposalOutcome,
   IngestProposalRefusal,
@@ -106,6 +108,7 @@ export type {
   IngestValidationContext,
   IngestValidationFinding,
   IngestValidationResult,
+  PlannedNoteWriteV1,
   ProposedNote,
   ValidatorId,
 } from "./ingest/index.js";

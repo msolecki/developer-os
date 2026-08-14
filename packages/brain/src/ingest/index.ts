@@ -53,6 +53,8 @@
  * this product's business; catching it on the way back is, and that is the
  * secret scan among the nine validators.
  */
+export { planIngestApply } from "./apply.js";
+export type { ApplyResult, PlannedNoteWriteV1 } from "./apply.js";
 export {
   MAX_PROPOSED_NOTE_CHARS,
   MAX_PROPOSED_NOTES,

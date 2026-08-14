@@ -14,6 +14,7 @@ import { runCapture } from "./commands/capture.js";
 import type { CaptureResultV1 } from "./commands/capture.js";
 import { runDoctor } from "./commands/doctor.js";
 import type { DoctorReportV1 } from "./commands/doctor.js";
+import { renderIngest, runIngest } from "./commands/ingest.js";
 import { runInit } from "./commands/init.js";
 import type { InitResultV1 } from "./commands/init.js";
 import { runRepair } from "./commands/repair.js";
@@ -39,6 +40,7 @@ const USAGE = [
   "  search     alias for brain search <query>",
   "  capture    quarantine one observation, redacted before it is written",
   "  review     list quarantined captures, or decide on one",
+  "  ingest     turn accepted captures into notes, one agent call each",
   "  status     report the current installation without changing it",
   "  doctor     run every health check without repairing anything",
   "  repair     resume or roll back one incomplete transaction",
@@ -52,6 +54,7 @@ const USAGE = [
   "  --text <text>    the observation to capture; stdin when absent (capture)",
   "  --id <id>        the capture to decide on (review)",
   "  --decision <d>   accept, reject or edit (review)",
+  "  --agent <name>   claude or codex; the first installed one by default (ingest)",
   "  --resume <id>    finish an incomplete transaction (repair)",
   "  --rollback <id>  undo an incomplete transaction (repair)",
   "  --version        print the product version",
@@ -59,6 +62,7 @@ const USAGE = [
 
 const OPTIONS = {
   "dry-run": { type: "boolean" },
+  agent: { type: "string" },
   decision: { type: "string" },
   id: { type: "string" },
   json: { type: "boolean" },
@@ -81,6 +85,7 @@ type OptionName = keyof typeof OPTIONS;
  */
 const OPTION_NAMES: readonly OptionName[] = [
   "dry-run",
+  "agent",
   "decision",
   "id",
   "json",
@@ -97,6 +102,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly OptionName[]>> = {
   search: ["json", "limit"],
   capture: ["text", "json"],
   review: ["id", "decision", "json"],
+  ingest: ["limit", "json", "yes", "agent"],
   init: ["dry-run", "yes", "json"],
   status: ["json"],
   doctor: ["json"],
@@ -116,6 +122,7 @@ const COMMAND_POSITIONALS: Readonly<
   init: { min: 0, max: 0 },
   capture: { min: 0, max: 0 },
   review: { min: 0, max: 0 },
+  ingest: { min: 0, max: 0 },
   status: { min: 0, max: 0 },
   doctor: { min: 0, max: 0 },
   repair: { min: 0, max: 0 },
@@ -489,6 +496,25 @@ async function dispatch(
         }),
         json,
         renderReview,
+      );
+    }
+    case "ingest": {
+      /**
+       * `limit` and `agent` are omitted rather than passed as `undefined`:
+       * `exactOptionalPropertyTypes` distinguishes the two, and `runIngest`
+       * reads *absent* as "every accepted capture" and "the first installed
+       * vendor" respectively.
+       */
+      const agent = optionString(invocation.values.agent);
+      return emit(
+        io,
+        await runIngest(context, {
+          ...(invocation.limit === null ? {} : { limit: invocation.limit }),
+          ...(agent === null ? {} : { agent }),
+          assumeYes,
+        }),
+        json,
+        renderIngest,
       );
     }
     case "status":

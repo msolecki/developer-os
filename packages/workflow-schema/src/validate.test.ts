@@ -51,21 +51,25 @@ describe("validateWorkflow", () => {
     ]);
   });
 
+  /**
+   * `agent.prompt`, because it is the only verb left without a handler: DOS-P6
+   * Task 13 shipped `developer-os ingest` and flipped the last three
+   * `ingest.*` verbs to implemented, which is what this case used to be written
+   * against. A case pinned to a verb that ships is a case whose subject moves,
+   * and the rule under test is about the *table's* `implemented` flag rather
+   * than about any particular row.
+   */
   it("raises an info finding per unimplemented verb, naming its owner", () => {
     const result = validateWorkflow(
       "workflows/sample/workflow.yaml",
       raw({
-        capabilities: ["structured_result"],
-        refusals: [
-          { when: "capability-missing", exit: 4, message: "needs a structured result" },
-        ],
-        scopes: { read: ["content/_raw/quarantine/**"], write: [] },
-        steps: [{ id: "a", do: "ingest.stage" }],
+        scopes: { read: [], write: [] },
+        steps: [{ id: "a", do: "agent.prompt" }],
       }),
     );
     const info = result.findings.filter((f) => f.severity === "info");
     expect(info).toHaveLength(1);
-    expect(info[0]?.message).toContain("DOS-P6");
+    expect(info[0]?.message).toContain("adapters");
     expect(result.errorCount).toBe(0);
   });
 

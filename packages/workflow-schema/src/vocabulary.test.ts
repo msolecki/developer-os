@@ -57,9 +57,9 @@ describe("EFFECT_VOCABULARY", () => {
       "capture.list": { read: quarantine, write: [], ...capture, command: "developer-os review" },
       "capture.setStatus": { read: [], write: quarantine, ...capture, command: "developer-os review" },
       "capture.edit": { read: quarantine, write: quarantine, ...capture, command: "developer-os review" },
-      "ingest.stage": { read: quarantine, write: [], staging: true, capability: "structured_result", owner: "DOS-P6", implemented: false, command: "developer-os ingest" },
-      "ingest.validate": { read: [], write: [], staging: true, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os ingest" },
-      "ingest.apply": { read: [], write: notes, staging: true, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os ingest" },
+      "ingest.stage": { read: quarantine, write: [], staging: true, capability: "structured_result", owner: "DOS-P6", implemented: true, command: "developer-os ingest" },
+      "ingest.validate": { read: [], write: [], staging: true, capability: null, owner: "DOS-P6", implemented: true, command: "developer-os ingest" },
+      "ingest.apply": { read: [], write: notes, staging: true, capability: null, owner: "DOS-P6", implemented: true, command: "developer-os ingest" },
       "doctor.report": { read: [], write: [], staging: false, capability: null, owner: "Foundation", implemented: true, command: "developer-os doctor" },
       "cli.run": { read: [], write: [], staging: false, capability: "non_interactive_run", owner: "Foundation", implemented: true, command: null },
       "agent.prompt": { read: [], write: [], staging: false, capability: null, owner: "adapters", implemented: false, command: null },
@@ -138,6 +138,7 @@ describe("EFFECT_VOCABULARY", () => {
     "search",
     "capture",
     "review",
+    "ingest",
   ] as const;
   const KNOWN_BRAIN_SUBCOMMANDS = ["reindex", "lint", "search", "status"] as const;
 
@@ -214,26 +215,27 @@ describe("EFFECT_VOCABULARY", () => {
     expect(EFFECT_VOCABULARY["ingest.apply"]?.write).toStrictEqual(["content/**"]);
   });
 
-  it("marks the four unimplemented verbs with their owning subsystem", () => {
+  it("marks the one unimplemented verb with its owning subsystem", () => {
     /**
      * Task 5 added `capture.edit`, unimplemented like its two `capture`
      * siblings, which grew the pinned set from seven to eight. Task 9 shipped
      * `developer-os capture` and took `capture.write` back out of it; Task 10
-     * shipped `developer-os review` and took the remaining three. That is the
+     * shipped `developer-os review` and took the next three; Task 13 shipped
+     * `developer-os ingest` and took the last three of DOS-P6's. That is the
      * whole point of the pin — a verb leaves this list in the same change as
      * the handler that closes it — and it is why the test's own name is part
      * of what each of those tasks had to update.
+     *
+     * What is left is `agent.prompt`, and it is the adapters' rather than this
+     * subsystem's: `invokeClaude` and `invokeCodex` exist, and what has no
+     * handler is the *step executor* that would turn an `agent.prompt` step in
+     * a workflow into one of those calls.
      */
     const pending = Object.entries(EFFECT_VOCABULARY)
       .filter(([, footprint]) => !footprint.implemented)
       .map(([verb]) => verb)
       .sort();
-    expect(pending).toStrictEqual([
-      "agent.prompt",
-      "ingest.apply",
-      "ingest.stage",
-      "ingest.validate",
-    ]);
+    expect(pending).toStrictEqual(["agent.prompt"]);
     /**
      * Anchored. The first version was `/DOS-P\d|adapters/u`, which matched
      * `xDOS-P9x` and `not-adapters-really` — it constrained nothing an owner

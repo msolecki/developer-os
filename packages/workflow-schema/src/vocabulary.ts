@@ -103,9 +103,17 @@ export const EFFECT_VOCABULARY: Readonly<Record<string, EffectFootprint>> =
      * read the edit itself needs.
      */
     "capture.edit": { read: QUARANTINE, write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: true, command: "developer-os review" },
-    "ingest.stage": { read: QUARANTINE, write: [], staging: true, capability: "structured_result", owner: "DOS-P6", implemented: false, command: "developer-os ingest" },
-    "ingest.validate": { read: [], write: [], staging: true, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os ingest" },
-    "ingest.apply": { read: [], write: ["content/**"], staging: true, capability: null, owner: "DOS-P6", implemented: false, command: "developer-os ingest" },
+    /**
+     * The last three verbs `claude-adapter.md` §9.3 and `codex-adapter.md`
+     * §10 record as having no handler, closed by DOS-P6 Task 13's
+     * `developer-os ingest`. One command implements all three because they are
+     * one ladder: the agent call that stages a proposal, the nine validators
+     * that gate it, and the transaction that applies it are not separately
+     * runnable and were never meant to be.
+     */
+    "ingest.stage": { read: QUARANTINE, write: [], staging: true, capability: "structured_result", owner: "DOS-P6", implemented: true, command: "developer-os ingest" },
+    "ingest.validate": { read: [], write: [], staging: true, capability: null, owner: "DOS-P6", implemented: true, command: "developer-os ingest" },
+    "ingest.apply": { read: [], write: ["content/**"], staging: true, capability: null, owner: "DOS-P6", implemented: true, command: "developer-os ingest" },
     "doctor.report": { read: [], write: [], staging: false, capability: null, owner: "Foundation", implemented: true, command: "developer-os doctor" },
     "cli.run": { read: [], write: [], staging: false, capability: "non_interactive_run", owner: "Foundation", implemented: true, command: null },
     "agent.prompt": { read: [], write: [], staging: false, capability: null, owner: "adapters", implemented: false, command: null },
