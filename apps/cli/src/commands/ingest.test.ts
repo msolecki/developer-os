@@ -525,6 +525,42 @@ describe("runIngest, the status ladder", () => {
   });
 
   /**
+   * A capture parked at `staging` with its notes already written is **not the
+   * same event as a refusal that wrote nothing**, and the report has to say so:
+   * `selectCaptures` never selects `staging`, so no later run will touch it, and
+   * a line labelled `refused` beside a recovery promising a retry would tell a
+   * user their vault was untouched and their capture queued — both false.
+   */
+  it("labels a post-apply failure as partly applied, and promises it no retry", async () => {
+    const fixture = await installedFixture("ingest-partly-applied-report", {
+      interruptAfter: "staged",
+      interruptKind: "ingest-ingested",
+    });
+    const seeded = await fixture.seedAccepted("an observation applied then stuck");
+    fixture.reply(() => oneNote(seeded.id, "DEV/stuck.md", "Stuck note"));
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain("partly applied, left at staging");
+    expect(result.error.message).not.toContain(`${seeded.id} refused`);
+    /** It names the notes the user now has, because their vault did change. */
+    expect(result.error.message).toContain("already in the vault");
+    expect(result.error.message).toContain("DEV/stuck.md");
+    /**
+     * And the run-level recovery describes this state rather than only its
+     * opposite: the old text said every refused capture "will be tried again",
+     * which is the one thing that cannot happen from `staging`.
+     */
+    const recovery = result.error.recovery ?? "";
+    expect(recovery).toContain("partly applied");
+    expect(recovery).toContain("staging");
+    expect(recovery).toContain("ingest never selects staging");
+    expect(await fixture.statusOf(seeded.id)).toBe("staging");
+  });
+
+  /**
    * The distinction that is load-bearing and easy to collapse: **`failed` is not
    * what an ingest refusal produces.** It describes a capture whose *own*
    * envelope is unreadable, which no retry can fix without the user looking at
@@ -1115,6 +1151,69 @@ describe("renderIngest, what a human is shown", () => {
     expect(text).toContain("Ingested 1 capture through claude");
     expect(text).toContain(seeded.id);
     expect(text).toContain("DEV/rendered.md");
+  });
+
+  /**
+   * **A capture's own recovery has to reach the person it is about.** Nearly
+   * every refusal on this path carries advice specific to one capture, and an
+   * earlier version of the containment collected only `captureId`, `code`,
+   * `message` and `paths` — so every capture-specific escape became unreachable
+   * at runtime while the run-level string looked like it had covered them.
+   *
+   * The "already holds a file" recovery is the one this is pinned on because it
+   * is the string the loss was most visible on, and because it shares no words
+   * with `REFUSED_RECOVERY`: a case asserting `--decision reject` would have
+   * stayed green through the whole regression.
+   */
+  it("puts the capture's own recovery on stderr, not only the run's", async () => {
+    const fixture = await installedFixture("ingest-per-capture-recovery");
+    const seeded = await fixture.seedAccepted("an observation over an existing note");
+    /** A path `init`'s own template already filled, so `applyNotes` refuses. */
+    expect(await vaultNotes(fixture)).toContain("DEV/example-knowledge-note.md");
+    fixture.reply(() =>
+      oneNote(
+        seeded.id,
+        "DEV/example-knowledge-note.md",
+        "A note proposed over an existing one",
+      ),
+    );
+
+    const code = await run(["ingest"], fixture.io, () => fixture.context);
+
+    expect(code).toBe(EXIT_CODES.operationalFailure);
+    const text = fixture.io.err.join("\n");
+    expect(text).toContain("ingest creates notes and never replaces one");
+    /** The capture's own advice, which no run-level string contains. */
+    expect(text).toContain("move or delete the existing note");
+    expect(text).toContain(seeded.id);
+  });
+
+  /**
+   * **A capture nothing could be read from must not vanish because another one
+   * refused.** `selectCaptures`'s warnings ride on the success path only, and
+   * the refused report iterates the selected captures, which unreadable ones are
+   * deliberately not among — so a run with one of each said nothing at all about
+   * the broken file, in exactly the run where a user is already looking.
+   */
+  it("still reports an unreadable capture when another capture refuses", async () => {
+    const fixture = await installedFixture("ingest-unreadable-and-refused");
+    const broken = await fixture.seedAccepted("an observation about to break");
+    const refusing = await fixture.seedAccepted("an observation that refuses");
+    await nodeFs.writeFile(broken.path, "not a capture at all\n", { mode: 0o600 });
+    fixture.reply(() =>
+      oneNote(refusing.id, "DEV/leaky.md", "Leaky note", `token ${SECRET}`),
+    );
+
+    const code = await run(["ingest"], fixture.io, () => fixture.context);
+
+    expect(code).toBe(EXIT_CODES.securityRefusal);
+    const text = fixture.io.err.join("\n");
+    expect(text).toContain(refusing.id);
+    expect(text).toContain("secret-scan");
+    /** And the broken one, by name and by reason, rather than silently dropped. */
+    expect(text).toContain(broken.id);
+    expect(text).toContain("could not be read at all");
+    expect(text).toContain("unparseable");
   });
 
   /**

@@ -34,11 +34,12 @@
  * **That declared read scope is wider than `ingest.stage`'s declared footprint,
  * and the two are not the same kind of statement.** `EFFECT_VOCABULARY` gives
  * `ingest.stage` `read: content/_raw/quarantine/**` — the files *Developer OS*
- * itself opens to perform the step. The literal above is the *model's* sandbox,
- * and spec §6.2 sets it deliberately wider: "the agent has read-only access to
- * the vault", because a model that cannot see the vault cannot propose notes
- * that link to existing ones or notice it is duplicating one. Nothing is
- * over-declared by this — a declared footprint is not a permission set.
+ * itself opens to perform the step. What the sandbox described above grants is
+ * the *model's* reach, and spec §6.2 sets it deliberately wider: "the agent has
+ * read-only access to the vault", because a model that cannot see the vault
+ * cannot propose notes that link to existing ones or notice it is duplicating
+ * one. Nothing is over-declared by this — a declared footprint is not a
+ * permission set.
  *
  * **The write side carries the same distinction, and it is now code.** After
  * Task 7 the `ingest` contract declares `write: [content/**, content/_indexes/**]`,

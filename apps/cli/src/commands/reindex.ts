@@ -33,7 +33,7 @@ import type { CliContext } from "../context.js";
  * their own refusal class.
  */
 
-export const EMPTY_MANIFEST: InstallationManifestV1 = {
+const EMPTY_MANIFEST: InstallationManifestV1 = {
   schemaVersion: 1,
   productVersion: "0.0.0",
   installedAt: "1970-01-01T00:00:00.000Z",

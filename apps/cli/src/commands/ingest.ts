@@ -28,6 +28,7 @@ import {
 } from "@developer-os/brain";
 import type {
   BrainConfigV1,
+  CaptureEnvelopeV1,
   CaptureStatus,
   IngestValidationFinding,
   PlannedNoteWriteV1,
@@ -74,7 +75,30 @@ interface RefusedCaptureV1 {
   readonly code: FailureExitCode;
   readonly message: string;
   readonly paths: readonly string[];
+  /**
+   * **This capture's own recovery, not the run's.** Almost every refusal on this
+   * path carries advice that is specific to the capture it is about — repair
+   * this file's frontmatter, move the note already at this path, resolve this
+   * transaction with `repair` — and collapsing them into one run-level string
+   * makes every one of them unreachable at runtime. `reportLines` prints it
+   * beside the capture's own line so the advice lands next to what it is about.
+   *
+   * `null` where the failure was not an `IngestRefusal` and carried none.
+   */
+  readonly recovery: string | null;
+  /**
+   * The notes already written when the failure landed — empty unless
+   * `ingest-apply` had finalized, in which case the capture is at `staging` with
+   * these files in the vault. It is a different event from a refusal that wrote
+   * nothing and it is labelled differently, because a user reading the line has
+   * to know their vault changed.
+   */
+  readonly appliedNotes: readonly string[];
 }
+
+type CaptureOutcome =
+  | { readonly ok: true; readonly capture: IngestedCaptureV1 }
+  | { readonly ok: false; readonly refusal: RefusedCaptureV1 };
 
 export interface IngestResultV1 {
   readonly schemaVersion: 1;
@@ -229,14 +253,26 @@ const RETRY_LATER =
   "run developer-os ingest again; the capture is unchanged and still accepted";
 
 /**
- * The escape from a capture whose proposal refuses every time — which "run it
- * again" is not. A capture is only rejectable from `quarantined`
+ * The run-level escape, and it has to be true of **both** outcomes a capture can
+ * be left in. An earlier version said only "still accepted and will be tried
+ * again", which is false of exactly the case a user most needs guidance on: a
+ * failure after `ingest-apply` finalizes leaves the capture at `staging`, and
+ * `selectCaptures` never selects `staging`, so no later run will touch it.
+ *
+ * The `reject` half names the full escape rather than the `review` command
+ * alone: a capture is only rejectable from `quarantined`
  * (`applyReviewDecision`'s own table), so the status has to go back by hand
- * first; naming only the `review` half would send a user to a command that
+ * first, and naming only the second half would send a user to a command that
  * refuses.
+ *
+ * Per-capture advice is printed beside each capture by `reportLines`; this is
+ * what applies to the run.
  */
-const REFUSED_RECOVERY =
-  "each refused capture is still accepted and will be tried again; to stop retrying one, set its status back to quarantined by hand and then developer-os review --id <id> --decision reject";
+const REFUSED_RECOVERY = [
+  "a capture reported as refused wrote nothing and is still accepted, so the next run tries it again; to stop retrying one, set its status back to quarantined by hand and then developer-os review --id <id> --decision reject",
+  "a capture reported as partly applied is at staging with the notes named on its line already in the vault, and ingest never selects staging: read those notes, then set the status by hand — ingested if they are what you wanted, or accepted after removing them to try the capture again",
+  "if developer-os status reports an incomplete transaction, resolve it with developer-os repair before either",
+].join("\n");
 
 type FailureExitCode = Exclude<ExitCode, typeof EXIT_CODES.success>;
 
@@ -780,10 +816,20 @@ interface IngestEnvironment {
  *   → status → ingested                                 (ingest-ingested)
  * ```
  *
- * **Every refusal from the agent call onward rolls the capture back to
- * `accepted`, never to `failed`.** The capture is fine and the proposal was
- * not; `failed` describes a capture whose own envelope is unreadable, and
- * collapsing the two would make a transient model failure look like data loss.
+ * **Nothing that fails here produces `failed`**, and which of the other two it
+ * leaves depends on whether the notes landed. `failed` describes a capture whose
+ * own envelope is unreadable, and collapsing it with a refusal would make a
+ * transient model failure look like data loss — the capture is fine and the
+ * proposal was not.
+ *
+ * - **Before `ingest-apply` finalizes**, the capture is rolled back to
+ *   `accepted` and the next run tries it again.
+ * - **After it finalizes**, the notes are on disk and the capture stays at
+ *   `staging`, which `selectCaptures` never selects. `accepted` would be a lie
+ *   there — a second run would meet this run's own output and refuse — so the
+ *   capture is left in the state that is true, is reported as *partly applied*
+ *   rather than as refused, and waits for a person. The rollback branch below
+ *   records the same reasoning at the point it acts on it.
  *
  * **The apply and the reindex are skipped when the proposal proposes nothing.**
  * An empty `notes` array is a correct answer — it means this capture is not
@@ -795,43 +841,58 @@ async function ingestOne(
   context: CliContext,
   environment: IngestEnvironment,
   fileName: string,
-): Promise<IngestedCaptureV1> {
+): Promise<CaptureOutcome> {
   const { brainConfig, key, paths, quarantine, vendor } = environment;
-  const path = await resolveCapturePath(context, quarantine, fileName);
-  let applied = false;
+  const captureId = fileName.slice(0, -CAPTURE_FILE_SUFFIX.length);
 
-  const text = await context.guards.readText(path);
-  const parsed = parseCaptureFile(fileName, text, (value) =>
-    redactText(value, key),
-  );
-  if (!parsed.ok) {
-    throw new IngestRefusal(
-      EXIT_CODES.invalidInput,
-      `the capture at ${fileName} could not be read (${parsed.reason})`,
-      [path],
-      "open the file and repair its frontmatter; nothing is written to a capture this command cannot read",
-    );
-  }
-  const envelope = parsed.envelope;
-  if (envelope.status !== "accepted") {
-    throw new IngestRefusal(
-      EXIT_CODES.invalidInput,
-      `this capture is at status ${envelope.status}, which ingest does not move`,
-      [path],
-      "set the file's status back to accepted by hand if it should be ingested again",
-    );
-  }
-
-  /** Transaction 1. Durable before the apply, or a crash is indistinguishable
-   * from a run that never started. */
-  await writeCaptureFile(
-    context,
-    TRANSACTION_KINDS.stage,
-    path,
-    renderCaptureFile({ ...envelope, status: "staging" }),
-  );
+  /**
+   * **This function answers rather than throws**, so one capture's failure is
+   * contained where it happened rather than at a loop that cannot tell how far
+   * the capture got. The two hoisted values are what the catch needs and cannot
+   * have until the file has been located and read; a failure before either is
+   * assigned has nothing to roll back.
+   */
+  let capturePath: string | null = null;
+  let staged: CaptureEnvelopeV1 | null = null;
+  /** Non-null once `ingest-apply` finalized, holding the notes it wrote. */
+  let applied: readonly string[] | null = null;
 
   try {
+    const path = await resolveCapturePath(context, quarantine, fileName);
+    capturePath = path;
+
+    const text = await context.guards.readText(path);
+    const parsed = parseCaptureFile(fileName, text, (value) =>
+      redactText(value, key),
+    );
+    if (!parsed.ok) {
+      throw new IngestRefusal(
+        EXIT_CODES.invalidInput,
+        `the capture at ${fileName} could not be read (${parsed.reason})`,
+        [path],
+        "open the file and repair its frontmatter; nothing is written to a capture this command cannot read",
+      );
+    }
+    const envelope = parsed.envelope;
+    if (envelope.status !== "accepted") {
+      throw new IngestRefusal(
+        EXIT_CODES.invalidInput,
+        `this capture is at status ${envelope.status}, which ingest does not move`,
+        [path],
+        "set the file's status back to accepted by hand if it should be ingested again",
+      );
+    }
+    staged = envelope;
+
+    /** Transaction 1. Durable before the apply, or a crash is indistinguishable
+     * from a run that never started. */
+    await writeCaptureFile(
+      context,
+      TRANSACTION_KINDS.stage,
+      path,
+      renderCaptureFile({ ...envelope, status: "staging" }),
+    );
+
     const outcome = await invokeVendor(
       context,
       vendor,
@@ -868,9 +929,10 @@ async function ingestOne(
       );
     }
 
+    const written = plan.writes.map((write) => write.path);
     if (plan.writes.length > 0) {
       await applyNotes(context, environment.contentRoot, plan.writes);
-      applied = true;
+      applied = written;
       await reindexVault(context, environment.config, paths, brainConfig);
     }
 
@@ -882,9 +944,12 @@ async function ingestOne(
     );
 
     return {
-      captureId: envelope.captureId,
-      status: "ingested",
-      notes: plan.writes.map((write) => write.path),
+      ok: true,
+      capture: {
+        captureId: envelope.captureId,
+        status: "ingested",
+        notes: written,
+      },
     };
   } catch (error) {
     /**
@@ -895,15 +960,17 @@ async function ingestOne(
      * capture left at `staging` says what is actually the case — considered,
      * partly applied, and waiting for a person — which is exactly the inert
      * residual `TRANSACTION_KINDS` describes, reached here by a caught failure
-     * rather than by a crash.
+     * rather than by a crash. `reportLines` labels it as such, and
+     * `REFUSED_RECOVERY` describes both states rather than only this one's
+     * opposite.
      */
-    if (!applied) {
+    if (applied === null && capturePath !== null && staged !== null) {
       try {
         await writeCaptureFile(
           context,
           TRANSACTION_KINDS.rollback,
-          path,
-          renderCaptureFile(envelope),
+          capturePath,
+          renderCaptureFile(staged),
         );
       } catch {
         /**
@@ -912,7 +979,20 @@ async function ingestOne(
          */
       }
     }
-    throw error;
+
+    return {
+      ok: false,
+      refusal: {
+        captureId,
+        code: exitCodeOf(error),
+        message:
+          error instanceof Error ? error.message : "an unexpected failure occurred",
+        paths: error instanceof IngestRefusal ? error.paths : [],
+        recovery:
+          error instanceof IngestRefusal ? (error.recovery ?? null) : null,
+        appliedNotes: applied ?? [],
+      },
+    };
   }
 }
 
@@ -951,40 +1031,89 @@ function severestOf(refused: readonly RefusedCaptureV1[]): FailureExitCode {
   );
 }
 
+interface RunReport {
+  readonly order: readonly string[];
+  readonly ingested: readonly IngestedCaptureV1[];
+  readonly refused: readonly RefusedCaptureV1[];
+  /** What `selectCaptures` could not read at all, and why. */
+  readonly warnings: readonly string[];
+}
+
+function screenNotes(notes: readonly string[]): string {
+  return notes
+    .map((note) => screenAndCap(note, MAX_PROPOSED_PATH_CHARS))
+    .join(" ");
+}
+
 /**
  * The whole run, one capture per entry, in the order it was processed — what a
  * machine consumer needs in order to learn what moved when the result cannot
- * carry data. Every capture the invocation selected appears exactly once,
- * whether it ingested or refused, so "A ingested and B refused" is readable
- * rather than inferable from B's error alone.
+ * carry data. Every capture the invocation touched appears exactly once, so
+ * "A ingested and B refused" is readable rather than inferable from B's error
+ * alone.
+ *
+ * **Three outcomes, three labels, because they are three different events.** A
+ * capture that ingested; one that refused and wrote nothing, which is still
+ * `accepted` and will be tried again; and one that was *partly applied* — its
+ * notes are in the vault and it is parked at `staging`, which no later run
+ * selects. Labelling the third as merely "refused" would tell a user their vault
+ * was untouched when it was not.
+ *
+ * **Each capture's own recovery is printed beside it.** Nearly every refusal on
+ * this path carries advice specific to the capture — repair *this* frontmatter,
+ * move the note already at *this* path — and an earlier version dropped all of
+ * them for one run-level string, which made every one unreachable at runtime.
+ *
+ * **The captures nothing could be done with are carried too.** They cost no
+ * agent call and no transaction, so they never enter `order`; before this they
+ * rode only on the success path's warnings and vanished the moment any other
+ * capture refused, which is precisely the run where a user is already looking.
  */
-function reportLines(
-  order: readonly string[],
-  ingested: readonly IngestedCaptureV1[],
-  refused: readonly RefusedCaptureV1[],
-): readonly string[] {
+function reportLines(report: RunReport): readonly string[] {
+  const { ingested, order, refused, warnings } = report;
   const byId = new Map(ingested.map((capture) => [capture.captureId, capture]));
   const refusalById = new Map(
     refused.map((refusal) => [refusal.captureId, refusal]),
   );
 
   const lines = [
-    `ingest refused ${String(refused.length)} of ${String(order.length)} capture${order.length === 1 ? "" : "s"}; ${String(ingested.length)} reached ingested`,
+    `ingest could not finish ${String(refused.length)} of ${String(order.length)} capture${order.length === 1 ? "" : "s"}; ${String(ingested.length)} reached ingested`,
   ];
+
   for (const captureId of order) {
     const done = byId.get(captureId);
     if (done !== undefined) {
-      const notes = done.notes.map((note) => screenAndCap(note, MAX_PROPOSED_PATH_CHARS));
-      lines.push(
-        `  ${captureId} ingested${notes.length === 0 ? "" : ` ${notes.join(" ")}`}`,
-      );
+      const notes = screenNotes(done.notes);
+      lines.push(`  ${captureId} ingested${notes === "" ? "" : ` ${notes}`}`);
       continue;
     }
+
     const refusal = refusalById.get(captureId);
     if (refusal === undefined) continue;
-    lines.push(`  ${captureId} refused (exit ${String(refusal.code)})`);
+    const partly = refusal.appliedNotes.length > 0;
+    lines.push(
+      `  ${captureId} ${partly ? "partly applied, left at staging" : "refused"} (exit ${String(refusal.code)})`,
+    );
+    if (partly) {
+      lines.push(
+        `    these notes are already in the vault: ${screenNotes(refusal.appliedNotes)}`,
+      );
+    }
     for (const line of refusal.message.split("\n")) lines.push(`    ${line}`);
+    if (refusal.recovery !== null) {
+      for (const line of `recovery: ${refusal.recovery}`.split("\n")) {
+        lines.push(`    ${line}`);
+      }
+    }
   }
+
+  if (warnings.length > 0) {
+    lines.push(
+      `${String(warnings.length)} capture${warnings.length === 1 ? "" : "s"} in quarantine could not be read at all:`,
+    );
+    for (const warning of warnings) lines.push(`  ${warning}`);
+  }
+
   return lines;
 }
 
@@ -999,10 +1128,17 @@ function reportLines(
  *
  * **One capture, one agent call, four transactions.** Failure isolates to a
  * single capture rather than poisoning a batch, and that is containment rather
- * than a stop: a refusal is recorded against its own capture, which stays
- * `accepted` and retryable, and every remaining capture is still attempted. The
- * prompt stays bounded by one envelope rather than by however many captures the
- * user accepted.
+ * than a stop: the failure is recorded against its own capture and every
+ * remaining capture is still attempted. The prompt stays bounded by one envelope
+ * rather than by however many captures the user accepted.
+ *
+ * **A capture that could not finish is left in one of two states, and the report
+ * distinguishes them.** One whose notes never landed is rolled back to
+ * `accepted` and is retried by the next run; one that failed *after*
+ * `ingest-apply` finalized keeps its notes and stays at `staging`, which
+ * `selectCaptures` never selects, so it waits for a person rather than for
+ * another run. Promising a retry for both would misdescribe exactly the case a
+ * user most needs guidance on.
  *
  * **The run's exit code is the severest refusal, and its message is the whole
  * run** — one line per selected capture, ingested or refused. `CliResult`
@@ -1074,25 +1210,19 @@ export async function runIngest(
      * Every error is contained, not only an `IngestRefusal`: a capture whose
      * own read hit `EACCES` is exactly as much "one capture's problem" as a
      * refused proposal, and it keeps its own exit code through `exitCodeOf`.
+     * The containment itself is in `ingestOne`, which answers rather than
+     * throws — it is the only place that knows how far the capture got, and
+     * therefore the only place that can say whether its notes landed.
      */
     const ingested: IngestedCaptureV1[] = [];
     const refused: RefusedCaptureV1[] = [];
     const order: string[] = [];
 
     for (const fileName of selection.accepted) {
-      const captureId = fileName.slice(0, -CAPTURE_FILE_SUFFIX.length);
-      order.push(captureId);
-      try {
-        ingested.push(await ingestOne(context, environment, fileName));
-      } catch (error) {
-        refused.push({
-          captureId,
-          code: exitCodeOf(error),
-          message:
-            error instanceof Error ? error.message : "an unexpected failure occurred",
-          paths: error instanceof IngestRefusal ? error.paths : [],
-        });
-      }
+      order.push(fileName.slice(0, -CAPTURE_FILE_SUFFIX.length));
+      const outcome = await ingestOne(context, environment, fileName);
+      if (outcome.ok) ingested.push(outcome.capture);
+      else refused.push(outcome.refusal);
     }
 
     const captures = [...ingested, ...selection.unreadable].sort(compareIds);
@@ -1105,7 +1235,12 @@ export async function runIngest(
        */
       throw new IngestRefusal(
         severestOf(refused),
-        reportLines(order, ingested, refused).join("\n"),
+        reportLines({
+          order,
+          ingested,
+          refused,
+          warnings: selection.warnings,
+        }).join("\n"),
         [...new Set(refused.flatMap((refusal) => refusal.paths))],
         REFUSED_RECOVERY,
       );
