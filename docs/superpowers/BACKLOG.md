@@ -64,6 +64,7 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P6 | spec approved and plan written, both 2026-08-13 | the implementation — nineteen tasks, **seventeen landed** 2026-08-13/14. **Task 17 ran 2026-08-15 and half discharged itself** — Claude's row landed, Codex's run hit an exhausted usage limit; the remainder is NEW-21. Task 19 closes the subsystem, and its Steps 5–6 wait on NEW-21 |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
+| Repository defects (R1) | `plans/2026-08-15-repository-defects.md` | **the four §1 rows whose fix is already specified and which take no decision away from the founder** — NEW-18, NEW-17, NEW-19, NEW-15. Five tasks, written 2026-08-15, `ORDER.md` Track R. Chosen by the founder when A10 turned out to be held on NEW-21 |
 | Repository-level | §1 | **NEW-21 (S — one successful `codex exec` completion, the founder's, blocked by an external usage limit)**, NEW-7 (XS, needs a machine with Obsidian), **NEW-20 (XS, security — `capture` proves its quarantine root then follows the path again; theoretical)**, **NEW-19 (XS, security — `reindex` builds its owned root textually)**, NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (XS, half closed — the argv screen's word list still screens a user's own path), NEW-13 (S, two artifact roots share one type), **NEW-15 (S, security — no executor of a discovered binary pays the check its type demands, and Task 17 made `capture` a second one)**, NEW-16 (S, spec §8.2's user-configured redaction patterns are unreachable), **NEW-17 (XS, security — `brain` is the one command whose config parse failure is not content-free)** and NEW-18 (XS, `assertSafeCommand`'s NUL branches have no test) |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
@@ -106,6 +107,15 @@ Everything in this section is genuinely open. Nothing here is bookkeeping, and n
 closed stays here — NEW-1 through NEW-6, NEW-8 and NEW-9 were removed on 2026-08-10 when
 they closed, NEW-10 on 2026-08-11, and NEW-14 on 2026-08-15 when DOS-P6 Task 19's review closed it. What a closed item leaves behind is a row in §8, a clause in a spec, or a test;
 if it left nothing, it was not worth recording. Git history is the archive.
+
+**Eleven rows, and they are not all the same kind of open.** Four — **NEW-18, NEW-17, NEW-19 and
+NEW-15** — have a fix their own row specifies and take no decision away from anyone, and those four
+are **R1**, `plans/2026-08-15-repository-defects.md`, in progress since 2026-08-15. Three —
+**NEW-16, NEW-11 and NEW-12** — cannot be implemented until a question in their own text is answered,
+and `ORDER.md` Track R names the question each one is waiting on. The remaining four are somebody
+else's: **NEW-21** the founder's, **NEW-20** and **NEW-13** registered as deliberately-not-fixed, and
+**NEW-7** waiting on a machine with Obsidian. **A row being open is not an invitation to implement
+it** — read which of the four groups it is in first.
 
 ### NEW-21 — one successful `codex exec` completion is still owed
 
