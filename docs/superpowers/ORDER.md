@@ -30,6 +30,14 @@ week of confusion.
 
 ## NOW
 
+**A10 is held, so `NOW` is R1.** DOS-P6 cannot close until NEW-21 does, on the founder's decision of
+2026-08-15 recorded in the box below, and NEW-21 is blocked on an external usage limit expected to
+reset on or after 2026-08-20. **A10 is not `now` and is not abandoned; it is waiting.** What the
+founder chose to run in the meantime is **R1** — Track R below — which closes the four `BACKLOG.md`
+§1 defects whose fix is already specified and which take no decision away from them. **R1 touches
+nothing DOS-P6 owns**: not its plan, not its spec, not its checkpoint. When R1 closes, `NOW` returns
+to A10 unchanged.
+
 **A10 — DOS-P6 Knowledge pipeline, at its `I` gate. Both documents exist: the spec was approved by
 the founder on 2026-08-13 and its implementation plan was written the same day.**
 `plans/2026-07-21-developer-os-knowledge-pipeline.md`, nineteen tasks, against
@@ -319,6 +327,30 @@ output and not before it; `BACKLOG.md` §4 carries the reasoning and what it mus
 
 ---
 
+## Track R — repository defects
+
+Not subsystem work and not on the product path. This track exists because `BACKLOG.md` §1 accumulates
+defects that reviews find while doing something else, each with an owner named as "whoever next
+touches it — DOS-P7 by default" — and DOS-P7 is two gates away. A row lands here when its fix is
+already specified and takes no decision away from the founder; anything carrying an open question
+stays in §1 until that question is answered.
+
+| # | Entry | Plan | Needs | Size | Done when | Status |
+|---|---|---|---|:---:|---|---|
+| R1 | Close the four §1 defects with no open question — NEW-18, NEW-17, NEW-19, NEW-15 | `plans/2026-08-15-repository-defects.md`, five tasks, written 2026-08-15 | — | S | all four rows leave `BACKLOG.md` §1, each with a regression test watched fail first, and CI green on the commit | **now** |
+
+**Chosen by the founder on 2026-08-15**, when A10 turned out to be held on NEW-21 and they were asked
+what the session should do instead. **Three §1 rows were deliberately left out of R1** and each is
+left out for the same reason: it needs a decision rather than an implementation. **NEW-16** — is a
+user-supplied redaction pattern a `config.toml` table, and does adding one amend a `.strict()` schema
+frozen at `foundation.md` §2? **NEW-11** — is an invisible tag an error, a warning, or silently
+dropped at index time? **NEW-12's remaining path half** — does a path this product derived itself
+belong under a word list at all? Its own row says *"do not close it by narrowing the pattern"*.
+**NEW-20 and NEW-13 were registered as deliberately-not-fixed**, NEW-7 needs a machine with Obsidian,
+and NEW-21 is the founder's. Do not pick any of these up as though R1 simply ran out of time.
+
+---
+
 ## Track L — long lead time, start early
 
 Both gate the last entry in Track A. Both depend on somebody who is not in this room.
@@ -374,9 +406,15 @@ implementation plan, written against it the same day. **Four remain**: DOS-P6's 
 DOS-P7's spec, plan and implementation. An implementation is done when its checkpoint holds with
 evidence in a commit and CI is green on it, not when the tasks are ticked.
 
-`BACKLOG.md` §1 is four repository defects: NEW-7, which needs ten minutes with a machine that has
-Obsidian rather than an agent; NEW-11, which is the same invisible-character rule that closed
-NEW-10 applied to `tags`, `summary` and the duplicates key; NEW-12, where the argv screen's word
-list is applied to free-form prose that only the positional half of the screen protects; and
-NEW-13, where two artifact roots share one type and the wrong one installs cleanly rather than
-refusing — **NEW-13 is DOS-P6's Task 4** and closes there.
+`BACKLOG.md` §1 is **eleven** repository defects, not the four this paragraph claimed until
+2026-08-15. **The count was stale by seven rows**, and it is restated here by recounting §1 rather
+than by editing a number — which is the same discipline the DOS-P6 plan's Task 19 Step 5 imposes on
+the residual arithmetic, applied to the file that imposes it. §0 of `BACKLOG.md` had them all along;
+this paragraph is what had not been reread.
+
+**Four are R1's** and close there: NEW-18, NEW-17, NEW-19 and NEW-15. **Three need a decision before
+anyone can implement them** — NEW-16, NEW-11 and NEW-12 — and Track R above says which decision each
+one needs. **Four belong to somebody else:** NEW-21 is the founder's and blocks A10; NEW-20 and
+NEW-13 were registered as deliberately-not-fixed, NEW-13 being DOS-P6's Task 4, which closes it at
+that plan's Task 19 Step 5; and NEW-7 needs ten minutes with a machine that has Obsidian rather than
+an agent.
