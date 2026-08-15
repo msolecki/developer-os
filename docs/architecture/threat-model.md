@@ -42,7 +42,7 @@ document names only the ones that change what a boundary is worth.
 
 ---
 
-## 1. Three boundaries this document would naturally claim, which do not hold
+## 1. Three boundaries this document would naturally claim, two of which do not hold
 
 Stated first, because a reader who stops after one section must not leave believing an enforcement
 that is absent. Each is stated again in §5, beside the boundary it belongs to, with its mechanism
@@ -50,14 +50,20 @@ and its record.
 
 | Boundary | Status | The record that owns it |
 |---|---|---|
-| A capture stays inside the vault | **absent for a relocated quarantine directory** | `BACKLOG.md` §1 **NEW-14** |
+| A capture stays inside the vault | **holds since 2026-08-15**, with a check-then-use window left open | closed: `BACKLOG.md` §1 NEW-14; the window is **NEW-20** |
 | A secret removed from a vault file is gone from the machine | **absent** — the pre-edit copy survives in the transaction backup | `ORDER.md`, the third Foundation request |
 | An agent invocation is bounded in turns | **partial** — bounded under Claude, no such field under Codex | `codex-adapter.md` §11.3 |
 
-**These are not "known issues" filed at the back.** Two of them defeat a sentence this product tells
-a user to their face: that a capture is contained, and that `review --decision edit` removed the
-secret they pasted. The third means one of two vendors runs an unbounded agentic loop under a
-120-second wall clock and nothing else.
+**The first row changed on 2026-08-15 and this table is the corrected one.** The relocated-quarantine
+escape it used to record as absent was closed by the fix round after DOS-P6 Task 19's review: all
+three commands that touch quarantine now anchor on the configured content root through one shared
+`resolveQuarantineRoot` (§5.2). What remains is narrower and is registered rather than closed —
+`resolveQuarantineRoot` proves the root once and the declared path is followed again afterwards, so a
+won race can still redirect a capture (**NEW-20**, theoretical, not a regression).
+
+**These are not "known issues" filed at the back.** The second defeats a sentence this product tells
+a user to their face: that `review --decision edit` removed the secret they pasted. The third means
+one of two vendors runs an unbounded agentic loop under a 120-second wall clock and nothing else.
 
 **Three further gaps were found while writing this document**, all registered as `BACKLOG.md` §1
 rows: **NEW-15**, the discovered vendor binary is executed without the owner and mode check its own
@@ -131,7 +137,7 @@ discipline — see §5.1.
         ▼
   content/_raw/quarantine/<captureId>.md      (redacted; never a managed artifact)
         │
-        │  ── seam 2: the capture file's own containment   §5.2  ◀ NEW-14
+        │  ── seam 2: the capture file's own containment   §5.2  ◀ NEW-20
         ▼
   developer-os review --decision accept|reject|edit
         │
@@ -594,7 +600,7 @@ requires them and the spec dropped them.
 **47 of the 85 cases carry a watched-failure demonstration and 38 do not.**
 
 **How that was arrived at, because the first attempt at it was wrong.** The total is the collection
-above, 83. The split is the 2026-08-13 baseline — 59 cases, 41 evidenced — plus the two fix rounds
+above, 85. The split is the 2026-08-13 baseline — 59 cases, 41 evidenced — plus the two fix rounds
 after Task 19's review, counted per suite:
 
 | | cases | evidenced |

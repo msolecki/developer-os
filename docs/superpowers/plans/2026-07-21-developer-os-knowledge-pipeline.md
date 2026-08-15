@@ -2889,7 +2889,24 @@ A reviewing agent that **is not the author of any task in this plan**, given: th
 
 For every accepted finding: add a regression test first, apply the smallest fix, rerun the gates, request another verdict. Record the findings and their disposition in the closing commit's message — a review whose findings are not written down is a review nobody can audit.
 
-- [ ] **Step 2: Verify the checkpoint against the program plan**
+- [x] **Step 2: Verify the checkpoint against the program plan**
+
+> **Verified 2026-08-15 against the tree, not against the table below.** All five criteria hold. The
+> verified table, with the suite opened for each, now lives under Task 6's **Test** heading in
+> `plans/2026-07-21-developer-os-program.md`, so it survives this file.
+>
+> **Two corrections to the table below.** The interruption suite is **35 cases across five forward
+> transaction kinds**, not fourteen — Task 19's review found it reached two of five and it was
+> extended. And the first criterion's evidence is **partly** demonstrated: `tests/security/` holds 85
+> cases of which **38 carry no watched-failure demonstration**, three of them in the sentinel suite
+> (`the logs`, `the --json output`, `the deduplication hash`). The criterion holds; the strength
+> behind three of its eight artifacts is assertion rather than demonstration. `BACKLOG.md` §5 and
+> `threat-model.md` §8 own that split.
+>
+> **Two stale statements were found and corrected while verifying**, both in Task 18's output:
+> `threat-model.md` §1 still listed the relocated-quarantine escape as an unenforced boundary after
+> Task 19's own review closed it, and §8's derivation said "the collection above, 83" against 85
+> everywhere else in the same paragraph.
 
 Program plan Task 6's five test criteria, each with its evidence named:
 
@@ -2901,7 +2918,16 @@ Program plan Task 6's five test criteria, each with its evidence named:
 | model output cannot widen write scope or bypass canonical validators | `tests/security/symlink-escape.test.ts` and Task 12's write-scope cases |
 | failure leaves the capture retryable and never marks it ingested | Task 13's status-ladder cases and the interruption suite |
 
-- [ ] **Step 3: Tick the program plan's boxes, and rewrite the one that cannot be ticked**
+- [x] **Step 3: Tick the program plan's boxes, and rewrite the one that cannot be ticked**
+
+> **Done 2026-08-15.** Nine of the ten boxes are ticked, each naming the task that discharges it. The
+> hooks box is **rewritten and left unticked**, stating the decline with its cross-reference to spec
+> §3.1 and to `docs/architecture/knowledge-pipeline.md` §2 — nothing shipped for it. The write-contract
+> box is ticked **with the clause** that spec §3.3 grants zero write scopes rather than a staging-only
+> one, and the security-review box records the run, the finding counts, the seven commits, the final
+> verdict, `NEW-19` and `NEW-20`, and that Tasks 1–18 were its scope. One stale sentence in the closed-
+> tasks preamble — the one saying the lifecycle capabilities report `wrapper-required` and
+> `plugin_hooks` reports `unknown` — was corrected in place rather than left to contradict the box.
 
 Which task discharges which box, so this is not a judgement handed to whoever runs it:
 
@@ -2922,7 +2948,17 @@ Which task discharges which box, so this is not a judgement handed to whoever ru
 
 Read **decision 4** for the third box. It is **rewritten to record the decline**, with a cross-reference to spec §3.1 and to `docs/architecture/knowledge-pipeline.md`. It is not ticked; nothing shipped for it.
 
-- [ ] **Step 4: Write the architecture note that replaces this plan**
+- [x] **Step 4: Write the architecture note that replaces this plan**
+
+> **Written 2026-08-15**, twelve sections, every citation re-derived mechanically against the tree
+> before the commit. Beyond the list below it carries three things this plan could not have known:
+> **§5, the four transactions** — spec §6.1's "one capture, one agent call, one transaction" is false,
+> with the two independent reasons no two of them merge and the accepted `staging`-with-notes residual;
+> **§9, what the independent security review caught** — the containment check that ran on the raw path
+> string while its neighbour ran on the resolved one, and the escalation in which one document
+> satisfies both the note parser and the capture parser; and **§10, the residuals with owners**,
+> including `NEW-14` through `NEW-20`, the four Foundation requests `ORDER.md` carries, and the
+> obligation that a Task 17 diff needs its own security pass, because the review covered Tasks 1–18.
 
 `docs/architecture/knowledge-pipeline.md`, carrying what a later reader needs after this file is gone:
 

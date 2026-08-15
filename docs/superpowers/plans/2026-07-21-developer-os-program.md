@@ -135,7 +135,10 @@ differences. What did not, in both vendor trees:
   `type: "command"` handler needs an executable file, nothing in this pipeline can express an
   executable bit, and the only nameable command is the `developer-os` capture entrypoint, which is
   Task 6's. All three lifecycle capabilities therefore report `wrapper-required` and `plugin_hooks`
-  reports `unknown`.
+  reports `unknown`. **Both halves of that sentence were overtaken on 2026-08-14.** The stated
+  blocker was wrong — a `"type": "command"` handler needs no executable bit — and hooks were
+  *declined* rather than deferred, so the three lifecycle keys and `plugin_hooks` now report
+  `not-used`. Task 6's third box below carries the decision.
 
 `claude-adapter.md` §8 and §9 and `codex-adapter.md` §10 and §11 are the full record, with owners.
 
@@ -170,24 +173,35 @@ spec wins over the plan, and this is recorded rather than left as an apparent om
 
 **How:**
 
-- [ ] Approve exact capture fields, lifecycle transitions, retention behavior, and redaction classes. — *this is the keystone the two adapters wait on: it decides what a hook body does, which is what makes a lifecycle capability observable.*
-- [ ] Ship the `capture`, `ingest` and `review` verbs that the six shipped skills already name, in both vendor trees. — *inherited from Tasks 4 and 5; six of the seven unimplemented verbs are this task's. `claude-adapter.md` §8, `codex-adapter.md` §10.*
-- [ ] Restore `hooks/hooks.json` for both adapters in one change — hook bodies, a mechanism that can express an executable bit, and a test that observes a hook firing. — *inherited from Tasks 4 and 5, ratified for both adapters 2026-08-12. Until it lands, all three lifecycle capabilities report `wrapper-required` and `plugin_hooks` reports `unknown`. `claude-adapter.md` §5, `codex-adapter.md` §5.*
-- [ ] Implement atomic quarantine writes and post-redaction deduplication.
-- [ ] Implement accept/edit/reject review without automatic deletion.
-- [ ] Invoke agents with source material marked as untrusted data and a staging-only write contract.
-- [ ] Validate schema, provenance, links, duplicates, confidence, secrets, indexes, generated artifacts, and write scope.
-- [ ] Add per-file backup, atomic replacement, transaction journal, resume, rollback, and concurrent-edit refusal. — *Foundation shipped the machinery in `packages/core/src/transactions/` and `packages/platform-macos/src/transaction-lock.ts`; what this box owes is the hardening of it against the capture and ingest paths, which do not exist yet.*
-- [ ] Add sentinel secret, prompt injection, symlink escape, multiline command, malformed manifest, and interruption tests. — *`tests/security/` does not exist; `BACKLOG.md` §5 records it as owed by this task.*
-- [ ] Run independent security review before accepting the checkpoint.
+- [x] Approve exact capture fields, lifecycle transitions, retention behavior, and redaction classes. — *the knowledge-pipeline spec, approved by the founder 2026-08-13; DOS-P6 Tasks 2 and 8 implement it. The clause about hook bodies is superseded by the box below: the spec decided that a lifecycle capability is `not-used` rather than observable.*
+- [x] Ship the `capture`, `ingest` and `review` verbs that the six shipped skills already name, in both vendor trees. — *DOS-P6 Tasks 5, 9, 10 and 13. `claude-adapter.md` §8, `codex-adapter.md` §10.*
+- [ ] **Hooks are declined, not deferred — this box is rewritten rather than ticked, and nothing shipped for it.** It read "restore `hooks/hooks.json` for both adapters in one change — hook bodies, a mechanism that can express an executable bit, and a test that observes a hook firing", ratified for both adapters 2026-08-12. The knowledge-pipeline spec **§3.1** declines hooks and corrects the stated blocker: a `"type": "command"` handler names a command string, so no executable bit was ever needed — what hooks lacked was *content to capture*, which a `session_end` hook cannot supply without `transcript_path`, and this product opens that field on no code path. Capture content is agent-authored instead, at the point of insight. **The consequences, each accepted by the founder:** no hooks ship in either vendor tree in v1, `developer-os run claude|codex` is never built, and nothing automatic captures anything. The capability words changed with the decision: `plugin_hooks` and the three lifecycle keys report **`not-used`**, not `unknown` or `wrapper-required` (DOS-P6 Task 3). `docs/architecture/knowledge-pipeline.md` §2 and spec §3.1 are the record; `BACKLOG.md` §8 carries the row.
+- [x] Implement atomic quarantine writes and post-redaction deduplication. — *DOS-P6 Tasks 8 and 9.*
+- [x] Implement accept/edit/reject review without automatic deletion. — *DOS-P6 Task 10.*
+- [x] Invoke agents with source material marked as untrusted data and a staging-only write contract. — *DOS-P6 Task 11, and **satisfied by something stronger than this box asks.** Spec §3.3 rejects the staging-only reading — the literal reading of design spec §13.4 — and grants the agent **zero** declared write scopes, so the vendor's own sandbox enforces it before the model runs rather than our validators proving it afterwards. Ticked with that clause rather than silently.*
+- [x] Validate schema, provenance, links, duplicates, confidence, secrets, indexes, generated artifacts, and write scope. — *DOS-P6 Task 12; the nine are `VALIDATOR_IDS` in `packages/brain/src/ingest/validate.ts:33-43`.*
+- [x] Add per-file backup, atomic replacement, transaction journal, resume, rollback, and concurrent-edit refusal. — *Foundation shipped the machinery in `packages/core/src/transactions/` and `packages/platform-macos/src/transaction-lock.ts`; DOS-P6 Tasks 9, 10 and 13 route every mutation through it, and Task 15's interruption and concurrent-edit suites are the evidence. **No DOS-P6 task extends `packages/core/src/transactions/`**, which this task's file list names: what the box owed was hardening against the capture and ingest paths, which is exercise rather than extension.*
+- [x] Add sentinel secret, prompt injection, symlink escape, multiline command, malformed manifest, and interruption tests. — *DOS-P6 Task 15. `tests/security/` holds **eight** suites, not six: the two above plus **network** and **concurrent edit**, which `BACKLOG.md` §7's standing gate requires and design spec §9 dropped.*
+- [x] Run independent security review before accepting the checkpoint. — *DOS-P6 Task 19 Step 1, run 2026-08-14/15 by an agent that authored no task in the plan. **One Critical, two Important and five Minor.** Every accepted finding was fixed with a regression test watched fail first, across four fix rounds and four independent verdicts — `455ae1d`, `2ae7de0`, `1886d5f`, `b49d33a`, `7ae7d15`, `d6bb382`, `4d693bf`. Final verdict: **ready for the checkpoint.** Two findings were registered rather than fixed, with owners — `BACKLOG.md` §1 **NEW-19** and **NEW-20**. **The review covered Tasks 1–18 only**; Task 17 is the founder's and has not run, so if it lands code its diff needs its own security pass.*
 
-**Test:**
+**Test — verified 2026-08-15 against the tree, not against the plan's own table:**
 
-- The same secret sentinel is absent from capture, logs, hashes, model input, staging, reports, and canonical notes.
-- Every interruption point returns either the pre-transaction state or a deterministic recoverable state.
-- Duplicate replay is idempotent.
-- Model output cannot widen write scope or bypass canonical validators.
-- Failure leaves the capture retryable and never marks it ingested.
+| Criterion | Evidence, opened | Holds |
+|---|---|---|
+| the same secret sentinel is absent from capture, logs, hashes, model input, staging, reports and canonical notes | `tests/security/sentinel.test.ts`, eight per-artifact cases plus `planted a sentinel the redactor actually recognised`, which is what stops the eight passing over an empty sweep | yes |
+| every interruption point returns either the pre-transaction state or a deterministic recoverable state | `tests/security/interruption.test.ts`, **35 cases** — five forward transaction kinds × seven phases — plus a measured coverage case. The plan's table said fourteen; Task 19's review found the suite reached two of five kinds and it was extended | yes, and wider than the plan claimed |
+| duplicate replay is idempotent | `apps/cli/src/commands/capture.test.ts:256`, `:290`, `:322` — the duplicate at exit 0 writing nothing, the unparseable duplicate, and the loser of a write race — plus `tests/e2e/knowledge-lifecycle/lifecycle.test.ts` | yes |
+| model output cannot widen write scope or bypass canonical validators | `tests/security/symlink-escape.test.ts` and `packages/brain/src/ingest/validate.test.ts:709-900`, the `write-scope` block | yes |
+| failure leaves the capture retryable and never marks it ingested | `apps/cli/src/commands/ingest.test.ts:385`, `:478`, `:505`, `:567`, `:589`, `:664`, and every interruption case's `expectedStatus` | yes |
+
+**One criterion's evidence is weaker than its claim, and it is the first.** `tests/security/` holds
+85 cases and **38 carry no watched-failure demonstration** — three excluded for a stated reason,
+twenty added on 2026-08-15 whose expectations were derived rather than watched fail, and fifteen with
+no evidence and no excuse. The split is `BACKLOG.md` §5 and `docs/architecture/threat-model.md` §8,
+which also records that the per-suite breakdown cannot be re-derived from the tree. Three of the
+sentinel suite's nine cases are among the unevidenced — `the logs`, `the --json output` and `the
+deduplication hash`. The criterion holds; the *strength* of the evidence behind three of its eight
+artifacts is assertion rather than demonstration.
 
 **Checkpoint:** The complete local knowledge lifecycle is production-candidate for synthetic data.
 
