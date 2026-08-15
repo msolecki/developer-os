@@ -107,11 +107,21 @@ commit; the fifth happens after it, on a machine that is not yours.
    first, apply the smallest fix, rerun the gates, request another verdict.
 3. **Checkboxes match evidence.** Tick a step only when its own evidence exists. Update
    the plan and the `ORDER.md` row in the same change as the work. **This has gone wrong
-   twice** — once when the program plan showed 0/71 while its first task's artifacts already
+   three times** — once when the program plan showed 0/71 while its first task's artifacts already
    existed, so a fresh session would have tried to redo a task whose inputs are deliberately
-   out of reach; and again when two steps stayed unticked for four days after the documents
-   they describe landed. Ticking the box is part of the work, and one plan is the checkbox
-   record for any given piece of it — never two.
+   out of reach; again when two steps stayed unticked for four days after the documents
+   they describe landed; and on 2026-08-15, when R1's plan was **written, executed and deleted in
+   one session with every box still unticked**. Ticking the box is part of the work, and one plan is
+   the checkbox record for any given piece of it — never two.
+
+   **The third one is the instructive one, because it looked harmless and mostly was.** A plan that
+   dies in the session that wrote it leaves no stale checkbox behind to mislead anybody: the file is
+   gone, `ORDER.md` says `done`, and the evidence sits in the commit messages, which outlive any
+   plan. So nothing broke. **But the ticks are not only a message to the next session — they are the
+   thing that makes a task's own evidence checkable while the task is running**, and a session that
+   skips them has no answer to "which steps actually have evidence" except its own memory, which is
+   exactly what this file exists not to rely on. If a plan is short enough to finish in one sitting,
+   tick as you go anyway; if it is long enough to survive the session, ticking is not optional.
 4. **Exact-path staging.** `git add <exact paths>`. Never `git add -A`, never `git add .`,
    never a wildcard. Then `git show --stat HEAD` and confirm it contains only what you
    meant to ship.
