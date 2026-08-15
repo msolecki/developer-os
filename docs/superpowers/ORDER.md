@@ -370,8 +370,20 @@ or quietly loosened, and `BACKLOG.md` §1 NEW-15 now carries the three parts of 
 loosening was considered and rejected on its merits:** a sticky bit stops another user *deleting* a
 file they do not own, not *creating* one under an unused name.
 
-**Four §1 rows now need a decision rather than an implementation**, and each is waiting on a
-different question. **NEW-15** — the policy above. **NEW-16** — is a user-supplied redaction pattern
+**One row R1 added rather than closed.** **NEW-22** — a vault whose `content` directory is a symlink
+**cannot be indexed at all**, and nothing tells the user so. `discoverNotes` refuses any symlinked
+content root unconditionally, before any per-entry walk, and `BrainService.reindex()` reaches it
+before `writeIndexArtifacts` runs — so `brain reindex` and `ingest` both fail on the ordinary
+scenario of pointing Developer OS at an Obsidian vault the user already has. **The guard is
+deliberate and its reason is good**, which is what makes this a design question rather than a bug:
+its own docblock records that a symlinked `content` would let another vault's notes be indexed as
+this one's. It was found because a review finding claimed R1 had broken that layout; driving it
+showed the layout was already refused one layer up, and had been since `discover.ts` was written.
+
+**Five §1 rows now need a decision rather than an implementation**, and each is waiting on a
+different question. **NEW-15** — the policy above. **NEW-22** — is a symlinked content root
+supported, refused with a message that says so, or supported with the duplicate-note problem solved
+another way? **NEW-16** — is a user-supplied redaction pattern
 a `config.toml` table, and does adding one amend a `.strict()` schema frozen at `foundation.md` §2?
 **NEW-11** — is an invisible tag an error, a warning, or silently dropped at index time? **NEW-12's
 remaining path half** — does a path this product derived itself belong under a word list at all? Its
@@ -436,17 +448,18 @@ implementation plan, written against it the same day. **Four remain**: DOS-P6's 
 DOS-P7's spec, plan and implementation. An implementation is done when its checkpoint holds with
 evidence in a commit and CI is green on it, not when the tasks are ticked.
 
-`BACKLOG.md` §1 is **eight** repository defects. It said "four" until 2026-08-15, when it was
-**eleven** — stale by seven rows — and R1 then closed three of them. Both corrections were made by
-recounting §1 rather than by editing a number, which is the same discipline the DOS-P6 plan's Task 19
-Step 5 imposes on the residual arithmetic, applied to the file that imposes it. §0 of `BACKLOG.md`
-had the eleven right all along; this paragraph was what had gone unread.
+`BACKLOG.md` §1 is **nine** repository defects. It said "four" until 2026-08-15, when it was
+**eleven** — stale by seven rows — and R1 then closed three and added one. Every correction was made
+by recounting §1 rather than by editing a number, which is the same discipline the DOS-P6 plan's
+Task 19 Step 5 imposes on the residual arithmetic, applied to the file that imposes it. §0 of
+`BACKLOG.md` had the eleven right all along; this paragraph was what had gone unread.
 
-**Four need a decision before anyone can implement them** — NEW-15, NEW-16, NEW-11 and NEW-12 — and
-Track R above says which question each one is waiting on. **Four belong to somebody else:** NEW-21 is
-the founder's and blocks A10; NEW-20 and NEW-13 were registered as deliberately-not-fixed, NEW-13
-being DOS-P6's Task 4, which closes it at that plan's Task 19 Step 5; and NEW-7 needs ten minutes
-with a machine that has Obsidian rather than an agent.
+**Five need a decision before anyone can implement them** — NEW-15, NEW-22, NEW-16, NEW-11 and
+NEW-12 — and Track R above says which question each one is waiting on. **Four belong to somebody
+else:** NEW-21 is the founder's and blocks A10; NEW-20 and NEW-13 were registered as
+deliberately-not-fixed, NEW-13 being DOS-P6's Task 4, which closes it at that plan's Task 19 Step 5;
+and NEW-7 needs ten minutes with a machine that has Obsidian rather than an agent.
 
 **Nothing here is startable without an answer**, which is the honest state of §1 and worth saying
-plainly rather than leaving a reader to derive it.
+plainly rather than leaving a reader to derive it. It is also why R1 has no successor queued: the
+rows it could have taken next are all waiting on the founder, not on an agent.
