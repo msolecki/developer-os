@@ -692,10 +692,29 @@ export async function runCapture(
      * not that validator's.
      */
     const contentRoot = join(paths.brain, resolveBrainConfig(config).contentRoot);
-    const quarantine = await resolveQuarantineRoot(
+    const quarantine = join(contentRoot, ...QUARANTINE_SEGMENTS);
+    /**
+     * **The answer is the check, and the canonical form is deliberately
+     * discarded.** Every path this command goes on to use is the *declared* one,
+     * for two reasons that both bite:
+     *
+     * - `validateChangePlan` canonicalizes the owned root it is given, and
+     *   `assertUsableRoots` refuses a root that resolved to an **ancestor** of
+     *   what was declared (`packages/core/src/plans/validate.ts:200-205`). That
+     *   test compares the canonical form against the declared one, so handing it
+     *   a path already canonicalized makes it compare a string with itself and it
+     *   can never fire. `containsPath` here cannot stand in for it: it is
+     *   same-or-descendant (`packages/core/src/manifest/store.ts:113`), so a
+     *   quarantine pointing at the content root passes the containment question
+     *   and is caught only by the ownership one.
+     * - `CaptureResultV1.path` is a contract, printed and published in `--json`.
+     *   On a vault reached through a symlink the canonical form names a location
+     *   the user never configured.
+     */
+    await resolveQuarantineRoot(
       context,
       contentRoot,
-      join(contentRoot, ...QUARANTINE_SEGMENTS),
+      quarantine,
       (message, paths_) =>
         new CaptureRefusal(
           EXIT_CODES.securityRefusal,

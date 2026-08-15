@@ -209,6 +209,38 @@ describe("runCapture", () => {
     );
   });
 
+  /**
+   * **The path this command reports is the path the user configured**, not the
+   * one the filesystem resolves it to.
+   *
+   * A vault reached through a symlink is ordinary — a synced folder, a second
+   * volume — and on such an install a canonicalized `path` would print and
+   * publish a location the user never wrote in `config.toml`, in `--json` as
+   * well as on the terminal. The quarantine root **is** canonicalized, for the
+   * containment question that has to be asked of the destination; what must not
+   * follow from that is the canonical form leaking into the contract, or into
+   * `validateChangePlan`'s `ownedRoots`, where a pre-resolved root makes its
+   * grew-authority test compare a string against itself.
+   */
+  it("reports the configured path, not the one a symlinked content root resolves to", async () => {
+    const fixture = await installedFixture("capture-path-shape");
+    const content = join(fixture.paths.brain, "content");
+    const real = join(fixture.paths.brain, "real-content");
+    await nodeFs.rename(content, real);
+    await nodeFs.symlink(real, content);
+
+    const result = await fixture.run(fixture.context, { text: OBSERVATION });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.path.startsWith(`${content}/`)).toBe(true);
+    expect(result.data.path).not.toContain("real-content");
+    /** And the bytes are there, through the link, so this is not a path alone. */
+    expect(await nodeFs.readFile(result.data.path, "utf8")).toContain(
+      `captureId: ${result.data.captureId}`,
+    );
+  });
+
   it("names the file after the capture id, which is the deduplication key", async () => {
     const fixture = await installedFixture("capture-file-name");
 

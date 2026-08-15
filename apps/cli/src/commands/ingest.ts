@@ -323,7 +323,17 @@ function refusedRecovery(refused: readonly RefusedCaptureV1[]): string {
   if (refused.some((refusal) => refusal.leftAt === "untouched")) {
     lines.push(UNTOUCHED_RECOVERY);
   }
-  if (refused.some((refusal) => refusal.appliedNotes.length > 0)) {
+  /**
+   * `leftAt` as well as the notes, because a capture whose notes landed **and**
+   * whose status then reached `ingested` satisfies the first half. Gating on the
+   * notes alone emits this line beside `INGESTED_RECOVERY`, telling the same
+   * user to undo work that finished.
+   */
+  if (
+    refused.some(
+      (refusal) => refusal.appliedNotes.length > 0 && refusal.leftAt !== "ingested",
+    )
+  ) {
     lines.push(PARTLY_APPLIED_RECOVERY);
   }
   if (

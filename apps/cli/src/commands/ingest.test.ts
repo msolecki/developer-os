@@ -680,6 +680,16 @@ describe("runIngest, the status ladder", () => {
     expect(result.error.message).not.toContain("left at staging");
     const recovery = result.error.recovery ?? "";
     expect(recovery).toContain("nothing to redo");
+    /**
+     * And **only** that line. The partly-applied line is gated on notes having
+     * landed, which is true here too — so without a second condition this run
+     * emits "set the status by hand … or accepted after removing them" beside
+     * "there is nothing to redo for it", and the first tells the user to undo
+     * finished work. One recovery in which one sentence is false on every run is
+     * the defect `refusedRecovery` was written to end.
+     */
+    expect(recovery).not.toContain("partly applied");
+    expect(recovery).not.toContain("already in the vault");
   });
 
   /**

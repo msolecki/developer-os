@@ -1,4 +1,4 @@
-import { lstat, mkdir, readFile, rename, symlink } from "node:fs/promises";
+import { lstat, mkdir, readFile, rename, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 
 import { EXIT_CODES } from "@developer-os/core";
@@ -277,5 +277,90 @@ describe("a quarantine directory that resolves outside the vault, met by capture
       "no capture file may exist at the destination",
     ).toBe(false);
     expect(captured.code).toBe(EXIT_CODES.securityRefusal);
+  });
+});
+
+/**
+ * **The relocation that stays inside the vault**, which no containment check
+ * refuses: `containsPath` is same-or-descendant
+ * (`packages/core/src/manifest/store.ts:111-114`, `fromRoot === ""`), so a
+ * quarantine symlinked to the content root resolves *inside* the content root
+ * and passes. Both spellings are driven — `content` would put a capture where
+ * discovery reads it, `content/_raw` one level above quarantine.
+ *
+ * **What refuses it, measured rather than assumed.** Not the ownership check
+ * this case was written for. `init` records the Brain skeleton's **directories**
+ * as managed artifacts — `/content`, `/content/_raw`, `/content/_raw/quarantine`
+ * among them — and `validateChangePlan` canonicalizes every artifact path before
+ * it reaches ownership, refusing when two collide
+ * (`packages/core/src/plans/validate.ts:295-305`). A quarantine linked to either
+ * ancestor makes exactly that collision, so both spellings end at exit 6 —
+ * `installation manifest is malformed or incomplete` — with nothing written.
+ *
+ * **So this case is a pin, not a regression test**, and it passed the day it was
+ * written. It went in with the fix that stopped handing `validateChangePlan` a
+ * pre-canonicalized owned root, which re-arms the ancestor check in
+ * `assertUsableRoots` (`:200-205`) — a check that compares the canonical root
+ * against the declared one and therefore cannot fire when they are the same
+ * string. That check is depth behind the collision above, not the thing standing
+ * today; the report for this round records the probe both ways round.
+ *
+ * The assertions are therefore about the **property** — refused, nothing written
+ * — rather than about which of the three guards got there first, so the case
+ * survives any of them changing and reddens if the last one goes.
+ */
+describe("a quarantine directory that resolves to an ancestor of itself", () => {
+  interface Relocated {
+    readonly label: string;
+    readonly code: number;
+    readonly newFilesInTheVault: readonly string[];
+  }
+
+  const relocations: readonly string[] = ["content", "content/_raw"];
+  const observed: Relocated[] = [];
+
+  beforeAll(async () => {
+    for (const relocation of relocations) {
+      const fixture = await installSecurityFixture(
+        `symlink-quarantine-ancestor-${relocation.replace(/\W+/gu, "-")}`,
+      );
+      const ancestor = join(fixture.paths.brain, relocation);
+
+      await rm(fixture.quarantine, { recursive: true });
+      await symlink(ancestor, fixture.quarantine);
+
+      const before = await filesUnder(fixture.paths.brain);
+      const result = await runCapture(
+        fixture.context,
+        { text: `an observation aimed at ${relocation}` },
+        { cwd: () => fixture.project, detect: () => "unknown" },
+      );
+      const after = await filesUnder(fixture.paths.brain);
+      const known = new Set(before);
+
+      observed.push({
+        label: relocation,
+        code: result.code,
+        newFilesInTheVault: after.filter((path) => !known.has(path)),
+      });
+    }
+  }, 120_000);
+
+  it("reaches the state the finding is about", () => {
+    expect(observed.map((entry) => entry.label)).toStrictEqual([...relocations]);
+    /** Each run must have been a real one, against a real installation. */
+    expect(observed).toHaveLength(2);
+  });
+
+  it("refuses each spelling, and writes no capture anywhere in the vault", () => {
+    for (const entry of observed) {
+      expect(
+        entry.newFilesInTheVault,
+        `${entry.label} must leave the vault unchanged`,
+      ).toStrictEqual([]);
+      expect(entry.code, `${entry.label} must be refused`).not.toBe(
+        EXIT_CODES.success,
+      );
+    }
   });
 });
