@@ -60,6 +60,31 @@ only thing standing. `NEW-18` — `assertSafeCommand`'s four NUL branches have n
 because the document tried to cite that coverage and a reviewer checked whether it existed. **None is
 fixed**; a documentation task may not edit the product.
 
+**Task 19's Step 1 is done and it is the only step of it that did not need Task 17.** The independent
+security review ran on 2026-08-14/15 over Tasks 1–18 and returned **one Critical**, two Important and
+five Minor. Every accepted finding is fixed with a regression test watched fail first, over four fix
+rounds and four independent verdicts, ending in **ready for the checkpoint**.
+
+**The Critical is worth knowing even though it is closed**, because it is what this gate exists to
+catch: `write-scope`'s private-folder subtraction ran on the **raw path string** with exact case while
+containment ran on the **resolved** path, so on APFS a proposal at `_RAW/quarantine/x.md`
+canonicalized into the real `_raw/quarantine/` — containment passed, the subtraction saw nothing. And
+because unknown frontmatter keys are preserved-and-ignored while a capture's id is never recomputed
+from content, **one document satisfies both the note parser and the capture parser**: the model's own
+output became an `accepted` capture on the next run, bypassing the pipeline's only human gate. A
+second variant needed no case-insensitive filesystem, only an in-vault symlink. `NEW-14` turned out to
+be the same root defect seen twice and was closed in the same change; its parked `it.fails` is now an
+ordinary passing case.
+
+**Two findings are registered rather than fixed**, both `BACKLOG.md` §1: `NEW-19`, the last
+textually-built owned root, traced by reading and explicitly not driven; and `NEW-20`, a check-then-use
+window on `capture`'s write path that is **not a regression** against the baseline before this work and
+whose closure would reverse a contract decision taken deliberately.
+
+**Steps 2 through 6 wait on Task 17**, because Step 5 requires every `BACKLOG.md` §8 row to carry an
+outcome and the Codex spec §14.1 row is discharged by Task 17 alone. **If Task 17 lands code, its own
+diff needs a security pass before Step 2's checkpoint** — this review did not cover it.
+
 **Two decisions are awaiting the founder** and are the only unratified rows in `BACKLOG.md` §8.
 
 The first is Task 12's `confidence-and-lifecycle` validator rule. The spec names the validator and
@@ -247,7 +272,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **17 of 19** — only Task 17, which needs the founder, and Task 19, which closes the subsystem |
+| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **17 of 19**, plus Task 19's security review, which returned ready. Only Task 17 (the founder's) and Task 19's closing steps remain |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |

@@ -2876,7 +2876,14 @@ git commit -m "docs: one threat model, with the mechanism beside every boundary"
 
 **Required before the checkpoint**, per `BACKLOG.md` §3's gate. This is the gate the two adapters' reviews caught real defects at, and this subsystem has a larger blast radius than either.
 
-- [ ] **Step 1: Dispatch the independent security review**
+- [x] **Step 1: Dispatch the independent security review**
+
+> **Run 2026-08-14/15.** One Critical, two Important and five Minor; every accepted finding fixed
+> with a regression test watched fail first, across four fix rounds and four independent verdicts —
+> commits `455ae1d`, `2ae7de0`, `1886d5f`, `b49d33a`, `7ae7d15`, `d6bb382`, `4d693bf`. The final
+> verdict is **ready for the checkpoint**. Two findings are registered rather than fixed —
+> `BACKLOG.md` §1 **NEW-19** and **NEW-20** — and the obligation to record every finding and its
+> disposition in the closing commit message belongs to Step 6, not here.
 
 A reviewing agent that **is not the author of any task in this plan**, given: the constraints in this plan's Global Constraints, the exact file list of everything Tasks 1–18 touched, spec §8 and §9, and instructions to **review only — no edits, no commits.** When it returns, run `git status --short` and `git diff` yourself to prove it did not touch the tree.
 
