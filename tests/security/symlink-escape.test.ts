@@ -376,9 +376,17 @@ describe("a quarantine directory that resolves to an ancestor of itself", () => 
  * **The second assertion is the one that matters.** A refusal alone would also
  * be satisfied by `ingest` failing for an unrelated reason; an empty
  * `outside-indexes` is what says nothing was written outside the vault.
+ *
+ * **The exit code is asserted too, not only `result.ok`.** The quarantine
+ * containment refusal three commands share is `EXIT_CODES.securityRefusal`;
+ * this one used to be constructed at `EXIT_CODES.operationalFailure` through
+ * `IndexWriteRequest.refuse`, which is built for an unrelated internal
+ * invariant (a validated plan losing its staged content), so a bare
+ * `result.ok === false` could not tell a containment escape from an ordinary
+ * operational failure. This is the assertion that would have caught that.
  */
 describe("a symlink out of the index root", () => {
-  it("refuses to write index artifacts through a relocated _indexes directory", async () => {
+  it("refuses at exit 5 to write index artifacts through a relocated _indexes directory", async () => {
     const fixture = await installSecurityFixture("symlink-indexes");
     const outside = join(fixture.root, "outside-indexes");
     await mkdir(outside, { recursive: true, mode: 0o700 });
@@ -393,6 +401,25 @@ describe("a symlink out of the index root", () => {
     const result = await fixture.ingest();
 
     expect(result.ok).toBe(false);
+    expect(result.code).toBe(EXIT_CODES.securityRefusal);
     expect(await filesUnder(outside)).toStrictEqual([]);
   });
 });
+
+/**
+ * **The regression the NEW-19 fix must not introduce** — a user whose
+ * `brainPath` is, say, `~/DeveloperBrain` with `~/DeveloperBrain/content` a
+ * symlink to an existing vault elsewhere — an external volume, a pre-existing
+ * Obsidian vault — is a real layout, not a hostile one, and `writeIndexArtifacts`
+ * anchoring on `vaultRoot` (the brain root) instead of the content root refused
+ * it. That regression is pinned at `apps/cli/src/commands/reindex.test.ts`,
+ * **not here**, and deliberately at the `writeIndexArtifacts` level rather than
+ * through `brain reindex` or `ingest`: both commands call
+ * `BrainService.reindex()` before this suite's code ever runs, and
+ * `BrainService`'s own note discovery
+ * (`packages/brain/src/discovery/discover.ts`'s `refuseEscapingLink`) refuses
+ * *any* content root reached through a symlink, vault-escaping or not — a
+ * separate, pre-existing guard, unrelated to NEW-19 and out of this task's
+ * scope, that a full command-level fixture here would trip on for a reason
+ * that has nothing to do with the anchor this task fixed.
+ */
