@@ -2898,11 +2898,11 @@ For every accepted finding: add a regression test first, apply the smallest fix,
 > **Two corrections to the table below.** The interruption suite drives **35 interruptions across
 > five forward transaction kinds**, not fourteen — Task 19's review found it reached two of five and
 > it was extended — and collection reports **36 cases** for that file, the thirty-five plus the case
-> that measures which of them ran. And the first criterion's evidence is **partly** demonstrated: `tests/security/` holds 85
-> cases of which **38 carry no watched-failure demonstration**, three of them in the sentinel suite
-> (`the logs`, `the --json output`, `the deduplication hash`). The criterion holds; the strength
-> behind three of its eight artifacts is assertion rather than demonstration. `BACKLOG.md` §5 and
-> `threat-model.md` §8 own that split.
+> that measures which of them ran. And the first criterion's evidence is **partly** demonstrated:
+> `tests/security/` holds 85 cases of which **38 carry no watched-failure demonstration**, three of
+> them in the sentinel suite (`the logs`, `the --json output`, `the deduplication hash`). The
+> criterion holds; the strength behind three of its eight artifacts is assertion rather than
+> demonstration. `BACKLOG.md` §5 and `threat-model.md` §8 own that split.
 >
 > **Two stale statements were found and corrected while verifying**, both in Task 18's output:
 > `threat-model.md` §1 still listed the relocated-quarantine escape as an unenforced boundary after

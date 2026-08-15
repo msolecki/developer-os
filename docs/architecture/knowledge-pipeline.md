@@ -26,7 +26,7 @@ produced it.
 | the three verbs | `apps/cli/src/commands/capture.ts`, `review.ts`, `ingest.ts` |
 | the envelope, its statuses, and their transitions | `packages/brain/src/schema/capture.ts`, `packages/brain/src/capture/`, `packages/brain/src/review/` |
 | the proposal, the nine validators, and the apply | `packages/brain/src/ingest/` |
-| the contracts the vendor trees render | `workflows/*/workflow.yaml`, all five at `2.0.0` |
+| the contracts the vendor trees render | `workflows/{capture,review,ingest,brain-search,shared}/workflow.yaml`, all five at `2.0.0`. That glob matches **six** files: `workflows/doctor/workflow.yaml` is unchanged at `1.0.0` |
 | the security suites | `tests/security/`, eight suites, 85 cases |
 | the end-to-end run against the compiled binary | `tests/e2e/knowledge-lifecycle/lifecycle.test.ts` |
 | trust boundaries and the mechanism enforcing each | `docs/architecture/threat-model.md` |
