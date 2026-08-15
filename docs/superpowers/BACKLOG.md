@@ -324,8 +324,15 @@ its ancestors — which is what the kernel actually runs at `exec` time — rath
 cost of a check-then-use window of the shape already registered as NEW-20; **(b)** whether
 group-writable is refusable at all when the group is the user's own, given Homebrew; **(c)** whether
 `tests/helpers/temp-home.ts` relocates off `/tmp`, and what replaces the redaction-threshold
-reasoning that put it there. **The work is not lost:** the guard, its tests and the full analysis
-were preserved off the branch rather than committed, and the reasoning above is the summary.
+reasoning that put it there.
+
+**The code was not retained, deliberately, and that is the right trade.** What is written down above
+is the whole of what the attempt bought: the policy, the two real-machine facts that defeat it, the
+loosening that was rejected and why, and the test-harness collision. The guard itself was about a
+hundred lines against an injected `lstat` and `currentUid`, and **whatever replaces it has to differ
+in the two rules that matter**, so keeping the withdrawn version would preserve mostly the parts that
+were wrong. Rebuilding it against a settled policy is a short task; deciding the policy is the long
+one, and that is what this row is now.
 
 ### NEW-16 — spec §8.2's user-configured redaction patterns are unreachable
 
