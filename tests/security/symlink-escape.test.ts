@@ -119,7 +119,7 @@ describe("a symlink out of the content root", () => {
  * passed. `ProtectedPathPolicy` did not catch it either — it is a
  * protected-**name** policy rather than a containment one, and returns early for
  * any path outside `$HOME` (`packages/security/src/protected-paths.ts:125`). What
- * closes it is an absolute anchor: `resolveQuarantineRoot` proves the quarantine
+ * closes it is an absolute anchor: `resolveContainedRoot` proves the quarantine
  * directory is inside the configured content root before anything is measured
  * against it.
  *
@@ -362,5 +362,37 @@ describe("a quarantine directory that resolves to an ancestor of itself", () => 
         EXIT_CODES.success,
       );
     }
+  });
+});
+
+/**
+ * **`content/_indexes` itself replaced by a link out of the vault** — NEW-19.
+ * `writeIndexArtifacts` built its `ownedRoots` entry the same way
+ * `resolveQuarantineRoot` once did: textually, from `vaultRoot` and
+ * `indexesDir`, never proven to resolve inside the vault. `brain reindex` and
+ * `ingest`'s third transaction are the two writers; this drives the one this
+ * suite already has a helper for.
+ *
+ * **The second assertion is the one that matters.** A refusal alone would also
+ * be satisfied by `ingest` failing for an unrelated reason; an empty
+ * `outside-indexes` is what says nothing was written outside the vault.
+ */
+describe("a symlink out of the index root", () => {
+  it("refuses to write index artifacts through a relocated _indexes directory", async () => {
+    const fixture = await installSecurityFixture("symlink-indexes");
+    const outside = join(fixture.root, "outside-indexes");
+    await mkdir(outside, { recursive: true, mode: 0o700 });
+
+    const indexes = join(fixture.content, "_indexes");
+    await rm(indexes, { recursive: true, force: true });
+    await symlink(outside, indexes);
+
+    const seeded = await fixture.seedAccepted("an observation about the index root");
+    fixture.runner.reply(() => oneNote(seeded.id, "DEV/note.md", "An ordinary note"));
+
+    const result = await fixture.ingest();
+
+    expect(result.ok).toBe(false);
+    expect(await filesUnder(outside)).toStrictEqual([]);
   });
 });

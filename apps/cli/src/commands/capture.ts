@@ -34,7 +34,7 @@ import type {
 import {
   failureFrom,
   loadOrCreateRedactionKey,
-  resolveQuarantineRoot,
+  resolveContainedRoot,
   runtimePathsFor,
 } from "../context.js";
 import type { CliContext, CliGuards } from "../context.js";
@@ -724,10 +724,11 @@ export async function runCapture(
      *   On a vault reached through a symlink the canonical form names a location
      *   the user never configured.
      */
-    await resolveQuarantineRoot(
+    await resolveContainedRoot(
       context,
       contentRoot,
       quarantine,
+      "the quarantine directory resolves outside the content root",
       (message, paths_) =>
         new CaptureRefusal(
           EXIT_CODES.securityRefusal,
