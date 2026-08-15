@@ -2895,9 +2895,10 @@ For every accepted finding: add a regression test first, apply the smallest fix,
 > verified table, with the suite opened for each, now lives under Task 6's **Test** heading in
 > `plans/2026-07-21-developer-os-program.md`, so it survives this file.
 >
-> **Two corrections to the table below.** The interruption suite is **35 cases across five forward
-> transaction kinds**, not fourteen — Task 19's review found it reached two of five and it was
-> extended. And the first criterion's evidence is **partly** demonstrated: `tests/security/` holds 85
+> **Two corrections to the table below.** The interruption suite drives **35 interruptions across
+> five forward transaction kinds**, not fourteen — Task 19's review found it reached two of five and
+> it was extended — and collection reports **36 cases** for that file, the thirty-five plus the case
+> that measures which of them ran. And the first criterion's evidence is **partly** demonstrated: `tests/security/` holds 85
 > cases of which **38 carry no watched-failure demonstration**, three of them in the sentinel suite
 > (`the logs`, `the --json output`, `the deduplication hash`). The criterion holds; the strength
 > behind three of its eight artifacts is assertion rather than demonstration. `BACKLOG.md` §5 and

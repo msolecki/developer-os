@@ -50,10 +50,18 @@ content to capture.
 
 **What it cost, each item accepted by the founder on 2026-08-13:**
 
-- `session_end` still sits in `workflows/capture/workflow.yaml` and `session_start` in
-  `workflows/shared/workflow.yaml` — both name triggers nothing can fire, which
-  `workflow-schema.md` §7 already records as a value that validates while the property it names is
-  false;
+- **both unfireable triggers were dropped, and that is why five contracts changed version.**
+  `workflows/capture/workflow.yaml` loses `session_end` and `workflows/shared/workflow.yaml` loses
+  `session_start`; each now declares `triggers: [manual]` and nothing else
+  (`workflows/capture/workflow.yaml:5-6`, `workflows/shared/workflow.yaml:5-6`), and a grep across
+  `workflows/` and `plugins/` finds neither word. A step list and a scope set are the contract and
+  `extends` pins `id@version` exactly, so a changed contract under an unchanged version is a workflow
+  that means two different things at one name — **all five went to `2.0.0`**, three of them for
+  reasons of their own: `ingest` gained a `reindex` step and wider write scopes, `brain-search`
+  gained `brain.readNote` and a wider read scope, and `review` gained the `capture.edit` verb its
+  `decision` input had been advertising. `workflow-schema.md` §7 recorded those two triggers as
+  values that validate while the property they name is false; that paragraph's schema point still
+  stands and no shipped contract exercises it any more;
 - no hooks ship, in either vendor tree, in v1;
 - `developer-os run claude|codex` is never built;
 - **nothing automatic captures anything.** If nobody runs the workflow, no knowledge is captured.
@@ -173,9 +181,12 @@ crash cannot be told from a run that never started.
 **The residual, accepted rather than closed.** A crash between the apply and the last transaction
 leaves a capture at `staging` with its notes already in the vault. It is **inert**: `selectCaptures`
 selects only captures whose status is `accepted` (`ingest.ts:541`), so the next run cannot
-double-apply. It is visible, and `developer-os repair` plus a hand edit of the status is what moves
-it — which is what `PARTLY_APPLIED_RECOVERY` (`ingest.ts:277-278`) tells the user in those words. **No
-arrangement of these transactions removes that window**, because no two of them can share one.
+double-apply. It is visible, and a hand edit of the status is what moves it — which is what
+`PARTLY_APPLIED_RECOVERY` (`ingest.ts:277-278`) tells the user, in those words and no others: **the
+`repair` half of that advice is a different constant.** `INCOMPLETE_TRANSACTION_RECOVERY`
+(`:300-301`) is appended unconditionally by `refusedRecovery` (`:349`), so the two arrive together in
+the output while neither line alone says both. **No arrangement of these transactions removes that
+window**, because no two of them can share one.
 
 **The model gets zero declared write scopes** (spec §3.3), and each vendor's sandbox follows from that
 count rather than from an argument: `invokeCodex` derives `-s read-only` from `writeScopes.length === 0`,
@@ -368,12 +379,16 @@ root inside the configured content root once per run through one shared implemen
 stay its own. The security suite's parked `it.fails` has been an ordinary passing case since
 2026-08-15, and it went red the day the guard changed, exactly as the parking intended.
 
-**Three more accepted findings, in one line each.** `agent.prompt`'s argument screen refused any
-capture containing `permission`, `danger` or `bypass` on both vendors forever, under advice to run
-`ingest` again — reachable and severe only once Task 13 gave that function a production caller. An
-apply that wrote and then failed to verify rolled the capture back to `accepted` with its notes on
-disk, which the next run refuses permanently. And interruption coverage reached two of five
-transaction kinds; it now reaches all five.
+**Three more accepted findings, in one line each — and the first of them is only half closed.**
+`agent.prompt`'s argument screen refused any capture containing `permission`, `danger` or `bypass` on
+both vendors forever, under advice to run `ingest` again — reachable and severe only once Task 13 gave
+that function a production caller. **The prose half is fixed and the path half is still open**
+(`BACKLOG.md` §1 **NEW-12**, §10.1 below): the prompt now goes through `screenProseArgument`, but
+`workingRoot` and `outputSchemaPath` are the user's own paths and keep the word list by design, so a
+vault whose path contains one of those words still refuses every `codex` ingest. An apply that wrote
+and then failed to verify rolled the capture back to `accepted` with its notes on disk, which the next
+run refuses permanently. And interruption coverage reached two of five transaction kinds; it now
+reaches all five.
 
 **Two findings were registered rather than fixed** — `BACKLOG.md` §1 **NEW-19** and **NEW-20**, both
 in §10 below with their owners.
@@ -392,37 +407,48 @@ in §10 below with their owners.
 | **NEW-16** — spec §8.2's user-configured redaction patterns are unreachable | DOS-P7 | S. `redactText`'s `userPatterns` parameter has no production caller, and `configSchema` is `.strict()` with no redaction table, so there is no key a user could set even if one existed. **Nothing regressed; it was specified and never wired** |
 | **NEW-17** — `brain` is the one command whose config parse failure is not content-free | DOS-P7 | XS, security. Seven of eight commands route through `readConfigFile`; `brain` does not, and smol-toml puts three raw source lines into the message the heuristic redactor then has to catch alone |
 | **NEW-18** — `assertSafeCommand`'s four NUL branches have no test anywhere | whoever next touches `packages/security/src/process.ts` | XS. **The guard is correct; only the evidence is missing** |
+| **NEW-12** — the argv screen's word list also screens a value nobody chose | whoever next touches `packages/security/src/cli.ts` — DOS-P7 by default | XS, security-adjacent, **half closed 2026-08-15** by Task 19's review. The prose half is fixed: the prompt goes through `screenProseArgument`, which keeps the positional dash rule and drops the word list. **The path half is reachable today** — `workingRoot` and `outputSchemaPath` are the *user's own* paths and keep the word list by design, so a vault whose path contains `danger`, `permission` or `bypass` refuses every `codex` ingest. Closing it means asking whether a path this product derived itself belongs under a word list at all; **do not close it by narrowing the pattern** |
 | **NEW-11** — the invisible-title rule stops at `title` | next task touching `packages/brain/src/indexes/render.ts` or `lint.ts` | S. `tags` and `summary` did not get NEW-10's predicate, and the `duplicates` key wants a perceptual grouping key rather than that boolean |
-| **NEW-13** — two artifact roots share one type | closed by DOS-P6 Task 4's nominal brands | — |
+| **NEW-13** — two artifact roots share one type | DOS-P6 Task 4's nominal brands | **the brands shipped and the `@ts-expect-error` case pins them**, but `BACKLOG.md:265` still reads `Status: open` — Step 5 of this plan's Task 19 is what closes the row. If those two ever disagree, the tree is the answer |
 
 ### 10.2 The four Foundation requests `ORDER.md` carries
 
-**No DOS-P6 task's file list reaches `packages/core`**, so no session in this subsystem could have
-done any of them. They are stated there in full; the arithmetic is what matters here.
+**No DOS-P6 task extends `packages/core/src/transactions/` or `packages/core/src/result.ts`**, which
+is where every one of these lands. Two tasks did reach `packages/core` — Task 3 owns
+`packages/core/src/capabilities/index.ts` and Task 4 owns `packages/core/src/agent-prompt/index.ts`,
+both in the plan's own file-structure table — so the reason none of these was done here is that they
+are executor and result-type changes nobody's file list named, not that the package was untouchable.
+They are stated in `ORDER.md` in full; the arithmetic is what matters here.
 
-1. **An optional caller-supplied precondition on `PlannedFileMutation`.** The executor computes
-   `expectedBeforeHash` from the snapshot it takes when `execute()` runs, so a command cannot supply
-   one. It costs `capture` the `O_EXCL` create spec §5.2 describes — tolerable there, since the id is
-   the content hash and colliding captures are byte-identical — and it costs `review --decision edit`
-   a read-to-execute window in which **the discarded content is the user's own hand edit**. Raised as
-   a pair, because a session that fixes one and not the other has fixed neither.
-2. **Prune the transaction backup on `finalize`.** `review --decision edit` removes a secret from a
-   vault file and `TransactionExecutor.backUp` writes the pre-edit file raw to
-   `~/.developer-os/backups/transactions/<id>/0.bin`, where nothing removes it. `rollbackLocked`
-   throws on a finalized journal, so after `finalize` those are dead bytes. **The user is told the
-   secret is gone and a copy survives.** This is why `tests/security/sentinel.test.ts` does not sweep
-   that directory: the suite would be right and would go red for something nobody in DOS-P6 could fix.
-3. **A `data` slot on `CliError`, or a partial-success arm on `CliResult`.** `ingest` processes a
-   batch and contains each capture's refusal to that capture; when any refuses, the run ends on the
-   failure arm and the per-capture outcomes ship as lines inside the error message. A consumer parses
-   prose where it should read fields.
-4. **A gate-integrity item that is unowned and stays that way.**
-   `apps/cli/src/commands/doctor.test.ts:195` needs 3.19 s of a 20 s budget on an idle machine and
-   reddened in five of six full runs once the security suites joined it. The measured fix —
-   `fileParallelism: false` — is in `tests/vitest.config.ts` and also dropped total test time from
-   roughly 1000 s to 700 s. A case one contended run from red is a gate one contended run from
-   uninformative. The `ENOTEMPTY` seen during fixture cleanup in two of those runs is a separate
-   filesystem race, unmeasured and possibly still live.
+1. **and 2. An optional caller-supplied precondition on `PlannedFileMutation`**
+   (`ORDER.md:139-155`). The executor computes `expectedBeforeHash` from the snapshot it takes when
+   `execute()` runs, so a command cannot supply one. It costs `capture` the `O_EXCL` create spec §5.2
+   describes — tolerable there, since the id is the content hash and colliding captures are
+   byte-identical — and it costs `review --decision edit` a read-to-execute window in which **the
+   discarded content is the user's own hand edit**. **Counted as two of the four and raised as one
+   pair**, because a session that fixes one and not the other has fixed neither.
+3. **Prune the transaction backup on `finalize`** (`ORDER.md:157`, "a third Foundation request").
+   `review --decision edit` removes a secret from a vault file and `TransactionExecutor.backUp` writes
+   the pre-edit file raw to `~/.developer-os/backups/transactions/<id>/0.bin`, where nothing removes
+   it. `rollbackLocked` throws on a finalized journal, so after `finalize` those are dead bytes.
+   **The user is told the secret is gone and a copy survives.** This is why
+   `tests/security/sentinel.test.ts` does not sweep that directory: the suite would be right and would
+   go red for something nobody in DOS-P6 could fix.
+4. **A `data` slot on `CliError`, or a partial-success arm on `CliResult`** (`ORDER.md:185`, "a fourth
+   Foundation request, and it is the cheapest of the four"). `ingest` processes a batch and contains
+   each capture's refusal to that capture; when any refuses, the run ends on the failure arm and the
+   per-capture outcomes ship as lines inside the error message — the precedent `brain lint` already
+   set under the identical constraint. A consumer parses prose where it should read fields. It changes
+   no existing caller, because nothing populates a field that does not exist yet.
+
+**One repository item sits beside these and is not one of them, because its measured fix is already
+applied.** `apps/cli/src/commands/doctor.test.ts:195` needs 3.19 s of a 20 s budget on an idle machine
+and reddened in five of six full runs once the security suites joined it; `fileParallelism: false`
+(`tests/vitest.config.ts:50`) made four of four runs green and dropped total test time from roughly
+1000 s to 700 s. **What stays open is the fragility, not a change**: a case one contended run from red
+is a gate one contended run from uninformative, and it is unowned. The `ENOTEMPTY` seen during fixture
+cleanup in two of those runs is a separate filesystem race that serialization may only have made
+rarer; it is unmeasured and possibly still live.
 
 ### 10.3 One product gap, and the obligation Task 17 leaves
 
@@ -446,10 +472,17 @@ capture path — the two places a vendor's real output first meets this product.
 
 ### 10.4 Open items the design of record did not close
 
-Spec §13's three, all still open, none of them DOS-P6's: `buildConflictEvidence` has no consumer and
-waits for the first subsystem with a real three-way merge; the Codex supported floor is one observed
-version rather than a range (DOS-P9); and a re-rendered plugin tree may not be a re-loaded one, since
-Codex resolves skills through a cache copy (DOS-P7, whose update lifecycle re-renders in place).
+**Spec §13 has six, not three**, and all six are stated here with their disposition, because that
+section is the last word on what the approved design left open.
+
+| Spec §13 | Disposition |
+|---|---|
+| 1. `buildConflictEvidence` still has no consumer | **open.** Both adapters declined the design it was built for; it waits for the first subsystem with a real three-way merge, which is not this one |
+| 2. the Codex supported floor is one observed version, not a range | **open.** Owner: DOS-P9 |
+| 3. a re-rendered plugin tree may not be a re-loaded one — Codex resolves skills through a cache copy | **open.** Owner: DOS-P7, whose update lifecycle re-renders in place |
+| 4. `NEW-11` and `NEW-12` are repository defects rather than pipeline ones, and are not taken here | **open, and both are in §10.1** with their owners. NEW-12 was half closed by Task 19's review; the other half is still reachable |
+| 5. line-wrap drift wants a repository formatting decision, not a hand pass | **open and unowned.** No decision was taken here, and nothing in this subsystem's scope could take one — it is a repository-wide formatting question, and this is the only place it is written down outside the spec |
+| 6. automatic capture is not designed, only declined | **decided, not deferred**, and §2 above is the substance. If a future version wants it, the honest route is a documented, stable transcript contract with a regression fixture landing in the same change — the condition both adapter specs already set for lifting the refusal. Nothing in this subsystem weakened it |
 
 ---
 

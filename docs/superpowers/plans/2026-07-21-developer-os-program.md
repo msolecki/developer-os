@@ -135,7 +135,8 @@ differences. What did not, in both vendor trees:
   `type: "command"` handler needs an executable file, nothing in this pipeline can express an
   executable bit, and the only nameable command is the `developer-os` capture entrypoint, which is
   Task 6's. All three lifecycle capabilities therefore report `wrapper-required` and `plugin_hooks`
-  reports `unknown`. **Both halves of that sentence were overtaken on 2026-08-14.** The stated
+  reports `unknown`. **Both halves of that sentence were overtaken on 2026-08-13**, the day the spec
+  was approved, decision 4 taken, and the vocabulary shipped (`69f294c`). The stated
   blocker was wrong — a `"type": "command"` handler needs no executable bit — and hooks were
   *declined* rather than deferred, so the three lifecycle keys and `plugin_hooks` now report
   `not-used`. Task 6's third box below carries the decision.

@@ -267,16 +267,20 @@ describe("an interruption at every forward phase", () => {
  * Vitest 4.1.8 *skips* non-matching cases rather than failing them, and a `-t`
  * pattern chosen to select the cases below will not normally select this one:
  * `npx vitest run security/interruption.test.ts -t "planned"` reports
- * `2 passed | 13 skipped`, **green**, having driven two of fourteen
+ * `5 passed | 31 skipped`, **green**, having driven five of thirty-five
  * interruptions. This case cannot warn about that, because it was filtered out
  * along with the coverage it measures. Measured, not assumed — an earlier
  * version of this paragraph claimed the opposite.
  *
  * The one filtered form that *does* redden is a pattern matching this case's own
- * name too: `-t "killed at planned|nothing else"` gives `1 failed | 2 passed |
- * 12 skipped`, naming the twelve labels that went unrecorded. `--shard` never
+ * name too: `-t "killed at planned|nothing else"` gives `1 failed | 5 passed |
+ * 30 skipped`, naming the thirty labels that went unrecorded. `--shard` never
  * triggers it at all — vitest shards at file granularity, so a selected file
  * runs whole.
+ *
+ * **Re-measured 2026-08-15**, both commands, after the suite grew from fourteen
+ * interruptions to thirty-five. The previous numbers were the pre-extension
+ * ones and had gone stale where nothing cited them.
  */
 describe("what this suite drove", () => {
   it("interrupted every forward transaction at each of the seven phases, and nothing else", () => {

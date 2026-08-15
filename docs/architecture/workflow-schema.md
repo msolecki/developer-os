@@ -152,9 +152,16 @@ sentence "the scopes this workflow declares" resolves, in the only form the arti
 renderers are the thing that would inject it.
 
 **A trigger implies no capability, and nothing checks that it can fire.** Capability
-requirements are derived from step footprints only. `shared` declares `session_start` and
-`capture` declares `session_end`, both with no capability and no `capability-missing` refusal —
-so a workflow can name a trigger the host agent cannot fire and validate clean. That is the same
+requirements are derived from step footprints only. `shared` declared `session_start` and
+`capture` declared `session_end`, both with no capability and no `capability-missing` refusal —
+so a workflow can name a trigger the host agent cannot fire and validate clean. **Both
+declarations are gone as of 2026-08-13**: DOS-P6 declined hooks rather than deferring them, so
+each contract dropped its unfireable trigger and went to `2.0.0` — `triggers: [manual]` is now all
+either one carries (`workflows/shared/workflow.yaml:5-6`, `workflows/capture/workflow.yaml:5-6`),
+and a grep across `workflows/` and `plugins/` finds neither word. **The schema property this
+paragraph describes is unchanged and still unowned**; what changed is that no shipped contract
+exercises it any more. `docs/architecture/knowledge-pipeline.md` §2 is the decision and its costs;
+`BACKLOG.md` §8 carries the amendment row. That is the same
 shape as the refused `scheduled` trigger: a value that passes validation while the property it
 names is false. §11 also names `capture`'s fallback outright (the `developer-os run claude|codex`
 wrapper), and the contract says nothing about it. **Owner: DOS-P4/P5**, which is where trigger
