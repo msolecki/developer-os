@@ -748,6 +748,23 @@ Copied here so they are visible without opening the program plan.
 | License | OSI-approved text reviewed by qualified counsel | public visibility |
 | Packaging | checksums, SBOM, clean-account install | `v1.0.0` |
 
+**One measurement for whoever runs the publication secret re-scan, taken 2026-08-15.** DOS-P6 Task 17
+added `tests/fixtures/codex/observed-exec-stream.jsonl` — a **redacted recording of real vendor
+output**, and the one deliberate exception to `SESSION.md`'s "fixtures are synthetic" rule, mandated
+by that task because the JSONL rule cannot be settled against an invented stream. The product's own
+`redactText` was run over the change as a candidate-only scan, and the result is worth carrying:
+
+- **Over the 687 added lines: zero candidates**, the fixture included.
+- **Over the whole text of the same files: 25 candidates**, every one in pre-existing prose and every
+  one a false positive — `high-entropy` on commit SHAs and hex identifiers, plus `certificate` and
+  four `service-credential` hits inside the knowledge-pipeline plan, which quotes redaction-class
+  examples as documentation.
+
+**So the gate must be run per-diff, or against a triaged baseline.** A whole-tree scan of this
+repository's documentation returns a false-positive set large enough that a reader would either
+triage it every release or learn to skim it, and skimming a secret scan is how a real hit gets
+waved through. There is no scanner in the tree yet; this is the note that says what one will meet.
+
 ---
 
 ## 8. Amendments to approved documents
