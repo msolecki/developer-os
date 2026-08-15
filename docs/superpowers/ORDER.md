@@ -30,13 +30,20 @@ week of confusion.
 
 ## NOW
 
-**A10 is held, so `NOW` is R1.** DOS-P6 cannot close until NEW-21 does, on the founder's decision of
-2026-08-15 recorded in the box below, and NEW-21 is blocked on an external usage limit expected to
-reset on or after 2026-08-20. **A10 is not `now` and is not abandoned; it is waiting.** What the
-founder chose to run in the meantime is **R1** — Track R below — which closes the four `BACKLOG.md`
-§1 defects whose fix is already specified and which take no decision away from them. **R1 touches
-nothing DOS-P6 owns**: not its plan, not its spec, not its checkpoint. When R1 closes, `NOW` returns
-to A10 unchanged.
+**`NOW` is A10, and A10 is held.** DOS-P6 cannot close until NEW-21 does, on the founder's decision
+of 2026-08-15 recorded in the box below, and NEW-21 is blocked on an external usage limit expected to
+reset on or after 2026-08-20. **A10 is not abandoned; it is waiting**, and nothing since has touched
+it — not its plan, not its spec, not its checkpoint.
+
+**R1 ran in the meantime and closed on 2026-08-15**, which is why Track R below is a `done` row
+rather than the entry. It closed three `BACKLOG.md` §1 defects — NEW-18, NEW-17 and NEW-19 — each
+with a regression test watched fail first. **It aimed at a fourth and did not get it.** NEW-15's
+guard was built, tested, and withdrawn before commit, because the policy that row implies refuses
+this product's own vendors: `claude` and `codex` are both symlinks on the founder's machine and
+`/opt/homebrew/bin` is group-writable, so the rule as written would have made `capture` record
+`unknown` forever and `ingest` exit 5 on every run. **NEW-15 is therefore a decision now, not an
+implementation** — the first thing waiting on the founder besides NEW-21, and `BACKLOG.md` §1 states
+the three parts of it.
 
 **A10 — DOS-P6 Knowledge pipeline, at its `I` gate. Both documents exist: the spec was approved by
 the founder on 2026-08-13 and its implementation plan was written the same day.**
@@ -337,17 +344,40 @@ stays in §1 until that question is answered.
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| R1 | Close the four §1 defects with no open question — NEW-18, NEW-17, NEW-19, NEW-15 | `plans/2026-08-15-repository-defects.md`, five tasks, written 2026-08-15 | — | S | all four rows leave `BACKLOG.md` §1, each with a regression test watched fail first, and CI green on the commit | **now** |
+| R1 | Close the §1 defects with no open question — NEW-18, NEW-17, NEW-19, and NEW-15 attempted | plan deleted on closure, 2026-08-15 | — | S | the rows leave `BACKLOG.md` §1 with a regression test each, and CI green on the commit | **done** — three closed; **NEW-15 came back as a founder decision and stays in §1** |
 
 **Chosen by the founder on 2026-08-15**, when A10 turned out to be held on NEW-21 and they were asked
-what the session should do instead. **Three §1 rows were deliberately left out of R1** and each is
-left out for the same reason: it needs a decision rather than an implementation. **NEW-16** — is a
-user-supplied redaction pattern a `config.toml` table, and does adding one amend a `.strict()` schema
-frozen at `foundation.md` §2? **NEW-11** — is an invisible tag an error, a warning, or silently
-dropped at index time? **NEW-12's remaining path half** — does a path this product derived itself
-belong under a word list at all? Its own row says *"do not close it by narrowing the pattern"*.
-**NEW-20 and NEW-13 were registered as deliberately-not-fixed**, NEW-7 needs a machine with Obsidian,
-and NEW-21 is the founder's. Do not pick any of these up as though R1 simply ran out of time.
+what the session should do instead.
+
+**What R1 closed, and what each cost.** **NEW-18** — `assertSafeCommand`'s four NUL branches had no
+test anywhere; they have four now, each watched red against a neutered guard. **NEW-17** — `brain`
+was the one command of eight whose config parse failure was not content-free, so a hand-edited
+`config.toml` holding a secret was echoed back with the heuristic redactor as the only thing
+standing; its read now goes through `readConfigFile` like every other command's, and the e2e case
+that pins the contract enumerates all six command forms rather than gaining a seventh case.
+**NEW-19** — `reindex` built its owned root textually, and the row admitted it had been *"traced by
+reading, not driven"*. It is driven now: the red run showed `ingest` succeeding with all four
+generated artifacts written outside the vault through a relocated `_indexes` symlink. **That run also
+corrected the row**, which had named two files — `tags.md` and `topics.md` — that exist nowhere in
+this product; the real four are `index.json`, `graph.json`, `vault-map.md` and `catalog.md`.
+
+**What R1 did not close, and why that is the more useful result.** **NEW-15** read like an
+implementation and was not. Building it revealed that the policy its own text implies — refuse a
+symbolic link anywhere in the chain, refuse any group- or world-writable ancestor — **refuses both
+vendors on the founder's own machine**, because `claude` and `codex` are symlinks under
+`~/.local/bin` and `/opt/homebrew/bin` is `drwxrwxr-x`. The guard was withdrawn rather than shipped
+or quietly loosened, and `BACKLOG.md` §1 NEW-15 now carries the three parts of the decision. **One
+loosening was considered and rejected on its merits:** a sticky bit stops another user *deleting* a
+file they do not own, not *creating* one under an unused name.
+
+**Four §1 rows now need a decision rather than an implementation**, and each is waiting on a
+different question. **NEW-15** — the policy above. **NEW-16** — is a user-supplied redaction pattern
+a `config.toml` table, and does adding one amend a `.strict()` schema frozen at `foundation.md` §2?
+**NEW-11** — is an invisible tag an error, a warning, or silently dropped at index time? **NEW-12's
+remaining path half** — does a path this product derived itself belong under a word list at all? Its
+own row says *"do not close it by narrowing the pattern"*. **NEW-20 and NEW-13 were registered as
+deliberately-not-fixed**, NEW-7 needs a machine with Obsidian, and NEW-21 is the founder's. Do not
+pick any of these up as though R1 simply ran out of time.
 
 ---
 
@@ -406,15 +436,17 @@ implementation plan, written against it the same day. **Four remain**: DOS-P6's 
 DOS-P7's spec, plan and implementation. An implementation is done when its checkpoint holds with
 evidence in a commit and CI is green on it, not when the tasks are ticked.
 
-`BACKLOG.md` §1 is **eleven** repository defects, not the four this paragraph claimed until
-2026-08-15. **The count was stale by seven rows**, and it is restated here by recounting §1 rather
-than by editing a number — which is the same discipline the DOS-P6 plan's Task 19 Step 5 imposes on
-the residual arithmetic, applied to the file that imposes it. §0 of `BACKLOG.md` had them all along;
-this paragraph is what had not been reread.
+`BACKLOG.md` §1 is **eight** repository defects. It said "four" until 2026-08-15, when it was
+**eleven** — stale by seven rows — and R1 then closed three of them. Both corrections were made by
+recounting §1 rather than by editing a number, which is the same discipline the DOS-P6 plan's Task 19
+Step 5 imposes on the residual arithmetic, applied to the file that imposes it. §0 of `BACKLOG.md`
+had the eleven right all along; this paragraph was what had gone unread.
 
-**Four are R1's** and close there: NEW-18, NEW-17, NEW-19 and NEW-15. **Three need a decision before
-anyone can implement them** — NEW-16, NEW-11 and NEW-12 — and Track R above says which decision each
-one needs. **Four belong to somebody else:** NEW-21 is the founder's and blocks A10; NEW-20 and
-NEW-13 were registered as deliberately-not-fixed, NEW-13 being DOS-P6's Task 4, which closes it at
-that plan's Task 19 Step 5; and NEW-7 needs ten minutes with a machine that has Obsidian rather than
-an agent.
+**Four need a decision before anyone can implement them** — NEW-15, NEW-16, NEW-11 and NEW-12 — and
+Track R above says which question each one is waiting on. **Four belong to somebody else:** NEW-21 is
+the founder's and blocks A10; NEW-20 and NEW-13 were registered as deliberately-not-fixed, NEW-13
+being DOS-P6's Task 4, which closes it at that plan's Task 19 Step 5; and NEW-7 needs ten minutes
+with a machine that has Obsidian rather than an agent.
+
+**Nothing here is startable without an answer**, which is the honest state of §1 and worth saying
+plainly rather than leaving a reader to derive it.
