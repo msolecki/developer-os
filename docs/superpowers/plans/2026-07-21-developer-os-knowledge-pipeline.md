@@ -2838,7 +2838,7 @@ Read **decision 3**. Run each vendor and record what its environment actually co
 
 **Anything unrecognised still records `"unknown"`.**
 
-- [ ] **Step 4: Run the gate and commit**
+- [x] **Step 4: Run the gate and commit** — *`npm run check` exit 0 at every review round; committed `5c56892`, CI green on it. The commit's own message is the record of the six-round security review, which `ORDER.md` points at rather than repeating*
 
 ```bash
 npm run check
