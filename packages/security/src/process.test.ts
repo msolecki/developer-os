@@ -95,6 +95,42 @@ describe("assertSafeCommand", () => {
       expect(refusal).toMatchObject({ code: EXIT_CODES.securityRefusal });
     },
   );
+
+  const nul = "\u0000";
+
+  it("refuses a NUL byte in the executable, by the executable's own message", () => {
+    const request = createRequest({
+      executable: `${process.execPath}${nul}`,
+    });
+
+    expect(() => {
+      assertSafeCommand(request);
+    }).toThrow(/absolute path without NUL bytes/u);
+  });
+
+  it("refuses a NUL byte in the working directory", () => {
+    const request = createRequest({ cwd: `${tmpdir()}${nul}` });
+
+    expect(() => {
+      assertSafeCommand(request);
+    }).toThrow(/request contains a NUL byte/u);
+  });
+
+  it("refuses a NUL byte in any argument, not only the first", () => {
+    const request = createRequest({ args: ["--version", `value${nul}`] });
+
+    expect(() => {
+      assertSafeCommand(request);
+    }).toThrow(/request contains a NUL byte/u);
+  });
+
+  it("refuses a NUL byte in stdin", () => {
+    const request = createRequest({ stdin: `body${nul}` });
+
+    expect(() => {
+      assertSafeCommand(request);
+    }).toThrow(/request contains a NUL byte/u);
+  });
 });
 
 describe("NodeProcessRunner", () => {
