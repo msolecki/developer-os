@@ -128,6 +128,7 @@ async function runReindex(
   context: CliContext,
   service: BrainService,
   vaultRoot: string,
+  contentRoot: string,
   indexesDir: string,
   dryRun: boolean,
 ): Promise<CliResult<BrainReindexResultV1>> {
@@ -148,15 +149,26 @@ async function runReindex(
    * transaction, the manifest record — lives in `reindex.ts`, because
    * `developer-os ingest` performs the identical sequence as the third of its
    * four transactions. What stays here is what differs: this command's
-   * transaction kind and its own refusal class.
+   * transaction kind and its own refusal classes — one for an internal
+   * invariant failure, one for the index directory resolving outside the
+   * content root, which is a security refusal and must carry recovery text in
+   * the style the quarantine call sites use.
    */
   const transactionId = await writeIndexArtifacts(context, {
     vaultRoot,
+    contentRoot,
     indexesDir,
     files: artifacts.files,
     kind: "brain-reindex",
     refuse: (message, paths) =>
       new BrainRefusal(EXIT_CODES.operationalFailure, message, paths),
+    refuseIndexEscape: (message, paths) =>
+      new BrainRefusal(
+        EXIT_CODES.securityRefusal,
+        message,
+        paths,
+        "restore the index directory inside the vault's content root; nothing is read or written through an index path that leaves it",
+      ),
   });
 
   return success({
@@ -316,6 +328,7 @@ export async function runBrain(
           context,
           service,
           paths.brain,
+          brainConfig.contentRoot,
           join(brainConfig.contentRoot, brainConfig.indexesDir),
           options.dryRun,
         );

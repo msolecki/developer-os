@@ -77,6 +77,20 @@ export function dependenciesFor(
 export interface IndexWriteRequest {
   readonly vaultRoot: string;
   /**
+   * Vault-relative — `content` under a default configuration, which is
+   * `brainConfig.contentRoot`. This, not `vaultRoot`, is what
+   * `writeIndexArtifacts` anchors its containment check on: `vaultRoot` is the
+   * brain root, and a user whose `brainPath` names a directory whose `content`
+   * is a symlink to an existing vault elsewhere — an external volume, a
+   * pre-existing Obsidian vault — has that layout refused as if it were an
+   * escape, while `capture`, `ingest`'s quarantine step, `review`, `brain
+   * lint` and `brain search` all keep working because they anchor on the
+   * content root already. Anchoring here on the content root instead closes
+   * NEW-19 identically — a relocated `_indexes` still resolves outside the
+   * canonical content root — without that asymmetry.
+   */
+  readonly contentRoot: string;
+  /**
    * Vault-relative — `content/_indexes` under a default configuration, which is
    * `join(brainConfig.contentRoot, brainConfig.indexesDir)`.
    */
@@ -92,12 +106,30 @@ export interface IndexWriteRequest {
    */
   readonly kind: string;
   /**
-   * How this caller reports a validated plan that lost its staged content.
-   * Injected because each command raises its own refusal class carrying its own
-   * exit code and recovery text, and a shared module inventing a third would
-   * throw both commands an error neither one's catch clause recognises.
+   * How this caller reports a validated plan that lost its staged content —
+   * an internal invariant failure, not a security refusal, and never to be
+   * confused with `refuseIndexEscape` below. Injected because each command
+   * raises its own refusal class carrying its own exit code and recovery
+   * text, and a shared module inventing a third would throw both commands an
+   * error neither one's catch clause recognises.
    */
   readonly refuse: (message: string, paths: readonly string[]) => Error;
+  /**
+   * How this caller reports the index directory resolving outside the
+   * content root (NEW-19) — a containment escape, which both callers must
+   * raise as their own `EXIT_CODES.securityRefusal` refusal class carrying
+   * recovery text, in the style their quarantine call sites already use
+   * (`ingest.ts`, `review.ts`, `capture.ts`). This used to be conflated with
+   * `refuse` above, which both callers construct at
+   * `EXIT_CODES.operationalFailure` with no recovery text — reporting the
+   * same class of escape the three quarantine call sites raise at exit 5 as
+   * an ordinary operational failure at exit 1 instead — a class `doctor`'s
+   * `EXIT_PRECEDENCE` ranks below a security refusal.
+   */
+  readonly refuseIndexEscape: (
+    message: string,
+    paths: readonly string[],
+  ) => Error;
 }
 
 /**
@@ -107,9 +139,11 @@ export interface IndexWriteRequest {
  * into the other is what the exclusion refuses.
  *
  * `ownedIndexRoot` is `writeIndexArtifacts`'s already-proven root, not rebuilt
- * here: `resolveContainedRoot` requires the directory to exist, and this
- * function has no reason to know whether it does — that ordering belongs to
- * the caller.
+ * here: whether the index directory exists yet is an ordering decision that
+ * belongs to the caller, not to this function — and not, either way, something
+ * canonicalization needs settled first. `canonicalizePlannedPath` walks up to
+ * the nearest existing ancestor (`packages/security/src/paths.ts:53-73`), so it
+ * resolves a not-yet-created path exactly as well as an existing one.
  */
 async function stageArtifacts(
   context: CliContext,
@@ -288,10 +322,10 @@ async function stageArtifacts(
        * writes through this function.
        *
        * `ownedIndexRoot` rather than `join(vaultRoot, indexesDir)`: the root is
-       * now *proven* to resolve inside the vault (NEW-19) instead of merely
-       * constructed, and this is the value `resolveContainedRoot` returned —
-       * building the join a second time here would be a second spelling of one
-       * path that could disagree with the proven one.
+       * now *proven* to resolve inside the content root (NEW-19) instead of
+       * merely constructed, and this is the value `resolveContainedRoot`
+       * returned — building the join a second time here would be a second
+       * spelling of one path that could disagree with the proven one.
        */
       ownedRoots: [ownedIndexRoot],
       excludedRoots: [context.paths.home],
@@ -409,19 +443,32 @@ export async function writeIndexArtifacts(
    * `resolveQuarantineRoot` used to, so a sideways relocation carried its own
    * containment check along with it and `validateChangePlan` never saw it move.
    * `resolveContainedRoot` canonicalizes both sides and asks whether the result
-   * still resolves inside `vaultRoot`, which a relocation cannot satisfy by
-   * construction.
+   * still resolves inside the content root, which a relocation cannot satisfy
+   * by construction.
    *
-   * Placed after `mkdir`, not before: canonicalization requires the directory
-   * to exist, and the directory does not exist yet on a fresh install until the
-   * two lines above create it.
+   * Anchored on the content root, not `vaultRoot`. `vaultRoot` is the brain
+   * root, and anchoring there refused a real, non-hostile layout: a
+   * `brainPath` whose `content` is a symlink to an existing vault elsewhere —
+   * an external volume, a pre-existing Obsidian vault — resolves the index
+   * directory outside `vaultRoot` by construction even though nothing here is
+   * an attack. `capture`, `ingest`'s quarantine step, `review`, `brain lint`
+   * and `brain search` already anchor on the content root and canonicalize
+   * both sides, so this brings `reindex` in line with them rather than making
+   * it the one command that treats that layout as an escape.
+   *
+   * Placed after `mkdir`, matching where `init` creates a directory before
+   * validating it — not because canonicalization needs the directory to exist.
+   * `canonicalizePlannedPath` walks up to the nearest existing ancestor
+   * (`packages/security/src/paths.ts:53-73`), so this check would resolve
+   * exactly as correctly if it ran before `mkdir`.
    */
+  const contentRoot = join(request.vaultRoot, request.contentRoot);
   const ownedIndexRoot = await resolveContainedRoot(
     context,
-    request.vaultRoot,
+    contentRoot,
     indexDirectory,
-    "the index directory resolves outside the vault",
-    request.refuse,
+    "the index directory resolves outside the content root",
+    request.refuseIndexEscape,
   );
 
   const staged = await stageArtifacts(context, request, ownedIndexRoot);

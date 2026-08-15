@@ -944,11 +944,19 @@ async function reindexVault(
 
   await writeIndexArtifacts(context, {
     vaultRoot: paths.brain,
+    contentRoot: brainConfig.contentRoot,
     indexesDir: join(brainConfig.contentRoot, brainConfig.indexesDir),
     files: (await service.reindex()).files,
     kind: TRANSACTION_KINDS.reindex,
     refuse: (message, paths_) =>
       new IngestRefusal(EXIT_CODES.operationalFailure, message, paths_),
+    refuseIndexEscape: (message, paths_) =>
+      new IngestRefusal(
+        EXIT_CODES.securityRefusal,
+        message,
+        paths_,
+        "restore the index directory inside the vault's content root; nothing is read or written through an index path that leaves it",
+      ),
   });
 }
 
