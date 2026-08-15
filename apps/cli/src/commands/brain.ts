@@ -3,7 +3,6 @@ import { join } from "node:path";
 import {
   EXIT_CODES,
   failure,
-  loadConfig,
   success,
 } from "@developer-os/core";
 import type {
@@ -16,6 +15,7 @@ import type { LintFinding, RetrievalMatch } from "@developer-os/brain";
 
 import { failureFrom, renderPath, runtimePathsFor } from "../context.js";
 import type { CliContext } from "../context.js";
+import { ConfigurationError, readConfigFile } from "./doctor.js";
 import { dependenciesFor, writeIndexArtifacts } from "./reindex.js";
 
 export interface BrainReindexResultV1 {
@@ -94,19 +94,34 @@ class BrainRefusal extends Error {
   }
 }
 
+/**
+ * Absence and corruption are different failures with different recoveries, so
+ * `readConfigFile`'s `null`-versus-throw split is preserved rather than folded
+ * into one message: a missing `config.toml` means "run `init`", but a present,
+ * unparseable one means `init` will refuse on drift, which is the wrong answer
+ * for that user. `ConfigurationError` itself is rethrown unmodified — its
+ * message already quotes nothing, and it carries the same exit code this
+ * function's own `notInitialized` refusal uses, so `failureFrom` renders it
+ * correctly with no extra handling here.
+ */
 async function readConfig(context: CliContext): Promise<DeveloperOsConfigV1> {
-  let serialized: string;
+  const notInitialized = new BrainRefusal(
+    EXIT_CODES.invalidInput,
+    "Developer OS is not initialized, so there is no Brain to work with",
+    [context.paths.configFile],
+    "developer-os init",
+  );
+
+  let config: DeveloperOsConfigV1 | null;
   try {
-    serialized = await context.guards.readText(context.paths.configFile);
-  } catch {
-    throw new BrainRefusal(
-      EXIT_CODES.invalidInput,
-      "Developer OS is not initialized, so there is no Brain to work with",
-      [context.paths.configFile],
-      "developer-os init",
-    );
+    config = await readConfigFile(context, context.paths.configFile);
+  } catch (error) {
+    if (error instanceof ConfigurationError) throw error;
+    throw notInitialized;
   }
-  return loadConfig(serialized);
+
+  if (config === null) throw notInitialized;
+  return config;
 }
 
 async function runReindex(

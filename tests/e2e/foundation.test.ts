@@ -1261,6 +1261,8 @@ describe("Foundation boundaries", () => {
         ["doctor", "--json"],
         ["status"],
         ["doctor"],
+        ["brain", "status", "--json"],
+        ["brain", "status"],
       ]) {
         const run = await runCli(home, args);
         expect(run.timedOut, `${args.join(" ")} timed out`).toBe(false);
