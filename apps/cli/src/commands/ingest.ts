@@ -43,7 +43,7 @@ import {
   failureFrom,
   loadOrCreateRedactionKey,
   renderPath,
-  resolveQuarantineRoot,
+  resolveContainedRoot,
   runtimePathsFor,
 } from "../context.js";
 import type { CliContext, CliGuards } from "../context.js";
@@ -555,7 +555,7 @@ async function selectCaptures(
  * makes the path unbuildable is upstream; this is the check that makes a
  * *symlinked* component resolving out of the vault unusable.
  *
- * **`quarantine` is the canonical root `resolveQuarantineRoot` returned**, which
+ * **`quarantine` is the canonical root `resolveContainedRoot` returned**, which
  * is what makes this containment check absolute rather than relative to whatever
  * the quarantine path happens to resolve to today.
  */
@@ -1406,10 +1406,11 @@ export async function runIngest(
 
     const brainConfig = resolveBrainConfig(config);
     const contentRoot = join(paths.brain, brainConfig.contentRoot);
-    const quarantine = await resolveQuarantineRoot(
+    const quarantine = await resolveContainedRoot(
       context,
       contentRoot,
       join(contentRoot, ...QUARANTINE_SEGMENTS),
+      "the quarantine directory resolves outside the content root",
       (message, paths_) =>
         new IngestRefusal(
           EXIT_CODES.securityRefusal,

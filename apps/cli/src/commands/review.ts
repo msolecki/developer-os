@@ -27,7 +27,7 @@ import {
   exitCodeOf,
   failureFrom,
   loadOrCreateRedactionKey,
-  resolveQuarantineRoot,
+  resolveContainedRoot,
   runtimePathsFor,
 } from "../context.js";
 import type { CliContext, CliGuards } from "../context.js";
@@ -271,7 +271,7 @@ async function listQuarantined(
  * the shape check makes the path unbuildable and this one makes the resolved
  * path unusable, and a mistake in either alone is not enough.
  *
- * **`quarantine` is the canonical root `resolveQuarantineRoot` returned**, which
+ * **`quarantine` is the canonical root `resolveContainedRoot` returned**, which
  * is what makes this containment check absolute rather than relative to whatever
  * the quarantine path happens to resolve to today.
  */
@@ -515,10 +515,11 @@ export async function runReview(
     const paths = runtimePathsFor(context, config);
     await assertVaultPresent(context, paths);
     const contentRoot = join(paths.brain, resolveBrainConfig(config).contentRoot);
-    const quarantine = await resolveQuarantineRoot(
+    const quarantine = await resolveContainedRoot(
       context,
       contentRoot,
       join(contentRoot, ...QUARANTINE_SEGMENTS),
+      "the quarantine directory resolves outside the content root",
       (message, paths_) =>
         new ReviewRefusal(EXIT_CODES.securityRefusal, message, paths_),
     );

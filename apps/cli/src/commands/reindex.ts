@@ -13,6 +13,7 @@ import type {
   DirectoryEntry,
 } from "@developer-os/brain";
 
+import { resolveContainedRoot } from "../context.js";
 import type { CliContext } from "../context.js";
 
 /**
@@ -104,15 +105,21 @@ export interface IndexWriteRequest {
  * directory is the only root this command may write to, and the product home is
  * excluded as the other ownership universe — a symlink inside one resolving
  * into the other is what the exclusion refuses.
+ *
+ * `ownedIndexRoot` is `writeIndexArtifacts`'s already-proven root, not rebuilt
+ * here: `resolveContainedRoot` requires the directory to exist, and this
+ * function has no reason to know whether it does — that ordering belongs to
+ * the caller.
  */
 async function stageArtifacts(
   context: CliContext,
   request: IndexWriteRequest,
+  ownedIndexRoot: string,
 ): Promise<{
   readonly mutations: readonly PlannedFileMutation[];
   readonly artifacts: readonly ManagedArtifactV1[];
 }> {
-  const { files, indexesDir, vaultRoot } = request;
+  const { files, vaultRoot } = request;
   const encoder = new TextEncoder();
   const verifiedAt = context.now().toISOString();
 
@@ -279,8 +286,14 @@ async function stageArtifacts(
        * this root to the whole vault changes no observable behaviour and no test
        * can tell the difference. It is here to constrain the *next* thing that
        * writes through this function.
+       *
+       * `ownedIndexRoot` rather than `join(vaultRoot, indexesDir)`: the root is
+       * now *proven* to resolve inside the vault (NEW-19) instead of merely
+       * constructed, and this is the value `resolveContainedRoot` returned —
+       * building the join a second time here would be a second spelling of one
+       * path that could disagree with the proven one.
        */
-      ownedRoots: [join(vaultRoot, indexesDir)],
+      ownedRoots: [ownedIndexRoot],
       excludedRoots: [context.paths.home],
       canonicalize: context.guards.canonicalize,
     },
@@ -390,7 +403,28 @@ export async function writeIndexArtifacts(
   await context.guards.transaction.assertTarget(indexDirectory);
   await context.fs.mkdir(indexDirectory, { recursive: true, mode: 0o700 });
 
-  const staged = await stageArtifacts(context, request);
+  /**
+   * Proven rather than constructed (NEW-19): a `content/_indexes` replaced by a
+   * symbolic link built `ownedRoots` from the same textual join
+   * `resolveQuarantineRoot` used to, so a sideways relocation carried its own
+   * containment check along with it and `validateChangePlan` never saw it move.
+   * `resolveContainedRoot` canonicalizes both sides and asks whether the result
+   * still resolves inside `vaultRoot`, which a relocation cannot satisfy by
+   * construction.
+   *
+   * Placed after `mkdir`, not before: canonicalization requires the directory
+   * to exist, and the directory does not exist yet on a fresh install until the
+   * two lines above create it.
+   */
+  const ownedIndexRoot = await resolveContainedRoot(
+    context,
+    request.vaultRoot,
+    indexDirectory,
+    "the index directory resolves outside the vault",
+    request.refuse,
+  );
+
+  const staged = await stageArtifacts(context, request, ownedIndexRoot);
   const journal = await context.executor.execute({
     kind: request.kind,
     mutations: staged.mutations,
