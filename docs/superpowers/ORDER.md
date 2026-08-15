@@ -164,8 +164,12 @@ they have no reason to know about.
 **This is a missing prune, not an inherent cost.** `rollbackLocked` throws on a finalized journal
 (`executor.ts:280`), so once `finalize` runs that backup can never be used for anything — it is dead
 bytes. The fix is to prune `backupDirectory(id)` in the `finalized` transition, which is a smaller
-change than the precondition above and independent of it. **No DOS-P6 task's file list reaches
-`packages/core`**, so no session can do it without being told to.
+change than the precondition above and independent of it. **No DOS-P6 task extends
+`packages/core/src/transactions/`**, so no session in this subsystem can do it without being told to.
+*(Corrected 2026-08-15: this read "no DOS-P6 task's file list reaches `packages/core`", which is
+false — Tasks 3 and 4 shipped `capabilities/index.ts` and `agent-prompt/index.ts` there. The
+transactions directory is the true and load-bearing boundary, and it is the one the program plan's
+own box-8 note already uses.)*
 
 **A containment escape in shipped DOS-P6 code, found by Task 15's own suite, registered as
 `BACKLOG.md` §1 NEW-14 — and closed on 2026-08-15 by the fix round after Task 19's review, which
