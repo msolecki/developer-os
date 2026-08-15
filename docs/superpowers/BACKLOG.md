@@ -64,8 +64,8 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P6 | spec approved and plan written, both 2026-08-13 | the implementation — nineteen tasks, **seventeen landed** 2026-08-13/14. **Task 17 ran 2026-08-15 and half discharged itself** — Claude's row landed, Codex's run hit an exhausted usage limit; the remainder is NEW-21. Task 19 closes the subsystem, and its Steps 5–6 wait on NEW-21 |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository defects (R1) | **closed 2026-08-15**, plan deleted | **three of the four it aimed at** — NEW-18, NEW-17 and NEW-19, each with a regression test watched fail first. The fourth, **NEW-15, came back as a decision rather than a fix** and stays in §1: the guard was built, tested and withdrawn, because the policy the row implies refuses this product's own vendors |
-| Repository-level | §1 | **NEW-21 (S — one successful `codex exec` completion, the founder's, blocked by an external usage limit)**, **NEW-15 (S, security — the check `platform-macos`'s type demands; built and withdrawn 2026-08-15, now a policy decision that is the founder's)**, NEW-7 (XS, needs a machine with Obsidian), **NEW-20 (XS, security — `capture` proves its quarantine root then follows the path again; theoretical)**, NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (XS, half closed — the argv screen's word list still screens a user's own path), NEW-13 (S, two artifact roots share one type) and NEW-16 (S, spec §8.2's user-configured redaction patterns are unreachable) |
+| Repository defects (R1) | **closed 2026-08-15**, plan deleted | **three of the four it aimed at** — NEW-18, NEW-17 and NEW-19, each with a regression test watched fail first. The fourth, **NEW-15, came back as a decision rather than a fix** and stays in §1. It also **added NEW-22**, found while checking whether its own fix had broken a real vault layout |
+| Repository-level | §1 | **NEW-21 (S — one successful `codex exec` completion, the founder's, blocked by an external usage limit)**, **NEW-15 (S, security — the check `platform-macos`'s type demands; built and withdrawn 2026-08-15, now a policy decision that is the founder's)**, **NEW-22 (S — a vault whose `content` is a symlink cannot be indexed at all; a design question, not a bug)**, NEW-7 (XS, needs a machine with Obsidian), **NEW-20 (XS, security — `capture` proves its quarantine root then follows the path again; theoretical)**, NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (XS, half closed — the argv screen's word list still screens a user's own path), NEW-13 (S, two artifact roots share one type) and NEW-16 (S, spec §8.2's user-configured redaction patterns are unreachable) |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -110,18 +110,20 @@ NEW-18 and NEW-19 on 2026-08-15 when R1 closed them**. What a closed item leaves
 §8, a clause in a spec, or a test; if it left nothing, it was not worth recording. Git history is the
 archive.
 
-**Eight rows, and they are not all the same kind of open.** **R1 closed three of the eleven that
-stood here on 2026-08-15** — NEW-18, NEW-17 and NEW-19, each with a regression test watched fail
-first. It set out to close a fourth, NEW-15, and **that one came back as a decision instead**: the
-guard was built and withdrawn, because the policy the row implies refuses this product's own vendors.
-Its section below carries what the attempt settled.
+**Nine rows, and they are not all the same kind of open.** **R1 closed three of the eleven that stood
+here on 2026-08-15** — NEW-18, NEW-17 and NEW-19, each with a regression test watched fail first. It
+set out to close a fourth, NEW-15, and **that one came back as a decision instead**: the guard was
+built and withdrawn, because the policy the row implies refuses this product's own vendors. **And it
+added one**, NEW-22, found while checking whether its own fix had broken a real vault layout — it had
+not; that layout was already refused, one layer up, and nobody had recorded it.
 
-So: **four now need a decision before anyone can implement them** — **NEW-15** (the founder's, and
-the newest), plus **NEW-16**, **NEW-11** and **NEW-12**, whose questions `ORDER.md` Track R names.
-The other four are somebody else's: **NEW-21** the founder's, **NEW-20** and **NEW-13** registered as
-deliberately-not-fixed, and **NEW-7** waiting on a machine with Obsidian. **A row being open is not
-an invitation to implement it** — read which group it is in first. NEW-15 is the cautionary case: it
-read like an implementation for a day and cost a full task to discover it was not.
+So: **five now need a decision before anyone can implement them** — **NEW-15** and **NEW-22**, both
+new on 2026-08-15, plus **NEW-16**, **NEW-11** and **NEW-12**, whose questions `ORDER.md` Track R
+names. The other four are somebody else's: **NEW-21** the founder's, **NEW-20** and **NEW-13**
+registered as deliberately-not-fixed, and **NEW-7** waiting on a machine with Obsidian. **A row being
+open is not an invitation to implement it** — read which group it is in first. NEW-15 is the
+cautionary case: it read like an implementation for a day, and cost a full task to discover it was
+not.
 
 ### NEW-21 — one successful `codex exec` completion is still owed
 
@@ -168,6 +170,36 @@ read like an implementation for a day and cost a full task to discover it was no
 - **The founder chose on 2026-08-15 to hold DOS-P6 open for this** rather than close the subsystem
   and carry it as a residual. `ORDER.md`'s note beside Task 19's Steps 5–6 records why that was a
   live option and why it was declined.
+
+### NEW-22 — a vault whose `content` is a symlink cannot be indexed at all
+
+- **Status:** open, found 2026-08-15 by R1's fix wave, which went looking for a regression it had
+  introduced and found a pre-existing refusal instead · **Owner:** DOS-P7 by default · **Size:** S ·
+  **Not a security defect — a usability one, and the guard it names is deliberate**
+- `discoverNotes` canonicalizes the content directory and calls `refuseEscapingLink` on it
+  **unconditionally, before any per-entry walk** (`packages/brain/src/discovery/discover.ts:132-144`
+  and `:230-242`). That refuses **any** content root reached through a symbolic link — not only one
+  that escapes the vault. `BrainService.reindex()` reaches it through `buildIndex()` →
+  `discoverNotes()`, so **`brain reindex` and `ingest`'s third transaction both fail on such a vault**,
+  with `Vault entry resolves outside the vault: content`.
+- **The scenario this makes impossible is an ordinary one:** a user with an existing Obsidian vault
+  who points `brainPath` at a new directory and symlinks `content` at the vault they already have.
+  Nothing in the product tells them this is unsupported; they get a refusal naming a path they
+  deliberately created.
+- **The guard's own reason is good and is not in dispute**: its docblock records that a symlinked
+  `content` would let another vault's notes be indexed as this vault's own, and the sibling clause
+  skips a link even when it resolves inside, because a link and its target are one file and indexing
+  both produces a duplicate finding naming two paths only one of which is real.
+- **So this is a design question, not a bug to fix quietly:** is a symlinked content root supported,
+  refused with a message that says so, or supported with the duplicate problem solved another way?
+  Whoever answers it should read `refuseEscapingLink`'s docblock first — the cheap-looking fix
+  reopens exactly what it was written for.
+- **How it was found, which is the useful part.** R1 narrowed `writeIndexArtifacts`'s containment
+  anchor from the brain root to the content root, on a review finding that the wider anchor "breaks a
+  real layout". Driving that layout showed it was **already** broken one layer up, and had been since
+  `discover.ts` was written. The narrowing was still right — it removed a redundant refusal raised at
+  the wrong layer with the wrong exit code — but it rescued no working configuration, and the review
+  finding's "regression" framing was wrong. Recorded so the next reader does not repeat the trace.
 
 ### NEW-20 — `capture` proves its quarantine root, then follows the path again
 
