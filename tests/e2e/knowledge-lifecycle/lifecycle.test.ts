@@ -81,11 +81,13 @@ function dataOf<T>(run: { readonly result: CliResult<T> }): T {
  * 1. **Discovery** — `/usr/bin/which codex`, answered by existing and being
  *    executable rather than by anything the script prints.
  * 2. **The version probe** — `codex --version`, which `discoverCli` parses. No
- *    invocation in this lifecycle spawns one today (`AGENT_DETECTION_ROWS` is
- *    empty, so `capture` probes nothing, and `doctor` is not part of the five),
- *    but a vendor that answered only the model call would be discovered as
- *    absent the moment one did, and the failure would name neither this file nor
- *    the probe.
+ *    invocation in this lifecycle spawns one today: `AGENT_DETECTION_ROWS`
+ *    carries only Claude's row since Task 17 (2026-08-15) and this lifecycle
+ *    runs under a scripted Codex, so `capture` matches nothing and probes
+ *    nothing, and `doctor` is not part of the five. But a vendor that answered
+ *    only the model call would be discovered as absent the moment one did — and
+ *    a Codex row is exactly what Task 17 still owes — so the failure would name
+ *    neither this file nor the probe.
  * 3. **The model call** — `codex exec --json …`, whose reply is Codex's own
  *    dialect: JSONL, one event per line, of which the last line that parses to
  *    an object is the payload. Claude's is a single JSON document, and a fake

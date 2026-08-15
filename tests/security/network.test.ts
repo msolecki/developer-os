@@ -49,15 +49,18 @@ import type { InstalledFixture, VendorCall } from "./helpers.js";
  *   `which` calls, plus one `--version` per installed vendor.
  * - **`capture` is two when an agent is detected and zero when one is not.**
  *   `discoverSourceAgent` does both halves: `discoverExecutable`, then a version
- *   probe through the runner. `AGENT_DETECTION_ROWS` is empty by decision until
- *   Task 17, so the shipped default path spawns nothing at all; both rows are
- *   here because only one of them is today's and only the other is tomorrow's.
+ *   probe through the runner. **Both rows are now reachable, and which one you
+ *   get depends on the vendor:** since Task 17 (2026-08-15)
+ *   `AGENT_DETECTION_ROWS` carries Claude's row, so a capture inside a Claude
+ *   Code session takes the two-call path, while one inside a Codex session
+ *   still takes the zero-call path because that vendor's row could not be
+ *   observed.
  */
 
 /**
  * What the vendor's child process is handed. Both adapters pass `env: {}`
- * (`packages/adapter-claude/src/invoke.ts:118`,
- * `packages/adapter-codex/src/invoke.ts:213`), so this is empty today.
+ * (`packages/adapter-claude/src/invoke.ts:125`,
+ * `packages/adapter-codex/src/invoke.ts:251`), so this is empty today.
  *
  * Declared as an expectation rather than written as `toEqual({})` inline: an
  * empty environment is stricter than spec §2.7 asks and this constant is where a

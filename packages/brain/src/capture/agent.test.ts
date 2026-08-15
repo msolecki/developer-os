@@ -9,34 +9,65 @@ import {
 
 describe("detectSourceAgent", () => {
   it("records unknown for an environment no observed row matches", () => {
-    expect(detectSourceAgent({ CLAUDECODE: "1" })).toBe("unknown");
+    /**
+     * This case used `CLAUDECODE` as its stand-in for "matches nothing" while
+     * the table was empty. Task 17 observed that exact variable, so the example
+     * moved rather than the contract: an environment carrying no observed
+     * marker still records `"unknown"`, and an empty one always did.
+     */
+    expect(detectSourceAgent({ SOME_OTHER_AGENT: "1" })).toBe("unknown");
     expect(detectSourceAgent({})).toBe("unknown");
   });
 
-  it("carries no row that Task 17 has not observed", () => {
+  it("records claude for the marker Task 17 observed a real vendor set", () => {
     /**
-     * Deliberately the shape that *fails* the day a row is added, which is
-     * correct: adding one is Task 17's job — the single task that runs a real
-     * vendor binary — and it updates this test with the observation that
-     * justifies the row. Spec §10.3 is normative: until a vendor's row is
-     * observed, that vendor is not in the table and detection records
-     * `"unknown"`. **A guessed row is worse than an absent one: it is a fact a
-     * later reader will trust** (spec §5.4).
+     * The observation, so this assertion is auditable without leaving the file:
+     * `claude -p --output-format json` on Claude Code 2.1.233, macOS, run on
+     * 2026-08-15 with **every** `CLAUDE*`, `CODEX*` and `ANTHROPIC*` variable
+     * stripped from the parent environment. A child process it spawned still
+     * saw `CLAUDECODE=1`, which is what makes this the vendor's own marker
+     * rather than one leaking in from the session that ran the experiment —
+     * the first attempt inherited them and could not tell the two apart.
+     */
+    expect(detectSourceAgent({ CLAUDECODE: "1" })).toBe("claude");
+  });
+
+  it("still records unknown for codex, whose row Task 17 could not observe", () => {
+    /**
+     * Spec §10.3 is normative: until a vendor's row is observed, that vendor is
+     * not in the table and detection records `"unknown"`. Codex's row needs one
+     * successful `codex exec` completion, and on 2026-08-15 the account's usage
+     * limit was exhausted — so the row is **absent, not guessed**. **A guessed
+     * row is worse than an absent one: it is a fact a later reader will trust**
+     * (spec §5.4).
      *
      * The cost is stated rather than discovered later: every capture written
-     * between this task and Task 17 records `sourceAgent: "unknown"`. Those
-     * captures are correct and are never rewritten.
+     * inside a Codex session until that row lands records
+     * `sourceAgent: "unknown"`. Those captures are correct and are never
+     * rewritten.
      */
-    expect(AGENT_DETECTION_ROWS).toEqual([]);
+    expect(AGENT_DETECTION_ROWS.some((row) => row.agent === "codex")).toBe(false);
+  });
+
+  it("carries no row without the observation that justifies it", () => {
+    for (const row of AGENT_DETECTION_ROWS) {
+      expect(row.observedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/u);
+      expect(row.observedIn.length).toBeGreaterThan(0);
+    }
+    expect(AGENT_DETECTION_ROWS.length).toBeGreaterThan(0);
   });
 });
 
 describe("matchObservedAgent", () => {
   /**
-   * The table is empty, so the matching rule above it would be untested code
-   * that first runs the day Task 17 adds a row — with nothing to say whether it
-   * works. These rows are synthetic and local to this file: they exercise the
-   * rule without claiming an observation, which is the line spec §10.3 draws.
+   * The real table carries one vendor's row and it is an exact-value one, so it
+   * exercises a single branch of the matching rule. The presence-only
+   * (`value: null`) branch and the tie-break are code that would first run the
+   * day someone adds a row of that shape; the empty-string branch needs no new
+   * row — `CLAUDECODE=` reaches it today — but nothing in the product produces
+   * that environment, so only these rows exercise it either way. They are
+   * synthetic and local to this file: they exercise the rule without claiming
+   * an observation, which is the line spec §10.3 draws.
    */
   const presence: AgentDetectionRow = {
     agent: "synthetic-presence",

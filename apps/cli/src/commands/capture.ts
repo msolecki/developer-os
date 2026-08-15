@@ -77,11 +77,12 @@ export interface CaptureDependencies {
    * Which agent produced this capture, from the environment it ran in.
    *
    * Injected for the reason `matchObservedAgent` is tested against synthetic
-   * rows one layer down: `AGENT_DETECTION_ROWS` is empty by decision until
-   * Task 17 observes a real vendor, so a detection that is only ever reached
-   * through the real table can never be seen to *succeed*. With this, the
-   * whole command — probe, envelope, `captureMethod` — is exercisable in the
-   * state Task 17 will put it in, rather than only in today's.
+   * rows one layer down: it lets the whole command — probe, envelope,
+   * `captureMethod` — be exercised for a vendor whose row does not exist yet,
+   * which since Task 17 (2026-08-15) means Codex, whose marker that task could
+   * not observe. `AGENT_DETECTION_ROWS` now carries Claude's row, and the case
+   * that drives detection through the real table rather than through this
+   * parameter is the one that proves the two meet.
    */
   readonly detect: (
     env: Readonly<Record<string, string | undefined>>,
@@ -205,13 +206,25 @@ function isAgentName(agent: string): agent is AgentName {
  *
  * **This spawns the vendor binary once per capture** when — and only when — an
  * agent was detected. That is a session-level event rather than a hot path, and
- * it is stated here rather than left for a reader to discover. Today no
- * environment matches a detection row (`AGENT_DETECTION_ROWS` is empty by
- * decision until Task 17 observes one), so today nothing is spawned at all.
+ * it is stated here rather than left for a reader to discover. **Since Task 17
+ * (2026-08-15) that is a live path rather than a dormant one:** a capture taken
+ * inside a Claude Code session matches `AGENT_DETECTION_ROWS`'s one row and
+ * spawns `claude --version`. A capture taken inside a Codex session still
+ * matches nothing and still spawns nothing, because that vendor's row could not
+ * be observed.
+ *
+ * **What it spawns is a PATH-resolved binary that nothing here vouches for.**
+ * `PlatformAdapter`'s own type says whoever executes a discovered binary owes an
+ * owner and mode check first, and no caller in this product pays it — see
+ * `BACKLOG.md` §1 NEW-15, which this command joined on 2026-08-15 when the
+ * Claude row made the path live. `CLAUDECODE` is trivially settable, so the
+ * trigger is not a privilege the attacker had to earn. Narrower here than under
+ * `ingest`, which hands the binary the observation and the vault: this probe
+ * passes `--version` and nothing else.
  *
  * Takes the agent name rather than reading the environment itself, so the rule
- * can be exercised while that table is empty — a rule first run the day someone
- * adds a row is a rule nobody has ever seen work.
+ * can be exercised for a vendor that is not in the table — a rule first run the
+ * day someone adds a row is a rule nobody has ever seen work.
  */
 export async function discoverSourceAgent(
   context: CliContext,

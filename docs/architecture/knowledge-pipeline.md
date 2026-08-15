@@ -79,13 +79,22 @@ a test that observed it working — the rule that kept `plugin_hooks` from ever 
 a file that does not exist. Parity between the two lists is asserted by
 `apps/cli/src/adapter-capability-parity.test.ts`.
 
-**`sourceAgent` records `"unknown"` until a real vendor run observes a row.**
-`AGENT_DETECTION_ROWS` is frozen empty (`packages/brain/src/capture/agent.ts:47`) and the rule that
-reads it is tested against synthetic rows, so it is not a rule whose first run is the day someone
-adds one. Every capture written before that observation records `sourceAgent: "unknown"` and
-`sourceAgentVersion: "unknown"`. **Those captures are correct and are never rewritten.** A guessed
+**`sourceAgent` records `"unknown"` until a real vendor run observes a row, and after Task 17 that is
+still true of exactly one vendor.** `AGENT_DETECTION_ROWS` carries **one** row
+(`packages/brain/src/capture/agent.ts`): `CLAUDECODE=1`, observed 2026-08-15 on Claude Code 2.1.233
+with every vendor variable stripped from the parent environment, so the marker could not be one
+leaking in from the session that ran the experiment — the first attempt inherited them and was
+discarded for exactly that reason. **Codex's row is absent**, because the account's usage limit was
+exhausted and every `codex exec` ended `turn.failed` before a shell command could report an
+environment.
+
+The rule that reads the table is still tested against synthetic rows, so it is not a rule whose first
+run is the day someone adds one, and one case now drives detection through the **real** table end to
+end — without it the observation would live in a unit test with nothing proving the command consumes
+it. Every capture written inside a Codex session until that row lands records `sourceAgent: "unknown"`
+and `sourceAgentVersion: "unknown"`. **Those captures are correct and are never rewritten.** A guessed
 row would be exactly the undocumented capability assumption the design spec names as a release
-blocker.
+blocker, which is why the absent row was left absent. Owner: `BACKLOG.md` §1 **NEW-21**.
 
 ---
 
@@ -401,9 +410,10 @@ in §10 below with their owners.
 
 | | Owner | Shape |
 |---|---|---|
+| **NEW-21** — one successful `codex exec` completion is still owed | the founder, because it spends their credits | S. Task 17 ran on 2026-08-15 and the account's usage limit was exhausted, so it settled the JSONL framing and the discriminating `type` field and **not** the terminal-event rule, and observed no Codex environment. One run closes both halves; until it lands, `finalJsonlLine` stays provisional and every capture taken inside a Codex session records `sourceAgent: "unknown"` |
 | **NEW-20** — `capture` proves its quarantine root, then follows the declared path again | DOS-P7 by default | XS, security, **theoretical**: it needs a won race and is not a regression. The declared path is the contract — it is what `CaptureResultV1.path` publishes — so closing the window means the two paths disagreeing inside one function. `threat-model.md` §5.2 describes it |
 | **NEW-19** — `reindex` builds its owned root textually, as `capture` used to | DOS-P7 by default | XS, security. Replace `content/_indexes` with a link out of the vault and the four generated artifacts are written there: vault metadata disclosure, not capture text. **Traced by reading, not driven** — no test exists, so it is not demonstrated the way `tests/security/symlink-escape.test.ts` demonstrates the other two. The fix already exists one directory over (`apps/cli/src/context.ts:263-305`) |
-| **NEW-15** — the first executor of a discovered binary pays none of the check its own type demands | DOS-P7 by default | S, security. `packages/platform-macos/src/types.ts:13-18` states that whoever executes a discovered binary owes an owner and mode check; `ingest` spawns `discovery.executablePath` with no `stat`, no uid and no mode comparison. Not privilege escalation — it hands that binary the captured observations and read access to the whole vault on the strength of a name match |
+| **NEW-15** — nothing that executes a discovered binary pays the check its own type demands | DOS-P7 by default | S, security. `packages/platform-macos/src/types.ts:13-18` states that whoever executes a discovered binary owes an owner and mode check; `ingest` spawns `discovery.executablePath` with no `stat`, no uid and no mode comparison. **`capture` joined it on 2026-08-15**, when Task 17's Claude row made `discoverSourceAgent`'s probe path live — narrower there, since a `--version` probe is handed no observation and no vault path, but unchecked on the same terms and on a far more frequently run command. Not privilege escalation — it hands that binary the captured observations and read access to the whole vault on the strength of a name match |
 | **NEW-16** — spec §8.2's user-configured redaction patterns are unreachable | DOS-P7 | S. `redactText`'s `userPatterns` parameter has no production caller, and `configSchema` is `.strict()` with no redaction table, so there is no key a user could set even if one existed. **Nothing regressed; it was specified and never wired** |
 | **NEW-17** — `brain` is the one command whose config parse failure is not content-free | DOS-P7 | XS, security. Seven of eight commands route through `readConfigFile`; `brain` does not, and smol-toml puts three raw source lines into the message the heuristic redactor then has to catch alone |
 | **NEW-18** — `assertSafeCommand`'s four NUL branches have no test anywhere | whoever next touches `packages/security/src/process.ts` | XS. **The guard is correct; only the evidence is missing** |
@@ -458,17 +468,41 @@ changes their mind — or whose capture refuses ingest deterministically — has
 frontmatter, which is what both of `ingest`'s recovery strings tell them to do. Adding the transition
 is a decision about spec §5.5's table, not a bug fix. **Owner: DOS-P7.**
 
-**Task 17 — one real run per vendor — did not run.** It requires the founder and spends their credits.
-Three things wait on it, and all three are stated in the tree rather than assumed: the JSONL
-terminal-event rule in `packages/adapter-codex/src/invoke.ts` is still **provisional and unverified**
-(`finalJsonlLine` reduces stdout to the last line that parses as a non-null JSON object — the best
-available rule, not an observed one); the Claude scoped-permission form `claude-adapter.md` §14.3 names
-but does not specify is left unresolved, which is why `ingest` passes bare tool names
-(`apps/cli/src/commands/ingest.ts:187-194`); and `AGENT_DETECTION_ROWS` stays empty.
+**Task 17 — one real run per vendor — ran on 2026-08-15, and settled about half of what it owed.**
+The founder authorised the spend. Claude answered; **Codex's account had exhausted its usage limit**,
+so every `codex exec` ended `turn.failed` and no run reached a model response. What that run did and
+did not settle:
 
-**If Task 17 lands code, its diff needs its own security pass.** The independent review covered
-Tasks 1–18 only, and Task 17 changes an adapter's stdout-parsing rule and a detection table on the
-capture path — the two places a vendor's real output first meets this product.
+| Obligation | State |
+|---|---|
+| `--json` really is JSONL, one JSON object per line | **confirmed**, four lines, none scalar or `null` |
+| whether the stream carries a discriminating field worth filtering on | **confirmed: `type`**, on every line. Observed vocabulary `thread.started`, `turn.started`, `error`, `turn.failed` — *not* the `session.created` / `item.completed` / `turn.completed` the synthetic tests had guessed |
+| whether a **successful** turn's terminal event is the final response | **still open.** A failed turn cannot answer it, so `finalJsonlLine` stays provisional and its docblock says so |
+| the Codex `AGENT_DETECTION_ROWS` row | **still open**, and absent rather than guessed |
+| the Claude `AGENT_DETECTION_ROWS` row | **observed**, `CLAUDECODE=1` |
+
+Two findings the run produced that nobody had asked it for, both now pinned:
+
+- **`codex exec` reads stdin when stdin is not a TTY**, printing `Reading additional input from
+  stdin...` and blocking. The production call returns **with a result** — rather than after its
+  timeout, which would still fire — only because `NodeProcessRunner` closes the pipe with
+  `child.stdin.end(request.stdin)`. Undocumented by the vendor; the first attempt at the observation
+  hung on it.
+- **The failure path's terminal event is shaped like a result.** The last parsing line of the observed
+  stream is `turn.failed`, so `finalJsonlLine` alone would hand a caller a vendor error as a payload.
+  The `exitCode !== 0` check that runs before it is what prevents that. **The ordering was already
+  guarded** by a synthetic non-zero-exit case; what this run adds is the first demonstration of the
+  payload it keeps out.
+
+The recording is `tests/fixtures/codex/observed-exec-stream.jsonl`, with `README.md` beside it stating
+what was redacted. **What remains open is `BACKLOG.md` §1 NEW-21**, and one successful `codex exec`
+completion closes all of it. Separately and untouched by this run: the Claude scoped-permission form
+`claude-adapter.md` §14.3 names but does not specify is still unresolved, which is why `ingest` passes
+bare tool names (`apps/cli/src/commands/ingest.ts:187-194`).
+
+**Task 17's diff needs its own security pass.** The independent review covered Tasks 1–18 only, and
+this diff changes an adapter's stdout-parsing documentation and a detection table on the capture path
+— the two places a vendor's real output first meets this product.
 
 ### 10.4 Open items the design of record did not close
 

@@ -698,6 +698,15 @@ vendor surface: ingest invokes `agent.prompt` through the adapters' existing `in
 ### 10.2 What this subsystem must verify, and it requires spending money
 
 **The JSONL terminal-event rule ships provisional and unverified** (`codex-adapter.md` §7, §11.2).
+
+> **Amended 2026-08-15 by Task 17.** The call below was made and this paragraph's premise has moved:
+> the framing and the discriminating `type` field are **settled**, and the terminal-event rule is
+> **not**, because the account's usage limit was exhausted before any run reached a model response.
+> The obligation this section states is therefore half discharged; what is still owed is one
+> successful `codex exec` completion — `BACKLOG.md` §1 **NEW-21** — and
+> `specs/…-codex-adapter-design.md` §14.1 carries the observed shape. Read the paragraph below as the
+> statement of why the call had to be made rather than as the current state.
+
 `codex exec --json` streams events as JSONL while `--output-schema` constrains only the final
 response, so stdout is reduced to the last line that parses as a non-null JSON object. Settling it
 needs a real `codex exec` call, which invokes a model on the founder's credentials and costs money —
@@ -720,6 +729,29 @@ The environment table §5.4 relies on is established by observation during imple
 per vendor, each recorded here with what was observed and when. **Until a row is observed, its
 vendor is not in the table and detection records `"unknown"`** — a guessed row is exactly the kind of
 undocumented capability assumption design spec §20 names as a release blocker.
+
+**Observed by Task 17 on 2026-08-15 — one row, not two.**
+
+| Vendor | Variable | Value | Observed on | Observed in |
+|---|---|---|---|---|
+| `claude` | `CLAUDECODE` | `1` | 2026-08-15 | Claude Code 2.1.233 on macOS, `claude -p --output-format json`, with **every** `CLAUDE*`, `CODEX*` and `ANTHROPIC*` variable stripped from the parent environment |
+
+**Codex has no row, and the table above is the whole table** — the rule immediately above it is that
+an unobserved vendor is *not in the table*, so listing it as a row marked "not observed" would
+contradict the rule in the act of stating it. The account's usage limit was exhausted on 2026-08-15
+and every `codex exec` ended `turn.failed` before a shell command could report an environment.
+
+**Why the Claude row was taken twice.** The first attempt ran `claude -p` from inside a Claude Code
+session and inherited that session's variables, so it could not distinguish a marker the vendor sets
+from one leaking in from the parent. It was discarded and re-run with the parent stripped, which is
+what the "Observed in" column records. A marker that only ever appears in an inherited environment
+would detect the *session that ran the experiment*, not the vendor.
+
+**Codex's row is absent rather than guessed**, per the rule above, and the cost is stated rather than
+discovered later: every capture written inside a Codex session until that row lands records
+`sourceAgent: "unknown"`. Those captures are correct and are never rewritten. Registered as
+`BACKLOG.md` §1 **NEW-21**, together with the half of `codex-adapter-design.md` §14.1 the same
+blocked run left open.
 
 ## 11. Produced interfaces
 

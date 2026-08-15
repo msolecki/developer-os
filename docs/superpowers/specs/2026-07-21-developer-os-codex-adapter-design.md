@@ -433,6 +433,50 @@ surface absent from this section.
 - refused: `--dangerously-bypass-approvals-and-sandbox`, `--dangerously-bypass-hook-trust`,
   `--ignore-user-config`.
 
+**DOS-P6 Task 17, 2026-08-15 — first contact with a real `codex exec`, and the JSONL rule is
+*partly* settled.** DOS-P5 could not justify a model call and this subsystem could not avoid one; the
+founder accepted the spend for this subsystem in principle on 2026-08-13 and authorised this
+specific run on 2026-08-15. One run was made against `codex-cli 0.147.0` on macOS,
+with the production argv byte for byte and stdin closed. The recording is
+`tests/fixtures/codex/observed-exec-stream.jsonl` and `tests/fixtures/codex/README.md` states what was
+redacted from it.
+
+**The run ended `turn.failed`: the account's usage limit was exhausted, so no run reached a model
+response.** Everything below is therefore an observation of the failure path, and the rule is
+**not** promoted to verified.
+
+- **Confirmed — `--json` is JSONL.** Four lines, one JSON object per line, no scalar and no `null`.
+  The framing this design assumed is what the binary does.
+- **Confirmed — every line carries a discriminating `type`**, answering the second of the two
+  questions §10.2 of the knowledge-pipeline spec puts to a real run. The observed vocabulary is
+  `thread.started` (with `thread_id`), `turn.started`, `error` (with `message`) and `turn.failed`
+  (with `error`).
+- **Corrected — the guessed vocabulary was wrong.** `invoke.test.ts`'s synthetic cases used
+  `session.created`, `item.completed` and `turn.completed`; none of the three appears. Those cases
+  remain valid, because `finalJsonlLine` reads no `type` value at all — they were never evidence
+  about the vocabulary, and this fixture is.
+- **Still open — whether a successful turn's terminal event is the final response.** This is the
+  first of §10.2's two questions and the one that would let the rule be promoted. A failed turn
+  cannot answer it. `finalJsonlLine` stays provisional and its docblock says so.
+- **Not narrowed, deliberately.** A discriminating field now exists to filter on, and filtering is a
+  narrowing this section requires to be proven against a stream where the old rule and the new one
+  agree. A failed turn contains no final response for two rules to agree about, so the filter is not
+  written.
+- **New, and load-bearing — `codex exec` reads stdin when stdin is not a TTY.** It prints
+  `Reading additional input from stdin...` to stderr and blocks. The first attempt at this
+  observation hung on it. What makes the production call return **with a result** — rather than after
+  its `timeoutMs`, which would still fire — is `NodeProcessRunner` closing the pipe through
+  `child.stdin.end(request.stdin)`; nothing in the vendor's `--help` says the flagless form waits,
+  and `[PROMPT]`'s documentation mentions stdin only for the `-` form.
+- **New — the failure path's terminal event is shaped like a result.** The last line that parses to a
+  non-null object is `turn.failed`, so `finalJsonlLine` alone would return a vendor error as a
+  payload. The `exitCode !== 0` check that precedes it is what prevents that. **The ordering was
+  already guarded** by a synthetic non-zero-exit case; what this run adds is the first demonstration,
+  against real vendor bytes, of the payload that guard keeps out — a synthetic `{}` cannot show it.
+
+**Owner of the remainder:** one successful `codex exec` completion settles §10.2's first question and
+the Codex row of knowledge-pipeline spec §10.3. Registered in `BACKLOG.md` §1 as **NEW-21**.
+
 ### 14.2 Hooks — `https://learn.chatgpt.com/docs/hooks`
 
 - Events: `SessionStart`, `SessionEnd`, `SubagentStart`, `SubagentStop`, `PreToolUse`,

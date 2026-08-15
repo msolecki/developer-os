@@ -66,7 +66,8 @@ a user to their face: that `review --decision edit` removed the secret they past
 one of two vendors runs an unbounded agentic loop under a 120-second wall clock and nothing else.
 
 **Three further gaps were found while writing this document**, all registered as `BACKLOG.md` §1
-rows: **NEW-15**, the discovered vendor binary is executed without the owner and mode check its own
+rows: **NEW-15**, a discovered vendor binary is executed — by `ingest`, and since 2026-08-15 by
+`capture` too — without the owner and mode check its own
 type says its executor owes (§5.11); **NEW-16**, the `user-pattern` redaction class has no production
 caller and no configuration key, so spec §8.2's user-configured patterns are unreachable (§5.7); and
 **NEW-17**, a TOML parse failure on a `brain` run reaches the user through the heuristic redactor
@@ -344,13 +345,23 @@ carries both rules is every value a CLI could reread as a flag — a tool name, 
 working root, the output schema path — and the last two are **the user's own paths**, which is the
 half of `BACKLOG.md` §1 **NEW-12** that stays open.
 
-**One rule at this seam is provisional and unverified.** Codex's `--json` streams JSONL while
+**One rule at this seam is provisional on the success path.** Codex's `--json` streams JSONL while
 `--output-schema` constrains only the final response, so stdout is reduced to *the last line that
-parses as a non-null JSON object* (`packages/adapter-codex/src/invoke.ts:98-147`). No event type is
+parses as a non-null JSON object* (`packages/adapter-codex/src/invoke.ts:98-171`). No event type is
 filtered on, because an invented enum a future version rejects is a failure only a real run would
-find. Settling it needs one real `codex exec` call against a real binary — **DOS-P6 Task 17**, which
-the founder must authorise. It ships unverified and says so at the seam; nothing here should be read
-as having verified it.
+find. **DOS-P6 Task 17 made that call on 2026-08-15** and settled the framing — one JSON object per
+line — and the existence of a discriminating `type` field, but **not** the terminal-event rule
+itself: the run ended `turn.failed` on an exhausted usage limit, so no run reached a model response.
+It still ships unverified and says so at the seam; nothing here should be read as having verified it.
+Owner of the remainder: `BACKLOG.md` §1 **NEW-21**.
+
+**That run also showed what a boundary at this seam is protecting against.** The observed stream's
+last parsing line is the `turn.failed` event, so the reduction rule alone would hand a caller a
+vendor error shaped like a result; what prevents it is the `exitCode !== 0` check that runs *before*
+the reduction (`packages/adapter-codex/src/invoke.ts`). **That ordering was already guarded** — a
+synthetic non-zero-exit case in `invoke.test.ts` goes red without it — so what the real recording
+adds is not the guard but the demonstration, against bytes a vendor actually emitted, of the payload
+the guard keeps out.
 
 ### 5.6 The vault the model reads, and the vault the product reads
 
@@ -505,7 +516,11 @@ words: *"resolved through the caller's PATH, with no assertion about the owner o
 containing directory. Anything that executes it owes that check first."* **DOS-P6 is the first thing
 in this product that executes it**, and `selectVendor` takes `discovery.executablePath` and hands it
 straight to `invokeVendor` (`apps/cli/src/commands/ingest.ts:454-463`, `:1405`) with no owner or mode
-check anywhere between. The debt the platform boundary assigned to its executor is unpaid, and the
+check anywhere between. **It is no longer the only one: `capture` joined it on 2026-08-15**, when
+Task 17's Claude detection row made `discoverSourceAgent`'s probe path live — the same unchecked
+execution, on the product's most frequently run command, triggered by a `CLAUDECODE=1` that any
+wrapper or CI step can export. The exposure there is narrower, because a `--version` probe is handed
+no observation and no vault path, and it is the same unpaid debt rather than a second one. The debt the platform boundary assigned to its executor is unpaid, and the
 `ingest` docblock at `:442-446` already reasons about "a hostile `claude` on `PATH`" while handling
 only the fall-through case.
 

@@ -68,6 +68,8 @@ Spec §10.3 is normative and already requires it: **until a vendor's row is obse
 
 It is recorded here as an ordering consequence rather than as a decision, because the cost must not be discovered later: **every capture written between Task 8 and Task 17 records `sourceAgent: "unknown"` and `sourceAgentVersion: "unknown"`.** Those captures are correct and are never rewritten. A guessed row is exactly the undocumented capability assumption design spec §20 names as a release blocker.
 
+> **Half discharged 2026-08-15.** Task 17 added Claude's row and could not observe Codex's, so this rule is still live for exactly one vendor: a capture taken inside a Codex session still records `"unknown"`, and will until `BACKLOG.md` §1 NEW-21 closes. The paragraph above should be read as "between Task 8 and NEW-21" for Codex, and as closed for Claude.
+
 **It gets no `BACKLOG.md` §8 row on purpose.** §8 is the index a reader consults to learn whether the approved document in front of them is still current; a row that changes nothing costs that table its signal.
 
 **4. The program plan's Task 6 hook box cannot be ticked as written, and is rewritten rather than ticked.**
@@ -1300,6 +1302,8 @@ it("carries no row that Task 17 has not observed", () => {
 ```
 
 The second assertion is deliberately the shape that *fails* the day a row is added — which is correct, because adding a row is Task 17's job and Task 17 updates this test with the observation that justifies it. **A guessed row is worse than an absent one: it is a fact a later reader will trust** (spec §5.4).
+
+> **Superseded 2026-08-15 by Task 17, and left here as the record of why the test looked like this.** Both assertions above have moved rather than been deleted. The first used `CLAUDECODE` as its stand-in for "matches nothing", which stopped being an example the moment Task 17 observed that exact variable; its contract is unchanged and it now names a variable no row matches. The second is replaced by three: Claude's row detects, **Codex's row is asserted absent** — which is the half of "a guessed row is worse than an absent one" that is still live — and no row may carry a malformed observation date. The same correction was owed in `apps/cli/src/commands/capture.test.ts`, whose unknown-agent case used the same stand-in.
 
 - [x] **Step 6: Run the gate and commit**
 
@@ -2769,19 +2773,68 @@ Spec §10.2 is explicit about why this task exists and what it costs. **The JSON
 - Modify: `docs/superpowers/specs/2026-07-21-developer-os-knowledge-pipeline-design.md` §10.3 — one row per vendor
 - Create: `tests/fixtures/codex/observed-exec-stream.jsonl` — the captured stdout, redacted
 
-- [ ] **Step 1: Capture raw stdout from one real `codex exec` run**
+> **What it actually touched, recorded 2026-08-15 because the list above was short by eleven files.**
+> Adding a detection row is not a local change: it makes `capture`'s probe path live, so every
+> docblock and test that had pinned "the table is empty" became false in the same commit. Beyond the
+> five above — `packages/adapter-codex/src/invoke.test.ts` (the fixture-backed cases),
+> `apps/cli/src/commands/capture.ts` and `capture.test.ts` (two docblocks and two cases whose
+> `CLAUDECODE` stand-in stopped meaning "matches nothing"), `tests/security/network.test.ts`,
+> `tests/e2e/knowledge-lifecycle/lifecycle.test.ts`, `tests/fixtures/codex/README.md`,
+> `docs/architecture/knowledge-pipeline.md`, `codex-adapter.md`, `threat-model.md`, and
+> `docs/superpowers/BACKLOG.md` §0, §1 and §8, and this plan itself. **Whoever finishes this task via NEW-21 should expect
+> the same fan-out** for the Codex row.
+
+> **Ran 2026-08-15, and half discharged.** The founder had accepted the spend for this subsystem in
+> principle on 2026-08-13 and authorised this specific run on 2026-08-15. One real
+> `codex exec` was made against `codex-cli 0.147.0` with the production argv byte for byte and stdin
+> closed; **the account's usage limit was exhausted**, so it ended `turn.failed` and no run reached a
+> model response. There is no API-key fallback configured and no local OSS provider, so `--oss` was not
+> an alternative. The founder chose, that day, to **land what was observed and defer the rest** rather
+> than wait for the account's usage limit to reset.
+>
+> **Steps 1 and 2 are done for what a failed turn can show, and say so.** §14.1 carries a dated
+> amendment; `tests/fixtures/codex/observed-exec-stream.jsonl` is the recording and its `README.md`
+> states the two redactions. Settled: `--json` is JSONL, one JSON object per line; **`type` is a
+> discriminating field** on every line; and the vocabulary this package's synthetic tests had guessed
+> (`session.created`, `item.completed`, `turn.completed`) is **wrong** — the real one is
+> `thread.started`, `turn.started`, `error`, `turn.failed`. **Not settled, and the rule was not
+> promoted:** whether a *successful* turn's terminal event is the final response. No event-type filter
+> was written either, because §14.1 requires a narrowing to be proven against a stream where the old
+> and new rules agree, and a failed turn has no final response for them to agree about.
+>
+> **Two findings nobody asked this task for**, both pinned by tests: `codex exec` **reads stdin when
+> stdin is not a TTY** and blocks, so the production call returns with a result rather than after its
+> timeout only because `NodeProcessRunner` closes the pipe — the first attempt at this observation
+> hung on it; and the
+> failed stream's last parsing line is `turn.failed`, so `finalJsonlLine` alone would return a vendor
+> error as a payload, and the `exitCode !== 0` check that precedes it is what prevents that. **That
+> ordering was already guarded** by a synthetic non-zero-exit case; what the recording adds is the
+> first demonstration of the payload it keeps out.
+>
+> **Step 3 added one row, not two.** Claude's is `CLAUDECODE=1`, observed on Claude Code 2.1.233 with
+> every `CLAUDE*`/`CODEX*`/`ANTHROPIC*` variable stripped from the parent — the first attempt
+> inherited them, could not tell a vendor's marker from a leaked one, and was discarded. **Codex's row
+> is absent rather than guessed**, per decision 3 and spec §10.3, because no shell command ever ran.
+>
+> **What remains is `BACKLOG.md` §1 NEW-21**, and one successful `codex exec` completion closes all of
+> it. Until then this task stays open and Task 19 Steps 5–6 stay blocked, because §8's Codex spec
+> §14.1 row is discharged by this task alone.
+
+- [x] **Step 1: Capture raw stdout from one real `codex exec` run** — *done for a failed turn; the successful-turn half is NEW-21*
 
 The obligation is precise (spec §10.2): record **whether the final response really is the last parsing line**, and **whether it carries a discriminating field worth filtering on**. Redact the captured stream before it is written to a fixture — it is model output on the founder's account, and this repository is public.
 
-- [ ] **Step 2: Amend the Codex spec §14.1 with the observed shape, dated**
+- [x] **Step 2: Amend the Codex spec §14.1 with the observed shape, dated** — *amended; the rule is explicitly **not** promoted*
 
 **Do not quietly promote the rule to verified.** If the observation contradicts the rule, that is the finding, and `finalJsonlLine` changes in the same commit with a regression fixture. If it confirms it, say so with the date and the version observed, and correct the docblock that currently calls itself provisional.
 
 If the observation shows a discriminating field, filtering on it is a **narrowing** and needs the fixture to prove the old rule and the new one agree on this stream. Record what was given up, as the existing docblock does about pretty-printed JSON.
 
-- [ ] **Step 3: Observe one agent-detection row per vendor**
+- [ ] **Step 3: Observe one agent-detection row per vendor** — *Claude's row landed; Codex's is NEW-21*
 
-Read **decision 3**. Run each vendor and record what its environment actually contains, then add one row per vendor to `AGENT_DETECTION_ROWS` and to spec §10.3, each with what was observed and when. Update the Task 8 test that asserts the table is empty — with the observation in the commit message, so the change from "empty" to "two rows" carries its justification.
+Read **decision 3**. Run each vendor and record what its environment actually contains, then add one row per vendor to `AGENT_DETECTION_ROWS` and to spec §10.3, each with what was observed and when. Update the Task 8 test that asserts the table is empty — with the observation in the commit message, so the change from "empty" carries its justification.
+
+> **Landed as one row, not two, on 2026-08-15**, so read "one row per vendor" above as the intent rather than the outcome: Codex's environment was never observed, because its run ended `turn.failed` before any shell command could report one. Per decision 3 and spec §10.3 the row is **absent rather than guessed**, and a test asserts its absence so that a later guess goes red rather than through.
 
 **Anything unrecognised still records `"unknown"`.**
 

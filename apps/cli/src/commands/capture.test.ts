@@ -34,7 +34,7 @@ interface CaptureFixture extends CommandFixture {
   run(
     context: CliContext,
     options: { readonly text?: string },
-    /** Overrides the real (empty-table) detection, for the probe cases. */
+    /** Overrides the real detection table, for a vendor that has no row in it. */
     detect?: (env: Readonly<Record<string, string | undefined>>) => string,
   ): ReturnType<typeof runCapture>;
 }
@@ -641,23 +641,28 @@ describe("runCapture", () => {
   });
 
   /**
-   * Decision 3 of the plan: `AGENT_DETECTION_ROWS` is deliberately empty until
-   * Task 17 observes a real vendor row, so every capture written today records
-   * `unknown` and spawns nothing. Task 15's suite is going to lean on that, so
-   * it is pinned so that **exactly one** thing keeps it true.
+   * **The environment here is now Codex's, and that is the point.** This case
+   * used `CLAUDECODE: "1"` while the detection table was empty, which stopped
+   * being an example of "nothing matches" the moment Task 17 observed that
+   * exact variable on 2026-08-15. The contract did not move — an environment
+   * carrying no observed marker probes nothing and records `unknown` — so only
+   * the environment did, to the one vendor whose row Task 17 could **not**
+   * observe: the account's usage limit was exhausted, so `CODEX_SANDBOX` is a
+   * plausible marker that this product has never seen a real binary set and
+   * therefore refuses to detect on.
    *
-   * The machine here has Claude Code installed and the environment carries both
-   * vendors' markers; the platform is asked nothing and the runner is never
-   * called, so the only thing standing between this code and a probe is the
-   * empty table. Against an implementation that probed whenever the environment
-   * looked like an agent's — or that hardcoded a vendor — this goes red.
+   * The machine here has Claude Code installed and the platform is asked
+   * nothing and the runner is never called, so the only thing standing between
+   * this code and a probe is the absence of a matching row. Against an
+   * implementation that probed whenever the environment looked like an agent's
+   * — or that hardcoded a vendor — this goes red.
    */
-  it("records an unknown agent, spawning nothing, while the detection table is empty", async () => {
+  it("records an unknown agent, spawning nothing, for a vendor with no observed row", async () => {
     const spawned: string[] = [];
     const asked: string[] = [];
     const fixture = await installedFixture("capture-unknown-agent", {
       fixture: {
-        env: { CLAUDECODE: "1", CODEX_SANDBOX: "seatbelt" },
+        env: { CODEX_SANDBOX: "seatbelt" },
         agents: CLAUDE_INSTALLED,
         runner: {
           run: (request): Promise<ProcessResult> => {
@@ -691,10 +696,12 @@ describe("runCapture", () => {
   });
 
   /**
-   * The other half of the same fact, and the state Task 17 will put this
-   * command in: once detection names a vendor, the capture probes that vendor
-   * **once** and records what it found — including `captureMethod`, which
-   * moves with detection rather than independently of it.
+   * The other half of the same fact, with detection injected so the case is
+   * about what the command does *given* a named vendor: it probes that vendor
+   * **once** and records what it found — including `captureMethod`, which moves
+   * with detection rather than independently of it. The case below it is the
+   * same path driven by the real table Task 17 populated, which is what proves
+   * the two halves meet.
    */
   it("probes the detected agent exactly once and records it as agent-authored", async () => {
     const spawned: string[] = [];
@@ -734,13 +741,53 @@ describe("runCapture", () => {
     expect(written).toContain("sourceAgentVersion: 2.1.216");
     expect(written).toContain("captureMethod: agent-authored");
   });
+
+  /**
+   * **The row Task 17 observed, driven end to end with nothing injected.** The
+   * case above supplies the detector; this one lets `detectSourceAgent` read
+   * `AGENT_DETECTION_ROWS` itself, so it is the only case in this file that
+   * would go red if that row were removed or its variable changed. Without it
+   * the observation lives in a unit test and nothing proves the command
+   * consumes it.
+   */
+  it("detects claude from the marker Task 17 observed, with no detector injected", async () => {
+    const spawned: string[] = [];
+    const fixture = await installedFixture("capture-observed-claude", {
+      fixture: {
+        env: { CLAUDECODE: "1" },
+        agents: CLAUDE_INSTALLED,
+        runner: {
+          run: (request): Promise<ProcessResult> => {
+            spawned.push(request.executable);
+            return Promise.resolve({
+              stdout: "2.1.233 (Claude Code)\n",
+              stderr: "",
+              exitCode: 0,
+              signal: null,
+              timedOut: false,
+            });
+          },
+        },
+      },
+    });
+    spawned.length = 0;
+
+    const result = await fixture.run(fixture.context, { text: OBSERVATION });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const written = await nodeFs.readFile(result.data.path, "utf8");
+    expect(written).toContain("sourceAgent: claude");
+    expect(written).toContain("sourceAgentVersion: 2.1.233");
+    expect(written).toContain("captureMethod: agent-authored");
+  });
 });
 
 /**
  * The version probe, tested directly against an agent name rather than through
- * detection: the detection table is empty by decision, so a rule reached only
- * through it is a rule nobody has ever seen run — the same reason
- * `matchObservedAgent` is tested against synthetic rows one layer down.
+ * detection, so the rule is exercised for a vendor that has no row — since Task
+ * 17 that means Codex — rather than only for the one that does. It is the same
+ * reason `matchObservedAgent` is tested against synthetic rows one layer down.
  */
 describe("discoverSourceAgent", () => {
   it("reads the version from the adapter's own discovery", async () => {

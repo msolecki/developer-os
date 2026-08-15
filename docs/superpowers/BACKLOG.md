@@ -61,10 +61,10 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | Area | Where | What is left |
 |---|---|---|
 | Program (umbrella) | 1 plan | Tasks 6–9 open; Tasks 0–5 closed and not rows here |
-| DOS-P6 | spec approved and plan written, both 2026-08-13 | the implementation — nineteen tasks, **seventeen landed** 2026-08-13/14. **Task 17 needs the founder** — one real model call per vendor; Task 19 closes the subsystem |
+| DOS-P6 | spec approved and plan written, both 2026-08-13 | the implementation — nineteen tasks, **seventeen landed** 2026-08-13/14. **Task 17 ran 2026-08-15 and half discharged itself** — Claude's row landed, Codex's run hit an exhausted usage limit; the remainder is NEW-21. Task 19 closes the subsystem, and its Steps 5–6 wait on NEW-21 |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian), **NEW-20 (XS, security — `capture` proves its quarantine root then follows the path again; theoretical)**, **NEW-19 (XS, security — `reindex` builds its owned root textually)**, NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (XS, half closed — the argv screen's word list still screens a user's own path), NEW-13 (S, two artifact roots share one type), **NEW-15 (S, security — the first executor of a discovered binary pays none of the check its type demands)**, NEW-16 (S, spec §8.2's user-configured redaction patterns are unreachable), **NEW-17 (XS, security — `brain` is the one command whose config parse failure is not content-free)** and NEW-18 (XS, `assertSafeCommand`'s NUL branches have no test) |
+| Repository-level | §1 | **NEW-21 (S — one successful `codex exec` completion, the founder's, blocked by an external usage limit)**, NEW-7 (XS, needs a machine with Obsidian), **NEW-20 (XS, security — `capture` proves its quarantine root then follows the path again; theoretical)**, **NEW-19 (XS, security — `reindex` builds its owned root textually)**, NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (XS, half closed — the argv screen's word list still screens a user's own path), NEW-13 (S, two artifact roots share one type), **NEW-15 (S, security — no executor of a discovered binary pays the check its type demands, and Task 17 made `capture` a second one)**, NEW-16 (S, spec §8.2's user-configured redaction patterns are unreachable), **NEW-17 (XS, security — `brain` is the one command whose config parse failure is not content-free)** and NEW-18 (XS, `assertSafeCommand`'s NUL branches have no test) |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -106,6 +106,36 @@ Everything in this section is genuinely open. Nothing here is bookkeeping, and n
 closed stays here — NEW-1 through NEW-6, NEW-8 and NEW-9 were removed on 2026-08-10 when
 they closed, NEW-10 on 2026-08-11, and NEW-14 on 2026-08-15 when DOS-P6 Task 19's review closed it. What a closed item leaves behind is a row in §8, a clause in a spec, or a test;
 if it left nothing, it was not worth recording. Git history is the archive.
+
+### NEW-21 — one successful `codex exec` completion is still owed
+
+- **Status:** open, created 2026-08-15 when DOS-P6 Task 17 ran and could only half discharge itself ·
+  **Owner:** the founder, because it spends their credits · **Size:** S ·
+  **Blocked until the account's usage limit resets**
+- **What happened.** The founder accepted the spend for this subsystem in principle on 2026-08-13,
+  authorised this specific run on 2026-08-15, and the run was made against
+  `codex-cli 0.147.0` with the production argv byte for byte. **The account's usage limit was
+  exhausted**, so every `codex exec` ended `turn.failed` and no run reached a model response. There is
+  no API-key fallback configured and no local OSS provider installed, so `--oss` was not an option
+  either.
+- **What the failed run did settle**, and it is not nothing: `--json` really is JSONL, one JSON object
+  per line; **`type` is a discriminating field** present on every line, with an observed vocabulary of
+  `thread.started`, `turn.started`, `error`, `turn.failed`; and the synthetic vocabulary the adapter's
+  own tests had guessed (`session.created`, `item.completed`, `turn.completed`) is **wrong**. All of it
+  is recorded in `specs/…-codex-adapter-design.md` §14.1's amendment of 2026-08-15 and pinned against
+  `tests/fixtures/codex/observed-exec-stream.jsonl`.
+- **What is still owed, and one run closes both.** First, whether a **successful** turn's terminal
+  event is the final response — the question that would let `finalJsonlLine` stop being provisional,
+  and the one a failed turn cannot answer. Second, the **Codex row of `AGENT_DETECTION_ROWS`**: no
+  shell command ever ran, so no environment was observed, and per knowledge-pipeline spec §10.3 the row
+  is left absent rather than guessed. Until it lands, every capture taken inside a Codex session records
+  `sourceAgent: "unknown"`; those captures are correct and are never rewritten.
+- **A narrowing is available and was deliberately not taken.** A discriminating field now exists to
+  filter on, but spec §14.1 requires a narrowing to be proven against a stream where the old rule and
+  the new one agree, and a failed turn contains no final response for two rules to agree about.
+- Cross-referenced from `docs/architecture/codex-adapter.md`, `docs/architecture/knowledge-pipeline.md`
+  §10.3 and `docs/architecture/threat-model.md` §5.5. **It is what keeps DOS-P6's Task 19 Steps 5–6
+  from closing**, because §8's Codex spec §14.1 row is discharged by Task 17 alone.
 
 ### NEW-20 — `capture` proves its quarantine root, then follows the path again
 
@@ -226,7 +256,7 @@ if it left nothing, it was not worth recording. Git history is the archive.
   existed. **The guard is correct; only the evidence is missing**, which is why this is XS and not a
   security row. Four cases, one file.
 
-### NEW-15 — the first thing to execute a discovered binary pays none of the check its type demands
+### NEW-15 — nothing that executes a discovered binary pays the check its type demands
 
 - **Status:** open, found 2026-08-14 while writing `docs/architecture/threat-model.md`, verified
   independently by that task's review · **Owner:** unassigned; DOS-P7 by default, as the first
@@ -238,10 +268,23 @@ if it left nothing, it was not worth recording. Git history is the archive.
   `discovery.executablePath` (`apps/cli/src/commands/ingest.ts:454-463`) and the run spawns it
   through `invokeVendor` (`:1405`, `:658`); no `stat`, no uid comparison and no mode comparison exists anywhere on that path — the
   only `lstat` in the file is on a note path and the only mode is a `mkdir`.
+- **Widened 2026-08-15 by Task 17: `capture` is now a second executor on the same terms, and it is
+  the product's most-run command.** While `AGENT_DETECTION_ROWS` was empty this path was dormant;
+  the Claude row made it live. `discoverSourceAgent` (`apps/cli/src/commands/capture.ts`) spawns the
+  PATH-resolved `claude` — first `/usr/bin/which claude`, then `<resolved> --version` — whenever
+  `CLAUDECODE` is exactly `1`, the value the row records; `matchObservedAgent` compares the observed
+  value against the row's, so `CLAUDECODE=true` does not trigger it. And
+  `MacOsPlatformAdapter.discoverExecutable` resolves through `process.env.PATH` — again with no
+  `stat`, no uid and no mode check. **`CLAUDECODE` is trivially settable**, so any wrapper, direnv
+  file or CI step that exports it and prepends a directory it controls gets its own `claude`
+  executed by every `developer-os capture`. This is the same defect, not a new one; what changed is
+  that it moved from an occasional command onto the common one.
 - **What it is not:** privilege escalation. The binary runs as the user either way, and a user who
   can write their own `PATH` can already run anything. **What it is:** the product hands that binary
   the user's captured observations and read access to the whole vault, on the strength of a name
-  match. A world-writable directory earlier on `PATH` is the ordinary way this goes wrong.
+  match. A world-writable directory earlier on `PATH` is the ordinary way this goes wrong. Under
+  `capture` the exposure is narrower than under `ingest` — a `--version` probe is handed no
+  observation and no vault path — but it is still an unchecked execution the type says is owed one.
 - The nearest existing record is `claude-adapter.md` §9 residual 10, which notes the execution and
   **not** the check — which is why this row exists rather than a pointer to it.
 
@@ -454,8 +497,10 @@ first contact with a real binary.
   and `docs/architecture/codex-adapter.md` §11, each with this subsystem named as owner. Four of
   them belong in the spec rather than in the implementation: the **capture contract**, which is what
   unblocks hooks for both adapters in one change (neither ships `hooks/hooks.json`, and both report
-  `plugin_hooks` as `unknown`); the **provisional JSONL terminal-event rule**, unverified because
-  settling it needs a real model call the founder declined on 2026-08-12; **`maxTurns`**, bounded
+  `plugin_hooks` as `unknown`); the **JSONL terminal-event rule**, still provisional on the
+  success path: Task 17 made the call on 2026-08-15 and settled the framing and the discriminating
+  `type` field, but the account's usage limit was exhausted before any run reached a model response,
+  so a successful completion is still owed — NEW-21; **`maxTurns`**, bounded
   under Claude and silently dropped under Codex from one shared `agent.prompt` schema; and the fact
   that the **two-gate capability machinery has no production caller today**, so DOS-P6 is the first
   to exercise it.
@@ -708,7 +753,7 @@ carries the cross-reference, not when the decision is taken.
 | product design spec §14.3 | "user-configured patterns" narrowed to literal case-insensitive substrings — a user-supplied regex over capture text is a ReDoS surface and this codebase bounds no expression anywhere | DOS-P6 Task 2 |
 | `specs/…-claude-adapter-design.md` §6.1 | hooks **declined**, not deferred; the three lifecycle keys report `not-used` | DOS-P6 Task 3 |
 | `specs/…-codex-adapter-design.md` §5.3 | the same, in one decision covering both adapters. **This supersedes the ratified amendment below**, which deferred hooks to DOS-P6 rather than closing them | DOS-P6 Task 3 |
-| `specs/…-codex-adapter-design.md` §14.1 | the JSONL terminal-event rule promoted from provisional to observed, dated, with the shape seen — ingest forces the real `codex exec` call that DOS-P5 could not justify | DOS-P6 Task 17 |
+| `specs/…-codex-adapter-design.md` §14.1 | the JSONL terminal-event rule promoted from provisional to observed, dated, with the shape seen — ingest forces the real `codex exec` call that DOS-P5 could not justify. **Partly discharged 2026-08-15:** the run was made and §14.1 carries the dated amendment, but the account's usage limit was exhausted, so it settles the JSONL framing and the discriminating `type` field and **not** the terminal-event rule. The row stays until one successful `codex exec` completion lands — `BACKLOG.md` §1 **NEW-21** | DOS-P6 Task 17 |
 | `specs/…-workflow-compiler-design.md` §6 | scope globs stop being literals, which `workflow-schema.md` §8.1 made due at the first handler that resolves one. **Narrowed by the plan** — see the ratified row below | DOS-P6 Task 6 |
 
 **Six were ratified by the founder on 2026-08-13**, in the same session that approved the spec and
@@ -733,14 +778,16 @@ were put to the founder with the other four.
 | product design spec §13.4, "the staged result" | the `deterministic reindex` validator runs over an **in-memory projection** of vault plus proposal, not over a staging directory. §13.4 and the knowledge-pipeline spec's own §6.3 preamble contradict each other — nothing is staged at the point the preamble names — and staging first would make every file in staging attacker-influenced content the validators must re-read as hostile | 12 |
 | product design spec §17.5, and the knowledge-pipeline spec §9 | §9 narrows §17.5's security cases to six suites and drops two the standing gate in §7 of this file still requires from DOS-P6 onward: a **network** suite, and **concurrent user edits**. The plan ships eight suites rather than six and registers the narrowing rather than inheriting it. **Shipped 2026-08-14 as `tests/security/`** — `sentinel`, `prompt-injection`, `symlink-escape`, `multiline-command`, `malformed-manifest` and `interruption` from §9, plus `network` and `concurrent-edit`, the two §9 dropped and §7 still requires | 15 |
 
-**Two rows are awaiting ratification and are the only unratified rows in this section.** Both were
-raised by DOS-P6 during implementation rather than planning, which is why neither is in a table
-above.
+**Two rows were raised by DOS-P6 during implementation rather than planning**, which is why neither is
+in a table above. **Both were ratified by the founder on 2026-08-15**, in the session that ran Task 17;
+they were the last unratified rows in this section, and there are now none. Each leaves the table when
+DOS-P6 Task 19 Step 5 lands, per the rule that a row leaves when the amended document carries the
+cross-reference.
 
-| Amended | Outcome, **awaiting the founder** | Raised by |
+| Amended | Outcome, **ratified 2026-08-15** | Raised by |
 |---|---|---|
-| the knowledge-pipeline spec §6.1, "one capture, one agent call, **one transaction**" | the last third is false and cannot be made true. The ladder performs four mutations and **the executor's lock is per-execution**, so it ships as **four transactions per capture** — `ingest-stage` (the capture file, `accepted → staging`), `ingest-apply` (the proposed notes), `ingest-reindex` (the index artifacts), `ingest-ingested` (the capture file, `staging → ingested`) — plus a compensating `ingest-rollback` on failure. Two independent reasons no two of them merge: `BrainService.reindex()` **reads the vault**, so it cannot run until the apply has finalized; and `validateChangePlan` grants ownership from the manifest, where the index artifacts are recorded and a capture is deliberately absent (spec §3.4 keeps a capture hand-editable in Obsidian). **The residual, accepted rather than closed:** a crash between the apply and the last transaction leaves a capture at `staging` with its notes already applied — inert, because the next run selects only `accepted` captures and cannot double-apply, and recoverable by `repair` plus a hand edit. **Cost of overturning:** there is no cheaper arrangement to overturn it to; the alternative is a Foundation change letting one execution span a read of what it just wrote | DOS-P6 Task 13, plan correction 4 |
-| the knowledge-pipeline spec §6.3, `confidence and lifecycle` | the spec names the validator and says "required frontmatter for the note's declared stage is absent" — **it never says which frontmatter**. Shipped rule: `established` requires `reviewed` to be a date, `deprecated` requires `updated` to be present, `emerging` requires nothing extra. It is **defensible but invented**: nothing in the tree enforced either before this task. It is grounded in a contradiction the product already flags — `lint.ts:285-294` grades an agent-authored, never-reviewed note as `provenance` at severity **warn**, so ingest turns only the narrower `established`-while-never-reviewed claim into a refusal. **The broad reading was checked and rejected**: refusing every `author: agent` + `reviewed: null` note would refuse every proposal this pipeline can produce. **Cost of overturning:** two `if`s at `validate.ts:444-461`; this validator writes no data, so nothing has to be migrated | DOS-P6 Task 12, `validate.ts` |
+| the knowledge-pipeline spec §6.1, "one capture, one agent call, **one transaction**" | the last third is false and cannot be made true. The ladder performs four mutations and **the executor's lock is per-execution**, so it ships as **four transactions per capture** — `ingest-stage` (the capture file, `accepted → staging`), `ingest-apply` (the proposed notes), `ingest-reindex` (the index artifacts), `ingest-ingested` (the capture file, `staging → ingested`) — plus a compensating `ingest-rollback` on failure. Two independent reasons no two of them merge: `BrainService.reindex()` **reads the vault**, so it cannot run until the apply has finalized; and `validateChangePlan` grants ownership from the manifest, where the index artifacts are recorded and a capture is deliberately absent (spec §3.4 keeps a capture hand-editable in Obsidian). **The residual, accepted rather than closed:** a crash between the apply and the last transaction leaves a capture at `staging` with its notes already applied — inert, because the next run selects only `accepted` captures and cannot double-apply, and recoverable by `repair` plus a hand edit. **Cost of overturning:** there is no cheaper arrangement to overturn it to; the alternative is a Foundation change letting one execution span a read of what it just wrote. **Ratified as shipped by the founder on 2026-08-15**, four transactions and the accepted `staging`-with-notes residual together; the Foundation alternative was declined rather than deferred | DOS-P6 Task 13, plan correction 4 |
+| the knowledge-pipeline spec §6.3, `confidence and lifecycle` | the spec names the validator and says "required frontmatter for the note's declared stage is absent" — **it never says which frontmatter**. Shipped rule: `established` requires `reviewed` to be a date, `deprecated` requires `updated` to be present, `emerging` requires nothing extra. It is **defensible but invented**: nothing in the tree enforced either before this task. It is grounded in a contradiction the product already flags — `lint.ts:285-294` grades an agent-authored, never-reviewed note as `provenance` at severity **warn**, so ingest turns only the narrower `established`-while-never-reviewed claim into a refusal. **The broad reading was checked and rejected**: refusing every `author: agent` + `reviewed: null` note would refuse every proposal this pipeline can produce. **Cost of overturning:** two `if`s at `validate.ts:444-461`; this validator writes no data, so nothing has to be migrated. **Ratified as shipped by the founder on 2026-08-15**: the invented rule stands as written, so the spec's silence is closed by this row rather than by a change to the code | DOS-P6 Task 12, `validate.ts` |
 
 **One row is the founder correcting the spec after a pre-flight scan**, and it is the most
 consequential amendment DOS-P6 has taken:

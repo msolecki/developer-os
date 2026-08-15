@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 import type {
   ProcessRequest,
@@ -385,6 +388,72 @@ describe("invokeCodex failure identity", () => {
       runner: runner(() => ({ exitCode: 0, stdout: hostile })),
     });
     expect(result).toEqual({ ok: false, reason: "malformed-output" });
+  });
+});
+
+/**
+ * **The only cases in this file whose input is not invented.** Every JSONL case
+ * above uses an event vocabulary this package guessed while the rule was
+ * unverified — `session.created`, `item.completed`, `turn.completed` — and Task
+ * 17's real run on 2026-08-15 shows the vendor emits `thread.started`,
+ * `turn.started`, `error` and `turn.failed` instead. The synthetic cases still
+ * exercise the rule correctly, because the rule reads no `type` value at all;
+ * they simply were never evidence about the vocabulary, and these two are.
+ *
+ * The recording is a **failed** turn — the account's usage limit was exhausted
+ * — so it settles the framing and the discriminating field and cannot settle
+ * whether a successful turn's final response is the last parsing line. See
+ * `tests/fixtures/codex/README.md` and the spec's §14.1 amendment.
+ */
+describe("invokeCodex against the stream Task 17 actually observed", () => {
+  const observed = readFileSync(
+    fileURLToPath(
+      new URL("../../../tests/fixtures/codex/observed-exec-stream.jsonl", import.meta.url),
+    ),
+    "utf8",
+  );
+
+  it("keeps a failed turn's exit identity instead of returning its terminal event as a payload", async () => {
+    /**
+     * **The ordering was already pinned; what this adds is why it matters.**
+     * `"reports a non-zero exit carrying the code"` above goes red under the
+     * same mutation, because its synthetic `"{}"` parses just as happily. So
+     * this case is not the first guard on the ordering and does not claim to
+     * be. It is the first to show, against bytes a real vendor emitted, what
+     * the ordering is *protecting against*: on the observed stream the last
+     * line that parses to a non-null object is `turn.failed` — **not** a
+     * response — so `finalJsonlLine` alone would hand a caller a vendor error
+     * shaped like a result: an `ok: true` telling the caller nothing failed,
+     * over a payload whose own `type` says `turn.failed`. A synthetic `"{}"`
+     * cannot show that.
+     *
+     * Watched fail on 2026-08-15 by moving `parseStructuredPayload(...)` above
+     * the exit-code check: the assertion then received
+     * `{ok: true, payload: {type: "turn.failed", …}}`.
+     */
+    const result = await invokeCodex(installation, invocation(), {
+      runner: runner(() => ({ exitCode: 1, stdout: observed })),
+    });
+    expect(result).toEqual({ ok: false, reason: "exit", exitCode: 1 });
+  });
+
+  it("shows every line of a real stream to be a JSON object carrying a discriminating type", () => {
+    /**
+     * Spec §10.2 asks two questions of a real run. This answers the second:
+     * **yes, `type` is a discriminating field** and it is present on every
+     * line. `finalJsonlLine` deliberately still filters on none of them, and
+     * §14.1's amendment records why that stayed true given a stream that only
+     * demonstrates the failure path.
+     */
+    const lines = observed.split(/\r?\n/u).filter((line) => line.trim().length > 0);
+    expect(lines).toHaveLength(4);
+    const types = lines.map((line) => {
+      const parsed: unknown = JSON.parse(line);
+      expect(typeof parsed).toBe("object");
+      expect(parsed).not.toBeNull();
+      return (parsed as { type?: unknown }).type;
+    });
+    expect(types).toEqual(["thread.started", "turn.started", "error", "turn.failed"]);
   });
 });
 

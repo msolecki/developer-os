@@ -39,10 +39,13 @@ it.
 
 **Sessions execute that plan one task at a time**, under `superpowers:subagent-driven-development` —
 a different agent implements and reviews each task, and a task is not done until its reviewer says
-so. **Seventeen of the nineteen have landed** — Tasks 1–16 and 18, 2026-08-13/14. **Task 17 is next
-in the plan's order and it stops and asks** — it spends the founder's credits on a real model call against
-both vendor binaries, which is the only way the `codex exec --json` terminal-event rule stops being
-provisional. Nothing else in the plan can settle it and no agent may decide it.
+so. **Seventeen of the nineteen have landed** — Tasks 1–16 and 18, 2026-08-13/14. **Task 17 ran on 2026-08-15,
+after the founder authorised the spend, and half discharged itself.** Claude answered and its detection
+row landed; **Codex's account had exhausted its usage limit**, so every `codex exec` ended `turn.failed`
+and no run reached a model response. What it settled and what it did not is
+`docs/architecture/knowledge-pipeline.md` §10.3; **the remainder is `BACKLOG.md` §1 NEW-21** — one
+successful `codex exec` completion, which is the founder's because it spends their credits, and which
+alone lets the `codex exec --json` terminal-event rule stop being provisional.
 
 **Task 18 landed first, and taking it out of order was not skipping ahead.** The threat model names
 the JSONL rule as provisional, which is what it is; nothing in it consumed evidence Task 17 produces.
@@ -51,8 +54,9 @@ requires every `BACKLOG.md` §8 row to carry an outcome, and the Codex spec §14
 Task 17 alone.
 
 **Writing that threat model found four defects nobody had looked for, all now `BACKLOG.md` §1 rows.**
-`NEW-15` — the first thing to execute a discovered binary pays none of the owner and mode check
-`platform-macos`'s own type says its executor owes. `NEW-16` — spec §8.2's user-configured redaction
+`NEW-15` — nothing that executes a discovered binary pays the owner and mode check
+`platform-macos`'s own type says its executor owes; `ingest` was the first and **`capture` joined it on
+2026-08-15**, when Task 17's detection row made its probe path live. `NEW-16` — spec §8.2's user-configured redaction
 patterns are unreachable: no production caller passes them and the config schema has no table for
 them. `NEW-17` — `brain` is the one command of eight whose config parse failure is **not**
 content-free, so smol-toml's three raw source lines reach the user with the heuristic redactor as the
@@ -60,9 +64,9 @@ only thing standing. `NEW-18` — `assertSafeCommand`'s four NUL branches have n
 because the document tried to cite that coverage and a reviewer checked whether it existed. **None is
 fixed**; a documentation task may not edit the product.
 
-**Task 19's Step 1 is done and it is the only step of it that did not need Task 17.** The independent
-security review ran on 2026-08-14/15 over Tasks 1–18 and returned **one Critical**, two Important and
-five Minor. Every accepted finding is fixed with a regression test watched fail first, over four fix
+**Task 19's Steps 1 through 4 are done; Steps 5 and 6 are the ones that needed Task 17.** The
+independent security review ran on 2026-08-14/15 over Tasks 1–18 and returned **one Critical**, two
+Important and five Minor. Every accepted finding is fixed with a regression test watched fail first, over four fix
 rounds and four independent verdicts, ending in **ready for the checkpoint**.
 
 **The Critical is worth knowing even though it is closed**, because it is what this gate exists to
@@ -81,16 +85,21 @@ textually-built owned root, traced by reading and explicitly not driven; and `NE
 window on `capture`'s write path that is **not a regression** against the baseline before this work and
 whose closure would reverse a contract decision taken deliberately.
 
-**Steps 2 through 6 wait on Task 17**, because Step 5 requires every `BACKLOG.md` §8 row to carry an
-outcome and the Codex spec §14.1 row is discharged by Task 17 alone. **If Task 17 lands code, its own
-diff needs a security pass before Step 2's checkpoint** — this review did not cover it.
+**Steps 5 and 6 still wait on Task 17**, because Step 5 requires every `BACKLOG.md` §8 row to carry
+an outcome and the Codex spec §14.1 row is discharged by Task 17 alone — and Task 17 could only half
+discharge it. **Its diff did get the security pass this paragraph asked for**: an independent
+reviewer that wrote none of it ran on 2026-08-15 over several rounds, and every finding it raised was
+accepted and fixed before the commit. The commit message is the record of what it found.
 
-**Two decisions are awaiting the founder** and are the only unratified rows in `BACKLOG.md` §8.
+**Both decisions that were awaiting the founder were ratified on 2026-08-15, and `BACKLOG.md` §8 now
+has no unratified rows.** Each leaves that table when Task 19 Step 5 lands. They are recorded here
+because the reasoning outlives the row.
 
-The first is Task 12's `confidence-and-lifecycle` validator rule. The spec names the validator and
+The first was Task 12's `confidence-and-lifecycle` validator rule. The spec names the validator and
 never says which frontmatter each stage requires, so the rule shipped is defensible but invented —
 `established` requires a `reviewed` date, `deprecated` requires `updated`, `emerging` requires
-nothing. Overturning it is two `if`s and migrates nothing, because that validator writes no data.
+nothing. **Ratified as shipped**: overturning it would have been two `if`s and migrated nothing,
+because that validator writes no data.
 
 The second is Task 13's, and it corrects a headline sentence of the approved spec. **§6.1's "one
 capture, one agent call, one transaction" is false and cannot be made true.** `ingest` ships as four
@@ -224,8 +233,9 @@ requires without reading `transcript_path`, which this product refuses on both v
 the founder accepted — no hooks ship in v1, `developer-os run claude|codex` is never built,
 `wrapper-required` is replaced by `not-used`, and **nothing automatic captures anything**. The
 plan's five decisions are what it had to settle that the spec did not; four of them, and two more
-its tasks raised, are ratified rows in `BACKLOG.md` §8 beside the spec's own six — twelve rows, all
-ratified 2026-08-13, each leaving the table when the task named beside it lands.
+its tasks raised, are ratified rows in `BACKLOG.md` §8 beside the spec's own six — twelve rows, ten
+ratified 2026-08-13 and the two Tasks 12 and 13 raised on 2026-08-15, each leaving the table when the
+task named beside it lands.
 
 **Read three documents before touching the code**, in this order:
 `docs/architecture/codex-adapter.md`, `docs/architecture/claude-adapter.md`, and
@@ -248,10 +258,14 @@ appear in it:
 
 **Also DOS-P6's, and easy to miss:** the entire two-gate capability machinery has no production
 caller today — `doctor` never turns probing on — so DOS-P6 is the first to exercise it; the
-`codex exec --json` JSONL terminal-event rule ships **provisional and unverified**, because settling
-it needs a real model call the founder declined on 2026-08-12; and `maxTurns` is bounded under
-Claude and silently dropped under Codex, one shared schema with two behaviours. `codex-adapter.md`
-§11 is the full list with owners.
+`codex exec --json` JSONL terminal-event rule ships **provisional on the success path**, because a
+successful `codex exec` completion is still owed — `BACKLOG.md` §1 NEW-21; and `maxTurns` is bounded
+under Claude and silently dropped under Codex, one shared schema with two behaviours.
+`codex-adapter.md` §11 is the full list with owners.
+
+**On that middle item:** Task 17's run of 2026-08-15 settled the JSONL framing and the discriminating
+`type` field and **not** the terminal-event rule, because the account's usage limit was exhausted
+before any run reached a model response.
 
 **What is closed, and what each closure left behind.** Read the right-hand column before touching
 the subsystem it names; these documents are the reason the plans could be deleted.
@@ -276,7 +290,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **17 of 19**, plus Task 19's security review, which returned ready. Only Task 17 (the founder's) and Task 19's closing steps remain |
+| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **17 of 19**, plus Task 19's security review, which returned ready. Task 17 **ran 2026-08-15 and half discharged** — its remainder is NEW-21, the founder's, because it spends their credits — and Task 19's Steps 5–6 remain |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |

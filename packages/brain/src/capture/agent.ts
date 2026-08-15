@@ -30,26 +30,38 @@ export interface AgentDetectionRow {
 const UNKNOWN_AGENT = "unknown";
 
 /**
- * **Empty, and that is the finished state of this task.**
+ * **One row, not the two Task 17 set out to add, and the missing one is Codex's.**
  *
  * Spec §10.3 is normative: until a vendor's row is observed, that vendor is not
- * in the table and detection records `"unknown"`. Task 17 is the one task that
- * runs a real vendor binary; it adds one row per vendor, with what was observed
- * and when, updates spec §10.3, and updates the test that asserts this list is
- * empty — with the observation in the commit message, so the change from
- * "empty" to "two rows" carries its justification.
+ * in the table and detection records `"unknown"`. Task 17 ran both binaries on
+ * 2026-08-15. Claude's row is below, observed. **Codex's is absent because the
+ * account's usage limit was exhausted** and every `codex exec` ended
+ * `turn.failed` before a shell command could report an environment — so there
+ * was nothing to observe, and a row inferred from the vendor's documentation
+ * would be exactly the undocumented capability assumption design spec §20 names
+ * as a release blocker.
  *
- * A guessed row is exactly the undocumented capability assumption design spec
- * §20 names as a release blocker. The cost of the empty table is that every
- * capture written between here and Task 17 records `sourceAgent: "unknown"`.
- * Those captures are correct and are never rewritten.
+ * The cost is stated rather than discovered later: every capture written inside
+ * a Codex session until that row lands records `sourceAgent: "unknown"`. Those
+ * captures are correct and are never rewritten.
  */
-export const AGENT_DETECTION_ROWS: readonly AgentDetectionRow[] = Object.freeze([]);
+export const AGENT_DETECTION_ROWS: readonly AgentDetectionRow[] = Object.freeze([
+  {
+    agent: "claude",
+    variable: "CLAUDECODE",
+    value: "1",
+    observedOn: "2026-08-15",
+    observedIn:
+      "Claude Code 2.1.233 on macOS, `claude -p --output-format json`, with every CLAUDE*, CODEX* and ANTHROPIC* variable stripped from the parent environment so the marker could not be one leaking in from the session that ran the experiment",
+  },
+]);
 
 /**
  * The rule the table is read by, separated from the table so it can be tested
- * against synthetic rows while the real table is empty. A rule that first runs
- * the day someone adds a row is a rule nobody has ever seen work.
+ * against synthetic rows the real table does not carry. That table holds one
+ * exact-value row, so it exercises one branch of this function and none of the
+ * others; a branch that first runs the day someone adds a row is a branch
+ * nobody has ever seen work.
  *
  * An exported-but-empty variable is *absent*: `FOO=` is what a shell leaves
  * behind when a wrapper clears a value, and naming an agent on the strength of
