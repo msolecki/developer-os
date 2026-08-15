@@ -85,9 +85,19 @@ textually-built owned root, traced by reading and explicitly not driven; and `NE
 window on `capture`'s write path that is **not a regression** against the baseline before this work and
 whose closure would reverse a contract decision taken deliberately.
 
-**Steps 5 and 6 still wait on Task 17**, because Step 5 requires every `BACKLOG.md` §8 row to carry
-an outcome and the Codex spec §14.1 row is discharged by Task 17 alone — and Task 17 could only half
-discharge it. **Its diff did get the security pass this paragraph asked for**: an independent
+**Steps 5 and 6 wait on Task 17, and that is now a decision rather than an inference.** Step 5
+requires every `BACKLOG.md` §8 row to carry an outcome, and the Codex spec §14.1 row is discharged by
+Task 17 alone — which could only half discharge it.
+
+> **Asked and settled 2026-08-15: DOS-P6 holds.** Checking the blocker properly turned up that the
+> Checkpoint names three conditions — the five criteria of Step 2 with evidence in a commit, the
+> independent security review returned and dispositioned, and CI green on that commit — and **none of
+> them mentions Task 17**. All three are met. `BACKLOG.md` §5 is already empty, so that sub-item of
+> Step 5 is discharged too. So closing DOS-P6 today, carrying Task 17's remainder as **NEW-21**, was
+> available and was **put to the founder, who chose to hold** until NEW-21 closes on or after
+> 2026-08-20. **Do not reopen this from the arithmetic** — a later session that rediscovers the
+> checkpoint wording will find the same opening, and the answer to it is already given. A11 stays
+> blocked meanwhile, deliberately. **Its diff did get the security pass this paragraph asked for**: an independent
 reviewer that wrote none of it ran on 2026-08-15 over several rounds, and every finding it raised was
 accepted and fixed before the commit. The commit message is the record of what it found.
 
@@ -144,6 +154,14 @@ rarer. It is unmeasured and possibly still live.
 **The underlying fragility is unowned and stays that way:** a case that needs 3.19 s of a 20 s budget
 on an idle machine is one contended run from red, and this is the second gate-integrity item this
 program has paid for.
+
+**One unexplained gate failure, 2026-08-15, recorded because it is unexplained.** During Task 17 a
+single `npm run check` exited 1 after lint and all 1956 tests had passed, with `$ tsc -b` as the last
+output — so the failure was in `pnpm build` or `git diff --check`, and the edits in that round were
+**markdown only**. It did not reproduce: `git diff --check` was clean immediately after, and four
+consecutive `pnpm build` runs and two full `npm run check` runs all exited 0. No diagnosis, no owner,
+and deliberately not dressed up as one. Noted so that a second occurrence is a pattern rather than a
+first.
 
 **Tasks 9 and 10 raise one question with one cause, and it is the founder's.** `PlannedFileMutation`
 is `{targetPath, operation, content}`: **a command cannot supply a precondition.** The executor

@@ -136,6 +136,22 @@ if it left nothing, it was not worth recording. Git history is the archive.
 - Cross-referenced from `docs/architecture/codex-adapter.md`, `docs/architecture/knowledge-pipeline.md`
   §10.3 and `docs/architecture/threat-model.md` §5.5. **It is what keeps DOS-P6's Task 19 Steps 5–6
   from closing**, because §8's Codex spec §14.1 row is discharged by Task 17 alone.
+- **How to close it**, carried here because the plan that holds the instructions is deleted when
+  DOS-P6 closes: rerun `codex exec --json` with the production argv (`--output-schema` at the shipped
+  `ingest.stage.schema.json`, `-s read-only`, `--skip-git-repo-check`, `-C <working root>`) **with
+  stdin closed**, and record whether the final response is the last parsing line and whether the
+  discriminating `type` is worth filtering on. Then run each vendor and observe what a child process
+  of it actually sees, with every `CLAUDE*`/`CODEX*`/`ANTHROPIC*` variable stripped from the parent —
+  an inherited marker detects the session that ran the experiment, not the vendor. Amend
+  `specs/…-codex-adapter-design.md` §14.1 and `…-knowledge-pipeline-design.md` §10.3 with the
+  observation, dated, and **do not quietly promote the rule to verified**. A narrowing needs a stream
+  where the old rule and the new one agree.
+- **Expect the fan-out.** Adding the Claude row falsified prose in fourteen files, because "the table
+  is empty" had become load-bearing in docblocks, tests, three architecture notes, a spec, this file
+  and `ORDER.md`. The Codex row will do it again; sweep for the class rather than fixing instances.
+- **The founder chose on 2026-08-15 to hold DOS-P6 open for this** rather than close the subsystem
+  and carry it as a residual. `ORDER.md`'s note beside Task 19's Steps 5–6 records why that was a
+  live option and why it was declined.
 
 ### NEW-20 — `capture` proves its quarantine root, then follows the path again
 
