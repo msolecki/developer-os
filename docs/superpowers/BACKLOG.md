@@ -64,7 +64,7 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P6 | spec approved and plan written, both 2026-08-13 | the implementation — nineteen tasks, **seventeen landed** 2026-08-13/14. **Task 17 needs the founder** — one real model call per vendor; Task 19 closes the subsystem |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian), **NEW-19 (XS, security — `reindex` builds its owned root textually)**, NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (XS, half closed — the argv screen's word list still screens a user's own path), NEW-13 (S, two artifact roots share one type), **NEW-15 (S, security — the first executor of a discovered binary pays none of the check its type demands)**, NEW-16 (S, spec §8.2's user-configured redaction patterns are unreachable), **NEW-17 (XS, security — `brain` is the one command whose config parse failure is not content-free)** and NEW-18 (XS, `assertSafeCommand`'s NUL branches have no test) |
+| Repository-level | §1 | NEW-7 (XS, needs a machine with Obsidian), **NEW-20 (XS, security — `capture` proves its quarantine root then follows the path again; theoretical)**, **NEW-19 (XS, security — `reindex` builds its owned root textually)**, NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (XS, half closed — the argv screen's word list still screens a user's own path), NEW-13 (S, two artifact roots share one type), **NEW-15 (S, security — the first executor of a discovered binary pays none of the check its type demands)**, NEW-16 (S, spec §8.2's user-configured redaction patterns are unreachable), **NEW-17 (XS, security — `brain` is the one command whose config parse failure is not content-free)** and NEW-18 (XS, `assertSafeCommand`'s NUL branches have no test) |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -106,6 +106,33 @@ Everything in this section is genuinely open. Nothing here is bookkeeping, and n
 closed stays here — NEW-1 through NEW-6, NEW-8 and NEW-9 were removed on 2026-08-10 when
 they closed, NEW-10 on 2026-08-11, and NEW-14 on 2026-08-15 when DOS-P6 Task 19's review closed it. What a closed item leaves behind is a row in §8, a clause in a spec, or a test;
 if it left nothing, it was not worth recording. Git history is the archive.
+
+### NEW-20 — `capture` proves its quarantine root, then follows the path again
+
+- **Status:** open, found 2026-08-15 by the fourth independent review of DOS-P6 Task 19 · **Owner:**
+  whoever next touches `apps/cli/src/commands/capture.ts` — DOS-P7 by default · **Size:** XS ·
+  **Security** · **Theoretical: it needs a won race, and it is not a regression**
+- **The window.** `resolveQuarantineRoot` proves the quarantine directory resolves inside the content
+  root (`apps/cli/src/commands/capture.ts:714`) and its canonical answer is then **discarded by
+  design**: every later operation re-follows the *declared* path — `readExistingCapture` (`:742`),
+  `writeCapture` (`:751`), and `validateChangePlan`, which re-canonicalizes the target and the owned
+  root fresh (`apps/cli/src/commands/capture.ts:579`, `:598`). Because both are re-resolved together,
+  containment between them holds wherever the link points *now*, and nothing re-asks the content-root
+  question. Swapping the quarantine symlink between the check and the write redirects the capture
+  outside the vault.
+- **Why it is registered and not closed.** The declared path is the contract, ruled so on 2026-08-15:
+  it is what `CaptureResultV1.path` prints and publishes, and it is what makes
+  `assertUsableRoots`'s ancestor test comparable at all — round two's canonical root pinned this
+  window by construction and cost both of those. Reversing that to close a race would trade a
+  certainty for a maybe.
+- **What it costs an attacker and what it buys.** Local write access to the vault *plus* a won race.
+  What it buys is redirection of a capture into a directory they chose — the same primitive the
+  steady-state symlink used to give for free, which is now refused deterministically. **It is not a
+  regression against the pre-round-two baseline**, which used declared paths with no check at all.
+- **The shape of a fix, if anyone wants it:** canonical root for `target` and `readExistingCapture`,
+  declared path for `CaptureResultV1.path` alone. That keeps the contract and closes the window, at
+  the cost of the two paths disagreeing inside one function.
+- Cross-referenced from `docs/architecture/threat-model.md` §5.2, where the boundary is described.
 
 ### NEW-19 — `reindex` builds its owned root textually, like `capture` did
 
@@ -208,8 +235,8 @@ if it left nothing, it was not worth recording. Git history is the archive.
   executes a discovered binary owes an owner and mode check first.** `discoverExecutable` finds a
   name on `PATH` and returns a path; it does not vouch for it.
 - **DOS-P6 is the first executor and pays nothing.** `selectVendor` returns
-  `discovery.executablePath` (`apps/cli/src/commands/ingest.ts:454-462`) and the run spawns it
-  through `invokeVendor` (`:1395`, `:648`); no `stat`, no uid comparison and no mode comparison exists anywhere on that path — the
+  `discovery.executablePath` (`apps/cli/src/commands/ingest.ts:454-463`) and the run spawns it
+  through `invokeVendor` (`:1405`, `:658`); no `stat`, no uid comparison and no mode comparison exists anywhere on that path — the
   only `lstat` in the file is on a note path and the only mode is a `mkdir`.
 - **What it is not:** privilege escalation. The binary runs as the user either way, and a user who
   can write their own `PATH` can already run anything. **What it is:** the product hands that binary

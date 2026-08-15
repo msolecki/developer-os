@@ -219,6 +219,20 @@ is same-or-descendant (`packages/core/src/manifest/store.ts:111-114`), so a quar
 the content root passes containment. It also keeps `CaptureResultV1.path` — printed, and published in
 `--json` — the path the user wrote rather than the one their filesystem resolves it to.
 
+**What refuses the ancestor shape today is not that ownership check, and the distinction is worth
+keeping.** `init` records the Brain skeleton's directories as managed artifacts, and
+`validateChangePlan` canonicalizes every artifact path before ownership is reached, refusing when two
+collide (`packages/core/src/plans/validate.ts:296-306`) — which is exactly what a quarantine linked
+to `content` or `content/_raw` produces. Both spellings therefore end at exit 6 with nothing written,
+measured against a real `init`. The re-armed ancestor check is **depth behind that**, and it is worth
+having because the collision guard is incidental: it depends on `init` recording directories, which
+is not a security property, and its message names the manifest rather than the link.
+
+**The check is proven once and the path is followed again afterwards**, which is a check-then-use
+window this arrangement accepts: `resolveQuarantineRoot` answers at `apps/cli/src/commands/capture.ts:714`
+and every later operation re-follows the declared path. `BACKLOG.md` §1 **NEW-20** carries it, with
+why it is registered rather than closed.
+
 All three commands now resolve the quarantine root once, through **one shared implementation**
 (`apps/cli/src/context.ts:263-305`), prove it inside the configured content root, and measure every
 capture path against the proven root. One implementation rather than three, because this repository's

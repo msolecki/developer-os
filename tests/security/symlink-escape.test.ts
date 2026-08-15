@@ -293,7 +293,7 @@ describe("a quarantine directory that resolves outside the vault, met by capture
  * as managed artifacts — `/content`, `/content/_raw`, `/content/_raw/quarantine`
  * among them — and `validateChangePlan` canonicalizes every artifact path before
  * it reaches ownership, refusing when two collide
- * (`packages/core/src/plans/validate.ts:295-305`). A quarantine linked to either
+ * (`packages/core/src/plans/validate.ts:296-306`). A quarantine linked to either
  * ancestor makes exactly that collision, so both spellings end at exit 6 —
  * `installation manifest is malformed or incomplete` — with nothing written.
  *
