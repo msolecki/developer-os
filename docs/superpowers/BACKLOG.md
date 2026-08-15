@@ -129,7 +129,7 @@ if it left nothing, it was not worth recording. Git history is the archive.
 - **Traced by reading, not driven.** The three misses above were each read at their line; no test was
   written, so nobody should treat this row as demonstrated the way
   `tests/security/symlink-escape.test.ts` demonstrates the other two.
-- **The fix already exists**: `resolveQuarantineRoot` (`apps/cli/src/context.ts:262-305`) is the
+- **The fix already exists**: `resolveQuarantineRoot` (`apps/cli/src/context.ts:263-305`) is the
   same check one directory over, and its `refuse` injection means a caller keeps its own exit code.
   Generalize its name when the second caller shape appears rather than copying it.
 
@@ -208,7 +208,7 @@ if it left nothing, it was not worth recording. Git history is the archive.
   executes a discovered binary owes an owner and mode check first.** `discoverExecutable` finds a
   name on `PATH` and returns a path; it does not vouch for it.
 - **DOS-P6 is the first executor and pays nothing.** `selectVendor` returns
-  `discovery.executablePath` (`apps/cli/src/commands/ingest.ts:444-452`) and the run spawns it
+  `discovery.executablePath` (`apps/cli/src/commands/ingest.ts:454-462`) and the run spawns it
   through `invokeVendor` (`:1395`, `:648`); no `stat`, no uid comparison and no mode comparison exists anywhere on that path — the
   only `lstat` in the file is on a note path and the only mode is a `mkdir`.
 - **What it is not:** privilege escalation. The binary runs as the user either way, and a user who
@@ -531,11 +531,11 @@ durable behind as they closed:
   symlink escape, multiline command, malformed manifest and interruption from §9, plus **network** and
   **concurrent edit**, the two §7's standing gate requires and §9 dropped. Every suite was watched
   fail before it was believed, and thirteen reverts are recorded with the line each disabled. **47 of
-  its 83 cases carry that evidence and 36 do not** — the total counted by collection
+  its 85 cases carry that evidence and 38 do not** — the total counted by collection
   (`npx vitest list --root tests security`), the split derived per suite in
-  `docs/architecture/threat-model.md` §8. The two fix rounds after Task 19's review added twenty-four
-  cases between them, five of which were watched fail, and converted one parked `it.fails` into a
-  sixth. That split is recorded **here and nowhere else** —
+  `docs/architecture/threat-model.md` §8. The three fix rounds after Task 19's review added
+  twenty-six cases between them, five of which were watched fail, and converted one parked
+  `it.fails` into a sixth. That split is recorded **here and nowhere else** —
   a correction to an earlier version of this sentence, which claimed the suites say it about
   themselves. They do not: `grep -rniE "revert" tests/security/` returns nothing, and the per-case
   itemization lived only in a scratch report that does not survive this plan. Anyone tightening the
@@ -713,7 +713,7 @@ above.
 | Amended | Outcome, **awaiting the founder** | Raised by |
 |---|---|---|
 | the knowledge-pipeline spec §6.1, "one capture, one agent call, **one transaction**" | the last third is false and cannot be made true. The ladder performs four mutations and **the executor's lock is per-execution**, so it ships as **four transactions per capture** — `ingest-stage` (the capture file, `accepted → staging`), `ingest-apply` (the proposed notes), `ingest-reindex` (the index artifacts), `ingest-ingested` (the capture file, `staging → ingested`) — plus a compensating `ingest-rollback` on failure. Two independent reasons no two of them merge: `BrainService.reindex()` **reads the vault**, so it cannot run until the apply has finalized; and `validateChangePlan` grants ownership from the manifest, where the index artifacts are recorded and a capture is deliberately absent (spec §3.4 keeps a capture hand-editable in Obsidian). **The residual, accepted rather than closed:** a crash between the apply and the last transaction leaves a capture at `staging` with its notes already applied — inert, because the next run selects only `accepted` captures and cannot double-apply, and recoverable by `repair` plus a hand edit. **Cost of overturning:** there is no cheaper arrangement to overturn it to; the alternative is a Foundation change letting one execution span a read of what it just wrote | DOS-P6 Task 13, plan correction 4 |
-| the knowledge-pipeline spec §6.3, `confidence and lifecycle` | the spec names the validator and says "required frontmatter for the note's declared stage is absent" — **it never says which frontmatter**. Shipped rule: `established` requires `reviewed` to be a date, `deprecated` requires `updated` to be present, `emerging` requires nothing extra. It is **defensible but invented**: nothing in the tree enforced either before this task. It is grounded in a contradiction the product already flags — `lint.ts:285-294` grades an agent-authored, never-reviewed note as `provenance` at severity **warn**, so ingest turns only the narrower `established`-while-never-reviewed claim into a refusal. **The broad reading was checked and rejected**: refusing every `author: agent` + `reviewed: null` note would refuse every proposal this pipeline can produce. **Cost of overturning:** two `if`s at `validate.ts:474-491`; this validator writes no data, so nothing has to be migrated | DOS-P6 Task 12, `validate.ts` |
+| the knowledge-pipeline spec §6.3, `confidence and lifecycle` | the spec names the validator and says "required frontmatter for the note's declared stage is absent" — **it never says which frontmatter**. Shipped rule: `established` requires `reviewed` to be a date, `deprecated` requires `updated` to be present, `emerging` requires nothing extra. It is **defensible but invented**: nothing in the tree enforced either before this task. It is grounded in a contradiction the product already flags — `lint.ts:285-294` grades an agent-authored, never-reviewed note as `provenance` at severity **warn**, so ingest turns only the narrower `established`-while-never-reviewed claim into a refusal. **The broad reading was checked and rejected**: refusing every `author: agent` + `reviewed: null` note would refuse every proposal this pipeline can produce. **Cost of overturning:** two `if`s at `validate.ts:444-461`; this validator writes no data, so nothing has to be migrated | DOS-P6 Task 12, `validate.ts` |
 
 **One row is the founder correcting the spec after a pre-flight scan**, and it is the most
 consequential amendment DOS-P6 has taken:
