@@ -64,8 +64,8 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P6 | spec approved and plan written, both 2026-08-13 | the implementation — nineteen tasks, **seventeen landed** 2026-08-13/14. **Task 17 ran 2026-08-15 and half discharged itself** — Claude's row landed, Codex's run hit an exhausted usage limit; the remainder is NEW-21. Task 19 closes the subsystem, and its Steps 5–6 wait on NEW-21 |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository defects (R1) | `plans/2026-08-15-repository-defects.md` | **the four §1 rows whose fix is already specified and which take no decision away from the founder** — NEW-18, NEW-17, NEW-19, NEW-15. Five tasks, written 2026-08-15, `ORDER.md` Track R. Chosen by the founder when A10 turned out to be held on NEW-21 |
-| Repository-level | §1 | **NEW-21 (S — one successful `codex exec` completion, the founder's, blocked by an external usage limit)**, NEW-7 (XS, needs a machine with Obsidian), **NEW-20 (XS, security — `capture` proves its quarantine root then follows the path again; theoretical)**, **NEW-19 (XS, security — `reindex` builds its owned root textually)**, NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (XS, half closed — the argv screen's word list still screens a user's own path), NEW-13 (S, two artifact roots share one type), **NEW-15 (S, security — no executor of a discovered binary pays the check its type demands, and Task 17 made `capture` a second one)**, NEW-16 (S, spec §8.2's user-configured redaction patterns are unreachable), **NEW-17 (XS, security — `brain` is the one command whose config parse failure is not content-free)** and NEW-18 (XS, `assertSafeCommand`'s NUL branches have no test) |
+| Repository defects (R1) | **closed 2026-08-15**, plan deleted | **three of the four it aimed at** — NEW-18, NEW-17 and NEW-19, each with a regression test watched fail first. The fourth, **NEW-15, came back as a decision rather than a fix** and stays in §1: the guard was built, tested and withdrawn, because the policy the row implies refuses this product's own vendors |
+| Repository-level | §1 | **NEW-21 (S — one successful `codex exec` completion, the founder's, blocked by an external usage limit)**, **NEW-15 (S, security — the check `platform-macos`'s type demands; built and withdrawn 2026-08-15, now a policy decision that is the founder's)**, NEW-7 (XS, needs a machine with Obsidian), **NEW-20 (XS, security — `capture` proves its quarantine root then follows the path again; theoretical)**, NEW-11 (S, the invisible-title rule stops at `title`), NEW-12 (XS, half closed — the argv screen's word list still screens a user's own path), NEW-13 (S, two artifact roots share one type) and NEW-16 (S, spec §8.2's user-configured redaction patterns are unreachable) |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -105,17 +105,23 @@ founder's machine as user data, not as source material.
 
 Everything in this section is genuinely open. Nothing here is bookkeeping, and nothing
 closed stays here — NEW-1 through NEW-6, NEW-8 and NEW-9 were removed on 2026-08-10 when
-they closed, NEW-10 on 2026-08-11, and NEW-14 on 2026-08-15 when DOS-P6 Task 19's review closed it. What a closed item leaves behind is a row in §8, a clause in a spec, or a test;
-if it left nothing, it was not worth recording. Git history is the archive.
+they closed, NEW-10 on 2026-08-11, NEW-14 on 2026-08-15 when DOS-P6 Task 19's review closed it, and **NEW-17,
+NEW-18 and NEW-19 on 2026-08-15 when R1 closed them**. What a closed item leaves behind is a row in
+§8, a clause in a spec, or a test; if it left nothing, it was not worth recording. Git history is the
+archive.
 
-**Eleven rows, and they are not all the same kind of open.** Four — **NEW-18, NEW-17, NEW-19 and
-NEW-15** — have a fix their own row specifies and take no decision away from anyone, and those four
-are **R1**, `plans/2026-08-15-repository-defects.md`, in progress since 2026-08-15. Three —
-**NEW-16, NEW-11 and NEW-12** — cannot be implemented until a question in their own text is answered,
-and `ORDER.md` Track R names the question each one is waiting on. The remaining four are somebody
-else's: **NEW-21** the founder's, **NEW-20** and **NEW-13** registered as deliberately-not-fixed, and
-**NEW-7** waiting on a machine with Obsidian. **A row being open is not an invitation to implement
-it** — read which of the four groups it is in first.
+**Eight rows, and they are not all the same kind of open.** **R1 closed three of the eleven that
+stood here on 2026-08-15** — NEW-18, NEW-17 and NEW-19, each with a regression test watched fail
+first. It set out to close a fourth, NEW-15, and **that one came back as a decision instead**: the
+guard was built and withdrawn, because the policy the row implies refuses this product's own vendors.
+Its section below carries what the attempt settled.
+
+So: **four now need a decision before anyone can implement them** — **NEW-15** (the founder's, and
+the newest), plus **NEW-16**, **NEW-11** and **NEW-12**, whose questions `ORDER.md` Track R names.
+The other four are somebody else's: **NEW-21** the founder's, **NEW-20** and **NEW-13** registered as
+deliberately-not-fixed, and **NEW-7** waiting on a machine with Obsidian. **A row being open is not
+an invitation to implement it** — read which group it is in first. NEW-15 is the cautionary case: it
+read like an implementation for a day and cost a full task to discover it was not.
 
 ### NEW-21 — one successful `codex exec` completion is still owed
 
@@ -190,32 +196,6 @@ it** — read which of the four groups it is in first.
   the cost of the two paths disagreeing inside one function.
 - Cross-referenced from `docs/architecture/threat-model.md` §5.2, where the boundary is described.
 
-### NEW-19 — `reindex` builds its owned root textually, like `capture` did
-
-- **Status:** open, found 2026-08-15 by the survey Task 19's second fix round ran over every
-  `ownedRoots` caller after `capture.ts` was fixed · **Owner:** whoever next touches
-  `apps/cli/src/commands/reindex.ts` — DOS-P7 by default · **Size:** XS · **Security**
-- `writeIndexArtifacts` passes `ownedRoots: [join(vaultRoot, indexesDir)]`
-  (`apps/cli/src/commands/reindex.ts:283`) — built from strings, never proven to resolve inside the
-  vault. **It is the same shape `capture.ts:579` had**, and the same three checks miss it for the
-  same reasons. `assertUsableRoots` refuses a root that *grew* authority or sits inside
-  `excludedRoots` (`packages/core/src/plans/validate.ts:199-206`) and **permits a sideways
-  relocation on purpose** — its own comment names `~/.claude -> ~/Dropbox/claude` as the legitimate
-  case it must not break (`:186-188`). `ProtectedPathPolicy` returns early outside `$HOME`. Nothing
-  else on that path asks where the directory resolves.
-- **What it buys is narrower than `capture`'s**, which is why it is XS and was registered rather than
-  fixed in the same round. Replace `content/_indexes` with a link out of the vault and
-  `brain reindex` — and `ingest`'s third transaction — write the four generated artifacts there:
-  `index.json`, `catalog.md`, `tags.md`, `topics.md`. Those are derived rather than raw, but they
-  carry every note's title, path, summary and tags, so it is vault-metadata disclosure into an
-  attacker-chosen directory rather than the capture text itself.
-- **Traced by reading, not driven.** The three misses above were each read at their line; no test was
-  written, so nobody should treat this row as demonstrated the way
-  `tests/security/symlink-escape.test.ts` demonstrates the other two.
-- **The fix already exists**: `resolveQuarantineRoot` (`apps/cli/src/context.ts:263-305`) is the
-  same check one directory over, and its `refuse` injection means a caller keeps its own exit code.
-  Generalize its name when the second caller shape appears rather than copying it.
-
 ### NEW-11 — the invisible-title rule stops at the title
 
 - **Status:** open, found 2026-08-11 by the review that closed NEW-10 · **Owner:** the next task
@@ -246,47 +226,14 @@ it** — read which of the four groups it is in first.
   question the full fix has to answer — whether an invisible tag is an error, a warning, or
   silently dropped at index time.
 
-### NEW-17 — `brain` is the one command whose config parse failure is not content-free
-
-- **Status:** open, found 2026-08-14 by the fresh-context re-review of DOS-P6 Task 18 · **Owner:**
-  DOS-P7 · **Size:** XS · **Security**
-- **Seven of the eight commands refuse content-free.** `status`, `doctor`, `init`, `capture`,
-  `uninstall`, `review` and `ingest` route their config read through `readConfigFile`
-  (`apps/cli/src/commands/doctor.ts:209`), which
-  catches the parse error and raises a `ConfigurationError` that quotes nothing —
-  `tests/e2e/foundation.test.ts:1250` pins exactly that, as
-  `it("never quotes the configuration it failed to parse")`.
-- **`brain` does not.** `apps/cli/src/commands/brain.ts:109` calls `loadConfig(serialized)` outside
-  any `try`. The `TomlError` is not a `BrainRefusal`, so it falls through to `failureFrom`, which
-  emits `context.guards.redactDiagnostic(error.message)` — and smol-toml puts **three raw source
-  lines** of the file into that message.
-- **So a hand-edited `config.toml` containing a secret is echoed back on a `brain` run, with the
-  heuristic redactor as the only thing standing.** That is the one place in this product where
-  redaction is the sole defence rather than the last of several, which is the property
-  `docs/architecture/threat-model.md` §5.7 otherwise states as absolute — and now states as partial,
-  naming this row.
-- **The fix is the size of the defect:** route `brain`'s read through `readConfigFile` like every
-  other command, or wrap the call. Extend `foundation.test.ts:1250`'s case to cover `brain` in the
-  same change, or the next command to be added inherits the gap.
-
-### NEW-18 — `assertSafeCommand`'s NUL branches have no test anywhere
-
-- **Status:** open, found 2026-08-14 while checking a citation in the Task 18 threat model ·
-  **Owner:** whoever next touches `packages/security/src/process.ts` · **Size:** XS
-- `assertSafeCommand` refuses a NUL byte in the executable, the working directory, any argument and
-  stdin (`packages/security/src/process.ts:48-61`). **No test in this repository exercises any of the
-  four.** `process.test.ts`'s `assertSafeCommand` block holds two cases — the pipe-to-shell
-  normalization and a non-absolute executable — and a search for NUL cases across every test file
-  finds them for other functions only.
-- Found because the threat model tried to cite the coverage and the re-review checked whether it
-  existed. **The guard is correct; only the evidence is missing**, which is why this is XS and not a
-  security row. Four cases, one file.
-
 ### NEW-15 — nothing that executes a discovered binary pays the check its type demands
 
 - **Status:** open, found 2026-08-14 while writing `docs/architecture/threat-model.md`, verified
-  independently by that task's review · **Owner:** unassigned; DOS-P7 by default, as the first
-  subsystem after the one that introduced the execution · **Size:** S · **Security**
+  independently by that task's review. **Attempted 2026-08-15 as R1 Task 4 and deliberately not
+  shipped** — a working guard was built, tested and then withdrawn, because the obvious policy
+  refuses this product's own vendors. What is now owed is a **founder decision**, not an
+  implementation; see "What the attempt settled" below · **Owner:** the founder for the policy, then
+  DOS-P7 for the code · **Size:** S · **Security**
 - `packages/platform-macos/src/types.ts:13-18` states the contract in its own words: **whoever
   executes a discovered binary owes an owner and mode check first.** `discoverExecutable` finds a
   name on `PATH` and returns a path; it does not vouch for it.
@@ -313,6 +260,40 @@ it** — read which of the four groups it is in first.
   observation and no vault path — but it is still an unchecked execution the type says is owed one.
 - The nearest existing record is `claude-adapter.md` §9 residual 10, which notes the execution and
   **not** the check — which is why this row exists rather than a pointer to it.
+
+**What the attempt settled, 2026-08-15.** R1 Task 4 built the guard — `assertTrustedExecutable`,
+walking the executable and every ancestor to `/`, refusing a component owned by neither the current
+uid nor root, refusing `(mode & 0o022) !== 0`, and refusing a symbolic link anywhere in the chain
+rather than following it. Six unit cases, watched red then green; both call sites wired with the
+behaviours each command's contract already demands (`capture` swallows the refusal and records
+`unknown` per spec §5.4, `ingest` refuses outside the `catch` that would otherwise hide it). **It was
+withdrawn before commit and the row stayed open**, for one reason and one class of reason.
+
+- **The rules as stated refuse this product's own vendors, on the founder's own machine.**
+  `command -v claude` and `command -v codex` both resolve to `~/.local/bin/…` and **both are
+  symbolic links**, so the no-symlink rule refuses both outright. `/opt/homebrew/bin` is
+  `drwxrwxr-x` — **group-writable** — so the mode rule refuses every Homebrew-installed binary,
+  which is the ordinary way these CLIs arrive. Shipped as specified, `capture` would record
+  `sourceAgent: "unknown"` forever and `ingest` would exit 5 on every run.
+- **The test harness collision is real but secondary.** `tests/helpers/temp-home.ts` sandboxes under
+  `/tmp` on purpose — its docblock records that `os.tmpdir()` paths are long and high-entropy enough
+  that the product's own redactor rewrites them, after which discovery reports nothing — and `/tmp`
+  resolves to `/private/tmp`, mode `41777`. The one e2e case that spawns the real binary therefore
+  went red on a correct refusal.
+- **One loosening was considered and rejected on its merits**, and the argument is worth keeping: a
+  **sticky bit does not make a world-writable directory safe here.** It stops another user deleting
+  or renaming a file they do not own; it does not stop them **creating** one under a name nothing
+  owns yet. So exempting sticky world-writable ancestors would wave through exactly the planted
+  binary this row exists to refuse.
+
+**So the open question is the policy, and it is the founder's**, because it decides whether the
+product runs on an ordinary macOS install: **(a)** canonicalize and check the *resolved* target and
+its ancestors — which is what the kernel actually runs at `exec` time — rather than refusing symlinks, at the
+cost of a check-then-use window of the shape already registered as NEW-20; **(b)** whether
+group-writable is refusable at all when the group is the user's own, given Homebrew; **(c)** whether
+`tests/helpers/temp-home.ts` relocates off `/tmp`, and what replaces the redaction-threshold
+reasoning that put it there. **The work is not lost:** the guard, its tests and the full analysis
+were preserved off the branch rather than committed, and the reasoning above is the summary.
 
 ### NEW-16 — spec §8.2's user-configured redaction patterns are unreachable
 
