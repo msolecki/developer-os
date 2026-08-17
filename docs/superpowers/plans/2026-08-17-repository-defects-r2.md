@@ -348,7 +348,7 @@ git commit -m "test(repository): resolve every path:line citation, and fail on o
 - Produces: `createRedactor(key: Uint8Array, options?: RedactionOptions): Redactor`
 - Produces: `DeveloperOsConfigV1.redaction?: { readonly patterns: readonly string[] }`
 
-- [ ] **Step 1: Write the failing config test**
+- [x] **Step 1: Write the failing config test**
 
 In `packages/core/src/config/loader.test.ts`:
 
@@ -385,12 +385,12 @@ it("keeps a configuration that predates the table loadable", () => {
 });
 ```
 
-- [ ] **Step 2: Run it and verify it fails**
+- [x] **Step 2: Run it and verify it fails**
 
 Run: `pnpm vitest run packages/core/src/config/loader.test.ts`
 Expected: FAIL — the first case throws on an unrecognized key, because the schema is `.strict()`. That failure is the point: it is what makes this a documented amendment rather than a widening nobody noticed.
 
-- [ ] **Step 3: Add the table to the schema**
+- [x] **Step 3: Add the table to the schema**
 
 In `packages/core/src/config/loader.ts`, above `configSchema`:
 
@@ -430,12 +430,12 @@ Add `redaction: redactionSchema.optional(),` to `configSchema`. Destructure it o
 
 Add `readonly redaction?: { readonly patterns: readonly string[] }` to `DeveloperOsConfigV1`.
 
-- [ ] **Step 4: Run the config tests and verify they pass**
+- [x] **Step 4: Run the config tests and verify they pass**
 
 Run: `pnpm vitest run packages/core/src/config/loader.test.ts`
 Expected: PASS, all four.
 
-- [ ] **Step 5: Write the failing redactor test**
+- [x] **Step 5: Write the failing redactor test**
 
 In `packages/security/src/redaction.test.ts`:
 
@@ -457,12 +457,12 @@ it("returns a redactor that behaves as redactText does when no patterns are conf
 });
 ```
 
-- [ ] **Step 6: Run it and verify it fails**
+- [x] **Step 6: Run it and verify it fails**
 
 Run: `pnpm vitest run packages/security/src/redaction.test.ts`
 Expected: FAIL — `createRedactor is not defined`.
 
-- [ ] **Step 7: Add `createRedactor`**
+- [x] **Step 7: Add `createRedactor`**
 
 In `packages/security/src/redaction.ts`:
 
@@ -491,13 +491,13 @@ export function createRedactor(
 }
 ```
 
-- [ ] **Step 8: Thread the redactor from the composition root**
+- [x] **Step 8: Thread the redactor from the composition root**
 
 In `apps/cli/src/context.ts`, build one redactor from the loaded config's `redaction?.patterns ?? []` and the durable key, and expose it as `CliContext.redact: Redactor`. Replace every `redactText(value, key)` in `capture.ts`, `review.ts`, `ingest.ts`, `init.ts` and `context.ts` with a call to the bound redactor, changing the parameter each helper receives from `key: Uint8Array` to `redact: Redactor` **where the function only redacts**. The key stays where it is genuinely needed for fingerprinting — `fingerprintDirectory(workingDirectory, key)` in `apps/cli/src/commands/capture.ts:684` is the case to leave alone.
 
 `init.ts:734` runs before a config exists; it passes no patterns and keeps the built-in classes only. Say so in a comment at that site.
 
-- [ ] **Step 9: Write the gate that keeps the entry single**
+- [x] **Step 9: Write the gate that keeps the entry single**
 
 Create `tests/repository/redactor-entry.test.ts`:
 
@@ -518,16 +518,16 @@ it("routes every production redaction through createRedactor, per package", asyn
 
 The per-scope non-empty assertion is not optional: `SESSION.md`'s hard rule is that a gate which can pass by scanning nothing is not a gate, and the self-containment enumerator has already been caught passing over an empty set once.
 
-- [ ] **Step 10: Run the gate**
+- [x] **Step 10: Run the gate**
 
 Run: `npm run check`
 Expected: exit 0. Show failures only.
 
-- [ ] **Step 11: Register the amendment**
+- [x] **Step 11: Register the amendment**
 
 Add a `BACKLOG.md` §8 row: `foundation.md` §2's frozen `.strict()` config schema, amended 2026-08-17 by this task with an optional `[redaction]` table, outcome pending founder ratification. Cross-reference it from `docs/architecture/foundation.md` §2 in that same commit — four amendments were once recorded and never cross-referenced, and readers of the amended sections got the superseded contract for four days.
 
-- [ ] **Step 12: Fresh-context review, then commit**
+- [x] **Step 12: Fresh-context review, then commit**
 
 ```bash
 git add packages/core/src/config packages/security/src/redaction.ts packages/security/src/index.ts packages/security/src/redaction.test.ts apps/cli/src/context.ts apps/cli/src/commands/capture.ts apps/cli/src/commands/review.ts apps/cli/src/commands/ingest.ts apps/cli/src/commands/init.ts tests/repository/redactor-entry.test.ts docs/superpowers/BACKLOG.md docs/architecture/foundation.md

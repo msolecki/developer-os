@@ -8,11 +8,12 @@ export {
   SecurityRefusalError,
 } from "./paths.js";
 export { ProtectedPathPolicy } from "./protected-paths.js";
-export { REDACTION_CLASSES, redactText } from "./redaction.js";
+export { createRedactor, REDACTION_CLASSES, redactText } from "./redaction.js";
 export type {
   RedactionFinding,
   RedactionOptions,
   RedactionResult,
+  Redactor,
 } from "./redaction.js";
 export { assertSafeCommand, NodeProcessRunner } from "./process.js";
 export type {

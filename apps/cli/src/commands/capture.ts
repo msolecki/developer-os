@@ -25,7 +25,8 @@ import {
 } from "@developer-os/brain";
 import type { CaptureStatus } from "@developer-os/brain";
 import type { AgentName } from "@developer-os/platform-macos";
-import { redactText } from "@developer-os/security";
+import { createRedactor } from "@developer-os/security";
+import type { Redactor } from "@developer-os/security";
 import type {
   CliInstallation,
   DiscoverCliDependencies,
@@ -444,7 +445,7 @@ async function readExistingCapture(
   context: CliContext,
   target: string,
   fileName: string,
-  key: Uint8Array,
+  redact: Redactor,
 ): Promise<ExistingCapture | null> {
   try {
     await context.fs.lstat(target);
@@ -454,9 +455,7 @@ async function readExistingCapture(
   }
 
   const text = await context.guards.readText(target);
-  const outcome = parseCaptureFile(fileName, text, (value) =>
-    redactText(value, key),
-  );
+  const outcome = parseCaptureFile(fileName, text, redact);
 
   return outcome.ok
     ? { parsed: true, status: outcome.envelope.status, warning: null, contents: text }
@@ -478,10 +477,10 @@ async function readCaptureQuietly(
   context: CliContext,
   target: string,
   fileName: string,
-  key: Uint8Array,
+  redact: Redactor,
 ): Promise<ExistingCapture | null> {
   try {
-    return await readExistingCapture(context, target, fileName, key);
+    return await readExistingCapture(context, target, fileName, redact);
   } catch {
     return null;
   }
@@ -623,10 +622,10 @@ async function writeCapture(
  * captured content with the composition root's ephemeral key would persist
  * fingerprints nothing can ever be compared against.
  */
-function guardsWith(guards: CliGuards, key: Uint8Array): CliGuards {
+function guardsWith(guards: CliGuards, redact: Redactor): CliGuards {
   return {
     ...guards,
-    redactDiagnostic: (text: string): string => redactText(text, key).text,
+    redactDiagnostic: (text: string): string => redact(text).text,
   };
 }
 
@@ -660,7 +659,20 @@ export async function runCapture(
     const text = await resolveText(context, options);
 
     const key = loadOrCreateRedactionKey(paths.stateDir);
-    guards = guardsWith(context.guards, key);
+    /**
+     * Built once, here, where the key and the configuration are both in scope for the
+     * only time. **This is the seam spec §8.2's user-extensible class was missing** — the
+     * parameter existed on `redactText` and no caller passed it, and the schema had no
+     * table to read (BACKLOG NEW-16).
+     *
+     * Everything below takes the redactor rather than the key, so the key travels no
+     * further than the fingerprint that genuinely needs it. A closure cannot be
+     * interpolated into a diagnostic by accident (spec §8.4).
+     */
+    const redact = createRedactor(key, {
+      userPatterns: config.redaction?.patterns ?? [],
+    });
+    guards = guardsWith(context.guards, redact);
 
     const workingDirectory = await context.guards.canonicalize(
       dependencies.cwd(),
@@ -683,7 +695,7 @@ export async function runCapture(
       projectSlug: slugify(basename(workingDirectory)),
       workingDirectoryFingerprint: fingerprintDirectory(workingDirectory, key),
       createdAt: context.now().toISOString(),
-      redact: (value: string) => redactText(value, key),
+      redact,
     });
     assertWritableContent(built.envelope.content);
 
@@ -757,7 +769,7 @@ export async function runCapture(
       context,
       target,
       built.fileName,
-      key,
+      redact,
     );
     if (existing !== null) return duplicate(existing);
 
@@ -792,7 +804,7 @@ export async function runCapture(
        * refused guard, a full disk, an unreadable staging directory, an
        * interrupted apply: every one of them still surfaces as itself.
        */
-      const raced = await readCaptureQuietly(context, target, built.fileName, key);
+      const raced = await readCaptureQuietly(context, target, built.fileName, redact);
       if (raced === null || !raced.parsed || raced.contents === built.contents) {
         throw error;
       }

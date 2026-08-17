@@ -229,6 +229,41 @@ function setStatus(path: string, status: string): Promise<void> {
 }
 
 describe("runReview", () => {
+  /**
+   * **BACKLOG NEW-16 on the verb that exists for exactly this.**
+   * `review --decision edit` re-reads a capture and re-redacts it, and its whole purpose
+   * is removing something a user put in the file by hand. A client name no built-in class
+   * catches is the case spec §8.2 describes, so it must be the case `edit` handles.
+   *
+   * Seeded before the table is written, so the name is genuinely on disk and this
+   * exercises `review`'s own redactor. Revert `review.ts`'s
+   * `userPatterns: config.redaction?.patterns ?? []` and this goes red.
+   */
+  it("re-redacts a configured client name on edit", async () => {
+    const fixture = await installedFixture("review-user-redaction");
+    const seeded = await fixture.seed(
+      "the Northwind Traders migration needs a rollback plan",
+    );
+    expect(await nodeFs.readFile(seeded.path, "utf8")).toContain("Northwind Traders");
+
+    await nodeFs.appendFile(
+      fixture.paths.configFile,
+      '\n[redaction]\npatterns = ["Northwind Traders"]\n',
+      "utf8",
+    );
+
+    const result = await fixture.run(fixture.context, {
+      id: seeded.id,
+      decision: "edit",
+    });
+
+    expect(result.ok, "the edit must succeed").toBe(true);
+    const after = await nodeFs.readFile(seeded.path, "utf8");
+    expect(after).not.toContain("Northwind Traders");
+    expect(after).toContain("[REDACTED:user-pattern]");
+    expect(after).toContain("migration needs a rollback plan");
+  });
+
   it("lists quarantined captures and nothing else", async () => {
     const fixture = await installedFixture("review-list");
     const quarantined = await fixture.seed(OBSERVATION);

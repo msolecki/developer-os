@@ -189,6 +189,61 @@ async function setStatus(path: string, status: string): Promise<void> {
 }
 
 describe("runCapture", () => {
+
+  /**
+   * **The end-to-end claim of BACKLOG NEW-16, and the reason it is here rather than in a
+   * unit test.** The loader parses `[redaction]` and `createRedactor` binds patterns —
+   * both were covered in isolation, and both would keep passing if the three lines that
+   * join them were deleted. That is precisely the state NEW-16 describes: the option
+   * exists and no production caller passes it.
+   *
+   * So this drives the real command against a real installed config: write the table,
+   * capture text containing the pattern, and read the file back off disk. Revert
+   * `capture.ts`'s `userPatterns: config.redaction?.patterns ?? []` to `createRedactor(key)`
+   * and this goes red.
+   *
+   * The client name is synthetic, as every fixture in this repository must be.
+   */
+  it("redacts a client name configured in the vault's own config.toml", async () => {
+    const fixture = await installedFixture("capture-user-redaction");
+    await nodeFs.appendFile(
+      fixture.paths.configFile,
+      '\n[redaction]\npatterns = ["Northwind Traders"]\n',
+      "utf8",
+    );
+
+    const result = await fixture.run(fixture.context, {
+      text: "the Northwind Traders migration needs a rollback plan",
+    });
+
+    expect(result.ok, "the capture must succeed").toBe(true);
+    if (!result.ok) return;
+
+    const written = await nodeFs.readFile(result.data.path, "utf8");
+    expect(written).not.toContain("Northwind Traders");
+    expect(written).toContain("[REDACTED:user-pattern]");
+    /** The rest of the observation survives: this redacts a name, not the note. */
+    expect(written).toContain("migration needs a rollback plan");
+  });
+
+  /**
+   * The other half: with no table configured, nothing changes. Without this the case
+   * above could pass because *something* redacts, rather than because the user's own
+   * pattern does.
+   */
+  it("leaves the same text alone when no patterns are configured", async () => {
+    const fixture = await installedFixture("capture-no-user-redaction");
+    const result = await fixture.run(fixture.context, {
+      text: "the Northwind Traders migration needs a rollback plan",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(await nodeFs.readFile(result.data.path, "utf8")).toContain(
+      "Northwind Traders",
+    );
+  });
+
   it("writes one quarantine file through a transaction, not a bare write", async () => {
     const fixture = await installedFixture("capture-write");
 

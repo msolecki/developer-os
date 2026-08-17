@@ -485,11 +485,32 @@ function secretScan(
      * Never the value, never the redacted text, never the fingerprint — a
      * validation report is written and logged.
      */
+    /**
+     * **`user-pattern` gets its own sentence, because it has a different remedy.** Every
+     * other class means a real secret is in the model's proposal. `user-pattern` means
+     * the proposal contains a string the *user* asked to be redacted — a client name,
+     * ordinarily — and the fix is to narrow the `[redaction]` table, not to hunt a leak.
+     * One message for both sent a user looking for a credential that was never there
+     * (BACKLOG NEW-24).
+     *
+     * **It still names no value and no entry.** Which configured pattern matched is not
+     * knowable here: `RedactionFinding` carries a class and a fingerprint and nothing
+     * that identifies the table row. Threading a pattern index through would widen a type
+     * that reaches a persisted capture envelope, which is a decision rather than a gap to
+     * fill in passing — the residual row states it.
+     */
+    const sorted = [...classes].sort(compareCanonical);
+    const userConfigured = classes.has("user-pattern");
+    const others = sorted.filter((name) => name !== "user-pattern");
     findings.push(
       finding(
         "secret-scan",
         note.path,
-        `the redaction pass found ${[...classes].sort(compareCanonical).join(", ")} in this note`,
+        userConfigured && others.length === 0
+          ? "this note matches a pattern from the [redaction] table in config.toml; narrow that entry if the match was not intended"
+          : userConfigured
+            ? `the redaction pass found ${others.join(", ")} in this note, and it also matches a pattern from the [redaction] table in config.toml`
+            : `the redaction pass found ${sorted.join(", ")} in this note`,
       ),
     );
   }

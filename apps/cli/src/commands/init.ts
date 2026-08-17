@@ -21,7 +21,7 @@ import type {
 import {
   assertDisjointPaths,
   canonicalizePlannedPath,
-  redactText,
+  createRedactor,
 } from "@developer-os/security";
 
 import {
@@ -652,8 +652,9 @@ export async function runInit(
    *
    * **The pattern Task 8 copies is the rule, not this binding: redact with the
    * key you loaded, at the point you loaded it.** `capture`, `review` and
-   * `ingest` must hand their own key to `redactText` for the content they
-   * persist a fingerprint of. A command that swapped guards only on its error
+   * `ingest` must build their own redactor from the key they loaded, and use it
+   * for the content they persist a fingerprint of — they hand no key to
+   * `redactText` any more, since `createRedactor` binds it (BACKLOG NEW-16). A command that swapped guards only on its error
    * path would fingerprint captured content with the ephemeral key, which is
    * the exact defect this task exists to kill.
    */
@@ -731,7 +732,13 @@ export async function runInit(
     guards = {
       ...context.guards,
       redactDiagnostic: (text: string): string =>
-        redactText(text, durableKey).text,
+        /**
+         * **No user patterns, and there can be none.** `init` is what *creates* the
+         * configuration file; a `[redaction]` table cannot exist before this command
+         * finishes. The built-in classes are the whole of what applies here, which is
+         * correct rather than a gap (BACKLOG NEW-16).
+         */
+        createRedactor(durableKey)(text).text,
     };
 
     const journal = await context.executor.execute({

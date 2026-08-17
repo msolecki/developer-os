@@ -48,7 +48,7 @@ import {
   canonicalizePlannedPath,
   NodeProcessRunner,
   ProtectedPathPolicy,
-  redactText,
+  createRedactor,
   SecurityRefusalError,
 } from "@developer-os/security";
 import type { ProcessRunner } from "@developer-os/security";
@@ -355,7 +355,12 @@ export function createTransactionGuards(
       await policy.assertWritable(path);
     },
     redactDiagnostic: (text: string): string =>
-      redactText(text, redactionKey).text,
+      /**
+       * Built-in classes only: this diagnostic redactor is built before any configuration
+       * is read. Each command rebinds its own guards with a config-bound redactor as soon
+       * as it has both — see `guardsWith` in `capture.ts`, `review.ts` and `ingest.ts`.
+       */
+      createRedactor(redactionKey)(text).text,
   };
 }
 
@@ -662,7 +667,20 @@ export function createProductionContext(
   const lockProvider = new MacOsTransactionLockProvider();
   const runner = new NodeProcessRunner({
     assertCommand: assertSafeCommand,
-    redact: (text: string) => redactText(text, redactionKey),
+    /**
+     * **Built-in classes only, and deliberately so rather than by oversight.** This
+     * runner redacts a child process's stdout and stderr — including a vendor model's
+     * proposal on the way back into `ingest` — and it is constructed here, at the
+     * composition root, *before any configuration file has been read*. The user's
+     * `[redaction]` patterns are not available yet and cannot be without making the
+     * runner per-command, which would bypass the fake runner every command test injects.
+     *
+     * **What limits the exposure**: the return leg is model output, not user content, and
+     * `validateProposal`'s `secret-scan` runs the *config-bound* redactor over every
+     * proposed note — so a proposal carrying a configured pattern is refused rather than
+     * written. Registered as `BACKLOG.md` §1 **NEW-26**.
+     */
+    redact: createRedactor(redactionKey),
   });
   const now = (): Date => new Date();
 

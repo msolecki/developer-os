@@ -127,6 +127,63 @@ const brainSchema = z
     { message: "a topicAliases key must not also be a configured topic folder" },
   );
 
+/**
+ * **Literal substrings, never expressions.** `redactText` matches these with `indexOf`
+ * and not with a compiled pattern: a user-supplied regular expression run over capture
+ * text is a ReDoS surface, and this codebase bounds no expression anywhere —
+ * `RedactionOptions`' own docblock states the rule this table has to honour.
+ *
+ * **Bounded on both axes, and the bounds are why it is safe to expose.** Redaction is
+ * O(patterns x text) and runs on every capture, every review and every ingest; an
+ * unbounded list turns a configuration file into a denial of service against the user's
+ * own vault. Sixty-four patterns of up to 200 characters is far above any real
+ * client-name list and far below anything measurable.
+ *
+ * **An empty string is refused rather than ignored**, because `indexOf("")` matches at
+ * every position: one empty entry would redact the whole of every text this product
+ * handles, and the failure would look like the redactor working.
+ *
+ * Optional, like `[brain]` and for the same reason: `configSchema` is `.strict()`, so a
+ * required table would refuse every installation that predates it. **Amends the schema
+ * `docs/architecture/foundation.md` §2 froze**; `BACKLOG.md` §8 carries the row
+ * (NEW-16).
+ */
+const redactionSchema = z
+  .object({
+    patterns: z
+      .array(
+        z
+          .string()
+          .max(200)
+          /**
+           * **Non-empty after trimming, and no longer than that.** The bound started at
+           * `min(1)`, justified by the empty string matching at every position — and a
+           * single space defeats that argument while passing it: `patterns = [" "]`
+           * redacts between every word of every text this product handles, and the
+           * failure looks like the redactor working. Trimming is what that argument
+           * actually asked for.
+           *
+           * **A three-character floor was tried and withdrawn, because it measured the
+           * wrong thing.** It refused `EY`, `BP`, `GE` and `3M` — registered company
+           * names rather than abbreviations a user could lengthen — and every
+           * two-character CJK name, which is the ordinary length there, leaving a user
+           * with a Chinese or Japanese client unable to configure it at all. What `" "`
+           * and `"e"` share is not shortness; it is that they match ubiquitously, which
+           * is a property of the *text* and cannot be measured here.
+           *
+           * **So over-matching is deliberately not bounded by this schema.** A pattern
+           * short or common enough to match most of a note still refuses every ingest,
+           * and closing that needs a redaction-time density check plus a refusal that
+           * names the offending entry. `BACKLOG.md` §1 **NEW-24** carries it.
+           */
+          .refine((value) => value.trim().length > 0, {
+            message: "A redaction pattern must contain a non-whitespace character",
+          }),
+      )
+      .max(64),
+  })
+  .strict();
+
 const configSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -148,6 +205,7 @@ const configSchema = z
       })
       .strict(),
     brain: brainSchema.optional(),
+    redaction: redactionSchema.optional(),
     telemetry: z.literal(false),
   })
   .strict();
@@ -161,9 +219,16 @@ const configSchema = z
  * empty `[brain]` table into a configuration that never had one.
  */
 export function loadConfig(source: string): DeveloperOsConfigV1 {
-  const { brain, ...rest } = configSchema.parse(parse(source));
+  const { brain, redaction, ...rest } = configSchema.parse(parse(source));
 
-  return brain === undefined ? rest : { ...rest, brain };
+  /**
+   * Both optional sections are re-added only when present, for the reason the `brain`
+   * docblock above gives: under `exactOptionalPropertyTypes` a present-and-`undefined`
+   * key is not assignable to an optional one, and loosening the interface instead would
+   * let `serializeConfig` emit an empty table into a configuration that never had one.
+   */
+  const withBrain = brain === undefined ? rest : { ...rest, brain };
+  return redaction === undefined ? withBrain : { ...withBrain, redaction };
 }
 
 export function serializeConfig(config: DeveloperOsConfigV1): string {
@@ -189,6 +254,7 @@ export function serializeConfig(config: DeveloperOsConfigV1): string {
      * existing config on the first save that touched it.
      */
     ...(validated.brain === undefined ? {} : { brain: validated.brain }),
+    ...(validated.redaction === undefined ? {} : { redaction: validated.redaction }),
     telemetry: validated.telemetry,
   });
 }

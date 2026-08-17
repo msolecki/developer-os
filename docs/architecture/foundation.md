@@ -97,6 +97,16 @@ existed still loads and still serializes byte-identically. Rationale in
 `specs/2026-07-21-developer-os-brain-engine-design.md` §3 and §15.3; every amendment to a
 frozen interface is indexed in `docs/superpowers/BACKLOG.md` §8.
 
+**A second amendment landed on 2026-08-17, on exactly the same terms.** Track R entry R2 gave
+`DeveloperOsConfigV1` an optional `redaction?: { patterns }` member — a bounded list of literal
+substrings, never expressions — because the knowledge-pipeline spec §8.2 describes a
+user-extensible redaction class that was **unreachable**: `redactText` accepted the option and no
+production caller passed it, and this schema had no key a user could set (`BACKLOG.md` §1 NEW-16).
+Additive in the same three senses as `brain`: `.strict()` and `schemaVersion = 1` are unchanged, the
+table is emitted only when present, and a configuration predating it loads and re-serializes
+byte-identically. `BACKLOG.md` §8 carries the row, **unratified** — the founder decided to implement
+NEW-16, which is not the same as ratifying the amendment it required.
+
 ## 3. The mutation pipeline
 
 Every filesystem mutation in the product goes through seven phases, recorded in a journal at

@@ -36,6 +36,15 @@ export interface DeveloperOsConfigV1 {
    * a version bump would stop an installed product on upgrade.
    */
   readonly brain?: BrainConfigV1;
+  /**
+   * Spec §8.2's user-extensible redaction class — the one a founder uses for a client
+   * name no generic pattern catches. Literal substrings, never expressions; the loader's
+   * `redactionSchema` states why, and bounds both the count and the length.
+   *
+   * Optional for the same reason `brain` is: the schema is `.strict()`, so a required
+   * table would refuse every installation that predates it.
+   */
+  readonly redaction?: { readonly patterns: readonly string[] };
   readonly telemetry: false;
 }
 

@@ -21,7 +21,8 @@ import {
   REVIEW_DECISIONS,
 } from "@developer-os/brain";
 import type { CaptureStatus, ReviewDecision } from "@developer-os/brain";
-import { redactText } from "@developer-os/security";
+import { createRedactor } from "@developer-os/security";
+import type { Redactor } from "@developer-os/security";
 
 import {
   exitCodeOf,
@@ -234,16 +235,14 @@ interface Listing {
 async function listQuarantined(
   context: CliContext,
   quarantine: string,
-  key: Uint8Array,
+  redact: Redactor,
 ): Promise<Listing> {
   const captures: ReviewedCaptureV1[] = [];
   const warnings: string[] = [];
 
   for (const fileName of await captureFileNames(context, quarantine)) {
     const text = await context.guards.readText(join(quarantine, fileName));
-    const outcome = parseCaptureFile(fileName, text, (value) =>
-      redactText(value, key),
-    );
+    const outcome = parseCaptureFile(fileName, text, redact);
     if (!outcome.ok) {
       warnings.push(
         `${fileName} is not a readable capture (${outcome.reason}), so it is failed rather than waiting for review`,
@@ -423,7 +422,7 @@ async function writeCapture(
 async function decideOne(
   context: CliContext,
   quarantine: string,
-  key: Uint8Array,
+  redact: Redactor,
   target: ReviewTarget,
 ): Promise<ReviewedCaptureV1> {
   const fileName = `${target.id}${CAPTURE_FILE_SUFFIX}`;
@@ -431,9 +430,7 @@ async function decideOne(
 
   /** Read as late as possible: everything above is independent of the file. */
   const text = await readCapture(context, path, target.id);
-  const parsed = parseCaptureFile(fileName, text, (value) =>
-    redactText(value, key),
-  );
+  const parsed = parseCaptureFile(fileName, text, redact);
   if (!parsed.ok) {
     throw new ReviewRefusal(
       EXIT_CODES.invalidInput,
@@ -469,10 +466,10 @@ async function decideOne(
  * the composition root's ephemeral key would persist fingerprints nothing can
  * ever be compared against.
  */
-function guardsWith(guards: CliGuards, key: Uint8Array): CliGuards {
+function guardsWith(guards: CliGuards, redact: Redactor): CliGuards {
   return {
     ...guards,
-    redactDiagnostic: (text: string): string => redactText(text, key).text,
+    redactDiagnostic: (text: string): string => redact(text).text,
   };
 }
 
@@ -525,17 +522,26 @@ export async function runReview(
     );
 
     const key = loadOrCreateRedactionKey(paths.stateDir);
-    guards = guardsWith(context.guards, key);
+    /**
+     * Built once, where the key and the configuration are both in scope. Spec §8.2's
+     * user-extensible patterns reach the re-redaction an `edit` performs through here —
+     * which matters most in this command, since `review --decision edit` exists to remove
+     * a secret a user pasted in by hand (BACKLOG NEW-16).
+     */
+    const redact = createRedactor(key, {
+      userPatterns: config.redaction?.patterns ?? [],
+    });
+    guards = guardsWith(context.guards, redact);
 
     if (target === null) {
-      const listing = await listQuarantined(context, quarantine, key);
+      const listing = await listQuarantined(context, quarantine, redact);
       return success(
         { schemaVersion: 1, captures: listing.captures, reviewed: 0 },
         listing.warnings,
       );
     }
 
-    const reviewed = await decideOne(context, quarantine, key, target);
+    const reviewed = await decideOne(context, quarantine, redact, target);
     return success({ schemaVersion: 1, captures: [reviewed], reviewed: 1 });
   } catch (error) {
     return failureFrom(
