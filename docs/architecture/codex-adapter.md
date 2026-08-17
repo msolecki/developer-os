@@ -268,12 +268,20 @@ codex exec --json --output-schema <schema-file> -s <sandbox> [--add-dir <dir>]..
 The sandbox comes from the declared write-scope count: none → `read-only`, one or more →
 `workspace-write` plus `--add-dir` naming exactly those scopes. `--output-schema` constrains the
 model's final response and the result is validated afterwards anyway: constrain, then validate.
-Every value position goes through `screenValueArgument` from `@developer-os/security` — one copy,
-shared with the Claude adapter since Task 3.5, and the reason `BACKLOG.md` §1 NEW-12 exists is that
-its *nominal* half is applied to free-form prose that only its positional half protects.
+Every value position goes through a screen from `@developer-os/security` — one copy of each, shared
+with the Claude adapter since Task 3.5 — and **which screen depends on where the value came from**.
+A write scope originates outside this repository and keeps both rules (`screenValueArgument`); the
+prompt is prose and keeps the positional rule alone (`screenProseArgument`); the working root and the
+output schema path are assembled by this product and also keep the positional rule alone
+(`screenDerivedPathArgument`). That last split closed `BACKLOG.md` §1 NEW-12 on 2026-08-17: applying
+the *nominal* half to a path derived from the user's own `brainPath` refused a vault at
+`~/Danger/DeveloperBrain` permanently, and applying it to a capture body refused every observation
+that quoted an `EACCES` message.
 
-**Nothing in this package writes the file `outputSchemaPath` points at.** It is a caller-supplied
-path — `invokeCodex` screens it and places it in argv, and never reads or creates it — so the
+**Nothing in this package writes the file `outputSchemaPath` points at.** It is caller-supplied, and
+the caller is `ingest` — which is the same fact as "assembled by this product" one paragraph up, seen
+from this package rather than from the product. `invokeCodex` screens it and places it in argv, and
+never reads or creates it — so the
 schema's content belongs to whichever subsystem executes the verb, which is DOS-P6. The obligation
 exists nowhere else: `outputSchemaPath` appears in no code path outside `packages/adapter-codex`,
 `parseAgentPromptArgs` in `packages/core` does not accept it, and no fixture or test in `apps`,

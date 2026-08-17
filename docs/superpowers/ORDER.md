@@ -202,7 +202,7 @@ stays in §1 until that question is answered.
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| R2 | Nine decided defects — five §1 rows, three Foundation requests, one DOS-P7 gap | `plans/2026-08-17-repository-defects-r2.md`, ten tasks | nothing | M | every closed row leaves §1, both amendments registered in §8, CI green on the commit | **now** |
+| R2 | Nine decided defects — five §1 rows (NEW-12 already closed, four in flight), three Foundation requests, one DOS-P7 gap | `plans/2026-08-17-repository-defects-r2.md`, ten tasks | nothing | M | every closed row leaves §1, both amendments registered in §8, CI green on the commit | **now** |
 
 **R2 exists because the five decisions those rows were waiting on were taken on 2026-08-17.** Each had
 sat as "open" while being unimplementable, which is the state this track exists to resolve rather than
@@ -223,10 +223,19 @@ accumulate. What was decided:
 Three Foundation requests and the `accepted → rejected` gap are in the same plan, decided the same
 day, because they were unowned for the same reason: no entry on the product path reaches them.
 
-**Four §1 rows are deliberately not in R2**, and a session finishing this entry must not sweep them up
-with the five that close: **NEW-21** is the founder's and blocks A10; **NEW-20** and **NEW-13** were
-registered as deliberately-not-fixed; **NEW-7** needs ten minutes with a machine that has Obsidian
-rather than an agent.
+**Seven §1 rows are deliberately not in R2**, and a session finishing this entry must not sweep them up
+with the four that close. **Four belong to somebody else:** **NEW-21** is the founder's and blocks
+A10; **NEW-20** and **NEW-13** were registered as deliberately-not-fixed; **NEW-7** needs ten minutes
+with a machine that has Obsidian rather than an agent. **Three came from the review that closed NEW-12**, on
+2026-08-17 — a derived path that will wear a write scope's name; an interpolation in `ingest` that no
+longer has an end-to-end test because no production path can reach it; and **NEW-23**, which is the
+one worth reading, because it is about this repository's documents rather than its code: roughly a
+hundred `path:line` citations are maintained by hand, `npm run check` is green with every one of them
+broken, and fixing two of them in Task 1 silently broke twelve more. None of the three is R2's to fix.
+
+**§1 therefore holds eleven rows while R2 runs, not nine.** NEW-12 left when it closed, and **three**
+arrived — its successor, its coverage residual, and NEW-23. A row leaves §1 when its fix is committed,
+not when its question is answered, so the four R2 implements stay listed until it lands them.
 
 **NEW-15 is still the cautionary case, and a decided policy does not repeal the lesson.** It read like
 an implementation for a day and cost a full task to discover it was not: the guard was built, tested,

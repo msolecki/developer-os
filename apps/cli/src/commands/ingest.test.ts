@@ -1175,26 +1175,37 @@ describe("runIngest, the agent call", () => {
   );
 
   /**
-   * The other half of the same seam: a value position that *does* keep the word
-   * list, and whose refusal detail used to be discarded. `workingRoot` is this
-   * vault's own content root, so a user whose vault path contains one of the
-   * three words meets this — which is why the message has to say which value was
-   * refused rather than only that something was.
+   * **The other half of the same seam, inverted on 2026-08-17 (BACKLOG
+   * NEW-12).** `workingRoot` is this vault's own content root, derived from the
+   * user's `brainPath`. It used to keep the argv word list, so a user whose
+   * vault path contained `permission`, `danger` or `bypass` had every `codex`
+   * ingest refused — permanently, under a recovery line telling them to run it
+   * again. This case pinned that refusal by putting the word in the fixture's
+   * own path; it pins the acceptance now, from the same fixture, which is why
+   * the fixture name is unchanged.
+   *
+   * **One coverage residual, recorded rather than papered over.** This was also
+   * the only end-to-end assertion that `invokeVendor` propagates a refusal's
+   * `detail` into its message — behaviour DOS-P6 Task 19 added after finding it
+   * discarded. Closing NEW-12 makes a *screening* refusal unreachable from
+   * `ingest` by construction: the prompt is prefixed with a heading so the dash
+   * rule cannot fire, both paths are derived, and spec §3.3 gives the agent zero
+   * write scopes, so no value ingest passes keeps the word list. The detail
+   * strings themselves stay pinned in `adapter-codex/src/invoke.test.ts`'s
+   * dash-rule cases. What is no longer covered end-to-end is the interpolation,
+   * and no fixture can reach it without an injection point that does not exist.
    */
-  it("names the value a vendor refusal was about, rather than dropping the reason", async () => {
+  it("ingests from a vault whose own path names a word-list term", async () => {
     const fixture = await installedFixture("ingest-danger-in-the-path");
     const seeded = await fixture.seedAccepted("an observation under a danger path");
     fixture.reply(() => oneNote(seeded.id));
 
     const result = await fixture.run({ agent: "codex" });
 
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error.message).toContain("refused");
-    expect(result.error.message).toContain("the working root");
-    /** And nothing was spawned, so the detail is the only account of the run. */
-    expect(fixture.calls).toStrictEqual([]);
-    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
+    expect(result.ok).toBe(true);
+    /** The vendor was actually reached, which is the whole of what was broken. */
+    expect(fixture.calls).not.toStrictEqual([]);
+    expect(await fixture.statusOf(seeded.id)).toBe("ingested");
   });
 
   it("makes one agent call per capture, so a prompt is bounded by one envelope", async () => {

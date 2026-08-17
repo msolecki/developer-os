@@ -173,13 +173,13 @@ accepted capture
   → status → ingested                         (ingest-ingested)
 ```
 
-The five kinds are `apps/cli/src/commands/ingest.ts:245-251`; the ladder is documented at `:1000-1013`
+The five kinds are `apps/cli/src/commands/ingest.ts:245-251`; the ladder is documented at `:1020-1033`
 and the reasons at `:228-243`. **Two independent reasons no two of them merge:**
 
 1. **`BrainService.reindex()` reads the vault** (`packages/brain/src/service.ts:220`), so it cannot
    run until the apply has finalized — and it has no write channel at all, by design, so the CLI
    stages its bytes through the executor exactly as `brain reindex` does
-   (`apps/cli/src/commands/ingest.ts:927-953`).
+   (`apps/cli/src/commands/ingest.ts:947-973`).
 2. **`validateChangePlan` grants ownership from the manifest**, where the four index artifacts *are*
    recorded (`apps/cli/src/commands/reindex.ts:156-165`) and a capture deliberately **is not**
    (`apps/cli/src/commands/capture.ts:530-534`). One transaction cannot hold both regimes.
@@ -330,7 +330,7 @@ configuration value inside a document whose whole purpose is to be comparable ac
 substitutions are **pinned to a position** — `content` at index 0 only, `_indexes` at index 1 only and
 only when index 0 was `content` — so a vault folder literally named `content` nested under `staging/`
 cannot be corrupted, and every root is glob-escaped and NFC-normalized before it is spliced in.
-`ingest` resolves its declared scopes through it once per invocation (`ingest.ts:1440`), against
+`ingest` resolves its declared scopes through it once per invocation (`ingest.ts:1460`), against
 `INGEST_DECLARED_WRITE_SCOPES` (`:168-171`), which `ingest.test.ts` pins against
 `workflows/ingest/workflow.yaml` so a contract edit that does not update the constant goes red. The
 compiler's declared-versus-derived arithmetic is untouched, so the equality rule stays the checked
@@ -391,10 +391,10 @@ stay its own. The security suite's parked `it.fails` has been an ordinary passin
 **Three more accepted findings, in one line each — and the first of them is only half closed.**
 `agent.prompt`'s argument screen refused any capture containing `permission`, `danger` or `bypass` on
 both vendors forever, under advice to run `ingest` again — reachable and severe only once Task 13 gave
-that function a production caller. **The prose half is fixed and the path half is still open**
-(`BACKLOG.md` §1 **NEW-12**, §10.1 below): the prompt now goes through `screenProseArgument`, but
-`workingRoot` and `outputSchemaPath` are the user's own paths and keep the word list by design, so a
-vault whose path contains one of those words still refuses every `codex` ingest. An apply that wrote
+that function a production caller. **Both halves are now fixed and NEW-12 is closed** (§10.1 below):
+the prompt goes through `screenProseArgument` since 2026-08-15, and since 2026-08-17 `workingRoot` and
+`outputSchemaPath` go through `screenDerivedPathArgument`, because this product assembles them rather
+than receiving them — so a vault whose path contains one of those words ingests. An apply that wrote
 and then failed to verify rolled the capture back to `accepted` with its notes on disk, which the next
 run refuses permanently. And interruption coverage reached two of five transaction kinds; it now
 reaches all five.
@@ -417,7 +417,7 @@ in §10 below with their owners.
 | **NEW-16** — spec §8.2's user-configured redaction patterns are unreachable | DOS-P7 | S. `redactText`'s `userPatterns` parameter has no production caller, and `configSchema` is `.strict()` with no redaction table, so there is no key a user could set even if one existed. **Nothing regressed; it was specified and never wired** |
 | **NEW-17** — `brain` is the one command whose config parse failure is not content-free | DOS-P7 | XS, security. Seven of eight commands route through `readConfigFile`; `brain` does not, and smol-toml puts three raw source lines into the message the heuristic redactor then has to catch alone |
 | **NEW-18** — `assertSafeCommand`'s four NUL branches have no test anywhere | whoever next touches `packages/security/src/process.ts` | XS. **The guard is correct; only the evidence is missing** |
-| **NEW-12** — the argv screen's word list also screens a value nobody chose | whoever next touches `packages/security/src/cli.ts` — DOS-P7 by default | XS, security-adjacent, **half closed 2026-08-15** by Task 19's review. The prose half is fixed: the prompt goes through `screenProseArgument`, which keeps the positional dash rule and drops the word list. **The path half is reachable today** — `workingRoot` and `outputSchemaPath` are the *user's own* paths and keep the word list by design, so a vault whose path contains `danger`, `permission` or `bypass` refuses every `codex` ingest. Closing it means asking whether a path this product derived itself belongs under a word list at all; **do not close it by narrowing the pattern** |
+| **NEW-12** — the argv screen's word list also screens a value nobody chose | **closed 2026-08-17** by Track R entry R2 | XS, security-adjacent. Closed in two halves and **not** by narrowing the pattern, which the row forbade: the prose half on 2026-08-15 (`screenProseArgument` for the prompt), the path half on 2026-08-17 (`screenDerivedPathArgument` for `workingRoot` and `outputSchemaPath`, which this product assembles). The word list is byte-identical and each of its three alternatives is now guarded by a sample that isolates it. **Two residuals:** `ingest` can no longer produce a screening refusal at all, so `invokeVendor`'s refusal-detail interpolation is unreachable in production and uncovered end-to-end; and the first caller to pass a real write scope will hand a derived path to the screen that still carries the word list, re-creating the defect one field over |
 | **NEW-11** — the invisible-title rule stops at `title` | next task touching `packages/brain/src/indexes/render.ts` or `lint.ts` | S. `tags` and `summary` did not get NEW-10's predicate, and the `duplicates` key wants a perceptual grouping key rather than that boolean |
 | **NEW-13** — two artifact roots share one type | DOS-P6 Task 4's nominal brands | **the brands shipped and the `@ts-expect-error` case pins them**, but `BACKLOG.md:265` still reads `Status: open` — Step 5 of this plan's Task 19 is what closes the row. If those two ever disagree, the tree is the answer |
 
@@ -514,7 +514,7 @@ section is the last word on what the approved design left open.
 | 1. `buildConflictEvidence` still has no consumer | **open.** Both adapters declined the design it was built for; it waits for the first subsystem with a real three-way merge, which is not this one |
 | 2. the Codex supported floor is one observed version, not a range | **open.** Owner: DOS-P9 |
 | 3. a re-rendered plugin tree may not be a re-loaded one — Codex resolves skills through a cache copy | **open.** Owner: DOS-P7, whose update lifecycle re-renders in place |
-| 4. `NEW-11` and `NEW-12` are repository defects rather than pipeline ones, and are not taken here | **open, and both are in §10.1** with their owners. NEW-12 was half closed by Task 19's review; the other half is still reachable |
+| 4. `NEW-11` and `NEW-12` are repository defects rather than pipeline ones, and are not taken here | **both left this subsystem and were decided elsewhere, which is what this row predicted.** `NEW-12` is **closed** — its prose half by Task 19's review on 2026-08-15, its path half by Track R entry R2 on 2026-08-17, and §10.1 carries the two residuals it left. `NEW-11` was decided by the founder on 2026-08-17 (an invisible tag is a lint warning) and is implemented by that same entry |
 | 5. line-wrap drift wants a repository formatting decision, not a hand pass | **open and unowned.** No decision was taken here, and nothing in this subsystem's scope could take one — it is a repository-wide formatting question, and this is the only place it is written down outside the spec |
 | 6. automatic capture is not designed, only declined | **decided, not deferred**, and §2 above is the substance. If a future version wants it, the honest route is a documented, stable transcript contract with a regression fixture landing in the same change — the condition both adapter specs already set for lifting the refusal. Nothing in this subsystem weakened it |
 

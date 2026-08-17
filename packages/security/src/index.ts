@@ -24,6 +24,7 @@ export type {
 export {
   discoverCli,
   parseStructuredPayload,
+  screenDerivedPathArgument,
   screenProseArgument,
   screenValueArgument,
 } from "./cli.js";

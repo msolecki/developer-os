@@ -152,9 +152,22 @@ Expected: exit 0. Show failures only.
 
 - [ ] **Step 6: Fresh-context review, then commit**
 
+**Stage what `git status --short` actually lists, not what this step predicted.** The first draft
+named five paths; the task really touched thirteen, and each omission had the same consequence —
+green locally, red in every other checkout, which is the failure mode `SESSION.md` opens with. Two
+were not obvious: `packages/security/src/index.test.ts` is an exact-set door test that goes red the
+moment the export list widens, and `apps/cli/src/commands/ingest.test.ts` asserted the refusal this
+task removes. **This file is the thirteenth** — the corrected staging list and these ticked
+checkboxes are themselves part of the change, and leaving them unstaged hands the next session the
+instruction that caused the problem.
+
+**Run `git status --short` and stage every path it prints.** That is the rule for every task in this
+plan; a hardcoded list in a document is a prediction, and this one was wrong twice.
+
 ```bash
-git add packages/security/src/cli.ts packages/security/src/index.ts packages/security/src/cli.test.ts packages/adapter-codex/src/invoke.ts packages/adapter-codex/src/invoke.test.ts
-git commit -m "fix(security): screen a product-derived path by provenance, not by word list"
+git status --short          # read it; stage exactly these paths
+git add packages/security/src/cli.ts packages/security/src/index.ts packages/security/src/cli.test.ts packages/security/src/index.test.ts packages/adapter-codex/src/invoke.ts packages/adapter-codex/src/invoke.test.ts apps/cli/src/commands/ingest.ts apps/cli/src/commands/ingest.test.ts docs/architecture/threat-model.md docs/architecture/codex-adapter.md docs/architecture/knowledge-pipeline.md docs/superpowers/BACKLOG.md docs/superpowers/plans/2026-08-17-repository-defects-r2.md
+git commit -m "fix(security): screen a product-assembled path by provenance, not by word list"
 ```
 
 ---
@@ -171,7 +184,15 @@ git commit -m "fix(security): screen a product-derived path by provenance, not b
 - Modify: `packages/security/src/redaction.ts` — `createRedactor`
 - Modify: `packages/security/src/index.ts` — export `createRedactor`, `Redactor`
 - Modify: `apps/cli/src/context.ts:358`, `:665` — construct the redactor once, from config
-- Modify: `apps/cli/src/commands/capture.ts:458`, `:629`, `:686`; `review.ts:245`, `:435`, `:475`; `ingest.ts:531`, `:794`, `:1075`, `:1126`, `:1234`; `init.ts:734`
+- Modify: `apps/cli/src/commands/capture.ts:458`, `:629`, `:686`; `review.ts:245`, `:435`, `:475`; `ingest.ts:531`, `:814`, `:1095`, `:1146`, `:1254`; `init.ts:734`
+
+> **These line numbers are instructions, not history, so they were re-resolved on 2026-08-17** after
+> Task 1 moved four of them by twenty lines. Re-resolve them again before starting: `ingest.ts` is
+> edited by Tasks 1, 7 and 8 of this plan. **Task 1's own citations are the opposite case** — its
+> `invoke.ts:211`, `:215`, `:200` and the docblock lines describe code that task has already changed,
+> so they are a record of where the work was done and must not be "corrected" into nonsense by a
+> later sweep. A line number in a **Files** block ages; a line number in a closed task's prose does
+> not.
 - Create: `tests/repository/redactor-entry.test.ts` — the gate
 - Test: `packages/core/src/config/loader.test.ts`, `packages/security/src/redaction.test.ts`
 - Modify: `docs/superpowers/BACKLOG.md` §8 — the amendment row; `docs/architecture/foundation.md` §2 — the cross-reference
