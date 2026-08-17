@@ -214,14 +214,27 @@ function isAgentName(agent: string): agent is AgentName {
  * matches nothing and still spawns nothing, because that vendor's row could not
  * be observed.
  *
- * **What it spawns is a PATH-resolved binary that nothing here vouches for.**
- * `PlatformAdapter`'s own type says whoever executes a discovered binary owes an
- * owner and mode check first, and no caller in this product pays it — see
- * `BACKLOG.md` §1 NEW-15, which this command joined on 2026-08-15 when the
+ * **What it spawns is a PATH-resolved binary, and this command now pays the check
+ * that makes it safe to.** `PlatformAdapter`'s own type says whoever executes a
+ * discovered binary owes an owner and mode check first; no caller paid it until
+ * 2026-08-17, and this command had joined the offenders on 2026-08-15 when the
  * Claude row made the path live. `CLAUDECODE` is trivially settable, so the
- * trigger is not a privilege the attacker had to earn. Narrower here than under
- * `ingest`, which hands the binary the observation and the vault: this probe
- * passes `--version` and nothing else.
+ * trigger was never a privilege an attacker had to earn.
+ *
+ * **The refusal is swallowed here and fatal in `ingest`, and the asymmetry is the
+ * point.** Spec §5.4 records an agent this command cannot identify as `unknown`,
+ * and a binary it will not execute is one it cannot identify — so the capture
+ * still happens and the note is still written. `ingest` refuses outright because
+ * it hands the binary the observation and read access to the whole vault; this
+ * probe passes `--version` and nothing else, and losing the user's note over a
+ * probe it declined to run would be the worse trade.
+ *
+ * **The user is told by `doctor`, not here, and that is a decision rather than an
+ * omission.** `doctor` grades an untrusted binary at exit 5 and names it, so the surface
+ * exists; a warning on every capture would fire on each one in a session for a condition
+ * that does not change between them, which is how a warning on the most-run command
+ * teaches people to skip warnings. The residual is real and recorded: a user who never
+ * runs `doctor` never learns their `claude` is refused.
  *
  * Takes the agent name rather than reading the environment itself, so the rule
  * can be exercised for a vendor that is not in the table — a rule first run the
@@ -238,6 +251,16 @@ export async function discoverSourceAgent(
     if (!discovery.installed || discovery.executablePath === null) {
       return UNKNOWN_SOURCE;
     }
+    /**
+     * **Inside this `try`, deliberately, and the difference from `ingest` is the point**
+     * (BACKLOG NEW-15). Spec §5.4 says an agent this command cannot identify is recorded
+     * as `unknown`, and a binary it will not execute is one it cannot identify — so the
+     * refusal is swallowed by the `catch` below and the capture still happens. `ingest`
+     * refuses outright because it hands the binary the observation; this only probes for a
+     * version, and failing the whole capture over a `--version` it declined to run would
+     * cost the user their note for nothing.
+     */
+    await context.platform.assertTrustedExecutable(discovery.executablePath);
     const installation = await VERSION_PROBES[agent]({
       runner: context.runner,
       executable: discovery.executablePath,

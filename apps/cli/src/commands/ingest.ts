@@ -440,11 +440,19 @@ interface Vendor {
  * refuses surfaces as `malformed-output`, which is where a missing structured
  * result actually shows up.
  *
- * A discovery that *refuses* — the adapter declines to vouch for a path it
- * resolved — is treated as "not this one" rather than as a run-ending error, so
- * a hostile `claude` on `PATH` does not also cost the user their `codex`. With
- * one vendor named explicitly there is nothing to fall through to, and the
- * refusal is the exit-4 message below.
+ * A discovery that *fails* — the adapter cannot find one, or `which` returns a
+ * path it will not report — is treated as "not this one" rather than as a
+ * run-ending error, so a missing `claude` does not also cost the user their
+ * `codex`. With one vendor named explicitly there is nothing to fall through
+ * to, and that case is the exit-4 message below.
+ *
+ * **A binary the adapter will not vouch for is the opposite, and ends the run
+ * at exit 5.** This paragraph said the reverse until 2026-08-17, when the check
+ * `types.ts` demands was finally paid: `assertTrustedExecutable` is called
+ * *outside* the `catch`, deliberately, because inside it a refusal would be
+ * swallowed into "not installed" and fall through to the other vendor — which
+ * is the reverse of refusing. This command hands the binary the user's captured
+ * observation and read access to the whole vault (BACKLOG NEW-15).
  */
 async function selectVendor(
   context: CliContext,
@@ -460,7 +468,18 @@ async function selectVendor(
     } catch {
       executable = null;
     }
-    if (executable !== null) return { name, executable };
+    if (executable === null) continue;
+
+    /**
+     * **Outside the `catch` above, deliberately** (BACKLOG NEW-15). That `catch` maps any
+     * throw to "not installed", so a refusal raised inside it would become a silent
+     * fall-through to the other vendor — the opposite of refusing. This command's contract
+     * is to refuse: it hands the binary the user's captured observations and read access
+     * to the whole vault, on the strength of a name match, so an untrusted one stops the
+     * run rather than degrading it.
+     */
+    await context.platform.assertTrustedExecutable(executable);
+    return { name, executable };
   }
 
   throw new IngestRefusal(

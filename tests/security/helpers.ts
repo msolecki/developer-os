@@ -317,6 +317,20 @@ export async function createSecurityFixture(
           },
           searchPath: join(root, "bin"),
           canonicalize: (path: string) => Promise.resolve(path),
+          /**
+           * **The synthetic executables do not exist on disk**, so the real `stat` would
+           * make `assertTrustedExecutable` refuse them — correctly, since it fails closed
+           * on an ancestor it cannot inspect (BACKLOG NEW-15). These suites are about what
+           * reaches a network and what a command writes, not about trust, so ownership is
+           * faked on exactly the terms `canonicalize` already is: a user-owned, non-writable
+           * chain.
+           *
+           * `apps/cli/src/commands/*.test.ts` is where the refusal path is driven, through
+           * `FakePlatformAdapter`'s `untrustedExecutable`.
+           */
+          stat: () =>
+            /** `S_IFREG` included: the guard checks the file type, not only the bits. */
+            Promise.resolve({ uid: process.getuid?.() ?? 0, mode: 0o100755 }),
         })
       : new FakePlatformAdapter({ userHome, agents });
 

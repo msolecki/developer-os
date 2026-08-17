@@ -825,7 +825,7 @@ git commit -m "fix(brain): anchor discovery on the content root so a symlinked v
 **Interfaces:**
 - Produces: `PlatformAdapter.assertTrustedExecutable(path: string): Promise<void>` — resolves, or throws `MacOsPlatformTrustError`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `packages/platform-macos/src/macos.test.ts`:
 
@@ -890,12 +890,12 @@ it("refuses ingest with a security exit code when the binary is not trusted", as
 
 The two commands differ on purpose and each follows the contract it already has: `capture` swallows the refusal and records `unknown` (spec §5.4), while `ingest` refuses **outside** the `catch` at `apps/cli/src/commands/ingest.ts:459` that would otherwise hide it.
 
-- [ ] **Step 2: Run them and verify they fail**
+- [x] **Step 2: Run them and verify they fail**
 
 Run: `pnpm vitest run packages/platform-macos apps/cli/src/commands/capture.test.ts apps/cli/src/commands/ingest.test.ts`
 Expected: FAIL — `assertTrustedExecutable is not a function`, and both command cases return the trusting result.
 
-- [ ] **Step 3: Implement the check at the boundary that made the promise**
+- [x] **Step 3: Implement the check at the boundary that made the promise**
 
 The check belongs in `packages/platform-macos` because that is where the contract is written: `packages/platform-macos/src/types.ts:13-18` says the discovered path is untrusted and "anything that executes it owes that check first". Putting the payment beside the promise means a second executor cannot arrive without meeting it.
 
@@ -930,19 +930,19 @@ async assertTrustedExecutable(path: string): Promise<void>
 
 Resolve with `#canonicalize`, then walk the resolved path and every ancestor to `/` with `stat`, refusing on the first component whose `uid` is neither `currentUid()` nor `0`, or whose mode has `0o002` set, or whose mode has `0o020` set while its `uid` is not `currentUid()`.
 
-- [ ] **Step 4: Pay it at both call sites**
+- [x] **Step 4: Pay it at both call sites**
 
 `selectVendor` in `apps/cli/src/commands/ingest.ts:456-461`: call `await context.platform.assertTrustedExecutable(discovery.executablePath)` **outside** that `try`. That `catch` maps any throw to "not installed" and would turn a security refusal into a fall-through to the other vendor, which is the opposite of refusing.
 
 `discoverSourceAgent` in `apps/cli/src/commands/capture.ts:235`: call it inside that existing `try`, before `VERSION_PROBES[agent]`. Its `catch` returns `UNKNOWN_SOURCE`, which is what spec §5.4 requires of an undetectable agent, and an untrusted binary is one.
 
-- [ ] **Step 5: Relocate the test harness off `/tmp`**
+- [x] **Step 5: Relocate the test harness off `/tmp`**
 
 `tests/helpers/temp-home.ts` sandboxes under `/tmp` on purpose — its docblock records that `os.tmpdir()` paths are long and high-entropy enough that the product's own redactor rewrites them, after which discovery reports nothing. `/tmp` resolves to `/private/tmp`, mode `41777`, so the one e2e case that spawns the real binary goes red on a correct refusal.
 
 Relocate the sandbox to a short, low-entropy directory the test process owns and creates with mode `0o755` — `<repo>/.tmp-home/<n>` — and **replace the redaction-threshold reasoning in that docblock with the new reason**, rather than deleting it. Add `.tmp-home/` to `.gitignore`. A helper whose comment explains a constraint it no longer meets is worse than one with no comment.
 
-- [ ] **Step 6: Run the gate, review, commit**
+- [x] **Step 6: Run the gate, review, commit**
 
 Run: `npm run check`
 Expected: exit 0. The e2e case that spawns the real binary must be green **without** an exemption.

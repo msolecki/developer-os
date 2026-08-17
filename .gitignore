@@ -5,3 +5,7 @@ coverage/
 .DS_Store
 .developer-os-test/
 _Context.md
+
+# Test sandboxes. Relocated off /tmp on 2026-08-17 because the executable trust
+# check refuses a world-writable ancestor; see tests/helpers/temp-home.ts.
+.tmp-home/

@@ -230,8 +230,8 @@ accumulate. What was decided:
 Three Foundation requests and the `accepted → rejected` gap are in the same plan, decided the same
 day, because they were unowned for the same reason: no entry on the product path reaches them.
 
-**Twelve §1 rows are deliberately not in R2**, and a session finishing this entry must not sweep them up
-with the one it still has to close — NEW-15. **Four belong to somebody else:** **NEW-21** is the founder's and blocks
+**Fourteen §1 rows are deliberately not in R2**, and a session finishing this entry must not sweep them up
+— R2 has closed all five it was opened for. **Four belong to somebody else:** **NEW-21** is the founder's and blocks
 A10; **NEW-20** and **NEW-13** were registered as deliberately-not-fixed; **NEW-7** needs ten minutes
 with a machine that has Obsidian rather than an agent. **Eight came out of R2's own reviews**, registered 2026-08-17 by the reviews that produced them. **NEW-27** and **NEW-28** came from NEW-12: a derived path that will wear a write scope's name, and
 an interpolation in `ingest` that no longer has an end-to-end test because no production path can
@@ -241,7 +241,7 @@ overlapping patterns that cannot both redact; and a vendor's stdout redacted wit
 only, because the process runner is built before any configuration is read. **NEW-29** came from the
 same review and is a gate-integrity item rather than a product one: a wall-clock assertion in the
 standing suite that can redden an unrelated commit. **None is R2's to fix, and the count is the
-honest cost of closing four rows — though NEW-22 closed leaving nothing at all, which is the
+honest cost of closing five rows — though NEW-22 closed leaving nothing at all, which is the
 counter-example worth keeping in view** — a defect that closes cleanly and leaves nothing is rarer than
 this queue used to imply. 4 + 8 = 12.
 
@@ -252,11 +252,10 @@ reported twelve defects on its first run, then four more once its extractor was 
 citation across lines — the form that an evidence table written as one file name and eight bare
 ranges depends on, and that a per-line reader cannot see.
 
-**§1 therefore holds thirteen rows while R2 runs, not nine**, and the arithmetic is worth stating because
+**§1 therefore holds fourteen rows while R2 runs, not nine**, and the arithmetic is worth stating because
 it moves every time a task lands. It started at nine. NEW-12 closed and left two residuals; NEW-23
-arrived from the same review and closed the same day; NEW-16 closed and left **three**; NEW-11 closed and left NEW-30 and NEW-31; NEW-22 closed and left nothing; the review that closed it also observed NEW-29, a timing assertion that can redden an unrelated commit. A row leaves §1
-when its fix is **committed**, not when its question is answered, so the one R2 still implements —
-NEW-15 — stays listed until it lands.
+arrived from the same review and closed the same day; NEW-16 closed and left **three**; NEW-11 closed and left NEW-30 and NEW-31; NEW-22 closed and left nothing; NEW-15 closed and left NEW-32 and NEW-33; the review that closed it also observed NEW-29, a timing assertion that can redden an unrelated commit. A row leaves §1
+when its fix is **committed**, not when its question is answered, and all five R2 was opened for have now landed.
 
 **NEW-15 is still the cautionary case, and a decided policy does not repeal the lesson.** It read like
 an implementation for a day and cost a full task to discover it was not: the guard was built, tested,

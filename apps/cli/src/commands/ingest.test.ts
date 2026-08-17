@@ -17,6 +17,7 @@ import {
 import type { CaptureStatus, ProposedNote } from "@developer-os/brain";
 import { redactText } from "@developer-os/security";
 import type { ProcessResult, ProcessRunner } from "@developer-os/security";
+import { MacOsPlatformTrustError } from "@developer-os/platform-macos";
 import type { AgentDiscovery, AgentName } from "@developer-os/platform-macos";
 import { loadWorkflow } from "@developer-os/workflow-schema";
 
@@ -99,6 +100,8 @@ interface IngestFixture extends CommandFixture {
 interface FixtureOptions {
   readonly claude?: boolean;
   readonly codex?: boolean;
+  /** Makes the platform refuse the discovered binary (BACKLOG NEW-15). */
+  readonly untrustedExecutable?: Error;
   readonly interruptAfter?: TransactionPhase;
   readonly interruptKind?: string;
   /**
@@ -212,6 +215,9 @@ async function installedFixture(
       claude: discovery("claude", options.claude === false ? null : CLAUDE),
       codex: discovery("codex", options.codex === false ? null : CODEX),
     },
+    ...(options.untrustedExecutable === undefined
+      ? {}
+      : { untrustedExecutable: options.untrustedExecutable }),
     ...(options.interruptAfter === undefined
       ? {}
       : { interruptAfter: options.interruptAfter }),
@@ -1234,6 +1240,41 @@ describe("runIngest, the agent call", () => {
     expect(sent).toContain("[REDACTED:user-pattern]");
     /** The rest of the observation still reaches the model. */
     expect(sent).toContain("migration needs a rollback plan");
+  });
+
+  /**
+   * **BACKLOG NEW-15, on the command whose contract is to refuse.** `ingest` hands the
+   * discovered binary the user's captured observation and read access to the whole vault,
+   * on the strength of a name match — so a binary the platform will not vouch for stops
+   * the run rather than degrading it.
+   *
+   * The refusal is raised **outside** `selectVendor`'s `catch`, which maps any throw to
+   * "not installed"; inside it, this would silently fall through to the other vendor.
+   */
+  it("refuses at exit 5 when the discovered binary is not trusted", async () => {
+    const fixture = await installedFixture("ingest-untrusted-binary", {
+      /**
+       * **The real class, not a stand-in.** Injecting `SecurityRefusalError` made this
+       * assertion pass on the strength of duck-typed `.code`, so deleting
+       * `MacOsPlatformTrustError`'s own `code` left every suite green while `ingest`
+       * silently started exiting 1 on an untrusted binary. This pins the class and the
+       * plumbing together.
+       */
+      untrustedExecutable: new MacOsPlatformTrustError(
+        "The executable is not trusted: /synthetic/bin is writable by any user",
+      ),
+    });
+    const seeded = await fixture.seedAccepted("an observation to ingest");
+    fixture.reply(() => oneNote(seeded.id));
+
+    const result = await fixture.run({ agent: "codex" });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(EXIT_CODES.securityRefusal);
+    /** Nothing was spawned, and the capture is untouched and retryable. */
+    expect(fixture.calls).toStrictEqual([]);
+    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
   });
 
   it("ingests from a vault whose own path names a word-list term", async () => {
