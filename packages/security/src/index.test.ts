@@ -30,6 +30,7 @@ describe("the package's public door", () => {
         "NodeProcessRunner",
         "discoverCli",
         "parseStructuredPayload",
+        "screenDerivedPathArgument",
         "screenProseArgument",
         "screenValueArgument",
         "capGraphemes",

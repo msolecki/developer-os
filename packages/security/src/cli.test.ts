@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   discoverCli,
   parseStructuredPayload,
+  screenDerivedPathArgument,
   screenProseArgument,
   screenValueArgument,
 } from "./cli.js";
@@ -270,6 +271,98 @@ describe("screenProseArgument", () => {
 
   it("permits an ordinary prompt", () => {
     expect(screenProseArgument("summarise this capture", "prompt")).toBeNull();
+  });
+});
+
+describe("screenDerivedPathArgument", () => {
+  /**
+   * **The defect this closes, stated as the user meets it (BACKLOG NEW-12).**
+   * `workingRoot` is derived from the user's own `brainPath`, so a vault at
+   * `~/Danger/DeveloperBrain` refused every `codex` ingest — forever, under a
+   * recovery line telling the user to run `ingest` again.
+   */
+  it("permits a product-derived path that names a word-list term", () => {
+    expect(
+      screenDerivedPathArgument("/synthetic/Danger/DeveloperBrain", "the working root"),
+    ).toBeNull();
+    expect(
+      screenValueArgument("/synthetic/Danger/DeveloperBrain", "the working root"),
+    ).not.toBeNull();
+  });
+
+  it("permits the other two words of the list in a derived path", () => {
+    for (const value of [
+      "/synthetic/permissions-audit/vault",
+      "/synthetic/bypass-notes/vault",
+    ]) {
+      expect(screenDerivedPathArgument(value, "the working root"), value).toBeNull();
+    }
+  });
+
+  /**
+   * The dash rule is the one that was ever load-bearing here, and it stays: an
+   * absolute path cannot begin with `-`, so a value that does is not the path
+   * this product derived, whatever produced it.
+   */
+  it("keeps the leading-dash rule", () => {
+    expect(screenDerivedPathArgument("-/synthetic/vault", "the working root")).toBe(
+      'the working root may not begin with "-": it would be read as an option, not a value',
+    );
+  });
+
+  /**
+   * **A tripwire on one function's body, and deliberately not more than that.**
+   * `screenDerivedPathArgument` is `return screenProseArgument(...)`, so this
+   * case holds by construction and cannot fail while that delegation stands.
+   * What it catches is somebody giving the derived function a body of its own:
+   * it goes red, and they have to say here what diverged and why.
+   *
+   * **It does not cover the drift direction that actually worries this file**,
+   * and saying otherwise would be the exact failure this repository names — a
+   * comment promising coverage that does not exist. Add a rule to
+   * `screenProseArgument` and both functions change identically, this case
+   * stays green, and derived paths silently gain a prose rule. **Only review
+   * catches that**, which is why `screenProseArgument`'s own docblock carries
+   * the warning rather than relying on a test to raise it.
+   */
+  it("agrees with screenProseArgument on every input today", () => {
+    for (const value of [
+      "/synthetic/vault",
+      "/synthetic/Danger/DeveloperBrain",
+      "-/synthetic/vault",
+      "--output-schema",
+      "",
+      "relative/path",
+      "/synthetic/vault with spaces/brain",
+    ]) {
+      expect(
+        screenDerivedPathArgument(value, "the working root"),
+        value,
+      ).toStrictEqual(screenProseArgument(value, "the working root"));
+    }
+  });
+
+  /**
+   * The guard on the split itself. Narrowing the word list was the fix this row
+   * explicitly forbids, because it would weaken the values that do need both
+   * rules — so a change that closes NEW-12 by touching the pattern must turn
+   * this red rather than pass quietly.
+   *
+   * **Each sample isolates exactly one alternative, and that is the whole point
+   * of the case.** The obvious sample for `bypass` is `bypassPermissions`, and
+   * it is useless here: it also contains `Permissions`, so it stays refused
+   * with `bypass` deleted from the pattern and the guard passes over its own
+   * subject. `bypassApprovals` contains none of the other two. A sample that
+   * matches two alternatives tests neither.
+   */
+  it.each([
+    ["permission", "permission-cache"],
+    ["danger", "danger-full-access"],
+    ["bypass", "bypassApprovals"],
+  ])("keeps %s in the word list for values that originate outside", (_word, value) => {
+    expect(screenValueArgument(value, "an allowed tool")).toBe(
+      "an allowed tool names a permission or bypass surface that is refused in a value position",
+    );
   });
 });
 

@@ -98,16 +98,29 @@ export async function discoverCli(
  * rather than silently dropping the offending entry, because a caller that
  * asked for a bypass has a bug worth reporting.
  *
- * **The two rules are applied by two functions, and the split is positional.**
- * `screenValueArgument` applies both and is what every value that could be
- * reread as a flag gets — a tool name, a write scope, a working root, an output
- * schema path. `screenProseArgument` applies rule one alone and is what a
- * free-form prose argument gets. The word list buys nothing on prose, which
- * cannot be reinterpreted as an option, while refusing text nobody chose:
- * DOS-P6 puts a **capture body** in an argv value position, and an ordinary
- * `EACCES` message names a permission. Narrowing the word list instead would
- * weaken the values that do need it, which is the direction this screen exists
- * to prevent (BACKLOG NEW-12).
+ * **The two rules are applied by three functions, and the split is by
+ * provenance rather than by position.** It was positional until 2026-08-17, and
+ * the paragraph you are reading said so; NEW-12 closed by splitting the *value*
+ * case in two, because where a value came from is what decides whether the word
+ * list can tell you anything about it.
+ *
+ * - `screenValueArgument` applies both rules, and is what a value originating
+ *   **outside this repository** gets — a tool name, a write scope, a sandbox
+ *   mode. These are short vendor vocabulary chosen by a workflow author or
+ *   echoed from a model, so a permission surface really can appear in one
+ *   without a leading dash.
+ * - `screenDerivedPathArgument` applies rule one, and is what a path **this
+ *   product computed** gets — the working root, the output schema path.
+ * - `screenProseArgument` applies rule one, and is what a free-form prose
+ *   argument gets. The word list buys nothing on prose, which cannot be
+ *   reinterpreted as an option, while refusing text nobody chose: DOS-P6 puts a
+ *   **capture body** in an argv value position, and an ordinary `EACCES`
+ *   message names a permission.
+ *
+ * Narrowing the word list instead would weaken the values that do need it,
+ * which is the direction this screen exists to prevent — so the pattern below
+ * is byte-identical to the one that shipped, and `cli.test.ts` guards each of
+ * its three alternatives with a sample that isolates it (BACKLOG NEW-12).
  *
  * **Rule two, the word list, is nominal and best-effort:** `permission|danger|
  * bypass`, wider than the `permission|dangerous` that first shipped. It
@@ -130,23 +143,86 @@ export function screenValueArgument(value: string, field: string): string | null
 }
 
 /**
- * **The weaker of the two screens, and the wrong default.** Reach for
+ * **The weakest of the three screens, and the wrong default.** Reach for
  * `screenValueArgument` unless the value is prose that a vendor CLI cannot
  * reread as a flag — a prompt, and nothing else in this codebase today. A caller
- * choosing between them by which one accepts its string has chosen wrongly by
- * construction, which is the one hazard of exporting both: the name says what
- * the argument must *be*, not that this function asks less of it.
+ * choosing between the three by which one accepts its string has chosen wrongly
+ * by construction, which is the hazard of exporting them all: each name says
+ * what the argument must *be*, not that this function asks less of it.
  *
  * Rule one alone, then: it is a narrowing of `screenValueArgument` rather than a
  * second policy beside it — the complete rule is kept and the best-effort one is
  * dropped — so a prompt beginning with `-` is refused here exactly as it was
  * before.
+ *
+ * **A rule added here reaches derived paths too, silently.**
+ * `screenDerivedPathArgument` delegates to this function, so anything added
+ * below becomes a rule on `workingRoot` and `outputSchemaPath` as well as on the
+ * prompt. **No test catches that** — both functions change together and stay
+ * equal, so the agreement case in `cli.test.ts` stays green through it. Whoever
+ * edits this body owes a sentence on whether a path should have got the rule
+ * too, and this paragraph is the only thing that will ask them (BACKLOG NEW-12).
  */
 export function screenProseArgument(value: string, field: string): string | null {
   if (value.startsWith("-")) {
     return `${field} may not begin with "-": it would be read as an option, not a value`;
   }
   return null;
+}
+
+/**
+ * **The third screen, and the only one whose name states a provenance rather
+ * than a shape.** A derived path is one *this product assembled* — the working
+ * root, from the user's validated `brainPath`; the output schema path, from the
+ * product state root plus a fixed `schemas/<verb>.schema.json` tail.
+ *
+ * **Careful about what "derived" claims, because the obvious stronger claim is
+ * false.** These paths are full of text the user chose: their home directory
+ * name is in both, and `DEVELOPER_OS_HOME` can put anything in front of the
+ * shipped tail. What is true — and what the word list actually depends on — is
+ * that **no party outside this process chose the argument**. A workflow author
+ * or a model can hand us a write scope; neither hands us this. That is the
+ * whole distinction, and it does not need the user's own path segments to be
+ * innocent.
+ *
+ * **So the word list screens nothing here while refusing a directory the user
+ * named themselves.** Rule two exists to catch a value naming a permission or
+ * bypass surface that arrived from outside without a leading dash. A vault at
+ * `~/Danger/DeveloperBrain` refused every `codex` ingest until this existed —
+ * permanently, under a recovery line telling the user to run `ingest` again
+ * (BACKLOG NEW-12).
+ *
+ * **The dash rule is kept, and it is the one that was ever load-bearing here.**
+ * `process.ts` spawns with `shell: false` and an args array, so a value that
+ * does not begin with `-` cannot become anything but a value; an absolute path
+ * that does begin with one is not the path this product assembled, whatever
+ * produced it.
+ *
+ * **It delegates to `screenProseArgument`, and the drift that creates runs one
+ * way — toward here.** Any rule added to that function silently becomes a rule
+ * on derived paths; the reverse cannot happen, because nothing delegates to
+ * this. **No test catches that direction and none can while the delegation
+ * stands**, since both functions change together and stay equal — so the guard
+ * is this paragraph and the reviewer who reads it. `cli.test.ts`'s agreement
+ * case is a tripwire on *this* function's body, not coverage of that leak, and
+ * it says so. Whoever adds a rule to the prose screen owes a sentence about
+ * whether a path should have got it too.
+ *
+ * **Do not add a NUL check here** — `process.ts` already applies one to every
+ * argument of every request, and this file's own header forbids a security
+ * screen existing twice.
+ *
+ * **Choosing between the three screens is a question about where the value came
+ * from, never about which one accepts your string.** A caller reaching for this
+ * because `screenValueArgument` refused its input has chosen wrongly by
+ * construction unless it can name the code in this repository that assembled
+ * the value.
+ */
+export function screenDerivedPathArgument(
+  value: string,
+  field: string,
+): string | null {
+  return screenProseArgument(value, field);
 }
 
 /**

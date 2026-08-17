@@ -702,9 +702,29 @@ async function invokeVendor(
    * what went wrong — the adapters return it for a prompt, a write scope, a
    * working root, an output schema path and a turn bound — and a user told only
    * that the run "did not return a usable proposal (refused)" learns nothing
-   * and retries forever. The detail names the **field**, never the value:
-   * `screenValueArgument` composes its message from the caller's own field
-   * label, so nothing model-chosen is interpolated here.
+   * and retries forever. The detail names the **field**, never the value: each
+   * screen composes its message from the caller's own field label, so nothing
+   * model-chosen is interpolated here.
+   *
+   * **As of 2026-08-17 this branch is unreachable from `ingest`, and it is kept
+   * as defence in depth rather than because a user can meet it.** Closing
+   * BACKLOG NEW-12 left no argument on this path that a screen can refuse, and
+   * the disposal has to cover all four sources listed above, not three:
+   *
+   * - the **prompt** is prefixed with a Markdown heading, so the dash rule
+   *   cannot fire on it;
+   * - the **working root** and the **output schema path** are assembled from
+   *   validated absolute paths and now take the derived screen;
+   * - the **write scope** list is empty, because spec §3.3 grants the agent
+   *   zero declared write scopes;
+   * - the **turn bound** is `DEFAULT_MAX_TURNS`, a compile-time constant well
+   *   inside the 1–50 window `invokeClaude` enforces, so it cannot be refused
+   *   by a value this command chooses.
+   *
+   * The user described above no longer exists — but the first caller to pass a
+   * real write scope brings them back, so the interpolation stays. **Nothing
+   * covers it end-to-end any more**, which is recorded at the inverted case in
+   * `ingest.test.ts` and as a BACKLOG §1 row.
    */
   const detail = result.reason === "refused" ? `: ${result.detail}` : "";
   throw new IngestRefusal(

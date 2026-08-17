@@ -64,7 +64,7 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P6 | spec approved and plan written, both 2026-08-13 | **three unticked steps** — Task 17 Step 3 (the Codex detection row, blocked on NEW-21) and Task 19 Steps 5–6 (close the documents, run the gate), which wait on it. Seventeen of nineteen tasks landed 2026-08-13/14/15 and their step lists are deleted |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | **nine rows, none startable without an answer.** Five need a decision — NEW-15, NEW-22, NEW-16, NEW-11, NEW-12. Four belong to somebody else — NEW-21 (the founder's, blocks A10), NEW-20 and NEW-13 (deliberately not fixed), NEW-7 (needs a machine with Obsidian) |
+| Repository-level | §1 | **eleven rows.** Four were decided 2026-08-17 and are being implemented as Track R **R2** — NEW-15, NEW-22, NEW-16, NEW-11. Four belong to somebody else — NEW-21 (the founder's, blocks A10), NEW-20 and NEW-13 (deliberately not fixed), NEW-7 (needs a machine with Obsidian). Three came from the review that closed NEW-12 on 2026-08-17 — its two successors and NEW-23, the unchecked `path:line` citations |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -104,17 +104,26 @@ founder's machine as user data, not as source material.
 
 Everything in this section is genuinely open. Nothing here is bookkeeping, and nothing closed stays
 here: NEW-1 through NEW-6, NEW-8, NEW-9, NEW-10, NEW-14, NEW-17, NEW-18 and NEW-19 were removed as
-they closed, between 2026-08-10 and 2026-08-15. What a closed item leaves behind is a row in §8, a
-clause in a spec, or a test; if it left nothing, it was not worth recording. Git history is the
-archive.
+they closed, between 2026-08-10 and 2026-08-15, and **NEW-12 on 2026-08-17**. What a closed item
+leaves behind is a row in §8, a clause in a spec, or a test; if it left nothing, it was not worth
+recording. Git history is the archive.
 
-**Nine rows, and they are not all the same kind of open.** **Five need a decision before anyone can
-implement them** — **NEW-15**, **NEW-22**, **NEW-16**, **NEW-11** and **NEW-12**, whose questions
-`ORDER.md` Track R names one by one. The other four are somebody else's: **NEW-21** the founder's,
-**NEW-20** and **NEW-13** registered as deliberately-not-fixed, and **NEW-7** waiting on a machine
-with Obsidian. **A row being open is not an invitation to implement it** — read which group it is in
-first. NEW-15 is the cautionary case: it read like an implementation for a day, and cost a full task
-to discover it was not.
+**Eleven rows, and they are not all the same kind of open.** **Four were waiting on a decision, got one
+on 2026-08-17, and are being implemented** as `ORDER.md` Track R entry **R2** — **NEW-15**,
+**NEW-22**, **NEW-16** and **NEW-11**. They stay here until R2 closes them, because a row leaves this
+section when its fix is committed, not when its question is answered. Four are somebody else's:
+**NEW-21** the founder's, **NEW-20** and **NEW-13** registered as deliberately-not-fixed, and
+**NEW-7** waiting on a machine with Obsidian.
+
+**Three are new, and all three were found by the review that closed NEW-12 rather than by the work
+itself** — its successor, its coverage residual, and **NEW-23**. That is the ordinary yield of a
+fresh-context review and the reason the gate exists: closing a defect moved a trap one field over,
+made one branch unreachable, and the fix for a stale line citation broke twelve more. None was
+visible to the author.
+
+**A row being open is not an invitation to implement it** — read which group it is in first. NEW-15 is
+the cautionary case: it read like an implementation for a day, and cost a full task to discover it was
+not.
 
 ### NEW-21 — one successful `codex exec` completion is still owed
 
@@ -262,7 +271,7 @@ to discover it was not.
   name on `PATH` and returns a path; it does not vouch for it.
 - **DOS-P6 is the first executor and pays nothing.** `selectVendor` returns
   `discovery.executablePath` (`apps/cli/src/commands/ingest.ts:454-463`) and the run spawns it
-  through `invokeVendor` (`:1405`, `:658`); no `stat`, no uid comparison and no mode comparison exists anywhere on that path — the
+  through `invokeVendor` (`:1425`, `:658`); no `stat`, no uid comparison and no mode comparison exists anywhere on that path — the
   only `lstat` in the file is on a note path and the only mode is a `mkdir`.
 - **Widened 2026-08-15 by Task 17: `capture` is now a second executor on the same terms, and it is
   the product's most-run command.** While `AGENT_DETECTION_ROWS` was empty this path was dormant;
@@ -364,51 +373,157 @@ one, and that is what this row is now.
   docblock and a test asserting the two façade bindings are not the same function — which stays
   green under the misuse it describes.
 
-### NEW-12 — the argv screen's word list also screens a value nobody chose
+### NEW-12's successor — a derived path will wear a write scope's name
 
-- **Status:** **half closed 2026-08-15** by DOS-P6 Task 19's review — the prose half is fixed and
-  the *path* half is what is left · **Owner:** whoever next touches
-  `packages/security/src/cli.ts` — DOS-P7 by default · **Size:** XS · **Security-adjacent**
-- **What closed.** The prompt is screened by `screenProseArgument`, which keeps the positional dash
-  rule and drops the word list; `screenValueArgument` is unchanged and is still what a tool name, a
-  write scope, a working root and an output schema path get. `packages/security/src/cli.test.ts`
-  pins both, and `apps/cli/src/commands/ingest.test.ts` drives a capture body reading
-  `npm ERR! EACCES: permission denied, open /usr/local/lib` through **both** vendors.
-- **It had become reachable and severe, which the paragraph below understated.** Task 13 gave
-  `agent.prompt` a production caller, and `buildIngestPrompt` puts the capture body in an argv value
-  position: every capture containing `permission`, `danger` or `bypass` refused on both vendors,
-  forever, under a recovery line telling the user to run `ingest` again — and it blocked the head of
-  every `--limit` run.
-- **What is left is one class of value, and it is reachable today.** `workingRoot` and
-  `outputSchemaPath` are **the user's own paths**, and they keep the word list by design: a vault at
-  `~/Danger/DeveloperBrain` refuses every `codex` ingest with "the working root names a permission
-  or bypass surface". That refusal is now at least legible — `invokeVendor` propagates
-  `result.detail`, which it used to discard — and `ingest.test.ts`'s
-  `names the value a vendor refusal was about` pins it by putting the word in the fixture's own
-  path. Closing it properly means asking whether a path this product derived itself belongs under a
-  word list at all; do not close it by narrowing the pattern.
-- Original registration, kept because it is the reasoning the split rests on:
-- **Was:** open, found 2026-08-12 by the fresh-context review of DOS-P5 Task 3.5 · **Owner:**
-  whichever subsystem first gives `agent.prompt` a production caller — DOS-P6 by default ·
-  **Size:** S
-- `screenValueArgument` in `packages/security/src/cli.ts` applies **two** rules to every value
-  reaching a vendor CLI: a *positional* one (nothing may begin with `-`, so it cannot be reread as
-  an option) and a *nominal* one (nothing may match `/permission|danger|bypass/iu`). Both are
-  applied to `invocation.prompt`, which is free-form prose written by a workflow author.
-- **Only the positional rule is load-bearing for a prompt.** Prose cannot be reinterpreted as a
-  CLI option, so the word list buys nothing there while refusing legitimate text — a prompt asking
-  a model to "check for dangerous patterns" is refused, and the workflow's failure is a `refused`
-  with a message about permission surfaces.
-- **Not a regression and not reachable today** — *stale on both counts from Task 13 onward, which
-  is why the status above is where this row's severity now lives.* The narrower
-  `/permission|dangerous/iu` that shipped with DOS-P4 refused that same sentence, and `invokeClaude`
-  had no production caller — only tests constructed an invocation. Task 3.5 widened the pattern to
-  `danger`, which enlarges the false-positive surface without changing the shape of the problem.
-- **The fix is to split the screen by position, not to narrow the pattern.** An argument that
-  *becomes* a flag if it looks like one (a tool name, a directory, a sandbox mode) needs both
-  rules; a terminal prose argument needs the dash rule alone. Narrowing the word list instead
-  would weaken the values that do need it, which is the direction DOS-P5 Task 12 exists to
-  prevent.
+- **Status:** open, registered 2026-08-17 by the fresh-context review that closed NEW-12 · **Owner:**
+  whoever wires the first production write scope · **Size:** XS to prevent, S to rediscover ·
+  **Security-adjacent**
+- **NEW-12 itself is closed** — the prose half on 2026-08-15, the path half on 2026-08-17 by Track R
+  entry R2, splitting `screenValueArgument` by provenance rather than narrowing its word list, which
+  that row forbade. This is what the review found *while* closing it.
+- **The same defect is set to reappear one field over.** `--add-dir` takes a directory, and
+  `resolveScopeGlob` returns a **vault-relative** glob (`content/**` → `<contentRoot>/**`). So the
+  first caller to pass a real write scope will join it onto the user's own vault root and hand
+  `screenValueArgument` — which still carries the word list, correctly, because a scope's *name*
+  originates outside — a value that is in fact a path this product assembled. A vault at
+  `~/Danger/DeveloperBrain` refuses again, by exactly the mechanism NEW-12 closed.
+- **`adapter-claude` carries the same trap**, in a different shape.
+  `ClaudeInvocation.allowedTools`' own docblock records that derived read and write scopes translate
+  into allowed-tool rules; it does **not** say what the resulting entry looks like. The concrete
+  `Read(<path>/**)` form is an inference from the vendor's `--allowedTools` syntax, not a repository
+  fact — flagged as an inference so nobody cites this row as evidence for it. Whatever the form, an
+  entry carrying a derived path meets the word list the same way.
+- **Nothing is wrong today and that is why this is a row rather than a fix.** No production caller
+  passes a write scope — `ingest` passes `[]` under spec §3.3 — and keeping both rules on a field
+  whose values are short vendor vocabulary is the right default until one exists. **Do not
+  pre-emptively move write scopes to the derived screen**: today their content is a vendor's
+  vocabulary, and dropping the word list before the path half arrives would weaken the value the
+  screen was written for.
+- **The shape of the fix, when it is needed:** screen the *scope name* and the *derived path* as two
+  values rather than one, so each meets the rule that applies to it — the same split, one level down.
+
+### NEW-12's other residual — `ingest` can no longer produce a screening refusal
+
+- **Status:** open, registered 2026-08-17 · **Owner:** whoever gives `ingest` an argument a screen can
+  refuse · **Size:** XS · **Coverage, not security**
+- Closing NEW-12 made `invokeVendor`'s refusal-detail branch (`apps/cli/src/commands/ingest.ts:729`)
+  **unreachable from every production path**, verified against all four sources the branch's own
+  docblock lists: the prompt is prefixed with a Markdown heading so the dash rule cannot fire; the
+  working root and output schema path are assembled from validated absolute paths and now take the
+  derived screen; spec §3.3 passes an empty write-scope array; and the turn bound is
+  `DEFAULT_MAX_TURNS`, a compile-time constant inside the window `invokeClaude` enforces.
+- **The branch is retained as defence in depth** — NEW-12's successor above brings the user back — but
+  the interpolation it performs is no longer covered end-to-end. It was covered by exactly one case,
+  which asserted a refusal this product should never have produced, and that case now asserts the
+  acceptance instead.
+- **No fixture can reach it**, because the refusal happens before the fake runner is called and the
+  harness has no injection point for a vendor outcome. Recorded rather than replaced with a test that
+  would have to fake the thing it is testing.
+
+### NEW-23 — `path:line` citations rot silently, and nothing checks them
+
+- **Status:** open, registered 2026-08-17 after this became a review finding for the **third time in
+  two rounds** · **Owner:** whoever adds the next repository check — DOS-P7 by default · **Size:** S ·
+  **Documentation integrity**
+- **The architecture notes hold themselves to a standard nothing enforces.**
+  `knowledge-pipeline.md`'s own preamble says "every claim here points at code or at a named test
+  case, `path:line`, which is the standard `threat-model.md` holds itself to." **Counted 2026-08-17
+  by script rather than by estimate: 372 citations across nine documents** — 218 full `path:line`,
+  117 bare continuations (`` `:1041-1054` ``, resolved against the last filename on the line), and 37
+  bare basenames (`` `ingest.ts:541` ``). They are maintained by hand, and **`npm run check` is green
+  with every one of them broken.**
+- **They rot on any edit, not on a rewrite**, and this row exists because the repair is harder than
+  the rot. Adding eleven lines to one docblock in `apps/cli/src/commands/ingest.ts` moved twelve
+  citations in two documents. The session that noticed then made it **worse, twice**: it computed the
+  shift arithmetically from a stale diff, so every correction was off by nine; and a typo in its own
+  substitution script wrote the literal string `appsig/PLACEHOLDER` into two of `threat-model.md`'s
+  security-invariant evidence cells, where `npm run check` passed over it. **A freshly-touched wrong
+  citation is worse than an untouched stale one, because it looks verified.**
+- **What worked, and is the method any fix must use:** map HEAD line → current line with a diff over
+  file *contents*, then accept a new address only when the cited lines are byte-equal to what HEAD
+  held. Arithmetic on hunk offsets is what failed, three times.
+- **The method has an ordering rule and it is not optional: remap *last*, immediately before staging,
+  and re-verify after any subsequent edit to a cited file.** A correct remapper run at the wrong time
+  is indistinguishable from a broken one. This was the fourth consecutive failure of this class and
+  the first one where the tool was right: two docblocks were edited *after* the remap, and every
+  citation past those insertions was stale again on arrival. Re-running the remapper as the final
+  action must propose **zero** changes; if it proposes any, a cited file was edited after the previous
+  run.
+- **Two holes in byte-equality, both of which fired here.** First, **a citation whose cited content
+  was itself rewritten has no byte-equal target anywhere**, so the tool cannot remap it — and a tool
+  that silently keeps the old value in that case reports success while leaving a stale citation. It
+  must be a hard error the operator resolves by hand. Second, **byte-equality proves nothing when the cited
+  content is not unique in the file** — and this applies to *every* method here, the forward-unpaired
+  verifier included, because it is byte-equality too.
+  **The property is uniqueness, and a length heuristic is the wrong proxy for it.** A first line of
+  `]);` matches any `]);` in the file, which is how one wrong citation survived three repair rounds —
+  but the live case that matters is a 23-character line of ordinary code, `redactText(value, key),`,
+  which occurs twice in `ingest.ts` and is cited at *both* sites in one comma list. Swap the two and
+  every check here still passes: the content resolves in HEAD, and the HEAD document cited both
+  locations. A "punctuation-only or under fifteen characters" rule returns false on it.
+  **So count occurrences of the cited content in HEAD and treat more than one as ambiguous**, to be
+  disambiguated by position — prefer the candidate nearest the content-anchored mapping — or escalated
+  to a human. Length and punctuation are an additional signal, never the test.
+- **The scope is every changed file, not every changed *source* file.** Test files are cited as
+  evidence too — a test name is the evidence for most of `threat-model.md`'s rows — and three repair
+  rounds swept only `src/`, leaving a citation pointing at the *opposite* assertion in a neighbouring
+  case.
+- **Why this is worse than ordinary staleness.** The evidence column is the mechanism by which a
+  reader verifies a trust boundary. A citation that lands mid-docblock does not look wrong — it looks
+  like a claim the reader failed to understand, so the failure mode is a reader who doubts themselves
+  and moves on.
+- **The fix is a repository check**, in the shape `tests/repository/` already uses: extract every
+  citation, refuse one whose file does not exist or whose range is out of bounds, and assert the
+  extracted set is non-empty **per document** — `SESSION.md`'s rule that a gate which can pass by
+  scanning nothing is not a gate.
+- **Two forms make it harder than it looks, and neither is optional.** A **bare continuation** carries
+  no filename and must be resolved against the last path named on its line; there are 117 of them, and
+  the first repair pass missed the form entirely. A **bare basename** is worse, and the ambiguity is
+  measured rather than assumed: of **19 distinct bare basenames cited, 8 resolve to more than one
+  file** — a basename of `types.ts` has **five** candidates across `core` and `platform-macos`,
+  `validate.ts` has three, and `invoke.ts` has two, `adapter-claude` against `adapter-codex`, so
+  guessing wrong points a reader at the *other vendor's* adapter. The check either rejects those or
+  needs a resolution rule, and deciding that rule is most of the work.
+- **The obvious specimen is the misleading one.** An earlier draft of this row illustrated the
+  ambiguity with a basename of `ingest.ts` — which resolves to **exactly one** file in this
+  repository. An implementer testing the stated example first would find it unique and conclude the
+  resolution rule is easy. Same defect class as the "known wrong" list below: a correct conclusion
+  resting on an unverified example.
+- **A third hole, and the one most likely to defeat a naive implementation.** A verifier that pairs
+  each HEAD citation with its current counterpart **cannot see a citation whose group changed size** —
+  one split into two, a new row added, a stale one already fixed by hand. It has no twin to compare
+  against and the natural implementation skips it silently. The trap is that **the act of improving a
+  document is what disables its verification**, so the tool is weakest exactly where the editing was
+  heaviest. Both surviving errors of the 2026-08-17 repair sat in such groups. The fix is to verify
+  **forward and unpaired**: for each citation in the *current* document, locate its cited content in
+  HEAD and require the HEAD document to have cited that location. Unpairable is a hard error, like
+  unmappable — and a legitimate semantic re-citation will trip it, which is correct: a human should
+  confirm that a citation was moved on purpose.
+- **The row specifies a gate that will extract the row.** NEW-23's own prose contains specimen
+  citations written as illustrations of a *form*, not as evidence, and any extractor picks them up.
+  One of them is even in bounds, so it fails silently rather than loudly. The gate needs a stated
+  exemption — a fenced block, an escape, or an explicit marker — decided before it ships, or its first
+  run trips on its own specification.
+- **Bounds-checking is what is affordable, and it is not sufficient.** Whether the cited lines *mean*
+  what the sentence claims is not machine-checkable. `threat-model.md` cited
+  `packages/adapter-codex/src/invoke.ts` for the `-s read-only` derivation while pointing at
+  `finalJsonlLine`'s docblock — wrong function, right file, in bounds. A bounds check passes that
+  forever. Whoever ships the gate should say so in the test, or a green run will be read as "the
+  evidence is sound".
+- **Adoption will go red, but not on the list this row first carried.** An earlier draft named four
+  "known wrong" citations from memory, and the accounting was loose in both directions: **two were
+  fully correct**, one had **no citation on it at all**, and the fourth contained a genuinely wrong
+  citation the draft did not name. Not one of the four was right as stated — a caution that belongs in
+  the row about the row. Verified by resolution on 2026-08-17: of the 229 spans in the four main documents,
+  **all now resolve in bounds**, and the genuinely wrong one found was
+  `tests/security/network.test.ts:176-179`, which begins on a closing brace. Whoever adopts the check
+  runs it first and fixes what it actually reports. **In bounds is not the same as correct** — see the
+  bullet above on the wrong-function-in-bounds case; a clean bounds sweep says nothing about whether
+  the cited lines support the sentence.
+- **A cheaper alternative was considered and is worse:** citing symbols rather than lines
+  (`cli.ts` `screenValueArgument`) never rots, but it is a repository-wide prose migration of ~370
+  sites and it loses the ability to point at a *range* of reasoning inside one function, which is what
+  many of these citations are doing.
 
 ### NEW-7 — a link destination's percent-encoding is unverified against Obsidian
 

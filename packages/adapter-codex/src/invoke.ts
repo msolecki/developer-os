@@ -3,6 +3,7 @@ import { cwd } from "node:process";
 import { parseAgentPromptArgs } from "@developer-os/core";
 import {
   parseStructuredPayload,
+  screenDerivedPathArgument,
   screenProseArgument,
   screenValueArgument,
 } from "@developer-os/security";
@@ -12,9 +13,29 @@ import type { CodexInstallation } from "./discover.js";
 /**
  * Spec §7: the shape a compiled `agent.prompt` step and its derived scopes
  * become before they reach `invokeCodex`. Every field here that reaches an
- * argv value position still needs `screenValueArgument` before it gets
- * there — this type only describes the *shape*, not that the values are
- * already safe.
+ * argv value position still needs a screen before it gets there — this type
+ * only describes the *shape*, not that the values are already safe.
+ *
+ * **Which screen depends on where the field came from**, and `invokeCodex` is
+ * where that is decided: `screenValueArgument` for a write scope,
+ * `screenProseArgument` for the prompt, and `screenDerivedPathArgument` for
+ * `workingRoot` and `outputSchemaPath`, which this product assembles itself
+ * (BACKLOG NEW-12).
+ *
+ * **The write-scope row is provisional, and the first real caller will have to
+ * revisit it.** No production caller passes a write scope today — `ingest`
+ * passes `[]` under spec §3.3 — so keeping both rules there costs nothing and
+ * is the safe default for a value a workflow author will eventually write. But
+ * `--add-dir` takes a *directory*, and `resolveScopeGlob` returns a
+ * vault-relative glob, so whoever wires the first scope will join it onto the
+ * user's own vault root and hand this function a **derived path wearing a write
+ * scope's name**. At that moment a vault at `~/Danger/DeveloperBrain` refuses
+ * again, by exactly the mechanism NEW-12 closed, one field over. The same trap
+ * is set in `adapter-claude`, whose `allowedTools` entries are documented as
+ * carrying derived read and write scopes. **The concrete `Read(<path>/**)`
+ * spelling is an inference from the vendor's own `--allowedTools` syntax, not
+ * something that docblock states** — the trap does not depend on the spelling,
+ * only on a derived path reaching a screen that carries the word list.
  */
 export interface CodexInvocation {
   readonly prompt: string;
@@ -61,10 +82,11 @@ export const DEFAULT_TIMEOUT_MS = 30_000;
  *
  * `context` carries what the compiler already derived — `workingRoot`,
  * `writeScopes`, `outputSchemaPath` — rather than anything read directly out
- * of `args`. That is not a trust boundary: `invokeCodex` screens every one
- * of these fields with `screenValueArgument` before they reach argv
- * regardless of where they came from, because the positional rule it
- * enforces does not take provenance as an input.
+ * of `args`. That is not a trust boundary: `invokeCodex` screens every one of
+ * these fields before they reach argv regardless of where they came from, and
+ * the positional rule — the complete one — is applied to all of them. What
+ * provenance decides is only whether the *nominal* rule is applied on top, and
+ * for these three it is not (BACKLOG NEW-12).
  */
 export function invocationFromAgentPrompt(
   args: unknown,
@@ -202,17 +224,30 @@ export async function invokeCodex(
       return { ok: false, reason: "refused", detail: refusal };
     }
   }
-  // The screen is positional, not nominal: every value this module places in
-  // an argv value position is screened, regardless of where it came from.
-  // `workingRoot` and `outputSchemaPath` are `readonly string` fields of an
-  // exported interface reached through an exported function — nothing in the
-  // type system marks them trusted, so they are screened exactly like
-  // `prompt` and each write scope above.
-  const workingRootRefusal = screenValueArgument(invocation.workingRoot, "the working root");
+  // Assembled here, so the positional rule alone (BACKLOG NEW-12). Both are
+  // put together by this product — `workingRoot` from the user's validated
+  // `brainPath`, `outputSchemaPath` from the product state root plus a fixed
+  // `schemas/<verb>.schema.json` tail, of which only the tail ships. Both are
+  // therefore full of text the user chose; what matters is that no party
+  // outside this process chose the *argument*, which is the premise the word
+  // list needs. It screened nothing here while refusing a directory the user
+  // named themselves: a vault at `~/Danger/DeveloperBrain` refused every
+  // ingest.
+  //
+  // This corrects, rather than relaxes, what stood here before. That comment
+  // argued these fields are screened because "nothing in the type system marks
+  // them trusted" — true, and the reason the screen is chosen by a function
+  // whose *name* states the provenance the type cannot. Every value this
+  // module places in an argv position is still screened; two of them are now
+  // screened by the rule that applies to them.
+  const workingRootRefusal = screenDerivedPathArgument(
+    invocation.workingRoot,
+    "the working root",
+  );
   if (workingRootRefusal !== null) {
     return { ok: false, reason: "refused", detail: workingRootRefusal };
   }
-  const outputSchemaPathRefusal = screenValueArgument(
+  const outputSchemaPathRefusal = screenDerivedPathArgument(
     invocation.outputSchemaPath,
     "the output schema path",
   );

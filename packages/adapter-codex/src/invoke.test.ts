@@ -179,19 +179,31 @@ describe("the three refused flags, and the sandbox that is never full access", (
     expect(called).toBe(false);
   });
 
-  it("refuses a workingRoot naming a permission or bypass surface, with no leading dash to trip the positional rule first", async () => {
-    let called = false;
+  /**
+   * **Inverted on 2026-08-17 (BACKLOG NEW-12), and this is the case the row was
+   * opened for.** `workingRoot` is derived from the user's own `brainPath`, so
+   * this refusal meant a vault at `~/Danger/DeveloperBrain` could never ingest
+   * through `codex` — a permanent refusal of a directory the user named, under
+   * a recovery line telling them to try again.
+   *
+   * The path is a plausible vault rather than the bare `permission-cache` it
+   * used to be, so a reader can see whose string this is.
+   */
+  it("permits a workingRoot naming a word-list term, because it is the user's own vault path", async () => {
+    const { runner: capturingRunner, seen } = capturing();
     const result = await invokeCodex(
       installation,
-      invocation({ workingRoot: "permission-cache" }),
-      { runner: runner(() => { called = true; return {}; }) },
+      invocation({ workingRoot: "/synthetic/Danger/DeveloperBrain" }),
+      { runner: capturingRunner },
     );
-    expect(result).toEqual({
-      ok: false,
-      reason: "refused",
-      detail: "the working root names a permission or bypass surface that is refused in a value position",
-    });
-    expect(called).toBe(false);
+    expect(result).toEqual({ ok: true, payload: {} });
+    /**
+     * Asserted against argv rather than only against the absence of a refusal.
+     * `not.toMatchObject({ reason: "refused" })` is satisfied by
+     * `spawn-failed` and `malformed-output` too, so it would stay green if this
+     * value stopped reaching the vendor for some entirely different reason.
+     */
+    expect(seen()?.args).toContain("/synthetic/Danger/DeveloperBrain");
   });
 
   it("refuses a hostile outputSchemaPath before spawning", async () => {
@@ -209,19 +221,31 @@ describe("the three refused flags, and the sandbox that is never full access", (
     expect(called).toBe(false);
   });
 
-  it("refuses an outputSchemaPath naming a permission or bypass surface, with no leading dash to trip the positional rule first", async () => {
-    let called = false;
+  /**
+   * **Inverted on 2026-08-17, and the inversion is the decision rather than a
+   * convenience (BACKLOG NEW-12).** This case used to assert the refusal; it
+   * asserts the acceptance now, because `outputSchemaPath` is a path this
+   * product assembles — the product state root, plus a fixed
+   * `schemas/<verb>.schema.json` tail. **Only the tail ships**: the prefix is
+   * `DEVELOPER_OS_HOME` or the user's own home, so words the user chose are
+   * certainly in it. What matters is that no party outside this process chose
+   * the argument, which is what the word list needs in order to mean anything.
+   * The refusal it pinned cost every ingest whose assembled path happened to
+   * contain an ordinary English word.
+   *
+   * **The dash-rule case directly above is untouched and must stay green**: it
+   * is the proof that the screen was narrowed rather than deleted, and the two
+   * read as a pair on purpose.
+   */
+  it("permits an outputSchemaPath naming a word-list term, because this product assembled it", async () => {
+    const { runner: capturingRunner, seen } = capturing();
     const result = await invokeCodex(
       installation,
       invocation({ outputSchemaPath: "danger-zone.json" }),
-      { runner: runner(() => { called = true; return {}; }) },
+      { runner: capturingRunner },
     );
-    expect(result).toEqual({
-      ok: false,
-      reason: "refused",
-      detail: "the output schema path names a permission or bypass surface that is refused in a value position",
-    });
-    expect(called).toBe(false);
+    expect(result).toEqual({ ok: true, payload: {} });
+    expect(seen()?.args).toContain("danger-zone.json");
   });
 
   it("chooses the sandbox from the scope count, so full access is unreachable by argument", async () => {
