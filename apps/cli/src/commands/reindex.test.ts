@@ -52,16 +52,18 @@ function requestFor(vaultRoot: string): IndexWriteRequest {
 }
 
 /**
- * **Driven at the `writeIndexArtifacts` level, not through `brain reindex` or
- * `ingest`.** Both commands call `BrainService.reindex()` before they ever
- * reach this function, and `BrainService`'s own note discovery
- * (`packages/brain/src/discovery/discover.ts`) refuses *any* content root
- * reached through a symlink, vault-escaping or not — a separate, pre-existing
- * guard this task does not touch. Driving the full command would therefore
- * fail before reaching the code this suite is about, for a reason unrelated to
- * the finding. This calls the function directly, the way `ingest.ts` and
- * `brain.ts` do, with a synthetic artifact in place of a real `BrainService`
- * build.
+ * **Driven at the `writeIndexArtifacts` level, with a synthetic artifact in place of a
+ * real `BrainService` build**, the way `ingest.ts` and `brain.ts` call it. That keeps this
+ * suite about the artifact-writing containment rules rather than about discovery.
+ *
+ * **The reason this docblock used to give is no longer true, and the correction matters.**
+ * It said `BrainService`'s own note discovery refuses *any* content root reached through
+ * a symlink, so driving the full command would fail upstream for an unrelated reason. That
+ * guard was the subject of `BACKLOG.md` §1 NEW-22 and was removed on 2026-08-17 — a
+ * symlinked content root is now supported, on the founder's decision. **A reader is no
+ * longer talked out of the end-to-end case**, and it exists: `brain.test.ts`'s
+ * `reindexes a vault whose content is a symlink to a vault elsewhere` drives `runBrain`
+ * against exactly this layout, and reddens if the refusal comes back.
  */
 describe("writeIndexArtifacts, content symlinked to a vault elsewhere", () => {
   it("succeeds when the brain's content directory is a symlink to a directory outside the brain root", async () => {

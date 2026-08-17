@@ -704,6 +704,14 @@ git commit -m "fix(brain): carry the invisible-title rule to tags, summary and t
 **The compatibility clause, and it is the part to get right.** Per-entry checks today accept a link that resolves anywhere inside the **vault** and skip it. Anchoring entries on the content root alone would start *refusing* a link from `content/` to a sibling such as `_indexes` — a layout that works today. So an entry is refused only when its target is outside **both** roots.
 
 **Files:**
+> **The plan said to walk the canonical path and that was wrong, corrected during execution.**
+> Canonicalizing the *anchor* is what NEW-22 needs. Canonicalizing every path the walk touches
+> changes what `reader.readDir` and `assertReadable` receive for **every** vault, because a
+> `/var/…` root realpaths to `/private/var/…` on macOS — it moved `absolutePath` in `index.json`
+> for installations with nothing to do with this defect, and broke seven `validate.test.ts` cases
+> whose fixtures key on the declared path. The walk reads declared; only containment is asked
+> against the resolved root.
+
 - Modify: `packages/brain/src/discovery/discover.ts:132-144` (`refuseEscapingLink`), `:155-159` (`WalkContext`), `:183-190`, `:225-265`
 - Test: `packages/brain/src/discovery/discover.test.ts`
 
@@ -711,7 +719,7 @@ git commit -m "fix(brain): carry the invisible-title rule to tags, summary and t
 - Consumes: nothing from other tasks.
 - Produces: `refuseEscapingLink(absolutePath: string, vaultPath: string, permittedRoots: readonly string[], canonicalize: (path: string) => Promise<string>): Promise<void>` — refuses when the target is contained by none of the roots.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `packages/brain/src/discovery/discover.test.ts`:
 
@@ -734,12 +742,12 @@ it("still skips, and does not refuse, a link from content into the vault", async
 });
 ```
 
-- [ ] **Step 2: Run them and verify they fail**
+- [x] **Step 2: Run them and verify they fail**
 
 Run: `pnpm vitest run packages/brain/src/discovery/discover.test.ts`
 Expected: the first FAILs with `Vault entry resolves outside the vault: content`. **The second and third must pass on first run** — they are the two guarantees this change is forbidden to spend, and a green start is what proves the change did not buy the first case with either of them.
 
-- [ ] **Step 3: Widen the anchor to a set of roots**
+- [x] **Step 3: Widen the anchor to a set of roots**
 
 Change `refuseEscapingLink`'s third parameter from `vaultRootCanonical: string` to `permittedRoots: readonly string[]`, and its test from one `containsPath` to `permittedRoots.some(...)`. Its docblock gains the reason the set has two members:
 
@@ -759,7 +767,7 @@ Change `refuseEscapingLink`'s third parameter from `vaultRootCanonical: string` 
  */
 ```
 
-- [ ] **Step 4: Make the content root an anchor rather than a subject**
+- [x] **Step 4: Make the content root an anchor rather than a subject**
 
 In `discoverNotes`, replace the `refuseEscapingLink(contentDir, …)` call with a canonicalization:
 
@@ -782,12 +790,12 @@ const contentRootCanonical = await canonicalize(contentDir);
 
 Thread `permittedRoots: [contentRootCanonical, vaultRootCanonical]` into `WalkContext`, replacing `vaultRootCanonical`, and pass it at both per-entry sites (`:184-189` and `:259-264`). Start the top-level `readDir` and every `join` from `contentRootCanonical` rather than `contentDir`.
 
-- [ ] **Step 5: Run the tests and verify they pass**
+- [x] **Step 5: Run the tests and verify they pass**
 
 Run: `pnpm vitest run packages/brain`
 Expected: PASS, including `build.test.ts` and `lint.test.ts`, which consume discovery's output.
 
-- [ ] **Step 6: Run the gate, review, commit**
+- [x] **Step 6: Run the gate, review, commit**
 
 Run: `npm run check`
 

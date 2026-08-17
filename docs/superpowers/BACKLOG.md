@@ -64,7 +64,7 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P6 | spec approved and plan written, both 2026-08-13 | **three unticked steps** — Task 17 Step 3 (the Codex detection row, blocked on NEW-21) and Task 19 Steps 5–6 (close the documents, run the gate), which wait on it. Seventeen of nineteen tasks landed 2026-08-13/14/15 and their step lists are deleted |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | **fourteen rows**, and the breakdown adds up: **two** await their fix from Track R **R2** (NEW-15, NEW-22); **four** belong to somebody else (NEW-21 the founder's and blocking A10, NEW-20 and NEW-13 deliberately not fixed, NEW-7 needing a machine with Obsidian); **eight** came out of R2's own reviews — NEW-27 and NEW-28 from closing NEW-12, NEW-24, NEW-25, NEW-26 and NEW-29 from closing NEW-16, NEW-30 and NEW-31 from closing NEW-11. NEW-23 was raised the same way and closed the same day |
+| Repository-level | §1 | **thirteen rows**, and the breakdown adds up: **one** awaits its fix from Track R **R2** (NEW-15); **four** belong to somebody else (NEW-21 the founder's and blocking A10, NEW-20 and NEW-13 deliberately not fixed, NEW-7 needing a machine with Obsidian); **eight** came out of R2's own reviews — NEW-27 and NEW-28 from closing NEW-12, NEW-24, NEW-25, NEW-26 and NEW-29 from closing NEW-16, NEW-30 and NEW-31 from closing NEW-11. NEW-23 was raised the same way and closed the same day |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -113,7 +113,7 @@ recording. Git history is the archive.
 one. A residual is a defect like any other and gets `NEW-24` through `NEW-28`; the row it came from
 is named in its own text, which is where the lineage belongs.
 
-**Fourteen rows, and they are not all the same kind of open.** **Two are waiting on R2 to land their fix** — **NEW-15** and **NEW-22**. **NEW-11 closed
+**Thirteen rows, and they are not all the same kind of open.** **One is waiting on R2 to land its fix** — **NEW-15**. **NEW-22 closed 2026-08-17.** **NEW-11 closed
 2026-08-17** and left NEW-30, the fourth field with the same gap. All four
 that were waiting on a decision got one on 2026-08-17; **NEW-16 closed the same day** and left three
 residual rows of its own — NEW-24, NEW-25 and NEW-26. They stay here until R2 closes them, because a row leaves this
@@ -127,8 +127,8 @@ that closed NEW-16, and NEW-30 and NEW-31 from the one that closed NEW-11. A nin
 the same way and **closed the same day** by Track R Task 1b, which built the gate it asked for.
 
 **That is the ordinary yield of the review gate, and the number is the argument for it.**
-Three defects
-closed cleanly would have left this section at six rows; closing them honestly left it at fourteen.
+Four defects
+closed cleanly would have left this section at five rows; closing them honestly left it at thirteen.
 
 **They are not all the same thing, and the honest split is worth more than a round number.** Two —
 NEW-25 and NEW-29 — are properties that predate everything: an overlap rule that was unreachable
@@ -199,36 +199,6 @@ not.
 - **The founder chose on 2026-08-15 to hold DOS-P6 open for this** rather than close the subsystem
   and carry it as a residual. `ORDER.md`'s note beside Task 19's Steps 5–6 records why that was a
   live option and why it was declined.
-
-### NEW-22 — a vault whose `content` is a symlink cannot be indexed at all
-
-- **Status:** open, found 2026-08-15 by R1's fix wave, which went looking for a regression it had
-  introduced and found a pre-existing refusal instead · **Owner:** DOS-P7 by default · **Size:** S ·
-  **Not a security defect — a usability one, and the guard it names is deliberate**
-- `discoverNotes` canonicalizes the content directory and calls `refuseEscapingLink` on it
-  **unconditionally, before any per-entry walk** (`packages/brain/src/discovery/discover.ts:132-144`
-  and `:230-242`). That refuses **any** content root reached through a symbolic link — not only one
-  that escapes the vault. `BrainService.reindex()` reaches it through `buildIndex()` →
-  `discoverNotes()`, so **`brain reindex` and `ingest`'s third transaction both fail on such a vault**,
-  with `Vault entry resolves outside the vault: content`.
-- **The scenario this makes impossible is an ordinary one:** a user with an existing Obsidian vault
-  who points `brainPath` at a new directory and symlinks `content` at the vault they already have.
-  Nothing in the product tells them this is unsupported; they get a refusal naming a path they
-  deliberately created.
-- **The guard's own reason is good and is not in dispute**: its docblock records that a symlinked
-  `content` would let another vault's notes be indexed as this vault's own, and the sibling clause
-  skips a link even when it resolves inside, because a link and its target are one file and indexing
-  both produces a duplicate finding naming two paths only one of which is real.
-- **So this is a design question, not a bug to fix quietly:** is a symlinked content root supported,
-  refused with a message that says so, or supported with the duplicate problem solved another way?
-  Whoever answers it should read `refuseEscapingLink`'s docblock first — the cheap-looking fix
-  reopens exactly what it was written for.
-- **How it was found, which is the useful part.** R1 narrowed `writeIndexArtifacts`'s containment
-  anchor from the brain root to the content root, on a review finding that the wider anchor "breaks a
-  real layout". Driving that layout showed it was **already** broken one layer up, and had been since
-  `discover.ts` was written. The narrowing was still right — it removed a redundant refusal raised at
-  the wrong layer with the wrong exit code — but it rescued no working configuration, and the review
-  finding's "regression" framing was wrong. Recorded so the next reader does not repeat the trace.
 
 ### NEW-20 — `capture` proves its quarantine root, then follows the path again
 
@@ -452,6 +422,11 @@ one, and that is what this row is now.
   tree differed from the passing runs **only in documentation**, and the test runs in 878 ms against
   vitest's 5 s default — a 5.7x margin a plain timeout would have to eat. **Mechanism unconfirmed**:
   the message was not captured before the re-run, which is the mistake to avoid next time.
+- **A third occurrence, 2026-08-17, during R2 Task 4** — `npm run check` ended `1 failed | 2058
+  passed` and a rerun of the same tree was clean at 2059. **The name was lost again**, to the same
+  mistake: the run was piped through `tail`, so the failing case scrolled past. That is two
+  occurrences in one day where the mitigation below existed and was not followed, which is worth more
+  than the datum — **pipe through `tee` and grep the file, never `tail` alone.**
 - **So this row is a class, not an assertion**, and its mitigation below was written when it looked
   like one. Two intermittents with the same signature — red once in three or four full-suite runs on
   a machine loaded by the suite itself — points at parallel-worker contention rather than at either
