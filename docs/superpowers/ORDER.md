@@ -82,11 +82,12 @@ scan is owed again.
 
 Everything in this section is unfinished. Nothing here is a record of work that closed.
 
-### Four Foundation requests, raised by DOS-P6 and owned by nobody
+### Four Foundation requests, raised by DOS-P6 — the first three are now R2's
 
-**No DOS-P6 task extends `packages/core/src/transactions/`**, so no session in this subsystem can act
-on the first three without being told to. They are raised together because a session that fixes one
-and not the next has fixed neither.
+**No DOS-P6 task extends `packages/core/src/transactions/`**, so no session in this subsystem could act
+on the first three without being told to. **All three were decided on 2026-08-17 and are Tasks 6, 7 and
+8 of R2**; item 4 is untouched and still belongs to the founder. They are kept here rather than moved
+because a session that fixes one and not the next has fixed neither, and R2 orders them accordingly.
 
 1. **A command cannot supply a precondition.** `PlannedFileMutation` is
    `{targetPath, operation, content}`; the executor computes `expectedBeforeHash` from the snapshot it
@@ -115,13 +116,15 @@ and not the next has fixed neither.
    `<state>/transactions/` accumulating one permanent `0600` lock file per transaction id is intended
    or wants collection. `BACKLOG.md` §2 and `foundation-constraints.md` carry them.
 
-### One product gap that is DOS-P7's rather than Foundation's
+### One product gap that was DOS-P7's rather than Foundation's — decided, and now R2 Task 9
 
 `applyReviewDecision` permits a decision only from `quarantined` (`decide.ts:REVIEWABLE`), so
 **nothing moves a capture from `accepted` to `rejected`.** A user who accepts a capture and then
 changes their mind — or whose capture refuses ingest deterministically — has only a hand edit of the
 file's frontmatter, which is what both of `ingest`'s recovery strings now tell them to do. Adding the
-transition is a decision about spec §5.5's table, not a bug fix.
+transition was a decision about spec §5.5's table rather than a bug fix, and **the founder took it on
+2026-08-17**: the row is added for `reject` alone, `accept` and `edit` keep their single row, and
+`CAPTURE_STATUSES` gains no member.
 
 ### Two gate-integrity residuals, both unowned
 
@@ -197,27 +200,42 @@ touches it — DOS-P7 by default" — and DOS-P7 is two gates away. A row lands 
 already specified and takes no decision away from the founder; anything carrying an open question
 stays in §1 until that question is answered.
 
-**There is no row, and that is the honest state rather than an oversight.** R1 closed on 2026-08-15
-and every remaining §1 row waits on somebody who is not an agent:
+| # | Entry | Plan | Needs | Size | Done when | Status |
+|---|---|---|---|:---:|---|---|
+| R2 | Nine decided defects — five §1 rows, three Foundation requests, one DOS-P7 gap | `plans/2026-08-17-repository-defects-r2.md`, ten tasks | nothing | M | every closed row leaves §1, both amendments registered in §8, CI green on the commit | **now** |
 
-- **Five need a decision before anyone can implement them.** **NEW-15** — is the executable check
-  ancestors-and-resolved-target, and is group-writable refusable at all when the group is the user's
-  own? **NEW-22** — is a symlinked content root supported, refused with a message that says so, or
-  supported with the duplicate-note problem solved another way? **NEW-16** — is a user-supplied
-  redaction pattern a `config.toml` table, and does adding one amend a `.strict()` schema frozen at
-  `foundation.md` §2? **NEW-11** — is an invisible tag an error, a warning, or silently dropped at
-  index time? **NEW-12's remaining path half** — does a path this product derived itself belong under
-  a word list at all? Its own row says *"do not close it by narrowing the pattern"*.
-- **Four belong to somebody else.** **NEW-21** is the founder's and blocks A10. **NEW-20** and
-  **NEW-13** were registered as deliberately-not-fixed. **NEW-7** needs ten minutes with a machine
-  that has Obsidian rather than an agent.
+**R2 exists because the five decisions those rows were waiting on were taken on 2026-08-17.** Each had
+sat as "open" while being unimplementable, which is the state this track exists to resolve rather than
+accumulate. What was decided:
 
-**NEW-15 is the cautionary case.** It read like an implementation for a day and cost a full task to
-discover it was not: the guard was built, tested, and withdrawn before commit, because the policy that
-row implies refuses this product's own vendors — `claude` and `codex` are both symlinks on the
-founder's machine and `/opt/homebrew/bin` is group-writable, so the rule as written would have made
-`capture` record `unknown` forever and `ingest` exit 5 on every run. **A row being open is not an
-invitation to implement it.** Read which group it is in first.
+- **NEW-15** — resolve, then check: canonicalize the binary and check the **resolved** target and its
+  ancestors, refuse an owner that is neither the user nor root, refuse other-writable with or without
+  the sticky bit, and **allow group-writable when the directory's owner is the user** — which is what
+  lets an ordinary Homebrew install pass where the withdrawn strict guard refused it.
+- **NEW-22** — a symlinked content root is **supported**: the content root is canonicalized into the
+  containment anchor instead of being measured against the vault root.
+- **NEW-16** — user redaction patterns get a `config.toml` `[redaction]` table, and the `.strict()`
+  schema amendment is registered rather than slipped in.
+- **NEW-11** — an invisible tag is a **lint warning**. The note still indexes.
+- **NEW-12's path half** — split by provenance: a path this product derived itself keeps the dash rule
+  and loses the word list. Not closed by narrowing the pattern, which its row forbids.
+
+Three Foundation requests and the `accepted → rejected` gap are in the same plan, decided the same
+day, because they were unowned for the same reason: no entry on the product path reaches them.
+
+**Four §1 rows are deliberately not in R2**, and a session finishing this entry must not sweep them up
+with the five that close: **NEW-21** is the founder's and blocks A10; **NEW-20** and **NEW-13** were
+registered as deliberately-not-fixed; **NEW-7** needs ten minutes with a machine that has Obsidian
+rather than an agent.
+
+**NEW-15 is still the cautionary case, and a decided policy does not repeal the lesson.** It read like
+an implementation for a day and cost a full task to discover it was not: the guard was built, tested,
+and withdrawn before commit, because the policy that row implied refuses this product's own vendors —
+`claude` and `codex` are both symlinks on the founder's machine and `/opt/homebrew/bin` is
+group-writable, so the rule as written would have made `capture` record `unknown` forever and `ingest`
+exit 5 on every run. What changed is that a policy now exists; the row did not become implementable by
+being read again. **A row being open is not an invitation to implement it.** Read which group it is in
+first.
 
 ---
 
@@ -294,6 +312,7 @@ else — Track R above says which is which. **Add roughly eight open decisions**
 rows: the four Foundation requests above, DOS-P7's `accepted → rejected` transition, DOS-P9's
 dedicated-plan question, and the two Foundation founder questions.
 
-**Nothing on this queue is startable by an agent today.** A10 waits on NEW-21, which waits on an
-external usage limit; A11 waits on A10; every §1 row waits on a decision or on a machine. That is why
-Track R has no successor row, and it is worth saying plainly rather than leaving a reader to derive it.
+**Nothing on the *product path* is startable by an agent today**, and that is unchanged: A10 waits on
+NEW-21, which waits on an external usage limit, and A11 waits on A10. **Track R is startable, as of
+2026-08-17**, because the five decisions its rows were waiting on were taken that day — R2 is the row.
+The four §1 rows that are not in R2 still wait on the founder or on a machine.
