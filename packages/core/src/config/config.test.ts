@@ -115,6 +115,33 @@ describe("brain configuration section", () => {
     expect(config.brain?.topicFolders).toStrictEqual(["DEV", "PROJECTS"]);
   });
 
+  /**
+   * Regression, pinned rather than only fixed: an earlier `pathSegmentSchema`
+   * refused any glob metacharacter, which made this schema — governing
+   * `topicFolders` and every root — reject `!inbox`, the standard Obsidian
+   * convention for sorting a folder to the top of an alphabetical listing,
+   * alongside any other ordinary name that happens to use one. The failure
+   * was total: `loadConfig` throws, so the CLI cannot start for a vault
+   * already using such a name, and `serializeConfig` throws on the same
+   * value, so the file cannot be rewritten to fix it either. Glob
+   * metacharacters are mitigated by escaping at the one place a root is
+   * spliced into a glob (`resolveScopeGlob` in `packages/workflow-schema`),
+   * not by refusing them as names here.
+   */
+  it("loads topic folders and roots that use ordinary glob-metacharacter naming conventions", () => {
+    const source = brainToml
+      .replace('contentRoot = "content"', 'contentRoot = "content (v2)"')
+      .replace('indexesDir = "_indexes"', 'indexesDir = "_indexes!"')
+      .replace('["DEV", "PROJECTS"]', '["!inbox", "PROJECTS (2024)"]')
+      .replace('PROJEKTY = "PROJECTS"', 'PROJEKTY = "PROJECTS (2024)"');
+
+    const config = loadConfig(source);
+
+    expect(config.brain?.contentRoot).toBe("content (v2)");
+    expect(config.brain?.indexesDir).toBe("_indexes!");
+    expect(config.brain?.topicFolders).toStrictEqual(["!inbox", "PROJECTS (2024)"]);
+  });
+
   it.each([
     {
       name: "a topic folder that is a path rather than a segment",

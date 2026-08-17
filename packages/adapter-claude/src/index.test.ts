@@ -38,7 +38,9 @@ describe("the public door", () => {
     expect(Object.keys(pkg).sort()).toEqual([
       "CLAUDE_CAPABILITY_KEYS",
       "CLAUDE_MINIMUM_VERSION",
+      "CLAUDE_NOT_USED_KEYS",
       "ClaudeRenderer",
+      "DEFAULT_MAX_TURNS",
       "PLUGIN_INSTALL_SEGMENTS",
       "PLUGIN_NAME",
       "SHARED_WORKFLOW_ID",

@@ -105,7 +105,7 @@ another — so neither package can assert the property about itself. The asserti
 at once. Before it, both files carried prose claiming the lists were identical and nothing checked
 it. **Owner of keeping them so: DOS-P6**, as the consumer the parity exists for.
 
-**The floor is `0.147.0`, and it is one observed version, not a range.** Task 17 ran the real
+**The floor is `0.147.0`, and it is one observed version, not a range.** DOS-P5's Task 17 ran the real
 install path against the one Codex available and raised the floor to it. This is a *raise* rather
 than a confirmation of the prior `0.144.6`: that same task fixed three real bugs in this adapter's
 own CLI argv and marketplace document (§7) without which no install step succeeded at all, so
@@ -306,11 +306,20 @@ contract violation; the fixtures hid it because a single object is not an event 
 event-type value is filtered on, because an invented enum a future version rejects is a failure only
 a real run would find. Settling it needs one real `codex exec` call, which invokes a model on the
 founder's credentials and costs money — **declined by the founder for this subsystem on
-2026-08-12**, with Task 17 scoped to offline plugin management instead. The rule ships unverified
-and says so at the seam. **Owner: DOS-P6**, which must capture raw stdout from one real run, record
-whether the final response really is the last parsing line and whether it carries a discriminating
-field worth filtering on, amend spec §14.1 with the observed shape, dated, and correct the docblock.
-Do not quietly promote the rule to verified.
+2026-08-12**, with DOS-P5's Task 17 scoped to offline plugin management instead.
+
+**DOS-P6's Task 17 made that call on 2026-08-15, and the rule is half settled.** Spec §14.1 carries
+the dated amendment and `tests/fixtures/codex/observed-exec-stream.jsonl` is the recording. The
+framing is **confirmed** — one JSON object per line — and so is the existence of a discriminating
+field, `type`, present on every line, with an observed vocabulary of `thread.started`,
+`turn.started`, `error` and `turn.failed`. **What is not settled is the half that matters**: the run
+ended `turn.failed` because the account's usage limit was exhausted, so no run reached a model
+response and nothing shows whether a *successful* turn's terminal event is the final response.
+The rule therefore still ships unverified and still says so at the seam, and no event-type filter was
+written, because filtering is a narrowing this design requires to be proven against a stream where
+the old rule and the new one agree — and a failed turn contains no final response for two rules to
+agree about. **Owner of the remainder: `BACKLOG.md` §1 NEW-21**, one successful `codex exec`
+completion. Do not quietly promote the rule to verified.
 
 ### The four spec §14.4 amendments of 2026-08-12
 
@@ -329,7 +338,7 @@ that runs.
    two-argument form the spec showed refuses with a usage error; the marketplace's name is read from
    the document's own `name` field.
 3. **`codex plugin remove` requires the qualified `<plugin>@<marketplace>` form once more than one
-   marketplace is configured.** A bare name refuses only under that condition — Task 17 observed
+   marketplace is configured.** A bare name refuses only under that condition — DOS-P5's Task 17 observed
    `codex plugin remove developer-os` exit 1 with `plugin requires --marketplace unless passed as
    <plugin>@<marketplace>` once a second marketplace existed to disambiguate against; `install.ts`
    carries the condition precisely, and this note previously stated the refusal as unconditional.
@@ -428,7 +437,7 @@ product.
 1. **Two artifact roots share one type** — §4. Structurally identical, semantically incompatible,
    and the wrong one applies cleanly. `proposeCodexInstall` now refuses a mislocated tree; the
    durable fix is branded types. `BACKLOG.md` §1 NEW-13. **Owner: DOS-P6.**
-2. **The JSONL terminal-event rule is provisional and unverified** — §7. **Owner: DOS-P6.**
+2. **The JSONL terminal-event rule is provisional on the success path** — §7. DOS-P6's Task 17 ran it on 2026-08-15 and settled the framing and the discriminating `type` field, but its run ended `turn.failed` on an exhausted usage limit, so the terminal-event rule itself is unsettled. **Owner of the remainder: `BACKLOG.md` §1 NEW-21**, one successful `codex exec` completion.
 3. **`maxTurns` is enforced under Claude and silently dropped under Codex** — §7. **Owner: the
    workflow compiler and DOS-P6.**
 4. **The whole two-gate capability machinery has no production caller** — §3. `captureVia` can never

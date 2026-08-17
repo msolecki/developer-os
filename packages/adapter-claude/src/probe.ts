@@ -27,7 +27,8 @@ const PROBE_TIMEOUT_MS = 30_000;
  * enforced rather than remembered. A `SessionEnd` hook cannot be made to fire
  * without a real session (spec §6.1), so `session_end_capture` is absent here
  * on purpose and reaches `resolveCapabilities` as an unmentioned key — which
- * that function reports as `wrapper-required`.
+ * that function reports as `not-used`, since no hook ships to fire (DOS-P6
+ * Task 3).
  *
  * **`plugin_hooks` and `subagents` were on this list and are not any more.** The
  * tree contains `.claude-plugin/plugin.json` and six `SKILL.md` files: no

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { discoverCli, parseStructuredPayload, screenValueArgument } from "./cli.js";
+import {
+  discoverCli,
+  parseStructuredPayload,
+  screenProseArgument,
+  screenValueArgument,
+} from "./cli.js";
 import type { ProcessRequest, ProcessResult, ProcessRunner } from "./process.js";
 
 const EXECUTABLE = "/opt/synthetic/bin/vendor-cli";
@@ -88,8 +93,10 @@ describe("discoverCli", () => {
    * `2.1.216-rc.1` may lack what `2.1.216` ships, so granting it the release's
    * documented floor would be a lie — except that a floor never earns a `yes`
    * on its own (spec §5.1). The probe still has to observe every capability, so
-   * the worst this truncation can produce is a `wrapper-required` where a
-   * stricter parse would have produced `unknown`.
+   * the worst this truncation can produce is a `yes` where a stricter parse
+   * would have produced `unknown`, and only for a capability a probe already
+   * observed. (It read `wrapper-required` until DOS-P6 Task 3, which replaced
+   * that state with `unknown` throughout.)
    *
    * If the table is ever allowed to grant a capability without a probe, this
    * test must be revisited in the same change.
@@ -225,6 +232,44 @@ describe("screenValueArgument", () => {
         `${flag} must be refused`,
       ).not.toBeNull();
     }
+  });
+});
+
+describe("screenProseArgument", () => {
+  /**
+   * **The word list is dropped here and only here.** Prose cannot be reread as
+   * an option, so the nominal rule buys nothing in this position while refusing
+   * text a user did not choose: DOS-P6 puts a redacted capture body in an argv
+   * value, and an ordinary error message contains the word `permission`.
+   */
+  it("permits prose the value screen refuses for naming a permission surface", () => {
+    const body = "npm ERR! EACCES: permission denied, open /usr/local/lib";
+    expect(screenValueArgument(body, "prompt")).not.toBeNull();
+    expect(screenProseArgument(body, "prompt")).toBeNull();
+  });
+
+  it("permits the other two words of the list as well", () => {
+    for (const body of [
+      "the change is dangerous and needs review",
+      "we bypass the cache on a cold start",
+    ]) {
+      expect(screenProseArgument(body, "prompt"), body).toBeNull();
+    }
+  });
+
+  /**
+   * The positional rule is the complete one and stays, so this screen is a
+   * narrowing of the other rather than a hole beside it: a prompt that would be
+   * reread as an option is still refused.
+   */
+  it("keeps the leading-dash rule, which is the rule that is complete", () => {
+    for (const value of ["--permission-mode=bypassPermissions", "-p", "--add-dir"]) {
+      expect(screenProseArgument(value, "prompt"), value).not.toBeNull();
+    }
+  });
+
+  it("permits an ordinary prompt", () => {
+    expect(screenProseArgument("summarise this capture", "prompt")).toBeNull();
   });
 });
 

@@ -1,3 +1,6 @@
+import type { BrainConfigV1 } from "@developer-os/core";
+import { pathSegmentViolation } from "@developer-os/core";
+
 import type { WorkflowCapability } from "./contract.js";
 
 export interface EffectFootprint {
@@ -16,6 +19,17 @@ export interface EffectFootprint {
   /** The subsystem that owes the handler. A verb with no handler is a promise. */
   readonly owner: string;
   readonly implemented: boolean;
+  /**
+   * The `developer-os` invocation a rendered skill names for this verb, or
+   * `null` when none exists to name. `command` and `implemented` are
+   * different facts: a command is a declaration of what an agent would run,
+   * `implemented` is whether running it does anything yet. Claiming a handler
+   * before one exists is the defect `implemented` guards against one layer
+   * down; naming no command for a verb that has one is the defect spec §4
+   * records against three shipped skills, in both vendor trees, before this
+   * field existed.
+   */
+  readonly command: string | null;
 }
 
 const INDEXES = ["content/_indexes/**"] as const;
@@ -66,20 +80,43 @@ function sealVocabulary(
 
 export const EFFECT_VOCABULARY: Readonly<Record<string, EffectFootprint>> =
   sealVocabulary({
-    "brain.readIndex": { read: INDEXES, write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true },
-    "brain.search": { read: INDEXES, write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true },
-    "brain.readNote": { read: ["content/**"], write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true },
-    "brain.reindex": { read: ["content/**"], write: ["content/_indexes/**"], staging: false, capability: null, owner: "DOS-P2", implemented: true },
-    "brain.lint": { read: ["content/**"], write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true },
-    "capture.write": { read: [], write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: false },
-    "capture.list": { read: QUARANTINE, write: [], staging: false, capability: null, owner: "DOS-P6", implemented: false },
-    "capture.setStatus": { read: [], write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: false },
-    "ingest.stage": { read: QUARANTINE, write: [], staging: true, capability: "structured_result", owner: "DOS-P6", implemented: false },
-    "ingest.validate": { read: [], write: [], staging: true, capability: null, owner: "DOS-P6", implemented: false },
-    "ingest.apply": { read: [], write: ["content/**"], staging: true, capability: null, owner: "DOS-P6", implemented: false },
-    "doctor.report": { read: [], write: [], staging: false, capability: null, owner: "Foundation", implemented: true },
-    "cli.run": { read: [], write: [], staging: false, capability: "non_interactive_run", owner: "Foundation", implemented: true },
-    "agent.prompt": { read: [], write: [], staging: false, capability: null, owner: "adapters", implemented: false },
+    "brain.readIndex": { read: INDEXES, write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true, command: null },
+    "brain.search": { read: INDEXES, write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true, command: "developer-os brain search" },
+    "brain.readNote": { read: ["content/**"], write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true, command: null },
+    "brain.reindex": { read: ["content/**"], write: ["content/_indexes/**"], staging: false, capability: null, owner: "DOS-P2", implemented: true, command: "developer-os brain reindex" },
+    "brain.lint": { read: ["content/**"], write: [], staging: false, capability: null, owner: "DOS-P2", implemented: true, command: "developer-os brain lint" },
+    /** DOS-P6 Task 9 shipped `developer-os capture`. */
+    "capture.write": { read: [], write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: true, command: "developer-os capture" },
+    /**
+     * The three `developer-os review` verbs, all shipped by DOS-P6 Task 10:
+     * listing what is quarantined, moving a status, and the edit that re-reads
+     * a hand-edited capture.
+     */
+    "capture.list": { read: QUARANTINE, write: [], staging: false, capability: null, owner: "DOS-P6", implemented: true, command: "developer-os review" },
+    "capture.setStatus": { read: [], write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: true, command: "developer-os review" },
+    /**
+     * Spec §4's seventh Brain-adjacent verb, and a separate verb from
+     * `capture.setStatus` because an edit is a *content* transition: spec §5.5
+     * has no status meaning "edited", and adding one would put a seventh
+     * member into a frozen ordered list to say what the file's own mtime
+     * already says. Same quarantine footprint as `capture.setStatus`, plus the
+     * read the edit itself needs.
+     */
+    "capture.edit": { read: QUARANTINE, write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: true, command: "developer-os review" },
+    /**
+     * The last three verbs `claude-adapter.md` §9.3 and `codex-adapter.md`
+     * §10 record as having no handler, closed by DOS-P6 Task 13's
+     * `developer-os ingest`. One command implements all three because they are
+     * one ladder: the agent call that stages a proposal, the nine validators
+     * that gate it, and the transaction that applies it are not separately
+     * runnable and were never meant to be.
+     */
+    "ingest.stage": { read: QUARANTINE, write: [], staging: true, capability: "structured_result", owner: "DOS-P6", implemented: true, command: "developer-os ingest" },
+    "ingest.validate": { read: [], write: [], staging: true, capability: null, owner: "DOS-P6", implemented: true, command: "developer-os ingest" },
+    "ingest.apply": { read: [], write: ["content/**"], staging: true, capability: null, owner: "DOS-P6", implemented: true, command: "developer-os ingest" },
+    "doctor.report": { read: [], write: [], staging: false, capability: null, owner: "Foundation", implemented: true, command: "developer-os doctor" },
+    "cli.run": { read: [], write: [], staging: false, capability: "non_interactive_run", owner: "Foundation", implemented: true, command: null },
+    "agent.prompt": { read: [], write: [], staging: false, capability: null, owner: "adapters", implemented: false, command: null },
   });
 
 /**
@@ -96,4 +133,173 @@ export function lookupVerb(verb: string): EffectFootprint | undefined {
 
 export function isKnownVerb(verb: string): boolean {
   return lookupVerb(verb) !== undefined;
+}
+
+/**
+ * The verbs that need a JSON Schema file shipped with the product, derived
+ * from the table rather than written down beside it.
+ *
+ * **The derivation is narrower than the phrase the spec uses, and deliberately
+ * so.** Knowledge-pipeline spec §6.6 says "one JSON Schema file per
+ * agent-invoking verb"; this returns the `structured_result` set, which is not
+ * the same words. `agent.prompt` also invokes an agent and needs no schema of
+ * ours — the adapters own that verb and its caller supplies
+ * `outputSchemaPath`. The set that needs a file the product ships is the set
+ * that *names* one, and naming one is what `structured_result` means.
+ *
+ * Today that is exactly one verb, `ingest.stage`. A second is a decision
+ * somebody has to make in this table, beside the schema file it obliges the
+ * product to write — which is the whole reason this is a derivation and not a
+ * literal list `init` could disagree with.
+ *
+ * **The order is this table's declaration order, not a re-sort.** Sorting by
+ * code point would mean importing `compareCodePoints` from `derive.js`, which
+ * already imports this module — a cycle through the one file every other
+ * module in this package reads. The table is a frozen literal, so its own
+ * order is already a stated total order, and `init` writing one file per verb
+ * needs determinism rather than any particular collation.
+ */
+export function structuredResultVerbs(): readonly string[] {
+  return Object.freeze(
+    Object.entries(EFFECT_VOCABULARY)
+      .filter(([, footprint]) => footprint.capability === "structured_result")
+      .map(([verb]) => verb),
+  );
+}
+
+/**
+ * `EFFECT_VOCABULARY`'s globs are literal vault-relative paths — `content/**`,
+ * not `$brain.contentRoot/**` — deliberately: a substitution syntax inside the
+ * workflow contract would need its own validator and would put a configuration
+ * value inside the one document meant to be comparable across installs (spec
+ * §6, `workflow-schema.md` §8.1). This function is the resolution step §8.1
+ * named as its own acceptance condition: the first handler or adapter to check
+ * a scope glob against a real filesystem must resolve it through here rather
+ * than hardcode `content/` and `_indexes` a second time.
+ *
+ * Validation is `pathSegmentViolation` from `@developer-os/core`, not a local
+ * reimplementation. A first cut of this function rebuilt the rule from
+ * `BrainConfigV1`'s docblock rather than from the config loader that actually
+ * enforces it (`packages/core/src/config/loader.ts`'s `pathSegmentSchema`),
+ * landed three of its four clauses, and — critically — accepted `.`, which
+ * the loader has always rejected. A root of `.` reads as "one segment that
+ * cannot leave the vault", which is true and is the wrong property: the
+ * guarantee this function owes is that the declared *subtree* is not widened,
+ * and `./**` matches the entire vault root, not the content root, so every
+ * declared `content/**` scope would resolve to a grant over the whole vault —
+ * staging and `.git` included. Two independent guards over one value that
+ * disagree means neither is the authority; `pathSegmentViolation` is now the
+ * one place this rule lives.
+ *
+ * `pathSegmentViolation` does **not** refuse a glob metacharacter (`*`, `?`,
+ * …). A second cut of this function added that clause there, which also
+ * governs `topicFolders` and `topicAliases` and made ordinary directory names
+ * like `!inbox` fail to load. A metacharacter is a fine *name*; it is
+ * dangerous only once spliced unescaped into a *pattern*, and that splice
+ * happens below, in `escapeGlobSegment` — which is where the mitigation now
+ * lives instead.
+ */
+function assertValidRoot(root: string, field: "contentRoot" | "indexesDir"): void {
+  const violation = pathSegmentViolation(root);
+  if (violation !== null) {
+    throw new RangeError(`BrainConfigV1.${field} (${JSON.stringify(root)}) ${violation}`);
+  }
+}
+
+/**
+ * Escapes the ten ASCII characters picomatch (and glob syntax generally)
+ * treats specially, so a root containing one is matched as a literal
+ * directory name rather than as a pattern. `pathSegmentViolation` never
+ * refuses these characters in a root — `!inbox`, `PROJECTS (2024)`, and
+ * `notes{drafts}` are all valid, ordinary directory names — so a root
+ * reaching this function can legitimately contain any of them, and this is
+ * the one place, right before the splice into a glob, where that stops being
+ * a live risk. A root can never contain the backslash used to escape with:
+ * `pathSegmentViolation` refuses `\` unconditionally as a separator, so this
+ * function never has to escape an escape.
+ *
+ * `|` belongs in this class and was missing from an earlier version of it.
+ * picomatch compiles a glob segment straight into a regular expression, and
+ * an unescaped `|` survives that compilation as a top-level alternation —
+ * not a character class member like the other nine, but no less a way for a
+ * root to name more than the one directory it claims to. `contentRoot =
+ * "a|b"` used to resolve `content/**` to `a|b/**`, which matched neither the
+ * directory the user actually configured (`a|b`, since `|` is the
+ * alternation operator, not a literal pipe, once unescaped) nor stayed
+ * inside it: `b`, `b/x.md`, and everything under any sibling literally named
+ * `b` all matched too. The degenerate case is worse — `contentRoot = "|"`
+ * compiles an alternation with an empty left branch, matching every path
+ * outright, including one starting at the filesystem root. A reviewer
+ * confirmed by exhaustive sweep over the printable ASCII range that these
+ * ten are now the complete class picomatch requires.
+ */
+const GLOB_METACHARACTERS = /[*?[\]{}()!|]/gu;
+
+function escapeGlobSegment(segment: string): string {
+  return segment.replace(GLOB_METACHARACTERS, (character) => `\\${character}`);
+}
+
+/**
+ * Rewrites the leading `content` segment, and an immediately-following
+ * `_indexes` segment, of a vocabulary glob to the roots a real `BrainConfigV1`
+ * names, so a vault configured with `contentRoot: "notes"` gets a grant
+ * naming `notes/**` instead of a `content/**` directory that does not exist
+ * in it.
+ *
+ * Both substitutions are pinned to a position, not a bare segment match:
+ * - `content` only at index 0. `content` is a substring of `contents`, and
+ *   `String.replace` or an unpositioned segment match would rewrite either
+ *   one — a vault folder literally named `content` nested under `staging/`
+ *   would be corrupted the same way. Requiring index 0 makes both defects
+ *   structurally impossible rather than merely untested.
+ * - `_indexes` only at index 1, and only once index 0 was actually `content`.
+ *   Brain's real indexes directory is one level under the content root
+ *   (`packages/brain/src/indexes/artifacts.ts`); an `_indexes` folder a user
+ *   made two levels down, or a `staging/_indexes/**` path that never named
+ *   the content root at all, is not that directory, and rewriting it anyway
+ *   would point a grant at a directory that does not exist (or, worse, apply
+ *   Brain's configuration to a path that was never Brain's to begin with).
+ *   Gating on index 0 is what keeps this from firing on either case.
+ *
+ * A glob whose first segment is not `content` is returned unchanged — no
+ * substitution applies. Both roots are still validated on every call before
+ * that check runs, not only when a glob happens to reference them: resolving
+ * `EFFECT_VOCABULARY` entries one glob at a time against a bad config would
+ * otherwise throw for some globs and silently succeed for others in the same
+ * run, which is a config error surfacing as a heisenbug instead of a refusal.
+ *
+ * **NFC, on the way in.** Every Brain consumer that builds a real path from
+ * `contentRoot`/`indexesDir` normalizes to NFC first (`indexes/artifacts.ts`,
+ * `indexes/build.ts`, `discovery/discover.ts`, `lint/lint.ts`, `service.ts`),
+ * but `loadConfig` does not — a TOML file can hand either form to this
+ * function. Normalizing the substituted root here makes this function's
+ * output match what Brain actually writes to disk, which is the property
+ * that matters for a byte-comparing scope check. It is a partial fix: a
+ * caller that reads `config.contentRoot` directly, without going through
+ * `resolveScopeGlob`, still sees whatever normalization form the TOML file
+ * happened to use. `loadConfig` normalizing at load time would close that
+ * gap for every consumer at once and is the more complete fix — out of this
+ * task's scope (`vocabulary.ts`/`index.ts` only), left for whoever wires the
+ * first real caller.
+ *
+ * **Escaped, then substituted.** `escapeGlobSegment` runs on the root after
+ * normalization and before it is spliced in, so a root of `!inbox` produces
+ * a literal `\!inbox` segment that matches only a directory named `!inbox` —
+ * not the "any sibling of the vault root" a bare `!inbox` would read as once
+ * a real glob matcher resolved it.
+ */
+export function resolveScopeGlob(glob: string, config: BrainConfigV1): string {
+  assertValidRoot(config.contentRoot, "contentRoot");
+  assertValidRoot(config.indexesDir, "indexesDir");
+
+  const segments = glob.split("/");
+  if (segments[0] !== "content") return glob;
+
+  const resolved = [escapeGlobSegment(config.contentRoot.normalize("NFC"))];
+  if (segments[1] === "_indexes") {
+    resolved.push(escapeGlobSegment(config.indexesDir.normalize("NFC")), ...segments.slice(2));
+  } else {
+    resolved.push(...segments.slice(1));
+  }
+  return resolved.join("/");
 }

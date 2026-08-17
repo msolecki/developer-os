@@ -1,7 +1,11 @@
 import { isAbsolute } from "node:path";
 import { cwd } from "node:process";
 import { parseAgentPromptArgs } from "@developer-os/core";
-import { parseStructuredPayload, screenValueArgument } from "@developer-os/security";
+import {
+  parseStructuredPayload,
+  screenProseArgument,
+  screenValueArgument,
+} from "@developer-os/security";
 import type { ProcessRunner } from "@developer-os/security";
 import type { CodexInstallation } from "./discover.js";
 
@@ -73,11 +77,12 @@ export function invocationFromAgentPrompt(
     // it by `parseAgentPromptArgs`.
     return { ok: false, detail: parsed.message };
   }
-  // `parsed.args.maxTurns` is bounded by the shared schema but has nowhere to
-  // go from here: `CodexInvocation` carries no field for it and the argv this
-  // module builds has no flag for it (spec §7 does not name one). A workflow
-  // author writing `maxTurns: 3` under Codex gets no error and no effect —
-  // a known plan-level gap, not one this task closes.
+  // `parsed` can no longer carry a `maxTurns`: `parseAgentPromptArgs` refuses
+  // the key outright (owner DOS-P7) rather than accepting a value this module
+  // would have had nowhere to put — `CodexInvocation` carries no field for it
+  // and the argv built below has no flag for it either (spec §7 names none).
+  // A workflow author writing `maxTurns: 3` now gets a refusal naming DOS-P7
+  // instead of the silent no-op this comment used to describe.
   return {
     ok: true,
     invocation: {
@@ -96,17 +101,41 @@ export function invocationFromAgentPrompt(
  * whole stream (spec §7) — so `parseStructuredPayload`, built for one JSON
  * document, must never see the raw stream directly.
  *
- * **Provisional, and this must stay visible at the call site.** The spec
- * documents that the output is JSONL but does not document the event
- * vocabulary, so "the last line that parses to a non-null JSON object" is
- * the best available rule, not a verified one — there is no confirmed
- * guarantee that the terminal event is always the final response rather
- * than, say, a trailing usage or session-close event on some Codex version.
- * Establishing the real terminal event's shape, and amending this spec with
- * it, is the integration task's job (against a real installation), not this
- * unit-tested module's. No event-type value is filtered on here for the same
- * reason: inventing one risks silently mismatching a future vendor version,
- * a failure only that integration test would catch.
+ * **Still provisional on the path that matters, and this must stay visible at
+ * the call site.** DOS-P6 Task 17 ran a real `codex exec --json` against
+ * `codex-cli 0.147.0` on 2026-08-15 (spec §14.1's amendment of that date;
+ * the stream is `tests/fixtures/codex/observed-exec-stream.jsonl`). It settled
+ * two things and left the third open:
+ *
+ * - **Settled: the framing.** Output really is one JSON object per line. Every
+ *   line of the observed stream parsed, and none was a scalar or `null`.
+ * - **Settled: `type` is a discriminating field**, present on every line. The
+ *   observed vocabulary is `thread.started`, `turn.started`, `error`,
+ *   `turn.failed` — note that it is *not* the `session.created` /
+ *   `item.completed` / `turn.completed` this file's synthetic tests guessed
+ *   while the rule was unverified.
+ * - **Open: whether the terminal event of a *successful* turn is the final
+ *   response.** The observed run ended `turn.failed`, because the account's
+ *   usage limit was exhausted, so no run reached a model response. "The last
+ *   line that parses to a non-null JSON object" therefore remains the best
+ *   available rule rather than a verified one.
+ *
+ * **No event-type value is filtered on here, and observing one has not changed
+ * that.** Filtering would be a narrowing, and spec §14.1 requires a narrowing
+ * to be proven against a stream where the old rule and the new one agree — a
+ * failed turn is not that stream, since it contains no final response for the
+ * two rules to agree about. Inventing the filter now would risk silently
+ * mismatching a future vendor version, which is the failure only a successful
+ * real run can catch.
+ *
+ * **What keeps the failed-turn case safe is not this function.** On the
+ * observed stream the last parsing line is the `turn.failed` event, so this
+ * function alone would hand a caller a vendor error shaped like a result; the
+ * `exitCode !== 0` check in `invokeCodex` runs first and is what prevents it.
+ * That ordering was already pinned by the non-zero-exit case in
+ * `invoke.test.ts`, which a synthetic `"{}"` is enough to guard; what the real
+ * recording adds is a case showing *what* the ordering protects against, which
+ * a synthetic payload cannot.
  *
  * The object requirement guards the same risk from the other side: a stray
  * scalar or `null` line after the real result — a `123` or `"done"` emitted
@@ -160,7 +189,10 @@ export async function invokeCodex(
     return { ok: false, reason: "spawn-failed" };
   }
 
-  const promptRefusal = screenValueArgument(invocation.prompt, "prompt");
+  // Prose, so the positional rule alone (BACKLOG NEW-12): the word list would
+  // refuse a prompt for containing an ordinary English word, and DOS-P6 puts a
+  // capture body in this terminal argument.
+  const promptRefusal = screenProseArgument(invocation.prompt, "prompt");
   if (promptRefusal !== null) {
     return { ok: false, reason: "refused", detail: promptRefusal };
   }
@@ -208,6 +240,12 @@ export async function invokeCodex(
       executable: installation.executable,
       args,
       cwd: cwd(),
+      // Not a formality. `codex exec` reads its prompt from stdin whenever
+      // stdin is not a TTY — Task 17 observed it print "Reading additional
+      // input from stdin..." and block — so what makes this call return with a
+      // *result* rather than after `timeoutMs` is `NodeProcessRunner` closing
+      // the pipe with `child.stdin.end(request.stdin)`. Undocumented by the
+      // vendor; spec §14.1 carries the observation of 2026-08-15.
       stdin: "",
       timeoutMs: invocation.timeoutMs,
       env: {},

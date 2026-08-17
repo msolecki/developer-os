@@ -4,7 +4,7 @@ import type {
   ProcessResult,
   ProcessRunner,
 } from "@developer-os/security";
-import { invokeClaude } from "./invoke.js";
+import { DEFAULT_MAX_TURNS, invokeClaude } from "./invoke.js";
 import type { ClaudeInvocation } from "./invoke.js";
 
 const installation = {
@@ -157,6 +157,24 @@ describe("invokeClaude", () => {
     expect(seen()).toBeNull();
   });
 
+  /**
+   * **The prompt is prose and is screened as prose** (BACKLOG NEW-12). The
+   * positional rule above still applies to it; the word list does not, because
+   * prose cannot be reread as a CLI option and DOS-P6 puts a *capture body* in
+   * this position — an ordinary `EACCES` message names a permission, and a
+   * capture carrying one could never be ingested while both rules applied here.
+   */
+  it("invokes rather than refusing when the prompt is prose naming a permission", async () => {
+    const { runner, seen } = capturing({ stdout: '{"result":"done"}' });
+    const prompt = "npm ERR! EACCES: permission denied, open /usr/local/lib";
+    const result = await invokeClaude(installation, { ...invocation, prompt }, {
+      runner,
+    });
+
+    expect(result).toEqual({ ok: true, payload: { result: "done" } });
+    expect(seen()?.args).toContain(prompt);
+  });
+
   it("refuses before spawning when an allowed tool fails the shared screen", async () => {
     const { runner, seen } = capturing({ stdout: "{}" });
     const result = await invokeClaude(
@@ -201,6 +219,33 @@ describe("invokeClaude", () => {
       );
       expect(seen()).toBeNull();
     }
+  });
+
+  /**
+   * `DEFAULT_MAX_TURNS` is `packages/core/src/agent-prompt/index.ts`'s
+   * removed default, moved here now that `maxTurns` is refused outright there
+   * (owner DOS-P7) rather than defaulted. Pinned against the bound
+   * `invokeClaude` enforces above, not against a second copy of the private
+   * `MAX_TURNS_CEILING` — re-declaring that value here would let the two
+   * drift independently and prove nothing about what this module actually
+   * does with it. A default outside `[1, MAX_TURNS_CEILING]` would make
+   * every default-configured invocation refuse, which this test would catch
+   * as `result.ok === false`; deleting the constant altogether breaks this
+   * file's import instead of leaving the change silently green.
+   */
+  it("keeps DEFAULT_MAX_TURNS within the bound invokeClaude enforces on every invocation", async () => {
+    const { runner, seen } = capturing({ stdout: "{}" });
+    const result = await invokeClaude(
+      installation,
+      { ...invocation, maxTurns: DEFAULT_MAX_TURNS },
+      { runner },
+    );
+    expect(
+      result.ok,
+      "DEFAULT_MAX_TURNS must not be refused as out of bounds",
+    ).toBe(true);
+    expect(seen()?.args).toContain("--max-turns");
+    expect(seen()?.args).toContain(String(DEFAULT_MAX_TURNS));
   });
 
   /**

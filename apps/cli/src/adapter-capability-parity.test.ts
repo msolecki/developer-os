@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { CLAUDE_CAPABILITY_KEYS } from "@developer-os/adapter-claude";
-import { CODEX_CAPABILITY_KEYS } from "@developer-os/adapter-codex";
+import {
+  CLAUDE_CAPABILITY_KEYS,
+  CLAUDE_NOT_USED_KEYS,
+} from "@developer-os/adapter-claude";
+import {
+  CODEX_CAPABILITY_KEYS,
+  CODEX_NOT_USED_KEYS,
+} from "@developer-os/adapter-codex";
 
 /**
  * Both adapters' `versions.ts` carry prose saying their capability key list
@@ -15,5 +21,15 @@ import { CODEX_CAPABILITY_KEYS } from "@developer-os/adapter-codex";
 describe("the two adapters' capability key lists", () => {
   it("are identical, in order", () => {
     expect([...CODEX_CAPABILITY_KEYS]).toEqual([...CLAUDE_CAPABILITY_KEYS]);
+  });
+
+  /**
+   * The same assertion over the `not-used` lists, and for a sharper reason:
+   * which surfaces this product uses is one product decision, not two vendor
+   * ones. Two adapters that disagree about it produce one `doctor` report that
+   * means two different things depending on which half you read.
+   */
+  it("agree on which surfaces this product does not use", () => {
+    expect([...CODEX_NOT_USED_KEYS]).toEqual([...CLAUDE_NOT_USED_KEYS]);
   });
 });

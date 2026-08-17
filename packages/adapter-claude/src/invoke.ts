@@ -1,6 +1,10 @@
 import { isAbsolute } from "node:path";
 import { cwd } from "node:process";
-import { parseStructuredPayload, screenValueArgument } from "@developer-os/security";
+import {
+  parseStructuredPayload,
+  screenProseArgument,
+  screenValueArgument,
+} from "@developer-os/security";
 import type { ProcessRunner } from "@developer-os/security";
 import type { ClaudeInstallation } from "./discover.js";
 
@@ -36,6 +40,25 @@ export interface InvokeDependencies {
 
 const MAX_TURNS_CEILING = 50;
 
+/**
+ * `packages/core/src/agent-prompt/index.ts` refuses `maxTurns` outright
+ * rather than half-honouring it on one vendor and dropping it on the other
+ * (owner DOS-P7) — so `parseAgentPromptArgs`, which used to default the
+ * value, no longer produces one at all. `ClaudeInvocation.maxTurns` is still
+ * required, though: bounded because an unbounded agentic loop inside a
+ * workflow with declared scopes is a workflow whose cost and reach are
+ * decided by the model, not by the workflow's author. Exported as a named
+ * constant, not left as a literal at whatever future call site builds a
+ * `ClaudeInvocation` from a workflow step, so that reasoning travels with the
+ * value instead of being re-invented — or silently dropped — the day
+ * DOS-P7's real turn bound needs somewhere to start from. Re-exported through
+ * `index.ts`, this package's only door: the future call site this constant
+ * exists for is outside this package (wherever a workflow step becomes a
+ * `ClaudeInvocation`), so a package-internal export alone would leave it
+ * unreachable by the one consumer it was added for.
+ */
+export const DEFAULT_MAX_TURNS = 5;
+
 export async function invokeClaude(
   installation: ClaudeInstallation,
   invocation: ClaudeInvocation,
@@ -65,7 +88,10 @@ export async function invokeClaude(
     };
   }
 
-  const promptRefusal = screenValueArgument(invocation.prompt, "prompt");
+  // Prose, so the positional rule alone (BACKLOG NEW-12): the word list would
+  // refuse a prompt for containing an ordinary English word, and DOS-P6 puts a
+  // capture body here.
+  const promptRefusal = screenProseArgument(invocation.prompt, "prompt");
   if (promptRefusal !== null) {
     return { ok: false, reason: "refused", detail: promptRefusal };
   }

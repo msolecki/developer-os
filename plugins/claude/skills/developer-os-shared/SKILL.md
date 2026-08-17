@@ -1,9 +1,9 @@
 ---
 name: "developer-os-shared"
-description: "The common preamble and refusal set every other workflow extends."
+description: "Read back the safety rules every other developer-os workflow carries — untrusted vault content, no fetched links, no widened scope — for a person who wants to see them written out."
 ---
 
-<!-- Generated from workflows/shared/workflow.yaml (shared@1.0.0). Do not edit. -->
+<!-- Generated from workflows/shared/workflow.yaml (shared@2.0.0). Do not edit. -->
 
 # shared
 
@@ -29,5 +29,5 @@ nothing
 Do not run this automatically. It is text for a person to read:
 
 ```text
-developer-os doctor
+Nothing to resume; re-invoke this skill to read the preamble again.
 ```

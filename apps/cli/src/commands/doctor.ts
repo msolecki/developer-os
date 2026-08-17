@@ -24,7 +24,12 @@ import type { AgentDiscovery, AgentName } from "@developer-os/platform-macos";
 
 import { reportClaudeCapabilities } from "./claude-capabilities.js";
 import { reportCodexCapabilities } from "./codex-capabilities.js";
-import { exitCodeOf, runtimePathsFor } from "../context.js";
+import {
+  exitCodeOf,
+  REDACTION_KEY_BYTES,
+  redactionKeyPath,
+  runtimePathsFor,
+} from "../context.js";
 import type { CliContext } from "../context.js";
 
 const AGENT_NAMES: readonly AgentName[] = ["claude", "codex"];
@@ -48,6 +53,47 @@ export interface IncompleteTransaction {
   readonly phase: string;
 }
 
+export interface DoctorOptions {
+  /**
+   * Whether to ask each agent CLI what it supports, rather than reporting every
+   * probe-settled capability as `unknown`.
+   *
+   * **Opt-in, and that is a finding rather than a preference.** Claude's probe
+   * is `claude plugin validate`, which writes `~/.claude.json` and a timestamped
+   * backup under `~/.claude/backups/` (spec §14.1, observed against a real
+   * installation on 2026-08-11). `doctor` reports and never repairs, and
+   * Foundation's end-to-end suite asserts it touches nothing outside the
+   * product's own paths — probing by default broke that assertion, which is how
+   * the side effect was found in the first place.
+   */
+  readonly probe: boolean;
+}
+
+/**
+ * The default, named once. `runDoctor` and `runDoctorReport` both take these
+ * options *optionally*, because `runDoctorReport` is `init`'s injected `verify`
+ * dependency and is typed there as `(context) => Promise<DoctorReportV1>`: a
+ * required parameter would put `init` in this flag's blast radius and let it
+ * start writing to the user's Claude home as a side effect of verifying its own
+ * install.
+ */
+const NO_PROBE: DoctorOptions = { probe: false };
+
+/**
+ * Said before the probe runs, on `stderr` — never `stdout`, which carries
+ * `--json`, and never the result's warnings, which `main.ts` renders after the
+ * command has already returned. A user who reads a mutation notice after the
+ * mutation has been told, not warned. `context.ts`'s `EPHEMERAL_KEY_WARNING` is
+ * the precedent for the channel.
+ *
+ * **It names Claude rather than the agents in general.** Codex's probe is
+ * `codex plugin list --json`, a read-only structured query that writes nothing
+ * (`codex-capabilities.ts`), so a notice covering both would be false about half
+ * of it.
+ */
+const PROBE_MUTATION_WARNING =
+  "warning: --probe runs Claude's capability probe, which writes ~/.claude.json and a timestamped backup under ~/.claude/backups/; no check changes anything else";
+
 /**
  * A check plus the exit code it claims when it fails. The code is kept off
  * `DoctorCheck` because that shape is fixed by the Foundation plan and is what
@@ -66,6 +112,13 @@ const EXIT_PRECEDENCE: readonly ExitCode[] = [
   EXIT_CODES.invalidInput,
   EXIT_CODES.operationalFailure,
 ];
+
+/**
+ * The one command that creates a redaction key. Written once so the four
+ * remedies below cannot drift apart, or away from the command that has to
+ * honour them.
+ */
+const REDACTION_KEY_RECOVERY = "developer-os init";
 
 function isMissingEntry(error: unknown): boolean {
   return (
@@ -223,20 +276,121 @@ export async function detectManagedDrift(
   });
 }
 
+/**
+ * One agent's discovery, or the error that stopped it. A union rather than a
+ * nullable field with a loose `error`, so no branch can read a discovery that
+ * never happened.
+ */
+export type AgentOutcome =
+  | { readonly name: AgentName; readonly discovery: AgentDiscovery }
+  | {
+      readonly name: AgentName;
+      readonly discovery: null;
+      readonly error: unknown;
+    };
+
+/**
+ * Every agent asked, independently of every other.
+ *
+ * The loop this replaces pushed straight into an array and let the first raise
+ * escape, so a refusing `claude` meant `codex` was **never asked** and was then
+ * reported absent — one agent's failure printed as the other's absence. Asking
+ * separately is the whole fix; the callers below decide what a raise means.
+ */
+export async function discoverEachAgent(
+  context: CliContext,
+): Promise<readonly AgentOutcome[]> {
+  const outcomes: AgentOutcome[] = [];
+  for (const name of AGENT_NAMES) {
+    try {
+      outcomes.push({
+        name,
+        discovery: await context.platform.discoverExecutable(name),
+      });
+    } catch (error) {
+      outcomes.push({ name, discovery: null, error });
+    }
+  }
+  return outcomes;
+}
+
+/**
+ * The discoveries, or the first error, rethrown.
+ *
+ * `status` takes this shape and reports agents as data, with a warning when
+ * discovery fails; `doctor` needs the per-agent outcomes and reads
+ * `discoverEachAgent` directly. Both agents are still asked before anything is
+ * rethrown, which is the difference that matters — the raise is now a report
+ * about one agent rather than a reason the next one goes unexamined.
+ */
 export async function discoverAgents(
   context: CliContext,
 ): Promise<readonly AgentDiscovery[]> {
   const discovered: AgentDiscovery[] = [];
-  for (const name of AGENT_NAMES) {
-    discovered.push(await context.platform.discoverExecutable(name));
+  for (const outcome of await discoverEachAgent(context)) {
+    if (outcome.discovery === null) throw outcome.error;
+    discovered.push(outcome.discovery);
   }
   return discovered;
 }
 
-function describeAgents(agents: readonly AgentDiscovery[]): string {
-  return agents
-    .map((agent) => `${agent.name}=${agent.installed ? "present" : "absent"}`)
+/** Narrows to the raised half of the union, so `error` is reachable. */
+function raised(
+  outcome: AgentOutcome,
+): outcome is Extract<AgentOutcome, { readonly discovery: null }> {
+  return outcome.discovery === null;
+}
+
+/**
+ * **A discovery that raised reads `present`, never `absent`.**
+ *
+ * `MacOsPlatformAdapter` reports a binary it could not find as data — an
+ * `AgentDiscovery` with `installed: false` — and raises only once it has
+ * something it cannot vouch for: a `which` result it refuses, a call that did
+ * not complete. None of those is "not installed", and printing them as absence
+ * is the conflation `unreadable` exists to prevent, one layer down. The
+ * capability check says `unreadable` about the same agent in the same report;
+ * this line says which agent the pair is about, and `checkAgents` still grades
+ * the raise itself and names it in the same message.
+ */
+function describeAgents(outcomes: readonly AgentOutcome[]): string {
+  return outcomes
+    .map((outcome) => {
+      const installed =
+        outcome.discovery === null || outcome.discovery.installed;
+      return `${outcome.name}=${installed ? "present" : "absent"}`;
+    })
     .join(" ");
+}
+
+/**
+ * What one agent's discovery leaves for its capability report to say.
+ *
+ * Three outcomes, because there are three: a path to ask, nothing to ask, and
+ * a discovery that raised. **The third one used to be folded into the second**
+ * — the bare `catch` below passed `executablePath: null`, so any discovery
+ * error, a refusal included, printed as `claude=absent`: "we could not ask"
+ * rendered as "not installed", the same conflation `unreadable` exists to
+ * prevent one layer up, and the exact residual `codex-adapter.md` §11.6 left
+ * for DOS-P6 to close. `checkAgents` grades the raise itself, so nothing is
+ * swallowed by threading it here — this check still reports and never fails.
+ */
+function capabilityInput(outcome: AgentOutcome | undefined): {
+  readonly executablePath: string | null;
+  readonly discoveryFailed: boolean;
+} {
+  if (outcome === undefined) {
+    return { executablePath: null, discoveryFailed: false };
+  }
+  if (outcome.discovery === null) {
+    return { executablePath: null, discoveryFailed: true };
+  }
+  return {
+    executablePath: outcome.discovery.installed
+      ? outcome.discovery.executablePath
+      : null,
+    discoveryFailed: false,
+  };
 }
 
 /**
@@ -249,22 +403,17 @@ function describeAgents(agents: readonly AgentDiscovery[]): string {
  * doctor`. Different objects, same name. A missing agent is information, not a
  * failure, which is also why `agents` is excluded from `INIT_OWNED_CHECKS`.
  */
-async function checkClaudeCapabilities(context: CliContext): Promise<Finding> {
-  // Discovery can refuse — `MacOsPlatformAdapter` rejects a `which` result it
-  // cannot vouch for, and `checkAgents` already demotes that to a warning. A
-  // refusal here is information about the environment, not a failure of this
-  // report, so it degrades to "nothing to examine" rather than propagating.
-  let executablePath: string | null = null;
-  try {
-    const agents = await discoverAgents(context);
-    const claude = agents.find((agent) => agent.name === "claude");
-    executablePath = claude?.installed === true ? claude.executablePath : null;
-  } catch {
-    executablePath = null;
-  }
+async function checkClaudeCapabilities(
+  context: CliContext,
+  probe: boolean,
+): Promise<Finding> {
+  const outcome = (await discoverEachAgent(context)).find(
+    (candidate) => candidate.name === "claude",
+  );
   const report = await reportClaudeCapabilities({
-    executablePath,
+    ...capabilityInput(outcome),
     runner: context.runner,
+    probe,
     /**
      * The **user's** home, not the product's. This was
      * `join(paths.home, "plugins", "claude")` — `~/.developer-os/plugins/claude`,
@@ -306,53 +455,30 @@ export function codexPluginRoot(context: CliContext): string {
   return join(context.paths.home, ...PLUGIN_TREE_SEGMENTS);
 }
 
-async function checkCodexCapabilities(context: CliContext): Promise<Finding> {
-  // Discovery can refuse — `MacOsPlatformAdapter` rejects a `which` result it
-  // cannot vouch for, and `checkAgents` already demotes that to a warning. A
-  // refusal here is information about the environment, not a failure of this
-  // report, so it degrades to "nothing to examine" rather than propagating.
-  //
-  // The consequence is worth stating plainly: the catch above is bare, so
-  // any discovery error — a refusal, an unsupported platform, a security
-  // refusal from the process runner — is rendered as `codex=absent`, "we
-  // could not ask" printed as "not installed", the same conflation
-  // `unreadable` exists to prevent, one layer up. `checkAgents` in this file
-  // splits those on purpose (a refusal demotes to `warn`, anything else is
-  // `fail`), so the same failure can leave `agents` failing while
-  // `codex-capabilities` still prints `pass … codex=absent`. This is a known
-  // residual, not an oversight: both adapters carry it, they must stay
-  // identical because DOS-P6 consumes both, and DOS-P6 owns closing it.
-  let executablePath: string | null = null;
-  try {
-    const agents = await discoverAgents(context);
-    const codex = agents.find((agent) => agent.name === "codex");
-    executablePath = codex?.installed === true ? codex.executablePath : null;
-  } catch {
-    executablePath = null;
-  }
+async function checkCodexCapabilities(
+  context: CliContext,
+  probe: boolean,
+): Promise<Finding> {
+  const outcome = (await discoverEachAgent(context)).find(
+    (candidate) => candidate.name === "codex",
+  );
   const report = await reportCodexCapabilities({
-    executablePath,
+    ...capabilityInput(outcome),
     runner: context.runner,
+    probe,
     pluginRoot: codexPluginRoot(context),
   });
   /**
-   * `report.recovery` is carried on every branch unconditionally —
-   * `codex-capabilities.ts` decided a *report* that omits it is not a
-   * report. But this is the *message*, the line a human reads, and advice to
-   * open a Codex session is not actionable on a machine that has no Codex to
-   * open one in. Gated on `installed` rather than on a specific capability
-   * reading `wrapper-required`: `doctor` never sets `probe: true` (see the
-   * comment on `CodexCapabilityRequest.probe`), so every installed branch it
-   * can reach — unreadable, not-probed — reports `captureVia: "wrapper"`
-   * today, and the advice is actionable in both of them; only `absent` is
-   * not. The probed branch can return `captureVia: "hook"`
-   * (`codex-capabilities.ts` does when `session_end_capture === "yes"`), but
-   * `doctor` never sets `probe: true`, so that branch is unreachable here.
+   * No `recovery=` any more. It named the one command that grants Codex's hook
+   * trust gate, and knowledge-pipeline spec §3.1 ships no hooks, so the gate
+   * opens onto nothing — advice to run `/hooks` for a hook that does not exist
+   * is the same defect as a capability word naming a wrapper nobody can run.
+   * Removed from the report itself rather than hidden here, so no reader of
+   * either layer can act on it.
    */
-  const recovery = report.installed ? ` recovery="${report.recovery}"` : "";
   return pass(
     "codex-capabilities",
-    `${report.summary} capture-via=${report.captureVia}${recovery}`,
+    `${report.summary} capture-via=${report.captureVia}`,
     [],
   );
 }
@@ -547,6 +673,93 @@ async function checkBrain(
 }
 
 /**
+ * Presence, type and mode only, never contents: `lstat` neither follows a
+ * symlink nor discloses a byte of what the file holds, which is the whole point
+ * of a check for a secret this product must be able to report on without
+ * reading it (DOS-P6 Task 1).
+ *
+ * **Every state is a warning, and each one says which state it is.** This
+ * check exists to be reachable: it grades exactly the outcomes
+ * `readRedactionKey` returns `null` for, and until the composition root stopped
+ * creating and stopped throwing, three of the four could not reach `doctor` at
+ * all — a symlinked or truncated key failed *every* command, including this
+ * one. A lost key degrades a diagnostic, never the knowledge: nothing is
+ * encrypted with it, only fingerprints are derived from it, so none of this is
+ * a failure and none of it earns a non-zero exit.
+ *
+ * `doctor` reports and never repairs, so the over-permissive case is a warning
+ * too rather than a chmod. The next command that needs a durable key tightens
+ * it, which is where a repair belongs.
+ *
+ * Every remedy below names `init`, and that has to stay true of `init`: these
+ * messages were briefly false in both directions, because `runInit` returned
+ * before it reached the key on a machine with nothing else to install. A
+ * remedy nobody can follow is worse than no remedy — this check exits 0, so
+ * nothing escalates when the user follows it and nothing happens.
+ */
+async function checkRedactionKey(
+  context: CliContext,
+  paths: RuntimePaths,
+): Promise<Finding> {
+  const file = redactionKeyPath(paths.stateDir);
+  let stats;
+  try {
+    stats = await context.fs.lstat(file);
+  } catch (error) {
+    if (isMissingEntry(error)) {
+      return warn(
+        "redaction-key",
+        `no redaction key exists yet; ${REDACTION_KEY_RECOVERY} creates one, and prior fingerprints will no longer be comparable to it`,
+        [],
+      );
+    }
+    throw error;
+  }
+
+  if (stats.isSymbolicLink()) {
+    return warn(
+      "redaction-key",
+      `the redaction key path is a symlink, which this product will not read; remove it and run ${REDACTION_KEY_RECOVERY}, and prior fingerprints will no longer be comparable`,
+      [file],
+    );
+  }
+  if (!stats.isFile()) {
+    return warn(
+      "redaction-key",
+      `the redaction key path is not a regular file, which this product will not read; remove it and run ${REDACTION_KEY_RECOVERY}, and prior fingerprints will no longer be comparable`,
+      [file],
+    );
+  }
+  if (stats.size < REDACTION_KEY_BYTES) {
+    return warn(
+      "redaction-key",
+      `the redaction key is too short to be a key; remove it and run ${REDACTION_KEY_RECOVERY}, and prior fingerprints will no longer be comparable`,
+      [file],
+    );
+  }
+
+  const mode = stats.mode & 0o777;
+  const rendered = `present, 0${mode.toString(8).padStart(3, "0")}`;
+  if (mode === 0o600) return pass("redaction-key", rendered, [file]);
+
+  /**
+   * Only the group and other bits make a mode *permissive*. `0400` and `0000`
+   * are stricter than `0600`, not looser, and saying otherwise about `0000` is
+   * the worst of the two: `readRedactionKey` cannot open it, so that run is on
+   * an ephemeral key, while `lstat` needs no read permission at all and this
+   * check reports the file as fine apart from being "more permissive".
+   */
+  const permissive = (mode & 0o077) !== 0;
+  return warn(
+    "redaction-key",
+    permissive
+      ? `${rendered}, which is more permissive than 0600; the next command that needs the key tightens it`
+      : `${rendered}, which is not 0600`,
+    [file],
+  );
+}
+
+/**
  * Discovery that refuses is a warning, never a failure.
  *
  * `MacOsPlatformAdapter` rejects a `which` result it cannot vouch for — most
@@ -559,24 +772,43 @@ async function checkBrain(
  * has always degraded this to a warning; this is `doctor` agreeing with it.
  */
 async function checkAgents(context: CliContext): Promise<Finding> {
-  try {
-    const agents = await discoverAgents(context);
-    return pass("agents", describeAgents(agents), []);
-  } catch (error) {
-    const message = context.guards.redactDiagnostic(
-      error instanceof Error ? error.message : "agent discovery failed",
-    );
+  const outcomes = await discoverEachAgent(context);
+  const failed = outcomes.filter(raised);
+  const described = describeAgents(outcomes);
+  if (failed.length === 0) return pass("agents", described, []);
 
-    /**
-     * Only the refusal is demoted. `discoverExecutable` can also raise an
-     * unsupported platform, invalid input, or a security refusal from the
-     * process runner, and flattening those into a warning would erase the one
-     * signal that says a guard fired.
-     */
-    return error instanceof MacOsPlatformDiscoveryError
-      ? warn("agents", message, [])
-      : fail("agents", message, [], exitCodeOf(error));
-  }
+  /**
+   * The matrix **and** the diagnostics, not one or the other. This check used
+   * to replace its whole message with the error, which is how a refusing
+   * `claude` erased what was known about `codex` from the line a user reads.
+   * Each failure is named with its agent, so two refusals for different
+   * reasons cannot read as one.
+   */
+  const message = [
+    described,
+    ...failed.map(
+      (outcome) =>
+        `${outcome.name}: ${context.guards.redactDiagnostic(
+          outcome.error instanceof Error
+            ? outcome.error.message
+            : "agent discovery failed",
+        )}`,
+    ),
+  ].join("; ");
+
+  /**
+   * Only the refusal is demoted. `discoverExecutable` can also raise an
+   * unsupported platform, invalid input, or a security refusal from the
+   * process runner, and flattening those into a warning would erase the one
+   * signal that says a guard fired. The exit code comes from the first
+   * non-refusal, for the same reason: it is the error that earned the failure.
+   */
+  const graver = failed.find(
+    (outcome) => !(outcome.error instanceof MacOsPlatformDiscoveryError),
+  );
+  return graver === undefined
+    ? warn("agents", message, [])
+    : fail("agents", message, [], exitCodeOf(graver.error));
 }
 
 /**
@@ -608,7 +840,18 @@ async function guarded(
 
 async function collectFindings(
   context: CliContext,
+  options: DoctorOptions,
 ): Promise<readonly Finding[]> {
+  /**
+   * Emitted here, before the first check, and unconditionally on the flag
+   * rather than on whether a Claude installation was discovered. Warning about
+   * a mutation that then does not happen is noise a user forgives; staying
+   * silent because discovery happened to fail is the failure this notice exists
+   * to prevent, and it would make the warning depend on the order the checks
+   * below run in.
+   */
+  if (options.probe) context.io.stderr(PROBE_MUTATION_WARNING);
+
   const platform = await checkPlatform(context);
 
   let config: DeveloperOsConfigV1 | null = null;
@@ -654,12 +897,15 @@ async function collectFindings(
     await guarded(context, "brain", [paths.brain], () =>
       checkBrain(context, paths),
     ),
+    await guarded(context, "redaction-key", [], () =>
+      checkRedactionKey(context, paths),
+    ),
     await guarded(context, "agents", [], () => checkAgents(context)),
     await guarded(context, "claude-capabilities", [], () =>
-      checkClaudeCapabilities(context),
+      checkClaudeCapabilities(context, options.probe),
     ),
     await guarded(context, "codex-capabilities", [], () =>
-      checkCodexCapabilities(context),
+      checkCodexCapabilities(context, options.probe),
     ),
   ];
 }
@@ -679,8 +925,9 @@ export function doctorExitCode(findings: readonly Finding[]): ExitCode {
 
 export async function runDoctorReport(
   context: CliContext,
+  options: DoctorOptions = NO_PROBE,
 ): Promise<DoctorReportV1> {
-  const findings = await collectFindings(context);
+  const findings = await collectFindings(context, options);
   return {
     schemaVersion: 1,
     checks: findings.map((finding) => finding.check),
@@ -737,8 +984,9 @@ export function advisoryWarnings(report: DoctorReportV1): readonly string[] {
  */
 export async function runDoctor(
   context: CliContext,
+  options: DoctorOptions = NO_PROBE,
 ): Promise<CliResult<DoctorReportV1>> {
-  const findings = await collectFindings(context);
+  const findings = await collectFindings(context, options);
   const report: DoctorReportV1 = {
     schemaVersion: 1,
     checks: findings.map((finding) => finding.check),

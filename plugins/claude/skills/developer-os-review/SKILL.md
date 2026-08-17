@@ -3,7 +3,7 @@ name: "developer-os-review"
 description: "Accept, edit, or reject quarantined captures. Never deletes a source."
 ---
 
-<!-- Generated from workflows/review/workflow.yaml (review@1.0.0). Do not edit. -->
+<!-- Generated from workflows/review/workflow.yaml (review@2.0.0). Do not edit. -->
 
 <!-- preamble from shared; concatenated, not referenced -->
 
@@ -30,12 +30,28 @@ description: "Accept, edit, or reject quarantined captures. Never deletes a sour
 
 Effect: `capture.list`
 
+```text
+developer-os review
+```
+
 ### decide
 
 Effect: `capture.setStatus`
 
+```text
+developer-os review
+```
+
 ```json
 {"decision":"$input.decision"}
+```
+
+### edit
+
+Effect: `capture.edit`
+
+```text
+developer-os review
 ```
 
 

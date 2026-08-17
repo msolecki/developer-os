@@ -10,12 +10,17 @@ import type { CliResult, ExitCode } from "@developer-os/core";
 
 import { renderBrain, runBrain } from "./commands/brain.js";
 import type { BrainResultV1, BrainSubcommand } from "./commands/brain.js";
+import { runCapture } from "./commands/capture.js";
+import type { CaptureResultV1 } from "./commands/capture.js";
 import { runDoctor } from "./commands/doctor.js";
 import type { DoctorReportV1 } from "./commands/doctor.js";
+import { renderIngest, runIngest } from "./commands/ingest.js";
 import { runInit } from "./commands/init.js";
 import type { InitResultV1 } from "./commands/init.js";
 import { runRepair } from "./commands/repair.js";
 import type { RepairResultV1 } from "./commands/repair.js";
+import { runReview } from "./commands/review.js";
+import type { ReviewResultV1 } from "./commands/review.js";
 import { runStatus } from "./commands/status.js";
 import type { StatusReportV1 } from "./commands/status.js";
 import { runUninstall } from "./commands/uninstall.js";
@@ -33,6 +38,9 @@ const USAGE = [
   "  init       install product state and a Brain skeleton",
   "  brain      reindex | lint | search <query> | status",
   "  search     alias for brain search <query>",
+  "  capture    quarantine one observation, redacted before it is written",
+  "  review     list quarantined captures, or decide on one",
+  "  ingest     turn accepted captures into notes, one agent call each",
   "  status     report the current installation without changing it",
   "  doctor     run every health check without repairing anything",
   "  repair     resume or roll back one incomplete transaction",
@@ -40,9 +48,14 @@ const USAGE = [
   "",
   "Options:",
   "  --dry-run        show the plan without changing anything (init, uninstall)",
-  "  --yes            accept ordinary confirmations (init, uninstall)",
+  "  --yes            accept ordinary confirmations (init, uninstall; ingest never asks)",
   "  --json           emit one machine-readable line",
-  "  --limit <n>      most matches to return (brain search)",
+  "  --limit <n>      most matches to return (brain search), or captures to process (ingest)",
+  "  --text <text>    the observation to capture; stdin when absent (capture)",
+  "  --id <id>        the capture to decide on (review)",
+  "  --decision <d>   accept, reject or edit (review)",
+  "  --agent <name>   claude or codex; the first installed one by default (ingest)",
+  "  --probe          probe each agent CLI; Claude's probe writes ~/.claude.json (doctor)",
   "  --resume <id>    finish an incomplete transaction (repair)",
   "  --rollback <id>  undo an incomplete transaction (repair)",
   "  --version        print the product version",
@@ -50,32 +63,50 @@ const USAGE = [
 
 const OPTIONS = {
   "dry-run": { type: "boolean" },
+  agent: { type: "string" },
+  decision: { type: "string" },
+  id: { type: "string" },
   json: { type: "boolean" },
   yes: { type: "boolean" },
   limit: { type: "string" },
+  probe: { type: "boolean" },
   resume: { type: "string" },
   rollback: { type: "string" },
+  text: { type: "string" },
   version: { type: "boolean" },
 } as const;
 
 type OptionName = keyof typeof OPTIONS;
 
-const OPTION_NAMES: readonly OptionName[] = [
-  "dry-run",
-  "json",
-  "yes",
-  "limit",
-  "resume",
-  "rollback",
-  "version",
-];
+/**
+ * Every name in `OPTIONS`, **derived rather than restated**.
+ *
+ * `suppliedOptions` filters this list, and the per-command allow-list is checked
+ * against what it returns, so an option present in `OPTIONS` and missing here is
+ * invisible to that check: `status --text hi` would parse and run, and strict
+ * dispatch would be holed for every command rather than only the new one. It
+ * was a hand-maintained copy, and three consecutive tasks — `text`, `agent`,
+ * `probe` — each needed a correction telling them to update it. A list whose
+ * type makes a *missing* entry perfectly legal is a defect that recurs by
+ * design; the fix is to remove the second list, not to pin it a fourth time.
+ *
+ * **The cast is the safe direction.** `OptionName` *is* `keyof typeof OPTIONS`,
+ * so `Object.keys(OPTIONS)` can only fail to be `OptionName[]` if `OPTIONS`
+ * gains a key that is not one of its own keys — not a state the type system
+ * permits. `Object.keys` preserves insertion order for string keys, so this is
+ * the curated list exactly, and adding an option to `OPTIONS` now adds it here.
+ */
+const OPTION_NAMES = Object.keys(OPTIONS) as readonly OptionName[];
 
 const COMMAND_OPTIONS: Readonly<Record<string, readonly OptionName[]>> = {
   brain: ["dry-run", "json", "limit"],
   search: ["json", "limit"],
+  capture: ["text", "json"],
+  review: ["id", "decision", "json"],
+  ingest: ["limit", "json", "yes", "agent"],
   init: ["dry-run", "yes", "json"],
   status: ["json"],
-  doctor: ["json"],
+  doctor: ["json", "probe"],
   repair: ["resume", "rollback", "json"],
   uninstall: ["dry-run", "yes", "json"],
 };
@@ -90,6 +121,9 @@ const COMMAND_POSITIONALS: Readonly<
   Record<string, { readonly min: number; readonly max: number }>
 > = {
   init: { min: 0, max: 0 },
+  capture: { min: 0, max: 0 },
+  review: { min: 0, max: 0 },
+  ingest: { min: 0, max: 0 },
   status: { min: 0, max: 0 },
   doctor: { min: 0, max: 0 },
   repair: { min: 0, max: 0 },
@@ -232,6 +266,42 @@ function renderInit(result: InitResultV1): readonly string[] {
       ? "Developer OS would create:"
       : "Developer OS created:",
     ...result.created.map((path) => `  ${renderPath(path)}`),
+  ];
+}
+
+/**
+ * A duplicate says so and names the status it already holds, because that is
+ * the whole answer: re-capturing something already rejected does not resurrect
+ * it, and the user needs to see which decision stands.
+ */
+function renderCapture(result: CaptureResultV1): readonly string[] {
+  return [
+    result.duplicate
+      ? `Already captured, at status ${result.status}:`
+      : "Captured:",
+    `  ${renderPath(result.path)}`,
+    `redactions          ${String(result.redactionCount)}`,
+  ];
+}
+
+/**
+ * A listing names the ids a decision can be taken on; a decision names what it
+ * moved. Neither prints the observation: the capture is Markdown in the user's
+ * own vault, and a reviewer reads it there rather than through a terminal that
+ * would have to re-screen every line of it.
+ */
+function renderReview(result: ReviewResultV1): readonly string[] {
+  if (result.reviewed > 0) {
+    return result.captures.map(
+      (capture) => `Reviewed ${capture.captureId}, now ${capture.status}.`,
+    );
+  }
+  if (result.captures.length === 0) {
+    return ["No captures are waiting for review."];
+  }
+  return [
+    "Quarantined captures:",
+    ...result.captures.map((capture) => `  ${capture.captureId}`),
   ];
 }
 
@@ -399,10 +469,66 @@ async function dispatch(
         json,
         renderInit,
       );
+    case "capture": {
+      /**
+       * Omitted rather than passed as `undefined`: `exactOptionalPropertyTypes`
+       * distinguishes the two, and `runCapture` reads *absent* as "read stdin".
+       */
+      const text = optionString(invocation.values.text);
+      return emit(
+        io,
+        await runCapture(context, text === null ? {} : { text }),
+        json,
+        renderCapture,
+      );
+    }
+    case "review": {
+      /**
+       * Omitted rather than passed as `undefined`: `exactOptionalPropertyTypes`
+       * distinguishes the two, and `runReview` reads *both* absent as "list".
+       */
+      const id = optionString(invocation.values.id);
+      const decision = optionString(invocation.values.decision);
+      return emit(
+        io,
+        await runReview(context, {
+          ...(id === null ? {} : { id }),
+          ...(decision === null ? {} : { decision }),
+        }),
+        json,
+        renderReview,
+      );
+    }
+    case "ingest": {
+      /**
+       * `limit` and `agent` are omitted rather than passed as `undefined`:
+       * `exactOptionalPropertyTypes` distinguishes the two, and `runIngest`
+       * reads *absent* as "every accepted capture" and "the first installed
+       * vendor" respectively.
+       */
+      const agent = optionString(invocation.values.agent);
+      return emit(
+        io,
+        await runIngest(context, {
+          ...(invocation.limit === null ? {} : { limit: invocation.limit }),
+          ...(agent === null ? {} : { agent }),
+          assumeYes,
+        }),
+        json,
+        renderIngest,
+      );
+    }
     case "status":
       return emit(io, await runStatus(context), json, renderStatus);
     case "doctor":
-      return emit(io, await runDoctor(context), json, renderDoctor);
+      return emit(
+        io,
+        await runDoctor(context, {
+          probe: invocation.values.probe === true,
+        }),
+        json,
+        renderDoctor,
+      );
     case "repair":
       return emit(
         io,

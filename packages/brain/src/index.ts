@@ -68,6 +68,50 @@ export type {
 } from "./retrieval/index.js";
 export { BRAIN_MIGRATIONS } from "./migrations/index.js";
 export type { BrainMigration, VaultSnapshot } from "./migrations/index.js";
+export {
+  AGENT_DETECTION_ROWS,
+  buildCapture,
+  detectSourceAgent,
+  parseCaptureFile,
+  renderCaptureFile,
+} from "./capture/index.js";
+export type {
+  AgentDetectionRow,
+  CaptureBuildRequest,
+  CaptureBuildResult,
+  CaptureFileOutcome,
+  CaptureFileRefusal,
+} from "./capture/index.js";
+export {
+  applyReviewDecision,
+  isReviewDecision,
+  REVIEW_DECISIONS,
+} from "./review/index.js";
+export type { ReviewDecision, ReviewOutcome } from "./review/index.js";
+export {
+  buildIngestPrompt,
+  MAX_PROMPT_CONTENT_GRAPHEMES,
+  MAX_PROPOSED_NOTE_CHARS,
+  MAX_PROPOSED_NOTES,
+  MAX_PROPOSED_PATH_CHARS,
+  parseIngestProposal,
+  planIngestApply,
+  validateProposal,
+  VALIDATOR_IDS,
+} from "./ingest/index.js";
+export type {
+  ApplyResult,
+  IngestProposal,
+  IngestProposalOutcome,
+  IngestProposalRefusal,
+  IngestPromptOptions,
+  IngestValidationContext,
+  IngestValidationFinding,
+  IngestValidationResult,
+  PlannedNoteWriteV1,
+  ProposedNote,
+  ValidatorId,
+} from "./ingest/index.js";
 export { CAPTURE_STATUSES } from "./schema/capture.js";
 export type {
   CaptureEnvelopeV1,

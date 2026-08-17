@@ -58,5 +58,11 @@ export type {
   WorkflowSeverity,
   WorkflowValidationResult,
 } from "./validate.js";
-export { EFFECT_VOCABULARY, isKnownVerb, lookupVerb } from "./vocabulary.js";
+export {
+  EFFECT_VOCABULARY,
+  isKnownVerb,
+  lookupVerb,
+  resolveScopeGlob,
+  structuredResultVerbs,
+} from "./vocabulary.js";
 export type { EffectFootprint } from "./vocabulary.js";

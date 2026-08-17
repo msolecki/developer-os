@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IngestProposal",
+  "description": "What an ingest agent returns for one accepted capture: the notes it proposes, and nothing else. Developer OS writes staging; this proposal is read as data and validated before a byte of it reaches the vault.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "notes"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1,
+      "description": "Always 1. A different value is refused rather than migrated."
+    },
+    "notes": {
+      "type": "array",
+      "maxItems": 32,
+      "description": "Zero or more proposed notes. An empty array is a legitimate answer: it means this capture is not worth a note.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "contents", "sourceCaptureId"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "pattern": "^[^/\\\\][^\\\\]*\\.md$",
+            "description": "Where the note goes, relative to the vault's content root, with forward slashes and a .md extension. Never absolute, never containing a . or .. segment, never naming a private folder or the generated indexes directory."
+          },
+          "contents": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536,
+            "description": "The whole note: a YAML frontmatter block delimited by --- lines, then the body."
+          },
+          "sourceCaptureId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[0-9a-f]{16}$",
+            "description": "The captureId of the capture this note was derived from. A note that does not name its capture is refused."
+          }
+        }
+      }
+    }
+  }
+}

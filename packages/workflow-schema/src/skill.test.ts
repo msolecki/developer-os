@@ -154,6 +154,69 @@ describe("renderSkillBody", () => {
     const { contents } = render();
     expect(contents.length).toBeGreaterThan(0);
   });
+
+  /**
+   * Positional, because `developer-os capture` is already in the rendered
+   * artifact — under `## Recovery`, from `recovery.resume` — before this task
+   * adds anything. A `toContain` would be green before a line of `skill.ts`
+   * changed. `captureContract` mirrors `workflows/capture/workflow.yaml`,
+   * whose `recovery.resume` is literally `developer-os capture` (`:42`), so
+   * `indexOf` finds a real pre-existing occurrence in the Recovery block
+   * before this task renders the command anywhere else. `commandAt` must land
+   * after the effect block and before `## Recovery`, which is only true once
+   * the command is rendered there too.
+   */
+  it("renders the command inside the effect block, not only in the recovery block", () => {
+    const captureContract = contract({
+      recovery: { leaves: "the capture unwritten", resume: "developer-os capture" },
+    });
+    const body = renderSkillBody(captureContract, null, { shared }).join("\n");
+    const effectAt = body.indexOf("Effect: `capture.write`");
+    const recoveryAt = body.indexOf("## Recovery");
+    const commandAt = body.indexOf("developer-os capture");
+
+    expect(effectAt).toBeGreaterThanOrEqual(0);
+    expect(commandAt).toBeGreaterThan(effectAt);
+    expect(commandAt).toBeLessThan(recoveryAt);
+  });
+
+  /**
+   * Fix-pass addition: mutation-verified. Changing `"text"` to `"bash"` at the
+   * command's `fenced()` call in `skill.ts` left the full suite green —
+   * `renders recovery.resume as inert fenced text` only asserts `toContain("
+   * ```text")`, which the *recovery* block's own fence satisfies on its own,
+   * so the command's fence was unguarded. `nothing downstream should offer to
+   * run it` is the reason this fence exists; this is the case that holds it.
+   */
+  it("fences the command as text, never bash, so nothing downstream offers to run it", () => {
+    const captureContract = contract({
+      recovery: { leaves: "the capture unwritten", resume: "developer-os capture" },
+    });
+    const { contents } = render(captureContract);
+    expect(contents).toMatch(/```text\ndeveloper-os capture\n```/u);
+    expect(contents).not.toContain("```bash");
+  });
+
+  /**
+   * Fix-pass addition: mutation-verified. Replacing the `command != null`
+   * guard in `skill.ts` with an unconditional push left the full suite green,
+   * rendering an empty ` ```text\n``` ` fence under `Effect:
+   * \`brain.readIndex\``. `COMMANDLESS`'s whole point — asserted only in
+   * `vocabulary.test.ts` before this case — is that four verbs render no
+   * command at all; this is the render-seam half of that guarantee.
+   * `brain.readIndex` goes live as a step in Task 7's `brain-search` workflow.
+   */
+  it("renders no fence for a commandless verb", () => {
+    const noCommand = contract({
+      steps: [{ id: "read-index", do: "brain.readIndex" }],
+    });
+    const { contents } = render(noCommand);
+    const effectAt = contents.indexOf("Effect: `brain.readIndex`");
+    const recoveryAt = contents.indexOf("## Recovery", effectAt);
+    expect(effectAt).toBeGreaterThanOrEqual(0);
+    expect(recoveryAt).toBeGreaterThan(effectAt);
+    expect(contents.slice(effectAt, recoveryAt)).not.toContain("```");
+  });
 });
 
 /**

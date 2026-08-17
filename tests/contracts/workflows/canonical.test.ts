@@ -1,8 +1,10 @@
+import { readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { loadWorkflow } from "@developer-os/workflow-schema";
+import { compareScopes, deriveScopes, loadWorkflow } from "@developer-os/workflow-schema";
+import type { WorkflowContractV1 } from "@developer-os/workflow-schema";
 import { describe, expect, it } from "vitest";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
@@ -23,6 +25,27 @@ async function directories(): Promise<string[]> {
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort();
+}
+
+function mustLoad(relativePath: string): WorkflowContractV1 {
+  const text = readFileSync(join(ROOT, relativePath), "utf8");
+  const result = loadWorkflow({ file: relativePath, text });
+  if (result.contract === null) {
+    throw new Error(
+      `${relativePath} did not validate: ${result.findings.map((finding) => finding.message).join("; ")}`,
+    );
+  }
+  return result.contract;
+}
+
+/**
+ * `readFileSync`, not `await readFile`: the assertions below are synchronous
+ * `it` bodies, and `loadWorkflow` takes text rather than a path. Reuses
+ * `EXPECTED` above rather than a second id list — two lists in one file that
+ * must agree is how they come to disagree.
+ */
+function canonicalContracts(): readonly WorkflowContractV1[] {
+  return EXPECTED.map((id) => mustLoad(`workflows/${id}/workflow.yaml`));
 }
 
 describe("canonical workflows", () => {
@@ -74,5 +97,28 @@ describe("canonical workflows", () => {
         ).toStrictEqual([]);
       }
     }
+  });
+
+  it("declares no trigger nothing can fire", () => {
+    const contracts = canonicalContracts();
+    expect(contracts).toHaveLength(6);
+    for (const contract of contracts) {
+      expect(contract.triggers, contract.id).not.toContain("session_end");
+      expect(contract.triggers, contract.id).not.toContain("session_start");
+      expect(contract.triggers.length, contract.id).toBeGreaterThan(0);
+    }
+  });
+
+  it("declares scopes equal to what its steps derive", () => {
+    const contracts = canonicalContracts();
+    expect(contracts.length).toBeGreaterThan(0);
+    for (const contract of contracts) {
+      expect(compareScopes(contract.scopes, deriveScopes(contract)), contract.id).toEqual([]);
+    }
+  });
+
+  it("declares the edit verb its decision input advertises", () => {
+    const review = canonicalContracts().find((c) => c.id === "review");
+    expect(review?.steps.map((s) => s.do)).toContain("capture.edit");
   });
 });

@@ -143,7 +143,17 @@ describe("Foundation temporary-HOME lifecycle", () => {
       const stagingDir = join(home.productHome, "staging");
       const backupsDir = join(home.productHome, "backups");
       const logsDir = join(home.productHome, "logs");
+      const schemasDir = join(home.productHome, "schemas");
+      /**
+       * DOS-P6 Task 11: one JSON Schema file per structured-result verb ships
+       * with the product and is installed here, because `invokeCodex` only
+       * screens the path it is given and never writes it. Named rather than
+       * pattern-matched, since the set is derived from `EFFECT_VOCABULARY` and
+       * `output-schemas.test.ts` is what pins the derivation.
+       */
+      const ingestSchemaFile = join(schemasDir, "ingest.stage.schema.json");
       const brainKeep = join(home.brain, ".gitkeep");
+      const redactionKeyFile = join(stateDir, "redaction.key");
 
       const internalRoots = internalRootsOf(home);
 
@@ -194,17 +204,19 @@ describe("Foundation temporary-HOME lifecycle", () => {
        * are pinned by `brain-template.test.ts` and restating them here would
        * make every template edit a two-file change with one of them silent.
        */
-      expect(planned.created.slice(0, 8)).toStrictEqual([
+      expect(planned.created.slice(0, 10)).toStrictEqual([
         home.productHome,
         stateDir,
         stagingDir,
         backupsDir,
         logsDir,
+        schemasDir,
         configFile,
+        ingestSchemaFile,
         home.brain,
         brainKeep,
       ]);
-      const template = planned.created.slice(8);
+      const template = planned.created.slice(10);
       expect(template.length).toBeGreaterThan(0);
       /** The content root itself is the first entry, then everything under it. */
       expect(template[0]).toBe(`${home.brain}/content`);
@@ -261,8 +273,10 @@ describe("Foundation temporary-HOME lifecycle", () => {
          * count now covers the vault's directories and files as well as the
          * product's. Left as an exact number rather than a floor: this suite
          * exists to notice that an install created something nobody declared.
+         * Two more as of DOS-P6 Task 11 — `schemas/` and the one output
+         * schema in it.
          */
-        managedArtifacts: 34,
+        managedArtifacts: 36,
         driftCount: 0,
         incompleteTransactions: [],
       });
@@ -297,6 +311,7 @@ describe("Foundation temporary-HOME lifecycle", () => {
         "transactions",
         "drift",
         "brain",
+        "redaction-key",
         "agents",
         "claude-capabilities",
         "codex-capabilities",
@@ -348,7 +363,9 @@ describe("Foundation temporary-HOME lifecycle", () => {
         stagingDir,
         backupsDir,
         logsDir,
+        schemasDir,
         configFile,
+        ingestSchemaFile,
         home.brain,
       ]);
       expect(await inventory(home.root)).toStrictEqual(beforeStatus);
@@ -364,7 +381,16 @@ describe("Foundation temporary-HOME lifecycle", () => {
 
       expect(uninstalled.exitCode).toBe(EXIT_CODES.success);
       const removal = okData(uninstalled.result);
-      expect(removal.removed).toStrictEqual([configFile, logsDir]);
+      /**
+       * Deepest first: the schema file before the directory that holds it,
+       * which is what makes `rmdir` succeed where it refuses `state` below.
+       */
+      expect(removal.removed).toStrictEqual([
+        configFile,
+        ingestSchemaFile,
+        schemasDir,
+        logsDir,
+      ]);
       expect(removal.restored).toStrictEqual([]);
       /**
        * `state`, `staging`, and `backups` hold the journal and backups of the very
@@ -406,6 +432,13 @@ describe("Foundation temporary-HOME lifecycle", () => {
       expect(afterUninstall.has(configFile)).toBe(false);
       expect(afterUninstall.has(manifestFile)).toBe(false);
       expect(afterUninstall.has(logsDir)).toBe(false);
+      /**
+       * DOS-P6 Task 1: the redaction key is removed by exact path, the one
+       * exception to "everything uninstall removes came from the manifest".
+       * `removal.removed` above never names it — spec forbids the key from
+       * ever appearing in `--json` output — so this is checked on disk.
+       */
+      expect(afterUninstall.has(redactionKeyFile)).toBe(false);
       expect(afterUninstall.get(home.brain)).toBe("dir");
       expect(afterUninstall.get(brainKeep)).toBe(
         "file:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -443,7 +476,28 @@ describe("Foundation temporary-HOME lifecycle", () => {
         preserved: [],
         transactionId: null,
       });
-      expect(await inventory(home.root)).toStrictEqual(beforeSecondUninstall);
+
+      /**
+       * A true no-op, in both directions, and it took the amendment to Task 1
+       * to make it one. Building a context for this invocation used to call
+       * `loadOrCreateRedactionKey`, so the very command that had just removed
+       * the key put it back — and could then never remove it again, because
+       * `runUninstall` returns early when the manifest is absent and the
+       * removal sat below that return. The composition root now *reads*, and
+       * the removal now sits above the return, so the second uninstall neither
+       * regenerates the secret nor leaves one orphaned.
+       */
+      const afterSecondUninstall = await inventory(home.root);
+      expect(
+        removedPaths(beforeSecondUninstall, afterSecondUninstall),
+      ).toStrictEqual([]);
+      expect(
+        changedPaths(beforeSecondUninstall, afterSecondUninstall),
+      ).toStrictEqual([]);
+      expect(
+        addedPaths(beforeSecondUninstall, afterSecondUninstall),
+      ).toStrictEqual([]);
+      expect(afterSecondUninstall.has(redactionKeyFile)).toBe(false);
 
       // --- doctor on the emptied machine: reports, never repairs --------------
 
@@ -456,7 +510,13 @@ describe("Foundation temporary-HOME lifecycle", () => {
       const failure: CliError = errorOf(afterAllCommands.result);
       expect(failure.kind).toBe("doctor_failed");
       expect(failure.recovery).toBe("developer-os init");
-      expect(await inventory(home.root)).toStrictEqual(beforeSecondUninstall);
+      /**
+       * The key already exists by this point (regenerated above), so
+       * `doctor` — true to "reports and never repairs" — makes no further
+       * change; the baseline is `afterSecondUninstall`, not
+       * `beforeSecondUninstall`, because that regeneration already happened.
+       */
+      expect(await inventory(home.root)).toStrictEqual(afterSecondUninstall);
     });
   });
 
@@ -489,6 +549,63 @@ describe("Foundation temporary-HOME lifecycle", () => {
       );
       expect(byId.get("agents")).toContain("codex=absent");
       expect(byId.get("codex-capabilities")).toContain("codex=absent");
+    });
+  });
+
+  /**
+   * `doctor` tells the user to run `init`, so `init` has to be the recovery it
+   * claims. Driven through the built binary rather than a fixture, because the
+   * defect this pins was invisible to every unit test: on an installed machine
+   * `plan.created` is empty, `runInit` returned before it reached the only
+   * production call to `loadOrCreateRedactionKey` in the tree, and the key
+   * stayed gone while `doctor` kept promising it would come back.
+   */
+  it("restores a deleted redaction key when init is run again", async () => {
+    await withHome(async (home) => {
+      await install(home);
+      const redactionKeyFile = join(
+        home.productHome,
+        "state",
+        "redaction.key",
+      );
+      await rm(redactionKeyFile);
+
+      const dry = await runJson<InitResultV1>(home, [
+        "init",
+        "--dry-run",
+        "--json",
+      ]);
+      expect(dry.exitCode).toBe(EXIT_CODES.success);
+      expect(
+        (await inventory(home.root)).has(redactionKeyFile),
+        "a dry run recreated the key",
+      ).toBe(false);
+
+      const repeated = await runJson<InitResultV1>(home, [
+        "init",
+        "--yes",
+        "--json",
+      ]);
+
+      expect(repeated.exitCode).toBe(EXIT_CODES.success);
+      const result = okData(repeated.result);
+      expect(result.created).toStrictEqual([]);
+      expect(result.transactionId).toBeNull();
+
+      const after = await inventory(home.root);
+      expect(after.has(redactionKeyFile), "init did not recreate the key").toBe(
+        true,
+      );
+      /** Nothing but the key: recovery is not a second install. */
+      expect(after.has(join(home.productHome, "config.toml"))).toBe(true);
+
+      const doctor = await runJson<DoctorReportV1>(home, ["doctor", "--json"]);
+      expect(doctor.exitCode).toBe(EXIT_CODES.success);
+      const key = okData(doctor.result).checks.find(
+        (check) => check.id === "redaction-key",
+      );
+      expect(key?.status).toBe("pass");
+      expect(key?.message).toBe("present, 0600");
     });
   });
 });

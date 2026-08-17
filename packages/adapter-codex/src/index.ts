@@ -25,7 +25,13 @@ export { CODEX_CAPABILITY_KEYS, CODEX_MINIMUM_VERSION } from "./versions.js";
 export type { CodexCapabilityKey } from "./versions.js";
 export { probeCodex } from "./probe.js";
 export type { CodexProbeDependencies, CodexProbeResult } from "./probe.js";
-export { resolveCapabilities } from "./capabilities.js";
+/**
+ * `CODEX_NOT_USED_KEYS` is exported for one consumer:
+ * `apps/cli/src/adapter-capability-parity.test.ts`, the only place both
+ * adapters are legally visible at once (spec §1 forbids either importing the
+ * other, so neither package can assert parity about itself).
+ */
+export { CODEX_NOT_USED_KEYS, resolveCapabilities } from "./capabilities.js";
 export type {
   CapabilityState,
   CodexCapabilities,
@@ -42,6 +48,7 @@ export {
   PLUGIN_TREE_PREFIX,
   PLUGIN_TREE_SEGMENTS,
 } from "./plugin.js";
+export type { MarketplaceRootArtifact, PluginRootArtifact } from "./plugin.js";
 export { MARKETPLACE_NAME, renderMarketplace } from "./marketplace.js";
 export type { MarketplaceContext } from "./marketplace.js";
 export { proposeCodexInstall, proposeCodexUninstall } from "./install.js";

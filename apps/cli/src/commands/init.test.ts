@@ -1,9 +1,12 @@
+import fsSync from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EXIT_CODES, loadConfig, serializeConfig } from "@developer-os/core";
+import { structuredResultVerbs } from "@developer-os/workflow-schema";
+import type * as SecurityModule from "@developer-os/security";
 
 import { runInit } from "./init.js";
 import type { InitDependencies } from "./init.js";
@@ -13,6 +16,31 @@ import {
   inventory,
   removeCommandFixtures,
 } from "./testing.js";
+
+/**
+ * Which key a redaction used is not observable from any value the CLI returns —
+ * the replacement text is identical under every key — so the key `redactText`
+ * is handed is recorded here. The fixture's own guards carry a constant key
+ * that is deliberately not the one on disk, which is what makes "init redacts
+ * with the key it just created" a claim this file can fail on. The wrapper
+ * delegates, so every other suite here runs production behaviour unchanged.
+ */
+const { redactionKeyUses } = vi.hoisted(() => ({
+  redactionKeyUses: [] as Uint8Array[],
+}));
+
+vi.mock("@developer-os/security", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof SecurityModule>();
+
+  return {
+    ...actual,
+    redactText: (text: string, key: Uint8Array) => {
+      redactionKeyUses.push(Uint8Array.from(key));
+      return actual.redactText(text, key);
+    },
+  };
+});
 
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
 
@@ -88,6 +116,185 @@ describe("runInit", () => {
     const managed = manifest.artifacts.map((artifact) => artifact.path).sort();
     expect(managed).toContain(fixture.paths.configFile);
     expect(managed).toContain(fixture.paths.home);
+  });
+
+  it("installs one output schema per structured-result verb, as managed artifacts", async () => {
+    /**
+     * `codex-adapter.md` §11.13: **nothing writes the file `outputSchemaPath`
+     * points at.** `invokeCodex` only screens the path and forwards it into
+     * argv, so a caller pointing the vendor CLI at a missing file gets the
+     * CLI's own non-zero exit — diagnosed as the wrong failure entirely. The
+     * set is derived from `EFFECT_VOCABULARY` rather than listed, and the
+     * assertion is an equality rather than a non-empty check: a non-empty
+     * check over a one-element set proves nothing, and pinning the member
+     * makes a second one a decision somebody has to make here.
+     */
+    const fixture = await createCommandFixture("init-output-schemas");
+
+    const result = await runInit(fixture.context, ACCEPTED);
+    expect(result.ok).toBe(true);
+
+    const verbs = structuredResultVerbs();
+    expect(verbs).toStrictEqual(["ingest.stage"]);
+
+    const manifest = await fixture.context.manifests.read();
+    const managed = manifest.artifacts.map((artifact) => artifact.path);
+    expect(managed).toContain(join(fixture.paths.home, "schemas"));
+
+    for (const verb of verbs) {
+      const file = join(fixture.paths.home, "schemas", `${verb}.schema.json`);
+      expect(await nodeFs.readFile(file, "utf8")).toContain('"$schema"');
+      expect(managed).toContain(file);
+      expect(result.ok && result.data.created).toContain(file);
+    }
+  });
+
+  it("leaves an installed output schema alone on a second run", async () => {
+    /**
+     * `init` is the upgrade path as well as the install path, so the schemas
+     * are planned per file rather than gated on "this run created the vault".
+     * The second run must find them unchanged: a `create` operation over a
+     * file that already exists is refused by the change-plan validator, so an
+     * unconditional plan would make `init` fail on every machine it had
+     * already succeeded on.
+     */
+    const fixture = await createCommandFixture("init-output-schemas-twice");
+    const file = join(
+      fixture.paths.home,
+      "schemas",
+      "ingest.stage.schema.json",
+    );
+
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    const first = await nodeFs.readFile(file, "utf8");
+
+    const repeated = await runInit(fixture.context, ACCEPTED);
+    expect(repeated.ok).toBe(true);
+    if (!repeated.ok) return;
+    expect(repeated.data.created).toStrictEqual([]);
+    expect(repeated.data.unchanged).toContain(file);
+    expect(await nodeFs.readFile(file, "utf8")).toBe(first);
+  });
+
+  it("creates a redaction key that installation-manifest.json does not name", async () => {
+    const fixture = await createCommandFixture("init-redaction-key");
+    const keyFile = join(fixture.paths.stateDir, "redaction.key");
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    expect(result.ok).toBe(true);
+    expect(await exists(keyFile)).toBe(true);
+    expect(fsSync.statSync(keyFile).mode & 0o777).toBe(0o600);
+
+    const manifest = await fixture.context.manifests.read();
+    const managed = manifest.artifacts.map((artifact) => artifact.path);
+    expect(managed).not.toContain(keyFile);
+
+    const serializedManifest = await nodeFs.readFile(
+      fixture.paths.manifestFile,
+      "utf8",
+    );
+    expect(serializedManifest).not.toContain("redaction.key");
+  });
+
+  /**
+   * **The decision, pinned.** `init --dry-run` neither creates the key nor
+   * names it in `plan.created`, and the gap is accepted rather than closed.
+   *
+   * `created` enumerates the *managed artifacts* a run installs, and naming a
+   * non-artifact there would imply the manifest owns it — which is precisely
+   * the claim `installation-manifest.json` must never make about this file.
+   * The key belongs with the transaction journals and lock files under
+   * `stateDir` that the end-to-end suite already tolerates as internal.
+   */
+  it("neither creates nor declares the redaction key on a dry run", async () => {
+    const fixture = await createCommandFixture("init-redaction-key-dry-run");
+    const keyFile = join(fixture.paths.stateDir, "redaction.key");
+
+    const result = await runInit(fixture.context, {
+      dryRun: true,
+      assumeYes: true,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.created).not.toContain(keyFile);
+    expect(await exists(keyFile)).toBe(false);
+  });
+
+  /**
+   * **`init` is the recovery `doctor` names, so it has to be one.** On an
+   * installed machine whose key was deleted, `plan.created` is empty — and the
+   * key creation used to sit below `runInit`'s early return for that case, so
+   * the one production caller of `loadOrCreateRedactionKey` in the tree was
+   * unreachable on exactly the machines that needed it. `doctor` then reported
+   * "one will be created on next use" forever, and every broken-state remedy
+   * it prints ("remove it, and run init") moved a machine from a reportable
+   * state into a permanent one. Nothing escalated: `doctor` exits 0 for all of
+   * them.
+   */
+  it("restores a deleted redaction key on an already installed machine", async () => {
+    const fixture = await createCommandFixture("init-redaction-key-restore");
+    await runInit(fixture.context, ACCEPTED);
+    const keyFile = join(fixture.paths.stateDir, "redaction.key");
+    await nodeFs.unlink(keyFile);
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.created).toEqual([]);
+    expect(result.data.transactionId).toBeNull();
+    expect(await exists(keyFile)).toBe(true);
+    expect(fsSync.statSync(keyFile).mode & 0o777).toBe(0o600);
+  });
+
+  /** The companion: recovery is a real run, never a dry one. */
+  it("restores nothing on a dry run, even when the key is the only thing missing", async () => {
+    const fixture = await createCommandFixture("init-redaction-key-restore-dry");
+    await runInit(fixture.context, ACCEPTED);
+    const keyFile = join(fixture.paths.stateDir, "redaction.key");
+    await nodeFs.unlink(keyFile);
+    const before = await inventory(fixture.root);
+
+    const result = await runInit(fixture.context, {
+      dryRun: true,
+      assumeYes: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(await exists(keyFile)).toBe(false);
+    expect(await inventory(fixture.root)).toEqual(before);
+  });
+
+  /**
+   * `createGuards` and `NodeProcessRunner.redact` close over whatever key
+   * existed when the context was built — an ephemeral one on a machine `init`
+   * is about to initialize.
+   *
+   * What this pins is `runInit`'s terminal diagnostic specifically, which is
+   * the extent of the rebinding: the executor and the runner were built with
+   * the ephemeral key and cannot be corrected from inside the command. The
+   * rule Task 8 inherits is the one `init.ts` states — redact with the key you
+   * loaded, at the point you loaded it — not "swap the guards".
+   */
+  it("redacts with the key it just created, not with the context's", async () => {
+    const fixture = await createCommandFixture("init-redaction-key-point-of-use");
+    redactionKeyUses.length = 0;
+
+    const result = await runInit(
+      fixture.context,
+      ACCEPTED,
+      failingVerifier(),
+    );
+
+    expect(result.ok).toBe(false);
+    const durable = await nodeFs.readFile(
+      join(fixture.paths.stateDir, "redaction.key"),
+    );
+    const used = redactionKeyUses.at(-1);
+    expect(used).toBeDefined();
+    expect([...(used ?? [])]).toEqual([...durable]);
   });
 
   it("records the Brain skeleton it created so a failed init can undo it", async () => {

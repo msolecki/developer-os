@@ -30,11 +30,232 @@ week of confusion.
 
 ## NOW
 
-**A10 — DOS-P6 Knowledge pipeline, at its `S` gate. The next session writes the spec; approving it
-is the founder's.** Nothing else is in progress. DOS-P5 closed on 2026-08-12 and its plan is
-deleted; `docs/architecture/codex-adapter.md` is what replaced it.
+**A10 — DOS-P6 Knowledge pipeline, at its `I` gate. Both documents exist: the spec was approved by
+the founder on 2026-08-13 and its implementation plan was written the same day.**
+`plans/2026-07-21-developer-os-knowledge-pipeline.md`, nineteen tasks, against
+`specs/2026-07-21-developer-os-knowledge-pipeline-design.md`. Nothing else is in progress. DOS-P5
+closed on 2026-08-12 and its plan is deleted; `docs/architecture/codex-adapter.md` is what replaced
+it.
 
-**Read three documents before writing a line of that spec**, in this order:
+**Sessions execute that plan one task at a time**, under `superpowers:subagent-driven-development` —
+a different agent implements and reviews each task, and a task is not done until its reviewer says
+so. **Seventeen of the nineteen have landed** — Tasks 1–16 and 18, 2026-08-13/14. **Task 17 ran on 2026-08-15,
+after the founder authorised the spend, and half discharged itself.** Claude answered and its detection
+row landed; **Codex's account had exhausted its usage limit**, so every `codex exec` ended `turn.failed`
+and no run reached a model response. What it settled and what it did not is
+`docs/architecture/knowledge-pipeline.md` §10.3; **the remainder is `BACKLOG.md` §1 NEW-21** — one
+successful `codex exec` completion, which is the founder's because it spends their credits, and which
+alone lets the `codex exec --json` terminal-event rule stop being provisional.
+
+**Task 18 landed first, and taking it out of order was not skipping ahead.** The threat model names
+the JSONL rule as provisional, which is what it is; nothing in it consumed evidence Task 17 produces.
+`docs/architecture/threat-model.md` is what it left. **Task 19 does wait** on Task 17: its Step 5
+requires every `BACKLOG.md` §8 row to carry an outcome, and the Codex spec §14.1 row is discharged by
+Task 17 alone.
+
+**Writing that threat model found four defects nobody had looked for, all now `BACKLOG.md` §1 rows.**
+`NEW-15` — nothing that executes a discovered binary pays the owner and mode check
+`platform-macos`'s own type says its executor owes; `ingest` was the first and **`capture` joined it on
+2026-08-15**, when Task 17's detection row made its probe path live. `NEW-16` — spec §8.2's user-configured redaction
+patterns are unreachable: no production caller passes them and the config schema has no table for
+them. `NEW-17` — `brain` is the one command of eight whose config parse failure is **not**
+content-free, so smol-toml's three raw source lines reach the user with the heuristic redactor as the
+only thing standing. `NEW-18` — `assertSafeCommand`'s four NUL branches have no test anywhere, found
+because the document tried to cite that coverage and a reviewer checked whether it existed. **None is
+fixed**; a documentation task may not edit the product.
+
+**Task 19's Steps 1 through 4 are done; Steps 5 and 6 are the ones that needed Task 17.** The
+independent security review ran on 2026-08-14/15 over Tasks 1–18 and returned **one Critical**, two
+Important and five Minor. Every accepted finding is fixed with a regression test watched fail first, over four fix
+rounds and four independent verdicts, ending in **ready for the checkpoint**.
+
+**The Critical is worth knowing even though it is closed**, because it is what this gate exists to
+catch: `write-scope`'s private-folder subtraction ran on the **raw path string** with exact case while
+containment ran on the **resolved** path, so on APFS a proposal at `_RAW/quarantine/x.md`
+canonicalized into the real `_raw/quarantine/` — containment passed, the subtraction saw nothing. And
+because unknown frontmatter keys are preserved-and-ignored while a capture's id is never recomputed
+from content, **one document satisfies both the note parser and the capture parser**: the model's own
+output became an `accepted` capture on the next run, bypassing the pipeline's only human gate. A
+second variant needed no case-insensitive filesystem, only an in-vault symlink. `NEW-14` turned out to
+be the same root defect seen twice and was closed in the same change; its parked `it.fails` is now an
+ordinary passing case.
+
+**Two findings are registered rather than fixed**, both `BACKLOG.md` §1: `NEW-19`, the last
+textually-built owned root, traced by reading and explicitly not driven; and `NEW-20`, a check-then-use
+window on `capture`'s write path that is **not a regression** against the baseline before this work and
+whose closure would reverse a contract decision taken deliberately.
+
+**Steps 5 and 6 wait on Task 17, and that is now a decision rather than an inference.** Step 5
+requires every `BACKLOG.md` §8 row to carry an outcome, and the Codex spec §14.1 row is discharged by
+Task 17 alone — which could only half discharge it.
+
+> **Asked and settled 2026-08-15: DOS-P6 holds.** Checking the blocker properly turned up that the
+> Checkpoint names three conditions — the five criteria of Step 2 with evidence in a commit, the
+> independent security review returned and dispositioned, and CI green on that commit — and **none of
+> them mentions Task 17**. All three are met. `BACKLOG.md` §5 is already empty, so that sub-item of
+> Step 5 is discharged too. So closing DOS-P6 today, carrying Task 17's remainder as **NEW-21**, was
+> available and was **put to the founder, who chose to hold** until NEW-21 closes on or after
+> 2026-08-20. **Do not reopen this from the arithmetic** — a later session that rediscovers the
+> checkpoint wording will find the same opening, and the answer to it is already given. A11 stays
+> blocked meanwhile, deliberately. **Its diff did get the security pass this paragraph asked for**: an independent
+reviewer that wrote none of it ran on 2026-08-15 over several rounds, and every finding it raised was
+accepted and fixed before the commit. The commit message is the record of what it found.
+
+**Both decisions that were awaiting the founder were ratified on 2026-08-15, and `BACKLOG.md` §8 now
+has no unratified rows.** Each leaves that table when Task 19 Step 5 lands. They are recorded here
+because the reasoning outlives the row.
+
+The first was Task 12's `confidence-and-lifecycle` validator rule. The spec names the validator and
+never says which frontmatter each stage requires, so the rule shipped is defensible but invented —
+`established` requires a `reviewed` date, `deprecated` requires `updated`, `emerging` requires
+nothing. **Ratified as shipped**: overturning it would have been two `if`s and migrated nothing,
+because that validator writes no data.
+
+The second is Task 13's, and it corrects a headline sentence of the approved spec. **§6.1's "one
+capture, one agent call, one transaction" is false and cannot be made true.** `ingest` ships as four
+transactions per capture — `ingest-stage`, `ingest-apply`, `ingest-reindex`, `ingest-ingested` — plus
+a compensating `ingest-rollback` on failure. Two independent reasons no two of them merge:
+`BrainService.reindex()` **reads** the vault, so it cannot run until the apply has finalized; and
+`validateChangePlan` grants ownership from the manifest, where the index artifacts are recorded and a
+capture is deliberately absent, because spec §3.4 keeps a capture hand-editable in Obsidian. **The
+residual is accepted rather than closed:** a crash between the apply and the last transaction leaves a
+capture at `staging` with its notes already applied — inert, since the next run selects only
+`accepted` captures and cannot double-apply, and recoverable by `repair` plus a hand edit. Task 15's
+"a second transaction is refused while one holds the lock" tests a concurrent second *process*, not a
+nested execution.
+
+**The flaky case in the gate was diagnosed on 2026-08-14, and the answer is starvation.**
+`apps/cli/src/commands/doctor.test.ts:195` — the redaction-key plant loop — reddened twice in twelve
+full runs across Tasks 10 and 11, on diffs importing nothing from `doctor.ts`, once as
+`Test timed out in 20000ms`. **Task 15 turned it from intermittent into reproducible and then
+measured it**, because adding eight fsync-heavy suites under `tests/security/` made it fire almost
+every time:
+
+| configuration | full runs | result |
+|---|---|---|
+| `security/**` included, default parallelism | 6 | 1 green, **5 red** |
+| `security/**` excluded (control) | 3 | 3 green |
+| that case alone | 1 | green, 3.19 s |
+| `doctor.test.ts` alone, whole file | 1 | green, **20.94 s against a 20 s per-test budget** |
+| `security/**` included, `maxForks: 2` | 3 | 1 green, 2 red |
+| `security/**` included, `fileParallelism: false` | 4 | **4 green** |
+
+The case does four full installs with real transactions and sits on its own budget with nothing else
+running; under load it goes over. **The fix is `fileParallelism: false` in `tests/vitest.config.ts`**,
+which also drops *total* test time from roughly 1000 s to 700 s while costing about 60 s of wall
+clock — `npm run check` is now nearer four minutes than three. Nobody's timeout was raised and
+`doctor.test.ts` was not touched: a larger budget hides starvation rather than removing it.
+
+**One symptom is explicitly *not* covered by that diagnosis.** Two of the red runs also produced
+`ENOTEMPTY: rmdir …/backups/transactions/tx_fixture_001` during that fixture's own cleanup, which is
+a filesystem race in recursive removal rather than CPU starvation. Serializing may only have made it
+rarer. It is unmeasured and possibly still live.
+
+**The underlying fragility is unowned and stays that way:** a case that needs 3.19 s of a 20 s budget
+on an idle machine is one contended run from red, and this is the second gate-integrity item this
+program has paid for.
+
+**One unexplained gate failure, 2026-08-15, recorded because it is unexplained.** During Task 17 a
+single `npm run check` exited 1 after lint and all 1956 tests had passed, with `$ tsc -b` as the last
+output — so the failure was in `pnpm build` or `git diff --check`, and the edits in that round were
+**markdown only**. It did not reproduce: `git diff --check` was clean immediately after, and four
+consecutive `pnpm build` runs and two full `npm run check` runs all exited 0. No diagnosis, no owner,
+and deliberately not dressed up as one. Noted so that a second occurrence is a pattern rather than a
+first.
+
+**Tasks 9 and 10 raise one question with one cause, and it is the founder's.** `PlannedFileMutation`
+is `{targetPath, operation, content}`: **a command cannot supply a precondition.** The executor
+computes `expectedBeforeHash` from the snapshot it takes when `execute()` runs. Two consequences,
+found a task apart:
+
+- **`capture` (Task 9, shipped).** Spec §5.2 says a duplicate "is an `O_EXCL` create that fails". No
+  transaction-mediated write can deliver that — the `create` precondition is a snapshot, the lock is
+  keyed per execution, and apply ends in an unconditional `rename`. `capture` documents the property
+  it really has and why the residual window is tolerable *there*: the id is the content hash, so
+  colliding captures are byte-identical and the loser writes the same observation.
+- **`review --decision edit` (Task 10, next).** The same missing precondition leaves a read-to-execute
+  window, and here the loss is **not** benign: the discarded content is the user's own hand edit, in
+  the verb that exists to bring a hand edit back under the product's guarantees.
+
+**Closing this is either an amendment to spec §5.2 plus an accepted window for `edit`, or one change
+to Foundation — an optional caller-supplied precondition on `PlannedFileMutation`.** It is raised as
+a pair rather than twice, because a session that fixes one and not the other has fixed neither.
+
+**A third Foundation request, from Task 10's review, and it is the one with a security cost.**
+`review --decision edit` exists to remove a secret a user pasted into a vault file by hand. It does
+remove it — and `TransactionExecutor.backUp` writes the pre-edit file, raw, to
+`~/.developer-os/backups/transactions/<id>/0.bin` at mode `0600` (`executor.ts:449-467`), where
+nothing ever removes it. The user is told the secret is gone; a second copy survives in a directory
+they have no reason to know about.
+
+**This is a missing prune, not an inherent cost.** `rollbackLocked` throws on a finalized journal
+(`executor.ts:280`), so once `finalize` runs that backup can never be used for anything — it is dead
+bytes. The fix is to prune `backupDirectory(id)` in the `finalized` transition, which is a smaller
+change than the precondition above and independent of it. **No DOS-P6 task extends
+`packages/core/src/transactions/`**, so no session in this subsystem can do it without being told to.
+*(Corrected 2026-08-15: this read "no DOS-P6 task's file list reaches `packages/core`", which is
+false — Tasks 3 and 4 shipped `capabilities/index.ts` and `agent-prompt/index.ts` there. The
+transactions directory is the true and load-bearing boundary, and it is the one the program plan's
+own box-8 note already uses.)*
+
+**A containment escape in shipped DOS-P6 code, found by Task 15's own suite, registered as
+`BACKLOG.md` §1 NEW-14 — and closed on 2026-08-15 by the fix round after Task 19's review, which
+found the same defect a second time in `writeScope`.** Replacing `content/_raw/quarantine` with a
+symbolic link out of the vault used to let `ingest` complete and rewrite the capture file outside it:
+`resolveCapturePath` canonicalized the quarantine root and the target and compared them **against
+each other, never against the content root**, so a quarantine that had moved carried its own
+containment check with it; the writable-path guard did not catch it either, because
+`ProtectedPathPolicy` is a protected-*name* policy that returns early outside `$HOME`. A capture
+*file* that is a symlink **is** refused — by `captureFileNames`'s `entry.isFile()` filter at
+selection, a different guard — so the leaf case was never evidence about the directory case. All three
+commands that touch quarantine — `capture` included, which had no such check at all and wrote the
+user's observation into the relocated directory — now anchor on the configured content root through
+one shared `resolveQuarantineRoot`, and the security suite's parked `it.fails` is an ordinary passing
+case.
+
+**A fourth Foundation request, from Task 13, and it is the cheapest of the four.** `CliResult`'s
+failure arm is `{ok, code, error}` with no `data` slot (`result.ts:29-33`), so **a command that
+partly succeeded cannot report machine-readably what moved.** `ingest` processes a batch and
+contains each capture's refusal to that capture; when any of them refuses, the run ends on the
+failure arm, and the per-capture outcomes ship as lines inside the error's `message` — the precedent
+`brain lint` already set under the identical constraint. A consumer parses prose where it should read
+fields. The fix is a `data` slot on `CliError`, or a partial-success arm on `CliResult`; it changes no
+existing caller, because nothing populates a field that does not exist yet.
+
+**One product gap Task 13 exposed, and it is DOS-P7's rather than Foundation's.** `applyReviewDecision`
+permits a decision only from `quarantined` (`decide.ts:REVIEWABLE`), so **nothing moves a capture from
+`accepted` to `rejected`.** A user who accepts a capture and then changes their mind — or whose
+capture refuses ingest deterministically — has only a hand edit of the file's frontmatter, which is
+what both of `ingest`'s recovery strings now have to tell them to do. Adding the transition is a
+decision about spec §5.5's table, not a bug fix.
+
+**Read `.superpowers/sdd/preflight-findings.md` before dispatching any task.** An adversarial scan
+on 2026-08-13 found thirty-eight defects across Tasks 3–19. **None of the remaining three carries its
+findings.** Tasks 17, 18 and 19 are the ones it found clean, **which is not the same as needing no correction**: it graded Task 14 clean too,
+and three things it does not say still had to be written before dispatch. That file is local scratch
+and not repository state; if it is gone, the scan is owed again.
+
+**`OPTION_NAMES` no longer exists as a list to join, and nothing should tell a task to join it.**
+Three tasks in a row — 10, 13 and 14 — needed the identical pre-dispatch correction: an option added
+to `main.ts`'s `OPTIONS` and to `COMMAND_OPTIONS` but not to the hand-maintained `OPTION_NAMES`
+became invisible to `suppliedOptions`, and the per-command allow-list then admitted it on **every**
+command. Task 14's review found the class rather than the instance, and the list is now derived from
+`Object.keys(OPTIONS)`. A new option is visible to the allow-list the moment it is declared. Older
+task sections in the plan still carry the instruction; they are records of corrections already made,
+and a task copying the pattern would go looking for a list that is gone.
+
+**Read the spec's §3 and then the plan's five decisions.** The spec's five decisions each carry
+their cost; the one that reshapes the subsystem is 3.1: capture content is **agent-authored**,
+because `capture`'s declared `session_end` trigger cannot supply the `text` that same contract
+requires without reading `transcript_path`, which this product refuses on both vendors. Consequences
+the founder accepted — no hooks ship in v1, `developer-os run claude|codex` is never built,
+`wrapper-required` is replaced by `not-used`, and **nothing automatic captures anything**. The
+plan's five decisions are what it had to settle that the spec did not; four of them, and two more
+its tasks raised, are ratified rows in `BACKLOG.md` §8 beside the spec's own six — twelve rows, ten
+ratified 2026-08-13 and the two Tasks 12 and 13 raised on 2026-08-15, each leaving the table when the
+task named beside it lands.
+
+**Read three documents before touching the code**, in this order:
 `docs/architecture/codex-adapter.md`, `docs/architecture/claude-adapter.md`, and
 `docs/architecture/brain.md`. DOS-P6 is the first subsystem that consumes *both* adapters, and the
 two notes are written for exactly that reader.
@@ -55,10 +276,14 @@ appear in it:
 
 **Also DOS-P6's, and easy to miss:** the entire two-gate capability machinery has no production
 caller today — `doctor` never turns probing on — so DOS-P6 is the first to exercise it; the
-`codex exec --json` JSONL terminal-event rule ships **provisional and unverified**, because settling
-it needs a real model call the founder declined on 2026-08-12; and `maxTurns` is bounded under
-Claude and silently dropped under Codex, one shared schema with two behaviours. `codex-adapter.md`
-§11 is the full list with owners.
+`codex exec --json` JSONL terminal-event rule ships **provisional on the success path**, because a
+successful `codex exec` completion is still owed — `BACKLOG.md` §1 NEW-21; and `maxTurns` is bounded
+under Claude and silently dropped under Codex, one shared schema with two behaviours.
+`codex-adapter.md` §11 is the full list with owners.
+
+**On that middle item:** Task 17's run of 2026-08-15 settled the JSONL framing and the discriminating
+`type` field and **not** the terminal-event rule, because the account's usage limit was exhausted
+before any run reached a model response.
 
 **What is closed, and what each closure left behind.** Read the right-hand column before touching
 the subsystem it names; these documents are the reason the plans could be deleted.
@@ -83,14 +308,14 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A10 | DOS-P6 Knowledge pipeline — S / P / I | to write | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` open; the spec is the next session's work and its approval is the founder's |
+| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, nineteen tasks, written 2026-08-13 | — | L | program plan Task 6 checkpoint, after independent security review | **now** — `S` approved and `P` written 2026-08-13; `I` is **17 of 19**, plus Task 19's security review, which returned ready. Task 17 **ran 2026-08-15 and half discharged** — its remainder is NEW-21, the founder's, because it spends their credits — and Task 19's Steps 5–6 remain |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
 | A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |
 
-**A10's dependencies are both discharged**, so nothing gates it but the founder's approval of its
-spec. **A12 gets its own plan** — settled by the founder 2026-08-10, authored against A11's output
-and not before it; `BACKLOG.md` §4 carries the reasoning and what it must contain.
+**A10's dependencies are all discharged and both its gates are closed**, so nothing stands between it
+and code. **A12 gets its own plan** — settled by the founder 2026-08-10, authored against A11's
+output and not before it; `BACKLOG.md` §4 carries the reasoning and what it must contain.
 
 ---
 
@@ -118,6 +343,8 @@ request exists so a human sees it first.
 | how to run a session start to finish | `SESSION.md` |
 | what to do next | this file |
 | what a missing spec must decide, and what it produces | `BACKLOG.md` §3 |
+| what the knowledge pipeline is, why nothing captures automatically, and the six documents it amends | `specs/2026-07-21-developer-os-knowledge-pipeline-design.md` — **approved 2026-08-13** |
+| how it gets built, in nineteen tasks, and the five decisions the spec left to the plan | `plans/2026-07-21-developer-os-knowledge-pipeline.md` |
 | what the Brain engine is, and its six residuals | `docs/architecture/brain.md` |
 | what the workflow compiler is, what it deliberately cannot do, and the four workflows that say less than the product spec does | `docs/architecture/workflow-schema.md` |
 | what the Claude adapter is, why it ships no hooks, and its twelve residuals | `docs/architecture/claude-adapter.md` |
@@ -138,13 +365,18 @@ Foundation, DOS-P2, DOS-P3, DOS-P4 and DOS-P5 are closed — five subsystems of 
 the ones that turn a canonical workflow into something an agent can actually load. **Neither of them
 can execute what it renders**, which is the whole of what remains on the product path.
 
-**Six milestones remain**, each L: DOS-P6's spec, plan and implementation; DOS-P7's spec, plan and
-implementation. Then two more entries that are not subsystems — the cutover (A12) and the release
-(A13) — plus Track L's two items, which are not engineering work at all.
+**Six milestones were counted here**, each L: DOS-P6's spec, plan and implementation; DOS-P7's spec,
+plan and implementation. Then two more entries that are not subsystems — the cutover (A12) and the
+release (A13) — plus Track L's two items, which are not engineering work at all.
+
+**Two of the six closed on 2026-08-13** — DOS-P6's spec, approved by the founder, and its
+implementation plan, written against it the same day. **Four remain**: DOS-P6's implementation, then
+DOS-P7's spec, plan and implementation. An implementation is done when its checkpoint holds with
+evidence in a commit and CI is green on it, not when the tasks are ticked.
 
 `BACKLOG.md` §1 is four repository defects: NEW-7, which needs ten minutes with a machine that has
 Obsidian rather than an agent; NEW-11, which is the same invisible-character rule that closed
 NEW-10 applied to `tags`, `summary` and the duplicates key; NEW-12, where the argv screen's word
 list is applied to free-form prose that only the positional half of the screen protects; and
 NEW-13, where two artifact roots share one type and the wrong one installs cleanly rather than
-refusing.
+refusing — **NEW-13 is DOS-P6's Task 4** and closes there.

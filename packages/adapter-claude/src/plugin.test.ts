@@ -43,8 +43,8 @@ describe("buildPluginTree", () => {
    * is `{ path, contents }`; `ManagedArtifactV1` has `kind: "file"` and no mode.
    *
    * Nothing regresses by removing it. The three lifecycle capabilities are
-   * `wrapper-required` until a hook is observed firing (spec §6.1), and none
-   * ever could be. This test exists so restoring hooks is a deliberate change
+   * `not-used` (DOS-P6 Task 3): a hook has to be observed firing (spec §6.1)
+   * and none ever could be. This test exists so restoring hooks is a deliberate change
    * that has to delete an assertion, not an accident.
    */
   it("emits no hooks, because nothing here can ship an executable hook body", () => {

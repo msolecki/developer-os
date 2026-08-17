@@ -1,6 +1,42 @@
 import { compareCodePoints } from "@developer-os/workflow-schema";
 import type { RenderedArtifact } from "@developer-os/workflow-schema";
 
+/**
+ * Nominal, not structural — the durable fix for `BACKLOG.md` §1 NEW-13.
+ * `RenderedArtifact` (`{path, contents}`) used to describe paths relative to
+ * both the plugin root (`renderCodexPlugin`'s output) and the marketplace
+ * root (`renderCodexInstallTree`'s output, one level up) at once. Because the
+ * plugin root is a *descendant* of the marketplace root, a wrongly-rooted
+ * tree fed to `proposeCodexInstall` did not escape and containment still
+ * passed — it silently under-nested one level too shallow instead of
+ * refusing, and only a runtime guard (`assertWithinPluginTree` in
+ * `install.ts`) caught it.
+ *
+ * Declared here, not in `compose.ts` or `install.ts`, so both can import the
+ * same two types without a cycle: `compose.ts` imports `buildPluginTree` from
+ * this module already, and `install.ts` imports `PLUGIN_TREE_PREFIX` from it
+ * too — this file is the common ancestor.
+ *
+ * Neither brand carries a runtime marker: a `unique symbol` key that is never
+ * actually assigned on any real object erases to nothing once compiled. This
+ * is a compile-time refusal only — the runtime guards in `install.ts` still
+ * have to hold on their own, and still do, once the brand is gone.
+ */
+declare const pluginRoot: unique symbol;
+declare const marketplaceRoot: unique symbol;
+
+/** `renderCodexPlugin`'s output: every path relative to the **plugin root**. */
+export type PluginRootArtifact = RenderedArtifact & { readonly [pluginRoot]: true };
+
+/**
+ * `renderCodexInstallTree`'s output: every path relative to the
+ * **marketplace root**, one level up from `PluginRootArtifact`. The only
+ * type `proposeCodexInstall` accepts.
+ */
+export type MarketplaceRootArtifact = RenderedArtifact & {
+  readonly [marketplaceRoot]: true;
+};
+
 export const PLUGIN_NAME = "developer-os";
 
 /** Everything this adapter owns lives under one directory of the product home. */

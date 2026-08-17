@@ -98,6 +98,17 @@ export async function discoverCli(
  * rather than silently dropping the offending entry, because a caller that
  * asked for a bypass has a bug worth reporting.
  *
+ * **The two rules are applied by two functions, and the split is positional.**
+ * `screenValueArgument` applies both and is what every value that could be
+ * reread as a flag gets — a tool name, a write scope, a working root, an output
+ * schema path. `screenProseArgument` applies rule one alone and is what a
+ * free-form prose argument gets. The word list buys nothing on prose, which
+ * cannot be reinterpreted as an option, while refusing text nobody chose:
+ * DOS-P6 puts a **capture body** in an argv value position, and an ordinary
+ * `EACCES` message names a permission. Narrowing the word list instead would
+ * weaken the values that do need it, which is the direction this screen exists
+ * to prevent (BACKLOG NEW-12).
+ *
  * **Rule two, the word list, is nominal and best-effort:** `permission|danger|
  * bypass`, wider than the `permission|dangerous` that first shipped. It
  * exists because a value naming a permission or bypass surface can arrive
@@ -110,11 +121,30 @@ export async function discoverCli(
  * term; it is not, and cannot be made, complete the way the dash rule is.
  */
 export function screenValueArgument(value: string, field: string): string | null {
-  if (value.startsWith("-")) {
-    return `${field} may not begin with "-": it would be read as an option, not a value`;
-  }
+  const positional = screenProseArgument(value, field);
+  if (positional !== null) return positional;
   if (/permission|danger|bypass/iu.test(value)) {
     return `${field} names a permission or bypass surface that is refused in a value position`;
+  }
+  return null;
+}
+
+/**
+ * **The weaker of the two screens, and the wrong default.** Reach for
+ * `screenValueArgument` unless the value is prose that a vendor CLI cannot
+ * reread as a flag — a prompt, and nothing else in this codebase today. A caller
+ * choosing between them by which one accepts its string has chosen wrongly by
+ * construction, which is the one hazard of exporting both: the name says what
+ * the argument must *be*, not that this function asks less of it.
+ *
+ * Rule one alone, then: it is a narrowing of `screenValueArgument` rather than a
+ * second policy beside it — the complete rule is kept and the best-effort one is
+ * dropped — so a prompt beginning with `-` is refused here exactly as it was
+ * before.
+ */
+export function screenProseArgument(value: string, field: string): string | null {
+  if (value.startsWith("-")) {
+    return `${field} may not begin with "-": it would be read as an option, not a value`;
   }
   return null;
 }

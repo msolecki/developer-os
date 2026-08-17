@@ -3,6 +3,7 @@ import { isAbsolute } from "node:path";
 import { parse, stringify } from "smol-toml";
 import { z } from "zod";
 
+import { pathSegmentViolation } from "./segment.js";
 import type { DeveloperOsConfigV1 } from "./types.js";
 
 const absolutePathSchema = z
@@ -19,20 +20,24 @@ const absolutePathSchema = z
  * A single path segment, never a path. Topic folders, the content root, and the
  * index directory are joined onto the vault root, so accepting `..` or a
  * separator here would let a configuration file walk out of the vault before any
- * guard sees the resulting path.
+ * guard sees the resulting path. `pathSegmentViolation` is `./segment.js`,
+ * shared with `packages/workflow-schema`'s `resolveScopeGlob` rather than
+ * reimplemented here a second time — see that module's docblock for why a
+ * second implementation is the defect, not a safety margin, and for why a
+ * glob metacharacter is not one of the reasons this schema refuses a value.
+ *
+ * `superRefine`, not `refine`, so the issue this schema raises states the
+ * actual rule the value broke. `pathSegmentViolation` was built to hand back
+ * a reason precisely so a caller does not have to invent one — a fixed
+ * `refine` message would have thrown that reason away at the one call site a
+ * user actually meets a validation error from.
  */
-const pathSegmentSchema = z
-  .string()
-  .min(1)
-  .refine(
-    (value) =>
-      !value.includes("\0") &&
-      !value.includes("/") &&
-      !value.includes("\\") &&
-      value !== "." &&
-      value !== "..",
-    { message: "Must be a single path segment" },
-  );
+const pathSegmentSchema = z.string().superRefine((value, ctx) => {
+  const violation = pathSegmentViolation(value);
+  if (violation !== null) {
+    ctx.addIssue({ code: "custom", message: `${JSON.stringify(value)} ${violation}` });
+  }
+});
 
 /**
  * `z.record` silently *drops* these keys before the key schema ever runs, so

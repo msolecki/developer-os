@@ -3,14 +3,8 @@ import { parseAgentPromptArgs } from "./index.js";
 
 describe("parseAgentPromptArgs", () => {
   it("accepts a well-formed argument object", () => {
-    const parsed = parseAgentPromptArgs({ prompt: "summarise", maxTurns: 3 });
-    expect(parsed).toEqual({ ok: true, args: { prompt: "summarise", maxTurns: 3 } });
-  });
-
-  it("defaults maxTurns rather than leaving the loop unbounded", () => {
     const parsed = parseAgentPromptArgs({ prompt: "summarise" });
-    expect(parsed.ok).toBe(true);
-    if (parsed.ok) expect(parsed.args.maxTurns).toBeGreaterThan(0);
+    expect(parsed).toEqual({ ok: true, args: { prompt: "summarise" } });
   });
 
   it("refuses an unknown key rather than ignoring it", () => {
@@ -20,7 +14,7 @@ describe("parseAgentPromptArgs", () => {
   });
 
   it("refuses a missing prompt", () => {
-    expect(parseAgentPromptArgs({ maxTurns: 1 }).ok).toBe(false);
+    expect(parseAgentPromptArgs({}).ok).toBe(false);
   });
 
   it("refuses an empty prompt", () => {
@@ -46,10 +40,40 @@ describe("parseAgentPromptArgs", () => {
     expect(parseAgentPromptArgs(hostile).ok).toBe(false);
   });
 
-  it("refuses maxTurns outside its bounds", () => {
-    expect(parseAgentPromptArgs({ prompt: "x", maxTurns: 0 }).ok).toBe(false);
-    expect(parseAgentPromptArgs({ prompt: "x", maxTurns: 1000 }).ok).toBe(false);
-    expect(parseAgentPromptArgs({ prompt: "x", maxTurns: 1.5 }).ok).toBe(false);
+  /**
+   * Before this task, only an out-of-bounds `maxTurns` was refused; a
+   * within-bounds one (`1`) was honoured. The refusal below is unconditional
+   * on the value — `1` is refused for carrying the key at all, not for what
+   * it is set to, which is what distinguishes this from the old bounds check
+   * it replaces.
+   */
+  it("refuses maxTurns regardless of its value, not only ones outside the old bounds", () => {
+    for (const maxTurns of [0, 1, 1.5, 1000]) {
+      expect(parseAgentPromptArgs({ prompt: "x", maxTurns }).ok).toBe(false);
+    }
+  });
+
+  /**
+   * `docs/architecture/codex-adapter.md` §11: `maxTurns` is bounded and
+   * enforced under Claude, and silently dropped under Codex — a value that
+   * validates while the property it names is false, which is the shape this
+   * codebase refuses everywhere else (the `scheduled` trigger carries the
+   * same DOS-P7-owned refusal). This is that refusal for `agent.prompt`.
+   */
+  it("refuses maxTurns rather than honouring it on one vendor and dropping it on the other", () => {
+    const outcome = parseAgentPromptArgs({ prompt: "hello", maxTurns: 3 });
+    expect(outcome.ok).toBe(false);
+    expect(!outcome.ok && outcome.message).toContain("DOS-P7");
+  });
+
+  /**
+   * A regression pin, not a failing test: `maxTurns` carried `.default(5)`
+   * before this change, so a `prompt`-only object was already accepted.
+   * Recorded in the report as a finding, per the TDD requirement that a test
+   * passing on its first run is itself something to note.
+   */
+  it("still accepts a prompt on its own", () => {
+    expect(parseAgentPromptArgs({ prompt: "hello" }).ok).toBe(true);
   });
 
   it("is total for any unknown input, including hostile objects", () => {

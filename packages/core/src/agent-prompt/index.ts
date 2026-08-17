@@ -2,30 +2,17 @@ import { z } from "zod";
 
 export interface AgentPromptArgs {
   readonly prompt: string;
-  readonly maxTurns: number;
 }
 
 export type AgentPromptOutcome =
   | { readonly ok: true; readonly args: AgentPromptArgs }
   | { readonly ok: false; readonly message: string };
 
-/**
- * Bounded because an unbounded agentic loop inside a workflow with declared
- * scopes is a workflow whose cost and reach are decided by the model.
- */
-const MAX_TURNS_CEILING = 50;
-const DEFAULT_MAX_TURNS = 5;
 const PROMPT_CEILING = 100_000;
 
 const schema = z
   .object({
     prompt: z.string().min(1).max(PROMPT_CEILING),
-    maxTurns: z
-      .number()
-      .int()
-      .min(1)
-      .max(MAX_TURNS_CEILING)
-      .default(DEFAULT_MAX_TURNS),
   })
   .strict();
 
@@ -75,6 +62,21 @@ function parse(input: unknown): AgentPromptOutcome {
     return {
       ok: false,
       message: "agent.prompt arguments carry a reserved key",
+    };
+  }
+
+  // `docs/architecture/codex-adapter.md` §11: a `maxTurns` bounded and
+  // enforced under Claude but silently dropped under Codex is a value that
+  // validates while the property it names is false — the same shape this
+  // codebase refuses for the `scheduled` trigger, and for the same reason.
+  // Screened before `.strict()` gets to see it, matching the `__proto__`
+  // check above: the point is a message that names the owner, not the
+  // schema's generic "unrecognized key" refusal.
+  if (Object.prototype.hasOwnProperty.call(input, "maxTurns")) {
+    return {
+      ok: false,
+      message:
+        "agent.prompt does not accept maxTurns: it is bounded under Claude and silently dropped under Codex. A turn bound needs both vendors at once — owner DOS-P7",
     };
   }
 

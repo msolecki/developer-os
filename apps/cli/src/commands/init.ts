@@ -21,11 +21,13 @@ import type {
 import {
   assertDisjointPaths,
   canonicalizePlannedPath,
+  redactText,
 } from "@developer-os/security";
 
 import {
   assertRootsAnchored,
   failureFrom,
+  loadOrCreateRedactionKey,
   ownershipAnchorsFor,
   renderPath,
   runtimePathsFor,
@@ -35,6 +37,12 @@ import {
   BRAIN_TEMPLATE_DIRECTORIES,
 } from "./brain-template.js";
 import type { CliContext } from "../context.js";
+import {
+  OUTPUT_SCHEMA_DIRECTORY,
+  OUTPUT_SCHEMAS,
+  outputSchemaFileName,
+  outputSchemaPath,
+} from "./output-schemas.js";
 import {
   advisoryWarnings,
   detectManagedDrift,
@@ -49,6 +57,7 @@ import { removeManifestFile, revertArtifacts } from "./uninstall.js";
 
 const BRAIN_KEEP_FILE = ".gitkeep";
 const CONFIG_SOURCE = "generated/config.toml";
+const SCHEMA_SOURCE_PREFIX = "generated/schemas";
 const BRAIN_KEEP_SOURCE = "generated/brain/.gitkeep";
 const DIRECTORY_SOURCE = "generated/directory";
 
@@ -118,6 +127,15 @@ function productDirectoriesOf(paths: RuntimePaths): readonly string[] {
     paths.stagingDir,
     paths.backupsDir,
     paths.logsDir,
+    /**
+     * Derived here rather than added to `RuntimePaths`, and the location of
+     * the derivation is `output-schemas.ts` so that `init` writing the file
+     * and `ingest` naming it cannot drift apart. It belongs in this list
+     * because it is owned, created and mode-corrected exactly like the
+     * others — the difference is only that it holds installed content rather
+     * than runtime state, which no consumer of this list distinguishes.
+     */
+    join(paths.home, OUTPUT_SCHEMA_DIRECTORY),
   ];
 }
 
@@ -172,6 +190,20 @@ async function assertUsableDirectory(
     );
   }
   return directory === true;
+}
+
+/**
+ * `true` only for a regular file. A symlink where a managed artifact belongs
+ * reports `false` and is therefore planned as a `create`, which the transaction
+ * executor's own target assertion then refuses — the refusal a caller can act
+ * on, rather than a silent write through the link.
+ */
+async function isFile(context: CliContext, path: string): Promise<boolean> {
+  try {
+    return (await context.fs.lstat(path)).isFile();
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -242,6 +274,29 @@ async function buildPlan(context: CliContext): Promise<InitPlan> {
     created.push(paths.configFile);
   } else {
     unchanged.push(paths.configFile);
+  }
+
+  /**
+   * One JSON Schema file per structured-result verb (knowledge-pipeline spec
+   * §6.6), planned **per file** rather than gated on "this run created the
+   * home". `init` is the upgrade path as well as the install path, so a run on
+   * a machine that already has a home is the run that has to install a schema
+   * added since — while an unconditional plan would emit a `create` over a
+   * file that exists, which the change-plan validator refuses, and `init`
+   * would fail on every machine it had already succeeded on.
+   */
+  for (const schema of OUTPUT_SCHEMAS) {
+    const path = outputSchemaPath(paths.home, schema.verb);
+    if (await isFile(context, path)) {
+      unchanged.push(path);
+      continue;
+    }
+    productFiles.push({
+      path,
+      content: new TextEncoder().encode(schema.content),
+      source: `${SCHEMA_SOURCE_PREFIX}/${outputSchemaFileName(schema.verb)}`,
+    });
+    created.push(path);
   }
 
   const brainPresent = await inspectBrain(context, paths.brain);
@@ -582,6 +637,28 @@ export async function runInit(
   options: InitOptions,
   dependencies: InitDependencies = DEFAULT_DEPENDENCIES,
 ): Promise<CliResult<InitResultV1>> {
+  /**
+   * `context.guards` closes over whatever key existed when the context was
+   * built — an ephemeral one on the machine `init` is initializing.
+   *
+   * **This rebinding covers `runInit`'s own terminal diagnostic and nothing
+   * else, and the limit is structural rather than an oversight.** The helpers
+   * below take `context` and redact through the guards it carries;
+   * `context.executor` and `context.runner` closed over the ephemeral key when
+   * the context was constructed, and neither can be corrected from here
+   * without rebuilding them. Nothing `init` persists carries a fingerprint, so
+   * what is left is a cosmetic difference in an error message, not a
+   * comparability bug.
+   *
+   * **The pattern Task 8 copies is the rule, not this binding: redact with the
+   * key you loaded, at the point you loaded it.** `capture`, `review` and
+   * `ingest` must hand their own key to `redactText` for the content they
+   * persist a fingerprint of. A command that swapped guards only on its error
+   * path would fingerprint captured content with the ephemeral key, which is
+   * the exact defect this task exists to kill.
+   */
+  let guards = context.guards;
+
   try {
     await context.platform.inspect();
     await assertNoIncompleteTransaction(context);
@@ -600,7 +677,24 @@ export async function runInit(
       transactionId: null,
     };
 
-    if (options.dryRun || plan.created.length === 0) return success(settled);
+    if (options.dryRun) return success(settled);
+
+    if (plan.created.length === 0) {
+      /**
+       * Nothing to install — and still not a no-op, because the key may be
+       * the one thing missing. `doctor` names `init` as the recovery for
+       * every unusable-key state it reports, so `init` has to be one on a
+       * machine where there is nothing else left to do; below the early
+       * return, the only production caller of `loadOrCreateRedactionKey` in
+       * the tree was unreachable on exactly those machines.
+       *
+       * `stateDir` is guaranteed to exist here: it is one of
+       * `productDirectoriesOf`, so a missing one would have put it in
+       * `plan.created` and this branch would not have been taken.
+       */
+      loadOrCreateRedactionKey(plan.paths.stateDir);
+      return success(settled);
+    }
 
     const operations = await validateOperations(context, plan);
 
@@ -613,6 +707,32 @@ export async function runInit(
     }
 
     await createDirectories(context, plan);
+
+    /**
+     * Created now, immediately after `stateDir` exists, so an installation
+     * never completes without a durable redaction key — every fingerprint
+     * `capture` ever records depends on this being the same key every run.
+     * Deliberately outside `mutationsFor`/`recordArtifacts`: it is not a
+     * managed artifact, so it never appears in `installation-manifest.json`
+     * and a drift report never hashes it (DOS-P6 Task 1, spec §3.5, §8.4).
+     *
+     * It is not in `plan.created` either, and that gap is deliberate:
+     * `created` enumerates the *managed artifacts* a run installs, so naming a
+     * non-artifact there would imply the manifest owns it — the one claim
+     * `installation-manifest.json` must never make about this file. Like the
+     * journals and lock files beside it, the key is internal to `stateDir`.
+     *
+     * The path itself is not a secret, and no rule here says otherwise:
+     * `doctor --json` publishes it deliberately, because a diagnostic that
+     * cannot name the file it is reporting on is not a diagnostic. What must
+     * never appear in any output is the key's *bytes*.
+     */
+    const durableKey = loadOrCreateRedactionKey(plan.paths.stateDir);
+    guards = {
+      ...context.guards,
+      redactDiagnostic: (text: string): string =>
+        redactText(text, durableKey).text,
+    };
 
     const journal = await context.executor.execute({
       kind: "init",
@@ -662,7 +782,7 @@ export async function runInit(
     return success({ ...settled, transactionId: journal.id }, advisories);
   } catch (error) {
     return failureFrom(
-      context,
+      { guards },
       error,
       error instanceof InitRefusal ? error.paths : [],
       error instanceof InitRefusal ? error.recovery : undefined,

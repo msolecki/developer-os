@@ -53,12 +53,12 @@ function manifest(): RenderedArtifact {
  * has `kind: "file"` and no mode. A non-executable script fails exactly as a
  * missing one does.
  *
- * So the honest state is: this adapter ships skills, and capture and injection
- * go through the wrapper — which is what the capability model already reports,
- * because `session_end_capture`, `session_start_injection` and
- * `pre_compact_backup` are `wrapper-required` until a hook is *observed firing*
- * (spec §6.1) and none ever could be. Nothing regresses; a claim that was
- * always false stops being made.
+ * So the honest state is: this adapter ships skills, and nothing automatic
+ * captures anything — which is what the capability model reports, because
+ * `session_end_capture`, `session_start_injection` and `pre_compact_backup` are
+ * `not-used` (DOS-P6 Task 3; they were `wrapper-required` until spec §3.1
+ * declined the wrapper too). Nothing regresses; a claim that was always false
+ * stops being made.
  *
  * **What restoring it needs**, together, in one change: the hook bodies (whose
  * behaviour is DOS-P6's capture contract), a way to mark a generated artifact

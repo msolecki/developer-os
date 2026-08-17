@@ -147,8 +147,8 @@ async function listPlugins(
  * did not write. Anything that parsed but fails one of the three is
  * `absent`. Anything that did not parse, exited non-zero, or timed out is
  * `unavailable` — never `absent`: "we could not ask" and "we asked and it is
- * not there" are different facts, and a `wrapper-required` state must never
- * be reached by conflating a refusal to answer with an answer of no.
+ * not there" are different facts, and a settled state must never be reached by
+ * conflating a refusal to answer with an answer of no.
  *
  * `observations` always carries the `skills` key, even when nothing is
  * installed, so a clean result records that a check ran rather than being

@@ -1,9 +1,9 @@
 schemaVersion: 1
 id: shared
-version: 1.0.0
-description: The common preamble and refusal set every other workflow extends.
+version: 2.0.0
+description: Read back the safety rules every other developer-os workflow carries — untrusted vault content, no fetched links, no widened scope — for a person who wants to see them written out.
 triggers:
-  - session_start
+  - manual
 inputs: {}
 output:
   acknowledged:
@@ -38,4 +38,4 @@ validators:
   - the preamble names untrusted input and declared scopes
 recovery:
   leaves: nothing
-  resume: developer-os doctor
+  resume: Nothing to resume; re-invoke this skill to read the preamble again.

@@ -34,6 +34,7 @@ describe("the package's public door", () => {
       [
         "CODEX_CAPABILITY_KEYS",
         "CODEX_MINIMUM_VERSION",
+        "CODEX_NOT_USED_KEYS",
         "CODEX_ROOT_SEGMENT",
         "CodexAdapter",
         "CodexRenderer",

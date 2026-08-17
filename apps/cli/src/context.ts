@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import fsSync from "node:fs";
 import {
   chmod,
   link,
@@ -56,7 +57,7 @@ import type { CliIo } from "./io.js";
 
 export const PRODUCT_VERSION = "0.0.0";
 
-const REDACTION_KEY_BYTES = 32;
+export const REDACTION_KEY_BYTES = 32;
 
 /**
  * The union of every filesystem surface Foundation's core modules require,
@@ -260,6 +261,50 @@ export async function assertRootsAnchored(
 }
 
 /**
+ * The quarantine directory, canonicalized and **proven inside the configured
+ * content root** before anything is measured against it.
+ *
+ * **One implementation for the three commands that touch quarantine**, because
+ * this is a containment check and this repository's own rule for those is that
+ * they must not exist twice (`packages/security/src/cli.ts:10-13`). It arrived
+ * as two copies in `ingest` and `review`, and `capture` — the command that
+ * *writes* the capture — had no check at all; a third copy is how the next
+ * command to be added inherits two of the three.
+ *
+ * **What it catches.** Every caller builds this path textually from
+ * `contentRoot` plus `_raw/quarantine`, so a quarantine directory replaced by a
+ * symbolic link carries any check measured *relative to itself* along with it:
+ * `containsPath(canonicalQuarantine, canonicalTarget)` holds at the new location
+ * exactly as it did at the old one, and `validateChangePlan`'s `ownedRoots` is
+ * satisfied by a **sideways** relocation because such a root neither grows
+ * authority nor lands in `excludedRoots`. Anchoring on the content root is what
+ * makes the question absolute. `ProtectedPathPolicy` answers a different one —
+ * it is a protected-*name* policy and returns early for any path outside `$HOME`
+ * (`packages/security/src/protected-paths.ts:125`).
+ *
+ * **`refuse` is injected** for the reason `writeIndexArtifacts` states at
+ * `apps/cli/src/commands/reindex.ts:93-99`: each command raises its own refusal
+ * class carrying its own exit code and recovery text, and a shared module
+ * inventing a third would throw every caller an error its catch clause does not
+ * recognise.
+ */
+export async function resolveQuarantineRoot(
+  context: CliContext,
+  contentRoot: string,
+  quarantine: string,
+  refuse: (message: string, paths: readonly string[]) => Error,
+): Promise<string> {
+  const canonicalContentRoot = await context.guards.canonicalize(contentRoot);
+  const canonicalQuarantine = await context.guards.canonicalize(quarantine);
+  if (!containsPath(canonicalContentRoot, canonicalQuarantine)) {
+    throw refuse("the quarantine directory resolves outside the content root", [
+      quarantine,
+    ]);
+  }
+  return canonicalQuarantine;
+}
+
+/**
  * The `ManifestGuards.assertReadable` shape Task 6 specified: refuse protected
  * paths, then return the path with every ancestor canonicalized and the final
  * component preserved verbatim.
@@ -381,6 +426,198 @@ export function failureFrom(
   });
 }
 
+const REDACTION_KEY_FILE = "redaction.key";
+
+/**
+ * The one path `uninstall` removes outside the manifest (spec's decision 5,
+ * `BACKLOG.md` §8). Centralized so that exception stays exactly one path
+ * wide: `init`, `uninstall`, and `doctor` all name the key through this
+ * function rather than each spelling `"redaction.key"` again, which would
+ * leave the literal free to drift out of sync with what `loadOrCreateRedactionKey`
+ * actually reads and writes.
+ */
+export function redactionKeyPath(stateDir: string): string {
+  return join(stateDir, REDACTION_KEY_FILE);
+}
+
+/**
+ * `O_NOFOLLOW` because a symlink at this path is not our file. `O_NONBLOCK`
+ * because `open(O_RDONLY)` on a **FIFO** blocks until a writer appears, and the
+ * regular-file guard below is downstream of the open — without it, anyone who
+ * can write to `stateDir` can hang every invocation of the CLI forever, with no
+ * output and no diagnostic. On a regular file the flag is a no-op; on a FIFO it
+ * turns an unbounded wait into an open that `isFile()` immediately refuses.
+ */
+const REDACTION_KEY_READ_FLAGS =
+  fsSync.constants.O_RDONLY |
+  fsSync.constants.O_NOFOLLOW |
+  fsSync.constants.O_NONBLOCK;
+
+/**
+ * The point-of-use read: returns the durable bytes, or `null` when — and only
+ * when — no file is there at all. Every other unusable state is a refusal,
+ * because a file this product owns being a symlink, a FIFO, or eight bytes long
+ * is a finding, not an absence.
+ *
+ * Tightening an over-permissive mode rather than refusing is deliberate, and
+ * the asymmetry with the symlink case is the point: a secret this product owns,
+ * at a mode this product got wrong, is repaired; a file that is *not ours* is
+ * never touched.
+ */
+function readOwnRedactionKey(file: string): Uint8Array | null {
+  let handle: number;
+  try {
+    handle = fsSync.openSync(file, REDACTION_KEY_READ_FLAGS);
+  } catch (error) {
+    const { code } = error as NodeJS.ErrnoException;
+    if (code === "ELOOP") {
+      throw new SecurityRefusalError("the redaction key is a symlink");
+    }
+    if (code !== "ENOENT") throw error;
+    return null;
+  }
+  try {
+    const stats = fsSync.fstatSync(handle);
+    if (!stats.isFile()) {
+      throw new SecurityRefusalError("the redaction key is not a regular file");
+    }
+    const key = fsSync.readFileSync(handle);
+    if (key.byteLength < REDACTION_KEY_BYTES) {
+      throw new SecurityRefusalError("the redaction key is too short");
+    }
+    if ((stats.mode & 0o777) !== 0o600) fsSync.fchmodSync(handle, 0o600);
+    return key;
+  } finally {
+    fsSync.closeSync(handle);
+  }
+}
+
+/**
+ * Writes a fresh key with `O_CREAT | O_EXCL`, so this call either creates the
+ * file or discovers that another process already has. On `EEXIST` it re-reads
+ * through the same guarded door — **once**. That bound matters: the first
+ * implementation re-entered `loadOrCreateRedactionKey`, so a process deleting
+ * the file between the two calls put this one in an unbounded create/read loop
+ * rather than in an error anyone could act on.
+ *
+ * The write is checked and flushed before the handle closes, and a creation
+ * that fails for any reason takes its own half-written file with it. A
+ * truncated key is worse than no key: every later run refuses it, so a full
+ * disk during the first `init` would otherwise leave a machine that no command
+ * can run on.
+ */
+function createRedactionKey(file: string): Uint8Array {
+  let handle: number;
+  try {
+    handle = fsSync.openSync(
+      file,
+      fsSync.constants.O_CREAT | fsSync.constants.O_EXCL | fsSync.constants.O_WRONLY,
+      0o600,
+    );
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    const raced = readOwnRedactionKey(file);
+    if (raced === null) {
+      throw new Error(
+        "the redaction key was created and removed while this run was reading it; run the command again",
+      );
+    }
+    return raced;
+  }
+
+  const key = randomBytes(REDACTION_KEY_BYTES);
+  try {
+    const written = fsSync.writeSync(handle, key);
+    if (written !== key.byteLength) {
+      throw new Error(
+        `the redaction key was only partially written (${String(written)} of ${String(key.byteLength)} bytes)`,
+      );
+    }
+    fsSync.fsyncSync(handle);
+    fsSync.closeSync(handle);
+  } catch (error) {
+    try {
+      fsSync.closeSync(handle);
+    } catch {
+      /* the handle is unusable either way; the unlink below is what matters */
+    }
+    try {
+      fsSync.unlinkSync(file);
+    } catch {
+      /* nothing here can improve on the failure already being thrown */
+    }
+    throw error;
+  }
+  return key;
+}
+
+/**
+ * The point-of-use door, for the commands that genuinely need a durable key:
+ * `init` today, and `capture`, `review` and `ingest` after Task 8. Creates when
+ * absent, refuses a symlink or a non-regular file, tightens an over-permissive
+ * mode.
+ *
+ * The product's first secret at rest, and deliberately **not** a managed
+ * artifact: absent from `installation-manifest.json`, so it is never hashed into
+ * a drift report and never printed by a diagnostic that enumerates manifest
+ * contents (spec §3.5, §8.4).
+ *
+ * Losing it makes old fingerprints incomparable, never captures unreadable —
+ * content is not encrypted with it, only fingerprints are derived from it.
+ */
+export function loadOrCreateRedactionKey(stateDir: string): Uint8Array {
+  const file = redactionKeyPath(stateDir);
+  return readOwnRedactionKey(file) ?? createRedactionKey(file);
+}
+
+/**
+ * The composition root's door. **Never creates, never throws, never repairs.**
+ *
+ * `null` for absent, unreadable, symlinked, wrong-typed or too short alike —
+ * every one of which `doctor` must be able to *report*, which it cannot do if
+ * building the context already threw. The first implementation of this task
+ * called `loadOrCreateRedactionKey` here, and the consequences were not
+ * stylistic: `doctor`, `status` and both `--dry-run` commands wrote a new
+ * secret to disk merely by having a context built for them, and a symlink or a
+ * truncated file at the key path failed *every* command, including the
+ * diagnostic that would have reported it, with no in-product way back.
+ *
+ * Mode is deliberately not inspected: a repair here would be the same
+ * contract violation in smaller form. `doctor` reports an over-permissive key;
+ * the next command that needs a durable one tightens it.
+ */
+export function readRedactionKey(stateDir: string): Uint8Array | null {
+  let handle: number;
+  try {
+    handle = fsSync.openSync(
+      redactionKeyPath(stateDir),
+      REDACTION_KEY_READ_FLAGS,
+    );
+  } catch {
+    return null;
+  }
+  try {
+    const stats = fsSync.fstatSync(handle);
+    if (!stats.isFile()) return null;
+    const key = fsSync.readFileSync(handle);
+    return key.byteLength < REDACTION_KEY_BYTES ? null : key;
+  } catch {
+    return null;
+  } finally {
+    fsSync.closeSync(handle);
+  }
+}
+
+/**
+ * Emitted on `stderr` — never `stdout`, which carries `--json` — every time a
+ * run falls back to an ephemeral key. Spec's binding constraint: "a missing key
+ * regenerates on next use **with a warning that prior fingerprints are no
+ * longer comparable**". Silence here is what makes two captures look
+ * comparable when they are not.
+ */
+const EPHEMERAL_KEY_WARNING =
+  "warning: no comparable redaction key; fingerprints from this run cannot be compared with earlier ones";
+
 export interface ProductionContextOptions {
   readonly io: CliIo;
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -392,14 +629,28 @@ export interface ProductionContextOptions {
  * adapter. Nothing here inspects the host: `platform.inspect()` throws on an
  * unsupported one, and `doctor` must be able to report that as a check rather
  * than fail before dispatch.
+ *
+ * `paths` is resolved before the redaction key rather than after: the key is
+ * persisted under `paths.stateDir` now (DOS-P6 Task 1), where it used to be a
+ * per-process `randomBytes()` call that owed nothing to the filesystem.
+ *
+ * **`readRedactionKey`, never `loadOrCreateRedactionKey`.** A context is built
+ * for every command before dispatch, so creating here would make `doctor`,
+ * `status` and both `--dry-run` commands write a secret to disk. The ephemeral
+ * fallback is a real key, not a stub, so diagnostics on a machine that has
+ * never been initialized are still redacted — it is exactly the old
+ * per-process behaviour, now scoped to the one case where nothing durable
+ * exists, and announced rather than silent.
  */
 export function createProductionContext(
   options: ProductionContextOptions,
 ): CliContext {
   const policy = new ProtectedPathPolicy(options.userHome);
-  const redactionKey = randomBytes(REDACTION_KEY_BYTES);
-  const guards = createGuards(policy, redactionKey);
   const paths = resolveRuntimePaths(pathEnvironmentFor(options));
+  const durable = readRedactionKey(paths.stateDir);
+  if (durable === null) options.io.stderr(EPHEMERAL_KEY_WARNING);
+  const redactionKey = durable ?? randomBytes(REDACTION_KEY_BYTES);
+  const guards = createGuards(policy, redactionKey);
   const lockProvider = new MacOsTransactionLockProvider();
   const runner = new NodeProcessRunner({
     assertCommand: assertSafeCommand,
