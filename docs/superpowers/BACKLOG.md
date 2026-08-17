@@ -64,7 +64,7 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P6 | spec approved and plan written, both 2026-08-13 | **three unticked steps** — Task 17 Step 3 (the Codex detection row, blocked on NEW-21) and Task 19 Steps 5–6 (close the documents, run the gate), which wait on it. Seventeen of nineteen tasks landed 2026-08-13/14/15 and their step lists are deleted |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | **eleven rows.** Four were decided 2026-08-17 and are being implemented as Track R **R2** — NEW-15, NEW-22, NEW-16, NEW-11. Four belong to somebody else — NEW-21 (the founder's, blocks A10), NEW-20 and NEW-13 (deliberately not fixed), NEW-7 (needs a machine with Obsidian). Three came from the review that closed NEW-12 on 2026-08-17 — its two successors and NEW-23, the unchecked `path:line` citations |
+| Repository-level | §1 | **ten rows.** Four were decided 2026-08-17 and are being implemented as Track R **R2** — NEW-15, NEW-22, NEW-16, NEW-11. Four belong to somebody else — NEW-21 (the founder's, blocks A10), NEW-20 and NEW-13 (deliberately not fixed), NEW-7 (needs a machine with Obsidian). Two came from the review that closed NEW-12 on 2026-08-17; a third, NEW-23, was closed the same day by the citation gate |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -108,15 +108,16 @@ they closed, between 2026-08-10 and 2026-08-15, and **NEW-12 on 2026-08-17**. Wh
 leaves behind is a row in §8, a clause in a spec, or a test; if it left nothing, it was not worth
 recording. Git history is the archive.
 
-**Eleven rows, and they are not all the same kind of open.** **Four were waiting on a decision, got one
+**Ten rows, and they are not all the same kind of open.** **Four were waiting on a decision, got one
 on 2026-08-17, and are being implemented** as `ORDER.md` Track R entry **R2** — **NEW-15**,
 **NEW-22**, **NEW-16** and **NEW-11**. They stay here until R2 closes them, because a row leaves this
 section when its fix is committed, not when its question is answered. Four are somebody else's:
 **NEW-21** the founder's, **NEW-20** and **NEW-13** registered as deliberately-not-fixed, and
 **NEW-7** waiting on a machine with Obsidian.
 
-**Three are new, and all three were found by the review that closed NEW-12 rather than by the work
-itself** — its successor, its coverage residual, and **NEW-23**. That is the ordinary yield of a
+**Two are new, and both were found by the review that closed NEW-12 rather than by the work
+itself** — its successor and its coverage residual. A third, NEW-23, was found the same way and
+**closed the same day** by Track R Task 1b, which built the gate it asked for. That is the ordinary yield of a
 fresh-context review and the reason the gate exists: closing a defect moved a trap one field over,
 made one branch unreachable, and the fix for a stale line citation broke twelve more. None was
 visible to the author.
@@ -419,111 +420,6 @@ one, and that is what this row is now.
 - **No fixture can reach it**, because the refusal happens before the fake runner is called and the
   harness has no injection point for a vendor outcome. Recorded rather than replaced with a test that
   would have to fake the thing it is testing.
-
-### NEW-23 — `path:line` citations rot silently, and nothing checks them
-
-- **Status:** open, registered 2026-08-17 after this became a review finding for the **third time in
-  two rounds** · **Owner:** whoever adds the next repository check — DOS-P7 by default · **Size:** S ·
-  **Documentation integrity**
-- **The architecture notes hold themselves to a standard nothing enforces.**
-  `knowledge-pipeline.md`'s own preamble says "every claim here points at code or at a named test
-  case, `path:line`, which is the standard `threat-model.md` holds itself to." **Counted 2026-08-17
-  by script rather than by estimate: 372 citations across nine documents** — 218 full `path:line`,
-  117 bare continuations (`` `:1041-1054` ``, resolved against the last filename on the line), and 37
-  bare basenames (`` `ingest.ts:541` ``). They are maintained by hand, and **`npm run check` is green
-  with every one of them broken.**
-- **They rot on any edit, not on a rewrite**, and this row exists because the repair is harder than
-  the rot. Adding eleven lines to one docblock in `apps/cli/src/commands/ingest.ts` moved twelve
-  citations in two documents. The session that noticed then made it **worse, twice**: it computed the
-  shift arithmetically from a stale diff, so every correction was off by nine; and a typo in its own
-  substitution script wrote the literal string `appsig/PLACEHOLDER` into two of `threat-model.md`'s
-  security-invariant evidence cells, where `npm run check` passed over it. **A freshly-touched wrong
-  citation is worse than an untouched stale one, because it looks verified.**
-- **What worked, and is the method any fix must use:** map HEAD line → current line with a diff over
-  file *contents*, then accept a new address only when the cited lines are byte-equal to what HEAD
-  held. Arithmetic on hunk offsets is what failed, three times.
-- **The method has an ordering rule and it is not optional: remap *last*, immediately before staging,
-  and re-verify after any subsequent edit to a cited file.** A correct remapper run at the wrong time
-  is indistinguishable from a broken one. This was the fourth consecutive failure of this class and
-  the first one where the tool was right: two docblocks were edited *after* the remap, and every
-  citation past those insertions was stale again on arrival. Re-running the remapper as the final
-  action must propose **zero** changes; if it proposes any, a cited file was edited after the previous
-  run.
-- **Two holes in byte-equality, both of which fired here.** First, **a citation whose cited content
-  was itself rewritten has no byte-equal target anywhere**, so the tool cannot remap it — and a tool
-  that silently keeps the old value in that case reports success while leaving a stale citation. It
-  must be a hard error the operator resolves by hand. Second, **byte-equality proves nothing when the cited
-  content is not unique in the file** — and this applies to *every* method here, the forward-unpaired
-  verifier included, because it is byte-equality too.
-  **The property is uniqueness, and a length heuristic is the wrong proxy for it.** A first line of
-  `]);` matches any `]);` in the file, which is how one wrong citation survived three repair rounds —
-  but the live case that matters is a 23-character line of ordinary code, `redactText(value, key),`,
-  which occurs twice in `ingest.ts` and is cited at *both* sites in one comma list. Swap the two and
-  every check here still passes: the content resolves in HEAD, and the HEAD document cited both
-  locations. A "punctuation-only or under fifteen characters" rule returns false on it.
-  **So count occurrences of the cited content in HEAD and treat more than one as ambiguous**, to be
-  disambiguated by position — prefer the candidate nearest the content-anchored mapping — or escalated
-  to a human. Length and punctuation are an additional signal, never the test.
-- **The scope is every changed file, not every changed *source* file.** Test files are cited as
-  evidence too — a test name is the evidence for most of `threat-model.md`'s rows — and three repair
-  rounds swept only `src/`, leaving a citation pointing at the *opposite* assertion in a neighbouring
-  case.
-- **Why this is worse than ordinary staleness.** The evidence column is the mechanism by which a
-  reader verifies a trust boundary. A citation that lands mid-docblock does not look wrong — it looks
-  like a claim the reader failed to understand, so the failure mode is a reader who doubts themselves
-  and moves on.
-- **The fix is a repository check**, in the shape `tests/repository/` already uses: extract every
-  citation, refuse one whose file does not exist or whose range is out of bounds, and assert the
-  extracted set is non-empty **per document** — `SESSION.md`'s rule that a gate which can pass by
-  scanning nothing is not a gate.
-- **Two forms make it harder than it looks, and neither is optional.** A **bare continuation** carries
-  no filename and must be resolved against the last path named on its line; there are 117 of them, and
-  the first repair pass missed the form entirely. A **bare basename** is worse, and the ambiguity is
-  measured rather than assumed: of **19 distinct bare basenames cited, 8 resolve to more than one
-  file** — a basename of `types.ts` has **five** candidates across `core` and `platform-macos`,
-  `validate.ts` has three, and `invoke.ts` has two, `adapter-claude` against `adapter-codex`, so
-  guessing wrong points a reader at the *other vendor's* adapter. The check either rejects those or
-  needs a resolution rule, and deciding that rule is most of the work.
-- **The obvious specimen is the misleading one.** An earlier draft of this row illustrated the
-  ambiguity with a basename of `ingest.ts` — which resolves to **exactly one** file in this
-  repository. An implementer testing the stated example first would find it unique and conclude the
-  resolution rule is easy. Same defect class as the "known wrong" list below: a correct conclusion
-  resting on an unverified example.
-- **A third hole, and the one most likely to defeat a naive implementation.** A verifier that pairs
-  each HEAD citation with its current counterpart **cannot see a citation whose group changed size** —
-  one split into two, a new row added, a stale one already fixed by hand. It has no twin to compare
-  against and the natural implementation skips it silently. The trap is that **the act of improving a
-  document is what disables its verification**, so the tool is weakest exactly where the editing was
-  heaviest. Both surviving errors of the 2026-08-17 repair sat in such groups. The fix is to verify
-  **forward and unpaired**: for each citation in the *current* document, locate its cited content in
-  HEAD and require the HEAD document to have cited that location. Unpairable is a hard error, like
-  unmappable — and a legitimate semantic re-citation will trip it, which is correct: a human should
-  confirm that a citation was moved on purpose.
-- **The row specifies a gate that will extract the row.** NEW-23's own prose contains specimen
-  citations written as illustrations of a *form*, not as evidence, and any extractor picks them up.
-  One of them is even in bounds, so it fails silently rather than loudly. The gate needs a stated
-  exemption — a fenced block, an escape, or an explicit marker — decided before it ships, or its first
-  run trips on its own specification.
-- **Bounds-checking is what is affordable, and it is not sufficient.** Whether the cited lines *mean*
-  what the sentence claims is not machine-checkable. `threat-model.md` cited
-  `packages/adapter-codex/src/invoke.ts` for the `-s read-only` derivation while pointing at
-  `finalJsonlLine`'s docblock — wrong function, right file, in bounds. A bounds check passes that
-  forever. Whoever ships the gate should say so in the test, or a green run will be read as "the
-  evidence is sound".
-- **Adoption will go red, but not on the list this row first carried.** An earlier draft named four
-  "known wrong" citations from memory, and the accounting was loose in both directions: **two were
-  fully correct**, one had **no citation on it at all**, and the fourth contained a genuinely wrong
-  citation the draft did not name. Not one of the four was right as stated — a caution that belongs in
-  the row about the row. Verified by resolution on 2026-08-17: of the 229 spans in the four main documents,
-  **all now resolve in bounds**, and the genuinely wrong one found was
-  `tests/security/network.test.ts:176-179`, which begins on a closing brace. Whoever adopts the check
-  runs it first and fixes what it actually reports. **In bounds is not the same as correct** — see the
-  bullet above on the wrong-function-in-bounds case; a clean bounds sweep says nothing about whether
-  the cited lines support the sentence.
-- **A cheaper alternative was considered and is worse:** citing symbols rather than lines
-  (`cli.ts` `screenValueArgument`) never rots, but it is a repository-wide prose migration of ~370
-  sites and it loses the ability to point at a *range* of reasoning inside one function, which is what
-  many of these citations are doing.
 
 ### NEW-7 — a link destination's percent-encoding is unverified against Obsidian
 
@@ -940,7 +836,7 @@ cross-reference.
 | Amended | Outcome, **ratified 2026-08-15** | Raised by |
 |---|---|---|
 | the knowledge-pipeline spec §6.1, "one capture, one agent call, **one transaction**" | the last third is false and cannot be made true. The ladder performs four mutations and **the executor's lock is per-execution**, so it ships as **four transactions per capture** — `ingest-stage` (the capture file, `accepted → staging`), `ingest-apply` (the proposed notes), `ingest-reindex` (the index artifacts), `ingest-ingested` (the capture file, `staging → ingested`) — plus a compensating `ingest-rollback` on failure. Two independent reasons no two of them merge: `BrainService.reindex()` **reads the vault**, so it cannot run until the apply has finalized; and `validateChangePlan` grants ownership from the manifest, where the index artifacts are recorded and a capture is deliberately absent (spec §3.4 keeps a capture hand-editable in Obsidian). **The residual, accepted rather than closed:** a crash between the apply and the last transaction leaves a capture at `staging` with its notes already applied — inert, because the next run selects only `accepted` captures and cannot double-apply, and recoverable by `repair` plus a hand edit. **Cost of overturning:** there is no cheaper arrangement to overturn it to; the alternative is a Foundation change letting one execution span a read of what it just wrote. **Ratified as shipped by the founder on 2026-08-15**, four transactions and the accepted `staging`-with-notes residual together; the Foundation alternative was declined rather than deferred | DOS-P6 Task 13, plan correction 4 |
-| the knowledge-pipeline spec §6.3, `confidence and lifecycle` | the spec names the validator and says "required frontmatter for the note's declared stage is absent" — **it never says which frontmatter**. Shipped rule: `established` requires `reviewed` to be a date, `deprecated` requires `updated` to be present, `emerging` requires nothing extra. It is **defensible but invented**: nothing in the tree enforced either before this task. It is grounded in a contradiction the product already flags — `lint.ts:285-294` grades an agent-authored, never-reviewed note as `provenance` at severity **warn**, so ingest turns only the narrower `established`-while-never-reviewed claim into a refusal. **The broad reading was checked and rejected**: refusing every `author: agent` + `reviewed: null` note would refuse every proposal this pipeline can produce. **Cost of overturning:** two `if`s at `validate.ts:444-461`; this validator writes no data, so nothing has to be migrated. **Ratified as shipped by the founder on 2026-08-15**: the invented rule stands as written, so the spec's silence is closed by this row rather than by a change to the code | DOS-P6 Task 12, `validate.ts` |
+| the knowledge-pipeline spec §6.3, `confidence and lifecycle` | the spec names the validator and says "required frontmatter for the note's declared stage is absent" — **it never says which frontmatter**. Shipped rule: `established` requires `reviewed` to be a date, `deprecated` requires `updated` to be present, `emerging` requires nothing extra. It is **defensible but invented**: nothing in the tree enforced either before this task. It is grounded in a contradiction the product already flags — `lint.ts:285-294` grades an agent-authored, never-reviewed note as `provenance` at severity **warn**, so ingest turns only the narrower `established`-while-never-reviewed claim into a refusal. **The broad reading was checked and rejected**: refusing every `author: agent` + `reviewed: null` note would refuse every proposal this pipeline can produce. **Cost of overturning:** two `if`s at `packages/brain/src/ingest/validate.ts:444-461`; this validator writes no data, so nothing has to be migrated. **Ratified as shipped by the founder on 2026-08-15**: the invented rule stands as written, so the spec's silence is closed by this row rather than by a change to the code | DOS-P6 Task 12, `validate.ts` |
 
 **One row is the founder correcting the spec after a pre-flight scan**, and it is the most
 consequential amendment DOS-P6 has taken:

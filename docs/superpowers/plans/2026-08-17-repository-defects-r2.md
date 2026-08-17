@@ -36,6 +36,7 @@ Every task's requirements implicitly include this section. Each line is the repo
 | File | Responsibility | Task |
 |---|---|---|
 | `packages/security/src/cli.ts` | adds `screenDerivedPathArgument` beside the existing two screens | 1 |
+| `tests/repository/citations.test.ts` (new) | resolves every `path:line` citation in every document | 1b |
 | `packages/security/src/redaction.ts` | adds `createRedactor`, the only production entry to `redactText` | 2 |
 | `packages/core/src/config/loader.ts` | adds the `[redaction]` table to the `.strict()` schema | 2 |
 | `packages/security/src/text.ts` (new) | `isVisuallyBlank` and `perceptualKey`, moved out of `note.ts` on their second call site | 3 |
@@ -63,7 +64,7 @@ Every task's requirements implicitly include this section. Each line is the repo
 **Interfaces:**
 - Produces: `screenDerivedPathArgument(value: string, field: string): string | null` — same shape as its two neighbours, `null` meaning accepted.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `packages/security/src/cli.test.ts`:
 
@@ -99,12 +100,12 @@ it("ingests from a vault whose own path names a word-list term", async () => {
 });
 ```
 
-- [ ] **Step 2: Run them and verify they fail**
+- [x] **Step 2: Run them and verify they fail**
 
 Run: `pnpm vitest run packages/security/src/cli.test.ts packages/adapter-codex/src/invoke.test.ts`
 Expected: FAIL — `screenDerivedPathArgument is not defined`, and the codex case FAILs with `kind === "refused"` naming a permission or bypass surface. **The third case must pass on first run**; it is the guard that the split did not weaken the values that need both rules.
 
-- [ ] **Step 3: Add the third screen**
+- [x] **Step 3: Add the third screen**
 
 In `packages/security/src/cli.ts`, after `screenProseArgument`:
 
@@ -139,18 +140,18 @@ export function screenDerivedPathArgument(
 
 Export it from `packages/security/src/index.ts` beside the other two.
 
-- [ ] **Step 4: Move the two call sites**
+- [x] **Step 4: Move the two call sites**
 
 In `packages/adapter-codex/src/invoke.ts`, replace `screenValueArgument` with `screenDerivedPathArgument` at the `workingRoot` and `outputSchemaPath` sites only. Leave the write-scope loop at `:200` on `screenValueArgument` — a write scope is declared by a workflow author, which is outside.
 
 Update the module docblock at `:15` and `:65`, both of which name `screenValueArgument` as what these fields get.
 
-- [ ] **Step 5: Run the gate**
+- [x] **Step 5: Run the gate**
 
 Run: `npm run check`
 Expected: exit 0. Show failures only.
 
-- [ ] **Step 6: Fresh-context review, then commit**
+- [x] **Step 6: Fresh-context review, then commit**
 
 **Stage what `git status --short` actually lists, not what this step predicted.** The first draft
 named five paths; the task really touched thirteen, and each omission had the same consequence —
@@ -172,6 +173,151 @@ git commit -m "fix(security): screen a product-assembled path by provenance, not
 
 ---
 
+## Task 1b: NEW-23 — a gate for the evidence standard
+
+**Decision (2026-08-17):** build it now, inside R2, rather than leave it a registered row. It pays for
+itself across the eight tasks after it, every one of which edits the documents it protects.
+
+**Inserted rather than renumbered**, so the eight task numbers after it stay stable in this file and
+in `ORDER.md`.
+
+**The defect.** The architecture notes declare a `path:line` evidence standard in their own preamble —
+**372 citations across nine documents** — and nothing enforces it. `npm run check` is green with every
+one of them broken. They rot on any edit: eleven lines added to one docblock moved twelve citations in
+two documents. **`BACKLOG.md` §1 NEW-23 is this task's specification**; read it before writing code,
+because it carries three holes that a naive implementation will fall into and the reasons each was
+found the hard way.
+
+**What this gate does and does not buy.** It bounds-checks: a cited file must exist and a cited range
+must be inside it. **It cannot check that the cited lines *mean* what the sentence claims** — the
+threat model once cited the right file and the wrong function, in bounds, and a bounds check passes
+that forever. The test must say so, or a green run gets read as "the evidence is sound".
+
+**Files:**
+- Create: `tests/repository/citations.test.ts`
+- Modify: `docs/superpowers/BACKLOG.md` — close NEW-23
+- Test: the same file, second `describe`, per the `control-bytes.test.ts` pattern
+
+**Interfaces:**
+- Consumes: nothing. Follows `tests/repository/control-bytes.test.ts`'s shape — `git ls-files` for
+  enumeration, per-scope floors, unreadable is a failure rather than a skip.
+
+- [x] **Step 1: Write the failing test**
+
+Three citation forms, all of which exist in the tree today and each of which defeated a hand repair:
+
+```ts
+it("resolves every citation in every document", async () => {
+  const { root, docs } = await citationBearingDocuments();
+  expect(docs.length, "no documents enumerated").toBeGreaterThan(5);
+  const broken: string[] = [];
+  let checked = 0;
+  for (const doc of docs) {
+    const cites = extractCitations(await readFile(join(root, doc), "utf8"));
+    for (const c of cites) {
+      checked += 1;
+      const resolved = resolveSource(c, files);
+      if (resolved === null) { broken.push(`${doc}:${c.line} ${c.raw} names no file`); continue; }
+      if (resolved.ambiguous) { broken.push(`${doc}:${c.line} ${c.raw} matches ${String(resolved.candidates.length)} files`); continue; }
+      const lines = (await readFile(join(root, resolved.path), "utf8")).split("\n").length;
+      if (c.start < 1 || c.end > lines) {
+        broken.push(`${doc}:${c.line} ${c.raw} is out of range (${resolved.path} has ${String(lines)})`);
+      }
+    }
+  }
+  expect(checked, "extracted no citations at all").toBeGreaterThan(200);
+  expect(broken).toStrictEqual([]);
+});
+```
+
+And the second `describe`, which is what makes the first one evidence rather than decoration — the
+same discipline `control-bytes.test.ts` applies to its own pattern:
+
+```ts
+describe("the extractor this gate is built on", () => {
+  it("finds a full path citation", () => {
+    expect(extractCitations("see `packages/security/src/cli.ts:136-143` for it"))
+      .toMatchObject([{ start: 136, end: 143 }]);
+  });
+
+  it("resolves a bare continuation against the last path on its line", () => {
+    const [, second] = extractCitations("`apps/cli/src/commands/ingest.ts:245-251`; the ladder is at `:1020-1033`");
+    expect(second).toMatchObject({ path: "apps/cli/src/commands/ingest.ts", start: 1020, end: 1033 });
+  });
+
+  it("expands a comma list into one citation per span", () => {
+    expect(extractCitations("`apps/cli/src/commands/ingest.ts:531,814,1095`")).toHaveLength(3);
+  });
+
+  it("reports a bare basename that names more than one file", () => {
+    expect(resolveSource(bare("types.ts", 87), files).ambiguous).toBe(true);
+  });
+
+  it("accepts a bare basename that names exactly one", () => {
+    expect(resolveSource(bare("ingest.ts", 531), files).path)
+      .toBe("apps/cli/src/commands/ingest.ts");
+  });
+
+  it("does not extract a placeholder, so a document may describe the form it specifies", () => {
+    expect(extractCitations("a bare basename looks like `types.ts:<line>`")).toStrictEqual([]);
+  });
+});
+```
+
+- [x] **Step 2: Run them and verify they fail**
+
+Run: `pnpm vitest run tests/repository/citations.test.ts`
+Expected: FAIL — the module does not exist. Then, once it does, **expect the sweep to go red on real
+citations**: NEW-23 records that adoption fails on at least `tests/security/network.test.ts:176-179`,
+whose first line is a closing brace. **A gate that goes green on its first run over an unaudited
+surface has not been tested; it has been mis-specified.**
+
+- [x] **Step 3: Implement the extractor**
+
+Three forms, per NEW-23:
+
+- **Full path** — `(?:apps|packages|tests|workflows)/…\.ts` plus `:a`, `:a-b`, and a comma list.
+- **Bare continuation** — a backticked colon and range with no filename, resolved against the last
+  full path named earlier **on the same line**. There are 117; the first repair pass missed the form
+  entirely.
+- **Bare basename** — a backticked filename with no directory. **Resolution is fail-closed:** resolve
+  against `git ls-files`, accept a unique match, and **refuse an ambiguous one with its candidates
+  named**. Eight of nineteen are ambiguous — `types.ts` has five candidates and `invoke.ts` has two,
+  one per vendor adapter, where guessing wrong points a reader at the wrong vendor. Refusing forces
+  the author to write the path, which is the outcome worth having.
+
+A placeholder such as a non-numeric line must not extract, so a document can describe the form this
+gate parses without tripping it.
+
+- [x] **Step 4: Fix what it reports, in this commit**
+
+A check that ships disabled, or ships with its findings deferred, is worth nothing. Every citation it
+reports is repaired here — by resolution against the file, never by arithmetic.
+
+- [x] **Step 5: Add the floors**
+
+`expect(docs.length).toBeGreaterThan(5)` and `expect(checked).toBeGreaterThan(200)`. A sweep that
+scans nothing passes, and this repository has already shipped two gates that could: the
+self-containment enumerator skipped every path containing `#` and exited 0, and the network-capability
+scan never noticed that a whole package was absent from its list.
+
+- [x] **Step 6: Close NEW-23 and state the limit**
+
+Remove the row from `BACKLOG.md` §1; a closed row leaves a test, not a row. **Carry forward the one
+thing the gate cannot do** — that in-bounds is not the same as correct — into the test's own docblock,
+so it lives beside the check rather than in a deleted backlog entry.
+
+- [x] **Step 7: Run the gate, review, commit**
+
+Run: `npm run check`
+
+```bash
+git status --short          # stage exactly these paths
+git commit -m "test(repository): resolve every path:line citation, and fail on one that does not"
+```
+
+---
+
 ## Task 2: NEW-16 — make spec §8.2's user redaction patterns reachable
 
 **Decision (2026-08-17):** add the config table. A `[redaction] patterns = [...]` table of literal, non-backtracking strings, wired from the composition root through every call site, with the `.strict()` schema amendment registered as a `BACKLOG.md` §8 row cross-referenced from `foundation.md`.
@@ -189,7 +335,7 @@ git commit -m "fix(security): screen a product-assembled path by provenance, not
 > **These line numbers are instructions, not history, so they were re-resolved on 2026-08-17** after
 > Task 1 moved four of them by twenty lines. Re-resolve them again before starting: `ingest.ts` is
 > edited by Tasks 1, 7 and 8 of this plan. **Task 1's own citations are the opposite case** — its
-> `invoke.ts:211`, `:215`, `:200` and the docblock lines describe code that task has already changed,
+> `packages/adapter-codex/src/invoke.ts:211`, `:215`, `:200` and the docblock lines describe code that task has already changed,
 > so they are a record of where the work was done and must not be "corrected" into nonsense by a
 > later sweep. A line number in a **Files** block ages; a line number in a closed task's prose does
 > not.
@@ -347,7 +493,7 @@ export function createRedactor(
 
 - [ ] **Step 8: Thread the redactor from the composition root**
 
-In `apps/cli/src/context.ts`, build one redactor from the loaded config's `redaction?.patterns ?? []` and the durable key, and expose it as `CliContext.redact: Redactor`. Replace every `redactText(value, key)` in `capture.ts`, `review.ts`, `ingest.ts`, `init.ts` and `context.ts` with a call to the bound redactor, changing the parameter each helper receives from `key: Uint8Array` to `redact: Redactor` **where the function only redacts**. The key stays where it is genuinely needed for fingerprinting — `fingerprintDirectory(workingDirectory, key)` in `capture.ts:684` is the case to leave alone.
+In `apps/cli/src/context.ts`, build one redactor from the loaded config's `redaction?.patterns ?? []` and the durable key, and expose it as `CliContext.redact: Redactor`. Replace every `redactText(value, key)` in `capture.ts`, `review.ts`, `ingest.ts`, `init.ts` and `context.ts` with a call to the bound redactor, changing the parameter each helper receives from `key: Uint8Array` to `redact: Redactor` **where the function only redacts**. The key stays where it is genuinely needed for fingerprinting — `fingerprintDirectory(workingDirectory, key)` in `apps/cli/src/commands/capture.ts:684` is the case to leave alone.
 
 `init.ts:734` runs before a config exists; it passes no patterns and keeps the built-in classes only. Say so in a comment at that site.
 
@@ -527,7 +673,7 @@ for (const note of build.index.notes) {
 }
 ```
 
-`summary` is a required key typed `readonly summary: string` (`note.ts:72`, `build.ts:38`), so there is no `undefined` branch to guard — and `summary: ""` passes validation today and renders the same dangling em-dash, so it is in scope rather than a false positive. `isVisuallyBlank("")` is `true`, because `INVISIBLE_ONLY` is anchored over a `*` quantifier.
+`summary` is a required key typed `readonly summary: string` (`note.ts:72`, `packages/brain/src/indexes/build.ts:38`), so there is no `undefined` branch to guard — and `summary: ""` passes validation today and renders the same dangling em-dash, so it is in scope rather than a false positive. `isVisuallyBlank("")` is `true`, because `INVISIBLE_ONLY` is anchored over a `*` quantifier.
 
 In `duplicateFindings`, replace the screened-title group key with `perceptualKey(screenControlCharacters(note.title))`. The screen stays — it is what makes this class agree with the artifact it is about, since `catalog.md` renders a screened title — and the perceptual key is applied over its result.
 
@@ -734,7 +880,7 @@ it("refuses ingest with a security exit code when the binary is not trusted", as
 });
 ```
 
-The two commands differ on purpose and each follows the contract it already has: `capture` swallows the refusal and records `unknown` (spec §5.4), while `ingest` refuses **outside** the `catch` at `:459` that would otherwise hide it.
+The two commands differ on purpose and each follows the contract it already has: `capture` swallows the refusal and records `unknown` (spec §5.4), while `ingest` refuses **outside** the `catch` at `apps/cli/src/commands/ingest.ts:459` that would otherwise hide it.
 
 - [ ] **Step 2: Run them and verify they fail**
 
@@ -743,7 +889,7 @@ Expected: FAIL — `assertTrustedExecutable is not a function`, and both command
 
 - [ ] **Step 3: Implement the check at the boundary that made the promise**
 
-The check belongs in `packages/platform-macos` because that is where the contract is written: `types.ts:13-18` says the discovered path is untrusted and "anything that executes it owes that check first". Putting the payment beside the promise means a second executor cannot arrive without meeting it.
+The check belongs in `packages/platform-macos` because that is where the contract is written: `packages/platform-macos/src/types.ts:13-18` says the discovered path is untrusted and "anything that executes it owes that check first". Putting the payment beside the promise means a second executor cannot arrive without meeting it.
 
 Add optional `stat`, `lstat` and `currentUid` to `MacOsPlatformAdapterOptions`, defaulting to `node:fs/promises` and `process.getuid`, so tests drive fakes — the discipline every other dependency in that constructor already follows.
 
@@ -778,9 +924,9 @@ Resolve with `#canonicalize`, then walk the resolved path and every ancestor to 
 
 - [ ] **Step 4: Pay it at both call sites**
 
-`ingest.ts` `selectVendor`: call `await context.platform.assertTrustedExecutable(discovery.executablePath)` **outside** the `try` at `:456-461`. That `catch` maps any throw to "not installed" and would turn a security refusal into a fall-through to the other vendor, which is the opposite of refusing.
+`selectVendor` in `apps/cli/src/commands/ingest.ts:456-461`: call `await context.platform.assertTrustedExecutable(discovery.executablePath)` **outside** that `try`. That `catch` maps any throw to "not installed" and would turn a security refusal into a fall-through to the other vendor, which is the opposite of refusing.
 
-`capture.ts` `discoverSourceAgent`: call it inside the existing `try` at `:235`, before `VERSION_PROBES[agent]`. Its `catch` returns `UNKNOWN_SOURCE`, which is what spec §5.4 requires of an undetectable agent, and an untrusted binary is one.
+`discoverSourceAgent` in `apps/cli/src/commands/capture.ts:235`: call it inside that existing `try`, before `VERSION_PROBES[agent]`. Its `catch` returns `UNKNOWN_SOURCE`, which is what spec §5.4 requires of an undetectable agent, and an untrusted binary is one.
 
 - [ ] **Step 5: Relocate the test harness off `/tmp`**
 
