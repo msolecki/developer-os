@@ -25,6 +25,7 @@ describe("the package's public door", () => {
         "SecurityRefusalError",
         "ProtectedPathPolicy",
         "redactText",
+        "createRedactor",
         "REDACTION_CLASSES",
         "assertSafeCommand",
         "NodeProcessRunner",

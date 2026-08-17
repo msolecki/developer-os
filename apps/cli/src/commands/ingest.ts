@@ -35,7 +35,8 @@ import type {
   ValidatorId,
 } from "@developer-os/brain";
 import type { AgentName } from "@developer-os/platform-macos";
-import { redactText, screenAndCap } from "@developer-os/security";
+import { createRedactor, screenAndCap } from "@developer-os/security";
+import type { Redactor } from "@developer-os/security";
 import { resolveScopeGlob } from "@developer-os/workflow-schema";
 
 import {
@@ -518,7 +519,7 @@ interface Selection {
 async function selectCaptures(
   context: CliContext,
   quarantine: string,
-  key: Uint8Array,
+  redact: Redactor,
   limit: number | null,
 ): Promise<Selection> {
   const accepted: string[] = [];
@@ -527,9 +528,7 @@ async function selectCaptures(
 
   for (const fileName of await captureFileNames(context, quarantine)) {
     const text = await context.guards.readText(join(quarantine, fileName));
-    const outcome = parseCaptureFile(fileName, text, (value) =>
-      redactText(value, key),
-    );
+    const outcome = parseCaptureFile(fileName, text, redact);
     if (!outcome.ok) {
       const captureId = fileName.slice(0, -CAPTURE_FILE_SUFFIX.length);
       unreadable.push({ captureId, status: "failed", notes: [] });
@@ -805,13 +804,13 @@ async function statusOnDisk(
   context: CliContext,
   path: string,
   fileName: string,
-  key: Uint8Array,
+  redact: Redactor,
 ): Promise<CaptureStatus | null> {
   try {
     const parsed = parseCaptureFile(
       fileName,
       await context.guards.readText(path),
-      (value) => redactText(value, key),
+      redact,
     );
     return parsed.ok ? parsed.envelope.status : null;
   } catch {
@@ -996,7 +995,7 @@ async function reindexVault(
  */
 async function leftAtOf(
   context: CliContext,
-  key: Uint8Array,
+  redact: Redactor,
   fileName: string,
   capturePath: string | null,
   progress: { readonly movedToStaging: boolean; readonly rolledBack: boolean },
@@ -1004,7 +1003,7 @@ async function leftAtOf(
   const status =
     capturePath === null
       ? null
-      : await statusOnDisk(context, capturePath, fileName, key);
+      : await statusOnDisk(context, capturePath, fileName, redact);
 
   if (status === "ingested") return "ingested";
   if (status === "staging") return "staging";
@@ -1018,9 +1017,14 @@ interface IngestEnvironment {
   readonly config: DeveloperOsConfigV1;
   readonly paths: RuntimePaths;
   readonly brainConfig: BrainConfigV1;
+  /**
+   * Built once at the command entry, where the key and the configuration are both in
+   * scope. Carried on the environment rather than rebuilt per capture so spec §8.2's
+   * user patterns cannot reach one code path and miss another (BACKLOG NEW-16).
+   */
+  readonly redact: Redactor;
   readonly quarantine: string;
   readonly contentRoot: string;
-  readonly key: Uint8Array;
   readonly vendor: Vendor;
   readonly ingestContract: readonly string[];
 }
@@ -1071,7 +1075,7 @@ async function ingestOne(
   environment: IngestEnvironment,
   fileName: string,
 ): Promise<CaptureOutcome> {
-  const { brainConfig, key, paths, quarantine, vendor } = environment;
+  const { brainConfig, paths, quarantine, redact, vendor } = environment;
   const captureId = fileName.slice(0, -CAPTURE_FILE_SUFFIX.length);
 
   /**
@@ -1091,9 +1095,7 @@ async function ingestOne(
     capturePath = path;
 
     const text = await context.guards.readText(path);
-    const parsed = parseCaptureFile(fileName, text, (value) =>
-      redactText(value, key),
-    );
+    const parsed = parseCaptureFile(fileName, text, redact);
     if (!parsed.ok) {
       throw new IngestRefusal(
         EXIT_CODES.invalidInput,
@@ -1143,7 +1145,7 @@ async function ingestOne(
     const validation = await validateProposal(proposal.proposal, {
       captureId: envelope.captureId,
       ingestContract: environment.ingestContract,
-      redact: (value: string) => redactText(value, key),
+      redact,
       brain: dependenciesFor(context, paths.brain, environment.config),
     });
     if (!validation.ok) throw refusalFrom(validation.findings, envelope.captureId);
@@ -1232,7 +1234,7 @@ async function ingestOne(
         recovery:
           error instanceof IngestRefusal ? (error.recovery ?? null) : null,
         appliedNotes: applied ?? [],
-        leftAt: await leftAtOf(context, key, fileName, capturePath, {
+        leftAt: await leftAtOf(context, redact, fileName, capturePath, {
           movedToStaging: capturePath !== null && staged !== null,
           rolledBack,
         }),
@@ -1248,10 +1250,10 @@ async function ingestOne(
  * context closed over — `init` records the rule, and `capture` and `review`
  * follow it at the same point.
  */
-function guardsWith(guards: CliGuards, key: Uint8Array): CliGuards {
+function guardsWith(guards: CliGuards, redact: Redactor): CliGuards {
   return {
     ...guards,
-    redactDiagnostic: (text: string): string => redactText(text, key).text,
+    redactDiagnostic: (text: string): string => redact(text).text,
   };
 }
 
@@ -1449,16 +1451,26 @@ export async function runIngest(
     );
 
     const key = loadOrCreateRedactionKey(paths.stateDir);
-    guards = guardsWith(context.guards, key);
+    /**
+     * Built once, where the key and the configuration are both in scope, and carried on
+     * the environment below. Spec §8.2's user patterns must reach the *prompt* above all:
+     * `buildIngestPrompt` puts a capture body in front of a vendor model, and a client
+     * name no generic class catches is exactly what this table exists to keep out of it
+     * (BACKLOG NEW-16).
+     */
+    const redact = createRedactor(key, {
+      userPatterns: config.redaction?.patterns ?? [],
+    });
+    guards = guardsWith(context.guards, redact);
 
-    const selection = await selectCaptures(context, quarantine, key, limit);
+    const selection = await selectCaptures(context, quarantine, redact, limit);
     const environment: IngestEnvironment = {
       config,
       paths,
       brainConfig,
       quarantine,
       contentRoot,
-      key,
+      redact,
       vendor,
       /**
        * Resolved once per invocation, here, because resolution is per-install:

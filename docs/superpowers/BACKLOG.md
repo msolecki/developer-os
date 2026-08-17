@@ -64,7 +64,7 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P6 | spec approved and plan written, both 2026-08-13 | **three unticked steps** — Task 17 Step 3 (the Codex detection row, blocked on NEW-21) and Task 19 Steps 5–6 (close the documents, run the gate), which wait on it. Seventeen of nineteen tasks landed 2026-08-13/14/15 and their step lists are deleted |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | **ten rows.** Four were decided 2026-08-17 and are being implemented as Track R **R2** — NEW-15, NEW-22, NEW-16, NEW-11. Four belong to somebody else — NEW-21 (the founder's, blocks A10), NEW-20 and NEW-13 (deliberately not fixed), NEW-7 (needs a machine with Obsidian). Two came from the review that closed NEW-12 on 2026-08-17; a third, NEW-23, was closed the same day by the citation gate |
+| Repository-level | §1 | **thirteen rows**, and the breakdown adds up: **three** await their fix from Track R **R2** (NEW-15, NEW-22, NEW-11); **four** belong to somebody else (NEW-21 the founder's and blocking A10, NEW-20 and NEW-13 deliberately not fixed, NEW-7 needing a machine with Obsidian); **six** came out of R2's own reviews — NEW-27 and NEW-28 from closing NEW-12, NEW-24, NEW-25, NEW-26 and NEW-29 from closing NEW-16. NEW-23 was raised the same way and closed the same day |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -108,19 +108,46 @@ they closed, between 2026-08-10 and 2026-08-15, and **NEW-12 on 2026-08-17**. Wh
 leaves behind is a row in §8, a clause in a spec, or a test; if it left nothing, it was not worth
 recording. Git history is the archive.
 
-**Ten rows, and they are not all the same kind of open.** **Four were waiting on a decision, got one
-on 2026-08-17, and are being implemented** as `ORDER.md` Track R entry **R2** — **NEW-15**,
-**NEW-22**, **NEW-16** and **NEW-11**. They stay here until R2 closes them, because a row leaves this
+**Every row carries a number, including the residuals.** Three rows were briefly named
+`NEW-16's residual` — all three of them — and three code sites cited that name as if it identified
+one. A residual is a defect like any other and gets `NEW-24` through `NEW-28`; the row it came from
+is named in its own text, which is where the lineage belongs.
+
+**Thirteen rows, and they are not all the same kind of open.** **Three are waiting on R2 to land their fix** — **NEW-15**, **NEW-22** and **NEW-11**. All four
+that were waiting on a decision got one on 2026-08-17; **NEW-16 closed the same day** and left three
+residual rows of its own — NEW-24, NEW-25 and NEW-26. They stay here until R2 closes them, because a row leaves this
 section when its fix is committed, not when its question is answered. Four are somebody else's:
 **NEW-21** the founder's, **NEW-20** and **NEW-13** registered as deliberately-not-fixed, and
 **NEW-7** waiting on a machine with Obsidian.
 
-**Two are new, and both were found by the review that closed NEW-12 rather than by the work
-itself** — its successor and its coverage residual. A third, NEW-23, was found the same way and
-**closed the same day** by Track R Task 1b, which built the gate it asked for. That is the ordinary yield of a
-fresh-context review and the reason the gate exists: closing a defect moved a trap one field over,
-made one branch unreachable, and the fix for a stale line citation broke twelve more. None was
-visible to the author.
+**Six are new, and every one was found by a fresh-context review rather than by the work itself** —
+NEW-27 and NEW-28 from the review that closed NEW-12, and NEW-24, NEW-25, NEW-26 and NEW-29 from the
+one that closed NEW-16. A seventh, NEW-23, was found the same way and **closed the same day** by
+Track R Task 1b, which built the gate it asked for.
+
+**That is the ordinary yield of the review gate, and the number is the argument for it.** Two defects
+closed cleanly would have left this section at eight rows; closing them honestly left it at
+thirteen.
+
+**They are not all the same thing, and the honest split is worth more than a round number.** Two —
+NEW-25 and NEW-29 — are properties that predate everything: an overlap rule that was unreachable
+while nothing called the code, and a wall-clock assertion that was always going to meet a loaded
+machine eventually. Two are **costs the new capability created**: NEW-24 and NEW-26 could not have existed before
+there was a `[redaction]` table to misconfigure. Two are **consequences of the previous fix**, and
+say so in their own tenses: NEW-27 is what *will* happen to the first real write scope, NEW-28 is
+what *can no longer* happen in `ingest`. An earlier draft of this paragraph claimed four of the five
+predated the work, which is both false and weaker than the truth — the argument for the gate is not
+that these were lying around, it is that **every one was found before commit by an agent that wrote
+none of it**. Closing a defect moved a trap one field over, made one branch unreachable, and the fix for a stale
+line citation broke twelve more — none of it visible to the author.
+
+**And wiring this feature made two latent bugs reachable rather than one.** NEW-25's overlap rule is
+the one this paragraph already names. The other never reached a row: `addUserPatterns` folded the
+needle whole-string while the haystack folded per character, so Unicode's Final_Sigma mapping made a
+Greek company name in capitals configurable and **silently never redacted** — no error, no finding.
+That disagreement predated all of this and was invisible only because no production caller passed
+`userPatterns`. It was found and fixed inside the same review cycle, which is why it is a sentence
+here rather than a row below.
 
 **A row being open is not an invitation to implement it** — read which group it is in first. NEW-15 is
 the cautionary case: it read like an implementation for a day, and cost a full task to discover it was
@@ -335,20 +362,96 @@ in the two rules that matter**, so keeping the withdrawn version would preserve 
 were wrong. Rebuilding it against a settled policy is a short task; deciding the policy is the long
 one, and that is what this row is now.
 
-### NEW-16 — spec §8.2's user-configured redaction patterns are unreachable
+### NEW-24 — a common redaction pattern refuses every ingest, undiagnosably
 
-- **Status:** open, found 2026-08-14 while writing the threat model, verified independently by that
-  task's review · **Owner:** DOS-P7 · **Size:** S
-- `redactText`'s `userPatterns` parameter **has no production caller.** All thirteen call sites across
-  `apps/` and `packages/` pass two arguments; the parameter appears only in
-  `packages/security/src/redaction.test.ts` and in built type declarations.
-- The other half is missing too: `configSchema` is `.strict()`
-  (`packages/core/src/config/loader.ts:130-153`) and carries no redaction table, so there is no
-  `config.toml` key a user could set even if a caller existed.
-- **The consequence is narrow and worth stating precisely.** The four built-in redaction classes work
-  and are tested; what is unreachable is the *user-extensible* class the knowledge-pipeline spec §8.2
-  describes — the one a founder would use to redact a client name that no generic pattern catches.
-  Nothing regressed; it was specified and never wired.
+- **Status:** open, registered 2026-08-17 when NEW-16 closed · **Owner:** DOS-P7 · **Size:** S ·
+  **Usability, and the schema deliberately does not bound it**
+- **The failure.** `patterns = ["api"]` is accepted. Every proposed note whose path or body contains
+  `api` raises a `user-pattern` finding in `secretScan`, `validateProposal` refuses, and **every
+  ingest fails permanently**. The user has changed one line of `config.toml` and broken the pipeline.
+- **A length floor cannot fix it, and one was tried.** Three characters was shipped for a few hours
+  and withdrawn: it refuses `EY`, `BP`, `GE`, `3M` — registered company names, not abbreviations
+  anyone can lengthen — and every two-character CJK name, which is the ordinary length there, leaving
+  a user with a Chinese or Japanese client unable to configure it at all. What `" "` and `"e"` share
+  is not shortness but that they match **ubiquitously**, which is a property of the text. The schema
+  now refuses only a pattern with no non-whitespace character, which is what its own argument
+  supported.
+- **The shape of the fix is a redaction-time density check**: refuse, or warn, when a single pattern
+  claims more than some fraction of a text. That measures the thing that actually goes wrong and
+  never refuses a real name.
+- **Half of the diagnosability is already closed.** `secretScan` now says a
+  `user-pattern` match means "narrow the `[redaction]` table" rather than reporting it as a secret —
+  the two have opposite remedies and shared one sentence. **The other half needs a type decision**:
+  the message cannot name *which* entry matched, because `RedactionFinding` carries a class and a
+  fingerprint and nothing identifying the table row. A pattern index would close it and the position
+  is not a secret — but that type reaches a persisted capture envelope, so widening it is a decision
+  rather than a gap to fill in passing, on the same rule that governs `CaptureRedactionFinding`.
+
+### NEW-25 — two partially overlapping patterns cannot both redact
+
+- **Status:** open, registered 2026-08-17 · **Owner:** whoever next touches
+  `packages/security/src/redaction.ts` · **Size:** XS · **Not a regression**
+- `addCandidate` is first-wins on overlap. Sorting user patterns longest-first closes **containment**
+  — `["Acme", "Acme Corp"]` no longer leaves `Corp` in the clear, in either configured order — but
+  two patterns that **interleave** still cannot both win: `["Acme Corp", "Corp Holdings"]` over
+  `"x Acme Corp Holdings y"` leaves `Acme` in the clear.
+- **Pinned by a test rather than left implicit**, so nobody reads longest-first as a guarantee it is
+  not, and so the day someone changes the overlap policy the current behaviour is on record.
+- Closing it means a candidate policy that can merge overlapping ranges rather than drop one, which
+  is a change to every redaction class and not just this one.
+
+### NEW-26 — the vendor's own output is redacted with built-in classes only
+
+- **Status:** open, registered 2026-08-17 when NEW-16 closed · **Owner:** DOS-P7 · **Size:** S ·
+  **A bounded gap, not a leak**
+- `NodeProcessRunner` redacts a child process's stdout and stderr, and it is constructed at the
+  **composition root** — before any configuration file has been read, so the user's `[redaction]`
+  patterns are not available to it. The return leg from a vendor model therefore meets the four
+  built-in classes and not the user's own.
+- **The obvious fix is worse than the gap.** Building the runner per command would give it the
+  config, and would also bypass the fake runner every command test injects, which is the seam the
+  whole suite drives vendors through. Closing this properly means letting a runner's redactor be
+  *replaced* after construction, which is a Foundation change.
+- **What bounds it.** The direction that carries user content — the prompt — is covered:
+  `parseCaptureFile` runs the config-bound redactor before `buildIngestPrompt` sees anything. The
+  uncovered direction is model output, and `validateProposal`'s `secret-scan` runs the **config**
+  redactor over every proposed note, so a proposal carrying a configured pattern is **refused**
+  rather than written. What is genuinely uncovered is a diagnostic or a log line quoting vendor
+  stdout.
+- Recorded at both construction sites in `apps/cli/src/context.ts` rather than only here.
+
+### NEW-29 — a wall-clock assertion in the standing suite can redden an unrelated commit
+
+- **Status:** open, observed 2026-08-17 by the independent review of R2 Task 2 · **Owner:** whoever
+  next touches `packages/security/src/redaction.test.ts` — DOS-P7 by default · **Size:** XS ·
+  **Gate integrity**
+- `packages/security/src/redaction.test.ts`'s *"adds bounded per-pattern overhead over a
+  single-pattern baseline"* asserts a **wall-clock ratio** — `withPatterns < baseline * 3 + 20` over
+  512 KB. It failed once in three full-suite runs on a loaded machine and passed the other two.
+- **The mechanism it guards is real and worth guarding**: it proves the scan did not regress to a
+  per-position rescan.
+- **The calibration was done properly and this row is not a criticism of it.** Its docblock records
+  twenty no-load samples, **five under sixteen-way background CPU load**, and the buggy-shape floor
+  for comparison. What that arm cannot capture is a *different* contention profile — vitest's own
+  parallel workers with two thousand tests in flight, which is GC pressure and worker preemption
+  rather than CPU saturation. **This is the second symptom of one cause**: the same docblock records
+  an earlier version of this case blowing past its inherited default under parallel-worker load, and
+  the author fixed that half with an explicit 2000 ms timeout. The remaining half is the ratio.
+- **Until the fix lands, the mitigation is one sentence and it is free: a red run on this one
+  assertion is re-run once before anything is investigated, and only a repeated failure is a
+  signal.** A regressed *shape* measured 6.32–7.99× against a 3× bound, so it fails every attempt —
+  re-running cannot mask a real regression, which is what makes this safe to write down.
+- **The cost is misdiagnosis, not flakiness.** A red `npm run check` on an unrelated commit sends the
+  next person to the change in front of them. This repository already carries one such case
+  (`ORDER.md`'s doctor-test starvation note) and has paid for it twice.
+- **The shape of a fix**: assert on operation counts through an injected counter rather than on
+  elapsed time, or mark the case `retry: 2` and say in its docblock that it is a smoke test for a
+  shape rather than a bound. Raising the constant is the wrong move — it hides the starvation the
+  same way a larger timeout did in the doctor case.
+- **Not caused by the R2 work**, and the reviewer checked: the per-character folding helper was
+  benchmarked at 29.3 ms against 29.9 ms inline over 512 KB, and `addUserPatterns` returns before
+  the haystack is built when no patterns are configured, so a user without a `[redaction]` table
+  pays nothing at all.
 
 ### NEW-13 — two artifact roots share one type, and only prose separates them
 
@@ -374,7 +477,7 @@ one, and that is what this row is now.
   docblock and a test asserting the two façade bindings are not the same function — which stays
   green under the misuse it describes.
 
-### NEW-12's successor — a derived path will wear a write scope's name
+### NEW-27 — a derived path will wear a write scope's name
 
 - **Status:** open, registered 2026-08-17 by the fresh-context review that closed NEW-12 · **Owner:**
   whoever wires the first production write scope · **Size:** XS to prevent, S to rediscover ·
@@ -403,7 +506,7 @@ one, and that is what this row is now.
 - **The shape of the fix, when it is needed:** screen the *scope name* and the *derived path* as two
   values rather than one, so each meets the rule that applies to it — the same split, one level down.
 
-### NEW-12's other residual — `ingest` can no longer produce a screening refusal
+### NEW-28 — `ingest` can no longer produce a screening refusal
 
 - **Status:** open, registered 2026-08-17 · **Owner:** whoever gives `ingest` an argument a screen can
   refuse · **Size:** XS · **Coverage, not security**
@@ -413,7 +516,7 @@ one, and that is what this row is now.
   working root and output schema path are assembled from validated absolute paths and now take the
   derived screen; spec §3.3 passes an empty write-scope array; and the turn bound is
   `DEFAULT_MAX_TURNS`, a compile-time constant inside the window `invokeClaude` enforces.
-- **The branch is retained as defence in depth** — NEW-12's successor above brings the user back — but
+- **The branch is retained as defence in depth** — NEW-27 above brings the user back — but
   the interpolation it performs is no longer covered end-to-end. It was covered by exactly one case,
   which asserted a refusal this product should never have produced, and that case now asserts the
   acceptance instead.
@@ -827,9 +930,22 @@ were put to the founder with the other four.
 | product design spec §13.4, "the staged result" | the `deterministic reindex` validator runs over an **in-memory projection** of vault plus proposal, not over a staging directory. §13.4 and the knowledge-pipeline spec's own §6.3 preamble contradict each other — nothing is staged at the point the preamble names — and staging first would make every file in staging attacker-influenced content the validators must re-read as hostile | 12 |
 | product design spec §17.5, and the knowledge-pipeline spec §9 | §9 narrows §17.5's security cases to six suites and drops two the standing gate in §7 of this file still requires from DOS-P6 onward: a **network** suite, and **concurrent user edits**. The plan ships eight suites rather than six and registers the narrowing rather than inheriting it. **Shipped 2026-08-14 as `tests/security/`** — `sentinel`, `prompt-injection`, `symlink-escape`, `multiline-command`, `malformed-manifest` and `interruption` from §9, plus `network` and `concurrent-edit`, the two §9 dropped and §7 still requires | 15 |
 
+**One row was raised by Track R entry R2 on 2026-08-17, and is unratified.** It is the only
+unratified row in this section, and it is also the one place where §8's two rules pull against each
+other: the eviction rule says a row leaves when the amended document carries the cross-reference, and
+`foundation.md` §2 carries it in the same commit that adds the row. **Ratification wins** — a row
+whose amendment nobody has approved is exactly what this index exists to surface, so it stays until
+the founder rules on it, cross-reference or not. A founder decision to *implement* NEW-16 is not the same as ratifying
+the amendment implementing it required, and conflating the two is how an approved document gets
+rewritten silently.
+
+| Amended | Outcome, **awaiting ratification** | Raised by |
+|---|---|---|
+| `docs/architecture/foundation.md` §2, the frozen `configSchema` | an **optional** `[redaction]` table with a bounded list of literal `patterns`. Additive on the same terms as the `brain` section that preceded it: `configSchema` stays `.strict()`, `schemaVersion` stays `1`, `serializeConfig` emits the table only when the key is present, and `exactOptionalPropertyTypes` keeps absent distinguishable from present-and-undefined — so a configuration written before it still loads and still serializes byte-identically. **Without it spec §8.2's user-extensible redaction class is unreachable**: `redactText` took the option and no production caller passed it, because there was no key a user could set | R2 Task 2, `BACKLOG.md` §1 **NEW-16** |
+
 **Two rows were raised by DOS-P6 during implementation rather than planning**, which is why neither is
 in a table above. **Both were ratified by the founder on 2026-08-15**, in the session that ran Task 17;
-they were the last unratified rows in this section, and there are now none. Each leaves the table when
+they were the last unratified rows this subsystem raised — **R2 has since added one, above**. Each leaves the table when
 DOS-P6 Task 19 Step 5 lands, per the rule that a row leaves when the amended document carries the
 cross-reference.
 

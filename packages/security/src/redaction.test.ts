@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+  createRedactor,
   REDACTION_CLASSES,
   redactText,
   type RedactionResult,
@@ -780,5 +781,202 @@ describe("redactText", () => {
         [...REDACTION_CLASSES].sort(),
       );
     });
+  });
+});
+
+/**
+ * Spec §8.2's user-extensible class had no production caller and no configuration key —
+ * every one of fourteen call sites passed two arguments, and `configSchema` is `.strict()`
+ * (BACKLOG NEW-16). `createRedactor` is the seam that wires it, and the reason it binds
+ * rather than threads is the *key*: a closure cannot be logged into a diagnostic by
+ * accident, where a `Uint8Array` parameter travelling through capture, review, ingest and
+ * init had to be trusted at every stop (spec §8.4).
+ */
+describe("createRedactor", () => {
+  it("binds user patterns, so a caller cannot redact without them", () => {
+    const redact = createRedactor(deterministicKey, {
+      userPatterns: ["Northwind Traders"],
+    });
+    const result = redact("a note about Northwind Traders and nothing else");
+    expect(result.text).not.toContain("Northwind Traders");
+    expect(result.findings.map((finding) => finding.class)).toContain("user-pattern");
+  });
+
+  /** `addUserPatterns` folds to NFC and lower-cases, so the match is case-insensitive. */
+  it("matches a configured pattern regardless of case", () => {
+    const redact = createRedactor(deterministicKey, {
+      userPatterns: ["Northwind Traders"],
+    });
+    expect(redact("northwind traders").text).not.toContain("northwind traders");
+  });
+
+  it("behaves exactly as redactText does when no patterns are configured", () => {
+    expect(createRedactor(deterministicKey)("plain text with no secret")).toStrictEqual(
+      redactText("plain text with no secret", deterministicKey),
+    );
+  });
+
+  /**
+   * `addCandidate` is first-wins on overlap, so an unordered scan made the result depend
+   * on how the user typed the table: with `["Acme", "Acme Corp"]` the short form won and
+   * **`Corp` stayed in the clear**. Listing both forms of a client name is the obvious
+   * thing to do, so this is the ordinary case rather than an edge one.
+   */
+  it("redacts the longest pattern when two overlap, in either configured order", () => {
+    const text = "hello Acme Corp bye";
+    for (const userPatterns of [
+      ["Acme", "Acme Corp"],
+      ["Acme Corp", "Acme"],
+    ]) {
+      const result = createRedactor(deterministicKey, { userPatterns })(text);
+      expect(result.text, userPatterns.join("|")).toBe(
+        "hello [REDACTED:user-pattern] bye",
+      );
+      expect(result.text, userPatterns.join("|")).not.toContain("Corp");
+    }
+  });
+
+  /**
+   * **The ordering is on the *folded* pattern, and this is the case that proves it.**
+   * Matching happens on `normalize("NFC").toLowerCase()`; sorting on the raw string
+   * instead reintroduces the shadowing above, deterministically, whenever a pattern
+   * arrives decomposed — which macOS filenames and Finder copy-paste produce. The
+   * decomposed short form is *longer* raw and *shorter* folded, so a raw sort puts it
+   * first and leaves ` Co` in the clear in both configured orders.
+   */
+  it("orders on the folded pattern, so a decomposed name does not shadow its longer form", () => {
+    const short = "Nguyễn Văn Ánh".normalize("NFD");
+    const long = "Nguyễn Văn Ánh Co".normalize("NFC");
+    const fold = (value: string): string => {
+      let out = "";
+      for (const character of value.normalize("NFC")) out += character.toLowerCase();
+      return out;
+    };
+    expect(short.length, "the fixture needs raw length to disagree").toBeGreaterThan(
+      long.length,
+    );
+    /**
+     * And the folded relation must be the *other* way round, or the fixture stops
+     * exercising the hazard while the raw guard above still passes.
+     */
+    expect(fold(short).length, "folded lengths must invert the raw ones").toBeLessThan(
+      fold(long).length,
+    );
+    for (const userPatterns of [
+      [short, long],
+      [long, short],
+    ]) {
+      const result = createRedactor(deterministicKey, { userPatterns })(
+        `invoice for ${long} today`,
+      );
+      expect(result.text, userPatterns.join("|")).toBe(
+        "invoice for [REDACTED:user-pattern] today",
+      );
+    }
+  });
+
+  /**
+   * **The needle and the haystack fold by one rule, and this is the case that proved they
+   * did not.** The haystack folds per character, because it maps folded offsets back to
+   * original ones; a needle folded whole-string disagrees, because `toLowerCase` applies
+   * Unicode's Final_Sigma mapping to a string and not to an isolated character. `"ΟΔΟΣ"`
+   * folds to `"οδος"` one way and `"οδοσ"` the other.
+   *
+   * The failure was a **silent miss**: a Greek company name in capitals — how it appears
+   * on a letterhead — configured and never redacted, with no error and no finding. That
+   * is precisely what BACKLOG NEW-16 exists to prevent.
+   */
+  /**
+   * **Deliberately not a mirror of production's `foldForMatching`** — it stops at the
+   * per-character lowercase and omits the sigma unification, because it models the
+   * *broken* half of the disagreement the guard below asserts still exists. Making the
+   * two agree would silently disarm that guard.
+   */
+  const perCharacterLower = (value: string): string => {
+    let out = "";
+    for (const character of value) out += character.toLowerCase();
+    return out;
+  };
+
+  /**
+   * **The case the `it.each` below cannot reach, and the one that matters more.** Those
+   * fixtures match a pattern against *itself*, uppercase over uppercase. Unifying the
+   * folding rule on both sides fixed that and **moved** the miss rather than removing it:
+   * an all-caps pattern from a letterhead stopped matching `οδος`, which is how the word
+   * is ordinarily written in a sentence and therefore the likelier spelling in a capture.
+   *
+   * Greek writes one letter two ways by position. `toLowerCase` preserves the
+   * distinction, so `foldForMatching` unifies the two lowercase sigmas the way Unicode
+   * case folding does. This case goes red without that line.
+   */
+  it("matches every spelling of one Greek word, in both directions", () => {
+    const spellings = ["ΟΔΟΣ", "οδος", "οδοσ"];
+    for (const pattern of spellings) {
+      for (const text of spellings) {
+        const result = createRedactor(deterministicKey, { userPatterns: [pattern] })(
+          `client ${text} here`,
+        );
+        expect(result.text, `${pattern} over ${text}`).toBe(
+          "client [REDACTED:user-pattern] here",
+        );
+      }
+    }
+  });
+
+  /**
+   * And the limit that remains, which is correct rather than a gap: an accent is a
+   * different letter, and nothing here folds it away.
+   */
+  it("does not match across an accent, because that is a different letter", () => {
+    expect(
+      createRedactor(deterministicKey, { userPatterns: ["Οδός"] })("client ΟΔΟΣ here")
+        .text,
+    ).toBe("client ΟΔΟΣ here");
+  });
+
+  it.each(["ΟΔΟΣ", "ΠΑΠΑΣ", "ΑΣ"])(
+    "redacts %s, whose final sigma folds differently per character than whole-string",
+    (pattern) => {
+      expect(
+        pattern.toLowerCase(),
+        "the fixture needs the two foldings to disagree",
+      ).not.toBe(perCharacterLower(pattern));
+
+      const result = createRedactor(deterministicKey, { userPatterns: [pattern] })(
+        `client ${pattern} here`,
+      );
+      expect(result.text).toBe("client [REDACTED:user-pattern] here");
+    },
+  );
+
+  /**
+   * De-duplication is on the folded needle, so two spellings of one name are one scan.
+   * Asserted on a **case variant** rather than a byte-identical repeat: `addCandidate`
+   * refuses an overlap either way, so a byte-identical pair produces one finding with or
+   * without the dedupe and pins nothing.
+   */
+  it("treats two case spellings of one pattern as one needle", () => {
+    const result = createRedactor(deterministicKey, {
+      userPatterns: ["Acme Corp", "acme corp", "ACME CORP"],
+    })("hello Acme Corp bye");
+    expect(result.text).toBe("hello [REDACTED:user-pattern] bye");
+    expect(result.findings.filter((f) => f.class === "user-pattern")).toHaveLength(1);
+  });
+
+  /**
+   * **What longest-first does not close**, asserted so nobody reads the ordering as a
+   * guarantee it is not. Two patterns that interleave rather than contain cannot both
+   * win under `addCandidate`'s first-wins rule. Not a regression — the unordered scan
+   * leaked here too — and registered as `BACKLOG.md` §1 **NEW-25**.
+   */
+  it("leaves the tail of a partially overlapping pattern, which ordering cannot fix", () => {
+    const result = createRedactor(deterministicKey, {
+      userPatterns: ["Acme Corp", "Corp Holdings"],
+    })("x Acme Corp Holdings y");
+    expect(result.text).toBe("x Acme [REDACTED:user-pattern] y");
+  });
+
+  it("still refuses a key shorter than the floor redactText enforces", () => {
+    expect(() => createRedactor(new Uint8Array(31))("anything")).toThrow(RangeError);
   });
 });

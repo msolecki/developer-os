@@ -139,7 +139,7 @@ function buildFoldedHaystack(text: string): FoldedHaystack {
   let sourceIndex = 0;
   for (const character of text) {
     originalOffsetAt.set(haystackLength, sourceIndex);
-    const folded = character.toLowerCase();
+    const folded = foldForMatching(character);
     haystackParts.push(folded);
     haystackLength += folded.length;
     sourceIndex += character.length;
@@ -182,6 +182,45 @@ function toOriginalRange(
  * every other class matches against is what keeps this in the same
  * coordinate space as the rest of the function.
  */
+/**
+ * **One folding rule for both sides of the comparison, and the reason is a real miss.**
+ * `buildFoldedHaystack` folds the text **per character**, because it has to keep a map
+ * from folded offsets back to original ones. A needle folded whole-string does not agree
+ * with that: JavaScript's `toLowerCase` applies Unicode's Final_Sigma conditional mapping
+ * to a *string* and not to an isolated character, so `"ΟΔΟΣ"` folds to `"οδος"`
+ * whole-string and `"οδοσ"` per character.
+ *
+ * The consequence was a **silent miss in the direction that matters**: a Greek company
+ * name written in capitals — which is how it appears on a letterhead — could be
+ * configured in `[redaction]` and never redacted at all, with no error and no finding.
+ * Final_Sigma is the only conditional lowercase mapping `toLowerCase` applies, so this
+ * was one bounded case rather than a family; `ß` and `İ` expand identically either way.
+ *
+ * **What this does not buy:** an accent is a different letter. A pattern typed `Οδός`
+ * does not match text reading `ΟΔΟΣ`, and that is correct rather than a gap — nothing
+ * here folds diacritics away, and a rule that did would match words nobody configured.
+ */
+function foldForMatching(value: string): string {
+  let folded = "";
+  /** `for…of` walks code points, matching `buildFoldedHaystack`'s own iteration. */
+  for (const character of value) folded += character.toLowerCase();
+  /**
+   * **Then unify the two lowercase sigmas, which is what `toLowerCase` will not do.**
+   * Greek writes one letter two ways depending on position, and `toLowerCase` preserves
+   * that distinction — so folding consistently on both sides is necessary and not
+   * sufficient. Without this line the rule merely *moves* which cases miss: `ΟΔΟΣ` from a
+   * letterhead matches all-caps text and stops matching `οδος`, the way the word is
+   * ordinarily written in a sentence, which is the likelier spelling in a capture.
+   *
+   * `ς → σ` is exactly what Unicode case folding does with this pair, it is one code unit
+   * to one code unit — so `originalOffsetAt` and `toOriginalRange` are untouched, unlike
+   * the `İ → i̇` expansion they already handle — and it is Greek-only in effect: no other
+   * script has two lowercase forms of one letter that fold together. Hebrew's final forms
+   * are distinct letters and are deliberately not folded.
+   */
+  return folded.replace(/ς/gu, "σ");
+}
+
 function addUserPatterns(
   text: string,
   patterns: readonly string[],
@@ -190,8 +229,38 @@ function addUserPatterns(
   if (patterns.length === 0) return;
 
   const folded = buildFoldedHaystack(text);
-  for (const pattern of patterns) {
-    const needle = pattern.normalize("NFC").toLowerCase();
+  /**
+   * **Folded first, then de-duplicated, then sorted longest-first — in that order, and
+   * the order is the whole correctness argument.**
+   *
+   * `addCandidate` is first-wins on overlap, so an unsorted scan makes the result depend
+   * on how the user typed the table: `["Acme", "Acme Corp"]` over `"hello Acme Corp bye"`
+   * redacts the short form and **leaves `Corp` in the clear**, while the reverse order
+   * redacts the whole name. Listing both the short and the long form of a client name is
+   * the obvious thing for a founder to do.
+   *
+   * **Sorting on the raw string instead of the folded one reintroduces exactly that bug,
+   * deterministically.** Matching happens on `normalize("NFC").toLowerCase()`, and the
+   * two lengths disagree whenever a pattern arrives decomposed — which macOS filenames,
+   * Finder copy-paste and several editors all produce. A decomposed `"Nguyễn Văn Ánh"` is
+   * eighteen raw units and fourteen folded ones, so it sorts *ahead* of a composed
+   * `"Nguyễn Văn Ánh Co"` at seventeen, claims fourteen characters, and drops the longer
+   * candidate as an overlap: `" Co"` left in the clear in **both** configured orders.
+   *
+   * Folding before the `Set` also makes the de-duplication mean what its name says:
+   * `["Acme", "acme"]` is one needle, scanned once, where a byte-identical dedupe scanned
+   * it twice.
+   *
+   * **What longest-first does not close: partial overlap.** Two patterns that interleave
+   * rather than contain — `["Acme Corp", "Corp Holdings"]` over `"x Acme Corp Holdings y"`
+   * — still cannot both win, and `"Acme"` stays in the clear. That is `addCandidate`'s
+   * first-wins rule and predates this ordering; it is recorded as `BACKLOG.md` §1 **NEW-25**
+   * rather than silently implied to be handled.
+   */
+  const ordered = [
+    ...new Set(patterns.map((pattern) => foldForMatching(pattern.normalize("NFC")))),
+  ].sort((a, b) => b.length - a.length || (a < b ? -1 : a > b ? 1 : 0));
+  for (const needle of ordered) {
     if (needle.length === 0) continue;
     for (
       let at = folded.haystack.indexOf(needle);
@@ -303,6 +372,33 @@ function boundedPemPattern(label: string): RegExp {
   );
 }
 
+/**
+ * A redactor with its key and its user patterns already bound.
+ */
+export type Redactor = (text: string) => RedactionResult;
+
+/**
+ * **The one production entry to `redactText`, and the reason it exists is the key rather
+ * than the patterns.** Binding both into a closure stops the key travelling as a
+ * parameter through capture, review, ingest and init — fourteen call sites that each had
+ * to be trusted not to log, hash or persist it (knowledge-pipeline spec §8.4). A closure
+ * cannot be interpolated into a diagnostic by accident; a `Uint8Array` in scope can.
+ *
+ * The patterns come from `config.toml`'s `[redaction]` table and are literal substrings.
+ * `RedactionOptions` states why they are not expressions, and the loader's
+ * `redactionSchema` bounds their count and length (BACKLOG NEW-16).
+ *
+ * **The key is validated when the redactor runs, not when it is built**, which keeps
+ * `redactText`'s existing contract exactly: the same `RangeError` on a short key, raised
+ * at the same point relative to the text it was asked to redact.
+ */
+export function createRedactor(
+  key: Uint8Array,
+  options: RedactionOptions = {},
+): Redactor {
+  return (text: string) => redactText(text, key, options);
+}
+
 export function redactText(
   text: string,
   key: Uint8Array,
@@ -409,7 +505,9 @@ export function redactText(
    * narrower attempt at the same region is the one the overlap resolver
    * drops. `addUserPatterns` still no-ops when no patterns are configured,
    * so this reordering does not change output for any of the calls that
-   * pass none (the two production call sites, today).
+   * pass none. **That was every production call site until 2026-08-17**; `capture`,
+   * `review` and `ingest` now pass the user's configured patterns, so this ordering is
+   * live rather than latent (BACKLOG NEW-16).
    */
   addUserPatterns(normalizedText, options.userPatterns ?? [], candidates);
   /**

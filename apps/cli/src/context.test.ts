@@ -43,11 +43,23 @@ vi.mock("@developer-os/security", async (importOriginal) => {
   const actual =
     await importOriginal<typeof SecurityModule>();
 
+  /**
+   * **Spies on `createRedactor`, not on `redactText`.** `createRedactor` calls
+   * `redactText` *inside* `redaction.ts`, and a module-internal call is not intercepted
+   * by mocking the package barrel — so a spy on `redactText` sees nothing once the
+   * commands route through the redactor, and the case silently stops observing the thing
+   * it names. The claim being pinned is **almost** unchanged, and the difference is worth stating: the
+   * old spy recorded the key an actual redaction ran under, this one records the key a
+   * redactor was *constructed* with. Code that built `createRedactor(durableKey)` and
+   * then wired a *different* redactor into the guards would pass. Nothing in the tree
+   * does that — every site constructs and uses in one expression — but a future one
+   * could, and a reader should not take this for the stronger claim.
+   */
   return {
     ...actual,
-    redactText: (text: string, key: Uint8Array) => {
+    createRedactor: (key: Uint8Array, options?: SecurityModule.RedactionOptions) => {
       redactionKeyUses.push(Uint8Array.from(key));
-      return actual.redactText(text, key);
+      return actual.createRedactor(key, options);
     },
   };
 });

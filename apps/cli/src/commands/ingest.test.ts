@@ -1195,6 +1195,47 @@ describe("runIngest, the agent call", () => {
    * dash-rule cases. What is no longer covered end-to-end is the interpolation,
    * and no fixture can reach it without an injection point that does not exist.
    */
+  /**
+   * **BACKLOG NEW-16's sharpest claim: a configured client name must not reach a vendor
+   * model.** `buildIngestPrompt` puts the capture body in front of one, so this is the
+   * single path where spec §8.2's user-extensible class earns its keep.
+   *
+   * The capture is seeded **before** the table is written, so the name is genuinely on
+   * disk and this exercises `ingest`'s own redactor rather than `capture`'s. Revert
+   * `ingest.ts`'s `userPatterns: config.redaction?.patterns ?? []` and this goes red on
+   * the argv the fixture recorded.
+   */
+  it("keeps a configured client name out of the prompt it sends a vendor", async () => {
+    const fixture = await installedFixture("ingest-user-redaction");
+    const seeded = await fixture.seedAccepted(
+      "the Northwind Traders migration needs a rollback plan",
+    );
+    /**
+     * The seed is genuine, asserted rather than assumed. Without this a future change to
+     * `seedAccepted` that started redacting would hollow the case out silently: it would
+     * still pass `not.toContain`, and `[REDACTED:user-pattern]` would keep it green from
+     * `capture`'s side rather than `ingest`'s.
+     */
+    expect(await nodeFs.readFile(seeded.path, "utf8")).toContain("Northwind Traders");
+
+    await nodeFs.appendFile(
+      fixture.paths.configFile,
+      '\n[redaction]\npatterns = ["Northwind Traders"]\n',
+      "utf8",
+    );
+    fixture.reply(() => oneNote(seeded.id));
+
+    const result = await fixture.run({ agent: "codex" });
+
+    expect(result.ok, "the ingest must reach the vendor").toBe(true);
+    const sent = fixture.calls.map((call) => call.args.join("\n")).join("\n");
+    expect(sent, "the vendor was not called").not.toBe("");
+    expect(sent).not.toContain("Northwind Traders");
+    expect(sent).toContain("[REDACTED:user-pattern]");
+    /** The rest of the observation still reaches the model. */
+    expect(sent).toContain("migration needs a rollback plan");
+  });
+
   it("ingests from a vault whose own path names a word-list term", async () => {
     const fixture = await installedFixture("ingest-danger-in-the-path");
     const seeded = await fixture.seedAccepted("an observation under a danger path");

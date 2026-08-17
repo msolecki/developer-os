@@ -587,6 +587,48 @@ describe("secret-scan", () => {
     expect(validators(result)).toContain("secret-scan");
   });
 
+  /**
+   * **A `user-pattern` hit means "narrow your config", every other class means "a real
+   * secret is in the proposal".** One message for both sent a user hunting a credential
+   * that was never there (BACKLOG NEW-24). The message still names no value
+   * and no table entry — it cannot; `RedactionFinding` carries a class and a fingerprint
+   * and nothing that identifies which row matched.
+   */
+  it("says a user-configured pattern matched, rather than reporting a secret", async () => {
+    const context: IngestValidationContext = {
+      ...contextFor(await makeVault()),
+      redact: (text: string) => redactText(text, KEY, { userPatterns: ["Northwind"] }),
+    };
+    const result = await validateProposal(
+      proposal(note("DEV/client.md", {}, "the Northwind migration is planned\n")),
+      context,
+    );
+
+    expect(result.ok).toBe(false);
+    const message = result.findings.find((f) => f.validator === "secret-scan")?.message;
+    expect(message).toContain("[redaction] table in config.toml");
+    expect(message).not.toContain("Northwind");
+    /** And it does not claim a secret class was found, because none was. */
+    expect(message).not.toContain("provider-token");
+  });
+
+  it("names the real classes as well when both are present", async () => {
+    const context: IngestValidationContext = {
+      ...contextFor(await makeVault()),
+      redact: (text: string) => redactText(text, KEY, { userPatterns: ["Northwind"] }),
+    };
+    const result = await validateProposal(
+      proposal(
+        note("DEV/both.md", {}, `Northwind token ${providerToken("c")}\n`),
+      ),
+      context,
+    );
+
+    const message = result.findings.find((f) => f.validator === "secret-scan")?.message;
+    expect(message).toContain("provider-token");
+    expect(message).toContain("[redaction] table in config.toml");
+  });
+
   it("accepts a proposal the redactor finds nothing in", async () => {
     const result = await validateProposal(proposal(validNote()), contextFor(await makeVault()));
     expect(validators(result)).not.toContain("secret-scan");

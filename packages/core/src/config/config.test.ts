@@ -254,6 +254,92 @@ describe("brain configuration section", () => {
   });
 });
 
+const redactionToml = `${validToml}
+[redaction]
+patterns = ["Northwind Traders", "acme-internal"]
+`;
+
+/**
+ * Spec §8.2 describes a user-extensible redaction class — the one a founder uses for a
+ * client name no generic pattern catches. `redactText` has always taken the parameter and
+ * no production caller passed it, and `configSchema` is `.strict()` with no table to set,
+ * so the feature was specified and never wired (BACKLOG NEW-16).
+ *
+ * Adding the table amends the schema `foundation.md` §2 froze; BACKLOG §8 carries the row.
+ */
+describe("redaction configuration section", () => {
+  it("parses a table of literal patterns", () => {
+    expect(loadConfig(redactionToml).redaction?.patterns).toStrictEqual([
+      "Northwind Traders",
+      "acme-internal",
+    ]);
+  });
+
+  /**
+   * `indexOf("")` matches at every position, so one empty entry would redact the whole of
+   * every text this product handles — and the failure would look like the redactor
+   * working.
+   */
+  it("refuses an empty pattern, which would match at every position", () => {
+    expect(() => loadConfig(`${validToml}\n[redaction]\npatterns = [""]\n`)).toThrow();
+  });
+
+  /**
+   * The bound the empty-string rule was actually reaching for: a single space matches
+   * between every word of every text, and passed a `min(1)` justified by the empty string.
+   */
+  it("refuses a pattern that is only whitespace", () => {
+    for (const pattern of [" ", "\\t", "   "]) {
+      expect(
+        () => loadConfig(`${validToml}\n[redaction]\npatterns = ["${pattern}"]\n`),
+        pattern,
+      ).toThrow();
+    }
+  });
+
+  /**
+   * **A three-character floor was tried and withdrawn**, and these are the names it
+   * refused: registered two-letter companies, and CJK names where two characters is the
+   * ordinary length. A user with a Chinese client could not configure it at all.
+   */
+  it("accepts a real two-character company name, in any script", () => {
+    for (const pattern of ["EY", "BP", "3M", "\\u7d22\\u5c3c"]) {
+      expect(
+        loadConfig(`${validToml}\n[redaction]\npatterns = ["${pattern}"]\n`).redaction
+          ?.patterns,
+        pattern,
+      ).toHaveLength(1);
+    }
+  });
+
+  it("refuses an unknown key inside the table, because the schema is strict", () => {
+    expect(() =>
+      loadConfig(`${validToml}\n[redaction]\npatterns = ["a"]\nreplacement = "b"\n`),
+    ).toThrow();
+  });
+
+  /** A configuration written before this table existed must keep loading unchanged. */
+  it("leaves a configuration that predates the table untouched", () => {
+    expect(loadConfig(validToml).redaction).toBeUndefined();
+    expect(loadConfig(validToml)).toStrictEqual(validConfig);
+  });
+
+  it("round-trips through serializeConfig", () => {
+    expect(loadConfig(serializeConfig(loadConfig(redactionToml)))).toStrictEqual(
+      loadConfig(redactionToml),
+    );
+  });
+
+  /**
+   * The other half of the round-trip, and the reason `brain` is emitted conditionally: an
+   * `undefined` value makes `stringify` write an empty `[redaction]` table, which would
+   * rewrite every existing configuration on the first save that touched it.
+   */
+  it("emits no empty table for a configuration that has none", () => {
+    expect(serializeConfig(loadConfig(validToml))).not.toContain("[redaction]");
+  });
+});
+
 describe("serializeConfig", () => {
   it("emits canonical TOML bytes including the final newline", () => {
     expect(serializeConfig(loadConfig(validToml))).toBe(validToml);
