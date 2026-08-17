@@ -64,7 +64,7 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P6 | spec approved and plan written, both 2026-08-13 | **three unticked steps** — Task 17 Step 3 (the Codex detection row, blocked on NEW-21) and Task 19 Steps 5–6 (close the documents, run the gate), which wait on it. Seventeen of nineteen tasks landed 2026-08-13/14/15 and their step lists are deleted |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | **thirteen rows**, and the breakdown adds up: **three** await their fix from Track R **R2** (NEW-15, NEW-22, NEW-11); **four** belong to somebody else (NEW-21 the founder's and blocking A10, NEW-20 and NEW-13 deliberately not fixed, NEW-7 needing a machine with Obsidian); **six** came out of R2's own reviews — NEW-27 and NEW-28 from closing NEW-12, NEW-24, NEW-25, NEW-26 and NEW-29 from closing NEW-16. NEW-23 was raised the same way and closed the same day |
+| Repository-level | §1 | **fourteen rows**, and the breakdown adds up: **two** await their fix from Track R **R2** (NEW-15, NEW-22); **four** belong to somebody else (NEW-21 the founder's and blocking A10, NEW-20 and NEW-13 deliberately not fixed, NEW-7 needing a machine with Obsidian); **eight** came out of R2's own reviews — NEW-27 and NEW-28 from closing NEW-12, NEW-24, NEW-25, NEW-26 and NEW-29 from closing NEW-16, NEW-30 and NEW-31 from closing NEW-11. NEW-23 was raised the same way and closed the same day |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -113,21 +113,22 @@ recording. Git history is the archive.
 one. A residual is a defect like any other and gets `NEW-24` through `NEW-28`; the row it came from
 is named in its own text, which is where the lineage belongs.
 
-**Thirteen rows, and they are not all the same kind of open.** **Three are waiting on R2 to land their fix** — **NEW-15**, **NEW-22** and **NEW-11**. All four
+**Fourteen rows, and they are not all the same kind of open.** **Two are waiting on R2 to land their fix** — **NEW-15** and **NEW-22**. **NEW-11 closed
+2026-08-17** and left NEW-30, the fourth field with the same gap. All four
 that were waiting on a decision got one on 2026-08-17; **NEW-16 closed the same day** and left three
 residual rows of its own — NEW-24, NEW-25 and NEW-26. They stay here until R2 closes them, because a row leaves this
 section when its fix is committed, not when its question is answered. Four are somebody else's:
 **NEW-21** the founder's, **NEW-20** and **NEW-13** registered as deliberately-not-fixed, and
 **NEW-7** waiting on a machine with Obsidian.
 
-**Six are new, and every one was found by a fresh-context review rather than by the work itself** —
-NEW-27 and NEW-28 from the review that closed NEW-12, and NEW-24, NEW-25, NEW-26 and NEW-29 from the
-one that closed NEW-16. A seventh, NEW-23, was found the same way and **closed the same day** by
-Track R Task 1b, which built the gate it asked for.
+**Eight are new, and every one was found by a fresh-context review rather than by the work itself** —
+NEW-27 and NEW-28 from the review that closed NEW-12, NEW-24, NEW-25, NEW-26 and NEW-29 from the one
+that closed NEW-16, and NEW-30 and NEW-31 from the one that closed NEW-11. A ninth, NEW-23, was found
+the same way and **closed the same day** by Track R Task 1b, which built the gate it asked for.
 
-**That is the ordinary yield of the review gate, and the number is the argument for it.** Two defects
-closed cleanly would have left this section at eight rows; closing them honestly left it at
-thirteen.
+**That is the ordinary yield of the review gate, and the number is the argument for it.**
+Three defects
+closed cleanly would have left this section at six rows; closing them honestly left it at fourteen.
 
 **They are not all the same thing, and the honest split is worth more than a round number.** Two —
 NEW-25 and NEW-29 — are properties that predate everything: an overlap rule that was unreachable
@@ -256,35 +257,52 @@ not.
   the cost of the two paths disagreeing inside one function.
 - Cross-referenced from `docs/architecture/threat-model.md` §5.2, where the boundary is described.
 
-### NEW-11 — the invisible-title rule stops at the title
+### NEW-31 — a stray zero-width joiner still hides a duplicate title
 
-- **Status:** open, found 2026-08-11 by the review that closed NEW-10 · **Owner:** the next task
-  touching `packages/brain/src/indexes/render.ts` or `packages/brain/src/lint/lint.ts` — DOS-P6 by
-  default · **Size:** S
-- NEW-10 gave `title` a predicate that means *at least one visible character*. **Two neighbours
-  did not get it**, and both surface the way NEW-10 did — a rendered row that says nothing:
-  - **`tags`** is validated as a string array and nothing more, so `tags: [""]` and
-    `tags: ["\u200B"]` both pass. The tag cloud then renders `-  (3)` — two spaces, a count
-    attached to no label — and the folder table's "Top tags" cell gets an empty entry between
-    commas.
-  - **`summary`** is type-and-length only. `summary: "\u3164"` renders `- [Title](<path>) — ㅤ`,
-    a dangling em-dash. Cosmetic, unlike the tag case.
-- **The `duplicates` key has the older, narrower definition.** `lint.ts` keys on the *screened*
-  title, and the screen deletes `\p{Cf}` only — so `Deploy keys` and `Deploy\u3164keys` produce
-  different keys and no duplicate is reported, while `catalog.md` shows two rows a human reads as
-  identical. That is precisely the failure NEW-6 was opened for, one character class over.
-- **It is two fixes, not one, and the reviewer's correction is worth carrying.** `tags` and
-  `summary` want the *boolean* NEW-10 already wrote — move `isBlank` out of `note.ts` to
-  `packages/security` when that second call site appears, rather than copying it, which is the rule
-  that module's own header states. The duplicates key wants something `isBlank` cannot give: a
-  **perceptual grouping key**, a third function returning a string with invisibles removed and
-  marks untouched. Anyone who starts by reaching for `isBlank` there has started wrong.
-- **Do not fix either by widening the display screen.** `screenControlCharacters` must not delete
-  non-spacing marks: it would corrupt every accented and every Indic title it touches.
-- **A cheap interim exists for the half that is user-visible.** A `frontmatter`-class lint finding
-  for a blank tag needs no renderer change and no new module, and it does not prejudge the policy
-  question the full fix has to answer — whether an invisible tag is an error, a warning, or
-  silently dropped at index time.
+- **Status:** open, registered 2026-08-17 by the review that closed NEW-11 · **Owner:** whoever next
+  touches `packages/brain/src/lint/lint.ts` — DOS-P7 by default. **Not `text.ts`**: the last bullet
+  says closing this is a lint finding on the title rather than a change to the grouping key, so a
+  trigger on the key's own file would never fire on the file the fix touches · **Size:** S · **A deliberate trade,
+  recorded because the class is not complete**
+- `perceptualKey` exempts **U+200D ZERO WIDTH JOINER**, and it has to. Being `Cf` and
+  default-ignorable is why it *would* be removed; the reason it must not be is that without the
+  carve-out a title reading `Team` plus a family emoji grouped with the same title plus three
+  separate people, and Devanagari's explicit half-form grouped with the conjunct. Those are different
+  glyphs, which is the whole of what a perceptual key measures.
+- **U+200C ZERO WIDTH NON-JOINER is the mirror case and is already lost, one layer earlier.** It is
+  semantically load-bearing in Persian and in Devanagari's explicit-virama form, and
+  `screenControlCharacters` deletes it **before** `perceptualKey` ever sees it — so those pairs group
+  today and did before this task. Pre-existing and not this row's to fix, recorded so the next reader
+  does not conclude the row was half-researched.
+- **The cost is the failure NEW-6 and NEW-11 were both opened for, scoped to one character.** Between
+  Latin or Cyrillic letters a joiner joins nothing, so `Deploy<ZWJ>keys` and `Deploykeys` render
+  **glyph-identically in `catalog.md`** — `screenControlCharacters` preserves the joiner by the same
+  decision — and key differently, so no duplicate is reported. A stray joiner is exactly what a paste
+  out of a web page leaves behind.
+- **The trade is the right way round and that is why this is a row rather than a fix.** Over-grouping
+  corrupts a report about genuinely distinct notes; under-grouping misses one. But the previous
+  docblocks presented the class as complete, and a reader meeting `Deploy<ZWJ>keys` in a real vault
+  would reopen NEW-11 from scratch.
+- **Closing it means asking whether a joiner between two characters that do not join is itself the
+  defect** — a lint finding on the title rather than a change to the grouping key — which is a
+  different question from the one NEW-11 answered.
+
+### NEW-30 — `aliases` is the fourth field with no visible-character rule
+
+- **Status:** open, registered 2026-08-17 by the review that closed NEW-11 · **Owner:** whoever next
+  touches `packages/brain/src/schema/note.ts` — DOS-P7 by default · **Size:** XS · **The weakest of
+  the four, and registered rather than fixed for that reason**
+- NEW-11 gave `tags` and `summary` the predicate `title` already had. **`aliases` is validated by
+  `isStringArray` and nothing more**, exactly as those two were, so `aliases: ["\u200B"]` passes.
+- **It has no rendering symptom**, which is why it was left: an alias reaches neither the tag cloud
+  nor the catalog row. It reaches **link resolution** (`byAlias`), **search tokenisation**, and
+  `index.json` through `IndexedNote.aliases` — so the field is consumed, not inert, and the
+  consequence is an alias key nobody can type rather than a row that says nothing.
+- **The remaining fields were checked and are covered**: `sources` already raises a `provenance`
+  error for a blank value, `title` has the rule, and everything else is an enum, a date, an integer
+  or the literal `1`. `aliases` is the last one.
+- Closing it is one `isVisuallyBlank` call beside the two NEW-11 added, plus a decision about whether
+  a blank alias is a warning like a blank tag or an error like a blank title.
 
 ### NEW-15 — nothing that executes a discovered binary pays the check its type demands
 
@@ -420,14 +438,24 @@ one, and that is what this row is now.
   stdout.
 - Recorded at both construction sites in `apps/cli/src/context.ts` rather than only here.
 
-### NEW-29 — a wall-clock assertion in the standing suite can redden an unrelated commit
+### NEW-29 — the standing suite has at least two intermittent failures, and they misdiagnose
 
 - **Status:** open, observed 2026-08-17 by the independent review of R2 Task 2 · **Owner:** whoever
   next touches `packages/security/src/redaction.test.ts` — DOS-P7 by default · **Size:** XS ·
   **Gate integrity**
-- `packages/security/src/redaction.test.ts`'s *"adds bounded per-pattern overhead over a
-  single-pattern baseline"* asserts a **wall-clock ratio** — `withPatterns < baseline * 3 + 20` over
-  512 KB. It failed once in three full-suite runs on a loaded machine and passed the other two.
+- **The first is a wall-clock ratio.** `packages/security/src/redaction.test.ts`'s *"adds bounded
+  per-pattern overhead over a single-pattern baseline"* asserts `withPatterns < baseline * 3 + 20`
+  over 512 KB. It failed once in three full-suite runs on a loaded machine and passed the other two.
+- **The second is a different test and was found by widening the search.** On 2026-08-17 a review of
+  R2 Task 3 ran `npm run check` four times and saw `apps/cli/src/commands/capture.test.ts`'s
+  `workingDirectoryFingerprint` assertion fail once. That file passes 33/33 in isolation twice, the
+  tree differed from the passing runs **only in documentation**, and the test runs in 878 ms against
+  vitest's 5 s default — a 5.7x margin a plain timeout would have to eat. **Mechanism unconfirmed**:
+  the message was not captured before the re-run, which is the mistake to avoid next time.
+- **So this row is a class, not an assertion**, and its mitigation below was written when it looked
+  like one. Two intermittents with the same signature — red once in three or four full-suite runs on
+  a machine loaded by the suite itself — points at parallel-worker contention rather than at either
+  test's own bound.
 - **The mechanism it guards is real and worth guarding**: it proves the scan did not regress to a
   per-position rescan.
 - **The calibration was done properly and this row is not a criticism of it.** Its docblock records
@@ -437,9 +465,10 @@ one, and that is what this row is now.
   rather than CPU saturation. **This is the second symptom of one cause**: the same docblock records
   an earlier version of this case blowing past its inherited default under parallel-worker load, and
   the author fixed that half with an explicit 2000 ms timeout. The remaining half is the ratio.
-- **Until the fix lands, the mitigation is one sentence and it is free: a red run on this one
-  assertion is re-run once before anything is investigated, and only a repeated failure is a
-  signal.** A regressed *shape* measured 6.32–7.99× against a 3× bound, so it fails every attempt —
+- **Until the fix lands, the mitigation is one sentence and it is free: a red run on either of these
+  assertions is re-run once before anything is investigated, and only a repeated failure is a
+  signal — but capture the message first.** A blind re-run is exactly what kept the second one
+  invisible until a reviewer happened to run the suite four times. A regressed *shape* measured 6.32–7.99× against a 3× bound, so it fails every attempt —
   re-running cannot mask a real regression, which is what makes this safe to write down.
 - **The cost is misdiagnosis, not flakiness.** A red `npm run check` on an unrelated commit sends the
   next person to the change in front of them. This repository already carries one such case

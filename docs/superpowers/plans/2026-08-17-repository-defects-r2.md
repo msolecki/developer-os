@@ -557,7 +557,7 @@ git commit -m "feat(security): wire spec 8.2's user redaction patterns to a conf
 
 **Write every invisible as a `\uXXXX` escape, in the tests and in this plan.** `tests/repository/control-bytes.test.ts` refuses a literal U+200B anywhere in the tree, and it caught this plan's first draft. A test about invisible characters that cannot itself be committed is a test nobody runs — and an escape is legible to a reviewer where the character it stands for is, by construction, not.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `packages/security/src/text.test.ts`:
 
@@ -605,12 +605,12 @@ it("still indexes a note whose tag is blank, because this is a warning", async (
 });
 ```
 
-- [ ] **Step 2: Run them and verify they fail**
+- [x] **Step 2: Run them and verify they fail**
 
 Run: `pnpm vitest run packages/security/src/text.test.ts packages/brain/src/lint/lint.test.ts`
 Expected: FAIL — `perceptualKey is not defined`; the tag and summary cases find no finding; the duplicates case finds 0 findings rather than 2. **The fourth case must pass on first run** — it pins that this decision is a warning and not a validation error, and it would go red if a later hand reached for `note.ts` instead.
 
-- [ ] **Step 3: Move the predicate and add the key**
+- [x] **Step 3: Move the predicate and add the key**
 
 Create `packages/security/src/text.ts`. Move `INVISIBLE_ONLY` and `isBlank` out of `packages/brain/src/schema/note.ts` verbatim — the regex, and the whole docblock above it, including the ICU-drift paragraph, which is as true here as it was there. Rename the export to `isVisuallyBlank`; the local name said what it tested, the exported one has to say what it means.
 
@@ -641,7 +641,7 @@ where `INVISIBLE` is `/[\p{Cf}\p{Default_Ignorable_Code_Point}\p{Cc}]/gu` — th
 
 In `note.ts`, delete the local definition and import `isVisuallyBlank` from `@developer-os/security`. The `title` check at `:424` keeps its current behaviour exactly.
 
-- [ ] **Step 4: Add the two findings and rekey duplicates**
+- [x] **Step 4: Add the two findings and rekey duplicates**
 
 In `packages/brain/src/lint/lint.ts`, extend `frontmatterFindings` to walk `build.index.notes` — the parsed notes, not `build.parseIssues`, because a blank tag *parses*:
 
@@ -677,12 +677,12 @@ for (const note of build.index.notes) {
 
 In `duplicateFindings`, replace the screened-title group key with `perceptualKey(screenControlCharacters(note.title))`. The screen stays — it is what makes this class agree with the artifact it is about, since `catalog.md` renders a screened title — and the perceptual key is applied over its result.
 
-- [ ] **Step 5: Run the tests and verify they pass**
+- [x] **Step 5: Run the tests and verify they pass**
 
 Run: `pnpm vitest run packages/security/src/text.test.ts packages/brain/src/lint/lint.test.ts packages/brain/src/schema/note.test.ts`
 Expected: PASS. `note.test.ts` must be green **unchanged** — the title predicate moved packages and did not change.
 
-- [ ] **Step 6: Run the gate, review, commit**
+- [x] **Step 6: Run the gate, review, commit**
 
 Run: `npm run check`
 

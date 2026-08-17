@@ -37,6 +37,8 @@ describe("the package's public door", () => {
         "capGraphemes",
         "screenAndCap",
         "screenControlCharacters",
+        "isVisuallyBlank",
+        "perceptualKey",
         "boundedProse",
         "fenced",
         "screenParagraphs",

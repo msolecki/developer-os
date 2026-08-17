@@ -394,7 +394,111 @@ describe("links", () => {
   });
 });
 
+/**
+ * NEW-10 gave `title` a predicate meaning *at least one visible character*. Three
+ * neighbours did not get it, and each surfaces the way NEW-10 did — a rendered row that
+ * says nothing (BACKLOG NEW-11). An invisible tag is a **warning**: the note still
+ * indexes, decided by the founder on 2026-08-17.
+ */
+describe("invisible frontmatter values", () => {
+  const findingsFor = async (
+    fields: Record<string, string>,
+  ): Promise<ReturnType<typeof lintVault> extends Promise<infer R> ? R : never> =>
+    lintMemory({ "content/DEV/note.md": note(fields) });
+
+  it("warns about a tag with no visible character", async () => {
+    const result = await findingsFor({ tags: '["deploy", "\u200B"]' });
+    expect(
+      result.findings.filter((f) => f.class === "frontmatter" && f.key === "tags"),
+    ).toHaveLength(1);
+    expect(
+      result.findings.find((f) => f.key === "tags")?.severity,
+      "an invisible tag is a warning, not an error",
+    ).toBe("warn");
+  });
+
+  it("warns once per blank tag, so two blanks are two findings", async () => {
+    const result = await findingsFor({ tags: '["\u200B", "dev", "\u3164"]' });
+    expect(
+      result.findings.filter((f) => f.class === "frontmatter" && f.key === "tags"),
+    ).toHaveLength(2);
+  });
+
+  it("leaves an ordinary tag alone", async () => {
+    const result = await findingsFor({ tags: "[dev, deploy]" });
+    expect(result.findings.filter((f) => f.key === "tags")).toStrictEqual([]);
+  });
+
+  it("warns about a summary with no visible character", async () => {
+    const result = await findingsFor({ summary: '"\u3164"' });
+    expect(result.findings.find((f) => f.key === "summary")?.severity).toBe("warn");
+  });
+
+  /**
+   * `render.ts` guards `summary.length === 0` after screening, so an empty summary
+   * produces a clean catalog row rather than a dangling em-dash — an earlier version of
+   * this case was named for a symptom it does not have. It is still worth warning about:
+   * the row carries no description at all.
+   */
+  it("warns about an empty summary, which leaves the row with no description", async () => {
+    const result = await findingsFor({ summary: '""' });
+    expect(result.findings.find((f) => f.key === "summary")?.severity).toBe("warn");
+  });
+
+  /**
+   * The decision, pinned. A warning means the note still reaches the index; an error
+   * would make an existing vault with one stray tag un-indexable until hand-edited.
+   */
+  it("still indexes a note whose tag is blank", async () => {
+    const files = { "content/DEV/note.md": note({ tags: '["\u200B"]' }) };
+    /**
+     * **Asserts the index, not the absence of an error.** The weaker form passed if the
+     * tag loop were deleted entirely, and passed if the note were dropped from the index
+     * with no finding at all — it only caught "somebody turned this into a validation
+     * error". The decision was that the note still reaches the index, so that is what is
+     * pinned.
+     */
+    const build = await buildIndex(memoryBuild(files));
+    expect(build.index.notes).toHaveLength(1);
+
+    const result = await lintMemory(files);
+    expect(result.findings.some((f) => f.severity === "error")).toBe(false);
+  });
+});
+
 describe("duplicates", () => {
+  /**
+   * **The half of NEW-11 that is not a predicate.** `duplicates` keyed on the *screened*
+   * title, and `screenControlCharacters` deletes `\p{Cf}` only — so a title carrying
+   * U+3164 HANGUL FILLER, which is category `Lo` and the character people actually use to
+   * make an invisible name, produced a different key and no duplicate was reported. The
+   * catalog showed two rows a human reads as identical while lint said there was none,
+   * which is exactly the failure NEW-6 was opened for, one character class over.
+   */
+  it("reports two titles that differ only by a non-format invisible", async () => {
+    const result = await lintMemory({
+      "content/DEV/one.md": note({ title: "Deploykeys" }, "one\n"),
+      "content/DEV/two.md": note({ title: "Deploy\u3164keys" }, "two\n"),
+    });
+    const titles = of(result, "duplicates").filter((f) => f.key === "title");
+    expect(titles.map((f) => f.path).sort()).toEqual([
+      "content/DEV/one.md",
+      "content/DEV/two.md",
+    ]);
+  });
+
+  /**
+   * And the boundary the perceptual key must not cross: a diacritic distinguishes words
+   * in every language that uses one, so `Café` and `Cafe` are two titles.
+   */
+  it("does not group two titles that differ by a diacritic", async () => {
+    const result = await lintMemory({
+      "content/DEV/one.md": note({ title: "Cafe notes" }, "one\n"),
+      "content/DEV/two.md": note({ title: "Caf\u00E9 notes" }, "two\n"),
+    });
+    expect(of(result, "duplicates").filter((f) => f.key === "title")).toStrictEqual([]);
+  });
+
   it("reports a case-insensitive path collision as an error", async () => {
     /**
      * Built in memory because it cannot exist on disk here: a default macOS
