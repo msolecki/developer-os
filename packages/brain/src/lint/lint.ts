@@ -1,4 +1,5 @@
 import type { BrainConfigV1 } from "@developer-os/core";
+import { isVisuallyBlank, perceptualKey } from "@developer-os/security";
 
 import { compareCanonical, PRIVATE_FOLDERS } from "../discovery/index.js";
 import { buildIndex, renderArtifacts } from "../indexes/index.js";
@@ -180,6 +181,58 @@ function frontmatterFindings(
            */
           screenControlCharacters(issue.message),
           issue.line,
+        ),
+      );
+    }
+  }
+
+  /**
+   * **`tags` and `summary` get `title`'s predicate, three months late** (BACKLOG NEW-11).
+   * NEW-10 gave `title` a rule meaning *at least one visible character*; its two
+   * neighbours were validated as type-and-length only, so `tags: [""]` and a tag of one
+   * zero-width space both passed and the tag cloud rendered `-  (3)` — a count attached
+   * to no label, which is exactly what `render.ts` emits for a blank tag.
+   *
+   * **`summary`'s symptom is the quieter one, and an earlier draft of this said something
+   * false about it.** It claimed a blank summary "renders a dangling em-dash", which is
+   * true of only two of the six blank forms: `render.ts` guards `summary.length === 0`
+   * *after* screening, so `""`, a zero-width space, a soft hyphen and a no-break space
+   * all produce a clean row with no description, and only the non-format residue —
+   * U+3164, U+2800 — survives the screen to sit after an em-dash. The warning is worth
+   * having either way, because a note whose summary says nothing is unfindable in a
+   * catalog that exists to be skimmed. But it has to give its real reason: this file's
+   * own `MIN_SWALLOWED_PROSE_LENGTH` docblock argues that firing on a benign case trains
+   * users to ignore a class, and a warning with a wrong reason does the same.
+   *
+   * **A warning, not an error**, decided by the founder on 2026-08-17: the note still
+   * reaches the index. An error would make an existing vault with one stray tag
+   * un-indexable until somebody hand-edited it, which is a worse outcome than a row that
+   * reads badly.
+   *
+   * Walks `build.index.notes` rather than `build.parseIssues`, because a blank tag
+   * **parses** — that is the whole defect.
+   */
+  for (const note of build.index.notes) {
+    for (const tag of note.tags) {
+      if (!isVisuallyBlank(tag)) continue;
+      findings.push(
+        finding(
+          "frontmatter",
+          "warn",
+          note.path,
+          "tags",
+          "a tag with no visible character renders as a count attached to no label in the tag cloud; remove it or give it a name",
+        ),
+      );
+    }
+    if (isVisuallyBlank(note.summary)) {
+      findings.push(
+        finding(
+          "frontmatter",
+          "warn",
+          note.path,
+          "summary",
+          "a summary with no visible character leaves the catalog row with no description; write one or remove the key",
         ),
       );
     }
@@ -525,14 +578,30 @@ function duplicateFindings(build: IndexBuildResult): readonly LintFinding[] {
      * shown. It collapses runs of whitespace for the same reason: the renderer
      * does, so two titles differing only by a second space are one row.
      *
-     * The NFC fold stays, and stays second. Without it, two notes in one folder
-     * titled the same word in different normalizations are not reported — two
-     * lines apart, two different Unicode policies. Screening cannot replace it:
-     * it removes invisibles, it does not compose. `trim()` is gone because
-     * `screenControlCharacters` already trims.
+     * **`perceptualKey` is what closes the rest of it, and the screen alone could not**
+     * (BACKLOG NEW-11). `screenControlCharacters` deletes `\p{Cf}` and nothing else, so a
+     * title carrying U+3164 HANGUL FILLER — category `Lo`, and the character people
+     * actually use to make an invisible name — produced a different key, no duplicate was
+     * reported, and the catalog again showed two rows a human reads as identical. That is
+     * the failure this class was opened for, one character class over. The perceptual key
+     * removes the default-ignorable set — **except U+200D**, which every screen in this
+     * repository carves out so a joined emoji is not read as three people — and folds
+     * NFC. It keeps whitespace and every diacritic, so `Caf\u00E9` never groups with
+     * `Cafe`.
+     *
+     * The NFC fold stays, and stays after the removal — it now lives inside
+     * `perceptualKey`. Without it, two notes in one folder titled the same word in
+     * different normalizations are not reported. Screening cannot replace it: it removes
+     * invisibles, it does not compose. `trim()` is gone because `screenControlCharacters`
+     * already trims.
+     *
+     * **`toLowerCase` runs last, and the order is load-bearing.** Lowercasing before the
+     * removal would let an invisible sit between a sigma and the end of a word, so
+     * Final_Sigma resolves differently on two titles that are perceptually identical —
+     * the same class of bug `redaction.ts` was fixed for on 2026-08-17.
      */
     (note) =>
-      `${note.topicFolder}\u0000${screenControlCharacters(note.title).normalize("NFC").toLowerCase()}`,
+      `${note.topicFolder}\u0000${perceptualKey(screenControlCharacters(note.title)).toLowerCase()}`,
   )) {
     if (group.length < 2) continue;
     for (const note of group) {

@@ -230,10 +230,10 @@ accumulate. What was decided:
 Three Foundation requests and the `accepted → rejected` gap are in the same plan, decided the same
 day, because they were unowned for the same reason: no entry on the product path reaches them.
 
-**Ten §1 rows are deliberately not in R2**, and a session finishing this entry must not sweep them up
-with the three it still has to close — NEW-15, NEW-22 and NEW-11. **Four belong to somebody else:** **NEW-21** is the founder's and blocks
+**Twelve §1 rows are deliberately not in R2**, and a session finishing this entry must not sweep them up
+with the two it still has to close — NEW-15 and NEW-22. **Four belong to somebody else:** **NEW-21** is the founder's and blocks
 A10; **NEW-20** and **NEW-13** were registered as deliberately-not-fixed; **NEW-7** needs ten minutes
-with a machine that has Obsidian rather than an agent. **Six came out of R2's own reviews**, registered 2026-08-17 by the reviews that produced them. **NEW-27** and **NEW-28** came from NEW-12: a derived path that will wear a write scope's name, and
+with a machine that has Obsidian rather than an agent. **Eight came out of R2's own reviews**, registered 2026-08-17 by the reviews that produced them. **NEW-27** and **NEW-28** came from NEW-12: a derived path that will wear a write scope's name, and
 an interpolation in `ingest` that no longer has an end-to-end test because no production path can
 reach it. **NEW-24**, **NEW-25** and **NEW-26** came from NEW-16: a common redaction pattern that
 refuses every ingest and cannot be diagnosed without widening a persisted type; two partially
@@ -241,8 +241,8 @@ overlapping patterns that cannot both redact; and a vendor's stdout redacted wit
 only, because the process runner is built before any configuration is read. **NEW-29** came from the
 same review and is a gate-integrity item rather than a product one: a wall-clock assertion in the
 standing suite that can redden an unrelated commit. **None is R2's to fix, and the count is the
-honest cost of closing two rows** — a defect that closes cleanly and leaves nothing is rarer than
-this queue used to imply. 4 + 6 = 10.
+honest cost of closing three rows** — a defect that closes cleanly and leaves nothing is rarer than
+this queue used to imply. 4 + 8 = 12.
 
 **A third came from that review and is already closed — NEW-23, by Task 1b.** Over four hundred
 `path:line` citations across the documents were maintained by hand, `npm run check` was green with
@@ -251,11 +251,11 @@ reported twelve defects on its first run, then four more once its extractor was 
 citation across lines — the form that an evidence table written as one file name and eight bare
 ranges depends on, and that a per-line reader cannot see.
 
-**§1 therefore holds thirteen rows while R2 runs, not nine**, and the arithmetic is worth stating because
+**§1 therefore holds fourteen rows while R2 runs, not nine**, and the arithmetic is worth stating because
 it moves every time a task lands. It started at nine. NEW-12 closed and left two residuals; NEW-23
-arrived from the same review and closed the same day; NEW-16 closed and left **three**; the review that closed it also observed NEW-29, a timing assertion that can redden an unrelated commit. A row leaves §1
-when its fix is **committed**, not when its question is answered, so the three R2 still implements —
-NEW-15, NEW-22, NEW-11 — stay listed until it lands them.
+arrived from the same review and closed the same day; NEW-16 closed and left **three**; NEW-11 closed and left NEW-30 and NEW-31; the review that closed it also observed NEW-29, a timing assertion that can redden an unrelated commit. A row leaves §1
+when its fix is **committed**, not when its question is answered, so the two R2 still implements —
+NEW-15 and NEW-22 — stay listed until it lands them.
 
 **NEW-15 is still the cautionary case, and a decided policy does not repeal the lesson.** It read like
 an implementation for a day and cost a full task to discover it was not: the guard was built, tested,
