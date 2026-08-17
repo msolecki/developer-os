@@ -303,10 +303,23 @@ export async function discoverEachAgent(
   const outcomes: AgentOutcome[] = [];
   for (const name of AGENT_NAMES) {
     try {
-      outcomes.push({
-        name,
-        discovery: await context.platform.discoverExecutable(name),
-      });
+      const discovery = await context.platform.discoverExecutable(name);
+      /**
+       * **`doctor` is the third executor, and it was the one missed** (BACKLOG NEW-15).
+       * `--probe` hands this path to the capability probes, which spawn it — and one of
+       * them runs `claude plugin validate`, which *mutates state* under the user's home.
+       * A binary the platform will not vouch for must not reach that, and reporting it as
+       * `present` while `ingest` exits 5 on the same file is the worst of both.
+       *
+       * **Recorded as a discovery failure rather than rethrown**, which is what this
+       * function already does with every other refusal: both agents are still asked, the
+       * outcome carries the reason, and `checkAgents` grades it. The binary exists; what
+       * this product cannot do is vouch for it, and the error says so.
+       */
+      if (discovery.installed && discovery.executablePath !== null) {
+        await context.platform.assertTrustedExecutable(discovery.executablePath);
+      }
+      outcomes.push({ name, discovery });
     } catch (error) {
       outcomes.push({ name, discovery: null, error });
     }

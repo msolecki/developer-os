@@ -853,6 +853,7 @@ describe("discovery that throws for one agent", () => {
     const real = fixture.context.platform;
     const platform: PlatformAdapter = {
       inspect: () => real.inspect(),
+      assertTrustedExecutable: (): Promise<void> => Promise.resolve(),
       discoverExecutable: (name) =>
         name === agent
           ? Promise.reject(REFUSED)

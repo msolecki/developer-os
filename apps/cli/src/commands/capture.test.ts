@@ -158,6 +158,7 @@ function countingPlatform(
 ): PlatformAdapter {
   return {
     inspect: () => inner.inspect(),
+    assertTrustedExecutable: (): Promise<void> => Promise.resolve(),
     discoverExecutable: (name: AgentName): Promise<AgentDiscovery> => {
       asked.push(name);
       return inner.discoverExecutable(name);
@@ -204,6 +205,47 @@ describe("runCapture", () => {
    *
    * The client name is synthetic, as every fixture in this repository must be.
    */
+  /**
+   * **BACKLOG NEW-15, on the command whose contract is the opposite of `ingest`'s.** Spec
+   * §5.4 records an agent this command cannot identify as `unknown`, and a binary it will
+   * not execute is one it cannot identify — so the refusal is swallowed and the capture
+   * still happens. `ingest` refuses outright because it hands the binary the observation;
+   * this only probes for a version, and losing the user's note over a `--version` it
+   * declined to run would be a worse trade than recording `unknown`.
+   *
+   * **The check is real here even though the outcome is quiet**: `capture` became the
+   * second executor, and the most-run one, when Task 17 made the detection row live.
+   */
+  it("records an unknown source agent when the discovered binary is not trusted", async () => {
+    const fixture = await installedFixture("capture-untrusted-binary", {
+      fixture: {
+        untrustedExecutable: new Error(
+          "The executable is not trusted: /synthetic/bin is writable by any user",
+        ),
+      },
+    });
+
+    const result = await fixture.run(
+      fixture.context,
+      { text: "an observation taken beside an untrusted binary" },
+      () => "claude",
+    );
+
+    expect(result.ok, "the capture must still succeed").toBe(true);
+    if (!result.ok) return;
+
+    const written = await nodeFs.readFile(result.data.path, "utf8");
+    expect(written).toContain("sourceAgent: unknown");
+    expect(written).toContain("sourceAgentVersion: unknown");
+    /**
+     * And `captureMethod` follows detection, because they are the same observation: an
+     * agent we did not identify is not one we may credit with authorship.
+     */
+    expect(written).toContain("captureMethod: manual");
+    /** The observation itself is on disk: the refusal cost the user nothing. */
+    expect(written).toContain("an observation taken beside an untrusted binary");
+  });
+
   it("redacts a client name configured in the vault's own config.toml", async () => {
     const fixture = await installedFixture("capture-user-redaction");
     await nodeFs.appendFile(

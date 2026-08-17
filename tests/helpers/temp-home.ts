@@ -11,24 +11,37 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
+import { MacOsPlatformAdapter } from "@developer-os/platform-macos";
 import { redactText } from "@developer-os/security";
 
 /**
- * Deliberately `/tmp` and not `os.tmpdir()`. On macOS the per-user temporary
- * directory is `/var/folders/<2>/<30 random chars>/T/`, and an executable path
- * beneath it is long and high-entropy enough that the product's redactor
- * rewrites it — at which point `MacOsPlatformAdapter` correctly refuses to
- * report a path it can no longer vouch for, and agent discovery reports nothing.
+ * **Under the repository, not `/tmp`, and the reason changed on 2026-08-17.**
  *
- * That is not fatal: `doctor` grades the refusal as a warning and `init`
- * completes. But it is fatal *to these tests*, which assert that a planted fake
- * `claude` is discovered and that every check passes. Under `os.tmpdir()` the
- * lifecycle case fails on `agents` reporting absence — a much quieter and more
- * confusing signal than the one this guard produces. Foundation is macOS-only,
- * so `/tmp` is always present.
+ * It was `/tmp` and deliberately not `os.tmpdir()`: on macOS the per-user temporary
+ * directory is `/var/folders/<2>/<30 random chars>/T/`, and an executable path beneath it
+ * is long and high-entropy enough that the product's redactor rewrites it — at which point
+ * `MacOsPlatformAdapter` correctly refuses to report a path it can no longer vouch for,
+ * and agent discovery reports nothing. `assertDiscoverablePath` below still guards that
+ * property, and it is why the sandbox root must stay short and low-entropy.
+ *
+ * **What `/tmp` cannot survive is the trust check.** It resolves to `/private/tmp`, mode
+ * `1777` — world-writable — and `assertTrustedExecutable` refuses a binary with a
+ * world-writable ancestor, sticky bit or not, because sticky stops another user *deleting*
+ * a file they do not own and does not stop them *creating* one under a name nothing owns
+ * yet (BACKLOG NEW-15). The two suites that spawn a planted binary went red on a correct
+ * refusal, which is the guard working rather than a harness to exempt.
+ *
+ * **Whether the repository root satisfies the trust check is a claim about the reader's
+ * machine, and this file does not make it — it tests it.** `assertTrustedPath` below runs
+ * the product's own `assertTrustedExecutable` against every planted binary, so a checkout
+ * somewhere the guard refuses (under `/private/tmp`, which agent worktrees and some CI
+ * runners produce) fails with a sentence naming this file rather than as an agent
+ * mysteriously reported absent. `.tmp-home/` is git-ignored; `removeTempHome` deletes each
+ * sandbox, and the base directory itself is left in place between runs.
  */
-const SANDBOX_BASE = "/tmp";
+const SANDBOX_BASE = fileURLToPath(new URL("../../.tmp-home", import.meta.url));
 const PREFIX = "dos";
 const SANDBOX_NAME = /^dos[A-Za-z0-9]{6}$/u;
 
@@ -81,6 +94,7 @@ export interface TempHome {
  * path, for a reason that has nothing to do with the product.
  */
 export async function createTempHome(): Promise<TempHome> {
+  await mkdir(SANDBOX_BASE, { recursive: true, mode: 0o700 });
   const base = await realpath(SANDBOX_BASE);
   const root = await realpath(await mkdtemp(join(base, PREFIX)));
 
@@ -140,7 +154,42 @@ export async function installFakeExecutable(
 ): Promise<string> {
   const path = join(home.binDir, name);
   await writeFile(path, body, { mode: 0o755 });
+  await assertTrustedPath(path);
   return path;
+}
+
+/**
+ * **Runs the product's own trust check against the planted binary, rather than restating
+ * its rule.** `assertDiscoverablePath` is strong precisely because it calls the real
+ * `redactText` instead of re-implementing the entropy heuristic, so it cannot drift; this
+ * is the same move for the second property the sandbox now depends on.
+ *
+ * The sandbox moved off `/tmp` on 2026-08-17 because `/private/tmp` is mode `1777` and
+ * `assertTrustedExecutable` refuses a world-writable ancestor (BACKLOG NEW-15). The
+ * replacement is under the repository — but **that is a claim about the reader's machine
+ * that this repository cannot make**: a checkout under `/private/tmp`, which agent
+ * worktrees and some CI runners produce, puts a `1777` ancestor above every planted
+ * binary again. Without this the failure would surface as an agent reported absent or
+ * `ingest` exiting 5, which is exactly the quiet, misdirecting signal
+ * `assertDiscoverablePath` exists to prevent.
+ */
+async function assertTrustedPath(path: string): Promise<void> {
+  const adapter = new MacOsPlatformAdapter({
+    runner: {
+      run: () =>
+        Promise.reject(new Error("the trust probe spawns nothing")),
+    },
+  });
+  try {
+    await adapter.assertTrustedExecutable(path);
+  } catch (error) {
+    throw new Error(
+      `the sandbox executable ${path} is refused by the product's own trust check, ` +
+        "so agent discovery would decline it. The sandbox base must sit under a chain " +
+        "of user- or root-owned, non-world-writable directories — see SANDBOX_BASE in " +
+        `tests/helpers/temp-home.ts. Underlying refusal: ${String(error)}`,
+    );
+  }
 }
 
 /**

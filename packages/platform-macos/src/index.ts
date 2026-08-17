@@ -1,6 +1,7 @@
 export {
   MacOsPlatformAdapter,
   MacOsPlatformDiscoveryError,
+  MacOsPlatformTrustError,
   MacOsPlatformInputError,
   MacOsPlatformUnsupportedError,
 } from "./macos.js";

@@ -69,6 +69,13 @@ export interface FakePlatformOptions {
    * because the redactor rewrote a long, high-entropy one.
    */
   readonly discoveryFailure?: Error;
+  /**
+   * Makes `assertTrustedExecutable` refuse, so a command test can drive the
+   * untrusted-binary path without a real filesystem whose ownership it cannot control
+   * (BACKLOG NEW-15). Absent means every discovered binary is trusted, which is what
+   * every pre-existing fixture assumed before the check existed.
+   */
+  readonly untrustedExecutable?: Error;
 }
 
 export class FakePlatformAdapter implements PlatformAdapter {
@@ -88,6 +95,12 @@ export class FakePlatformAdapter implements PlatformAdapter {
       release: "25.5.0",
       userHome: this.#options.userHome,
     });
+  }
+
+  assertTrustedExecutable(): Promise<void> {
+    return this.#options.untrustedExecutable === undefined
+      ? Promise.resolve()
+      : Promise.reject(this.#options.untrustedExecutable);
   }
 
   discoverExecutable(name: AgentName): Promise<AgentDiscovery> {
@@ -159,6 +172,8 @@ export interface FixtureOptions {
   readonly answers?: readonly boolean[];
   readonly env?: Readonly<Record<string, string | undefined>>;
   readonly agents?: Readonly<Record<AgentName, AgentDiscovery>>;
+  /** Drives the untrusted-binary path without a filesystem whose ownership a test owns. */
+  readonly untrustedExecutable?: Error;
   readonly inspectFailure?: Error;
   readonly discoveryFailure?: Error;
   readonly now?: () => Date;
@@ -232,6 +247,9 @@ export async function createCommandFixture(
       ...(options.discoveryFailure === undefined
         ? {}
         : { discoveryFailure: options.discoveryFailure }),
+      ...(options.untrustedExecutable === undefined
+        ? {}
+        : { untrustedExecutable: options.untrustedExecutable }),
     }),
     transactions: new TransactionStore({
       stateDir: paths.stateDir,

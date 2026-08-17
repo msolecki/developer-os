@@ -64,7 +64,7 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P6 | spec approved and plan written, both 2026-08-13 | **three unticked steps** — Task 17 Step 3 (the Codex detection row, blocked on NEW-21) and Task 19 Steps 5–6 (close the documents, run the gate), which wait on it. Seventeen of nineteen tasks landed 2026-08-13/14/15 and their step lists are deleted |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | **thirteen rows**, and the breakdown adds up: **one** awaits its fix from Track R **R2** (NEW-15); **four** belong to somebody else (NEW-21 the founder's and blocking A10, NEW-20 and NEW-13 deliberately not fixed, NEW-7 needing a machine with Obsidian); **eight** came out of R2's own reviews — NEW-27 and NEW-28 from closing NEW-12, NEW-24, NEW-25, NEW-26 and NEW-29 from closing NEW-16, NEW-30 and NEW-31 from closing NEW-11. NEW-23 was raised the same way and closed the same day |
+| Repository-level | §1 | **fourteen rows**, and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **four** belong to somebody else (NEW-21 the founder's and blocking A10, NEW-20 and NEW-13 deliberately not fixed, NEW-7 needing a machine with Obsidian); **eight** came out of R2's own reviews — NEW-27 and NEW-28 from closing NEW-12, NEW-24, NEW-25, NEW-26 and NEW-29 from closing NEW-16, NEW-30 and NEW-31 from closing NEW-11. NEW-23 was raised the same way and closed the same day |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -113,7 +113,8 @@ recording. Git history is the archive.
 one. A residual is a defect like any other and gets `NEW-24` through `NEW-28`; the row it came from
 is named in its own text, which is where the lineage belongs.
 
-**Thirteen rows, and they are not all the same kind of open.** **One is waiting on R2 to land its fix** — **NEW-15**. **NEW-22 closed 2026-08-17.** **NEW-11 closed
+**Fourteen rows, and they are not all the same kind of open.** **None is waiting on R2 to land a fix.** NEW-11, NEW-12, NEW-15, NEW-16 and NEW-22 all closed
+on 2026-08-17; what remains here is somebody else's or a residual of that work. **NEW-11 closed
 2026-08-17** and left NEW-30, the fourth field with the same gap. All four
 that were waiting on a decision got one on 2026-08-17; **NEW-16 closed the same day** and left three
 residual rows of its own — NEW-24, NEW-25 and NEW-26. They stay here until R2 closes them, because a row leaves this
@@ -121,14 +122,23 @@ section when its fix is committed, not when its question is answered. Four are s
 **NEW-21** the founder's, **NEW-20** and **NEW-13** registered as deliberately-not-fixed, and
 **NEW-7** waiting on a machine with Obsidian.
 
-**Eight are new, and every one was found by a fresh-context review rather than by the work itself** —
-NEW-27 and NEW-28 from the review that closed NEW-12, NEW-24, NEW-25, NEW-26 and NEW-29 from the one
-that closed NEW-16, and NEW-30 and NEW-31 from the one that closed NEW-11. A ninth, NEW-23, was found
-the same way and **closed the same day** by Track R Task 1b, which built the gate it asked for.
+**Ten are new, and every one was found by a fresh-context review rather than by the work itself** —
+NEW-27 and NEW-28 from the review that closed NEW-12; NEW-24, NEW-25, NEW-26 and NEW-29 from the one
+that closed NEW-16; NEW-30 and NEW-31 from the one that closed NEW-11; and NEW-32 and NEW-33 from the
+one that closed NEW-15. An eleventh, NEW-23, was found the same way and **closed the same day** by
+Track R Task 1b, which built the gate it asked for.
+
+**The security review is the one that most earns the gate**, and it is worth saying which findings
+were code rather than prose: it found the trust check **accepting a symlink planted in a
+world-writable directory** while refusing a real file in the same place, then — after that was fixed —
+found the same hole one level in, where a symlinked *directory* hides the attacker's parent from a
+lexical walk. Both were reproduced against the real filesystem before they were believed. It also
+found a **third executor** the change had missed, `doctor --probe`, which spawns a subcommand that
+mutates state under the user's home.
 
 **That is the ordinary yield of the review gate, and the number is the argument for it.**
-Four defects
-closed cleanly would have left this section at five rows; closing them honestly left it at thirteen.
+Five defects
+closed cleanly would have left this section at four rows; closing them honestly left it at fourteen.
 
 **They are not all the same thing, and the honest split is worth more than a round number.** Two —
 NEW-25 and NEW-29 — are properties that predate everything: an overlap rule that was unreachable
@@ -225,6 +235,16 @@ not.
 - **The shape of a fix, if anyone wants it:** canonical root for `target` and `readExistingCapture`,
   declared path for `CaptureResultV1.path` alone. That keeps the contract and closes the window, at
   the cost of the two paths disagreeing inside one function.
+- **A second instance of this shape landed 2026-08-17 and is registered here rather than as its own
+  row.** `assertTrustedExecutable` resolves a discovered binary, walks the ancestors of **both** the
+  resolved and the declared path, and then the command executes it by path — the same check-then-use
+  window, for the same reason: closing it needs an exec-by-descriptor this runtime does not offer.
+- **What it costs an attacker is *not* identical to this row's own window, and an earlier draft said
+  it was.** This row's window sits on a path only the user can write, so winning the race
+  presupposes the access the check protects. The trust check's window can sit on a directory the
+  attacker owns — which is why the guard walks the declared path's directories as well, so owning
+  that directory is refused outright rather than merely raced. What remains is the narrower case
+  where every directory is trusted and the *file* is swapped between check and exec.
 - Cross-referenced from `docs/architecture/threat-model.md` §5.2, where the boundary is described.
 
 ### NEW-31 — a stray zero-width joiner still hides a duplicate title
@@ -274,81 +294,44 @@ not.
 - Closing it is one `isVisuallyBlank` call beside the two NEW-11 added, plus a decision about whether
   a blank alias is a warning like a blank tag or an error like a blank title.
 
-### NEW-15 — nothing that executes a discovered binary pays the check its type demands
+### NEW-32 — a middle symlink hop is on none of the trust check's chains
 
-- **Status:** open, found 2026-08-14 while writing `docs/architecture/threat-model.md`, verified
-  independently by that task's review. **Attempted 2026-08-15 as R1 Task 4 and deliberately not
-  shipped** — a working guard was built, tested and then withdrawn, because the obvious policy
-  refuses this product's own vendors. What is now owed is a **founder decision**, not an
-  implementation; see "What the attempt settled" below · **Owner:** the founder for the policy, then
-  DOS-P7 for the code · **Size:** S · **Security**
-- `packages/platform-macos/src/types.ts:13-18` states the contract in its own words: **whoever
-  executes a discovered binary owes an owner and mode check first.** `discoverExecutable` finds a
-  name on `PATH` and returns a path; it does not vouch for it.
-- **DOS-P6 is the first executor and pays nothing.** `selectVendor` returns
-  `discovery.executablePath` (`apps/cli/src/commands/ingest.ts:454-463`) and the run spawns it
-  through `invokeVendor` (`:1425`, `:658`); no `stat`, no uid comparison and no mode comparison exists anywhere on that path — the
-  only `lstat` in the file is on a note path and the only mode is a `mkdir`.
-- **Widened 2026-08-15 by Task 17: `capture` is now a second executor on the same terms, and it is
-  the product's most-run command.** While `AGENT_DETECTION_ROWS` was empty this path was dormant;
-  the Claude row made it live. `discoverSourceAgent` (`apps/cli/src/commands/capture.ts`) spawns the
-  PATH-resolved `claude` — first `/usr/bin/which claude`, then `<resolved> --version` — whenever
-  `CLAUDECODE` is exactly `1`, the value the row records; `matchObservedAgent` compares the observed
-  value against the row's, so `CLAUDECODE=true` does not trigger it. And
-  `MacOsPlatformAdapter.discoverExecutable` resolves through `process.env.PATH` — again with no
-  `stat`, no uid and no mode check. **`CLAUDECODE` is trivially settable**, so any wrapper, direnv
-  file or CI step that exports it and prepends a directory it controls gets its own `claude`
-  executed by every `developer-os capture`. This is the same defect, not a new one; what changed is
-  that it moved from an occasional command onto the common one.
-- **What it is not:** privilege escalation. The binary runs as the user either way, and a user who
-  can write their own `PATH` can already run anything. **What it is:** the product hands that binary
-  the user's captured observations and read access to the whole vault, on the strength of a name
-  match. A world-writable directory earlier on `PATH` is the ordinary way this goes wrong. Under
-  `capture` the exposure is narrower than under `ingest` — a `--version` probe is handed no
-  observation and no vault path — but it is still an unchecked execution the type says is owed one.
-- The nearest existing record is `claude-adapter.md` §9 residual 10, which notes the execution and
-  **not** the check — which is why this row exists rather than a pointer to it.
+- **Status:** open, registered 2026-08-17 by the review that closed NEW-15 · **Owner:** whoever next
+  touches `packages/platform-macos/src/macos.ts` — DOS-P7 by default · **Size:** S · **Security**
+- `assertTrustedExecutable` walks three chains: the resolved target's ancestors, the declared
+  directory's ancestors, and the ancestors of that directory canonicalized. **A hop in the middle is
+  on none of them.** `<trusted>/claude` → `<attacker>/hop` → `/bin/ls` passes: the declared chain is
+  `<trusted>` upward, the resolved chain is `/bin` upward, and `<attacker>` is visited by nobody.
+- **The hop can be a *directory* component, not only the last one, and this is the bullet that stops
+  the fix being wrong.** A declared path whose *directory* redirects through the attacker's tree and
+  then out again escapes all three chains the same way: `<r>/x` → `<attacker>/y`, and `<attacker>/y/z`
+  → `<clean>/z`, so `<attacker>` is traversed by the kernel and appears on none of them. Someone
+  repairing this from the file-level example alone writes a loop over the **final component's** link
+  chain, ships it, and that case still passes.
+- **Closing it needs stepwise resolution over every component** — `readlink` in a loop, checking the
+  directory of each hop of each component — rather than a fourth canonicalization, which is why it is
+  a row and not a line.
+- **Severity is below the two holes that were fixed**, and honestly so: it needs the user to already
+  have an install whose symlink chain passes through somewhere attacker-writable. But multi-hop
+  layouts are exactly what this product's own vendors use — `~/.local/bin/claude` resolves through
+  two directories — so the shape is native to the problem rather than exotic.
+- **Not the same residual as NEW-20**, and an earlier draft conflated them: NEW-20 is a file swapped
+  between check and exec on a path only the user can write. This is a *link* swapped at a hop nobody
+  inspected.
 
-**What the attempt settled, 2026-08-15.** R1 Task 4 built the guard — `assertTrustedExecutable`,
-walking the executable and every ancestor to `/`, refusing a component owned by neither the current
-uid nor root, refusing `(mode & 0o022) !== 0`, and refusing a symbolic link anywhere in the chain
-rather than following it. Six unit cases, watched red then green; both call sites wired with the
-behaviours each command's contract already demands (`capture` swallows the refusal and records
-`unknown` per spec §5.4, `ingest` refuses outside the `catch` that would otherwise hide it). **It was
-withdrawn before commit and the row stayed open**, for one reason and one class of reason.
+### NEW-33 — a root-owned group-writable directory refuses the binary under it
 
-- **The rules as stated refuse this product's own vendors, on the founder's own machine.**
-  `command -v claude` and `command -v codex` both resolve to `~/.local/bin/…` and **both are
-  symbolic links**, so the no-symlink rule refuses both outright. `/opt/homebrew/bin` is
-  `drwxrwxr-x` — **group-writable** — so the mode rule refuses every Homebrew-installed binary,
-  which is the ordinary way these CLIs arrive. Shipped as specified, `capture` would record
-  `sourceAgent: "unknown"` forever and `ingest` would exit 5 on every run.
-- **The test harness collision is real but secondary.** `tests/helpers/temp-home.ts` sandboxes under
-  `/tmp` on purpose — its docblock records that `os.tmpdir()` paths are long and high-entropy enough
-  that the product's own redactor rewrites them, after which discovery reports nothing — and `/tmp`
-  resolves to `/private/tmp`, mode `41777`. The one e2e case that spawns the real binary therefore
-  went red on a correct refusal.
-- **One loosening was considered and rejected on its merits**, and the argument is worth keeping: a
-  **sticky bit does not make a world-writable directory safe here.** It stops another user deleting
-  or renaming a file they do not own; it does not stop them **creating** one under a name nothing
-  owns yet. So exempting sticky world-writable ancestors would wave through exactly the planted
-  binary this row exists to refuse.
-
-**So the open question is the policy, and it is the founder's**, because it decides whether the
-product runs on an ordinary macOS install: **(a)** canonicalize and check the *resolved* target and
-its ancestors — which is what the kernel actually runs at `exec` time — rather than refusing symlinks, at the
-cost of a check-then-use window of the shape already registered as NEW-20; **(b)** whether
-group-writable is refusable at all when the group is the user's own, given Homebrew; **(c)** whether
-`tests/helpers/temp-home.ts` relocates off `/tmp`, and what replaces the redaction-threshold
-reasoning that put it there.
-
-**The code was not retained, deliberately, and that is the right trade.** What is written down above
-is the whole of what the attempt bought: the policy, the two real-machine facts that defeat it, the
-loosening that was rejected and why, and the test-harness collision. The guard itself was about a
-hundred lines against an injected `lstat` and `currentUid`, and **whatever replaces it has to differ
-in the two rules that matter**, so keeping the withdrawn version would preserve mostly the parts that
-were wrong. Rebuilding it against a settled policy is a short task; deciding the policy is the long
-one, and that is what this row is now.
+- **Status:** open, registered 2026-08-17 · **Owner:** the founder, because it is a policy question ·
+  **Size:** XS to change, unverified against a real machine
+- The decided rule allows group-writable **when the directory's owner is the current uid**, which is
+  what makes `/opt/homebrew/bin` pass. A directory owned by **root** and group-writable — `/usr/local`
+  and `/usr/local/bin` are `drwxrwxr-x root:admin` on some Intel and legacy macOS installs — is
+  refused, so a `claude` under one makes `ingest` exit 5.
+- **That is the same class of false refusal that got the strict guard withdrawn**, on a machine shape
+  nobody here has tested. It is also arguably correct: group `admin` means any admin user can plant a
+  binary there, which is the threat.
+- **Not changed unilaterally.** Whether root-owned group-writable is acceptable is the founder's call,
+  on the same footing as the decision that produced the current rule.
 
 ### NEW-24 — a common redaction pattern refuses every ingest, undiagnosably
 

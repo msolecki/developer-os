@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir, release, tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { EXIT_CODES, resolveRuntimePaths } from "@developer-os/core";
 import {
@@ -19,6 +19,7 @@ import {
   type MacOsPlatformEnvironment,
   MacOsPlatformDiscoveryError,
   MacOsPlatformInputError,
+  MacOsPlatformTrustError,
   MacOsPlatformUnsupportedError,
 } from "./macos.js";
 
@@ -246,6 +247,505 @@ describe("MacOsPlatformAdapter.inspect", () => {
     await adapter.inspect();
 
     expect(runner.requests).toStrictEqual([]);
+  });
+});
+
+/**
+ * **The check `packages/platform-macos/src/types.ts` says is owed.** That file states the
+ * contract in its own words — whoever executes a discovered binary owes an owner and mode
+ * check first — and until 2026-08-17 nothing paid it: `ingest` spawned the PATH-resolved
+ * vendor and `capture` probed it, with no `stat`, no uid comparison and no mode comparison
+ * anywhere on either path (BACKLOG NEW-15).
+ *
+ * **The policy is the founder's, decided after a stricter one was built and withdrawn.**
+ * Refusing symbolic links and refusing every group-writable ancestor is defensible on
+ * paper and refuses this product's own vendors: `claude` and `codex` are both links on the
+ * founder's machine and `/opt/homebrew/bin` is `drwxrwxr-x`, so shipped as specified
+ * `capture` would record `unknown` forever and `ingest` would exit 5 on every run.
+ * Resolving instead of refusing is not a loosening of the symlink rule — it is the correct
+ * rule, because the kernel executes the resolved target and that is the file whose
+ * ownership decides anything.
+ */
+describe("MacOsPlatformAdapter.assertTrustedExecutable", () => {
+  const ROOT = { uid: 0, mode: 0o755 };
+  const USER = { uid: 501, mode: 0o755 };
+  /** `/opt/homebrew/bin` on an Apple-silicon install: group-writable, user-owned. */
+  const USER_GROUP_WRITABLE = { uid: 501, mode: 0o775 };
+  /** `/private/tmp`: world-writable with the sticky bit. */
+  const STICKY_WORLD_WRITABLE = { uid: 0, mode: 0o1777 };
+  /**
+   * A regular file: `S_IFREG` plus its permissions. The fixture carries the type bits
+   * because the guard checks them — a "trusted executable" that accepted a directory
+   * would be promising more than it verified.
+   */
+  const FILE = { uid: 501, mode: 0o100755 };
+
+  function adapterSeeing(
+    entries: Readonly<Record<string, { uid: number; mode: number }>>,
+    resolved?: string,
+    declared?: string,
+  ): MacOsPlatformAdapter {
+    return createAdapter({
+      currentUid: () => 501,
+      /**
+       * **A function of its argument, not a constant.** Returning `resolved` for every
+       * input made `#canonicalize(declaredDirectory)` yield the resolved *file*, so the
+       * third chain collapsed onto the first and was untestable here — and the fixture
+       * described a filesystem where canonicalizing a directory returns a file. Only the
+       * declared path resolves; everything else, directories included, is its own
+       * canonical form, which is true of every fixture in this suite.
+       */
+      ...(resolved === undefined
+        ? {}
+        : {
+            canonicalize: (candidate: string) =>
+              Promise.resolve(candidate === declared ? resolved : candidate),
+          }),
+      /**
+       * **Unlisted paths reject rather than defaulting to trusted.** A fake that answers
+       * `{uid: 501, mode: 0o755}` for anything not in the map is fail-*open* inside the
+       * guard's own suite: a case would pass while the walk visited components the author
+       * never thought about, which is exactly how the declared-path hole survived its
+       * first review. Every fixture below lists the whole chain it means to describe.
+       */
+      stat: (path: string) => {
+        const entry = entries[path];
+        return entry === undefined
+          ? Promise.reject(
+              Object.assign(new Error(`ENOENT: ${path} is not in the fixture`), {
+                code: "ENOENT",
+              }),
+            )
+          : Promise.resolve({ uid: entry.uid, mode: entry.mode });
+      },
+    });
+  }
+
+  /**
+   * The chain both vendors actually have on the founder's machine, traced 2026-08-17:
+   * `~/.local/bin/claude` is a link into `~/.local/share/claude/versions/…`, and every
+   * ancestor of the resolved target is the user's at mode 755.
+   */
+  it("accepts a symlink whose resolved target and ancestors are the user's", async () => {
+    const adapter = adapterSeeing(
+      {
+        "/": ROOT,
+        "/Users": ROOT,
+        "/Users/u": USER,
+        "/Users/u/.local": USER,
+        "/Users/u/.local/bin": USER,
+        "/Users/u/.local/share": USER,
+        "/Users/u/.local/share/claude": USER,
+        "/Users/u/.local/share/claude/claude": FILE,
+      },
+      "/Users/u/.local/share/claude/claude",
+      "/Users/u/.local/bin/claude",
+    );
+
+    await expect(
+      adapter.assertTrustedExecutable("/Users/u/.local/bin/claude"),
+    ).resolves.toBeUndefined();
+  });
+
+  /**
+   * The clause that makes an ordinary Homebrew install pass, and the one the withdrawn
+   * guard lacked. A user who owns a directory can write it whatever its group bit says,
+   * so refusing on the bit alone buys nothing and costs every `brew install`.
+   */
+  it("accepts a group-writable ancestor the user owns, because that is Homebrew", async () => {
+    const adapter = adapterSeeing(
+      {
+        "/": ROOT,
+        "/opt": ROOT,
+        "/opt/homebrew": USER_GROUP_WRITABLE,
+        "/opt/homebrew/bin": USER_GROUP_WRITABLE,
+        "/opt/homebrew/bin/codex": FILE,
+      },
+      "/opt/homebrew/bin/codex",
+    );
+
+    await expect(
+      adapter.assertTrustedExecutable("/opt/homebrew/bin/codex"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("refuses a group-writable ancestor somebody else owns", async () => {
+    const adapter = adapterSeeing(
+      {
+        "/": ROOT,
+        "/opt": ROOT,
+        "/opt/shared": { uid: 502, mode: 0o775 },
+        "/opt/shared/claude": FILE,
+      },
+      "/opt/shared/claude",
+    );
+
+    await expect(
+      adapter.assertTrustedExecutable("/opt/shared/claude"),
+    ).rejects.toThrow(MacOsPlatformTrustError);
+  });
+
+  /**
+   * **The group-writable rule, pinned by a case only it can refuse.** The neighbouring
+   * "somebody else owns" fixture never reaches this rule — uid 502 is refused by the
+   * owner rule first — so deleting the group clause left the whole suite green. This one
+   * is **root-owned**, which the owner rule accepts, and group-writable, which only this
+   * clause refuses.
+   *
+   * It is also the exact shape `BACKLOG.md` §1 **NEW-33** asks the founder about:
+   * `/usr/local` and `/usr/local/bin` are `drwxrwxr-x root:admin` on some Intel and
+   * legacy installs, so a `claude` under one is refused today. Group `admin` means any
+   * admin user can plant a binary there, which is the threat — but it is the same class
+   * of false refusal that got the strict guard withdrawn, so the rule stands until the
+   * founder rules on it and this case records what "stands" means.
+   */
+  it("refuses a root-owned group-writable ancestor, which the owner rule permits", async () => {
+    const adapter = adapterSeeing(
+      {
+        "/": ROOT,
+        "/usr": ROOT,
+        "/usr/local": { uid: 0, mode: 0o775 },
+        "/usr/local/bin": { uid: 0, mode: 0o775 },
+        "/usr/local/bin/claude": FILE,
+      },
+      "/usr/local/bin/claude",
+    );
+
+    await expect(
+      adapter.assertTrustedExecutable("/usr/local/bin/claude"),
+    ).rejects.toThrow(MacOsPlatformTrustError);
+  });
+
+  /**
+   * **A sticky bit does not make a world-writable directory safe here**, and the argument
+   * survives from the withdrawn attempt: sticky stops another user deleting or renaming a
+   * file they do not own; it does not stop them **creating** one under a name nothing owns
+   * yet, which is precisely the planted binary this refuses.
+   */
+  it("refuses a world-writable ancestor even with the sticky bit", async () => {
+    const adapter = adapterSeeing(
+      {
+        "/": ROOT,
+        "/private": ROOT,
+        "/private/tmp": STICKY_WORLD_WRITABLE,
+        "/private/tmp/bin": USER,
+        "/private/tmp/bin/claude": FILE,
+      },
+      "/private/tmp/bin/claude",
+    );
+
+    await expect(
+      adapter.assertTrustedExecutable("/private/tmp/bin/claude"),
+    ).rejects.toThrow(MacOsPlatformTrustError);
+  });
+
+  it("refuses an ancestor owned by neither the user nor root", async () => {
+    const adapter = adapterSeeing(
+      { "/": ROOT, "/opt": { uid: 502, mode: 0o755 }, "/opt/claude": FILE },
+      "/opt/claude",
+    );
+
+    await expect(adapter.assertTrustedExecutable("/opt/claude")).rejects.toThrow(
+      MacOsPlatformTrustError,
+    );
+  });
+
+  /**
+   * **The hole the first version of this guard had, and the direction an attacker can
+   * actually take.** It checked only the resolved chain while both callers execute the
+   * *declared* path — so a symbolic link in a directory the attacker owns, pointing at a
+   * perfectly trusted target, was **accepted**, while a real file in the same directory
+   * was refused. The attacker then retargets the link between the check and the spawn,
+   * and since they own that directory permanently they lose nothing by losing a round.
+   *
+   * Planting a link in a *trusted* directory is not the threat: an attacker who can write
+   * there would overwrite the binary instead.
+   */
+  it("refuses a link whose own directory is world-writable, however trusted its target", async () => {
+    const adapter = adapterSeeing(
+      {
+        "/": ROOT,
+        "/private": ROOT,
+        "/private/tmp": STICKY_WORLD_WRITABLE,
+        "/opt": ROOT,
+        "/opt/homebrew": USER,
+        "/opt/homebrew/bin": USER,
+        "/opt/homebrew/bin/real-claude": FILE,
+      },
+      "/opt/homebrew/bin/real-claude",
+      "/private/tmp/claude",
+    );
+
+    await expect(
+      adapter.assertTrustedExecutable("/private/tmp/claude"),
+    ).rejects.toThrow(MacOsPlatformTrustError);
+  });
+
+  /**
+   * The mirror of the case above: resolving is still what makes the *target* checkable.
+   */
+  it("checks the resolved target, not only the path it was handed", async () => {
+    const adapter = adapterSeeing(
+      {
+        "/": ROOT,
+        "/private": ROOT,
+        "/private/tmp": STICKY_WORLD_WRITABLE,
+        "/private/tmp/planted": USER,
+        "/private/tmp/planted/claude": FILE,
+      },
+      "/private/tmp/planted/claude",
+      "/opt/homebrew/bin/claude",
+    );
+
+    await expect(
+      adapter.assertTrustedExecutable("/opt/homebrew/bin/claude"),
+    ).rejects.toThrow(MacOsPlatformTrustError);
+  });
+
+  it("refuses a relative path rather than resolving it against cwd", async () => {
+    const adapter = adapterSeeing({ "/": ROOT }, "/unused");
+
+    await expect(adapter.assertTrustedExecutable("bin/claude")).rejects.toThrow(
+      MacOsPlatformInputError,
+    );
+  });
+
+  /**
+   * **The loop's own fail-closed branch, which nothing reached.** Every other fixture
+   * lists a complete chain, and `refuses when an ancestor cannot be inspected` rejects at
+   * the *file-type* stat — a different `catch` — before the loop starts. Deleting the
+   * try/catch inside the loop left the suite green while an `EACCES` on a mid-chain
+   * directory became a raw filesystem error with a string `code`, falling through to exit
+   * 1: the same leak the resolver wrapper had just closed, one branch over.
+   *
+   * The fixture lists the resolved file and every component **except** one directory in
+   * the middle, so only the loop can refuse it, and the message must name that component.
+   */
+  it("refuses when a mid-chain directory cannot be inspected", async () => {
+    const adapter = adapterSeeing(
+      {
+        "/": ROOT,
+        "/opt": ROOT,
+        /** `/opt/vendor` is deliberately absent: the fake rejects what it does not list. */
+        "/opt/vendor/bin": USER,
+        "/opt/vendor/bin/claude": FILE,
+      },
+      "/opt/vendor/bin/claude",
+    );
+
+    await expect(
+      adapter.assertTrustedExecutable("/opt/vendor/bin/claude"),
+    ).rejects.toThrow(/\/opt\/vendor cannot be inspected/u);
+  });
+
+  /** An unreadable ancestor is a refusal, not a pass: the check must fail closed. */
+  it("refuses when an ancestor cannot be inspected", async () => {
+    const adapter = createAdapter({
+      currentUid: () => 501,
+      stat: () => Promise.reject(Object.assign(new Error("EACCES"), { code: "EACCES" })),
+    });
+
+    await expect(
+      adapter.assertTrustedExecutable("/opt/homebrew/bin/claude"),
+    ).rejects.toThrow(MacOsPlatformTrustError);
+  });
+});
+
+/**
+ * **One suite against the real filesystem, because the map-based fixture above cannot
+ * express the bug that mattered.** That fake maps a *lexical* path to a mode, and a
+ * symlinked directory is precisely the case where the lexical path and the thing `stat`
+ * answers about diverge — there is no row you can add to a flat map that says
+ * "`stat(bin)` describes `ww/sub` while `dirname(bin/claude)` is still `bin`". Both holes
+ * this guard shipped with were invisible to it by construction, and both are forty lines
+ * of real `symlink` away (BACKLOG NEW-15).
+ *
+ * The base sits under the user's home so no ancestor is world-writable except the one the
+ * case creates.
+ */
+describe("MacOsPlatformAdapter.assertTrustedExecutable, against a real filesystem", () => {
+  const roots: string[] = [];
+
+  afterEach(async () => {
+    for (const root of roots.splice(0)) {
+      /**
+       * Tightened before removal so a killed run cannot leave a `0o777` directory in the
+       * user's home — a smaller version of the thing this guard exists to refuse. The
+       * root's own `0o700` shields it in the normal case; this covers the abnormal one.
+       */
+      await chmod(root, 0o700).catch(() => undefined);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  async function sandbox(): Promise<string> {
+    const root = await realpath(await mkdtemp(join(homedir(), ".dos-trust-")));
+    roots.push(root);
+    return root;
+  }
+
+  function realAdapter(): MacOsPlatformAdapter {
+    return new MacOsPlatformAdapter({
+      environment: DARWIN_ENVIRONMENT,
+      runner: runnerReturning({ exitCode: 1 }),
+    });
+  }
+
+  it("accepts a binary whose whole chain is the user's", async () => {
+    const root = await sandbox();
+    await mkdir(join(root, "bin"), { mode: 0o755 });
+    await writeFile(join(root, "bin", "claude"), "#!/bin/sh\n", { mode: 0o755 });
+
+    await expect(
+      realAdapter().assertTrustedExecutable(join(root, "bin", "claude")),
+    ).resolves.toBeUndefined();
+  });
+
+  /**
+   * The original hole: a link in a directory the attacker owns, pointing at a trusted
+   * target. A real file in the same directory was already refused; the link was not.
+   */
+  it("refuses a link planted in a world-writable directory", async () => {
+    const root = await sandbox();
+    const open = join(root, "open");
+    await mkdir(open);
+    /** `mkdir`'s mode argument is masked by the umask, so the bit is set explicitly. */
+    await chmod(open, 0o777);
+    await symlink("/bin/ls", join(open, "claude"));
+
+    await expect(
+      realAdapter().assertTrustedExecutable(join(open, "claude")),
+    ).rejects.toThrow(MacOsPlatformTrustError);
+  });
+
+  /**
+   * The neighbour: the PATH directory is itself a symlink *into* a world-writable one.
+   * Walking the declared parents lexically sees the target's mode and then climbs the
+   * link's own parents, so the attacker's directory is visited by nobody — which is why
+   * the declared directory is canonicalized before it is walked.
+   */
+  it("refuses when the directory holding the binary is a link into a world-writable one", async () => {
+    const root = await sandbox();
+    const open = join(root, "open");
+    await mkdir(join(open, "sub"), { recursive: true });
+    await chmod(open, 0o777);
+    await symlink(join(open, "sub"), join(root, "bin"));
+    await symlink("/bin/ls", join(open, "sub", "claude"));
+
+    await expect(
+      realAdapter().assertTrustedExecutable(join(root, "bin", "claude")),
+    ).rejects.toThrow(MacOsPlatformTrustError);
+  });
+
+  /** A trusted *executable*: the resolved target must be a regular file. */
+  it("refuses a directory, however trusted its chain", async () => {
+    const root = await sandbox();
+    await mkdir(join(root, "bin"), { mode: 0o755 });
+
+    await expect(
+      realAdapter().assertTrustedExecutable(join(root, "bin")),
+    ).rejects.toThrow(MacOsPlatformTrustError);
+  });
+
+  /**
+   * **The accept case that guards against over-refusing**, and the direction that got the
+   * previous guard withdrawn. This is the founder's actual install shape — a link in a
+   * `bin` directory resolving into a versioned directory two levels away — and nothing
+   * else in this suite pins that three chains do not refuse it. A future attempt at
+   * NEW-32's stepwise resolution is most likely to break exactly here.
+   */
+  it("accepts the vendor shape: a link resolving through two directories", async () => {
+    const root = await sandbox();
+    await mkdir(join(root, "share", "claude", "v1"), { recursive: true });
+    await mkdir(join(root, "bin"));
+    const real = join(root, "share", "claude", "v1", "claude");
+    await writeFile(real, "#!/bin/sh\n", { mode: 0o755 });
+    await symlink(real, join(root, "bin", "claude"));
+
+    await expect(
+      realAdapter().assertTrustedExecutable(join(root, "bin", "claude")),
+    ).resolves.toBeUndefined();
+  });
+
+  /**
+   * The Homebrew clause against a real directory: group-writable and owned by this user.
+   * Its unit fixture is one of the five that refused for the wrong reason until the
+   * resolved file was listed, so it is worth a case that cannot.
+   */
+  it("accepts a group-writable directory this user owns", async () => {
+    const root = await sandbox();
+    const bin = join(root, "bin");
+    await mkdir(bin);
+    await chmod(bin, 0o775);
+    await writeFile(join(bin, "codex"), "#!/bin/sh\n", { mode: 0o755 });
+
+    await expect(
+      realAdapter().assertTrustedExecutable(join(bin, "codex")),
+    ).resolves.toBeUndefined();
+  });
+
+  /**
+   * `realpath` raises `ELOOP` here, whose `code` is a string — it escaped `exitCodeOf`'s
+   * numeric check and surfaced as an operational failure until the resolver was wrapped.
+   * An attacker who can write a PATH directory plants this and chooses the exit code.
+   */
+  it("refuses a symlink loop as a trust refusal, not an operational failure", async () => {
+    const root = await sandbox();
+    await symlink(join(root, "loopB"), join(root, "loopA"));
+    await symlink(join(root, "loopA"), join(root, "loopB"));
+
+    await expect(
+      realAdapter().assertTrustedExecutable(join(root, "loopA")),
+    ).rejects.toThrow(MacOsPlatformTrustError);
+  });
+
+  /**
+   * **The case only the *lexical* declared chain refuses**, found by mutation testing —
+   * deleting that chain left the whole suite green until this existed.
+   *
+   * The link lives in the directory the attacker owns and points at a perfectly trusted
+   * one. Canonicalizing the declared directory yields `/usr/bin`, whose ancestors are all
+   * root's, so the canonical chain is satisfied; the resolved chain is `/usr/bin` too.
+   * Only walking the declared parents *as written* sees the `0777` directory the link
+   * sits in — which is the directory the attacker replaces the link from.
+   */
+  it("refuses a link that lives in a world-writable directory but points at a trusted one", async () => {
+    const root = await sandbox();
+    const open = join(root, "open");
+    await mkdir(open);
+    await chmod(open, 0o777);
+    await symlink("/usr/bin", join(open, "bin"));
+
+    await expect(
+      realAdapter().assertTrustedExecutable(join(open, "bin", "true")),
+    ).rejects.toThrow(MacOsPlatformTrustError);
+  });
+
+  /**
+   * **The exit code the class carries, pinned.** Every other assertion here checks the
+   * *type*; none checked that `MacOsPlatformTrustError` maps to a security refusal. Change
+   * its `code` to `operationalFailure` and the whole suite stayed green while `ingest`
+   * began exiting 1 on an untrusted binary — which is the very distinction this class was
+   * introduced to make.
+   */
+  it("carries the security-refusal exit code, not an operational one", async () => {
+    const root = await sandbox();
+    const open = join(root, "open");
+    await mkdir(open);
+    await chmod(open, 0o777);
+    await writeFile(join(open, "claude"), "#!/bin/sh\n", { mode: 0o755 });
+
+    await expect(
+      realAdapter().assertTrustedExecutable(join(open, "claude")),
+    ).rejects.toMatchObject({ code: EXIT_CODES.securityRefusal });
+  });
+
+  it("refuses a path that does not exist, failing closed", async () => {
+    const root = await sandbox();
+
+    await expect(
+      realAdapter().assertTrustedExecutable(join(root, "bin", "absent")),
+    ).rejects.toThrow(MacOsPlatformTrustError);
   });
 });
 
