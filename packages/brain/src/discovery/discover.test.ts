@@ -426,6 +426,130 @@ describe("discoverNotes", () => {
     ).rejects.toThrow(SecurityRefusalError);
   });
 
+  /**
+   * **BACKLOG NEW-22.** `discoverNotes` canonicalized the content directory and called
+   * `refuseEscapingLink` on it *unconditionally*, which refused **any** content root
+   * reached through a link rather than only one that escapes. `BrainService.reindex()`
+   * reaches it through `buildIndex()`, so `brain reindex` and `ingest`'s third
+   * transaction both failed on such a vault — with a message naming a path the user had
+   * deliberately created.
+   *
+   * The scenario is ordinary: an existing Obsidian vault, `brainPath` pointed at a new
+   * directory, and `content` symlinked at the vault they already have.
+   */
+  it("indexes a vault whose content root is itself a symlink", async () => {
+    const result = await discoverNotes({
+      ...request,
+      /**
+       * A `readdir` on the declared path **follows** the link, so the tree lists the
+       * target's entries under `/vault/content` — which is what the filesystem does and
+       * what the fixture has to model.
+       */
+      reader: readerFor({
+        "/vault/content": ["DEV/"],
+        "/vault/content/DEV": ["pattern.md"],
+      }),
+      canonicalize: (path: string) =>
+        Promise.resolve(
+          path === "/vault/content" ? "/elsewhere/vault" : path,
+        ),
+    });
+
+    expect(result.notes.map((note) => note.vaultPath)).toStrictEqual([
+      "content/DEV/pattern.md",
+    ]);
+    /**
+     * **Declared, not resolved.** `absolutePath` stays `vaultRoot` plus `vaultPath`, an
+     * identity other code is entitled to rely on; only the containment question is asked
+     * against the resolved root.
+     */
+    expect(result.notes[0]?.absolutePath).toBe("/vault/content/DEV/pattern.md");
+  });
+
+  /**
+   * **The first guarantee this change is forbidden to spend.** An entry *inside* content
+   * that resolves outside everything is still a refusal — that is what
+   * `refuseEscapingLink` was written for and it is not in dispute.
+   */
+  it("still refuses an entry inside a symlinked content root that escapes it", async () => {
+    await expect(
+      discoverNotes({
+        ...request,
+        reader: readerFor({
+          "/vault/content": ["DEV/"],
+          "/vault/content/DEV": ["escape.md@"],
+        }),
+        canonicalize: (path: string) =>
+          Promise.resolve(
+            path === "/vault/content"
+              ? "/elsewhere/vault"
+              : path === "/vault/content/DEV/escape.md"
+                ? "/etc/passwd"
+                : path,
+          ),
+      }),
+    ).rejects.toThrow(SecurityRefusalError);
+  });
+
+  /**
+   * **The case that discriminates the widened anchor, and without it nothing here does.**
+   * The first three cases pass with the anchor left at the vault root alone — mutation
+   * testing on 2026-08-17 showed all 29 green after reverting `permittedRoots` — because
+   * none of them has an entry that resolves *into* a relocated content root. This one
+   * does: with `content` symlinked to `/elsewhere/vault`, a link inside it pointing at a
+   * sibling of that target is inside the content root and **outside the vault root**.
+   * Anchored on the vault root alone it is refused; anchored on both it is accepted and
+   * skipped, which is what a relocated vault needs.
+   */
+  it("accepts an entry resolving inside a relocated content root but outside the vault", async () => {
+    const result = await discoverNotes({
+      ...request,
+      reader: readerFor({
+        "/vault/content": ["alias@", "DEV/"],
+        "/vault/content/DEV": ["a.md"],
+      }),
+      canonicalize: (path: string) =>
+        Promise.resolve(
+          path === "/vault/content"
+            ? "/elsewhere/vault"
+            : path === "/vault/content/alias"
+              ? "/elsewhere/vault/other"
+              : path,
+        ),
+    });
+
+    expect(result.symlinkedFolders).toStrictEqual(["content/alias"]);
+    expect(result.notes.map((note) => note.vaultPath)).toStrictEqual([
+      "content/DEV/a.md",
+    ]);
+  });
+
+  /**
+   * **The second guarantee, and the compatibility clause the plan calls the part to get
+   * right.** A link from `content` to a sibling *inside the vault* — `_indexes`, say — is
+   * accepted-and-skipped today. Anchoring entries on the content root alone would start
+   * refusing it, which would be a regression dressed as a fix.
+   */
+  it("still skips, rather than refuses, a link from content into the vault", async () => {
+    const result = await discoverNotes({
+      ...request,
+      reader: readerFor({
+        "/vault": ["content/", "_indexes/"],
+        "/vault/content": ["sibling@", "DEV/"],
+        "/vault/content/DEV": ["a.md"],
+      }),
+      canonicalize: (path: string) =>
+        Promise.resolve(
+          path === "/vault/content/sibling" ? "/vault/_indexes" : path,
+        ),
+    });
+
+    expect(result.symlinkedFolders).toStrictEqual(["content/sibling"]);
+    expect(result.notes.map((note) => note.vaultPath)).toStrictEqual([
+      "content/DEV/a.md",
+    ]);
+  });
+
   it("refuses a topic folder that is a symlink escaping the vault", async () => {
     /**
      * `readdir` reports a symlink with `isDirectory: false`, so a `continue` on
@@ -521,32 +645,65 @@ describe("discoverNotes", () => {
     ).rejects.toThrow(SecurityRefusalError);
   });
 
-  it("refuses a content root that resolves outside the vault", async () => {
+  /**
+   * **Inverted on 2026-08-17, and the inversion is the founder's decision rather than a
+   * convenience (BACKLOG NEW-22).** This case used to assert the refusal. A symlinked
+   * `content` is how a user points a new `brainPath` at an Obsidian vault they already
+   * have, and refusing it made `brain reindex` and `ingest` fail outright with a message
+   * naming a path they had deliberately created.
+   *
+   * **What the old case was really protecting is kept, and is what the assertions below
+   * check.** A symlinked `content` is never reported by `readdir` — the walk starts
+   * inside it — so nothing below would notice a link to another vault. The root is
+   * therefore still resolved **before anything is read**, and the walk now proceeds from
+   * the resolved path: the link is followed to a known root instead of refused, and every
+   * entry beneath it is measured against that root, which is what
+   * `still refuses an entry inside a symlinked content root that escapes it` pins.
+   */
+  it("follows a content root that resolves elsewhere, resolving it before any read", async () => {
     /**
-     * A symlinked `content` is never reported by `readdir` — the walk starts
-     * inside it — so nothing below would notice. Unchecked, a link to another
-     * vault is enumerated in full and indexed as the user's own.
+     * **The log records canonicalization *and* reads, in one array, because otherwise the
+     * ordering this case is named for is asserted by nobody.** A `readDir`-only log stays
+     * green if the resolution is moved below the first read — which is the whole property
+     * the deleted refusal was protecting, and the only part of it this change keeps.
      */
-    const read: string[] = [];
-    await expect(
-      discoverNotes({
-        ...request,
-        reader: recording(
-          readerFor({
-            "/vault/content": ["DEV/"],
-            "/vault/content/DEV": ["a.md"],
-          }),
-          read,
-        ),
-        canonicalize: (path: string) =>
-          Promise.resolve(
-            path === "/vault/content" ? "/elsewhere/vault/content" : path,
-          ),
-      }),
-    ).rejects.toThrow(SecurityRefusalError);
+    const log: string[] = [];
+    const result = await discoverNotes({
+      ...request,
+      reader: recording(
+        readerFor({
+          "/vault/content": ["DEV/"],
+          "/vault/content/DEV": ["a.md"],
+        }),
+        log,
+      ),
+      canonicalize: (path: string) => {
+        log.push(`canonicalize:${path}`);
+        return Promise.resolve(
+          path === "/vault/content" ? "/elsewhere/vault/content" : path,
+        );
+      },
+    });
 
-    /** Refused before anything is read, per spec §5. */
-    expect(read).toEqual([]);
+    expect(result.notes.map((note) => note.vaultPath)).toStrictEqual([
+      "content/DEV/a.md",
+    ]);
+    /**
+     * **The content root is resolved before the first read, and that is the assertion.**
+     * What the old refusal protected was not "read nothing" — this design reads the other
+     * vault in full, deliberately — but "know where the root points before enumerating
+     * anything under it", so every entry can be measured against a root that is known.
+     */
+    const firstRead = log.findIndex((entry) => !entry.startsWith("canonicalize:"));
+    expect(log.indexOf("canonicalize:/vault/content")).toBeGreaterThanOrEqual(0);
+    expect(log.indexOf("canonicalize:/vault/content")).toBeLessThan(firstRead);
+    /**
+     * `toContain` rather than an exact list: the neighbouring read-log case uses the same
+     * idiom, and pinning the precise sequence reddens on any future read that changes no
+     * contract.
+     */
+    expect(log).toContain("/vault/content");
+    expect(log).toContain("/vault/content/DEV");
   });
 });
 

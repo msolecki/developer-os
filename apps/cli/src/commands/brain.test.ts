@@ -81,6 +81,60 @@ async function installed(
 }
 
 describe("brain reindex", () => {
+  /**
+   * **BACKLOG NEW-22's defect statement, driven end to end.** The row is about
+   * `brain reindex` and `ingest`'s third transaction failing outright on a vault whose
+   * `content` is a symlink — `BrainService.reindex()` reaches `discoverNotes` through
+   * `buildIndex()`, and that refused **any** content root reached through a link, with a
+   * message naming a path the user had deliberately created.
+   *
+   * The unit coverage in `packages/brain/src/discovery/discover.test.ts` pins the anchor
+   * against an in-memory reader and a hand-written `canonicalize`. **Neither exercises the
+   * command the row names**, and a reindex-path change that reintroduced a vault-root
+   * anchor anywhere above discovery would pass all of it. This is the case that would go
+   * red.
+   *
+   * The layout is the ordinary one: a `brainPath` pointed at a new directory, with
+   * `content` symlinked at an Obsidian vault the user already has.
+   */
+  it("reindexes a vault whose content is a symlink to a vault elsewhere", async () => {
+    /** No vault files: this test writes its own, outside the brain. */
+    const fixture = await installed("brain-reindex-symlinked-content", {});
+
+    /** Replace the installed content directory with a link to one outside the brain. */
+    const content = join(fixture.paths.brain, "content");
+    const elsewhere = join(fixture.root, "obsidian-vault");
+    await nodeFs.mkdir(join(elsewhere, "DEV"), { recursive: true, mode: 0o700 });
+    /**
+     * **`_indexes` is deliberately not pre-created.** A real Obsidian vault has none, and
+     * `writeIndexArtifacts` creates it — so leaving it absent makes this case additionally
+     * exercise `mkdir` **through** the symlink, which is the single filesystem operation
+     * on a relocated root most likely to break and which nothing else drives end to end.
+     */
+    await nodeFs.writeFile(
+      join(elsewhere, "DEV", "pattern.md"),
+      note({ title: "Pattern" }, "Body.\n"),
+      { mode: 0o600 },
+    );
+    await nodeFs.rm(content, { recursive: true, force: true });
+    await nodeFs.symlink(elsewhere, content);
+
+    const result = await runBrain(fixture.context, {
+      ...OPTIONS,
+      subcommand: "reindex",
+    });
+
+    expect(result.ok, "reindex must not refuse a symlinked content root").toBe(true);
+    if (!result.ok || result.data.subcommand !== "reindex") return;
+    expect(result.data.transactionId).not.toBeNull();
+    /** The note under the linked vault is indexed, under its declared vault path. */
+    expect(
+      await nodeFs.readFile(join(elsewhere, "_indexes", "index.json"), "utf8"),
+    ).toContain("content/DEV/pattern.md");
+    /** And the link is still a link: nothing replaced it with a real directory. */
+    expect((await nodeFs.lstat(content)).isSymbolicLink()).toBe(true);
+  });
+
   it("writes the four artifacts through a transaction", async () => {
     const fixture = await installed("brain-reindex");
 

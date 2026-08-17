@@ -128,15 +128,39 @@ function resolveTopic(name: string, config: BrainConfigV1): string | null {
  * link out of the vault is refused rather than followed. Returns nothing —
  * clearing an in-vault link does not make it followable, and every caller
  * skips the entry either way.
+ *
+ * **Two roots, because the content root is no longer required to sit inside the vault
+ * root** (BACKLOG NEW-22). A user may symlink `content` at an Obsidian vault they already
+ * have; after that the vault root holds the configuration and the indexes while every
+ * note lives under the content root, and neither contains the other. An entry is refused
+ * when it escapes **both**, which keeps accepting the in-vault link to a sibling such as
+ * `_indexes` that worked before.
+ *
+ * **What the union does not weaken, stated precisely because the obvious claim is wrong.**
+ * It would be tempting to say this preserves "another vault's notes cannot be indexed as
+ * this vault's own" — it does not, and that guarantee is *deliberately spent* for the
+ * content root, which is the whole of NEW-22. For **entries** the guarantee never came
+ * from containment at all: every caller skips a symbolic link whether the check passed or
+ * not, so the check only chooses refuse-versus-skip. **Widening the roots therefore cannot
+ * cause anything to be indexed that was not indexed before** — it converts a hard refusal
+ * into a silent skip, and nothing more.
+ *
+ * **One shape makes this vacuous and is worth knowing:** the union is only as tight as its
+ * loosest member, so the guard weakens as the content root sits higher in the tree,
+ * whatever it sits above — a `content` symlinked at `/` makes every path contained and
+ * the check refuses nothing for the rest of the run. Nothing is indexed through it, for
+ * the reason above, so the consequence is a
+ * disabled refusal rather than a leak. Refusing a content root that contains the vault
+ * root would close it; no test covers it today.
  */
 async function refuseEscapingLink(
   absolutePath: string,
   vaultPath: string,
-  vaultRootCanonical: string,
+  permittedRoots: readonly string[],
   canonicalize: (path: string) => Promise<string>,
 ): Promise<void> {
   const target = await canonicalize(absolutePath);
-  if (!containsPath(vaultRootCanonical, target)) {
+  if (!permittedRoots.some((root) => containsPath(root, target))) {
     throw new SecurityRefusalError(
       `Vault entry resolves outside the vault: ${vaultPath}`,
     );
@@ -154,7 +178,7 @@ function sortedUnique(values: readonly string[]): readonly string[] {
 
 interface WalkContext {
   readonly request: DiscoveryRequest;
-  readonly vaultRootCanonical: string;
+  readonly permittedRoots: readonly string[];
   readonly canonicalize: (path: string) => Promise<string>;
 }
 
@@ -184,7 +208,7 @@ async function walk(
       await refuseEscapingLink(
         absolutePath,
         vaultPath,
-        context.vaultRootCanonical,
+        context.permittedRoots,
         context.canonicalize,
       );
       /**
@@ -229,19 +253,57 @@ export async function discoverNotes(
 
   const vaultRootCanonical = await canonicalize(request.vaultRoot);
   /**
-   * The content root is resolved before anything under it is read. A symlinked
-   * `content` is not reported by `readdir` at all — the walk starts inside it —
-   * so without this check a link to another vault would be enumerated in full
-   * and every note under it indexed as though it were the user's own.
+   * **The content root is canonicalized into an anchor rather than measured against one**
+   * (BACKLOG NEW-22). It used to be passed to `refuseEscapingLink` like any entry, which
+   * refused **every** content root reached through a link and not only one that escapes —
+   * so a user who symlinked `content` at an existing Obsidian vault could not run
+   * `brain reindex` or `ingest` at all, and the refusal named a path they had
+   * deliberately created.
+   *
+   * **Resolving it before any read is the half of the old check that survives**, and the
+   * honest statement of it is narrow: a symlinked `content` is never reported by
+   * `readdir` — the walk starts inside it — so without resolving first, nothing below
+   * would ever learn where the root points. It is **not** that another vault is no longer
+   * enumerated: it is enumerated in full and indexed as this vault's own, which is the
+   * decision. What resolving buys is that every symbolic link *beneath* it can be
+   * measured against a root that is known. Regular files and directories are asked no
+   * containment question at all — `refuseEscapingLink`'s own docblock says which entries
+   * are checked and what that does and does not guarantee.
+   *
+   * **The walk still reads the declared path, and that is deliberate — the plan said to
+   * walk the canonical one and it was wrong.** Canonicalizing the *anchor* is what NEW-22
+   * needs; canonicalizing every path the walk touches changes what `reader.readDir` and
+   * `assertReadable` receive for **every** vault, symlinked or not, because on macOS a
+   * `/var/…` root realpaths to `/private/var/…`.
+   *
+   * **The cost is not the artifact — `absolutePath` is never serialized.** It lives on the
+   * internal parsed entry as the raw-byte tie-break for ordering, and `IndexedNote`, which
+   * is what `serializeIndex` writes, does not carry it. The cost is the **identity**: a
+   * note's `absolutePath` is `vaultRoot` joined with its `vaultPath`, up to normalization,
+   * and the ingest gate relies on it — `validateProposal` keys its virtual overlay on
+   * `join(vaultRoot, contentRoot, note.path)` and looks entries up by discovery's
+   * `absolutePath`. Walk the canonical path and every proposed note misses its own overlay
+   * entry, so the gate validates against the wrong bytes. `capture` settled the same
+   * principle one command over, reporting the configured path rather than the one a
+   * symlinked content root resolves to.
+   *
+   * Reading the declared path follows the link exactly as before; only the containment
+   * question is asked against the resolved root.
    */
-  await refuseEscapingLink(
-    contentDir,
-    contentRoot,
-    vaultRootCanonical,
-    canonicalize,
-  );
+  const contentRootCanonical = await canonicalize(contentDir);
 
-  const context: WalkContext = { request, vaultRootCanonical, canonicalize };
+  /**
+   * Both roots, because neither **need** contain the other — not because neither does.
+   * A `content` symlinked *inside* the brain, which `capture`'s own suite builds, leaves
+   * the content root strictly within the vault root and the union collapses to one; the
+   * relocated-vault case is the one where they are disjoint. An entry is refused only
+   * when it escapes both, and the compatibility that preserves is the in-vault link to a
+   * sibling such as `_indexes`, which was accepted-and-skipped before this change and
+   * still is.
+   */
+  const permittedRoots = [contentRootCanonical, vaultRootCanonical];
+
+  const context: WalkContext = { request, permittedRoots, canonicalize };
   const notes: DiscoveredNote[] = [];
   const unclassified: string[] = [];
   const symlinked: string[] = [];
@@ -259,7 +321,7 @@ export async function discoverNotes(
       await refuseEscapingLink(
         absolutePath,
         vaultPath,
-        vaultRootCanonical,
+        permittedRoots,
         canonicalize,
       );
       symlinked.push(vaultPath);
