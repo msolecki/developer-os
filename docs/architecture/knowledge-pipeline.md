@@ -124,7 +124,7 @@ claims to own. The write still goes through `validateChangePlan` with quarantine
 root and the product home as the excluded one (`:579-580`), which is what refuses a symlink inside one
 resolving into the other.
 
-**A duplicate is reported at exit 0 and writes nothing** (`capture.test.ts:256`), including when this
+**A duplicate is reported at exit 0 and writes nothing** (`apps/cli/src/commands/capture.test.ts:256`), including when this
 run loses the race to write it (`:322`) and when the existing file cannot be parsed (`:290`). It is
 **not** the `O_EXCL` create spec §5.2 describes, and cannot be: no transaction-mediated write can
 deliver that precondition. `ORDER.md` carries the Foundation change that would close it — §10.2 below.
@@ -145,7 +145,7 @@ a seventh to say what the file's own mtime already says.
 is how a secret gets pasted into a vault file, so the body is **re-redacted on the way in** rather
 than trusted until ingest.
 
-**The id is assigned once and never recomputed** (`parse.ts:17-21`, amended by the founder
+**The id is assigned once and never recomputed** (`packages/brain/src/capture/parse.ts:17-21`, amended by the founder
 2026-08-13). Under recomputation every content-changing edit would refuse, and the secret the user
 pasted would stay in the file — the one outcome `capture.edit` exists to prevent. `review` gained
 that verb in DOS-P6: the workflow's `decision` input offered `edit` while its only mutating verb was
@@ -249,7 +249,7 @@ still pass the exhaustiveness test because the typo went into the expectation to
 
 | Validator | Enforced at | What it refuses |
 |---|---|---|
-| `schema-and-frontmatter` | `validate.ts:337` | a note the canonical schema does not accept |
+| `schema-and-frontmatter` | `packages/brain/src/ingest/validate.ts:337` | a note the canonical schema does not accept |
 | `source-and-provenance` | `:365` | a note whose `sourceCaptureId` is not the capture being ingested |
 | `link-and-graph` | `:929` | links the lint build grades as broken |
 | `duplicate-detection` | `:951` | a proposal colliding with a note already in the vault |
@@ -376,7 +376,7 @@ The fix gives the destination the canonical twin `generatedOutputConsistency` al
 `privateRootsCanonical` is measured with `containsPathLoosely` because this branch **denies** rather
 than grants, and the destination's own segments are folded and checked too, because neither subsumes
 the other (`packages/brain/src/ingest/validate.ts:641-690`, with the reasoning at `:524-534`).
-Evidence: `validate.test.ts:817` — "refuses a path whose case differs from the private folder it
+Evidence: `packages/brain/src/ingest/validate.test.ts:817` — "refuses a path whose case differs from the private folder it
 resolves into" — and `:827`, the in-vault symlink.
 
 **Its twin closed `BACKLOG.md` §1 NEW-14.** `resolveCapturePath` compared the canonical quarantine
