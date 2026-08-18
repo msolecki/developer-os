@@ -204,11 +204,16 @@ Recorded rather than silently absorbed.
    Step 1 wording is "product artifacts removed, Brain retained". What actually happens is that
    every *removable* manifest artifact is removed, and `state/`, `staging/`, `backups/` and the
    product home itself survive — still holding both transactions' journals, the never-unlinked
-   lock files, the staged blobs, and the backups, **including a readable byte copy of the
-   `config.toml` just removed, which names the user's Brain path**. `rmdir` refuses a non-empty
-   directory, which is the safety property working as designed; the residue is the cost. This
-   is Foundation Task 8's residual 4, restated accurately after a reviewer showed the original
-   "three empty directories" description was wrong, and the suite now pins the real behaviour.
+   lock files, and the staged blobs. `rmdir` refuses a non-empty directory, which is the safety
+   property working as designed; the residue is the cost. This is Foundation Task 8's residual
+   4, restated accurately after a reviewer showed the original "three empty directories"
+   description was wrong, and the suite now pins the real behaviour.
+
+   **Amended 2026-08-17:** this entry also named "a readable byte copy of the `config.toml`
+   just removed, which names the user's Brain path", in `backups/`. `pruneBackups` removes
+   every backup payload at both terminal phases, so that copy is gone; the same content
+   survives in `staging/`, which nothing removes. `tests/e2e/foundation.test.ts` asserts both
+   halves rather than describing them.
 4. **`tests/node_modules/@developer-os/*` were created by hand**, exactly as Tasks 5, 7, and 8
    recorded for the other packages. Any working `pnpm install` recreates them from the `link:`
    entries now in `pnpm-lock.yaml`. Like every sibling package, `tests` declares neither

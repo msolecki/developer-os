@@ -789,7 +789,7 @@ describe("Foundation refusals", () => {
     });
   });
 
-  it("leaves its own transaction residue behind after uninstall", async () => {
+  it("leaves its own residue behind after uninstall: staged bytes yes, backup bytes no", async () => {
     await withHome(async (home) => {
       await install(home);
       const configFile = join(home.productHome, "config.toml");
@@ -803,13 +803,26 @@ describe("Foundation refusals", () => {
       expect(run.exitCode).toBe(EXIT_CODES.success);
 
       /**
-       * Foundation Task 8's residual 4, pinned as what it actually is. The
-       * product home and its three bookkeeping directories survive because
-       * `rmdir` refuses a directory still holding the journal and backups of the
-       * transaction doing the removing — and one of those backups is a byte copy
-       * of the `config.toml` just deleted, still readable, still naming the
-       * user's Brain. No user data is lost and nothing is misreported, but the
-       * residue is not the "three empty directories" it is easy to assume.
+       * Foundation Task 8's residual 4, pinned as what it actually is. The product home and
+       * its three bookkeeping directories survive because `rmdir` refuses a directory that
+       * is not empty, and each of the three still holds something: `state/` the journals
+       * and two `.tx_*.lock` files, `staging/` the applied payloads, `backups/` the
+       * per-mutation metadata.
+       *
+       * **One thing stopped surviving on 2026-08-17 and one did not, and the difference
+       * matters.** The *backup* copy of the `config.toml` just deleted — raw, readable,
+       * naming the user's Brain — is gone: the executor prunes every backup payload when a
+       * transaction reaches a terminal phase (BACKLOG, Foundation request 2). **The
+       * *staging* copy is still there**, because nothing removes the staging directory
+       * either, and it holds the same bytes. An earlier version of this comment claimed
+       * uninstall no longer leaves a readable copy of the configuration; that was false,
+       * and the assertion below is scoped to `backups/` precisely because it is the only
+       * half that closed.
+       *
+       * So this remains a residual. What changed is which pile the bytes sit in, which
+       * matters for the defect that prompted the fix — a secret pasted by hand reaches the
+       * *backup*, never staging, because staging holds post-redaction content — and not at
+       * all for "the product retains a readable copy of something the user removed".
        */
       const after = await inventory(home.root);
       expect(after.get(home.productHome)).toBe("dir");
@@ -822,8 +835,22 @@ describe("Foundation refusals", () => {
         configBefore.trimEnd(),
       );
       expect(
-        backupCopies.length,
-        "uninstall kept no readable copy of the configuration it removed",
+        backupCopies,
+        "uninstall left a readable copy of the configuration in backups/",
+      ).toStrictEqual([]);
+
+      /**
+       * **And the half that did not close, asserted rather than described.** Without this
+       * the comment above is the only record, and a prose claim about a residual is what
+       * went wrong here in the first place.
+       */
+      const stagedCopies = await filesContaining(
+        join(home.productHome, "staging"),
+        configBefore.trimEnd(),
+      );
+      expect(
+        stagedCopies.length,
+        "staging no longer holds the configuration — update the residual above",
       ).toBeGreaterThan(0);
 
       /** Whatever survives is the product's own, never the user's. */

@@ -1,4 +1,5 @@
 export {
+  TransactionBackupRetentionError,
   TransactionConflictError,
   TransactionExecutor,
   TransactionGuardError,

@@ -29,7 +29,7 @@ row fall short of that, and each says so where it appears:**
    Separately, a few cells point at a **`BACKLOG.md` §1 row** — those are *records* naming who owns a
    gap, never a mechanism standing in for a line.
 3. **Where a boundary rests on a `tests/security/` case that carries no watched-failure
-   demonstration, the cell says `(§8: no watched failure)`.** 38 of that directory's 85 cases are in
+   demonstration, the cell says `(§8: no watched failure)`.** 38 of that directory's 90 cases are in
    that position, and citing one without the marker would let a reader take it for evidence — the
    failure mode §1 exists to prevent, one level down. §8 is the whole accounting, **including what
    about §8 itself is not checkable against this repository.**
@@ -42,7 +42,7 @@ document names only the ones that change what a boundary is worth.
 
 ---
 
-## 1. Three boundaries this document would naturally claim, two of which do not hold
+## 1. Three boundaries this document would naturally claim, one of which does not hold
 
 Stated first, because a reader who stops after one section must not leave believing an enforcement
 that is absent. Each is stated again in §5, beside the boundary it belongs to, with its mechanism
@@ -51,29 +51,37 @@ and its record.
 | Boundary | Status | The record that owns it |
 |---|---|---|
 | A capture stays inside the vault | **holds since 2026-08-15**, with a check-then-use window left open | closed: `BACKLOG.md` §1 NEW-14; the window is **NEW-20** |
-| A secret removed from a vault file is gone from the machine | **absent** — the pre-edit copy survives in the transaction backup | `ORDER.md`, the third Foundation request |
+| A secret removed from a vault file is gone from the machine | **holds since 2026-08-17** — the pre-edit copy is pruned at both terminal phases | closed: `ORDER.md`, Foundation request 2 |
 | An agent invocation is bounded in turns | **partial** — bounded under Claude, no such field under Codex | `codex-adapter.md` §11.3 |
 
 **The first row changed on 2026-08-15 and this table is the corrected one.** The relocated-quarantine
 escape it used to record as absent was closed by the fix round after DOS-P6 Task 19's review: all
 three commands that touch quarantine now anchor on the configured content root through one shared
-`resolveQuarantineRoot` (§5.2). What remains is narrower and is registered rather than closed —
-`resolveQuarantineRoot` proves the root once and the declared path is followed again afterwards, so a
+`resolveContainedRoot` (§5.2). What remains is narrower and is registered rather than closed —
+`resolveContainedRoot` proves the root once and the declared path is followed again afterwards, so a
 won race can still redirect a capture (**NEW-20**, theoretical, not a regression).
 
-**These are not "known issues" filed at the back.** The second defeats a sentence this product tells
-a user to their face: that `review --decision edit` removed the secret they pasted. The third means
-one of two vendors runs an unbounded agentic loop under a 120-second wall clock and nothing else.
+**These are not "known issues" filed at the back.** The second used to defeat a sentence this product
+tells a user to their face — that `review --decision edit` removed the secret they pasted — and that
+is what closing it on 2026-08-17 was worth. The third still means one of two vendors runs an
+unbounded agentic loop under a 120-second wall clock and nothing else.
 
 **Three further gaps were found while writing this document**, all registered as `BACKLOG.md` §1
-rows: **NEW-15**, a discovered vendor binary is executed — by `ingest`, and since 2026-08-15 by
-`capture` too — without the owner and mode check its own
-type says its executor owes (§5.11); **NEW-16**, the `user-pattern` redaction class has no production
-caller and no configuration key, so spec §8.2's user-configured patterns are unreachable (§5.7); and
-**NEW-17**, a TOML parse failure on a `brain` run reaches the user through the heuristic redactor
-alone, because it is the one command of the eight that reads configuration without the wrapper the
-other seven use (§5.7, §5.12). None was fixed here — this is a documentation task and no production
-file is in its scope.
+rows, and **two of the three closed on 2026-08-17**. **NEW-15** — a discovered vendor binary executed
+without the owner and mode check its own type says its executor owes — is closed by
+`assertTrustedExecutable`, called by all three executors (§5.11); two residuals of it stay open, one
+of them a known bypass. **NEW-16** — the `user-pattern` redaction class having no production caller
+and no configuration key — is closed by the `[redaction]` table and `createRedactor` (§5.7); three
+usability residuals stay open. **NEW-17** — a TOML parse failure on a `brain` run reaching the user
+through the heuristic redactor alone — is closed too: `readConfig` reads through `readConfigFile`
+like every other command (§5.7, §5.12).
+
+None of the three was fixed *here*: this document's own task was documentation and no production file
+was in its scope. All three were fixed afterwards, and **this document went on asserting all three
+were open** — NEW-17 for two days, NEW-15 and NEW-16 for one — in §1, in §5, and again in §6's
+summary of §5. That is why §1 now states closures rather than deferring them: a reader who stops
+after the first section is the reader this section exists for, and three times over they were told a
+boundary was missing that was not.
 
 ---
 
@@ -118,9 +126,9 @@ pretends to sandbox it.
 | **Vault content** | user data, hand-edited, and may contain secrets the user wrote into their own notes | `packages/brain/src/schema/note.ts`, via `BrainService` |
 | **Model output** | a proposal chosen by a model that has just read untrusted capture text | `packages/brain/src/ingest/proposal.ts:199` |
 | **The vendor CLI's stdout** | a third-party binary's output, streamed, and parsed into an object callers will spread | `packages/security/src/cli.ts:240` |
-| **Configuration** | a TOML file the user edits by hand | `apps/cli/src/commands/doctor.ts:209` (`readConfigFile`), then `packages/core/src/config/loader.ts:163` |
+| **Configuration** | a TOML file the user edits by hand | `apps/cli/src/commands/doctor.ts:216` (`readConfigFile`), then `packages/core/src/config/loader.ts:187-211` |
 | **The installation manifest** | a JSON file on disk that decides ownership, and therefore deletion | `packages/core/src/manifest/store.ts:246` |
-| **`PATH`** | it decides which binary is `claude` or `codex` | `packages/platform-macos/src/macos.ts:143` |
+| **`PATH`** | it decides which binary is `claude` or `codex` | `packages/platform-macos/src/macos.ts:184-186` |
 | **Every path anywhere** | a symlink makes the written path and the destination differ, which is the whole bug class | `packages/security/src/paths.ts:45` |
 
 **One rule sits above all of them, and its ordering is the rule:** *redact before truncating,
@@ -178,9 +186,11 @@ watched-failure demonstration, §8 is what says so.
 | Quarantine is created private | `mkdir` with mode `0o700` (`apps/cli/src/commands/capture.ts:551`) | — |
 
 **The sentinel suite asserts per artifact, never in total** — the rule is stated at
-`tests/security/sentinel.test.ts:24-28` and enforced by `it.each(ARTIFACTS)` at `:188`, over the
-eight-name array at `:39-48`. A single assertion over a concatenation of all eight would pass while
-seven were empty, which is the shape of gate this repository has shipped and regretted twice.
+`tests/security/sentinel.test.ts:26-30` and enforced by `it.each(ARTIFACTS)` at `:229`, over the
+nine-name array at `:52-62`. A single assertion over a concatenation of all nine would pass while
+eight were empty, which is the shape of gate this repository has shipped and regretted twice. The
+ninth name is `"the backup directory"`, added on 2026-08-17 with its own floor rather than appended
+to staging's, because a shared floor is that same defect one level down.
 
 **A capture is deliberately not a managed artifact** (`apps/cli/src/commands/capture.ts:530-534`).
 Recording it in `installation-manifest.json` would report every legitimate Obsidian edit as drift.
@@ -193,7 +203,7 @@ The cost is that `validateChangePlan`'s ownership check does not stand behind a 
 | Boundary | Mechanism | Evidence |
 |---|---|---|
 | A capture *file* that is a symlink is never followed | `captureFileNames` filters `entry.isFile()`, which `readdir(withFileTypes)` reports false for a link, so the file is skipped at selection before any path is resolved | `tests/security/symlink-escape.test.ts` — `never follows a symlink standing where a capture file should be` |
-| The quarantine directory resolves inside the configured content root | `resolveQuarantineRoot` canonicalizes both and refuses at exit 5 before anything is read, once per run, in **all three** commands that touch quarantine — `capture`, `review` and `ingest` (`apps/cli/src/context.ts:263-305`) | `tests/security/symlink-escape.test.ts` — `is refused at exit 5, and neither the capture nor the vault is touched`, and `is refused at exit 5, and no observation is written at the destination` |
+| The quarantine directory resolves inside the configured content root | `resolveContainedRoot` canonicalizes both and refuses at exit 5 before anything is read, once per run, in **all three** commands that touch quarantine — `capture`, `review` and `ingest` (`apps/cli/src/context.ts:263-305`) | `tests/security/symlink-escape.test.ts` — `is refused at exit 5, and neither the capture nor the vault is touched`, and `is refused at exit 5, and no observation is written at the destination` |
 | A capture path resolves inside quarantine | `resolveCapturePath` canonicalizes the target and compares it against **that proven root** | the first of those |
 
 **This section recorded an absent boundary until 2026-08-15.** `resolveCapturePath` compared the
@@ -236,7 +246,7 @@ having because the collision guard is incidental: it depends on `init` recording
 is not a security property, and its message names the manifest rather than the link.
 
 **The check is proven once and the path is followed again afterwards**, which is a check-then-use
-window this arrangement accepts: `resolveQuarantineRoot` answers at `apps/cli/src/commands/capture.ts:714`
+window this arrangement accepts: `resolveContainedRoot` answers at `apps/cli/src/commands/capture.ts:762`
 and every later operation re-follows the declared path. `BACKLOG.md` §1 **NEW-20** carries it, with
 why it is registered rather than closed.
 
@@ -309,10 +319,10 @@ The vendor CLI is the only outbound process this product makes, and the only pla
 
 | Boundary | Mechanism | Evidence |
 |---|---|---|
-| The model is invoked with zero declared write scopes | `writeScopes: []` at the call site (`apps/cli/src/commands/ingest.ts:685`); Codex derives `-s read-only` **from the count and never from an argument**, which is what makes `danger-full-access` unreachable rather than merely unwritten (`packages/adapter-codex/src/invoke.ts:196-200`, `packages/adapter-codex/src/invoke.ts:264`); Claude is passed `["Read","Grep","Glob"]` with no write tool, so the vendor's own permission system enforces it before the model runs (`apps/cli/src/commands/ingest.ts:180-196`) | `apps/cli/src/commands/ingest.test.ts:1080` — `gives claude no write tool in --allowedTools`; `packages/adapter-codex/src/invoke.test.ts:284` — `uses read-only and adds no --add-dir when there are no write scopes`; `tests/security/network.test.ts` — `spawns exactly one process during ingest, and it is the discovered vendor binary` |
+| The model is invoked with zero declared write scopes | `writeScopes: []` at the call site (`apps/cli/src/commands/ingest.ts:703`); Codex derives `-s read-only` **from the count and never from an argument**, which is what makes `danger-full-access` unreachable rather than merely unwritten (`packages/adapter-codex/src/invoke.ts:196-200`, `packages/adapter-codex/src/invoke.ts:264`); Claude is passed `["Read","Grep","Glob"]` with no write tool, so the vendor's own permission system enforces it before the model runs (`apps/cli/src/commands/ingest.ts:180-196`) | `apps/cli/src/commands/ingest.test.ts:1086` — `gives claude no write tool in --allowedTools`; `packages/adapter-codex/src/invoke.test.ts:284` — `uses read-only and adds no --add-dir when there are no write scopes`; `tests/security/network.test.ts` — `spawns exactly one process during ingest, and it is the discovered vendor binary` |
 | No shell is ever involved | `spawn(..., { shell: false })` (`packages/security/src/process.ts:87-93`) | `packages/security/src/process.test.ts` |
 | The executable is absolute | `assertSafeCommand` refuses a non-absolute executable (`packages/security/src/process.ts:47-54`). Separately, the request carries no `PATH`, so a child has nothing to resolve a bare name against | `packages/security/src/process.test.ts:80-97` — `rejects foreign-platform executable syntax that is not locally absolute`, an `it.skipIf` that runs wherever `C:\tools\curl.exe` is not absolute, so it executes on the supported platform; `tests/security/network.test.ts:176-179` asserts absoluteness across every classified spawn |
-| The executable, `cwd`, every argument and stdin are NUL-free | four `containsNul` checks across two branches — the executable (`packages/security/src/process.ts:48`), then the working directory, every argument and stdin (`:56`, `:57`, `:58`) | **Mechanism only — no test in this repository exercises a NUL through `assertSafeCommand`.** Its `describe` block holds two cases (`packages/security/src/process.test.ts:63`, `:80`) and neither is about a NUL. The NUL refusals that *are* tested belong to other functions — for example `packages/security/src/paths.test.ts:58` and `:165`, covering `canonicalizePlannedPath` and `resolveOwnedPath`; that is a sample, not the set. **Record: `BACKLOG.md` §1 NEW-18.** Stated rather than papered over: all four checks exist and none is proven |
+| The executable, `cwd`, every argument and stdin are NUL-free | four `containsNul` checks across two branches — the executable (`packages/security/src/process.ts:48`), then the working directory, every argument and stdin (`:56`, `:57`, `:58`) | **Proven per branch since 2026-08-15.** `describe("assertSafeCommand")` (`packages/security/src/process.test.ts:62`) holds a case for each of the four `containsNul` sites — executable (`:101`), working directory (`:111`), any argument (`:119`), stdin (`:127`). This cell said no test exercised a NUL at all, and pointed at **NEW-18**, a row Track R closed with a regression test each and removed from `BACKLOG.md` §1 three days before this sentence was last edited. Stated rather than papered over: all four checks exist and none is proven |
 | The child inherits nothing from the parent environment | the runner passes only `{...request.env}` (`packages/security/src/process.ts:91`), and both adapters pass `env: {}` — stricter than the spec asks | `tests/security/network.test.ts` — `does not pass a proxy the parent process was given`, asserted by *inheritance* rather than by an expectation that could be edited to match a leak |
 | Output cannot exhaust memory | 1 MiB per stream, after which the child is `SIGKILL`ed and the call is a security refusal (`packages/security/src/process.ts:6,195-216`) | `packages/security/src/process.test.ts` |
 | A run is bounded in wall clock | `SIGTERM`, then `SIGKILL` 100 ms later, to the process *group* on darwin (`packages/security/src/process.ts:111-128,168-179`); `INGEST_TIMEOUT_MS` is 120 s (`apps/cli/src/commands/ingest.ts:206-212`) | `packages/security/src/process.test.ts` |
@@ -402,29 +412,34 @@ not against Obsidian, because there is no Obsidian in this environment to ask.
 
 ### 5.7 Redaction, and what it can and cannot promise
 
-**One headline this section used to carry is false, and correcting it is the point of the second row
-below.** "Redaction is never the only thing standing anywhere" is the design rule, and it holds on
-seven of the eight commands that read configuration. **On a `brain` run it does not**: there the
-heuristic redactor is the only thing between a TOML parse failure and the user. **Record:
-`BACKLOG.md` §1 NEW-17.**
+**"Redaction is never the only thing standing anywhere" is the design rule, and it now holds on
+every command that reads configuration.** It did not when this section was written: `brain` read its
+own configuration and let a `TomlError` reach the user through the heuristic redactor alone, which
+was **NEW-17**. `readConfig` goes through `readConfigFile` like every other command
+(`apps/cli/src/commands/brain.ts:117`) and rethrows `ConfigurationError` unmodified, so the parse
+failure is content-free on that path too. NEW-17 is closed and removed from `BACKLOG.md` §1.
 
 | Boundary | Mechanism | Evidence |
 |---|---|---|
 | Nine redaction classes, and a tenth cannot be added unreachably | `REDACTION_CLASSES` is frozen and a test asserts membership against findings **actually produced**, not against the list (`packages/security/src/redaction.ts:24-40`) | `packages/security/src/redaction.test.ts` |
 | A user-supplied pattern cannot backtrack | user patterns are literal, case-insensitive substrings over NFC-normalized text — never regular expressions, because this codebase bounds no expression anywhere and a pathological pattern would hang the one operation that must not fail quietly (`packages/security/src/redaction.ts:13-22`) | `packages/security/src/redaction.test.ts:448-469` — `.*` and `(a+)+$` asserted to behave as literals |
-| Redaction is a heuristic and is not the only thing standing — **on seven of the eight commands that read configuration** | the worked example is configuration: a `loadConfig` throw becomes a content-free `ConfigurationError` rather than being handed to the redactor, because `smol-toml` embeds three raw source lines in `TomlError.message` (`apps/cli/src/commands/doctor.ts:188-193,227-231`). `status`, `doctor`, `init`, `capture`, `uninstall`, `review` and `ingest` all reach configuration through that wrapper (`status.ts:42`, `doctor.ts:535,859`, `init.ts:236`, `apps/cli/src/commands/capture.ts:307`, `uninstall.ts:560`, `review.ts:160`, `ingest.ts:390-393`) | `tests/e2e/foundation.test.ts:1250` — `never quotes the configuration it failed to parse` |
-| The same, on a `brain` run | **partial — the wrapper is not on this path.** `readConfig` (`apps/cli/src/commands/brain.ts:97`) wraps only the *read*; `loadConfig(serialized)` is the return statement outside that `try` (`apps/cli/src/commands/brain.ts:100-109`), so a `TomlError` is not a `BrainRefusal` and falls through to `failureFrom` (`:334`), which emits `redactDiagnostic(error.message)` (`apps/cli/src/context.ts:411-427`) | **none, and none is possible for a property that does not hold.** The e2e case above drives `doctor`, not `brain`. **Record: `BACKLOG.md` §1 NEW-17** |
+| Redaction is a heuristic and is not the only thing standing — **on every command that reads configuration** | the worked example is configuration: a `loadConfig` throw becomes a content-free `ConfigurationError` rather than being handed to the redactor, because `smol-toml` embeds three raw source lines in `TomlError.message` (`apps/cli/src/commands/doctor.ts:195-200,234-238`). `status`, `doctor`, `init`, `capture`, `uninstall`, `review` and `ingest` all reach configuration through that wrapper (`status.ts:42`, `doctor.ts:667,1015`, `init.ts:236`, `apps/cli/src/commands/capture.ts:331`, `uninstall.ts:560`, `review.ts:161`, `ingest.ts:394`) | `tests/e2e/foundation.test.ts:1277` — `never quotes the configuration it failed to parse` |
+| The same, on a `brain` run | **holds since NEW-17 closed.** `readConfig` calls `readConfigFile` (`apps/cli/src/commands/brain.ts:117`) rather than parsing for itself, and rethrows `ConfigurationError` unmodified — its message quotes nothing and it carries the exit code `BrainRefusal` uses, so `failureFrom` renders it with no special handling. This row read **partial** for two days after the fix | `packages/core/src/config/config.test.ts`; `apps/cli/src/commands/brain.test.ts` |
 
-**A gap found while writing this document, recorded and not fixed.** `redactText`'s `userPatterns`
-option **has no production caller.** All fourteen production calls pass two arguments
-(`apps/cli/src/context.ts:350,657`, `apps/cli/src/commands/init.ts:734`,
-`apps/cli/src/commands/capture.ts:445,616,673`, `apps/cli/src/commands/review.ts:245,435,475`,
-`apps/cli/src/commands/ingest.ts:531,814,1087,1138,1246`), and `configSchema` is `.strict()` with no
-redaction table (`packages/core/src/config/loader.ts:130-153`) — so a user who adds one to their
-configuration gets a load failure, not a pattern. Design spec §8.2's "patterns live in `config.toml`"
-describes an unwired half. The `user-pattern` class is implemented, tested and unreachable from the
-product. **Nothing in this document should be read as claiming a user can configure a redaction
-pattern today.** **Record: `BACKLOG.md` §1 NEW-16.**
+**A gap found while writing this document — closed 2026-08-17, and this paragraph asserted the
+opposite for a day afterwards.** `redactText`'s `userPatterns` option had no production caller and
+`configSchema` had no redaction table, so design spec §8.2's "patterns live in `config.toml`"
+described an unwired half: the `user-pattern` class was implemented, tested and unreachable from the
+product.
+
+**It is wired now.** `configSchema` carries an optional `[redaction]` table
+(`packages/core/src/config/loader.ts:208`, whose `redactionSchema` is at `:151`), and the three
+commands that redact bind the user's patterns into a closure at their composition root —
+`apps/cli/src/commands/capture.ts:695`, `apps/cli/src/commands/review.ts:535`,
+`apps/cli/src/commands/ingest.ts:1480`. `createRedactor` is the only production entry to
+`redactText`, enforced by `tests/repository/redactor-entry.test.ts`, which is what keeps a new call
+site from silently opting out of the user's own patterns. **Record: `BACKLOG.md` §1 NEW-16, closed;
+its residuals NEW-24, NEW-25 and NEW-26 are open.**
 
 ### 5.8 The redaction key — the product's first secret at rest
 
@@ -432,51 +447,62 @@ pattern today.** **Record: `BACKLOG.md` §1 NEW-16.**
 |---|---|---|
 | The key is not a managed artifact | created deliberately outside `mutationsFor`/`recordArtifacts`, so it never enters `installation-manifest.json`, is never hashed into a drift report, and is absent from `plan.created` too — naming it there would imply the manifest owns it (`apps/cli/src/commands/init.ts:711-722`) | `apps/cli/src/commands/init.test.ts`; `tests/e2e/foundation.test.ts:563` — `restores a deleted redaction key when init is run again` |
 | Reading the key follows no symlink and cannot hang the CLI | `O_NOFOLLOW` because a symlink there is not our file, and `O_NONBLOCK` because `open(O_RDONLY)` on a FIFO blocks forever and the regular-file check is downstream of the open (`apps/cli/src/context.ts:443-454`) | `apps/cli/src/context.test.ts` |
-| A key that is not a private regular file of the right length is refused or repaired | symlink, non-regular and short-file refusals, and the mode is forced back to `0600` through the open handle (`apps/cli/src/context.ts:474-488`); created at `0600` (`:515`) | `apps/cli/src/commands/doctor.test.ts:195` |
+| A key that is not a private regular file of the right length is refused or repaired | symlink, non-regular and short-file refusals, and the mode is forced back to `0600` through the open handle (`apps/cli/src/context.ts:474-488`); created at `0600` (`:515`) | `apps/cli/src/commands/doctor.test.ts:228` |
 | A lost key degrades a diagnostic and never the knowledge | a missing key regenerates with a warning that prior fingerprints are no longer comparable (`apps/cli/src/context.ts:619,652`) — content is not derived from the key | `apps/cli/src/context.test.ts` |
 | `uninstall` removes it, and that is the one named exception to the manifest-only rule | centralized in `redactionKeyPath` so the exception stays exactly one path wide (`apps/cli/src/context.ts:429-441`) | `apps/cli/src/commands/uninstall.test.ts` |
 
-### 5.9 The transaction — **and the boundary that is absent**
+### 5.9 The transaction — **and the boundary that closed**
 
 | Boundary | Mechanism | Evidence |
 |---|---|---|
-| Every managed mutation is journalled, backed up and recoverable | seven phases driven by one loop, each journalled *after* it completes and before the next is attempted, so the journal always describes work already done (`packages/core/src/transactions/executor.ts:259-269`, `:848`) — the full phase table is `foundation.md` §3 | `tests/security/interruption.test.ts` — an interruption at each of the seven forward phases, for the capture write and each of the four forward ingest kinds. **It is an in-process `afterPhase` throw, not a signal**, and the suite says so in its own header: a thrown error unwinds where a `SIGKILL` does not, so it proves the journal is recoverable and never that no `finally` ran |
-| An interrupted run leaves the capture retryable and `doctor` says how to recover | `checkTransactions` fails on any incomplete journal and names both ways out in its recovery string (`apps/cli/src/commands/doctor.ts:601,613`), which sets exit 6 | `tests/security/interruption.test.ts`, and its derived coverage case at `:281-282` which reddens if the driven set shrinks; `tests/e2e/foundation.test.ts:1000` — `is reported, blocks init, and names both ways out` |
-| A file that changed under a running command is not overwritten | `expectedBeforeHash` compared at backup time, raising `TransactionConflictError` (`packages/core/src/transactions/executor.ts:453-457`) | `tests/security/concurrent-edit.test.ts` — `refuses a review edit whose capture changed under it, rather than overwriting` |
+| Every managed mutation is journalled, backed up and recoverable | seven phases driven by one loop, each journalled *after* it completes and before the next is attempted, so the journal always describes work already done (`packages/core/src/transactions/executor.ts:344-376`, `:1104`) — the full phase table is `foundation.md` §3 | `tests/security/interruption.test.ts` — an interruption at each of the seven forward phases, for the capture write and each of the four forward ingest kinds. **It is an in-process `afterPhase` throw, not a signal**, and the suite says so in its own header: a thrown error unwinds where a `SIGKILL` does not, so it proves the journal is recoverable and never that no `finally` ran |
+| An interrupted run leaves the capture retryable and `doctor` says how to recover | `checkTransactions` fails on any incomplete journal and names both ways out in its recovery string (`apps/cli/src/commands/doctor.ts:733,744`), which sets exit 6; it fails a second way, on a backup payload that outlived a terminal transaction, naming the one `repair` that clears it (`:756-758`) | `tests/security/interruption.test.ts`, and its derived coverage case at `:335-337` which reddens if the driven set shrinks; `tests/e2e/foundation.test.ts:1027` — `is reported, blocks init, and names both ways out` |
+| A file that changed under a running command is not overwritten | `expectedBeforeHash` compared at backup time, raising `TransactionConflictError` (`packages/core/src/transactions/executor.ts:694-698`) | `tests/security/concurrent-edit.test.ts` — `refuses a review edit whose capture changed under it, rather than overwriting` |
 | A second operation on a held journal is refused | every store operation on a journal runs inside `withTransactionLock` (`packages/core/src/transactions/store.ts:195,247,261,283`), which takes an advisory per-transaction lock through `/usr/bin/lockf` (`packages/platform-macos/src/transaction-lock.ts:17,84`) | `tests/security/concurrent-edit.test.ts` — `refuses a second transaction while one holds the lock` |
-| **A secret removed from a vault file is gone from the machine** | **absent** | see below |
+| **A secret removed from a vault file is gone from the machine** | `TransactionExecutor.pruneBackups` unlinks every `<index>.bin` and `<index>.bin.tmp` at both terminal transitions and both terminal early-returns (`packages/core/src/transactions/executor.ts`) | `tests/security/backup-prune.test.ts` — `holds nowhere under the product home once the edit finalizes`, which sweeps the whole product home **after** the command returns and reddens when the prune is disabled; `packages/core/src/transactions/transactions.test.ts` pins the mechanism per phase |
 
-**This is the second of the three.** `review --decision edit` exists to remove a secret a user pasted
-into a vault file by hand, and it does remove it from the vault: every decision re-redacts, because
-the command writes back what it parsed rather than patching a status line
-(`apps/cli/src/commands/review.ts:366-373`). **The secret leaves the vault; it does not leave the
-machine.** `TransactionExecutor.backUp` writes the pre-edit file raw to
-`<product home>/backups/transactions/<id>/<n>.bin` at mode `0600`
-(`packages/core/src/transactions/executor.ts:449-467`, `:391-392`), and **nothing prunes it** — no
-`rm` of that directory exists anywhere in the executor. The user is told the secret is gone; a copy
-survives in a directory they have no reason to know about.
+**This is the second of the three, and it closed on 2026-08-17.** `review --decision edit` exists to
+remove a secret a user pasted into a vault file by hand, and it removes it from the vault: every
+decision re-redacts, because the command writes back what it parsed rather than patching a status
+line (`apps/cli/src/commands/review.ts`). What this section used to record is that the secret left
+the vault and not the machine — `TransactionExecutor.backUp` writes the pre-edit file raw to
+`<product home>/backups/transactions/<id>/<n>.bin` at mode `0600`, and nothing pruned it.
 
-**It is a missing prune, not an inherent cost.** `rollbackLocked` throws on a finalized journal
-(`packages/core/src/transactions/executor.ts:280`), so once `finalize` runs that backup can never be
-used for anything — it is dead bytes. The fix is to prune the backup directory in the `finalized`
-transition. **No DOS-P6 task's file list reaches `packages/core`**, which is why no session has done
-it.
+**`pruneBackups` now does, at both terminal phases and both terminal early-returns.** `finalized` and
+`rolled_back` are equally terminal — `resumeLocked` throws on a rolled-back journal, `store.transition`
+refuses every transition out of either — so from the transition onward the payload is dead bytes.
+The early-returns are what make a crash between a transition and its prune recoverable rather than
+permanent, and `repair` accepts a terminal phase for its own action so a user can reach them.
+`<index>.bin.tmp` is swept too: `writeDurableFile` writes there before renaming, so it holds the same
+bytes, and a `rollback` never re-runs `backUp` to clear it. The `<index>.json` metadata stays — it
+carries `{existed, mode, atimeMs, mtimeMs}` and none of the bytes.
 
-**The evidence here is a test declaring what it does not assert.**
-`tests/security/sentinel.test.ts:29-36` puts `backups/transactions/` deliberately *outside* its sweep
-and says why, so "the staging directory" in that suite means the executor's own staging area rather
-than the backups. A suite that had quietly swept the backups away would have made this document's
-second claim false. **Record: `ORDER.md`, the third Foundation request.**
+**A prune that fails is reported rather than raised into the caller.** `execute` has seven call sites across six commands and
+all of them read a throw as "the transaction did not happen", which a retention failure is not, so
+the forward path retains and `doctor`'s `transactions` check names the payload and the `repair`
+command that clears it. The two terminal early-returns and the rollback transition still raise. The
+rule is keyed on the prune site rather than the caller: `repair --resume <id>` on an *incomplete*
+journal drives the forward loop and retains like any other command.
 
-**One correction to that docblock, and it does not change the finding.** It says the staging area is
-what `finalize` removes. **Nothing removes it either** — `ensureTransactionDirectories` creates both
-the staging and the backup directory (`packages/core/src/transactions/executor.ts:371-385`) and the
-executor's only removals are `removeOwnedTemp` on a durable-write temporary (`:102-111`) and the
-`unlink` of a `remove` mutation's own target (`:557`, `:666`). The staged bytes are *redacted*
-content, so their survival costs disk rather than a secret; the backup's do not, which is why the
-prune is a security fix and this is a housekeeping one. It sits beside the open founder question
-`BACKLOG.md` §2 carries about `<state>/transactions/` accumulating one permanent lock file per
-transaction id.
+**The evidence is a sweep taken after the command returns, and the first version of this row cited
+one that cannot fail.** `tests/security/sentinel.test.ts` did stop declaring what it does not assert
+— `backups/transactions/` used to be deliberately outside its sweep, and it is now its own artifact
+with its own payload floor, separate from staging so a shared floor could not be satisfied by the
+staging half alone. But that suite samples from inside `afterPhase`, which is *before* the prune
+runs, so it passes with `pruneBackups` disabled entirely; it proves the payload carries no secret
+while it exists, not that it stops existing. `tests/security/backup-prune.test.ts` performs the
+measurement this row actually claims: a secret hand-written into a capture file, `review --decision
+edit`, then every file under the product home and the vault counted for it. Disabling the prune
+turns it red and leaves all eleven sentinel cases green — which is how the gap was found.
+**Record: `ORDER.md`, Foundation request 2.**
+
+**The staging area is still not removed, and that is a separate residual.**
+`ensureTransactionDirectories` creates both the staging and the backup directory, and the executor's
+only other removals are `removeOwnedTemp` on a durable-write temporary and the `unlink` of a `remove`
+mutation's own target. The staged bytes are *redacted* content, so their survival costs disk rather
+than a secret; the backup's did not, which is why the prune was a security fix and this is a
+housekeeping one. It sits beside the open founder question `BACKLOG.md` §2 carries about
+`<state>/transactions/` accumulating one permanent lock file per transaction id.
 
 **Two related residuals, both open and both stated where a reader meets them.** `PlannedFileMutation`
 carries no caller-supplied precondition, so the executor computes `expectedBeforeHash` from its own
@@ -515,26 +541,48 @@ the "every managed mutation is transactional" sentence has a stated exception.
 
 | Boundary | Mechanism | Evidence |
 |---|---|---|
-| Discovery runs one absolute helper and gives it nothing but a search path | `/usr/bin/which`, spawned with `env: { PATH: <search path> }` and nothing else (`packages/platform-macos/src/macos.ts:17,175-182`) | `tests/security/network.test.ts` — every classified spawn asserted absolute, and the classification asserted total in both directions (`:164-179`) |
+| Discovery runs one absolute helper and gives it nothing but a search path | `/usr/bin/which`, spawned with `env: { PATH: <search path> }` and nothing else (`packages/platform-macos/src/macos.ts:18,229`) | `tests/security/network.test.ts` — every classified spawn asserted absolute, and the classification asserted total in both directions (`:164-179`) |
 | A discovered path that is not usable is refused rather than reported | must be absolute, free of every control character, and must not carry a redaction marker — because the runner redacts its own output and a high-entropy path segment comes back rewritten but still absolute (`packages/platform-macos/src/macos.ts:86-106`) | `packages/platform-macos/src/macos.test.ts` |
-| An empty `PATH` does not become an unbounded search | a fixed fallback of the four system directories (`packages/platform-macos/src/macos.ts:20,143-145`) | `packages/platform-macos/src/macos.test.ts` |
+| An empty `PATH` does not become an unbounded search | a fixed fallback of the four system directories (`packages/platform-macos/src/macos.ts:21,185-186`) | `packages/platform-macos/src/macos.test.ts` |
 | The *platform boundary* never executes what it found | `AgentDiscovery.version` is permanently `null` there, because determining it requires running the binary (`packages/platform-macos/src/types.ts:19-24`, `foundation.md` §7). **A layer above does execute it**: `discoverCli` runs `<exe> --version` (`packages/security/src/cli.ts:54-80`) and `doctor` calls it on every invocation, which retired the Foundation-era invariant — `claude-adapter.md` §9 residual 10 records exactly that | `packages/platform-macos/src/macos.test.ts`; `tests/security/network.test.ts` classifies the version probe rather than forbidding it |
 | A hostile entry for one vendor does not cost the user the other | a discovery that refuses is treated as "not this one" and the next vendor is tried (`apps/cli/src/commands/ingest.ts:454-463`) | `apps/cli/src/commands/ingest.test.ts` |
-| **The executed binary is vouched for by something** | **absent** | see below |
+| **The executed binary is vouched for by something** | `assertTrustedExecutable` canonicalizes the path, refuses anything that is not a regular file, and walks three ancestor chains — the resolved target's, the declared directory's, and that directory canonicalized — refusing an owner that is neither the current uid nor root, any other-writable directory, and a group-writable one the current uid does not own (`packages/platform-macos/src/macos.ts:305`) | `packages/platform-macos/src/macos.test.ts`; `tests/helpers/temp-home.ts` runs the real check against every planted binary |
 
-**A gap found while writing this document, recorded and not fixed.**
-`packages/platform-macos/src/types.ts:13-18` documents `executablePath` as untrusted in exactly these
-words: *"resolved through the caller's PATH, with no assertion about the owner or mode of the
-containing directory. Anything that executes it owes that check first."* **DOS-P6 is the first thing
-in this product that executes it**, and `selectVendor` takes `discovery.executablePath` and hands it
-straight to `invokeVendor` (`apps/cli/src/commands/ingest.ts:454-463`, `:1425`) with no owner or mode
-check anywhere between. **It is no longer the only one: `capture` joined it on 2026-08-15**, when
-Task 17's Claude detection row made `discoverSourceAgent`'s probe path live — the same unchecked
-execution, on the product's most frequently run command, triggered by a `CLAUDECODE=1` that any
-wrapper or CI step can export. The exposure there is narrower, because a `--version` probe is handed
-no observation and no vault path, and it is the same unpaid debt rather than a second one. The debt the platform boundary assigned to its executor is unpaid, and the
-`ingest` docblock at `:442-446` already reasons about "a hostile `claude` on `PATH`" while handling
-only the fall-through case.
+**A gap found while writing this document — paid on 2026-08-17, and this section read "absent" for
+a day afterwards.** `packages/platform-macos/src/types.ts:13-18` documented `executablePath` as
+untrusted and said "anything that executes it owes that check first", and nothing paid it: DOS-P6 was
+the first thing in this product to execute it, `selectVendor` handed `discovery.executablePath`
+straight to `invokeVendor`, and `capture` joined on 2026-08-15 when Task 17's Claude detection made
+`discoverSourceAgent`'s probe path live — the same unchecked execution on the product's most
+frequently run command, triggered by a `CLAUDECODE=1` any wrapper or CI step can export.
+
+**`assertTrustedExecutable` is that check**, and all three executors call it before spawning:
+`apps/cli/src/commands/capture.ts:263`, `apps/cli/src/commands/doctor.ts:439`,
+`apps/cli/src/commands/ingest.ts:481` — `doctor` was a third executor paying nothing while the first
+version of this fix claimed a third could not arrive. The rule, decided by the founder rather than
+chosen here (BACKLOG NEW-15): **resolve, then check.** The binary is canonicalized and the resolved
+target must be a regular file; every ancestor on three chains — the resolved target's, the declared
+directory's, and that directory canonicalized, the third because the first two alone accepted a PATH
+directory symlinked into a world-writable one — is then refused if its owner is neither the current uid nor root, if it is other-writable with or without a
+sticky bit, or if it is group-writable and not owned by the current uid.
+
+**Three residuals are open, and the first version of this paragraph named two — neither of them the
+one that matters.** In order of severity:
+
+1. **A middle symlink hop is on none of the chains (`BACKLOG.md` §1 NEW-32).** `<trusted>/claude` →
+   `<attacker>/hop` → `/bin/ls` passes every check: the declared chain walks `<trusted>` upward, the
+   resolved chain walks `/bin` upward, and `<attacker>` is visited by nobody. It needs no race. This
+   is a **working bypass of the guard**, and the paragraph it replaces omitted it while asserting
+   "neither is hidden".
+2. **macOS ACLs are invisible to `stat().mode`.** A directory can be `0755` and writable by another
+   user through an ACL entry, so the mode check is a floor rather than a proof.
+3. **Check-then-use (`BACKLOG.md` §1 NEW-35).** The target is stat'd and then executed by path;
+   closing it needs an exec-by-descriptor this runtime does not offer. Accepted by the founder when
+   the rule was decided.
+
+**`NEW-33` is not on that list**, and putting it there was the other half of the error: a root-owned
+group-writable directory being *refused* makes a `claude` under some `/usr/local` layouts fail. That
+is a false refusal — a usability cost and the founder's call — not a weakening of the boundary.
 
 What this does **not** mean: it is not a privilege escalation. The binary runs as the user, from the
 user's own `PATH`, and anyone who can plant it there can already run code as that user. What it costs
@@ -553,15 +601,17 @@ rather than a detail — see the last row.
 
 | Boundary | Mechanism | Evidence |
 |---|---|---|
-| Configuration is read through the protected-path policy, never with a bare `readFile` | the guarded reader canonicalizes, refuses a protected name, opens `O_NOFOLLOW` and re-checks `dev`/`ino` after the open (`packages/security/src/protected-paths.ts:47-88`), reached through `context.guards.readText` (`apps/cli/src/context.ts:363`, `apps/cli/src/commands/doctor.ts:225`) | `packages/security/src/protected-paths.test.ts:70` — `allows the Developer OS configuration path`; `:146` — `reads from the opened safe descriptor after the original alias is swapped` |
-| Absence is distinguished from a refusal | `lstat` is checked *first*, because the guarded reader reports a missing file as a security refusal — the right answer for a read and the wrong one for "this machine has never been initialized" (`apps/cli/src/commands/doctor.ts:218-223`) | `apps/cli/src/commands/doctor.test.ts` |
-| An unknown key is refused rather than ignored | `configSchema` is `.strict()`, as is every nested table (`packages/core/src/config/loader.ts:130-153`, `:77-91`) — so a typo'd or injected key fails the load instead of being silently dropped | `packages/core/src/config/config.test.ts` |
-| A parse failure never prints the file it failed on — **through `readConfigFile`** | a `loadConfig` throw becomes a content-free `ConfigurationError`, because `smol-toml` embeds three raw source lines in `TomlError.message` and propagating it printed whatever was read into `status`, `doctor` and their `--json` (`apps/cli/src/commands/doctor.ts:188-193,227-231`). Redaction is deliberately not the only thing standing on this path | `tests/e2e/foundation.test.ts:1250` — `never quotes the configuration it failed to parse` |
-| **The same boundary on a `brain` run — PARTIAL** | **`brain` does not use that wrapper.** `readConfig`'s `try` (`apps/cli/src/commands/brain.ts:97`) covers the read alone and `loadConfig(serialized)` is the return statement after it (`apps/cli/src/commands/brain.ts:100-109`); a `TomlError` is not a `BrainRefusal`, so the handler falls through to `failureFrom` (`:334`) and the message reaches the user through `redactDiagnostic` (`apps/cli/src/context.ts:411-427`) — **the heuristic redactor as the only thing standing, which is exactly what the row above exists to prevent.** Record: `BACKLOG.md` §1 NEW-17 | none |
-| Telemetry cannot be switched on by editing the file | the key is `z.literal(false)` (`packages/core/src/config/loader.ts:151`), so `telemetry = true` fails the load | `packages/core/src/config/config.test.ts` |
+| Configuration is read through the protected-path policy, never with a bare `readFile` | the guarded reader canonicalizes, refuses a protected name, opens `O_NOFOLLOW` and re-checks `dev`/`ino` after the open (`packages/security/src/protected-paths.ts:47-88`), reached through `context.guards.readText` (`apps/cli/src/context.ts:363`, `apps/cli/src/commands/doctor.ts:232`) | `packages/security/src/protected-paths.test.ts:70` — `allows the Developer OS configuration path`; `:146` — `reads from the opened safe descriptor after the original alias is swapped` |
+| Absence is distinguished from a refusal | `lstat` is checked *first*, because the guarded reader reports a missing file as a security refusal — the right answer for a read and the wrong one for "this machine has never been initialized" (`apps/cli/src/commands/doctor.ts:225-230`) | `apps/cli/src/commands/doctor.test.ts` |
+| An unknown key is refused rather than ignored | `configSchema` is `.strict()`, as is every nested table (`packages/core/src/config/loader.ts:187-211`, `:77-91`) — so a typo'd or injected key fails the load instead of being silently dropped | `packages/core/src/config/config.test.ts` |
+| A parse failure never prints the file it failed on — **through `readConfigFile`** | a `loadConfig` throw becomes a content-free `ConfigurationError`, because `smol-toml` embeds three raw source lines in `TomlError.message` and propagating it printed whatever was read into `status`, `doctor` and their `--json` (`apps/cli/src/commands/doctor.ts:195-200,234-238`). Redaction is deliberately not the only thing standing on this path | `tests/e2e/foundation.test.ts:1277` — `never quotes the configuration it failed to parse` |
+| The same boundary on a `brain` run | **holds.** `readConfig` reads through `readConfigFile` (`apps/cli/src/commands/brain.ts:117`) and rethrows `ConfigurationError` unmodified, so a `TomlError` never reaches `redactDiagnostic`. NEW-17, closed | `apps/cli/src/commands/brain.test.ts` |
+| Telemetry cannot be switched on by editing the file | the key is `z.literal(false)` (`packages/core/src/config/loader.ts:209`), so `telemetry = true` fails the load | `packages/core/src/config/config.test.ts` |
 
-**What configuration does *not* carry, and §5.7 explains why it matters:** there is no redaction
-table, so the `user-pattern` class has no way to be configured. **And one thing it decides that
+**What configuration carries that it did not, and §5.7 explains why it matters:** an optional
+`[redaction]` table, added on 2026-08-17 when NEW-16 closed, so the `user-pattern` class is
+configurable — this paragraph asserted the opposite for a day after the wiring landed, in a
+section a reader reaches *before* §5.7. **And one thing it decides that
 nothing else re-checks:** `brainPath` is an absolute path from the file, and `reindex` does not call
 `assertRootsAnchored` where `init` does — so a hand-edited vault path outside the home is refused by
 one command and accepted by the other. That is `brain.md` §4 residual 5, owned by DOS-P7.
@@ -574,7 +624,7 @@ one command and accepted by the other. That is `brain.md` §4 residual 5, owned 
 unless its notes are already in the vault, in which case it is left at `staging` and says so.**
 That is the gate's own wording in `BACKLOG.md` §3 plus the one qualification the ladder forces, and
 it holds by refusal (`apps/cli/src/commands/ingest.ts:766-792`) and by interruption
-(`tests/security/interruption.test.ts`, thirty-five cases). `accepted` beside this run's own notes
+(`tests/security/interruption.test.ts`, 37 cases by collection — 35 driven interruptions, the derived coverage case, and the stranding floor). `accepted` beside this run's own notes
 would be the one answer that is *not* retryable: `applyNotes` refuses an occupied path, so the next
 run would refuse the capture permanently.
 
@@ -607,24 +657,24 @@ look identical from outside and are not the same thing.
 
 | Absent | Mechanism | Evidence |
 |---|---|---|
-| **Network** | no HTTP client, no socket, no DNS anywhere in the product | `tests/e2e/foundation.test.ts:1164` — `ships no network capability`. It scans every compiled non-test module in **every workspace discovered under `apps/` and `packages/`** (`:1181-1193`) — discovered, not written down, which is the whole of the fix for the closed NEW-1 — and asserts non-empty **per workspace** rather than over the total (`:1238-1239`), because a floor over the sum is satisfied by one populated directory |
+| **Network** | no HTTP client, no socket, no DNS anywhere in the product | `tests/e2e/foundation.test.ts:1191` — `ships no network capability`. It scans every compiled non-test module in **every workspace discovered under `apps/` and `packages/`** (`:1208-1220`) — discovered, not written down, which is the whole of the fix for the closed NEW-1 — and asserts non-empty **per workspace** rather than over the total (`:1265-1266`), because a floor over the sum is satisfied by one populated directory |
 | **Any outbound call but one** | the vendor agent CLI during ingest, and nothing else | `tests/security/network.test.ts` — the spawn list is **classified, not forbidden**: the unclassified set is asserted empty and the classified set asserted non-empty, because a filter with nothing behind it passes by filtering everything |
 | **Credentials** | no Keychain, no token store; the protected-path policy refuses `.ssh`, `.aws`, `.gnupg`, `.env` and `.env.*`, and three exact files, on both the declared and the canonical path (`packages/security/src/protected-paths.ts:9-19,129-137`) | **The declared half:** `packages/security/src/protected-paths.test.ts:48` — `rejects reading the protected path %s` — and `:59` — `rejects writing the protected path %s` — two `it.each` blocks that run every one of the eight fixture paths (`:18-27`) through `assertReadable` and `assertWritable`, covering `.env`, `.env.local`, `.ssh`, `.aws`, `.gnupg` and all three exact files by name. **The canonical half:** `:130` — `rejects an innocent alias that resolves into synthetic SSH data` — a path innocent as written that resolves into a protected directory. **The negative control**, which is what keeps the rule a name match rather than a substring match: `:78` — `does not treat a protected-name prefix as the protected directory`. Note the policy covers `.env` and `.env.*` but **not** `.envrc` or `.environment` (`foundation.md` §7) |
 | **Reading a session transcript** | no code path opens the field the vendors ship in every hook payload | `tests/repository/transcript-path.test.ts` — a gate rather than a reviewer's grep, with the needle assembled at runtime so the file does not match its own source |
 | **Hooks** | neither adapter emits a hooks file; a not-used list in each `capabilities.ts` resolves `plugin_hooks` **before** the table or any observation is consulted, so a stray `observed` cannot make it `yes` over a file that does not exist (`packages/adapter-claude/src/capabilities.ts:31-32,73`, `packages/adapter-codex/src/capabilities.ts:26-27,80`) | `packages/adapter-claude/src/plugin.test.ts:50` asserts no `hooks/hooks.json` is emitted, so restoring hooks has to delete an assertion rather than happen by accident; `packages/adapter-claude/src/capabilities.test.ts:103,116` pins the state and its precedence |
 | **Automatic capture** | nothing fires on session start, session end or compaction. Capture content is agent-authored, and `capture` refuses without `--text` or stdin rather than sourcing text itself (`apps/cli/src/commands/capture.ts:339-346`) — the `session_end` trigger could only supply that text by reading a transcript, which the row above refuses | `apps/cli/src/commands/capture.test.ts`; follows structurally from hooks being absent |
-| **Telemetry, a scheduler, and Git mutation** | `telemetry` is `z.literal(false)` in the configuration schema (`packages/core/src/config/loader.ts:151`) | `packages/core/src/config/config.test.ts` |
+| **Telemetry, a scheduler, and Git mutation** | `telemetry` is `z.literal(false)` in the configuration schema (`packages/core/src/config/loader.ts:209`) | `packages/core/src/config/config.test.ts` |
 | **Reading anything outside this repository** | `npm run lint` runs a git-driven enumerator over tracked *and untracked* files | `tests/repository/self-containment.ts` — a lint rule rather than a sandbox, and it says so: it refuses the obvious spellings so that crossing the boundary has to be deliberate and visible in a diff |
 
 ---
 
 ## 8. What the evidence is worth
 
-`tests/security/` holds **eight suites and 85 cases**, counted by collection — `npx vitest list --root tests security` — rather than by adding deltas to a remembered total. Two of the eight are not in design spec §9's
+`tests/security/` holds **nine suites and 90 cases**, counted by collection — `npx vitest list --root tests security` — rather than by adding deltas to a remembered total. Two of the nine are not in design spec §9's
 list — **network** and **concurrent edit** — and are there because `BACKLOG.md` §7's standing gate
 requires them and the spec dropped them.
 
-**47 of the 85 cases carry a watched-failure demonstration and 38 do not.**
+**Of 90 cases, 38 carried no watched-failure demonstration when the directory held 85.** **Recounted 2026-08-17 by collection: nine suites, 90 cases.** The 38 that carry no watched-failure demonstration were counted at 85, and the five added since have not been re-audited — three of them (`backup-prune`'s sweep, `sentinel`'s payload floor, `interruption`'s stranding floor) were mutation-verified when written, so the 38 is an upper bound rather than a current figure.
 
 **How that was arrived at, because the first attempt at it was wrong.** The total is the collection
 above, 85. The split is the 2026-08-13 baseline — 59 cases, 41 evidenced — plus the two fix rounds
@@ -652,7 +702,7 @@ cannot check against the tree.**
 
 **The suites do not record which of their own cases was watched fail.** `grep -rniE "revert"
 tests/security/` returns nothing; no suite carries a marker, a count, or a list. What exists in this
-repository is the **aggregate**, in `BACKLOG.md` §5 — "47 of its 85 cases carry that evidence and 38
+repository is the **aggregate**, in `BACKLOG.md` §5 — "47 of its 85 cases carried that evidence and 38 did not; recounted at 90 on 2026-08-17" — quoted in full, because an earlier version of this line dropped the recount clause. The source reads "38
 do not". The **per-suite breakdown below, the named unevidenced cases, and the thirteen reverts**
 (each naming the production line disabled, the command run, and the failing output) live in the
 implementing task's report under `.superpowers/`, which is **untracked scratch and is deleted when
@@ -701,7 +751,7 @@ exact-path staging; and a **fresh-context review by an agent that is not the aut
 code-producing task.
 
 **One gate-integrity item is open and unowned, and this one *is* in the tree** — `ORDER.md` carries
-the measurement table. `apps/cli/src/commands/doctor.test.ts:195` needs 3.19 s of a 20 s budget on
+the measurement table. `apps/cli/src/commands/doctor.test.ts:228` needs 3.19 s of a 20 s budget on
 an idle machine and went red in 5 of 6 full runs once eight fsync-heavy suites joined it. The measured fix is `fileParallelism: false`, which also dropped total test time
 from roughly 1000 s to 700 s. A case one contended run from red is a gate one contended run from
 uninformative, and this is the second such item this program has paid for. Separately, an

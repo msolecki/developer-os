@@ -36,6 +36,74 @@ export class TransactionPlanError extends Error {
   }
 }
 
+/**
+ * **The transaction completed and a backup payload could not be removed.** Distinct from
+ * `TransactionStateError`, whose message — "transaction state is malformed or incomplete" —
+ * describes something that is not true here: the journal is terminal, the user's file is
+ * correct, and the only thing wrong is that bytes this product promised to delete are still
+ * on disk.
+ *
+ * **The outcome is a parameter, because two of the three raising sites are on the rollback
+ * path.** The message was hardcoded to "the change was applied", and `rollbackLocked`
+ * raises it twice — where the change was *un*applied and the user's original file restored.
+ * A completed rollback was reported as a failure whose text said the opposite of what
+ * happened, which is the same defect as raising out of `execute`, relocated rather than
+ * removed (found by fresh-context review, 2026-08-17).
+ *
+ * **It escapes only from `repair`, and that restriction is the point.** Every caller of
+ * `execute` — `reindex`, `uninstall`, `ingest`, `review`, `capture`, `init` — is written
+ * against "a throw means the transaction did not happen", and `ingest`'s own docblock says
+ * so in as many words. This error means the opposite, so raising it out of `execute` made
+ * `reindex` skip `recordArtifacts`, `uninstall` skip its manifest removal, and `ingest`
+ * report `ok: false` for captures that had all landed — a successful operation reported as
+ * a failure, with the command's own bookkeeping half done.
+ *
+ * **The three raising sites are the two terminal early-returns and the rollback transition
+ * — keyed on the prune site, not on the caller.** Saying "`repair`'s paths raise" is the
+ * shorter sentence and it is wrong in one direction that matters: `repair --resume <id>` on
+ * an *incomplete* journal drives the forward loop, reaches the `verified → finalized` prune,
+ * and retains silently like any other command. `doctor` covers that case; the rule does not.
+ * On the forward path `pruneBackups` retains, and `doctor`'s transactions check is what
+ * makes a retained payload visible.
+ *
+ * **It is recoverable, but not by retrying alone** — and the first version of `runRepair`'s
+ * recovery said otherwise. `pruneBackups` being idempotent means re-running is *safe*, not
+ * that it will succeed: the only thing that raises this is an `unlink` failing for a reason
+ * other than "already gone", and that reason is still there on the second attempt. The
+ * recovery names the precondition first and the command second.
+ *
+ * **`reason` carries the errno, because the recovery cannot be right for all of them.**
+ * `EACCES` on a non-writable directory is the common cause and the one the recovery names,
+ * but `EPERM` (a macOS `uchg` flag, or a sticky-bit directory owned by someone else),
+ * `EROFS`, `EIO` and `EBUSY` reach the same branch — and for those, "make the backup
+ * directory writable" is confidently wrong with nothing to tell the user why. Discarding
+ * the code left the message unable to distinguish them at all.
+ */
+export type TransactionOutcome = "applied" | "rolled back";
+
+export class TransactionBackupRetentionError extends Error {
+  readonly code = EXIT_CODES.recoveryRequired;
+
+  /**
+   * The directory the payload is in, unredacted, so a caller can publish it in `paths`
+   * rather than leaving the only copy inside a message `redactDiagnostic` rewrites.
+   */
+  readonly directory: string;
+
+  constructor(
+    path: string,
+    outcome: TransactionOutcome,
+    reason: string,
+    directory: string,
+  ) {
+    super(
+      `the change was ${outcome}, but a backup payload could not be removed (${reason}): ${path}`,
+    );
+    this.name = "TransactionBackupRetentionError";
+    this.directory = directory;
+  }
+}
+
 export class TransactionConflictError extends Error {
   readonly code = EXIT_CODES.decisionRequired;
 
@@ -68,6 +136,23 @@ function isMissing(error: unknown): boolean {
     "code" in error &&
     error.code === "ENOENT"
   );
+}
+
+/**
+ * The errno, or a stand-in when there is none.
+ *
+ * **It is the code and never the message.** An errno is a fixed token — `EACCES`, `EPERM`,
+ * `EROFS` — that carries no path, no user string and nothing to redact, which is what makes
+ * it safe to put in a diagnostic. `error.message` on the same object embeds the path it
+ * failed on, so folding it in would leak the same string twice by a route the caller does
+ * not know to redact.
+ */
+function errnoOf(error: unknown): string {
+  if (typeof error === "object" && error !== null && "code" in error) {
+    const code = (error as { readonly code: unknown }).code;
+    if (typeof code === "string" && /^[A-Z]+$/u.test(code)) return code;
+  }
+  return "unknown error";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -239,7 +324,24 @@ export class TransactionExecutor {
 
   private async resumeLocked(id: string): Promise<TransactionJournalV1> {
     let journal = await this.store.read(id);
-    if (journal.phase === "finalized") return journal;
+    if (journal.phase === "finalized") {
+      /**
+       * **The crash window, swept on the next resume.** The prune runs after the
+       * `finalized` transition, so a process that dies between them leaves a journal
+       * reading `finalized` with the payload still on disk — and every recovery path then
+       * refuses it: this function used to return here, `rollbackLocked` throws, and
+       * `repair` rejected a finalized id before the executor saw it. The bytes were
+       * stranded permanently while the product reported success.
+       *
+       * Pruning here as well makes the operation idempotent and gives that window a way
+       * out: `repair --resume <id>` on a finalized transaction now cleans it up instead of
+       * being a no-op. Ordering the prune after the transition is still right — the
+       * reverse would destroy the only copy while a rollback might need it — but it is
+       * only *safe* because of this line.
+       */
+      await this.pruneBackups(journal, { raiseOnFailure: true });
+      return journal;
+    }
     if (journal.phase === "rolled_back") throw new TransactionStateError();
 
     while (journal.phase !== "finalized") {
@@ -262,6 +364,14 @@ export class TransactionExecutor {
         case "verified":
           await this.verifyDesired(journal);
           journal = await this.transition(journal, "finalized");
+          /**
+           * **The one prune site a command can reach, so the one that must not raise.**
+           * `execute` funnels through here, and its seven call sites — six commands, `ingest`
+           * twice — all read a throw as
+           * "nothing happened" — which this failure is not. A retained payload is left
+           * for `doctor` to report and `repair --resume <id>` to sweep.
+           */
+          await this.pruneBackups(journal, { raiseOnFailure: false });
           break;
         default:
           throw new TransactionStateError();
@@ -276,7 +386,23 @@ export class TransactionExecutor {
 
   private async rollbackLocked(id: string): Promise<TransactionJournalV1> {
     let journal = await this.store.read(id);
-    if (journal.phase === "rolled_back") return journal;
+    if (journal.phase === "rolled_back") {
+      /**
+       * **The mirror of `resumeLocked`'s sweep, and leaving it out was the same defect
+       * twice.** A crash between the `rolled_back` transition and the prune strands the
+       * payload exactly as the finalized window did, on the flow the product recommends —
+       * and it is worse there, because a retried `rollback` returned `rolled_back`
+       * *successfully* while doing nothing, so the user is told it failed, runs it again,
+       * is told it worked, and the secret is still on disk.
+       *
+       * **`repair --rollback <id>` is what reaches this**, and it had to be opened for it:
+       * the gate in `runRepair` refused a `rolled_back` journal for *both* actions, so this
+       * early return was as unreachable from the product as `resumeLocked`'s was before it
+       * — the same defect, on the mirror side, found by the same review.
+       */
+      await this.pruneBackups(journal, { raiseOnFailure: true });
+      return journal;
+    }
     if (journal.phase === "finalized") throw new TransactionStateError();
 
     if (
@@ -291,6 +417,25 @@ export class TransactionExecutor {
     }
 
     journal = await this.transition(journal, "rolled_back");
+    /**
+     * **`rolled_back` is as terminal as `finalized`, so the payload is as dead** — and
+     * leaving it was the larger half of this defect. `resumeLocked` throws on a rolled-back
+     * journal and `store.transition` refuses every transition out of it, so nothing can ever
+     * read these bytes again either. (`repair` used to reject the id outright, which is what
+     * made the early return above unreachable; it now accepts `--rollback` here.)
+     *
+     * **And this is the path the product tells the user to take.** `review`'s conflict
+     * message says to resolve it with `developer-os repair` first; `doctor` and `init` both
+     * print `repair --rollback <id>` verbatim. So the flow was: an `edit` that removes a
+     * pasted secret hits a conflict, the product recommends a rollback, the user retries,
+     * the product reports the secret removed — and a raw copy of it stayed in the first
+     * transaction's backup directory forever.
+     *
+     * Raising here is unambiguous where raising on the forward path is not: `rollback` has
+     * exactly one caller, `recoverTransaction`, and exactly one entry point above it,
+     * `repair --rollback`. Nothing downstream of it has bookkeeping left to skip.
+     */
+    await this.pruneBackups(journal, { raiseOnFailure: true });
     return journal;
   }
 
@@ -388,6 +533,103 @@ export class TransactionExecutor {
     return join(this.dependencies.stagingDir, "transactions", id);
   }
 
+  /**
+   * **The backup payloads are dead bytes once a transaction reaches a terminal phase, and
+   * one of them may be a secret** (BACKLOG, Foundation request 2). Both `finalized` and
+   * `rolled_back` are terminal — `store.transition` refuses every transition out of either,
+   * `rollbackLocked` throws on a finalized journal and `resumeLocked` on a rolled-back one —
+   * so nothing in this product can ever read them again. Called from four sites — the
+   * finalize transition, the rollback transition, and each of the two terminal
+   * early-returns — and an earlier version of this sentence said three while listing
+   * four. Meanwhile
+   * `review --decision edit` exists precisely to remove a secret a user pasted into a
+   * vault file by hand, and `backUp` wrote that file here raw at mode `0600` before the
+   * edit landed. Retaining it undoes the one operation whose purpose is removal.
+   *
+   * **After the transition, never before.** The reverse order would destroy the only copy
+   * of the user's file at exactly the moment a rollback might still need it. A crash
+   * between the two leaves the payload on disk with the journal already terminal —
+   * **which is not free**: an earlier version of this paragraph said it cost nothing, and
+   * it cost the whole defect, permanently, while the product reported success. It is safe
+   * only because both terminal early-returns prune as well, so the next `resume` or
+   * `rollback` sweeps it, and `repair --resume` can reach a finalized journal to do so.
+   *
+   * **The payloads only — the `<index>.json` metadata stays.** The secret is in the bytes;
+   * the metadata is `{existed, mode, atimeMs, mtimeMs}` and carries none of it. Removing it
+   * too breaks a journal that is rewound to an earlier phase and resumed, because the
+   * metadata is how `restore` learns whether a target existed at all — and eighteen e2e
+   * cases build their fixtures exactly that way. Deleting a description of bytes that are
+   * gone buys nothing and costs that.
+   *
+   * **Derived from the journal rather than enumerated.** `TransactionFileSystem` offers no
+   * `readdir`, and it does not need one: `backUp` names every payload `<index>.bin` from
+   * `journal.mutations.entries()`, so the journal is the index. A mutation whose target did
+   * not exist wrote no payload, which is why a missing file is not an error here.
+   *
+   * **`<index>.bin.tmp` carries the same bytes and is removed too.** `writeDurableFile`
+   * writes the payload to that name and renames it into place, so a kill inside `backUp`
+   * leaves the pre-edit file — the secret, in the case this whole change exists for —
+   * under a `.tmp` suffix. `removeOwnedTemp` clears it on a `resume` that re-runs `backUp`,
+   * but a `rollback` never re-runs that phase, so the route `doctor` and `init` both print
+   * orphaned it permanently, and the `.bin`-only sweep could not see it (found by
+   * fresh-context review, 2026-08-17).
+   *
+   * **The directory is left behind, deliberately** — and it is not empty, which an earlier
+   * version of this paragraph claimed. The `<index>.json` metadata and its `.sha256` stay
+   * by the rule two paragraphs up: thirty files after one `init`, none of them bytes.
+   * Removing the directory needs `rmdir` on a frozen interface, and
+   * `<state>/transactions/` already accumulates one artifact per transaction id, which is
+   * an open founder question in `foundation-constraints.md`; this joins that question
+   * rather than answering it unilaterally.
+   *
+   * **Failure is never swallowed, and on the `repair` paths it is raised** — the paragraph
+   * here used to say a blanket catch was fine, and that catch turned `EACCES` on a
+   * non-writable backups directory into a silent no-op. `ENOENT` alone is expected.
+   *
+   * Anything else raises `TransactionBackupRetentionError` when the caller can only be
+   * `repair`, and otherwise leaves the payload for `doctor` to report — see that class's
+   * docblock for why the forward path cannot raise. Both halves keep the failure visible;
+   * only the channel differs, and the one thing neither does is report a clean success.
+   */
+  private async pruneBackups(
+    journal: TransactionJournalV1,
+    options: { readonly raiseOnFailure: boolean },
+  ): Promise<void> {
+    const directory = this.backupDirectory(journal.id);
+    let retained: { readonly path: string; readonly reason: string } | null = null;
+    for (const [index] of journal.mutations.entries()) {
+      for (const suffix of [".bin", ".bin.tmp"]) {
+        const payload = join(directory, `${String(index)}${suffix}`);
+        try {
+          await this.dependencies.fs.unlink(payload);
+        } catch (error) {
+          /**
+           * **`ENOENT` only** — already pruned, or never written because the target did
+           * not exist. Everything else is a retained payload: raised where `repair` is the
+           * sole caller, and left standing where a command is, because a throw there means
+           * "nothing happened" to seven call sites and this failure means the opposite.
+           *
+           * **The loop does not stop, and it did before.** Throwing on the first failure
+           * left payloads 4 and 5 on disk because payload 3 could not be removed — a
+           * per-file permission or `EIO` fault turning into a wholesale retention. The
+           * first one that survived is the one named; the rest are still attempted, on
+           * both the raising and the retaining path.
+           */
+          if (isMissing(error)) continue;
+          retained ??= { path: payload, reason: errnoOf(error) };
+        }
+      }
+    }
+    if (retained !== null && options.raiseOnFailure) {
+      throw new TransactionBackupRetentionError(
+        retained.path,
+        journal.phase === "rolled_back" ? "rolled back" : "applied",
+        retained.reason,
+        directory,
+      );
+    }
+  }
+
   private backupDirectory(id: string): string {
     return join(this.dependencies.backupsDir, "transactions", id);
   }
@@ -475,7 +717,7 @@ export class TransactionExecutor {
               mode: snapshot.mode,
               atimeMs: snapshot.atimeMs,
               mtimeMs: snapshot.mtimeMs,
-      };
+            };
       const metadataPath = join(directory, `${String(index)}.json`);
       const serializedMetadata = metadataBytes(metadata);
       await writeDurableFile(
@@ -636,6 +878,20 @@ export class TransactionExecutor {
     journal: TransactionJournalV1,
     index: number,
   ): Promise<void> {
+    /**
+     * **`metadata.existed === true` no longer implies a readable `<index>.bin`.** Backup
+     * payloads are pruned at both terminal phases, so the invariant that makes this
+     * function safe lives elsewhere: `rollbackLocked` refuses a `finalized` journal, and
+     * `store.transition` refuses every transition out of either terminal phase, so a
+     * rollback can only run while the payload is still there.
+     *
+     * The consequence if that ever loosens: this reads a payload that is gone and reports
+     * a bare `TransactionStateError`, indistinguishable from a tampered or truncated
+     * backup — and for a multi-mutation plan it would do so *partway*, having already
+     * restored the higher indices. Only a hand-edited journal reaches that state today,
+     * and the e2e fixtures that rewind a finalized journal are the one place it is
+     * constructed deliberately.
+     */
     const mutation = journal.mutations[index];
     if (mutation === undefined) throw new TransactionStateError();
     await this.assertTarget(mutation.targetPath);

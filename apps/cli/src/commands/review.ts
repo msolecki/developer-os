@@ -399,13 +399,17 @@ async function writeCapture(
  * get it because the rule is "redact before persisting", not "redact when
  * asked".
  *
- * **The secret leaves the vault; it does not leave the machine.** A transaction
- * backs its target up before it writes, and nothing prunes those backups, so a
- * copy of the pre-edit file — pasted secret and all — survives under the
- * product's own state directory. Measured rather than assumed: sweeping a
- * fixture root after an edit finds the token in exactly one file there and
- * nowhere in the vault. `docs/superpowers/ORDER.md` carries the fix; no
- * ordering inside this command substitutes for it.
+ * **The secret leaves the machine too, since 2026-08-17.** A transaction backs
+ * its target up before it writes, and this paragraph used to record that nothing
+ * pruned those backups: a copy of the pre-edit file, pasted secret and all,
+ * survived under the product's own state directory. `TransactionExecutor` now
+ * prunes every payload at both terminal phases. Re-measured the same way the
+ * original claim was — a fixture root swept after an edit — and the token is in
+ * **no** file there. That measurement is
+ * `tests/security/backup-prune.test.ts`, and naming it matters: this paragraph
+ * first credited `tests/security/sentinel.test.ts`, which samples from inside
+ * `afterPhase` and so passes with the prune disabled entirely (BACKLOG,
+ * Foundation request 2).
  *
  * **`captureId` is never recomputed** (spec §5.3, amended by the founder on
  * 2026-08-13), so the file keeps its name and an edit rewrites it in place.

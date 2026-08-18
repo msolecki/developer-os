@@ -64,7 +64,7 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P6 | spec approved and plan written, both 2026-08-13 | **three unticked steps** — Task 17 Step 3 (the Codex detection row, blocked on NEW-21) and Task 19 Steps 5–6 (close the documents, run the gate), which wait on it. Seventeen of nineteen tasks landed 2026-08-13/14/15 and their step lists are deleted |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | **fourteen rows**, and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **four** belong to somebody else (NEW-21 the founder's and blocking A10, NEW-20 and NEW-13 deliberately not fixed, NEW-7 needing a machine with Obsidian); **eight** came out of R2's own reviews — NEW-27 and NEW-28 from closing NEW-12, NEW-24, NEW-25, NEW-26 and NEW-29 from closing NEW-16, NEW-30 and NEW-31 from closing NEW-11. NEW-23 was raised the same way and closed the same day |
+| Repository-level | §1 | **sixteen rows**, and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **four** belong to somebody else (NEW-21 the founder's and blocking A10, NEW-20 and NEW-13 deliberately not fixed, NEW-7 needing a machine with Obsidian); **twelve** came out of R2's own reviews — NEW-27 and NEW-28 from closing NEW-12, NEW-24/25/26/29 from NEW-16, NEW-30 and NEW-31 from NEW-11, NEW-32 and NEW-33 from NEW-15, and NEW-34 and NEW-35 from Foundation request 2 |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -113,7 +113,7 @@ recording. Git history is the archive.
 one. A residual is a defect like any other and gets `NEW-24` through `NEW-28`; the row it came from
 is named in its own text, which is where the lineage belongs.
 
-**Fourteen rows, and they are not all the same kind of open.** **None is waiting on R2 to land a fix.** NEW-11, NEW-12, NEW-15, NEW-16 and NEW-22 all closed
+**Sixteen rows, and they are not all the same kind of open.** **None is waiting on R2 to land a fix.** NEW-11, NEW-12, NEW-15, NEW-16 and NEW-22 all closed
 on 2026-08-17; what remains here is somebody else's or a residual of that work. **NEW-11 closed
 2026-08-17** and left NEW-30, the fourth field with the same gap. All four
 that were waiting on a decision got one on 2026-08-17; **NEW-16 closed the same day** and left three
@@ -122,11 +122,14 @@ section when its fix is committed, not when its question is answered. Four are s
 **NEW-21** the founder's, **NEW-20** and **NEW-13** registered as deliberately-not-fixed, and
 **NEW-7** waiting on a machine with Obsidian.
 
-**Ten are new, and every one was found by a fresh-context review rather than by the work itself** —
+**Twelve are new, and every one was found by a fresh-context review rather than by the work itself** —
 NEW-27 and NEW-28 from the review that closed NEW-12; NEW-24, NEW-25, NEW-26 and NEW-29 from the one
-that closed NEW-16; NEW-30 and NEW-31 from the one that closed NEW-11; and NEW-32 and NEW-33 from the
-one that closed NEW-15. An eleventh, NEW-23, was found the same way and **closed the same day** by
-Track R Task 1b, which built the gate it asked for.
+that closed NEW-16; NEW-30 and NEW-31 from the one that closed NEW-11; NEW-32 and NEW-33 from the
+one that closed NEW-15; and NEW-34 and NEW-35 from the rounds that closed Foundation request 2 —
+NEW-34 the only one of the twelve that is a defect in a **gate** rather than in the product, and
+NEW-35 a residual that existed all along and was filed under the wrong row. A thirteenth, NEW-23,
+was found the same way and **closed the same day** by Track R Task 1b, which built the gate it asked
+for.
 
 **The security review is the one that most earns the gate**, and it is worth saying which findings
 were code rather than prose: it found the trust check **accepting a symlink planted in a
@@ -138,7 +141,7 @@ mutates state under the user's home.
 
 **That is the ordinary yield of the review gate, and the number is the argument for it.**
 Five defects
-closed cleanly would have left this section at four rows; closing them honestly left it at fourteen.
+closed cleanly would have left this section at four rows; closing them honestly left it at sixteen.
 
 **They are not all the same thing, and the honest split is worth more than a round number.** Two —
 NEW-25 and NEW-29 — are properties that predate everything: an overlap rule that was unreachable
@@ -215,7 +218,7 @@ not.
 - **Status:** open, found 2026-08-15 by the fourth independent review of DOS-P6 Task 19 · **Owner:**
   whoever next touches `apps/cli/src/commands/capture.ts` — DOS-P7 by default · **Size:** XS ·
   **Security** · **Theoretical: it needs a won race, and it is not a regression**
-- **The window.** `resolveQuarantineRoot` proves the quarantine directory resolves inside the content
+- **The window.** `resolveContainedRoot` proves the quarantine directory resolves inside the content
   root (`apps/cli/src/commands/capture.ts:714`) and its canonical answer is then **discarded by
   design**: every later operation re-follows the *declared* path — `readExistingCapture` (`:742`),
   `writeCapture` (`:751`), and `validateChangePlan`, which re-canonicalizes the target and the owned
@@ -319,6 +322,23 @@ not.
   between check and exec on a path only the user can write. This is a *link* swapped at a hop nobody
   inspected.
 
+### NEW-35 — the executable trust check is check-then-use, and was filed under the wrong row
+
+- **Status:** open, registered 2026-08-17 by the review that verified NEW-15's closure · **Owner:**
+  DOS-P7 · **Size:** L, and possibly not closable on this runtime · **Security, accepted**
+- `assertTrustedExecutable` resolves the path, stats the target and every ancestor, and returns; the
+  caller then spawns **by path**. Anything swapped in between is executed unchecked. Closing it needs
+  exec-by-descriptor — `fexecve`, or spawning through an already-open `O_PATH` handle — which Node
+  does not expose and macOS does not offer in the form this would need.
+- **The founder accepted this window when the rule was decided**, so it is a registered cost rather
+  than an oversight. It is registered *here* because it had no row: `macos.ts` said it was NEW-20,
+  and [[NEW-32]]'s own text says in as many words that NEW-20 is a different residual — `capture`'s
+  quarantine race, on a path only the user can write. The correction reached the BACKLOG and never
+  reached the code, so the file was written with the wrong row already recorded elsewhere.
+- **It is the weakest of the three residuals on this guard**, and the ordering matters: NEW-32 is a
+  bypass that needs no race at all, and the ACL blindness means the mode check is a floor rather than
+  a proof. A reader who fixes only this one has fixed the least of them.
+
 ### NEW-33 — a root-owned group-writable directory refuses the binary under it
 
 - **Status:** open, registered 2026-08-17 · **Owner:** the founder, because it is a policy question ·
@@ -332,6 +352,69 @@ not.
   binary there, which is the threat.
 - **Not changed unilaterally.** Whether root-owned group-writable is acceptable is the founder's call,
   on the same footing as the decision that produced the current rule.
+
+### NEW-34 — the citation gate bounds-checks addresses it cannot content-check
+
+- **Status:** open, registered 2026-08-17 when R2 Task 6 closed · **Owner:** DOS-P7 · **Size:** M ·
+  **A gate that passes over exactly the failure it was built for**
+- **What happened.** Task 6 added ~250 lines to `executor.ts` and ~125 to `doctor.ts`, and **twenty
+  `path:line` citations across five documents silently came to point at unrelated code** — three of
+  them the mechanism cells of security-invariant rows in `threat-model.md`, including "a file that
+  changed under a running command is not overwritten", which pointed at the `expectedBeforeHash`
+  compare and now pointed at a local destructuring. `npm run check` was green over every one.
+- **Why the gate cannot catch it.** `tests/repository/citations.test.ts` resolves each citation and
+  bounds-checks the line number. A citation that resolves and is in range passes, whatever is on the
+  line. Its own docblock names this failure and prescribes remapping "immediately before staging" —
+  a procedure, enforced by nothing, which this task skipped in five successive commits.
+- **Content anchoring is the obvious fix and it is not obviously available.** Verifying that a
+  citation still points at what it pointed at requires a baseline, and the only baseline is the
+  previous commit: a check written that way is meaningful before a commit and vacuous after it. The
+  alternatives are a stored digest per citation, dropping line numbers for a searchable anchor
+  (`` `executor.ts` — `pruneBackups` ``), or accepting the drift and re-running a remap script as a
+  release step. **Which is a design decision, not a defect fix**, which is why this is a row rather
+  than a change.
+- **A citation with no line number is not checked at all**, and that is the gap that matters most for
+  a boundary's Evidence cell: `threat-model.md` §5.9 cites `tests/security/backup-prune.test.ts` by
+  name, the extractor takes nothing from it, and the file was **untracked** while the gate stayed
+  green. A commit that forgot to add it would leave the security boundary citing a file that is not
+  in the repository. Checking bare filenames against `git ls-files` is cheap and closes it.
+- **The extractor has a second blind spot, found the same way.** A citation written as a bare
+  `` `:335-337` `` after a *different* file's path in the same sentence inherits the wrong carrier —
+  a slashed path with no line number neither sets nor clears it — so the gate bounds-checks the
+  wrong file. Any fix has to address both.
+- **Measured, 2026-08-18, and the number is the argument.** A full audit of the two architecture
+  notes found roughly **55 wrong citations out of 274** — about one in five — clustering by file with
+  a uniform per-file offset, which is the signature of code growth without a remap. Twelve of them
+  are one mechanical fact: `secretScan` grew 21 lines and every `validate.ts` citation after it
+  points at the preceding branch, so each sub-claim describes the wrong check.
+- **Three review rounds of hand repair did not converge.** Round 7 repaired ~15 citations; round 8
+  found ten of those repairs off-by-one or in the wrong function, plus a **fabricated quotation**
+  attributed to a file that never contained it; round 9 found two of round 8's repairs wrong in turn.
+  Hand repair at this density introduces defects at roughly the rate it removes them.
+- **And the remap script is not safely repeatable**, which is the finding that closes off the easy
+  answer. It anchors on a baseline commit; run it once and the citations no longer match that
+  baseline, so a second run re-anchors on content that has moved and shifts correct citations to
+  wrong ones. Verified twice. It is a one-shot tool per baseline, not a gate.
+- **The remap script this session used is the interim answer** and is not committed: it reads each
+  citation's content from `HEAD`, finds the unique matching span in the working tree, and rewrites
+  the address. It resolved sixteen of twenty automatically; the other four had either no unique match
+  or twelve, and needed a human. **And it is not sufficient**: a byte-faithful remap lands a
+  citation on syntactically identical code that supports a different claim, and it cannot see a
+  citation that was already wrong before the change — a following review found seven of each kind,
+  including two paragraphs asserting security boundaries that had closed.
+- **The prose has the same generator, and it is the half that misleads.** NEW-15, NEW-16, NEW-17,
+  NEW-18 and NEW-19 have each been asserted **open** in at least one document after closing —
+  NEW-18 and NEW-19 for three days, through three review rounds explicitly hunting for that. A
+  renamed symbol (`resolveQuarantineRoot` → `resolveContainedRoot`) was still named as the mechanism
+  of a containment boundary in five places. These are not the residue of one bad pass; they are new
+  instances each round.
+- **What would actually close this, in order.** (1) Drop line numbers for searchable anchors —
+  `` `executor.ts` — `pruneBackups` `` — because line-number citations at this density are not
+  maintainable by review, and a name is checkable by grep at test time. (2) Derive the suite and case
+  counts at test time and fail on drift, instead of restating them in seven documents. (3) Gate on
+  no closed `BACKLOG` id being referenced in the present tense. (4) Stop appending correction-history
+  paragraphs to the architecture notes — that layer is now the highest-defect-density prose in the
+  repository and is itself where several of these false claims were introduced. A committed version would at least make the procedure runnable.
 
 ### NEW-24 — a common redaction pattern refuses every ingest, undiagnosably
 
@@ -721,11 +804,11 @@ durable behind as they closed:
   what keeps that true. `docs/architecture/threat-model.md` §9 points at both rather than restating
   either; a third copy is how three descriptions of one model come to disagree.
 
-- **`tests/security/` holds eight suites, not the six spec §9 names** — sentinel, prompt injection,
+- **`tests/security/` holds nine suites, not the six spec §9 names** — sentinel, prompt injection,
   symlink escape, multiline command, malformed manifest and interruption from §9, plus **network** and
   **concurrent edit**, the two §7's standing gate requires and §9 dropped. Every suite was watched
   fail before it was believed, and thirteen reverts are recorded with the line each disabled. **47 of
-  its 85 cases carry that evidence and 38 do not** — the total counted by collection
+  its 85 cases carried that evidence and 38 did not; recounted at 90 on 2026-08-17** — the total counted by collection
   (`npx vitest list --root tests security`), the split derived per suite in
   `docs/architecture/threat-model.md` §8. The three fix rounds after Task 19's review added
   twenty-six cases between them, five of which were watched fail, and converted one parked

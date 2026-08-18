@@ -27,7 +27,7 @@ produced it.
 | the envelope, its statuses, and their transitions | `packages/brain/src/schema/capture.ts`, `packages/brain/src/capture/`, `packages/brain/src/review/` |
 | the proposal, the nine validators, and the apply | `packages/brain/src/ingest/` |
 | the contracts the vendor trees render | `workflows/{capture,review,ingest,brain-search,shared}/workflow.yaml`, all five at `2.0.0`. That glob matches **six** files: `workflows/doctor/workflow.yaml` is unchanged at `1.0.0` |
-| the security suites | `tests/security/`, eight suites, 85 cases |
+| the security suites | `tests/security/`, nine suites, 90 cases |
 | the end-to-end run against the compiled binary | `tests/e2e/knowledge-lifecycle/lifecycle.test.ts` |
 | trust boundaries and the mechanism enforcing each | `docs/architecture/threat-model.md` |
 
@@ -315,7 +315,7 @@ after the product is gone is worse than losing fingerprint comparability.** DOS-
 known exception rather than reading its own gate as violated; the row is `BACKLOG.md` §8.
 
 `doctor` reports presence, type and mode with `lstat` and never a byte of the contents, warns for each
-of the four unusable states by name, and repairs nothing (`apps/cli/src/commands/doctor.ts:676-700`).
+of the four unusable states by name, and repairs nothing (`apps/cli/src/commands/doctor.ts:856,868-892`).
 
 ### 8.2 Scope globs resolve at the handler boundary, and the contract keeps canonical names
 
@@ -399,7 +399,7 @@ and then failed to verify rolled the capture back to `accepted` with its notes o
 run refuses permanently. And interruption coverage reached two of five transaction kinds; it now
 reaches all five.
 
-**Two findings were registered rather than fixed** — `BACKLOG.md` §1 **NEW-19** and **NEW-20**, both
+**Two findings were registered rather than fixed** — `BACKLOG.md` §1 **NEW-19** and **NEW-20**, both in §10 below. **NEW-19 has since closed**; NEW-20 remains, and this sentence went on naming both for three days after.
 in §10 below with their owners.
 
 ---
@@ -412,14 +412,14 @@ in §10 below with their owners.
 |---|---|---|
 | **NEW-21** — one successful `codex exec` completion is still owed | the founder, because it spends their credits | S. Task 17 ran on 2026-08-15 and the account's usage limit was exhausted, so it settled the JSONL framing and the discriminating `type` field and **not** the terminal-event rule, and observed no Codex environment. One run closes both halves; until it lands, `finalJsonlLine` stays provisional and every capture taken inside a Codex session records `sourceAgent: "unknown"` |
 | **NEW-20** — `capture` proves its quarantine root, then follows the declared path again | DOS-P7 by default | XS, security, **theoretical**: it needs a won race and is not a regression. The declared path is the contract — it is what `CaptureResultV1.path` publishes — so closing the window means the two paths disagreeing inside one function. `threat-model.md` §5.2 describes it |
-| **NEW-19** — `reindex` builds its owned root textually, as `capture` used to | DOS-P7 by default | XS, security. Replace `content/_indexes` with a link out of the vault and the four generated artifacts are written there: vault metadata disclosure, not capture text. **Traced by reading, not driven** — no test exists, so it is not demonstrated the way `tests/security/symlink-escape.test.ts` demonstrates the other two. The fix already exists one directory over (`apps/cli/src/context.ts:263-305`) |
-| **NEW-15** — nothing that executes a discovered binary pays the check its own type demands | DOS-P7 by default | S, security. `packages/platform-macos/src/types.ts:13-18` states that whoever executes a discovered binary owes an owner and mode check; `ingest` spawns `discovery.executablePath` with no `stat`, no uid and no mode comparison. **`capture` joined it on 2026-08-15**, when Task 17's Claude row made `discoverSourceAgent`'s probe path live — narrower there, since a `--version` probe is handed no observation and no vault path, but unchecked on the same terms and on a far more frequently run command. Not privilege escalation — it hands that binary the captured observations and read access to the whole vault on the strength of a name match |
-| **NEW-16** — spec §8.2's user-configured redaction patterns are unreachable | DOS-P7 | S. `redactText`'s `userPatterns` parameter has no production caller, and `configSchema` is `.strict()` with no redaction table, so there is no key a user could set even if one existed. **Nothing regressed; it was specified and never wired** |
-| **NEW-17** — `brain` is the one command whose config parse failure is not content-free | DOS-P7 | XS, security. Seven of eight commands route through `readConfigFile`; `brain` does not, and smol-toml puts three raw source lines into the message the heuristic redactor then has to catch alone |
-| **NEW-18** — `assertSafeCommand`'s four NUL branches have no test anywhere | whoever next touches `packages/security/src/process.ts` | XS. **The guard is correct; only the evidence is missing** |
+| **NEW-19** — `reindex` builds its owned root textually, as `capture` used to | **closed 2026-08-15** by Track R entry R1 | XS, security. `reindex` calls `resolveContainedRoot` (`apps/cli/src/commands/reindex.ts:466`) rather than joining the path textually, so a `content/_indexes` replaced by a link out of the vault is refused instead of written through. Regression tests: `tests/security/symlink-escape.test.ts:369,410` |
+| **NEW-15** — nothing that executes a discovered binary pays the check its own type demands | **closed 2026-08-17** by Track R entry R2 | S, security. `assertTrustedExecutable` canonicalizes, refuses a non-regular-file target, and walks three ancestor chains refusing an owner that is neither the current uid nor root, any other-writable directory, and a group-writable one the current uid does not own. All three executors call it — `apps/cli/src/commands/capture.ts:263`, `apps/cli/src/commands/doctor.ts:439`, `apps/cli/src/commands/ingest.ts:481`. **Three residuals stay open**: NEW-32 (a middle symlink hop, a working bypass), ACL blindness, and NEW-35 (check-then-use); NEW-33 is a false refusal awaiting the founder |
+| **NEW-16** — spec §8.2's user-configured redaction patterns are unreachable | **closed 2026-08-17** by Track R entry R2 | S. `configSchema` carries an optional `[redaction]` table (`packages/core/src/config/loader.ts:208`) and the three redacting commands bind the user's patterns through `createRedactor` at their composition roots. `tests/repository/redactor-entry.test.ts` refuses a new call site that reaches for `redactText` directly. Residuals NEW-24, NEW-25 and NEW-26 stay open |
+| **NEW-17** — `brain` is the one command whose config parse failure is not content-free | **closed**, removed from `BACKLOG.md` §1 | XS, security. `readConfig` now routes through `readConfigFile` (`apps/cli/src/commands/brain.ts:117`) and rethrows `ConfigurationError` unmodified, so no command parses configuration outside the wrapper |
+| **NEW-18** — `assertSafeCommand`'s four NUL branches have no test anywhere | **closed 2026-08-15** by Track R entry R1 | XS. One case per `containsNul` site — executable, working directory, any argument, stdin (`packages/security/src/process.test.ts:101,111,119,127`) |
 | **NEW-12** — the argv screen's word list also screens a value nobody chose | **closed 2026-08-17** by Track R entry R2 | XS, security-adjacent. Closed in two halves and **not** by narrowing the pattern, which the row forbade: the prose half on 2026-08-15 (`screenProseArgument` for the prompt), the path half on 2026-08-17 (`screenDerivedPathArgument` for `workingRoot` and `outputSchemaPath`, which this product assembles). The word list is byte-identical and each of its three alternatives is now guarded by a sample that isolates it. **Two residuals:** `ingest` can no longer produce a screening refusal at all, so `invokeVendor`'s refusal-detail interpolation is unreachable in production and uncovered end-to-end; and the first caller to pass a real write scope will hand a derived path to the screen that still carries the word list, re-creating the defect one field over |
 | **NEW-11** — the invisible-title rule stops at `title` | **closed 2026-08-17** by Track R entry R2 | S. `tags` and `summary` now carry NEW-10's predicate as a **lint warning** — the note still indexes — and `duplicates` keys on a perceptual grouping key rather than on that boolean. `isBlank` moved to `packages/security/src/text.ts` rather than being copied. **Two residual rows, plus accepted consequences:** NEW-30 (`aliases` is the fourth field with the same gap) and NEW-31 (a stray U+200D still hides a duplicate, because the joiner is deliberately exempt). The accepted consequences — an emoji grouping with its text presentation, and two others — are enumerated in `text.ts` rather than carried as rows |
-| **NEW-13** — two artifact roots share one type | DOS-P6 Task 4's nominal brands | **the brands shipped and the `@ts-expect-error` case pins them**, but `BACKLOG.md:265` still reads `Status: open` — Step 5 of this plan's Task 19 is what closes the row. If those two ever disagree, the tree is the answer |
+| **NEW-13** — two artifact roots share one type | DOS-P6 Task 4's nominal brands | **the brands shipped and the `@ts-expect-error` case pins them**, but `BACKLOG.md:502` still reads `Status: open` — Step 5 of this plan's Task 19 is what closes the row. If those two ever disagree, the tree is the answer |
 
 ### 10.2 The four Foundation requests `ORDER.md` carries
 
@@ -431,28 +431,32 @@ are executor and result-type changes nobody's file list named, not that the pack
 They are stated in `ORDER.md` in full; the arithmetic is what matters here.
 
 1. **and 2. An optional caller-supplied precondition on `PlannedFileMutation`**
-   (`ORDER.md:139-155`). The executor computes `expectedBeforeHash` from the snapshot it takes when
+   (`ORDER.md:92-101`). The executor computes `expectedBeforeHash` from the snapshot it takes when
    `execute()` runs, so a command cannot supply one. It costs `capture` the `O_EXCL` create spec §5.2
    describes — tolerable there, since the id is the content hash and colliding captures are
    byte-identical — and it costs `review --decision edit` a read-to-execute window in which **the
    discarded content is the user's own hand edit**. **Counted as two of the four and raised as one
    pair**, because a session that fixes one and not the other has fixed neither.
-3. **Prune the transaction backup on `finalize`** (`ORDER.md:157`, "a third Foundation request").
-   `review --decision edit` removes a secret from a vault file and `TransactionExecutor.backUp` writes
-   the pre-edit file raw to `~/.developer-os/backups/transactions/<id>/0.bin`, where nothing removes
-   it. `rollbackLocked` throws on a finalized journal, so after `finalize` those are dead bytes.
-   **The user is told the secret is gone and a copy survives.** This is why
-   `tests/security/sentinel.test.ts` does not sweep that directory: the suite would be right and would
-   go red for something nobody in DOS-P6 could fix.
-4. **A `data` slot on `CliError`, or a partial-success arm on `CliResult`** (`ORDER.md:185`, "a fourth
-   Foundation request, and it is the cheapest of the four"). `ingest` processes a batch and contains
+3. **Prune the transaction backup — closed 2026-08-17** (`ORDER.md`, Foundation request 2).
+   `review --decision edit` removes a secret from a vault file and `TransactionExecutor.backUp` wrote
+   the pre-edit file raw to `~/.developer-os/backups/transactions/<id>/0.bin`, where nothing removed
+   it: the user was told the secret was gone and a copy survived. `pruneBackups` now unlinks every
+   payload — `<index>.bin` and the `<index>.bin.tmp` `writeDurableFile` renames from — at both
+   terminal transitions and both terminal early-returns, so a crash between a transition and its
+   prune is swept by the next `repair`. `tests/security/sentinel.test.ts` sweeps that directory as
+   its own artifact rather than routing around it, and `doctor`'s `transactions` check reports a
+   payload that outlived its transaction.
+4. **A `data` slot on `CliError`, or a partial-success arm on `CliResult`** (`ORDER.md:155-160`, where it is the **third** of the
+   three still-open requests — this line quoted it as "a fourth Foundation request, and it is the
+   cheapest of the four", a phrase that appears nowhere in `ORDER.md`, and the numbering moved when the
+   prune closed). `ingest` processes a batch and contains
    each capture's refusal to that capture; when any refuses, the run ends on the failure arm and the
    per-capture outcomes ship as lines inside the error message — the precedent `brain lint` already
    set under the identical constraint. A consumer parses prose where it should read fields. It changes
    no existing caller, because nothing populates a field that does not exist yet.
 
 **One repository item sits beside these and is not one of them, because its measured fix is already
-applied.** `apps/cli/src/commands/doctor.test.ts:195` needs 3.19 s of a 20 s budget on an idle machine
+applied.** `apps/cli/src/commands/doctor.test.ts:228` needs 3.19 s of a 20 s budget on an idle machine
 and reddened in five of six full runs once the security suites joined it; `fileParallelism: false`
 (`tests/vitest.config.ts:50`) made four of four runs green and dropped total test time from roughly
 1000 s to 700 s. **What stays open is the fragility, not a change**: a case one contended run from red
@@ -522,7 +526,7 @@ section is the last word on what the approved design left open.
 
 ## 11. What the evidence is worth
 
-`tests/security/` holds **eight suites and 85 cases**, and **38 of them carry no watched-failure
+`tests/security/` holds **nine suites and 90 cases**, and **38 carried no watched-failure
 demonstration.** The split, its derivation, and the fact that the per-suite breakdown cannot be
 re-derived from this repository are `docs/architecture/threat-model.md` §8 and `BACKLOG.md` §5. Do not
 cite the directory as a whole as though every case in it were evidence; the threat model marks the

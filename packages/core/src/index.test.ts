@@ -45,6 +45,7 @@ describe("the package's public door", () => {
         "compareVersions",
         "tablePermits",
         "recoverTransaction",
+        "TransactionBackupRetentionError",
         "TransactionConflictError",
         "TransactionExecutor",
         "TransactionGuardError",

@@ -291,12 +291,18 @@ three are the ones a user can hit.
    file. It wants a `repair --discard <id>`.
 4. **`uninstall` leaves the product home and its three bookkeeping directories behind, and
    they are not empty.** `state/`, `staging/`, and `backups/` still hold both transactions'
-   journals, the never-unlinked `.<id>.lock` files, the staged blobs, and the backups —
-   including **a readable byte copy of the `config.toml` it just removed**, which names the
-   user's Brain path. `rmdir` refuses them because they are non-empty, so the product home
-   refuses too, and the manifest is deleted, leaving residue no later run adopts or removes.
-   No user data is lost and nothing is misreported, but "uninstall" does not mean "gone".
-   Pinned by `tests/e2e/foundation.test.ts`.
+   journals, the never-unlinked `.<id>.lock` files, and the staged blobs. `rmdir` refuses them
+   because they are non-empty, so the product home refuses too, and the manifest is deleted,
+   leaving residue no later run adopts or removes. No user data is lost and nothing is
+   misreported, but "uninstall" does not mean "gone". Pinned by
+   `tests/e2e/foundation.test.ts`.
+
+   **The readable byte copy of `config.toml` is no longer among them, and this entry used to
+   say it was.** `backups/` held it — the file names the user's Brain path — and
+   `pruneBackups` removes every payload at both terminal phases as of 2026-08-17. What
+   survives is the same content in `staging/`, which nothing removes, so the residual is
+   narrower rather than closed: `tests/e2e/foundation.test.ts` now asserts both halves, an
+   empty `backups/` copy list and a surviving staged one.
 5. **A `kind: "symlink"` artifact would delete its target, not the link.** Latent: Foundation
    emits no symlink artifacts. It lands in the Claude and Codex adapters, which will.
 6. **Directory removal retains a check-to-use window.** Narrowed to one canonicalization before

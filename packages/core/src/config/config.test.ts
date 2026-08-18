@@ -261,9 +261,11 @@ patterns = ["Northwind Traders", "acme-internal"]
 
 /**
  * Spec §8.2 describes a user-extensible redaction class — the one a founder uses for a
- * client name no generic pattern catches. `redactText` has always taken the parameter and
- * no production caller passed it, and `configSchema` is `.strict()` with no table to set,
- * so the feature was specified and never wired (BACKLOG NEW-16).
+ * client name no generic pattern catches. `redactText` has always taken the parameter,
+ * no production caller passed it, and `configSchema` was `.strict()` with no table to set,
+ * so the feature was specified and never wired (BACKLOG NEW-16, closed 2026-08-17 — the
+ * cases below are what closed it, so the present tense here was false the moment they
+ * passed).
  *
  * Adding the table amends the schema `foundation.md` §2 froze; BACKLOG §8 carries the row.
  */

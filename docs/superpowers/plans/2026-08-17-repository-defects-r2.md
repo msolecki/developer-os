@@ -958,13 +958,63 @@ git commit -m "fix(security): check the resolved executable and its ancestors be
 
 **Decision (2026-08-17):** implement. This is the one of the three Foundation requests with a live secret in it.
 
-**The defect.** `review --decision edit` exists to remove a secret a user pasted into a vault file by hand. It does — and `TransactionExecutor.backUp` writes the pre-edit file, raw, to `~/.developer-os/backups/transactions/<id>/0.bin` at mode `0600` (`executor.ts:449-467`), where nothing ever removes it. **This is a missing prune, not an inherent cost:** `rollbackLocked` throws on a finalized journal (`executor.ts:280`), so once `finalize` runs those bytes can never be read by this product again.
+**The defect.** `review --decision edit` exists to remove a secret a user pasted into a vault file by hand. It does — and `TransactionExecutor.backUp` writes the pre-edit file, raw, to `~/.developer-os/backups/transactions/<id>/0.bin` at mode `0600` (`executor.ts:690-737`), where nothing ever removes it. **This is a missing prune, not an inherent cost:** `rollbackLocked` throws on a finalized journal (`executor.ts:406`), so once `finalize` runs those bytes can never be read by this product again.
+
+> **Two corrections found during execution, both worth carrying.**
+>
+> **The metadata must survive; only the payloads go.** Pruning `<index>.json` alongside
+> `<index>.bin` broke **eight** e2e resume and rollback cases, because those fixtures rewind a
+> finalized journal to an earlier phase and the metadata is how `restore` learns whether a target
+> existed at all. The secret is in the bytes; `{existed, mode, atimeMs, mtimeMs}` carries none of it,
+> so deleting a description of bytes that are gone buys nothing and costs that.
+>
+> **The prune has four call sites, not one, and the first version had one.** Both terminal
+> transitions and both terminal early-returns. The rollback half is the one the product actually
+> recommends — `review`'s conflict message and both `doctor` and `init` print `repair --rollback` —
+> and the early-return halves are what make a crash between a transition and its prune recoverable
+> rather than permanent. `repair` had to be opened to `--resume` on a finalized transaction for the
+> sweep to be reachable at all; claiming it was swept without executing that was the same mistake
+> twice in one task.
+>
+> **And then a third time, on the mirror side.** Opening `--resume` on `finalized` left `--rollback`
+> on `rolled_back` refused, so the rollback early-return was as unreachable as the resume one had
+> been — hidden the same way, by a unit test calling `executor.rollback()` where no shipped command
+> could. `repair`'s rule is now per action rather than per phase: a terminal phase is accepted for
+> its own action and refused only for the other, which the executor throws on anyway.
+>
+> **Raising the retention error out of `execute` was worse than the leftover it reported.** All six
+> callers read a throw as "the transaction did not happen" — `ingest`'s docblock states it — and this
+> failure means the opposite, so `reindex` skipped `recordArtifacts`, `uninstall` skipped its manifest
+> removal, and `ingest` returned `ok: false` for captures that had all landed. It now raises only
+> from the two terminal early-returns and the rollback transition — keyed on the prune site, not the
+> caller, since `repair --resume` on an incomplete journal drives the forward loop; the forward
+> path retains and `doctor`'s transactions check reports it, which also gives the crash window its
+> first detector.
+>
+> **Then the raise's own message repeated the defect it fixed.** Hardcoded "the change was applied",
+> raised twice from `rollbackLocked` — a rollback that fully succeeded, user's file restored,
+> reported as a failure saying the opposite. The outcome is a parameter now. Its recovery string had
+> the matching flaw: "re-run the command, the prune is idempotent" — idempotent means retrying is
+> safe, not that it works, and the `unlink` fails identically the second time. The precondition
+> comes first.
+>
+> **`<index>.bin.tmp` holds the same bytes and nothing swept it.** `writeDurableFile` writes there
+> and renames; `removeOwnedTemp` clears it on a `resume` that re-runs `backUp`, but `rollback` never
+> re-runs that phase — so the route `doctor` and `init` both print orphaned the pre-edit file
+> permanently and invisibly. And `doctor` now derives the names it looks for from `journal.mutations`
+> instead of listing the directory: the prune has no `readdir`, so a listing-driven check could
+> report a file no `repair` can clear, which it did — fail, remedy succeeds, fail again, forever.
+>
+> **The e2e suite runs the compiled binary, so `tsc -b` must run before `vitest`.** Two probes here
+> were run against a stale `dist` and gave the opposite answer to the truth — one said the failures
+> were pre-existing when they were mine, the other said my refinement had not worked when it had.
+> `npm run check` builds first; a bare `pnpm vitest run` on an e2e path does not.
 
 **Files:**
-- Modify: `packages/core/src/transactions/executor.ts:262-266` (the `verified → finalized` transition), and `backupDirectory` if a helper is wanted
+- Modify: `packages/core/src/transactions/executor.ts:364-373` (the `verified → finalized` transition), and `backupDirectory` if a helper is wanted
 - Test: `packages/core/src/transactions/transactions.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 it("removes the backup directory when a transaction finalizes", async () => {
@@ -991,12 +1041,12 @@ it("still refuses to roll back a finalized transaction", async () => {
 
 Use the **real** lock-materializing provider, not the fake. A prior test in this file asserted the journal held exactly `['tx-0001.json']` and thereby pinned a fake provider's zero-artifact behaviour instead of the side effect under test; that is the mistake to avoid here, and it is recorded in this project's own notes.
 
-- [ ] **Step 2: Run them and verify they fail**
+- [x] **Step 2: Run them and verify they fail**
 
 Run: `pnpm vitest run packages/core/src/transactions/transactions.test.ts`
 Expected: the first FAILs — `stat` resolves, because the directory is still there. **The second and third must pass on first run**: they pin that the prune happens at `finalized` and nowhere earlier, and that rollback's refusal is unchanged.
 
-- [ ] **Step 3: Prune in the `finalized` transition**
+- [x] **Step 3: Prune in the `finalized` transition**
 
 In `resumeLocked`'s `case "verified"`, after `verifyDesired` and before or after `transition(journal, "finalized")` — after, so a crash between them leaves the backup rather than losing it:
 
@@ -1026,12 +1076,12 @@ case "verified":
   break;
 ```
 
-- [ ] **Step 4: Run the tests and verify they pass**
+- [x] **Step 4: Run the tests and verify they pass**
 
 Run: `pnpm vitest run packages/core tests/security`
 Expected: PASS. `tests/security/`'s interruption suites exercise every phase and are the ones most likely to notice a prune placed one transition too early.
 
-- [ ] **Step 5: Run the gate, review, commit**
+- [x] **Step 5: Run the gate, review, commit**
 
 Run: `npm run check`
 

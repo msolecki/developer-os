@@ -5,7 +5,9 @@ import type { TransactionPhase } from "@developer-os/core";
 import { runCapture } from "@developer-os/cli/dist/commands/capture.js";
 import {
   listIncompleteTransactions,
+  listRetainedBackups,
   runDoctor,
+  runDoctorReport,
 } from "@developer-os/cli/dist/commands/doctor.js";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -34,12 +36,20 @@ import type { InstalledFixture } from "./helpers.js";
  * **The phase names are `TransactionPhase`'s, which are past tense.**
  * `rolled_back` is not a forward phase and is not interrupted.
  *
- * **`finalized` is the one phase that leaves nothing to recover**, and that is a
- * property rather than an exception: the throw lands after the transition to
- * `finalized` has been written, so the journal is complete and `doctor` has
- * nothing to report. Branching on it is what keeps the other thirty cases
- * honest — a suite that asserted exit 6 everywhere would have to be made green
- * by weakening the assertion.
+ * **`finalized` is the one phase that leaves no incomplete *journal*** — the throw
+ * lands after the transition has been written, so the journal is complete.
+ * Branching on it is what keeps the other thirty cases honest: a suite that
+ * asserted exit 6 everywhere would have to be made green by weakening the
+ * assertion.
+ *
+ * **It does not follow that there is nothing to recover, and this paragraph used
+ * to say it did.** The executor prunes each transaction's backup payloads
+ * immediately *after* the transition into `finalized`, so a kill between the two
+ * strands the pre-edit bytes under a journal no longer in flight. That was true
+ * when the claim was written; nothing could see the state, so the claim held by
+ * the product's blindness rather than by the state being clean. `doctor` reports
+ * it now, and the branch at `assertDoctorReports` splits on whether this
+ * transaction had a payload to strand — two of the five targets do.
  */
 
 const PHASES: readonly TransactionPhase[] = [
@@ -139,6 +149,13 @@ async function statusesInQuarantine(
 }
 
 /**
+ * How many `finalized` interruptions left a backup payload behind, so the branch below
+ * cannot go vacuous. Only the transactions whose mutations *replace* an existing file write
+ * a payload at all; a create-only one leaves nothing to strand, and both outcomes are real.
+ */
+let strandedAtFinalized = 0;
+
+/**
  * What `doctor` owes after an interruption, and it differs by exactly one
  * phase. Both branches assert something; neither can be satisfied by an empty
  * set.
@@ -152,7 +169,39 @@ async function assertDoctorReports(
 
   if (phase === "finalized") {
     expect(incomplete).toStrictEqual([]);
-    expect(report.code).not.toBe(EXIT_CODES.recoveryRequired);
+
+    /**
+     * **An interruption at `finalized` is not always nothing left to do, and this branch
+     * used to assert that it was.** The executor prunes each transaction's backup payloads
+     * immediately *after* the transition into `finalized`, so a kill between the two leaves
+     * the pre-edit bytes — for `review --decision edit`, the secret the user just removed —
+     * on disk under a journal no longer in flight. That was true when this assertion was
+     * written; nothing detected it, so the assertion held by the product's blindness rather
+     * than by the state being clean (BACKLOG, Foundation request 2).
+     *
+     * `doctor` now reports it, so the branch splits on whether this transaction had a
+     * payload to strand instead of assuming none did.
+     */
+    const retained = await listRetainedBackups(fixture.context);
+    if (retained.length === 0) {
+      expect(report.code).not.toBe(EXIT_CODES.recoveryRequired);
+      return;
+    }
+    strandedAtFinalized += 1;
+    expect(report.code).toBe(EXIT_CODES.recoveryRequired);
+    /**
+     * **Which check failed, not merely that one did.** Asserting only the exit code and a
+     * `repair --resume` substring would accept a `recoveryRequired` raised by any other
+     * check — coverage the flat `not.toBe(recoveryRequired)` this branch replaced did have.
+     * Naming `transactions` keeps it.
+     */
+    const failing = (await runDoctorReport(fixture.context)).checks.filter(
+      (check) => check.status === "fail",
+    );
+    expect(failing.map((check) => check.id)).toStrictEqual(["transactions"]);
+    expect(failing[0]?.recovery).toBe(
+      `developer-os repair --resume ${retained[0]?.id ?? ""}`,
+    );
     return;
   }
 
@@ -287,5 +336,15 @@ describe("what this suite drove", () => {
     expect(drove.size, "a suite that drove nothing is not a suite").toBeGreaterThan(0);
     expect([...drove].sort()).toStrictEqual([...EXPECTED_COVERAGE].sort());
     expect([...drove].some((entry) => entry.endsWith("|rolled_back"))).toBe(false);
+  });
+
+  /**
+   * **The `finalized` branch splits, so both halves have to be real.** If no interruption
+   * ever stranded a payload, the half that asserts `doctor` reports one would never run and
+   * the split would be decoration — the shape this file's own coverage case exists to
+   * refuse. Two of the five targets replace an existing file and therefore write a payload.
+   */
+  it("stranded a backup payload in at least one finalized interruption", () => {
+    expect(strandedAtFinalized).toBeGreaterThan(0);
   });
 });

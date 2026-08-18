@@ -113,7 +113,7 @@ What survives them, and what a later reader should open instead:
 | 12 | the nine validators — `VALIDATOR_IDS` | `packages/brain/src/ingest/validate.ts` |
 | 13 | `developer-os ingest`: apply, reindex, and the status ladder, as **four** transactions per capture | `apps/cli/src/commands/ingest.ts`; `knowledge-pipeline.md` §5 |
 | 14 | `doctor --probe`, the two-gate model's first production caller | `apps/cli/src/commands/doctor.ts` |
-| 15 | `tests/security/` — eight suites, 85 cases, of which 38 carry no watched-failure demonstration | `tests/security/`; the split is `BACKLOG.md` §5 and `threat-model.md` §8 |
+| 15 | `tests/security/` — nine suites, 90 cases, of which 38 carry no watched-failure demonstration | `tests/security/`; the split is `BACKLOG.md` §5 and `threat-model.md` §8 |
 | 16 | `tests/e2e/knowledge-lifecycle/` against the compiled binary | `tests/e2e/knowledge-lifecycle/` |
 | 18 | the consolidated threat model, which found four defects nobody had looked for | `docs/architecture/threat-model.md`; `BACKLOG.md` §1 NEW-15 to NEW-18 |
 
@@ -243,9 +243,9 @@ For every accepted finding: add a regression test first, apply the smallest fix,
 > five forward transaction kinds**, not fourteen — Task 19's review found it reached two of five and
 > it was extended — and collection reports **36 cases** for that file, the thirty-five plus the case
 > that measures which of them ran. And the first criterion's evidence is **partly** demonstrated:
-> `tests/security/` holds 85 cases of which **38 carry no watched-failure demonstration**, three of
+> `tests/security/` holds 90 cases of which **38 carry no watched-failure demonstration**, three of
 > them in the sentinel suite (`the logs`, `the --json output`, `the deduplication hash`). The
-> criterion holds; the strength behind three of its eight artifacts is assertion rather than
+> criterion holds; the strength behind three of its nine artifacts is assertion rather than
 > demonstration. `BACKLOG.md` §5 and `threat-model.md` §8 own that split.
 >
 > **Two stale statements were found and corrected while verifying**, both in Task 18's output:

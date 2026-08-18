@@ -633,10 +633,10 @@ about a false property, and this repository has shipped two of them.
 
 One planted secret, traced through every artifact it could reach: the capture file, the logs, the
 `--json` output, the deduplication hash, the model input, the staging directory, every validator
-report, and the canonical note. **Absent from all eight**, per the gate in `BACKLOG.md` §3 and
+report, and the canonical note. **Absent from all nine**, per the gate in `BACKLOG.md` §3 and
 design spec §17.5's release blocker.
 
-The suite asserts per artifact, not in total. A single assertion over a concatenation of all eight
+The suite asserts per artifact, not in total. A single assertion over a concatenation of all nine
 would pass while seven were empty — the same shape as the gates `SESSION.md` records as already
 violated twice.
 

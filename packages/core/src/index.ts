@@ -61,6 +61,7 @@ export { compareVersions, tablePermits } from "./versions/index.js";
 export type { CapabilityVersionTable } from "./versions/index.js";
 export {
   recoverTransaction,
+  TransactionBackupRetentionError,
   TransactionConflictError,
   TransactionExecutor,
   TransactionGuardError,
