@@ -99,11 +99,58 @@ because a session that fixes one and not the next has fixed neither, and R2 orde
    content is the user's own hand edit, in the verb that exists to bring a hand edit back under the
    product's guarantees. Closing this is either an amendment to spec §5.2 plus an accepted window for
    `edit`, or one change to Foundation: an optional caller-supplied precondition.
-2. **A removed secret survives in a backup nothing prunes.** `review --decision edit` exists to remove
+2. **A removed secret survives in a backup nothing prunes** — **closed 2026-08-17 by R2 Task 6.**
+   The executor prunes every backup payload at **both** terminal phases — `finalized` and
+   `rolled_back` — and at **both** terminal early-returns, so a crash between a transition and its
+   prune is swept by the next `resume` or `rollback`. **`repair` accepts a terminal phase for its own
+   action and refuses only the other one** — `--resume` on `finalized`, `--rollback` on `rolled_back`
+   — because refusing the phase outright made those sweeps unreachable from the product. An earlier
+   version of this paragraph asserted the sweep in one sentence and "`--rollback` on a terminal phase
+   is still refused" in the next, which is the sentence that made the first one false; both halves
+   took a review round each to find, and each hid the same way — a unit test calling the executor
+   directly where no shipped command could reach it. The rollback half is the larger one: it is the
+   flow the product itself recommends, since `review`'s conflict message says to resolve it with
+   `developer-os repair` first, and both `doctor` and `init` print `repair --rollback <id>` verbatim. The `<index>.json` metadata stays: it carries no bytes and is how
+   a rewound journal learns whether a target existed.
+
+   **A prune that fails is reported, not raised into the caller.** `execute` has seven call sites across six commands and all
+   of them read a throw as "the transaction did not happen" — `ingest`'s docblock says so — while a
+   retention failure means the opposite, so raising there made `reindex` skip `recordArtifacts`,
+   `uninstall` skip its manifest removal, and `ingest` report `ok: false` for captures that had all
+   landed. The forward path therefore retains and `doctor`'s transactions check reports the leftover
+   with the matching `repair` command; the two terminal early-returns and the rollback transition still raise
+   `TransactionBackupRetentionError`. The rule is keyed on the prune site rather than the caller:
+   `repair --resume <id>` on an *incomplete* journal drives the forward loop and retains like any
+   other command, which `doctor` covers and the shorter sentence would have got wrong. That check also
+   catches the crash window, which nothing detected before — and turned red an assertion in
+   `tests/security/interruption.test.ts` that a kill at `finalized` leaves nothing to repair. That
+   assertion had held because nothing could see the state, not because the state was clean.
+
+   **Three follow-ons, each the previous fix's own defect.** The error's message was hardcoded to
+   "the change was applied" while two of its three raising sites are inside `rollbackLocked` — a
+   completed rollback reported as a failure whose sentence said the opposite, which is the defect
+   moved from `execute` to `repair` rather than removed; the outcome is now a parameter. The
+   recovery string said to re-run the command, reasoning that the prune is idempotent — idempotent
+   means retrying is *safe*, not that it will succeed, and the `unlink` that failed fails again; it
+   now names the precondition first. And the sweep covers `<index>.bin.tmp`, which
+   `writeDurableFile` writes before renaming and which `rollback` never re-runs `backUp` to clear,
+   while `doctor` derives the names it looks for from `journal.mutations` rather than listing the
+   directory — a stray file the prune can never name made `doctor` fail, its own printed `repair`
+   succeed, and `doctor` fail again forever.
+
+   **It does *not* close Foundation Task 8's residual 4**, and an earlier version of this line
+   claimed it did. `uninstall` no longer leaves the configuration in `backups/` — but the same bytes
+   are still in `staging/`, which nothing removes, and `tests/e2e/foundation.test.ts` now asserts
+   both halves rather than describing them. What changed is which pile the bytes sit in, which is
+   decisive for the defect that prompted the fix — a hand-pasted secret reaches the backup, never
+   staging, because staging holds post-redaction content — and irrelevant to "the product retains a
+   readable copy of something the user removed".
+
+   Originally: `review --decision edit` exists to remove
    a secret a user pasted into a vault file by hand. It does — and `TransactionExecutor.backUp` writes
    the pre-edit file, raw, to `~/.developer-os/backups/transactions/<id>/0.bin` at mode `0600`
-   (`executor.ts:449-467`), where nothing ever removes it. **This is a missing prune, not an inherent
-   cost:** `rollbackLocked` throws on a finalized journal (`executor.ts:280`), so once `finalize` runs
+   (`executor.ts:690-737`), where nothing ever removes it. **This is a missing prune, not an inherent
+   cost:** `rollbackLocked` throws on a finalized journal (`executor.ts:406`), so once `finalize` runs
    those are dead bytes. The fix is to prune `backupDirectory(id)` in the `finalized` transition.
 3. **`CliResult`'s failure arm has no `data` slot** (`result.ts:29-33`), so a command that partly
    succeeded cannot report machine-readably what moved. `ingest` processes a batch and contains each
@@ -128,7 +175,7 @@ transition was a decision about spec §5.5's table rather than a bug fix, and **
 
 ### Two gate-integrity residuals, both unowned
 
-**The test suite is one contended run from red.** `apps/cli/src/commands/doctor.test.ts:195` needs
+**The test suite is one contended run from red.** `apps/cli/src/commands/doctor.test.ts:228` needs
 3.19 s of a 20 s budget on an idle machine and went over it under load; the fix that shipped is
 `fileParallelism: false` in `tests/vitest.config.ts`, which removes the starvation and costs about
 60 s of wall clock. **The underlying fragility is unowned and stays that way**, and this is the second

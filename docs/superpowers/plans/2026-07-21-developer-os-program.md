@@ -196,7 +196,7 @@ spec wins over the plan, and this is recorded rather than left as an apparent om
 | failure leaves the capture retryable and never marks it ingested | `apps/cli/src/commands/ingest.test.ts:385`, `:478`, `:505`, `:567`, `:589`, `:664`, and every interruption case's `expectedStatus` | yes |
 
 **One criterion's evidence is weaker than its claim, and it is the first.** `tests/security/` holds
-85 cases and **38 carry no watched-failure demonstration** — three excluded for a stated reason,
+90 cases and **38 carried no watched-failure demonstration at 85** — three excluded for a stated reason,
 twenty added on 2026-08-15 whose expectations were derived rather than watched fail, and fifteen with
 no evidence and no excuse. The split is `BACKLOG.md` §5 and `docs/architecture/threat-model.md` §8,
 which also records that the per-suite breakdown cannot be re-derived from the tree. Three of the

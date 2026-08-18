@@ -14,8 +14,11 @@ export interface RedactionResult {
  * `userPatterns` is the only caller-supplied redaction input, so it is kept
  * to literal substrings rather than regular expressions — a compiled
  * expression over capture text is a ReDoS surface, and this codebase bounds
- * no expression anywhere. Optional so the two existing call sites, which
- * pass no third argument, keep compiling and behaving unchanged.
+ * no expression anywhere. Optional so a call site that passes no third argument keeps compiling
+ * and behaving unchanged — which was written when there were two such sites and no others, and
+ * is now the rule rather than the count: `createRedactor` is the production entry, three
+ * commands bind the user's patterns through it, and `tests/repository/redactor-entry.test.ts`
+ * refuses a fourth that reaches for `redactText` directly.
  */
 export interface RedactionOptions {
   readonly userPatterns?: readonly string[];

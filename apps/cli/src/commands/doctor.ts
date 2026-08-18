@@ -16,6 +16,7 @@ import type {
   ExitCode,
   InstallationManifestV1,
   RuntimePaths,
+  TransactionJournalV1,
 } from "@developer-os/core";
 import { PLUGIN_INSTALL_SEGMENTS } from "@developer-os/adapter-claude";
 import { PLUGIN_TREE_SEGMENTS } from "@developer-os/adapter-codex";
@@ -51,6 +52,12 @@ export interface DoctorReportV1 {
 export interface IncompleteTransaction {
   readonly id: string;
   readonly phase: string;
+}
+
+export interface RetainedBackup {
+  readonly id: string;
+  readonly phase: "finalized" | "rolled_back";
+  readonly payload: string;
 }
 
 export interface DoctorOptions {
@@ -236,9 +243,9 @@ export async function readConfigFile(
  * `TransactionStore` addresses one transaction at a time. Reading is not
  * mutation, so `status` and `doctor` stay inspection-only.
  */
-export async function listIncompleteTransactions(
+async function listTransactionIds(
   context: CliContext,
-): Promise<readonly IncompleteTransaction[]> {
+): Promise<readonly string[]> {
   const journalDir = join(context.paths.stateDir, "transactions");
 
   let entries: readonly string[];
@@ -249,20 +256,132 @@ export async function listIncompleteTransactions(
     throw error;
   }
 
-  const ids = entries
+  return entries
     .filter((entry) => entry.endsWith(".json") && !entry.startsWith("."))
     .map((entry) => entry.slice(0, -".json".length))
     .filter((id) => JOURNAL_ID.test(id))
     .sort();
+}
 
+export async function listIncompleteTransactions(
+  context: CliContext,
+): Promise<readonly IncompleteTransaction[]> {
+  return (await surveyTransactions(context, { retained: false })).incomplete;
+}
+
+interface TransactionSurvey {
+  readonly incomplete: readonly IncompleteTransaction[];
+  readonly retained: readonly RetainedBackup[];
+}
+
+/**
+ * **One pass, because each journal read costs a subprocess.** `TransactionStore.read` runs
+ * inside `withTransactionLock`, and the macOS lock provider spawns `/usr/bin/lockf` — so
+ * `checkTransactions` calling the two public helpers in sequence doubled the spawns on the
+ * check `init` runs as its verification step. `<state>/transactions/` accumulates one
+ * journal per transaction permanently (the open founder question `ORDER.md` carries), so
+ * the cost grows without bound while the directory does.
+ *
+ * **`want.retained` is why this is a parameter and not always-on.** `listIncompleteTransactions`
+ * is called by `status` and by `init`'s pre-flight, and neither has ever touched `backupsDir`.
+ * Reading it unconditionally widened their failure surface: `retainedPayload` rethrows any
+ * `readdir` error that is not "missing", so a backup directory without the read bit would make
+ * `status` throw where it used to report incomplete transactions. Only `doctor` asks about
+ * retention, so only `doctor` pays for it — including the failure modes.
+ */
+async function surveyTransactions(
+  context: CliContext,
+  want: { readonly retained: boolean },
+): Promise<TransactionSurvey> {
   const incomplete: IncompleteTransaction[] = [];
-  for (const id of ids) {
+  const retained: RetainedBackup[] = [];
+
+  for (const id of await listTransactionIds(context)) {
     const journal = await context.transactions.read(id);
     if (journal.phase !== "finalized" && journal.phase !== "rolled_back") {
       incomplete.push({ id, phase: journal.phase });
+      continue;
     }
+    if (!want.retained) continue;
+    const leftover = await retainedPayload(context, id, journal);
+    if (leftover !== null) retained.push(leftover);
   }
-  return incomplete;
+
+  return { incomplete, retained };
+}
+
+/**
+ * **Backup payloads that outlived the transaction that wrote them.**
+ *
+ * `TransactionExecutor.backUp` writes each target's pre-edit bytes raw, so a `review
+ * --decision edit` that removes a pasted secret leaves a copy of it here. The executor
+ * prunes them on the transition into `finalized` and into `rolled_back`, but two things can
+ * leave one standing: a crash between the transition and the prune, and an `unlink` that
+ * fails for a reason other than "already gone".
+ *
+ * **This check is what makes the second case visible, and it is the reason the executor is
+ * allowed not to raise on it.** Raising out of `execute` would be worse than the leftover:
+ * every one of its seven call sites reads a throw as "the transaction did not happen", so a
+ * successful apply would be reported as a failure with the command's own bookkeeping
+ * skipped (see `TransactionBackupRetentionError`). Reporting it here costs nothing and
+ * catches the crash window too, which nothing detected before.
+ *
+ * **Terminal journals only.** A transaction still in flight is *supposed* to have its
+ * payloads on disk — that is what a rollback restores from — and `listIncompleteTransactions`
+ * already reports the transaction itself.
+ */
+export async function listRetainedBackups(
+  context: CliContext,
+): Promise<readonly RetainedBackup[]> {
+  return (await surveyTransactions(context, { retained: true })).retained;
+}
+
+async function retainedPayload(
+  context: CliContext,
+  id: string,
+  journal: TransactionJournalV1,
+): Promise<RetainedBackup | null> {
+  if (journal.phase !== "finalized" && journal.phase !== "rolled_back") return null;
+
+  const directory = join(context.paths.backupsDir, "transactions", id);
+  let entries: readonly string[];
+  try {
+    entries = await context.fs.readdir(directory);
+  } catch (error) {
+    if (isMissingEntry(error)) return null;
+    throw error;
+  }
+
+  /**
+   * **Exactly the names the prune removes, derived from the journal — not every `.bin`
+   * in the directory.** The prune has no `readdir` and works from
+   * `journal.mutations.entries()`, so a listing-driven check can report a file no
+   * `repair` can clear: a stray `9999.bin` beside a fifteen-mutation journal made
+   * `doctor` fail, `repair --resume` succeed, and `doctor` fail again forever (found by
+   * fresh-context review, 2026-08-17). A report whose named remedy does not clear it is
+   * worse than no report.
+   *
+   * `.bin.tmp` is included because `writeDurableFile` writes the payload there before
+   * renaming, so it holds the same bytes; `<index>.json` and its `.sha256` are excluded
+   * because the prune deliberately keeps them — they carry `{existed, mode, atimeMs,
+   * mtimeMs}` and none of the bytes. A check that counted every file would fire on every
+   * finalized transaction the product has ever run.
+   */
+  const swept = journal.mutations.flatMap((_mutation, index) => [
+    `${String(index)}.bin`,
+    `${String(index)}.bin.tmp`,
+  ]);
+  /**
+   * **In the prune's own order, which is mutation order, not lexicographic.** `.sort()`
+   * on the listing put `10.bin` ahead of `2.bin`, so a ten-mutation journal named a
+   * payload the user would not have expected first. Cosmetic — the printed `repair`
+   * clears all of them — but the message says "a backup payload", so it should be the
+   * first one.
+   */
+  const payload = swept.find((name) => entries.includes(name));
+  return payload === undefined
+    ? null
+    : { id, phase: journal.phase, payload: join(directory, payload) };
 }
 
 export async function detectManagedDrift(
@@ -612,19 +731,43 @@ async function checkManifest(
 }
 
 async function checkTransactions(context: CliContext): Promise<Finding> {
-  const incomplete = await listIncompleteTransactions(context);
+  const { incomplete, retained } = await surveyTransactions(context, {
+    retained: true,
+  });
   const first = incomplete[0];
-  if (first === undefined) {
-    return pass("transactions", "no incomplete transactions", []);
+  if (first !== undefined) {
+    return fail(
+      "transactions",
+      `transaction ${first.id} stopped at phase ${first.phase}`,
+      [join(context.paths.stateDir, "transactions", `${first.id}.json`)],
+      EXIT_CODES.recoveryRequired,
+      `developer-os repair --resume ${first.id} | developer-os repair --rollback ${first.id}`,
+    );
   }
 
-  return fail(
-    "transactions",
-    `transaction ${first.id} stopped at phase ${first.phase}`,
-    [join(context.paths.stateDir, "transactions", `${first.id}.json`)],
-    EXIT_CODES.recoveryRequired,
-    `developer-os repair --resume ${first.id} | developer-os repair --rollback ${first.id}`,
-  );
+  /**
+   * **Reported under `transactions` rather than as a tenth check**, because it is the same
+   * subject — a transaction not in a clean state — and the same remedy. A new check id
+   * widens `DoctorReportV1`'s `checks` array, which `init` consumes as its verification
+   * step and Foundation's e2e suite pins.
+   *
+   * Second, not first: an in-flight transaction is the more urgent finding and *should*
+   * have its payloads on disk, so reporting a retained payload ahead of it would name a
+   * symptom of the incomplete transaction as though it were a separate fault.
+   */
+  const leftover = retained[0];
+  if (leftover !== undefined) {
+    const action = leftover.phase === "finalized" ? "--resume" : "--rollback";
+    return fail(
+      "transactions",
+      `transaction ${leftover.id} reached ${leftover.phase} with a backup payload still on disk`,
+      [leftover.payload],
+      EXIT_CODES.recoveryRequired,
+      `developer-os repair ${action} ${leftover.id}`,
+    );
+  }
+
+  return pass("transactions", "no incomplete transactions", []);
 }
 
 async function checkDrift(

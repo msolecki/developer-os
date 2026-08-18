@@ -247,6 +247,17 @@ export class MacOsPlatformAdapter implements PlatformAdapter {
     return { name, installed: true, executablePath, version: null };
   }
 
+  /** Canonicalizes, or refuses: a path that cannot be resolved cannot be vouched for. */
+  async #resolveOrRefuse(path: string): Promise<string> {
+    try {
+      return await this.#canonicalize(path);
+    } catch {
+      throw new MacOsPlatformTrustError(
+        `The executable could not be verified: ${path} cannot be resolved`,
+      );
+    }
+  }
+
   /**
    * **The check `types.ts` says every executor owes, paid here rather than at each call
    * site** — beside the promise, so an executor meets both in one interface (BACKLOG
@@ -278,26 +289,19 @@ export class MacOsPlatformAdapter implements PlatformAdapter {
    * **It fails closed.** An ancestor that cannot be inspected is a refusal, because a
    * check that treats "I could not look" as "it is fine" is not a check.
    *
-   * **Three residuals, none of them closable here.** The **check-then-use window** is
-   * registered as BACKLOG NEW-20: the target is resolved and checked, then executed by
-   * path, and closing it needs an exec-by-descriptor this runtime does not offer. **A
-   * middle symlink hop** — a declared path resolving through a directory the attacker
-   * owns before reaching a trusted target — is on none of the three chains, because
-   * closing it needs stepwise `readlink` resolution rather than two canonicalizations;
-   * that is its own row. And **macOS ACLs are invisible to mode bits**: a directory can
-   * be `0755` and writable by another user through an ACL entry, which `stat().mode`
-   * cannot see, so this check is a floor rather than a proof.
+   * **Three residuals, none of them closable here, in the order a reader should fix
+   * them** — an earlier version led with the least of the three. **A middle symlink hop**
+   * (BACKLOG NEW-32) is a working bypass and needs no race: a declared path resolving
+   * through a directory the attacker owns before reaching a trusted target is on none of
+   * the three chains, because closing it needs stepwise `readlink` resolution rather than
+   * two canonicalizations. **macOS ACLs are invisible to mode bits**: a directory can be
+   * `0755` and writable by another user through an ACL entry, which `stat().mode` cannot
+   * see, so this check is a floor rather than a proof. And the **check-then-use window**
+   * (BACKLOG NEW-35) is the weakest: the target is resolved and checked, then executed by
+   * path, and closing it needs an exec-by-descriptor this runtime does not offer. It is
+   * **not** NEW-20 — this sentence said it was, and NEW-32's own row corrects the
+   * conflation: NEW-20 is `capture`'s quarantine race, on a path only the user can write.
    */
-  async #resolveOrRefuse(path: string): Promise<string> {
-    try {
-      return await this.#canonicalize(path);
-    } catch {
-      throw new MacOsPlatformTrustError(
-        `The executable could not be verified: ${path} cannot be resolved`,
-      );
-    }
-  }
-
   async assertTrustedExecutable(path: string): Promise<void> {
     this.#assertSupportedPlatform();
     if (!isAbsolute(path)) {

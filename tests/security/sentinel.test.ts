@@ -9,6 +9,7 @@ import { run } from "@developer-os/cli/dist/main.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
+  filesUnder,
   installSecurityFixture,
   oneNote,
   readFilesUnder,
@@ -22,18 +23,30 @@ import type { InstalledFixture } from "./helpers.js";
  * spec §17.5's release blocker and `BACKLOG.md` §3's gate, in one file.
  *
  * **Asserted per artifact, never in total.** A single assertion over a
- * concatenation of all eight would pass while seven of them were empty, which is
+ * concatenation of all nine would pass while eight of them were empty, which is
  * the shape of gate this repository has already shipped twice. The
  * `toBeGreaterThan(0)` line in each case is not decoration: it is what stops the
  * suite passing by collecting nothing.
  *
- * **`backups/transactions/` is deliberately out of the sweep**, and not because
- * it is out of scope. `TransactionExecutor.backUp` writes the pre-edit file raw,
- * and nothing prunes it, so a secret removed from a vault file by a later edit
- * survives there. That is a measured, known defect with a named fix pending in
- * Foundation (`docs/superpowers/ORDER.md`), not a property this suite may assert
- * or work around. "The staging directory" below therefore means the executor's
- * own staging area — the bytes it is about to apply — which `finalize` removes.
+ * **`backups/transactions/` used to be out of the sweep and no longer is.**
+ * `TransactionExecutor.backUp` writes the pre-edit file raw, and nothing pruned it — so a
+ * secret removed from a vault file by a later edit survived there, which was a measured
+ * defect this suite was not allowed to assert around. **That fix landed on 2026-08-17**
+ * (Foundation request 2): every backup payload is pruned at `finalized` and at
+ * `rolled_back`, both terminal, and a crash between the transition and the prune is swept
+ * by the next resume. The exclusion's justification is gone, so the exclusion is gone.
+ *
+ * **Backups are their own artifact with their own floor, not appended to staging.**
+ * Concatenating them would let the staging files satisfy the `toBeGreaterThan(0)` guard
+ * while the backups half silently collected nothing — which is precisely the shape this
+ * docblock rules out two paragraphs up, and which an earlier version of this change did.
+ * Both are sampled from inside `afterPhase`, because a transaction that reaches a terminal
+ * phase has already pruned by the time a command returns.
+ *
+ * **What `finalize` does *not* remove is the staging directory itself** — an earlier
+ * version of this comment said it did, and `tests/e2e/foundation.test.ts` now asserts the
+ * opposite: staged payloads survive uninstall. That is a separate residual, and it is why
+ * sweeping this directory matters rather than trusting a lifecycle claim about it.
  */
 
 const ARTIFACTS = [
@@ -43,6 +56,7 @@ const ARTIFACTS = [
   "the deduplication hash",
   "the model input",
   "the staging directory",
+  "the backup directory",
   "every validator report",
   "the canonical note",
 ] as const;
@@ -82,9 +96,20 @@ async function temporariesBeside(target: string): Promise<readonly string[]> {
 let fixture: InstalledFixture;
 let evidence: Evidence;
 let refused = false;
+/**
+ * **A floor on payloads, because the artifact floor cannot be one.** `ARTIFACTS`' guard is
+ * `backups.length > 0`, and `backUp` writes `<index>.json` metadata for **every** mutation
+ * whether or not a payload accompanies it — so a create-only transaction leaves two files
+ * in its backup directory and satisfies that guard on metadata alone. It proves the
+ * directory was read; it cannot prove a payload was collected, which is the only thing in
+ * there that can carry the secret. The regression it exists to catch — payloads no longer
+ * reaching the sweep — would leave it green.
+ */
+let payloadsSeen = 0;
 
 async function collect(): Promise<Evidence> {
   const staging: string[] = [];
+  const backups: string[] = [];
   let watch: ((journal: TransactionJournalV1) => Promise<void>) | null = null;
 
   fixture = await installSecurityFixture("sentinel", {
@@ -94,6 +119,21 @@ async function collect(): Promise<Evidence> {
   });
   watch = async (journal: TransactionJournalV1): Promise<void> => {
     staging.push(...(await readFilesUnder(fixture.paths.stagingDir)));
+    /**
+     * **`backups/` joined the sweep on 2026-08-17**, when the defect that excluded it was
+     * fixed. `TransactionExecutor` now prunes every backup payload at both terminal
+     * phases, so this directory is a place a sentinel must not survive rather than a
+     * measured hole the suite had to route around.
+     *
+     * Swept from inside `afterPhase`, like staging, because that is the only way to see
+     * the mid-transaction state: by the time a command returns, a finalized transaction
+     * has already pruned. So this observes the payload *while it exists* and the
+     * assertion is that even then it carries no sentinel.
+     */
+    backups.push(...(await readFilesUnder(fixture.paths.backupsDir)));
+    payloadsSeen += (await filesUnder(fixture.paths.backupsDir)).filter((path) =>
+      path.endsWith(".bin"),
+    ).length;
     for (const mutation of journal.mutations) {
       staging.push(...(await temporariesBeside(mutation.targetPath)));
     }
@@ -167,6 +207,7 @@ async function collect(): Promise<Evidence> {
     ],
     "the model input": fixture.runner.calls.map((call) => call.args.join("\n")),
     "the staging directory": staging,
+    "the backup directory": backups,
     "every validator report": refusal.ok
       ? []
       : [refusal.error.message, refusal.error.recovery ?? ""],
@@ -219,5 +260,19 @@ describe("a planted sentinel, per artifact", () => {
       "secret-scan",
     );
     expect(evidence["the canonical note"].length).toBeGreaterThan(1);
+  });
+
+  /**
+   * **The backup sweep's real floor.** `"the backup directory"` is satisfied by the
+   * `<index>.json` metadata `backUp` writes for every mutation, payload or not — so once
+   * any transaction has run, that guard can never fail, and a change that stopped payloads
+   * reaching the sweep would leave the whole suite green.
+   *
+   * `review --decision accept` replaces an existing capture file, so `backUp` writes a
+   * payload for it, and `afterPhase` fires inside `transition` — before `pruneBackups` —
+   * so the sweep observes the pre-image while it exists. This asserts it observed one.
+   */
+  it("collected a backup payload, not only its metadata", () => {
+    expect(payloadsSeen).toBeGreaterThan(0);
   });
 });

@@ -19,6 +19,7 @@ import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 import { codexPluginRoot, runDoctor, runDoctorReport } from "./doctor.js";
 import type { DoctorReportV1 } from "./doctor.js";
 import { runInit } from "./init.js";
+import { runRepair } from "./repair.js";
 import {
   createCommandFixture,
   inventory,
@@ -81,6 +82,38 @@ async function seedIncompleteTransaction(
     })}\n`,
     { mode: 0o600 },
   );
+}
+
+/**
+ * The id of the transaction a command just ran, read back rather than assumed.
+ *
+ * **A hand-written journal is not a substitute here.** The first version of the retention
+ * cases seeded one, and `TransactionStore.read` rejected it as malformed — so `doctor`
+ * reported a *different* fault with the same exit code, and the case would have passed on
+ * its code assertion alone while proving nothing about retained payloads.
+ */
+async function onlyTransactionId(fixture: CommandFixture): Promise<string> {
+  const journalDir = join(fixture.paths.stateDir, "transactions");
+  const journals = (await nodeFs.readdir(journalDir))
+    .filter((entry) => entry.endsWith(".json"))
+    .sort();
+  expect(journals).toHaveLength(1);
+  return (journals[0] ?? "").slice(0, -".json".length);
+}
+
+/** The crash window: a payload on disk beside a journal that already reached a terminal phase. */
+async function plantBackupFile(
+  fixture: CommandFixture,
+  id: string,
+  name: string,
+): Promise<string> {
+  const directory = join(fixture.paths.backupsDir, "transactions", id);
+  await nodeFs.mkdir(directory, { recursive: true, mode: 0o700 });
+  const path = join(directory, name);
+  await nodeFs.writeFile(path, "a pre-edit copy of the user's file", {
+    mode: 0o600,
+  });
+  return path;
 }
 
 describe("runDoctor", () => {
@@ -334,6 +367,112 @@ describe("runDoctor", () => {
     expect(result.error.recovery).toBe(
       "developer-os repair --resume tx_fixture_001 | developer-os repair --rollback tx_fixture_001",
     );
+  });
+
+  /**
+   * **The channel that lets the executor's forward path retain instead of raise, so it is
+   * the assertion that keeps that from being a silent no-op.**
+   *
+   * `TransactionExecutor` prunes each transaction's backup payloads on the transition into
+   * a terminal phase. Two things leave one standing: a crash between the transition and the
+   * prune, and an `unlink` that fails for a reason other than "already gone". Raising out
+   * of `execute` was the first fix and a worse defect — seven call sites read a throw as "the
+   * transaction did not happen", which this is not — so the forward path retains and this
+   * check is what makes a retained payload visible (BACKLOG, Foundation request 2).
+   *
+   * Seeded rather than provoked, because provoking it needs a filesystem that fails one
+   * `unlink`; `transactions.test.ts` owns the executor half against exactly that fake.
+   */
+  it("reports a backup payload a finalized transaction left behind", async () => {
+    const fixture = await createCommandFixture("doctor-retained-finalized");
+    await runInit(fixture.context, ACCEPTED);
+    const id = await onlyTransactionId(fixture);
+    const payload = await plantBackupFile(fixture, id, "0.bin");
+
+    const result = await runDoctor(fixture.context);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(result.error.recovery).toBe(`developer-os repair --resume ${id}`);
+    expect(result.error.paths).toStrictEqual([payload]);
+  });
+
+  /**
+   * **The rollback side names the other command**, because `resumeLocked` throws on a
+   * rolled-back journal: telling a user to run `--resume` here would hand them a refusal.
+   */
+  it("reports a backup payload a rolled-back transaction left behind", async () => {
+    const fixture = await createCommandFixture("doctor-retained-rolled-back", {
+      interruptAfter: "applied",
+    });
+    await runInit(fixture.context, ACCEPTED);
+    const id = await onlyTransactionId(fixture);
+    const rolled = await runRepair(fixture.context, { resume: null, rollback: id });
+    expect(rolled.ok).toBe(true);
+    await plantBackupFile(fixture, id, "0.bin");
+
+    const result = await runDoctor(fixture.context);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(result.error.recovery).toBe(`developer-os repair --rollback ${id}`);
+  });
+
+  /**
+   * `writeDurableFile` writes each payload to `<index>.bin.tmp` and renames it, so a kill
+   * inside `backUp` strands the same bytes under that name. The sweep and this check both
+   * missed it, and `repair --rollback` — the route `doctor` and `init` print — never
+   * re-runs `backUp`, so nothing cleared it either.
+   */
+  it("reports a payload stranded under its .tmp name", async () => {
+    const fixture = await createCommandFixture("doctor-retained-tmp");
+    await runInit(fixture.context, ACCEPTED);
+    const id = await onlyTransactionId(fixture);
+    const payload = await plantBackupFile(fixture, id, "0.bin.tmp");
+
+    const result = await runDoctor(fixture.context);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.paths).toStrictEqual([payload]);
+  });
+
+  /**
+   * **A report whose named remedy cannot clear it is worse than no report.** This check
+   * enumerates the directory; the prune derives its names from `journal.mutations`, and
+   * has no `readdir` to do otherwise. A file the prune will never name — here a `9999.bin`
+   * beside a fifteen-mutation journal — made `doctor` fail, the `repair` it printed
+   * succeed, and `doctor` fail again, permanently. The check now intersects the listing
+   * with exactly what the prune sweeps.
+   */
+  it("ignores a backup file no prune will ever name", async () => {
+    const fixture = await createCommandFixture("doctor-retained-foreign");
+    await runInit(fixture.context, ACCEPTED);
+    const id = await onlyTransactionId(fixture);
+    await plantBackupFile(fixture, id, "9999.bin");
+
+    const result = await runDoctor(fixture.context);
+
+    expect(result.ok).toBe(true);
+  });
+
+  /**
+   * **The metadata is not a payload, and a check that counted every file would fire on
+   * every finalized transaction the product has ever run.** `backUp` writes `<index>.json`
+   * beside each payload and the prune deliberately keeps it: it holds `{existed, mode,
+   * atimeMs, mtimeMs}` and none of the bytes.
+   */
+  it("does not report retained metadata as a leftover payload", async () => {
+    const fixture = await createCommandFixture("doctor-retained-metadata");
+    await runInit(fixture.context, ACCEPTED);
+    const id = await onlyTransactionId(fixture);
+    await plantBackupFile(fixture, id, "0.json");
+
+    const result = await runDoctor(fixture.context);
+
+    expect(result.ok).toBe(true);
   });
 
   it("reports drift as a decision the user must make", async () => {

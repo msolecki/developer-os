@@ -14,9 +14,11 @@ const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
  * Spec §8.2 describes a user-extensible redaction class — the one a founder uses for a
  * client name no generic pattern catches. It was specified and never wired: `redactText`
  * took a `userPatterns` option that **no production caller passed**, and `configSchema`
- * is `.strict()` with no table a user could set (BACKLOG NEW-16). Fourteen call sites
- * each passed two arguments, and adding the fifteenth correctly would have meant finding
- * and changing all of them.
+ * was `.strict()` with no table a user could set (BACKLOG NEW-16, closed 2026-08-17).
+ * Fourteen call sites each passed two arguments, and adding the fifteenth correctly would
+ * have meant finding and changing all of them — which is the shape this gate now prevents
+ * recurring. The table exists (`packages/core/src/config/loader.ts:208`); the present
+ * tense above described the state this file was written to end.
  *
  * `createRedactor` binds the key and the patterns once, where the configuration is in
  * scope. Without this gate a new call site can reach for `redactText` directly, compile,

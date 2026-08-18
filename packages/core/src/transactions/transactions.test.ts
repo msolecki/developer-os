@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { EXIT_CODES } from '../result.js';
 import {
   recoverTransaction,
+  TransactionBackupRetentionError,
   TransactionExecutor,
   TransactionStore,
   validateJournal,
@@ -255,6 +256,34 @@ async function installOriginal(targetPath: string): Promise<void> {
     ORIGINAL_MTIME_MS / 1000,
     ORIGINAL_MTIME_MS / 1000,
   );
+}
+
+/**
+ * **Denies `unlink` inside the backups directory and nowhere else.** The first version
+ * matched any path ending in `.bin`, which isolated the backup prune only by accident: the
+ * fixture's own target is `config.bin`, and it escaped the deny purely because
+ * `replacePlan` never unlinks its target. A `remove`-shaped plan would have landed the
+ * deny on the user's file and the test would have passed for the wrong reason.
+ *
+ * **Both conditions, and the second is not redundant.** Anchoring on the directory alone
+ * also denies the `.tmp` unlink inside `writeDurableFile`, which `backUp` uses to write the
+ * payloads in the first place — the fixture then failed in `backUp` with a
+ * `TransactionStateError` and never reached the prune at all. `payloads` names what the
+ * prune removes: `<index>.bin`, under the backups directory.
+ */
+function denyingUnlinkUnder(
+  directory: string,
+  payloads = '.bin',
+): TransactionFileSystem {
+  return {
+    ...nodeFs,
+    unlink: (path: Parameters<typeof nodeFs.unlink>[0]) =>
+      String(path).startsWith(directory) && String(path).endsWith(payloads)
+        ? Promise.reject(
+            Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' }),
+          )
+        : nodeFs.unlink(path),
+  };
 }
 
 async function readMode(targetPath: string): Promise<number> {
@@ -722,6 +751,508 @@ describe('TransactionExecutor durable recovery', () => {
       await expectBytes(outsidePath, NEW_BYTES);
       await expectBytes(targetPath, ORIGINAL_BYTES);
       expect(await readMode(targetPath)).toBe(ORIGINAL_MODE);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  /**
+   * **`review --decision edit` exists to remove a secret a user pasted into a vault file
+   * by hand — and `backUp` writes that file, raw, to the backup directory before the edit
+   * lands, where nothing ever removed it** (BACKLOG, Foundation request 2).
+   *
+   * They are dead bytes from `finalized` onward: `rollbackLocked` throws on a finalized
+   * journal, so nothing in this product can ever read them again. Retaining them undoes
+   * the one operation whose whole purpose is removal.
+   */
+  it('removes the backup payloads once the transaction finalizes', async () => {
+    const fixture = await createFixture('backup-pruned-on-finalize');
+    const targetPath = join(fixture.workspaceDir, 'config.bin');
+    const backupPath = join(
+      fixture.backupsDir,
+      'transactions',
+      fixture.transactionId,
+      '0.bin',
+    );
+
+    try {
+      await installOriginal(targetPath);
+      const journal = await createExecutor(fixture).execute(replacePlan(targetPath));
+
+      expect(journal.phase).toBe('finalized');
+      await expect(nodeFs.stat(backupPath)).rejects.toMatchObject({ code: 'ENOENT' });
+      /**
+       * **The metadata survives, deliberately.** It carries `{existed, mode, atimeMs,
+       * mtimeMs}` and no bytes, and it is how a rewound-and-resumed journal learns whether
+       * a target existed — which is how eighteen e2e cases build their fixtures. Deleting
+       * a description of bytes that are gone buys nothing and costs that.
+       */
+      await expect(
+        nodeFs.stat(backupPath.replace(/\.bin$/u, '.json')),
+      ).resolves.toBeDefined();
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  /**
+   * **The ordering, pinned — and nothing pinned it until this existed.** Moving the prune
+   * *before* the transition leaves the happy path identical, so mutation testing found it
+   * green. The difference is only visible in the crash window between the two.
+   *
+   * **This case used to stop here, asserting the payload survives the crash — which was
+   * pinning the defect as the desired outcome.** Every recovery path refused a finalized
+   * journal, so those bytes were stranded permanently while the product reported success.
+   * The ordering is still right; what was missing is the sweep, so the case now asserts
+   * both halves: the payload survives the crash *and* a later resume removes it.
+   */
+  it('prunes after the finalized transition, and a later resume sweeps the crash window', async () => {
+    const fixture = await createFixture('backup-prune-ordering');
+    const targetPath = join(fixture.workspaceDir, 'config.bin');
+    const backupPath = join(
+      fixture.backupsDir,
+      'transactions',
+      fixture.transactionId,
+      '0.bin',
+    );
+
+    try {
+      await installOriginal(targetPath);
+      const afterPhase = interruptAfter(fixture, 'finalized');
+      await expect(
+        createExecutor(fixture, { afterPhase }).execute(replacePlan(targetPath)),
+      ).rejects.toThrow();
+
+      /** The transition landed; the prune did not. The payload is still on disk. */
+      await expect(nodeFs.stat(backupPath)).resolves.toBeDefined();
+
+      /**
+       * And `repair --resume` on a finalized transaction is no longer a no-op: it is the
+       * one path that can reach this state, so it is the one that has to clean it.
+       */
+      const resumed = await createExecutor(fixture).resume(fixture.transactionId);
+      expect(resumed.phase).toBe('finalized');
+      await expect(nodeFs.stat(backupPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  /**
+   * **The mirror crash window, on the rollback side.** `rollbackLocked`'s early return was
+   * the same omission as the finalized one, and worse in effect: a retried `rollback`
+   * returned `rolled_back` *successfully* while doing nothing, so a user told the command
+   * failed would run it again, be told it worked, and still have the payload on disk.
+   */
+  it('sweeps the rolled-back crash window on a later rollback', async () => {
+    const fixture = await createFixture('backup-rollback-crash-window');
+    const targetPath = join(fixture.workspaceDir, 'config.bin');
+    const backupPath = join(
+      fixture.backupsDir,
+      'transactions',
+      fixture.transactionId,
+      '0.bin',
+    );
+
+    try {
+      await installOriginal(targetPath);
+      const stop = interruptAfter(fixture, 'applied');
+      await expect(
+        createExecutor(fixture, { afterPhase: stop }).execute(replacePlan(targetPath)),
+      ).rejects.toThrow();
+
+      /** Crash between the rolled_back transition and the prune. */
+      const crash = interruptAfter(fixture, 'rolled_back');
+      await expect(
+        createExecutor(fixture, { afterPhase: crash }).rollback(fixture.transactionId),
+      ).rejects.toThrow();
+      await expect(nodeFs.stat(backupPath)).resolves.toBeDefined();
+
+      const swept = await createExecutor(fixture).rollback(fixture.transactionId);
+
+      expect(swept.phase).toBe('rolled_back');
+      await expect(nodeFs.stat(backupPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  /**
+   * **`execute` does not raise on a payload it could not remove, and that is the fix rather
+   * than the hole.** A blanket catch made an `EACCES` on a non-writable backups directory a
+   * silent no-op, so the first fix raised — from every prune site, including this one. That
+   * was worse: `execute` has seven call sites across six commands and all read a throw as "the transaction
+   * did not happen", which is the one thing this failure does not mean. `reindex` skipped
+   * `recordArtifacts`, `uninstall` skipped its manifest removal, and `ingest` reported
+   * `ok: false` for captures that had all landed (found by fresh-context review,
+   * 2026-08-17).
+   *
+   * So the forward path retains and `doctor`'s transactions check reports it — asserted in
+   * `doctor.test.ts`, because a retention nothing surfaces is the original defect back.
+   * The case below is the other half: `repair`'s paths still raise.
+   */
+  it('retains a payload it could not remove without failing the applied change', async () => {
+    const fixture = await createFixture('backup-prune-denied');
+    const targetPath = join(fixture.workspaceDir, 'config.bin');
+    const backupPath = join(
+      fixture.backupsDir,
+      'transactions',
+      fixture.transactionId,
+      '0.bin',
+    );
+
+    try {
+      await installOriginal(targetPath);
+      const journal = await createExecutor(fixture, {
+        fs: denyingUnlinkUnder(fixture.backupsDir),
+      }).execute(replacePlan(targetPath));
+
+      /** The transaction is complete and the user's file is correct. */
+      expect(journal.phase).toBe('finalized');
+      expect(await nodeFs.readFile(targetPath, 'utf8')).not.toBe(ORIGINAL_FIXTURE_LABEL);
+      /** And the payload is still there, which is the thing `doctor` has to see. */
+      await expect(nodeFs.stat(backupPath)).resolves.toBeDefined();
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  /**
+   * **The half that raises: `repair`.** `resume` on a terminal journal and both of
+   * `rollback`'s prune sites are reached only through `recoverTransaction`, whose only
+   * entry point is the `repair` command — nothing downstream has bookkeeping left to skip,
+   * so "applied, but a payload survived" is the only thing a throw can mean there.
+   *
+   * `TransactionStateError` was what this raised first, and its message claims the
+   * transaction is malformed when the journal is terminal and the user's file is correct.
+   */
+  it('raises on the repair path, naming the payload and the applied change', async () => {
+    const fixture = await createFixture('backup-prune-denied-repair');
+    const targetPath = join(fixture.workspaceDir, 'config.bin');
+
+    try {
+      await installOriginal(targetPath);
+      const denying = denyingUnlinkUnder(fixture.backupsDir);
+      await createExecutor(fixture, { fs: denying }).execute(replacePlan(targetPath));
+
+      const failure = await createExecutor(fixture, { fs: denying })
+        .resume(fixture.transactionId)
+        .catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(TransactionBackupRetentionError);
+      expect((failure as Error).message).toContain('the change was applied');
+      expect((failure as Error).message).toContain('0.bin');
+
+      /** And it is recoverable: a resume with a working filesystem clears it. */
+      const swept = await createExecutor(fixture).resume(fixture.transactionId);
+      expect(swept.phase).toBe('finalized');
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  /**
+   * **A rollback did not apply the change, and the message said it did.** The text was
+   * hardcoded to "the change was applied" while two of the three raising sites are inside
+   * `rollbackLocked` — so a rollback that fully succeeded, with the user's original file
+   * restored, was reported as a failure whose sentence claimed the opposite. That is the
+   * defect the forward-path retention exists to prevent, relocated from `execute` to
+   * `repair` rather than removed (found by fresh-context review, 2026-08-17).
+   */
+  it('says the change was rolled back when it was, not that it was applied', async () => {
+    const fixture = await createFixture('backup-prune-denied-rollback');
+    const targetPath = join(fixture.workspaceDir, 'config.bin');
+
+    try {
+      await installOriginal(targetPath);
+      const stop = interruptAfter(fixture, 'applied');
+      await expect(
+        createExecutor(fixture, { afterPhase: stop }).execute(replacePlan(targetPath)),
+      ).rejects.toThrow();
+
+      const failure = await createExecutor(fixture, {
+        fs: denyingUnlinkUnder(fixture.backupsDir),
+      })
+        .rollback(fixture.transactionId)
+        .catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(TransactionBackupRetentionError);
+      expect((failure as Error).message).toContain('the change was rolled back');
+      expect((failure as Error).message).not.toContain('the change was applied');
+      /** And it really was rolled back: the user's original bytes are back. */
+      expect(await nodeFs.readFile(targetPath, 'utf8')).toBe(ORIGINAL_FIXTURE_LABEL);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  /**
+   * **The errno is the only thing from the caught error that reaches the message, and
+   * nothing pinned that.** Replacing `errnoOf`'s guarded return with one that appends
+   * `error.message` left all 106 cases green — and an fs `unlink` failure's message is
+   * `EACCES: permission denied, unlink '/abs/path/.../0.bin'`, which is a second copy of
+   * the payload path by a route the caller does not know to redact. The existing
+   * `toContain("EACCES")` assertion is satisfied by that longer string too, which is why it
+   * could not catch it (found by fresh-context review, 2026-08-17).
+   *
+   * A `code` that is not a bare errno gets a fixed stand-in rather than being interpolated.
+   */
+  it('puts the errno in the message and nothing else from the error', async () => {
+    const fixture = await createFixture('backup-prune-errno');
+    const targetPath = join(fixture.workspaceDir, 'config.bin');
+    const secret = 'sentinel-that-must-not-travel';
+
+    try {
+      await installOriginal(targetPath);
+      const shouting = {
+        ...nodeFs,
+        unlink: (path: Parameters<typeof nodeFs.unlink>[0]) =>
+          String(path).startsWith(fixture.backupsDir) && String(path).endsWith('.bin')
+            ? Promise.reject(
+                Object.assign(
+                  new Error(`EPERM: operation not permitted, unlink '${secret}'`),
+                  { code: 'EPERM' },
+                ),
+              )
+            : nodeFs.unlink(path),
+      };
+      await createExecutor(fixture, { fs: shouting }).execute(replacePlan(targetPath));
+
+      const failure = await createExecutor(fixture, { fs: shouting })
+        .resume(fixture.transactionId)
+        .catch((error: unknown) => error);
+
+      expect((failure as Error).message).toContain('(EPERM)');
+      expect((failure as Error).message).not.toContain(secret);
+      expect((failure as Error).message).not.toContain('operation not permitted');
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  /** A `code` that is not a bare errno is not interpolated into the message either. */
+  it('falls back to a fixed phrase when the error carries no errno', async () => {
+    const fixture = await createFixture('backup-prune-no-errno');
+    const targetPath = join(fixture.workspaceDir, 'config.bin');
+
+    try {
+      await installOriginal(targetPath);
+      const odd = {
+        ...nodeFs,
+        unlink: (path: Parameters<typeof nodeFs.unlink>[0]) =>
+          String(path).startsWith(fixture.backupsDir) && String(path).endsWith('.bin')
+            ? Promise.reject(
+                Object.assign(new Error('something went wrong'), {
+                  code: 'a sentence, not an errno',
+                }),
+              )
+            : nodeFs.unlink(path),
+      };
+      await createExecutor(fixture, { fs: odd }).execute(replacePlan(targetPath));
+
+      const failure = await createExecutor(fixture, { fs: odd })
+        .resume(fixture.transactionId)
+        .catch((error: unknown) => error);
+
+      expect((failure as Error).message).toContain('(unknown error)');
+      expect((failure as Error).message).not.toContain('a sentence, not an errno');
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  /**
+   * **The same "keep going" rule on the raising path, which nothing pinned.** The case
+   * above it drives `execute`, where `raiseOnFailure` is false — so reintroducing a throw
+   * inside the loop left all fifty-six core cases green while `repair --resume` on a
+   * multi-payload transaction stranded every payload after the first bad one.
+   */
+  it('keeps pruning past a failure on the repair path too', async () => {
+    const fixture = await createFixture('backup-prune-partial-repair');
+    const first = join(fixture.workspaceDir, 'config.bin');
+    const second = join(fixture.workspaceDir, 'other.bin');
+    const backupOf = (index: number): string =>
+      join(
+        fixture.backupsDir,
+        'transactions',
+        fixture.transactionId,
+        `${String(index)}.bin`,
+      );
+    const plan = {
+      kind: 'replace-test',
+      mutations: [
+        { targetPath: first, operation: 'replace', content: NEW_BYTES },
+        { targetPath: second, operation: 'replace', content: NEW_BYTES },
+      ],
+    } as const;
+
+    try {
+      await installOriginal(first);
+      await installOriginal(second);
+      /**
+       * **Interrupted at `finalized`, so no prune has run yet.** Letting `execute` finish
+       * first made this case unable to fail: its forward prune already removed payload 1,
+       * so the later `resume` found `ENOENT` either way and a throw reintroduced inside
+       * the loop stayed green. The crash window is what leaves both payloads on disk for
+       * the raising path to be measured against.
+       */
+      const stop = interruptAfter(fixture, 'finalized');
+      await expect(
+        createExecutor(fixture, { afterPhase: stop }).execute(plan),
+      ).rejects.toThrow();
+      await expect(nodeFs.stat(backupOf(0))).resolves.toBeDefined();
+      await expect(nodeFs.stat(backupOf(1))).resolves.toBeDefined();
+
+      const failure = await createExecutor(fixture, {
+        fs: denyingUnlinkUnder(fixture.backupsDir, '0.bin'),
+      })
+        .resume(fixture.transactionId)
+        .catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(TransactionBackupRetentionError);
+      /** Payload 1 is gone even though payload 0 raised. */
+      await expect(nodeFs.stat(backupOf(1))).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  /**
+   * **`<index>.bin.tmp` holds the same bytes and nothing removed it.** `writeDurableFile`
+   * writes the payload there before renaming, so a kill inside `backUp` strands the
+   * pre-edit file — the secret, in the case this change exists for — under a `.tmp`
+   * suffix. `removeOwnedTemp` clears it on a `resume` that re-runs `backUp`, but a
+   * `rollback` never re-runs that phase, so `repair --rollback` — the route `doctor` and
+   * `init` both print — orphaned it permanently and invisibly.
+   */
+  it('removes a payload stranded under its .tmp name', async () => {
+    const fixture = await createFixture('backup-prune-tmp');
+    const targetPath = join(fixture.workspaceDir, 'config.bin');
+    const temporary = join(
+      fixture.backupsDir,
+      'transactions',
+      fixture.transactionId,
+      '0.bin.tmp',
+    );
+
+    try {
+      await installOriginal(targetPath);
+      const stop = interruptAfter(fixture, 'applied');
+      await expect(
+        createExecutor(fixture, { afterPhase: stop }).execute(replacePlan(targetPath)),
+      ).rejects.toThrow();
+      await nodeFs.writeFile(temporary, ORIGINAL_BYTES);
+
+      const rolled = await createExecutor(fixture).rollback(fixture.transactionId);
+
+      expect(rolled.phase).toBe('rolled_back');
+      await expect(nodeFs.stat(temporary)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  /**
+   * **One payload that cannot be removed must not strand the rest.** The first version
+   * threw inside the loop, so a per-file `EACCES` or `EIO` on payload 0 left payloads 1 and
+   * 2 on disk untouched — a single-file fault escalating into wholesale retention, on
+   * exactly the operation whose purpose is removal.
+   */
+  it('keeps pruning past a payload it cannot remove', async () => {
+    const fixture = await createFixture('backup-prune-partial');
+    const first = join(fixture.workspaceDir, 'config.bin');
+    const second = join(fixture.workspaceDir, 'other.bin');
+    const backupOf = (index: number): string =>
+      join(
+        fixture.backupsDir,
+        'transactions',
+        fixture.transactionId,
+        `${String(index)}.bin`,
+      );
+
+    try {
+      await installOriginal(first);
+      await installOriginal(second);
+      const denying = denyingUnlinkUnder(fixture.backupsDir, '0.bin');
+
+      const journal = await createExecutor(fixture, { fs: denying }).execute({
+        kind: 'replace-test',
+        mutations: [
+          { targetPath: first, operation: 'replace', content: NEW_BYTES },
+          { targetPath: second, operation: 'replace', content: NEW_BYTES },
+        ],
+      });
+
+      expect(journal.phase).toBe('finalized');
+      await expect(nodeFs.stat(backupOf(0))).resolves.toBeDefined();
+      await expect(nodeFs.stat(backupOf(1))).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  /**
+   * **The rollback path, which the first version of the prune did not cover at all** — and
+   * it is the larger half, because it is the flow the product itself recommends: `review`'s
+   * conflict message says to resolve it with `repair` first, and `doctor` and `init` both
+   * print `repair --rollback <id>`. So a user removing a pasted secret could be told to
+   * roll back, retry, be told the secret was removed, and still have a raw copy on disk.
+   *
+   * `rolled_back` is as terminal as `finalized`: nothing can resume it, transition out of
+   * it, or read the payload again.
+   */
+  it('removes the backup payloads when a transaction rolls back', async () => {
+    const fixture = await createFixture('backup-pruned-on-rollback');
+    const targetPath = join(fixture.workspaceDir, 'config.bin');
+    const backupPath = join(
+      fixture.backupsDir,
+      'transactions',
+      fixture.transactionId,
+      '0.bin',
+    );
+
+    try {
+      await installOriginal(targetPath);
+      const afterPhase = interruptAfter(fixture, 'applied');
+      const executor = createExecutor(fixture, { afterPhase });
+      await expect(executor.execute(replacePlan(targetPath))).rejects.toThrow();
+      /** The payload is what the rollback restores from, so it must be there first. */
+      await expect(nodeFs.stat(backupPath)).resolves.toBeDefined();
+
+      const rolled = await createExecutor(fixture).rollback(fixture.transactionId);
+
+      expect(rolled.phase).toBe('rolled_back');
+      await expect(nodeFs.stat(backupPath)).rejects.toMatchObject({ code: 'ENOENT' });
+      /** Restored first, pruned after: the user's original bytes are back. */
+      expect(await nodeFs.readFile(targetPath, 'utf8')).toBe(ORIGINAL_FIXTURE_LABEL);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  /**
+   * **The boundary: while a rollback is still possible, the payload must survive.**
+   * Pruning one phase earlier would destroy the only copy of the user's file at exactly
+   * the moment the product might need to restore it.
+   */
+  it('keeps the backup while the transaction can still roll back', async () => {
+    const fixture = await createFixture('backup-kept-before-finalize');
+    const targetPath = join(fixture.workspaceDir, 'config.bin');
+    const backupPath = join(
+      fixture.backupsDir,
+      'transactions',
+      fixture.transactionId,
+      '0.bin',
+    );
+
+    try {
+      await installOriginal(targetPath);
+      const afterPhase = interruptAfter(fixture, 'applied');
+      await expect(
+        createExecutor(fixture, { afterPhase }).execute(replacePlan(targetPath)),
+      ).rejects.toThrow();
+
+      await expect(nodeFs.stat(backupPath)).resolves.toBeDefined();
     } finally {
       await removeFixture(fixture);
     }
