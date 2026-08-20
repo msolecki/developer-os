@@ -72,16 +72,24 @@ const BASELINES: ReadonlyMap<string, number> = new Map([
   ["docs/architecture/foundation-constraints.md", 3],
   ["docs/architecture/workflow-schema.md", 3],
   ["docs/superpowers/BACKLOG.md", 8],
-  ["docs/superpowers/ORDER.md", 2],
+  /**
+   * **Lowered from 2 to 1 on 2026-08-20, when R2 closed.** A floor exists to catch citations
+   * being lost silently, and this one caught exactly that — the second citation lived in the
+   * "Four Foundation requests" section, which Task 10 removed because all three of R2's are
+   * closed. A section that is deleted takes its citations with it, so the floor moves down
+   * with it rather than the deletion being worked around.
+   */
+  ["docs/superpowers/ORDER.md", 1],
   ["docs/superpowers/plans/2026-07-21-developer-os-program.md", 8],
 ]);
 
 /**
- * **`plans/2026-08-17-repository-defects-r2.md` is unfloored on purpose**, and says so
- * here rather than reading as an oversight: Task 10 of that plan deletes it, and a
- * baseline on a file scheduled for deletion is the moving target this map replaced.
- * `specs/…knowledge-pipeline-design.md` carries a single citation, which is below any
- * floor worth writing.
+ * **`plans/2026-08-17-repository-defects-r2.md` was unfloored on purpose and is now deleted**,
+ * by its own Task 10 — a baseline on a file scheduled for deletion is the moving target this
+ * map replaced. The note stays because the *reason* outlives the file: a plan is deleted when
+ * it closes, so a floor is worth writing only for the plans that survive their own execution.
+ * `specs/…knowledge-pipeline-design.md` carries a single citation, which is below any floor
+ * worth writing.
  */
 
 /** Notes that cite files without line numbers. Asserted, so the claim cannot rot. */

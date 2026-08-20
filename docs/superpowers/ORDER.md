@@ -82,100 +82,18 @@ scan is owed again.
 
 Everything in this section is unfinished. Nothing here is a record of work that closed.
 
-### Four Foundation requests, raised by DOS-P6 — the first three are now R2's
+### One Foundation question left, raised by DOS-P6
 
-**No DOS-P6 task extends `packages/core/src/transactions/`**, so no session in this subsystem could act
-on the first three without being told to. **All three were decided on 2026-08-17 and are Tasks 6, 7 and
-8 of R2**; item 4 is untouched and still belongs to the founder. They are kept here rather than moved
-because a session that fixes one and not the next has fixed neither, and R2 orders them accordingly.
+**The first three were R2's and are closed.** A command can supply a precondition
+(`PlannedFileMutation.expectedBeforeHash`, R2 Task 8); a removed secret no longer survives in an
+unpruned backup (R2 Task 6); and `CliError` carries a `data` slot only a redactor can fill (R2 Task
+7). All three were decided on 2026-08-17 and landed between 2026-08-19 and 2026-08-20; what each one
+cost is in its commit message, and the residuals each left are `BACKLOG.md` §1 rows.
 
-1. **A command cannot supply a precondition.** `PlannedFileMutation` is
-   `{targetPath, operation, content}`; the executor computes `expectedBeforeHash` from the snapshot it
-   takes when `execute()` runs. Two consequences, found a task apart. **`capture`** (Task 9, shipped):
-   spec §5.2 says a duplicate "is an `O_EXCL` create that fails", and no transaction-mediated write can
-   deliver that — the residual is tolerable there, because the id is the content hash and colliding
-   captures are byte-identical. **`review --decision edit`** (Task 10, shipped): the same missing
-   precondition leaves a read-to-execute window, and here the loss is **not** benign — the discarded
-   content is the user's own hand edit, in the verb that exists to bring a hand edit back under the
-   product's guarantees. Closing this is either an amendment to spec §5.2 plus an accepted window for
-   `edit`, or one change to Foundation: an optional caller-supplied precondition.
-2. **A removed secret survives in a backup nothing prunes** — **closed 2026-08-17 by R2 Task 6.**
-   The executor prunes every backup payload at **both** terminal phases — `finalized` and
-   `rolled_back` — and at **both** terminal early-returns, so a crash between a transition and its
-   prune is swept by the next `resume` or `rollback`. **`repair` accepts a terminal phase for its own
-   action and refuses only the other one** — `--resume` on `finalized`, `--rollback` on `rolled_back`
-   — because refusing the phase outright made those sweeps unreachable from the product. An earlier
-   version of this paragraph asserted the sweep in one sentence and "`--rollback` on a terminal phase
-   is still refused" in the next, which is the sentence that made the first one false; both halves
-   took a review round each to find, and each hid the same way — a unit test calling the executor
-   directly where no shipped command could reach it. The rollback half is the larger one: it is the
-   flow the product itself recommends, since `review`'s conflict message says to resolve it with
-   `developer-os repair` first, and both `doctor` and `init` print `repair --rollback <id>` verbatim. The `<index>.json` metadata stays: it carries no bytes and is how
-   a rewound journal learns whether a target existed.
-
-   **A prune that fails is reported, not raised into the caller.** `execute` has seven call sites across six commands and all
-   of them read a throw as "the transaction did not happen" — `ingest`'s docblock says so — while a
-   retention failure means the opposite, so raising there made `reindex` skip `recordArtifacts`,
-   `uninstall` skip its manifest removal, and `ingest` report `ok: false` for captures that had all
-   landed. The forward path therefore retains and `doctor`'s transactions check reports the leftover
-   with the matching `repair` command; the two terminal early-returns and the rollback transition still raise
-   `TransactionBackupRetentionError`. The rule is keyed on the prune site rather than the caller:
-   `repair --resume <id>` on an *incomplete* journal drives the forward loop and retains like any
-   other command, which `doctor` covers and the shorter sentence would have got wrong. That check also
-   catches the crash window, which nothing detected before — and turned red an assertion in
-   `tests/security/interruption.test.ts` that a kill at `finalized` leaves nothing to repair. That
-   assertion had held because nothing could see the state, not because the state was clean.
-
-   **Three follow-ons, each the previous fix's own defect.** The error's message was hardcoded to
-   "the change was applied" while two of its three raising sites are inside `rollbackLocked` — a
-   completed rollback reported as a failure whose sentence said the opposite, which is the defect
-   moved from `execute` to `repair` rather than removed; the outcome is now a parameter. The
-   recovery string said to re-run the command, reasoning that the prune is idempotent — idempotent
-   means retrying is *safe*, not that it will succeed, and the `unlink` that failed fails again; it
-   now names the precondition first. And the sweep covers `<index>.bin.tmp`, which
-   `writeDurableFile` writes before renaming and which `rollback` never re-runs `backUp` to clear,
-   while `doctor` derives the names it looks for from `journal.mutations` rather than listing the
-   directory — a stray file the prune can never name made `doctor` fail, its own printed `repair`
-   succeed, and `doctor` fail again forever.
-
-   **It does *not* close Foundation Task 8's residual 4**, and an earlier version of this line
-   claimed it did. `uninstall` no longer leaves the configuration in `backups/` — but the same bytes
-   are still in `staging/`, which nothing removes, and `tests/e2e/foundation.test.ts` now asserts
-   both halves rather than describing them. What changed is which pile the bytes sit in, which is
-   decisive for the defect that prompted the fix — a hand-pasted secret reaches the backup, never
-   staging, because staging holds post-redaction content — and irrelevant to "the product retains a
-   readable copy of something the user removed".
-
-   Originally: `review --decision edit` exists to remove
-   a secret a user pasted into a vault file by hand. It does — and `TransactionExecutor.backUp` writes
-   the pre-edit file, raw, to `~/.developer-os/backups/transactions/<id>/0.bin` at mode `0600`
-   (`executor.ts:690-737`), where nothing ever removes it. **This is a missing prune, not an inherent
-   cost:** `rollbackLocked` throws on a finalized journal (`executor.ts:406`), so once `finalize` runs
-   those are dead bytes. The fix is to prune `backupDirectory(id)` in the `finalized` transition.
-3. **`CliResult`'s failure arm has no `data` slot** — **built, awaiting its commit** under Track R entry R2:
-   `CliError.data?: RedactedPayload` is declared at `result.ts:632` and minted only by
-   `redactPayload`. A row leaves when its fix is *committed*, which is this
-   section's own rule and is why this one still says "awaiting". The description below is what the
-   request said before it was built, kept until R2's closing commit removes this whole section. It read: a command that partly
-   succeeded cannot report machine-readably what moved. `ingest` processes a batch and contains each
-   capture's refusal to that capture; when any refuses, the run ends on the failure arm and the
-   per-capture outcomes ship as lines inside the error's `message`. A consumer parses prose where it
-   should read fields. The fix is a `data` slot on `CliError`, or a partial-success arm; it changes no
-   existing caller, because nothing populates a field that does not exist yet.
-4. **Two open founder questions from Foundation itself**, neither blocking anything: whether
-   `SpawnLockfRunner` needs a watchdog around the non-blocking `lockf` call, and whether
-   `<state>/transactions/` accumulating one permanent `0600` lock file per transaction id is intended
-   or wants collection. `BACKLOG.md` §2 and `foundation-constraints.md` carry them.
-
-### One product gap that was DOS-P7's rather than Foundation's — decided, and now R2 Task 9
-
-`applyReviewDecision` permits a decision only from `quarantined` (`decide.ts:REVIEWABLE`), so
-**nothing moves a capture from `accepted` to `rejected`.** A user who accepts a capture and then
-changes their mind — or whose capture refuses ingest deterministically — has only a hand edit of the
-file's frontmatter, which is what both of `ingest`'s recovery strings now tell them to do. Adding the
-transition was a decision about spec §5.5's table rather than a bug fix, and **the founder took it on
-2026-08-17**: the row is added for `reject` alone, `accept` and `edit` keep their single row, and
-`CAPTURE_STATUSES` gains no member.
+What is left is **two open founder questions from Foundation itself**, neither blocking anything:
+whether `SpawnLockfRunner` needs a watchdog around the non-blocking `lockf` call, and whether
+`<state>/transactions/` accumulating one permanent `0600` lock file per transaction id is intended or
+wants collection. `BACKLOG.md` §2 and `foundation-constraints.md` carry them.
 
 ### Two gate-integrity residuals, both unowned
 
@@ -260,9 +178,9 @@ stays in §1 until that question is answered.
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| R2 | Ten decided defects — six §1 rows (NEW-12 and NEW-23 closed, four in flight), three Foundation requests, one DOS-P7 gap | `plans/2026-08-17-repository-defects-r2.md`, eleven tasks | nothing | M | every closed row leaves §1, both amendments registered in §8, CI green on the commit | **now** |
+| R2 | Ten decided defects — six `BACKLOG.md` §1 rows, three Foundation requests, one DOS-P7 gap | `plans/2026-08-17-repository-defects-r2.md`, eleven tasks | nothing | M | every closed row left §1, every amendment registered in §8, CI green on the commit | **done 2026-08-20** |
 
-**R2 exists because the five decisions those rows were waiting on were taken on 2026-08-17.** Each had
+**R2 existed because the five decisions those rows were waiting on were taken on 2026-08-17.** Each had
 sat as "open" while being unimplementable, which is the state this track exists to resolve rather than
 accumulate. What was decided:
 
@@ -281,7 +199,7 @@ accumulate. What was decided:
 Three Foundation requests and the `accepted → rejected` gap are in the same plan, decided the same
 day, because they were unowned for the same reason: no entry on the product path reaches them.
 
-**Twenty-two §1 rows are deliberately not in R2**, and a session finishing this entry must not sweep them up
+**Twenty-two §1 rows were deliberately not in R2**, and the session that finished it did not sweep them up
 — R2 has closed all five it was opened for. **Four belong to somebody else:** **NEW-21** is the founder's and blocks
 A10; **NEW-20** and **NEW-13** were registered as deliberately-not-fixed; **NEW-7** needs ten minutes
 with a machine that has Obsidian rather than an agent. **Eighteen came out of R2's own reviews**, registered between 2026-08-17 and 2026-08-19 by the reviews that produced them. **NEW-27** and **NEW-28** came from NEW-12: a derived path that will wear a write scope's name, and
@@ -303,7 +221,7 @@ reported twelve defects on its first run, then four more once its extractor was 
 citation across lines — the form that an evidence table written as one file name and eight bare
 ranges depends on, and that a per-line reader cannot see.
 
-**§1 therefore holds twenty-two rows while R2 runs, not nine**, and the arithmetic is worth stating because
+**§1 therefore holds twenty-two rows now R2 has closed, not nine**, and the arithmetic is worth stating because
 it moves every time a task lands. It started at nine. NEW-12 closed and left two residuals; NEW-23
 arrived from the same review and closed the same day; NEW-16 closed and left **three**; NEW-11 closed and left NEW-30 and NEW-31; NEW-22 closed and left nothing; NEW-15 closed and left NEW-32 and NEW-33; the review that closed it also observed NEW-29, a timing assertion that can redden an unrelated commit; Foundation request 2 left NEW-34; the review that verified NEW-15's closure left NEW-35, which is a residual that existed all along and was filed under the wrong row — the misattribution repeated here until a review caught it; and request 3 left NEW-36, NEW-37, NEW-38 and NEW-39. A row leaves §1
 when its fix is **committed**, not when its question is answered, and all five R2 was opened for have now landed.
@@ -387,12 +305,20 @@ commit and CI is green on it, not when the tasks are ticked.**
 Program Task 6 shows one unticked box and it is **not** work: the hooks box was rewritten to record
 that hooks are declined, and nothing shipped for it by design.
 
-**`BACKLOG.md` §1 is nine repository defects**, five needing a decision and four belonging to somebody
-else — Track R above says which is which. **Add roughly eight open decisions** that are not defect
-rows: the four Foundation requests above, DOS-P7's `accepted → rejected` transition, DOS-P9's
-dedicated-plan question, and the two Foundation founder questions.
+**`BACKLOG.md` §1 is twenty-two repository defects**, counted by listing the `### NEW-` headings on
+2026-08-20. **None waits on R2**, which is closed: four belong to somebody else (NEW-21 the founder's,
+NEW-20 and NEW-13 registered as deliberately not fixed, NEW-7 needing a machine with Obsidian) and
+eighteen came out of R2's own reviews. That number is the honest cost of closing ten decided defects
+with a fresh-context review on each, and it is the shape this queue should expect: a review that
+finds nothing is rarer than one that finds a residual.
+
+**Add six open decisions** that are not defect rows: the two Foundation founder questions, DOS-P9's
+dedicated-plan question, and the three `BACKLOG.md` §8 amendments awaiting ratification — spec §8.2's
+`[redaction]` schema, `foundation.md` §2's `CliError` slot, and knowledge-pipeline §5.5's
+`accepted → rejected` row.
 
 **Nothing on the *product path* is startable by an agent today**, and that is unchanged: A10 waits on
-NEW-21, which waits on an external usage limit, and A11 waits on A10. **Track R is startable, as of
-2026-08-17**, because the five decisions its rows were waiting on were taken that day — R2 is the row.
-The four §1 rows that are not in R2 still wait on the founder or on a machine.
+NEW-21, which waits on an external usage limit, and A11 waits on A10. **Track R is closed as of 2026-08-20.** R2 was its only entry, and its eleven tasks landed in four
+commits — the three Foundation requests, the DOS-P7 gap, and the six §1 rows the decisions of
+2026-08-17 unblocked. The four §1 rows that were never R2's still wait on the founder or on a
+machine, and the eighteen its reviews raised are new work for whoever takes §1 next.
