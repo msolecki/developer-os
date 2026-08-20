@@ -134,7 +134,8 @@ deliver that precondition. `ORDER.md` carries the Foundation change that would c
 ## 4. Review, and where a hand edit is brought back under the guarantees
 
 `applyReviewDecision` (`packages/brain/src/review/decide.ts:71`) is a status change and nothing else.
-The only status a decision is legal from is `quarantined` (`:36`); `accept → accepted`,
+Which statuses each decision is legal from is a table, `LEGAL_FROM` (`:70`), checked at `:128`;
+`accept → accepted`,
 `reject → rejected`, and **`edit` maps back to the status it came from** (`:45-50`), because no status
 means "edited" — `CAPTURE_STATUSES` is frozen at six members and recording an edit would mean adding
 a seventh to say what the file's own mtime already says.
@@ -468,11 +469,16 @@ rarer; it is unmeasured and possibly still live.
 
 ### 10.3 One product gap, and the obligation Task 17 leaves
 
-**`applyReviewDecision` permits a decision only from `quarantined`, so nothing moves a capture from
-`accepted` to `rejected`** (`packages/brain/src/review/decide.ts:36`). A user who accepts a capture and
-changes their mind — or whose capture refuses ingest deterministically — has only a hand edit of the
-frontmatter, which is what both of `ingest`'s recovery strings tell them to do. Adding the transition
-is a decision about spec §5.5's table, not a bug fix. **Owner: DOS-P7.**
+**Closed 2026-08-20 by Track R entry R2 Task 9.** `applyReviewDecision` permitted a decision only
+from `quarantined`, so nothing moved a capture from `accepted` to `rejected`: a user who accepted a
+capture and changed their mind — or whose capture refused ingest deterministically — had only a hand
+edit of the frontmatter, which is what both of `ingest`'s recovery strings told them to do. The
+decision was the founder's on 2026-08-17, spec §5.5 carries the amended table, and the table is now
+`LEGAL_FROM` (`packages/brain/src/review/decide.ts:70`). Both recovery strings name the verb.
+
+**What is still open is finding the capture.** `review`'s own listing shows `quarantined` only, so a
+user who accepted and changed their mind can reach the new transition only if they already hold the
+id — which the ingest-failure path prints beside the capture and the change-of-mind path does not.
 
 **Task 17 — one real run per vendor — ran on 2026-08-15, and settled about half of what it owed.**
 The founder authorised the spend. Claude answered; **Codex's account had exhausted its usage limit**,

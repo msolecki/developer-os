@@ -7,7 +7,11 @@ import { parseCaptureFile } from "../capture/parse.js";
 import { renderCaptureFile } from "../capture/render.js";
 import { CAPTURE_STATUSES } from "../schema/capture.js";
 import type { CaptureEnvelopeV1, CaptureStatus } from "../schema/capture.js";
-import { applyReviewDecision, REVIEW_DECISIONS } from "./decide.js";
+import {
+  applyReviewDecision,
+  decisionsFrom,
+  REVIEW_DECISIONS,
+} from "./decide.js";
 
 const TEST_KEY = new Uint8Array(32).fill(7);
 const redact = (text: string): RedactionResult => redactText(text, TEST_KEY);
@@ -27,7 +31,8 @@ const built = buildCapture({
 const envelope: CaptureEnvelopeV1 = built.envelope;
 
 /**
- * Every status a capture can hold except the one a decision is legal from.
+ * Every status a capture can hold except `quarantined`. It now includes `accepted`, from
+ * which `reject` is legal — so the grid below has one hole rather than none.
  * Derived from the frozen list rather than transcribed, so a seventh status
  * would arrive here as a refusal case rather than as an untested one — and the
  * count is asserted below, because a filter that silently emptied would leave
@@ -61,18 +66,79 @@ describe("applyReviewDecision", () => {
    * The whole grid, and the count that makes it a gate: the case above pins one
    * decision against five statuses, which leaves ten pairs an implementation
    * could get wrong — `reject` from `ingested`, say — with nothing watching.
+   *
+   * **`accepted → rejected` is the one exception, and it is named rather than skipped.** The
+   * per-pair `toStrictEqual` below is the gate: it asserts the exact outcome for all fifteen
+   * pairs, so widening the table anywhere reddens it.
+   * Spec §5.5 gained that row on 2026-08-20: a user who accepts a capture and then changes
+   * their mind, or whose capture refuses ingest deterministically, previously had only a hand
+   * edit of the file's frontmatter — which is what both of `ingest`'s recovery strings told
+   * them to do. A product recommending a hand edit of its own data is the gap.
    */
-  it("refuses every decision from every status but quarantined", () => {
+  it("refuses every decision from every status, but for accepted → rejected", () => {
     expect(OTHER_STATUSES).toHaveLength(5);
     expect(REVIEW_DECISIONS).toHaveLength(3);
 
+    let allowed = 0;
     for (const from of OTHER_STATUSES) {
       for (const decision of REVIEW_DECISIONS) {
+        const legal = from === "accepted" && decision === "reject";
+        if (legal) allowed += 1;
         expect(
           applyReviewDecision({ ...envelope, status: from }, decision),
           `${from} under ${decision}`,
-        ).toStrictEqual({ ok: false, reason: "illegal-transition" });
+        ).toStrictEqual(
+          legal
+            ? { ok: true, envelope: { ...envelope, status: "rejected" } }
+            : { ok: false, reason: "illegal-transition" },
+        );
       }
+    }
+    /**
+     * **The per-pair assertion is what makes this a gate; this line only pins the fixture.**
+     * `allowed` counts the loop's own predicate, so it holds for any implementation — a
+     * review widened the table to four statuses with the per-pair check neutered and this
+     * still passed. It stays because it asserts the *expectation table* has one exception,
+     * which is what a reader checks first, and it is labelled so nobody credits it with more.
+     */
+    expect(allowed).toBe(1);
+  });
+
+  /**
+   * **`accept` and `edit` deliberately do not gain the second row.** Re-accepting an accepted
+   * capture is not a transition — `accepted → accepted` has no row to add — and not, as an
+   * earlier version of this said, a no-op whose message would lie: every decision re-redacts
+   * and rewrites, and "now accepted" is true of an accepted capture. And `edit` maps to
+   * `quarantined`, so running it from `accepted` would silently withdraw an approval as a
+   * side effect of changing the text — the verb's name says nothing about un-approving, and
+   * a user who wants that has `reject`. Rejection is the only direction that is safe from
+   * `accepted`, because `rejected` is terminal for automation and no later phase reads it.
+   */
+  it.each(["accept", "edit"] as const)(
+    "does not let %s re-run on an accepted capture",
+    (decision) => {
+      expect(
+        applyReviewDecision({ ...envelope, status: "accepted" }, decision),
+      ).toStrictEqual({ ok: false, reason: "illegal-transition" });
+    },
+  );
+
+  /**
+   * **What a caller can offer from each status.** `review`'s refusal used to say "no review
+   * decision moves" this status and then tell the user to hand-edit their frontmatter — false
+   * once `reject` gained its `accepted` row, and the hand-edit advice is exactly what this
+   * table was widened to stop giving. The order is `REVIEW_DECISIONS`', so a message built
+   * from it reads the same way the help does.
+   */
+  it("reports the decisions legal from each status", () => {
+    expect(decisionsFrom("quarantined")).toStrictEqual([
+      "accept",
+      "reject",
+      "edit",
+    ]);
+    expect(decisionsFrom("accepted")).toStrictEqual(["reject"]);
+    for (const status of ["rejected", "staging", "ingested", "failed"] as const) {
+      expect(decisionsFrom(status), status).toStrictEqual([]);
     }
   });
 

@@ -64,7 +64,7 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P6 | spec approved and plan written, both 2026-08-13 | **three unticked steps** — Task 17 Step 3 (the Codex detection row, blocked on NEW-21) and Task 19 Steps 5–6 (close the documents, run the gate), which wait on it. Seventeen of nineteen tasks landed 2026-08-13/14/15 and their step lists are deleted |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | **twenty rows**, and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **four** belong to somebody else (NEW-21 the founder's and blocking A10, NEW-20 and NEW-13 deliberately not fixed, NEW-7 needing a machine with Obsidian); **sixteen** came out of R2's own reviews — NEW-27 and NEW-28 from closing NEW-12, NEW-24/25/26/29 from NEW-16, NEW-30 and NEW-31 from NEW-11, NEW-32, NEW-33 and NEW-35 from NEW-15, NEW-34 from Foundation request 2, and NEW-36, NEW-37, NEW-38 and NEW-39 from request 3 |
+| Repository-level | §1 | **twenty-two rows**, and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **four** belong to somebody else (NEW-21 the founder's and blocking A10, NEW-20 and NEW-13 deliberately not fixed, NEW-7 needing a machine with Obsidian); **eighteen** came out of R2's own reviews — NEW-27 and NEW-28 from closing NEW-12, NEW-24/25/26/29 from NEW-16, NEW-30 and NEW-31 from NEW-11, NEW-32, NEW-33 and NEW-35 from NEW-15, NEW-34 from Foundation request 2, and NEW-36, NEW-37, NEW-38 and NEW-39 from request 3, NEW-40 from Task 8, and NEW-41 from Task 9 |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -113,7 +113,7 @@ recording. Git history is the archive.
 one. A residual is a defect like any other and gets `NEW-24` through `NEW-28`; the row it came from
 is named in its own text, which is where the lineage belongs.
 
-**Twenty rows, and they are not all the same kind of open.** **None is waiting on R2 to land a fix.** NEW-11, NEW-12, NEW-15, NEW-16 and NEW-22 all closed
+**Twenty-two rows, and they are not all the same kind of open.** **None is waiting on R2 to land a fix.** NEW-11, NEW-12, NEW-15, NEW-16 and NEW-22 all closed
 on 2026-08-17; what remains here is somebody else's or a residual of that work. **NEW-11 closed
 2026-08-17** and left NEW-30, the fourth field with the same gap. All four
 that were waiting on a decision got one on 2026-08-17; **NEW-16 closed the same day** and left three
@@ -122,11 +122,11 @@ section when its fix is committed, not when its question is answered. Four are s
 **NEW-21** the founder's, **NEW-20** and **NEW-13** registered as deliberately-not-fixed, and
 **NEW-7** waiting on a machine with Obsidian.
 
-**Sixteen are new, and every one was found by a fresh-context review rather than by the work itself** —
+**Eighteen are new, and every one was found by a fresh-context review rather than by the work itself** —
 NEW-27 and NEW-28 from the review that closed NEW-12; NEW-24, NEW-25, NEW-26 and NEW-29 from the one
 that closed NEW-16; NEW-30 and NEW-31 from the one that closed NEW-11; NEW-32 and NEW-33 from the
-one that closed NEW-15; NEW-34 from the round that closed Foundation request 2, NEW-35 from the review that verified NEW-15's closure, and NEW-36, NEW-37, NEW-38 and NEW-39 from the review rounds on request 3 —
-NEW-34 the only one of the sixteen that is a defect in a **gate** rather than in the product, and
+one that closed NEW-15; NEW-34 from the round that closed Foundation request 2, NEW-35 from the review that verified NEW-15's closure, and NEW-36 to NEW-39 from the review rounds on request 3, NEW-40 from Task 8 and NEW-41 from Task 9 —
+NEW-34 the only one of the eighteen that is a defect in a **gate** rather than in the product, and
 NEW-35 a residual that existed all along and was filed under the wrong row. A seventeenth, NEW-23,
 was found the same way and **closed the same day** by Track R Task 1b, which built the gate it asked
 for.
@@ -141,7 +141,7 @@ mutates state under the user's home.
 
 **That is the ordinary yield of the review gate, and the number is the argument for it.**
 Five defects
-closed cleanly would have left this section at four rows; closing them honestly left it at twenty.
+closed cleanly would have left this section at four rows; closing them honestly left it at twenty-two.
 
 **They are not all the same thing, and the honest split is worth more than a round number.** Two —
 NEW-25 and NEW-29 — are properties that predate everything: an overlap rule that was unreachable
@@ -549,6 +549,28 @@ not.
 
 
 
+### NEW-41 — `review`'s listing shows only `quarantined`, so half of the new transition is unreachable
+
+- **Status:** open, registered 2026-08-20 by the round-2 review of Track R R2 Task 9 ·
+  **Owner:** DOS-P7 · **Size:** S · **The half of the gap Task 9 did not close**
+- **What Task 9 closed.** Spec §5.5 gained `accepted → rejected`, so a capture that `ingest`
+  refuses deterministically can be rejected with a verb instead of a hand edit. That path
+  works because the refusal *prints the capture id* beside the capture.
+- **What it did not.** `listCaptures` filters `status !== "quarantined"` (`review.ts:255`), so
+  `developer-os review` with no arguments never shows an accepted capture. The justification
+  repeated in five places leads with "a user who accepts a capture and then changes their
+  mind" — and that user cannot find the id through the product at all. They have the verb and
+  no way to reach it.
+- **Why it was not taken in Task 9.** Widening the listing is a change to what a bare `review`
+  means, and the plan scoped the task to the transition. It is also not obviously a widening:
+  a listing that shows accepted captures beside quarantined ones has to say which is which, and
+  that is a display decision rather than a table row.
+- **The measurement.** `review.ts:255` is one condition; the test that would pin it is one
+  case. The cost of leaving it is that the headline reason for the transition is served only
+  by the path nobody wrote it for.
+
+
+
 ### NEW-24 — a common redaction pattern refuses every ingest, undiagnosably
 
 - **Status:** open, registered 2026-08-17 when NEW-16 closed · **Owner:** DOS-P7 · **Size:** S ·
@@ -607,7 +629,7 @@ not.
   stdout.
 - Recorded at both construction sites in `apps/cli/src/context.ts` rather than only here.
 
-### NEW-29 — the standing suite has at least two intermittent failures, and they misdiagnose
+### NEW-29 — the standing suite has intermittent failures in at least three files, and they misdiagnose
 
 - **Status:** open, observed 2026-08-17 by the independent review of R2 Task 2 · **Owner:** whoever
   next touches `packages/security/src/redaction.test.ts` — DOS-P7 by default · **Size:** XS ·
@@ -621,13 +643,21 @@ not.
   tree differed from the passing runs **only in documentation**, and the test runs in 878 ms against
   vitest's 5 s default — a 5.7x margin a plain timeout would have to eat. **Mechanism unconfirmed**:
   the message was not captured before the re-run, which is the mistake to avoid next time.
+- **A third file joined the set on 2026-08-20** — the fourth recorded occurrence — found by the
+  round-1 review of R2 Task 9:
+  `apps/cli/src/commands/doctor.test.ts`'s *"gives each unusable redaction-key state its own
+  message"* failed with `Test timed out in 20000ms` in a full `npm run check`, and passes 36/36 in
+  isolation — where that single case takes ~20 s of a 36 s file, so it sits on the timeout rather
+  than under it. Unlike the wall-clock ratio, this one has an obvious remedy: the case is slow
+  because of what it does, and either the budget or the case should change. It is the same
+  load-sensitive class and the same misdiagnosis risk, in a file neither earlier bullet names.
 - **A third occurrence, 2026-08-17, during R2 Task 4** — `npm run check` ended `1 failed | 2058
   passed` and a rerun of the same tree was clean at 2059. **The name was lost again**, to the same
   mistake: the run was piped through `tail`, so the failing case scrolled past. That is two
   occurrences in one day where the mitigation below existed and was not followed, which is worth more
   than the datum — **pipe through `tee` and grep the file, never `tail` alone.**
 - **So this row is a class, not an assertion**, and its mitigation below was written when it looked
-  like one. Two intermittents with the same signature — red once in three or four full-suite runs on
+  like one. Intermittents in three files with the same signature — red once in three or four full-suite runs on
   a machine loaded by the suite itself — points at parallel-worker contention rather than at either
   test's own bound.
 - **The mechanism it guards is real and worth guarding**: it proves the scan did not regress to a
@@ -1133,8 +1163,8 @@ were put to the founder with the other four.
 | product design spec §13.4, "the staged result" | the `deterministic reindex` validator runs over an **in-memory projection** of vault plus proposal, not over a staging directory. §13.4 and the knowledge-pipeline spec's own §6.3 preamble contradict each other — nothing is staged at the point the preamble names — and staging first would make every file in staging attacker-influenced content the validators must re-read as hostile | 12 |
 | product design spec §17.5, and the knowledge-pipeline spec §9 | §9 narrows §17.5's security cases to six suites and drops two the standing gate in §7 of this file still requires from DOS-P6 onward: a **network** suite, and **concurrent user edits**. The plan ships eight suites rather than six and registers the narrowing rather than inheriting it. **Shipped 2026-08-14 as `tests/security/`** — `sentinel`, `prompt-injection`, `symlink-escape`, `multiline-command`, `malformed-manifest` and `interruption` from §9, plus `network` and `concurrent-edit`, the two §9 dropped and §7 still requires | 15 |
 
-**Two rows were raised by Track R entry R2, on 2026-08-17 and 2026-08-19, and both are
-unratified.** They are the only unratified rows in this section, and they are also the place where
+**Three rows were raised by Track R entry R2, on 2026-08-17, 2026-08-19 and 2026-08-20, and all
+three are unratified.** They are the only unratified rows in this section, and they are also the place where
 §8's two rules pull against each other: the eviction rule says a row leaves when the amended document carries the cross-reference, and
 `foundation.md` §2 carries it in the same commit that adds the row. **Ratification wins** — a row
 whose amendment nobody has approved is exactly what this index exists to surface, so it stays until
@@ -1151,6 +1181,7 @@ is precisely the kind of rule that goes unread by whoever is editing past it.
 |---|---|---|
 | `docs/architecture/foundation.md` §2, the frozen `configSchema` | an **optional** `[redaction]` table with a bounded list of literal `patterns`. Additive on the same terms as the `brain` section that preceded it: `configSchema` stays `.strict()`, `schemaVersion` stays `1`, `serializeConfig` emits the table only when the key is present, and `exactOptionalPropertyTypes` keeps absent distinguishable from present-and-undefined — so a configuration written before it still loads and still serializes byte-identically. **Without it spec §8.2's user-extensible redaction class is unreachable**: `redactText` took the option and no production caller passed it, because there was no key a user could set | R2 Task 2, `BACKLOG.md` §1 **NEW-16** |
 | `docs/architecture/foundation.md` §2, the frozen `CliError` | an **optional** `data?: RedactedPayload` member, so a partly-succeeded run can report machine-readably what moved. Additive on the same terms as the two config amendments: absent when unset, so every `--json` document a command emitted before it is byte-identical, and no existing caller changes because nothing populates a field that does not exist yet. It creates a new **publishing** surface, which the other two did not — the failure arm is serialized into `--json` — so `failureFrom` redacts every string leaf including keys, and the slot is typed `RedactedPayload`, a `unique symbol` brand whose only producer is `redactPayload`, which takes the redactor and performs the walk rather than asserting. Every *shape* that writes the field another way is a compile error, `failure` rebuilds the arm it publishes from five named fields — `kind`, `message` and `recovery` coerced to strings, `paths` copied and frozen, `data` accepted only by identity — the arm is branded so a hand-built one is a compile error, and `publish` — which decides the body and the exit status in one place, because they were decided separately and disagreed — rebuilds any failure arm `failure` did not return — the last of the three being what actually closes the class, since a phantom brand survives `Object.assign`, spread, `Proxy` and `structuredClone` while the runtime guarantees it stood for do not. What remains, verified by running each candidate against the built module, is exactly two things: a redactor that does not redact, and a producer call outside the composition root. `Object.defineProperty` and `Object.assign` before the call are **not** among them, and they are closed by two different mechanisms rather than one: the copying forms yield a value the payload registry does not hold, so `failure` drops the field, while in-place `Object.assign(payload, …)` returns the payload itself and is refused by the deep freeze. Three earlier versions of this sentence were wrong, the last of them by crediting the registry with both. The brand replaced a repository sweep that tried to enumerate the syntax instead and was falsified in five review rounds. The sweep survives with a different job: its load-bearing rule is that `redactPayload` is called only at the composition root, and beside it it detects over thirty spellings, split between casts onto the brand and ways of reaching the producer under another name; the exact split is left to the test file, because two reviews counting it disagreed and three documents repeating a number is how that drifts. The enumeration no longer carries the guarantee, so falsifying one more spelling costs a row on a list rather than the property. Three commands wanted it: `ingest`, `brain lint`, and `doctor` (recorded in `releases/foundation-checkpoint.md`) | Track R R2 Task 7, 2026-08-19 |
+| knowledge-pipeline spec §5.5, the transition table | a row for **`accepted → rejected`**, taken by `review --decision reject`. The table had one row per decision, all from `quarantined`, so a user who accepted a capture and then changed their mind had no verb — the only way to stop `ingest` retrying it was to hand-edit the frontmatter back to `quarantined`, which is what both of `ingest`'s recovery strings told them to do. A product that recommends a hand edit of its own data has a gap where a verb should be, and that same hand edit is what `failed` exists to describe going wrong. **`accept` and `edit` deliberately did not gain the equivalent row**: re-accepting is not a transition — `accepted → accepted` is not a row this table can hold — and `edit` maps to `quarantined`, so running it from `accepted` would silently withdraw an approval as a side effect of changing the text — the verb's name says nothing about un-approving, and a user who wants that has `reject`. Rejection is the only safe direction from `accepted`, because `rejected` is terminal for automation and no later phase reads it. **`CAPTURE_STATUSES` gains no member** — a row in a transition table, not a seventh status. Both retired recovery strings now name the verb, and `review`'s own refusal names the decisions legal from wherever the capture actually is rather than telling the user to edit their frontmatter | Track R R2 Task 9, 2026-08-20 |
 
 **Two rows were raised by DOS-P6 during implementation rather than planning**, which is why neither is
 in a table above. **Both were ratified by the founder on 2026-08-15**, in the session that ran Task 17;

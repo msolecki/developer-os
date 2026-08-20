@@ -597,6 +597,96 @@ describe("runReview", () => {
    * The narrower job the mismatch refusal keeps: a frontmatter `captureId` that
    * disagrees with the filename — a rename, or a hand-edited id field.
    */
+  /**
+   * **A user who changes their mind can say so, without editing their own data.** Spec §5.5
+   * gained `accepted → rejected` on 2026-08-20: before it, the only way to stop `ingest`
+   * retrying a capture was to hand-edit the frontmatter back to `quarantined` — which is what
+   * both of `ingest`'s recovery strings told people to do. A product recommending a hand edit
+   * of its own data is the gap.
+   */
+  it("rejects a capture the user already accepted", async () => {
+    const fixture = await installedFixture("review-accepted-reject");
+    const seeded = await fixture.seed(OBSERVATION);
+
+    const accepted = await fixture.run(fixture.context, {
+      id: seeded.id,
+      decision: "accept",
+    });
+    expect(accepted.ok).toBe(true);
+    expect((await envelopeOf(fixture, seeded.path)).status).toBe("accepted");
+
+    const rejected = await fixture.run(fixture.context, {
+      id: seeded.id,
+      decision: "reject",
+    });
+
+    expect(rejected.ok).toBe(true);
+    expect((await envelopeOf(fixture, seeded.path)).status).toBe("rejected");
+  });
+
+  /**
+   * **And the refusal names what is available instead of recommending a hand edit.** `accept`
+   * from `accepted` is still illegal — `accepted → accepted` is not a transition this table
+   * can hold — but the message must now say which decision *does* move the capture
+   * from where it is, because one does.
+   */
+  it("names the decision that is available when the one asked for is not", async () => {
+    const fixture = await installedFixture("review-available-decision");
+    const seeded = await fixture.seed(OBSERVATION);
+    await fixture.run(fixture.context, { id: seeded.id, decision: "accept" });
+
+    const result = await fixture.run(fixture.context, {
+      id: seeded.id,
+      decision: "accept",
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain("--decision accept does not move");
+    expect(result.error.recovery ?? "").toContain("--decision reject");
+    /** And it no longer tells the user to edit their own frontmatter. */
+    expect(result.error.recovery ?? "").not.toContain("by hand");
+  });
+
+  /**
+   * **The zero-decision fallback, which was untested and wrong for two statuses.** When no
+   * verb moves a capture the refusal falls back to a hand edit — and it named `quarantined`
+   * for all four such statuses. `ingest`'s own recovery strings say a `staging` capture goes
+   * back to **`accepted`**; following the old advice set it to `quarantined`, then `accept`,
+   * and then `ingest` met its own notes at a path `create` refuses — permanently stuck,
+   * having done exactly what the product said.
+   */
+  it.each([
+    /**
+     * `staging` is two states and `review` cannot tell them apart, so the advice must name
+     * both — the partly-applied case needs the notes removed before `accepted`, and giving it
+     * the stranded advice alone strands it exactly as the old string did.
+     */
+    ["staging", "remove them and set accepted"],
+    ["ingested", "already in the vault"],
+    ["failed", "quarantined"],
+    ["rejected", "quarantined"],
+  ])("advises the right hand edit for a capture at %s", async (status, advice) => {
+    const fixture = await installedFixture(`review-fallback-${status}`);
+    const seeded = await fixture.seed(OBSERVATION);
+    await setStatus(seeded.path, status);
+
+    const result = await fixture.run(fixture.context, {
+      id: seeded.id,
+      decision: "reject",
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.recovery ?? "").toContain(advice);
+    if (status === "staging") {
+      /** Never `quarantined`, which was the original defect. */
+      expect(result.error.recovery ?? "").not.toContain("quarantined");
+      /** And the stranded half too, so neither sub-state is left without its target. */
+      expect(result.error.recovery ?? "").toContain("if none did, set accepted");
+    }
+  });
+
   it("refuses an edit whose frontmatter id stops matching the filename", async () => {
     const fixture = await installedFixture("review-edit-mismatch");
     const seeded = await fixture.seed(OBSERVATION);

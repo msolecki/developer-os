@@ -10,6 +10,7 @@
  */
 export {
   applyReviewDecision,
+  decisionsFrom,
   isReviewDecision,
   REVIEW_DECISIONS,
 } from "./decide.js";
