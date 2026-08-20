@@ -44,6 +44,13 @@ describe("the package's public door", () => {
         "validateChangePlan",
         "compareVersions",
         "tablePermits",
+        /**
+         * The one door onto `RedactedPayload`, the brand on `CliError.data`. Exported
+         * because the brand's `unique symbol` is unnameable outside `result.ts`, so a
+         * caller cannot construct one and a producer has to be provided.
+         */
+        "publish",
+        "redactPayload",
         "recoverTransaction",
         "TransactionBackupRetentionError",
         "TransactionConflictError",

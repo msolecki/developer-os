@@ -1096,19 +1096,20 @@ git commit -m "fix(core): prune a transaction's backups once it can no longer ro
 
 **Decision (2026-08-17):** implement.
 
-**The defect.** `CliResult`'s failure arm has no `data` slot (`packages/core/src/result.ts:29-33`), so a command that partly succeeded cannot report machine-readably what moved. `ingest` processes a batch and contains each capture's refusal to that capture; when any refuses, the run ends on the failure arm and the per-capture outcomes ship as lines inside `error.message`. A consumer parses prose where it should read fields.
+**The defect.** `CliResult`'s failure arm had no `data` slot when this task was written; it is `packages/core/src/result.ts:632` now. A command that partly succeeded cannot report machine-readably what moved. `ingest` processes a batch and contains each capture's refusal to that capture; when any refuses, the run ends on the failure arm and the per-capture outcomes ship as lines inside `error.message`. A consumer parses prose where it should read fields.
 
 **It changes no existing caller**, because nothing populates a field that does not exist yet.
 
 **Files:**
-- Modify: `packages/core/src/result.ts:14-19` (`CliError`), `:46-56` (`failure`)
+- Modify: `packages/core/src/result.ts:579` (`CliError`), `:802` (`failure`)
 - Modify: `apps/cli/src/commands/ingest.ts` — populate it where the per-capture outcomes are assembled
 - Test: `packages/core/src/result.test.ts`, `apps/cli/src/commands/ingest.test.ts`
 
 **Interfaces:**
-- Produces: `CliError.data?: unknown` and `failure(code, error)` unchanged in arity.
+- Produces: `CliError.data?: RedactedPayload`, `redactPayload(redact, value)` as its only producer,
+  and `failure(code, error)` unchanged in arity.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it("carries structured detail on the failure arm", () => {
@@ -1116,7 +1117,7 @@ it("carries structured detail on the failure arm", () => {
     kind: "partial",
     message: "one capture refused",
     paths: [],
-    data: { ingested: ["cap-a"], refused: ["cap-b"] },
+    data: redactPayload((text) => text, { ingested: ["cap-a"], refused: ["cap-b"] }),
   });
   expect(result.ok).toBe(false);
   expect(JSON.parse(formatJsonResult(result)).error.data.refused).toEqual(["cap-b"]);
@@ -1136,37 +1137,38 @@ it("reports per-capture outcomes as fields rather than as lines in a message", a
 });
 ```
 
-- [ ] **Step 2: Run them and verify they fail**
+- [x] **Step 2: Run them and verify they fail**
 
 Run: `pnpm vitest run packages/core/src/result.test.ts apps/cli/src/commands/ingest.test.ts`
 Expected: FAIL — `data` is not assignable to `CliError`, and `result.error.data` is `undefined`.
 
-- [ ] **Step 3: Add the slot**
+- [x] **Step 3: Add the slot**
 
 ```ts
+export type RedactedPayload = { readonly [redacted]: true };
+
 export interface CliError {
   readonly kind: string;
   readonly message: string;
   readonly paths: readonly string[];
   readonly recovery?: string;
-  /**
-   * **What moved before the run failed, as fields.** A command that processes a
-   * batch and refuses one member is neither wholly successful nor wholly
-   * failed: `ingest` contains each capture's refusal to that capture, and
-   * without this the per-capture outcomes shipped as lines inside `message`,
-   * where a consumer had to parse prose (BACKLOG, Foundation request 3).
-   *
-   * **Redacted before it is set, like everything else this product prints.**
-   * The failure arm is serialized into `--json`, so this field is a publishing
-   * surface and not a debugging one; a value that has not been through the
-   * redactor does not belong here.
-   *
-   * Optional, so no existing caller changes — nothing populates a field that
-   * does not exist yet, which is what made this safe to add to a frozen type.
-   */
-  readonly data?: unknown;
+  /** What moved before the run failed, as fields. Branded, so obtaining one means redacting. */
+  readonly data?: RedactedPayload;
 }
 ```
+
+> **The step above already shows what shipped, and getting there took five review rounds.** An
+> earlier version of this step specified `data?: unknown` and this note contradicted it; the step
+> carries the branded version now, so what follows is why, not a correction to it.
+> The slot was `data?: unknown`, guarded by `tests/repository/failure-data-entry.test.ts` sweeping
+> for anyone writing it outside `failureFrom`. That sweep was falsified every round — four evasions,
+> then seven, then a conditional spread, then five inline shapes, then five more — because
+> `CliResult` is a plain structural union and the set of syntactic shapes producing a failure arm is
+> unbounded. The brand answers all of them at once, and the sweep survives with a different job:
+> the rule that carries weight is that a producer call stays at the composition root, and beside it
+> it detects over thirty spellings, split between casts onto the brand and ways of reaching the
+> producer under another name; the test file carries the list and is the only place worth counting. That enumeration no longer holds
+> the guarantee, so falsifying one more spelling now costs a row on a list rather than the property.
 
 In `ingest.ts`, populate it where the per-capture outcome lines are built today, keeping the human-readable `message` exactly as it is: the field is added beside the prose, not instead of it, because the prose is what a person reads.
 

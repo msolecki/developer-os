@@ -64,7 +64,7 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P6 | spec approved and plan written, both 2026-08-13 | **three unticked steps** — Task 17 Step 3 (the Codex detection row, blocked on NEW-21) and Task 19 Steps 5–6 (close the documents, run the gate), which wait on it. Seventeen of nineteen tasks landed 2026-08-13/14/15 and their step lists are deleted |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
-| Repository-level | §1 | **sixteen rows**, and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **four** belong to somebody else (NEW-21 the founder's and blocking A10, NEW-20 and NEW-13 deliberately not fixed, NEW-7 needing a machine with Obsidian); **twelve** came out of R2's own reviews — NEW-27 and NEW-28 from closing NEW-12, NEW-24/25/26/29 from NEW-16, NEW-30 and NEW-31 from NEW-11, NEW-32 and NEW-33 from NEW-15, and NEW-34 and NEW-35 from Foundation request 2 |
+| Repository-level | §1 | **twenty rows**, and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **four** belong to somebody else (NEW-21 the founder's and blocking A10, NEW-20 and NEW-13 deliberately not fixed, NEW-7 needing a machine with Obsidian); **sixteen** came out of R2's own reviews — NEW-27 and NEW-28 from closing NEW-12, NEW-24/25/26/29 from NEW-16, NEW-30 and NEW-31 from NEW-11, NEW-32, NEW-33 and NEW-35 from NEW-15, NEW-34 from Foundation request 2, and NEW-36, NEW-37, NEW-38 and NEW-39 from request 3 |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -113,7 +113,7 @@ recording. Git history is the archive.
 one. A residual is a defect like any other and gets `NEW-24` through `NEW-28`; the row it came from
 is named in its own text, which is where the lineage belongs.
 
-**Sixteen rows, and they are not all the same kind of open.** **None is waiting on R2 to land a fix.** NEW-11, NEW-12, NEW-15, NEW-16 and NEW-22 all closed
+**Twenty rows, and they are not all the same kind of open.** **None is waiting on R2 to land a fix.** NEW-11, NEW-12, NEW-15, NEW-16 and NEW-22 all closed
 on 2026-08-17; what remains here is somebody else's or a residual of that work. **NEW-11 closed
 2026-08-17** and left NEW-30, the fourth field with the same gap. All four
 that were waiting on a decision got one on 2026-08-17; **NEW-16 closed the same day** and left three
@@ -122,12 +122,12 @@ section when its fix is committed, not when its question is answered. Four are s
 **NEW-21** the founder's, **NEW-20** and **NEW-13** registered as deliberately-not-fixed, and
 **NEW-7** waiting on a machine with Obsidian.
 
-**Twelve are new, and every one was found by a fresh-context review rather than by the work itself** —
+**Sixteen are new, and every one was found by a fresh-context review rather than by the work itself** —
 NEW-27 and NEW-28 from the review that closed NEW-12; NEW-24, NEW-25, NEW-26 and NEW-29 from the one
 that closed NEW-16; NEW-30 and NEW-31 from the one that closed NEW-11; NEW-32 and NEW-33 from the
-one that closed NEW-15; and NEW-34 and NEW-35 from the rounds that closed Foundation request 2 —
-NEW-34 the only one of the twelve that is a defect in a **gate** rather than in the product, and
-NEW-35 a residual that existed all along and was filed under the wrong row. A thirteenth, NEW-23,
+one that closed NEW-15; NEW-34 from the round that closed Foundation request 2, NEW-35 from the review that verified NEW-15's closure, and NEW-36, NEW-37, NEW-38 and NEW-39 from the review rounds on request 3 —
+NEW-34 the only one of the sixteen that is a defect in a **gate** rather than in the product, and
+NEW-35 a residual that existed all along and was filed under the wrong row. A seventeenth, NEW-23,
 was found the same way and **closed the same day** by Track R Task 1b, which built the gate it asked
 for.
 
@@ -141,7 +141,7 @@ mutates state under the user's home.
 
 **That is the ordinary yield of the review gate, and the number is the argument for it.**
 Five defects
-closed cleanly would have left this section at four rows; closing them honestly left it at sixteen.
+closed cleanly would have left this section at four rows; closing them honestly left it at twenty.
 
 **They are not all the same thing, and the honest split is worth more than a round number.** Two —
 NEW-25 and NEW-29 — are properties that predate everything: an overlap rule that was unreachable
@@ -416,6 +416,114 @@ not.
   paragraphs to the architecture notes — that layer is now the highest-defect-density prose in the
   repository and is itself where several of these false claims were introduced. A committed version would at least make the procedure runnable.
 
+### NEW-36 — redacting a published payload renormalizes its paths and rewrites its keys
+
+- **Status:** open, registered 2026-08-19 by the review that closed Foundation request 3 ·
+  **Owner:** DOS-P7 · **Size:** M · **Two defects, one cause**
+- **`redactText` returns NFC**, and `redactPayload` runs every string leaf through it — so a
+  path published on `CliError.data` comes back renormalized. macOS hands back NFD, so
+  `notes/café.md` in — an `e` followed by a combining acute, which is what macOS hands back — goes `notes/café.md` out, a single precomposed codepoint. The two render identically and are different bytes, which is the entire defect and is why an earlier version of this row demonstrated it with two NFC strings that were byte-identical and a `--json` consumer that opens
+  `data.refused[].appliedNotes[0]` can get `ENOENT` for a file that exists. `error.paths`
+  beside it was **not** redacted at all, which was worse than a divergence and is fixed:
+  `failureFrom` redacts it and `recovery` now, after a review demonstrated with this
+  repository's own sentinel that a secret in a model-chosen note path published raw there
+  while the same string redacted in `message` and in `data`. What remains of this row is the
+  NFC divergence: `data`'s copy of a path is renormalized and `error.paths` is not. `threat-model.md` states byte-exactness as a boundary.
+- **Keys go through the same redactor, and the redactor carries the user's patterns.** A
+  founder whose configured `[redaction] patterns` entry is a substring of `order`, `code`,
+  `message`, `captureId`, `leftAt` or `appliedNotes` gets a document that still declares
+  `schemaVersion: 1` and no longer matches it — measured:
+  `patterns = ["captureId"]` turns the key into `[REDACTED:user-pattern]`.
+  **Product-chosen enum *values* go the same way**, and this bullet understated itself by
+  naming only keys: `agent`, `status` and `leftAt` carry strings the product picked, so a
+  founder with a client called *Staging* has `leftAt` rewritten and the document stops
+  matching its own schema for a second reason. Same cause, same fix.
+- **The silent-drop half closed the same day it was registered**, and this bullet said
+  otherwise for as long as it took a review to notice. `walk` rebuilt through
+  `Object.fromEntries`, so two keys reducing to one redacted string collapsed and the
+  earlier value was gone; it keeps both now, the second suffixed. What is left is the
+  renaming, which is the part this row is actually about — `ingest` publishes `RunReportV1`
+  on `data` and binds the user's patterns into the redactor that walks it, and the keys
+  include `order`, `code`, `message`, `captureId` and `leftAt`.
+- **Key redaction is not the mistake**; it exists because `{"Authorization: Bearer …": 1}`
+  is a real shape for an attacker-influenced payload. The mistake is applying the *user's*
+  substring list to keys the product chose. Closing it means a redactor that takes the class
+  set to apply, which `redactText` does not offer today.
+- **Both were found by reading the redactor, not by a failing test**, which is why this row
+  exists rather than a fix: the change is to `packages/security`'s public shape, and
+  Foundation request 3's scope was `CliError`.
+
+### NEW-37 — a numeric leaf is outside the redactor's reach, by type
+
+- **Status:** open, registered 2026-08-19 by the round-24 review of Foundation request 3 ·
+  **Owner:** DOS-P7 · **Size:** M · **A limitation of the redactor's signature, not a bug in
+  `redactPayload`**
+- **What escapes.** `redactPayload` redacts every string leaf of `CliError.data`, and a
+  `bigint` leaf too, because a `bigint` must be stringified to be published at all. A
+  `number` leaf is published verbatim. So a founder whose `[redaction] patterns` entry is a
+  numeric identifier — an account number, a client id — has it redacted wherever it appears
+  as text and published wherever the product happened to carry it as a number.
+- **Why it was not simply fixed there.** `redactText` is `string => string`. Applying it to
+  a `number` publishes `"1"` where `RunReportV1` declares `schemaVersion: 1`, so every
+  document would fail its own schema to redact a field the product chose. Redacting only
+  *matching* numbers is worse: the document's type would then depend on the user's config,
+  which is the same class of defect as NEW-36's key renaming.
+- **Latent rather than live today.** The `number` leaves this product actually publishes are
+  `code` and `schemaVersion` on `RunReportV1`, both product-chosen constants. It becomes
+  live the first time a report carries a caller-derived number.
+- **Closing it means a redactor that can answer about a value without changing its type** —
+  the same shape NEW-36 needs, which is why the two should be taken together.
+
+### NEW-38 — a quarantine filename reaches `--json` unscreened, through the message and the report
+
+- **Status:** open, registered 2026-08-19 by the round-34 review of Foundation request 3 ·
+  **Owner:** DOS-P7 · **Size:** S · **Pre-existing; found while proving the new field's
+  boundary, and it is the boundary beside it that was overstated**
+- **What escapes.** `selectCaptures` embeds the raw quarantine file name in an English warning
+  (`ingest.ts:593-595`), `reportLines` appends the warnings to the failure message, and
+  `failureFrom` redacts secrets but does not *screen* format characters. `JSON.stringify`
+  escapes `\p{Cc}` and not `\p{Cf}` — the code's own observation — so a right-to-left override
+  in a filename reaches a `--json` consumer through `error.message`. Measured on the very
+  fixture that proves the payload carries the id: the message has the override and so, since
+  2026-08-20, does `data.unreadable[].captureId`.
+- **Widened 2026-08-20**, when the screen on that field was reverted. It had been added to
+  close this row and did not: it collapses `/\s+/` and trims, so it renamed ordinary files
+  while the *success* arm published the same filename raw the whole time. Byte-exactness is
+  the repository's stated rule for paths; the exposure is one surface wider and one
+  false remedy shorter.
+- **Not introduced by Foundation request 3.** Every one of these strings already reached the
+  user through the same failure message before the `data` slot existed, and `ingest.ts`'s
+  `screened` docblock enumerates the exposure honestly. What the request changed is that
+  `threat-model.md` now asserts a boundary next to it, which is why this is registered rather
+  than left as a comment.
+- **The fix is one seam, not one call site.** Screening a warning where it is *built* leaves
+  the next warning unscreened; the durable answer is to screen where warnings become a
+  message, which is the same argument `screened` makes for the report.
+
+
+### NEW-39 — `error.paths` is the one published field the redactor never touches
+
+- **Status:** open, registered 2026-08-20 by the round-45 review of Foundation request 3 ·
+  **Owner:** DOS-P7 · **Size:** M · **Security, and blocked on NEW-36's capability**
+- **The leak.** `failureFrom` redacts `message`, `data` — every leaf of it — and `recovery`,
+  and passes `paths` through untouched. A note path is model-chosen, and `proposal.ts` treats
+  that payload as written by someone who has just read attacker-supplied capture material. So
+  one value can publish redacted in `message`, redacted in `data`, and **raw** in `paths`, on
+  one document. Demonstrated by moving this repository's own sentinel from a note body into a
+  note path: the `--json` invariant in `tests/security/sentinel.test.ts` goes red.
+- **Why it is not simply redacted, measured.** The redactor's `high-entropy` class fires on a
+  sixteen-hex capture id, so `_raw/quarantine/a1b2c3d4e5f60718.md` comes back
+  `[REDACTED:high-entropy].md` — the most important path this product publishes — and every
+  absolute path under a temporary directory goes the same way. Three existing tests catch it
+  immediately. Blanket redaction trades a narrow leak for a broad breakage.
+- **The fix is NEW-36's.** Applying the *pattern* classes to a path and not the heuristic one
+  needs a redactor that takes the class set, which `redactText` does not offer. The two should
+  be taken together, and this row is why NEW-36 is worth more than its own description
+  suggests.
+- **Recorded at three sites** so the exemption is not read as considered: `failureFrom`'s
+  docblock, the sentinel suite's plant, and `threat-model.md`'s boundary row.
+
+
 ### NEW-24 — a common redaction pattern refuses every ingest, undiagnosably
 
 - **Status:** open, registered 2026-08-17 when NEW-16 closed · **Owner:** DOS-P7 · **Size:** S ·
@@ -580,7 +688,7 @@ not.
 
 - **Status:** open, registered 2026-08-17 · **Owner:** whoever gives `ingest` an argument a screen can
   refuse · **Size:** XS · **Coverage, not security**
-- Closing NEW-12 made `invokeVendor`'s refusal-detail branch (`apps/cli/src/commands/ingest.ts:729`)
+- Closing NEW-12 made `invokeVendor`'s refusal-detail branch (`apps/cli/src/commands/ingest.ts:786`)
   **unreachable from every production path**, verified against all four sources the branch's own
   docblock lists: the prompt is prefixed with a Markdown heading so the dash rule cannot fire; the
   working root and output schema path are assembled from validated absolute paths and now take the
@@ -1000,22 +1108,28 @@ were put to the founder with the other four.
 | product design spec §13.4, "the staged result" | the `deterministic reindex` validator runs over an **in-memory projection** of vault plus proposal, not over a staging directory. §13.4 and the knowledge-pipeline spec's own §6.3 preamble contradict each other — nothing is staged at the point the preamble names — and staging first would make every file in staging attacker-influenced content the validators must re-read as hostile | 12 |
 | product design spec §17.5, and the knowledge-pipeline spec §9 | §9 narrows §17.5's security cases to six suites and drops two the standing gate in §7 of this file still requires from DOS-P6 onward: a **network** suite, and **concurrent user edits**. The plan ships eight suites rather than six and registers the narrowing rather than inheriting it. **Shipped 2026-08-14 as `tests/security/`** — `sentinel`, `prompt-injection`, `symlink-escape`, `multiline-command`, `malformed-manifest` and `interruption` from §9, plus `network` and `concurrent-edit`, the two §9 dropped and §7 still requires | 15 |
 
-**One row was raised by Track R entry R2 on 2026-08-17, and is unratified.** It is the only
-unratified row in this section, and it is also the one place where §8's two rules pull against each
-other: the eviction rule says a row leaves when the amended document carries the cross-reference, and
+**Two rows were raised by Track R entry R2, on 2026-08-17 and 2026-08-19, and both are
+unratified.** They are the only unratified rows in this section, and they are also the place where
+§8's two rules pull against each other: the eviction rule says a row leaves when the amended document carries the cross-reference, and
 `foundation.md` §2 carries it in the same commit that adds the row. **Ratification wins** — a row
 whose amendment nobody has approved is exactly what this index exists to surface, so it stays until
-the founder rules on it, cross-reference or not. A founder decision to *implement* NEW-16 is not the same as ratifying
-the amendment implementing it required, and conflating the two is how an approved document gets
-rewritten silently.
+the founder rules on it, cross-reference or not. A founder decision to *implement* NEW-16, or Foundation request 3, is not the
+same as ratifying the amendment implementing it required, and conflating the two is how an approved
+document gets rewritten silently.
+
+**The second row was found missing by a fresh-context review**, not by the work: Task 7 amended
+`CliError` and registered nothing, and `foundation.md` §2's own instruction — "every amendment to a
+frozen interface is indexed in `BACKLOG.md` §8" — is a sentence in the document being amended, which
+is precisely the kind of rule that goes unread by whoever is editing past it.
 
 | Amended | Outcome, **awaiting ratification** | Raised by |
 |---|---|---|
 | `docs/architecture/foundation.md` §2, the frozen `configSchema` | an **optional** `[redaction]` table with a bounded list of literal `patterns`. Additive on the same terms as the `brain` section that preceded it: `configSchema` stays `.strict()`, `schemaVersion` stays `1`, `serializeConfig` emits the table only when the key is present, and `exactOptionalPropertyTypes` keeps absent distinguishable from present-and-undefined — so a configuration written before it still loads and still serializes byte-identically. **Without it spec §8.2's user-extensible redaction class is unreachable**: `redactText` took the option and no production caller passed it, because there was no key a user could set | R2 Task 2, `BACKLOG.md` §1 **NEW-16** |
+| `docs/architecture/foundation.md` §2, the frozen `CliError` | an **optional** `data?: RedactedPayload` member, so a partly-succeeded run can report machine-readably what moved. Additive on the same terms as the two config amendments: absent when unset, so every `--json` document a command emitted before it is byte-identical, and no existing caller changes because nothing populates a field that does not exist yet. It creates a new **publishing** surface, which the other two did not — the failure arm is serialized into `--json` — so `failureFrom` redacts every string leaf including keys, and the slot is typed `RedactedPayload`, a `unique symbol` brand whose only producer is `redactPayload`, which takes the redactor and performs the walk rather than asserting. Every *shape* that writes the field another way is a compile error, `failure` rebuilds the arm it publishes from five named fields — `kind`, `message` and `recovery` coerced to strings, `paths` copied and frozen, `data` accepted only by identity — the arm is branded so a hand-built one is a compile error, and `publish` — which decides the body and the exit status in one place, because they were decided separately and disagreed — rebuilds any failure arm `failure` did not return — the last of the three being what actually closes the class, since a phantom brand survives `Object.assign`, spread, `Proxy` and `structuredClone` while the runtime guarantees it stood for do not. What remains, verified by running each candidate against the built module, is exactly two things: a redactor that does not redact, and a producer call outside the composition root. `Object.defineProperty` and `Object.assign` before the call are **not** among them, and they are closed by two different mechanisms rather than one: the copying forms yield a value the payload registry does not hold, so `failure` drops the field, while in-place `Object.assign(payload, …)` returns the payload itself and is refused by the deep freeze. Three earlier versions of this sentence were wrong, the last of them by crediting the registry with both. The brand replaced a repository sweep that tried to enumerate the syntax instead and was falsified in five review rounds. The sweep survives with a different job: its load-bearing rule is that `redactPayload` is called only at the composition root, and beside it it detects over thirty spellings, split between casts onto the brand and ways of reaching the producer under another name; the exact split is left to the test file, because two reviews counting it disagreed and three documents repeating a number is how that drifts. The enumeration no longer carries the guarantee, so falsifying one more spelling costs a row on a list rather than the property. Three commands wanted it: `ingest`, `brain lint`, and `doctor` (recorded in `releases/foundation-checkpoint.md`) | Track R R2 Task 7, 2026-08-19 |
 
 **Two rows were raised by DOS-P6 during implementation rather than planning**, which is why neither is
 in a table above. **Both were ratified by the founder on 2026-08-15**, in the session that ran Task 17;
-they were the last unratified rows this subsystem raised — **R2 has since added one, above**. Each leaves the table when
+they were the last unratified rows this subsystem raised — **R2 has since added two, above**. Each leaves the table when
 DOS-P6 Task 19 Step 5 lands, per the rule that a row leaves when the amended document carries the
 cross-reference.
 

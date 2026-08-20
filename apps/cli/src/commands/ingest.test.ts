@@ -12,6 +12,7 @@ import type { CliResult, TransactionPhase } from "@developer-os/core";
 import {
   DEFAULT_BRAIN_CONFIG,
   detectSourceAgent,
+  MAX_PROPOSED_PATH_CHARS,
   parseCaptureFile,
 } from "@developer-os/brain";
 import type { CaptureStatus, ProposedNote } from "@developer-os/brain";
@@ -27,6 +28,7 @@ import { runCapture } from "./capture.js";
 import {
   INGEST_DECLARED_WRITE_SCOPES,
   renderIngest,
+  CAPTURE_LEFT_AT,
   renderValidationFinding,
   runIngest,
 } from "./ingest.js";
@@ -534,7 +536,7 @@ describe("runIngest, the status ladder", () => {
    * **The apply that wrote its notes and then failed to verify.** `execute`
    * writes every mutation and transitions to `applied` *before* `verifyDesired`
    * runs, and that call can raise `TransactionConflictError`
-   * (`packages/core/src/transactions/executor.ts:586-611`) with the files already
+   * (`packages/core/src/transactions/executor.ts:835-853`) with the files already
    * on disk — so a throw out of `applyNotes` does **not** mean "wrote nothing".
    * Rolling the capture back to `accepted` there sends the next run at a path
    * that is now occupied, which `applyNotes` refuses permanently, while the
@@ -626,6 +628,38 @@ describe("runIngest, the status ladder", () => {
      * is a lie on every run.
      */
     expect(recovery).not.toContain("wrote nothing");
+    /**
+     * **And as fields, which is the whole point of the slot.** This run reaches the one state
+     * `leftAt` and `appliedNotes` exist to describe, and every assertion above it reads the
+     * *prose* channel the field was added to replace — so `leftAt` could be hardcoded
+     * `"untouched"`, `appliedNotes` emptied, and `message`/`recovery` blanked, all with the
+     * suite green. The only other `data` assertion of `leftAt` reads `"untouched"` on a run
+     * whose true value is `"untouched"`, which cannot fail.
+     */
+    const report = result.error.data as unknown as {
+      readonly refused: readonly {
+        readonly leftAt: string;
+        readonly appliedNotes: readonly string[];
+        readonly message: string;
+        readonly recovery: string | null;
+      }[];
+      readonly ingested: readonly { readonly notes: readonly string[] }[];
+    };
+    expect(report.refused).toHaveLength(1);
+    expect(report.refused[0]?.leftAt).toBe("staging");
+    expect(report.refused[0]?.appliedNotes).toStrictEqual(["DEV/stuck.md"]);
+    /**
+     * The per-capture `message` is *this capture's* failure, not the run-level prose above —
+     * which is the distinction the field exists for: a consumer reading the run's message
+     * gets every capture's outcome concatenated, and reading this gets one capture's.
+     */
+    expect(report.refused[0]?.message).toContain("synthetic interruption");
+    /**
+     * `recovery` is genuinely `null` on this path — an interruption carries no per-capture
+     * advice — so it is asserted where it *is* populated instead, in the security-refusal
+     * case above, which is the run that can tell a dropped field from an honest absence.
+     */
+    expect(report.refused[0]?.recovery).toBeNull();
   });
 
   /**
@@ -808,7 +842,361 @@ describe("runIngest, the status ladder", () => {
   });
 });
 
+describe("the published vocabularies", () => {
+  /**
+   * **`leftAt` is on `CliError.data`, so its members are a contract**, and two of the three
+   * collide by name with `CaptureStatus` while meaning something different — where the
+   * capture's *file* was left, not what status it holds. Pinned here so a fourth member
+   * cannot join the type silently, and so the collision stays a deliberate one.
+   */
+  it("pins the three places a refused capture can be left", () => {
+    expect([...CAPTURE_LEFT_AT]).toStrictEqual(["untouched", "staging", "ingested"]);
+    /**
+     * **And frozen, which the spread above cannot see.** The docblock said "named and
+     * frozen"; `as const` is a type-level claim and compiles to a mutable array, so an
+     * importer could `push` a fourth state and this case — which spreads at import time —
+     * would never look again. `EXIT_CODES` in `result.ts` states exactly this rule; this
+     * constant broke it one file over.
+     */
+    expect(() => {
+      (CAPTURE_LEFT_AT as unknown as string[]).push("elsewhere");
+    }).toThrow(TypeError);
+  });
+});
+
 describe("runIngest, a batch that is not uniform", () => {
+  /**
+   * **The same run, read as fields rather than as prose.** `CliResult`'s failure arm
+   * carried no data, so a mixed batch shipped its per-capture outcomes as lines inside
+   * `error.message` and a consumer had to parse them — `ingest`'s own docblock said "a
+   * mixed batch that reported only the first error would leave a caller unable to learn
+   * that anything was written at all", and the workaround was the message (BACKLOG,
+   * Foundation request 3).
+   *
+   * **The prose stays.** The field is added beside `message`, not instead of it, because
+   * the message is what a person reads and the field is what a script reads.
+   */
+  it("reports per-capture outcomes as fields rather than only as lines in a message", async () => {
+    const fixture = await installedFixture("ingest-failure-data");
+    const seeded = [
+      await fixture.seedAccepted("the first observation"),
+      await fixture.seedAccepted("the second observation"),
+    ].sort(byId);
+    const refusing = seeded[1];
+    expect(refusing).toBeDefined();
+    if (refusing === undefined) return;
+
+    fixture.reply((call) => {
+      const target = seeded.find((capture) =>
+        call.args.join("\n").includes(capture.id),
+      );
+      if (target === undefined) return nothingProposed();
+      return target.id === refusing.id
+        ? oneNote(target.id, "DEV/leaky.md", "Leaky note", `token ${SECRET}`)
+        : oneNote(target.id, `DEV/note-${target.id}.md`, `Note ${target.id}`, "Clean.");
+    });
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.data).toMatchObject({
+      schemaVersion: 1,
+      /** Attributable, exactly as the success arm is. */
+      agent: "claude",
+      order: seeded.map((capture) => capture.id),
+      /**
+       * **`notes` too, and it is the field a consumer reads to learn what landed.** Two
+       * earlier versions of this comment described a `screened` helper — the first with its
+       * mechanism backwards, the second after the helper had been deleted. The report copies
+       * every field and transforms none now, so what naming the note here catches is the
+       * copy losing an entry, which `IngestedCaptureV1` would not catch because an empty
+       * array satisfies the type.
+       */
+      ingested: [
+        {
+          captureId: seeded[0]?.id,
+          status: "ingested",
+          notes: [`DEV/note-${seeded[0]?.id ?? ""}.md`],
+        },
+      ],
+      refused: [
+        {
+          captureId: refusing.id,
+          code: EXIT_CODES.securityRefusal,
+          leftAt: "untouched",
+        },
+      ],
+      /**
+       * Structured, not prose. The first version published the run's English warning
+       * lines here, which reproduced inside the new contract the exact defect the contract
+       * exists to close.
+       */
+      unreadable: [],
+    });
+    /**
+     * **The per-capture `recovery`, which only a refusal like this one carries.** An
+     * interruption leaves it `null`, so the partly-applied case cannot tell a dropped field
+     * from an honest absence; this one can, and without it `recovery: null` was a change the
+     * whole suite accepted.
+     */
+    const refusedHere = (
+      result.error.data as unknown as {
+        readonly refused: readonly { readonly recovery: string | null }[];
+      }
+    ).refused;
+    expect(refusedHere[0]?.recovery).toContain("the capture is unchanged");
+    /** The human-readable half is untouched. */
+    expect(result.error.message).toContain("refused (exit 5)");
+  });
+
+  /**
+   * **`unreadable` carries the broken captures, and the case above cannot say so.** That
+   * run has none, so its `unreadable: []` passes with the field hardcoded empty — the
+   * fixture cannot distinguish the mapping from its absence. This run has one of each, which
+   * is the state the field exists for: `selectCaptures`' warnings ride the success path
+   * only, so on a refusing run this field is the *only* machine-readable record that a file
+   * could not be read.
+   *
+   * **`captureId` is published byte-exact, and it is the one field here a human never chose.**
+   * `selectCaptures` derives it as `fileName.slice(0, -3)` with no shape check, so a
+   * filename carrying a bidi override or a control byte reaches `--json` through it. The
+   * guard's own docblock says it "was published raw"; nothing asserted the fix.
+   */
+  it("reports an unreadable capture as a field, byte-exact", async () => {
+    const fixture = await installedFixture("ingest-unreadable-data");
+    const broken = await fixture.seedAccepted("an observation about to break");
+    const refusing = await fixture.seedAccepted("an observation that refuses");
+    await nodeFs.writeFile(broken.path, "not a capture at all\n", { mode: 0o600 });
+    fixture.reply(() =>
+      oneNote(refusing.id, "DEV/leaky.md", "Leaky note", `token ${SECRET}`),
+    );
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const report = result.error.data as unknown as {
+      readonly unreadable: readonly {
+        readonly captureId: string;
+        readonly status: string;
+        readonly notes: readonly string[];
+      }[];
+    };
+    expect(report.unreadable.length).toBeGreaterThan(0);
+    expect(report.unreadable[0]?.captureId).toBe(broken.id);
+    /**
+     * **`failed`, and this is the only entry in the report that is ever anything but
+     * `ingested`.** Hardcoding the status was once a change the whole suite accepted, because
+     * every other capture reaching the report really is `ingested` and this is the one that
+     * is not.
+     */
+    expect(report.unreadable[0]?.status).toBe("failed");
+    expect(report.unreadable[0]?.notes).toStrictEqual([]);
+  });
+
+  /**
+   * **A capture id is published byte-exact, and both arms agree.** An earlier version of this
+   * case asserted the opposite — that `data` screened a hostile filename — and it was the
+   * wrong contract twice over. The screen it pinned was `screenAndCap`, which collapses
+   * `/\s+/` and trims, so it corrupted an *ordinary* filename (`cap  two.md` → `cap two`,
+   * naming no file) while the success arm published the identical value raw. `data` was the
+   * only one of four renderings that was wrong.
+   *
+   * `threat-model.md`'s rule is byte-exact everywhere and screened at the terminal. What that
+   * leaves open — `JSON.stringify` escapes `\p{Cc}` and not `\p{Cf}`, so an override survives
+   * into `--json` — is NEW-38, and the screen never closed it: the success arm always
+   * published the same bytes. This asserts the agreement, which is the property
+   * `RunReportV1`'s docblock calls the point of having two renderings.
+   */
+  it("publishes a capture id byte-exact, as the success arm does", async () => {
+    const fixture = await installedFixture("ingest-capture-id-bytes");
+    const refusing = await fixture.seedAccepted("an observation that refuses");
+    const awkward = "cap  two";
+    await nodeFs.writeFile(
+      join(fixture.quarantine, `${awkward}.md`),
+      "not a capture at all\n",
+      { mode: 0o600 },
+    );
+    fixture.reply(() =>
+      oneNote(refusing.id, "DEV/leaky.md", "Leaky note", `token ${SECRET}`),
+    );
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const report = result.error.data as unknown as {
+      readonly unreadable: readonly { readonly captureId: string }[];
+    };
+    expect(report.unreadable[0]?.captureId).toBe(awkward);
+    /** And the id really does name the file, which is what byte-exact is for. */
+    await expect(
+      nodeFs.stat(join(fixture.quarantine, `${awkward}.md`)),
+    ).resolves.toBeDefined();
+  });
+
+  /**
+   * **The longest id a filesystem permits passes through whole**, which is what the report
+   * carrying values untransformed has to mean at the boundary. A filename is limited to 255
+   * **UTF-16 code units** (measured on darwin/APFS — `"漢".repeat(255)` is 765 bytes and
+   * creates, 256 gives `ENAMETOOLONG`), so no id can reach a length any consumer would have
+   * to truncate. A `screenAndCap` here once capped at 512 and collapsed whitespace; the cap
+   * could never fire for exactly this reason, and the collapse fired on ordinary names.
+   */
+  it("passes through the longest capture id a filesystem permits", async () => {
+    const fixture = await installedFixture("ingest-longest-capture-id");
+    const refusing = await fixture.seedAccepted("an observation that refuses");
+    /** 252, because the `.md` suffix shares the 255-code-unit filename budget. */
+    const longest = "c".repeat(252);
+    await nodeFs.writeFile(
+      join(fixture.quarantine, `${longest}.md`),
+      "not a capture at all\n",
+      { mode: 0o600 },
+    );
+    fixture.reply(() =>
+      oneNote(refusing.id, "DEV/leaky.md", "Leaky note", `token ${SECRET}`),
+    );
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const report = result.error.data as unknown as {
+      readonly unreadable: readonly { readonly captureId: string }[];
+    };
+    expect(report.unreadable[0]?.captureId).toBe(longest);
+    expect(longest.length).toBeLessThan(MAX_PROPOSED_PATH_CHARS);
+  });
+
+  /**
+   * **A legitimate note path is carried byte-exact, and screening it was corrupting it.**
+   * `screenAndCap` collapses `/\s+/` to one space and trims, so a vault file at
+   * `DEV/two  spaces.md` was published on `data` as `DEV/two spaces.md` — a path that does
+   * not exist — while the success arm published it correctly and the terminal printed it
+   * correctly. A `--json` consumer opening it gets `ENOENT`, and the partly-applied recovery
+   * names a note it calls "already in the vault".
+   *
+   * A double space is an ordinary artefact of a title-derived filename, and a non-breaking
+   * space an ordinary artefact of pasted content; neither is refused by `pathViolation`,
+   * which is what makes them the reachable case. The characters screening exists to catch are
+   * refused there before a note can exist.
+   */
+  it("carries a note path with repeated whitespace byte-exact onto the report", async () => {
+    const fixture = await installedFixture("ingest-note-path-bytes");
+    const clean = await fixture.seedAccepted("an observation that lands");
+    const refusing = await fixture.seedAccepted("an observation that refuses");
+    const spaced = "DEV/two  spaces.md";
+    fixture.reply((call) =>
+      call.args.join("\n").includes(refusing.id)
+        ? oneNote(refusing.id, "DEV/leaky.md", "Leaky note", `token ${SECRET}`)
+        : oneNote(clean.id, spaced, "Two spaces", "Clean."),
+    );
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const report = result.error.data as unknown as {
+      readonly ingested: readonly { readonly notes: readonly string[] }[];
+    };
+    expect(report.ingested[0]?.notes).toStrictEqual([spaced]);
+    /** And the path really is the one on disk, which is what makes the byte match matter. */
+    await expect(
+      nodeFs.stat(join(fixture.content, spaced)),
+    ).resolves.toBeDefined();
+    /**
+     * **The human half too, which the first fix left collapsed.** `reportLines` screened note
+     * paths with `screenAndCap`, so the message named `DEV/two spaces.md` for a file called
+     * `DEV/two  spaces.md` — and the partly-applied line calls such a path "already in the
+     * vault". Fixing only `data` made the failure terminal the one rendering of four that
+     * corrupts a path. It renders through `renderPath` now, which substitutes and truncates
+     * without collapsing.
+     */
+    expect(result.error.message).toContain(spaced);
+  });
+
+  /**
+   * **`error.paths` is the fourth rendering, and it was the last one still collapsing.**
+   * `refusalFrom` and `applyNotes` built it with `screenAndCap`, so a refusal about
+   * `DEV/two  spaces.md` named `DEV/two spaces.md` — while `data`, the success arm and the
+   * message all carried the file that exists. Three successive rounds each fixed one
+   * rendering and left this one, which is why the case asserts against `nodeFs.stat` rather
+   * than against a sibling field.
+   */
+  it("names a refused path byte-exact, against the file on disk", async () => {
+    const fixture = await installedFixture("ingest-refused-path-bytes");
+    const first = await fixture.seedAccepted("an observation that lands");
+    const spaced = "DEV/two  spaces.md";
+    fixture.reply(() => oneNote(first.id, spaced, "Two spaces", "Clean."));
+    expect((await fixture.run()).ok).toBe(true);
+
+    /** The second run proposes the same path, which now exists, so the write is refused. */
+    const second = await fixture.seedAccepted("an observation that collides");
+    fixture.reply(() => oneNote(second.id, spaced, "Two spaces again", "Clean."));
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.paths).toContain(spaced);
+    await expect(
+      nodeFs.stat(join(fixture.content, spaced)),
+    ).resolves.toBeDefined();
+  });
+
+  /**
+   * **A hostile note path never reaches the report, and that is the finding.** `appliedNotes`
+   * and `notes` both run their entries through `screenAndCap`, and the product's own path
+   * cannot exercise it: the proposal **parser**'s `pathViolation` refuses a path carrying a right-to-left override
+   * as `unsafe-path` *before* any note is applied, so the fields are empty by the time they
+   * are screened. Measured — the run below refuses at `unsafe-path` and publishes
+   * `"appliedNotes":[]`.
+   *
+   * So the screening on those two fields is a second layer under a validator that already
+   * refuses, and it is recorded as such rather than pinned by a construct that reaches it
+   * some other way. The layer that *is* reachable — `captureId`, whose value comes from a
+   * filename and passes through no validator at all — is pinned by the case above.
+   */
+  it("refuses a hostile note path before it can reach the report", async () => {
+    const fixture = await installedFixture("ingest-hostile-note-path");
+    const seeded = await fixture.seedAccepted("an observation with a hostile note path");
+    fixture.reply(() => oneNote(seeded.id, "DEV/stu\u202Eck.md", "Stuck note"));
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain("unsafe-path");
+    const published = JSON.stringify(result.error.data);
+    expect(published).not.toContain("\u202E");
+    expect(published).toContain('"appliedNotes":[]');
+  });
+
+  /**
+   * **That the published detail carries no sentinel, end to end.**
+   *
+   * It does **not** prove the redaction: this path's refusal message names the finding's
+   * class rather than quoting the secret, so the case stays green with `redactDeep`
+   * removed — mutation-tested, and the reason the guarantee itself is asserted against
+   * `failureFrom` directly in `context.test.ts` with a nested payload that does carry one.
+   * What this pins is the property a reader of `--json` actually cares about: run the real
+   * pipeline over a leaking proposal, and the structured half comes back clean.
+   */
+  it("publishes structured detail that carries no sentinel", async () => {
+    const fixture = await installedFixture("ingest-failure-data-redacted");
+    const seeded = await fixture.seedAccepted("an observation");
+    fixture.reply(() =>
+      oneNote(seeded.id, "DEV/leaky.md", "Leaky note", `token ${SECRET}`),
+    );
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(JSON.stringify(result.error.data)).not.toContain(SECRET);
+    expect(JSON.stringify(result.error.data ?? {}).length).toBeGreaterThan(2);
+  });
+
   /**
    * **Containment, and the head-of-line blocking it prevents.** Without it the
    * middle capture's refusal propagates out of the loop and the third capture is
@@ -996,6 +1384,30 @@ describe("runIngest, the agent call", () => {
 
     expect(dataOf(result).agent).toBe("codex");
     expect(fixture.calls.map((call) => call.executable)).toStrictEqual([CODEX]);
+  });
+
+  /**
+   * **The failure arm is attributable too, and nothing asked.** Every failing-run fixture uses
+   * the default vendor, which *is* claude — so the report's `agent` could be hardcoded
+   * `"claude"` with all 122 files green, and a `--agent codex` run that partly refused would
+   * publish the wrong vendor. The field's own docblock says "a run that failed is no less in
+   * need of attribution than one that succeeded, and the first version dropped both"; the two
+   * cases that do read a non-default agent both read the **success** arm.
+   */
+  it("attributes a refusing run to the agent that ran it", async () => {
+    const fixture = await installedFixture("ingest-agent-attribution", {
+      codex: true,
+    });
+    const seeded = await fixture.seedAccepted("an observation a second vendor refuses");
+    fixture.reply(() =>
+      oneNote(seeded.id, "DEV/leaky.md", "Leaky note", `token ${SECRET}`),
+    );
+
+    const result = await fixture.run({ agent: "codex" });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.data).toMatchObject({ agent: "codex" });
   });
 
   it("honours --agent, so a second vendor is reachable without uninstalling one", async () => {

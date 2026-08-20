@@ -3,7 +3,7 @@ import { parseArgs } from "node:util";
 import {
   EXIT_CODES,
   failure,
-  formatJsonResult,
+  publish,
   success,
 } from "@developer-os/core";
 import type { CliResult, ExitCode } from "@developer-os/core";
@@ -371,9 +371,25 @@ function emit<T>(
     // override survives into a terminal that cats the JSON — accepted, because
     // mangling machine output to protect a human reading it raw is the worse
     // trade.
-    io.stdout(formatJsonResult(result));
-    return result.code;
+    /**
+     * **One call, so the body and the status cannot disagree.** This read `result.code`
+     * itself, which is a second read of a value `formatJsonResult` had already validated —
+     * a `code` getter answering differently each time published one status and exited with
+     * another. `publish` decides both.
+     */
+    const { text, code } = publish(result);
+    io.stdout(text);
+    return code;
   }
+
+  /**
+   * **The hardening above is `--json`'s only.** The human paths return
+   * `result.code` raw and read `data`, `warnings` and `error` off the same object with no
+   * containment, so every argument for `publish` applies to them verbatim. Nothing in this
+   * repository reshapes a `CliResult`, so it is a gap in the defensive story rather than a
+   * live defect — recorded because the asymmetry is otherwise invisible, and because a
+   * reader who sees `publish` here may reasonably assume the whole function is covered.
+   */
 
   if (result.ok) {
     for (const line of render(result.data)) io.stdout(line);

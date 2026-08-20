@@ -193,7 +193,7 @@ spec wins over the plan, and this is recorded rather than left as an apparent om
 | every interruption point returns either the pre-transaction state or a deterministic recoverable state | `tests/security/interruption.test.ts`, **35 cases** — five forward transaction kinds × seven phases — plus a measured coverage case. The plan's table said fourteen; Task 19's review found the suite reached two of five kinds and it was extended | yes, and wider than the plan claimed |
 | duplicate replay is idempotent | `apps/cli/src/commands/capture.test.ts:256`, `:290`, `:322` — the duplicate at exit 0 writing nothing, the unparseable duplicate, and the loser of a write race — plus `tests/e2e/knowledge-lifecycle/lifecycle.test.ts` | yes |
 | model output cannot widen write scope or bypass canonical validators | `tests/security/symlink-escape.test.ts` and `packages/brain/src/ingest/validate.test.ts:709-900`, the `write-scope` block | yes |
-| failure leaves the capture retryable and never marks it ingested | `apps/cli/src/commands/ingest.test.ts:385`, `:478`, `:505`, `:567`, `:589`, `:664`, and every interruption case's `expectedStatus` | yes |
+| failure leaves the capture retryable and never marks it ingested | `apps/cli/src/commands/ingest.test.ts:393`, `:486`, `:513`, `:575`, `:597`, `:704`, and every interruption case's `expectedStatus` | yes |
 
 **One criterion's evidence is weaker than its claim, and it is the first.** `tests/security/` holds
 90 cases and **38 carried no watched-failure demonstration at 85** — three excluded for a stated reason,
