@@ -15,6 +15,7 @@ import {
   unlink,
   utimes,
 } from "node:fs/promises";
+import type { FileHandle } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 import {
@@ -115,8 +116,19 @@ export interface CliGuards {
    * `O_NOFOLLOW` and a `dev`/`ino` re-check after open. Configuration is the one
    * file the CLI reads outside core's drift machinery, and it must not be the
    * one read that skips the policy.
+   *
+   * **The `reader` is exposed because a caller sometimes has to hash what it read.**
+   * `ProtectedPathPolicy.readText` has always taken one; this guard discarded it, so the only
+   * way to obtain a capture's bytes was to decode and re-encode — and that is lossy. Node's
+   * `utf8` decode turns every invalid byte into U+FFFD, so a file holding one cp1252 smart
+   * quote re-encodes to different bytes than it holds. A caller comparing that digest against
+   * the executor's would refuse for ever. `indexes/build.ts` records the same limitation of
+   * the same call.
    */
-  readonly readText: (path: string) => Promise<string>;
+  readonly readText: (
+    path: string,
+    reader?: (handle: FileHandle) => Promise<string>,
+  ) => Promise<string>;
   /**
    * Full canonicalization, final component included — the shape
    * `ChangePlanContext.canonicalize` requires. Deliberately *not* the same
@@ -374,7 +386,10 @@ export function createGuards(
   return {
     manifest: createManifestGuards(policy),
     transaction,
-    readText: (path: string): Promise<string> => policy.readText(path),
+    readText: (
+      path: string,
+      reader?: (handle: FileHandle) => Promise<string>,
+    ): Promise<string> => policy.readText(path, reader),
     canonicalize: canonicalizePlannedPath,
     redactDiagnostic: (text: string): string =>
       transaction.redactDiagnostic(text),

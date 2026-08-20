@@ -113,6 +113,27 @@ export class TransactionConflictError extends Error {
   }
 }
 
+/**
+ * **A conflict detected before anything was written**, and the distinction is load-bearing
+ * rather than cosmetic. A caller-supplied precondition is checked in the plan phase, so a
+ * refusal means no bytes moved and the caller's own file is exactly as it was — while the
+ * other conflict sites — seven of them, and only some raised after a byte moved — cannot promise
+ * that. A caller that compensates on failure needs to tell them apart: rolling back a
+ * transaction that never landed writes a stale copy over whatever is on disk, which on this
+ * path is the hand edit the refusal had just protected.
+ *
+ * It extends `TransactionConflictError` so every existing `catch` keeps working and the exit
+ * code is unchanged; a caller that wants the stronger promise asks for the subclass. An
+ * earlier version of this change reused the base class alone and argued a second class would
+ * need handling at every catch site — which is what `extends` is for.
+ */
+export class TransactionPreconditionError extends TransactionConflictError {
+  constructor() {
+    super("transaction target changed before the transaction began");
+    this.name = "TransactionPreconditionError";
+  }
+}
+
 export class TransactionGuardError extends Error {
   readonly code:
     | typeof EXIT_CODES.decisionRequired
@@ -168,6 +189,24 @@ function hasExactKeys(value: Record<string, unknown>, expected: readonly string[
   return (
     actual.length === expected.length &&
     actual.every((key, index) => key === expected[index])
+  );
+}
+
+/**
+ * The required keys, plus any of `optional` that are present. An unknown key is still a plan
+ * this executor does not understand and is still refused — the exactness is the point, and
+ * `expectedBeforeHash` had to be named here before a caller could supply it. A plan carrying
+ * a *misspelled* precondition is exactly the plan that must not silently execute without one.
+ */
+function hasKeys(
+  value: Record<string, unknown>,
+  required: readonly string[],
+  optional: readonly string[],
+): boolean {
+  const actual = Object.keys(value);
+  return (
+    required.every((key) => actual.includes(key)) &&
+    actual.every((key) => required.includes(key) || optional.includes(key))
   );
 }
 
@@ -287,6 +326,39 @@ export class TransactionExecutor {
         if (planned.operation === "create" ? before !== null : before === null) {
           throw new TransactionPlanError();
         }
+        /**
+         * **The caller's precondition, honoured before anything is staged.** Everything
+         * between a caller's own read and this snapshot is invisible to the executor, so a
+         * caller that read the file supplies what it read and this refuses rather than
+         * silently overwriting a change it never saw. Refusing *here* — before this
+         * mutation's `writeStaged` — is what lets the refusal promise that the target is
+         * untouched.
+         *
+         * **"Nothing was written" is about the target, not the transaction directory.** For a
+         * multi-mutation plan, mutation *i*'s bytes are staged before mutation *i+1*'s
+         * precondition is checked, so an earlier target may already have a staged copy; and
+         * every refusal leaves an empty `staging/` and `backups/` directory with no journal,
+         * which no `status` or `repair` path sweeps. Both are true of `TransactionPlanError`
+         * beside it, but a precondition is designed to fire routinely, so the residue is
+         * routine too.
+         *
+         * `TransactionPreconditionError`, which the plan asked for and an earlier version of
+         * this change declined to add — arguing a second class would need handling at every
+         * catch site, which is what `extends` is for. It subclasses `TransactionConflictError`,
+         * so every existing `catch` and the exit code are unchanged, and a caller that wants
+         * the stronger promise asks for the subclass. That promise turned out to be
+         * structurally necessary, not cosmetic: `ingest` compensates a failed stage by writing
+         * the pre-read envelope back, and without a way to tell a plan-phase refusal from a
+         * mid-transaction one it wrote that copy over the very hand edit the refusal had just
+         * protected.
+         */
+        const observed = before === null ? null : hash(before.bytes);
+        if (
+          planned.expectedBeforeHash !== undefined &&
+          planned.expectedBeforeHash !== observed
+        ) {
+          throw new TransactionPreconditionError();
+        }
 
         const stagedRelativePath =
           planned.operation === "remove" ? null : `${String(index)}.bin`;
@@ -298,7 +370,7 @@ export class TransactionExecutor {
         mutations.push({
           targetPath: planned.targetPath,
           operation: planned.operation,
-          expectedBeforeHash: before === null ? null : hash(before.bytes),
+          expectedBeforeHash: observed,
           stagedRelativePath,
         });
       }
@@ -454,7 +526,27 @@ export class TransactionExecutor {
     for (const mutation of plan.mutations) {
       if (
         !isRecord(mutation) ||
-        !hasExactKeys(mutation, ["content", "operation", "targetPath"])
+        !hasKeys(
+          mutation,
+          ["content", "operation", "targetPath"],
+          ["expectedBeforeHash"],
+        )
+      ) {
+        throw new TransactionPlanError();
+      }
+      /**
+       * **Shape-checked, not merely typed.** `store.ts` already demands
+       * `/^[a-f0-9]{64}$/` of a persisted hash while this accepted any string from a caller —
+       * so a caller with a bug that produced `""` supplied a precondition that could never
+       * match, and every call refused for ever with a message saying the file had changed.
+       * That is precisely the failure this task spent a round on. A malformed precondition is
+       * a malformed plan, and says so loudly at the first call rather than quietly at all of
+       * them.
+       */
+      const expected = mutation.expectedBeforeHash;
+      if (
+        expected !== undefined &&
+        (typeof expected !== "string" || !/^[a-f0-9]{64}$/u.test(expected))
       ) {
         throw new TransactionPlanError();
       }

@@ -20,14 +20,18 @@ import {
  *
  * **The competing write lands from `afterPhase`, after the executor took its
  * snapshot and before it applies.** That placement is the whole case.
- * `TransactionExecutor.execute` snapshots each target when it plans
- * (`executor.ts:216`) and re-checks the hash at apply (`:548`), so a write
- * landing *earlier* is adopted as the expected state and silently overwritten —
- * the lost-update residual Task 10 documented and `docs/superpowers/ORDER.md`
- * still carries as a Foundation change. That window is deliberately **not**
- * asserted here in either direction: asserting the overwrite would encode the
- * bug as the contract, and asserting the refusal would fail against real
- * behaviour.
+ * `TransactionExecutor.execute` snapshots each target when it plans and re-checks the hash at
+ * apply, so a write landing *earlier* used to be adopted as the expected state and silently
+ * overwritten — the lost-update residual this suite declined to assert in either direction,
+ * because asserting the overwrite would have encoded the bug as the contract and asserting
+ * the refusal would have failed against real behaviour.
+ *
+ * **That is no longer true as of 2026-08-20.** `PlannedFileMutation.expectedBeforeHash` lets a
+ * caller hand over the digest of the bytes *it* read, and the plan phase refuses on a
+ * mismatch — so the earlier write is now refused when the caller supplies a precondition, and
+ * `review.test.ts` and `ingest.test.ts` each assert it. This suite still does not drive that
+ * window, because its subject is the lock and the phase hooks; the case it declined to write
+ * exists now, one layer up.
  *
  * **The lock is keyed per transaction id, and this suite says so rather than
  * pretending otherwise.** `TransactionStore.withTransactionLock` takes an id and

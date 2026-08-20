@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 
 import {
@@ -5,6 +6,7 @@ import {
   EXIT_CODES,
   success,
   TransactionConflictError,
+  TransactionPreconditionError,
 } from "@developer-os/core";
 import type {
   CliResult,
@@ -403,6 +405,28 @@ class IngestRefusal extends Error {
   }
 }
 
+/**
+ * A refusal raised in the transaction's **plan phase**, before any byte moved. The
+ * compensating path checks for it by class: nothing was written, so rolling back would write
+ * a stale copy over whatever is on disk — which on this path is the hand edit the refusal had
+ * just protected.
+ *
+ * It is a class and not a flag on the message because the message carries the model's own
+ * proposed path, and a proposal that spelled the marker phrase made a post-write refusal read
+ * as a pre-write one.
+ */
+class IngestPreconditionRefusal extends IngestRefusal {
+  constructor(
+    code: FailureExitCode,
+    message: string,
+    paths: readonly string[] = [],
+    recovery?: string,
+  ) {
+    super(code, message, paths, recovery);
+    this.name = "IngestPreconditionRefusal";
+  }
+}
+
 function isMissingEntry(error: unknown): boolean {
   return (
     typeof error === "object" &&
@@ -645,17 +669,33 @@ async function resolveCapturePath(
  * drift. `resolveCapturePath` stands in for it, which is a narrower constraint
  * than ownership rather than the same one.
  *
- * **The lost-update window is the one `review.ts` describes and it is not
- * closed here.** Each capture is read as late as possible — immediately before
- * the transaction that moves it — which narrows the window to in-process work
- * and cannot remove it. `docs/superpowers/ORDER.md` carries the Foundation
- * change (a caller-supplied precondition on `PlannedFileMutation`) that would.
+ * **The lost-update window is the one `review.ts` describes, and the *first* of the three
+ * writes each capture takes now closes it** — the staging write supplies the digest of the
+ * bytes this run read, so a hand edit landing between that read and the transaction is
+ * refused rather than overwritten. It is the first write **per capture**, not per run:
+ * `ingestOne` runs once for each, so a three-capture run has three such writes.
+ *
+ * **The two later writes still overwrite, and the widest window in this command is one of
+ * them.** The `ingested` write re-renders the pre-agent envelope over the whole file after
+ * the vendor call — the longest read-to-write gap the product has, minutes rather than
+ * milliseconds — and a hand edit made during it is discarded silently. An earlier version of
+ * this paragraph called that structurally impossible to pin because "there is no caller read"
+ * — which is wrong: this run holds the exact bytes it wrote at staging and could pin their
+ * digest. Whether to is a decision, and it is registered as **NEW-40** rather than described
+ * as closed.
  */
 async function writeCaptureFile(
   context: CliContext,
   kind: string,
   target: string,
   contents: string,
+  /**
+   * The digest of the bytes this run read, when it has one. The first write of a run does —
+   * it reads the capture immediately above — and the later ones do not: they follow a write
+   * this run itself made, so there is no caller read to pin, and the executor's own snapshot
+   * is the right precondition for them.
+   */
+  expectedBeforeHash?: string,
 ): Promise<void> {
   try {
     await context.executor.execute({
@@ -665,11 +705,27 @@ async function writeCaptureFile(
           targetPath: target,
           operation: "replace",
           content: new TextEncoder().encode(contents),
+          ...(expectedBeforeHash === undefined ? {} : { expectedBeforeHash }),
         },
       ],
     });
   } catch (error) {
     if (!(error instanceof TransactionConflictError)) throw error;
+    /**
+     * **A precondition refusal says more, because it can.** It is raised in the plan phase,
+     * so nothing was written and the file the user is looking at is the one they edited. The
+     * other conflict sites cannot promise that — there are seven, and which one ran is not
+     * something this catch can tell — which is why the general message
+     * below says nothing about the file's contents.
+     */
+    if (error instanceof TransactionPreconditionError) {
+      throw new IngestPreconditionRefusal(
+        exitCodeOf(error),
+        "the capture changed on disk before ingest moved it, so nothing was written and your edit is intact",
+        [target],
+        "run developer-os ingest again, which reads the newer file",
+      );
+    }
     throw new IngestRefusal(
       exitCodeOf(error),
       "the capture changed on disk while this ingest was running, so its status did not move",
@@ -677,6 +733,21 @@ async function writeCaptureFile(
       "if developer-os status reports an incomplete transaction, resolve it with developer-os repair first; otherwise run developer-os ingest again, which reads the newer file",
     );
   }
+}
+
+/**
+ * Whether a refusal came from the plan phase, where nothing has been written yet.
+ *
+ * **Carried as a class, because the first version matched on the message text** — and that
+ * message interpolates the model's proposed note path. A proposal naming
+ * `before ingest moved it.md` made a refusal raised *after* the staging bytes landed look
+ * like one raised before them, so the rollback was skipped and the capture stranded at
+ * `staging`, which `selectCaptures` never selects again. The steering string arrives through
+ * the capture body and the prompt: the untrusted path this command's threat model is written
+ * against. Control flow must not be decidable by anything a model can spell.
+ */
+function isPreconditionRefusal(error: unknown): boolean {
+  return error instanceof IngestPreconditionRefusal;
 }
 
 /* ---------------------------------------------------------- the agent call */
@@ -1155,7 +1226,12 @@ async function ingestOne(
     const path = await resolveCapturePath(context, quarantine, fileName);
     capturePath = path;
 
-    const text = await context.guards.readText(path);
+    let asRead = "";
+    const text = await context.guards.readText(path, async (handle) => {
+      const bytes = await handle.readFile();
+      asRead = createHash("sha256").update(bytes).digest("hex");
+      return bytes.toString("utf8");
+    });
     const parsed = parseCaptureFile(fileName, text, redact);
     if (!parsed.ok) {
       throw new IngestRefusal(
@@ -1183,6 +1259,7 @@ async function ingestOne(
       TRANSACTION_KINDS.stage,
       path,
       renderCaptureFile({ ...envelope, status: "staging" }),
+      asRead,
     );
 
     const outcome = await invokeVendor(
@@ -1265,7 +1342,16 @@ async function ingestOne(
      * `refusedRecovery` emits the line for the state this capture is really in.
      */
     let rolledBack = false;
-    if (applied === null && capturePath !== null && staged !== null) {
+    /**
+     * **A precondition refusal is not compensated, because nothing was written.** `staged` is
+     * set before the staging transaction — it has to be, since an interruption *after* the
+     * bytes land still needs rolling back — so it cannot distinguish a write that never
+     * happened. `TransactionPreconditionError` can: it is raised in the plan phase, before
+     * anything is staged. Without this the rollback wrote the pre-read envelope over exactly
+     * the hand edit the refusal had just protected, two lines after protecting it.
+     */
+    const untouched = isPreconditionRefusal(error);
+    if (!untouched && applied === null && capturePath !== null && staged !== null) {
       try {
         await writeCaptureFile(
           context,
@@ -1296,7 +1382,14 @@ async function ingestOne(
           error instanceof IngestRefusal ? (error.recovery ?? null) : null,
         appliedNotes: applied ?? [],
         leftAt: await leftAtOf(context, redact, fileName, capturePath, {
-          movedToStaging: capturePath !== null && staged !== null,
+          /**
+       * `untouched` here for the same reason the rollback takes it: a plan-phase refusal
+       * moved nothing, so reporting `staging` would print recovery telling the user to set a
+       * status back by hand for a file this run never wrote. `leftAtOf` reads the status from
+       * disk and falls back to this only when the file is unparseable — which a hand edit
+       * that breaks frontmatter *and* lands in the window is, so the two conditions meet.
+       */
+      movedToStaging: !untouched && capturePath !== null && staged !== null,
           rolledBack,
         }),
       },

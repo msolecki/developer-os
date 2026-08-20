@@ -1219,7 +1219,7 @@ it("computes its own hash when the caller supplies none, unchanged", async () =>
 it("does not discard a hand edit made while review was reading", async () => {
   const result = await runReviewEdit(contextWhereFileChangesAfterRead());
   expect(result.ok).toBe(false);
-  expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+  expect(result.code).toBe(EXIT_CODES.decisionRequired);
 });
 ```
 
@@ -1253,7 +1253,9 @@ Honour it in the phase that takes the snapshot: when present and the observed ha
 
 - [ ] **Step 4: Supply it from the edit path**
 
-In `review.ts`, hash the bytes the edit path actually read and pass them as `expectedBeforeHash` on the planned mutation. Map the refusal to `EXIT_CODES.recoveryRequired` with a recovery string that tells the user their file changed and the edit was not applied — the outcome the window used to produce silently.
+In `review.ts`, hash the bytes the edit path actually read — **the bytes, not a re-encode of the decoded text**: `readText` decodes UTF-8 lossily, so a capture holding one invalid byte would hash to something the file never held and refuse for ever. Pass them as `expectedBeforeHash` on the planned mutation, and give the refusal a recovery string that tells the user their file changed and the edit was not applied — the outcome the window used to produce silently.
+
+**Amended 2026-08-20: the exit code is `decisionRequired` (3), not `recoveryRequired` (6).** The step above specified 6, and 6 tells a user to run `repair`. A plan-phase refusal writes nothing and leaves no transaction to repair, so 6 would send them to a verb that finds nothing. `TransactionConflictError` already carries 3, which the exit table glosses as "user decision or conflict resolution required" — exactly this event. The subclass keeps that code.
 
 - [ ] **Step 5: Run the tests, the gate, review, commit**
 

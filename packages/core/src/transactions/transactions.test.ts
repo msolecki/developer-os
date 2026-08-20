@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as nodeFs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, sep } from 'node:path';
@@ -9,6 +10,8 @@ import {
   recoverTransaction,
   TransactionBackupRetentionError,
   TransactionExecutor,
+  TransactionPlanError,
+  TransactionPreconditionError,
   TransactionStore,
   validateJournal,
   type PlannedFileMutation,
@@ -360,6 +363,147 @@ function validPersistedJournal(
     mutations,
   };
 }
+
+describe('a precondition the caller read', () => {
+  /**
+   * **The window this closes.** The executor snapshots the target when `execute()` runs, so
+   * everything between a caller's own read and that snapshot is invisible to it. For
+   * `capture` that is benign — spec §5.2 wants an `O_EXCL` create no transaction-mediated
+   * write can deliver, and colliding captures are byte-identical because the id *is* the
+   * content hash. For `review --decision edit` it is not: the file is read, re-redacted and
+   * written back, and what the window discards is the user's own hand edit, in the one verb
+   * that exists to bring a hand edit under this product's guarantees.
+   */
+  it('refuses when the target changed between the caller read and the execute', async () => {
+    const fixture = await createFixture('precondition-changed');
+    const targetPath = join(fixture.workspaceDir, 'config.bin');
+
+    try {
+      await installOriginal(targetPath);
+      /** What the caller read, hashed — and then somebody else writes. */
+      const asRead = createHash('sha256').update(ORIGINAL_BYTES).digest('hex');
+      await nodeFs.writeFile(targetPath, new TextEncoder().encode('edited by hand'));
+
+      await expect(
+        createExecutor(fixture).execute({
+          kind: 'replace-test',
+          mutations: [
+            {
+              targetPath,
+              operation: 'replace',
+              content: NEW_BYTES,
+              expectedBeforeHash: asRead,
+            },
+          ],
+        }),
+      ).rejects.toBeInstanceOf(TransactionPreconditionError);
+
+      /** And the hand edit is still there: the refusal happens before anything is staged. */
+      await expect(nodeFs.readFile(targetPath, 'utf8')).resolves.toBe('edited by hand');
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  /**
+   * **Absence keeps the previous behaviour exactly**, which is what makes the field additive.
+   * `capture` supplies none and wants none. This must pass on the first run, before the
+   * executor honours anything — it is the assertion that the other two tests are the change.
+   */
+  it('computes its own precondition when the caller supplies none', async () => {
+    const fixture = await createFixture('precondition-absent');
+    const targetPath = join(fixture.workspaceDir, 'config.bin');
+
+    try {
+      await installOriginal(targetPath);
+
+      await expect(
+        createExecutor(fixture).execute(replacePlan(targetPath)),
+      ).resolves.toMatchObject({ phase: 'finalized' });
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  /**
+   * **A supplied hash against a *created* target is a mismatch.** A `create` observes no
+   * bytes, so a caller that supplies a precondition for one is describing a file it thinks
+   * exists — and this is the case where "no bytes" must not read as "no precondition". The
+   * `replace`-with-missing-target case is deliberately *not* the test for this: the plan
+   * phase already refuses that as a plan error, so it would pass with the precondition
+   * ignored entirely, which is how the first version of this case was vacuous.
+   */
+  it('refuses a supplied precondition on a create, which observes no bytes', async () => {
+    const fixture = await createFixture('precondition-create');
+    const targetPath = join(fixture.workspaceDir, 'fresh.bin');
+
+    try {
+      await nodeFs.mkdir(fixture.workspaceDir, { recursive: true });
+      const asRead = createHash('sha256').update(ORIGINAL_BYTES).digest('hex');
+
+      await expect(
+        createExecutor(fixture).execute({
+          kind: 'create-test',
+          mutations: [
+            {
+              targetPath,
+              operation: 'create',
+              content: NEW_BYTES,
+              expectedBeforeHash: asRead,
+            },
+          ],
+        }),
+      ).rejects.toBeInstanceOf(TransactionPreconditionError);
+
+      await expectMissing(targetPath);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  /**
+   * **A misspelled precondition is refused, not ignored.** The plan validator checks exact
+   * keys, and teaching it this field meant widening that check — so the plan carrying
+   * `expectedBeforeHsh` must still be a plan error rather than one that silently executes
+   * with no precondition at all, which is the failure the widening could have introduced.
+   */
+  it.each([
+    ['a misspelled key', { expectedBeforeHsh: 'abc' }],
+    ['a non-string hash', { expectedBeforeHash: 7 }],
+    /**
+     * The empty string is the shape a caller-side bug actually produces — a digest variable
+     * that was declared and never assigned. Accepting it means every call refuses for ever
+     * with a message saying the file changed, which is the failure this field spent a review
+     * round on; refusing it says so at the first call.
+     */
+    ['an empty hash', { expectedBeforeHash: '' }],
+    ['a hash that is not hex', { expectedBeforeHash: 'z'.repeat(64) }],
+    ['a hash of the wrong length', { expectedBeforeHash: 'a'.repeat(63) }],
+  ])('refuses %s on a planned mutation', async (_name, extra) => {
+    const fixture = await createFixture('precondition-shape');
+    const targetPath = join(fixture.workspaceDir, 'config.bin');
+
+    try {
+      await installOriginal(targetPath);
+
+      await expect(
+        createExecutor(fixture).execute({
+          kind: 'replace-test',
+          mutations: [
+            {
+              targetPath,
+              operation: 'replace',
+              content: NEW_BYTES,
+              ...extra,
+            } as unknown as PlannedFileMutation,
+          ],
+        }),
+      ).rejects.toBeInstanceOf(TransactionPlanError);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+});
 
 describe('TransactionExecutor durable recovery', () => {
   for (const phase of RESTARTABLE_PHASES) {
