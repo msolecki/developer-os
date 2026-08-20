@@ -178,7 +178,16 @@ stays in §1 until that question is answered.
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| R2 | Ten decided defects — six `BACKLOG.md` §1 rows, three Foundation requests, one DOS-P7 gap | `plans/2026-08-17-repository-defects-r2.md`, eleven tasks | nothing | M | every closed row left §1, every amendment registered in §8, CI green on the commit | **done 2026-08-20** |
+| R2 | Ten decided defects — six `BACKLOG.md` §1 rows, three Foundation requests, one DOS-P7 gap | deleted on closure, as a finished plan is | nothing | M | every closed row left §1, every amendment registered in §8, CI green on the commit | **code done 2026-08-20; CI gate unmet** |
+
+**The fifth gate is unmet, and the row says so rather than reading as complete.** R2's eleven tasks
+landed in five commits, and `npm run check` is green on the last of them — 122 files, 2303 passed, one
+skipped. What has not happened is CI: `development` requires a pull request, `check.yml` runs on
+`pull_request:` and on pushes to `feat/foundation` alone, and the founder chose on 2026-08-20 to leave
+the commits local rather than open one. So the local gate has run and the gate that exists precisely
+because a green local gate missed three DOS-P2 defects has not. **Whoever pushes this opens the pull
+request and reads the run**; until then the entry is done in the sense that the work is finished, and
+not in the sense its own "Done when" column defines.
 
 **R2 existed because the five decisions those rows were waiting on were taken on 2026-08-17.** Each had
 sat as "open" while being unimplementable, which is the state this track exists to resolve rather than
