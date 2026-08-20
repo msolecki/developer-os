@@ -16,6 +16,7 @@ import type {
 } from "@developer-os/core";
 import {
   applyReviewDecision,
+  decisionsFrom,
   isReviewDecision,
   parseCaptureFile,
   renderCaptureFile,
@@ -437,6 +438,42 @@ async function writeCapture(
 }
 
 /**
+ * **Where a hand edit should actually put each status, when no verb can move it.** The
+ * fallback named `quarantined` for all four, and for `staging` that is wrong in a way that
+ * costs the user their capture: setting it to `quarantined`, then `accept`, makes `ingest`
+ * re-run and meet its own notes at a path `create` refuses — permanently stuck, having done
+ * exactly what the product said.
+ *
+ * **`staging` is two states and this table cannot tell them apart, so it names both.** A
+ * capture that was *partly applied* has notes in the vault already; one *left at staging*
+ * wrote none. `ingest` distinguishes them because it knows what it did, and says so in two
+ * separate strings — go to `ingested`, or to `accepted` **after removing the notes**, versus
+ * simply back to `accepted`. `review` arrives later with only a status to go on, and
+ * `developer-os status` cannot close the gap: it reports incomplete *transactions*, and a
+ * partly-applied capture's transaction finalized. A first version of this entry gave the
+ * stranded advice to both, which is the partly-applied stranding again — reintroduced by the
+ * fix for it, because the prose beside it reasoned about the wrong sub-state.
+ *
+ * `rejected` goes back to `quarantined`, because the user is undoing a decision. `failed` is
+ * a status only a hand edit can put in a file — `selectCaptures` derives it and never
+ * persists it — so the capture in front of the user parsed cleanly and wants the same target.
+ */
+const HAND_EDIT_TARGET: Readonly<Record<CaptureStatus, string>> = Object.freeze({
+  quarantined:
+    "set the file's status back to quarantined by hand if the decision should be taken again",
+  accepted:
+    "set the file's status back to quarantined by hand if the decision should be taken again",
+  rejected:
+    "set the file's status back to quarantined by hand if this capture should be decided again",
+  staging:
+    "ingest left this capture at staging and never selects it again: read the run's own report for the notes it names — if any landed, set the status to ingested to keep them or remove them and set accepted to retry; if none did, set accepted",
+  ingested:
+    "this capture is already in the vault; edit or remove the note it produced rather than the capture",
+  failed:
+    "failed is a status only a hand edit writes, and this file parsed cleanly: set its status back to quarantined by hand to decide it again",
+});
+
+/**
  * One capture, one decision, spec §5.6:
  *
  * ```text
@@ -508,11 +545,24 @@ async function decideOne(
 
   const outcome = applyReviewDecision(parsed.envelope, target.decision);
   if (!outcome.ok) {
+    /**
+     * **Name what is available from here, rather than recommending a hand edit.** The message
+     * said "no review decision moves" this status, which stopped being true when `reject`
+     * gained its `accepted` row — and the recovery told the user to edit their own
+     * frontmatter, which is the advice this product spent a task removing from `ingest`. If
+     * some decision is legal from where the capture actually is, say so; the hand edit is the
+     * last resort and only when there is genuinely nothing else.
+     */
+    const available = decisionsFrom(parsed.envelope.status);
     throw new ReviewRefusal(
       EXIT_CODES.invalidInput,
-      `this capture is at status ${parsed.envelope.status}, which no review decision moves`,
+      available.length === 0
+        ? `this capture is at status ${parsed.envelope.status}, which no review decision moves`
+        : `this capture is at status ${parsed.envelope.status}, which --decision ${target.decision} does not move`,
       [path],
-      "set the file's status back to quarantined by hand if the decision should be taken again",
+      available.length === 0
+        ? HAND_EDIT_TARGET[parsed.envelope.status]
+        : `from ${parsed.envelope.status} this capture takes ${available.map((decision) => `--decision ${decision}`).join(" or ")}`,
     );
   }
 

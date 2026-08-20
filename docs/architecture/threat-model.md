@@ -642,13 +642,17 @@ review corrected: `verifyDesired` runs after the bytes are on disk and can raise
 `accepted` there is what makes the residual unrecoverable rather than inert. It is inert — the next
 run selects only `accepted` captures and cannot double-apply — and recoverable by `repair` plus a
 hand edit. This
-corrects design spec §6.1's headline sentence and is one of two rows in `BACKLOG.md` §8 awaiting the
+corrects design spec §6.1's headline sentence and is one of three rows in `BACKLOG.md` §8 awaiting the
 founder.
 
-**One product gap at the same seam, and it is DOS-P7's.** `applyReviewDecision` permits a decision
-only from `quarantined` (`packages/brain/src/review/decide.ts:36,75`), so nothing moves a capture from `accepted` back to `rejected`. A user who
-changes their mind, or whose capture refuses ingest deterministically, has only a hand edit of the
-file's frontmatter — which is what both of `ingest`'s recovery strings tell them to do.
+**One product gap at the same seam, closed 2026-08-20 by Track R entry R2 Task 9.**
+`applyReviewDecision` permitted a decision only from `quarantined`, so nothing moved a capture from
+`accepted` to `rejected`: a user who accepted a capture and changed their mind, or whose capture
+refused ingest deterministically, had only a hand edit of the file's frontmatter — which is what both
+of `ingest`'s recovery strings told them to do. `LEGAL_FROM`
+(`packages/brain/src/review/decide.ts:70`) is the table now, spec §5.5 carries the amendment, and
+both strings name the verb. What remains is that `review`'s listing shows `quarantined` only, so the
+change-of-mind path still needs an id the user already holds.
 
 ---
 

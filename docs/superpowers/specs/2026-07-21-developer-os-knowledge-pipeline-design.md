@@ -366,6 +366,7 @@ capture because a version probe failed would be the wrong trade in every case.
 | `quarantined` | `accepted` | `review --decision accept` |
 | `quarantined` | `rejected` | `review --decision reject` |
 | `quarantined` | `quarantined` | `review --decision edit` — content changes, status does not |
+| `accepted` | `rejected` | `review --decision reject` — **added 2026-08-20**, see the amendment below |
 | `accepted` | `staging` | `ingest`, on entering the transaction |
 | `staging` | `ingested` | `ingest`, only after `finalize` |
 | `staging` | `accepted` | rollback or resume-to-abandon; the capture is retryable |
@@ -379,6 +380,32 @@ looking at the file. Collapsing the two would make a transient model failure loo
 
 **`rejected` is terminal for automation and not for the user.** Nothing transitions out of it
 automatically; the user may edit the file's status by hand, which the review path re-validates.
+
+**Amended 2026-08-20 — `accepted → rejected`.** The table had one row per decision, all from
+`quarantined`, so a user who accepted a capture and then changed their mind had no verb: the
+only way to stop `ingest` retrying it was to hand-edit the frontmatter back to `quarantined`,
+which is what both of `ingest`'s recovery strings told them to do. A product that recommends a
+hand edit of its own data has a gap where a verb should be, and the same hand edit is what
+`failed` exists to describe going wrong.
+
+**`accept` and `edit` deliberately did not gain the equivalent row.** Re-accepting an accepted
+capture is not a transition — `accepted → accepted` is not a row this table can hold, and the
+verb exists to move a capture between states. And `edit` maps to
+`quarantined` — it is a content transition whose status result is the reviewable one — so
+running it from `accepted` would silently withdraw an approval as a side effect of changing the
+text; the verb's name says nothing about un-approving, and a user who wants that has `reject`. Rejection is the only direction that is safe from `accepted`, because
+`rejected` is terminal for automation and no later phase reads it.
+
+**`CAPTURE_STATUSES` gains no member.** This is a row in a transition table, not a seventh
+status; §13.1's list and its frozen order are unchanged.
+
+**What rejecting from `accepted` costs, stated because the row makes it easy to reach.**
+Nothing transitions out of `rejected`, and `capture` treats a duplicate as already captured —
+it exits 0 naming the rejected capture rather than filing a new one, because the id is the
+content hash. So rejecting is irreversible through the product *and* it blocks re-capturing
+that content: a user who rejects by mistake has the hand edit this amendment exists to retire,
+one step later. That is the same cost `quarantined → rejected` always carried; the new row
+does not change it, it makes it reachable from a status a user is more likely to be in.
 
 **No status means "edited".** Design spec §13.1's list has none, and adding one would put a
 seventh member into a frozen ordered list to record something the file's own mtime already says.

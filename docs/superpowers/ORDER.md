@@ -281,10 +281,10 @@ accumulate. What was decided:
 Three Foundation requests and the `accepted → rejected` gap are in the same plan, decided the same
 day, because they were unowned for the same reason: no entry on the product path reaches them.
 
-**Twenty §1 rows are deliberately not in R2**, and a session finishing this entry must not sweep them up
+**Twenty-two §1 rows are deliberately not in R2**, and a session finishing this entry must not sweep them up
 — R2 has closed all five it was opened for. **Four belong to somebody else:** **NEW-21** is the founder's and blocks
 A10; **NEW-20** and **NEW-13** were registered as deliberately-not-fixed; **NEW-7** needs ten minutes
-with a machine that has Obsidian rather than an agent. **Sixteen came out of R2's own reviews**, registered between 2026-08-17 and 2026-08-19 by the reviews that produced them. **NEW-27** and **NEW-28** came from NEW-12: a derived path that will wear a write scope's name, and
+with a machine that has Obsidian rather than an agent. **Eighteen came out of R2's own reviews**, registered between 2026-08-17 and 2026-08-19 by the reviews that produced them. **NEW-27** and **NEW-28** came from NEW-12: a derived path that will wear a write scope's name, and
 an interpolation in `ingest` that no longer has an end-to-end test because no production path can
 reach it. **NEW-24**, **NEW-25** and **NEW-26** came from NEW-16: a common redaction pattern that
 refuses every ingest and cannot be diagnosed without widening a persisted type; two partially
@@ -294,7 +294,7 @@ same review and is a gate-integrity item rather than a product one: a wall-clock
 standing suite that can redden an unrelated commit. **None is R2's to fix, and the count is the
 honest cost of closing five rows — though NEW-22 closed leaving nothing at all, which is the
 counter-example worth keeping in view** — a defect that closes cleanly and leaves nothing is rarer than
-this queue used to imply. The six named above are the ones this section already knew — **NEW-27**, **NEW-28**, **NEW-24**, **NEW-25**, **NEW-26** and **NEW-29**, which it miscounted as eight. Ten more have landed since: **NEW-30** and **NEW-31** from NEW-11, **NEW-32** and **NEW-33** from NEW-15, **NEW-34** from Foundation request 2, **NEW-35** from the review that verified NEW-15's closure, and **NEW-36**, **NEW-37**, **NEW-38** and **NEW-39** from request 3. 6 + 10 = 16, and 4 + 16 = 20 — matching `BACKLOG.md` §1, which holds the rows and therefore wins.
+this queue used to imply. The six named above are the ones this section already knew — **NEW-27**, **NEW-28**, **NEW-24**, **NEW-25**, **NEW-26** and **NEW-29**, which it miscounted as eight. Twelve more have landed since: **NEW-30** and **NEW-31** from NEW-11, **NEW-32** and **NEW-33** from NEW-15, **NEW-34** from Foundation request 2, **NEW-35** from the review that verified NEW-15's closure, and **NEW-36**, **NEW-37**, **NEW-38** **NEW-39** from request 3, **NEW-40** from Task 8 and **NEW-41** from Task 9. 6 + 12 = 18, and 4 + 18 = 22 — matching `BACKLOG.md` §1, which holds the rows and therefore wins.
 
 **A third came from that review and is already closed — NEW-23, by Task 1b.** Over four hundred
 `path:line` citations across the documents were maintained by hand, `npm run check` was green with
@@ -303,7 +303,7 @@ reported twelve defects on its first run, then four more once its extractor was 
 citation across lines — the form that an evidence table written as one file name and eight bare
 ranges depends on, and that a per-line reader cannot see.
 
-**§1 therefore holds twenty rows while R2 runs, not nine**, and the arithmetic is worth stating because
+**§1 therefore holds twenty-two rows while R2 runs, not nine**, and the arithmetic is worth stating because
 it moves every time a task lands. It started at nine. NEW-12 closed and left two residuals; NEW-23
 arrived from the same review and closed the same day; NEW-16 closed and left **three**; NEW-11 closed and left NEW-30 and NEW-31; NEW-22 closed and left nothing; NEW-15 closed and left NEW-32 and NEW-33; the review that closed it also observed NEW-29, a timing assertion that can redden an unrelated commit; Foundation request 2 left NEW-34; the review that verified NEW-15's closure left NEW-35, which is a residual that existed all along and was filed under the wrong row — the misattribution repeated here until a review caught it; and request 3 left NEW-36, NEW-37, NEW-38 and NEW-39. A row leaves §1
 when its fix is **committed**, not when its question is answered, and all five R2 was opened for have now landed.

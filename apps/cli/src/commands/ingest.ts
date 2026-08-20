@@ -303,7 +303,7 @@ const RETRY_LATER =
  * this run actually produced.
  */
 const UNTOUCHED_RECOVERY =
-  "a capture reported as refused wrote nothing and its status is unchanged, so the next run tries it again while it is accepted; to stop retrying one, set its status back to quarantined by hand and then developer-os review --id <id> --decision reject";
+  "a capture reported as refused wrote nothing and its status is unchanged, so the next run tries it again while it is accepted; to stop retrying one, developer-os review --id <id> --decision reject";
 
 const PARTLY_APPLIED_RECOVERY =
   "a capture reported as partly applied is at staging with the notes named on its line already in the vault, and ingest never selects staging: read those notes, then set the status by hand — ingested if they are what you wanted, or accepted after removing them to try the capture again";
@@ -340,11 +340,12 @@ const INCOMPLETE_TRANSACTION_RECOVERY =
  * one about the state their capture is really in. Each line is emitted only if
  * some refusal in this run is in the state it describes.
  *
- * The `reject` half of the first line names the full escape rather than the
- * `review` command alone: a capture is only rejectable from `quarantined`
- * (`applyReviewDecision`'s own table), so the status has to go back by hand
- * first, and naming only the second half would send a user to a command that
- * refuses.
+ * The `reject` half of the first line names the `review` command alone, and used to name a
+ * hand edit before it: a capture was rejectable only from `quarantined`, so the status had to
+ * go back by hand first. Spec §5.5 gained `accepted → rejected` on 2026-08-20, and every
+ * capture these lines describe is at `accepted` — so the verb now works from where the
+ * capture actually is, and telling a user to edit their own frontmatter first would send them
+ * the long way round. `applyReviewDecision`'s table is still the authority; the table changed.
  *
  * Per-capture advice is printed beside each capture by `reportLines`; this is
  * what applies to the run.
@@ -1027,7 +1028,7 @@ async function applyNotes(
         EXIT_CODES.operationalFailure,
         "the proposal names a path that already holds a file; ingest creates notes and never replaces one",
         [write.path],
-        "ingest will refuse this capture again until something changes: move or delete the existing note if the proposal should replace it, or set the capture's status back to quarantined by hand and then developer-os review --id <id> --decision reject",
+        "ingest will refuse this capture again until something changes: move or delete the existing note if the proposal should replace it, or developer-os review --id <id> --decision reject",
       );
     }
 

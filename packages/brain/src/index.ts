@@ -84,6 +84,7 @@ export type {
 } from "./capture/index.js";
 export {
   applyReviewDecision,
+  decisionsFrom,
   isReviewDecision,
   REVIEW_DECISIONS,
 } from "./review/index.js";

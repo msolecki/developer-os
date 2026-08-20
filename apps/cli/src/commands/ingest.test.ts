@@ -1920,6 +1920,15 @@ describe("renderIngest, what a human is shown", () => {
     expect(text).toContain("ingest creates notes and never replaces one");
     /** The capture's own advice, which no run-level string contains. */
     expect(text).toContain("move or delete the existing note");
+    /**
+     * **And it names the verb rather than a hand edit.** This string said "set the capture's
+     * status back to quarantined by hand and then developer-os review …" because a capture
+     * was rejectable only from `quarantined`; spec §5.5 gained `accepted → rejected`, and the
+     * capture this line describes is at `accepted`. Its sibling at the run level was pinned
+     * and this one was not, so reverting it alone left the suite green.
+     */
+    expect(text).toContain("or developer-os review --id <id> --decision reject");
+    expect(text).not.toContain("back to quarantined by hand");
     expect(text).toContain(seeded.id);
   });
 
@@ -2032,6 +2041,31 @@ describe("renderIngest, what a human is shown", () => {
     const result = await fixture.run();
 
     expect(result.ok, "a lossy digest would refuse this for ever").toBe(true);
+  });
+
+  /**
+   * **The run-level recovery names the verb, and no longer a hand edit.** Both strings said
+   * "set its status back to quarantined by hand and then developer-os review …", because a
+   * capture was rejectable only from `quarantined`. Spec §5.5 gained `accepted → rejected`,
+   * and every capture these lines describe is at `accepted` — so the verb works from where
+   * the capture already is. Nothing pinned either string, so reverting them was silent.
+   */
+  it("recovers a refused capture by naming the verb, not a hand edit", async () => {
+    const fixture = await installedFixture("ingest-recovery-verb");
+    const seeded = await fixture.seedAccepted("an observation that refuses");
+    fixture.reply(() =>
+      oneNote(seeded.id, "DEV/leaky.md", "Leaky note", `token ${SECRET}`),
+    );
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const recovery = result.error.recovery ?? "";
+    expect(recovery).toContain("developer-os review --id <id> --decision reject");
+    expect(recovery).not.toContain("by hand");
+    /** And the capture really is at the status the verb now accepts. */
+    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
   });
 
   /**
