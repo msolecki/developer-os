@@ -18,7 +18,6 @@ import { invokeCodex } from "@developer-os/adapter-codex";
 import {
   BrainService,
   buildIngestPrompt,
-  MAX_PROPOSED_PATH_CHARS,
   parseCaptureFile,
   parseIngestProposal,
   planIngestApply,
@@ -35,7 +34,7 @@ import type {
   ValidatorId,
 } from "@developer-os/brain";
 import type { AgentName } from "@developer-os/platform-macos";
-import { createRedactor, screenAndCap } from "@developer-os/security";
+import { createRedactor } from "@developer-os/security";
 import type { Redactor } from "@developer-os/security";
 import { resolveScopeGlob } from "@developer-os/workflow-schema";
 
@@ -65,12 +64,41 @@ export interface IngestedCaptureV1 {
 }
 
 /**
+ * **Where a refused capture's *file* was left — not what status it holds.**
+ *
+ * Two of the three names collide with `CaptureStatus` members and mean something different
+ * here, which is why the set is named and frozen rather than written inline: `"staging"` is
+ * a capture whose notes may be on disk and which `selectCaptures` never selects, so it
+ * waits for a person; `"ingested"` is one whose notes landed *and* whose status reached
+ * `ingested` before something later failed.
+ *
+ * **`"untouched"` is everything else, and it is wider than "will be retried".** `leftAtOf`
+ * returns it for *any* on-disk status that is neither of the other two — an `accepted` a
+ * rollback restored, which the next run does retry, but also `quarantined`, `rejected` and
+ * `failed`, which it does not. A first version of this docblock narrowed it to the retried
+ * case; the name means "not left at staging and not left ingested", which is what the
+ * run-level recovery in `refusedRecovery` is written against.
+ *
+ * Published on `CliError.data`, so it is a contract. The array is exported and pinned by
+ * `ingest.test.ts` rather than left as a bare union, so a fourth member cannot be added to
+ * the type without something failing.
+ */
+export const CAPTURE_LEFT_AT = Object.freeze([
+  "untouched",
+  "staging",
+  "ingested",
+] as const);
+
+export type CaptureLeftAt = (typeof CAPTURE_LEFT_AT)[number];
+
+/**
  * One capture this invocation could not finish, and why.
  *
- * It is reported in the failure's **message** rather than in a `data` field
- * because `CliResult` carries no data on a failure — `brain lint` records the
- * same constraint and answers it the same way. Closing that properly is a
- * Foundation change to `CliError`, not this command's to make.
+ * It is reported in **both** the failure's message and its `data` field. It was the
+ * message alone until 2026-08-19, because `CliResult` carried no data on a failure —
+ * `brain lint` recorded the same constraint and answered it the same way. The Foundation
+ * change that constraint asked for landed as Foundation request 3, so `reportFields` now
+ * publishes this shape verbatim and the message keeps the prose.
  */
 interface RefusedCaptureV1 {
   readonly captureId: string;
@@ -108,7 +136,7 @@ interface RefusedCaptureV1 {
    * notes are applied and no rollback runs — an inference from those two facts
    * says `staging` while the bytes on disk say `ingested`.
    */
-  readonly leftAt: "untouched" | "staging" | "ingested";
+  readonly leftAt: CaptureLeftAt;
 }
 
 type CaptureOutcome =
@@ -359,6 +387,16 @@ class IngestRefusal extends Error {
     message: string,
     readonly paths: readonly string[] = [],
     readonly recovery?: string,
+    /**
+     * **The same run the message describes, as fields.** Carried on the error rather than
+     * assembled at the catch, because only the throw site holds the per-capture outcomes —
+     * and it is `undefined` for every other refusal on this path, which is why the slot is
+     * optional rather than an empty report (BACKLOG, Foundation request 3).
+     *
+     * It is not redacted here. `failureFrom` redacts every string leaf of it, for the same
+     * reason it has always redacted `message`.
+     */
+    readonly data?: RunReportV1,
   ) {
     super(message);
     this.name = "IngestRefusal";
@@ -727,7 +765,7 @@ async function invokeVendor(
    * **As of 2026-08-17 this branch is unreachable from `ingest`, and it is kept
    * as defence in depth rather than because a user can meet it.** Closing
    * BACKLOG NEW-12 left no argument on this path that a screen can refuse, and
-   * the disposal has to cover all four sources listed above, not three:
+   * the disposal has to cover every source listed below, not the three it once named:
    *
    * - the **prompt** is prefixed with a Markdown heading, so the dash rule
    *   cannot fire on it;
@@ -737,7 +775,11 @@ async function invokeVendor(
    *   zero declared write scopes;
    * - the **turn bound** is `DEFAULT_MAX_TURNS`, a compile-time constant well
    *   inside the 1–50 window `invokeClaude` enforces, so it cannot be refused
-   *   by a value this command chooses.
+   *   by a value this command chooses;
+   * - the **tool list** is `CLAUDE_READ_ONLY_TOOLS`, which `invokeClaude` screens
+   *   per entry — measured, each of `Read`, `Grep` and `Glob` passes. It is a
+   *   fifth source and an earlier version of this list said "all four", having
+   *   been corrected once already for the same class of omission.
    *
    * The user described above no longer exists — but the first caller to pass a
    * real write scope brings them back, so the interpolation stays. **Nothing
@@ -777,7 +819,7 @@ export function renderValidationFinding(finding: IngestValidationFinding): strin
   const where =
     finding.path === null
       ? ""
-      : ` ${screenAndCap(finding.path, MAX_PROPOSED_PATH_CHARS)}`;
+      : ` ${renderPath(finding.path)}`;
   return `${finding.validator}${where}: ${finding.message}`;
 }
 
@@ -793,7 +835,7 @@ function refusalFrom(
       findings.flatMap((finding) =>
         finding.path === null
           ? []
-          : [screenAndCap(finding.path, MAX_PROPOSED_PATH_CHARS)],
+          : [finding.path],
       ),
     ),
   ];
@@ -913,7 +955,7 @@ async function applyNotes(
       throw new IngestRefusal(
         EXIT_CODES.operationalFailure,
         "the proposal names a path that already holds a file; ingest creates notes and never replaces one",
-        [screenAndCap(write.path, MAX_PROPOSED_PATH_CHARS)],
+        [write.path],
         "ingest will refuse this capture again until something changes: move or delete the existing note if the proposal should replace it, or set the capture's status back to quarantined by hand and then developer-os review --id <id> --decision reject",
       );
     }
@@ -930,7 +972,7 @@ async function applyNotes(
    * **A throw out of `execute` does not mean "wrote nothing".** `apply()` writes
    * every mutation and transitions the journal to `applied` before
    * `verifyDesired` runs, and that verify raises `TransactionConflictError`
-   * (`packages/core/src/transactions/executor.ts:586-611`) with the files
+   * (`packages/core/src/transactions/executor.ts:835-853`) with the files
    * already on disk; a crash lands in the same place. Reporting "nothing was
    * written" there rolls the capture back to `accepted`, and the next run then
    * meets its own output at a path `create` refuses — permanently, under advice
@@ -1305,16 +1347,150 @@ interface RunReport {
   readonly warnings: readonly string[];
 }
 
+/**
+ * **Rendered for a terminal, not repaired.** This used `screenAndCap`, which collapses
+ * `/\s+/` and trims — so the human half of a refusal named `DEV/two spaces.md` for a file on
+ * disk called `DEV/two  spaces.md`, and the partly-applied line said that path was "already
+ * in the vault". `renderPath` is the boundary this repository already nominates for paths:
+ * it substitutes the characters that reorder a line and truncates, and it leaves whitespace
+ * alone. The rule is `threat-model.md`'s — byte-exact everywhere, screened at the terminal —
+ * and a collapse is neither.
+ */
 function screenNotes(notes: readonly string[]): string {
-  return notes
-    .map((note) => screenAndCap(note, MAX_PROPOSED_PATH_CHARS))
-    .join(" ");
+  return notes.map((note) => renderPath(note)).join(" ");
+}
+
+/**
+ * **What `reportLines` says, as fields a consumer can read.**
+ *
+ * The prose and the fields are built from the same `RunReport` and neither is derived from
+ * the other: parsing the lines back would make the message a wire format, and the message
+ * exists to be read by a person. Both are emitted; they are two renderings of one run.
+ *
+ * **Every capture in `order` appears in exactly one of `ingested` or `refused`**, which is
+ * the property the message has always had and the one a script most needs.
+ *
+ * **`unreadable` is structured, and it was prose for one review round.** These are the
+ * captures whose own envelope could not be read, so they cost no agent call and never enter
+ * `order`. The first version published `RunReport.warnings` — English sentences — which
+ * reproduced, inside the new contract, the exact defect the contract exists to close. The
+ * same captures are already structured as `selection.unreadable` and in scope at the throw
+ * site; that is what is published now. Same element type as `IngestResultV1.captures`, not
+ * the same set — the success arm folds unreadable captures in with the ingested ones and
+ * this keeps them apart, because on a failing run which is which is the question.
+ *
+ * **Every field here is published byte-exact**, including an unreadable capture's
+ * `captureId`, which is the one that can carry a byte a human never chose. Screening it and
+ * the note paths was tried and reverted: the screen used collapses whitespace, so it
+ * corrupted ordinary filenames while the success arm published the same values raw. The rule
+ * is `threat-model.md`'s — byte-exact everywhere, rendered at the terminal — and `screened`
+ * below carries the account of what that leaves open.
+ *
+ * **`agent` and `status` are carried for the same reason the success arm carries them.**
+ * A run that failed is no less in need of attribution than one that succeeded, and the
+ * first version dropped both — which would have made the two arms disagree about what a
+ * capture is.
+ *
+ * `schemaVersion` and `export` because this is published in `--json`: a `schemaVersion: 1`
+ * on a shape no consumer can name is not a contract, and the success arm's
+ * `IngestResultV1` is exported and imported by name from outside this package.
+ */
+export interface RunReportV1 {
+  readonly schemaVersion: 1;
+  readonly agent: AgentName;
+  readonly order: readonly string[];
+  readonly ingested: readonly IngestedCaptureV1[];
+  readonly refused: readonly {
+    readonly captureId: string;
+    readonly code: FailureExitCode;
+    readonly leftAt: CaptureLeftAt;
+    readonly message: string;
+    readonly recovery: string | null;
+    readonly appliedNotes: readonly string[];
+  }[];
+  readonly unreadable: readonly IngestedCaptureV1[];
+}
+
+/**
+ * **The `captureId` of an unreadable capture is the value here that can carry a byte a
+ * human never chose**, and it is published byte-exact — deliberately, after a screen was
+ * tried here and reverted.
+ *
+ * `renderIngest` puts it through `renderPath` for the *terminal*, because every id that came
+ * through `parseCaptureFile` is provably sixteen hex characters while an unreadable
+ * capture's is sliced out of a file name nothing checked. The `--json` half got
+ * `screenAndCap` to match, and that was wrong twice: `screenAndCap` collapses whitespace, so
+ * it renamed ordinary files; and it closed nothing, because the *success* arm published the
+ * same filename raw throughout. `threat-model.md`'s rule is byte-exact everywhere, rendered
+ * at the terminal, and the residue — `JSON.stringify` escaping `\p{Cc}` and not `\p{Cf}` —
+ * is NEW-38.
+ *
+ * **Note paths are not screened, and screening them was the defect.** A proposed path
+ * carrying `\p{Cc}` or `\p{Cf}`, or exceeding the cap, is refused by `proposal.ts` before it
+ * can become a note — so the screen closed nothing, and what it did do was collapse `/\s+/`
+ * and trim, publishing `DEV/two spaces.md` for a vault file called `DEV/two  spaces.md`.
+ * Two successive versions of this paragraph argued it was belt-and-braces from the half that
+ * was redundant, and never addressed the half that fired.
+ *
+ * What makes `reportLines` and `reportFields` two renderings of one run is that they carry
+ * the same bytes, not that they apply the same transformation: the message renders through
+ * `renderPath` because a terminal must not be reorderable, and the report carries the path a
+ * consumer has to open.
+ *
+ * `redactDeep` is not a substitute for either: it redacts secrets, not format characters.
+ *
+ * **What is still unscreened, so a green gate is not over-read.** `selection.warnings` are
+ * English sentences that embed the raw quarantine file name, and they ship verbatim in
+ * `reportLines`' message *and* on the success arm's `warnings`; `RunReportV1.refused[]`
+ * carries `message` and `recovery` as the refusal produced them. None of those is a *new*
+ * exposure — every one of them already reached the user through the failure message this
+ * field sits beside — but the enumeration is the point: a first version of this paragraph
+ * named only the warnings and read as exhaustive. `RunReportV1` publishes `unreadable`
+ * structurally rather than repeating the warning sentences, which narrows the exposure
+ * without closing it.
+ *
+ * **Every field is copied and published as it stands; nothing here transforms a value.**
+ * Two helpers used to — `screened` on the capture ids and `carriedNotes` on the note paths —
+ * and both are gone, along with the `screenAndCap` import this command no longer has. They
+ * ran `screenAndCap`, which strips `\p{Cc}`/`\p{Cf}`, **collapses `/\s+/` and trims**. The
+ * strip was redundant: `proposal.ts` refuses those characters in a note path, and the
+ * *success* arm published the same capture ids raw the whole time, so the screen closed
+ * nothing it was added to close. The collapse was destructive: `cap  two.md` published as
+ * `cap two`, `DEV/two  spaces.md` as `DEV/two spaces.md` — names of files that do not exist.
+ *
+ * Three successive reviews each removed it from one rendering and left another, so for a
+ * while the corrupted one was in turn `data`, then the terminal, then `error.paths`. The rule
+ * that ends it is `threat-model.md`'s and predates all of this: **paths are byte-exact
+ * everywhere and rendered at the terminal instead**, through `renderPath`, which substitutes
+ * reordering characters without touching whitespace. Redaction is the one transformation that
+ * still applies to every published field, and `failureFrom` is where it happens.
+ */
+function reportFields(
+  report: RunReport,
+  agent: AgentName,
+  unreadable: readonly IngestedCaptureV1[],
+): RunReportV1 {
+  return {
+    schemaVersion: 1,
+    agent,
+    order: report.order,
+    ingested: [...report.ingested],
+    refused: report.refused.map((refusal) => ({
+      captureId: refusal.captureId,
+      code: refusal.code,
+      leftAt: refusal.leftAt,
+      message: refusal.message,
+      recovery: refusal.recovery,
+      appliedNotes: [...refusal.appliedNotes],
+    })),
+    unreadable: [...unreadable],
+  };
 }
 
 /**
  * The whole run, one capture per entry, in the order it was processed — what a
- * machine consumer needs in order to learn what moved when the result cannot
- * carry data. Every capture the invocation touched appears exactly once, so
+ * person needs in order to read what moved. Every capture the invocation
+ * touched appears exactly once, so
  * "A ingested and B refused" is readable rather than inferable from B's error
  * alone.
  *
@@ -1423,9 +1599,16 @@ function reportLines(report: RunReport): readonly string[] {
  * why `refusedRecovery` emits only the lines this run's outcomes earn.
  *
  * **The run's exit code is the severest refusal, and its message is the whole
- * run** — one line per selected capture, ingested or refused. `CliResult`
- * carries no data on a failure, so a mixed batch that reported only the first
- * error would leave a caller unable to learn that anything was written at all.
+ * run** — one line per selected capture, ingested or refused. A mixed batch that reported
+ * only the first error would leave a caller unable to learn that anything was written at
+ * all.
+ *
+ * **Since 2026-08-19 the same run is also published as fields**, on `CliError.data`
+ * (Foundation request 3). The message used to be the only channel because `CliResult`
+ * carried no data on a failure, so a consumer parsed prose; both are emitted now, built
+ * from one `RunReport` and neither derived from the other — the message is what a person
+ * reads, the fields are what a script reads, and parsing the message back would make it a
+ * wire format it was never designed to be.
  *
  * **The model writes nothing.** It is invoked with zero declared write scopes,
  * inside its vendor's own read-only sandbox, and returns a proposal that nine
@@ -1532,21 +1715,22 @@ export async function runIngest(
     const captures = [...ingested, ...selection.unreadable].sort(compareIds);
     if (refused.length > 0) {
       /**
-       * Thrown rather than returned, so it takes the redacting path below —
-       * `brain lint` does the same, and for the same reason its own docblock
-       * gives: `CliResult` cannot carry data on a failure, so a command whose
-       * whole job is to say what happened has to say it in the message.
+       * Thrown rather than returned, so it takes the redacting path below — which is
+       * now also what redacts `data`'s string leaves, so the structured half gets the
+       * guarantee the message always had without this site having to remember it.
        */
+      const report: RunReport = {
+        order,
+        ingested,
+        refused,
+        warnings: selection.warnings,
+      };
       throw new IngestRefusal(
         severestOf(refused),
-        reportLines({
-          order,
-          ingested,
-          refused,
-          warnings: selection.warnings,
-        }).join("\n"),
+        reportLines(report).join("\n"),
         [...new Set(refused.flatMap((refusal) => refusal.paths))],
         refusedRecovery(refused),
+        reportFields(report, vendor.name, selection.unreadable),
       );
     }
 
@@ -1566,6 +1750,7 @@ export async function runIngest(
       error,
       error instanceof IngestRefusal ? error.paths : [],
       error instanceof IngestRefusal ? error.recovery : undefined,
+      error instanceof IngestRefusal ? error.data : undefined,
     );
   }
 }

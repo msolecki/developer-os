@@ -7,7 +7,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { EXIT_CODES } from "@developer-os/core";
+import { EXIT_CODES, formatJsonResult } from "@developer-os/core";
 import { ProtectedPathPolicy, redactText, SecurityRefusalError } from "@developer-os/security";
 import type * as SecurityModule from "@developer-os/security";
 
@@ -16,6 +16,7 @@ import {
   assertRootsAnchored,
   createGuards,
   createProductionContext,
+  failureFrom,
   loadOrCreateRedactionKey,
   pathEnvironmentFor,
   readRedactionKey,
@@ -728,6 +729,363 @@ describe("createGuards", () => {
     expect(
       guards.redactDiagnostic("Authorization: Bearer abc123def456ghi789"),
     ).toBe("Authorization: Bearer [REDACTED:bearer-token]");
+  });
+});
+
+describe("failureFrom", () => {
+  /**
+   * **`CliError.data` is a publishing surface, so it is redacted like the message.**
+   *
+   * The rule this asserts is that redaction happens *here* rather than at each call site.
+   * Eight commands reach this function; a guarantee each of them has to remember is a
+   * guarantee one of them will forget, and a nested `{ refused: [{ message }] }` is exactly
+   * where forgetting stays invisible until a secret is in someone's terminal.
+   *
+   * **Nested, not top-level, and that is the whole point of the case.** A first version of
+   * this guarantee was asserted through `ingest`, where the value never carried a live
+   * secret — so the test passed with the redaction removed. This drives the function
+   * directly with a shape whose secret is two levels down.
+   */
+  it("redacts every string leaf of the published detail, at any depth", async () => {
+    const fixture = await createFixture("failure-data");
+    const guards = createGuards(
+      new ProtectedPathPolicy(fixture.homeDir),
+      REDACTION_KEY,
+    );
+    const secret = "Authorization: Bearer abc123def456ghi789";
+
+    const result = failureFrom(
+      { guards },
+      new Error("one capture refused"),
+      [],
+      undefined,
+      {
+        order: ["cap-a"],
+        refused: [{ captureId: "cap-a", message: secret, code: 5 }],
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const published = JSON.stringify(result.error.data);
+    expect(published).not.toContain("abc123def456ghi789");
+    expect(published).toContain("[REDACTED:bearer-token]");
+    /**
+     * A `number` leaf survives unchanged — not because it cannot carry a secret, but
+     * because the redactor is `string => string` and applying it here would publish
+     * `"5"` where the schema declares a number. NEW-37 carries the limitation; the
+     * assertion pins the published *type*, which is what this test is about.
+     */
+    expect(result.error.data).toMatchObject({
+      refused: [{ code: 5, captureId: "cap-a" }],
+    });
+  });
+
+  /**
+   * **This runs inside a `catch`, so it must not be the thing that crashes.** A first
+   * version had no seen-set and no depth cap: a self-referencing `data` raised
+   * `RangeError: Maximum call stack size exceeded` out of a command's error handler, and it
+   * overflowed at roughly depth 1875 where `JSON.stringify` survives past 6000 — the
+   * redactor was the binding limit, on the error path.
+   */
+  it("survives a circular reference instead of overflowing the stack", async () => {
+    const fixture = await createFixture("failure-data-cycle");
+    const guards = createGuards(
+      new ProtectedPathPolicy(fixture.homeDir),
+      REDACTION_KEY,
+    );
+    const cycle: Record<string, unknown> = { captureId: "cap-a" };
+    cycle.self = cycle;
+
+    const result = failureFrom({ guards }, new Error("refused"), [], undefined, {
+      refused: [cycle],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(JSON.stringify(result.error.data)).toContain("[circular]");
+  });
+
+  it("truncates a structure deeper than it will walk", async () => {
+    const fixture = await createFixture("failure-data-deep");
+    const guards = createGuards(
+      new ProtectedPathPolicy(fixture.homeDir),
+      REDACTION_KEY,
+    );
+    let deep: Record<string, unknown> = { end: "leaf" };
+    for (let index = 0; index < 5_000; index += 1) deep = { n: deep };
+
+    const result = failureFrom({ guards }, new Error("refused"), [], undefined, deep);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(JSON.stringify(result.error.data)).toContain("[truncated]");
+  });
+
+  /**
+   * **Keys are a string leaf too**, and a first version walked values only — so
+   * `{ "Authorization: Bearer …": 1 }` published the secret verbatim under a docblock
+   * promising every leaf.
+   */
+  it("redacts an object key, not only its value", async () => {
+    const fixture = await createFixture("failure-data-key");
+    const guards = createGuards(
+      new ProtectedPathPolicy(fixture.homeDir),
+      REDACTION_KEY,
+    );
+
+    const result = failureFrom({ guards }, new Error("refused"), [], undefined, {
+      ["Authorization: Bearer abc123def456ghi789"]: 1,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(JSON.stringify(result.error.data)).not.toContain("abc123def456ghi789");
+  });
+
+  /**
+   * **A `Date` is left to `JSON.stringify` rather than walked into `{}`.** Walking every
+   * object emptied `Date`, `Map`, `Set` and `Error` alike, which for a `Date` is strictly
+   * worse than not walking it: the serializer would have produced the ISO string.
+   */
+  it("does not empty a value it cannot walk", async () => {
+    const fixture = await createFixture("failure-data-date");
+    const guards = createGuards(
+      new ProtectedPathPolicy(fixture.homeDir),
+      REDACTION_KEY,
+    );
+
+    const result = failureFrom({ guards }, new Error("refused"), [], undefined, {
+      at: new Date(Date.UTC(2026, 7, 18)),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(JSON.stringify(result.error.data)).toContain("2026-08-18T00:00:00.000Z");
+  });
+
+  /**
+   * **The hole the `Date` fix opened.** Leaving every non-plain object alone stopped
+   * `Date` becoming `{}` and started letting a class instance, an `Error` subclass and a
+   * `toJSON` carrier reach `--json` with their strings unredacted — because
+   * `JSON.stringify` renders them and `JSON.stringify` is not the redactor. `toJSON` is
+   * the sharp one: its *container* is plain, so it is walked, and the function survives to
+   * produce bytes that never passed through here.
+   */
+  it.each([
+    [
+      "a class instance",
+      { r: new (class { readonly message = "Authorization: Bearer abc123def456ghi789"; })() },
+    ],
+    [
+      "an Error subclass",
+      { e: Object.assign(new Error("boom"), { detail: "Authorization: Bearer abc123def456ghi789" }) },
+    ],
+    [
+      "an object rendered by toJSON",
+      { o: { toJSON: () => ({ leak: "Authorization: Bearer abc123def456ghi789" }) } },
+    ],
+  ])("redacts through %s rather than around it", async (_name, data) => {
+    const fixture = await createFixture("failure-data-nonplain");
+    const guards = createGuards(
+      new ProtectedPathPolicy(fixture.homeDir),
+      REDACTION_KEY,
+    );
+
+    const result = failureFrom({ guards }, new Error("refused"), [], undefined, data);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(JSON.stringify(result.error.data)).not.toContain("abc123def456ghi789");
+  });
+
+  /**
+   * A value the serializer refuses must not throw out of a `catch` block, which is where
+   * every caller of this function stands.
+   */
+  it("names a value it cannot serialize instead of throwing", async () => {
+    const fixture = await createFixture("failure-data-unserializable");
+    const guards = createGuards(
+      new ProtectedPathPolicy(fixture.homeDir),
+      REDACTION_KEY,
+    );
+    const hostile = new (class {
+      toJSON(): never {
+        throw new Error("no");
+      }
+    })();
+
+    const result = failureFrom({ guards }, new Error("refused"), [], undefined, {
+      hostile,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(JSON.stringify(result.error.data)).toContain("[unserializable]");
+  });
+
+  /**
+   * **The crash this field could cause at *publish* time, which is past every `catch`.**
+   * A `bigint` is not an object, so it left the redactor untouched and reached
+   * `JSON.stringify` in `main.ts` — after `failureFrom` had already returned successfully.
+   * The throw escaped the product entirely: no `--json` line printed, and Node's exit code
+   * rather than the command's.
+   */
+  it.each([
+    ["a bigint", { n: 10n }, "10n"],
+    ["a symbol", { s: Symbol("x") }, "[unserializable]"],
+    ["a function", { f: (): number => 1 }, "[unserializable]"],
+  ])("publishes %s the serializer would refuse or drop", async (_name, data, shown) => {
+    const fixture = await createFixture("failure-data-primitive");
+    const guards = createGuards(
+      new ProtectedPathPolicy(fixture.homeDir),
+      REDACTION_KEY,
+    );
+
+    const result = failureFrom({ guards }, new Error("refused"), [], undefined, data);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(() => formatJsonResult(result)).not.toThrow();
+    expect(formatJsonResult(result)).toContain(shown);
+  });
+
+  /**
+   * **An array subclass carries `toJSON` on its prototype, and `map` preserves the
+   * subclass.** `Array.isArray` was tested before `isWalkable`, so the array branch mapped
+   * it into another instance of the same subclass and the serializer called `toJSON` on
+   * the result.
+   */
+  it("redacts through an array subclass that renders itself", async () => {
+    const fixture = await createFixture("failure-data-array-subclass");
+    const guards = createGuards(
+      new ProtectedPathPolicy(fixture.homeDir),
+      REDACTION_KEY,
+    );
+    class Rendering extends Array<number> {
+      toJSON(): unknown {
+        return { leak: "Authorization: Bearer abc123def456ghi789" };
+      }
+    }
+
+    const result = failureFrom({ guards }, new Error("refused"), [], undefined, {
+      a: Rendering.from([1, 2]),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(JSON.stringify(result.error.data)).not.toContain("abc123def456ghi789");
+  });
+
+  /**
+   * **Every read this function performs *about* a value, not only reads *of* it.** A first
+   * version wrapped `Object.entries` alone and four others still escaped: `"toJSON" in
+   * value` runs a Proxy `has` trap and an accessor named `toJSON`; `Object.getPrototypeOf`
+   * runs another trap. Enumerating branches is how they were missed, so the rule is one line
+   * and this is the table that holds it.
+   *
+   * **`Symbol.species` left this table when the walk stopped using `Array.prototype.map`.**
+   * It was here because `map` asks the value for its species — which a later review turned
+   * into a leak rather than a throw, by returning a foreign object for the walk to write
+   * into. The walk builds its own array now, so a hostile species is never consulted and the
+   * value redacts normally; the case below asserts that instead.
+   */
+  it.each([
+    ["an accessor named toJSON that throws", { get toJSON(): never { throw new Error("g"); } }],
+
+    ["an array holding one of them", [{ get toJSON(): never { throw new Error("n"); } }]],
+    ["a Proxy whose has trap throws", new Proxy({}, { has: () => { throw new Error("has"); } })],
+    [
+      "a Proxy whose getPrototypeOf trap throws",
+      new Proxy({}, { getPrototypeOf: () => { throw new Error("proto"); } }),
+    ],
+    [
+      "a revoked Proxy",
+      (() => {
+        const { proxy, revoke } = Proxy.revocable({}, {});
+        revoke();
+        return proxy;
+      })(),
+    ],
+    ["a toJSON returning a bigint", { toJSON: () => 1n }],
+  ])("contains %s", async (_name, hostile) => {
+    const fixture = await createFixture("failure-data-hostile");
+    const guards = createGuards(
+      new ProtectedPathPolicy(fixture.homeDir),
+      REDACTION_KEY,
+    );
+
+    const result = failureFrom({ guards }, new Error("refused"), [], undefined, {
+      v: hostile,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(() => formatJsonResult(result)).not.toThrow();
+    expect(JSON.stringify(result.error.data)).toContain("[unserializable]");
+  });
+
+  /**
+   * **A hostile `Symbol.species` is simply not consulted.** The walk builds its own array
+   * rather than delegating to `Array.prototype.map`, so the value never participates in
+   * constructing the redacted output — it is redacted like any other array.
+   */
+  it("redacts an array subclass without consulting its species", async () => {
+    const fixture = await createFixture("failure-data-species");
+    const guards = createGuards(
+      new ProtectedPathPolicy(fixture.homeDir),
+      REDACTION_KEY,
+    );
+    class Hostile extends Array<string> {
+      static override get [Symbol.species](): never {
+        throw new Error("species");
+      }
+    }
+
+    const result = failureFrom({ guards }, new Error("refused"), [], undefined, {
+      v: Hostile.from(["Authorization: Bearer abc123def456ghi789"]),
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(JSON.stringify(result.error.data)).not.toContain("abc123def456ghi789");
+    expect(JSON.stringify(result.error.data)).not.toContain("[unserializable]");
+  });
+
+  /**
+   * **A getter throws from `Object.entries`, and this runs inside every command's
+   * `catch`.** It was contained for a non-plain object — `normalize` has its own `try` —
+   * and not for a plain one, so the behaviour depended on the container's prototype while
+   * the docblock stated both rules as absolutes.
+   */
+  it("contains a getter that throws instead of escaping the caller's catch", async () => {
+    const fixture = await createFixture("failure-data-getter");
+    const guards = createGuards(
+      new ProtectedPathPolicy(fixture.homeDir),
+      REDACTION_KEY,
+    );
+
+    const result = failureFrom({ guards }, new Error("refused"), [], undefined, {
+      get boom(): string {
+        throw new Error("getter blew up");
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(JSON.stringify(result.error.data)).toContain("[unserializable]");
+  });
+
+  /** Absent rather than present-and-empty when no caller supplies it. */
+  it("omits the slot when nothing is passed", () => {
+    const result = failureFrom(
+      { guards: { redactDiagnostic: (text: string) => text } } as never,
+      new Error("plain"),
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect("data" in result.error).toBe(false);
   });
 });
 

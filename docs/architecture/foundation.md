@@ -107,6 +107,91 @@ table is emitted only when present, and a configuration predating it loads and r
 byte-identically. `BACKLOG.md` §8 carries the row, **unratified** — the founder decided to implement
 NEW-16, which is not the same as ratifying the amendment it required.
 
+**A third amendment landed on 2026-08-19, and it is the first to touch `CliError` rather than
+the configuration.** Track R entry R2 gave `CliError` an optional `data?: RedactedPayload` member, because
+`CliResult`'s failure arm carried nothing machine-readable: `ingest` processes a batch and contains
+each capture's refusal to that capture, so a partly-succeeded run had to ship its per-capture
+outcomes as lines inside `message` and a consumer parsed prose. `brain lint` recorded the same
+constraint and answered it the same way, and `releases/foundation-checkpoint.md` records `doctor`
+hitting it a third time — three commands reaching for the same missing field is what made it a
+Foundation change rather than any one command's to work around.
+
+Additive in the senses that matter here: the field is **optional and absent when unset**, so every
+`--json` document a command emitted before it is byte-identical, and no existing caller changes
+because nothing populates a field that does not exist yet. What it costs is a new publishing
+surface — the failure arm is serialized into `--json` — so `failureFrom` redacts every string leaf
+of it, keys included, cycle-safe, depth-bounded and bounded in *breadth* — a caller's list is copied
+entry by entry under its own cap rather than spread, because a spread drives a hostile iterator to
+completion and V8 aborts with `FATAL ERROR: invalid array length`, which no `catch` contains. The same copy
+guards `warnings` on the success arm, and it drives the iterator's `next()` by hand rather than
+breaking out of a `for…of`: any early exit from `for…of` calls the iterator's `return()`, which is
+the caller's code, so the obvious spelling substitutes an uncatchable hang for the abort. And **three mechanisms make that the way in: the
+type closes the shape half, `failure` refuses what it cannot vouch for, and `publish` — the seam that decides the bytes and the exit status together — rebuilds anything it
+was not handed by `failure`, field by field**. The slot is `RedactedPayload`,
+branded with a `unique symbol` only `result.ts` can name, so `redactPayload` is its sole producer —
+and it takes the redactor and performs the walk, rather than asserting, so obtaining the type means
+having redacted. Every *shape* that writes the field another way is a compile error.
+
+The type alone was not enough, and a review demonstrated it six ways: `failure` kept the caller's
+object and `formatJsonResult` serialized it whole, so a `toJSON` on the error, a class
+`implements CliError`, `Object.defineProperty`, and mutating the returned result all published a raw
+value without writing the field in any shape a parse could see. Three mechanisms answer it, and the
+order they arrived in is the argument for the third. `failure` rebuilds the arm from its five named
+fields: `kind`, `message` and `recovery` coerced to strings, `paths` copied and frozen, and
+`data` accepted only if `redactPayload` produced it. The arm is branded `Constructed`, so a hand-built
+`{ ok: false, code, error }` is a compile error. And `publish` rebuilds any failure arm
+`failure` did not return, dropping `data`, because a payload on an arm this module never produced
+cannot be vouched for. An unregistered *success* arm has no such rebuild available — `data` is
+generic, so there is no coercion that makes it safe — and it is refused outright rather than
+serialized as given. A round-24 review measured the alternative: publishing it verbatim printed a
+secret and returned exit status `0` for an arm whose own code said `5`.
+
+**The third is what closes the class.** Rebuilding helps only callers who choose to call, and a
+*phantom* brand rides through `Object.assign`, object spread, `Proxy` and `structuredClone` while
+every runtime property it stood for is discarded — `{ ...result, error }`, which is what re-wrapping
+a sub-command's failure looks like, typechecks and skips all of it. Identity is the one thing those
+operations cannot forge, so the question is asked at the seam that decides the bytes. Both brands
+are type-only, so the published bytes are unchanged.
+
+**What the brand does not stop**, recorded because two successive versions of this paragraph each
+named something that is in fact closed: **a caller who supplies an identity redactor**, and **a
+producer call outside the composition root**. That is the whole list, verified by running each
+candidate against the built module. Merging with `Object.assign`, spreading into a wider object,
+`Object.defineProperty` before the call, and mutating through a cast are all closed — but by **two**
+mechanisms, and an earlier version of this paragraph credited them all to one. Spreading,
+`Object.assign({}, payload, …)` and `Object.defineProperty` on a fresh literal each yield a value
+`payloads` does not hold, so `failure` drops the field entirely. In-place `Object.assign(payload, …)`
+and mutation through a cast are stopped by the deep freeze instead: those return the payload itself,
+which the registry *does* hold, so the registry cannot be what refuses them. The distinction is
+load-bearing — moving the freeze to the publishing seam would leave the first pair closed and the
+second pair open. An identity redactor is the one
+that survives, because obtaining the brand means having performed the walk *with the function the
+caller supplied*, and no type can audit a function.
+`tests/repository/failure-data-entry.test.ts` keeps the producer at the composition root and sweeps
+the greppable spellings — over thirty, split between casts and brand-naming
+annotations on one side and ways of reaching the producer under another name on the other. The
+exact split is deliberately not quoted here: two reviews counting it disagreed, and a number three
+documents repeat is worth less than the test file, which is the only thing that can be right. The original pair
+was a cast onto the brand and a producer call outside the composition root; reviews then added
+`as never`, a type predicate or `asserts` signature naming it, a variable bound to the producer, and
+a re-export of it. The list records what was measured rather than what is believed to remain.
+
+**That was the second design.** It began as `data?: unknown` guarded by a repository sweep, on the
+argument that `failure` is exported and called directly at seven command sites besides
+`failureFrom`, and that `failureFrom` builds
+its error with a spread — which is exempt from excess-property checking, so the type policed
+neither. The sweep was then falsified in five consecutive review rounds: four evasions, seven, a
+conditional spread, five inline shapes, five more — never trending to zero, because `CliResult` is a
+plain structural union and the set of syntactic shapes producing a failure arm is unbounded. A brand
+answers all of them at once. `tests/repository/failure-data-entry.test.ts` survives, narrowed to the
+holes a brand cannot close: obtaining one without redacting, and minting one outside the composition
+root. A sixth round then found five more ways to reach it — `as never`, a type predicate, an
+`asserts` signature, a variable bound to the producer, and a re-export of it — so the sweep's
+coverage is a measured list rather than an argument.
+
+`BACKLOG.md` §8 carries the row, **unratified** — the founder decided to implement Foundation
+request 3, which is not the same as ratifying the amendment it required.
+
 ## 3. The mutation pipeline
 
 Every filesystem mutation in the product goes through seven phases, recorded in a journal at

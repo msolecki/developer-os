@@ -202,11 +202,15 @@ async function runLint(
   }
 
   /**
-   * A failing lint carries its findings in the message, because `CliResult`
-   * cannot carry data on a failure and this command exists to say what is
-   * wrong. Exiting non-zero with nothing but a count would make every consumer
-   * run the command twice — once for the code, once for `--json` — and the
-   * second run would exit non-zero too.
+   * A failing lint carries its findings in the message: this command exists to say what
+   * is wrong, and exiting non-zero with nothing but a count would make every consumer run
+   * the command twice — once for the code, once for `--json` — and the second run would
+   * exit non-zero too.
+   *
+   * **`CliError.data` exists as of 2026-08-19** (Foundation request 3, which this docblock
+   * is cited as one of the three motivations for, beside `ingest` and `doctor`), so the
+   * message is no longer the only channel available here. Moving `lint`'s findings onto it is a separate change with its
+   * own output contract to settle, and is deliberately not smuggled in with the slot.
    *
    * Bounded, and the messages are already redacted: `lint` truncates every
    * author-controlled value it interpolates at 64 graphemes.

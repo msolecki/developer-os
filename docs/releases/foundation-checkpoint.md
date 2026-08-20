@@ -291,8 +291,14 @@ excluded as preconditions already checked before any mutation, and `agents` excl
 Foundation does not depend on. Two further regressions pin both halves.
 
 One P2 was accepted as a limitation rather than fixed: a warning is invisible on a *failing*
-`doctor` run, because `CliResult`'s failure branch carries no data and therefore no checks. Fixing
-that means changing a frozen interface, which is not this task's to do.
+`doctor` run, because `CliResult`'s failure branch carried no data and therefore no checks. Fixing
+that meant changing a frozen interface, which was not that task's to do.
+
+**Amended 2026-08-19.** The interface changed: `CliError` has an optional `data` slot (Foundation
+request 3, registered in `BACKLOG.md` §8 and `foundation.md` §2). This was the **third** recorded
+command to want it — `ingest` and `brain lint` are the other two, and three is what turned it from
+a workaround into a Foundation change. `doctor` does not populate it yet; that is its own change,
+with its own output contract to settle, and is deliberately not smuggled in with the slot.
 
 **Reviewer B — documentation accuracy against source.** Two P0 findings, both accepted, both
 errors in this checkpoint and in `docs/architecture/foundation.md`:

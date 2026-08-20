@@ -22,6 +22,7 @@ import {
   EXIT_CODES,
   failure,
   ManifestStore,
+  redactPayload,
   resolveRuntimePaths,
   TransactionExecutor,
   TransactionStore,
@@ -288,7 +289,7 @@ export async function assertRootsAnchored(
  * (`packages/security/src/protected-paths.ts:125`).
  *
  * **`refuse` is injected** for the reason `writeIndexArtifacts` states at
- * `apps/cli/src/commands/reindex.ts:93-99`: each command raises its own refusal
+ * `apps/cli/src/commands/reindex.ts:108-114`: each command raises its own refusal
  * class carrying its own exit code and recovery text, and a shared module
  * inventing a third would throw every caller an error its catch clause does not
  * recognise. **`refusalMessage` is injected too**, rather than built from a
@@ -418,24 +419,49 @@ function kindOf(error: unknown): string {
 }
 
 /**
- * Turns a thrown error into a stable `CliResult`. The message passes through the
- * redactor first: it may quote a path, a command, or file content.
+ * Turns a thrown error into a stable `CliResult`. **Every published field passes through the
+ * redactor**: `message`, because it may quote a path, a command or file content; `data`,
+ * every leaf of it; and `paths` and `recovery` beside them.
+ *
+ * **`paths` is the exception, and it is an open defect rather than a decision.** A secret in
+ * a model-chosen note path publishes raw there while the same string redacts in `message` and
+ * in `data` — one value, three renderings of one document, one of them clear. Redacting the
+ * field is the obvious fix and it cannot ship: the redactor's `high-entropy` class fires on a
+ * sixteen-hex capture id, so `_raw/quarantine/a1b2c3d4e5f60718.md` comes back
+ * `[REDACTED:high-entropy].md` — the most important path this product publishes, destroyed,
+ * and with it every absolute path under a temporary directory. Measured both ways.
+ *
+ * Closing it needs a redactor that applies the *pattern* classes and not the heuristic one,
+ * which is the capability NEW-36 already registers as absent and out of this task's scope.
+ * The row is **NEW-39**; this comment exists so the exemption is not read as considered.
+ *
+ * **`data` is typed `object` rather than `unknown`**, which is narrower than the field it
+ * populates. `recovery` is object-proof already, so the two cannot be swapped in that
+ * direction; typing `data` as `unknown` left the other direction open, and
+ * `failureFrom(ctx, e, [], undefined, "run doctor")` would publish recovery text as machine
+ * data. A report is an object; a string in this position is a mistake.
  */
 export function failureFrom(
   context: Pick<CliContext, "guards">,
   error: unknown,
   paths: readonly string[] = [],
   recovery?: string,
+  data?: object,
 ): CliResult<never> {
   const message = context.guards.redactDiagnostic(
     error instanceof Error ? error.message : "an unexpected failure occurred",
   );
 
+  const redact = context.guards.redactDiagnostic;
+
   return failure(exitCodeOf(error), {
     kind: kindOf(error),
     message,
     paths,
-    ...(recovery === undefined ? {} : { recovery }),
+    ...(recovery === undefined ? {} : { recovery: redact(recovery) }),
+    ...(data === undefined
+      ? {}
+      : { data: redactPayload(context.guards.redactDiagnostic, data) }),
   });
 }
 

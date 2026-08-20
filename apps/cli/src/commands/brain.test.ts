@@ -456,9 +456,10 @@ describe("brain lint", () => {
     if (result.ok) return;
     expect(result.code).toBe(EXIT_CODES.operationalFailure);
     /**
-     * `CliResult` cannot carry data on a failure, and this command exists to
-     * say what is wrong — so the findings ride in the message. Exiting non-zero
-     * with only a count would make every consumer run the command twice.
+     * This command exists to say what is wrong, so the findings ride in the message:
+     * exiting non-zero with only a count would make every consumer run the command twice.
+     * `CliError.data` exists now (Foundation request 3) and `lint` does not use it yet —
+     * that move needs its own output contract, so this pins the message as it stands.
      */
     expect(result.error.message).toContain("DEV/absent");
     expect(result.error.paths).toContain("content/DEV/broken.md");

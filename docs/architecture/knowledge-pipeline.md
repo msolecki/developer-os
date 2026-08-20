@@ -173,13 +173,13 @@ accepted capture
   → status → ingested                         (ingest-ingested)
 ```
 
-The five kinds are `apps/cli/src/commands/ingest.ts:245-251`; the ladder is documented at `:1020-1033`
-and the reasons at `:228-243`. **Two independent reasons no two of them merge:**
+The five kinds are `apps/cli/src/commands/ingest.ts:275-281`; the ladder is documented at `:1090-1130`
+and the reasons at `:258-274`. **Two independent reasons no two of them merge:**
 
 1. **`BrainService.reindex()` reads the vault** (`packages/brain/src/service.ts:220`), so it cannot
    run until the apply has finalized — and it has no write channel at all, by design, so the CLI
    stages its bytes through the executor exactly as `brain reindex` does
-   (`apps/cli/src/commands/ingest.ts:947-973`).
+   (`apps/cli/src/commands/ingest.ts:988-1014`).
 2. **`validateChangePlan` grants ownership from the manifest**, where the four index artifacts *are*
    recorded (`apps/cli/src/commands/reindex.ts:156-165`) and a capture deliberately **is not**
    (`apps/cli/src/commands/capture.ts:530-534`). One transaction cannot hold both regimes.
@@ -189,18 +189,18 @@ crash cannot be told from a run that never started.
 
 **The residual, accepted rather than closed.** A crash between the apply and the last transaction
 leaves a capture at `staging` with its notes already in the vault. It is **inert**: `selectCaptures`
-selects only captures whose status is `accepted` (`ingest.ts:541`), so the next run cannot
+selects only captures whose status is `accepted` (`ingest.ts:598`), so the next run cannot
 double-apply. It is visible, and a hand edit of the status is what moves it — which is what
-`PARTLY_APPLIED_RECOVERY` (`ingest.ts:277-278`) tells the user, in those words and no others: **the
+`PARTLY_APPLIED_RECOVERY` (`ingest.ts:307-308`) tells the user, in those words and no others: **the
 `repair` half of that advice is a different constant.** `INCOMPLETE_TRANSACTION_RECOVERY`
-(`:300-301`) is appended unconditionally by `refusedRecovery` (`:349`), so the two arrive together in
+(`:330-331`) is appended unconditionally by `refusedRecovery` (`:379`), so the two arrive together in
 the output while neither line alone says both. **No arrangement of these transactions removes that
 window**, because no two of them can share one.
 
 **The model gets zero declared write scopes** (spec §3.3), and each vendor's sandbox follows from that
 count rather than from an argument: `invokeCodex` derives `-s read-only` from `writeScopes.length === 0`,
 and the Claude side passes a tool list carrying no write tool — no `Write`, no `Edit`, no `Bash`, no
-`Task` (`ingest.ts:180-196`, `:658-690`). The alternative, a staging-only write scope, was rejected:
+`Task` (`ingest.ts:210-226`, `:699-715`, `:732`). The alternative, a staging-only write scope, was rejected:
 under it "the model cannot write outside staging" is a property our validators must prove after the
 fact, and every file in staging becomes attacker-influenced content we must treat as hostile on
 read-back. Under this design it is a property the vendor's own permission system enforced **before the
@@ -208,7 +208,7 @@ model ran**.
 
 **One asymmetry a reader will otherwise assume away.** `--output-schema` reaches Codex only;
 `invokeClaude` has no such flag, so on that vendor the schema is described in the prompt and enforced
-by `parseIngestProposal` afterwards (`ingest.ts:651-656`).
+by `parseIngestProposal` afterwards (`ingest.ts:708-714`).
 
 ---
 
@@ -225,17 +225,17 @@ quarantined → accepted → staging → ingested
 
 **`failed` describes a capture whose own envelope cannot be read, and nothing else.** It has exactly
 two producers: `selectCaptures`, when `parseCaptureFile` refuses a file
-(`apps/cli/src/commands/ingest.ts:533-539`), and the duplicate path in `capture`
+(`apps/cli/src/commands/ingest.ts:577-598`), and the duplicate path in `capture`
 (`apps/cli/src/commands/capture.ts:452`). **A validator refusal leaves the capture `accepted` and
 retryable**, and a review refusal writes nothing at all (`decide.ts:67-69`).
 
 Collapsing the two would make a transient model failure look like data loss: the capture is fine and
 the proposal was not. That distinction is what `ingest`'s four recovery strings are for — `untouched`,
 `staging` with notes, `staging` without them, and `ingested`-under-a-failure-exit — assembled from the
-states a run actually left rather than printed in full every time (`ingest.ts:321-350`).
+states a run actually left rather than printed in full every time (`ingest.ts:351-379`).
 
-**Evidence:** `apps/cli/src/commands/ingest.test.ts:385` (the ladder itself), `:478` (rollback to
-`accepted`, never to `failed`), `:505` and `:589` (no rollback once notes landed), `:664` (the status
+**Evidence:** `apps/cli/src/commands/ingest.test.ts:393` (the ladder itself), `:486` (rollback to
+`accepted`, never to `failed`), `:513` and `:597` (no rollback once notes landed), `:704` (the status
 is read from disk rather than inferred), and every case in `tests/security/interruption.test.ts`,
 whose `expectedStatus` is derived per transaction kind and phase rather than assumed uniform.
 
@@ -264,7 +264,7 @@ the file **never the value** (`:67-72`) — the report is written and logged, an
 output that has just read material an attacker may have written.
 
 **Two of the nine refuse at exit 5 rather than exit 1**: `secret-scan` and `write-scope`
-(`ingest.ts:253-262`). Spec §6.4 names exit 5 for write-scope; extending it to the secret scan is this
+(`ingest.ts:284-292`). Spec §6.4 names exit 5 for write-scope; extending it to the secret scan is this
 subsystem's reading and is stated rather than buried — a secret coming back from a model and a path
 trying to leave the vault are the same kind of event, and different in kind from a model that got a
 frontmatter key wrong.
@@ -285,13 +285,13 @@ differently on every invocation: the field would populate, look correct, and mea
 
 **The key is durable, and the load has two doors, not one:**
 
-- `readRedactionKey` (`apps/cli/src/context.ts:589`) is the **composition root's** door. It never
+- `readRedactionKey` (`apps/cli/src/context.ts:614`) is the **composition root's** door. It never
   creates, never throws and never repairs, returning `null` for absent, unreadable, symlinked,
   wrong-typed or too-short — every state `doctor` must be able to *report*, which it cannot do if
   building the context already threw. The root warns and falls back to an ephemeral key
-  (`:650`), so diagnostics are still redacted on a machine that has never been initialized.
-- `loadOrCreateRedactionKey` (`:568`) is the **point-of-use** door, called by `init` (`init.ts:695`,
-  `:730`) and by `capture`, `review` and `ingest` at their own points of use. It creates when absent,
+  (`:662-668`), so diagnostics are still redacted on a machine that has never been initialized.
+- `loadOrCreateRedactionKey` (`:593`) is the **point-of-use** door, called by `init` (`init.ts:696`,
+  `:731`) and by `capture`, `review` and `ingest` at their own points of use. It creates when absent,
   refuses a symlink or a non-regular file, and tightens an over-permissive mode. Both doors open with
   `O_NOFOLLOW | O_NONBLOCK`: without the second, a FIFO planted at that path blocks the CLI forever,
   because the file-type guard is downstream of the open.
@@ -330,8 +330,8 @@ configuration value inside a document whose whole purpose is to be comparable ac
 substitutions are **pinned to a position** — `content` at index 0 only, `_indexes` at index 1 only and
 only when index 0 was `content` — so a vault folder literally named `content` nested under `staging/`
 cannot be corrupted, and every root is glob-escaped and NFC-normalized before it is spliced in.
-`ingest` resolves its declared scopes through it once per invocation (`ingest.ts:1460`), against
-`INGEST_DECLARED_WRITE_SCOPES` (`:168-171`), which `ingest.test.ts` pins against
+`ingest` resolves its declared scopes through it once per invocation (`ingest.ts:1686`), against
+`INGEST_DECLARED_WRITE_SCOPES` (`:198-201`), which `ingest.test.ts` pins against
 `workflows/ingest/workflow.yaml` so a contract edit that does not update the constant goes red. The
 compiler's declared-versus-derived arithmetic is untouched, so the equality rule stays the checked
 arithmetic it was designed to be.
@@ -411,9 +411,11 @@ in §10 below with their owners.
 | | Owner | Shape |
 |---|---|---|
 | **NEW-21** — one successful `codex exec` completion is still owed | the founder, because it spends their credits | S. Task 17 ran on 2026-08-15 and the account's usage limit was exhausted, so it settled the JSONL framing and the discriminating `type` field and **not** the terminal-event rule, and observed no Codex environment. One run closes both halves; until it lands, `finalJsonlLine` stays provisional and every capture taken inside a Codex session records `sourceAgent: "unknown"` |
+| **NEW-36** — a redacted payload's paths are renormalized and its keys rewritten | DOS-P7, open | M. `ingest` publishes `RunReportV1` on `CliError.data`, and `redactPayload` runs every string leaf through `redactText`, which returns NFC — so a note path a `--json` consumer reads back may not open on a filesystem that handed it out as NFD, while `error.paths` beside it stays byte-exact. The same redactor carries the user's `[redaction] patterns`, which are applied to product-chosen key names: `patterns = ["captureId"]` yields a document still declaring `schemaVersion: 1` that no longer matches it. Closing it needs a redactor that takes the class set to apply, which `redactText` does not offer |
+| **NEW-37** — a numeric leaf of that payload is outside the redactor's reach | DOS-P7, open | M. `redactText` is `string => string`, so applying it to a `number` would publish `"1"` where the schema declares `schemaVersion: 1`. Every string and `bigint` leaf redacts; a `number` does not. Latent while the only `number` leaves are product-chosen constants, live the first time a report carries a caller-derived one. Same shape as NEW-36 and should be taken with it |
 | **NEW-20** — `capture` proves its quarantine root, then follows the declared path again | DOS-P7 by default | XS, security, **theoretical**: it needs a won race and is not a regression. The declared path is the contract — it is what `CaptureResultV1.path` publishes — so closing the window means the two paths disagreeing inside one function. `threat-model.md` §5.2 describes it |
 | **NEW-19** — `reindex` builds its owned root textually, as `capture` used to | **closed 2026-08-15** by Track R entry R1 | XS, security. `reindex` calls `resolveContainedRoot` (`apps/cli/src/commands/reindex.ts:466`) rather than joining the path textually, so a `content/_indexes` replaced by a link out of the vault is refused instead of written through. Regression tests: `tests/security/symlink-escape.test.ts:369,410` |
-| **NEW-15** — nothing that executes a discovered binary pays the check its own type demands | **closed 2026-08-17** by Track R entry R2 | S, security. `assertTrustedExecutable` canonicalizes, refuses a non-regular-file target, and walks three ancestor chains refusing an owner that is neither the current uid nor root, any other-writable directory, and a group-writable one the current uid does not own. All three executors call it — `apps/cli/src/commands/capture.ts:263`, `apps/cli/src/commands/doctor.ts:439`, `apps/cli/src/commands/ingest.ts:481`. **Three residuals stay open**: NEW-32 (a middle symlink hop, a working bypass), ACL blindness, and NEW-35 (check-then-use); NEW-33 is a false refusal awaiting the founder |
+| **NEW-15** — nothing that executes a discovered binary pays the check its own type demands | **closed 2026-08-17** by Track R entry R2 | S, security. `assertTrustedExecutable` canonicalizes, refuses a non-regular-file target, and walks three ancestor chains refusing an owner that is neither the current uid nor root, any other-writable directory, and a group-writable one the current uid does not own. All three executors call it — `apps/cli/src/commands/capture.ts:263`, `apps/cli/src/commands/doctor.ts:439`, `apps/cli/src/commands/ingest.ts:516`. **Three residuals stay open**: NEW-32 (a middle symlink hop, a working bypass), ACL blindness, and NEW-35 (check-then-use); NEW-33 is a false refusal awaiting the founder |
 | **NEW-16** — spec §8.2's user-configured redaction patterns are unreachable | **closed 2026-08-17** by Track R entry R2 | S. `configSchema` carries an optional `[redaction]` table (`packages/core/src/config/loader.ts:208`) and the three redacting commands bind the user's patterns through `createRedactor` at their composition roots. `tests/repository/redactor-entry.test.ts` refuses a new call site that reaches for `redactText` directly. Residuals NEW-24, NEW-25 and NEW-26 stay open |
 | **NEW-17** — `brain` is the one command whose config parse failure is not content-free | **closed**, removed from `BACKLOG.md` §1 | XS, security. `readConfig` now routes through `readConfigFile` (`apps/cli/src/commands/brain.ts:117`) and rethrows `ConfigurationError` unmodified, so no command parses configuration outside the wrapper |
 | **NEW-18** — `assertSafeCommand`'s four NUL branches have no test anywhere | **closed 2026-08-15** by Track R entry R1 | XS. One case per `containsNul` site — executable, working directory, any argument, stdin (`packages/security/src/process.test.ts:101,111,119,127`) |
@@ -502,7 +504,7 @@ The recording is `tests/fixtures/codex/observed-exec-stream.jsonl`, with `README
 what was redacted. **What remains open is `BACKLOG.md` §1 NEW-21**, and one successful `codex exec`
 completion closes all of it. Separately and untouched by this run: the Claude scoped-permission form
 `claude-adapter.md` §14.3 names but does not specify is still unresolved, which is why `ingest` passes
-bare tool names (`apps/cli/src/commands/ingest.ts:187-194`).
+bare tool names (`apps/cli/src/commands/ingest.ts:216-222`).
 
 **Task 17's diff needs its own security pass.** The independent review covered Tasks 1–18 only, and
 this diff changes an adapter's stdout-parsing documentation and a detection table on the capture path
