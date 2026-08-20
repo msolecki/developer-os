@@ -63,7 +63,8 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | Program (umbrella) | 1 plan | Tasks 6–9 open, **25 unticked steps**; Tasks 0–5 closed and not rows here |
 | DOS-P6 | spec approved and plan written, both 2026-08-13 | **three unticked steps** — Task 17 Step 3 (the Codex detection row, blocked on NEW-21) and Task 19 Steps 5–6 (close the documents, run the gate), which wait on it. Seventeen of nineteen tasks landed 2026-08-13/14/15 and their step lists are deleted |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
-| DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each |
+| DOS-P10, DOS-P11, DOS-P12 | no documents; added 2026-08-20 | **3 specs, 3 plans, 3 implementations.** The shared-runtime layers no subsystem owned: thirty-eight instruction artifacts, eleven event hooks, nine tooling scripts |
+| DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each. **The cutover's scope grew on 2026-08-20** — it now retires the shared runtime entirely, so it follows DOS-P12 rather than DOS-P7 |
 | Repository-level | §1 | **twenty-two rows**, and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **four** belong to somebody else (NEW-21 the founder's and blocking A10, NEW-20 and NEW-13 deliberately not fixed, NEW-7 needing a machine with Obsidian); **eighteen** came out of R2's own reviews — NEW-27 and NEW-28 from closing NEW-12, NEW-24/25/26/29 from NEW-16, NEW-30 and NEW-31 from NEW-11, NEW-32, NEW-33 and NEW-35 from NEW-15, NEW-34 from Foundation request 2, and NEW-36, NEW-37, NEW-38 and NEW-39 from request 3, NEW-40 from Task 8, and NEW-41 from Task 9 |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
@@ -548,7 +549,6 @@ not.
   task was scoped to the mechanism.
 
 
-
 ### NEW-41 — `review`'s listing shows only `quarantined`, so half of the new transition is unreachable
 
 - **Status:** open, registered 2026-08-20 by the round-2 review of Track R R2 Task 9 ·
@@ -568,7 +568,6 @@ not.
 - **The measurement.** `review.ts:255` is one condition; the test that would pin it is one
   case. The cost of leaving it is that the headline reason for the transition is served only
   by the path nobody wrote it for.
-
 
 
 ### NEW-24 — a common redaction pattern refuses every ingest, undiagnosably
@@ -823,9 +822,16 @@ that subsystem in §3.
 
 ## 3. Missing specs and plans
 
-**Two documents left, both DOS-P7's.** DOS-P6's spec was approved by the founder on 2026-08-13 and
-its implementation plan was written the same day. Nothing else on the product path is missing a
-document.
+**Eight documents left, across four subsystems.** DOS-P6's spec was approved by the founder on
+2026-08-13 and its implementation plan was written the same day. Everything else on the product path
+— DOS-P7, and the three subsystems added on 2026-08-20 — is missing both its spec and its plan.
+
+**The three new ones exist because a parity read found layers with no owner.** On 2026-08-20 the
+founder ruled that the legacy shared runtime is retired **entirely** rather than partially. Read
+against that goal, the product as scoped covers the vault and the knowledge pipeline and nothing
+else: thirty-eight instruction artifacts, eleven event hooks and nine tooling scripts appear in no
+spec, no plan and no backlog row. The cutover cannot retire what the product never built, which is
+why all three sit ahead of it in `ORDER.md` rather than inside it.
 
 Each subsystem after Foundation requires an approved spec **and** an implementation plan
 before any code work — this is a Global Constraint of the program plan, not a preference.
@@ -908,22 +914,123 @@ list of what the spec "must decide" back into this section; it was decided and s
   ships opt-in commands without a way to record the opt-in ships a dead end. Detail in
   `docs/architecture/foundation-constraints.md`, "Found after Foundation closed".
 
+
+### DOS-P10 — Managed instruction artifacts
+
+- **Spec:** `specs/2026-08-20-developer-os-instruction-artifacts-design.md` — missing
+- **Plan:** `plans/2026-08-20-developer-os-instruction-artifacts.md` — missing
+- **Program task:** 10 — **and the program plan has no Task 10**; see §8 · **Complexity:** L ·
+  **Blocked by:** DOS-P7, by the founder's sequencing ruling of 2026-08-20 and not by any technical
+  dependency. Its renderers closed with DOS-P4 and DOS-P5 and its artifact mechanism closed with
+  Foundation, so it is startable the moment A10 is.
+- **Scope:** thirty-eight artifacts the legacy shared runtime carries and this product does not —
+  twelve rule and output-style documents, five subagents, eight slash commands, and thirteen skills
+  that are not about the Brain.
+- **The workflow compiler is the wrong tool, and that is this entry's central finding.** A canonical
+  workflow is declarative: `steps` naming product verbs, `scopes`, `refusals` carrying exit codes,
+  `validators`. The thirty-eight are instructional prose, and the subagents are a system prompt with a
+  model and a tool allowlist. Not one of them can be expressed as a product verb, so compiling them is
+  not a large version of DOS-P3's job — it is a different job. What they need is Foundation's
+  mechanism: markdown in, manifest-owned install out, drift detected, uninstall complete.
+- **The spec must decide:** the artifact kinds — subagents, commands, output styles, and how a rule
+  document reaches each vendor's instruction file; how a lazily-loaded rule, today a symlink, is
+  expressed as a managed artifact; and the two-vendor mapping, which needs a third value wherever one
+  vendor has no equivalent surface, on the model `CapabilityState` already sets.
+- **It must also decide where the content lives, and that constraint shapes the subsystem.** This
+  repository is public, and `docs/migration/exclusion-policy.md` prohibits founder notes and client
+  material in public artifacts. The legacy rule documents name client engagements in their own prose.
+  So the product ships the **mechanism**, and at most neutral defaults; the founder's thirty-eight
+  artifacts live in a private source the product installs *from*. A spec that puts them in
+  `templates/` fails the publication gate rather than the review.
+- **Produces:** `InstructionArtifactV1`, new `ManagedArtifactV1` kinds, and renderer extensions in
+  both adapters.
+- **Gate:** install, drift and uninstall exercised over every kind on both vendors; `uninstall` leaves
+  no manifest-owned artifact behind; the publication gate passes with no founder content in the tree.
+- **A test asserts the absence this entry removes.** `docs/architecture/claude-adapter.md` §3 records
+  that the tree contains no `agents/` directory at all, and that a test now enumerates every
+  capability key so that restoring one has to ship its artifact in the same change. Deleting that
+  assertion without shipping the artifact recreates the exact defect it was written for: a
+  verified-present claim about something that is not there.
+
+### DOS-P11 — Hooks
+
+- **Spec:** `specs/2026-08-20-developer-os-hooks-design.md` — missing
+- **Plan:** `plans/2026-08-20-developer-os-hooks.md` — missing
+- **Program task:** 11 — **and the program plan has no Task 11**; see §8 · **Complexity:** L ·
+  **Blocked by:** DOS-P10
+- **Scope:** eleven of the legacy runtime's thirteen hooks — four command and path guards, the
+  formatter, the session-start vault injection, the stop gate, the prompt-submit skill activator, and
+  the instructions check.
+- **What this reopens, precisely, and what it does not.** Spec §3.1 declined hooks, and its reason is
+  sound: a `session_end` hook receives only `transcript_path`, and this product refuses that field on
+  every code path. **That reason covers two of the thirteen.** Measured 2026-08-20 by reading all
+  thirteen: exactly two read `transcript_path`; the other eleven read tool inputs, file paths, or the
+  vault. The consequence §3.1 drew — "No hooks ship, in either vendor tree, in v1" — generalised a
+  capture-specific constraint across a set it never examined. Reopening the eleven leaves §3.1's
+  decision standing.
+- **The two stay declined, and the founder accepted the cost on the machine as well as in the spec**
+  (2026-08-20). After cutover nothing captures automatically and there is no pre-compaction backup.
+  §3.1 calls that "the largest product narrowing in the program to date"; what was added on 2026-08-20
+  is that it binds the founder's own runtime once the legacy one is gone.
+- **Two architecture notes are wrong until this entry lands, and both say so in a way a reader will
+  believe.** `claude-adapter.md` §5 and `codex-adapter.md` §5 each give the executable bit as what
+  blocks hooks, and each names DOS-P6 as owner. Spec §3.1 disproved the bit — a `"type": "command"`
+  handler names a command string, so naming the installed binary ships no script and needs no mode bit
+  — and §8 of this file already carries that correction **against the program plan only**. The notes
+  were never corrected with it. This entry owes both edits, and the owner line becomes DOS-P11.
+- **The spec must decide:** which guards become product verbs rather than user-supplied scripts; the
+  event-name mapping across both vendors; and how a hook is *proven* to fire, which is the third of the
+  three things `claude-adapter.md` §5 asks for and the only one still outstanding.
+- **Gate:** a test observes a hook firing; every shipped handler names the installed binary; drift and
+  uninstall cover the hook artifact; a hook that cannot fire on a vendor is refused rather than
+  rendered.
+
+### DOS-P12 — Repository tooling verbs
+
+- **Spec:** `specs/2026-08-20-developer-os-tooling-design.md` — missing
+- **Plan:** `plans/2026-08-20-developer-os-tooling.md` — missing
+- **Program task:** 12 — **and the program plan has no Task 12**; see §8 · **Complexity:** M ·
+  **Blocked by:** DOS-P11
+- **Scope:** nine legacy scripts — the repository audit and its weekly form, repository bootstrap,
+  worktree management, the English prose guard, the Git-history secret scan, and the plugin-version,
+  template and config-drift checks.
+- **The boundary with DOS-P7 has to be stated before either spec is written.** DOS-P7 owns *when* a
+  job runs: the `launchd` plans, the schedules, the lock ownership, the opt-in. This entry owns *what*
+  it runs. A spec that re-decides scheduling here contradicts one that will already be approved.
+- **The spec must decide:** which of the nine become product verbs, which are refused with a recorded
+  reason, and which collapse into `doctor` rather than earning a verb of their own.
+- **The English prose guard is the one that cannot simply be dropped.** It is wired into the founder's
+  commit gate today, and §6 records what its last failure cost: 173 findings standing red while no
+  automation ran the check and the weekly job reported green. A cutover that retires it silently
+  removes a gate nobody will notice is gone — which is the failure mode this whole product exists to
+  end.
+- **Gate:** each of the nine is a shipped verb or a refusal recorded with its reason; no verb reads the
+  legacy runtime.
+
 ---
 
 ## 4. Program tasks 8 and 9 — artifacts, and one open decision
 
 ### DOS-P8 — Founder shadow migration
 
-- **Status:** open · **Blocked by:** DOS-P7, and by all four Track B items
+- **Status:** open · **Blocked by:** DOS-P12, since 2026-08-20. The cutover retires the shared
+  runtime **entirely** on the founder's ruling of that date, so it follows the three subsystems that
+  build what replaces it rather than DOS-P7 alone. Track B closed 2026-08-10 and gates nothing; §6
+  records that, and the older "all four Track B items" in this line was stale before it was corrected.
+- **One hard invariant below stopped being theoretical on 2026-08-20.** "Two copies of a mutating hook
+  are never enabled at once" was cheap to honour while the product shipped no hooks at all. DOS-P11
+  ships eleven, every one of them with a legacy counterpart still installed at cutover time, so this
+  is now the invariant the cutover plan is mostly about.
 - **Artifacts required (none exist):** `docs/migration/founder-cutover.md`,
   `founder-baseline-results.json`, `founder-shadow-results.json`,
   `founder-cutover-manifest.json`.
 - **Decided 2026-08-10 by the founder: author a dedicated plan.** The program plan enumerates
   ten steps inline and mandates neither a spec nor a plan; the ruling is that this task gets a
   plan regardless, because it is the only one that mutates the founder's live machine and its
-  rollback must be rehearsed before cutover is declared complete. **Written against A11's
-  output, not before it** — a cutover plan authored ahead of the lifecycle it cuts over to
-  would specify commands that do not exist. No spec is required; the program verification
+  rollback must be rehearsed before cutover is declared complete. **Written against A11 through
+  A14's output, not before it** — a cutover plan authored ahead of the lifecycle it cuts over to
+  would specify commands that do not exist. The span widened on 2026-08-20 with the cutover's
+  scope; a plan written against A11 alone would rehearse a rollback for a third of the product. No spec is required; the program verification
   matrix and the hard invariants below are the contract it plans against.
 - **Hard invariants:** the founder's vault is not moved; legacy recovery data is not
   deleted; two copies of a mutating hook are never enabled at once; legacy hooks and jobs
@@ -1013,7 +1120,7 @@ not exist, and a map with a gap invites a second copy.
 only unfinished work; recover it at `72f9c58` if the reasoning is ever needed. Nothing is
 planned, scheduled, or in progress on `~/claude-shared` or `~/brain`. Both are frozen artifacts
 running the founder's machine until the DOS-P8 cutover retires them, and **Track B no longer
-gates A12.**
+gates A15.**
 
 This section is no longer a worklist. It is what a cutover still has to know.
 
@@ -1029,7 +1136,7 @@ reads it. Four things bound that decision:
 - **The obligation does not expire.** The original reasoning — that this is the one item whose
   consequence exists whether or not this product ever ships — was weighed and set aside, not
   shown to be wrong.
-- **Nothing downstream depends on it.** It gated no sequence, and A12 never needed it.
+- **Nothing downstream depends on it.** It gated no sequence, and A15 never needed it.
 - **Reopening it is a conversation with the founder**, never a task picked up from a backlog.
 
 **The candidate set is a floor, not a total.** A 2026-07-19 triage recorded four rotation
@@ -1182,6 +1289,19 @@ is precisely the kind of rule that goes unread by whoever is editing past it.
 | `docs/architecture/foundation.md` §2, the frozen `configSchema` | an **optional** `[redaction]` table with a bounded list of literal `patterns`. Additive on the same terms as the `brain` section that preceded it: `configSchema` stays `.strict()`, `schemaVersion` stays `1`, `serializeConfig` emits the table only when the key is present, and `exactOptionalPropertyTypes` keeps absent distinguishable from present-and-undefined — so a configuration written before it still loads and still serializes byte-identically. **Without it spec §8.2's user-extensible redaction class is unreachable**: `redactText` took the option and no production caller passed it, because there was no key a user could set | R2 Task 2, `BACKLOG.md` §1 **NEW-16** |
 | `docs/architecture/foundation.md` §2, the frozen `CliError` | an **optional** `data?: RedactedPayload` member, so a partly-succeeded run can report machine-readably what moved. Additive on the same terms as the two config amendments: absent when unset, so every `--json` document a command emitted before it is byte-identical, and no existing caller changes because nothing populates a field that does not exist yet. It creates a new **publishing** surface, which the other two did not — the failure arm is serialized into `--json` — so `failureFrom` redacts every string leaf including keys, and the slot is typed `RedactedPayload`, a `unique symbol` brand whose only producer is `redactPayload`, which takes the redactor and performs the walk rather than asserting. Every *shape* that writes the field another way is a compile error, `failure` rebuilds the arm it publishes from five named fields — `kind`, `message` and `recovery` coerced to strings, `paths` copied and frozen, `data` accepted only by identity — the arm is branded so a hand-built one is a compile error, and `publish` — which decides the body and the exit status in one place, because they were decided separately and disagreed — rebuilds any failure arm `failure` did not return — the last of the three being what actually closes the class, since a phantom brand survives `Object.assign`, spread, `Proxy` and `structuredClone` while the runtime guarantees it stood for do not. What remains, verified by running each candidate against the built module, is exactly two things: a redactor that does not redact, and a producer call outside the composition root. `Object.defineProperty` and `Object.assign` before the call are **not** among them, and they are closed by two different mechanisms rather than one: the copying forms yield a value the payload registry does not hold, so `failure` drops the field, while in-place `Object.assign(payload, …)` returns the payload itself and is refused by the deep freeze. Three earlier versions of this sentence were wrong, the last of them by crediting the registry with both. The brand replaced a repository sweep that tried to enumerate the syntax instead and was falsified in five review rounds. The sweep survives with a different job: its load-bearing rule is that `redactPayload` is called only at the composition root, and beside it it detects over thirty spellings, split between casts onto the brand and ways of reaching the producer under another name; the exact split is left to the test file, because two reviews counting it disagreed and three documents repeating a number is how that drifts. The enumeration no longer carries the guarantee, so falsifying one more spelling costs a row on a list rather than the property. Three commands wanted it: `ingest`, `brain lint`, and `doctor` (recorded in `releases/foundation-checkpoint.md`) | Track R R2 Task 7, 2026-08-19 |
 | knowledge-pipeline spec §5.5, the transition table | a row for **`accepted → rejected`**, taken by `review --decision reject`. The table had one row per decision, all from `quarantined`, so a user who accepted a capture and then changed their mind had no verb — the only way to stop `ingest` retrying it was to hand-edit the frontmatter back to `quarantined`, which is what both of `ingest`'s recovery strings told them to do. A product that recommends a hand edit of its own data has a gap where a verb should be, and that same hand edit is what `failed` exists to describe going wrong. **`accept` and `edit` deliberately did not gain the equivalent row**: re-accepting is not a transition — `accepted → accepted` is not a row this table can hold — and `edit` maps to `quarantined`, so running it from `accepted` would silently withdraw an approval as a side effect of changing the text — the verb's name says nothing about un-approving, and a user who wants that has `reject`. Rejection is the only safe direction from `accepted`, because `rejected` is terminal for automation and no later phase reads it. **`CAPTURE_STATUSES` gains no member** — a row in a transition table, not a seventh status. Both retired recovery strings now name the verb, and `review`'s own refusal names the decisions legal from wherever the capture actually is rather than telling the user to edit their frontmatter | Track R R2 Task 9, 2026-08-20 |
+
+**One row was raised by the scope ruling of 2026-08-20**, and it is ratified in substance and
+undischarged in the document. The founder ruled that the legacy shared runtime is retired entirely and
+that three subsystems are added ahead of the cutover to build what replaces it. `ORDER.md` Track A
+carries them as A12, A13 and A14, and §3 of this file carries what each spec must decide — but **the
+program plan enumerates Tasks 0 through 9 and knows nothing of them.** That plan is an approved
+document and is not silently rewritten, so the row sits here until its task list and its verification
+matrix carry the three. Amending it is owed **before the DOS-P10 spec cycle opens**, not after: a spec
+written against a program plan that does not contain its task has no checkpoint to satisfy.
+
+| Amended | Outcome, ratified 2026-08-20 | Discharged by |
+|---|---|---|
+| `plans/2026-07-21-developer-os-program.md`, the task list and the verification matrix | three tasks added — **10** managed instruction artifacts, **11** hooks, **12** repository tooling verbs — each ahead of Task 8, whose scope grows from cutting over the knowledge pipeline to retiring the shared runtime entirely. The program's own count moves from eight subsystems to ten. **Nothing in Tasks 0–7 changes**; this is an extension, and it is recorded rather than applied because the plan's Global Constraints require an approved spec before the work each new task names | the DOS-P10 spec cycle |
 
 **Two rows were raised by DOS-P6 during implementation rather than planning**, which is why neither is
 in a table above. **Both were ratified by the founder on 2026-08-15**, in the session that ran Task 17;

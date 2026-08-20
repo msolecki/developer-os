@@ -158,13 +158,33 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 |---|---|---|---|:---:|---|---|
 | A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, three steps left | NEW-21 | L | program plan Task 6 checkpoint, after independent security review | **now** — held. `S` and `P` closed 2026-08-13; `I` is **17 of 19 tasks**, and the security review returned ready. Task 17 Step 3 and Task 19 Steps 5–6 remain |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
-| A12 | DOS-P8 Founder shadow migration | to write against A11's output — decided 2026-08-10 | A11, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
-| A13 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A12, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |
+| A12 | DOS-P10 Managed instruction artifacts — S / P / I | to write | A11 | L | thirty-eight instruction artifacts install, drift-check and uninstall under manifest ownership on both vendors | blocked |
+| A13 | DOS-P11 Hooks — S / P / I | to write | A12 | L | a hook is observed firing in a test, and every shipped handler names the installed binary | blocked |
+| A14 | DOS-P12 Repository tooling verbs — S / P / I | to write | A13 | M | every legacy tooling script is a product verb or a recorded refusal | blocked |
+| A15 | DOS-P8 Founder shadow migration | to write against A11–A14's output — decided 2026-08-10 | A14, L2 | L | rollback exercised once; one complete stable cycle on the new runtime | blocked |
+| A16 | DOS-P9 Public beta and v1 | `plans/…-program.md` Task 9 | A15, **L1**, **L2** | L | `v1.0.0` published and reproducible | blocked |
 
-**A12 gets its own plan** — settled by the founder 2026-08-10, authored against A11's output and not
-before it; `BACKLOG.md` §4 carries the reasoning and what it must contain. **A13's equivalent question
-is open**: no dedicated plan is mandated, and DOS-P8's answer does not transfer, because DOS-P8 mutates
-the founder's live machine while DOS-P9 publishes a release.
+**A15 gets its own plan** — settled by the founder 2026-08-10, authored against the lifecycle it cuts
+over to and not before it; `BACKLOG.md` §4 carries the reasoning and what it must contain. That plan is
+now owed against A11 **through A14**, because the cutover's scope changed on 2026-08-20 and a plan
+written against A11 alone would rehearse a rollback for a third of the product. **A16's equivalent
+question is open**: no dedicated plan is mandated, and DOS-P8's answer does not transfer, because
+DOS-P8 mutates the founder's live machine while DOS-P9 publishes a release.
+
+**A12, A13 and A14 were added on 2026-08-20, and the entries below them were renumbered.** The founder
+ruled that the legacy shared runtime is retired **entirely** rather than partially, and the product as
+scoped could not absorb it: a parity read found three whole layers with no owner in any document —
+eleven event hooks, thirty-eight instruction artifacts, and nine repository tooling scripts. The
+cutover cannot retire what the product never built, so the three subsystems sit ahead of it. **The
+renumbering was chosen over appending A14–A16 out of order**: thirteen citations across three files is
+a cheap edit, and a queue whose numbers do not imply sequence is a queue that has to be read twice.
+`BACKLOG.md` §3 carries what each spec must decide.
+
+**The founder also ruled the sequence strict** — A10 → A11 → A12 → A13 → A14 → A15 — rather than
+running the three new entries as a parallel track. None of them needs DOS-P7: their renderers closed
+with DOS-P4 and DOS-P5 and their artifact mechanism closed with Foundation, so all three are
+technically startable the moment A10 is. The cost of the ruling is that nothing new starts while A10
+waits on NEW-21, and that was put to the founder before it was taken.
 
 ---
 
@@ -221,7 +241,7 @@ same review and is a gate-integrity item rather than a product one: a wall-clock
 standing suite that can redden an unrelated commit. **None is R2's to fix, and the count is the
 honest cost of closing five rows — though NEW-22 closed leaving nothing at all, which is the
 counter-example worth keeping in view** — a defect that closes cleanly and leaves nothing is rarer than
-this queue used to imply. The six named above are the ones this section already knew — **NEW-27**, **NEW-28**, **NEW-24**, **NEW-25**, **NEW-26** and **NEW-29**, which it miscounted as eight. Twelve more have landed since: **NEW-30** and **NEW-31** from NEW-11, **NEW-32** and **NEW-33** from NEW-15, **NEW-34** from Foundation request 2, **NEW-35** from the review that verified NEW-15's closure, and **NEW-36**, **NEW-37**, **NEW-38** **NEW-39** from request 3, **NEW-40** from Task 8 and **NEW-41** from Task 9. 6 + 12 = 18, and 4 + 18 = 22 — matching `BACKLOG.md` §1, which holds the rows and therefore wins.
+this queue used to imply. The six named above are the ones this section already knew — **NEW-27**, **NEW-28**, **NEW-24**, **NEW-25**, **NEW-26** and **NEW-29**, which it miscounted as eight. Twelve more have landed since: **NEW-30** and **NEW-31** from NEW-11, **NEW-32** and **NEW-33** from NEW-15, **NEW-34** from Foundation request 2, **NEW-35** from the review that verified NEW-15's closure, and **NEW-36**, **NEW-37**, **NEW-38** and **NEW-39** from request 3, **NEW-40** from Task 8 and **NEW-41** from Task 9. 6 + 12 = 18, and 4 + 18 = 22 — matching `BACKLOG.md` §1, which holds the rows and therefore wins.
 
 **A third came from that review and is already closed — NEW-23, by Task 1b.** Over four hundred
 `path:line` citations across the documents were maintained by hand, `npm run check` was green with
@@ -249,12 +269,12 @@ first.
 ## Track L — long lead time, start early
 
 Both gate the last entry in Track A. Both depend on somebody who is not in this room.
-Starting them at A13 adds their full lead time to the release date for no reason.
+Starting them at A16 adds their full lead time to the release date for no reason.
 
 | # | Entry | Owner | Gates | Done when | Status |
 |---|---|---|---|---|---|
-| L1 | Select an OSI-approved license and obtain qualified legal approval | Founder + counsel | A13, public visibility | approved text committed as `LICENSE` | open, startable now |
-| L2 | Remote verification — destination remote, visibility, branch protections | Founder, outside this environment | A12, A13 | `remoteVerification` no longer `blocked_by_environment` | open, startable now |
+| L1 | Select an OSI-approved license and obtain qualified legal approval | Founder + counsel | A16, public visibility | approved text committed as `LICENSE` | open, startable now |
+| L2 | Remote verification — destination remote, visibility, branch protections | Founder, outside this environment | A15, A16 | `remoteVerification` no longer `blocked_by_environment` | open, startable now |
 
 **L2 no longer blocks pushing.** The remote exists and CI runs on it, as of 2026-08-10; pushing a
 topic branch and opening a pull request is routine. What L2 still gates is the cutover and the
@@ -291,15 +311,21 @@ request exists so a human sees it first.
 Counted 2026-08-17 by reading the files rather than by editing a number, which is the discipline the
 DOS-P6 plan's Task 19 Step 5 imposes on the residual arithmetic, applied to the file that imposes it.
 
-**Five subsystems of eight are closed** — Foundation, DOS-P2, DOS-P3, DOS-P4, DOS-P5 — including both
+**Recounted 2026-08-20, and the denominator moved.** Three subsystems were added that day; nothing
+reopened and nothing closed. Where this section said eight subsystems and six milestones, it now says
+ten and seven, and the arithmetic below is derived from the Track A table rather than edited on top of
+the old numbers.
+
+**Five subsystems of ten are closed** — Foundation, DOS-P2, DOS-P3, DOS-P4, DOS-P5 — including both
 of the ones that turn a canonical workflow into something an agent can load. Neither of them can
 execute what it renders, which is the whole of what remains on the product path.
 
-**Four milestones remain of the six this program counted**, each L: DOS-P6's implementation (its spec
-and plan closed 2026-08-13), then DOS-P7's spec, plan and implementation. Then two entries that are
-not subsystems — the cutover (A12) and the release (A13) — plus Track L's two, which are not
-engineering work at all. **An implementation is done when its checkpoint holds with evidence in a
-commit and CI is green on it, not when the tasks are ticked.**
+**Seven Track A entries remain.** DOS-P6's implementation, its spec and plan closed 2026-08-13. Then
+DOS-P7, DOS-P10, DOS-P11 and DOS-P12 — spec, plan and implementation apiece, and **not one of those
+four has a document of any kind yet**, which is eight documents owed before any of their code is
+written. Then two entries that are not subsystems — the cutover (A15) and the release (A16) — plus
+Track L's two, which are not engineering work at all. **An implementation is done when its checkpoint
+holds with evidence in a commit and CI is green on it, not when the tasks are ticked.**
 
 **Twenty-eight plan steps are unticked**, and they are the whole of the written work:
 
@@ -310,6 +336,11 @@ commit and CI is green on it, not when the tasks are ticked.**
 | program | 7 — Git, automation, update, release lifecycle | 7 |
 | program | 8 — founder shadow migration | 10 |
 | program | 9 — public beta and v1 | 8 |
+
+**DOS-P10, DOS-P11 and DOS-P12 contribute no rows to that table, and their absence is not good news.**
+A plan step can only be counted once a plan exists, and all three are at the stage before their spec.
+The written work is twenty-eight steps; the *unwritten* work is three spec cycles, three plans, and
+three implementations, and it is the larger half. Do not read the table as the total.
 
 Program Task 6 shows one unticked box and it is **not** work: the hooks box was rewritten to record
 that hooks are declined, and nothing shipped for it by design.
@@ -327,7 +358,9 @@ dedicated-plan question, and the three `BACKLOG.md` §8 amendments awaiting rati
 `accepted → rejected` row.
 
 **Nothing on the *product path* is startable by an agent today**, and that is unchanged: A10 waits on
-NEW-21, which waits on an external usage limit, and A11 waits on A10. **Track R is closed as of 2026-08-20.** R2 was its only entry, and its eleven tasks landed in four
+NEW-21, which waits on an external usage limit, and A11 waits on A10 — and A12, A13 and A14, added
+2026-08-20, wait on A11 by the founder's sequencing ruling rather than by any technical dependency.
+**Track R is closed as of 2026-08-20.** R2 was its only entry, and its eleven tasks landed in four
 commits — the three Foundation requests, the DOS-P7 gap, and the six §1 rows the decisions of
 2026-08-17 unblocked. The four §1 rows that were never R2's still wait on the founder or on a
 machine, and the eighteen its reviews raised are new work for whoever takes §1 next.
