@@ -55,6 +55,28 @@ export interface PlannedFileMutation {
   readonly targetPath: string;
   readonly operation: "create" | "replace" | "remove";
   readonly content: Uint8Array | null;
+  /**
+   * **A precondition the caller read, not one the executor computed.** Without this the
+   * executor snapshots the target when `execute()` runs, so everything between a caller's own
+   * read and that snapshot is invisible to it — and `review --decision edit` reads the file,
+   * re-redacts it and writes it back. What that window discards is the user's own hand edit,
+   * in the one verb that exists to bring a hand edit under this product's guarantees.
+   *
+   * **Optional, and absence keeps the previous behaviour exactly.** `capture` supplies none
+   * and wants none: spec §5.2 calls a duplicate an `O_EXCL` create that fails, which no
+   * transaction-mediated write delivers, and the residual is benign there because the id *is*
+   * the content hash — colliding captures are byte-identical.
+   *
+   * **A supplied hash against a `create` is a mismatch**: a create observes no bytes, so a
+   * caller that supplies a precondition for one is describing a file it believes exists.
+   *
+   * A `replace` or `remove` whose target has *vanished* never reaches this comparison — the
+   * plan phase already refuses a missing target as `TransactionPlanError`, one check earlier.
+   * An earlier version of this paragraph claimed the precondition covered that case; it does
+   * not, and the user meets "transaction plan is invalid" with no paths and no recovery. That
+   * is pre-existing and registered rather than described as handled.
+   */
+  readonly expectedBeforeHash?: string;
 }
 
 export interface TransactionPlan {

@@ -16,6 +16,7 @@ import {
   parseCaptureFile,
 } from "@developer-os/brain";
 import type { CaptureStatus, ProposedNote } from "@developer-os/brain";
+import type { CliContext } from "../context.js";
 import { redactText } from "@developer-os/security";
 import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 import { MacOsPlatformTrustError } from "@developer-os/platform-macos";
@@ -1612,8 +1613,7 @@ describe("runIngest, the agent call", () => {
    * strings themselves stay pinned in `adapter-codex/src/invoke.test.ts`'s
    * dash-rule cases. What is no longer covered end-to-end is the interpolation,
    * and no fixture can reach it without an injection point that does not exist.
-   */
-  /**
+   *
    * **BACKLOG NEW-16's sharpest claim: a configured client name must not reach a vendor
    * model.** `buildIngestPrompt` puts the capture body in front of one, so this is the
    * single path where spec §8.2's user-extensible class earns its keep.
@@ -1921,6 +1921,117 @@ describe("renderIngest, what a human is shown", () => {
     /** The capture's own advice, which no run-level string contains. */
     expect(text).toContain("move or delete the existing note");
     expect(text).toContain(seeded.id);
+  });
+
+  /**
+   * **The same read-to-write window `review` closes, on the same files.** `ingest` reads a
+   * capture, renders it at `staging`, and writes it back through one `replace` — so a hand
+   * edit landing between that read and the transaction was read, ignored and overwritten,
+   * non-idempotently. The command's own docblock said so and pointed at this Foundation
+   * change as the thing that would close it; the change shipped, so it does.
+   *
+   * Only the *first* write of a run carries a precondition: the later ones follow a write
+   * this run made itself, and the executor's own snapshot is the right one for those.
+   */
+  it("refuses when a hand edit lands between the read and the staging write", async () => {
+    const fixture = await installedFixture("ingest-read-window");
+    const seeded = await fixture.seedAccepted("an observation about to be edited");
+    const edited = `${await nodeFs.readFile(seeded.path, "utf8")}\nedited by hand\n`;
+
+    /**
+     * **The *second* read of the capture is the one to race.** `selectCaptures` reads every
+     * file first to learn its status; the read whose digest becomes the precondition is the
+     * one in `decide`, immediately before the staging write. Racing the first would put the
+     * edit before that read, which would then hash the edited bytes and match — a fixture
+     * that cannot fail.
+     *
+     * **The read to race is the one that supplies the precondition**, and it is identifiable
+     * because it is the only read of a capture that passes a `reader` — that hook exists to
+     * hash the bytes. `selectCaptures` reads every file first to learn its status; racing
+     * that one puts the edit *before* the read whose digest is pinned, which then hashes the
+     * edited bytes and matches. A fixture that cannot fail.
+     */
+    let raced = false;
+    const guards = fixture.context.guards;
+    const context: CliContext = {
+      ...fixture.context,
+      guards: {
+        ...guards,
+        readText: async (
+          path: string,
+          reader?: Parameters<typeof guards.readText>[1],
+        ): Promise<string> => {
+          const text = await guards.readText(path, reader);
+          if (path === seeded.path && reader !== undefined && !raced) {
+            raced = true;
+            await nodeFs.writeFile(seeded.path, edited, { mode: 0o600 });
+          }
+          return text;
+        },
+      },
+    };
+
+    const result = await runIngest(context, {});
+
+    expect(raced, "the edit must land after the read whose digest is pinned").toBe(true);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    /**
+     * **The user's words survive, which is the point of refusing.** This assertion is what
+     * caught the compensating write: the executor declined to overwrite the hand edit, and
+     * the rollback then wrote the pre-read envelope over it two lines later, because
+     * `staged` was set before the staging write rather than after it.
+     */
+    await expect(nodeFs.readFile(seeded.path, "utf8")).resolves.toBe(edited);
+  });
+
+  /**
+   * **A model-chosen path cannot decide this command's control flow.** The compensating path
+   * asks whether a refusal came from the plan phase, and the first version asked by matching
+   * the refusal *message* — which interpolates the model's proposed note path. A proposal
+   * naming the marker phrase made a refusal raised *after* the staging bytes landed read as
+   * one raised before them, so the rollback was skipped and the capture stayed at `staging`,
+   * which `selectCaptures` never selects again: stranded until a hand edit of its frontmatter.
+   *
+   * The phrase arrives through the capture body and the prompt, which is the untrusted path
+   * this command's threat model is written against.
+   */
+  it("rolls back a refusal whose path spells the precondition marker", async () => {
+    const fixture = await installedFixture("ingest-marker-path");
+    const seeded = await fixture.seedAccepted("an observation with a steering path");
+    fixture.reply(() =>
+      oneNote(seeded.id, "_raw/quarantine/before ingest moved it.md", "Steered"),
+    );
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    /** Rolled back, not stranded: the write landed, so the compensation must run. */
+    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
+  });
+
+  /**
+   * **A capture holding a byte that is not valid UTF-8 still ingests**, the counterpart of
+   * `review`'s case. The precondition is a digest of what was read, and hashing a *re-encode*
+   * of the decoded text is lossy — `0x93` becomes U+FFFD and re-encodes to `EF BF BD` — so
+   * such a capture would hash to bytes the file never held and refuse for ever, with a
+   * message saying it had changed on disk. `ingest` reads through the same hook `review`
+   * does, so it needs the same proof.
+   */
+  it("ingests a capture whose body holds a byte that is not valid UTF-8", async () => {
+    const fixture = await installedFixture("ingest-invalid-utf8");
+    const seeded = await fixture.seedAccepted("an observation with an odd byte");
+    const original = await nodeFs.readFile(seeded.path);
+    await nodeFs.writeFile(
+      seeded.path,
+      Buffer.concat([original, Buffer.from([0x93])]),
+      { mode: 0o600 },
+    );
+    fixture.reply(() => oneNote(seeded.id, "DEV/odd.md", "Odd note", "Clean."));
+
+    const result = await fixture.run();
+
+    expect(result.ok, "a lossy digest would refuse this for ever").toBe(true);
   });
 
   /**

@@ -524,6 +524,31 @@ not.
   docblock, the sentinel suite's plant, and `threat-model.md`'s boundary row.
 
 
+### NEW-40 — `ingest`'s two later writes still discard a hand edit, and one spans the agent call
+
+- **Status:** open, registered 2026-08-20 by the round-2 review of Track R R2 Task 8 ·
+  **Owner:** DOS-P7 · **Size:** S · **The residual of the precondition, stated because the
+  first version of its docblock called it structurally impossible**
+- **What is closed.** Each capture takes three writes. The first — the staging write — now
+  supplies the digest of the bytes this run read, so a hand edit landing between that read
+  and the transaction is refused rather than overwritten.
+- **What is not.** The `ingested` write re-renders the *pre-agent* envelope over the whole
+  file once the vendor returns, with no precondition. That gap spans the entire agent call —
+  minutes, the longest read-to-write window in the product, and the one a user is most likely
+  to edit inside because the command is visibly busy. Measured: an edit written from inside
+  the vendor reply is silently overwritten and the run reports success.
+- **The stated reason it could not be pinned was wrong.** "There is no caller read to pin" —
+  but the run holds the exact bytes it wrote at staging, so `hash(renderCaptureFile({...
+  envelope, status: "staging"}))` is available without re-reading anything. Whether to refuse
+  there is a decision about what a user wants when their edit collides with a completed agent
+  run, not a structural limit.
+- **Why it was not taken in Task 8.** Refusing at that point strands work that has already
+  been paid for — the notes are applied, and the capture is at `staging`. The right answer may
+  be to refuse, or to detect and report rather than refuse. That is a product decision and the
+  task was scoped to the mechanism.
+
+
+
 ### NEW-24 — a common redaction pattern refuses every ingest, undiagnosably
 
 - **Status:** open, registered 2026-08-17 when NEW-16 closed · **Owner:** DOS-P7 · **Size:** S ·

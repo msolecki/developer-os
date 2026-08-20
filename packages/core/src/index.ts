@@ -73,6 +73,7 @@ export {
   TransactionExecutor,
   TransactionGuardError,
   TransactionPlanError,
+  TransactionPreconditionError,
   TransactionStateError,
   TransactionStore,
   validateJournal,

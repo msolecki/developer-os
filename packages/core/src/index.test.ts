@@ -57,6 +57,7 @@ describe("the package's public door", () => {
         "TransactionExecutor",
         "TransactionGuardError",
         "TransactionPlanError",
+        "TransactionPreconditionError",
         "TransactionStateError",
         "TransactionStore",
         "validateJournal",

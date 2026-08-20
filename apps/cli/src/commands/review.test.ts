@@ -448,7 +448,104 @@ describe("runReview", () => {
    * The recovery is asserted **in the order it must be followed**, by position
    * and not by presence: `repair` first, because a second review moves the file
    * the incomplete transaction is still holding.
+   *
+   * **The window *before* the transaction, which the case below does not reach.** That one
+   * races the edit into the middle of the run, where the executor's own verification catches
+   * it. This one lands the edit between `decide`'s read and `execute` — a window the executor
+   * could not see at all, because it snapshotted the target when `execute()` ran and took
+   * whatever was there as the "before" state. A hand edit made in that gap was read, ignored,
+   * and overwritten by the re-rendered capture, in the verb whose whole purpose is to bring a
+   * hand edit under this product's guarantees.
+   *
+   * `review` now supplies the digest of the bytes it read, so the executor refuses. Hooking
+   * `readText` is what puts the write in the gap rather than in the transaction: the wrapper
+   * returns what the command asked for, and then somebody else changes the file.
+   *
+   * **A capture holding a byte that is not valid UTF-8 still reviews.** The precondition is a
+   * digest of what was read, and the first version digested a *re-encode* of the decoded
+   * text. Node's `utf8` decode is lossy — `0x93`, the cp1252 smart quote a paste produces,
+   * becomes U+FFFD and re-encodes to `EF BF BD` — so the digest described bytes the file
+   * never held and the executor refused every time. Permanently: the message said the file
+   * had changed on disk, the recovery said to run it again, and running it again refused
+   * identically, pinning an unredacted capture in quarantine for ever.
+   *
+   * `parseCaptureFile` does not stop it, which the first version's comment claimed: it
+   * validates frontmatter and passes the body through as text.
    */
+  it("accepts a capture whose body holds a byte that is not valid UTF-8", async () => {
+    const fixture = await installedFixture("review-invalid-utf8");
+    const seeded = await fixture.seed(OBSERVATION);
+    const original = await nodeFs.readFile(seeded.path);
+    await nodeFs.writeFile(
+      seeded.path,
+      Buffer.concat([original, Buffer.from([0x93])]),
+      { mode: 0o600 },
+    );
+
+    const result = await fixture.run(fixture.context, {
+      id: seeded.id,
+      decision: "accept",
+    });
+
+    expect(result.ok, "a lossy digest made this refuse for ever").toBe(true);
+  });
+
+  it("refuses, keeping the hand edit, when it lands between the read and the write", async () => {
+    const fixture = await installedFixture("review-read-window");
+    const seeded = await fixture.seed(OBSERVATION);
+    const edited = (await nodeFs.readFile(seeded.path, "utf8")).replace(
+      OBSERVATION,
+      "an observation the user edited by hand before the write",
+    );
+
+    let raced = false;
+    const guards = fixture.context.guards;
+    const context: CliContext = {
+      ...fixture.context,
+      guards: {
+        ...guards,
+        /**
+         * **The `reader` must be forwarded, and the first version dropped it.** `readCapture`
+         * passes a reader so it can hash the bytes; a wrapper declared `(path)` discards it
+         * silently, `asRead` stays `""`, and the executor then refuses whatever the file
+         * contains — so the case passed without the race and proved nothing. Gating on
+         * `reader !== undefined` also identifies the read whose digest is pinned, rather than
+         * the earlier one that only resolves the path.
+         */
+        readText: async (
+          path: string,
+          reader?: Parameters<typeof guards.readText>[1],
+        ): Promise<string> => {
+          const text = await guards.readText(path, reader);
+          if (path === seeded.path && reader !== undefined && !raced) {
+            raced = true;
+            writeFileSync(seeded.path, edited, { mode: 0o600 });
+          }
+          return text;
+        },
+      },
+    };
+
+    const result = await fixture.run(context, {
+      id: seeded.id,
+      decision: "accept",
+    });
+
+    expect(raced, "the hand edit must actually have landed in the window").toBe(true);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(EXIT_CODES.decisionRequired);
+    expect(result.error.message).toContain("changed on disk");
+    /**
+     * And it promises what only a plan-phase refusal can: nothing was written. The
+     * mid-transaction case below deliberately promises neither.
+     */
+    expect(result.error.message).toContain("your edit is intact");
+    expect(result.error.recovery ?? "").not.toContain("repair");
+    /** And the user's words are still on disk, which is the point of refusing. */
+    await expect(nodeFs.readFile(seeded.path, "utf8")).resolves.toBe(edited);
+  });
+
   it("refuses, keeping the newer file, when a hand edit lands mid-transaction", async () => {
     let onClock: (() => void) | null = null;
     let tick = 0;

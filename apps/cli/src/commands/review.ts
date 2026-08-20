@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 
 import {
@@ -5,6 +6,7 @@ import {
   EXIT_CODES,
   success,
   TransactionConflictError,
+  TransactionPreconditionError,
 } from "@developer-os/core";
 import type {
   CliResult,
@@ -297,6 +299,13 @@ async function readCapture(
   context: CliContext,
   target: string,
   id: string,
+  /**
+   * Called with the file's own bytes during the same open, so a caller can hash what it read
+   * rather than a re-encode of what it decoded. Decoding is lossy and re-encoding does not
+   * recover the original, which made the first precondition refuse for ever on any capture
+   * holding a byte that is not valid UTF-8.
+   */
+  observe?: (bytes: Uint8Array) => void,
 ): Promise<string> {
   try {
     await context.fs.lstat(target);
@@ -309,7 +318,11 @@ async function readCapture(
       "developer-os review lists the captures waiting for a decision",
     );
   }
-  return context.guards.readText(target);
+  return context.guards.readText(target, async (handle) => {
+    const bytes = await handle.readFile();
+    observe?.(bytes);
+    return bytes.toString("utf8");
+  });
 }
 
 /**
@@ -326,17 +339,19 @@ async function readCapture(
  * directory — which is a narrower constraint than ownership, though not the
  * same one.
  *
- * **There is a lost-update window between the read and this call, and on this
- * path it is not benign.** This command reads the file, re-redacts, re-hashes
+ * **There was a lost-update window between the read and this call, and on this
+ * path it was not benign.** This command reads the file, re-redacts, re-hashes
  * and renders, and only then asks for the write; a hand edit landing in between
- * is overwritten by content derived from the older read. What is lost is the
+ * was overwritten by content derived from the older read. What was lost is the
  * user's own hand edit — silently, by the verb whose whole purpose is to bring
  * a hand edit back under the product's guarantees. Unlike `capture`'s residual
  * race, that is not idempotent: a capture collision writes the same observation
  * twice because the id is the content hash, while here the two writers hold
- * different content. The window is narrowed to in-process work by reading as
- * late as possible and cannot be closed from here; `docs/superpowers/ORDER.md`
- * carries the Foundation change that would close it.
+ * different content. **That window is closed as of 2026-08-20**, by the Foundation change
+ * Track R entry R2 Task 8 built: `PlannedFileMutation.expectedBeforeHash` lets this
+ * command hand the executor the digest of the bytes it read, and the executor refuses in the
+ * plan phase rather than snapshotting whatever is there when `execute()` runs. Reading as
+ * late as possible still narrows it; it is no longer the only defence.
  *
  * **A conflict is translated rather than leaked, and keeps the class's own exit
  * code.** When the executor finds the file changed under it, it refuses — the
@@ -360,6 +375,7 @@ async function writeCapture(
   context: CliContext,
   target: string,
   contents: string,
+  asRead: string,
 ): Promise<void> {
   try {
     await context.executor.execute({
@@ -369,11 +385,48 @@ async function writeCapture(
           targetPath: target,
           operation: "replace",
           content: new TextEncoder().encode(contents),
+          /**
+           * **The bytes this command actually read**, so the executor refuses rather than
+           * overwriting a change it never saw. It snapshots the target when `execute()`
+           * runs, and everything between the read at `decide` and that snapshot was
+           * invisible — which on this path is the user's own hand edit, discarded by the one
+           * verb that exists to bring a hand edit under this product's guarantees.
+           *
+           * **The bytes, never a re-encode of the text.** The first version hashed
+           * `encode(readText(...))` and argued that a capture which did not round-trip would
+           * already have been refused as unreadable. That is false: `parseCaptureFile`
+           * validates frontmatter and hands the body through as text. Node's `utf8` decode is
+           * lossy — one cp1252 byte becomes U+FFFD, and `0x93` re-encodes to `EF BF BD` — so
+           * a capture holding a single such byte hashed to something the file never held and
+           * refused *every* time, permanently, with a message saying it had changed on disk
+           * and a recovery that could never work. It fired on hand-edited files, which is the
+           * population this verb exists for.
+           */
+          expectedBeforeHash: asRead,
         },
       ],
     });
   } catch (error) {
     if (!(error instanceof TransactionConflictError)) throw error;
+    /**
+     * **A precondition refusal can promise what the general one cannot.** It is raised in the
+     * plan phase, before anything is staged, so the file on disk is exactly the one the user
+     * edited and no `repair` is pending. The other conflict sites may arrive after the
+     * bytes may have been written and cannot say either thing — which is why the message
+     * below promises nothing about the file.
+     *
+     * This is the whole reason the executor raises a subclass rather than reusing the base
+     * class: the most useful sentence available to a user who has just hand-edited a capture
+     * is that their edit survived.
+     */
+    if (error instanceof TransactionPreconditionError) {
+      throw new ReviewRefusal(
+        exitCodeOf(error),
+        "the capture changed on disk before this review wrote to it, so nothing was written and your edit is intact",
+        [target],
+        "run the same review again, which reads the newer file",
+      );
+    }
     throw new ReviewRefusal(
       exitCodeOf(error),
       "the capture changed on disk while this review was running, so the decision did not complete",
@@ -432,8 +485,15 @@ async function decideOne(
   const fileName = `${target.id}${CAPTURE_FILE_SUFFIX}`;
   const path = await resolveCapturePath(context, quarantine, fileName);
 
-  /** Read as late as possible: everything above is independent of the file. */
-  const text = await readCapture(context, path, target.id);
+  /**
+   * Read as late as possible: everything above is independent of the file. The digest is
+   * taken from the same read, off the bytes rather than the decoded text — see the
+   * precondition passed to `writeCapture`.
+   */
+  let asRead = "";
+  const text = await readCapture(context, path, target.id, (bytes) => {
+    asRead = createHash("sha256").update(bytes).digest("hex");
+  });
   const parsed = parseCaptureFile(fileName, text, redact);
   if (!parsed.ok) {
     throw new ReviewRefusal(
@@ -456,7 +516,12 @@ async function decideOne(
     );
   }
 
-  await writeCapture(context, path, renderCaptureFile(outcome.envelope));
+  await writeCapture(
+    context,
+    path,
+    renderCaptureFile(outcome.envelope),
+    asRead,
+  );
   return {
     captureId: outcome.envelope.captureId,
     status: outcome.envelope.status,

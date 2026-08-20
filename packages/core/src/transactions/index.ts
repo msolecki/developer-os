@@ -4,6 +4,7 @@ export {
   TransactionExecutor,
   TransactionGuardError,
   TransactionPlanError,
+  TransactionPreconditionError,
 } from "./executor.js";
 export { recoverTransaction } from "./recovery.js";
 export {
