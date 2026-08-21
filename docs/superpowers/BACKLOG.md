@@ -775,8 +775,17 @@ not.
 
 ### NEW-13 — two artifact roots share one type, and only prose separates them
 
-- **Status:** open, found 2026-08-12 by the fresh-context review of DOS-P5 Task 13 · **Owner:**
-  DOS-P6, as the first consumer of `CodexAdapter` · **Size:** S
+- **Status:** **closed 2026-08-21** by DOS-P6 Task 19 Step 5, which is the step that closes rows the
+  subsystem's own tasks fixed. Found 2026-08-12 by the fresh-context review of DOS-P5 Task 13 ·
+  **Owner was:** DOS-P6, as the first consumer of `CodexAdapter` · **Size:** S
+- **The fix landed with DOS-P6 Task 4 and this row went on reading `open` for nine days**, which is
+  the part worth keeping: `PluginRootArtifact` and `MarketplaceRootArtifact` are distinct branded
+  types (`packages/adapter-codex/src/plugin.ts:29`, `:36`), `buildPluginTree` is the single
+  brand-injection point (`packages/adapter-codex/src/compose.ts:61`), and
+  `packages/adapter-codex/src/install.test.ts:185` pins the refusal with a `@ts-expect-error` — so
+  handing a plugin-root tree to `proposeInstall` is a compile error rather than an install one level
+  too shallow. `docs/architecture/codex-adapter.md` recorded the discrepancy between the code and this
+  row rather than letting it pass, and named this step as what resolves it.
 - `RenderedArtifact` is `{ path, contents }` for artifacts relative to **two different roots**.
   `renderCodexPlugin` returns paths relative to the plugin root — `.codex-plugin/plugin.json`,
   `skills/…` — and that is what `plugins/codex/` checks in. `proposeCodexInstall` resolves against
@@ -982,7 +991,14 @@ list of what the spec "must decide" back into this section; it was decided and s
   `SchemaMigrationPlan`, verified uninstall/rollback results.
 - **Gate:** a Git-disabled and automation-disabled install performs no related process or
   network call; push failure never records a successful sync; update refuses drift;
-  uninstall removes only manifest-owned artifacts.
+  uninstall removes only manifest-owned artifacts **and the redaction key**.
+- **That last clause is an amendment, ratified 2026-08-13 and discharged by DOS-P6 Task 1.** The gate
+  read "only manifest-owned artifacts" without exception. The redaction key is deliberately **not** a
+  manifest artifact — knowledge-pipeline spec §3.5 keeps it out — and spec §8.4 requires `uninstall`
+  to remove it, so the gate as written forbade what another approved section required. Making the key
+  a hash-exempt manifest entry was rejected: it would put the key's path into a file that every
+  enumerating diagnostic reads. **The exception is exactly one path wide and is asserted by test.**
+  `BACKLOG.md` §8 carries the row; this is the cross-reference it was owed.
 - **Absorbs:** legacy follow-up Step 6 (real-Git integration coverage), frozen on the
   legacy runtime 2026-07-27 and rebuilt here instead.
 - **Must also decide how a managed artifact changes across product versions**, raised by DOS-P6
@@ -1338,27 +1354,29 @@ carries the cross-reference, not when the decision is taken.
 | `specs/…-codex-adapter-design.md` §14.1 | the JSONL terminal-event rule promoted from provisional to observed, dated, with the shape seen — ingest forces the real `codex exec` call that DOS-P5 could not justify. **Discharged in two parts.** 2026-08-15: the framing and the discriminating `type` field, against a turn that failed on an exhausted usage limit. 2026-08-20, NEW-21: the terminal-event rule itself, **which was not promoted but replaced** — a successful turn ends on a `turn.completed` usage record, so the rule returned telemetry as a payload. The same amendment corrects that section's own 2026-08-15 reading of the vocabulary, which called three guessed names wrong when two were right, and records a defect outside its original scope: the vendor refuses this product's shipped output schema for a `schemaVersion` with no `type` keyword | DOS-P6 Task 17 |
 | `specs/…-workflow-compiler-design.md` §6 | scope globs stop being literals, which `workflow-schema.md` §8.1 made due at the first handler that resolves one. **Narrowed by the plan** — see the ratified row below | DOS-P6 Task 6 |
 
-**Six were ratified by the founder on 2026-08-13**, in the same session that approved the spec and
-received the plan. Every one is the implementation plan's rather than the spec's: they ride on
-`plans/2026-07-21-developer-os-knowledge-pipeline.md`, whose "Five decisions this plan takes"
-section is the authoritative statement for the first four, and Tasks 12 and 15 for the last two.
-Each amends an approved document, which is why they are here rather than only in the plan. **A row
-leaves this table when the amended document carries the cross-reference**, not when the decision was
-taken — so all six stay until the task named beside them lands.
+**Six were ratified by the founder on 2026-08-13 and all six left this table on 2026-08-21**, when
+DOS-P6 Task 19 Step 5 verified that each amended document carries the cross-reference it was owed.
+That verification is the whole of why the rows existed: **a row leaves when the amended document
+carries the cross-reference, not when the decision was taken.**
 
-**Two rows exist because a fresh-context review found them missing on 2026-08-13**, before this plan
-was committed: the narrowing of design spec §13.4's "staged result", and the narrowing of §17.5's
-security cases to spec §9's six suites. Both were decisions the plan was taking silently, and both
-were put to the founder with the other four.
+**Four of the six did not carry it, and had not for eight days.** This is the fifth time this
+repository has recorded that failure — `SESSION.md` names four earlier amendments whose readers got
+the superseded contract for four days — and it is why the rule is a rule rather than a habit. What
+was written into the amended documents on 2026-08-21:
 
-| Amended | Outcome, ratified 2026-08-13 | Discharged by |
+| Amended document | What it now says, that it did not | Discharged by |
 |---|---|---|
-| the knowledge-pipeline spec §12 | **five** canonical workflows go to `2.0.0`, not two. `ingest` gains a step and widens its write scopes, `brain-search` gains one and widens its read scopes, and `review` gains the `capture.edit` step its `decision` input already advertises — with its scopes unchanged, which is what makes it easy to miss. A step list and a scope set are the contract, and `extends` pins `id@version` exactly | 7 |
-| `specs/…-workflow-compiler-design.md` §6, again | the globs resolve at the **handler boundary** through `resolveScopeGlob(glob, config)`; the contract keeps canonical names. Templating them inside the YAML was rejected: it invents a substitution syntax in the workflow schema and puts a configuration value in the one document meant to be comparable across installs. Leaves a display gap — a skill shows `content/**` while the handler enforces the user's own root | 6 |
-| **program plan Task 6**, third box | "Restore `hooks/hooks.json` for both adapters in one change" cannot be ticked — spec §3.1 declines hooks and corrects the stated blocker: a `"type": "command"` handler needs no executable bit, and what hooks lacked was content to capture. **Spec §12 omits the program plan from its amendment list; that gap was found while writing the plan.** The box is rewritten to record the decline, not ticked | 19 |
-| **§7 of this file**, the DOS-P7 gate "uninstall removes only manifest-owned artifacts" | one named exception: the redaction key, which spec §3.5 keeps out of the manifest and spec §8.4 requires `uninstall` to remove. Making it a hash-exempt manifest artifact was rejected — it would put the key's path in a file every enumerating diagnostic reads. The exception is one path wide and asserted by test | 1 |
-| product design spec §13.4, "the staged result" | the `deterministic reindex` validator runs over an **in-memory projection** of vault plus proposal, not over a staging directory. §13.4 and the knowledge-pipeline spec's own §6.3 preamble contradict each other — nothing is staged at the point the preamble names — and staging first would make every file in staging attacker-influenced content the validators must re-read as hostile | 12 |
-| product design spec §17.5, and the knowledge-pipeline spec §9 | §9 narrows §17.5's security cases to six suites and drops two the standing gate in §7 of this file still requires from DOS-P6 onward: a **network** suite, and **concurrent user edits**. The plan ships eight suites rather than six and registers the narrowing rather than inheriting it. **Shipped 2026-08-14 as `tests/security/`** — `sentinel`, `prompt-injection`, `symlink-escape`, `multiline-command`, `malformed-manifest` and `interruption` from §9, plus `network` and `concurrent-edit`, the two §9 dropped and §7 still requires | 15 |
+| knowledge-pipeline spec §12 | **five** canonical workflows go to `2.0.0`, not two. It said two. `ingest` gains a step and widens its write scopes, `brain-search` gains one and widens its read scopes, and `review` gains the `capture.edit` step its `decision` input already advertised — **with its scopes unchanged, which is what makes it the easy one to miss.** A step list and a scope set are both the contract, and `extends` pins `id@version` exactly | 7 |
+| `specs/…-workflow-compiler-design.md` §6 | the globs stop being literals and resolve at the **handler boundary** through `resolveScopeGlob(glob, config)`; the table keeps canonical names. Templating inside the YAML was rejected — it invents a substitution syntax in the schema and puts a configuration value in the one document meant to be comparable across installs. The section had no mention of either | 6 |
+| §7 of this file, the DOS-P7 uninstall gate | "…and the redaction key". The gate read "only manifest-owned artifacts" with no exception, while spec §3.5 keeps the key out of the manifest and §8.4 requires `uninstall` to remove it — so the gate forbade what another approved section required | 1 |
+| product design spec §13.4 | the `deterministic reindex` validator runs over an **in-memory projection**, not "the staged result" this section named; nothing is staged at that point. Staging first was rejected because it would make every file in staging attacker-influenced content the validators must re-read as hostile | 12 |
+| product design spec §17.5 | the narrowing to six suites **was not taken** — the plan shipped eight, so `network` and `concurrent-edit`, which §9 dropped and §7 still requires, are covered and this list stands as written | 15 |
+| program plan Task 6, third box | already carried it. The box records that hooks are **declined** and corrects the stated blocker: a `"type": "command"` handler needs no executable bit, and what hooks lacked was content to capture | 19 |
+
+**Two of the six existed because a fresh-context review found them missing on 2026-08-13**, before the
+plan was committed — §13.4's "staged result" and §17.5's security cases. Both were decisions the plan
+was taking silently. That they then went eight days without the cross-reference the review won for
+them is the part worth remembering.
 
 **Three rows were raised by Track R entry R2, on 2026-08-17, 2026-08-19 and 2026-08-20, and all
 three are unratified.** They are the only unratified rows in this section, and they are also the place where

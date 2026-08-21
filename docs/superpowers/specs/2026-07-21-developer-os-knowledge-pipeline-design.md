@@ -836,9 +836,22 @@ the document it amends. An approved document is not silently rewritten.
 | `specs/…-codex-adapter-design.md` §14.1 | the JSONL terminal-event rule promoted from provisional to observed, dated, with the shape that was seen |
 | `specs/…-workflow-compiler-design.md` §6 | scope globs derived from `BrainConfigV1` rather than written as literals |
 
-**Two canonical workflows change**, which is a contract change rather than an amendment to prose:
-`workflows/capture/workflow.yaml` drops `session_end` and `workflows/shared/workflow.yaml` drops
-`session_start`; both go to `2.0.0`; both vendor trees regenerate and the drift gates prove it.
+**Five canonical workflows change, not two**, which is a contract change rather than an amendment to
+prose. This paragraph said two when the spec was approved; the count was corrected on 2026-08-13 in
+the same session, ratified by the founder, and discharged by the plan's Task 7. `BACKLOG.md` §8
+carries the row, and the tree is the evidence — every file below reads `version: 2.0.0`, and
+`workflows/doctor/workflow.yaml` alone stays at `1.0.0`.
+
+- `workflows/capture/workflow.yaml` drops `session_end`;
+- `workflows/shared/workflow.yaml` drops `session_start`;
+- `workflows/ingest/workflow.yaml` gains a step and **widens its write scopes**;
+- `workflows/brain-search/workflow.yaml` gains a step and **widens its read scopes**;
+- `workflows/review/workflow.yaml` gains the `capture.edit` step its `decision` input already
+  advertised — **with its scopes unchanged, which is what makes it the easy one to miss**.
+
+A step list and a scope set are both the contract, and `extends` pins `id@version` exactly, so a
+workflow that gains a step without a version bump silently changes what an inheriting document
+resolves to. Both vendor trees regenerate and the drift gates prove it.
 
 ## 13. Open items this spec does not close
 

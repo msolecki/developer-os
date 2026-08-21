@@ -504,6 +504,14 @@ data boundary and write scope. The agent produces a structured change manifest i
 the transaction staging directory. It cannot write directly to the canonical
 vault during proposal generation.
 
+**Amended by the knowledge-pipeline spec §6.3, ratified 2026-08-13, discharged by DOS-P6 Task 12.**
+"The staged result" is not what the `deterministic reindex` validator runs over: it runs over an
+**in-memory projection** of the vault plus the proposal, because nothing is staged at the point this
+paragraph names — this section and the knowledge-pipeline spec's own §6.3 preamble contradicted each
+other on that. Staging first was rejected rather than merely avoided: it would make every file in
+staging attacker-influenced content that the validators would have to re-read as hostile. The rest of
+the list below is unchanged. `BACKLOG.md` §8 carries the row.
+
 The staged result must pass:
 
 - schema and frontmatter validation;
@@ -658,6 +666,15 @@ The test asserts file bytes, ownership manifest, transaction state, vault indexe
 logs, backups, process invocations, and absence of unexpected network calls.
 
 ### 17.5 Security cases
+
+**Narrowed by the knowledge-pipeline spec §9, ratified 2026-08-13, discharged by DOS-P6 Task 15 —
+and the narrowing was not taken.** §9 reduced this list to six suites and dropped two that `BACKLOG.md`
+§7's standing gate still requires from DOS-P6 onward: **attempted implicit network access** and
+**concurrent user edits**. The plan registered the narrowing rather than inheriting it and shipped
+**eight** suites, so both dropped cases are covered: `tests/security/` carries `sentinel`,
+`prompt-injection`, `symlink-escape`, `multiline-command`, `malformed-manifest` and `interruption`
+from §9, plus `network` and `concurrent-edit`. This list therefore stands as written. `BACKLOG.md` §8
+carries the row.
 
 The suite includes:
 
