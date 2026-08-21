@@ -125,18 +125,22 @@ commit; the fifth happens after it, on a machine that is not yours.
 4. **Exact-path staging.** `git add <exact paths>`. Never `git add -A`, never `git add .`,
    never a wildcard. Then `git show --stat HEAD` and confirm it contains only what you
    meant to ship.
-5. **CI is green on the commit.** Push, and read the result — `gh run list --branch development`
-   for a direct push, `gh pr checks <n>` for a pull request. **A red run that nobody reads is worse
-   than the no CI it replaced**, so do not push work you are not going to watch.
+5. **CI is green on the commit.** Push a topic branch, open a pull request, and read the
+   result — `gh pr checks <n>`. The default branch requires a pull request, so this is the
+   only route anything lands by. **A red run that nobody reads is worse than the no CI it
+   replaced**, so do not open a pull request you are not going to watch.
 
-   **Two things this step said until 2026-08-21 were false, and they were false together.** It said
-   the default branch requires a pull request: `development` carries **no branch protection**, so a
-   direct push lands. And `check.yml` scoped its `push:` trigger to `feat/foundation`, which had been
-   the default branch when that file was written and **no longer exists on the remote** — so a push
-   ran no workflow at all. Between them, work could land on the default branch with neither a review
-   nor a check, which is the precise state this step exists to prevent. The trigger now names
-   `development`. **Whether the founder wants protection back on that branch is theirs to decide**,
-   and it belongs with Track L's L2.
+   **The rule is a GitHub *ruleset*, not classic branch protection, and confusing the two cost a
+   session on 2026-08-21.** `gh api repos/<owner>/<repo>/branches/development/protection` answers
+   **404 Branch not protected**, which reads as "a direct push will land" and is wrong. The rule
+   lives at `gh api repos/<owner>/<repo>/rules/branches/development` — `pull_request` with
+   `required_approving_review_count: 0`, plus `deletion` and `non_fast_forward`. A direct push is
+   rejected with "Changes must be made through a pull request". **Check the second endpoint, or just
+   try the push and read the refusal**; do not conclude from the first that this step is optional.
+
+   **A pull request needs a head branch, so "land this without creating a branch" is not a thing
+   this repository can do.** Zero approvals are required, so the founder can merge their own — but
+   the branch has to exist.
 
 ## 6. Report and stop
 
