@@ -62,11 +62,12 @@ pull request and reads the run.
 > had never worked.
 >
 > The detection row is `CODEX_THREAD_ID` on presence. **What NEW-21 leaves is six `BACKLOG.md` §1
-> rows — NEW-42 through NEW-47 — and five of them came from three fresh-context reviews of its own diff
+> rows — NEW-42 through NEW-47 — and five of them came from two fresh-context reviews of its own diff
 > rather than from the work.** Only NEW-42 is the work's own: no interactive vendor session has ever
-> been observed, on either vendor. The reviews added NEW-43 (the Codex arm of the security suite has
+> been observed, on either vendor. The reviews added NEW-43 (the Codex arm of the security suite had
 > never executed, which is why its fake vendor was wrong for its whole four-day life without a red
-> test), NEW-44 (a nested session mis-attributes its capture, and no row order fixes it), NEW-45 (the
+> test — **closed 2026-08-21**, the day after it was raised, by one case with `claude: false`),
+> NEW-44 (a nested session mis-attributes its capture, and no row order fixes it), NEW-45 (the
 > replacement rule's "last agent message wins" is an inference), NEW-46 (the trust check covers half of
 > what the prose claimed about the widened spawn trigger) and NEW-47 (whether a model-run command can
 > write raw bytes into the stream this product parses, which decides NEW-45's tie-break).
@@ -155,8 +156,12 @@ pattern rather than a first.
   exactly one `agent_message`, so "the last one wins" is unobserved and is labelled as such at the
   seam rather than written as a fact.
 - **A nested session mis-attributes its capture** — NEW-44, and no row order fixes it.
-- **The Codex arm of the security suite has never executed** — NEW-43, which is why its fake vendor
-  was wrong for every one of the four days it stood, without a red test.
+- ~~The Codex arm of the security suite has never executed~~ — **NEW-43, closed 2026-08-21.** One case
+  with `claude: false` lands an in-scope note through the Codex arm before refusing a traversal in it,
+  which is what proves the reply was *understood* rather than merely unparsed: a drifted dialect writes
+  nothing, and a case that only checked nothing was written outside the vault would sleep through the
+  bug the row was about. Listed struck through rather than deleted because it is the row that shows
+  what a session can close unaided — three of the other five are the same way.
 - **The widened spawn trigger is only half closed by the trust check** — NEW-46.
 - **Whether a model-run command can write raw bytes into the stream this product parses is
   unexamined** — NEW-47, which decides NEW-45's tie-break and settles from vendor source without
@@ -375,33 +380,40 @@ written. Then two entries that are not subsystems — the cutover (A15) and the 
 Track L's two, which are not engineering work at all. **An implementation is done when its checkpoint
 holds with evidence in a commit and CI is green on it, not when the tasks are ticked.**
 
-**Twenty-seven plan steps are unticked**, and they are the whole of the written work. Task 17's last
-step closed on 2026-08-20:
+**Twenty-six plan steps are unticked**, and they are the whole of the written work. The figure has
+moved twice in two days and both moves are recorded so the next recount has a baseline: **28** until
+Task 17's last step closed on 2026-08-20, **27** until Task 19 Step 5 closed on 2026-08-21, **26**
+now.
 
 | Plan | Task | Steps left |
 |---|---|:---:|
-| knowledge pipeline | 19 — close the documents, run the gate | 2 |
+| knowledge pipeline | 19 — run the gate and open the pull request | 1 |
 | program | 7 — Git, automation, update, release lifecycle | 7 |
 | program | 8 — founder shadow migration | 10 |
 | program | 9 — public beta and v1 | 8 |
 
 **DOS-P10, DOS-P11 and DOS-P12 contribute no rows to that table, and their absence is not good news.**
 A plan step can only be counted once a plan exists, and all three are at the stage before their spec.
-The written work is twenty-eight steps; the *unwritten* work is three spec cycles, three plans, and
+The written work is twenty-six steps; the *unwritten* work is three spec cycles, three plans, and
 three implementations, and it is the larger half. Do not read the table as the total.
 
 Program Task 6 shows one unticked box and it is **not** work: the hooks box was rewritten to record
 that hooks are declined, and nothing shipped for it by design.
 
-**`BACKLOG.md` §1 is twenty-seven repository defects**, counted by listing the `### NEW-` headings on
-2026-08-20. **None waits on R2**, which is closed: eighteen came out of R2's own reviews, four
-(NEW-43, NEW-44, NEW-46, NEW-47) out of the reviews of the NEW-21 diff and every one of them startable
-in a session, and five need somebody or something no session has — NEW-42 an interactive vendor
-session, NEW-45 the founder's credits, NEW-20 and NEW-13 registered as deliberately not fixed, NEW-7 a
-machine with Obsidian. **NEW-21 closed on 2026-08-20 and left six rows**, five of them found by review
-rather than by the work. That is the shape this queue should keep expecting. That number is the honest cost of closing ten decided defects
-with a fresh-context review on each, and it is the shape this queue should expect: a review that
-finds nothing is rarer than one that finds a residual.
+**`BACKLOG.md` §1 is twenty-five open repository defects** — twenty-seven `### NEW-` headings on
+2026-08-21, less the two closed that day, NEW-13 and NEW-43. **None waits on R2**, which is closed:
+eighteen came out of R2's own reviews; three (NEW-44, NEW-46, NEW-47) out of the reviews of the NEW-21
+diff and startable in a session; and four need somebody or something no session has — NEW-42 an
+interactive vendor session, NEW-45 the founder's credits, NEW-20 registered as deliberately not fixed,
+NEW-7 a machine with Obsidian. 18 + 3 + 4 = 25.
+
+**NEW-21 left six rows and one has already gone.** NEW-43 closed the day after it was raised — but it
+was **one of four** a session could have taken, not the only one: NEW-44, NEW-46 and NEW-47 are still
+open, and NEW-47 needs no credits either. That is the shape this queue should keep expecting: reviews
+add rows faster than work closes them, and the ones that close fastest are the ones nobody has to be
+asked about. **Eighteen of the twenty-five are the honest cost of closing ten decided defects with a
+fresh-context review on each**, and a review that finds nothing is rarer than one that finds a
+residual.
 
 **Add six open decisions** that are not defect rows: the two Foundation founder questions, DOS-P9's
 dedicated-plan question, and the three `BACKLOG.md` §8 amendments awaiting ratification — spec §8.2's
@@ -409,7 +421,8 @@ dedicated-plan question, and the three `BACKLOG.md` §8 amendments awaiting rati
 `accepted → rejected` row.
 
 **A10 became startable on 2026-08-20** and is the only thing on the product path that is: NEW-21
-closed when the external usage limit reset, so what remains of A10 is Task 19 Steps 5 and 6. A11 waits
+closed when the external usage limit reset, and Step 5 landed 2026-08-21, so what remains of A10 is
+Task 19 Step 6 alone, which needs a pull request. A11 waits
 on A10, and A12, A13 and A14 wait on A11 by the founder's sequencing ruling rather than by any
 technical dependency. **Step 6 opens a pull request**, which is the founder's call rather than a
 session's — see the `NOW` section.

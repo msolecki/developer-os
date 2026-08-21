@@ -67,7 +67,7 @@ export const SENTINEL = `ghp_${"S3nt1nel".repeat(5)}`;
  * what `isVersionProbe` binds to — see there.
  */
 export const CLAUDE = "/synthetic/bin/claude";
-const CODEX = "/synthetic/bin/codex";
+export const CODEX = "/synthetic/bin/codex";
 const DISCOVERABLE: readonly string[] = [CLAUDE, CODEX];
 
 const REDACTION_KEY = new Uint8Array(32).fill(11);
@@ -131,14 +131,32 @@ export interface RecordingRunner extends ProcessRunner {
  * document. A fake that spoke one dialect to both would let a bridge that
  * confused them pass.
  *
- * **That justification describes coverage this file does not have, and saying
- * so is the point of this paragraph.** `VENDOR_ORDER` is `["claude", "codex"]`
- * and every fixture here installs both, so `selectVendor` always picks Claude
- * and **no security test has ever executed the Codex arm**. The dialect below
- * was wrong from 2026-08-17, when it was written, and stayed green for every one
- * of the four days it stood — which is how a fresh-context review found it on
+ * **That justification described coverage this file did not have until
+ * 2026-08-21.** `VENDOR_ORDER` is `["claude", "codex"]` and every fixture here
+ * installs both by default, so `selectVendor` always picked Claude and **no
+ * security test had ever executed the Codex arm**. The dialect below was wrong
+ * from 2026-08-17, when it was written, and stayed green for every one of the
+ * four days it stood — which is how a fresh-context review found it on
  * 2026-08-20 rather than a failing test.
- * Registered as `BACKLOG.md` §1 NEW-43.
+ *
+ * **`prompt-injection.test.ts` now drives one case with `claude: false`**, so
+ * this branch executes and a drift that changes what `finalAgentMessage` can
+ * read goes red there instead of waiting for a reviewer. A drift that still
+ * parses — a changed `item.id`, a reordered stream — does not. That case asserts the arm ran before it asserts anything else,
+ * and — the part that took two rounds to get right — it lands an **in-scope**
+ * note through this arm before refusing a traversal in it. A drifted dialect
+ * yields `malformed-output`, which becomes a refusal and writes nothing, so a
+ * case that only checked nothing was written *outside* the vault stays green
+ * through exactly the bug. `BACKLOG.md` §1 NEW-43 closed on it.
+ *
+ * **One case is not this arm's coverage, and the difference is worth stating.**
+ * It covers one property — the traversal refusal — on this vendor. Everything
+ * else in `tests/security/` is still Claude-only: the spawn-count and argv
+ * screens in `network.test.ts` and `multiline-command.test.ts` never see the
+ * argv `invokeCodex` builds. And `claude: false` only works under the default
+ * `platform: "fake"`; under `platform: "real"` discovery goes through
+ * `/usr/bin/which` and this runner answers for Claude regardless, so the
+ * technique does not reach the suites where spawn behaviour matters most.
  *
  * A `--version` probe is answered with a version string rather than a proposal,
  * because that is what the command asking for one parses.

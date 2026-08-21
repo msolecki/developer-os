@@ -65,7 +65,7 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P10, DOS-P11, DOS-P12 | no documents; added 2026-08-20 | **3 specs, 3 plans, 3 implementations.** The shared-runtime layers no subsystem owned: thirty-eight instruction artifacts, eleven event hooks, nine tooling scripts |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each. **The cutover's scope grew on 2026-08-20** — it now retires the shared runtime entirely, so it follows DOS-P12 rather than DOS-P7 |
-| Repository-level | §1 | **twenty-seven rows**, and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **five** need somebody or something no session has (NEW-42 an interactive vendor session, NEW-45 the founder's credits, NEW-20 and NEW-13 deliberately not fixed, NEW-7 a machine with Obsidian); **eighteen** came out of R2's own reviews — NEW-27 and NEW-28 from closing NEW-12, NEW-24/25/26/29 from NEW-16, NEW-30 and NEW-31 from NEW-11, NEW-32, NEW-33 and NEW-35 from NEW-15, NEW-34 from Foundation request 2, and NEW-36, NEW-37, NEW-38 and NEW-39 from request 3, NEW-40 from Task 8, and NEW-41 from Task 9; **four** — NEW-43, NEW-44, NEW-46 and NEW-47 — are startable in a session, which is what groups them; the reviews of the NEW-21 diff produced these four **and NEW-45**, which sits above only because it needs credits. **NEW-21 closed 2026-08-20 and left six**, which is the honest price of one real vendor call |
+| Repository-level | §1 | **twenty-five open rows** of twenty-seven headings, two of them closed 2026-08-21 — and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **four** need somebody or something no session has (NEW-42 an interactive vendor session, NEW-45 the founder's credits, NEW-20 deliberately not fixed, NEW-7 a machine with Obsidian); **eighteen** came out of R2's own reviews — NEW-27 and NEW-28 from closing NEW-12, NEW-24/25/26/29 from NEW-16, NEW-30 and NEW-31 from NEW-11, NEW-32, NEW-33 and NEW-35 from NEW-15, NEW-34 from Foundation request 2, and NEW-36, NEW-37, NEW-38 and NEW-39 from request 3, NEW-40 from Task 8, and NEW-41 from Task 9; **three** — NEW-44, NEW-46 and NEW-47 — are startable in a session, which is what groups them; the reviews of the NEW-21 diff produced these three, **NEW-45** (above, because it needs credits) and **NEW-43**, which closed on 2026-08-21, the day after it was raised. 4 + 18 + 3 = 25. **NEW-21 left six rows and one has gone; NEW-43 was one of four a session could have taken**, not the only one — NEW-44, NEW-46 and NEW-47 are still there, and NEW-47 needs no credits either |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -114,14 +114,15 @@ recording. Git history is the archive.
 one. A residual is a defect like any other and gets `NEW-24` through `NEW-28`; the row it came from
 is named in its own text, which is where the lineage belongs.
 
-**Twenty-two rows, and they are not all the same kind of open.** **None is waiting on R2 to land a fix.** NEW-11, NEW-12, NEW-15, NEW-16 and NEW-22 all closed
+**Twenty-five open rows, recounted 2026-08-21, and they are not all the same kind of open.** **None is waiting on R2 to land a fix.** NEW-11, NEW-12, NEW-15, NEW-16 and NEW-22 all closed
 on 2026-08-17; what remains here is somebody else's or a residual of that work. **NEW-11 closed
 2026-08-17** and left NEW-30, the fourth field with the same gap. All four
 that were waiting on a decision got one on 2026-08-17; **NEW-16 closed the same day** and left three
 residual rows of its own — NEW-24, NEW-25 and NEW-26. They stay here until R2 closes them, because a row leaves this
 section when its fix is committed, not when its question is answered. Three were somebody else's:
 **NEW-20** and **NEW-13** registered as deliberately-not-fixed, and **NEW-7** waiting on a machine
-with Obsidian.
+with Obsidian. **NEW-13 has since closed** — 2026-08-21, by Task 19 Step 5, against brands that had
+shipped nine days earlier — so that group is two.
 
 **NEW-21 was a fourth, closed on 2026-08-20, and left six rows behind it** — NEW-42 through NEW-47.
 Only **NEW-42** came from the work; **NEW-43 through NEW-47 came from two fresh-context reviews of its
@@ -136,7 +137,7 @@ NEW-27 and NEW-28 from the review that closed NEW-12; NEW-24, NEW-25, NEW-26 and
 that closed NEW-16; NEW-30 and NEW-31 from the one that closed NEW-11; NEW-32 and NEW-33 from the
 one that closed NEW-15; NEW-34 from the round that closed Foundation request 2, NEW-35 from the review that verified NEW-15's closure, and NEW-36 to NEW-39 from the review rounds on request 3, NEW-40 from Task 8 and NEW-41 from Task 9 —
 NEW-34 the only one of the eighteen that is a defect in a **gate** rather than in the product, and
-NEW-35 a residual that existed all along and was filed under the wrong row. A seventeenth, NEW-23,
+NEW-35 a residual that existed all along and was filed under the wrong row. A nineteenth, NEW-23,
 was found the same way and **closed the same day** by Track R Task 1b, which built the gate it asked
 for.
 
@@ -264,21 +265,39 @@ not.
 
 ### NEW-43 — no security test has ever executed the Codex arm
 
-- **Status:** open, registered 2026-08-20 by the fresh-context review of the NEW-21 diff ·
-  **Owner:** whoever next touches `tests/security/` — DOS-P7 by default · **Size:** S ·
-  **Gate integrity**
-- **What is uncovered.** `tests/security/helpers.ts` answers each vendor in its own dialect, and its
-  docblock justifies that with "a fake that spoke one dialect to both would let a bridge that confused
-  them pass". `VENDOR_ORDER` is `["claude", "codex"]` and every fixture in that directory installs
-  both, so `selectVendor` always picks Claude and **the Codex branch of that fake has never run**.
+- **Status:** **closed 2026-08-21**, one day after it was registered by the fresh-context review of
+  the NEW-21 diff · **Size:** S · **Gate integrity**
+- **Closed by one case with `claude: false`**, and the first version of that case did not close it.
+  `tests/security/prompt-injection.test.ts` asserts the arm executed *before* anything else — a run
+  that quietly selected Claude would satisfy the rest for the wrong reason — and then **lands an
+  in-scope note through this arm before refusing a traversal in it.** That second part is the fix a
+  review forced: a drifted dialect yields `malformed-output`, which becomes a refusal and writes
+  nothing, so the original case, which checked only that nothing was written *outside* the vault,
+  would have stayed green through exactly the bug this row registered. Twice red-verified — removing
+  `claude: false` fails the arm assertion, and reverting the fake's Codex branch to a bare document
+  fails the in-scope one.
+- **What it does not cover, because a row that closes should say so.** One property on this arm, not
+  the suite: the argv and spawn screens in `network.test.ts` and `multiline-command.test.ts` still
+  never see the argv `invokeCodex` builds. And `claude: false` works only under the default
+  `platform: "fake"` — under `platform: "real"` discovery goes through `/usr/bin/which` and the
+  recording runner answers for Claude regardless, so the technique does not reach the suites where
+  spawn behaviour matters most.
+- **What was uncovered, in the past tense because it is closed.** `tests/security/helpers.ts` answers
+  each vendor in its own dialect, and its docblock justified that with "a fake that spoke one dialect
+  to both would let a bridge that confused them pass". `VENDOR_ORDER` is `["claude", "codex"]` and
+  every fixture in that directory installed both, so `selectVendor` always picked Claude and **the
+  Codex branch of that fake had never run**. One fixture now passes `claude: false`, so it does.
 - **How it was found, which is the argument for the row.** The fake's Codex dialect was wrong from
   2026-08-17, when it was written, and the security suite stayed green for every one of the four days
   it stood; the parser correction of 2026-08-20
-  reddened the two fakes that *are* exercised — `ingest.test.ts` and the e2e lifecycle — and left this
-  one silently wrong. A fresh-context review found it, not a test. **A gate that can pass by executing
+  reddened the two fakes that *were* exercised then — `ingest.test.ts` and the e2e lifecycle — and left
+  this one silently wrong. A fresh-context review found it, not a test. **A gate that can pass by executing
   neither branch is the same class as one that passes by scanning nothing.**
-- **How to close it:** at least one security fixture that installs Codex alone, or passes `--agent
-  codex`, so the arm executes. Whoever does it should expect the fake to be wrong again by then.
+- **How it was closed**, kept in the shape it was written because it is what a later reader needs if
+  this regresses: at least one security fixture that installs Codex alone, or passes `--agent codex`,
+  so the arm executes. The prediction beside it — "whoever does it should expect the fake to be wrong
+  again by then" — held within the day: the fake was wrong, and the first case written against it did
+  not catch that, which is why the closure bullets above exist.
 
 ### NEW-42 — only `codex exec` has ever been observed, on either vendor
 
