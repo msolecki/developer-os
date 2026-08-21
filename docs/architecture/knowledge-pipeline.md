@@ -79,22 +79,37 @@ a test that observed it working — the rule that kept `plugin_hooks` from ever 
 a file that does not exist. Parity between the two lists is asserted by
 `apps/cli/src/adapter-capability-parity.test.ts`.
 
-**`sourceAgent` records `"unknown"` until a real vendor run observes a row, and after Task 17 that is
-still true of exactly one vendor.** `AGENT_DETECTION_ROWS` carries **one** row
-(`packages/brain/src/capture/agent.ts`): `CLAUDECODE=1`, observed 2026-08-15 on Claude Code 2.1.233
-with every vendor variable stripped from the parent environment, so the marker could not be one
-leaking in from the session that ran the experiment — the first attempt inherited them and was
-discarded for exactly that reason. **Codex's row is absent**, because the account's usage limit was
-exhausted and every `codex exec` ended `turn.failed` before a shell command could report an
-environment.
+**`sourceAgent` records `"unknown"` until a real vendor run observes a row, and since 2026-08-20 both
+vendors have one.** `AGENT_DETECTION_ROWS` (`packages/brain/src/capture/agent.ts`) carries
+`CLAUDECODE=1`, observed 2026-08-15 on Claude Code 2.1.233, and `CODEX_THREAD_ID` **on presence**,
+observed 2026-08-20 on `codex-cli 0.147.0`. Both were taken with every `CLAUDE*`, `CODEX*` and
+`ANTHROPIC*` variable stripped from the parent, so neither marker can be one leaking in from the
+session that ran the experiment — the first attempt at the Claude row inherited them and was
+discarded for exactly that reason.
+
+**Codex's row was absent for five days rather than guessed**, because the account's usage limit was
+exhausted on 2026-08-15 and every `codex exec` ended `turn.failed` before a shell command could report
+an environment. Every capture written inside a Codex session in that window records
+`sourceAgent: "unknown"` and `sourceAgentVersion: "unknown"`. **Those captures are correct and are
+never rewritten.** A guessed row would have been exactly the undocumented capability assumption the
+design spec names as a release blocker.
+
+**Which of four observed variables became the row is the part worth carrying.** A shell command inside
+`codex exec` saw `CODEX_CI=1`, `CODEX_SANDBOX=seatbelt`, `CODEX_SANDBOX_NETWORK_DISABLED=1` and
+`CODEX_THREAD_ID=<uuid>`, identically under both sandbox modes. The two `SANDBOX` names describe the
+sandbox rather than the vendor — absent under `danger-full-access`, platform-valued — and `CODEX_CI`
+reads as a marker of non-interactive `exec`. The thread id is per-session, so the row matches on
+presence and is the first real row to drive that branch of `matchObservedAgent`.
+
+**What neither row covers is the interactive session**, and that is the limit of both. Claude's was
+taken through `claude -p`, Codex's through `codex exec`; the TUI, where a founder actually captures,
+has never been observed on either vendor. A row that does not hold there records `"unknown"`, which is
+the safe direction. Registered in `BACKLOG.md` §1.
 
 The rule that reads the table is still tested against synthetic rows, so it is not a rule whose first
-run is the day someone adds one, and one case now drives detection through the **real** table end to
-end — without it the observation would live in a unit test with nothing proving the command consumes
-it. Every capture written inside a Codex session until that row lands records `sourceAgent: "unknown"`
-and `sourceAgentVersion: "unknown"`. **Those captures are correct and are never rewritten.** A guessed
-row would be exactly the undocumented capability assumption the design spec names as a release
-blocker, which is why the absent row was left absent. Owner: `BACKLOG.md` §1 **NEW-21**.
+run is the day someone adds one, and two cases now drive detection through the **real** table end to
+end — one per vendor. Without them the observations would live in unit tests with nothing proving the
+command consumes them.
 
 ---
 
@@ -411,12 +426,12 @@ in §10 below with their owners.
 
 | | Owner | Shape |
 |---|---|---|
-| **NEW-21** — one successful `codex exec` completion is still owed | the founder, because it spends their credits | S. Task 17 ran on 2026-08-15 and the account's usage limit was exhausted, so it settled the JSONL framing and the discriminating `type` field and **not** the terminal-event rule, and observed no Codex environment. One run closes both halves; until it lands, `finalJsonlLine` stays provisional and every capture taken inside a Codex session records `sourceAgent: "unknown"` |
+| **NEW-21** — one successful `codex exec` completion is still owed | the founder, because it spends their credits | **closed 2026-08-20**, S. The usage limit reset and five invocations were made with the production argv, all four recordings committed. It closed by falsifying two shipped things: the terminal-event rule — a successful turn ends on a `turn.completed` usage record, so `finalJsonlLine` returned telemetry as an `ok: true` payload and is replaced by `finalAgentMessage` — and the shipped output schema, refused with HTTP 400 for a `schemaVersion` carrying no `type` keyword, which means **`ingest` could never have run on this vendor**. It also observed the Codex detection row, `CODEX_THREAD_ID` on presence. **Residual: only `codex exec` has ever been observed, on either vendor**; the interactive TUI has not, and that bears on the detection rows and on the parsing rule alike |
 | **NEW-36** — a redacted payload's paths are renormalized and its keys rewritten | DOS-P7, open | M. `ingest` publishes `RunReportV1` on `CliError.data`, and `redactPayload` runs every string leaf through `redactText`, which returns NFC — so a note path a `--json` consumer reads back may not open on a filesystem that handed it out as NFD, while `error.paths` beside it stays byte-exact. The same redactor carries the user's `[redaction] patterns`, which are applied to product-chosen key names: `patterns = ["captureId"]` yields a document still declaring `schemaVersion: 1` that no longer matches it. Closing it needs a redactor that takes the class set to apply, which `redactText` does not offer |
 | **NEW-37** — a numeric leaf of that payload is outside the redactor's reach | DOS-P7, open | M. `redactText` is `string => string`, so applying it to a `number` would publish `"1"` where the schema declares `schemaVersion: 1`. Every string and `bigint` leaf redacts; a `number` does not. Latent while the only `number` leaves are product-chosen constants, live the first time a report carries a caller-derived one. Same shape as NEW-36 and should be taken with it |
 | **NEW-20** — `capture` proves its quarantine root, then follows the declared path again | DOS-P7 by default | XS, security, **theoretical**: it needs a won race and is not a regression. The declared path is the contract — it is what `CaptureResultV1.path` publishes — so closing the window means the two paths disagreeing inside one function. `threat-model.md` §5.2 describes it |
 | **NEW-19** — `reindex` builds its owned root textually, as `capture` used to | **closed 2026-08-15** by Track R entry R1 | XS, security. `reindex` calls `resolveContainedRoot` (`apps/cli/src/commands/reindex.ts:466`) rather than joining the path textually, so a `content/_indexes` replaced by a link out of the vault is refused instead of written through. Regression tests: `tests/security/symlink-escape.test.ts:369,410` |
-| **NEW-15** — nothing that executes a discovered binary pays the check its own type demands | **closed 2026-08-17** by Track R entry R2 | S, security. `assertTrustedExecutable` canonicalizes, refuses a non-regular-file target, and walks three ancestor chains refusing an owner that is neither the current uid nor root, any other-writable directory, and a group-writable one the current uid does not own. All three executors call it — `apps/cli/src/commands/capture.ts:263`, `apps/cli/src/commands/doctor.ts:439`, `apps/cli/src/commands/ingest.ts:516`. **Three residuals stay open**: NEW-32 (a middle symlink hop, a working bypass), ACL blindness, and NEW-35 (check-then-use); NEW-33 is a false refusal awaiting the founder |
+| **NEW-15** — nothing that executes a discovered binary pays the check its own type demands | **closed 2026-08-17** by Track R entry R2 | S, security. `assertTrustedExecutable` canonicalizes, refuses a non-regular-file target, and walks three ancestor chains refusing an owner that is neither the current uid nor root, any other-writable directory, and a group-writable one the current uid does not own. All three executors call it — `apps/cli/src/commands/capture.ts:263`, `apps/cli/src/commands/doctor.ts:439`, `apps/cli/src/commands/ingest.ts:544`. **Three residuals stay open**: NEW-32 (a middle symlink hop, a working bypass), ACL blindness, and NEW-35 (check-then-use); NEW-33 is a false refusal awaiting the founder |
 | **NEW-16** — spec §8.2's user-configured redaction patterns are unreachable | **closed 2026-08-17** by Track R entry R2 | S. `configSchema` carries an optional `[redaction]` table (`packages/core/src/config/loader.ts:208`) and the three redacting commands bind the user's patterns through `createRedactor` at their composition roots. `tests/repository/redactor-entry.test.ts` refuses a new call site that reaches for `redactText` directly. Residuals NEW-24, NEW-25 and NEW-26 stay open |
 | **NEW-17** — `brain` is the one command whose config parse failure is not content-free | **closed**, removed from `BACKLOG.md` §1 | XS, security. `readConfig` now routes through `readConfigFile` (`apps/cli/src/commands/brain.ts:117`) and rethrows `ConfigurationError` unmodified, so no command parses configuration outside the wrapper |
 | **NEW-18** — `assertSafeCommand`'s four NUL branches have no test anywhere | **closed 2026-08-15** by Track R entry R1 | XS. One case per `containsNul` site — executable, working directory, any argument, stdin (`packages/security/src/process.test.ts:101,111,119,127`) |
@@ -489,9 +504,10 @@ did not settle:
 |---|---|
 | `--json` really is JSONL, one JSON object per line | **confirmed**, four lines, none scalar or `null` |
 | whether the stream carries a discriminating field worth filtering on | **confirmed: `type`**, on every line. Observed vocabulary `thread.started`, `turn.started`, `error`, `turn.failed` — *not* the `session.created` / `item.completed` / `turn.completed` the synthetic tests had guessed |
-| whether a **successful** turn's terminal event is the final response | **still open.** A failed turn cannot answer it, so `finalJsonlLine` stays provisional and its docblock says so |
-| the Codex `AGENT_DETECTION_ROWS` row | **still open**, and absent rather than guessed |
+| whether a **successful** turn's terminal event is the final response | **answered 2026-08-20 by NEW-21: no.** A successful turn ends on a `turn.completed` usage record and the response is the `item.completed` before it, so `finalJsonlLine` was wrong rather than provisional and was replaced by `finalAgentMessage` |
+| the Codex `AGENT_DETECTION_ROWS` row | **observed 2026-08-20**, `CODEX_THREAD_ID` on presence |
 | the Claude `AGENT_DETECTION_ROWS` row | **observed**, `CLAUDECODE=1` |
+| whether the vocabulary reading of 2026-08-15 held | **corrected 2026-08-20.** `item.completed` and `turn.completed` are real; only `session.created` is not. A failed turn was never a stream the other two could appear in |
 
 Two findings the run produced that nobody had asked it for, both now pinned:
 
@@ -507,8 +523,13 @@ Two findings the run produced that nobody had asked it for, both now pinned:
   payload it keeps out.
 
 The recording is `tests/fixtures/codex/observed-exec-stream.jsonl`, with `README.md` beside it stating
-what was redacted. **What remains open is `BACKLOG.md` §1 NEW-21**, and one successful `codex exec`
-completion closes all of it. Separately and untouched by this run: the Claude scoped-permission form
+what was redacted. **NEW-21 closed on 2026-08-20** when the usage limit reset and five invocations were
+made — the schema refusal, one per sandbox branch, and one testing `--output-last-message`. It closed by falsifying two shipped
+things rather than by confirming one: the terminal-event rule, above, and the shipped output schema,
+which the vendor refused with HTTP 400 before any turn began because `schemaVersion` carried no `type`
+keyword. **`ingest` could never have returned a proposal on Codex**, and every gate was green over it,
+because nothing in the repository had ever handed that file to the binary. The recordings are
+`observed-exec-success-stream.jsonl` and `observed-exec-schema-refusal.jsonl`. Separately and untouched by this run: the Claude scoped-permission form
 `claude-adapter.md` §14.3 names but does not specify is still unresolved, which is why `ingest` passes
 bare tool names (`apps/cli/src/commands/ingest.ts:216-222`).
 

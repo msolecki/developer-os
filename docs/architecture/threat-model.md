@@ -369,20 +369,26 @@ and `resolveScopeGlob` returns a vault-relative glob, so the first caller to pas
 will hand a derived path to the screen that still carries the word list. Claude's `allowedTools` carries the same trap; its exact
 spelling is an inference from vendor syntax rather than a documented form.
 
-**One rule at this seam is provisional on the success path.** Codex's `--json` streams JSONL while
-`--output-schema` constrains only the final response, so stdout is reduced to *the last line that
-parses as a non-null JSON object* (`packages/adapter-codex/src/invoke.ts:120-193`). No event type is
-filtered on, because an invented enum a future version rejects is a failure only a real run would
-find. **DOS-P6 Task 17 made that call on 2026-08-15** and settled the framing — one JSON object per
-line — and the existence of a discriminating `type` field, but **not** the terminal-event rule
-itself: the run ended `turn.failed` on an exhausted usage limit, so no run reached a model response.
-It still ships unverified and says so at the seam; nothing here should be read as having verified it.
-Owner of the remainder: `BACKLOG.md` §1 **NEW-21**.
+**One rule at this seam was provisional on the success path, and on 2026-08-20 it turned out to be
+wrong.** Codex's `--json` streams JSONL while `--output-schema` constrains only the final response, so
+stdout was reduced to *the last line that parses as a non-null JSON object*, filtering on no event
+type — an invented enum a future version rejects being a failure only a real run would find. **DOS-P6
+Task 17 made that call on 2026-08-15** and settled the framing and the existence of a discriminating
+`type` field, but not the terminal-event rule: its run ended `turn.failed` on an exhausted usage
+limit.
 
-**That run also showed what a boundary at this seam is protecting against.** The observed stream's
-last parsing line is the `turn.failed` event, so the reduction rule alone would hand a caller a
-vendor error shaped like a result; what prevents it is the `exitCode !== 0` check that runs *before*
-the reduction (`packages/adapter-codex/src/invoke.ts`). **That ordering was already guarded** — a
+**NEW-21's successful turn showed the reduction selected the wrong event.** A successful turn ends on
+`turn.completed`, a usage record; the response is the `item.completed` before it, whose `item.type` is
+`agent_message` and whose `text` holds the payload as a string. So the seam returned vendor telemetry
+with `ok: true` — the boundary reporting success over a document with no proposal in it — on every
+successful run, invisibly, because no fixture had ever held a real successful stream.
+`finalAgentMessage` replaces it and now filters on three vendor field names, trading a silent wrong
+answer for a `malformed-output` if the vendor renames one.
+
+**The 2026-08-15 run also showed what a boundary at this seam is protecting against, and that finding
+survives the correction.** The failed stream's last parsing line is the `turn.failed` event, so any
+rule reaching the parse at all would hand a caller a vendor error shaped like a result; what prevents
+it is the `exitCode !== 0` check that runs *before* it (`packages/adapter-codex/src/invoke.ts`). **That ordering was already guarded** — a
 synthetic non-zero-exit case in `invoke.test.ts` goes red without it — so what the real recording
 adds is not the guard but the demonstration, against bytes a vendor actually emitted, of the payload
 the guard keeps out.
@@ -558,9 +564,24 @@ straight to `invokeVendor`, and `capture` joined on 2026-08-15 when Task 17's Cl
 `discoverSourceAgent`'s probe path live — the same unchecked execution on the product's most
 frequently run command, triggered by a `CLAUDECODE=1` any wrapper or CI step can export.
 
+**The trigger surface doubled on 2026-08-20 and got cheaper.** NEW-21 added Codex's detection row, so
+`capture` now spawns a version probe inside a Codex session too — and that row matches on
+**presence**, so `CODEX_THREAD_ID=anything` arms it where Claude's row at least wants the literal `1`.
+Neither was ever a privilege an attacker had to earn. `assertTrustedExecutable` runs before the spawn
+on that path (`apps/cli/src/commands/capture.ts:263`), and it is what makes the widening tolerable.
+
+**It is a partial mitigation, and this paragraph is the one a future reader will rely on, so it says
+which part.** The check refuses a chain owned by neither the user nor root, any other-writable
+directory, and a group-writable one the user does not own. It does **not** refuse a binary the *same
+uid* planted in a directory that uid owns and reached through a prepended `PATH` — that chain passes
+every test it makes. And anyone who can export `CODEX_THREAD_ID` into a session can usually export
+`PATH` into the same one. So what the detection row widened is the set of sessions in which a
+same-uid `PATH` attack gets a spawn to ride, and the check narrows *who* can plant the binary rather
+than closing the path. Registered as `BACKLOG.md` §1 NEW-46.
+
 **`assertTrustedExecutable` is that check**, and all three executors call it before spawning:
 `apps/cli/src/commands/capture.ts:263`, `apps/cli/src/commands/doctor.ts:439`,
-`apps/cli/src/commands/ingest.ts:516` — `doctor` was a third executor paying nothing while the first
+`apps/cli/src/commands/ingest.ts:544` — `doctor` was a third executor paying nothing while the first
 version of this fix claimed a third could not arrive. The rule, decided by the founder rather than
 chosen here (BACKLOG NEW-15): **resolve, then check.** The binary is canonicalized and the resolved
 target must be a regular file; every ancestor on three chains — the resolved target's, the declared

@@ -38,6 +38,31 @@ function runner(handler: (request: ProcessRequest) => Partial<ProcessResult>): P
   };
 }
 
+/**
+ * The shape a real turn puts its response in, from
+ * `tests/fixtures/codex/observed-exec-success-stream.jsonl`: the schema-
+ * constrained JSON arrives as a **string** in the `text` of an `item.completed`
+ * whose `item.type` is `agent_message`, and a `turn.completed` usage record
+ * follows it.
+ *
+ * **Synthetic cases below wrap their payload with this rather than emitting a
+ * bare JSON line, and that is a correction rather than a tidy-up.** Until
+ * 2026-08-20 they emitted a bare `{"result":"done"}` as the last line, which no
+ * observed run has ever produced — they were pinning the positional rule this
+ * module used to apply, not a shape the vendor emits. NEW-21's two successful
+ * turns are what falsified it.
+ */
+function agentMessageStream(payload: string, before: readonly string[] = []): string {
+  return [
+    ...before,
+    JSON.stringify({
+      type: "item.completed",
+      item: { id: "item_0", type: "agent_message", text: payload },
+    }),
+    JSON.stringify({ type: "turn.completed", usage: { input_tokens: 1, output_tokens: 1 } }),
+  ].join("\n");
+}
+
 function capturing(result: Partial<ProcessResult> = {}): {
   runner: ProcessRunner;
   seen: () => ProcessRequest | null;
@@ -138,7 +163,9 @@ describe("the three refused flags, and the sandbox that is never full access", (
    * ordinary `EACCES` message names a permission.
    */
   it("invokes rather than refusing when the prompt is prose naming a permission", async () => {
-    const { runner: capture, seen } = capturing({ stdout: '{"result":"done"}' });
+    const { runner: capture, seen } = capturing({
+      stdout: agentMessageStream('{"result":"done"}'),
+    });
     const prompt = "npm ERR! EACCES: permission denied, open /usr/local/lib";
 
     const result = await invokeCodex(installation, invocation({ prompt }), {
@@ -190,7 +217,7 @@ describe("the three refused flags, and the sandbox that is never full access", (
    * used to be, so a reader can see whose string this is.
    */
   it("permits a workingRoot naming a word-list term, because it is the user's own vault path", async () => {
-    const { runner: capturingRunner, seen } = capturing();
+    const { runner: capturingRunner, seen } = capturing({ stdout: agentMessageStream("{}") });
     const result = await invokeCodex(
       installation,
       invocation({ workingRoot: "/synthetic/Danger/DeveloperBrain" }),
@@ -238,7 +265,7 @@ describe("the three refused flags, and the sandbox that is never full access", (
    * read as a pair on purpose.
    */
   it("permits an outputSchemaPath naming a word-list term, because this product assembled it", async () => {
-    const { runner: capturingRunner, seen } = capturing();
+    const { runner: capturingRunner, seen } = capturing({ stdout: agentMessageStream("{}") });
     const result = await invokeCodex(
       installation,
       invocation({ outputSchemaPath: "danger-zone.json" }),
@@ -346,15 +373,54 @@ describe("invokeCodex failure identity", () => {
 
   it("returns the parsed payload on success", async () => {
     const result = await invokeCodex(installation, invocation(), {
-      runner: runner(() => ({ exitCode: 0, stdout: '{"result":"done"}' })),
+      runner: runner(() => ({ exitCode: 0, stdout: agentMessageStream('{"result":"done"}') })),
     });
     expect(result).toEqual({ ok: true, payload: { result: "done" } });
   });
 
-  it("reduces a multi-line JSONL stream to the last object", async () => {
+  it("passes over a completed item that is not the agent's message", async () => {
+    /**
+     * The observed stream's first `item.completed` is a `command_execution`
+     * with no `text` at all. A rule keyed on `item.completed` alone returns a
+     * shell transcript here; the `item.type` test is what stops it.
+     */
+    const stdout = agentMessageStream('{"result":"done"}', [
+      '{"type":"item.completed","item":{"id":"item_0","type":"command_execution","aggregated_output":"x"}}',
+    ]);
+    const result = await invokeCodex(installation, invocation(), {
+      runner: runner(() => ({ exitCode: 0, stdout })),
+    });
+    expect(result).toEqual({ ok: true, payload: { result: "done" } });
+  });
+
+  it("passes over a later completed item that carries text but is not the agent's message", async () => {
+    /**
+     * **The `item.type` test is what this pins, and nothing pinned it before.**
+     * The case above feeds a `command_execution` with no `text` field at all,
+     * so `typeof message.text !== "string"` rejects it and the `item.type`
+     * check never decides anything — deleting that check left the whole suite
+     * green, which a fresh-context review caught on 2026-08-20.
+     *
+     * The input that makes it decide is an item that is **not** an
+     * `agent_message`, **does** carry a `text` string, and arrives **after**
+     * the response — which is the shape of a reasoning item. Under the
+     * last-wins rule the guard is the only thing standing between that text
+     * and the caller.
+     *
+     * Watched fail by deleting the `item.type` check: the assertion then
+     * received `{ok: false, reason: "malformed-output"}`, because the
+     * reasoning text is not JSON.
+     */
     const stdout = [
-      '{"type":"item.completed","item":{"id":"1"}}',
-      '{"result":"done"}',
+      JSON.stringify({
+        type: "item.completed",
+        item: { id: "item_0", type: "agent_message", text: '{"result":"done"}' },
+      }),
+      JSON.stringify({
+        type: "item.completed",
+        item: { id: "item_1", type: "reasoning", text: "Let me double-check that." },
+      }),
+      JSON.stringify({ type: "turn.completed", usage: { input_tokens: 1 } }),
     ].join("\n");
     const result = await invokeCodex(installation, invocation(), {
       runner: runner(() => ({ exitCode: 0, stdout })),
@@ -363,12 +429,11 @@ describe("invokeCodex failure identity", () => {
   });
 
   it("yields the result even when it is preceded by other event types", async () => {
-    const stdout = [
-      '{"type":"session.created","session_id":"abc"}',
-      '{"type":"item.completed","item":{"id":"1"}}',
-      '{"type":"turn.completed","usage":{"tokens":10}}',
-      '{"result":"final answer"}',
-    ].join("\n");
+    const stdout = agentMessageStream('{"result":"final answer"}', [
+      '{"type":"thread.started","thread_id":"abc"}',
+      '{"type":"turn.started"}',
+      '{"type":"item.started","item":{"id":"item_0","type":"agent_message"}}',
+    ]);
     const result = await invokeCodex(installation, invocation(), {
       runner: runner(() => ({ exitCode: 0, stdout })),
     });
@@ -376,15 +441,16 @@ describe("invokeCodex failure identity", () => {
   });
 
   it("ignores leading, trailing and interleaved blank lines", async () => {
-    const stdout = '\n\n{"type":"session.created"}\n\n{"result":"done"}\n\n\n';
+    const stdout =
+      '\n\n{"type":"thread.started"}\n\n' + agentMessageStream('{"result":"done"}') + "\n\n\n";
     const result = await invokeCodex(installation, invocation(), {
       runner: runner(() => ({ exitCode: 0, stdout })),
     });
     expect(result).toEqual({ ok: true, payload: { result: "done" } });
   });
 
-  it("skips a trailing scalar line and keeps the real result, since a bare value is never the payload", async () => {
-    const stdout = ['{"result":"final answer"}', "123"].join("\n");
+  it("skips a trailing scalar line, which no rule keyed on an event shape can mistake for a payload", async () => {
+    const stdout = agentMessageStream('{"result":"final answer"}') + "\n123";
     const result = await invokeCodex(installation, invocation(), {
       runner: runner(() => ({ exitCode: 0, stdout })),
     });
@@ -399,15 +465,23 @@ describe("invokeCodex failure identity", () => {
     expect(result).toEqual({ ok: false, reason: "malformed-output" });
   });
 
-  it("still works against a single-object stdout, unchanged from before the JSONL reduction", async () => {
+  it("refuses a bare JSON object on stdout, which the positional rule used to accept", async () => {
+    /**
+     * **A narrowing, stated rather than discovered.** The superseded rule took
+     * the last line that parsed, so a lone `{}` was a payload; keying on the
+     * `agent_message` event means a stream carrying no such event yields `""`
+     * and therefore `malformed-output`. Nothing observed emits a bare object —
+     * a real turn always frames its response — so what is given up is a shape
+     * that only ever existed in this file.
+     */
     const result = await invokeCodex(installation, invocation(), {
       runner: runner(() => ({ exitCode: 0, stdout: "{}" })),
     });
-    expect(result).toEqual({ ok: true, payload: {} });
+    expect(result).toEqual({ ok: false, reason: "malformed-output" });
   });
 
   it("refuses a payload carrying a top-level __proto__ rather than returning it", async () => {
-    const hostile = '{"result":"x","__proto__":{"polluted":true}}';
+    const hostile = agentMessageStream('{"result":"x","__proto__":{"polluted":true}}');
     const result = await invokeCodex(installation, invocation(), {
       runner: runner(() => ({ exitCode: 0, stdout: hostile })),
     });
@@ -416,18 +490,23 @@ describe("invokeCodex failure identity", () => {
 });
 
 /**
- * **The only cases in this file whose input is not invented.** Every JSONL case
- * above uses an event vocabulary this package guessed while the rule was
- * unverified — `session.created`, `item.completed`, `turn.completed` — and Task
- * 17's real run on 2026-08-15 shows the vendor emits `thread.started`,
- * `turn.started`, `error` and `turn.failed` instead. The synthetic cases still
- * exercise the rule correctly, because the rule reads no `type` value at all;
- * they simply were never evidence about the vocabulary, and these two are.
+ * **The cases whose input is not invented**, and since 2026-08-20 the synthetic
+ * ones above are built from what these recordings show rather than from a
+ * guess.
  *
- * The recording is a **failed** turn — the account's usage limit was exhausted
- * — so it settles the framing and the discriminating field and cannot settle
- * whether a successful turn's final response is the last parsing line. See
- * `tests/fixtures/codex/README.md` and the spec's §14.1 amendment.
+ * **The 2026-08-15 reading of the vocabulary was itself too strong, and this is
+ * where that is corrected.** It said the three names this package had guessed —
+ * `session.created`, `item.completed`, `turn.completed` — were all wrong,
+ * because none appears in a failed turn. NEW-21's successful turns emit two of
+ * them: `item.completed` and `turn.completed` are real, and only
+ * `session.created` is not — the vendor calls it `thread.started`. A failed
+ * turn was never a stream those two could have appeared in, so the conclusion
+ * reached past its evidence.
+ *
+ * This recording is the **failed** turn: it settles the framing and the
+ * discriminating field, and its terminal `turn.failed` is what the exit-code
+ * ordering protects a caller from. See `tests/fixtures/codex/README.md` and the
+ * spec's §14.1 amendments of both dates.
  */
 describe("invokeCodex against the stream Task 17 actually observed", () => {
   const observed = readFileSync(
@@ -444,12 +523,16 @@ describe("invokeCodex against the stream Task 17 actually observed", () => {
      * same mutation, because its synthetic `"{}"` parses just as happily. So
      * this case is not the first guard on the ordering and does not claim to
      * be. It is the first to show, against bytes a real vendor emitted, what
-     * the ordering is *protecting against*: on the observed stream the last
-     * line that parses to a non-null object is `turn.failed` — **not** a
-     * response — so `finalJsonlLine` alone would hand a caller a vendor error
-     * shaped like a result: an `ok: true` telling the caller nothing failed,
-     * over a payload whose own `type` says `turn.failed`. A synthetic `"{}"`
-     * cannot show that.
+     * the ordering is *protecting against*: the observed stream's last parsing
+     * line is `turn.failed` — **not** a response — so a rule that reached the
+     * parse at all would hand a caller a vendor error shaped like a result. A
+     * synthetic `"{}"` cannot show that.
+     *
+     * **The correction of 2026-08-20 sharpened this case rather than retiring
+     * it.** `finalAgentMessage` finds no `agent_message` in a failed stream and
+     * returns `""`, so the wrong answer it would now produce is
+     * `malformed-output` rather than a forged payload — still the wrong answer,
+     * because `exit` is what tells a caller to retry.
      *
      * Watched fail on 2026-08-15 by moving `parseStructuredPayload(...)` above
      * the exit-code check: the assertion then received
@@ -465,9 +548,10 @@ describe("invokeCodex against the stream Task 17 actually observed", () => {
     /**
      * Spec §10.2 asks two questions of a real run. This answers the second:
      * **yes, `type` is a discriminating field** and it is present on every
-     * line. `finalJsonlLine` deliberately still filters on none of them, and
-     * §14.1's amendment records why that stayed true given a stream that only
-     * demonstrates the failure path.
+     * line. Nothing filtered on it until 2026-08-20, because a narrowing wanted
+     * a stream where the old rule and the new one agreed; what arrived instead
+     * was a stream on which the old rule was **wrong**, and `finalAgentMessage`
+     * now selects on `type` and on `item.type`. §14.1 carries both amendments.
      */
     const lines = observed.split(/\r?\n/u).filter((line) => line.trim().length > 0);
     expect(lines).toHaveLength(4);
@@ -478,6 +562,171 @@ describe("invokeCodex against the stream Task 17 actually observed", () => {
       return (parsed as { type?: unknown }).type;
     });
     expect(types).toEqual(["thread.started", "turn.started", "error", "turn.failed"]);
+  });
+});
+
+/**
+ * The success path, observed 2026-08-20 by NEW-21 and recorded at
+ * `tests/fixtures/codex/observed-exec-success-stream.jsonl`. Everything above
+ * this block was written against a turn that failed on an exhausted usage
+ * limit, which is why the rule these cases replace stood unchallenged for the
+ * eight days between 2026-08-12 and 2026-08-20: a failed turn emits no
+ * response, so nothing could show where the response actually sits.
+ */
+describe("invokeCodex against the successful turn NEW-21 observed", () => {
+  const observed = readFileSync(
+    fileURLToPath(
+      new URL(
+        "../../../tests/fixtures/codex/observed-exec-success-stream.jsonl",
+        import.meta.url,
+      ),
+    ),
+    "utf8",
+  );
+
+  it("returns the agent's response rather than the usage record that follows it", async () => {
+    const result = await invokeCodex(installation, invocation(), {
+      runner: runner(() => ({ exitCode: 0, stdout: observed })),
+    });
+    expect(result).toEqual({
+      ok: true,
+      payload: {
+        schemaVersion: 1,
+        notes: [
+          {
+            path: "codex-env-probe.md",
+            contents:
+              "---\ntitle: codex env probe\n---\nCODEX_CI=1\nCODEX_SANDBOX=seatbelt\nCODEX_SANDBOX_NETWORK_DISABLED=1\nCODEX_THREAD_ID=00000000-0000-7000-0000-000000000001\n",
+            sourceCaptureId: "00000000000000ff",
+          },
+        ],
+      },
+    });
+  });
+
+  it("passes over an earlier completed item that is not the agent's message", () => {
+    /**
+     * The observed stream carries two `item.completed` lines. The first is a
+     * `command_execution` whose `item` has no `text` at all, so a rule that
+     * took the first completed item, or any completed item, would return a
+     * shell transcript. Selecting on `item.type` is what this fixture exists
+     * to pin.
+     */
+    const lines = observed.split(/\r?\n/u).filter((line) => line.trim().length > 0);
+    const itemTypes = lines
+      .map((line) => JSON.parse(line) as { type?: unknown; item?: { type?: unknown } })
+      .filter((event) => event.type === "item.completed")
+      .map((event) => event.item?.type);
+    expect(itemTypes).toEqual(["command_execution", "agent_message"]);
+  });
+
+  it("returns the same response from the other sandbox branch this package emits", async () => {
+    /**
+     * **`-s` is derived from `writeScopes.length`, so there are two argv
+     * branches and a claim about one is not a claim about both.** The
+     * `workspace-write` run of 2026-08-20 is recorded beside the `read-only`
+     * one for that reason; the sentence "identical under both sandbox modes"
+     * in `agent.ts` and in spec §10.3 rests on this file rather than on
+     * somebody's memory of a terminal.
+     */
+    const other = readFileSync(
+      fileURLToPath(
+        new URL(
+          "../../../tests/fixtures/codex/observed-exec-workspace-write-stream.jsonl",
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    );
+    const shape = (stream: string): unknown[] =>
+      stream
+        .split(/\r?\n/u)
+        .filter((line) => line.trim().length > 0)
+        .map((line) => {
+          const event = JSON.parse(line) as { type?: unknown; item?: { type?: unknown } };
+          return [event.type, event.item?.type];
+        });
+    expect(shape(other)).toEqual(shape(observed));
+
+    const { runner: capture, seen } = capturing({ exitCode: 0, stdout: other });
+    const result = await invokeCodex(
+      installation,
+      invocation({ writeScopes: ["/synthetic/scope"] }),
+      { runner: capture },
+    );
+    expect(seen()?.args).toContain("workspace-write");
+    expect(result).toEqual({
+      ok: true,
+      payload: {
+        schemaVersion: 1,
+        notes: [
+          {
+            path: "codex-env-probe.md",
+            contents:
+              "---\ntitle: codex env probe\n---\nCODEX_CI=1\nCODEX_SANDBOX=seatbelt\nCODEX_SANDBOX_NETWORK_DISABLED=1\nCODEX_THREAD_ID=00000000-0000-7000-0000-000000000003\n",
+            sourceCaptureId: "00000000000000ff",
+          },
+        ],
+      },
+    });
+  });
+
+  it("agrees with what --output-last-message wrote for the same turn", async () => {
+    /**
+     * **The alternative that was tested and declined, kept as evidence rather
+     * than as a sentence.** `codex-adapter.md` §7 and spec §14.1 record that
+     * `--output-last-message` works and was rejected for the vendor-written
+     * temp file it introduces. This is the run that showed it.
+     *
+     * **What executes is a comparison of two committed files**, so it cannot
+     * distinguish "the vendor wrote both" from "somebody copied one into the
+     * other" — that provenance is asserted in the fixture README, not proved
+     * here. What it does prove is that the two stay equal: if a later change to
+     * the parsing rule made the stream yield something else, this goes red.
+     */
+    const stream = readFileSync(
+      fileURLToPath(
+        new URL(
+          "../../../tests/fixtures/codex/observed-exec-last-message-stream.jsonl",
+          import.meta.url,
+        ),
+      ),
+      "utf8",
+    );
+    const file = readFileSync(
+      fileURLToPath(
+        new URL("../../../tests/fixtures/codex/observed-exec-last-message.txt", import.meta.url),
+      ),
+      "utf8",
+    );
+    const result = await invokeCodex(installation, invocation(), {
+      runner: runner(() => ({ exitCode: 0, stdout: stream })),
+    });
+    const written: unknown = JSON.parse(file.trim());
+    expect(result).toEqual({ ok: true, payload: written });
+  });
+
+  it("shows the terminal event of a successful turn is not the response", () => {
+    /**
+     * This is the question spec §10.2 put to a real run and that the failed
+     * turn of 2026-08-15 could not answer. The answer is **no**: the last
+     * line is `turn.completed`, a usage record. The rule that shipped until
+     * 2026-08-20 took exactly this line, and `parseStructuredPayload` would
+     * have returned it as `ok: true` — a caller told nothing failed, over a
+     * payload that is vendor telemetry.
+     */
+    const lines = observed.split(/\r?\n/u).filter((line) => line.trim().length > 0);
+    const types = lines.map((line) => (JSON.parse(line) as { type?: unknown }).type);
+    expect(types).toEqual([
+      "thread.started",
+      "turn.started",
+      "item.started",
+      "item.completed",
+      "item.completed",
+      "turn.completed",
+    ]);
+    const terminal = JSON.parse(lines[lines.length - 1] ?? "") as { type?: unknown };
+    expect(terminal.type).toBe("turn.completed");
   });
 });
 

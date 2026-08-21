@@ -126,9 +126,19 @@ export interface RecordingRunner extends ProcessRunner {
 
 /**
  * Records every request and answers each vendor in its own dialect: Codex
- * streams JSONL and takes the last line that parses to an object, while Claude
- * parses stdout as one JSON document. A fake that spoke one dialect to both
- * would let a bridge that confused them pass.
+ * streams JSONL and takes the response from the last `item.completed` whose
+ * `item.type` is `agent_message`, while Claude parses stdout as one JSON
+ * document. A fake that spoke one dialect to both would let a bridge that
+ * confused them pass.
+ *
+ * **That justification describes coverage this file does not have, and saying
+ * so is the point of this paragraph.** `VENDOR_ORDER` is `["claude", "codex"]`
+ * and every fixture here installs both, so `selectVendor` always picks Claude
+ * and **no security test has ever executed the Codex arm**. The dialect below
+ * was wrong from 2026-08-17, when it was written, and stayed green for every one
+ * of the four days it stood — which is how a fresh-context review found it on
+ * 2026-08-20 rather than a failing test.
+ * Registered as `BACKLOG.md` §1 NEW-43.
  *
  * A `--version` probe is answered with a version string rather than a proposal,
  * because that is what the command asking for one parses.
@@ -188,7 +198,19 @@ export function createRecordingRunner(): RecordingRunner {
       const document = JSON.stringify(reply);
       const stdout =
         call.executable === CODEX
-          ? [JSON.stringify({ type: "item.started" }), document, ""].join("\n")
+          ? [
+              JSON.stringify({ type: "thread.started" }),
+              JSON.stringify({ type: "item.started" }),
+              JSON.stringify({
+                type: "item.completed",
+                item: { id: "item_0", type: "agent_message", text: document },
+              }),
+              JSON.stringify({
+                type: "turn.completed",
+                usage: { input_tokens: 1, output_tokens: 1 },
+              }),
+              "",
+            ].join("\n")
           : document;
       return { stdout, stderr: "", exitCode: 0, signal: null, timedOut: false };
     },

@@ -79,11 +79,11 @@ export interface CaptureDependencies {
    *
    * Injected for the reason `matchObservedAgent` is tested against synthetic
    * rows one layer down: it lets the whole command — probe, envelope,
-   * `captureMethod` — be exercised for a vendor whose row does not exist yet,
-   * which since Task 17 (2026-08-15) means Codex, whose marker that task could
-   * not observe. `AGENT_DETECTION_ROWS` now carries Claude's row, and the case
-   * that drives detection through the real table rather than through this
-   * parameter is the one that proves the two meet.
+   * `captureMethod` — be exercised for a vendor whose row does not exist, which
+   * since 2026-08-20 is no vendor this product ships for. Both rows are
+   * observed, and the two cases that drive detection through the real table
+   * rather than through this parameter — one per vendor — are what prove the
+   * table and the command meet.
    */
   readonly detect: (
     env: Readonly<Record<string, string | undefined>>,
@@ -207,12 +207,12 @@ function isAgentName(agent: string): agent is AgentName {
  *
  * **This spawns the vendor binary once per capture** when — and only when — an
  * agent was detected. That is a session-level event rather than a hot path, and
- * it is stated here rather than left for a reader to discover. **Since Task 17
- * (2026-08-15) that is a live path rather than a dormant one:** a capture taken
- * inside a Claude Code session matches `AGENT_DETECTION_ROWS`'s one row and
- * spawns `claude --version`. A capture taken inside a Codex session still
- * matches nothing and still spawns nothing, because that vendor's row could not
- * be observed.
+ * it is stated here rather than left for a reader to discover. **Since
+ * 2026-08-20 it is live for both vendors:** a capture inside a Claude Code
+ * session matches `CLAUDECODE` and spawns `claude --version`, and one inside a
+ * Codex session matches `CODEX_THREAD_ID` and spawns `codex --version`. Between
+ * 2026-08-15 and that date only the first was live, because NEW-21 had not
+ * observed the second.
  *
  * **What it spawns is a PATH-resolved binary, and this command now pays the check
  * that makes it safe to.** `PlatformAdapter`'s own type says whoever executes a

@@ -750,6 +750,21 @@ really is the last parsing line and whether it carries a discriminating field wo
 amend Codex spec §14.1 with the observed shape, dated, and correct the docblock. **Do not quietly
 promote the rule to verified.**
 
+**Discharged 2026-08-20, and the answer to the first question was no.** Task 17 took the second on
+2026-08-15 — `type` is discriminating — and could not take the first, because the run failed on an
+exhausted usage limit. `BACKLOG.md` §1 NEW-21 carried it until the limit reset. The final response is
+**not** the last parsing line: a successful turn ends on a `turn.completed` usage record, and the
+response is the `item.completed` before it. So the rule was never promoted to verified and was
+replaced instead, which is what this paragraph's last sentence was written to protect. Codex spec
+§14.1 carries the amendment of that date.
+
+**The same run also refuted an assumption this section did not know it was making.** It presumed the
+only thing a real call could settle was the *parsing* of a reply. The call never reached a model:
+`--output-schema` pointed at this product's own shipped schema was refused with HTTP 400, because
+`schemaVersion` was written as a bare `const` with no `type` keyword. **The central path this section
+argues cannot be exercised without a real model call had a defect that a real model call surfaces
+before the model runs**, and every gate had been green over it.
+
 ### 10.3 Agent detection
 
 The environment table §5.4 relies on is established by observation during implementation, one row
@@ -757,16 +772,28 @@ per vendor, each recorded here with what was observed and when. **Until a row is
 vendor is not in the table and detection records `"unknown"`** — a guessed row is exactly the kind of
 undocumented capability assumption design spec §20 names as a release blocker.
 
-**Observed by Task 17 on 2026-08-15 — one row, not two.**
+**Both vendors are observed as of 2026-08-20. Claude's row is Task 17's, 2026-08-15; Codex's is
+NEW-21's, five days later, when the usage limit that blocked it reset.**
 
 | Vendor | Variable | Value | Observed on | Observed in |
 |---|---|---|---|---|
 | `claude` | `CLAUDECODE` | `1` | 2026-08-15 | Claude Code 2.1.233 on macOS, `claude -p --output-format json`, with **every** `CLAUDE*`, `CODEX*` and `ANTHROPIC*` variable stripped from the parent environment |
+| `codex` | `CODEX_THREAD_ID` | presence | 2026-08-20 | `codex-cli 0.147.0` on macOS, `codex exec --json`, with **every** `CLAUDE*`, `CODEX*` and `ANTHROPIC*` variable stripped from the parent environment |
 
-**Codex has no row, and the table above is the whole table** — the rule immediately above it is that
-an unobserved vendor is *not in the table*, so listing it as a row marked "not observed" would
-contradict the rule in the act of stating it. The account's usage limit was exhausted on 2026-08-15
-and every `codex exec` ended `turn.failed` before a shell command could report an environment.
+**Codex's row matches on presence, and the three variables it was chosen over are worth naming.** A
+shell command the model ran saw four: `CODEX_CI=1`, `CODEX_SANDBOX=seatbelt`,
+`CODEX_SANDBOX_NETWORK_DISABLED=1` and `CODEX_THREAD_ID=<uuid>` — identically under both sandbox
+modes this product emits. `CODEX_SANDBOX` and `CODEX_SANDBOX_NETWORK_DISABLED` describe the sandbox
+rather than the vendor: absent under `danger-full-access`, and platform-valued. `CODEX_CI` reads as a
+marker of non-interactive `exec`, which is exactly the mode this run could observe and not the one a
+founder captures in. The thread id is per-session, so the row carries no value and matches on
+presence — the first real row to drive that branch of `matchObservedAgent`.
+
+**Neither vendor's interactive session has ever been observed**, and this is the limit of both rows
+rather than of one. Claude's was taken through `claude -p` and Codex's through `codex exec`; both are
+the non-interactive form. A row that turns out not to hold in the TUI records `"unknown"` there,
+which is the safe direction: a capture that names no agent is correct and is never rewritten, while a
+guessed row is a fact a later reader will trust. Registered in `BACKLOG.md` §1.
 
 **Why the Claude row was taken twice.** The first attempt ran `claude -p` from inside a Claude Code
 session and inherited that session's variables, so it could not distinguish a marker the vendor sets
@@ -774,11 +801,11 @@ from one leaking in from the parent. It was discarded and re-run with the parent
 what the "Observed in" column records. A marker that only ever appears in an inherited environment
 would detect the *session that ran the experiment*, not the vendor.
 
-**Codex's row is absent rather than guessed**, per the rule above, and the cost is stated rather than
-discovered later: every capture written inside a Codex session until that row lands records
-`sourceAgent: "unknown"`. Those captures are correct and are never rewritten. Registered as
-`BACKLOG.md` §1 **NEW-21**, together with the half of `codex-adapter-design.md` §14.1 the same
-blocked run left open.
+**Between 2026-08-15 and 2026-08-20, Codex's row was absent rather than guessed**, per the rule
+above, and the cost was stated rather than discovered later: every capture written inside a Codex
+session in those five days records `sourceAgent: "unknown"`. **Those captures are correct and are
+never rewritten** — the row landing does not make them retroactively wrong, and nothing goes back
+over them.
 
 ## 11. Produced interfaces
 

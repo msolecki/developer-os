@@ -198,15 +198,34 @@ async function installedFixture(
       }
       /**
        * Each vendor's own dialect, because each adapter parses a different one:
-       * Codex streams JSONL and `invokeCodex` takes the last line that parses to
-       * an object, while `invokeClaude` parses stdout as one JSON document. A
-       * fake that spoke one dialect to both would let a bridge that confused
-       * them pass.
+       * Codex streams JSONL and `invokeCodex` takes the response out of the last
+       * `item.completed` whose `item.type` is `agent_message`, while
+       * `invokeClaude` parses stdout as one JSON document. A fake that spoke one
+       * dialect to both would let a bridge that confused them pass.
+       *
+       * **This spoke a dialect no vendor speaks until 2026-08-20.** It put the
+       * proposal on a bare line and appended nothing, which matched the rule
+       * `invokeCodex` applied and not the stream a vendor emits; NEW-21's real
+       * run showed the response is framed and followed by a `turn.completed`
+       * usage record. The usage record is included here deliberately — it is the
+       * line the superseded rule would have returned instead of the proposal.
        */
       const document = JSON.stringify(reply);
       const stdout =
         call.executable === CODEX
-          ? [JSON.stringify({ type: "item.started" }), document, ""].join("\n")
+          ? [
+              JSON.stringify({ type: "thread.started" }),
+              JSON.stringify({ type: "item.started" }),
+              JSON.stringify({
+                type: "item.completed",
+                item: { id: "item_0", type: "agent_message", text: document },
+              }),
+              JSON.stringify({
+                type: "turn.completed",
+                usage: { input_tokens: 1, output_tokens: 1 },
+              }),
+              "",
+            ].join("\n")
           : document;
       return { stdout, stderr: "", exitCode: 0, signal: null, timedOut: false };
     },
