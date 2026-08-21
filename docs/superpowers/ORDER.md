@@ -166,6 +166,8 @@ pattern rather than a first.
 - **Whether a model-run command can write raw bytes into the stream this product parses is
   unexamined** — NEW-47, which decides NEW-45's tie-break and settles from vendor source without
   spending anything.
+- **The Brain spec's lint-class table documents none of the four warnings that class emits** —
+  NEW-48, raised by the review of NEW-30's closure.
 - **`maxTurns` is bounded under Claude and silently dropped under Codex**, one shared schema with two
   behaviours. `codex-adapter.md` §11 is the full list with owners.
 
@@ -408,20 +410,27 @@ three implementations, and it is the larger half. Do not read the table as the t
 Program Task 6 shows one unticked box and it is **not** work: the hooks box was rewritten to record
 that hooks are declined, and nothing shipped for it by design.
 
-**`BACKLOG.md` §1 is twenty-five open repository defects** — twenty-seven `### NEW-` headings on
-2026-08-21, less the two closed that day, NEW-13 and NEW-43. **None waits on R2**, which is closed:
-eighteen came out of R2's own reviews; three (NEW-44, NEW-46, NEW-47) out of the reviews of the NEW-21
-diff and startable in a session; and four need somebody or something no session has — NEW-42 an
-interactive vendor session, NEW-45 the founder's credits, NEW-20 registered as deliberately not fixed,
-NEW-7 a machine with Obsidian. 18 + 3 + 4 = 25.
+**`BACKLOG.md` §1 is twenty-five open repository defects** — twenty-eight `### NEW-` headings on
+2026-08-21, less the three closed that day: NEW-13, NEW-30 and NEW-43. **None waits on R2**, which is
+closed: seventeen of the eighteen that came out of R2's own reviews are still open; four (NEW-44,
+NEW-46, NEW-47, NEW-48) came out of reviews of this session's own work and are startable in a session;
+and four need somebody or something no session has — NEW-42 an interactive vendor session, NEW-45 the
+founder's credits, NEW-20 registered as deliberately not fixed, NEW-7 a machine with Obsidian.
+17 + 4 + 4 = 25.
+
+**Closing one row raised one row, and that is the honest arithmetic of this section.** NEW-30 closed
+and the review of its closure found that the Brain spec's lint-class table documents none of the four
+warnings that class emits — NEW-48. The count did not move.
 
 **NEW-21 left six rows and one has already gone.** NEW-43 closed the day after it was raised — but it
 was **one of four** a session could have taken, not the only one: NEW-44, NEW-46 and NEW-47 are still
-open, and NEW-47 needs no credits either. That is the shape this queue should keep expecting: reviews
+open, and NEW-47 needs no credits either. **NEW-30 closed the same day from outside that set**, which
+is the more useful example: it had sat since 2026-08-17 marked "the weakest of the four" and its fix
+was one call and a decision that had already been made for its class. That is the shape this queue should keep expecting: reviews
 add rows faster than work closes them, and the ones that close fastest are the ones nobody has to be
-asked about. **Eighteen of the twenty-five are the honest cost of closing ten decided defects with a
-fresh-context review on each**, and a review that finds nothing is rarer than one that finds a
-residual.
+asked about. **Seventeen of the twenty-five are the honest cost of closing ten decided defects with a
+fresh-context review on each** — eighteen were raised and NEW-30 has closed — and a review that finds
+nothing is rarer than one that finds a residual.
 
 **Add six open decisions** that are not defect rows: the two Foundation founder questions, DOS-P9's
 dedicated-plan question, and the three `BACKLOG.md` §8 amendments awaiting ratification — spec §8.2's
@@ -437,4 +446,5 @@ session's — see the `NOW` section.
 **Track R is closed as of 2026-08-20.** R2 was its only entry, and its eleven tasks landed in four
 commits — the three Foundation requests, the DOS-P7 gap, and the six §1 rows the decisions of
 2026-08-17 unblocked. The four §1 rows that were never R2's still wait on the founder or on a
-machine, and the eighteen its reviews raised are new work for whoever takes §1 next.
+machine, and seventeen of the eighteen its reviews raised are still new work for whoever takes §1
+next; NEW-30 was the first of them to close.
