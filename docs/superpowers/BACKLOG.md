@@ -222,6 +222,17 @@ not.
   installation path rather than through `PATH` at probe time; or drop the version probe from `capture`
   and record `sourceAgentVersion: "unknown"`, which costs a field the envelope already tolerates
   missing.
+- **The founder chose the first on 2026-08-21, and it is larger than this row implies.** Started that
+  day and stopped before any code: **there is no recorded installation path.** `discoverExecutable`
+  resolves through `/usr/bin/which` against `process.env.PATH` at call time
+  (`packages/platform-macos/src/macos.ts:209`), and nothing in the config or the state root persists a
+  vendor executable. So "use the recorded path" means **creating that record first** — where it is
+  written, who owns it in the manifest, what happens when the vendor upgrades or moves and the record
+  goes stale, and whether a stale record should refuse or fall back. That is a persisted-state design
+  with a drift story, which is Foundation and DOS-P7 territory rather than a fix to `capture.ts`.
+- **So the row keeps both shapes and gains a third fact: the chosen one has a prerequisite.** Whoever
+  takes it should either take the prerequisite with it, or take the second shape, which needs no new
+  state and closes the surface rather than guarding it.
 
 ### NEW-45 — "the last agent message wins" is an inference, not an observation
 
