@@ -383,7 +383,7 @@ vault-relative path, and the frontmatter classes carry the offending key.
 
 | Class | Findings |
 |---|---|
-| `frontmatter` | missing required key, wrong type, value outside an enum, malformed date, `summary` over 400 characters (`error`); unknown key (`info`) |
+| `frontmatter` | missing required key, wrong type, value outside an enum, malformed date, `summary` over 400 characters (`error`); unknown key (`info`); a frontmatter key whose value swallowed the prose that followed it, a `tag`, a `summary` or an `alias` with no visible character, and a symlinked folder that is not followed (`warn`) |
 | `provenance` | `author: agent` with `reviewed: null` (`warn`); a `sources` entry that resolves to no file and is not an absolute URL (`error`) |
 | `links` | wikilink resolving to nothing (`error`); link into an excluded folder (`error`); link escaping the vault (`error`); link text matching more than one note (`warn`) |
 | `duplicates` | identical normalized title within one topic folder (`warn`); identical content hash anywhere (`warn`); case-insensitive path collision (`error`) |
@@ -392,6 +392,30 @@ vault-relative path, and the frontmatter classes carry the offending key.
 
 `unclassified-folder` (§5) is reported by `discovery` through the `frontmatter` class's
 result envelope at `warn`, so it surfaces in `brain lint` without a seventh class.
+
+**Amended 2026-08-21 by `BACKLOG.md` §1 NEW-48 — the `frontmatter` row listed no `warn`
+finding, and the class emits five.** This is drift rather than a decision: no ruling changed
+what this class reports, the implementation grew warnings over three weeks and the table was
+never updated for any of them. They are, with the change that added each:
+
+| Warning | Added by |
+|---|---|
+| a frontmatter key whose value swallowed the prose that followed it | DOS-P2 Task 2's review |
+| a symlinked folder that is not followed, so none of its notes are indexed | the same |
+| a `tag` with no visible character | NEW-11, 2026-08-17 |
+| a `summary` with no visible character | NEW-11, 2026-08-17 |
+| an `alias` with no visible character | NEW-30, 2026-08-21 |
+
+**The symlink one is the easy miss and the reason this list is enumerated from the code.**
+§4's path-resolution paragraph says a symlink out of the vault is refused, which reads as
+covering it and does not: that refusal happens during resolution, and this is `brain lint`
+reporting a folder inside the vault that was skipped. The first count of these said four and
+missed it.
+
+**Every one is a `warn`, and that is the founder's ruling of 2026-08-17 rather than an
+accident of implementation**: an invisible value leaves the note indexable, so it warns;
+`title` is the one that errors, because a note with no readable title cannot be identified at
+all. Registered in `BACKLOG.md` §8.
 
 **Amended 2026-08-09 by DOS-P2 Task 4 — two link-resolution decisions, recorded here
 because the implementation forced them and the original text did not cover them.**
