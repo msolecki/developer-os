@@ -205,7 +205,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, one step left | nothing | L | program plan Task 6 checkpoint, after independent security review | **now** — **work done 2026-08-21; CI gate unmet.** `S` and `P` closed 2026-08-13; `I` is **19 of 19 tasks** and Task 19 Step 5 has landed. Step 6 needs a pull request the founder chose not to open |
+| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, one step left | nothing | L | program plan Task 6 checkpoint, after independent security review | **now** — **work done 2026-08-21; CI gate unmet.** `S` and `P` closed 2026-08-13; `I` is **19 of 19 tasks** and Task 19 Step 5 has landed. Step 6 needs a pull request, which the founder was asked for on 2026-08-21, after a direct push was refused, and declined |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P10 Managed instruction artifacts — S / P / I | to write | A11 | L | thirty-eight instruction artifacts install, drift-check and uninstall under manifest ownership on both vendors | blocked |
 | A13 | DOS-P11 Hooks — S / P / I | to write | A12 | L | a hook is observed firing in a test, and every shipped handler names the installed binary | blocked |
@@ -253,9 +253,12 @@ stays in §1 until that question is answered.
 **The fifth gate is unmet, and the row says so rather than reading as complete.** R2's eleven tasks
 landed in five commits with `npm run check` green on the last of them, and the founder chose on
 2026-08-20 to leave them local. On 2026-08-21 they asked for everything to go to `development` without
-creating a branch, **and the remote refused it**: a ruleset on that branch requires a pull request.
-So the gate that exists precisely because a green local gate missed three DOS-P2 defects still has not
-run.
+creating a branch, **and the remote refused it**: a ruleset on that branch requires a pull request,
+and a pull request needs a head branch, so "land this without creating a branch" is not something this
+repository permits. Told that the only route was one temporary branch merged and deleted, **the
+founder chose to leave everything local.** So the gate that exists precisely because a green local
+gate missed three DOS-P2 defects still has not run, and the reason is now a decision that was made
+with the constraint on the table rather than an option nobody had tested.
 
 **Two things were learned by trying.** `check.yml` scoped its `push:` trigger to `feat/foundation`,
 a branch that **no longer exists on the remote** — the rule kept anything from landing unchecked, but
