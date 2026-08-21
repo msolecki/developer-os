@@ -61,11 +61,11 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | Area | Where | What is left |
 |---|---|---|
 | Program (umbrella) | 1 plan | Tasks 6–9 open, **25 unticked steps**; Tasks 0–5 closed and not rows here |
-| DOS-P6 | spec approved and plan written, both 2026-08-13 | **three unticked steps** — Task 17 Step 3 (the Codex detection row, blocked on NEW-21) and Task 19 Steps 5–6 (close the documents, run the gate), which wait on it. Seventeen of nineteen tasks landed 2026-08-13/14/15 and their step lists are deleted |
+| DOS-P6 | spec approved and plan written, both 2026-08-13 | **two unticked steps** — Task 19 Steps 5–6 (close the documents, run the gate). Task 17 closed 2026-08-20 when NEW-21 did. Eighteen of nineteen tasks have landed and their step lists are deleted |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P10, DOS-P11, DOS-P12 | no documents; added 2026-08-20 | **3 specs, 3 plans, 3 implementations.** The shared-runtime layers no subsystem owned: thirty-eight instruction artifacts, eleven event hooks, nine tooling scripts |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each. **The cutover's scope grew on 2026-08-20** — it now retires the shared runtime entirely, so it follows DOS-P12 rather than DOS-P7 |
-| Repository-level | §1 | **twenty-two rows**, and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **four** belong to somebody else (NEW-21 the founder's and blocking A10, NEW-20 and NEW-13 deliberately not fixed, NEW-7 needing a machine with Obsidian); **eighteen** came out of R2's own reviews — NEW-27 and NEW-28 from closing NEW-12, NEW-24/25/26/29 from NEW-16, NEW-30 and NEW-31 from NEW-11, NEW-32, NEW-33 and NEW-35 from NEW-15, NEW-34 from Foundation request 2, and NEW-36, NEW-37, NEW-38 and NEW-39 from request 3, NEW-40 from Task 8, and NEW-41 from Task 9 |
+| Repository-level | §1 | **twenty-seven rows**, and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **five** need somebody or something no session has (NEW-42 an interactive vendor session, NEW-45 the founder's credits, NEW-20 and NEW-13 deliberately not fixed, NEW-7 a machine with Obsidian); **eighteen** came out of R2's own reviews — NEW-27 and NEW-28 from closing NEW-12, NEW-24/25/26/29 from NEW-16, NEW-30 and NEW-31 from NEW-11, NEW-32, NEW-33 and NEW-35 from NEW-15, NEW-34 from Foundation request 2, and NEW-36, NEW-37, NEW-38 and NEW-39 from request 3, NEW-40 from Task 8, and NEW-41 from Task 9; **four** — NEW-43, NEW-44, NEW-46 and NEW-47 — are startable in a session, which is what groups them; the reviews of the NEW-21 diff produced these four **and NEW-45**, which sits above only because it needs credits. **NEW-21 closed 2026-08-20 and left six**, which is the honest price of one real vendor call |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -119,9 +119,17 @@ on 2026-08-17; what remains here is somebody else's or a residual of that work. 
 2026-08-17** and left NEW-30, the fourth field with the same gap. All four
 that were waiting on a decision got one on 2026-08-17; **NEW-16 closed the same day** and left three
 residual rows of its own — NEW-24, NEW-25 and NEW-26. They stay here until R2 closes them, because a row leaves this
-section when its fix is committed, not when its question is answered. Four are somebody else's:
-**NEW-21** the founder's, **NEW-20** and **NEW-13** registered as deliberately-not-fixed, and
-**NEW-7** waiting on a machine with Obsidian.
+section when its fix is committed, not when its question is answered. Three were somebody else's:
+**NEW-20** and **NEW-13** registered as deliberately-not-fixed, and **NEW-7** waiting on a machine
+with Obsidian.
+
+**NEW-21 was a fourth, closed on 2026-08-20, and left six rows behind it** — NEW-42 through NEW-47.
+Only **NEW-42** came from the work; **NEW-43 through NEW-47 came from two fresh-context reviews of its
+own diff**, which is the pattern this section keeps recording. The review also found
+things that were **fixed rather than registered** and so are not rows — the guard the fix turned on
+could be deleted with the whole suite green, and the traversal added to the schema gate had three
+branches its own test never drove — and the distinction matters, because a reader who maps the review's
+findings one-to-one onto these rows gets the wrong set.
 
 **Eighteen are new, and every one was found by a fresh-context review rather than by the work itself** —
 NEW-27 and NEW-28 from the review that closed NEW-12; NEW-24, NEW-25, NEW-26 and NEW-29 from the one
@@ -168,51 +176,131 @@ here rather than a row below.
 the cautionary case: it read like an implementation for a day, and cost a full task to discover it was
 not.
 
-### NEW-21 — one successful `codex exec` completion is still owed
+### NEW-47 — whether a model-run command can write raw bytes to the vendor's stdout is unexamined
 
-- **Status:** open, created 2026-08-15 when DOS-P6 Task 17 ran and could only half discharge itself ·
-  **Owner:** the founder, because it spends their credits · **Size:** S ·
-  **Blocked until the account's usage limit resets**
-- **What happened.** The founder accepted the spend for this subsystem in principle on 2026-08-13,
-  authorised this specific run on 2026-08-15, and the run was made against
-  `codex-cli 0.147.0` with the production argv byte for byte. **The account's usage limit was
-  exhausted**, so every `codex exec` ended `turn.failed` and no run reached a model response. There is
-  no API-key fallback configured and no local OSS provider installed, so `--oss` was not an option
-  either.
-- **What the failed run did settle**, and it is not nothing: `--json` really is JSONL, one JSON object
-  per line; **`type` is a discriminating field** present on every line, with an observed vocabulary of
-  `thread.started`, `turn.started`, `error`, `turn.failed`; and the synthetic vocabulary the adapter's
-  own tests had guessed (`session.created`, `item.completed`, `turn.completed`) is **wrong**. All of it
-  is recorded in `specs/…-codex-adapter-design.md` §14.1's amendment of 2026-08-15 and pinned against
-  `tests/fixtures/codex/observed-exec-stream.jsonl`.
-- **What is still owed, and one run closes both.** First, whether a **successful** turn's terminal
-  event is the final response — the question that would let `finalJsonlLine` stop being provisional,
-  and the one a failed turn cannot answer. Second, the **Codex row of `AGENT_DETECTION_ROWS`**: no
-  shell command ever ran, so no environment was observed, and per knowledge-pipeline spec §10.3 the row
-  is left absent rather than guessed. Until it lands, every capture taken inside a Codex session records
-  `sourceAgent: "unknown"`; those captures are correct and are never rewritten.
-- **A narrowing is available and was deliberately not taken.** A discriminating field now exists to
-  filter on, but spec §14.1 requires a narrowing to be proven against a stream where the old rule and
-  the new one agree, and a failed turn contains no final response for two rules to agree about.
-- Cross-referenced from `docs/architecture/codex-adapter.md`, `docs/architecture/knowledge-pipeline.md`
-  §10.3 and `docs/architecture/threat-model.md` §5.5. **It is what keeps DOS-P6's Task 19 Steps 5–6
-  from closing**, because §8's Codex spec §14.1 row is discharged by Task 17 alone.
-- **How to close it**, carried here because the plan that holds the instructions is deleted when
-  DOS-P6 closes: rerun `codex exec --json` with the production argv (`--output-schema` at the shipped
-  `ingest.stage.schema.json`, `-s read-only`, `--skip-git-repo-check`, `-C <working root>`) **with
-  stdin closed**, and record whether the final response is the last parsing line and whether the
-  discriminating `type` is worth filtering on. Then run each vendor and observe what a child process
-  of it actually sees, with every `CLAUDE*`/`CODEX*`/`ANTHROPIC*` variable stripped from the parent —
-  an inherited marker detects the session that ran the experiment, not the vendor. Amend
-  `specs/…-codex-adapter-design.md` §14.1 and `…-knowledge-pipeline-design.md` §10.3 with the
-  observation, dated, and **do not quietly promote the rule to verified**. A narrowing needs a stream
-  where the old rule and the new one agree.
-- **Expect the fan-out.** Adding the Claude row falsified prose in fourteen files, because "the table
-  is empty" had become load-bearing in docblocks, tests, three architecture notes, a spec, this file
-  and `ORDER.md`. The Codex row will do it again; sweep for the class rather than fixing instances.
-- **The founder chose on 2026-08-15 to hold DOS-P6 open for this** rather than close the subsystem
-  and carry it as a residual. `ORDER.md`'s note beside Task 19's Steps 5–6 records why that was a
-  live option and why it was declined.
+- **Status:** open, registered 2026-08-20 by the second fresh-context review of the NEW-21 diff ·
+  **Owner:** whoever next touches `packages/adapter-codex/src/invoke.ts` — DOS-P7 by default ·
+  **Size:** S · **Security** · **Settles from vendor source; costs no credits**
+- **The question.** `finalAgentMessage` reads the vendor's stdout as JSONL. A model can run shell
+  commands, and those commands produce output. If a command — or a process it backgrounds — inherits
+  the vendor's own stdout file descriptor, it can write a line of its choosing into the stream this
+  product parses.
+- **The evidence so far is weak and points the safe way.** In every recording the shell transcript
+  arrives *inside* an `item.completed` as a JSON-encoded `aggregated_output` string, which means the
+  vendor captured the child's output rather than passing it through, and a newline inside a JSON
+  string cannot open a new JSONL line. That is an inference from four recordings, not a reading of the
+  vendor's process handling.
+- **Why it is not merely academic: it decides `finalAgentMessage`'s tie-break.** The rule takes the
+  **last** matching event. If raw writes are possible, a backgrounded process can emit a forged
+  `item.completed` / `agent_message` *after* the real response and win — where under a first-wins rule
+  it would lose. So the choice recorded in **NEW-45** as a correctness inference has a security half,
+  and that half is this row.
+- **How to close it, and it is cheaper than it looks:** `codex` is open source. Read how it wires the
+  child's stdio for a `command_execution` and record what it does, dated. **No model call and no
+  credits** — which is why this is registered as work rather than as a founder decision.
+
+### NEW-46 — the detection row widened a spawn trigger the trust check only partly closes
+
+- **Status:** open, registered 2026-08-20 by the fresh-context review of the NEW-21 diff ·
+  **Owner:** whoever next touches `apps/cli/src/commands/capture.ts` — DOS-P7 by default ·
+  **Size:** M · **Security** · **Needs a same-uid attacker, which is a low bar in a session**
+- **What widened.** Adding Codex's detection row made `capture` spawn `codex --version` inside a Codex
+  session, and that row matches on **presence** — `CODEX_THREAD_ID=anything` arms it, where Claude's
+  row at least wants the literal `1`.
+- **What the mitigation does and does not do.** `assertTrustedExecutable` runs before the spawn
+  (`apps/cli/src/commands/capture.ts:263`) and refuses a chain owned by neither the user nor root, any
+  other-writable directory, and a group-writable one the user does not own. It does **not** refuse a
+  binary the **same uid** planted in a directory that uid owns, reached through a prepended `PATH` —
+  that chain passes every test it makes. Anyone who can export `CODEX_THREAD_ID` into a session can
+  usually export `PATH` into it too.
+- **So what the row bought an attacker is a larger set of sessions in which a same-uid `PATH` attack
+  finds a spawn to ride**, not a new privilege. `threat-model.md` now says which half the check covers;
+  before this row it said "what stands between an exported variable and an executed binary is
+  `assertTrustedExecutable`", which was the sentence a future reader would have relied on.
+- **The shape of a fix**, none of them free: resolve the vendor binary through the adapter's recorded
+  installation path rather than through `PATH` at probe time; or drop the version probe from `capture`
+  and record `sourceAgentVersion: "unknown"`, which costs a field the envelope already tolerates
+  missing.
+
+### NEW-45 — "the last agent message wins" is an inference, not an observation
+
+- **Status:** open, registered 2026-08-20 by the fresh-context review of the NEW-21 diff ·
+  **Owner:** whoever next runs a real `codex exec` — DOS-P7 by default · **Size:** S
+- **What is unobserved.** `finalAgentMessage` takes the **last** `item.completed` whose `item.type` is
+  `agent_message`. Every recording in `tests/fixtures/codex/` contains exactly **one** such event, so
+  nothing observed says whether a turn may emit several, nor whether `--output-schema` constrains every
+  assistant message or only the terminal one.
+- **What breaks if the inference is wrong.** A free-text summary emitted after the structured response
+  would be returned instead of it, and every Codex ingest would fail as `malformed-output` — the same
+  silent-and-total shape the rule was rewritten to end, reached by the same method: an inference about
+  vendor behaviour written as an observation. Codex spec §14.1 requires exactly this to be labelled,
+  and the docblock now labels it.
+- **How to close it:** one `codex exec` run whose prompt makes a summary likely after the structured
+  answer, then record how many `agent_message` events the stream carries and which one the schema
+  constrained. It spends the founder's credits, which is why it is registered rather than done.
+- **It has a security half, and that half is `NEW-47`.** Last-wins is also the weaker choice *if* a
+  model-run command can write raw bytes to the vendor's stdout: a forged event emitted after the real
+  response wins under last-wins and loses under first-wins. Whoever settles either row should settle
+  both, because the two answers together decide the tie-break and neither decides it alone.
+
+### NEW-44 — a nested session mis-attributes the capture to the outer vendor
+
+- **Status:** open, registered 2026-08-20 by the fresh-context review of the NEW-21 diff ·
+  **Owner:** whoever next touches `packages/brain/src/capture/agent.ts` — DOS-P7 by default ·
+  **Size:** S
+- **What happens.** `matchObservedAgent` returns the **first** matching row. Run `codex exec` from a
+  shell inside a Claude Code session and the Codex child sees an inherited `CLAUDECODE=1` beside the
+  `CODEX_THREAD_ID` its own vendor set, so the capture records `sourceAgent: claude`. **That is a
+  guessed fact a later reader will trust**, which is the thing spec §5.4 says the design refuses —
+  reached not by guessing a row but by ordering two correct ones.
+- **Why it is registered rather than fixed, and this is the substance of the row.** No order is right:
+  reversing the rows moves the error to the other nesting, and refusing to name either vendor when both
+  markers are present records `"unknown"` for the ordinary un-nested session that a marker merely leaked
+  into. Choosing needs an observation nobody has — whether a vendor's marker is distinguishable from an
+  inherited copy of itself. Until then the behaviour is pinned by a test so it is a decision on record
+  rather than a property of an array literal's order.
+- **It is not new with Codex's row**, and that is the uncomfortable part: it was unreachable only
+  because one vendor had a row. The second row did not create it, it revealed it.
+
+### NEW-43 — no security test has ever executed the Codex arm
+
+- **Status:** open, registered 2026-08-20 by the fresh-context review of the NEW-21 diff ·
+  **Owner:** whoever next touches `tests/security/` — DOS-P7 by default · **Size:** S ·
+  **Gate integrity**
+- **What is uncovered.** `tests/security/helpers.ts` answers each vendor in its own dialect, and its
+  docblock justifies that with "a fake that spoke one dialect to both would let a bridge that confused
+  them pass". `VENDOR_ORDER` is `["claude", "codex"]` and every fixture in that directory installs
+  both, so `selectVendor` always picks Claude and **the Codex branch of that fake has never run**.
+- **How it was found, which is the argument for the row.** The fake's Codex dialect was wrong from
+  2026-08-17, when it was written, and the security suite stayed green for every one of the four days
+  it stood; the parser correction of 2026-08-20
+  reddened the two fakes that *are* exercised — `ingest.test.ts` and the e2e lifecycle — and left this
+  one silently wrong. A fresh-context review found it, not a test. **A gate that can pass by executing
+  neither branch is the same class as one that passes by scanning nothing.**
+- **How to close it:** at least one security fixture that installs Codex alone, or passes `--agent
+  codex`, so the arm executes. Whoever does it should expect the fake to be wrong again by then.
+
+### NEW-42 — only `codex exec` has ever been observed, on either vendor
+
+- **Status:** open, registered 2026-08-20 when NEW-21 closed · **Owner:** whoever next touches
+  `packages/brain/src/capture/agent.ts` — DOS-P7 by default · **Size:** S
+- **What is unobserved.** Both `AGENT_DETECTION_ROWS` entries were taken through a vendor's
+  *non-interactive* form — Claude's through `claude -p` on 2026-08-15, Codex's through `codex exec` on
+  2026-08-20. **Neither vendor's interactive session has ever been observed**, and the interactive
+  session is where a founder actually captures: the agent runs `developer-os capture` as a shell
+  command inside a TUI, not inside an `exec`.
+- **Why it is a residual and not a defect.** A row that does not hold in the TUI records `"unknown"`
+  there, and spec §10.3 makes that correct rather than wrong: a capture that names no agent is
+  correct and is never rewritten. The failure mode is silent under-detection, not a false claim.
+- **What makes it worth a row anyway.** `CODEX_CI=1` was observed alongside the row that was chosen,
+  and its name reads as a marker of non-interactive `exec` specifically. If the vendor sets the whole
+  `CODEX_*` group only under `exec`, the chosen row is unreachable in the mode that matters and every
+  interactive Codex capture records `"unknown"` — the exact cost NEW-21 was opened to end, surviving
+  its closure in a place nobody looked.
+- **How to close it:** run `developer-os capture` from inside each vendor's interactive session with
+  every `CLAUDE*`/`CODEX*`/`ANTHROPIC*` variable stripped from the parent, and record what the child
+  sees. It needs a human at a terminal rather than an agent, which is why it is registered rather than
+  done. Amend knowledge-pipeline spec §10.3 with what is found, dated, on the terms that section sets.
 
 ### NEW-20 — `capture` proves its quarantine root, then follows the path again
 
@@ -867,16 +955,18 @@ list of what the spec "must decide" back into this section; it was decided and s
   **agent-authored**, so no hooks ship, `developer-os run claude|codex` is never built, and **nothing
   automatic captures anything**. §12 lists the six documents it amends; §8 here carries them.
 - **Plan:** `plans/2026-07-21-developer-os-knowledge-pipeline.md` — written 2026-08-13, nineteen
-  tasks, seventeen landed. **Three steps are unticked** and they are the whole of what is left:
-  Task 17 Step 3, and Task 19 Steps 5 and 6.
-- **Program task:** 6 · **Complexity:** L · **Blocked by:** **NEW-21**, on the founder's decision of
-  2026-08-15 to hold the subsystem open rather than close it carrying a residual.
+  tasks, eighteen landed. **Two steps are unticked** and they are the whole of what is left:
+  Task 19 Steps 5 and 6. Task 17 closed 2026-08-20 with NEW-21.
+- **Program task:** 6 · **Complexity:** L · **Blocked by:** nothing since 2026-08-20, when NEW-21
+  closed. It had been held on that row by the founder's decision of 2026-08-15 to keep the subsystem
+  open rather than close it carrying a residual.
 - **Absorbs:** legacy follow-up Steps 5, 7, 9 and 12, frozen on the legacy runtime 2026-07-27 and
   rebuilt here instead.
-- **The two residuals it hands forward**, of the thirteen it inherited from the two adapters: the
-  **JSONL terminal-event rule**, still provisional on the success path until one successful
-  `codex exec` completion lands (NEW-21); and **`maxTurns`**, bounded under Claude and silently
-  dropped under Codex from one shared `agent.prompt` schema.
+- **The residuals it hands forward**, of the thirteen it inherited from the two adapters:
+  **`maxTurns`**, bounded under Claude and silently dropped under Codex from one shared
+  `agent.prompt` schema; and **NEW-42**, that no interactive vendor session has ever been observed.
+  **The JSONL terminal-event rule is no longer among them** — NEW-21 settled it on 2026-08-20 by
+  showing it was wrong rather than merely unverified, and the fix shipped with the observation.
 
 
 ### DOS-P7 — Git, automation, update and release lifecycle
@@ -1245,7 +1335,7 @@ carries the cross-reference, not when the decision is taken.
 | product design spec §14.3 | "user-configured patterns" narrowed to literal case-insensitive substrings — a user-supplied regex over capture text is a ReDoS surface and this codebase bounds no expression anywhere | DOS-P6 Task 2 |
 | `specs/…-claude-adapter-design.md` §6.1 | hooks **declined**, not deferred; the three lifecycle keys report `not-used` | DOS-P6 Task 3 |
 | `specs/…-codex-adapter-design.md` §5.3 | the same, in one decision covering both adapters. **This supersedes the ratified amendment below**, which deferred hooks to DOS-P6 rather than closing them | DOS-P6 Task 3 |
-| `specs/…-codex-adapter-design.md` §14.1 | the JSONL terminal-event rule promoted from provisional to observed, dated, with the shape seen — ingest forces the real `codex exec` call that DOS-P5 could not justify. **Partly discharged 2026-08-15:** the run was made and §14.1 carries the dated amendment, but the account's usage limit was exhausted, so it settles the JSONL framing and the discriminating `type` field and **not** the terminal-event rule. The row stays until one successful `codex exec` completion lands — `BACKLOG.md` §1 **NEW-21** | DOS-P6 Task 17 |
+| `specs/…-codex-adapter-design.md` §14.1 | the JSONL terminal-event rule promoted from provisional to observed, dated, with the shape seen — ingest forces the real `codex exec` call that DOS-P5 could not justify. **Discharged in two parts.** 2026-08-15: the framing and the discriminating `type` field, against a turn that failed on an exhausted usage limit. 2026-08-20, NEW-21: the terminal-event rule itself, **which was not promoted but replaced** — a successful turn ends on a `turn.completed` usage record, so the rule returned telemetry as a payload. The same amendment corrects that section's own 2026-08-15 reading of the vocabulary, which called three guessed names wrong when two were right, and records a defect outside its original scope: the vendor refuses this product's shipped output schema for a `schemaVersion` with no `type` keyword | DOS-P6 Task 17 |
 | `specs/…-workflow-compiler-design.md` §6 | scope globs stop being literals, which `workflow-schema.md` §8.1 made due at the first handler that resolves one. **Narrowed by the plan** — see the ratified row below | DOS-P6 Task 6 |
 
 **Six were ratified by the founder on 2026-08-13**, in the same session that approved the spec and

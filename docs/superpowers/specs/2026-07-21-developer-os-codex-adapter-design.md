@@ -477,6 +477,67 @@ response.** Everything below is therefore an observation of the failure path, an
 **Owner of the remainder:** one successful `codex exec` completion settles §10.2's first question and
 the Codex row of knowledge-pipeline spec §10.3. Registered in `BACKLOG.md` §1 as **NEW-21**.
 
+**NEW-21, 2026-08-20 — the successful turn, and the rule was wrong rather than unverified.** The
+account's usage limit had reset. **Five invocations were made** against `codex-cli 0.147.0` on macOS,
+four of them with the production argv byte for byte and one adding `--output-last-message` to it,
+producing four distinct observations. Every one of them is committed —
+this section's own discipline is that an unrecorded observation is an inference, and a change whose
+whole finding is that unrecorded inferences shipped two defects cannot rest on one:
+
+| Recording | The invocation | What it is evidence for |
+|---|---|---|
+| `observed-exec-schema-refusal.jsonl` | the shipped schema, before the fix | the HTTP 400 below. Taken twice — the first was overwritten before it was copied, and the second reproduced it byte for byte bar the thread id |
+| `observed-exec-success-stream.jsonl` | `-s read-only`, the typed schema | the terminal-event finding, and the detection row |
+| `observed-exec-workspace-write-stream.jsonl` | `-s workspace-write --add-dir` | that the two argv branches produce the identical shape, which is otherwise a claim about half the product |
+| `observed-exec-last-message-stream.jsonl`, `observed-exec-last-message.txt` | adding `--output-last-message` | that the declined alternative works, and that it agrees with the stream on the same turn |
+
+`tests/fixtures/codex/README.md` states what was redacted from each.
+
+- **Settled, and it falsifies the shipped rule — the terminal event is not the response.** A
+  successful turn ends `turn.completed`, carrying a `usage` object and nothing else. The response is
+  the event *before* it: an `item.completed` whose `item.type` is `agent_message`, whose `text` holds
+  the schema-constrained JSON **as a string**. `finalJsonlLine` took the last line that parsed, so it
+  returned the usage record, and `parseStructuredPayload` returned that as `ok: true` — a caller told
+  nothing had failed, holding vendor telemetry with no proposal in it. Both sandbox branches produce
+  the identical shape.
+- **Corrected — this section's own reading of 2026-08-15 was too strong.** It recorded that all three
+  names this package had guessed were wrong. Two are right: `item.completed` and `turn.completed` both
+  exist. Only `session.created` does not — the vendor calls it `thread.started`. A failed turn is not
+  a stream in which either of the other two could have appeared, so the conclusion reached past its
+  evidence. The correction is recorded here rather than by editing that entry, because a dated
+  observation that was honest about its stream is not made dishonest by a later one.
+- **Narrowed, and the constraint above did not apply.** This section requires a narrowing to be proven
+  against a stream where the old rule and the new one **agree**. No such stream exists and none can:
+  the old rule is not narrower than the new one, it is wrong, and the two disagree on every successful
+  turn. The replacement selects on `item.completed` / `agent_message` / `text` and gives up one input
+  class the positional rule accepted — a bare JSON object on stdout, a shape no observed run has ever
+  produced. What the vendor-field dependency buys is that a rename now yields `malformed-output`, a
+  loud failure at the boundary, where the positional rule yielded a confident wrong answer.
+- **`--output-last-message <FILE>` was tested and not adopted.** It writes exactly the
+  schema-conforming payload and nothing else, so it would remove stream parsing entirely. It was
+  declined because it introduces a vendor-written temp file this product would have to place, own and
+  collect — a filesystem surface the design does not currently have, and one that would owe the
+  `plan → backup → stage → validate → apply → verify → finalize` treatment every other mutation here
+  gets. Recorded rather than dropped: whoever reopens the parsing rule should know the alternative
+  works.
+- **New, and outside this document's scope until it was observed — the vendor refuses this product's
+  shipped output schema.** `--output-schema` pointed at `templates/schemas/ingest.stage.schema.json`
+  answered HTTP 400 before any turn began: `In context=('properties', 'schemaVersion'), schema must
+  have a 'type' key`. `schemaVersion` was a bare `const`, which is valid JSON Schema. So **`ingest`
+  could never have returned a proposal on this vendor**, and every gate stayed green throughout,
+  because nothing in the repository had ever handed that file to the binary. Fixed by adding
+  `"type": "integer"`; `apps/cli/src/commands/output-schemas.test.ts` now walks every property of
+  every shipped schema for a `type` keyword.
+- **Confirmed again — `codex exec` reads stdin when stdin is not a TTY.** Observed on every run of
+  both dates.
+
+**What remains open after these runs:** the *interactive* session, and one inference inside the
+replacement rule. Every invocation was `codex exec`, which is what this product spawns; nothing here
+observed the TUI, where a founder captures by hand. And every recording contains exactly **one**
+`agent_message`, so nothing observed says whether a turn may emit several — the new rule takes the
+last, which is an inference and is labelled as one at the seam rather than written as an observation.
+Both are registered in `BACKLOG.md` §1.
+
 ### 14.2 Hooks — `https://learn.chatgpt.com/docs/hooks`
 
 - Events: `SessionStart`, `SessionEnd`, `SubagentStart`, `SubagentStop`, `PreToolUse`,

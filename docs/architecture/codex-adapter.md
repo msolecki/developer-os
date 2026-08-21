@@ -316,18 +316,32 @@ a real run would find. Settling it needs one real `codex exec` call, which invok
 founder's credentials and costs money — **declined by the founder for this subsystem on
 2026-08-12**, with DOS-P5's Task 17 scoped to offline plugin management instead.
 
-**DOS-P6's Task 17 made that call on 2026-08-15, and the rule is half settled.** Spec §14.1 carries
+**DOS-P6's Task 17 made that call on 2026-08-15, and the rule was half settled.** Spec §14.1 carries
 the dated amendment and `tests/fixtures/codex/observed-exec-stream.jsonl` is the recording. The
 framing is **confirmed** — one JSON object per line — and so is the existence of a discriminating
 field, `type`, present on every line, with an observed vocabulary of `thread.started`,
-`turn.started`, `error` and `turn.failed`. **What is not settled is the half that matters**: the run
-ended `turn.failed` because the account's usage limit was exhausted, so no run reached a model
-response and nothing shows whether a *successful* turn's terminal event is the final response.
-The rule therefore still ships unverified and still says so at the seam, and no event-type filter was
-written, because filtering is a narrowing this design requires to be proven against a stream where
-the old rule and the new one agree — and a failed turn contains no final response for two rules to
-agree about. **Owner of the remainder: `BACKLOG.md` §1 NEW-21**, one successful `codex exec`
-completion. Do not quietly promote the rule to verified.
+`turn.started`, `error` and `turn.failed`. What that run could not settle was whether a *successful*
+turn's terminal event is the final response: it ended `turn.failed` on an exhausted usage limit, so
+no run reached a model response.
+
+**NEW-21 settled it on 2026-08-20, and the answer was that the rule was wrong.** A successful turn
+ends on `turn.completed`, which carries a `usage` object and nothing else; the response is the event
+before it — an `item.completed` whose `item.type` is `agent_message`, holding the schema-constrained
+JSON as a **string** in `text`. `finalJsonlLine` took the last parsing line, so it returned the usage
+record and `parseStructuredPayload` returned that as `ok: true`: a caller told nothing had failed,
+holding vendor telemetry with no proposal in it. **The failure was silent, total, and green** — every
+successful Codex ingest would have produced it, and no gate could see it, because no fixture in the
+repository had ever contained a real successful stream. The recording now is
+`tests/fixtures/codex/observed-exec-success-stream.jsonl`.
+
+**`finalAgentMessage` replaces it**, selecting on `item.completed` / `agent_message` / `text`. That is
+a narrowing this design requires to be proven against a stream where old and new rules agree, and no
+such stream exists or can: the old rule is not narrower, it is wrong, and the two disagree on every
+successful turn. What is given up is one input class — a bare JSON object on stdout, a shape no
+observed run produces. What is bought is that a vendor rename now yields `malformed-output` rather
+than a confident wrong answer. **`--output-last-message` was tested and works**, and was declined
+because it adds a vendor-written temp file this product would have to own; spec §14.1 records why, so
+that whoever reopens the rule knows the alternative exists.
 
 ### The four spec §14.4 amendments of 2026-08-12
 
@@ -445,7 +459,7 @@ product.
 1. **Two artifact roots share one type** — §4. Structurally identical, semantically incompatible,
    and the wrong one applies cleanly. `proposeCodexInstall` now refuses a mislocated tree; the
    durable fix is branded types. `BACKLOG.md` §1 NEW-13. **Owner: DOS-P6.**
-2. **The JSONL terminal-event rule is provisional on the success path** — §7. DOS-P6's Task 17 ran it on 2026-08-15 and settled the framing and the discriminating `type` field, but its run ended `turn.failed` on an exhausted usage limit, so the terminal-event rule itself is unsettled. **Owner of the remainder: `BACKLOG.md` §1 NEW-21**, one successful `codex exec` completion.
+2. **CLOSED 2026-08-20 — the JSONL terminal-event rule was not provisional, it was wrong** — §7. Task 17 settled the framing and the discriminating `type` field on 2026-08-15 against a failed turn; NEW-21's successful turn showed the terminal event is a `turn.completed` usage record and the response is the `item.completed` before it. `finalJsonlLine` returned the usage record as a payload, with `ok: true`. Replaced by `finalAgentMessage`. **The residual it leaves is narrower and is a new row in `BACKLOG.md` §1**: every observation of this vendor to date is of `codex exec`, and the interactive TUI has never been observed — which bears on the detection row as much as on this one.
 3. **`maxTurns` is enforced under Claude and silently dropped under Codex** — §7. **Owner: the
    workflow compiler and DOS-P6.**
 4. **The whole two-gate capability machinery has no production caller** — §3. `captureVia` can never

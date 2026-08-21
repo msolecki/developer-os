@@ -49,12 +49,12 @@ import type { InstalledFixture, VendorCall } from "./helpers.js";
  *   `which` calls, plus one `--version` per installed vendor.
  * - **`capture` is two when an agent is detected and zero when one is not.**
  *   `discoverSourceAgent` does both halves: `discoverExecutable`, then a version
- *   probe through the runner. **Both rows are now reachable, and which one you
- *   get depends on the vendor:** since Task 17 (2026-08-15)
- *   `AGENT_DETECTION_ROWS` carries Claude's row, so a capture inside a Claude
- *   Code session takes the two-call path, while one inside a Codex session
- *   still takes the zero-call path because that vendor's row could not be
- *   observed.
+ *   probe through the runner. **Both branches are reachable for both vendors
+ *   since 2026-08-20**, when NEW-21 added Codex's row: a capture inside either
+ *   vendor's session now takes the two-call path, and the zero-call path is
+ *   what a capture outside both takes. Until that date a Codex session took the
+ *   zero-call path for a reason that has stopped being true — its row could not
+ *   be observed — so a reader counting calls per vendor should count again.
  */
 
 /**

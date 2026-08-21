@@ -146,6 +146,16 @@ const CLAUDE_INSTALLED: Readonly<Record<AgentName, AgentDiscovery>> = {
   codex: { name: "codex", installed: false, executablePath: null, version: null },
 };
 
+const CODEX_INSTALLED: Readonly<Record<AgentName, AgentDiscovery>> = {
+  claude: { name: "claude", installed: false, executablePath: null, version: null },
+  codex: {
+    name: "codex",
+    installed: true,
+    executablePath: "/synthetic/bin/codex",
+    version: null,
+  },
+};
+
 /**
  * Records which agents were asked about, so "asks nothing at all" is an
  * observation rather than a restatement of the fake's default answer. A wrapper
@@ -743,10 +753,16 @@ describe("runCapture", () => {
    * being an example of "nothing matches" the moment Task 17 observed that
    * exact variable on 2026-08-15. The contract did not move — an environment
    * carrying no observed marker probes nothing and records `unknown` — so only
-   * the environment did, to the one vendor whose row Task 17 could **not**
-   * observe: the account's usage limit was exhausted, so `CODEX_SANDBOX` is a
-   * plausible marker that this product has never seen a real binary set and
-   * therefore refuses to detect on.
+   * the environment did, to a variable this product refuses to detect on.
+   *
+   * **`CODEX_SANDBOX` stopped being unobserved on 2026-08-20 and stayed
+   * unmatched, which is a stronger example than the one it replaced.** NEW-21
+   * saw a real `codex exec` set it to `seatbelt`, and the row it added is
+   * `CODEX_THREAD_ID` instead: `CODEX_SANDBOX` describes the sandbox rather
+   * than the vendor, so it is absent under `danger-full-access` and its value
+   * is platform-specific. So this case now pins a marker that a real vendor
+   * really sets and that detection really ignores — not merely one nobody has
+   * looked for.
    *
    * The machine here has Claude Code installed and the platform is asked
    * nothing and the runner is never called, so the only thing standing between
@@ -842,10 +858,10 @@ describe("runCapture", () => {
   /**
    * **The row Task 17 observed, driven end to end with nothing injected.** The
    * case above supplies the detector; this one lets `detectSourceAgent` read
-   * `AGENT_DETECTION_ROWS` itself, so it is the only case in this file that
-   * would go red if that row were removed or its variable changed. Without it
-   * the observation lives in a unit test and nothing proves the command
-   * consumes it.
+   * `AGENT_DETECTION_ROWS` itself, so it goes red if Claude's row is removed or
+   * its variable changed. Without it the observation lives in a unit test and
+   * nothing proves the command consumes it. The Codex case below is its
+   * counterpart, added when NEW-21 observed the second row.
    */
   it("detects claude from the marker Task 17 observed, with no detector injected", async () => {
     const spawned: string[] = [];
@@ -877,6 +893,49 @@ describe("runCapture", () => {
     expect(written).toContain("sourceAgent: claude");
     expect(written).toContain("sourceAgentVersion: 2.1.233");
     expect(written).toContain("captureMethod: agent-authored");
+  });
+
+  /**
+   * **The row NEW-21 observed, driven end to end with nothing injected**, and
+   * the counterpart of the case above. It is one of exactly two cases in this
+   * file that would go red if a row were removed from `AGENT_DETECTION_ROWS` or
+   * its variable changed — before 2026-08-20 there was one, and the vendor it
+   * did not cover was the one whose capture path had never run.
+   *
+   * Watched fail by deleting the `codex` row from `AGENT_DETECTION_ROWS`: the
+   * envelope then carried `sourceAgent: unknown`, no binary was spawned, and
+   * both version assertions went red.
+   */
+  it("detects codex from the marker NEW-21 observed, with no detector injected", async () => {
+    const spawned: string[] = [];
+    const fixture = await installedFixture("capture-observed-codex", {
+      fixture: {
+        env: { CODEX_THREAD_ID: "00000000-0000-7000-0000-000000000001" },
+        agents: CODEX_INSTALLED,
+        runner: {
+          run: (request): Promise<ProcessResult> => {
+            spawned.push(request.executable);
+            return Promise.resolve({
+              stdout: "codex-cli 0.147.0\n",
+              stderr: "",
+              exitCode: 0,
+              signal: null,
+              timedOut: false,
+            });
+          },
+        },
+      },
+    });
+    spawned.length = 0;
+
+    const result = await fixture.run(fixture.context, { text: OBSERVATION });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const written = await nodeFs.readFile(result.data.path, "utf8");
+    expect(written).toContain("sourceAgent: codex");
+    expect(written).toContain("sourceAgentVersion: 0.147.0");
+    expect(spawned).toEqual(["/synthetic/bin/codex"]);
   });
 });
 

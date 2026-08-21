@@ -34,30 +34,50 @@ week of confusion.
 
 ## NOW
 
-**`NOW` is A10, and A10 is held.** DOS-P6 cannot close until NEW-21 does, on the founder's decision
-of 2026-08-15 recorded in the box below, and NEW-21 is blocked on an external usage limit expected to
-reset on or after 2026-08-20. **A10 is not abandoned; it is waiting.**
+**`NOW` is A10, and its hold is released.** DOS-P6 was held for NEW-21 on the founder's decision of
+2026-08-15; **NEW-21 closed on 2026-08-20**, when the external usage limit reset. What is left of A10
+is **Task 19 Steps 5 and 6** — close the documents, run the gate — and nothing else.
 
-**What is left of A10 is three unticked steps and nothing else.**
-`plans/2026-07-21-developer-os-knowledge-pipeline.md` — nineteen tasks, **seventeen landed**
-2026-08-13/14/15, their step lists deleted on closure and replaced by a table of what survives each.
+`plans/2026-07-21-developer-os-knowledge-pipeline.md` — nineteen tasks, **eighteen landed**, their
+step lists deleted on closure and replaced by a table of what survives each.
 
-- **Task 17, Step 3** — the Codex agent-detection row. Claude's landed 2026-08-15; Codex's account
-  had exhausted its usage limit, so every `codex exec` ended `turn.failed` and no run reached a model
-  response. The remainder is `BACKLOG.md` §1 **NEW-21**, which carries the full closing procedure
-  because this plan is deleted when DOS-P6 closes.
-- **Task 19, Steps 5 and 6** — closing the documents and running the gate. Both wait on Task 17: Step
-  5 requires every `BACKLOG.md` §8 row to carry an outcome, and the Codex spec §14.1 row is discharged
-  by Task 17 alone.
+> **NEW-21 closed by falsifying two shipped things rather than by confirming one, and that is the
+> reason this entry was worth holding.** Three `codex exec` runs with the production argv showed, in
+> order: that the JSONL terminal-event rule selected the wrong event — a successful turn ends on a
+> `turn.completed` usage record, so `finalJsonlLine` returned vendor telemetry with `ok: true` on
+> **every** successful Codex run, invisibly; that the vendor **refuses this product's own shipped
+> output schema** with HTTP 400 before any turn begins, because `schemaVersion` carried a bare `const`
+> with no `type` keyword, so `ingest` could never have returned a proposal on that vendor at all; and
+> that the 2026-08-15 reading of the event vocabulary was itself too strong. Every gate had been green
+> over all three, because nothing in this repository had ever handed a real vendor a real call. **The
+> founder's decision to hold rather than close carrying a residual is what put a real call in front of
+> this code**, and closing DOS-P6 on the arithmetic would have shipped a subsystem whose central path
+> had never worked.
+>
+> The detection row is `CODEX_THREAD_ID` on presence. **What NEW-21 leaves is six `BACKLOG.md` §1
+> rows — NEW-42 through NEW-47 — and five of them came from two fresh-context reviews of its own diff
+> rather than from the work.** Only NEW-42 is the work's own: no interactive vendor session has ever
+> been observed, on either vendor. The reviews added NEW-43 (the Codex arm of the security suite has
+> never executed, which is why its fake vendor was wrong for its whole four-day life without a red
+> test), NEW-44 (a
+> nested session mis-attributes its capture, and no row order fixes it), NEW-45 (the replacement rule's
+> "last agent message wins" is an inference), NEW-46 (the trust check covers half of what the prose
+> claimed about the widened spawn trigger) and NEW-47 (whether a model-run command can write raw bytes
+> into the stream this product parses, which decides NEW-45's tie-break).
+>
+> **The reviews also found things that were fixed rather than registered, and those are not rows** —
+> the guard the fix turned on could be deleted with the whole suite green, the schema gate's new
+> traversal had three branches its own test never drove, and that test was written so it could not
+> fail for the reason it existed. Counting the review's findings as rows gives the wrong set.
 
-> **Asked and settled 2026-08-15: DOS-P6 holds.** The Checkpoint names three conditions — the five
-> criteria of Step 2 with evidence in a commit, the independent security review returned and
-> dispositioned, and CI green on that commit — and **none of them mentions Task 17**. All three are
-> met, and `BACKLOG.md` §5 is empty, so that sub-item of Step 5 is discharged too. So closing DOS-P6
-> and carrying Task 17's remainder as **NEW-21** was available, and was **put to the founder, who
-> chose to hold** until NEW-21 closes on or after 2026-08-20. **Do not reopen this from the
-> arithmetic** — a later session that rediscovers the checkpoint wording will find the same opening,
-> and the answer to it is already given. A11 stays blocked meanwhile, deliberately.
+**Task 19 Step 5 is now unblocked on its own terms.** It requires every `BACKLOG.md` §8 row to carry
+an outcome, and the Codex spec §14.1 row was the one discharged by Task 17 alone; it now reads
+discharged in two parts, with the second recording a replacement rather than a promotion.
+
+**Step 6 opens a pull request, and that is the one thing in this entry a session cannot decide.** The
+founder chose on 2026-08-20 to keep Track R's commits local rather than open one; whoever takes Step 6
+should ask whether that choice extends to this entry, because the DOS-P6 checkpoint names CI green on
+the commit as one of its three conditions and a local gate cannot satisfy it.
 
 **Read the spec's §3 and then the plan's five decisions** before touching this subsystem. The one
 that reshapes it is spec 3.1: capture content is **agent-authored**, because `capture`'s declared
@@ -124,9 +144,29 @@ pattern rather than a first.
 
 ### What DOS-P6 still hands forward
 
-- **The `codex exec --json` JSONL terminal-event rule ships provisional on the success path** — NEW-21.
+- **No interactive vendor session has ever been observed, on either vendor** — NEW-42. Both detection
+  rows and the whole of what is known about the JSONL protocol come from the non-interactive form,
+  and the interactive one is where a founder captures. It needs a human at a terminal.
+- **The replacement parsing rule carries one inference of its own** — NEW-45. Every recording holds
+  exactly one `agent_message`, so "the last one wins" is unobserved and is labelled as such at the
+  seam rather than written as a fact.
+- **A nested session mis-attributes its capture** — NEW-44, and no row order fixes it.
+- **The Codex arm of the security suite has never executed** — NEW-43, which is why its fake vendor
+  was wrong for every one of the four days it stood, without a red test.
+- **The widened spawn trigger is only half closed by the trust check** — NEW-46.
+- **Whether a model-run command can write raw bytes into the stream this product parses is
+  unexamined** — NEW-47, which decides NEW-45's tie-break and settles from vendor source without
+  spending anything.
 - **`maxTurns` is bounded under Claude and silently dropped under Codex**, one shared schema with two
   behaviours. `codex-adapter.md` §11 is the full list with owners.
+
+**The terminal-event rule is no longer on this list**, and how it left is the more useful fact: it did
+not get confirmed, it got falsified. NEW-21's real call showed `finalJsonlLine` returned a
+`turn.completed` usage record as an `ok: true` payload on every successful Codex run, and a second
+defect beside it — the vendor refusing this product's own output schema — meant `ingest` had never
+been able to run on that vendor at all. **Both were shipped, gated green, and reviewed.** What found
+them was one real call, which is the argument for every remaining item on this list that says
+"unobserved".
 
 ---
 
@@ -156,7 +196,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, three steps left | NEW-21 | L | program plan Task 6 checkpoint, after independent security review | **now** — held. `S` and `P` closed 2026-08-13; `I` is **17 of 19 tasks**, and the security review returned ready. Task 17 Step 3 and Task 19 Steps 5–6 remain |
+| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, two steps left | nothing | L | program plan Task 6 checkpoint, after independent security review | **now** — unheld since 2026-08-20. `S` and `P` closed 2026-08-13; `I` is **18 of 19 tasks**, and the security review returned ready. Task 19 Steps 5–6 remain |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P10 Managed instruction artifacts — S / P / I | to write | A11 | L | thirty-eight instruction artifacts install, drift-check and uninstall under manifest ownership on both vendors | blocked |
 | A13 | DOS-P11 Hooks — S / P / I | to write | A12 | L | a hook is observed firing in a test, and every shipped handler names the installed binary | blocked |
@@ -183,8 +223,9 @@ a cheap edit, and a queue whose numbers do not imply sequence is a queue that ha
 **The founder also ruled the sequence strict** — A10 → A11 → A12 → A13 → A14 → A15 — rather than
 running the three new entries as a parallel track. None of them needs DOS-P7: their renderers closed
 with DOS-P4 and DOS-P5 and their artifact mechanism closed with Foundation, so all three are
-technically startable the moment A10 is. The cost of the ruling is that nothing new starts while A10
-waits on NEW-21, and that was put to the founder before it was taken.
+technically startable the moment A10 is. The cost of the ruling was that nothing new started while A10
+waited on NEW-21, and that was put to the founder before it was taken. **That cost expired on
+2026-08-20** when NEW-21 closed; the sequencing ruling itself stands.
 
 ---
 
@@ -229,9 +270,12 @@ Three Foundation requests and the `accepted → rejected` gap are in the same pl
 day, because they were unowned for the same reason: no entry on the product path reaches them.
 
 **Twenty-two §1 rows were deliberately not in R2**, and the session that finished it did not sweep them up
-— R2 has closed all five it was opened for. **Four belong to somebody else:** **NEW-21** is the founder's and blocks
-A10; **NEW-20** and **NEW-13** were registered as deliberately-not-fixed; **NEW-7** needs ten minutes
-with a machine that has Obsidian rather than an agent. **Eighteen came out of R2's own reviews**, registered between 2026-08-17 and 2026-08-19 by the reviews that produced them. **NEW-27** and **NEW-28** came from NEW-12: a derived path that will wear a write scope's name, and
+— R2 has closed all five it was opened for. *(That twenty-two is a snapshot of 2026-08-20 before A10's
+work landed; §1 holds twenty-seven now, and the live count is at the end of this file.)* **Four belonged
+to somebody else:** **NEW-21** was the founder's and blocked A10 until it closed on 2026-08-20, leaving
+**NEW-42**, which needs a human at an interactive vendor session; **NEW-20** and **NEW-13** were
+registered as deliberately-not-fixed; **NEW-7** needs ten minutes with a machine that has Obsidian
+rather than an agent. **Eighteen came out of R2's own reviews**, registered between 2026-08-17 and 2026-08-19 by the reviews that produced them. **NEW-27** and **NEW-28** came from NEW-12: a derived path that will wear a write scope's name, and
 an interpolation in `ingest` that no longer has an end-to-end test because no production path can
 reach it. **NEW-24**, **NEW-25** and **NEW-26** came from NEW-16: a common redaction pattern that
 refuses every ingest and cannot be diagnosed without widening a persisted type; two partially
@@ -327,11 +371,11 @@ written. Then two entries that are not subsystems — the cutover (A15) and the 
 Track L's two, which are not engineering work at all. **An implementation is done when its checkpoint
 holds with evidence in a commit and CI is green on it, not when the tasks are ticked.**
 
-**Twenty-eight plan steps are unticked**, and they are the whole of the written work:
+**Twenty-seven plan steps are unticked**, and they are the whole of the written work. Task 17's last
+step closed on 2026-08-20:
 
 | Plan | Task | Steps left |
 |---|---|:---:|
-| knowledge pipeline | 17 — one real run per vendor | 1 |
 | knowledge pipeline | 19 — close the documents, run the gate | 2 |
 | program | 7 — Git, automation, update, release lifecycle | 7 |
 | program | 8 — founder shadow migration | 10 |
@@ -345,10 +389,13 @@ three implementations, and it is the larger half. Do not read the table as the t
 Program Task 6 shows one unticked box and it is **not** work: the hooks box was rewritten to record
 that hooks are declined, and nothing shipped for it by design.
 
-**`BACKLOG.md` §1 is twenty-two repository defects**, counted by listing the `### NEW-` headings on
-2026-08-20. **None waits on R2**, which is closed: four belong to somebody else (NEW-21 the founder's,
-NEW-20 and NEW-13 registered as deliberately not fixed, NEW-7 needing a machine with Obsidian) and
-eighteen came out of R2's own reviews. That number is the honest cost of closing ten decided defects
+**`BACKLOG.md` §1 is twenty-seven repository defects**, counted by listing the `### NEW-` headings on
+2026-08-20. **None waits on R2**, which is closed: eighteen came out of R2's own reviews, four
+(NEW-43, NEW-44, NEW-46, NEW-47) out of the reviews of the NEW-21 diff and every one of them startable
+in a session, and five need somebody or something no session has — NEW-42 an interactive vendor
+session, NEW-45 the founder's credits, NEW-20 and NEW-13 registered as deliberately not fixed, NEW-7 a
+machine with Obsidian. **NEW-21 closed on 2026-08-20 and left six rows**, five of them found by review
+rather than by the work. That is the shape this queue should keep expecting. That number is the honest cost of closing ten decided defects
 with a fresh-context review on each, and it is the shape this queue should expect: a review that
 finds nothing is rarer than one that finds a residual.
 
@@ -357,9 +404,11 @@ dedicated-plan question, and the three `BACKLOG.md` §8 amendments awaiting rati
 `[redaction]` schema, `foundation.md` §2's `CliError` slot, and knowledge-pipeline §5.5's
 `accepted → rejected` row.
 
-**Nothing on the *product path* is startable by an agent today**, and that is unchanged: A10 waits on
-NEW-21, which waits on an external usage limit, and A11 waits on A10 — and A12, A13 and A14, added
-2026-08-20, wait on A11 by the founder's sequencing ruling rather than by any technical dependency.
+**A10 became startable on 2026-08-20** and is the only thing on the product path that is: NEW-21
+closed when the external usage limit reset, so what remains of A10 is Task 19 Steps 5 and 6. A11 waits
+on A10, and A12, A13 and A14 wait on A11 by the founder's sequencing ruling rather than by any
+technical dependency. **Step 6 opens a pull request**, which is the founder's call rather than a
+session's — see the `NOW` section.
 **Track R is closed as of 2026-08-20.** R2 was its only entry, and its eleven tasks landed in four
 commits — the three Foundation requests, the DOS-P7 gap, and the six §1 rows the decisions of
 2026-08-17 unblocked. The four §1 rows that were never R2's still wait on the founder or on a

@@ -68,7 +68,7 @@ Spec §10.3 is normative and already requires it: **until a vendor's row is obse
 
 It is recorded here as an ordering consequence rather than as a decision, because the cost must not be discovered later: **every capture written between Task 8 and Task 17 records `sourceAgent: "unknown"` and `sourceAgentVersion: "unknown"`.** Those captures are correct and are never rewritten. A guessed row is exactly the undocumented capability assumption design spec §20 names as a release blocker.
 
-> **Half discharged 2026-08-15.** Task 17 added Claude's row and could not observe Codex's, so this rule is still live for exactly one vendor: a capture taken inside a Codex session still records `"unknown"`, and will until `BACKLOG.md` §1 NEW-21 closes. The paragraph above should be read as "between Task 8 and NEW-21" for Codex, and as closed for Claude.
+> **Fully discharged 2026-08-20.** Task 17 added Claude's row on 2026-08-15 and could not observe Codex's; NEW-21 added Codex's five days later. The paragraph above should be read as "between Task 8 and 2026-08-15" for Claude and "between Task 8 and 2026-08-20" for Codex. Captures written inside a Codex session in that window record `"unknown"`, are correct, and are never rewritten.
 
 **It gets no `BACKLOG.md` §8 row on purpose.** §8 is the index a reader consults to learn whether the approved document in front of them is still current; a row that changes nothing costs that table its signal.
 
@@ -181,21 +181,67 @@ Spec §10.2 is explicit about why this task exists and what it costs. **The JSON
 > inherited them, could not tell a vendor's marker from a leaked one, and was discarded. **Codex's row
 > is absent rather than guessed**, per decision 3 and spec §10.3, because no shell command ever ran.
 >
-> **What remains is `BACKLOG.md` §1 NEW-21**, and one successful `codex exec` completion closes all of
-> it. Until then this task stays open and Task 19 Steps 5–6 stay blocked, because §8's Codex spec
-> §14.1 row is discharged by this task alone.
+> **What remained was `BACKLOG.md` §1 NEW-21, and it closed on 2026-08-20.** The usage limit had
+> reset. Five invocations were made with the production argv, producing four distinct observations —
+> the schema refusal, one per sandbox branch `invokeCodex` emits, and one testing
+> `--output-last-message` — and **this task closed by falsifying two shipped things rather than by
+> confirming one.** All four recordings are committed; spec §14.1 tabulates which claim each carries.
+>
+> **First, the terminal-event rule was wrong, not merely unverified.** A successful turn ends on
+> `turn.completed`, a usage record; the response is the `item.completed` before it, whose `item.type`
+> is `agent_message` and whose `text` holds the payload as a string. `finalJsonlLine` returned the
+> usage record and `parseStructuredPayload` returned *that* with `ok: true` — the boundary reporting
+> success over a document with no proposal in it, on every successful Codex run, invisibly.
+> `finalAgentMessage` replaces it. The founder chose the in-stream filter over
+> `--output-last-message`, which was tested and works and was declined for the vendor-written temp
+> file it would add.
+>
+> **Second, and outside anything this task was scoped to ask: the vendor refuses this product's own
+> shipped output schema.** `--output-schema` at `templates/schemas/ingest.stage.schema.json` answered
+> HTTP 400 before any turn began — `schemaVersion` carried a bare `const` with no `type` keyword. So
+> **`ingest` could never have returned a proposal on Codex**, and every gate had been green over it,
+> because nothing in this repository had ever handed that file to the binary. Both copies of the
+> schema now carry `"type": "integer"`, and `output-schemas.test.ts` walks every property of every
+> shipped schema for a `type` keyword.
+>
+> **Third, the vocabulary reading of 2026-08-15 was itself too strong** — `item.completed` and
+> `turn.completed` are real; only `session.created` is not. A failed turn was never a stream in which
+> the other two could have appeared.
+>
+> **Step 3's row is `CODEX_THREAD_ID`, on presence**, chosen over three others a child of `codex exec`
+> also sees: `CODEX_SANDBOX` and `CODEX_SANDBOX_NETWORK_DISABLED` describe the sandbox rather than the
+> vendor, and `CODEX_CI` reads as a marker of the non-interactive mode. Spec §10.3 carries the table.
+>
+> **The fan-out was the predicted size, and one third of it was found by review rather than by a
+> test.** This repository has **three** fake Codex vendors, all speaking a dialect no vendor speaks
+> since 2026-08-17, when they were written — four days, against the eight the rule itself stood. Two
+> of them — `ingest.test.ts` and the e2e lifecycle — went red the moment the
+> parser was corrected. The third, `tests/security/helpers.ts`, stayed green, because no security
+> fixture has ever installed Codex alone and its branch has therefore never executed; it was corrected
+> by hand and the gap registered as NEW-43. Four new fixture files and one `.txt`, all **read** by
+> tests rather than only named by them, and their `README.md`.
+>
+> **What it leaves is `BACKLOG.md` §1 NEW-42 through NEW-47.** The work's own residual is NEW-42: every
+> observation of either vendor is of the non-interactive form, and the TUI — where a founder actually
+> captures — has never been observed. The other **five** came from two fresh-context reviews of this
+> diff: NEW-43 above, NEW-44 (two correct detection rows mis-attribute a nested session, and no row
+> order fixes it), NEW-45 (the replacement rule's "last agent message wins" is an inference, since
+> every recording holds exactly one), NEW-46 (the trust check named as mitigation for the widened spawn
+> trigger does not stop a same-uid `PATH` attack), and NEW-47 (whether a model-run command can write
+> raw bytes into the stream this product parses, which decides NEW-45's tie-break and settles from
+> vendor source without spending anything).
 
-- [x] **Step 1: Capture raw stdout from one real `codex exec` run** — *done for a failed turn; the successful-turn half is NEW-21*
+- [x] **Step 1: Capture raw stdout from one real `codex exec` run** — *a failed turn 2026-08-15, three successful runs 2026-08-20*
 
 The obligation is precise (spec §10.2): record **whether the final response really is the last parsing line**, and **whether it carries a discriminating field worth filtering on**. Redact the captured stream before it is written to a fixture — it is model output on the founder's account, and this repository is public.
 
-- [x] **Step 2: Amend the Codex spec §14.1 with the observed shape, dated** — *amended; the rule is explicitly **not** promoted*
+- [x] **Step 2: Amend the Codex spec §14.1 with the observed shape, dated** — *amended twice; the rule was never promoted and was **replaced** on 2026-08-20*
 
 **Do not quietly promote the rule to verified.** If the observation contradicts the rule, that is the finding, and `finalJsonlLine` changes in the same commit with a regression fixture. If it confirms it, say so with the date and the version observed, and correct the docblock that currently calls itself provisional.
 
 If the observation shows a discriminating field, filtering on it is a **narrowing** and needs the fixture to prove the old rule and the new one agree on this stream. Record what was given up, as the existing docblock does about pretty-printed JSON.
 
-- [ ] **Step 3: Observe one agent-detection row per vendor** — *Claude's row landed; Codex's is NEW-21*
+- [x] **Step 3: Observe one agent-detection row per vendor** — *both rows landed; Claude's 2026-08-15, Codex's 2026-08-20*
 
 Read **decision 3**. Run each vendor and record what its environment actually contains, then add one row per vendor to `AGENT_DETECTION_ROWS` and to spec §10.3, each with what was observed and when. Update the Task 8 test that asserts the table is empty — with the observation in the commit message, so the change from "empty" carries its justification.
 

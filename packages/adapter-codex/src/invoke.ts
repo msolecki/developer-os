@@ -119,63 +119,63 @@ export function invocationFromAgentPrompt(
 
 /**
  * Codex's `--json` streams events to stdout as JSONL (spec §14.1), and
- * `--output-schema` constrains only the model's *final* response, not the
+ * `--output-schema` constrains only the model's *final response*, not the
  * whole stream (spec §7) — so `parseStructuredPayload`, built for one JSON
  * document, must never see the raw stream directly.
  *
- * **Still provisional on the path that matters, and this must stay visible at
- * the call site.** DOS-P6 Task 17 ran a real `codex exec --json` against
- * `codex-cli 0.147.0` on 2026-08-15 (spec §14.1's amendment of that date;
- * the stream is `tests/fixtures/codex/observed-exec-stream.jsonl`). It settled
- * two things and left the third open:
+ * **The response is not the last line, and until 2026-08-20 this module
+ * believed it was.** NEW-21 ran three successful turns against `codex-cli
+ * 0.147.0` on that date — one per sandbox branch this module can emit, plus one
+ * testing `--output-last-message` — and all three end the same way: the
+ * terminal event is `turn.completed`, a **usage record**. The response is the
+ * line before it — an `item.completed` whose `item.type` is `agent_message`,
+ * carrying the schema-constrained JSON as a *string* in `item.text`. The
+ * primary recording is
+ * `tests/fixtures/codex/observed-exec-success-stream.jsonl`; the other two are
+ * beside it, and spec §14.1 tabulates which claim each one carries.
  *
- * - **Settled: the framing.** Output really is one JSON object per line. Every
- *   line of the observed stream parsed, and none was a scalar or `null`.
- * - **Settled: `type` is a discriminating field**, present on every line. The
- *   observed vocabulary is `thread.started`, `turn.started`, `error`,
- *   `turn.failed` — note that it is *not* the `session.created` /
- *   `item.completed` / `turn.completed` this file's synthetic tests guessed
- *   while the rule was unverified.
- * - **Open: whether the terminal event of a *successful* turn is the final
- *   response.** The observed run ended `turn.failed`, because the account's
- *   usage limit was exhausted, so no run reached a model response. "The last
- *   line that parses to a non-null JSON object" therefore remains the best
- *   available rule rather than a verified one.
+ * **What the superseded rule did was worse than failing.** "The last line that
+ * parses to a non-null object" selected `turn.completed`, which parses
+ * perfectly, so `parseStructuredPayload` returned `ok: true` over vendor
+ * telemetry: a caller told nothing had gone wrong, holding a payload with no
+ * proposal in it. It shipped on 2026-08-12 and was wrong for the whole eight
+ * days it stood, because the only real stream anyone had was the failed turn of
+ * 2026-08-15, and a failed turn emits no response for a rule to be wrong about.
  *
- * **No event-type value is filtered on here, and observing one has not changed
- * that.** Filtering would be a narrowing, and spec §14.1 requires a narrowing
- * to be proven against a stream where the old rule and the new one agree — a
- * failed turn is not that stream, since it contains no final response for the
- * two rules to agree about. Inventing the filter now would risk silently
- * mismatching a future vendor version, which is the failure only a successful
- * real run can catch.
+ * **This filters on three vendor field names, and that is a deliberate trade.**
+ * Spec §14.1 requires a narrowing to be proven against a stream where the old
+ * rule and the new one agree; no such stream exists, because the old rule is
+ * not narrower than this one but simply wrong. What the dependency buys is that
+ * a vendor rename now yields `""` and therefore `malformed-output` — a loud
+ * failure at the boundary — where the positional rule yielded a confident wrong
+ * answer. A failure a caller can act on is worth more than a coincidence that
+ * held on one stream shape.
  *
- * **What keeps the failed-turn case safe is not this function.** On the
- * observed stream the last parsing line is the `turn.failed` event, so this
- * function alone would hand a caller a vendor error shaped like a result; the
- * `exitCode !== 0` check in `invokeCodex` runs first and is what prevents it.
- * That ordering was already pinned by the non-zero-exit case in
- * `invoke.test.ts`, which a synthetic `"{}"` is enough to guard; what the real
- * recording adds is a case showing *what* the ordering protects against, which
- * a synthetic payload cannot.
+ * **Two things select the response, and only one of them is observed.**
  *
- * The object requirement guards the same risk from the other side: a stray
- * scalar or `null` line after the real result — a `123` or `"done"` emitted
- * by some event type this module has not seen — must not be read as the
- * payload just because it parses.
+ * The `item.type` test is: the observed stream carries two `item.completed`
+ * events and the first is a `command_execution`. It has no `text`, so that
+ * check alone would skip it — what the `item.type` test actually guards is an
+ * item that *does* carry `text` and is not the response, which is the shape of
+ * a reasoning item, and `invoke.test.ts` pins exactly that.
  *
- * This rule also **narrows** an input class the direct
- * `parseStructuredPayload(stdout)` call it replaced could still handle: a
- * pretty-printed single JSON document spread over several lines parses fine
- * as one string, but split by line here, no individual line parses on its
- * own, so this function returns `""` and the call now fails as
- * `malformed-output`. Harmless today because this module's argv always
- * passes `--json`, which Codex documents as one event per line (spec
- * §14.1), and the failure is closed rather than open — but whoever changes
- * this rule next should know it already gave something up, not only that it
- * might give up more.
+ * **The last-wins tie-break is an inference and is labelled as one**, per spec
+ * §14.1's rule that an unobserved claim is not written as an observation. The
+ * recording contains exactly **one** `agent_message`. Nothing observed says
+ * whether `--output-schema` constrains every assistant message or only the
+ * terminal one, so nothing rules out a free-text summary arriving after the
+ * structured response — under which this returns the summary and every Codex
+ * ingest fails as `malformed-output`. That is the same silent-and-total shape
+ * this function was rewritten to end, which is why it is named here rather than
+ * left implicit. `BACKLOG.md` §1 NEW-45.
+ *
+ * **What keeps the failure path safe is still not this function.** On a failed
+ * turn no `agent_message` is ever emitted, so this returns `""`; but the
+ * `exitCode !== 0` check in `invokeCodex` runs first and is what gives that
+ * caller `exit` rather than `malformed-output`, which is the distinction that
+ * tells them whether to retry.
  */
-function finalJsonlLine(stdout: string): string {
+function finalAgentMessage(stdout: string): string {
   let last = "";
   for (const line of stdout.split(/\r?\n/u)) {
     const trimmed = line.trim();
@@ -187,7 +187,14 @@ function finalJsonlLine(stdout: string): string {
       continue;
     }
     if (typeof parsed !== "object" || parsed === null) continue;
-    last = trimmed;
+    const event = parsed as { type?: unknown; item?: unknown };
+    if (event.type !== "item.completed") continue;
+    const item = event.item;
+    if (typeof item !== "object" || item === null) continue;
+    const message = item as { type?: unknown; text?: unknown };
+    if (message.type !== "agent_message") continue;
+    if (typeof message.text !== "string") continue;
+    last = message.text;
   }
   return last;
 }
@@ -304,5 +311,5 @@ export async function invokeCodex(
     // code the child ever reported.
     return { ok: false, reason: "exit", exitCode: result.exitCode ?? 1 };
   }
-  return parseStructuredPayload(finalJsonlLine(result.stdout));
+  return parseStructuredPayload(finalAgentMessage(result.stdout));
 }

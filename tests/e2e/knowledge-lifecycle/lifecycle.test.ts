@@ -81,17 +81,19 @@ function dataOf<T>(run: { readonly result: CliResult<T> }): T {
  * 1. **Discovery** — `/usr/bin/which codex`, answered by existing and being
  *    executable rather than by anything the script prints.
  * 2. **The version probe** — `codex --version`, which `discoverCli` parses. No
- *    invocation in this lifecycle spawns one today: `AGENT_DETECTION_ROWS`
- *    carries only Claude's row since Task 17 (2026-08-15) and this lifecycle
- *    runs under a scripted Codex, so `capture` matches nothing and probes
- *    nothing, and `doctor` is not part of the five. But a vendor that answered
- *    only the model call would be discovered as absent the moment one did — and
- *    a Codex row is exactly what Task 17 still owes — so the failure would name
- *    neither this file nor the probe.
+ *    invocation in this lifecycle spawns one today, and since 2026-08-20 the
+ *    reason changed rather than the outcome: `AGENT_DETECTION_ROWS` now carries
+ *    Codex's row too, so what leaves `capture` probing nothing is that this
+ *    sandbox sets no `CODEX_THREAD_ID`, not that the vendor has no row. The
+ *    path is one environment variable away from live here, which is the
+ *    opposite of dormant — a vendor that answered only the model call would be
+ *    discovered as absent the moment it ran.
  * 3. **The model call** — `codex exec --json …`, whose reply is Codex's own
- *    dialect: JSONL, one event per line, of which the last line that parses to
- *    an object is the payload. Claude's is a single JSON document, and a fake
- *    that spoke one dialect to a vendor expecting the other would prove nothing.
+ *    dialect: JSONL, one event per line, of which the response is the last
+ *    `item.completed` whose `item.type` is `agent_message`, carried as a string
+ *    in its `text`. Claude's is a single JSON document, and a fake that spoke
+ *    one dialect to a vendor expecting the other would prove nothing — which is
+ *    what this fake did until 2026-08-20, when NEW-21 observed the real one.
  *
  * It records every spawn's argv into `argvLog`, NUL-separated, because the
  * prompt is multi-line and a newline-separated log could not be split back into
@@ -193,19 +195,38 @@ describe("the knowledge pipeline, against the compiled binary", () => {
        * asserted present before it is replaced, so a fixture that stopped
        * carrying it fails here rather than at that validator.
        *
-       * **The `JSON.parse` → `JSON.stringify` round trip is load-bearing**, not
-       * tidiness: it collapses the pretty-printed fixture onto one line, which
-       * is what makes the reply JSONL. Writing the template through would leave
-       * a document no single line of which parses, and `invokeCodex` would read
-       * it as `malformed-output`.
+       * **The reply carries the event frame a real turn puts a response in**,
+       * from `tests/fixtures/codex/observed-exec-success-stream.jsonl`: the
+       * proposal is a *string* in the `text` of an `item.completed` whose
+       * `item.type` is `agent_message`, and a `turn.completed` usage record
+       * follows it. Until 2026-08-20 this wrote the proposal as a bare line and
+       * passed, because the rule it was written against took the last line that
+       * parsed. NEW-21 observed that no vendor turn emits a bare line, and this
+       * fake was speaking a dialect no vendor speaks.
+       *
+       * The `JSON.parse` → `JSON.stringify` round trip survives that change but
+       * stopped being load-bearing with it: `JSON.stringify` escapes the
+       * newlines of a pretty-printed fixture when it embeds one in `text`, so
+       * the JSONL framing no longer depends on collapsing it first. It is kept
+       * because it also proves the fixture is JSON at all.
        */
       const template = await readFile(PROPOSAL_FIXTURE, "utf8");
       expect(template).toContain(CAPTURE_ID_PLACEHOLDER);
+      const payload = JSON.stringify(
+        JSON.parse(template.replaceAll(CAPTURE_ID_PLACEHOLDER, captureId)),
+      );
       await writeFile(
         replyFile,
-        JSON.stringify(
-          JSON.parse(template.replaceAll(CAPTURE_ID_PLACEHOLDER, captureId)),
-        ),
+        [
+          JSON.stringify({
+            type: "item.completed",
+            item: { id: "item_0", type: "agent_message", text: payload },
+          }),
+          JSON.stringify({
+            type: "turn.completed",
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+        ].join("\n"),
       );
 
       /** 3. The human gate: accepted, one capture, by id. */
