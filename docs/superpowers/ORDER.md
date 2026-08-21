@@ -250,14 +250,19 @@ stays in §1 until that question is answered.
 |---|---|---|---|:---:|---|---|
 | R2 | Ten decided defects — six `BACKLOG.md` §1 rows, three Foundation requests, one DOS-P7 gap | deleted on closure, as a finished plan is | nothing | M | every closed row left §1, every amendment registered in §8, CI green on the commit | **code done 2026-08-20; CI gate unmet** |
 
-**The fifth gate went unmet for a day, and closing it exposed why it could not have been met.** R2's
-eleven tasks landed in five commits with `npm run check` green on the last of them, and the founder
-chose on 2026-08-20 to leave them local. On 2026-08-21 they chose to push everything to `development`
-rather than open a branch — and that surfaced the real problem: **`check.yml` scoped its `push:`
-trigger to `feat/foundation`, a branch that no longer exists on the remote**, while `development`
-carries **no branch protection**. So the claim this paragraph used to make — that `development`
-requires a pull request — was false, and a push would have run no workflow at all. Both halves of the
-guarantee were gone at once. The trigger now names `development`, so a push is checked.
+**The fifth gate is unmet, and the row says so rather than reading as complete.** R2's eleven tasks
+landed in five commits with `npm run check` green on the last of them, and the founder chose on
+2026-08-20 to leave them local. On 2026-08-21 they asked for everything to go to `development` without
+creating a branch, **and the remote refused it**: a ruleset on that branch requires a pull request.
+So the gate that exists precisely because a green local gate missed three DOS-P2 defects still has not
+run.
+
+**Two things were learned by trying.** `check.yml` scoped its `push:` trigger to `feat/foundation`,
+a branch that **no longer exists on the remote** — the rule kept anything from landing unchecked, but
+that trigger had stopped naming anything, and it now names `development`. And the protection is a
+**ruleset**, which `.../branches/development/protection` reports as 404 "not protected"; the endpoint
+that answers is `.../rules/branches/development`. Reading the first one and believing it is what put a
+false claim into three files for the length of one commit.
 
 **R2 existed because the five decisions those rows were waiting on were taken on 2026-08-17.** Each had
 sat as "open" while being unimplementable, which is the state this track exists to resolve rather than
