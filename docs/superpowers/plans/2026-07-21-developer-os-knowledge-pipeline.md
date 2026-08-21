@@ -360,7 +360,7 @@ Read **decision 4** for the third box. It is **rewritten to record the decline**
 - the resolution rule decision 2 took, and the display gap it leaves;
 - **the residuals this subsystem leaves, each with an owner** — including anything spec §13 left open that is still open, and any finding from Step 1 that was accepted as a residual rather than fixed.
 
-- [ ] **Step 5: Close the documents, in one commit**
+- [x] **Step 5: Close the documents, in one commit** — *landed 2026-08-21; what it could not do is below*
 
 - `docs/superpowers/ORDER.md`: A10 → `done`, `NOW` moves to A11, the closed table gains a DOS-P6 row naming `knowledge-pipeline.md` and `threat-model.md`.
 - `docs/superpowers/BACKLOG.md`: §3's DOS-P6 entry is removed; §5's two rows leave; §8's **six pending rows** — this plan's decisions 1, 2, 4 and 5, plus the two Tasks 12 and 15 raised — carry their outcome rather than their question, and the spec's own six move from ratified to discharged as each task lands; §1's NEW-13 closes against Task 4.
@@ -368,7 +368,26 @@ Read **decision 4** for the third box. It is **rewritten to record the decline**
 - The spec's status line moves to the past tense and names `knowledge-pipeline.md` as what points at it, per `SESSION.md`'s rule that a spec stays only while another document names it as the design of record.
 - **This plan is deleted in the same commit**, after every piece of evidence a later step needs has been carried into the document that needs it. Git history is the archive.
 
-- [ ] **Step 6: Run the gate, commit, and open the pull request**
+> **What Step 5 did, and the three things in its own list it could not.** It discharged all six
+> `BACKLOG.md` §8 rows of 2026-08-13 — and **four of the six had never been cross-referenced into the
+> documents they amend**, eight days after ratification, so a reader of design spec §13.4 or §17.5, of
+> workflow-compiler §6, or of `BACKLOG.md` §7's own DOS-P7 uninstall gate was getting the superseded
+> contract. Writing those four cross-references was most of the step. It also closed §1's **NEW-13**
+> against Task 4's brands, which had read `Status: open` for nine days while the code refused the
+> misuse at compile time.
+>
+> **Three items on this step's list presume the subsystem is closed, and it is not.** `ORDER.md`'s A10
+> row cannot read `done`, `NOW` cannot move to A11, the closed table cannot gain a DOS-P6 row, and
+> `BACKLOG.md` §3's DOS-P6 entry and the spec's past-tense status line cannot follow — because Step 6
+> is unticked and the checkpoint names CI green on the commit as one of its three conditions. **This
+> plan is therefore not deleted either**, which is the rule working rather than failing: a plan is
+> deleted when its last step closes.
+>
+> **The founder chose on 2026-08-21 to keep the commits local**, as they had for Track R the day
+> before. `ORDER.md`'s `NOW` section records A10 as work done with the CI gate unmet, in the same form
+> R2's row uses, rather than rounding it up.
+
+- [ ] **Step 6: Run the gate, commit, and open the pull request** — *the only thing left in DOS-P6; needs a pull request the founder has not opened*
 
 ```bash
 npm run check

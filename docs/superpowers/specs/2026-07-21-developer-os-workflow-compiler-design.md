@@ -130,6 +130,21 @@ the vault, it is a verb.** Prose steps are inert by construction.
 
 ## 6. The effect vocabulary, and scope derivation
 
+**Amended twice, both ratified by the founder on 2026-08-13, both discharged by DOS-P6 Task 6.**
+
+1. **The globs in this table stop being literals.** `content/**` and its siblings are canonical names
+   here; the user's own content root comes from `BrainConfigV1`, so a vault that does not use
+   `content/` was being checked against a path it does not have.
+2. **They resolve at the handler boundary**, through `resolveScopeGlob(glob, config)` — not by
+   templating them inside the YAML. Templating was rejected: it invents a substitution syntax in the
+   workflow schema and puts a configuration value into the one document meant to be comparable across
+   installs. **The contract below keeps the canonical names**, which is why the table is unchanged.
+
+**The cost is a display gap, recorded rather than left to be discovered:** a rendered skill shows
+`content/**` while the handler enforces the user's own root, so the two disagree in prose for any
+vault that renamed it. `workflow-schema.md` §8.1 made this due at the first handler that resolves a
+glob; `BACKLOG.md` §8 carries both rows.
+
 The vocabulary is a constant in `packages/workflow-schema`. Each verb maps to its effect
 footprint:
 

@@ -34,20 +34,27 @@ week of confusion.
 
 ## NOW
 
-**`NOW` is A10, and its hold is released.** DOS-P6 was held for NEW-21 on the founder's decision of
-2026-08-15; **NEW-21 closed on 2026-08-20**, when the external usage limit reset. What is left of A10
-is **Task 19 Steps 5 and 6** — close the documents, run the gate — and nothing else.
+**`NOW` is A10, and one gate stands between it and closed.** The hold that blocked it — NEW-21, on an
+external usage limit — was released on 2026-08-20 and the row closed on 2026-08-21. **Task 17 and Task
+19 Step 5 have landed. What remains is Step 6, and Step 6 is not a session's to take**: it requires
+CI green on the commit, which is the third of the three conditions the DOS-P6 checkpoint names, and
+the only route to it is a pushed branch and a pull request. **The founder chose on 2026-08-21 to keep
+the commits local**, as they had for Track R the day before.
 
-`plans/2026-07-21-developer-os-knowledge-pipeline.md` — nineteen tasks, **eighteen landed**, their
-step lists deleted on closure and replaced by a table of what survives each.
+**So A10 is finished in the sense that its work is done and its local gate is green, and not finished
+in the sense its own checkpoint defines** — the same honest state R2's row carried, and stated the same
+way rather than rounded up to `done`. Nineteen commits are unpushed. Whoever pushes them opens the
+pull request and reads the run.
+
+`plans/2026-07-21-developer-os-knowledge-pipeline.md` survives for exactly one unticked step. It is
+**not** deleted, because a plan is deleted when its last step closes and Step 6 has not.
 
 > **NEW-21 closed by falsifying two shipped things rather than by confirming one, and that is the
-> reason this entry was worth holding.** Three `codex exec` runs with the production argv showed, in
-> order: that the JSONL terminal-event rule selected the wrong event — a successful turn ends on a
-> `turn.completed` usage record, so `finalJsonlLine` returned vendor telemetry with `ok: true` on
-> **every** successful Codex run, invisibly; that the vendor **refuses this product's own shipped
-> output schema** with HTTP 400 before any turn begins, because `schemaVersion` carried a bare `const`
-> with no `type` keyword, so `ingest` could never have returned a proposal on that vendor at all; and
+> reason this entry was worth holding.** Five `codex exec` invocations showed: that the JSONL
+> terminal-event rule selected the wrong event — a successful turn ends on a `turn.completed` usage
+> record, so `finalJsonlLine` returned vendor telemetry with `ok: true` on **every** successful Codex
+> run, invisibly; that the vendor **refuses this product's own shipped output schema** with HTTP 400
+> before any turn begins, so `ingest` could never have returned a proposal on that vendor at all; and
 > that the 2026-08-15 reading of the event vocabulary was itself too strong. Every gate had been green
 > over all three, because nothing in this repository had ever handed a real vendor a real call. **The
 > founder's decision to hold rather than close carrying a residual is what put a real call in front of
@@ -55,29 +62,26 @@ step lists deleted on closure and replaced by a table of what survives each.
 > had never worked.
 >
 > The detection row is `CODEX_THREAD_ID` on presence. **What NEW-21 leaves is six `BACKLOG.md` §1
-> rows — NEW-42 through NEW-47 — and five of them came from two fresh-context reviews of its own diff
+> rows — NEW-42 through NEW-47 — and five of them came from three fresh-context reviews of its own diff
 > rather than from the work.** Only NEW-42 is the work's own: no interactive vendor session has ever
 > been observed, on either vendor. The reviews added NEW-43 (the Codex arm of the security suite has
 > never executed, which is why its fake vendor was wrong for its whole four-day life without a red
-> test), NEW-44 (a
-> nested session mis-attributes its capture, and no row order fixes it), NEW-45 (the replacement rule's
-> "last agent message wins" is an inference), NEW-46 (the trust check covers half of what the prose
-> claimed about the widened spawn trigger) and NEW-47 (whether a model-run command can write raw bytes
-> into the stream this product parses, which decides NEW-45's tie-break).
+> test), NEW-44 (a nested session mis-attributes its capture, and no row order fixes it), NEW-45 (the
+> replacement rule's "last agent message wins" is an inference), NEW-46 (the trust check covers half of
+> what the prose claimed about the widened spawn trigger) and NEW-47 (whether a model-run command can
+> write raw bytes into the stream this product parses, which decides NEW-45's tie-break).
 >
 > **The reviews also found things that were fixed rather than registered, and those are not rows** —
 > the guard the fix turned on could be deleted with the whole suite green, the schema gate's new
 > traversal had three branches its own test never drove, and that test was written so it could not
 > fail for the reason it existed. Counting the review's findings as rows gives the wrong set.
 
-**Task 19 Step 5 is now unblocked on its own terms.** It requires every `BACKLOG.md` §8 row to carry
-an outcome, and the Codex spec §14.1 row was the one discharged by Task 17 alone; it now reads
-discharged in two parts, with the second recording a replacement rather than a promotion.
-
-**Step 6 opens a pull request, and that is the one thing in this entry a session cannot decide.** The
-founder chose on 2026-08-20 to keep Track R's commits local rather than open one; whoever takes Step 6
-should ask whether that choice extends to this entry, because the DOS-P6 checkpoint names CI green on
-the commit as one of its three conditions and a local gate cannot satisfy it.
+> **Step 5 spent most of its effort on something it did not expect to.** Its job was to make every
+> `BACKLOG.md` §8 row carry an outcome; **four of the six 2026-08-13 rows had never been
+> cross-referenced into the documents they amend**, eight days after ratification. `SESSION.md`
+> already names four earlier amendments that went four days the same way. So a reader of design spec
+> §13.4, §17.5, workflow-compiler §6, or this file's own DOS-P7 uninstall gate was getting the
+> superseded contract. All four now carry it, and §8 records what each one gained.
 
 **Read the spec's §3 and then the plan's five decisions** before touching this subsystem. The one
 that reshapes it is spec 3.1: capture content is **agent-authored**, because `capture`'s declared
@@ -196,7 +200,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, two steps left | nothing | L | program plan Task 6 checkpoint, after independent security review | **now** — unheld since 2026-08-20. `S` and `P` closed 2026-08-13; `I` is **18 of 19 tasks**, and the security review returned ready. Task 19 Steps 5–6 remain |
+| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, one step left | nothing | L | program plan Task 6 checkpoint, after independent security review | **now** — **work done 2026-08-21; CI gate unmet.** `S` and `P` closed 2026-08-13; `I` is **19 of 19 tasks** and Task 19 Step 5 has landed. Step 6 needs a pull request the founder chose not to open |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
 | A12 | DOS-P10 Managed instruction artifacts — S / P / I | to write | A11 | L | thirty-eight instruction artifacts install, drift-check and uninstall under manifest ownership on both vendors | blocked |
 | A13 | DOS-P11 Hooks — S / P / I | to write | A12 | L | a hook is observed firing in a test, and every shipped handler names the installed binary | blocked |
