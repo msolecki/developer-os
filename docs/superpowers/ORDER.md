@@ -208,7 +208,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
 | A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, one step left | nothing | L | program plan Task 6 checkpoint, after independent security review | **now** — **work done 2026-08-21; CI gate unmet.** `S` and `P` closed 2026-08-13; `I` is **19 of 19 tasks** and Task 19 Step 5 has landed. Step 6 needs a pull request, which the founder was asked for on 2026-08-21, after a direct push was refused, and declined |
-| A11 | DOS-P7 Git, automation, update, release — S / P / I | to write | A10 | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | blocked |
+| A11 | DOS-P7 Git, automation, update, release — S / P / I | two specs, two plans | nothing | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | **started 2026-08-21.** Spec 1 of 2 written and awaiting approval; spec 2, and both plans, owed |
 | A12 | DOS-P10 Managed instruction artifacts — S / P / I | to write | A11 | L | thirty-eight instruction artifacts install, drift-check and uninstall under manifest ownership on both vendors | blocked |
 | A13 | DOS-P11 Hooks — S / P / I | to write | A12 | L | a hook is observed firing in a test, and every shipped handler names the installed binary | blocked |
 | A14 | DOS-P12 Repository tooling verbs — S / P / I | to write | A13 | M | every legacy tooling script is a product verb or a recorded refusal | blocked |
@@ -230,6 +230,13 @@ cutover cannot retire what the product never built, so the three subsystems sit 
 renumbering was chosen over appending A14–A16 out of order**: thirteen citations across three files is
 a cheap edit, and a queue whose numbers do not imply sequence is a queue that has to be read twice.
 `BACKLOG.md` §3 carries what each spec must decide.
+
+**The strict-sequence ruling was suspended on 2026-08-21, and only for A11.** The founder ruled on
+2026-08-20 that A10 → A11 → … runs in order, on the premise that A10 would close. It did not: its one
+remaining item is a pull request declined three times, so the ruling would have deadlocked the program
+on a decision rather than on work. Put to the founder as a correction rather than routed around, and
+they chose to start DOS-P7's spec cycle while A10 waits. **A12 through A15 stay sequenced behind A11**
+— nothing about their ordering changed, and this is a suspension for one entry rather than a repeal.
 
 **The founder also ruled the sequence strict** — A10 → A11 → A12 → A13 → A14 → A15 — rather than
 running the three new entries as a parallel track. None of them needs DOS-P7: their renderers closed
@@ -384,9 +391,10 @@ of the ones that turn a canonical workflow into something an agent can load. Nei
 execute what it renders, which is the whole of what remains on the product path.
 
 **Seven Track A entries remain.** DOS-P6's implementation, its spec and plan closed 2026-08-13. Then
-DOS-P7, DOS-P10, DOS-P11 and DOS-P12 — spec, plan and implementation apiece, and **not one of those
-four has a document of any kind yet**, which is eight documents owed before any of their code is
-written. Then two entries that are not subsystems — the cutover (A15) and the release (A16) — plus
+DOS-P7, DOS-P10, DOS-P11 and DOS-P12 — and **DOS-P7 now owes four documents rather than two**, since
+the founder split it on 2026-08-21 into opt-in surfaces and version lifecycle. **The first of the ten
+exists**: `specs/2026-08-21-developer-os-opt-in-surfaces-design.md`, written 2026-08-21 and awaiting
+approval. Nine are owed before any of their code is written. Then two entries that are not subsystems — the cutover (A15) and the release (A16) — plus
 Track L's two, which are not engineering work at all. **An implementation is done when its checkpoint
 holds with evidence in a commit and CI is green on it, not when the tasks are ticked.**
 
