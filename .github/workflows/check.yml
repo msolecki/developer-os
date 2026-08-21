@@ -8,13 +8,24 @@ name: check
 # `push:` is scoped rather than bare. Unscoped, a branch with an open pull
 # request runs the whole suite twice for every commit — once for the push and
 # once for the pull request — which was measured on this workflow's own first
-# run. Nothing is lost by scoping it: a repository rule requires a pull request
-# to reach the default branch, so every commit that can land is still checked,
-# and a topic branch with no pull request open is not yet asking to land.
+# run. Scoping it to the default branch loses nothing: a commit that lands is
+# checked either way, and a topic branch with no pull request open is not yet
+# asking to land.
+#
+# **The scoped branch was `feat/foundation` until 2026-08-21, and by then it did
+# not exist.** It had been the default branch when this file was written; the
+# default moved to `development` and this trigger did not follow, so pushes ran
+# no workflow at all. The paragraph above also claimed "a repository rule
+# requires a pull request to reach the default branch" — `development` carries
+# no branch protection, so a direct push lands without a pull request and, with
+# a dead branch named here, without a check. **Both halves of the guarantee this
+# comment describes were false**, which is the failure mode `BACKLOG.md` §7
+# calls a gate that can pass by scanning nothing, one level up: a gate that runs
+# on nothing at all.
 on:
   push:
     branches:
-      - feat/foundation
+      - development
   pull_request:
 
 # Least privilege. This workflow reads the repository and writes nothing —

@@ -250,14 +250,14 @@ stays in §1 until that question is answered.
 |---|---|---|---|:---:|---|---|
 | R2 | Ten decided defects — six `BACKLOG.md` §1 rows, three Foundation requests, one DOS-P7 gap | deleted on closure, as a finished plan is | nothing | M | every closed row left §1, every amendment registered in §8, CI green on the commit | **code done 2026-08-20; CI gate unmet** |
 
-**The fifth gate is unmet, and the row says so rather than reading as complete.** R2's eleven tasks
-landed in five commits, and `npm run check` is green on the last of them — 122 files, 2303 passed, one
-skipped. What has not happened is CI: `development` requires a pull request, `check.yml` runs on
-`pull_request:` and on pushes to `feat/foundation` alone, and the founder chose on 2026-08-20 to leave
-the commits local rather than open one. So the local gate has run and the gate that exists precisely
-because a green local gate missed three DOS-P2 defects has not. **Whoever pushes this opens the pull
-request and reads the run**; until then the entry is done in the sense that the work is finished, and
-not in the sense its own "Done when" column defines.
+**The fifth gate went unmet for a day, and closing it exposed why it could not have been met.** R2's
+eleven tasks landed in five commits with `npm run check` green on the last of them, and the founder
+chose on 2026-08-20 to leave them local. On 2026-08-21 they chose to push everything to `development`
+rather than open a branch — and that surfaced the real problem: **`check.yml` scoped its `push:`
+trigger to `feat/foundation`, a branch that no longer exists on the remote**, while `development`
+carries **no branch protection**. So the claim this paragraph used to make — that `development`
+requires a pull request — was false, and a push would have run no workflow at all. Both halves of the
+guarantee were gone at once. The trigger now names `development`, so a push is checked.
 
 **R2 existed because the five decisions those rows were waiting on were taken on 2026-08-17.** Each had
 sat as "open" while being unimplementable, which is the state this track exists to resolve rather than
