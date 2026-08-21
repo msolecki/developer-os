@@ -236,6 +236,49 @@ function frontmatterFindings(
         ),
       );
     }
+    /**
+     * **The fourth field with this rule, and the last one that needed it**
+     * (`BACKLOG.md` §1 NEW-30). NEW-11 gave `tags` and `summary` the predicate
+     * `title` already had; `aliases` was left validated by `isStringArray`
+     * alone.
+     *
+     * **`sources` is the field that looks like a fifth and is not, and saying so
+     * is the point of naming it.** It is also `isStringArray` and nothing more
+     * at the schema layer — so an enumeration of `RESERVED_KEYS` reaches it,
+     * finds a bare type check, and reopens this question. What covers it is a
+     * layer down: a blank source matches no scheme and no `byPath` candidate, so
+     * `provenanceFindings`, composed after this function, raises an **error**
+     * for it. Everything else is
+     * an enum, a date, an integer or the literal `1`. An earlier version of this
+     * docblock dropped the `sources` clause and claimed the remainder were all
+     * enums and dates, which was false — the same mistake NEW-31 was registered
+     * to stop this file making, made in the paragraph that cites it.
+     *
+     * **It reads differently from the two above because an alias is consumed
+     * rather than displayed.** There is no rendering symptom to point at: an
+     * alias reaches neither the tag cloud nor the catalog row. What it reaches
+     * is `byAlias` link resolution, search tokenisation and `index.json`, so a
+     * blank one is an alias key nobody can type — a key that silently resolves
+     * nothing, rather than a row that reads badly.
+     *
+     * **A warning on the same ruling of 2026-08-17, not a fresh decision.** The
+     * line the founder drew is whether the note still reaches the index: `title`
+     * errors because a note with no readable title cannot be identified at all;
+     * everything else warns. An error here would make an existing vault with one
+     * stray alias un-indexable until somebody hand-edited it.
+     */
+    for (const alias of note.aliases) {
+      if (!isVisuallyBlank(alias)) continue;
+      findings.push(
+        finding(
+          "frontmatter",
+          "warn",
+          note.path,
+          "aliases",
+          "an alias with no visible character is a link target nobody can type; remove it or give it a name",
+        ),
+      );
+    }
   }
 
   for (const folder of build.unclassifiedFolders) {

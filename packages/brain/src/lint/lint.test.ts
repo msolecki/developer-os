@@ -429,6 +429,69 @@ describe("invisible frontmatter values", () => {
     expect(result.findings.filter((f) => f.key === "tags")).toStrictEqual([]);
   });
 
+  it("warns about an alias with no visible character", async () => {
+    /**
+     * **The fourth field, and the last one** — `BACKLOG.md` §1 NEW-30. NEW-11
+     * gave `tags` and `summary` the predicate `title` already had and left
+     * `aliases` validated by `isStringArray` alone, so `aliases: ["\u200B"]`
+     * parsed and indexed.
+     *
+     * **A warning rather than an error, on the founder's ruling of 2026-08-17
+     * for this class**, not a fresh decision: `title` is an error because a note
+     * with no readable title cannot be identified at all, while `tags`,
+     * `summary` and now `aliases` are warnings because the note still reaches
+     * the index. An alias is consumed rather than displayed — it reaches
+     * `byAlias` link resolution, search tokenisation and `index.json` — so what
+     * a blank one costs is an alias key nobody can type, which is the same shape
+     * of harm as a tag nobody can read.
+     */
+    const result = await findingsFor({ aliases: '["Ops", "\u200B"]' });
+    expect(
+      result.findings.filter((f) => f.class === "frontmatter" && f.key === "aliases"),
+    ).toHaveLength(1);
+    expect(
+      result.findings.find((f) => f.key === "aliases")?.severity,
+      "an invisible alias is a warning, not an error",
+    ).toBe("warn");
+  });
+
+  it("warns once per distinct blank alias, and leaves an ordinary one alone", async () => {
+    /**
+     * **Distinct, not "once per blank"**, because `buildIndex` puts `aliases`
+     * through a `Set` before lint sees them — two copies of the same invisible
+     * are one entry and therefore one finding. The two below are different code
+     * points, which is what makes this two rather than one.
+     */
+    const two = await findingsFor({ aliases: '["\u200B", "Ops", "\u3164"]' });
+    expect(two.findings.filter((f) => f.key === "aliases")).toHaveLength(2);
+    const repeated = await findingsFor({ aliases: '["\u200B", "\u200B"]' });
+    expect(repeated.findings.filter((f) => f.key === "aliases")).toHaveLength(1);
+    const clean = await findingsFor({ aliases: '["Ops", "Operations"]' });
+    expect(clean.findings.filter((f) => f.key === "aliases")).toStrictEqual([]);
+  });
+
+  it("still indexes a note whose alias is blank", async () => {
+    /**
+     * **Asserts the index, not the absence of an error**, which is the same
+     * correction the blank-tag case below already carries: the weaker form
+     * passes if the alias loop is deleted entirely, and passes if the note is
+     * dropped from the index with no finding at all — it catches only
+     * "somebody turned this into a validation error". The first version of this
+     * case was that weaker form under this stronger name, which a fresh-context
+     * review caught on 2026-08-21.
+     *
+     * The founder's ruling of 2026-08-17 is that the note still reaches the
+     * index, so that is what is pinned.
+     */
+    const files = { "content/DEV/note.md": note({ aliases: '["\u200B"]' }) };
+    const build = await buildIndex(memoryBuild(files));
+    expect(build.index.notes).toHaveLength(1);
+
+    const result = await lintMemory(files);
+    expect(result.findings.some((f) => f.severity === "error")).toBe(false);
+    expect(result.findings.some((f) => f.key === "aliases")).toBe(true);
+  });
+
   it("warns about a summary with no visible character", async () => {
     const result = await findingsFor({ summary: '"\u3164"' });
     expect(result.findings.find((f) => f.key === "summary")?.severity).toBe("warn");

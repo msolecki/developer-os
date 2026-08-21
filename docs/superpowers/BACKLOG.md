@@ -65,7 +65,7 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P10, DOS-P11, DOS-P12 | no documents; added 2026-08-20 | **3 specs, 3 plans, 3 implementations.** The shared-runtime layers no subsystem owned: thirty-eight instruction artifacts, eleven event hooks, nine tooling scripts |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each. **The cutover's scope grew on 2026-08-20** — it now retires the shared runtime entirely, so it follows DOS-P12 rather than DOS-P7 |
-| Repository-level | §1 | **twenty-five open rows** of twenty-seven headings, two of them closed 2026-08-21 — and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **four** need somebody or something no session has (NEW-42 an interactive vendor session, NEW-45 the founder's credits, NEW-20 deliberately not fixed, NEW-7 a machine with Obsidian); **eighteen** came out of R2's own reviews — NEW-27 and NEW-28 from closing NEW-12, NEW-24/25/26/29 from NEW-16, NEW-30 and NEW-31 from NEW-11, NEW-32, NEW-33 and NEW-35 from NEW-15, NEW-34 from Foundation request 2, and NEW-36, NEW-37, NEW-38 and NEW-39 from request 3, NEW-40 from Task 8, and NEW-41 from Task 9; **three** — NEW-44, NEW-46 and NEW-47 — are startable in a session, which is what groups them; the reviews of the NEW-21 diff produced these three, **NEW-45** (above, because it needs credits) and **NEW-43**, which closed on 2026-08-21, the day after it was raised. 4 + 18 + 3 = 25. **NEW-21 left six rows and one has gone; NEW-43 was one of four a session could have taken**, not the only one — NEW-44, NEW-46 and NEW-47 are still there, and NEW-47 needs no credits either |
+| Repository-level | §1 | **twenty-five open rows** of twenty-eight headings, three of them closed 2026-08-21 — NEW-13, NEW-30 and NEW-43 — and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **four** need somebody or something no session has (NEW-42 an interactive vendor session, NEW-45 the founder's credits, NEW-20 deliberately not fixed, NEW-7 a machine with Obsidian); **seventeen** of the eighteen that came out of R2's own reviews are still open — NEW-27 and NEW-28 from closing NEW-12, NEW-24/25/26/29 from NEW-16, NEW-30 and NEW-31 from NEW-11, NEW-32, NEW-33 and NEW-35 from NEW-15, NEW-34 from Foundation request 2, and NEW-36, NEW-37, NEW-38 and NEW-39 from request 3, NEW-40 from Task 8, and NEW-41 from Task 9; **four** — NEW-44, NEW-46, NEW-47 and **NEW-48** — are startable in a session, which is what groups them; the reviews of the NEW-21 diff produced the first three plus **NEW-45** (above, because it needs credits) and **NEW-43**, which closed on 2026-08-21, and the review of NEW-30's own closure produced NEW-48. 4 + 17 + 4 = 25. **NEW-21 left six rows and one has gone; NEW-43 was one of four a session could have taken**, not the only one — NEW-44, NEW-46 and NEW-47 are still there, and NEW-47 needs no credits either |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -103,9 +103,17 @@ founder's machine as user data, not as source material.
 
 ## 1. Open right now
 
-Everything in this section is genuinely open. Nothing here is bookkeeping, and nothing closed stays
-here: NEW-1 through NEW-6, NEW-8, NEW-9, NEW-10, NEW-14, NEW-17, NEW-18 and NEW-19 were removed as
-they closed, between 2026-08-10 and 2026-08-15, and **NEW-12 on 2026-08-17**. What a closed item
+Almost everything in this section is genuinely open, and nothing here is bookkeeping. Rows were once
+removed on closing — NEW-1 through NEW-6, NEW-8, NEW-9, NEW-10, NEW-14, NEW-17, NEW-18 and NEW-19
+between 2026-08-10 and 2026-08-15, and **NEW-12 on 2026-08-17**.
+
+**Three rows closed on 2026-08-21 and stayed: NEW-13, NEW-30 and NEW-43.** The practice changed
+before the sentence describing it did, which a fresh-context review caught the day it happened. What
+they buy by staying is a closure that carries its own evidence — which test reddens without the fix,
+what the closure does *not* cover, and in NEW-30's case that the decision the row asked for had
+already been made for its class. That is worth more in place than in a commit message somebody has to
+go looking for. **A row that closes should be marked closed, not deleted**, and the removals above are
+the older convention rather than the rule. What a closed item
 leaves behind is a row in §8, a clause in a spec, or a test; if it left nothing, it was not worth
 recording. Git history is the archive.
 
@@ -114,15 +122,21 @@ recording. Git history is the archive.
 one. A residual is a defect like any other and gets `NEW-24` through `NEW-28`; the row it came from
 is named in its own text, which is where the lineage belongs.
 
-**Twenty-five open rows, recounted 2026-08-21, and they are not all the same kind of open.** **None is waiting on R2 to land a fix.** NEW-11, NEW-12, NEW-15, NEW-16 and NEW-22 all closed
+**Twenty-five open rows, recounted 2026-08-21 after NEW-30 closed and NEW-48 was raised by the review of that closure, and they are not all the same kind of open.** **None is waiting on R2 to land a fix.** NEW-11, NEW-12, NEW-15, NEW-16 and NEW-22 all closed
 on 2026-08-17; what remains here is somebody else's or a residual of that work. **NEW-11 closed
-2026-08-17** and left NEW-30, the fourth field with the same gap. All four
+2026-08-17** and left NEW-30 and NEW-31; NEW-30 closed 2026-08-21, so **NEW-31 — a stray zero-width
+joiner that still hides a duplicate title — is the one still open.** All four
 that were waiting on a decision got one on 2026-08-17; **NEW-16 closed the same day** and left three
 residual rows of its own — NEW-24, NEW-25 and NEW-26. They stay here until R2 closes them, because a row leaves this
 section when its fix is committed, not when its question is answered. Three were somebody else's:
 **NEW-20** and **NEW-13** registered as deliberately-not-fixed, and **NEW-7** waiting on a machine
 with Obsidian. **NEW-13 has since closed** — 2026-08-21, by Task 19 Step 5, against brands that had
 shipped nine days earlier — so that group is two.
+
+**NEW-48 belongs to neither group above and neither below**, so it is named here rather than left to
+be inferred: the review of NEW-30's *closure* raised it, which is a fourth provenance this section did
+not have until 2026-08-21. Partitioning the preamble's groups without it comes up one short of the
+twenty-five.
 
 **NEW-21 was a fourth, closed on 2026-08-20, and left six rows behind it** — NEW-42 through NEW-47.
 Only **NEW-42** came from the work; **NEW-43 through NEW-47 came from two fresh-context reviews of its
@@ -132,7 +146,9 @@ could be deleted with the whole suite green, and the traversal added to the sche
 branches its own test never drove — and the distinction matters, because a reader who maps the review's
 findings one-to-one onto these rows gets the wrong set.
 
-**Eighteen are new, and every one was found by a fresh-context review rather than by the work itself** —
+**Seventeen of the eighteen new rows are still open, and every one of the eighteen was found by a
+fresh-context review rather than by the work itself.** NEW-30 closed on 2026-08-21 and is still listed
+below rather than deleted, under the practice this section's opening paragraph describes:
 NEW-27 and NEW-28 from the review that closed NEW-12; NEW-24, NEW-25, NEW-26 and NEW-29 from the one
 that closed NEW-16; NEW-30 and NEW-31 from the one that closed NEW-11; NEW-32 and NEW-33 from the
 one that closed NEW-15; NEW-34 from the round that closed Foundation request 2, NEW-35 from the review that verified NEW-15's closure, and NEW-36 to NEW-39 from the review rounds on request 3, NEW-40 from Task 8 and NEW-41 from Task 9 —
@@ -176,6 +192,33 @@ here rather than a row below.
 **A row being open is not an invitation to implement it** — read which group it is in first. NEW-15 is
 the cautionary case: it read like an implementation for a day, and cost a full task to discover it was
 not.
+
+### NEW-48 — the Brain spec's lint-class table documents no warning the class emits
+
+- **Status:** open, registered 2026-08-21 by the fresh-context review of the NEW-30 closure ·
+  **Owner:** whoever next touches `packages/brain/src/lint/lint.ts` — DOS-P7 by default ·
+  **Size:** XS
+- **What is stale.** `specs/2026-07-21-developer-os-brain-engine-design.md` §7 enumerates the
+  `frontmatter` lint class as errors plus one `info`. The class emits **five** `warn` findings that
+  appear nowhere in it, and the first count of them said four:
+  swallowed prose key (`lint.ts:159`, carried from Task 2's review), blank tag (`:220`), blank summary
+  (`:231`), blank alias (`:273`, 2026-08-21), and a **symlinked folder** (`:304`) — which the spec's
+  own symlink paragraph does not cover, because that paragraph says a symlink out of the vault is
+  refused during path resolution and never says lint reports one. The unclassified-folder warning
+  (`:286`) is the one that *is* documented, under `unclassified-folder` in §5.
+- **Why it matters more than a missing row.** §7 opens "Six classes, matching `BACKLOG.md` §3", which
+  reads as an authoritative enumeration; a reader checking whether a warning is expected behaviour
+  finds a table that says it is not. The spec is the design of record for a closed subsystem, so
+  nothing else contradicts it.
+- **It is drift rather than an amendment**, which is why it is a §1 row and not a §8 one: no decision
+  changed the spec's contract, the implementation grew warnings the table was never updated for. They
+  arrived one at a time over three weeks — the swallowed prose key from Task 2's review, the symlinked
+  folder alongside it, two from NEW-11, and the blank alias from NEW-30 — which is how a table stays
+  wrong without anyone deciding it should.
+- **How to close it:** add the five to §7's table with the dates they landed, and check whether the
+  other five classes have the same gap before assuming only `frontmatter` does. **Count them from
+  `lint.ts` rather than from this row** — the first version of it said four and missed the symlink
+  warning, which is the same mistake one level down.
 
 ### NEW-47 — whether a model-run command can write raw bytes to the vendor's stdout is unexamined
 
@@ -401,9 +444,17 @@ not.
 
 ### NEW-30 — `aliases` is the fourth field with no visible-character rule
 
-- **Status:** open, registered 2026-08-17 by the review that closed NEW-11 · **Owner:** whoever next
-  touches `packages/brain/src/schema/note.ts` — DOS-P7 by default · **Size:** XS · **The weakest of
-  the four, and registered rather than fixed for that reason**
+- **Status:** **closed 2026-08-21.** Registered 2026-08-17 by the review that closed NEW-11 ·
+  **Size:** XS · **The weakest of the four, and registered rather than fixed for that reason**
+- **Closed in `lint.ts`, not `note.ts`**, which is where the row guessed it would land: the rule
+  NEW-11 established lives beside the `tags` and `summary` warnings in the lint pass, and putting the
+  fourth field anywhere else would have split one rule across two files.
+- **The decision the row named was already made.** It asked whether a blank alias is a warning like a
+  blank tag or an error like a blank title. The founder's ruling of 2026-08-17 drew that line by
+  whether the note still reaches the index — `title` errors because a note with no readable title
+  cannot be identified, everything else warns — so `aliases` follows the class rather than needing a
+  fresh answer. An error would make an existing vault with one stray alias un-indexable until somebody
+  hand-edited it, which is the outcome that ruling exists to avoid.
 - NEW-11 gave `tags` and `summary` the predicate `title` already had. **`aliases` is validated by
   `isStringArray` and nothing more**, exactly as those two were, so `aliases: ["\u200B"]` passes.
 - **It has no rendering symptom**, which is why it was left: an alias reaches neither the tag cloud
@@ -413,8 +464,18 @@ not.
 - **The remaining fields were checked and are covered**: `sources` already raises a `provenance`
   error for a blank value, `title` has the rule, and everything else is an enum, a date, an integer
   or the literal `1`. `aliases` is the last one.
-- Closing it is one `isVisuallyBlank` call beside the two NEW-11 added, plus a decision about whether
-  a blank alias is a warning like a blank tag or an error like a blank title.
+- **Registered text, kept as written:** closing it is one `isVisuallyBlank` call beside the two NEW-11
+  added, plus a decision about whether a blank alias is a warning like a blank tag or an error like a
+  blank title. **That decision is answered above** — this bullet is the row as it was raised, not an
+  open question, and it stays because the closure's reasoning is only checkable against it.
+- **Red-verified, both directions.** Without the loop the two positive cases fail `0 vs 1` and
+  `0 vs 2`; with `"warn"` changed to `"error"` the severity assertion fails and so does the case that
+  pins the note still linting clean, which is the half the founder's ruling is actually about.
+- **What it does not cover, because a row that closes should say so.** `aliases` goes through a `Set`
+  in `buildIndex` before lint sees it, so two copies of the same invisible are one finding rather than
+  two — the tests say "per distinct blank" for that reason. And `sources` is the field that looks like
+  a fifth case and is not: it is `isStringArray` at the schema layer like `aliases` was, and what
+  covers it is the provenance **error** a blank source already raises one layer down.
 
 ### NEW-32 — a middle symlink hop is on none of the trust check's chains
 
