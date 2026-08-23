@@ -7,6 +7,7 @@ import {
   success,
 } from "@developer-os/core";
 import type { CliResult, ExitCode } from "@developer-os/core";
+import { CAPTURE_STATUSES } from "@developer-os/brain";
 
 import { renderBrain, runBrain } from "./commands/brain.js";
 import type { BrainResultV1, BrainSubcommand } from "./commands/brain.js";
@@ -54,6 +55,7 @@ const USAGE = [
   "  --text <text>    the observation to capture; stdin when absent (capture)",
   "  --id <id>        the capture to decide on (review)",
   "  --decision <d>   accept, reject or edit (review)",
+  "  --status <s>     which status to list; quarantined by default (review)",
   "  --agent <name>   claude or codex; the first installed one by default (ingest)",
   "  --probe          probe each agent CLI; Claude's probe writes ~/.claude.json (doctor)",
   "  --resume <id>    finish an incomplete transaction (repair)",
@@ -65,6 +67,7 @@ const OPTIONS = {
   "dry-run": { type: "boolean" },
   agent: { type: "string" },
   decision: { type: "string" },
+  status: { type: "string" },
   id: { type: "string" },
   json: { type: "boolean" },
   yes: { type: "boolean" },
@@ -102,7 +105,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly OptionName[]>> = {
   brain: ["dry-run", "json", "limit"],
   search: ["json", "limit"],
   capture: ["text", "json"],
-  review: ["id", "decision", "json"],
+  review: ["id", "decision", "status", "json"],
   ingest: ["limit", "json", "yes", "agent"],
   init: ["dry-run", "yes", "json"],
   status: ["json"],
@@ -290,17 +293,39 @@ function renderCapture(result: CaptureResultV1): readonly string[] {
  * own vault, and a reviewer reads it there rather than through a terminal that
  * would have to re-screen every line of it.
  */
-function renderReview(result: ReviewResultV1): readonly string[] {
+/**
+ * **Told what was asked for, never sniffed from the rows.** A first version read
+ * `result.captures[0]?.status`, which is correct only while every row shares a
+ * status — and the *other* answer `BACKLOG.md` §1 NEW-41 left open is to widen
+ * the listing so they do not. That version would then have labelled every row
+ * with row zero's status, silently, which is the exact defect it was written to
+ * fix. A fresh-context review caught it on 2026-08-21, one refactor from live.
+ *
+ * **It also broke the default it claimed not to touch:** with nothing to infer
+ * from, a bare `review` on an empty queue said "no captures are at that status"
+ * to a user who named none. The requested status is `null` on that path and the
+ * two original strings are restored for it.
+ *
+ * The name echoed is the **frozen constant**, not the user's string — a lookup
+ * rather than a second validation, so nothing user-typed reaches stdout here.
+ */
+export function renderReview(
+  result: ReviewResultV1,
+  requested: string | null,
+): readonly string[] {
   if (result.reviewed > 0) {
     return result.captures.map(
       (capture) => `Reviewed ${capture.captureId}, now ${capture.status}.`,
     );
   }
+  const listed = CAPTURE_STATUSES.find((status) => status === requested) ?? null;
   if (result.captures.length === 0) {
-    return ["No captures are waiting for review."];
+    return listed === null
+      ? ["No captures are waiting for review."]
+      : [`No captures are at ${listed}.`];
   }
   return [
-    "Quarantined captures:",
+    listed === null ? "Quarantined captures:" : `Captures at ${listed}:`,
     ...result.captures.map((capture) => `  ${capture.captureId}`),
   ];
 }
@@ -505,14 +530,16 @@ async function dispatch(
        */
       const id = optionString(invocation.values.id);
       const decision = optionString(invocation.values.decision);
+      const status = optionString(invocation.values.status);
       return emit(
         io,
         await runReview(context, {
           ...(id === null ? {} : { id }),
           ...(decision === null ? {} : { decision }),
+          ...(status === null ? {} : { status }),
         }),
         json,
-        renderReview,
+        (data) => renderReview(data, status),
       );
     }
     case "ingest": {

@@ -65,7 +65,7 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P10, DOS-P11, DOS-P12 | no documents; added 2026-08-20 | **3 specs, 3 plans, 3 implementations.** The shared-runtime layers no subsystem owned: thirty-eight instruction artifacts, eleven event hooks, nine tooling scripts |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each. **The cutover's scope grew on 2026-08-20** — it now retires the shared runtime entirely, so it follows DOS-P12 rather than DOS-P7 |
-| Repository-level | §1 | **twenty-five open rows** of twenty-eight headings, three of them closed 2026-08-21 — NEW-13, NEW-30 and NEW-43 — and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **four** need somebody or something no session has (NEW-42 an interactive vendor session, NEW-45 the founder's credits, NEW-20 deliberately not fixed, NEW-7 a machine with Obsidian); **seventeen** of the eighteen that came out of R2's own reviews are still open — NEW-27 and NEW-28 from closing NEW-12, NEW-24/25/26/29 from NEW-16, NEW-30 and NEW-31 from NEW-11, NEW-32, NEW-33 and NEW-35 from NEW-15, NEW-34 from Foundation request 2, and NEW-36, NEW-37, NEW-38 and NEW-39 from request 3, NEW-40 from Task 8, and NEW-41 from Task 9; **four** — NEW-44, NEW-46, NEW-47 and **NEW-48** — are startable in a session, which is what groups them; the reviews of the NEW-21 diff produced the first three plus **NEW-45** (above, because it needs credits) and **NEW-43**, which closed on 2026-08-21, and the review of NEW-30's own closure produced NEW-48. 4 + 17 + 4 = 25. **NEW-21 left six rows and one has gone; NEW-43 was one of four a session could have taken**, not the only one — NEW-44, NEW-46 and NEW-47 are still there, and NEW-47 needs no credits either |
+| Repository-level | §1 | **twenty-five open rows** of twenty-nine headings, four of them closed 2026-08-21 — NEW-13, NEW-30, NEW-41 and NEW-43 — and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **four** need somebody or something no session has (NEW-42 an interactive vendor session, NEW-45 the founder's credits, NEW-20 deliberately not fixed, NEW-7 a machine with Obsidian); **sixteen** of the eighteen that came out of R2's own reviews are still open — NEW-27 and NEW-28 from closing NEW-12, NEW-24/25/26/29 from NEW-16, NEW-30 and NEW-31 from NEW-11, NEW-32, NEW-33 and NEW-35 from NEW-15, NEW-34 from Foundation request 2, and NEW-36, NEW-37, NEW-38 and NEW-39 from request 3, NEW-40 from Task 8, and NEW-41 from Task 9; **five** — NEW-44, NEW-46, NEW-47, **NEW-48** and **NEW-49** — are startable in a session, which is what groups them; the reviews of the NEW-21 diff produced the first three plus **NEW-45** (above, because it needs credits) and **NEW-43**, which closed on 2026-08-21, and the reviews of NEW-30's and NEW-41's own closures produced NEW-48 and NEW-49. 4 + 16 + 5 = 25. **NEW-21 left six rows and one has gone; NEW-43 was one of four a session could have taken**, not the only one — NEW-44, NEW-46 and NEW-47 are still there, and NEW-47 needs no credits either |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -122,7 +122,7 @@ recording. Git history is the archive.
 one. A residual is a defect like any other and gets `NEW-24` through `NEW-28`; the row it came from
 is named in its own text, which is where the lineage belongs.
 
-**Twenty-five open rows, recounted 2026-08-21 after NEW-30 closed and NEW-48 was raised by the review of that closure, and they are not all the same kind of open.** **None is waiting on R2 to land a fix.** NEW-11, NEW-12, NEW-15, NEW-16 and NEW-22 all closed
+**Twenty-five open rows, recounted 2026-08-21. Two closed that day — NEW-30 and NEW-41 — and two were raised by the reviews of those very closures, NEW-48 and NEW-49, so the count moved by nothing. They are not all the same kind of open.** **None is waiting on R2 to land a fix.** NEW-11, NEW-12, NEW-15, NEW-16 and NEW-22 all closed
 on 2026-08-17; what remains here is somebody else's or a residual of that work. **NEW-11 closed
 2026-08-17** and left NEW-30 and NEW-31; NEW-30 closed 2026-08-21, so **NEW-31 — a stray zero-width
 joiner that still hides a duplicate title — is the one still open.** All four
@@ -133,10 +133,10 @@ section when its fix is committed, not when its question is answered. Three were
 with Obsidian. **NEW-13 has since closed** — 2026-08-21, by Task 19 Step 5, against brands that had
 shipped nine days earlier — so that group is two.
 
-**NEW-48 belongs to neither group above and neither below**, so it is named here rather than left to
-be inferred: the review of NEW-30's *closure* raised it, which is a fourth provenance this section did
-not have until 2026-08-21. Partitioning the preamble's groups without it comes up one short of the
-twenty-five.
+**NEW-48 and NEW-49 belong to neither group above and neither below**, so they are named here rather
+than left to be inferred: the reviews of NEW-30's and NEW-41's *closures* raised them, which is a
+fourth provenance this section did not have until 2026-08-21. Partitioning the preamble's groups
+without them comes up two short of the twenty-five.
 
 **NEW-21 was a fourth, closed on 2026-08-20, and left six rows behind it** — NEW-42 through NEW-47.
 Only **NEW-42** came from the work; **NEW-43 through NEW-47 came from two fresh-context reviews of its
@@ -146,9 +146,10 @@ could be deleted with the whole suite green, and the traversal added to the sche
 branches its own test never drove — and the distinction matters, because a reader who maps the review's
 findings one-to-one onto these rows gets the wrong set.
 
-**Seventeen of the eighteen new rows are still open, and every one of the eighteen was found by a
-fresh-context review rather than by the work itself.** NEW-30 closed on 2026-08-21 and is still listed
-below rather than deleted, under the practice this section's opening paragraph describes:
+**Sixteen of the eighteen new rows are still open, and every one of the eighteen was found by a
+fresh-context review rather than by the work itself.** NEW-30 and NEW-41 closed on 2026-08-21 and are
+still listed below rather than deleted, under the practice this section's opening paragraph
+describes:
 NEW-27 and NEW-28 from the review that closed NEW-12; NEW-24, NEW-25, NEW-26 and NEW-29 from the one
 that closed NEW-16; NEW-30 and NEW-31 from the one that closed NEW-11; NEW-32 and NEW-33 from the
 one that closed NEW-15; NEW-34 from the round that closed Foundation request 2, NEW-35 from the review that verified NEW-15's closure, and NEW-36 to NEW-39 from the review rounds on request 3, NEW-40 from Task 8 and NEW-41 from Task 9 —
@@ -192,6 +193,28 @@ here rather than a row below.
 **A row being open is not an invitation to implement it** — read which group it is in first. NEW-15 is
 the cautionary case: it read like an implementation for a day, and cost a full task to discover it was
 not.
+
+### NEW-49 — the agent-facing `review` route cannot reach a decided capture
+
+- **Status:** open, registered 2026-08-21 by the fresh-context review of the NEW-41 closure ·
+  **Owner:** whoever next touches `workflows/review/workflow.yaml` — DOS-P7 by default ·
+  **Size:** S
+- **What is uncovered.** NEW-41 gave the CLI `review --status <status>`, so a human can find the id of
+  a capture they accepted and then want to reject. The **agent** route did not gain it:
+  `workflows/review/workflow.yaml` declares one input, `decision`, its `list` step is `capture.list`
+  with no status, and the rendered `SKILL.md` in both vendor trees still says "quarantined captures".
+- **Why it was not taken with NEW-41.** A canonical workflow is a contract: adding an input means a
+  version bump and a regeneration of both vendor trees, with the drift gates proving it. That is
+  wider than the one condition NEW-41 was registered as.
+- **Why it matters more than it looks.** Knowledge-pipeline §3.1 made capture agent-authored, so the
+  agent is the party that touches this pipeline most. A route the human has and the agent does not is
+  the asymmetry that spec spent its longest section avoiding.
+- **How to close it:** add the input to the workflow, bump the version, regenerate, and check the
+  skill body says what the flag does rather than restating the default. **The word "quarantined" also
+  lives in the workflow's own `description:` field** (`workflows/review/workflow.yaml:4`), which is
+  what both rendered skills inherit — so closing this means editing that line too, not only adding an
+  input. A review of this row caught that the "how to close" step would otherwise have left the
+  sentence a reader actually sees unchanged.
 
 ### NEW-48 — the Brain spec's lint-class table documents no warning the class emits
 
@@ -735,12 +758,30 @@ not.
 
 ### NEW-41 — `review`'s listing shows only `quarantined`, so half of the new transition is unreachable
 
-- **Status:** open, registered 2026-08-20 by the round-2 review of Track R R2 Task 9 ·
-  **Owner:** DOS-P7 · **Size:** S · **The half of the gap Task 9 did not close**
+- **Status:** **closed 2026-08-21.** Registered 2026-08-20 by the round-2 review of Track R R2
+  Task 9 · **Size:** S · **The half of the gap Task 9 did not close**
+- **Closed by `review --status <status>`, and the default is unchanged.** The row left two answers
+  open — widen the listing, or add a way to ask — and named the first a display decision, because a
+  listing mixing statuses has to say which row is which. The narrower one was taken: a bare `review`
+  is still the pending queue, so nothing that reads it starts seeing decided captures, and an
+  accepted capture's id is now reachable **through the CLI** rather than only through `ingest`'s
+  refusal.
+- **The agent-facing route did not gain it, and the closure says so rather than claiming the
+  product.** `workflows/review/workflow.yaml` declares one input, `decision`; its `list` step is
+  `capture.list` with no status, and both rendered skills still say "quarantined captures". An agent
+  driving `review` through its skill still cannot reach an accepted id. Extending it is a canonical
+  workflow contract change — a version bump and a regeneration of both vendor trees — which is wider
+  than this row. **Registered as NEW-49.**
+- **The status is validated against `CAPTURE_STATUSES`, not against a list written at the call
+  site**, so a seventh status cannot become listable in one place and unlistable in another. An
+  unknown value refuses naming what is legal; listing nothing would be indistinguishable from an
+  empty vault.
+- **Red-verified**: before the change, `--status accepted` returned the quarantined capture, and the
+  bad-status case returned `ok`. Both now fail without the fix.
 - **What Task 9 closed.** Spec §5.5 gained `accepted → rejected`, so a capture that `ingest`
   refuses deterministically can be rejected with a verb instead of a hand edit. That path
   works because the refusal *prints the capture id* beside the capture.
-- **What it did not.** `listCaptures` filters `status !== "quarantined"` (`review.ts:255`), so
+- **What it did not.** `listQuarantined` filtered `status !== "quarantined"`, so
   `developer-os review` with no arguments never shows an accepted capture. The justification
   repeated in five places leads with "a user who accepts a capture and then changes their
   mind" — and that user cannot find the id through the product at all. They have the verb and
@@ -749,9 +790,12 @@ not.
   means, and the plan scoped the task to the transition. It is also not obviously a widening:
   a listing that shows accepted captures beside quarantined ones has to say which is which, and
   that is a display decision rather than a table row.
-- **The measurement.** `review.ts:255` is one condition; the test that would pin it is one
-  case. The cost of leaving it is that the headline reason for the transition is served only
-  by the path nobody wrote it for.
+- **The measurement, as registered.** One condition and one case. **It cost more than that**, and the
+  gap between the estimate and the work is the useful part: the condition was one line, and the
+  renderer above it hard-coded `Quarantined captures:` over whatever was listed, `renderReview` had no
+  test at all, and validating the new flag where the listing needed it put it *after*
+  `loadOrCreateRedactionKey` — so a mistyped `--status` wrote a durable secret before refusing. A
+  fresh-context review found all three.
 
 
 ### NEW-24 — a common redaction pattern refuses every ingest, undiagnosably
@@ -1483,9 +1527,14 @@ plan was committed — §13.4's "staged result" and §17.5's security cases. Bot
 was taking silently. That they then went eight days without the cross-reference the review won for
 them is the part worth remembering.
 
-**Three rows were raised by Track R entry R2, on 2026-08-17, 2026-08-19 and 2026-08-20, and all
-three are unratified.** They are the only unratified rows in this section, and they are also the place where
-§8's two rules pull against each other: the eviction rule says a row leaves when the amended document carries the cross-reference, and
+**Six rows are unratified, and the table below now carries all six.** Three were raised by Track R
+entry R2 on 2026-08-17, 2026-08-19 and 2026-08-20; **three more arrived on 2026-08-21** — the Brain
+spec's lint-class table (NEW-48), the program plan's Task 7 split into two specs, and
+knowledge-pipeline §5.6's `--status` line (NEW-41). This paragraph said "three" and "the only
+unratified rows in this section" while the table beneath it had grown to six, which a fresh-context
+review caught the day the third landed.
+
+**The R2 three are the place where §8's two rules pull against each other**: the eviction rule says a row leaves when the amended document carries the cross-reference, and
 `foundation.md` §2 carries it in the same commit that adds the row. **Ratification wins** — a row
 whose amendment nobody has approved is exactly what this index exists to surface, so it stays until
 the founder rules on it, cross-reference or not. A founder decision to *implement* NEW-16, or Foundation request 3, is not the
@@ -1504,6 +1553,7 @@ is precisely the kind of rule that goes unread by whoever is editing past it.
 | knowledge-pipeline spec §5.5, the transition table | a row for **`accepted → rejected`**, taken by `review --decision reject`. The table had one row per decision, all from `quarantined`, so a user who accepted a capture and then changed their mind had no verb — the only way to stop `ingest` retrying it was to hand-edit the frontmatter back to `quarantined`, which is what both of `ingest`'s recovery strings told them to do. A product that recommends a hand edit of its own data has a gap where a verb should be, and that same hand edit is what `failed` exists to describe going wrong. **`accept` and `edit` deliberately did not gain the equivalent row**: re-accepting is not a transition — `accepted → accepted` is not a row this table can hold — and `edit` maps to `quarantined`, so running it from `accepted` would silently withdraw an approval as a side effect of changing the text — the verb's name says nothing about un-approving, and a user who wants that has `reject`. Rejection is the only safe direction from `accepted`, because `rejected` is terminal for automation and no later phase reads it. **`CAPTURE_STATUSES` gains no member** — a row in a transition table, not a seventh status. Both retired recovery strings now name the verb, and `review`'s own refusal names the decisions legal from wherever the capture actually is rather than telling the user to edit their frontmatter | Track R R2 Task 9, 2026-08-20 |
 | `specs/…-brain-engine-design.md` §7, the lint-class table | the `frontmatter` row gains the **five `warn` findings** the class emits and the table listed none of: a key whose value swallowed the prose after it, a symlinked folder that is not followed, and a `tag`, `summary` or `alias` with no visible character. **Drift, not a decision** — no ruling changed what this class reports; the implementation grew warnings over three weeks and the table was never updated for any of them, so the ratification asked for is that the table may be brought into line rather than that anything may change. **The symlink one is the easy miss**: §4 says a symlink out of the vault is refused during path resolution, which reads as covering it and does not — this is lint reporting a folder *inside* the vault that was skipped, and the first count of these findings said four because of it. The amendment enumerates each with the change that added it, so the next reader counts from the code rather than from prose | `BACKLOG.md` §1 NEW-48, 2026-08-21 |
 | `plans/2026-07-21-developer-os-program.md`, Task 7 | **Task 7 produces two specs and two plans, not one of each.** Its "must decide" list covers Git, scheduled automation, release and update, and schema migration; read against their dependencies those are two clusters — configuration mutability gates both opt-ins, update gates migration — sharing only the manifest. The checkpoint is unchanged and is met when **both** halves land: nothing is added to or removed from what Task 7 must deliver, only the number of documents it delivers it in. The first, `specs/2026-08-21-developer-os-opt-in-surfaces-design.md`, is written; the second is owed after it is approved. **Registered rather than applied**, because the program plan's Global Constraints require an approved spec before the work each task names, and this row is the founder's to ratify | the DOS-P7 spec cycle, 2026-08-21 |
+| knowledge-pipeline spec §5.6, the `review` surface block | a `--status <status>` line. **§5.5's `accepted → rejected` row had no route to it**: that transition exists for a user who accepts a capture and then changes their mind, and the listing filtered to `quarantined`, so the id was unreachable through the command — the verb existed and nothing led to it. **The default is unchanged rather than widened**, which is the narrower of the two answers NEW-41 left open; the other, mixing statuses in one listing, needs the listing to say which row is which and is a display decision the row declined to take. The flag is refused beside `--id` or `--decision`, because it chooses what a listing shows rather than what a decision applies to | `BACKLOG.md` §1 NEW-41, 2026-08-21 |
 
 **One row was raised by the scope ruling of 2026-08-20**, and it is ratified in substance and
 undischarged in the document. The founder ruled that the legacy shared runtime is retired entirely and

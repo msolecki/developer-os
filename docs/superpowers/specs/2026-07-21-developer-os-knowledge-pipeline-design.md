@@ -423,10 +423,19 @@ seventh member into a frozen ordered list to record something the file's own mti
 
 ```text
 developer-os review                                  list quarantined captures
+developer-os review --status <status>                list captures at that status
 developer-os review --id <id> --decision accept      status → accepted
 developer-os review --id <id> --decision reject      status → rejected, source untouched
 developer-os review --id <id> --decision edit        re-read, re-redact, re-hash, record
 ```
+
+**Amended 2026-08-21 by `BACKLOG.md` §1 NEW-41 — `--status` was added because §5.5's own
+`accepted → rejected` row had no route to it.** That transition exists for a user who accepts a
+capture and then changes their mind, and the listing showed `quarantined` alone, so that user could
+not find the id through this command at all: they had the verb and no way to reach it. The default is
+**unchanged** — a bare `review` is still the pending queue — and the flag is refused beside `--id` or
+`--decision`, because it chooses what a listing shows rather than what a decision applies to.
+Registered in `BACKLOG.md` §8.
 
 **`edit` re-validates; it does not open an editor.** The capture is Markdown in the user's own
 vault, edited in Obsidian or any editor. `--decision edit` is the verb that brings a hand edit back

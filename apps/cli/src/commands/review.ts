@@ -16,6 +16,7 @@ import type {
 } from "@developer-os/core";
 import {
   applyReviewDecision,
+  CAPTURE_STATUSES,
   decisionsFrom,
   isReviewDecision,
   parseCaptureFile,
@@ -64,6 +65,27 @@ export interface ReviewOptions {
   readonly id?: string;
   /** `--decision`. Absent means "list"; present without `--id` is refused. */
   readonly decision?: string;
+  /**
+   * `--status`. Which status the listing shows; absent means `quarantined`.
+   *
+   * **It exists because the transition spec §5.5 added had no route to it**
+   * (`BACKLOG.md` §1 NEW-41). `accepted → rejected` is taken by
+   * `review --id <id> --decision reject`, and its headline case is a user who
+   * accepted a capture and changed their mind — who could not find the id,
+   * because the listing showed `quarantined` alone. They had the verb and no way
+   * to reach it.
+   *
+   * **The default is unchanged rather than widened**, which is the narrower of
+   * the two answers the row left open: a bare `review` is still the pending
+   * queue, so nothing that reads it starts seeing decided captures.
+   *
+   * **A display decision was taken anyway**, and an earlier version of this
+   * paragraph denied it. The listing has to say what it is showing, so
+   * `renderReview` names the requested status in both its heading and its empty
+   * line. What widening would additionally require is a listing that says which
+   * status each *row* is — that one is still untaken.
+   */
+  readonly status?: string;
 }
 
 /** Vault-relative, under the configured content root. Spec §3.4. */
@@ -222,23 +244,69 @@ interface Listing {
 }
 
 /**
- * Every quarantined capture, in id order, and nothing else.
+ * Which status a listing shows, defaulting to `quarantined`.
+ *
+ * **Validated against `CAPTURE_STATUSES` rather than against a list written
+ * here**, so a seventh status cannot become listable by being added in one place
+ * and unlistable by being forgotten in another. An unknown value is a refusal
+ * naming what is legal — the alternative, silently listing nothing, is
+ * indistinguishable from an empty vault.
+ */
+function listedStatus(options: ReviewOptions): CaptureStatus {
+  const requested = options.status;
+  if (requested === undefined) return "quarantined";
+  if (options.id !== undefined || options.decision !== undefined) {
+    /**
+     * **A flag that does nothing is refused rather than ignored**, which is the
+     * convention `resolveTarget` already sets for `--id` without `--decision`.
+     * `--status` selects what a *listing* shows; a decision names one capture by
+     * id, so the two together describe two different commands. Accepting it
+     * silently would also leave the value unvalidated, since the decision path
+     * never reaches the listing.
+     */
+    throw new ReviewRefusal(
+      EXIT_CODES.invalidInput,
+      "--status chooses what a listing shows and means nothing beside --id or --decision",
+      [],
+      "developer-os review --status <status>, or developer-os review --id <id> --decision <d>",
+    );
+  }
+  const known = CAPTURE_STATUSES.find((status) => status === requested);
+  if (known === undefined) {
+    throw new ReviewRefusal(
+      EXIT_CODES.invalidInput,
+      `${requested} is not a capture status, so there is nothing to list under it`,
+      [],
+      `developer-os review --status ${CAPTURE_STATUSES.join("|")}`,
+    );
+  }
+  return known;
+}
+
+/**
+ * Every capture at one status, in id order, and nothing else.
  *
  * **A capture this cannot parse is `failed`** (spec §5.5) — a truncated write,
- * or a hand edit that broke the frontmatter — and `failed` is not
- * `quarantined`, so it is not listed. It is warned about rather than passed
- * over in silence: a user with a broken file in their vault needs to be told
+ * or a hand edit that broke the frontmatter — and it is reported as a warning
+ * rather than as a row, whatever status was asked for: the parse failed, so
+ * there is no status to compare. It is warned about rather than passed over in
+ * silence, because a user with a broken file in their vault needs to be told
  * which file and why, and nothing else this command could do for it would be
  * safe. The reason travels; the file's contents never do.
+ *
+ * **`--status failed` therefore lists nothing and warns about everything**, which
+ * is not a gap: `failed` is a description of a file this command could not read,
+ * not a value it ever finds in one it could.
  *
  * A read that *refuses* — a symlink where a capture should be, a path the
  * protected-path policy will not open — is left to propagate. Reporting a
  * security refusal as a line in a listing would file it where nobody looks.
  */
-async function listQuarantined(
+async function listByStatus(
   context: CliContext,
   quarantine: string,
   redact: Redactor,
+  status: CaptureStatus,
 ): Promise<Listing> {
   const captures: ReviewedCaptureV1[] = [];
   const warnings: string[] = [];
@@ -252,7 +320,7 @@ async function listQuarantined(
       );
       continue;
     }
-    if (outcome.envelope.status !== "quarantined") continue;
+    if (outcome.envelope.status !== status) continue;
     captures.push({
       captureId: outcome.envelope.captureId,
       status: outcome.envelope.status,
@@ -597,6 +665,7 @@ function guardsWith(guards: CliGuards, redact: Redactor): CliGuards {
  *
  * ```text
  * developer-os review                                  list quarantined captures
+ * developer-os review --status <status>                list captures at that status
  * developer-os review --id <id> --decision accept      status → accepted
  * developer-os review --id <id> --decision reject      status → rejected
  * developer-os review --id <id> --decision edit        re-read, re-redact, re-hash
@@ -626,6 +695,16 @@ export async function runReview(
   try {
     /** Before the vault is touched and before a key exists on disk. */
     const target = resolveTarget(options);
+    /**
+     * **Beside `resolveTarget` for the reason its comment gives, not near its
+     * use.** A first version validated the status where the listing needed it,
+     * four lines below `loadOrCreateRedactionKey` — so a mistyped `--status` on
+     * an uninstalled machine was answered "Developer OS is not initialized", and
+     * on an installed one **wrote a durable secret to disk** before refusing.
+     * The docblock claimed "refused before anything is read" from that position,
+     * which a fresh-context review caught on 2026-08-21.
+     */
+    const status = listedStatus(options);
 
     const config = await readConfiguration(context);
     const paths = runtimePathsFor(context, config);
@@ -653,7 +732,7 @@ export async function runReview(
     guards = guardsWith(context.guards, redact);
 
     if (target === null) {
-      const listing = await listQuarantined(context, quarantine, redact);
+      const listing = await listByStatus(context, quarantine, redact, status);
       return success(
         { schemaVersion: 1, captures: listing.captures, reviewed: 0 },
         listing.warnings,
