@@ -282,6 +282,83 @@ describe("runReview", () => {
     expect(result.data.reviewed).toBe(0);
   });
 
+  it("lists a chosen status, so an accepted capture's id is reachable", async () => {
+    /**
+     * **`BACKLOG.md` §1 NEW-41.** Task 9 gave spec §5.5 the
+     * `accepted → rejected` row so that a user who accepts a capture and then
+     * changes their mind has a verb instead of a hand edit. The listing filtered
+     * to `quarantined`, so **that user could not find the id through the product
+     * at all** — they had the verb and no route to it, and the headline reason
+     * for the transition was served only by `ingest`'s refusal printing the id.
+     *
+     * **The bare command is unchanged**, which the case above pins: `review`
+     * with no arguments is still the pending queue. What is added is a way to
+     * ask for another status, so widening the default — a display decision the
+     * row declined to take — is not taken here either.
+     */
+    const fixture = await installedFixture("review-list-status");
+    const quarantined = await fixture.seed(OBSERVATION);
+    const accepted = await fixture.seed("an observation already accepted");
+    await setStatus(accepted.path, "accepted");
+
+    const result = await fixture.run(fixture.context, { status: "accepted" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.captures).toStrictEqual([
+      { captureId: accepted.id, status: "accepted" },
+    ]);
+    expect(
+      result.data.captures.map((capture) => capture.captureId),
+      "the quarantined one must not appear under an explicit status",
+    ).not.toContain(quarantined.id);
+  });
+
+  it("refuses a status that is not a capture status", async () => {
+    /**
+     * **The exit code is asserted, not only `ok === false`.** A first version
+     * asserted the refusal alone, which this fixture would have satisfied by
+     * refusing for any other reason.
+     *
+     * **It does not pin *where* the validation runs, and an earlier title
+     * claimed it did.** `installedFixture` runs `init`, so a redaction key
+     * already exists before `runReview` is called and this case cannot observe
+     * one being created either way — it stays green with the check back in the
+     * listing branch. What pins the position is the uninstalled-fixture case in
+     * `main.test.ts`, where the two answers differ.
+     */
+    const fixture = await installedFixture("review-list-status-bad");
+    await fixture.seed(OBSERVATION);
+
+    const result = await fixture.run(fixture.context, { status: "pending" });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe(EXIT_CODES.invalidInput);
+    if (result.ok) return;
+    expect(result.error.message).toContain("not a capture status");
+  });
+
+  it("refuses --status beside a decision, rather than ignoring it", async () => {
+    /**
+     * `--status` chooses what a listing shows; a decision names one capture by
+     * id. Together they describe two different commands, and accepting the
+     * combination silently would also leave the value unvalidated, since the
+     * decision path never reaches the listing. `resolveTarget` sets the same
+     * convention for `--id` without `--decision`.
+     */
+    const fixture = await installedFixture("review-status-with-decision");
+    const seeded = await fixture.seed(OBSERVATION);
+
+    const result = await fixture.run(fixture.context, {
+      id: seeded.id,
+      decision: "accept",
+      status: "accepted",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe(EXIT_CODES.invalidInput);
+  });
+
   it("changes nothing at all while listing", async () => {
     const fixture = await installedFixture("review-list-writes-nothing");
     const seeded = await seedThree(fixture);

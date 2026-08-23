@@ -418,17 +418,20 @@ three implementations, and it is the larger half. Do not read the table as the t
 Program Task 6 shows one unticked box and it is **not** work: the hooks box was rewritten to record
 that hooks are declined, and nothing shipped for it by design.
 
-**`BACKLOG.md` §1 is twenty-five open repository defects** — twenty-eight `### NEW-` headings on
-2026-08-21, less the three closed that day: NEW-13, NEW-30 and NEW-43. **None waits on R2**, which is
-closed: seventeen of the eighteen that came out of R2's own reviews are still open; four (NEW-44,
-NEW-46, NEW-47, NEW-48) came out of reviews of this session's own work and are startable in a session;
-and four need somebody or something no session has — NEW-42 an interactive vendor session, NEW-45 the
-founder's credits, NEW-20 registered as deliberately not fixed, NEW-7 a machine with Obsidian.
-17 + 4 + 4 = 25.
+**`BACKLOG.md` §1 is twenty-five open repository defects** — twenty-nine `### NEW-` headings on
+2026-08-21, less the four closed that day: NEW-13, NEW-30, NEW-41 and NEW-43. **None waits on R2**,
+which is closed: sixteen of the eighteen that came out of R2's own reviews are still open; five —
+NEW-44, NEW-46 and NEW-47 from the reviews of the NEW-21 diff, NEW-48 and NEW-49 from the reviews of
+NEW-30's and NEW-41's closures — are startable in a session; and four need somebody or something no
+session has: NEW-42 an interactive vendor session, NEW-45 the founder's credits, NEW-20 registered as
+deliberately not fixed, NEW-7 a machine with Obsidian. 16 + 5 + 4 = 25.
 
-**Closing one row raised one row, and that is the honest arithmetic of this section.** NEW-30 closed
-and the review of its closure found that the Brain spec's lint-class table documents none of the four
-warnings that class emits — NEW-48. The count did not move.
+**Closing two rows raised two rows, and that is the honest arithmetic of this section.** NEW-30 closed
+and the review of its closure found that the Brain spec's lint-class table documents none of the five
+warnings that class emits — NEW-48. NEW-41 closed and the review of *its* closure found that the CLI
+gained `--status` while the canonical workflow the agent drives did not — NEW-49. **The section ended
+the day exactly where it started**, which is not failure: what it bought was two defects fixed and two
+found, and the two found were invisible until something moved.
 
 **NEW-21 left six rows and one has already gone.** NEW-43 closed the day after it was raised — but it
 was **one of four** a session could have taken, not the only one: NEW-44, NEW-46 and NEW-47 are still
@@ -436,14 +439,16 @@ open, and NEW-47 needs no credits either. **NEW-30 closed the same day from outs
 is the more useful example: it had sat since 2026-08-17 marked "the weakest of the four" and its fix
 was one call and a decision that had already been made for its class. That is the shape this queue should keep expecting: reviews
 add rows faster than work closes them, and the ones that close fastest are the ones nobody has to be
-asked about. **Seventeen of the twenty-five are the honest cost of closing ten decided defects with a
-fresh-context review on each** — eighteen were raised and NEW-30 has closed — and a review that finds
-nothing is rarer than one that finds a residual.
+asked about. **Sixteen of the twenty-five are the honest cost of closing ten decided defects with a
+fresh-context review on each** — eighteen were raised, and NEW-30 and NEW-41 have closed — and a
+review that finds nothing is rarer than one that finds a residual.
 
-**Add six open decisions** that are not defect rows: the two Foundation founder questions, DOS-P9's
-dedicated-plan question, and the three `BACKLOG.md` §8 amendments awaiting ratification — spec §8.2's
-`[redaction]` schema, `foundation.md` §2's `CliError` slot, and knowledge-pipeline §5.5's
-`accepted → rejected` row.
+**Add nine open decisions** that are not defect rows: the two Foundation founder questions, DOS-P9's
+dedicated-plan question, and the **six** `BACKLOG.md` §8 amendments awaiting ratification. Three are
+Track R R2's — spec §8.2's `[redaction]` schema, `foundation.md` §2's `CliError` slot, and
+knowledge-pipeline §5.5's `accepted → rejected` row. **Three arrived on 2026-08-21**: the Brain spec's
+lint-class table (NEW-48), the program plan's Task 7 split, and knowledge-pipeline §5.6's `--status`
+line (NEW-41).
 
 **A10 became startable on 2026-08-20** and is the only thing on the product path that is: NEW-21
 closed when the external usage limit reset, and Step 5 landed 2026-08-21, so what remains of A10 is
@@ -454,5 +459,5 @@ session's — see the `NOW` section.
 **Track R is closed as of 2026-08-20.** R2 was its only entry, and its eleven tasks landed in four
 commits — the three Foundation requests, the DOS-P7 gap, and the six §1 rows the decisions of
 2026-08-17 unblocked. The four §1 rows that were never R2's still wait on the founder or on a
-machine, and seventeen of the eighteen its reviews raised are still new work for whoever takes §1
-next; NEW-30 was the first of them to close.
+machine, and sixteen of the eighteen its reviews raised are still new work for whoever takes §1 next;
+NEW-30 and NEW-41 closed on 2026-08-21.

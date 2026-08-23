@@ -11,7 +11,8 @@ import {
 } from "./commands/testing.js";
 import type { CommandFixture } from "./commands/testing.js";
 import type { CliIo } from "./io.js";
-import { run } from "./main.js";
+import { renderReview, run } from "./main.js";
+import type { ReviewResultV1 } from "./commands/review.js";
 
 afterEach(removeCommandFixtures);
 
@@ -378,6 +379,7 @@ describe("review dispatch", () => {
       ["review", "--json"],
       ["review", "--id", "0f1e2d3c4b5a6978", "--decision", "accept"],
       ["review", "--id", "0f1e2d3c4b5a6978", "--decision", "edit"],
+      ["review", "--status", "accepted"],
     ]) {
       const fixture = await createCommandFixture(`ok-${argv.join("-")}`);
       const lines: string[] = [];
@@ -386,6 +388,107 @@ describe("review dispatch", () => {
         "Developer OS is not initialized",
       );
     }
+  });
+});
+
+/**
+ * **The one case that pins where `--status` is validated**, and it has to run on
+ * an *uninstalled* fixture to do it.
+ *
+ * `BACKLOG.md` §1 NEW-46's neighbouring lesson applies here: a check that runs
+ * late is not the check it claims to be. `listedStatus` first sat where the
+ * listing needed it — four lines below `loadOrCreateRedactionKey` — so a
+ * mistyped flag on an uninstalled machine was answered "Developer OS is not
+ * initialized", and on an installed one **wrote a durable secret to disk before
+ * refusing a typo**. Every case in `review.test.ts` uses an installed fixture,
+ * where a key already exists, so none of them could tell the two positions
+ * apart; a fresh-context review found the fix unpinned on 2026-08-21.
+ *
+ * Here the vault is absent, so the two answers differ: validated first, the
+ * refusal names the status; validated late, it names the installation.
+ */
+describe("review validates --status before it touches anything", () => {
+  it("refuses a bad status on an uninstalled machine rather than reporting the install", async () => {
+    const fixture = await createCommandFixture("status-before-config");
+    const lines: string[] = [];
+
+    await run(["review", "--status", "pending"], collectingIo(lines), () => fixture.context);
+
+    const output = lines.join("\n");
+    expect(output).toContain("not a capture status");
+    expect(
+      output,
+      "answering with the installation means the status was validated too late",
+    ).not.toContain("Developer OS is not initialized");
+  });
+});
+
+/**
+ * **`renderReview` had no test anywhere in the tree until 2026-08-21**, which is
+ * how a heading that said `Quarantined captures:` over rejected ids shipped, and
+ * then how its first correction broke the default it claimed not to touch. Both
+ * were found by a fresh-context review rather than by a failing case — twice.
+ *
+ * Unit cases rather than a dispatch fixture: the function is pure in
+ * `(result, requested)`, and the strings *are* the contract. A round trip
+ * through `run` would exercise the same two lines while making the assertion
+ * about everything else in the command.
+ */
+describe("renderReview", () => {
+  const listing = (
+    captures: readonly { captureId: string; status: string }[],
+  ): ReviewResultV1 =>
+    ({ schemaVersion: 1, captures, reviewed: 0 }) as unknown as ReviewResultV1;
+
+  it("names the quarantine queue when no status was asked for", () => {
+    expect(renderReview(listing([{ captureId: "aa00bb11cc22dd33", status: "quarantined" }]), null))
+      .toStrictEqual(["Quarantined captures:", "  aa00bb11cc22dd33"]);
+  });
+
+  it("names the status that was asked for", () => {
+    expect(renderReview(listing([{ captureId: "aa00bb11cc22dd33", status: "accepted" }]), "accepted"))
+      .toStrictEqual(["Captures at accepted:", "  aa00bb11cc22dd33"]);
+  });
+
+  it("keeps the original empty line on the default path", () => {
+    /**
+     * The regression this pins: a renderer that derived the heading from row
+     * zero had nothing to derive from when the list was empty, so a bare
+     * `review` told a user who named no status that none were "at that status".
+     */
+    expect(renderReview(listing([]), null)).toStrictEqual([
+      "No captures are waiting for review.",
+    ]);
+  });
+
+  it("names the status in the empty line when one was asked for", () => {
+    expect(renderReview(listing([]), "ingested")).toStrictEqual([
+      "No captures are at ingested.",
+    ]);
+  });
+
+  it("echoes the frozen constant, never the caller's string", () => {
+    /**
+     * A status that is not a `CaptureStatus` cannot reach this function through
+     * the CLI — `listedStatus` refuses first — so this pins the second line of
+     * defence rather than a reachable path: the rendered name comes from
+     * `CAPTURE_STATUSES`, so nothing user-typed is echoed even if a future
+     * caller forgets to validate.
+     */
+    expect(renderReview(listing([]), "quarantined\u0007evil")).toStrictEqual([
+      "No captures are waiting for review.",
+    ]);
+  });
+
+  it("reports decisions rather than a listing when one was taken", () => {
+    const decided = {
+      schemaVersion: 1,
+      captures: [{ captureId: "aa00bb11cc22dd33", status: "rejected" }],
+      reviewed: 1,
+    } as unknown as ReviewResultV1;
+    expect(renderReview(decided, "accepted")).toStrictEqual([
+      "Reviewed aa00bb11cc22dd33, now rejected.",
+    ]);
   });
 });
 
