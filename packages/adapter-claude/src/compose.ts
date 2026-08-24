@@ -10,14 +10,14 @@ import { ClaudeRenderer, SHARED_WORKFLOW_ID } from "./render.js";
  * `workflow render` command call.
  *
  * It takes already-validated contracts and touches no filesystem. That is the
- * boundary spec §2 draws — this package consumes what `validateWorkflow`
+ * boundary Claude architecture former §2 draws — this package consumes what `validateWorkflow`
  * produced and never re-reads or re-validates it — and it is what lets the
  * contract test read `workflows/` from disk while the package stays testable
  * with nothing installed and nothing on disk.
  *
  * Ordering is not taken from the caller. `buildPluginTree` sorts by code point,
  * so a directory reader that yields the six workflows in any order produces the
- * same bytes — which is the byte-identity property spec §7.3 owes DOS-P3.
+ * same bytes — which is the byte-identity property Claude architecture former §7.3 owes DOS-P3.
  */
 export function renderClaudePlugin(
   contracts: readonly WorkflowContractV1[],
@@ -26,7 +26,7 @@ export function renderClaudePlugin(
     (contract) => contract.id === SHARED_WORKFLOW_ID,
   );
   if (shared === undefined) {
-    // Every other artifact concatenates this one's preamble (spec §7.1).
+    // Every other artifact concatenates this one's preamble (Claude architecture former §7.1).
     // Rendering without it would produce five artifacts silently missing the
     // prompt-injection defence, which is the failure the empty-preamble check
     // in `ClaudeRenderer` exists to prevent — caught here too, because a

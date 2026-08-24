@@ -10,7 +10,7 @@
  * library's `uniqueKeys` default, which the call below does not pin (BACKLOG.md
  * NEW-2). The duplicate-key case in `note.test.ts` is what stands there, and it
  * pins a contract: a new parser that fails it is the wrong parser, not a test to
- * loosen. Design spec §4.4 states all four clauses.
+ * loosen. Brain architecture former §4.4 states all four clauses.
  */
 import { parseAllDocuments, visit } from "yaml";
 
@@ -275,7 +275,7 @@ function lineOfOffset(text: string, offset: number): number {
  * question whose answer belongs to the library and changes with it, instead of
  * *frontmatter carries no tags*, which is a property of the format this
  * product defines. Note frontmatter has no legitimate use for an explicit tag.
- * This is design spec §4.4's amendment for BACKLOG NEW-4.
+ * This is Brain architecture former §4.4's amendment for BACKLOG NEW-4.
  *
  * The tag text is screened and capped before it reaches the message: `!custom`
  * is author-written, unbounded, and this refusal is printed.

@@ -1,5 +1,5 @@
 /**
- * The only door into this package. Spec §11 names `CodexAdapter` as "the
+ * The only door into this package. Codex architecture former §11 names `CodexAdapter` as "the
  * package's only public door"; `index.test.ts` pins the export list this file
  * produces so the surface cannot widen unnoticed.
  *
@@ -28,7 +28,7 @@ export type { CodexProbeDependencies, CodexProbeResult } from "./probe.js";
 /**
  * `CODEX_NOT_USED_KEYS` is exported for one consumer:
  * `apps/cli/src/adapter-capability-parity.test.ts`, the only place both
- * adapters are legally visible at once (spec §1 forbids either importing the
+ * adapters are legally visible at once (Codex architecture former §1 forbids either importing the
  * other, so neither package can assert parity about itself).
  */
 export { CODEX_NOT_USED_KEYS, resolveCapabilities } from "./capabilities.js";
@@ -74,7 +74,7 @@ import { proposeCodexInstall, proposeCodexUninstall } from "./install.js";
 import { probeCodex } from "./probe.js";
 
 /**
- * The bound interface DOS-P6 consumes, not eleven loose functions. Spec §11
+ * The bound interface DOS-P6 consumes, not eleven loose functions. Codex architecture former §11
  * names `CodexAdapter` that interface; `claude-adapter.md` §9.6 recorded that
  * DOS-P4 shipped no equivalent façade and deferred the question to "the
  * point where a common interface has two implementations" — this is that

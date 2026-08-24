@@ -317,7 +317,7 @@ async function buildPlan(context: CliContext): Promise<InitPlan> {
     /**
      * The skeleton, and **only** when this run is what creates the vault.
      * Foundation's guarantee is that `init` never modifies an existing vault;
-     * the brain-engine spec's §10 amendment narrows that to "installs the
+     * Brain architecture former §10 narrows that to "installs the
      * template when, and only when, it creates the vault", which keeps the
      * guarantee intact rather than carving an exception out of it.
      */

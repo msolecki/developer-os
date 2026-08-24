@@ -120,7 +120,7 @@ describe("probeClaude", () => {
   });
 
   /**
-   * Spec §6.1: a lifecycle surface is verified only when a hook is *observed to
+   * Claude architecture former §6.1: a lifecycle surface is verified only when a hook is *observed to
    * fire*, and a `SessionEnd` hook cannot be made to fire without a real
    * session. `claude plugin validate` settles the manifest and frontmatter; it
    * settles no lifecycle event, and must never be read as if it did.

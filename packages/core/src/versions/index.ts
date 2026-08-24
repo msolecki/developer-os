@@ -61,7 +61,7 @@ export interface CapabilityVersionTable<Key extends string> {
 
 /**
  * Whether the version table permits a capability to be *considered*. It never
- * grants one: spec §5.1 requires a probe to observe the capability before it is
+ * grants one: both adapter architecture notes' former §5.1 requires a probe to observe the capability before it is
  * reported `yes`, and this function is only the first of those two gates.
  *
  * A version above everything the table knows is permitted rather than refused —

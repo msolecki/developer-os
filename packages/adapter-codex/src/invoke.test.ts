@@ -287,7 +287,7 @@ describe("the three refused flags, and the sandbox that is never full access", (
 });
 
 describe("invokeCodex argv", () => {
-  it("builds the full spec §7 argv, in order, with every fixed flag present", async () => {
+  it("builds the full Codex architecture former §7 argv, in order, with every fixed flag present", async () => {
     const { runner: capturingRunner, seen } = capturing();
     await invokeCodex(installation, invocation({ writeScopes: ["/synthetic/vault"] }), {
       runner: capturingRunner,
@@ -506,7 +506,7 @@ describe("invokeCodex failure identity", () => {
  * This recording is the **failed** turn: it settles the framing and the
  * discriminating field, and its terminal `turn.failed` is what the exit-code
  * ordering protects a caller from. See `tests/fixtures/codex/README.md` and the
- * spec's §14.1 amendments of both dates.
+ * Codex architecture former §14.1 amendments of both dates.
  */
 describe("invokeCodex against the stream Task 17 actually observed", () => {
   const observed = readFileSync(
@@ -546,12 +546,13 @@ describe("invokeCodex against the stream Task 17 actually observed", () => {
 
   it("shows every line of a real stream to be a JSON object carrying a discriminating type", () => {
     /**
-     * Spec §10.2 asks two questions of a real run. This answers the second:
+     * Knowledge-pipeline spec §10.2 asks two questions of a real run. This answers the second:
      * **yes, `type` is a discriminating field** and it is present on every
      * line. Nothing filtered on it until 2026-08-20, because a narrowing wanted
      * a stream where the old rule and the new one agreed; what arrived instead
      * was a stream on which the old rule was **wrong**, and `finalAgentMessage`
-     * now selects on `type` and on `item.type`. §14.1 carries both amendments.
+     * now selects on `type` and on `item.type`. Codex architecture former §14.1
+     * carries both amendments.
      */
     const lines = observed.split(/\r?\n/u).filter((line) => line.trim().length > 0);
     expect(lines).toHaveLength(4);
@@ -626,7 +627,7 @@ describe("invokeCodex against the successful turn NEW-21 observed", () => {
      * branches and a claim about one is not a claim about both.** The
      * `workspace-write` run of 2026-08-20 is recorded beside the `read-only`
      * one for that reason; the sentence "identical under both sandbox modes"
-     * in `agent.ts` and in spec §10.3 rests on this file rather than on
+     * in `agent.ts` and in knowledge-pipeline spec §10.3 rests on this file rather than on
      * somebody's memory of a terminal.
      */
     const other = readFileSync(
@@ -674,7 +675,7 @@ describe("invokeCodex against the successful turn NEW-21 observed", () => {
   it("agrees with what --output-last-message wrote for the same turn", async () => {
     /**
      * **The alternative that was tested and declined, kept as evidence rather
-     * than as a sentence.** `codex-adapter.md` §7 and spec §14.1 record that
+     * than as a sentence.** `codex-adapter.md` §7 and Codex architecture former §14.1 record that
      * `--output-last-message` works and was rejected for the vendor-written
      * temp file it introduces. This is the run that showed it.
      *
@@ -708,7 +709,7 @@ describe("invokeCodex against the successful turn NEW-21 observed", () => {
 
   it("shows the terminal event of a successful turn is not the response", () => {
     /**
-     * This is the question spec §10.2 put to a real run and that the failed
+     * This is the question knowledge-pipeline spec §10.2 put to a real run and that the failed
      * turn of 2026-08-15 could not answer. The answer is **no**: the last
      * line is `turn.completed`, a usage record. The rule that shipped until
      * 2026-08-20 took exactly this line, and `parseStructuredPayload` would

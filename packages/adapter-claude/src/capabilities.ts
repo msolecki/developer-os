@@ -40,7 +40,7 @@ export const CLAUDE_NOT_USED_KEYS: readonly ClaudeCapabilityKey[] = [
 /**
  * The asymmetry is the mechanism, not a mood.
  *
- * A capability the probe could not settle reports `unknown` (spec §9.2) —
+ * A capability the probe could not settle reports `unknown` (Claude architecture former §9.2) —
  * never `no`, because "we could not ask" and "the answer is no" are different
  * facts and only one of them justifies telling a user their install lacks a
  * feature. Everything else uncertain reports `unknown` too: it used to report

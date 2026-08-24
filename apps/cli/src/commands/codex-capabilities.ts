@@ -23,7 +23,7 @@ export interface CodexCapabilityRequest {
   readonly runner: ProcessRunner;
   /**
    * The absolute path the plugin tree is installed to — the tree's own root,
-   * `<product-home>/codex/plugins/developer-os` (spec §4), not the
+   * `<product-home>/codex/plugins/developer-os` (Codex architecture former §4), not the
    * marketplace root a level above it. `probeCodex` compares this against the
    * resolved path `codex plugin list --json` reports, so it must be the exact
    * value `install.ts` writes to, not a value this file invents.
@@ -35,9 +35,9 @@ export interface CodexCapabilityRequest {
    * **Default `false`, and that is a finding rather than a preference.**
    * `doctor` is a diagnostic and must not shell out to the vendor's CLI on
    * every invocation — `claude-capabilities.ts` settles the same question for
-   * Claude's probe, which spec §14.1 records as *mutating* (it writes
+   * Claude's probe, which Claude architecture former §14.1 records as *mutating* (it writes
    * `~/.claude.json` and a backup). This probe is different in kind: `codex
-   * plugin list --json` is a read-only structured query (spec §5.2), so
+   * plugin list --json` is a read-only structured query (Codex architecture former §5.2), so
    * nothing here is refusing a write. It stays opt-in anyway, because
    * spawning any vendor process from a read-only command is a decision
    * `doctor` should make once, explicitly, rather than on every run.
@@ -108,7 +108,7 @@ function summarise(capabilities: CodexCapabilities): string {
  * codex=absent` about the same file.
  *
  * With nothing to examine, every capability is `unknown` rather than absent
- * (spec §9.2): "we could not ask" and "the answer is no" are different facts.
+ * (`docs/architecture/codex-adapter.md` §3): "we could not ask" and "the answer is no" are different facts.
  */
 export async function reportCodexCapabilities(
   request: CodexCapabilityRequest,
@@ -171,7 +171,7 @@ export async function reportCodexCapabilities(
     installed: true,
     version: installation.version,
     capabilities,
-    // A capture reaches the vault because somebody ran a command. Spec §5.3
+    // A capture reaches the vault because somebody ran a command. Codex architecture former §5.3
     // used to name the wrapper here, chosen by `session_end_capture === "yes"`;
     // that key is `not-used` unconditionally now, so the branch was dead.
     captureVia: "command",

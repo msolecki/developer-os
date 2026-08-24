@@ -49,7 +49,7 @@ function canonicalContracts(): readonly WorkflowContractV1[] {
 }
 
 describe("canonical workflows", () => {
-  it("ships exactly the six the spec names", async () => {
+  it("ships exactly the six named by Workflow architecture former §10", async () => {
     expect(await directories()).toStrictEqual([...EXPECTED]);
   });
 

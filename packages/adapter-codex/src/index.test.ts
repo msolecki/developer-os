@@ -29,7 +29,7 @@ function forbiddenModuleSpecifiers(vendor: string): readonly [string, string] {
 }
 
 describe("the package's public door", () => {
-  it("exports exactly what spec §11 names, and nothing else", () => {
+  it("exports exactly what Codex architecture former §11 names, and nothing else", () => {
     expect(Object.keys(door).sort()).toEqual(
       [
         "CODEX_CAPABILITY_KEYS",
@@ -122,7 +122,7 @@ describe("the package's public door", () => {
   });
 
   /**
-   * Spec §1, asserted across the package rather than one file.
+   * Codex architecture former §1, asserted across the package rather than one file.
    */
   it("imports nothing from the Claude adapter, anywhere in the package", async () => {
     const [scoped, relative] = forbiddenModuleSpecifiers("claude");

@@ -28,7 +28,7 @@ describe("resolveCapabilities", () => {
   });
 
   /**
-   * Spec §9.2: "we could not ask" and "the answer is no" are different facts,
+   * Claude architecture former §9.2: "we could not ask" and "the answer is no" are different facts,
    * and only one of them justifies telling a user their install lacks a
    * feature. `unavailable` must never collapse into either `yes` or a claim of
    * absence.

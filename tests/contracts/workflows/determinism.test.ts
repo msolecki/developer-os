@@ -17,7 +17,7 @@ import { describe, expect, it } from "vitest";
 const WORKFLOWS = fileURLToPath(new URL("../../../workflows/", import.meta.url));
 
 /**
- * A stub, because this package ships no renderer by design (spec §14). It is
+ * A stub, because this package ships no renderer by design (Workflow architecture former §14). It is
  * enough to prove the pipeline is deterministic; the byte-identity of real
  * vendor artifacts belongs to DOS-P4 and DOS-P5.
  */
@@ -92,7 +92,7 @@ describe("determinism", () => {
      * so what this pins is that each contract renders identically regardless of
      * the order it was read in, and that a renderer must impose its own stable
      * order. That last part is owed by DOS-P4 and DOS-P5 along with the rest of
-     * spec §13's byte-identity requirement.
+     * Workflow architecture former §13's byte-identity requirement.
      */
     const renderById = (contracts: WorkflowContractV1[]): Map<string, string> =>
       new Map(

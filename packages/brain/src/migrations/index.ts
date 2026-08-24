@@ -20,7 +20,7 @@ export interface BrainMigration {
   /**
    * Emits a plan; it does not apply one. Execution goes through Foundation's
    * `TransactionStore`, so `packages/brain` performs no direct filesystem
-   * mutation of a user's notes — spec §9.
+   * mutation of a user's notes — Brain architecture former §9.
    */
   readonly plan: (snapshot: VaultSnapshot) => ChangePlanV1;
 }

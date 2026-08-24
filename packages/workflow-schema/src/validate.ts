@@ -196,7 +196,7 @@ export function validateWorkflow(
 
   /**
    * Walked per step rather than read off `derived.unknownVerbs`, which is a
-   * *set* of verb strings and therefore drops two things spec §11 asks for: the
+   * *set* of verb strings and therefore drops two things Workflow architecture former §11 asks for: the
    * step id every finding is supposed to carry, and the second occurrence. Two
    * steps sharing one bad verb produced one finding, so an author fixed one and
    * met the same error again. It is the rule an author hits most often and it

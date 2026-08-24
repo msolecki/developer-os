@@ -13,7 +13,7 @@ import {
  * is deliberately identical to the other's, because DOS-P6 consumes both and
  * two vocabularies would make its contract a translation layer. Nothing
  * checked that claim — the two adapters are peers that may never import one
- * another (spec §1), so neither package can assert it about itself. This
+ * another (both adapter architecture notes' former §1), so neither package can assert it about itself. This
  * test lives here, in `apps/cli`, because this app is the one place both
  * adapters are legally visible at once; it is the only place the assertion
  * can be written at all.

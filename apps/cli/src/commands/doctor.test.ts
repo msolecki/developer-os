@@ -559,7 +559,7 @@ describe("runDoctor", () => {
 /**
  * The two-gate model's first production caller, and why it is opt-in.
  *
- * `probeClaude` runs `claude plugin validate`, which spec §14.1 records as
+ * `probeClaude` runs `claude plugin validate`, which Claude architecture former §14.1 records as
  * writing `~/.claude.json` and a timestamped backup under `~/.claude/backups/`
  * — observed against a real installation on 2026-08-11. A default-on probe
  * would make `doctor` a silently mutating command, which contradicts the rule

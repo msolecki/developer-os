@@ -27,7 +27,7 @@ describe("buildPluginTree", () => {
     expect(PLUGIN_TREE_PREFIX).toBe(PLUGIN_TREE_SEGMENTS.slice(1).join("/"));
   });
 
-  it("emits a manifest with exactly the fields spec §14.4 names and no others", () => {
+  it("emits a manifest with exactly the fields Codex architecture former §14.4 names and no others", () => {
     const manifest = buildPluginTree(skills).find((a) => a.path === ".codex-plugin/plugin.json");
     const parsed = JSON.parse(manifest?.contents ?? "{}") as Record<string, unknown>;
     expect(Object.keys(parsed).sort()).toEqual(["description", "name", "skills", "version"]);

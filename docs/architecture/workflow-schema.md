@@ -3,10 +3,9 @@
 `packages/workflow-schema`, delivered by DOS-P3 on 2026-08-10. One description of a workflow,
 rendered to any vendor, so nobody maintains a second copy.
 
-**Design of record:** `docs/superpowers/specs/2026-07-21-developer-os-workflow-compiler-design.md`,
-approved 2026-08-10. Where this note and that spec disagree, the spec wins. This document
-replaces the implementation plan, which was deleted when its last step closed; git history is
-the archive.
+This note absorbed the surviving design record on 2026-08-24, when the completed subsystem spec
+was deleted. The implementation plan was deleted when its last step closed; git history is the
+archive for both.
 
 ## 1. What it is
 
@@ -51,8 +50,8 @@ The compiler unions those footprints and requires the result to *equal* the decl
    fires is a passing check about a false property.
 5. **Pre-release and build metadata are not valid workflow versions.** `MAJOR.MINOR.PATCH` only,
    no leading zeros. An overlay pins `id@version` exactly, and comparing `1.2.3-rc.1` against
-   `1.2.3` there would mean nothing. This narrows the spec's bare word "semver" and is recorded
-   here because the spec wins by default.
+   `1.2.3` there would mean nothing. This deliberately narrows the original design's bare word
+   "semver".
 
 ## 3. The equality rule, and why over-declaring is an error
 
@@ -91,16 +90,14 @@ check, so the raw schema accepts a workflow carrying one and silently drops it. 
 in `validateWorkflow`, which makes the guarantee structural rather than a rule everyone has to
 remember.
 
-## 5. The seven unimplemented verbs
+## 5. The remaining unimplemented verb
 
-The vocabulary has fourteen verbs. Seven have no handler yet; each raises an `info` finding
-naming the subsystem that owes it, and the exact list is pinned by a test so that closing one
-forces a return to this table.
+The vocabulary has fifteen verbs. DOS-P6 implemented the capture and ingest commands; only
+`agent.prompt` has no step executor. It raises an `info` finding naming the adapters, and the exact
+list is pinned by a test so that closing it forces a return to this table.
 
 | Verb | Owed by |
 |---|---|
-| `capture.write`, `capture.list`, `capture.setStatus` | DOS-P6 |
-| `ingest.stage`, `ingest.validate`, `ingest.apply` | DOS-P6 |
 | `agent.prompt` | the adapters, DOS-P4 and DOS-P5 |
 
 `ingest.stage` writes into the transaction staging directory and therefore contributes **nothing**
@@ -110,7 +107,7 @@ carries both the staging flag and a real vault write — different axes, not an 
 
 ## 6. What DOS-P4 and DOS-P5 inherit
 
-- **Spec §13's byte-identity requirement is met further than it was, and still not in full.**
+- **The completed design's byte-identity requirement is met in full.**
   *Amended 2026-08-12, when the skill body moved here.* §13 asks that six workflows "render
   byte-identically twice, and once under a reversed directory reader". This package proved the
   narrower thing it could prove while it rendered nothing: the *inputs* a renderer is handed are
@@ -129,59 +126,36 @@ carries both the staging flag and a real vault write — different axes, not an 
 - **The first `.claude/` question.** DOS-P4 settles whether small conveniences under `.claude/`
   are publication artifacts needing an approval-and-hash cycle.
 
-## 7. Where the six workflows say less than the product spec does
+## 7. Workflow gaps after DOS-P6
 
-Ruled by the founder on 2026-08-10: recorded rather than closed, because each needs a handler
-or a renderer that does not exist yet, and a contract written against a missing handler is a
-promise rather than a specification. Every one of these is a gap in what the YAML *says* — none
-is a defect in the compiler.
+The four workflow gaps recorded here on 2026-08-10 are closed. DOS-P6 added `capture.edit` to
+`review` (`workflows/review/workflow.yaml:41`), reindexed after `ingest`
+(`workflows/ingest/workflow.yaml:41`), made `brain-search` read selected notes
+(`workflows/brain-search/workflow.yaml:43`), and aligned `doctor` with its report-only contract.
+DOS-P4 and DOS-P5 also made the shared preamble part of every rendered skill body
+(`packages/workflow-schema/src/skill.ts:201`). These are historical outcomes, not open work.
 
-| Workflow | What the spec says | What the workflow says | Owner |
-|---|---|---|---|
-| `review` | §13.3 offers accept, edit, reject | its `decision` input advertises `edit`, and the only mutating verb is `capture.setStatus`; §13.1's status list has no "edited". Needs a `capture.edit` verb, which derives the same quarantine write scope | DOS-P6 |
-| `ingest` | §13 is `transactional apply → index rebuild → retrieval` | stops at apply, so a note is ingested and `brain-search` cannot find it until somebody runs `brain reindex`. `brain.reindex` exists and is implemented; adding it widens ingest's declared scopes | DOS-P6 |
-| `doctor` | §11 prints a matrix for the detected environment, and Foundation's `doctor` reports rather than repairs | refuses when no installation is found — while `shared` tells a user in exactly that state to run `developer-os doctor` | DOS-P4 |
-| `brain-search` | §13.5 is `vault-map → catalog section → selected notes → sourced answer` | reads `content/_indexes/**` only and never `brain.readNote`, so it summarises from index metadata. Read-only either way, so this is completeness rather than safety | DOS-P6 |
+Two genuine gaps remain:
 
-**`shared` is extended by nothing.** Its description calls it "the common preamble and refusal
-set every other workflow extends", and `WorkflowContractV1` has no composition field —
-`WorkflowOverlayV1.extends` pins an overlay to its base, which is a different relation. So the
-preamble carrying the entire prompt-injection defence reaches no other workflow, and its own
-sentence "the scopes this workflow declares" resolves, in the only form the artifact has, to
-`shared`'s empty scopes. **Delivering it to the other five is owed by DOS-P4 and DOS-P5**, whose
-renderers are the thing that would inject it.
+1. **`agent.prompt` has no step executor.** It is the sole item in §5 and is owned by the adapters
+   (`packages/workflow-schema/src/vocabulary.ts:119`).
+2. **A declared trigger is not validated against an observable host capability.** DOS-P6 removed
+   the unfireable `session_start` and `session_end` declarations and both shipped contracts are
+   manual-only, so no current workflow exercises this gap. Reintroducing a non-manual trigger must
+   add the host-capability validation and a firing test in the same change.
 
-**A trigger implies no capability, and nothing checks that it can fire.** Capability
-requirements are derived from step footprints only. `shared` declared `session_start` and
-`capture` declared `session_end`, both with no capability and no `capability-missing` refusal —
-so a workflow can name a trigger the host agent cannot fire and validate clean. That is the same
-shape as the refused `scheduled` trigger: a value that passes validation while the property it
-names is false. §11 also names `capture`'s fallback outright (the `developer-os run claude|codex`
-wrapper), and the contract says nothing about it. **Owner: DOS-P4/P5**, which is where trigger
-support becomes observable.
-
-**Both declarations are gone as of 2026-08-13**, and the paragraph above is written in the past
-tense for that reason. DOS-P6 declined hooks rather than deferring them, so each contract dropped
-its unfireable trigger and went to `2.0.0` — `triggers: [manual]` is now all either one carries
-(`workflows/shared/workflow.yaml:5-6`, `workflows/capture/workflow.yaml:5-6`), and a grep across
-`workflows/` and `plugins/` finds neither word. **The schema property above is unchanged, and its
-owner with it**: nothing still checks that a declared trigger can fire, and what changed is only
-that no shipped contract exercises the gap. `docs/architecture/knowledge-pipeline.md` §2 is the
-decision and its costs. `BACKLOG.md` §8 records the drop as **a contract change rather than an
-amendment** (`docs/superpowers/BACKLOG.md:767-771`); its §8 row naming this note (`:765`) is about
-a different set — §7's other recorded gaps and §8.1's globs.
+The manual-only change was a contract change, not an amendment: `shared` and `capture` moved to
+`2.0.0`. `docs/architecture/knowledge-pipeline.md` §2 records the decision and its costs.
 
 ## 8. Known residuals
 
-1. **Vocabulary globs hardcode `content/` and `_indexes`, which are configurable.**
+1. **CLOSED by DOS-P6: vocabulary globs keep canonical `content/` and `_indexes` names and resolve
+   them at the handler boundary.**
    `BrainConfigV1.contentRoot` and `indexesDir` are settings; every glob in the table is a
-   literal, exactly as spec §6 writes them. Nothing is wrong today, because the equality rule is
-   arithmetic on the same literals on both sides, and the failure direction is safe — a vault
-   with `contentRoot = "notes"` would get a grant naming a directory that does not exist, so the
-   workflow fails rather than reaching further than declared. **Owner: DOS-P6.** Acceptance: the
-   first time a handler or adapter resolves one of these globs against a real filesystem, the
-   globs must be derived from the configuration rather than hardcoded, and spec §6 amended with
-   them.
+   canonical literal. `resolveScopeGlob(glob, config)` rewrites the leading segments before a
+   handler touches the filesystem, while declared-versus-derived arithmetic remains over the
+   canonical names. Templating inside the YAML was rejected because it would add substitution
+   syntax to the portable contract.
 2. **The duplicate-step-id check has a bounded reporting gap.** It is a root-level zod refinement,
    and zod runs a root refinement when a child fails a *check* (a regex, a custom refinement) but
    skips it when a child fails a *type or shape* parse. So duplicate ids are reported alongside a
@@ -267,3 +241,81 @@ table and for the overlay's patches, a `ReadonlyMap` parameter on the drift chec
 `unknown` input — a cycle, twenty thousand levels of nesting, and a throwing getter all return a
 finding — because a validator that aborts on the first hostile file cannot report on the other
 five, which is the whole contract `load.ts` is built on.
+
+## 10. Normative parser and contract
+
+### 10.1 Parser
+
+Canonical workflows are vendor-neutral YAML data. The parser uses YAML 1.2, `parseAllDocuments`,
+`uniqueKeys: true` and silent logging with errors read from the document. It refuses a second
+document, every explicit tag, every anchor and every alias before conversion, converts with
+`maxAliasCount: 100`, and turns library throws into a bounded `malformed` refusal. Unknown fields
+are rejected by strict schemas at every level.
+
+### 10.2 `WorkflowContractV1`
+
+| Field | Normative shape |
+|---|---|
+| `schemaVersion` | literal `1` |
+| `id` | directory-matching slug, `^[a-z][a-z0-9-]*$` |
+| `version` | `MAJOR.MINOR.PATCH`, no leading zero, pre-release or build metadata |
+| `description` | non-empty string |
+| `triggers` | non-empty ordered array from `manual`, `session_start`, `session_end`; `scheduled` remains refused until DOS-P7 makes it fire |
+| `inputs`, `output` | slug-keyed records of strict `{ type, required, description }`; type is `string`, `integer`, `boolean` or `path` |
+| `capabilities` | ordered array from `structured_result`, `non_interactive_run`, `session_start_injection`, `session_end_capture`, `file_write`; `file_write` is reserved and currently named by no verb footprint |
+| `scopes` | strict `{ read: string[], write: string[] }`, declared and equal to derived footprints |
+| `refusals` | ordered strict refusal records, §10.4 |
+| `steps` | non-empty ordered array of unique-id steps, §10.3 |
+| `validators` | ordered non-empty strings |
+| `recovery` | strict non-empty `{ leaves, resume }` strings; `resume` remains inert data here |
+
+Author-ordered arrays are never resorted. Compiler-derived sets sort by code point after NFC
+normalization. The workflow id must equal its containing directory, and duplicate step ids are
+errors because overlays key by them.
+
+### 10.3 Steps and effect vocabulary
+
+A step has a slug `id` and exactly one of non-empty `do` or non-empty `prose`; `with` is legal only
+with `do`. Effect steps name the closed table in `src/vocabulary.ts`; prose is inert. Anything that
+touches the filesystem, network, a process or vault must be a verb. The compiler unions verb
+footprints and requires exact equality with declared read/write scopes, rejecting both under- and
+over-declaration. Only `agent.prompt` remains unimplemented; configured vault roots resolve at the
+handler boundary rather than by templating canonical workflow YAML.
+
+### 10.4 Refusals and exit codes
+
+`when` is closed to `capability-missing`, `index-missing`, `vault-missing`, `input-invalid` and
+`scope-violation`. `exit` is one of Foundation's failure codes 1–6, never success 0, and a missing
+capability uses code 4. Every required capability must have a declarative refusal; messages are
+non-empty and pass through the shared bounded display screen.
+
+### 10.5 Validation output and public boundary
+
+Validation is total over `unknown` and returns every finding it can establish, each with file,
+optional step id, rule and `error`, `warn` or `info` severity. A finding never echoes source
+content. Consumers enter through `validateWorkflow` and the package public index;
+`workflowContractSchema` is intentionally not exported because raw zod parsing can strip hostile
+prototype keys before strictness observes them.
+
+## 11. Former spec section map
+
+Source comments predating the completed-spec cleanup use the former section numbers. They now
+resolve here:
+
+| Former design section | Current authority |
+|---|---|
+| §1 | §1 |
+| §2 | §2 |
+| §3 | §10.1 |
+| §4 | §10.2 |
+| §5 | §10.3 |
+| §6 | §3, §5 and §10.3 |
+| §7 | §10.4 |
+| §8 | §4 |
+| §9 | §1, §6 and §8 |
+| §10 | §1 and §7 |
+| §11 | §8, §9 and §10.5 |
+| §12 | §2, §9 and §10.1 |
+| §13 | §6, §8 and §9 |
+| §14 | §1, §4, §6, §8 and §10.5 |
+| §15 | §2, §7 and §8 |

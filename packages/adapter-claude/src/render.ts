@@ -51,7 +51,7 @@ function yamlScalar(value: string): string {
  * The body — the source marker, the concatenated `shared` preamble, the
  * refusals, steps and recovery — is `renderSkillBody` in the compiler, because
  * none of it is vendor behaviour: it comes from one contract and renders
- * identically for every vendor. Spec §7.1's concatenation decision, and the
+ * identically for every vendor. Claude architecture former §7.1's concatenation decision, and the
  * screening rules that go with it, live there.
  */
 export class ClaudeRenderer implements WorkflowRenderer {

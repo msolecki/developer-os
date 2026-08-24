@@ -115,7 +115,7 @@ describe("rendered views", () => {
     for (const text of [renderVaultMap(index), renderCatalog(index)]) {
       expect(text.match(/^generatedAt: /gmu)).toHaveLength(1);
       expect(text).toContain(`generatedAt: ${FROZEN}`);
-      /** Spec §6.3 replaces this line to compare canonical form. */
+      /** Brain architecture former §6.3 replaces this line to compare canonical form. */
       expect(text.startsWith("---\ngeneratedAt: ")).toBe(true);
     }
   });
@@ -214,7 +214,7 @@ describe("rendered views treat note content as untrusted", () => {
   it("cannot inject a second generatedAt line through a summary", () => {
     /**
      * The product design spec's §14.1 classifies vault files as untrusted
-     * data (not the brain-engine spec, whose §14 is the gate). A summary carrying a
+     * data (not Brain architecture former §14, which is the gate). A summary carrying a
      * newline would otherwise start a fresh line in the artifact, and the drift
      * canonicalizer replaces only the first `generatedAt:` it finds — so a note
      * could pin the sentinel and make its own edits invisible to `index-drift`.
@@ -500,7 +500,7 @@ describe("a tag cannot forge line or block structure", () => {
 
   it("cannot add a second generatedAt line by being named one", () => {
     /**
-     * Spec §6.1(1): `generatedAt` appears exactly once per artifact, at a fixed
+     * Brain architecture former §6.1(1): `generatedAt` appears exactly once per artifact, at a fixed
      * location. A tag named `generatedAt:` reaches the start of the tag line,
      * and §6.3's canonicalizer replaces only the first match.
      */

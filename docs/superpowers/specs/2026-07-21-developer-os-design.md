@@ -1,10 +1,21 @@
 # Developer OS — Product and Architecture Design
 
 **Date:** 2026-07-21
-**Status:** Approved in conversation on 2026-07-21
+**Status:** Approved in conversation on 2026-07-21; active as the umbrella design until the
+remaining product entries A10–A16 close.
 **Target repository:** `git@github.com:msolecki/developer-os.git`
 **Product name:** Developer OS
 **CLI command:** `developer-os`
+
+> **Implementation record, 2026-08-24 — read before treating historical sequencing as current
+> state.** The repository has been public since 2026-08-10; the license remains a release gate, not
+> a visibility gate (`BACKLOG.md` §0 and `ORDER.md` Track L). The four `brain` commands §8 calls
+> "not yet built" shipped with DOS-P2 on 2026-08-10. DOS-P6 also superseded the automatic-capture,
+> hook and wrapper assumptions in §2 and §18: capture is agent-authored, neither adapter ships a
+> hook, `developer-os run claude|codex` is not built, and the affected capabilities report
+> `not-used`. The approved amendment is the knowledge-pipeline spec §3.1–§3.2; its implementation
+> record is `docs/architecture/knowledge-pipeline.md` §2 and the amendment index is `BACKLOG.md` §8.
+> The original clauses remain below as the approved baseline they amended.
 
 ## 1. Summary
 
@@ -250,8 +261,7 @@ or both paths resolve to the same directory.
 >
 > 1. **A `brain` group is added** — `brain reindex|lint|search|status` — and `search`
 >    becomes an alias for `brain search`. Amended 2026-08-04 by
->    `specs/2026-07-21-developer-os-brain-engine-design.md` §11; not yet built (its plan's
->    Task 9).
+>    DOS-P2 and shipped 2026-08-10; `docs/architecture/brain.md` is the surviving record.
 > 2. **`--verbose` is not implemented anywhere**, and dispatch is strict, so passing it
 >    exits 2. It belongs to the first subsystem with diagnostics worth printing. See
 >    `docs/architecture/foundation.md` §7.

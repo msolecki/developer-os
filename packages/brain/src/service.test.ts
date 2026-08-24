@@ -313,7 +313,7 @@ describe("BrainService.status", () => {
     expect(classes).not.toContain("index-drift");
 
     /**
-     * Spec §9's second named example — "folders that are neither configured
+     * Brain architecture former §9's second named example — "folders that are neither configured
      * nor private". It is a `frontmatter` warn, so an error-only filter would
      * drop it while every other assertion here still passed.
      */
@@ -322,7 +322,7 @@ describe("BrainService.status", () => {
 
   it("leaves a duplicate title out of adoption but keeps a case collision in", async () => {
     /**
-     * Spec §7 draws this line in one sentence: "Two notes with the same title
+     * Brain architecture former §7 draws this line in one sentence: "Two notes with the same title
      * are a curation question. Two paths that differ only in case are a
      * data-loss question the moment the vault is cloned." The first is a warn
      * and must not block adoption; the second is an error and must.
@@ -349,7 +349,7 @@ describe("BrainService.status", () => {
   it("leaves curation out of adoption", async () => {
     /**
      * An agent-written note nobody has reviewed, and a note reviewed long ago,
-     * are both perfectly valid. Spec §9 defines adoption as "what would have to
+     * are both perfectly valid. Brain architecture former §9 defines adoption as "what would have to
      * change for it to validate" — a judgement about the vault's shape, not
      * about its housekeeping.
      */

@@ -69,7 +69,7 @@ describe("reportClaudeCapabilities", () => {
   });
 
   /**
-   * Spec §9.2. With nothing to ask, every answer is `unknown` — never a claim
+   * Claude architecture former §9.2. With nothing to ask, every answer is `unknown` — never a claim
    * that the install lacks the feature, because no install was examined.
    */
   it("reports unknown, not absence, when there is nothing to probe", async () => {
@@ -174,7 +174,7 @@ describe("reportClaudeCapabilities", () => {
   });
 
   /**
-   * A capture reaches the vault because somebody ran a command. Spec §8.2's
+   * A capture reaches the vault because somebody ran a command. Knowledge-pipeline spec §8.2's
    * fallback to the wrapper, and the `hook` branch beside it, both name paths
    * this product is not building (knowledge-pipeline spec §3.1).
    */

@@ -14,7 +14,7 @@ export type CodexCapabilities = Readonly<Record<CodexCapabilityKey, CapabilitySt
  * ones.
  *
  * `plugin_hooks` was already here under the name `UNSETTLED`: this subsystem
- * ships no hooks file (see the plan's opening decisions) and spec §15.1 records
+ * ships no hooks file (see the plan's opening decisions) and Codex architecture former §15.1 records
  * the plugin-bundled path as documented and unobserved. The other five join it
  * because knowledge-pipeline spec §3.1 declines both automatic capture paths —
  * no lifecycle hook fires, and no `developer-os run codex` wrapper is built.

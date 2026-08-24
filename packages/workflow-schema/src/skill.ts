@@ -89,7 +89,8 @@ const SEMVER = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u;
  * `id` reaches the artifact **path** and `version` reaches the source marker,
  * and every renderer accepts anything typed as `WorkflowContractV1` — a value
  * that came from `validateWorkflow` today and could come from code tomorrow.
- * Spec §10 says the plugin directory is the only path an adapter writes; an `id`
+ * Claude architecture former §10 and Codex architecture former §9 make each plugin directory the
+ * only product-owned path its adapter writes; an `id`
  * of `../../evil` would break that, and the render seam is where the rule "the
  * first surface owns screening it" applies.
  *
@@ -147,7 +148,8 @@ export function assertUsablePreamble(shared: WorkflowContractV1): void {
 /**
  * The vendor-neutral half of a skill: everything below the frontmatter.
  *
- * Spec §7.1. `shared` carries the entire prompt-injection defence, and
+ * Claude architecture former §7.1 and Codex architecture former §6.1. `shared` carries the entire
+ * prompt-injection defence, and
  * `WorkflowContractV1` has no composition field — `WorkflowOverlayV1.extends`
  * pins an overlay to its base, which is a different relation — so nothing in
  * the contract delivers that preamble to the other five workflows. The
@@ -164,16 +166,17 @@ export function assertUsablePreamble(shared: WorkflowContractV1): void {
  * path and its plugin manifest.
  *
  * The overlay is **applied**, not discarded. It used to be `void overlay`, so a
- * caller who passed one lost it silently and no test failed — while spec §7 says
- * the input is a contract plus its optional vendor overlay. `applyOverlay` is
+ * caller who passed one lost it silently and no test failed — while workflow architecture §4 says
+ * rendering consumes a contract plus its optional vendor overlay. `applyOverlay` is
  * the compiler's own merge and the only thing that knows an overlay is
  * presentation-only; re-implementing the rule here is how the two come to
  * disagree. A refused overlay throws, because rendering the base contract
  * instead would silently produce an artifact the caller did not ask for.
  *
  * `OverlayOutcome.lifecycle` is deliberately unused: DOS-P4 emits no hook
- * artifact at all (spec §6, amended 2026-08-11), so there is nothing for a
- * lifecycle binding to bind to. Owner of the restoration: DOS-P6.
+ * artifact at all (both adapter architecture notes §5), so there is nothing for a lifecycle
+ * binding to bind to. Shipped workflows are manual-only; a future non-manual trigger belongs to
+ * DOS-P11 and must be observed firing.
  */
 export function renderSkillBody(
   contract: WorkflowContractV1,
@@ -324,7 +327,7 @@ function renderSteps(contract: WorkflowContractV1): readonly string[] {
     lines.push(`Effect: \`${screen(step.do)}\``, "");
     /**
      * The command an agent would run for this verb, named right beside the
-     * effect it names — the fix for spec §4's finding that three shipped
+     * effect it names — the fix for knowledge-pipeline spec §4's finding that three shipped
      * skills, in both vendor trees, named commands that do not exist because
      * nothing in the pipeline mapped a verb to an invocation. `lookupVerb`
      * returns `undefined` for a verb outside the vocabulary and `null` for
@@ -347,7 +350,8 @@ function renderSteps(contract: WorkflowContractV1): readonly string[] {
 }
 
 /**
- * Spec §7.2. `recovery.resume` is a command string that **nothing in this
+ * Claude architecture former §7.2 and Codex architecture former §6.2. `recovery.resume` is a
+ * command string that **nothing in this
  * product executes**, and `workflow-schema.md` §6 hands the adapters the rule
  * that whichever surface first displays it must treat it as data. It is fenced
  * as `text` rather than `bash` so no renderer downstream offers to run it, and

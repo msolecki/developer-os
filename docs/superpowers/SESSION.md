@@ -186,11 +186,12 @@ These are not style preferences. Each one exists because it was already violated
   → finalize`.
 - **Reviewer ≠ author.** Always. A subagent's security or auth change is unauthorized until
   independently reviewed.
-- **Finished plans get deleted, not archived.** When a plan's last step closes, remove the
-  file in that same commit, after carrying any evidence a later step still needs into the
-  document that needs it. Git history is the archive. **A spec is not a plan** — it stays
-  while its subsystem is unfinished, and afterwards only while another document points at
-  it as the design of record, with a status line that says so in the past tense.
+- **Finished plans and completed subsystem specs get deleted, not archived.** A plan stays until
+  its last step closes; a subsystem spec stays until its checkpoint closes. Before deleting either,
+  carry every surviving decision, constraint, amendment, residual, and inbound reference into the
+  architecture or program document that owns it. Delete the source in the same cleanup or closure
+  commit. Git history is the archive. Umbrella and in-progress specs stay while they still govern
+  open work.
 - **An approved document is not silently rewritten.** When something you build changes a
   document that was approved before you started, record the change in the document you are
   writing, cross-reference it from the one it amends, and register the pair in

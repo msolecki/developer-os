@@ -34,7 +34,7 @@ export type ParseOutcome =
  * known-tags fallback even on the core schema, so `!!binary` becomes a `Buffer`
  * and `!!timestamp` a `Date` — values a `.strict()` string schema would reject
  * with a confusing message, and values a future library version could widen.
- * Brain-engine spec §4.4 clause 5 settled this.
+ * Brain architecture former §4.4 clause 5 settled this.
  *
  * **Any anchor or alias.** An alias makes the bytes and the parsed value
  * disagree, which is the one property this layer exists to defend, and refusing

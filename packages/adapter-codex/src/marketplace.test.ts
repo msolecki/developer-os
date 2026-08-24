@@ -42,13 +42,13 @@ describe("renderMarketplace", () => {
   });
 
   /**
-   * Spec §14.4 names the keys a marketplace document carries and does not
+   * Codex architecture former §14.4 names the keys a marketplace document carries and does not
    * document the accepted *values* of `policy` or `category`. We emit only what
    * we can point at, and Task 17 amends §14.4 with whatever the real CLI
    * accepted — an invented enum value that a future version rejects is a
    * failure only the integration test would find.
    */
-  it("emits only the keys spec §14.4 names, and invents no enum values", () => {
+  it("emits only the keys Codex architecture former §14.4 names, and invents no enum values", () => {
     const parsed = JSON.parse(renderMarketplace({ home }).contents) as Record<string, unknown>;
     expect(Object.keys(parsed).sort()).toEqual(["name", "plugins"]);
     const plugin = (parsed.plugins as Record<string, unknown>[])[0] ?? {};

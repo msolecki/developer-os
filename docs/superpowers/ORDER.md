@@ -82,7 +82,7 @@ nothing about its checks, so it is not rounded up to `done`.
 > `BACKLOG.md` §8 row carry an outcome; **four of the six 2026-08-13 rows had never been
 > cross-referenced into the documents they amend**, eight days after ratification. `SESSION.md`
 > already names four earlier amendments that went four days the same way. So a reader of design spec
-> §13.4, §17.5, workflow-compiler §6, or this file's own DOS-P7 uninstall gate was getting the
+> §13.4, §17.5, `docs/architecture/workflow-schema.md` §8.1, or this file's own DOS-P7 uninstall gate was getting the
 > superseded contract. All four now carry it, and §8 records what each one gained.
 
 **Read the spec's §3 and then the plan's five decisions** before touching this subsystem. The one
@@ -167,10 +167,12 @@ pattern rather than a first.
 - **Whether a model-run command can write raw bytes into the stream this product parses is
   unexamined** — NEW-47, which decides NEW-45's tie-break and settles from vendor source without
   spending anything.
-- **The Brain spec's five-warning amendment is written and awaiting founder ratification** — NEW-48,
-  raised by the review of NEW-30's closure.
-- **`maxTurns` is bounded under Claude and silently dropped under Codex**, one shared schema with two
-  behaviours. `codex-adapter.md` §11 is the full list with owners.
+- ~~The Brain lint inventory omitted all five warnings~~ — **NEW-48, closed 2026-08-24.** The
+  current six-class inventory moved into `docs/architecture/brain.md` before the completed spec was
+  deleted, so no approval question remains against a retired document.
+- **Direct adapter invocation has a turn-bound asymmetry**: Claude accepts a bounded `maxTurns`,
+  Codex has no field, and the shared `agent.prompt` parser refuses the key before vendor selection.
+  DOS-P7 owns a cross-vendor bound; `codex-adapter.md` §7 and §11 carry the current contract.
 
 **The terminal-event rule is no longer on this list**, and how it left is the more useful fact: it did
 not get confirmed, it got falsified. NEW-21's real call showed `finalJsonlLine` returned a
@@ -190,10 +192,10 @@ plans could be deleted.
 | Closed | When | What survives it |
 |---|---|---|
 | Foundation | 2026-08-01 | `docs/architecture/foundation.md`, `…-constraints.md` — the CLI, transactions, the manifest, and two open founder questions. Gate evidence: `docs/releases/foundation-checkpoint.md` |
-| A6 · DOS-P2 Brain engine | 2026-08-10 | `docs/architecture/brain.md`, and `specs/…-brain-engine-design.md` as the design of record |
-| A7 · DOS-P3 Workflow compiler | 2026-08-10 | `docs/architecture/workflow-schema.md` — §7 records four canonical workflows that say less than the product spec does, §8 nine residuals |
-| A8 · DOS-P4 Claude adapter | 2026-08-11 | `docs/architecture/claude-adapter.md` — why in-place discovery beat a marketplace copy, why no hooks ship, and twelve residuals |
-| A9 · DOS-P5 Codex adapter | 2026-08-12 | `docs/architecture/codex-adapter.md` — why the install is a local marketplace, the four spec amendments the real binary forced, the two-adapter table DOS-P6 inherits, and twelve residuals. **Its checkpoint is half met and §10 says which half.** |
+| A6 · DOS-P2 Brain engine | 2026-08-10 | `docs/architecture/brain.md`; completed plan and spec are recoverable from git history |
+| A7 · DOS-P3 Workflow compiler | 2026-08-10 | `docs/architecture/workflow-schema.md` — the normative compiler contract, the four historical gaps DOS-P6 closed, the two genuine gaps that remain, and current residuals |
+| A8 · DOS-P4 Claude adapter | 2026-08-11 | `docs/architecture/claude-adapter.md` — why in-place discovery beat a marketplace copy, why no hooks ship, and which findings are closed or remain owned |
+| A9 · DOS-P5 Codex adapter | 2026-08-12 | `docs/architecture/codex-adapter.md` — why the install is a local marketplace, the real-binary amendments, the two-adapter table, and the current checkpoint state in §10 |
 | Track B · legacy exit | 2026-08-10 | `BACKLOG.md` §6 — what a cutover still has to know, and one decision (EXIT-1) that is a conversation with the founder rather than a backlog item |
 | Track R · repository defects (R1) | 2026-08-15 | three `BACKLOG.md` §1 rows closed with a regression test each — NEW-18, NEW-17, NEW-19. It also turned **NEW-15** from an implementation into a founder decision, and added **NEW-22**. Both are §1 rows |
 
@@ -362,10 +364,10 @@ request exists so a human sees it first.
 | what to do next | this file |
 | what a missing spec must decide, and what it produces | `BACKLOG.md` §3 |
 | what the knowledge pipeline is, and why nothing captures automatically | `docs/architecture/knowledge-pipeline.md`, then the spec it points at |
-| the three steps that close DOS-P6 | `plans/2026-07-21-developer-os-knowledge-pipeline.md` |
+| the one remaining step that closes DOS-P6 | `plans/2026-07-21-developer-os-knowledge-pipeline.md` |
 | what the Brain engine is, and its six residuals | `docs/architecture/brain.md` |
-| what the workflow compiler is, what it deliberately cannot do, and the four workflows that say less than the product spec does | `docs/architecture/workflow-schema.md` |
-| what the Claude adapter is, why it ships no hooks, and its twelve residuals | `docs/architecture/claude-adapter.md` |
+| what the workflow compiler is, what it deliberately cannot do, what DOS-P6 closed, and the two gaps that remain | `docs/architecture/workflow-schema.md` |
+| what the Claude adapter is, why it ships no hooks, and which findings remain live | `docs/architecture/claude-adapter.md` |
 | what the Codex adapter is, why the install is a local marketplace, and the two-adapter table DOS-P6 inherits | `docs/architecture/codex-adapter.md` |
 | the consolidated trust boundaries, and the residuals with owners | `docs/architecture/threat-model.md` |
 | what Foundation delivered, and what it deliberately cannot do | `docs/architecture/foundation.md` |
@@ -391,8 +393,9 @@ the old numbers.
 of the ones that turn a canonical workflow into something an agent can load. Neither of them can
 execute what it renders, which is the whole of what remains on the product path.
 
-**Seven Track A entries remain.** DOS-P6's implementation, its spec and plan closed 2026-08-13. Then
-DOS-P7, DOS-P10, DOS-P11 and DOS-P12 — and **DOS-P7 now owes four documents rather than two**, since
+**Seven Track A entries remain.** DOS-P6's implementation closed on 2026-08-13; its live spec and
+plan remain until the final closure step completes. Then DOS-P7, DOS-P10, DOS-P11 and DOS-P12 — and
+**DOS-P7 now owes four documents rather than two**, since
 the founder split it on 2026-08-21 into opt-in surfaces and version lifecycle. **The first of the ten
 exists**: `specs/2026-08-21-developer-os-opt-in-surfaces-design.md`, written 2026-08-21 and awaiting
 approval. Nine are owed before any of their code is written. Then two entries that are not subsystems — the cutover (A15) and the release (A16) — plus
@@ -419,20 +422,18 @@ three implementations, and it is the larger half. Do not read the table as the t
 Program Task 6 shows one unticked box and it is **not** work: the hooks box was rewritten to record
 that hooks are declined, and nothing shipped for it by design.
 
-**`BACKLOG.md` §1 is twenty-five open repository defects** — twenty-nine `### NEW-` headings on
-2026-08-21, less the four closed that day: NEW-13, NEW-30, NEW-41 and NEW-43. **None waits on R2**,
-which is closed: sixteen of the eighteen that came out of R2's own reviews are still open; five —
-NEW-44, NEW-46 and NEW-47 from the reviews of the NEW-21 diff, NEW-48 and NEW-49 from the reviews of
-NEW-30's and NEW-41's closures — are startable in a session; and four need somebody or something no
-session has: NEW-42 an interactive vendor session, NEW-45 the founder's credits, NEW-20 registered as
-deliberately not fixed, NEW-7 a machine with Obsidian. 16 + 5 + 4 = 25.
+**`BACKLOG.md` §1 is twenty-four open repository defects** — twenty-nine `### NEW-` headings, less
+NEW-13, NEW-30, NEW-41 and NEW-43 closed on 2026-08-21 and NEW-48 closed on 2026-08-24. **None waits
+on R2**, which is closed: sixteen of the eighteen that came out of R2's own reviews are still open;
+four — NEW-44, NEW-46 and NEW-47 from the reviews of the NEW-21 diff, and NEW-49 from the review of
+NEW-41's closure — are startable in a session; and four need somebody or something no session has:
+NEW-42 an interactive vendor session, NEW-45 the founder's credits, NEW-20 registered as deliberately
+not fixed, NEW-7 a machine with Obsidian. 16 + 4 + 4 = 24.
 
-**Closing two rows raised two rows, and that is the honest arithmetic of this section.** NEW-30 closed
-and the review of its closure found that the Brain spec's lint-class table documents none of the five
-warnings that class emits — NEW-48. NEW-41 closed and the review of *its* closure found that the CLI
-gained `--status` while the canonical workflow the agent drives did not — NEW-49. **The section ended
-the day exactly where it started**, which is not failure: what it bought was two defects fixed and two
-found, and the two found were invisible until something moved.
+**Closing two rows raised two rows, and one of those has now closed.** NEW-30's review found the
+missing Brain lint inventory — NEW-48, closed by the 2026-08-24 completed-spec migration. NEW-41's
+review found that the CLI gained `--status` while the canonical workflow did not — NEW-49, still
+open. The reviews bought two defects fixed and two previously invisible defects found.
 
 **NEW-21 left six rows and one has already gone.** NEW-43 closed the day after it was raised — but it
 was **one of four** a session could have taken, not the only one: NEW-44, NEW-46 and NEW-47 are still
@@ -440,16 +441,15 @@ open, and NEW-47 needs no credits either. **NEW-30 closed the same day from outs
 is the more useful example: it had sat since 2026-08-17 marked "the weakest of the four" and its fix
 was one call and a decision that had already been made for its class. That is the shape this queue should keep expecting: reviews
 add rows faster than work closes them, and the ones that close fastest are the ones nobody has to be
-asked about. **Sixteen of the twenty-five are the honest cost of closing ten decided defects with a
+asked about. **Sixteen of the twenty-four are the honest cost of closing ten decided defects with a
 fresh-context review on each** — eighteen were raised, and NEW-30 and NEW-41 have closed — and a
 review that finds nothing is rarer than one that finds a residual.
 
-**Add nine open decisions** that are not defect rows: the two Foundation founder questions, DOS-P9's
-dedicated-plan question, and the **six** `BACKLOG.md` §8 amendments awaiting ratification. Three are
+**Add eight open decisions** that are not defect rows: the two Foundation founder questions, DOS-P9's
+dedicated-plan question, and the **five** `BACKLOG.md` §8 amendments awaiting ratification. Three are
 Track R R2's — spec §8.2's `[redaction]` schema, `foundation.md` §2's `CliError` slot, and
-knowledge-pipeline §5.5's `accepted → rejected` row. **Three arrived on 2026-08-21**: the Brain spec's
-lint-class table (NEW-48), the program plan's Task 7 split, and knowledge-pipeline §5.6's `--status`
-line (NEW-41).
+knowledge-pipeline §5.5's `accepted → rejected` row. **Two arrived on 2026-08-21**: the program
+plan's Task 7 split and knowledge-pipeline §5.6's `--status` line (NEW-41).
 
 **A10 became startable on 2026-08-20** and is the only thing on the product path that is: NEW-21
 closed when the external usage limit reset, and Step 5 landed 2026-08-21, so what remains of A10 is

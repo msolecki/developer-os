@@ -67,7 +67,7 @@ export interface DoctorOptions {
    *
    * **Opt-in, and that is a finding rather than a preference.** Claude's probe
    * is `claude plugin validate`, which writes `~/.claude.json` and a timestamped
-   * backup under `~/.claude/backups/` (spec §14.1, observed against a real
+   * backup under `~/.claude/backups/` (Claude architecture former §14.1, observed against a real
    * installation on 2026-08-11). `doctor` reports and never repairs, and
    * Foundation's end-to-end suite asserts it touches nothing outside the
    * product's own paths — probing by default broke that assertion, which is how
@@ -570,7 +570,7 @@ async function checkClaudeCapabilities(
  *
  * **The plugin root is under the *product* home, not the user's home** — the
  * mirror image of the bug fixed above, where the product home was used for a
- * path under the user's home. Spec §4 puts the tree at
+ * path under the user's home. Codex architecture former §4 puts the tree at
  * `<product-home>/codex/plugins/developer-os`, and `install.ts`'s
  * `marketplaceRoot` resolves the same `CODEX_ROOT_SEGMENT` against the
  * product home for the same reason — `PLUGIN_TREE_SEGMENTS`

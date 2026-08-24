@@ -46,7 +46,7 @@ export type RetrievalResult =
   | { readonly kind: "no-candidates"; readonly tried: readonly string[] };
 
 /**
- * Spec §8. Integers, so no float ever enters an ordering comparison — two
+ * Brain architecture former §8. Integers, so no float ever enters an ordering comparison — two
  * machines that disagree in the last bit of a float would disagree about which
  * note came first.
  */
@@ -190,7 +190,7 @@ interface Scored {
 
 /**
  * Stage 2 — lexical. Integer weighted term counts over the fields the note
- * carries. `stage` and `reviewed` are returned and never read: spec §8's trust
+ * carries. `stage` and `reviewed` are returned and never read: Brain architecture former §8's trust
  * model puts the judgement in front of the reader rather than folding it into
  * an unfalsifiable number that quietly reorders the list.
  */
@@ -230,7 +230,7 @@ function scoreNote(
     match: {
       /**
        * **Not** screened, unlike the two fields below, and that asymmetry is
-       * deliberate: spec §14 gates on "every retrieval match resolves to a
+       * deliberate: Brain architecture former §14 gates on "every retrieval match resolves to a
        * canonical note that exists at the returned path", so this is machine
        * identity and must stay byte-exact. Discovery validates nothing about
        * filename characters, so a file really can be named with an ESC in it.

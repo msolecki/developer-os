@@ -4,7 +4,7 @@ import type { RenderedArtifact } from "@developer-os/workflow-schema";
 export const PLUGIN_NAME = "developer-os";
 
 /**
- * Spec §4: `~/.claude/skills/developer-os/`, discovered in place. Segments
+ * Claude architecture former §4: `~/.claude/skills/developer-os/`, discovered in place. Segments
  * rather than a joined absolute path, so the caller resolves them against a
  * real home and no machine path is ever written into this repository.
  */
@@ -18,12 +18,12 @@ export const PLUGIN_INSTALL_SEGMENTS: readonly string[] = [
 // The duplicate that lived here is gone — `claude-adapter.md` §9.5.
 
 /**
- * Spec §14.1: the manifest is optional and `name` is its only required field,
+ * Claude architecture former §14.1: the manifest is optional and `name` is its only required field,
  * and Claude Code ignores unrecognized top-level fields at load.
  *
  * Minimal on purpose. `displayName` requires 2.1.143, `defaultEnabled` requires
  * 2.1.154 and an object `metadata` requires 2.1.222; depending on none of them
- * is what keeps the supported floor at `CLAUDE_MINIMUM_VERSION` (spec §5.2).
+ * is what keeps the supported floor at `CLAUDE_MINIMUM_VERSION` (Claude architecture former §5.2).
  */
 function manifest(): RenderedArtifact {
   return {
@@ -33,11 +33,10 @@ function manifest(): RenderedArtifact {
 }
 
 /**
- * **`hooks/hooks.json` is deliberately not emitted, and this is the record of
- * why.** Amends spec §6, which declares three events. **Ratified by the founder
- * on 2026-08-12**, and the ratified decision covers *both* adapters: neither
- * this one nor Codex ships `hooks/hooks.json`, so the two are in one state
- * rather than two coincidences. `BACKLOG.md` §8 carries the row.
+ * **`hooks/hooks.json` is deliberately not emitted.** The first version named
+ * three commands under a `bin/` directory that did not exist; removing those
+ * dangling claims was ratified on 2026-08-12 and DOS-P6 later declined the two
+ * capture hooks. `BACKLOG.md` §8 carries the decision for both adapters.
  *
  * The first version emitted hooks whose commands were
  * `${CLAUDE_PLUGIN_ROOT}/bin/session-start` and two siblings. A fresh-context
@@ -46,28 +45,18 @@ function manifest(): RenderedArtifact {
  * `claude plugin validate` checks schema, not existence, so `plugin_hooks`
  * could still report `yes` over a dangling path.
  *
- * The obvious repair — emit the three scripts — does not work, for a reason
- * that only appears once you try it. A `type: "command"` hook needs an
- * executable file, and **nothing in this pipeline can express an executable
- * bit**: `RenderedArtifact` is `{ path, contents }`, and `ManagedArtifactV1`
- * has `kind: "file"` and no mode. A non-executable script fails exactly as a
- * missing one does.
- *
- * So the honest state is: this adapter ships skills, and nothing automatic
- * captures anything — which is what the capability model reports, because
- * `session_end_capture`, `session_start_injection` and `pre_compact_backup` are
- * `not-used` (DOS-P6 Task 3; they were `wrapper-required` until spec §3.1
- * declined the wrapper too). Nothing regresses; a claim that was always false
- * stops being made.
- *
- * **What restoring it needs**, together, in one change: the hook bodies (whose
- * behaviour is DOS-P6's capture contract), a way to mark a generated artifact
- * executable, and a test that observes a hook actually firing. Owner: DOS-P6.
+ * An executable bit is not the blocker: a `type: "command"` handler may name
+ * the installed `developer-os` binary directly. The two capture events remain
+ * declined because neither can supply faithful agent-authored observation text
+ * without reading the vendor transcript field, which this product refuses. DOS-P11 may
+ * reintroduce only the eleven non-capture hooks from the legacy runtime. Any
+ * such change must name installed product verbs, observe the hook firing, and
+ * cover drift and uninstall in the same change.
  */
 
 /**
  * The rendered skills plus the two files that make them a plugin, in a stable
- * order. Ordering is part of the artifact contract: spec §7.3 requires the tree
+ * order. Ordering is part of the artifact contract: Claude architecture former §7.3 requires the tree
  * to be byte-identical across two renders and under a reversed directory
  * reader, and a tree whose order depends on input order cannot be.
  */

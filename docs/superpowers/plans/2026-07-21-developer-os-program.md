@@ -105,10 +105,10 @@ P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5
 |---|---|---|
 | 0 — preserve sources, establish the publication boundary | 2026-07-21 | the three files in `docs/migration/`, and the self-containment constraint in Global Constraints above — enforced by `npm run lint` since 2026-08-01 rather than by prose |
 | 1 — public foundation and CLI lifecycle | 2026-08-01 | `docs/architecture/foundation.md`, `docs/architecture/foundation-constraints.md`, `docs/releases/foundation-checkpoint.md` |
-| 2 — Brain engine | 2026-08-10 | `docs/architecture/brain.md`, and `specs/2026-07-21-developer-os-brain-engine-design.md` as the design of record |
-| 3 — workflow compiler | 2026-08-10 | `docs/architecture/workflow-schema.md`, and `specs/2026-07-21-developer-os-workflow-compiler-design.md` as the design of record |
-| 4 — Claude Code adapter | 2026-08-11 | `docs/architecture/claude-adapter.md`, and `specs/2026-07-21-developer-os-claude-adapter-design.md` as the design of record |
-| 5 — Codex adapter | 2026-08-12 | `docs/architecture/codex-adapter.md`, and `specs/2026-07-21-developer-os-codex-adapter-design.md` as the design of record |
+| 2 — Brain engine | 2026-08-10 | `docs/architecture/brain.md`; completed plan and spec are recoverable from git history |
+| 3 — workflow compiler | 2026-08-10 | `docs/architecture/workflow-schema.md`; completed plan and spec are recoverable from git history |
+| 4 — Claude Code adapter | 2026-08-11 | `docs/architecture/claude-adapter.md`; completed plan and spec are recoverable from git history |
+| 5 — Codex adapter | 2026-08-12 | `docs/architecture/codex-adapter.md`; completed plan and spec are recoverable from git history |
 
 None can be re-run and none should be read as instruction: Task 0's inputs are deliberately out
 of reach, and every plan behind these six was deleted when its last step closed. The recovery
@@ -123,14 +123,13 @@ while none of the code existed, corrected 2026-08-11. Deleting a closed list doe
 against that direction; the staging rule does. `git add` the paths your own task owns, and read
 `git show --stat HEAD` before believing a commit contains only what you meant.
 
-**Tasks 4 and 5 both closed half met, and the missing half is Task 6's.** Recorded here because a
-reader of the two checkpoints alone would read them as whole. What landed: six skills load in a
-real Claude installation and in a real Codex one, and `doctor` reports both adapters with their
-differences. What did not, in both vendor trees:
-
-- **`capture`, `ingest` and `review` name verbs with no handler anywhere in this product** — six of
-  the seven unimplemented verbs are Task 6's. An adapter renders workflows and executes none of
-  them, so neither task could have closed that half.
+**Tasks 4 and 5 initially closed half met; Task 6 later paid the missing command half.** Recorded
+here because the two checkpoint sentences alone read as whole. What Tasks 4 and 5 proved: all six
+Claude artifacts pass `claude plugin validate` against a real installation, all six Codex skills
+are discoverable in a real disposable installation, and `doctor` reports both adapters with their
+differences. A paid Claude session is still required to prove actual skill discovery there. DOS-P6
+then shipped the commands named by `capture`, `ingest`, `review`, `doctor` and `brain-search`;
+`agent.prompt` is now the sole verb without a step executor.
 - **Neither ships `hooks/hooks.json`**, ratified for both adapters at once on 2026-08-12: a
   `type: "command"` handler needs an executable file, nothing in this pipeline can express an
   executable bit, and the only nameable command is the `developer-os` capture entrypoint, which is

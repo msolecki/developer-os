@@ -33,7 +33,7 @@ const realReader: DirectoryReader = {
 /**
  * Reverses every result array. This is the reader that makes the determinism
  * gate mean something: building twice through the same reader re-runs the same
- * directory order and proves almost nothing (spec §6.2).
+ * directory order and proves almost nothing (Brain architecture former §6.2).
  */
 const reversedReader: DirectoryReader = {
   async readDir(path: string): Promise<readonly DirectoryEntry[]> {

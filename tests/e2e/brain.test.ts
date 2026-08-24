@@ -143,8 +143,8 @@ describe("brain, against the compiled binary under a temporary HOME", () => {
 
       /**
        * Canonical form, not bytes. `generatedAt` is taken from a real clock, so
-       * the two runs differ there and only there — which is exactly why spec
-       * §6.3 defines drift over canonical form rather than over the file.
+       * the two runs differ there and only there — which is exactly why Brain
+       * architecture former §6.3 defines drift over canonical form rather than over the file.
        */
       const canonical = (text: string): string =>
         text.replace(/"generatedAt": "[^"]*"/u, '"generatedAt": "SENTINEL"');

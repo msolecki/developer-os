@@ -60,7 +60,7 @@ Spec §7.1 makes `EFFECT_VOCABULARY`'s hardcoded `content/` and `_indexes` due h
 
 *Taken:* `EFFECT_VOCABULARY` keeps canonical vault-relative names, and a new exported `resolveScopeGlob(glob, config)` rewrites the leading `content/` segment to `config.contentRoot` and the `_indexes` segment to `config.indexesDir`. **Every handler and adapter resolves through it before touching a path**; the compiler's declared-versus-derived arithmetic is untouched, so the equality rule stays the checked arithmetic it was designed to be.
 
-The cost, stated plainly: a user whose `contentRoot` is not `content` reads a skill whose declared scopes name `content/**` while the handler enforces their own root. That is a display gap in a document about the *shape* of a workflow, not an enforcement gap — the enforcement is Task 12's write-scope check, which resolves. **Amends `specs/…-workflow-compiler-design.md` §6** with the resolution function rather than with template syntax, which is a narrower amendment than spec §12 anticipated and is registered as such.
+The cost, stated plainly: a user whose `contentRoot` is not `content` reads a skill whose declared scopes name `content/**` while the handler enforces their own root. That is a display gap in a document about the *shape* of a workflow, not an enforcement gap — the enforcement is Task 12's write-scope check, which resolves. The surviving outcome is `docs/architecture/workflow-schema.md` §8.1: resolution at the handler boundary rather than template syntax in the contract.
 
 **3. `sourceAgent` records `"unknown"` until Task 17 observes a row. This is not an amendment and gets no §8 row.**
 
@@ -119,7 +119,7 @@ What survives them, and what a later reader should open instead:
 
 **Task 19 Step 4's architecture note is written** — `docs/architecture/knowledge-pipeline.md`, twelve
 sections — and it, not this file, is what a later reader needs. This plan is retained only for the
-three steps still unticked below, and is deleted by Step 5.
+one step still unticked below, and is deleted by Step 6.
 
 ---
 
@@ -132,7 +132,7 @@ Spec §10.2 is explicit about why this task exists and what it costs. **The JSON
 **Stop and ask before starting this task.** It spends the founder's credits and runs a vendor binary against a real installation.
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-07-21-developer-os-codex-adapter-design.md` §14.1 — a dated in-place amendment
+- Modify: `docs/architecture/codex-adapter.md` §7 — carry the dated observed result into the surviving record
 - Modify: `packages/adapter-codex/src/invoke.ts` — the `finalJsonlLine` docblock
 - Modify: `packages/brain/src/capture/agent.ts` and `agent.test.ts` — the observed detection rows
 - Modify: `docs/superpowers/specs/2026-07-21-developer-os-knowledge-pipeline-design.md` §10.3 — one row per vendor
@@ -235,7 +235,7 @@ Spec §10.2 is explicit about why this task exists and what it costs. **The JSON
 
 The obligation is precise (spec §10.2): record **whether the final response really is the last parsing line**, and **whether it carries a discriminating field worth filtering on**. Redact the captured stream before it is written to a fixture — it is model output on the founder's account, and this repository is public.
 
-- [x] **Step 2: Amend the Codex spec §14.1 with the observed shape, dated** — *amended twice; the rule was never promoted and was **replaced** on 2026-08-20*
+- [x] **Step 2: Carry the observed shape into `docs/architecture/codex-adapter.md` §7, dated** — *amended twice; the rule was never promoted and was **replaced** on 2026-08-20*
 
 **Do not quietly promote the rule to verified.** If the observation contradicts the rule, that is the finding, and `finalJsonlLine` changes in the same commit with a regression fixture. If it confirms it, say so with the date and the version observed, and correct the docblock that currently calls itself provisional.
 
@@ -365,20 +365,21 @@ Read **decision 4** for the third box. It is **rewritten to record the decline**
 - `docs/superpowers/ORDER.md`: A10 → `done`, `NOW` moves to A11, the closed table gains a DOS-P6 row naming `knowledge-pipeline.md` and `threat-model.md`.
 - `docs/superpowers/BACKLOG.md`: §3's DOS-P6 entry is removed; §5's two rows leave; §8's **six pending rows** — this plan's decisions 1, 2, 4 and 5, plus the two Tasks 12 and 15 raised — carry their outcome rather than their question, and the spec's own six move from ratified to discharged as each task lands; §1's NEW-13 closes against Task 4.
 - **The residual arithmetic is restated from the notes, not copied from the old sentences.** `ORDER.md` and `BACKLOG.md` §3 both say "thirteen of twenty-four" residuals are DOS-P6's; `codex-adapter.md` §11 now has fourteen numbered residuals with eight naming DOS-P6, and `claude-adapter.md` §9 has twelve with four reachable. Count them against the notes as they stand and correct whichever sentence is wrong — this predates the plan, and Task 19 is where a stale count stops being carried forward.
-- The spec's status line moves to the past tense and names `knowledge-pipeline.md` as what points at it, per `SESSION.md`'s rule that a spec stays only while another document names it as the design of record.
-- **This plan is deleted in the same commit**, after every piece of evidence a later step needs has been carried into the document that needs it. Git history is the archive.
+- At Task 19 Step 6, after the checkpoint closes, the completed spec and this plan are both deleted
+  in the same closure commit, after every piece of evidence a later step needs has been carried into
+  `docs/architecture/knowledge-pipeline.md`, `ORDER.md`, or `BACKLOG.md`. Git history is the archive.
 
 > **What Step 5 did, and the three things in its own list it could not.** It discharged all six
 > `BACKLOG.md` §8 rows of 2026-08-13 — and **four of the six had never been cross-referenced into the
 > documents they amend**, eight days after ratification, so a reader of design spec §13.4 or §17.5, of
-> workflow-compiler §6, or of `BACKLOG.md` §7's own DOS-P7 uninstall gate was getting the superseded
+> `docs/architecture/workflow-schema.md` §8.1, or of `BACKLOG.md` §7's own DOS-P7 uninstall gate was getting the superseded
 > contract. Writing those four cross-references was most of the step. It also closed §1's **NEW-13**
 > against Task 4's brands, which had read `Status: open` for nine days while the code refused the
 > misuse at compile time.
 >
 > **Three items on this step's list presume the subsystem is closed, and it is not.** `ORDER.md`'s A10
 > row cannot read `done`, `NOW` cannot move to A11, the closed table cannot gain a DOS-P6 row, and
-> `BACKLOG.md` §3's DOS-P6 entry and the spec's past-tense status line cannot follow — because Step 6
+> `BACKLOG.md` §3's DOS-P6 entry and deletion of the completed spec cannot follow — because Step 6
 > is unticked and the checkpoint names CI green on the commit as one of its three conditions. **This
 > plan is therefore not deleted either**, which is the rule working rather than failing: a plan is
 > deleted when its last step closes.

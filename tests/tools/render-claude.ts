@@ -4,7 +4,7 @@
  * **Not a CLI command, and that is a correction to the plan.** DOS-P4's Task 10
  * said to add `developer-os workflow render --vendor claude`, and Task 10 shipped
  * without it, recording the debt rather than hiding it. Taken literally the step
- * conflicts with the design it implements: spec §10 says the adapter writes to
+ * conflicts with the design it implements: Claude architecture former §10 says the adapter writes to
  * exactly one directory — the plugin directory under the user's `~/.claude` — and
  * a shipped verb that writes `./plugins/claude` into whatever directory a user
  * happens to stand in writes somewhere else entirely, outside the manifest,

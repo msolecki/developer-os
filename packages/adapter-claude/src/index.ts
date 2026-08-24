@@ -7,8 +7,8 @@
  * everyone has to remember.
  *
  * `parseAgentPromptArgs` is deliberately **not** re-exported. It lives in
- * `packages/core` because DOS-P4 and DOS-P5 both execute `agent.prompt` (spec
- * §8.1, as amended on 2026-08-11), and a package that re-exports another
+ * `packages/core` because DOS-P4 and DOS-P5 both execute `agent.prompt` (Claude
+ * architecture former §8.1, as amended on 2026-08-11), and a package that re-exports another
  * package's guard hands consumers two import paths for one guarantee.
  *
  * `resolveExecutable`, `DiscoverDependencies` and `ResolveDependencies` were
@@ -29,7 +29,7 @@ export type { ProbeDependencies } from "./probe.js";
 /**
  * `CLAUDE_NOT_USED_KEYS` is exported for one consumer:
  * `apps/cli/src/adapter-capability-parity.test.ts`, the only place both
- * adapters are legally visible at once (spec §1 forbids either importing the
+ * adapters are legally visible at once (Claude architecture former §1 forbids either importing the
  * other, so neither package can assert parity about itself).
  */
 export { CLAUDE_NOT_USED_KEYS, resolveCapabilities } from "./capabilities.js";

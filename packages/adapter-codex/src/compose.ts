@@ -33,7 +33,7 @@ export function renderCodexPlugin(
     (contract) => contract.id === SHARED_WORKFLOW_ID,
   );
   if (shared === undefined) {
-    // Every other artifact concatenates this one's preamble (spec §7.1).
+    // Every other artifact concatenates this one's preamble (Codex architecture former §7.1).
     // Rendering without it would produce five artifacts silently missing the
     // prompt-injection defence, which is the failure the empty-preamble check
     // in `CodexRenderer` exists to prevent — caught here too, because a

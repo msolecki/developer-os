@@ -203,7 +203,7 @@ describe("the generated install tree against a real Codex installation", () => {
    * happened rather than softening the expectation, per the founder's
    * instruction for this task. As shipped (after Task 17's own fix to
    * `installRegistration`'s argv and `renderMarketplace`'s `source.path`,
-   * both amended in spec §14.4), both steps exit 0 against 0.147.0.
+   * both amended in Codex architecture former §14.4), both steps exit 0 against 0.147.0.
    */
   it.skipIf(codex === null)(
     "registers the marketplace and installs the plugin, both exiting 0",
@@ -214,7 +214,7 @@ describe("the generated install tree against a real Codex installation", () => {
   );
 
   /**
-   * The property the whole install shape (spec §4) was chosen for: a local
+   * The property the whole install shape (Codex architecture former §4) was chosen for: a local
    * marketplace resolves an installed plugin to the real on-disk path this
    * adapter wrote, not to the cache copy `codex plugin add` also stages under
    * `$CODEX_HOME/plugins/cache/...` — confirmed to exist separately by Task
@@ -246,7 +246,7 @@ describe("the generated install tree against a real Codex installation", () => {
    * model without sending it — no `codex exec`, no model invocation, no cost,
    * and safe under the founder's 2026-08-12 deferral of Step 2b. Skill
    * entries from a plugin are prefixed `plugin_name:` in the model-visible
-   * list (spec §14.3); Task 17 confirmed this offline-safe command as the
+   * list (Codex architecture former §14.3); Task 17 confirmed this offline-safe command as the
    * only way found to verify skill discoverability without an exec run.
    */
   it.skipIf(codex === null)(
@@ -264,7 +264,7 @@ describe("the generated install tree against a real Codex installation", () => {
   );
 
   /**
-   * Spec §4: the install writes one tree, under the product home, plus
+   * Codex architecture former §4: the install writes one tree, under the product home, plus
    * whatever the vendor's own CLI writes under `CODEX_HOME` — and nothing
    * else. Measured across the whole registration sequence, not just our own
    * writes, because the vendor's CLI is expected to write under `CODEX_HOME`
@@ -289,7 +289,7 @@ describe("the generated install tree against a real Codex installation", () => {
 
   /**
    * `~/.codex/config.toml`, here `$CODEX_HOME/config.toml`, is the vendor's
-   * own file (spec §4.1: "we never parse, edit, or merge" it). Proven by
+   * own file (Codex architecture former §4.1: "we never parse, edit, or merge" it). Proven by
    * ordering: `afterOurWrites` is captured before any `codex` invocation, so
    * if this adapter had written the file itself it would already be present
    * there. It is not — the vendor's `plugin marketplace add` creates it.
@@ -309,7 +309,7 @@ describe("the generated install tree against a real Codex installation", () => {
   );
 
   /**
-   * Uninstall reverses both CLI steps and then removes the tree (spec §4.2).
+   * Uninstall reverses both CLI steps and then removes the tree (Codex architecture former §4.2).
    * Run last, deliberately: it mutates the shared installed state every case
    * above depends on.
    *
@@ -383,7 +383,7 @@ describe("the generated install tree against a real Codex installation", () => {
       }
       expect(simulatedFailureExit).not.toBe(0);
       // Step one already succeeded, step two (simulated) failed — the tree
-      // must still survive, exactly as spec §4.2 requires.
+      // must still survive, exactly as Codex architecture former §4.2 requires.
       expect(await inventory(productHome)).toEqual(beforeUninstall);
 
       // Now the real step two, correct: succeeds — same reasoning as step
@@ -391,7 +391,7 @@ describe("the generated install tree against a real Codex installation", () => {
       await runCodex(unregisterStep.args);
 
       // Both real CLI steps have now succeeded — remove the tree, exactly as
-      // spec §4.2 orders it.
+      // Codex architecture former §4.2 orders it.
       await rm(treeRoot, { recursive: true, force: true });
       expect(await inventory(productHome)).toEqual(new Map());
 

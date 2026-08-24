@@ -86,7 +86,7 @@ export function compareRawBytes(a: string, b: string): number {
 }
 
 /**
- * Excluded at *every* depth, per spec §5 — not only directly under
+ * Excluded at *every* depth, per Brain architecture former §5 — not only directly under
  * `contentRoot`. Applying it at one level only means `content/DEV/_raw/` is
  * enumerated, opened and indexed, which is exactly the quarantined-capture leak
  * deny-by-default exists to prevent.
@@ -98,7 +98,7 @@ export function compareRawBytes(a: string, b: string): number {
  * link branch, so a user whose excluded folder is a link to somewhere outside
  * the vault keeps working instead of losing the whole reindex to a refusal over
  * a directory that is never read. The dot-prefix half stays unconditional —
- * spec §5 excludes any segment beginning with `.`, file or not.
+ * Brain architecture former §5 excludes any segment beginning with `.`, file or not.
  */
 function isExcludedSegment(
   name: string,
@@ -124,7 +124,7 @@ function resolveTopic(name: string, config: BrainConfigV1): string | null {
 }
 
 /**
- * Spec §5: every path is resolved through Foundation's canonicalization, so a
+ * Brain architecture former §5: every path is resolved through Foundation's canonicalization, so a
  * link out of the vault is refused rather than followed. Returns nothing —
  * clearing an in-vault link does not make it followable, and every caller
  * skips the entry either way.

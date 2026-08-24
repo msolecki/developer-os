@@ -53,12 +53,12 @@ export interface BrainStatusReportV1 {
 }
 
 /**
- * A third outcome beside spec §8's two, and deliberately not folded into
+ * A third outcome beside Brain architecture former §8's two, and deliberately not folded into
  * `RetrievalResult`.
  *
  * "The index is not built" and "no note matches" are different answers to
  * different questions, and returning `no-candidates` for both would teach the
- * user to disbelieve the genuine miss. `RetrievalResult` is spec §8's shape and
+ * user to disbelieve the genuine miss. `RetrievalResult` is Brain architecture former §8's shape and
  * belongs to the pure function; this variant belongs to the facade that has to
  * touch a filesystem. Throwing was the alternative and is wrong: a vault nobody
  * has indexed yet is an expected state, not a defect.
@@ -80,7 +80,7 @@ export type BrainSearchOutcome = RetrievalResult | BrainIndexUnavailable;
  * Adoption is about whether the vault *validates*, not whether it is tidy.
  *
  * Stated as an allow-list, because writing it as a subtraction let two classes
- * through by omission. Spec §9 names three examples — missing required keys,
+ * through by omission. Brain architecture former §9 names three examples — missing required keys,
  * folders that are neither configured nor private, unresolved links — and the
  * rule that covers all three is: **every error except `index-drift`, plus
  * `frontmatter` at warn**, which is where the unclassified-folder finding lives.
@@ -90,7 +90,7 @@ export type BrainSearchOutcome = RetrievalResult | BrainIndexUnavailable;
  *
  * - `staleness` — a review from two years ago is a valid note.
  * - `provenance` at warn — so is one an agent wrote and nobody has read.
- * - `duplicates` at warn — spec §7 says it outright: "Two notes with the same
+ * - `duplicates` at warn — Brain architecture former §7 says it outright: "Two notes with the same
  *   title are a curation question." (The case-collision row is an `error` and
  *   is included, which is the same spec sentence's other half: "a data-loss
  *   question the moment the vault is cloned".)

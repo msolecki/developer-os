@@ -2,14 +2,14 @@ import type { CapabilityVersionTable } from "@developer-os/core";
 import { tablePermits as tablePermitsGeneric } from "@developer-os/core";
 
 /**
- * Spec §5.4's capability keys, in product spec §11's order and identical to the
+ * Codex architecture former §5.4's capability keys, in product spec §11's order and identical to the
  * Claude adapter's — deliberately, because DOS-P6 consumes both and two
- * vocabularies would make its contract a translation layer (spec §5). The
+ * vocabularies would make its contract a translation layer (Codex architecture former §5). The
  * Codex and Claude adapters are peers that may never import one another, so
  * the list is spelled out here rather than shared, and the test asserts it in
  * full.
  *
- * `durable_project_guidance` is reported and used by nothing: spec §6.1 writes
+ * `durable_project_guidance` is reported and used by nothing: Codex architecture former §6.1 writes
  * no `AGENTS.md` at any scope. `subagents` likewise: the hook events exist and
  * no canonical workflow spawns a subagent (§15.4).
  */
@@ -32,7 +32,7 @@ export type CodexCapabilityKey = (typeof CODEX_CAPABILITY_KEYS)[number];
  * against a real installation, as this docblock always said would settle it.
  *
  * One version was available on this machine and one was tested; this is not
- * a range, and spec §15 item 2 says so in as many words. It is a **raise**,
+ * a range, and Codex architecture former §15 item 2 says so in as many words. It is a **raise**,
  * not a confirmation, of the prior provisional `0.144.6`: Task 17 also fixed
  * two real bugs in this adapter's own CLI argv (`install.ts`) and marketplace
  * document (`marketplace.ts`) that made every install step fail against the
@@ -44,7 +44,7 @@ export type CodexCapabilityKey = (typeof CODEX_CAPABILITY_KEYS)[number];
  * worked on `0.144.6` — that version predates this observation entirely, and
  * may not even carry the `plugin`/`marketplace` subcommands this design
  * depends on. `0.147.0` is the only version this adapter's actual install
- * path has been proven against; see spec §14.4 and §15 for the full record.
+ * path has been proven against; see Codex architecture former §14.4 and §15 for the full record.
  */
 export const CODEX_MINIMUM_VERSION = "0.147.0";
 

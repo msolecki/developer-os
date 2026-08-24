@@ -22,7 +22,7 @@ describe("EFFECT_VOCABULARY", () => {
 
   it("pins every footprint, because this table is the root of the scope model", () => {
     /**
-     * One `toStrictEqual` over the whole table, transcribed from spec §6.
+     * One `toStrictEqual` over the whole table, transcribed from Workflow architecture former §6.
      * The previous tests asserted values for two verbs and incidentally covered
      * four more, so eight were unpinned: the review widened `brain.lint` to
      * `read: ["/**"]` — the entire filesystem — and `capture.write` to the whole
@@ -72,7 +72,7 @@ describe("EFFECT_VOCABULARY", () => {
    * `reindex | lint | search | status` — there is no `developer-os brain
    * read-index` and no `read-note`, and inventing one would render a skill
    * telling an agent to run a command that does not exist, which is the whole
-   * defect spec §4 closes.
+   * defect knowledge-pipeline spec §4 closes.
    */
   const COMMANDLESS = [
     "agent.prompt",
@@ -203,7 +203,7 @@ describe("EFFECT_VOCABULARY", () => {
 
   it("gives ingest.stage no write scope, because staging is outside the vault", () => {
     /**
-     * Spec §6. Staging is governed by Foundation's transaction model; two
+     * Workflow architecture former §6. Staging is governed by Foundation's transaction model; two
      * mechanisms guarding one directory would mean neither is the authority.
      */
     const stage = EFFECT_VOCABULARY["ingest.stage"];

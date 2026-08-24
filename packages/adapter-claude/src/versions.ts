@@ -2,10 +2,10 @@ import type { CapabilityVersionTable } from "@developer-os/core";
 import { tablePermits as tablePermitsGeneric } from "@developer-os/core";
 
 /**
- * Spec §5.4's capability keys.
+ * Claude architecture former §5.4's capability keys.
  *
  * `durable_project_guidance` is reported for `doctor`'s matrix and depended on
- * by nothing: spec §7.1 chose to concatenate the `shared` preamble into every
+ * by nothing: Claude architecture former §7.1 chose to concatenate the `shared` preamble into every
  * artifact rather than reference one shared guidance surface, so nothing in
  * this package may start relying on it. Reporting a capability this adapter
  * does not use is worth doing; relying on it is not.
@@ -27,14 +27,14 @@ export type ClaudeCapabilityKey = (typeof CLAUDE_CAPABILITY_KEYS)[number];
 /**
  * Provisional; the integration test confirms or raises it.
  *
- * Spec §15.1: the skills-directory-plugin floor is not documented on the page
+ * Claude architecture former §15.1: the skills-directory-plugin floor is not documented on the page
  * read on 2026-08-11, so it is established by probe. `2.1.142` is the oldest
- * documented plugin-skill gate in spec §14.1 and is the floor below which
+ * documented plugin-skill gate in Claude architecture former §14.1 and is the floor below which
  * nothing here is worth attempting.
  *
  * `baseline-capabilities.json` records `2.1.216`. That is a historical
  * observation of one machine on 2026-07-21 and is deliberately **not** this
- * floor — spec §5.2 says so in as many words.
+ * floor — Claude architecture former §5.2 says so in as many words.
  */
 export const CLAUDE_MINIMUM_VERSION = "2.1.142";
 
@@ -42,7 +42,7 @@ export const CLAUDE_MINIMUM_VERSION = "2.1.142";
  * A documented floor per key, or `null` meaning "no documented floor above the
  * minimum; the probe decides".
  *
- * Deliberately sparse. Spec §5.2 keeps the floor low by refusing to depend on
+ * Deliberately sparse. Claude architecture former §5.2 keeps the floor low by refusing to depend on
  * `metadata` (2.1.222), `displayName` (2.1.143) or `defaultEnabled` (2.1.154),
  * so none of them appears here — that absence is the mechanism, not an
  * oversight.

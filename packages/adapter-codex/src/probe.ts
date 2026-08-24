@@ -36,7 +36,7 @@ const PROBE_TIMEOUT_MS = 30_000;
  * stay strict, because those are ours to keep in sync; this one is not ours
  * to police.
  *
- * Real shape, per spec §14.4 (Task 17, verified against a real 0.147.0
+ * Real shape, per Codex architecture former §14.4 (Task 17, verified against a real 0.147.0
  * binary): `{ installed: [...], available: [...] }`, never the guessed
  * `{ plugins: [...] }` this schema previously expected. Each entry's path
  * is nested under `source.path` — the marketplace-resolved *source*, not
@@ -45,13 +45,13 @@ const PROBE_TIMEOUT_MS = 30_000;
  * string `status` this schema previously expected.
  *
  * `enabled` and `source` are `optional`, not required, for the same reason
- * as the `.loose()` above — spec §5.2 documents the fields this adapter
+ * as the `.loose()` above — Codex architecture former §5.2 documents the fields this adapter
  * reads, not a guarantee that every entry in every Codex release carries
  * them. `installed` (the array) is required: without it there is nothing
  * trustworthy to search, and a parse failure becomes `unavailable`, never
  * `absent` (see `probeCodex`'s doc comment on why that distinction matters).
  * `available` is not read at all — `probeCodex` only ever searches
- * `installed` (spec §14.4: `available` lists what a marketplace offers, not
+ * `installed` (Codex architecture former §14.4: `available` lists what a marketplace offers, not
  * what is installed). It is typed `z.unknown()` rather than an array of
  * `pluginEntrySchema`: a malformed `available` entry (say, missing `name`)
  * must never fail the whole parse and turn a perfectly readable `installed`
@@ -129,19 +129,19 @@ async function listPlugins(
  * call without over-claiming, because those three facts are exactly what the
  * listing reports.
  *
- * `skills` is the only key this settles (spec §5.2 scopes the listing to
+ * `skills` is the only key this settles (Codex architecture former §5.2 scopes the listing to
  * that). `session_start_injection`, `session_end_capture` and
  * `pre_compact_backup` need a real session to observe, and `plugin_hooks` is
- * documented-but-unobserved per spec §15.1 — none of the four are written to
+ * documented-but-unobserved per Codex architecture former §15.1 — none of the four are written to
  * `observations` at all, so `observations.has(key)` is `false` for each and
  * Task 7's resolver sees an unmentioned key rather than a false claim about
  * one that was never asked about.
  *
  * `observed` requires all three of: a plugin named `developer-os` present in
  * `installed` — never `available`, which lists what a marketplace offers,
- * not what is installed (spec §14.4) — enabled, and resolved (`source.path`)
+ * not what is installed (Codex architecture former §14.4) — enabled, and resolved (`source.path`)
  * to `dependencies.pluginRoot`. A plugin under our name resolved to a path we
- * never wrote is not our tree — spec's local-marketplace install shape
+ * never wrote is not our tree — Codex architecture §4's local-marketplace install shape
  * exists precisely so this call can tell the two apart, and reporting
  * `observed` for someone else's tree would claim we verified an artifact we
  * did not write. Anything that parsed but fails one of the three is

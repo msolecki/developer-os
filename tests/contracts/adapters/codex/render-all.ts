@@ -10,7 +10,7 @@ export const GENERATED_ROOT = join(REPOSITORY_ROOT, "plugins", "codex");
 
 export interface RenderOptions {
   /**
-   * Reverse the directory listing before loading. Spec §7.3 owes DOS-P3 proof
+   * Reverse the directory listing before loading. Codex architecture former §7.3 owes DOS-P3 proof
    * that the artifacts are byte-identical under a reversed reader, and the only
    * way to prove it is to actually reverse one.
    */

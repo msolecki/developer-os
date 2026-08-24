@@ -6,8 +6,8 @@ export const WORKFLOW_TRIGGERS = ["manual", "session_start", "session_end"] as c
 export type WorkflowTrigger = (typeof WORKFLOW_TRIGGERS)[number];
 
 /**
- * The keys from product spec §11, spelled the way §11 spells them. Design §4
- * says capabilities *are* those keys, and the first draft invented
+ * The keys from product spec §11, spelled the way §11 spells them. Workflow
+ * architecture former §4 says capabilities *are* those keys, and the first draft invented
  * `session_start_hook` and `session_end_hook` for what §11 calls
  * `session_start_injection` and `session_end_capture`. Renamed while nothing
  * consumes either value; once an adapter keys on one, the rename stops being
@@ -56,7 +56,7 @@ const SEMVER = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/u;
  * Named rather than inferred, because the message is the whole decision. A
  * workflow author who writes `scheduled` is not making a typo — they are asking
  * for a scheduler — and being told the value is invalid teaches them nothing.
- * Spec §15.8.
+ * Workflow architecture former §15.8.
  */
 const RETIRED_TRIGGERS: ReadonlyMap<string, string> = new Map([
   [
@@ -77,7 +77,7 @@ const RETIRED_TRIGGERS: ReadonlyMap<string, string> = new Map([
  * The refinement is piped into a closed enum so the parsed field's type is
  * `WorkflowTrigger`, not `string`. Inference alone gave `string[]`, which left
  * the exported `WorkflowTrigger` describing a field it was never the type of,
- * and a renderer no exhaustiveness checking over a set the spec calls closed.
+ * and a renderer no exhaustiveness checking over the set workflow architecture §10.2 calls closed.
  */
 const triggerSchema = z
   .string()

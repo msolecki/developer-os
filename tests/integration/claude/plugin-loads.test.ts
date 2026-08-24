@@ -144,7 +144,7 @@ describe("the generated plugin against a real Claude Code installation", () => {
       });
       const version = /\b\d+\.\d+\.\d+\b/u.exec(stdout);
       expect(version).not.toBeNull();
-      // Deliberately not asserted against a floor. Spec §15.1 records that the
+      // Deliberately not asserted against a floor. Claude architecture former §15.1 records that the
       // skills-directory-plugin floor is established by probe, and one machine
       // is one observation rather than a range — so this proves the surface
       // works here and says nothing it cannot support.
@@ -154,7 +154,7 @@ describe("the generated plugin against a real Claude Code installation", () => {
   );
 
   /**
-   * Spec §4: the install writes one directory and no settings key. Measured
+   * Claude architecture former §4: the install writes one directory and no settings key. Measured
    * across *our* writes only — the snapshot is taken before any Claude
    * invocation, for the reason the next test records.
    */
@@ -199,10 +199,10 @@ describe("the generated plugin against a real Claude Code installation", () => {
    * on the author's machine.
    *
    * That matters beyond this file: `probeClaude` runs exactly this command, so
-   * the capability probe spec §5 relies on **mutates the user's home**. It is
+   * the capability probe Claude architecture former §5 relies on **mutates the user's home**. It is
    * the vendor's own state and not ours, but "doctor writes nothing" would be a
    * false claim, and a probe with a side effect is worth stating rather than
-   * discovering later. Recorded here as the observation, and in spec §14.1.
+   * discovering later. Recorded here as the observation, and in Claude architecture former §14.1.
    */
   it.skipIf(claude === null)(
     "records that the vendor's own validate command mutates the home",
@@ -217,7 +217,7 @@ describe("the generated plugin against a real Claude Code installation", () => {
       // observation; the prefix is what pins the isolation.
       expect(
         vendorWrites.length,
-        "validate no longer mutates the home it is pointed at: update spec §14.1, and reconsider whether doctor may probe",
+        "validate no longer mutates the home it is pointed at: update Claude architecture former §14.1, and reconsider whether doctor may probe",
       ).toBeGreaterThan(0);
       expect(
         vendorWrites.every((path) => path.startsWith(temporary().home)),

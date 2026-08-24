@@ -45,7 +45,7 @@ describe("deriveScopes", () => {
      * The second half is the half that can fail. `ingest.stage` carries
      * `write: []` in the vocabulary and `deriveScopes` never reads `staging`,
      * so asserting the empty write alone holds whether or not staging is
-     * handled at all — which is right per spec §6, where staging is encoded as
+     * handled at all — which is right per Workflow architecture former §6, where staging is encoded as
      * absent globs rather than as a runtime suppression, but it names a
      * mechanism this module does not implement. Asserting the read axis pins
      * the real content: only vault paths become scopes.
@@ -148,7 +148,7 @@ describe("compareScopes", () => {
 
   it("reports over-declaration, which a subset check would pass", () => {
     /**
-     * Spec §6. A workflow claiming write access it never exercises is a lie the
+     * Workflow architecture former §6. A workflow claiming write access it never exercises is a lie the
      * adapter would faithfully grant, and it is how a scope grows without
      * anyone deciding to grow it.
      */

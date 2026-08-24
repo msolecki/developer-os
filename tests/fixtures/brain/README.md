@@ -10,7 +10,7 @@ including the founder's. `docs/migration/baseline-capabilities.json` froze the v
 *capabilities* (Obsidian-compatible Markdown, a vault map, a catalog, a graph, index-first
 retrieval), and that is the only thing these trees encode; the frontmatter schema they
 carry is a design decision from
-`docs/superpowers/specs/2026-07-21-developer-os-brain-engine-design.md` §4.2, not a shape
+`docs/architecture/brain.md` §6.1, not a shape
 recovered from anywhere. When the product needs a shape a fixture does not yet cover,
 **extend the fixture in place and say so in the commit** — do not open a real vault to
 find out what it should look like.
@@ -22,7 +22,7 @@ than by path — a path assertion passes against an indexer that reads the file 
 renames it.
 
 One of those excluded files, `content/DEV/_raw/nested.md`, is deliberately **not** directly
-under `content/`. Spec §5 excludes the private folder names at any depth, and an indexer
+under `content/`. Brain architecture former §5 excludes the private folder names at any depth, and an indexer
 that applies the rule only to `content/`'s immediate children passes every other fixture in
 this tree while quietly indexing quarantined captures. That file is the one that fails it.
 

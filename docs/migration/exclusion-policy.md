@@ -30,9 +30,8 @@ The following material is prohibited from public artifacts, prompts, reports, lo
   lives in `plugins/claude/` and installs into the user's `~/.claude/skills/`, so no generated
   artifact needs a home here; conveniences this repository would run on itself are declined rather
   than deferred. Recorded so the absence is a decision rather than a gap: the repository is public,
-  and a `.claude/` here is inherited by every fork. Amended into this policy on 2026-08-11 by
-  `docs/superpowers/specs/2026-07-21-developer-os-claude-adapter-design.md` §12, which is the
-  reasoning of record; reopening it is an amendment, not a `mkdir`.
+  and a `.claude/` here is inherited by every fork. The reasoning of record is
+  `docs/architecture/claude-adapter.md` §2; reopening it is an amendment, not a `mkdir`.
 
 ## Clean-room migration procedure
 

@@ -41,7 +41,7 @@ describe("workflowContractSchema", () => {
 
   it("refuses the scheduled trigger and names DOS-P7", () => {
     /**
-     * Spec §15.8. A trigger that validates and never fires is a passing check
+     * Workflow architecture former §15.8. A trigger that validates and never fires is a passing check
      * about a false property, which is the shape this repository has shipped
      * twice. DOS-P7 adds the value in the change that makes launchd fire it.
      */
@@ -195,13 +195,13 @@ describe("workflowContractSchema", () => {
     expect(workflowContractSchema.safeParse(contract({ version: "10.20.30" })).success).toBe(true);
   });
 
-  it("gives the parsed contract the closed types the spec calls closed", () => {
+  it("gives the parsed contract the closed types workflow architecture §10.2 requires", () => {
     /**
      * A type-level assertion with a runtime tail. `triggerSchema` was
      * `z.string().superRefine(...)`, so `WorkflowContractV1["triggers"]` inferred
      * as `string[]` and the exported `WorkflowTrigger` was never the type of the
-     * field it describes — a renderer got no exhaustiveness checking over a set
-     * the spec calls closed. The same widening hit `exit`, which inferred as
+     * field it describes — a renderer got no exhaustiveness checking over the set
+     * workflow architecture §10.2 calls closed. The same widening hit `exit`, which inferred as
      * `number` and so could not be passed to core's `failure()`.
      *
      * **The two annotations below are the assertion**, not the two `expect`

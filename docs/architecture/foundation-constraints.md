@@ -20,12 +20,25 @@ collection. `docs/superpowers/BACKLOG.md` §2 routes readers here for them.
 ## Task 5: Implement recoverable filesystem transactions
 
 > **Completed 2026-07-27.** Task 5 shipped with the kernel exclusion protocol
-> designed in
-> `docs/superpowers/specs/2026-07-22-developer-os-kernel-transaction-lock-design.md`,
-> which remains the reference for review and drift checks. The implementation
-> plan that carried it was deleted when its last step closed; recover it from
-> git history if the reasoning is ever needed. No lease, heartbeat, stale-owner,
-> quarantine, or lock-file deletion behavior exists anywhere in the result.
+> recorded below. The completed subsystem spec was deleted on 2026-08-24 after this note absorbed
+> its surviving contract; recover the approved baseline from git history if the discarded
+> alternatives are ever needed. No lease, heartbeat, stale-owner, quarantine, or lock-file deletion
+> behavior exists anywhere in the result.
+>
+> **Surviving kernel lock contract:**
+>
+> - Exclusion is a kernel-managed BSD advisory lock, not a PID, lease, timestamp, heartbeat, or
+>   stale-owner protocol. Core owns the platform-neutral port; macOS uses `/usr/bin/lockf` in
+>   descriptor mode.
+> - One stable descriptor spans execute, resume, and rollback. Release closes that descriptor;
+>   process exit releases the kernel lock. The stable lock file is never unlinked.
+> - Acquisition fails closed: the parent is owner-only; the lock file is a stable `0600`,
+>   `O_NOFOLLOW` regular file; `lstat`/`fstat` identity is checked by `dev`/`ino`; parent and file
+>   identity are checked again after `lockf` returns.
+> - Acquisition is non-blocking. Contention is code 6 and never attempts stale-lock reclamation.
+> - Core contract tests pin mutual exclusion across execute/resume/rollback and release on every
+>   outcome. macOS adversarial tests pin symlink refusal, type/owner checks, descriptor lifetime,
+>   and both pre- and post-lock identity checks.
 >
 > **What Task 7 inherits, and must not undo:**
 >
@@ -63,8 +76,8 @@ collection. `docs/superpowers/BACKLOG.md` §2 routes readers here for them.
 > **Derived contract (2026-07-27).** This task fixes `ManagedArtifactV1` and
 > `InstallationManifestV1` exactly, and those ship field-for-field as written.
 > It names `ChangePlanV1`, `DriftFinding`, `ManifestStore`, and
-> `validateChangePlan` without defining them; those were derived from design
-> spec §9.2–9.4 and reviewed. What a later task must not silently change:
+> `validateChangePlan` without defining them; those were derived from the product
+> design §9.2–9.4 and reviewed. What a later task must not silently change:
 >
 > - **Ownership comes from the target's location, never from the manifest.**
 >   `validateChangePlan` checks the target against `ownedRoots`/`excludedRoots`
@@ -151,7 +164,7 @@ collection. `docs/superpowers/BACKLOG.md` §2 routes readers here for them.
 >
 > - **`AgentDiscovery.version` is always `null` in Foundation, by design.**
 >   Filling it means executing a `PATH`-resolved binary, which this boundary
->   never does, and design spec §6.6 assigns version detection to the agent
+>   never does, and the product design §6.6 assigns version detection to the agent
 >   adapters. DOS-P4/DOS-P5 populate it. Task 8 is the *no-agent* lifecycle and
 >   has no consumer for it.
 > - **`discoverExecutable` distinguishes absence from malfunction.** A non-zero
@@ -376,7 +389,7 @@ collection. `docs/superpowers/BACKLOG.md` §2 routes readers here for them.
 >    `config.brainPath`, which is what Task 6's residual asked for; it is not a
 >    containment policy for the environment.
 >
-> **Foundation ships no `--verbose`.** Design spec §8 lists it for every mutating
+> **Foundation ships no `--verbose`.** The product design §8 lists it for every mutating
 > command; Step 6 of this task does not, and dispatch is strict, so `--verbose`
 > is rejected with code 2. Add it with the subsystem that has diagnostics worth
 > printing.

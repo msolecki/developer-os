@@ -33,8 +33,8 @@ export interface MarketplaceContext {
  * `<product-home>/codex` — the directory *containing* `.agents/plugins/`.
  * `./plugins/developer-os` resolves against that directory; resolving it
  * against `.agents/plugins/` itself would look for
- * `.agents/plugins/plugins/developer-os`, which does not exist. Amends spec
- * §14.4, dated 2026-08-12.
+ * `.agents/plugins/plugins/developer-os`, which does not exist. Amends Codex
+ * architecture former §14.4, dated 2026-08-12.
  *
  * `context.home` is no longer read to build `path` — `PLUGIN_TREE_PREFIX` is
  * a fixed, marketplace-root-relative constant — but the parameter and its

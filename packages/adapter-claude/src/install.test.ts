@@ -78,7 +78,7 @@ describe("proposeClaudeInstall", () => {
   });
 
   /**
-   * Spec §4: the install writes no key into `~/.claude/settings.json`. That is
+   * Claude architecture former §4: the install writes no key into `~/.claude/settings.json`. That is
    * the property the whole install shape was chosen for, so it is asserted
    * rather than assumed.
    */

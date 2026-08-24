@@ -93,9 +93,9 @@ and `core/src/config/` now also owns and exports `BrainConfigV1`. The change is 
 `configSchema` stays `.strict()`, `schemaVersion` stays `1`, `serializeConfig` emits the
 section only when the key is present, and `exactOptionalPropertyTypes` keeps "absent"
 distinguishable from "present-and-undefined" — so a configuration written before the section
-existed still loads and still serializes byte-identically. Rationale in
-`specs/2026-07-21-developer-os-brain-engine-design.md` §3 and §15.3; every amendment to a
-frozen interface is indexed in `docs/superpowers/BACKLOG.md` §8.
+existed still loads and still serializes byte-identically. The surviving rationale is in
+`docs/architecture/brain.md` §3; every amendment to a frozen interface is indexed in
+`docs/superpowers/BACKLOG.md` §8.
 
 **A second amendment landed on 2026-08-17, on exactly the same terms.** Track R entry R2 gave
 `DeveloperOsConfigV1` an optional `redaction?: { patterns }` member — a bounded list of literal

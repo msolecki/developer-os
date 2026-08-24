@@ -10,7 +10,7 @@ import { SHARED_WORKFLOW_ID } from "./render.js";
 
 const home = "/synthetic/home/.developer-os";
 const context = { home, productVersion: "0.0.0" };
-/** The marketplace root — spec §4.1 — is what `codex plugin marketplace add` registers, and Founder decision 2026-08-12 is that both proposals resolve against it. */
+/** The marketplace root — Codex architecture former §4.1 — is what `codex plugin marketplace add` registers, and Founder decision 2026-08-12 is that both proposals resolve against it. */
 const marketplaceRoot = `${home}/codex`;
 /** Derived from `PLUGIN_TREE_PREFIX`, never typed — see that constant's docblock for why. */
 const pluginRoot = `${marketplaceRoot}/${PLUGIN_TREE_PREFIX}`;
@@ -118,7 +118,7 @@ function planContext(installed: InstallationManifestV1) {
 }
 
 describe("proposeCodexInstall", () => {
-  it("targets only paths under the marketplace root spec §4 defines", () => {
+  it("targets only paths under the marketplace root Codex architecture former §4 defines", () => {
     for (const operation of proposeCodexInstall(tree, context).operations) {
       expect(operation.targetPath.startsWith(`${marketplaceRoot}/`)).toBe(true);
     }
@@ -252,7 +252,7 @@ describe("proposeCodexInstall", () => {
   });
 
   /**
-   * Spec §4.1: the vendor's tool is the only writer of the vendor's config.
+   * Codex architecture former §4.1: the vendor's tool is the only writer of the vendor's config.
    * `codex plugin marketplace add` takes exactly one positional argument —
    * the source path, never a separate name — confirmed against the real
    * 0.147.0 binary by Task 17 (2026-08-12); the marketplace's name comes from
@@ -281,7 +281,7 @@ describe("proposeCodexInstall", () => {
    * field distinguishing which side of `operations` `registration` runs on —
    * an apply-phase caller had to infer it from which function it called. Get
    * it backwards on uninstall and a marketplace stays registered against a
-   * directory that no longer exists, which spec §4.2 calls out as worse than
+   * directory that no longer exists, which Codex architecture former §4.2 calls out as worse than
    * leaving both in place.
    */
   it("marks registration as running after operations on install", () => {

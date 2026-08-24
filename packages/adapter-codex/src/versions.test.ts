@@ -3,12 +3,12 @@ import { CODEX_CAPABILITY_KEYS, CODEX_MINIMUM_VERSION, tablePermits } from "./ve
 
 describe("the capability keys", () => {
   /**
-   * Spelled out rather than imported from the other adapter, which spec §1
+   * Spelled out rather than imported from the other adapter, which Codex architecture former §1
    * forbids — so the list is asserted in full, in order. A length check would
    * catch no rename, no reorder and no substitution, and this is the one place
    * a duplicated list can drift.
    */
-  it("are exactly product spec §11's, in order, resolved against spec §5.4", () => {
+  it("are exactly product spec §11's, in order, resolved against Codex architecture former §5.4", () => {
     expect([...CODEX_CAPABILITY_KEYS]).toEqual([
       "skills",
       "plugin_hooks",

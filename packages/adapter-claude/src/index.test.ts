@@ -57,7 +57,7 @@ describe("the public door", () => {
 
   /**
    * `parseAgentPromptArgs` lives in `packages/core` because both adapters
-   * execute `agent.prompt` (spec §8.1, amended 2026-08-11). Re-exporting it
+   * execute `agent.prompt` (Claude architecture former §8.1, amended 2026-08-11). Re-exporting it
    * here would give consumers two import paths for one guarantee, which is how
    * the two copies come to disagree.
    */
@@ -72,7 +72,7 @@ describe("the public door", () => {
   });
 
   /**
-   * Spec §1, asserted across the package rather than one file. Mirrors the
+   * Claude architecture former §1, asserted across the package rather than one file. Mirrors the
    * Codex adapter's identical guard — the invariant is stated bidirectionally
    * in both packages' `versions.ts` prose ("peers that may never import one
    * another"), so both packages need the guard, not just one.

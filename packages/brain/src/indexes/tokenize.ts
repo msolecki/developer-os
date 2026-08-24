@@ -6,7 +6,7 @@
 const SEPARATOR = /[^\p{L}\p{N}]+/u;
 
 /**
- * Stated non-goal: no stemming (spec §8). `cache` does not match `caching`.
+ * Stated non-goal: no stemming (Brain architecture former §8). `cache` does not match `caching`.
  * Every stemmer worth having is either a large dependency or a rule set wrong
  * often enough to make results unexplainable, and tags and aliases are the
  * documented mitigation.

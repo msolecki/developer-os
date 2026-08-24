@@ -18,8 +18,8 @@ function find(
 
 describe("buildPluginTree", () => {
   /**
-   * Spec §14.1: `name` is the only required manifest field, and unrecognized
-   * fields are ignored at load. Spec §5.2 keeps the version floor low by
+   * Claude architecture former §14.1: `name` is the only required manifest field, and unrecognized
+   * fields are ignored at load. Claude architecture former §5.2 keeps the version floor low by
    * depending on none of `displayName` (2.1.143), `defaultEnabled` (2.1.154) or
    * `metadata` (2.1.222) — so the minimal manifest is the mechanism, and this
    * test is what stops a later convenience field raising the floor unnoticed.
@@ -33,21 +33,18 @@ describe("buildPluginTree", () => {
   });
 
   /**
-   * Amends spec §6, pending founder ratification (`BACKLOG.md` §8).
+   * Claude architecture former §6, as corrected by DOS-P6 and `BACKLOG.md` §8.
    *
    * The tree declared three hooks whose commands lived under a `bin/` directory
    * no task creates, and `claude plugin validate` checks schema rather than
    * existence — so `plugin_hooks` could report `yes` over a dangling path. The
-   * obvious repair fails too: a command hook needs an executable file, and
-   * nothing in this pipeline can express an executable bit. `RenderedArtifact`
-   * is `{ path, contents }`; `ManagedArtifactV1` has `kind: "file"` and no mode.
-   *
-   * Nothing regresses by removing it. The three lifecycle capabilities are
-   * `not-used` (DOS-P6 Task 3): a hook has to be observed firing (spec §6.1)
-   * and none ever could be. This test exists so restoring hooks is a deliberate change
-   * that has to delete an assertion, not an accident.
+   * Capture hooks remain declined because a hook cannot supply faithful
+   * agent-authored observation text without reading the vendor transcript field. An
+   * executable bit is not required when a command hook names the installed
+   * binary. DOS-P11 owns only the eleven non-capture hooks and must observe any
+   * restored hook firing. This assertion makes restoration deliberate.
    */
-  it("emits no hooks, because nothing here can ship an executable hook body", () => {
+  it("emits no hooks while capture hooks stay declined and DOS-P11 is unimplemented", () => {
     const paths = buildPluginTree(skills).map((artifact) => artifact.path);
     expect(paths).not.toContain("hooks/hooks.json");
     expect(paths.some((path) => path.startsWith("bin/"))).toBe(false);

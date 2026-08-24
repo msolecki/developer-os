@@ -6,7 +6,7 @@ const installation = { executable: "/opt/synthetic/bin/codex", version: "0.147.0
 const pluginRoot = "/synthetic/home/.developer-os/codex/plugins/developer-os";
 
 /**
- * `codex plugin list --json`'s real top-level shape, per spec §14.4 (Task
+ * `codex plugin list --json`'s real top-level shape, per Codex architecture former §14.4 (Task
  * 17, verified against a real 0.147.0 binary): `{ installed: [...],
  * available: [...] }`, never `{ plugins: [...] }`.
  */
@@ -56,11 +56,11 @@ describe("probeCodex", () => {
    * `observed` for it claims we verified an artifact somebody else installed.
    * The path that must equal `pluginRoot` is `source.path` — the marketplace
    * source the listing resolves — never the `$CODEX_HOME/plugins/cache/...`
-   * copy Codex also stages (spec §14.4). This fixture puts a cache-shaped
+   * copy Codex also stages (Codex architecture former §14.4). This fixture puts a cache-shaped
    * path in `source.path` — the only field `probeCodex` reads — so it proves
    * only that a non-matching `source.path` yields `absent`; it cannot show
    * the probe would resist reading some other cache-bearing field, because
-   * there is no such field in the code or in the spec's documented shape.
+   * there is no such field in the code or in Codex architecture former §14.4's documented shape.
    */
   it("reports absent when our name resolves to a path we do not own", async () => {
     const probed = await probeCodex(installation, {
@@ -92,7 +92,7 @@ describe("probeCodex", () => {
   });
 
   /**
-   * Spec §14.4: `available` lists what a marketplace offers, not what is
+   * Codex architecture former §14.4: `available` lists what a marketplace offers, not what is
    * installed. A plugin under our name sitting only in `available` must not
    * read as installed — the probe must search `installed`, never fall back
    * to `available`.
@@ -191,7 +191,7 @@ describe("probeCodex", () => {
     }
   });
 
-  it("settles nothing about plugin_hooks, which spec §15.1 leaves unobserved", async () => {
+  it("settles nothing about plugin_hooks, which Codex architecture former §15.1 leaves unobserved", async () => {
     const probed = await probeCodex(installation, {
       runner: listing({
         installed: [{ name: "developer-os", enabled: true, source: { path: pluginRoot } }],

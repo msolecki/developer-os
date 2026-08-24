@@ -359,7 +359,24 @@ async function repository(): Promise<{
     cwd: root,
     maxBuffer: MAX_OUTPUT_BYTES,
   });
-  const all = stdout.split("\0").filter((path) => path.length > 0);
+  /**
+   * `git ls-files` reads the index, so an unstaged deletion remains in its output. The session
+   * protocol runs this gate before exact-path staging; without subtracting worktree deletions, a
+   * legitimate document removal reaches `readFile` as ENOENT before the citation assertions run.
+   * Keep deleted paths out of both the document sweep and the resolution set: any surviving
+   * citation to one must then fail as `missing`, which is the behavior this gate promises.
+   */
+  const { stdout: deletedOutput } = await runProcess(
+    "git",
+    ["ls-files", "--deleted", "-z"],
+    { cwd: root, maxBuffer: MAX_OUTPUT_BYTES },
+  );
+  const deleted = new Set(
+    deletedOutput.split("\0").filter((path) => path.length > 0),
+  );
+  const all = stdout
+    .split("\0")
+    .filter((path) => path.length > 0 && !deleted.has(path));
   return {
     root,
     files: all,

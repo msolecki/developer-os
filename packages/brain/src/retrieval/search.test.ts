@@ -57,7 +57,7 @@ describe("search", () => {
 
   it("returns no-candidates rather than falling back to full text", () => {
     /**
-     * Spec §8: a silent full-text fallback would make the funnel decorative and
+     * Brain architecture former §8: a silent full-text fallback would make the funnel decorative and
      * produce results nobody can explain the reachability of.
      */
     const result = search(index, { text: "zzzznotpresent", maxCandidates: 10 });
@@ -89,14 +89,14 @@ describe("search", () => {
 
   it("scores each field at exactly its stated weight", () => {
     /**
-     * The weights are a stated contract, not a tuning knob: spec §8 fixes them
+     * The weights are a stated contract, not a tuning knob: Brain architecture former §8 fixes them
      * at title 4, alias 3, tag 3, summary 2, body 1.
      *
      * Reachability comes from the topic folder, which is a stage-1 access path
      * and carries no weight — so each note is a candidate for a reason that
      * cannot contaminate its score. Reaching them by tag instead would add 3 to
      * every row. A summary-only or body-only note is *not* reachable at all,
-     * which is the funnel working: stage 1 is structural, and spec §8 refuses a
+     * which is the funnel working: stage 1 is structural, and Brain architecture former §8 refuses a
      * full-text fallback.
      */
     const document = documentOf([
@@ -133,7 +133,7 @@ describe("search", () => {
      * The other half of the funnel, and the reason the weights test reaches by
      * folder. Stage 1 is structural; a note carrying the term only in prose is
      * not an access path, and inventing one would be the full-text fallback
-     * spec §8 refuses.
+     * Brain architecture former §8 refuses.
      */
     const document = documentOf([
       indexedNote({ path: "content/QA/a.md", topicFolder: "QA", summary: "widget" }),
@@ -213,7 +213,7 @@ describe("search", () => {
 
   it("refuses a maxCandidates that is not a positive integer", () => {
     /**
-     * Spec §8: the API has no implicit default, so a caller that forgets to
+     * Brain architecture former §8: the API has no implicit default, so a caller that forgets to
      * choose must not silently get one. Nonsense is a caller bug, not user
      * input — the CLI validates `--limit` before it reaches here.
      */
@@ -263,7 +263,7 @@ describe("search", () => {
 
   it("returns stage and reviewed on every match", () => {
     /**
-     * Spec §8's trust model: the reader sees how trustworthy a note claims to
+     * Brain architecture former §8's trust model: the reader sees how trustworthy a note claims to
      * be and decides, instead of an unfalsifiable number quietly reordering.
      */
     const result = search(index, { text: "dev", maxCandidates: 10 });
@@ -362,7 +362,7 @@ describe("search", () => {
 
   it("does not stem", () => {
     /**
-     * Spec §8 states this as a non-goal, not an oversight. `cache` does not
+     * Brain architecture former §8 states this as a non-goal, not an oversight. `cache` does not
      * reach a note titled `caching` by any path: it is not an exact term, and
      * it is not even a substring — the shared prefix is `cach`. A stemmer would
      * collapse the two and the reader could no longer tell which word the note
@@ -768,7 +768,7 @@ describe("premises the code depends on", () => {
 
   it("leaves path byte-exact so a match still resolves", () => {
     /**
-     * Spec §14 gates on every match resolving to a note that exists at the
+     * Brain architecture former §14 gates on every match resolving to a note that exists at the
      * returned path, so this is machine identity and screening it would break
      * the gate. The consequence is Task 9's: it must render the path.
      */

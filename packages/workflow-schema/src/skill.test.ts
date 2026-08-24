@@ -70,7 +70,8 @@ describe("renderSkillBody", () => {
   });
 
   /**
-   * Spec §7.1. `shared` carries the entire prompt-injection defence and
+   * Claude architecture former §7.1 and Codex architecture former §6.1. `shared` carries the
+   * entire prompt-injection defence and
    * `WorkflowContractV1` has no composition field, so the renderer is what
    * delivers it. Physically present in every artifact means no load order and
    * no user setting can remove it.
@@ -99,7 +100,8 @@ describe("renderSkillBody", () => {
   });
 
   /**
-   * Spec §7.2 and `workflow-schema.md` §6: `recovery.resume` is a command
+   * Claude architecture former §7.2, Codex architecture former §6.2 and `workflow-schema.md` §6:
+   * `recovery.resume` is a command
    * string that nothing executes, and the moment a surface prints it as "run
    * this to recover", an author-controlled shell line has reached a terminal.
    */
@@ -257,7 +259,8 @@ describe("skill body refusals found by review", () => {
    * `id` reaches the artifact **path**. The compiler's slug regex is the only
    * thing that ever constrained it, and the renderer revalidates nothing — so a
    * contract built in code rather than parsed from YAML could write outside the
-   * plugin directory, which spec §10 says is the only path an adapter writes.
+   * plugin directory, which Claude architecture former §10 and Codex architecture former §9 make
+   * the only product-owned path each adapter writes.
    */
   it("refuses an id that is not a slug, because it reaches the artifact path", () => {
     for (const hostile of ["../../evil", "a/b", "Capture", "", "-x"]) {
@@ -376,8 +379,8 @@ describe("skill body sharp edges carried from the Tasks 1-5 review", () => {
   });
 
   /**
-   * `render` took an overlay and discarded it (`void overlay`), while spec §7
-   * says the input is a contract plus its optional vendor overlay. A caller
+   * `render` took an overlay and discarded it (`void overlay`), while workflow architecture §4
+   * says rendering consumes a contract plus its optional vendor overlay. A caller
    * passing one lost it silently and no test failed.
    */
   it("applies an overlay rather than discarding it", () => {

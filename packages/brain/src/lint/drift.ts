@@ -24,7 +24,7 @@ export function canonicalizeArtifact(text: string): string {
 
 /**
  * The first line that differs, as a 1-based number, or `null` when the two are
- * identical. Spec §6.3: `index-drift` reports the artifact and the first
+ * identical. Brain architecture former §6.3: `index-drift` reports the artifact and the first
  * differing line, never a whole-file diff — a diff of a 5,000-line `index.json`
  * is not a message anybody reads, and it would echo note content into a
  * terminal and a log.

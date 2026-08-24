@@ -38,7 +38,7 @@ function pluginRoot(context: InstallContext): string {
  *
  * The renderer refuses a non-slug id, so today these paths are safe by the time
  * they arrive. This is the boundary where a relative path becomes a real
- * filesystem write, and spec §10 says the plugin directory is the only path
+ * filesystem write, and Claude architecture former §10 says the plugin directory is the only path
  * this adapter writes — a guarantee worth holding at both ends, because the
  * renderer is not the only thing that could ever produce a `RenderedArtifact`.
  */
@@ -93,7 +93,7 @@ export function proposeClaudeInstall(
         kind: "file" as const,
         expectedBeforeHash: existing?.installedHash ?? null,
         source: artifact.path,
-        // `dedicated` because this adapter merges no foreign file. Spec §4.3
+        // `dedicated` because this adapter merges no foreign file. Claude architecture former §4.3
         // dissolved the semantic config merge rather than answering it: the
         // install shape writes only into a directory Developer OS owns wholly.
         mergeStrategy: "dedicated" as const,
@@ -104,7 +104,7 @@ export function proposeClaudeInstall(
 }
 
 /**
- * Spec §4.2: there is no uninstall step, because nothing was installed from a
+ * Claude architecture former §4.2: there is no uninstall step, because nothing was installed from a
  * marketplace. Removing the directory is the whole operation, and Foundation
  * refuses if any file under it has drifted — a drifted file is a user edit, and
  * Foundation never overwrites one.

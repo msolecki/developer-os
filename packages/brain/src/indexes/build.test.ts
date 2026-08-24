@@ -137,7 +137,7 @@ describe("buildIndex determinism", () => {
   });
 
   it("stores no floating-point number in either artifact", async () => {
-    /** Spec §6.1(4): a float's formatting is a portability hazard. */
+    /** Brain architecture former §6.1(4): a float's formatting is a portability hazard. */
     const result = await buildIndex(fixtureRequest(FROZEN));
     for (const text of [
       serializeIndex(result.index),
@@ -479,7 +479,7 @@ describe("buildIndex link resolution", () => {
     /**
      * "Shortest path when possible" is Obsidian's stock setting, so a vault
      * authored there contains `[[caching]]`. Without this tier every such link
-     * is a spec §7 `links` error and `brain lint` fails on a supported vault.
+     * is a Brain architecture former §7 `links` error and `brain lint` fails on a supported vault.
      */
     const result = await buildIndex(
       memoryRequest({
@@ -513,7 +513,7 @@ describe("buildIndex link resolution", () => {
     /**
      * Two notes sharing a basename in different subfolders have different
      * titles, different hashes and no case-insensitive path collision, so none
-     * of spec §7's three `duplicates` findings fires. Without this the link
+     * of Brain architecture former §7's three `duplicates` findings fires. Without this the link
      * points at the wrong note and nothing says so.
      */
     const result = await buildIndex(
@@ -540,7 +540,7 @@ describe("buildIndex link resolution", () => {
   it("ignores a wikilink inside a fenced block or inline code", async () => {
     /**
      * A note documenting wikilink syntax would otherwise emit an unresolved
-     * link per example — an `error` under spec §7. The product's own template
+     * link per example — an `error` under Brain architecture former §7. The product's own template
      * is such a note.
      */
     const result = await buildIndex(
@@ -577,7 +577,7 @@ describe("buildIndex carries what lint needs", () => {
   it("keeps info issues from a note that parsed", async () => {
     /**
      * `parseNote` returns issues on its success branch too, and that is where
-     * every `unknown-key` lives. Spec §7 requires it as a `frontmatter` info
+     * every `unknown-key` lives. Brain architecture former §7 requires it as a `frontmatter` info
      * finding, and Task 6's unterminated-frontmatter heuristic is defined as an
      * unknown key containing whitespace — both unreachable if these are dropped.
      */
@@ -649,7 +649,7 @@ describe("buildIndex carries what lint needs", () => {
 
 describe("buildIndex under a hostile reader", () => {
   /**
-   * The reversed reader is what spec §6.2 calls the assertion that catches "a
+   * The reversed reader is what Brain architecture former §6.2 calls the assertion that catches "a
    * `Map` whose insertion order leaked into output" — and `resolveLink` reads
    * `candidates[0]` straight out of Map insertion order. The committed fixture
    * cannot pin that: it has one edge, no ambiguity and no parse issues. This

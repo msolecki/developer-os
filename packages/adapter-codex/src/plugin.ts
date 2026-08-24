@@ -42,14 +42,14 @@ export const PLUGIN_NAME = "developer-os";
 /** Everything this adapter owns lives under one directory of the product home. */
 export const CODEX_ROOT_SEGMENT = "codex";
 
-/** Spec §4: `<product-home>/codex/plugins/developer-os`. */
+/** Codex architecture former §4: `<product-home>/codex/plugins/developer-os`. */
 export const PLUGIN_TREE_SEGMENTS: readonly string[] = [
   CODEX_ROOT_SEGMENT,
   "plugins",
   PLUGIN_NAME,
 ];
 
-/** Spec §4: relative to `<product-home>/codex`, which is the marketplace root. */
+/** Codex architecture former §4: relative to `<product-home>/codex`, which is the marketplace root. */
 export const MARKETPLACE_RELATIVE_PATH = ".agents/plugins/marketplace.json";
 
 /**
@@ -86,7 +86,7 @@ export const PLUGIN_DESCRIPTION =
   "Local-first Developer OS workflows for Codex, rendered from the shared workflow contract.";
 
 /**
- * Spec §14.4: a plugin manifest is `<plugin>/.codex-plugin/plugin.json`. The
+ * Codex architecture former §14.4: a plugin manifest is `<plugin>/.codex-plugin/plugin.json`. The
  * vendor documents `author`, `homepage`, `repository`, `license`, `keywords`,
  * `apps`, `mcpServers` and an `interface` object beyond what we emit here;
  * every one of those is a field that could differ between versions and break

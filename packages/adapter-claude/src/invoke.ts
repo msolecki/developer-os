@@ -12,7 +12,7 @@ export interface ClaudeInvocation {
   readonly prompt: string;
   readonly maxTurns: number;
   /**
-   * Spec §8: where a compile-time scope becomes a runtime restriction. The
+   * Claude architecture former §8: where a compile-time scope becomes a runtime restriction. The
    * workflow's derived read and write scopes translate into allowed-tool rules,
    * so the equality rule DOS-P3 enforces on paper is enforced again by the
    * agent's own permission system.

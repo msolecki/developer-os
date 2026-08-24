@@ -164,7 +164,7 @@ export interface CliContext {
    * Added by DOS-P4, which is the first subsystem that needs to execute a
    * process from a command rather than from the platform adapter.
    *
-   * `doctor` reports a capability matrix, and spec §5 requires a *probe* — the
+   * `doctor` reports a capability matrix, and both adapter architecture notes' former §5 requires a *probe* — the
    * version table alone never earns a `yes`. A probe is a process execution, so
    * without a runner here the matrix could only ever report `unknown`, which is
    * honest and useless. The real context already constructed one for
@@ -614,7 +614,7 @@ function createRedactionKey(file: string): Uint8Array {
  * The product's first secret at rest, and deliberately **not** a managed
  * artifact: absent from `installation-manifest.json`, so it is never hashed into
  * a drift report and never printed by a diagnostic that enumerates manifest
- * contents (spec §3.5, §8.4).
+ * contents (knowledge-pipeline spec §3.5, §8.4).
  *
  * Losing it makes old fingerprints incomparable, never captures unreadable —
  * content is not encrypted with it, only fingerprints are derived from it.

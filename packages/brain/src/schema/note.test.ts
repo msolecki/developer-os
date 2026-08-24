@@ -741,7 +741,7 @@ describe("parseNote and explicitly tagged YAML", () => {
 
   it("reports the value's line when the tag sits on the line above it", () => {
     /**
-     * The caveat the docstring and spec §4.4 both state, pinned so it cannot
+     * The caveat the docstring and Brain architecture former §4.4 both state, pinned so it cannot
      * drift into being untrue quietly. `yaml` gives a node's range as the
      * *value* token's offset, so a tag on its own line names the line below
      * itself. Documented rather than corrected — recovering the tag's own

@@ -55,7 +55,7 @@ export function firstDifferingLine(
 
 /**
  * Reports the artifact and the first differing line, never a diff — the same
- * rule as brain-engine spec §6.3 and for the same reason: a diff echoes content
+ * rule as Brain architecture former §6.3 and for the same reason: a diff echoes content
  * into a terminal and a log.
  *
  * `onDisk` is a `ReadonlyMap` rather than a record on purpose. A plain object

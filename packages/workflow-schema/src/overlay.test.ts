@@ -25,7 +25,7 @@ const base: WorkflowContractV1 = {
 describe("workflowOverlaySchema", () => {
   it("has no field capable of setting a scope", () => {
     /**
-     * Spec §8. The gate is not a merge rule that must be correct; it is a
+     * Workflow architecture former §8. The gate is not a merge rule that must be correct; it is a
      * schema that cannot express the violation. This must fail as an
      * unknown-field parse error, and the assertion names which kind.
      */

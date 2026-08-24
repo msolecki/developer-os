@@ -4,10 +4,11 @@
 2026-08-11. One canonical workflow becomes a Claude Code skill, and nothing about Claude Code
 leaks into any other package.
 
-**Design of record:** `docs/superpowers/specs/2026-07-21-developer-os-claude-adapter-design.md`,
-approved 2026-08-11. Where this note and that spec disagree, the spec wins — except where this
-note records an amendment, which is then also registered in `BACKLOG.md` §8. This document
-replaces the implementation plan, deleted when its last step closed; git history is the archive.
+This note absorbed the surviving design record on 2026-08-24, when the completed subsystem spec
+was deleted. It also carries the DOS-P6 correction: capture is agent-authored, hooks and the
+`developer-os run claude` wrapper are declined, and the six unused capability keys resolve to
+`not-used`. The implementation plan was deleted when its last step closed; git history is the
+archive for both.
 
 ## 1. What it is
 
@@ -42,8 +43,8 @@ replaces the implementation plan, deleted when its last step closed; git history
 4. **It never opens `transcript_path`**, on any code path. No hook payload is read at all,
    because no hook ships.
 5. **It executes no workflow verb.** A rendered skill is guidance; the effects it names are
-   `developer-os` commands. Three of the six workflows name commands that do not exist yet — see
-   §8.
+   `developer-os` commands. DOS-P6 shipped the capture, ingest, review and Brain commands; only
+   `agent.prompt` still lacks a step executor — see §8.
 6. **`claude plugin validate` is not a security control.** It reports unrecognized manifest
    fields as warnings and such a plugin still loads. The drift check is the authority on what our
    manifest contains; the probe catches syntax and schema errors early, which is a different job.
@@ -51,7 +52,9 @@ replaces the implementation plan, deleted when its last step closed; git history
 ## 3. The capability model — two gates, three values
 
 `yes` requires a documented version floor to permit the capability **and** a probe to observe it.
-A probe that could not run yields `unknown`. Everything else uncertain yields `wrapper-required`.
+A probe that could not run yields `unknown`. DOS-P6 removed `wrapper-required`: `plugin_hooks`,
+`session_start_injection`, `session_end_capture`, `pre_compact_backup`, `subagents` and
+`durable_project_guidance` are unused by this product and resolve to `not-used` before either gate.
 
 **The probe settles exactly one key, and that is the second correction the model needed.**
 `claude plugin validate` used to settle `skills`, `plugin_hooks` and `subagents` on the strength
@@ -69,8 +72,7 @@ means here.
 
 The asymmetry is the mechanism. `unknown` is never `no`, because "we could not ask" and "the
 answer is no" are different facts and only one of them justifies telling a user their install
-lacks a feature. Uncertainty otherwise degrades toward the wrapper, because the wrapper produces
-the same capture while a false `yes` produces silent data loss.
+lacks a feature. `not-used` is different again: it records a product decision, not a vendor fact.
 
 Two things worth knowing before changing this:
 
@@ -106,27 +108,18 @@ never overwrites one.
 
 ## 5. `hooks/hooks.json` is not shipped, and the reason is not the obvious one
 
-Amends spec §6, decided by the implementer on 2026-08-11 and **ratified by the founder the same
-day**. `BACKLOG.md` §8 carries the row.
+The tree once declared three hooks whose commands pointed at missing scripts. Removing those
+dangling claims was ratified on 2026-08-11. DOS-P6 then settled the product decision on 2026-08-13:
+**hooks are declined, not deferred**.
 
-The tree once declared three hooks whose commands lived under a `bin/` directory no task creates.
-`claude plugin validate` checks schema and not existence, so `plugin_hooks` could report `yes`
-over a dangling path — a verified-present claim about a file that was not there.
+The blocker was not an executable bit; a `type: "command"` hook accepts a command string. The
+capture workflow requires agent-authored observation text, while a session-end hook can supply no
+such text without opening `transcript_path`, which this product refuses on every code path. A hook
+would therefore have nothing faithful to capture. `developer-os run claude` was declined with it.
 
-**Emitting the missing scripts does not repair it.** A `type: "command"` hook needs an
-*executable* file, and nothing in this pipeline can express an executable bit: `RenderedArtifact`
-is `{ path, contents }` and `ManagedArtifactV1` has `kind: "file"` and no mode. A non-executable
-script fails exactly as a missing one does. The choice was never "scripts or no scripts"; it was
-"keep shipping a claim that cannot be true, or stop making it".
-
-Nothing regressed. Spec §6.1 already reports `session_start_injection`, `session_end_capture` and
-`pre_compact_backup` as `wrapper-required` until a hook is *observed firing*, and none of them
-ever could be. A test now asserts the absence, so restoring hooks has to delete an assertion
-rather than happen by accident.
-
-**Restoring them needs three things in one change:** the hook bodies, whose behaviour is DOS-P6's
-capture contract; a mechanism for marking a generated artifact executable; and a test that
-observes a hook actually firing. **Owner: DOS-P6.**
+Tests assert that no hooks ship and that the affected capability keys resolve to `not-used`.
+Reopening the decision requires a new source of capture content, an explicit amendment, and a test
+that observes the new mechanism working; it is not outstanding DOS-P6 work.
 
 ## 6. Rendering
 
@@ -192,7 +185,7 @@ is what turns forgetting into a red build.
 
 **The plan said to add a `developer-os workflow render --vendor claude` CLI command. That is
 recorded here as declined, with a reason.** Taken literally it contradicts the design it
-implements: spec §10 says the adapter writes to exactly one directory — the plugin directory under
+implements: the completed design says the adapter writes to exactly one directory — the plugin directory under
 the user's `~/.claude` — and a shipped verb that writes `./plugins/claude` into whatever directory
 a user happens to stand in writes somewhere else entirely, outside the manifest, outside a
 transaction, and outside every guarantee Foundation makes about mutation. `plugins/claude/` exists
@@ -204,36 +197,28 @@ different code check nothing.
 **Ratified by the founder on 2026-08-11**, and reversible: restoring the CLI verb means deciding
 where it may write and how that write is owned. `BACKLOG.md` §8 carries the row.
 
-## 8. What the program checkpoint got, and what it did not
+## 8. What the program checkpoint got, and what DOS-P6 completed
 
-Program plan Task 4's checkpoint is "a Claude-only user completes the full synthetic Brain
-workflow with no Codex installed". **Half of it is DOS-P6's, and saying so is the point of this
-section.**
+Program plan Task 4's checkpoint was "a Claude-only user completes the full synthetic Brain
+workflow with no Codex installed". DOS-P4 made all six generated skills pass
+`claude plugin validate` against a real installation; this does not prove paid-session discovery
+(§9.9). DOS-P6 supplied the commands named by `capture`, `ingest`, `review`, `doctor` and
+`brain-search`. Only the shared `agent.prompt` executor remains open.
 
-What works today: the six skills load in a real Claude Code installation, `doctor` and
-`brain search` name `developer-os` commands that exist, and the wrapper story is honestly
-reported rather than claimed.
-
-What does not: `capture`, `ingest` and `review` name verbs with no handler anywhere in this
-product — `workflow-schema.md` §5 lists all seven unimplemented verbs and assigns six of them to
-DOS-P6. A user following those three skills reaches a command that is not there. DOS-P4 could not
-have closed this: the adapter renders workflows and executes none of them.
-
-Two program-plan boxes stay unticked for the same reason, each with an inline note naming DOS-P6:
-lifecycle injection and automatic capture (no lifecycle surface could be verified, §5), and
-`developer-os run claude` (the wrapper verb the capability model already tells users they need,
-which has nothing to capture into until the capture contract exists).
+Lifecycle injection, automatic capture and `developer-os run claude` were declined by DOS-P6,
+not deferred. The capability model reports those surfaces as `not-used`; §5 records why automatic
+capture cannot faithfully obtain agent-authored observation text without reading a transcript.
 
 ## 9. Known residuals, each with an owner
 
-1. **Hooks are not shipped** — §5. Owner: DOS-P6, and it needs all three parts in one change.
-2. **`developer-os run claude` does not exist.** `doctor` reports `wrapper-required`, which is
-   true and currently unactionable. Owner: DOS-P6.
-3. **`capture.write`, `capture.list`, `capture.setStatus`, `ingest.stage`, `ingest.validate` and
-   `ingest.apply` have no handler.** Owner: DOS-P6.
+1. **CLOSED by DOS-P6: hooks are declined** — §5. Their absence is the v1 contract, not a residual.
+2. **CLOSED by DOS-P6: `developer-os run claude` is declined.** The affected capabilities report
+   `not-used`, not recovery advice for a wrapper that does not exist.
+3. **CLOSED by DOS-P6: the capture and ingest handlers ship.** `agent.prompt` remains the one
+   vocabulary verb without a step executor (`workflow-schema.md` §5).
 4. **`claude plugin validate` mutates the home it is pointed at**, creating `~/.claude.json` and a
    timestamped copy under `~/.claude/backups/`. Observed against a real installation on
-   2026-08-11 and recorded in spec §14.1. Two consequences: **`doctor` may not claim to write
+   2026-08-11. Two consequences: **`doctor` may not claim to write
    nothing**, and the probe is not safe to treat as a pure read. Owner: whichever task next
    states `doctor`'s write behaviour.
 5. **The code-point sort was duplicated — closed on 2026-08-12.** The copy in `plugin.ts` is gone;
@@ -241,8 +226,8 @@ which has nothing to capture into until the capture contract exists).
    package's public door, and `plugin.ts` imports it. The fix landed a task early because the
    Codex adapter would have made it a third copy, which is the cost the residual was recording.
    No owner: nothing is outstanding.
-6. **There is no `ClaudeAdapter` object.** Spec §13 names one as a produced interface; the package
-   ships the eight modules that spec names — plus `compose.ts`, which is the composition both the
+6. **There is no `ClaudeAdapter` object.** The completed design named one as a produced interface;
+   the package ships its eight modules — plus `compose.ts`, which is the composition both the
    regenerator and the drift check call — behind one `index.ts`, and no façade class over them.
    Nothing consumes a façade yet, and inventing one before DOS-P5 shows what the two adapters
    actually share would fix the wrong shape. Owner: DOS-P5, at the point where a common interface
@@ -253,16 +238,15 @@ which has nothing to capture into until the capture contract exists).
    package's own half of the residual is not discharged by that — but the open half is now
    *symmetry between two adapters that both lack a façade class*, not an absence with no
    precedent to weigh against. `codex-adapter.md` §9 records the same fact from the other side.
-7. **`durable_project_guidance` is reported and used by nothing** (spec §15.2). Reporting a
-   capability this adapter does not use is worth doing; relying on it is not, and §6's
-   concatenation decision is what would have to be revisited first.
+7. **CLOSED by DOS-P6: `durable_project_guidance` is used by nothing and reports `not-used`.**
+   Relying on it would first require revisiting §6's concatenation decision.
 8. **`buildConflictEvidence` still has no consumer.** DOS-P4 dissolved its half of the semantic
-   merge (spec §4.3, and §2 above) and the Codex spec dissolves the other. Owner: the first subsystem with a real
+   merge (§2 above) and the Codex adapter dissolves the other. Owner: the first subsystem with a real
    three-way merge.
 9. **The integration test proves the tree does not anger `claude plugin validate`, not that the
    six skills load.** Its only substantive assertion is a clean exit and a clean stderr; a renderer
    gutted to emit only the manifest would still pass it. Proving discovery needs a real session —
-   spec §14.3's `claude --plugin-dir <dir> -p "…" --output-format json` — which is a billed model
+   `claude --plugin-dir <dir> -p "…" --output-format json` — which is a billed model
    call rather than a unit of CI. Owner: DOS-P8, whose agent-compatibility matrix is where a
    real-agent run already belongs (`BACKLOG.md` §7).
 10. **`doctor` executes the discovered binary.** `claude --version` runs on every invocation,
@@ -282,16 +266,60 @@ which has nothing to capture into until the capture contract exists).
     `exports` map. It becomes a real surface the day one is added. Owner: DOS-P9, which is where
     packaging is decided.
 
-## 10. What DOS-P5 and DOS-P6 inherit
+## 10. What DOS-P5 and DOS-P6 inherited
 
 **DOS-P5, from this adapter's shape rather than its code:** in-place discovery over a cache copy
 (§4) is the property that keeps drift detection meaningful, and Codex has no in-place plugin
-discovery — its spec answers this with a local marketplace, which resolves to real on-disk paths.
+discovery — its architecture answers this with a local marketplace, which resolves to real on-disk paths.
 The `agent.prompt` argument schema is already in `packages/core`, so DOS-P5 imports it rather than
 writing a second one. The code-point sort came due early and is closed (§9.5); the façade question
 (§9.6) still comes due when there are two adapters.
 
-**DOS-P6, and it is the larger inheritance:** every one of §9.1 through §9.3. The capture contract
-decides what a hook body does, which is what unblocks hooks, which is what makes a lifecycle
-capability observable, which is what turns `wrapper-required` into `yes`. Until then the honest
-report is the one this adapter already produces.
+**DOS-P6 closed the larger inheritance:** capture is agent-authored; hooks and the wrapper are
+declined; the capture and ingest commands ship; and the six unused keys resolve to `not-used`.
+`docs/architecture/knowledge-pipeline.md` is the current cross-subsystem record.
+
+## 11. Invocation and security contract
+
+`invokeClaude` accepts an absolute discovered executable plus a `ClaudeInvocation` carrying prompt,
+`maxTurns`, `allowedTools` and `timeoutMs`. It invokes the security runner with an argv array —
+never a shell string — as:
+
+```text
+claude -p <prompt> --output-format json --max-turns <N> [--allowedTools <tool> ...]
+```
+
+Stdin and environment are empty. The prompt is screened as prose and each allowed-tool value is
+screened as an argument before spawn. `maxTurns` must be an integer from 1 through 50; the exported
+default is 5 for the future cross-vendor call site. The shared `agent.prompt` argument parser in
+`packages/core` is strict, accepts only bounded non-empty `prompt`, refuses hostile prototype keys,
+and currently refuses a workflow-supplied `maxTurns` until both vendors enforce one.
+
+`--allowedTools` is emitted only when non-empty and is the runtime defence-in-depth counterpart to
+compiled scopes. The runner enforces `timeoutMs`; timeout, signal death, non-zero exit, spawn
+failure, argument refusal and malformed structured output remain distinct result variants. Only a
+zero-exit JSON structured payload reaches a consumer, and malformed output is never best-effort
+parsed.
+
+## 12. Former spec section map
+
+Source comments predating the completed-spec cleanup use the former section numbers. They now
+resolve here:
+
+| Former design section | Current authority |
+|---|---|
+| §1 | §1 and the package boundary in §2 |
+| §2 | §2 |
+| §3 | §3, §4 and §5 |
+| §4 | §4 |
+| §5 | §3 |
+| §6 | §5 |
+| §7 | §6 |
+| §8 | §11 |
+| §9 | §3 and §11 |
+| §10 | §4, §7 and §11 |
+| §11 | §6, §9 and §11 |
+| §12 | §6 and §10 |
+| §13 | §1 and §11 |
+| §14 | §3, §6 and §9 |
+| §15 | §9 and §10 |

@@ -2,7 +2,7 @@ import { compareCanonical } from "../discovery/index.js";
 import { screenControlCharacters } from "../redact.js";
 import type { IndexDocumentV1, IndexedNote } from "./build.js";
 
-/** Spec §6: the map shows what changed lately, not the whole vault. */
+/** Brain architecture former §6: the map shows what changed lately, not the whole vault. */
 export const RECENT_CHANGES_LIMIT = 15;
 
 /**
@@ -12,7 +12,7 @@ export const RECENT_CHANGES_LIMIT = 15;
  * The product design spec's §14.1 classifies vault files as untrusted data. A
  * title or summary carrying a newline would start a fresh line in the artifact,
  * and a note could then write `generatedAt: <sentinel>` into the rendered
- * output — spec §6.3's drift canonicalizer replaces only the *first*
+ * output — Brain architecture former §6.3's drift canonicalizer replaces only the *first*
  * occurrence, so the note would pin the sentinel and make every later edit
  * invisible to `index-drift`.
  *
@@ -179,7 +179,7 @@ function link(note: IndexedNote): string {
 }
 
 /**
- * `generatedAt` first, on its own line, per spec §6.1(1) and because §6.3's
+ * `generatedAt` first, on its own line, per Brain architecture former §6.1(1) and because §6.3's
  * canonicalizer matches it anchored at a line start. Nothing else here is
  * time-derived.
  */
@@ -244,7 +244,7 @@ export function renderVaultMap(index: IndexDocumentV1): string {
    * not work inside one, so it could not be made safe against a backtick — but
    * the span was also guaranteeing a safe line *prefix*, and losing that let a
    * tag named `generatedAt:` put a second `^generatedAt:` line in the artifact,
-   * which spec §6.1(1) forbids outright. Both jobs have to be done.
+   * which Brain architecture former §6.1(1) forbids outright. Both jobs have to be done.
    */
   lines.push(
     index.tags.length === 0

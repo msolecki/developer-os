@@ -9,11 +9,11 @@ import { join } from "node:path";
  * `apps/cli`, so a published package would not carry it — the same argument
  * `brain-template.ts` makes for the vault skeleton, and the same failure if
  * it is ignored. Here the failure is sharper than a missing skeleton:
- * `codex-adapter.md` §11.13 records that **nothing writes the file
- * `outputSchemaPath` points at**. `invokeCodex` only screens the path and
- * forwards it into argv, so pointing the vendor CLI at a missing schema
- * produces the CLI's own non-zero exit and is diagnosed as the wrong failure
- * entirely.
+ * `codex-adapter.md` §11.13 records the closed ownership split: `init` writes
+ * these managed files, `ingest` selects the installed path, and `invokeCodex`
+ * only screens and forwards it. Without the init side, the vendor CLI would
+ * report a missing schema as its own non-zero exit and the product would
+ * diagnose the wrong failure.
  *
  * Which verbs need one is derived from `EFFECT_VOCABULARY`, never listed
  * twice: `structuredResultVerbs()` is the set, and the test above pins this
@@ -58,4 +58,3 @@ export function outputSchemaFileName(verb: string): string {
 export function outputSchemaPath(productHome: string, verb: string): string {
   return join(productHome, OUTPUT_SCHEMA_DIRECTORY, outputSchemaFileName(verb));
 }
-

@@ -1,11 +1,18 @@
 # Developer OS — Knowledge Pipeline Design
 
-**Status: approved by the founder 2026-08-13**, the day it was written, for `ORDER.md` entry A10,
-program plan Task 6, DOS-P6. Its implementation plan is
-`plans/2026-07-21-developer-os-knowledge-pipeline.md`, written against this document the same day;
-code comes after that plan, which is a Global Constraint of the program plan rather than a
-preference. **Approving this document was the founder's and was not delegable** — an agent that
-judges its own spec ready has removed the only gate in the program a machine cannot check.
+**Status: approved by the founder 2026-08-13; all nineteen implementation tasks are committed, but
+the DOS-P6 checkpoint remains open for remote CI evidence and its closure commit.** Written for
+`ORDER.md` entry A10, program plan Task 6, DOS-P6. Its implementation plan is
+`plans/2026-07-21-developer-os-knowledge-pipeline.md` and remains until Task 19 Step 6 closes.
+**Approving this document was the founder's and was not delegable** — an agent that judges its own
+spec ready has removed the only gate in the program a machine cannot check.
+
+> **Implementation record, 2026-08-24.** §6.1's "one transaction" headline was refuted by the
+> implementation: ingest uses four transactions plus a compensating rollback, ratified as shipped on
+> 2026-08-15 and recorded in `BACKLOG.md` §8 and `docs/architecture/knowledge-pipeline.md` §5. The
+> §12 row saying Codex's JSONL terminal-event rule was "promoted" is also superseded by §10.2: the
+> successful 2026-08-20 observation refuted and replaced it. The original clauses remain below as
+> the approved baseline those dated amendments corrected.
 
 **The plan takes five decisions this document did not, and its tasks raised two more.** Six of those
 seven are registered in `BACKLOG.md` §8 and were ratified by the founder on 2026-08-13 — the seventh is
@@ -28,7 +35,8 @@ has no §8 row — but it is a cost, and the plan states it where a reader will 
 `docs/architecture/claude-adapter.md` and `docs/architecture/codex-adapter.md`, which between them
 name this subsystem as owner of thirteen residuals; `docs/architecture/brain.md`, which froze
 `CaptureEnvelopeV1` as a type and wrote none of them; `docs/architecture/workflow-schema.md`, whose
-§5 lists six unimplemented verbs as this subsystem's and whose §8.1 makes the scope globs due here;
+historical §5 assigned six verbs to this subsystem and whose current §5 records that DOS-P6
+implemented five of them, leaving only `agent.prompt`; §8.1 makes the scope globs due here;
 and `docs/architecture/foundation.md` for the mutation pipeline, the manifest and the transaction
 model. Nothing outside this repository was read, per the program's Global Constraints.
 
@@ -96,13 +104,12 @@ decision recorded without its cost reads as a free choice to whoever inherits it
 `session_end` hook cannot supply that text. The only session content a hook receives on either
 vendor is `transcript_path`, and this product refuses to open that field on any code path.
 
-So the hook body was never blocked on an executable bit. `docs/architecture/claude-adapter.md` §5
-and `docs/architecture/codex-adapter.md` §5 both say restoring hooks needs "the hook bodies, a
-mechanism for marking a generated artifact executable, and a test that observes a hook firing." The
-middle requirement is **not actually needed** — a `"type": "command"` handler names a command
-string, so naming the installed `developer-os` binary ships no script and needs no mode bit. What
-hooks lacked was content to capture. That correction is recorded here because both notes state the
-blocker as the executable bit, and a later reader would otherwise solve the wrong problem.
+So the hook body was never blocked on an executable bit. Before the 2026-08-24 documentation
+cleanup, `docs/architecture/claude-adapter.md` §5 and `docs/architecture/codex-adapter.md` §5 both
+said restoring hooks needed a mechanism for marking a generated artifact executable. The notes now
+carry the correction: a `"type": "command"` handler can name the installed `developer-os` binary,
+so no mode bit is needed. What the two capture hooks lack is faithful agent-authored content without
+reading `transcript_path`; DOS-P11 reopens only the eleven non-capture hooks.
 
 **The decision.** Capture content comes from the agent, mid-session, at the point of insight. The
 rendered skill instructs it to run `developer-os capture` with its own summary — which is exactly
@@ -530,11 +537,11 @@ checked arithmetic rather than a judgement.
 
 ### 6.6 The output schema files
 
-`codex-adapter.md` §11.13: nothing writes the file `outputSchemaPath` points at, because
-`invokeCodex` only screens the path and forwards it into argv. **One JSON Schema file per
-agent-invoking verb** ships with the product and is written to the product home at `init`, so a
-caller never points the vendor CLI at a missing file — which would surface as the CLI's own non-zero
-exit rather than as `malformed-output`, and would be diagnosed as the wrong failure.
+`codex-adapter.md` §11.13 records the closed split: `init` writes **one JSON Schema file per
+structured-result verb** into product state, `ingest` derives and selects that installed path, and
+`invokeCodex` only screens and forwards it. A caller therefore does not point the vendor CLI at a
+missing file — which would surface as the CLI's own non-zero exit rather than as
+`malformed-output`, and would be diagnosed as the wrong failure.
 
 ## 7. What else this subsystem is due
 
@@ -545,8 +552,8 @@ exit rather than as `malformed-output`, and would be diagnosed as the wrong fail
 acceptance condition is "the first time a handler or adapter resolves one of these globs against a
 real filesystem" — this subsystem is that first time, so it is due here rather than deferred again.
 
-The globs are derived from the resolved Brain configuration, and the workflow-compiler spec §6 is
-amended with them (§12).
+The globs are derived from the resolved Brain configuration; the surviving outcome is recorded in
+`docs/architecture/workflow-schema.md` §8.1 (§12).
 
 ### 7.2 Probing becomes opt-in, and the two-gate machinery gets its first caller
 
@@ -569,33 +576,27 @@ and the declared read scopes widen to the content root. Read-only either way; th
 
 ### 7.4 `maxTurns` is refused rather than implemented
 
-`codex-adapter.md` §7 and §11.3: one shared `agent.prompt` schema, two behaviours, one of them
-silent — `invokeClaude` bounds it and refuses anything out of range, `CodexInvocation` has no such
-field, so a workflow setting it gets a turn limit on one vendor and none on the other with no
-diagnostic.
+`codex-adapter.md` §7 and §11.3: the direct adapter APIs remain asymmetric — `invokeClaude` bounds
+`maxTurns` and refuses anything out of range, while `CodexInvocation` has no such field. The shared
+workflow surface does **not** expose those two behaviours: `parseAgentPromptArgs` refuses
+`maxTurns` before vendor selection, with an error naming DOS-P7 as the owner of a cross-vendor turn
+bound. A workflow therefore cannot silently apply a limit on Claude and drop it on Codex.
 
-**`parseAgentPromptArgs` refuses `maxTurns`**, with an error naming whoever implements a turn bound
-on both vendors. This is the repository's own precedent: the `scheduled` trigger is refused with an
-error naming DOS-P7 because "a value that validates while the property it names is false" is what
-this codebase refuses. No canonical workflow sets `maxTurns`, so nothing regresses. Implementing it
-under Codex was rejected as inventing a bound the vendor does not document.
+This follows the repository's own precedent: the `scheduled` trigger is refused with an error
+naming DOS-P7 because "a value that validates while the property it names is false" is what this
+codebase refuses. No canonical workflow sets `maxTurns`, so nothing regresses. Implementing it under
+Codex was rejected as inventing a bound the vendor does not document; the remaining direct-call
+asymmetry belongs to DOS-P7.
 
-### 7.5 Three small correctness fixes this subsystem owns
+### 7.5 Three small correctness fixes this subsystem closed
 
-- **Two artifact roots share one type** (`codex-adapter.md` §11.1, `BACKLOG.md` §1 NEW-13).
-  `RenderedArtifact` is `{path, contents}` for paths relative to the plugin root *and* the
-  marketplace root; the plugin root is a descendant of the marketplace root, so a wrongly-rooted tree
-  applies cleanly instead of refusing. The durable fix is nominal: brand the two array shapes as
-  distinct opaque types so `proposeCodexInstall` structurally refuses a plugin-root tree. Due here
-  because this subsystem is the first consumer of `CodexAdapter`.
-- **`doctor` renders any discovery error as `absent`** (`codex-adapter.md` §11.6) — "we could not
-  ask" printed as "not installed", the same conflation `unreadable` exists to prevent, one layer up,
-  duplicated in two functions that must change together. Both are fixed in one change.
-- **The `allUnknown` unsound cast, in two copies** (`codex-adapter.md` §11.7).
-  `Record<string, CapabilityState>`'s index signature satisfies the named-property type, so a
-  renamed or dropped capability key is not a compile error. Fixed in both adapters, and the fix must
-  make a dropped key fail to compile — a test that merely checks the current keys would restate the
-  bug.
+- **The two artifact roots now have distinct opaque types** (`codex-adapter.md` §11.1,
+  `BACKLOG.md` §1 NEW-13). `PluginRootArtifact` cannot be passed where
+  `MarketplaceRootArtifact` is required, and the runtime location guard remains after type erasure.
+- **`doctor` now renders discovery failure as `unreadable`, not `absent`**
+  (`codex-adapter.md` §11.6), in both adapters.
+- **The duplicated `allUnknown` cast is gone** (`codex-adapter.md` §11.7). Each capability object
+  is written and typed key by key, so a renamed or dropped required key fails compilation.
 
 ## 8. Security seams
 
@@ -726,8 +727,8 @@ Normative. An implementation may not depend on a surface this section does not c
 
 ### 10.1 What is already verified, and where
 
-The vendor CLI surfaces this subsystem invokes are carried by the two adapter specs, both approved:
-`specs/…-claude-adapter-design.md` §14 and `specs/…-codex-adapter-design.md` §14, the latter as
+The vendor CLI surfaces this subsystem invokes are carried by the two adapter architecture notes:
+`docs/architecture/claude-adapter.md` and `docs/architecture/codex-adapter.md` §7, the latter
 amended four times on 2026-08-12 by first contact with `codex-cli 0.147.0`. This spec adds no new
 vendor surface: ingest invokes `agent.prompt` through the adapters' existing `invoke` modules.
 
@@ -740,7 +741,7 @@ vendor surface: ingest invokes `agent.prompt` through the adapters' existing `in
 > **not**, because the account's usage limit was exhausted before any run reached a model response.
 > The obligation this section states is therefore half discharged; what is still owed is one
 > successful `codex exec` completion — `BACKLOG.md` §1 **NEW-21** — and
-> `specs/…-codex-adapter-design.md` §14.1 carries the observed shape. Read the paragraph below as the
+> `docs/architecture/codex-adapter.md` §7 carries the observed shape. Read the paragraph below as the
 > statement of why the call had to be made rather than as the current state.
 
 `codex exec --json` streams events as JSONL while `--output-schema` constrains only the final
@@ -756,7 +757,7 @@ accepted this on 2026-08-13 when approving the scope boundary.
 
 The obligation is precise: capture raw stdout from one real run, record whether the final response
 really is the last parsing line and whether it carries a discriminating field worth filtering on,
-amend Codex spec §14.1 with the observed shape, dated, and correct the docblock. **Do not quietly
+amend `docs/architecture/codex-adapter.md` §7 with the observed shape, dated, and correct the docblock. **Do not quietly
 promote the rule to verified.**
 
 **Discharged 2026-08-20, and the answer to the first question was no.** Task 17 took the second on
@@ -764,8 +765,8 @@ promote the rule to verified.**
 exhausted usage limit. `BACKLOG.md` §1 NEW-21 carried it until the limit reset. The final response is
 **not** the last parsing line: a successful turn ends on a `turn.completed` usage record, and the
 response is the `item.completed` before it. So the rule was never promoted to verified and was
-replaced instead, which is what this paragraph's last sentence was written to protect. Codex spec
-§14.1 carries the amendment of that date.
+replaced instead, which is what this paragraph's last sentence was written to protect. The Codex
+architecture note §7 carries the amendment of that date.
 
 **The same run also refuted an assumption this section did not know it was making.** It presumed the
 only thing a real call could settle was the *parsing* of a reply. The call never reached a model:
@@ -840,10 +841,10 @@ the document it amends. An approved document is not silently rewritten.
 |---|---|
 | product design spec §11 | "Automatic capture may use a documented lifecycle hook or the controlled `developer-os run claude|codex` wrapper" and "`doctor` reports that wrapper use is required" — there is neither a hook nor a wrapper. `CapabilityState` **replaces** `wrapper-required` with `not-used`, and six of the nine keys resolve to it |
 | product design spec §14.3 | "user-configured patterns" narrowed to literal case-insensitive substrings, for the ReDoS reason in §8.2 |
-| `specs/…-claude-adapter-design.md` §6.1 | hooks **declined**, not deferred; the three lifecycle keys report `not-used` rather than `wrapper-required` |
-| `specs/…-codex-adapter-design.md` §5.3 | the same, for the same reason, in one decision covering both adapters |
-| `specs/…-codex-adapter-design.md` §14.1 | the JSONL terminal-event rule promoted from provisional to observed, dated, with the shape that was seen |
-| `specs/…-workflow-compiler-design.md` §6 | scope globs derived from `BrainConfigV1` rather than written as literals |
+| `docs/architecture/claude-adapter.md` §5 | hooks **declined**, not deferred; the three lifecycle keys report `not-used` rather than `wrapper-required` |
+| `docs/architecture/codex-adapter.md` §5 | the same, for the same reason, in one decision covering both adapters |
+| `docs/architecture/codex-adapter.md` §7 | the JSONL terminal-event rule was observed, then replaced when a successful stream refuted it |
+| `docs/architecture/workflow-schema.md` §8.1 | scope globs keep canonical names and resolve through `BrainConfigV1` at the handler boundary |
 
 **Five canonical workflows change, not two**, which is a contract change rather than an amendment to
 prose. This paragraph said two when the spec was approved; the count was corrected on 2026-08-13 in

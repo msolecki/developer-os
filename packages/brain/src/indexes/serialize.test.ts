@@ -32,7 +32,7 @@ describe("serialization", () => {
   });
 
   it("emits generatedAt exactly once per artifact", async () => {
-    /** Spec §6.3's drift canonicalization replaces one occurrence per file. */
+    /** Brain architecture former §6.3's drift canonicalization replaces one occurrence per file. */
     const { index, graph } = await buildIndex(fixtureRequest(FROZEN));
     for (const text of [serializeIndex(index), serializeGraph(graph)]) {
       expect(text.match(/"generatedAt":/gu)).toHaveLength(1);

@@ -32,13 +32,13 @@ export interface ClaudeCapabilityRequest {
    * Whether to run the capability probe.
    *
    * **Default `false`, and that is a finding rather than a preference.** The
-   * probe is `claude plugin validate`, which spec §14.1 records as creating
+   * probe is `claude plugin validate`, which Claude architecture former §14.1 records as creating
    * `~/.claude.json` and a backup under `~/.claude/backups/` — observed against
    * a real installation on 2026-08-11. `doctor` is a diagnostic, and Foundation's
    * end-to-end suite asserts it touches nothing outside the product's own paths;
    * probing from there broke that assertion, which is how this was found.
    *
-   * So spec §5's "the probe decides" cannot hold inside a read-only command.
+   * So Claude architecture former §5's "the probe decides" cannot hold inside a read-only command.
    * `doctor` reads the version — `claude --version` writes nothing, measured —
    * and reports every probe-settled capability as `unknown`, which is exactly
    * what §9.2 means by it: we did not ask.
@@ -83,7 +83,7 @@ export interface ClaudeCapabilityReport {
  * command beside this one; all four sites are the same gap.
  *
  * The six `not-used` keys stay `unknown` here on purpose. `not-used` is a claim
- * about a resolved matrix; this one resolves nothing, and spec §9.2's rule is
+ * about a resolved matrix; this one resolves nothing, and Claude architecture former §9.2's rule is
  * that a report about an install nobody examined says only that.
  */
 function allUnknown(): ClaudeCapabilities {
@@ -119,11 +119,11 @@ function summarise(capabilities: ClaudeCapabilities): string {
  * on an empty environment is the whole job.
  *
  * With nothing to examine, every capability is `unknown` rather than absent
- * (spec §9.2): "we could not ask" and "the answer is no" are different facts,
+ * (Claude architecture former §9.2): "we could not ask" and "the answer is no" are different facts,
  * and only one of them justifies telling a user their install lacks a feature.
  *
  * **The probe has a side effect.** `probeClaude` runs `claude plugin validate`,
- * which spec §14.1 records as creating `~/.claude.json` and a backup under
+ * which Claude architecture former §14.1 records as creating `~/.claude.json` and a backup under
  * `~/.claude/backups/`. That is the vendor's own state rather than ours, but it
  * means `doctor` is not a read-only command and must not be described as one.
  */
@@ -203,7 +203,7 @@ export async function reportClaudeCapabilities(
     installed: true,
     version: installation.version,
     capabilities,
-    // A capture reaches the vault because somebody ran a command. Spec §8.2
+    // A capture reaches the vault because somebody ran a command. Claude architecture former §8.2
     // used to name the wrapper here, chosen by `session_end_capture === "yes"`;
     // that key is `not-used` unconditionally now, so the branch was dead.
     captureVia: "command",

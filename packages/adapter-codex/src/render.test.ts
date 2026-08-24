@@ -65,7 +65,7 @@ describe("CodexRenderer", () => {
     expect(render().path).toBe("skills/developer-os-capture/SKILL.md");
   });
 
-  it("carries the two frontmatter fields spec §14.3 requires, and no third", () => {
+  it("carries the two frontmatter fields Codex architecture former §14.3 requires, and no third", () => {
     const { contents } = render();
     const frontmatter = contents.split("---")[1] ?? "";
     expect(frontmatter).toContain('name: "developer-os-capture"');

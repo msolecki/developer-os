@@ -120,7 +120,7 @@ describe("ClaudeRenderer", () => {
   });
 
   /**
-   * `render` took an overlay and discarded it (`void overlay`), while spec §7
+   * `render` took an overlay and discarded it (`void overlay`), while Claude architecture former §7
    * says the input is a contract plus its optional Claude overlay. A caller
    * passing one lost it silently and no test failed. Kept as a door case,
    * even though `skill.test.ts` also pins overlay application at the body
@@ -143,7 +143,7 @@ describe("ClaudeRenderer", () => {
   /**
    * There is deliberately no "renders no absolute machine path" test here.
    *
-   * The rule (spec §6, §10) is that *this adapter* never constructs one — hook
+   * The rule (Claude architecture former §6, §10) is that *this adapter* never constructs one — hook
    * commands go through `${CLAUDE_PLUGIN_ROOT}`, which `plugin.test.ts` pins,
    * and Task 10 scans the whole generated tree. It is **not** that author
    * content is stripped of paths: a `recovery.resume` legitimately names one,
@@ -217,7 +217,7 @@ describe("ClaudeRenderer refusals found by review", () => {
    * `id` reaches the artifact **path**. The compiler's slug regex is the only
    * thing that ever constrained it, and the renderer revalidates nothing — so a
    * contract built in code rather than parsed from YAML could write outside the
-   * plugin directory, which spec §10 says is the only path this adapter writes.
+   * plugin directory, which Claude architecture former §10 says is the only path this adapter writes.
    * Kept as a door case: the artifact path is this adapter's own concern.
    */
   it("refuses an id that is not a slug, because it reaches the artifact path", () => {

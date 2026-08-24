@@ -30,16 +30,11 @@ replacement text says where it went.
   in the same commit that closes it, after carrying any evidence a later step still needs
   into the document that needs it. Git history is the archive — do not keep a `completed/`
   or `archive/` directory.
-- **A spec outlives its plan.** While a subsystem is unfinished its spec is the reference
-  for review and drift checks. After it ships, the spec is retained only while another
-  document still points at it as the design of record — §3's table is the current list, plus
-  the kernel-lock spec in §8 — and its status line must then say so, in the past tense.
-  **One spec is exempt because the rule's unit does not fit it.** The product design spec
-  specifies eight subsystems at once, so no single status line could be truthful: Foundation
-  and DOS-P2 through DOS-P5 have shipped, DOS-P6 through DOS-P9 are unbuilt. It carries per-section
-  markers instead — §8, §9.1 and §9.3 each say what actually shipped — which is finer
-  granularity than this rule asks for. Do not give it a global past-tense status line, and do
-  not treat it as a deletion candidate while any subsystem it specifies is unbuilt.
+- **A subsystem spec stays only while it governs unfinished work.** When the checkpoint closes,
+  carry every surviving decision, amendment, residual, and inbound reference into the subsystem's
+  architecture note, then delete the spec in the same closure or cleanup commit. Git history is the
+  archive. Umbrella specs are different only in granularity: the product design stays while any
+  product entry it governs remains open, with dated section-level corrections for shipped work.
 - **Every plan this program has finished is deleted, and all of them are in git history.** The
   four subsystem plans are in §3's table with their recovery commits; the other three are the
   brain/claude-shared English migration (`28a0ddc`), the kernel transaction lock (`cf70342^`) and
@@ -62,10 +57,10 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 |---|---|---|
 | Program (umbrella) | 1 plan | Tasks 6–9 open, **25 unticked steps**; Tasks 0–5 closed and not rows here |
 | DOS-P6 | spec approved and plan written, both 2026-08-13 | **one unticked step** — Task 19 Step 6. Its exact local gate passed, its exact-path work is committed, and `origin/development` is at `c46b82c`; the remote CI verdict is unobserved. Once that run is green, A10 still needs its closure commit and observed CI on that commit. The founder rejected a separate branch and directed the 2026-08-24 continuing session not to push. Task 17 closed 2026-08-20 when NEW-21 did; Tasks 1–18 have landed and Task 19 Steps 1–5 are checked |
-| DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
+| DOS-P7 | spec 1 of 2 written, awaiting approval | approval of spec 1; spec 2; 2 plans; 2 implementations |
 | DOS-P10, DOS-P11, DOS-P12 | no documents; added 2026-08-20 | **3 specs, 3 plans, 3 implementations.** The shared-runtime layers no subsystem owned: thirty-eight instruction artifacts, eleven event hooks, nine tooling scripts |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each. **The cutover's scope grew on 2026-08-20** — it now retires the shared runtime entirely, so it follows DOS-P12 rather than DOS-P7 |
-| Repository-level | §1 | **twenty-five open rows** of twenty-nine headings, four of them closed 2026-08-21 — NEW-13, NEW-30, NEW-41 and NEW-43 — and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **four** need somebody or something no session has (NEW-42 an interactive vendor session, NEW-45 the founder's credits, NEW-20 deliberately not fixed, NEW-7 a machine with Obsidian); **sixteen** of the eighteen that came out of R2's own reviews are still open — NEW-27 and NEW-28 from closing NEW-12, NEW-24/25/26/29 from NEW-16, NEW-30 and NEW-31 from NEW-11, NEW-32, NEW-33 and NEW-35 from NEW-15, NEW-34 from Foundation request 2, and NEW-36, NEW-37, NEW-38 and NEW-39 from request 3, NEW-40 from Task 8, and NEW-41 from Task 9; **five** — NEW-44, NEW-46, NEW-47, **NEW-48** and **NEW-49** — are startable in a session, which is what groups them; the reviews of the NEW-21 diff produced the first three plus **NEW-45** (above, because it needs credits) and **NEW-43**, which closed on 2026-08-21, and the reviews of NEW-30's and NEW-41's own closures produced NEW-48 and NEW-49. 4 + 16 + 5 = 25. **NEW-21 left six rows and one has gone; NEW-43 was one of four a session could have taken**, not the only one — NEW-44, NEW-46 and NEW-47 are still there, and NEW-47 needs no credits either |
+| Repository-level | §1 | **twenty-four open rows** of twenty-nine headings, five closed — NEW-13, NEW-30, NEW-41 and NEW-43 on 2026-08-21, NEW-48 on 2026-08-24 — and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **four** need somebody or something no session has (NEW-42 an interactive vendor session, NEW-45 the founder's credits, NEW-20 deliberately not fixed, NEW-7 a machine with Obsidian); **sixteen** of the eighteen that came out of R2's own reviews are still open — NEW-27 and NEW-28 from closing NEW-12, NEW-24/25/26/29 from NEW-16, NEW-30 and NEW-31 from NEW-11, NEW-32, NEW-33 and NEW-35 from NEW-15, NEW-34 from Foundation request 2, and NEW-36, NEW-37, NEW-38 and NEW-39 from request 3, NEW-40 from Task 8, and NEW-41 from Task 9; **four** — NEW-44, NEW-46, NEW-47 and **NEW-49** — are startable in a session. 4 + 16 + 4 = 24. **NEW-21 left six rows and one has gone; NEW-43 was one of four a session could have taken**, not the only one — NEW-44, NEW-46 and NEW-47 are still there, and NEW-47 needs no credits either |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
@@ -74,10 +69,11 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 behind is `docs/architecture/foundation.md`, `brain.md`, `workflow-schema.md`, `claude-adapter.md`
 and `codex-adapter.md`, plus §2 here for Foundation's open questions; every one of those plans is
 deleted and git history is the archive. **Both adapter notes are written for DOS-P6**, the one
-subsystem that consumes both — `codex-adapter.md` §9 carries the two-adapter table, and its §11 and
-`claude-adapter.md` §9 carry twenty-four residuals between them, thirteen of them DOS-P6's.
-DOS-P3's note is still the one to read before touching the compiler: its §7 records four canonical workflows that say less than the product
-spec does, each with an owner, and its §8 records nine residuals.
+subsystem that consumes both — `codex-adapter.md` §9 carries the two-adapter table, while its §11
+and `claude-adapter.md` §9 distinguish closed findings from live residuals with owners.
+DOS-P3's note is still the one to read before touching the compiler: its §7 records that DOS-P6
+closed the four historical workflow gaps and names the two genuine gaps that remain; §8 carries
+the compiler's current residuals.
 
 **This repository is public, deliberately, as of 2026-08-10.** It was pushed to
 `github.com/msolecki/developer-os` and the founder confirmed the visibility after being shown
@@ -122,7 +118,7 @@ recording. Git history is the archive.
 one. A residual is a defect like any other and gets `NEW-24` through `NEW-28`; the row it came from
 is named in its own text, which is where the lineage belongs.
 
-**Twenty-five open rows, recounted 2026-08-21. Two closed that day — NEW-30 and NEW-41 — and two were raised by the reviews of those very closures, NEW-48 and NEW-49, so the count moved by nothing. They are not all the same kind of open.** **None is waiting on R2 to land a fix.** NEW-11, NEW-12, NEW-15, NEW-16 and NEW-22 all closed
+**Twenty-four open rows, recounted 2026-08-24. Two closed on 2026-08-21 — NEW-30 and NEW-41 — and two were raised by their reviews, NEW-48 and NEW-49; NEW-48 then closed in the completed-spec cleanup. They are not all the same kind of open.** **None is waiting on R2 to land a fix.** NEW-11, NEW-12, NEW-15, NEW-16 and NEW-22 all closed
 on 2026-08-17; what remains here is somebody else's or a residual of that work. **NEW-11 closed
 2026-08-17** and left NEW-30 and NEW-31; NEW-30 closed 2026-08-21, so **NEW-31 — a stray zero-width
 joiner that still hides a duplicate title — is the one still open.** All four
@@ -133,10 +129,10 @@ section when its fix is committed, not when its question is answered. Three were
 with Obsidian. **NEW-13 has since closed** — 2026-08-21, by Task 19 Step 5, against brands that had
 shipped nine days earlier — so that group is two.
 
-**NEW-48 and NEW-49 belong to neither group above and neither below**, so they are named here rather
-than left to be inferred: the reviews of NEW-30's and NEW-41's *closures* raised them, which is a
-fourth provenance this section did not have until 2026-08-21. Partitioning the preamble's groups
-without them comes up two short of the twenty-five.
+**NEW-49 belongs to neither group above nor below**, so it is named here rather than left to be
+inferred: the review of NEW-41's *closure* raised it, which is a fourth provenance this section did
+not have until 2026-08-21. NEW-48 came from the same new provenance and closed on 2026-08-24.
+Partitioning the preamble's open groups without NEW-49 comes up one short of twenty-four.
 
 **NEW-21 was a fourth, closed on 2026-08-20, and left six rows behind it** — NEW-42 through NEW-47.
 Only **NEW-42** came from the work; **NEW-43 through NEW-47 came from two fresh-context reviews of its
@@ -216,37 +212,15 @@ not.
   input. A review of this row caught that the "how to close" step would otherwise have left the
   sentence a reader actually sees unchanged.
 
-### NEW-48 — the Brain spec's lint-class table documents no warning the class emits
+### NEW-48 — CLOSED 2026-08-24: the Brain lint inventory omitted all five warnings
 
-- **Status:** **the amendment is written and awaiting ratification**, registered 2026-08-21 by the
-  fresh-context review of the NEW-30 closure · **Size:** XS
-- **The table is amended in place, dated, with each warning beside the change that added it**, which
-  is the convention §7 already uses for its 2026-08-09 link-resolution amendment. §8 carries the row.
-  **The row does not close until the founder ratifies it** — this is an approved document, and an
-  agent deciding that its own edit to one is fine is the gate this program has no machine substitute
-  for. What is being asked is narrow: that a table may be brought into line with a class whose
-  behaviour nothing changed.
-- **What is stale.** `specs/2026-07-21-developer-os-brain-engine-design.md` §7 enumerates the
-  `frontmatter` lint class as errors plus one `info`. The class emits **five** `warn` findings that
-  appear nowhere in it, and the first count of them said four:
-  swallowed prose key (`lint.ts:159`, carried from Task 2's review), blank tag (`:220`), blank summary
-  (`:231`), blank alias (`:273`, 2026-08-21), and a **symlinked folder** (`:304`) — which the spec's
-  own symlink paragraph does not cover, because that paragraph says a symlink out of the vault is
-  refused during path resolution and never says lint reports one. The unclassified-folder warning
-  (`:286`) is the one that *is* documented, under `unclassified-folder` in §5.
-- **Why it matters more than a missing row.** §7 opens "Six classes, matching `BACKLOG.md` §3", which
-  reads as an authoritative enumeration; a reader checking whether a warning is expected behaviour
-  finds a table that says it is not. The spec is the design of record for a closed subsystem, so
-  nothing else contradicts it.
-- **It is drift rather than an amendment**, which is why it is a §1 row and not a §8 one: no decision
-  changed the spec's contract, the implementation grew warnings the table was never updated for. They
-  arrived one at a time over three weeks — the swallowed prose key from Task 2's review, the symlinked
-  folder alongside it, two from NEW-11, and the blank alias from NEW-30 — which is how a table stays
-  wrong without anyone deciding it should.
-- **How to close it:** add the five to §7's table with the dates they landed, and check whether the
-  other five classes have the same gap before assuming only `frontmatter` does. **Count them from
-  `lint.ts` rather than from this row** — the first version of it said four and missed the symlink
-  warning, which is the same mistake one level down.
+- **Status:** closed by the completed-spec cleanup; originally registered 2026-08-21 by the
+  fresh-context review of the NEW-30 closure.
+- **What closed it:** `docs/architecture/brain.md` now owns the current six-class inventory and
+  enumerates all five `frontmatter` warnings from the implementation: swallowed prose, a skipped
+  symlinked folder, and blank visible content in a tag, summary, or alias. The completed Brain spec,
+  whose stale table created the row, was deleted after that migration. No behaviour or design ruling
+  changed; this was documentation drift, so no founder ratification remains necessary.
 
 ### NEW-47 — whether a model-run command can write raw bytes to the vendor's stdout is unexamined
 
@@ -316,7 +290,7 @@ not.
 - **What breaks if the inference is wrong.** A free-text summary emitted after the structured response
   would be returned instead of it, and every Codex ingest would fail as `malformed-output` — the same
   silent-and-total shape the rule was rewritten to end, reached by the same method: an inference about
-  vendor behaviour written as an observation. Codex spec §14.1 requires exactly this to be labelled,
+  vendor behaviour written as an observation. `docs/architecture/codex-adapter.md` §7 requires exactly this to be labelled,
   and the docblock now labels it.
 - **How to close it:** one `codex exec` run whose prompt makes a summary likely after the structured
   answer, then record how many `agent_message` events the stream carries and which one the schema
@@ -1041,15 +1015,14 @@ collection. Neither blocks anything; both are decisions nobody has made.
 
 **One thing Foundation built and nothing consumes.** `buildConflictEvidence` and its
 unified-diff machinery in `packages/core/src/manifest/drift.ts` are implemented and
-unit-tested, and no command calls them. That is deliberate — the first consumer is the
-semantic config merge in DOS-P4/DOS-P5 — but a later reader should not mistake unused for
-untested, or unused for dead.
+unit-tested, and no command calls them. It was built for a planned semantic config merge, but a
+later reader should not mistake unused for untested.
 
-**That sentence is amended, by the Claude adapter spec approved 2026-08-11** (§8). Its §4.3
-dissolves DOS-P4's half of the merge rather than answering it: a skills-directory plugin writes no
-foreign config file, so DOS-P4 has nothing to three-way merge and leaves `buildConflictEvidence`
-uncalled. DOS-P5 may still need it — Codex's documented surface includes `AGENTS.md`, which is
-shared in a way `~/.claude/skills/developer-os/` is not.
+**Both adapters dissolved that planned consumer.** `claude-adapter.md` §2 and §9.8 record that the
+skills-directory plugin writes no foreign config file. `codex-adapter.md` §2, §4 and §11.9 record
+that Codex writes no `AGENTS.md` and delegates registration to `codex plugin add`. Neither adapter
+therefore performs a three-way merge, and `buildConflictEvidence` has no consumer. Whether a future
+subsystem takes it up or deletes it belongs to the first design with a real merge requirement.
 
 **Residual 9 is owed by DOS-P7**, and it is the one residual that makes a shipped feature
 unusable rather than merely rough: configuration cannot be changed after `init`. Detail with
@@ -1059,9 +1032,10 @@ that subsystem in §3.
 
 ## 3. Missing specs and plans
 
-**Eight documents left, across four subsystems.** DOS-P6's spec was approved by the founder on
-2026-08-13 and its implementation plan was written the same day. Everything else on the product path
-— DOS-P7, and the three subsystems added on 2026-08-20 — is missing both its spec and its plan.
+**Ten documents left, across four subsystems.** DOS-P6's spec was approved by the founder on
+2026-08-13 and its implementation plan was written the same day. On the remaining product path,
+DOS-P7's first split spec exists; its second split spec plus the plans for both DOS-P7 halves and
+the specs and plans for DOS-P10 through DOS-P12 still owe nine documents.
 
 **The three new ones exist because a parity read found layers with no owner.** On 2026-08-20 the
 founder ruled that the legacy shared runtime is retired **entirely** rather than partially. Read
@@ -1074,25 +1048,24 @@ Each subsystem after Foundation requires an approved spec **and** an implementat
 before any code work — this is a Global Constraint of the program plan, not a preference.
 Every spec starts with a brainstorming/approval cycle, and approval is the founder's.
 
-**The four closed subsystems are not rows here.** Each kept its spec, because an architecture note
-names it as the design of record, and each deleted its plan:
+**The four closed subsystems are not rows here.** Each deleted its plan at closure and its completed
+spec on 2026-08-24, after the architecture note absorbed the surviving record:
 
-| Closed | Spec retained | Named as design of record by | Plan recoverable at |
-|---|---|---|---|
-| DOS-P2 | `specs/…-brain-engine-design.md` | `docs/architecture/brain.md` | `81e7e7d` |
-| DOS-P3 | `specs/…-workflow-compiler-design.md` | `docs/architecture/workflow-schema.md` | `a47e965` |
-| DOS-P4 | `specs/…-claude-adapter-design.md` | `docs/architecture/claude-adapter.md` | `17968cb` |
-| DOS-P5 | `specs/…-codex-adapter-design.md` | `docs/architecture/codex-adapter.md` | the commit that closed DOS-P5 |
+| Closed | Surviving design and implementation record | Plan recoverable at |
+|---|---|---|
+| DOS-P2 | `docs/architecture/brain.md` | `81e7e7d` |
+| DOS-P3 | `docs/architecture/workflow-schema.md` | `a47e965` |
+| DOS-P4 | `docs/architecture/claude-adapter.md` | `17968cb` |
+| DOS-P5 | `docs/architecture/codex-adapter.md` | the commit that closed DOS-P5 |
 
 **Read both adapter notes before starting DOS-P6** — between them they record why in-place discovery
 beat a marketplace copy on one vendor and a local marketplace won on the other, the two-adapter
-table DOS-P6 designs against, and thirteen residuals it inherits. And read §8 before trusting the
-Codex spec: its §14, the section it declares normative, was amended four times on 2026-08-12 by
-first contact with a real binary.
+table DOS-P6 designs against, and thirteen residuals it inherits. The Codex note's §7 carries the
+four amendments forced on 2026-08-12 by first contact with a real binary.
 
 ### DOS-P6 — Knowledge pipeline hardening
 
-**Kept here only until Task 19 Step 5 removes it.** The spec's obligations — capture fields,
+**Kept here only until Task 19 Step 6 closes A10.** The spec's obligations — capture fields,
 lifecycle transitions, retention, redaction classes, atomic quarantine writes, post-redaction
 deduplication, accept/edit/reject review, the untrusted-source contract, the six required security
 suites and the five gate criteria — are **discharged**, and the record of each is
@@ -1103,17 +1076,18 @@ list of what the spec "must decide" back into this section; it was decided and s
   2026-08-13.** Read its §3 first. The decision that reshapes the subsystem is 3.1: capture content is
   **agent-authored**, so no hooks ship, `developer-os run claude|codex` is never built, and **nothing
   automatic captures anything**. §12 lists the six documents it amends; §8 here carries them.
-- **Plan:** `plans/2026-07-21-developer-os-knowledge-pipeline.md` — written 2026-08-13, nineteen
-  tasks, eighteen landed. **Two steps are unticked** and they are the whole of what is left:
-  Task 19 Steps 5 and 6. Task 17 closed 2026-08-20 with NEW-21.
+- **Plan:** `plans/2026-07-21-developer-os-knowledge-pipeline.md` — written 2026-08-13, all nineteen
+  tasks landed. **One step is unticked** and it is the whole of what is left: Task 19 Step 6.
+  Task 17 closed 2026-08-20 with NEW-21; Task 19 Step 5 landed 2026-08-21.
 - **Program task:** 6 · **Complexity:** L · **Blocked by:** nothing since 2026-08-20, when NEW-21
   closed. It had been held on that row by the founder's decision of 2026-08-15 to keep the subsystem
   open rather than close it carrying a residual.
 - **Absorbs:** legacy follow-up Steps 5, 7, 9 and 12, frozen on the legacy runtime 2026-07-27 and
   rebuilt here instead.
 - **The residuals it hands forward**, of the thirteen it inherited from the two adapters:
-  **`maxTurns`**, bounded under Claude and silently dropped under Codex from one shared
-  `agent.prompt` schema; and **NEW-42**, that no interactive vendor session has ever been observed.
+  the **direct-invocation `maxTurns` asymmetry** — Claude accepts a bound, Codex has no field, while
+  the shared `agent.prompt` parser refuses the key fail-closed until DOS-P7 resolves both vendors —
+  and **NEW-42**, that no interactive vendor session has ever been observed.
   **The JSONL terminal-event rule is no longer among them** — NEW-21 settled it on 2026-08-20 by
   showing it was wrong rather than merely unverified, and the fix shipped with the observation.
 
@@ -1131,7 +1105,7 @@ list of what the spec "must decide" back into this section; it was decided and s
 - **Program task:** 7 · **Complexity:** L · **Blocked by:** nothing, since 2026-08-21. It was blocked
   by DOS-P6 under the strict-sequence ruling of 2026-08-20; the founder suspended that ruling on
   2026-08-21 once A10 turned out to be held on a decision rather than on work, so the spec cycle could
-  start while the pull request waits.
+  start while A10 waits for its remote CI verdict.
 - **The spec must decide:** Git initialization, existing-remote connection, scoped
   staging, commit, push and every error state; the exact `launchd` jobs, schedules, logs,
   lock ownership and opt-in boundaries; signed/checksummed release metadata; dry-run
@@ -1227,12 +1201,11 @@ list of what the spec "must decide" back into this section; it was decided and s
   (2026-08-20). After cutover nothing captures automatically and there is no pre-compaction backup.
   §3.1 calls that "the largest product narrowing in the program to date"; what was added on 2026-08-20
   is that it binds the founder's own runtime once the legacy one is gone.
-- **Two architecture notes are wrong until this entry lands, and both say so in a way a reader will
-  believe.** `claude-adapter.md` §5 and `codex-adapter.md` §5 each give the executable bit as what
-  blocks hooks, and each names DOS-P6 as owner. Spec §3.1 disproved the bit — a `"type": "command"`
-  handler names a command string, so naming the installed binary ships no script and needs no mode bit
-  — and §8 of this file already carries that correction **against the program plan only**. The notes
-  were never corrected with it. This entry owes both edits, and the owner line becomes DOS-P11.
+- **The two adapter notes were corrected on 2026-08-24.** Neither now treats an executable bit as
+  the blocker: a `"type": "command"` handler names a command string, so naming the installed binary
+  ships no script and needs no mode bit. The remaining capture blocker is semantic — the two capture
+  events cannot supply faithful agent-authored observation text without reading `transcript_path`.
+  DOS-P11 therefore reopens only the eleven non-capture hooks; the two capture hooks stay declined.
 - **The spec must decide:** which guards become product verbs rather than user-supplied scripts; the
   event-name mapping across both vendors; and how a hook is *proven* to fire, which is the third of the
   three things `claude-adapter.md` §5 asks for and the only one still outstanding.
@@ -1489,6 +1462,13 @@ amended one; only code and status lines are edited in place. This section is the
 it before trusting any approved document, because it is the only place that says whether the
 one in front of you is still current.
 
+**Completed-spec migration, directed by the founder 2026-08-24.** The Brain, workflow compiler,
+Claude adapter, Codex adapter, and kernel transaction-lock specs governed no unfinished work, so
+their surviving contracts moved into the corresponding architecture notes and the five specs were
+deleted. References in the still-active product and knowledge-pipeline specs were retargeted to
+those notes; no product contract changed. `SESSION.md` and this file now make that the standing
+retention rule. This is a ratified documentation migration, not an unratified amendment row.
+
 **The knowledge-pipeline spec's six were ratified on 2026-08-13**, in the same conversation that
 approved the spec. They are listed below with their outcome rather than their question, and each is
 discharged by the DOS-P6 task named beside it — a row leaves this table when the amended document
@@ -1498,10 +1478,10 @@ carries the cross-reference, not when the decision is taken.
 |---|---|---|
 | product design spec §11 | there is neither a lifecycle hook nor a `developer-os run claude\|codex` wrapper. `CapabilityState` **replaces** `wrapper-required` with `not-used`, and six of the nine keys resolve to it | DOS-P6 Task 3 |
 | product design spec §14.3 | "user-configured patterns" narrowed to literal case-insensitive substrings — a user-supplied regex over capture text is a ReDoS surface and this codebase bounds no expression anywhere | DOS-P6 Task 2 |
-| `specs/…-claude-adapter-design.md` §6.1 | hooks **declined**, not deferred; the three lifecycle keys report `not-used` | DOS-P6 Task 3 |
-| `specs/…-codex-adapter-design.md` §5.3 | the same, in one decision covering both adapters. **This supersedes the ratified amendment below**, which deferred hooks to DOS-P6 rather than closing them | DOS-P6 Task 3 |
-| `specs/…-codex-adapter-design.md` §14.1 | the JSONL terminal-event rule promoted from provisional to observed, dated, with the shape seen — ingest forces the real `codex exec` call that DOS-P5 could not justify. **Discharged in two parts.** 2026-08-15: the framing and the discriminating `type` field, against a turn that failed on an exhausted usage limit. 2026-08-20, NEW-21: the terminal-event rule itself, **which was not promoted but replaced** — a successful turn ends on a `turn.completed` usage record, so the rule returned telemetry as a payload. The same amendment corrects that section's own 2026-08-15 reading of the vocabulary, which called three guessed names wrong when two were right, and records a defect outside its original scope: the vendor refuses this product's shipped output schema for a `schemaVersion` with no `type` keyword | DOS-P6 Task 17 |
-| `specs/…-workflow-compiler-design.md` §6 | scope globs stop being literals, which `workflow-schema.md` §8.1 made due at the first handler that resolves one. **Narrowed by the plan** — see the ratified row below | DOS-P6 Task 6 |
+| `docs/architecture/claude-adapter.md` §5 | hooks **declined**, not deferred; the three lifecycle keys report `not-used` | DOS-P6 Task 3 |
+| `docs/architecture/codex-adapter.md` §5 | the same, in one decision covering both adapters. **This supersedes the earlier decision** that deferred hooks to DOS-P6 rather than closing them | DOS-P6 Task 3 |
+| `docs/architecture/codex-adapter.md` §7 | the JSONL terminal-event rule promoted from provisional to observed, dated, with the shape seen — ingest forces the real `codex exec` call that DOS-P5 could not justify. **Discharged in two parts.** 2026-08-15: the framing and the discriminating `type` field, against a turn that failed on an exhausted usage limit. 2026-08-20, NEW-21: the terminal-event rule itself, **which was not promoted but replaced** — a successful turn ends on a `turn.completed` usage record, so the rule returned telemetry as a payload. The same amendment corrects that section's own 2026-08-15 reading of the vocabulary, which called three guessed names wrong when two were right, and records a defect outside its original scope: the vendor refuses this product's shipped output schema for a `schemaVersion` with no `type` keyword | DOS-P6 Task 17 |
+| `docs/architecture/workflow-schema.md` §8.1 | scope globs stop being literals at the handler boundary while the contract keeps canonical names. **Narrowed by the plan** — see the ratified row below | DOS-P6 Task 6 |
 
 **Six were ratified by the founder on 2026-08-13 and all six left this table on 2026-08-21**, when
 DOS-P6 Task 19 Step 5 verified that each amended document carries the cross-reference it was owed.
@@ -1516,7 +1496,7 @@ was written into the amended documents on 2026-08-21:
 | Amended document | What it now says, that it did not | Discharged by |
 |---|---|---|
 | knowledge-pipeline spec §12 | **five** canonical workflows go to `2.0.0`, not two. It said two. `ingest` gains a step and widens its write scopes, `brain-search` gains one and widens its read scopes, and `review` gains the `capture.edit` step its `decision` input already advertised — **with its scopes unchanged, which is what makes it the easy one to miss.** A step list and a scope set are both the contract, and `extends` pins `id@version` exactly | 7 |
-| `specs/…-workflow-compiler-design.md` §6 | the globs stop being literals and resolve at the **handler boundary** through `resolveScopeGlob(glob, config)`; the table keeps canonical names. Templating inside the YAML was rejected — it invents a substitution syntax in the schema and puts a configuration value in the one document meant to be comparable across installs. The section had no mention of either | 6 |
+| `docs/architecture/workflow-schema.md` §8.1 | the globs stop being literals and resolve at the **handler boundary** through `resolveScopeGlob(glob, config)`; the table keeps canonical names. Templating inside the YAML was rejected — it invents a substitution syntax in the schema and puts a configuration value in the one document meant to be comparable across installs. The section had no mention of either | 6 |
 | §7 of this file, the DOS-P7 uninstall gate | "…and the redaction key". The gate read "only manifest-owned artifacts" with no exception, while spec §3.5 keeps the key out of the manifest and §8.4 requires `uninstall` to remove it — so the gate forbade what another approved section required | 1 |
 | product design spec §13.4 | the `deterministic reindex` validator runs over an **in-memory projection**, not "the staged result" this section named; nothing is staged at that point. Staging first was rejected because it would make every file in staging attacker-influenced content the validators must re-read as hostile | 12 |
 | product design spec §17.5 | the narrowing to six suites **was not taken** — the plan shipped eight, so `network` and `concurrent-edit`, which §9 dropped and §7 still requires, are covered and this list stands as written | 15 |
@@ -1527,12 +1507,11 @@ plan was committed — §13.4's "staged result" and §17.5's security cases. Bot
 was taking silently. That they then went eight days without the cross-reference the review won for
 them is the part worth remembering.
 
-**Six rows are unratified, and the table below now carries all six.** Three were raised by Track R
-entry R2 on 2026-08-17, 2026-08-19 and 2026-08-20; **three more arrived on 2026-08-21** — the Brain
-spec's lint-class table (NEW-48), the program plan's Task 7 split into two specs, and
-knowledge-pipeline §5.6's `--status` line (NEW-41). This paragraph said "three" and "the only
-unratified rows in this section" while the table beneath it had grown to six, which a fresh-context
-review caught the day the third landed.
+**Five rows are unratified, and the table below carries all five.** Three were raised by Track R
+entry R2 on 2026-08-17, 2026-08-19 and 2026-08-20; **two more arrived on 2026-08-21** — the program
+plan's Task 7 split into two specs and knowledge-pipeline §5.6's `--status` line (NEW-41). NEW-48's
+documentation-only approval question disappeared when its stale completed spec was retired and the
+current lint inventory moved into `docs/architecture/brain.md`.
 
 **The R2 three are the place where §8's two rules pull against each other**: the eviction rule says a row leaves when the amended document carries the cross-reference, and
 `foundation.md` §2 carries it in the same commit that adds the row. **Ratification wins** — a row
@@ -1551,7 +1530,6 @@ is precisely the kind of rule that goes unread by whoever is editing past it.
 | `docs/architecture/foundation.md` §2, the frozen `configSchema` | an **optional** `[redaction]` table with a bounded list of literal `patterns`. Additive on the same terms as the `brain` section that preceded it: `configSchema` stays `.strict()`, `schemaVersion` stays `1`, `serializeConfig` emits the table only when the key is present, and `exactOptionalPropertyTypes` keeps absent distinguishable from present-and-undefined — so a configuration written before it still loads and still serializes byte-identically. **Without it spec §8.2's user-extensible redaction class is unreachable**: `redactText` took the option and no production caller passed it, because there was no key a user could set | R2 Task 2, `BACKLOG.md` §1 **NEW-16** |
 | `docs/architecture/foundation.md` §2, the frozen `CliError` | an **optional** `data?: RedactedPayload` member, so a partly-succeeded run can report machine-readably what moved. Additive on the same terms as the two config amendments: absent when unset, so every `--json` document a command emitted before it is byte-identical, and no existing caller changes because nothing populates a field that does not exist yet. It creates a new **publishing** surface, which the other two did not — the failure arm is serialized into `--json` — so `failureFrom` redacts every string leaf including keys, and the slot is typed `RedactedPayload`, a `unique symbol` brand whose only producer is `redactPayload`, which takes the redactor and performs the walk rather than asserting. Every *shape* that writes the field another way is a compile error, `failure` rebuilds the arm it publishes from five named fields — `kind`, `message` and `recovery` coerced to strings, `paths` copied and frozen, `data` accepted only by identity — the arm is branded so a hand-built one is a compile error, and `publish` — which decides the body and the exit status in one place, because they were decided separately and disagreed — rebuilds any failure arm `failure` did not return — the last of the three being what actually closes the class, since a phantom brand survives `Object.assign`, spread, `Proxy` and `structuredClone` while the runtime guarantees it stood for do not. What remains, verified by running each candidate against the built module, is exactly two things: a redactor that does not redact, and a producer call outside the composition root. `Object.defineProperty` and `Object.assign` before the call are **not** among them, and they are closed by two different mechanisms rather than one: the copying forms yield a value the payload registry does not hold, so `failure` drops the field, while in-place `Object.assign(payload, …)` returns the payload itself and is refused by the deep freeze. Three earlier versions of this sentence were wrong, the last of them by crediting the registry with both. The brand replaced a repository sweep that tried to enumerate the syntax instead and was falsified in five review rounds. The sweep survives with a different job: its load-bearing rule is that `redactPayload` is called only at the composition root, and beside it it detects over thirty spellings, split between casts onto the brand and ways of reaching the producer under another name; the exact split is left to the test file, because two reviews counting it disagreed and three documents repeating a number is how that drifts. The enumeration no longer carries the guarantee, so falsifying one more spelling costs a row on a list rather than the property. Three commands wanted it: `ingest`, `brain lint`, and `doctor` (recorded in `releases/foundation-checkpoint.md`) | Track R R2 Task 7, 2026-08-19 |
 | knowledge-pipeline spec §5.5, the transition table | a row for **`accepted → rejected`**, taken by `review --decision reject`. The table had one row per decision, all from `quarantined`, so a user who accepted a capture and then changed their mind had no verb — the only way to stop `ingest` retrying it was to hand-edit the frontmatter back to `quarantined`, which is what both of `ingest`'s recovery strings told them to do. A product that recommends a hand edit of its own data has a gap where a verb should be, and that same hand edit is what `failed` exists to describe going wrong. **`accept` and `edit` deliberately did not gain the equivalent row**: re-accepting is not a transition — `accepted → accepted` is not a row this table can hold — and `edit` maps to `quarantined`, so running it from `accepted` would silently withdraw an approval as a side effect of changing the text — the verb's name says nothing about un-approving, and a user who wants that has `reject`. Rejection is the only safe direction from `accepted`, because `rejected` is terminal for automation and no later phase reads it. **`CAPTURE_STATUSES` gains no member** — a row in a transition table, not a seventh status. Both retired recovery strings now name the verb, and `review`'s own refusal names the decisions legal from wherever the capture actually is rather than telling the user to edit their frontmatter | Track R R2 Task 9, 2026-08-20 |
-| `specs/…-brain-engine-design.md` §7, the lint-class table | the `frontmatter` row gains the **five `warn` findings** the class emits and the table listed none of: a key whose value swallowed the prose after it, a symlinked folder that is not followed, and a `tag`, `summary` or `alias` with no visible character. **Drift, not a decision** — no ruling changed what this class reports; the implementation grew warnings over three weeks and the table was never updated for any of them, so the ratification asked for is that the table may be brought into line rather than that anything may change. **The symlink one is the easy miss**: §4 says a symlink out of the vault is refused during path resolution, which reads as covering it and does not — this is lint reporting a folder *inside* the vault that was skipped, and the first count of these findings said four because of it. The amendment enumerates each with the change that added it, so the next reader counts from the code rather than from prose | `BACKLOG.md` §1 NEW-48, 2026-08-21 |
 | `plans/2026-07-21-developer-os-program.md`, Task 7 | **Task 7 produces two specs and two plans, not one of each.** Its "must decide" list covers Git, scheduled automation, release and update, and schema migration; read against their dependencies those are two clusters — configuration mutability gates both opt-ins, update gates migration — sharing only the manifest. The checkpoint is unchanged and is met when **both** halves land: nothing is added to or removed from what Task 7 must deliver, only the number of documents it delivers it in. The first, `specs/2026-08-21-developer-os-opt-in-surfaces-design.md`, is written; the second is owed after it is approved. **Registered rather than applied**, because the program plan's Global Constraints require an approved spec before the work each task names, and this row is the founder's to ratify | the DOS-P7 spec cycle, 2026-08-21 |
 | knowledge-pipeline spec §5.6, the `review` surface block | a `--status <status>` line. **§5.5's `accepted → rejected` row had no route to it**: that transition exists for a user who accepts a capture and then changes their mind, and the listing filtered to `quarantined`, so the id was unreachable through the command — the verb existed and nothing led to it. **The default is unchanged rather than widened**, which is the narrower of the two answers NEW-41 left open; the other, mixing statuses in one listing, needs the listing to say which row is which and is a display decision the row declined to take. The flag is refused beside `--id` or `--decision`, because it chooses what a listing shows rather than what a decision applies to | `BACKLOG.md` §1 NEW-41, 2026-08-21 |
 
@@ -1629,12 +1607,9 @@ two plans.
 ratified on or before 2026-08-12 and every one of them is now carried, dated and in place, by the
 document it amends — which is the definition of discharged this section uses. Keeping a second copy
 here made §8 read as a list of outstanding work when it held none, so the twenty-nine discharged rows
-were deleted on 2026-08-17 and git history is the archive. **Two facts from that table are load-bearing
-and are kept here rather than in it:**
+were deleted on 2026-08-17 and git history is the archive. **One fact from that table is load-bearing
+and is kept here rather than in it:**
 
-- **`specs/…-kernel-transaction-lock-design.md` is the one spec retained after its subsystem shipped**,
-  because `foundation-constraints.md` points at it as the design of record for
-  `packages/platform-macos/src/transaction-lock.ts`. Delete it only when nothing points at it.
 - **`buildConflictEvidence` has no consumer in either adapter.** DOS-P4 §4.3 dissolved its half and
   DOS-P5 §4.3 the other, by delegating the config write to `codex plugin add`. It was built for a
   design both adapters declined. Whether it is retained, taken up by DOS-P7, or deleted belongs to the

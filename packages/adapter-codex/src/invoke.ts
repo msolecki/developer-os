@@ -11,7 +11,7 @@ import type { ProcessRunner } from "@developer-os/security";
 import type { CodexInstallation } from "./discover.js";
 
 /**
- * Spec §7: the shape a compiled `agent.prompt` step and its derived scopes
+ * Codex architecture former §7: the shape a compiled `agent.prompt` step and its derived scopes
  * become before they reach `invokeCodex`. Every field here that reaches an
  * argv value position still needs a screen before it gets there — this type
  * only describes the *shape*, not that the values are already safe.
@@ -24,7 +24,7 @@ import type { CodexInstallation } from "./discover.js";
  *
  * **The write-scope row is provisional, and the first real caller will have to
  * revisit it.** No production caller passes a write scope today — `ingest`
- * passes `[]` under spec §3.3 — so keeping both rules there costs nothing and
+ * passes `[]` under knowledge-pipeline spec §3.3 — so keeping both rules there costs nothing and
  * is the safe default for a value a workflow author will eventually write. But
  * `--add-dir` takes a *directory*, and `resolveScopeGlob` returns a
  * vault-relative glob, so whoever wires the first scope will join it onto the
@@ -65,8 +65,8 @@ export interface InvocationContext {
 }
 
 /**
- * Applied when a caller does not supply its own `timeoutMs`. Not sourced from
- * the spec, which names no default duration; chosen to match the fixed value
+ * Applied when a caller does not supply its own `timeoutMs`. Codex architecture
+ * former §7 names no default duration; the value is chosen to match the fixed value
  * `adapter-codex/src/probe.ts`'s `PROBE_TIMEOUT_MS` already uses elsewhere in
  * this package. A named constant so a future change to it shows as a diff
  * here, rather than as a silent edit inside a literal nothing else points at.
@@ -102,7 +102,7 @@ export function invocationFromAgentPrompt(
   // `parsed` can no longer carry a `maxTurns`: `parseAgentPromptArgs` refuses
   // the key outright (owner DOS-P7) rather than accepting a value this module
   // would have had nowhere to put — `CodexInvocation` carries no field for it
-  // and the argv built below has no flag for it either (spec §7 names none).
+  // and the argv built below has no flag for it either (Codex architecture former §7 names none).
   // A workflow author writing `maxTurns: 3` now gets a refusal naming DOS-P7
   // instead of the silent no-op this comment used to describe.
   return {
@@ -118,9 +118,9 @@ export function invocationFromAgentPrompt(
 }
 
 /**
- * Codex's `--json` streams events to stdout as JSONL (spec §14.1), and
+ * Codex's `--json` streams events to stdout as JSONL (Codex architecture former §14.1), and
  * `--output-schema` constrains only the model's *final response*, not the
- * whole stream (spec §7) — so `parseStructuredPayload`, built for one JSON
+ * whole stream (Codex architecture former §7) — so `parseStructuredPayload`, built for one JSON
  * document, must never see the raw stream directly.
  *
  * **The response is not the last line, and until 2026-08-20 this module
@@ -132,7 +132,7 @@ export function invocationFromAgentPrompt(
  * carrying the schema-constrained JSON as a *string* in `item.text`. The
  * primary recording is
  * `tests/fixtures/codex/observed-exec-success-stream.jsonl`; the other two are
- * beside it, and spec §14.1 tabulates which claim each one carries.
+ * beside it, and Codex architecture former §14.1 tabulates which claim each one carries.
  *
  * **What the superseded rule did was worse than failing.** "The last line that
  * parses to a non-null object" selected `turn.completed`, which parses
@@ -143,7 +143,7 @@ export function invocationFromAgentPrompt(
  * 2026-08-15, and a failed turn emits no response for a rule to be wrong about.
  *
  * **This filters on three vendor field names, and that is a deliberate trade.**
- * Spec §14.1 requires a narrowing to be proven against a stream where the old
+ * Codex architecture former §14.1 requires a narrowing to be proven against a stream where the old
  * rule and the new one agree; no such stream exists, because the old rule is
  * not narrower than this one but simply wrong. What the dependency buys is that
  * a vendor rename now yields `""` and therefore `malformed-output` — a loud
@@ -159,8 +159,8 @@ export function invocationFromAgentPrompt(
  * item that *does* carry `text` and is not the response, which is the shape of
  * a reasoning item, and `invoke.test.ts` pins exactly that.
  *
- * **The last-wins tie-break is an inference and is labelled as one**, per spec
- * §14.1's rule that an unobserved claim is not written as an observation. The
+ * **The last-wins tie-break is an inference and is labelled as one**, per Codex
+ * architecture former §14.1's rule that an unobserved claim is not written as an observation. The
  * recording contains exactly **one** `agent_message`. Nothing observed says
  * whether `--output-schema` constrains every assistant message or only the
  * terminal one, so nothing rules out a free-text summary arriving after the
@@ -200,7 +200,7 @@ function finalAgentMessage(stdout: string): string {
 }
 
 /**
- * Spec §7's fixed argv. The sandbox mode (`-s`) is derived from
+ * Codex architecture former §7's fixed argv. The sandbox mode (`-s`) is derived from
  * `invocation.writeScopes.length` and never taken from an argument — that is
  * what makes `danger-full-access` unreachable rather than merely unwritten.
  * No caller and no workflow author can ask for it; the only two values this
@@ -287,7 +287,7 @@ export async function invokeCodex(
       // input from stdin..." and block — so what makes this call return with a
       // *result* rather than after `timeoutMs` is `NodeProcessRunner` closing
       // the pipe with `child.stdin.end(request.stdin)`. Undocumented by the
-      // vendor; spec §14.1 carries the observation of 2026-08-15.
+      // vendor; Codex architecture former §14.1 carries the observation of 2026-08-15.
       stdin: "",
       timeoutMs: invocation.timeoutMs,
       env: {},

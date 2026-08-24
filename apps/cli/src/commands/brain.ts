@@ -44,7 +44,7 @@ export interface BrainSearchResultV1 {
   readonly truncated: boolean;
   /**
    * The access paths the funnel tried, and non-`null` only when none of them
-   * reached anything. Spec §8 requires a miss to say which doors were tried
+   * reached anything. Brain architecture former §8 requires a miss to say which doors were tried
    * rather than look like an empty result set.
    */
   readonly tried: readonly string[] | null;

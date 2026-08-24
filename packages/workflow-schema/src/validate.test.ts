@@ -164,7 +164,7 @@ describe("validateWorkflow", () => {
 
   it("names the step of every unknown verb, including a repeated one", () => {
     /**
-     * Spec §11: a finding carries the step id. This rule read a *set* of verb
+     * Workflow architecture former §11: a finding carries the step id. This rule read a *set* of verb
      * strings, so the step id was gone before it could be attached and two
      * steps sharing one bad verb collapsed into a single finding — the author
      * fixed one occurrence and met the same error again.

@@ -55,7 +55,7 @@ describe("plugins/claude is a clean regeneration", () => {
   });
 
   /**
-   * Spec §7.1: the preamble carrying the prompt-injection defence is
+   * Claude architecture former §7.1: the preamble carrying the prompt-injection defence is
    * concatenated into every other artifact, so it is physically present rather
    * than referenced. This asserts it over the real workflows, not a fixture.
    */
@@ -79,7 +79,7 @@ describe("plugins/claude is a clean regeneration", () => {
    * simply not regenerated — it would be testing the artifact rather than the
    * decision, and only the drift case would go red.
    */
-  it("ships no hooks, matching the amendment to spec §6", async () => {
+  it("ships no hooks, matching the amendment to Claude architecture former §6", async () => {
     for (const paths of [
       [...(await readGeneratedTree()).keys()],
       (await renderAllForClaude()).map((artifact) => artifact.path),

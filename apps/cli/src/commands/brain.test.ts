@@ -208,7 +208,7 @@ describe("brain reindex", () => {
     /**
      * Compared in canonical form, not byte for byte. The fixture's clock
      * advances with every transaction id, so `generatedAt` legitimately differs
-     * between the two runs — which is exactly why spec §6.3 defines drift over
+     * between the two runs — which is exactly why Brain architecture former §6.3 defines drift over
      * the canonical form rather than the bytes. Everything else must be equal.
      */
     const canonical = (text: string): string =>
@@ -647,7 +647,7 @@ describe("brain status", () => {
 describe("rendering", () => {
   it("screens a control character out of a rendered match path", () => {
     /**
-     * Retrieval leaves `path` byte-exact on purpose — spec §14 gates on every
+     * Retrieval leaves `path` byte-exact on purpose — Brain architecture former §14 gates on every
      * match resolving at the returned path — which makes screening it the CLI's
      * job, and this the only place a user-controlled vault path reaches a
      * terminal. Removing every `renderPath` call from `renderBrain` left all

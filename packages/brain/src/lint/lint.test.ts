@@ -147,7 +147,7 @@ describe("index-drift", () => {
   });
 
   it("names the first differing line rather than dumping a diff", async () => {
-    /** Spec §6.3. A whole-file diff echoes note content into a terminal and a log. */
+    /** Brain architecture former §6.3. A whole-file diff echoes note content into a terminal and a log. */
     const built = await buildIndex(buildRequestForFixture("legacy-shape", BUILD_CLOCK));
     const written = { ...writtenArtifacts(built) };
     written[PATHS.vaultMap] = (written[PATHS.vaultMap] ?? "").replace(
@@ -282,7 +282,7 @@ describe("frontmatter", () => {
      * Obsidian's Properties UI accepts arbitrary property names, so `Due date`
      * is a stock note. Whitespace alone would fire on it, and a class that
      * fires on ordinary output is a class users learn to ignore — the same
-     * argument spec §7's amendment used for the bare-basename link tier.
+     * argument Brain architecture former §7's amendment used for the bare-basename link tier.
      */
     const result = await lintMemory({
       "content/DEV/a.md": note({ "Due date": "2026-09-01", Status: "in review" }),
@@ -704,7 +704,7 @@ describe("staleness", () => {
 
   it("treats a review exactly at the threshold as fresh, one day past it as stale", async () => {
     /**
-     * Spec §7 says "older than", so the boundary day itself is not stale.
+     * Brain architecture former §7 says "older than", so the boundary day itself is not stale.
      * `>=` instead of `>` passes every other test in this file: no fixture sits
      * on the boundary, and an off-by-one here quietly ages every vault by a day.
      * 2026-02-05 is exactly 180 days before TODAY; 2026-02-04 is 181.

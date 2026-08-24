@@ -132,11 +132,9 @@ describe("runInit", () => {
 
   it("installs one output schema per structured-result verb, as managed artifacts", async () => {
     /**
-     * `codex-adapter.md` §11.13: **nothing writes the file `outputSchemaPath`
-     * points at.** `invokeCodex` only screens the path and forwards it into
-     * argv, so a caller pointing the vendor CLI at a missing file gets the
-     * CLI's own non-zero exit — diagnosed as the wrong failure entirely. The
-     * set is derived from `EFFECT_VOCABULARY` rather than listed, and the
+     * `codex-adapter.md` §11.13: `init` owns writing the managed schemas,
+     * `ingest` selects their installed paths, and `invokeCodex` only screens
+     * and forwards one. The set is derived from `EFFECT_VOCABULARY` rather than listed, and the
      * assertion is an equality rather than a non-empty check: a non-empty
      * check over a one-element set proves nothing, and pinning the member
      * makes a second one a decision somebody has to make here.

@@ -59,7 +59,7 @@ describe("tokenize", () => {
   });
 
   it("does not stem", () => {
-    /** Spec §8 states this as a non-goal, not an oversight. */
+    /** Brain architecture former §8 states this as a non-goal, not an oversight. */
     expect(tokenize("caching")).not.toEqual(tokenize("cache"));
   });
 });

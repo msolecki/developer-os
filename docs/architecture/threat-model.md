@@ -332,11 +332,12 @@ The vendor CLI is the only outbound process this product makes, and the only pla
 | A refusal never echoes the rejected value | `parseAgentPromptArgs` scrubs it, because a `with` block is author-controlled and the message reaches a log (`packages/adapter-codex/src/invoke.ts:96-100`) | `packages/core/src/agent-prompt/agent-prompt.test.ts` |
 | **An invocation is bounded in turns** | **partial** | see below |
 
-**This is the third of the three.** `maxTurns` is bounded and enforced under Claude — an integer
+**This is the third of the three.** At the direct adapter boundary, `maxTurns` is bounded and
+enforced under Claude — an integer
 between 1 and 50, refused otherwise, bounded at the adapter rather than trusted from the type
 (`packages/adapter-claude/src/invoke.ts:41,79-89`) — and `CodexInvocation` has no such field, so the
-Codex arm of `invokeVendor` passes none (`apps/cli/src/commands/ingest.ts:737-747`). **One shared
-schema, two behaviours, one of them silent.**
+Codex arm of `invokeVendor` passes none (`apps/cli/src/commands/ingest.ts:737-747`). The shared
+workflow parser does not expose those two behaviours: it refuses `maxTurns` before vendor selection.
 
 Half of it is closed and the half that is closed is worth knowing: `parseAgentPromptArgs` now
 **refuses `maxTurns` outright** with an error naming its owner, rather than honouring it on one
@@ -791,7 +792,7 @@ have made rarer; it is unmeasured and possibly still live.
 
 | For | Read |
 |---|---|
-| The capability model — two gates, three values, and why it is recorded twice | `claude-adapter.md` §3 and `codex-adapter.md` §3; parity enforced by `apps/cli/src/adapter-capability-parity.test.ts`. **Read the code for the values**: both notes still say `plugin_hooks` is `unknown`, and DOS-P6 Task 3 changed it to `not-used` — hooks were declined rather than deferred, and `unknown` is what the model does with a fact nobody established (`BACKLOG.md` §8) |
+| The capability model — two gates, three values, and why it is recorded twice | `claude-adapter.md` §3 and `codex-adapter.md` §3; parity enforced by `apps/cli/src/adapter-capability-parity.test.ts`. Both notes now record the DOS-P6 result: `plugin_hooks` and the other declined surfaces are `not-used`, while `unknown` remains reserved for a fact a probe could not establish (`BACKLOG.md` §8) |
 | The two-adapter differences table DOS-P6 designs against | `codex-adapter.md` §9 |
 | Fourteen Codex residuals and twelve Claude ones, most with owners | `codex-adapter.md` §11, `claude-adapter.md` §9 |
 | The mutation pipeline, ownership, exit codes and what Foundation cannot do | `foundation.md` §3, §4, §6, §7 |

@@ -31,7 +31,7 @@ const version = (stdout: string) =>
 
 /**
  * A `codex plugin list --json` response naming our plugin, resolved at
- * `pluginRoot`. Real top-level shape, per spec §14.4 (Task 17, verified
+ * `pluginRoot`. Real top-level shape, per Codex architecture former §14.4 (Task 17, verified
  * against a real 0.147.0 binary): `{ installed: [...], available: [...] }`,
  * each entry's path nested under `source.path` and `enabled` a boolean field
  * — never the guessed `{ plugins: [{ name, status?, path? }] }` shape this

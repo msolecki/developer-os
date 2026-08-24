@@ -3,7 +3,7 @@ import { CAPABILITY_STATES, PROBE_OBSERVATIONS } from "./index.js";
 
 /**
  * The vocabulary lives here because two adapters share it and neither may
- * import the other (Codex spec §1). DOS-P6 consumes both, and two vocabularies
+ * import the other (Codex architecture former §1). DOS-P6 consumes both, and two vocabularies
  * would make its own contract a translation layer.
  */
 describe("the shared capability vocabulary", () => {

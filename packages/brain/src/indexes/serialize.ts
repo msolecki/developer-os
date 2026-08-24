@@ -1,7 +1,7 @@
 import type { GraphDocumentV1, IndexDocumentV1 } from "./build.js";
 
 /**
- * Two-space indent, LF endings, exactly one trailing newline — spec §6.1(5).
+ * Two-space indent, LF endings, exactly one trailing newline — Brain architecture former §6.1(5).
  *
  * No custom stringifier, and that is a decision rather than an omission.
  * `JSON.stringify` emits object keys in insertion order, and every object in

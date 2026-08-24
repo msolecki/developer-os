@@ -19,13 +19,13 @@ const PROBE_TIMEOUT_MS = 30_000;
 
 /**
  * The capabilities `claude plugin validate` can settle **for the tree this
- * adapter actually ships**. Spec §14.1: validate checks the manifest, skill,
+ * adapter actually ships**. Claude architecture former §14.1: validate checks the manifest, skill,
  * agent and command frontmatter, and `hooks/hooks.json`, for syntax and schema
  * errors.
  *
  * It settles no lifecycle event, and this list is where that boundary is
  * enforced rather than remembered. A `SessionEnd` hook cannot be made to fire
- * without a real session (spec §6.1), so `session_end_capture` is absent here
+ * without a real session (Claude architecture former §6.1), so `session_end_capture` is absent here
  * on purpose and reaches `resolveCapabilities` as an unmentioned key — which
  * that function reports as `not-used`, since no hook ships to fire (DOS-P6
  * Task 3).
@@ -46,7 +46,7 @@ const VALIDATE_SETTLES = [
 /**
  * Probes only what a probe can honestly settle, and never throws.
  *
- * `claude plugin validate` is **not** a security control: spec §10 records that
+ * `claude plugin validate` is **not** a security control: Claude architecture former §10 records that
  * it reports unrecognized manifest fields as warnings and that such a plugin
  * still loads. Our own drift check is the authority on our manifest's contents;
  * this call is used to catch syntax and schema errors early, which is a

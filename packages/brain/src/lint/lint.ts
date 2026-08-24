@@ -126,7 +126,7 @@ const WHITESPACE = /\s/u;
 /**
  * Whitespace alone is not enough. Obsidian's Properties UI accepts arbitrary
  * property names, so `Due date:` is an ordinary note and firing on it would
- * train users to ignore this class — the same argument spec §7's amendment used
+ * train users to ignore this class — the same argument Brain architecture former §7's amendment used
  * to justify the bare-basename link tier. A property name is a short label; a
  * swallowed prose line is a sentence. The length is the discriminator.
  */
@@ -358,7 +358,7 @@ function sourceResolves(
   /**
    * Folded, because every path in `byPath` is. macOS hands back NFD when a
    * filename is pasted out of Finder, and an unfolded lookup turns a source
-   * naming a real note into a spec §7 `error` that fails the gate.
+   * naming a real note into a Brain architecture former §7 `error` that fails the gate.
    */
   const folded = source.normalize("NFC");
   const candidates = [
@@ -464,7 +464,7 @@ function linkFindings(
      * appears — no note is called `_raw`. A leading dot is not: link text is
      * very often a title, and `[[.NET conventions]]` is a typo to fix, not a
      * link into an excluded tree. So the dot rule applies only when the text is
-     * path-shaped, which keeps `[[DEV/.env]]` classified correctly — spec §5
+     * path-shaped, which keeps `[[DEV/.env]]` classified correctly — Brain architecture former §5
      * excludes any dot segment, file or not.
      */
     const segment =
@@ -518,8 +518,8 @@ function linkFindings(
          * `renderPath` in `apps/cli`, which is where a path stops being an
          * identifier and becomes output.
          *
-         * An earlier version of this comment justified the exemption with spec
-         * §14, which does not cover it: §14 gates on a *retrieval match*
+         * An earlier version of this comment justified the exemption with Brain
+         * architecture former §14, which does not cover it: §14 gates on a *retrieval match*
          * resolving at its returned path, and on `finding.path`, not on a path
          * interpolated into prose that nothing parses back out. Recorded
          * because a wrong reason in a comment is worse than no reason — the
@@ -768,7 +768,7 @@ async function driftFindings(
     if (line === null) continue;
 
     /**
-     * The line number, never the line. Spec §6.3 asks for the first differing
+     * The line number, never the line. Brain architecture former §6.3 asks for the first differing
      * line, and echoing its content would put note text into a terminal and a
      * log — which the redaction rule exists to prevent.
      *

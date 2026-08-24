@@ -28,7 +28,7 @@ export interface IndexedNote {
   readonly topicFolder: string;
   /**
    * Deduplicated, in the author's order. Author order is content-derived and
-   * therefore deterministic, which is the property spec §6.1(2) actually needs,
+   * therefore deterministic, which is the property Brain architecture former §6.1(2) actually needs,
    * and it preserves the sequence the user chose to see their tags in. The
    * duplicates go because a note listing `dev` twice would otherwise count
    * twice in every rollup and score twice in retrieval.
@@ -42,7 +42,7 @@ export interface IndexedNote {
   readonly occurrences: number;
   readonly created: string;
   readonly updated: string | null;
-  /** Carried so lint can check each entry resolves; spec §7 `provenance`. */
+  /** Carried so lint can check each entry resolves; Brain architecture former §7 `provenance`. */
   readonly sources: readonly string[];
   readonly contentHash: string;
   readonly terms: readonly IndexedTerm[];
@@ -102,7 +102,7 @@ export interface UnresolvedLink {
 /**
  * A link text that matched more than one note within one tier. Resolution still
  * takes the lowest path so the graph stays deterministic, but the user is told,
- * because none of spec §7's three `duplicates` findings covers this case: two
+ * because none of Brain architecture former §7's three `duplicates` findings covers this case: two
  * notes with different titles, different content hashes and no case-insensitive
  * path collision can still share a basename, and then a link points silently at
  * the wrong one.
@@ -127,7 +127,7 @@ export interface IndexBuildResult {
   /**
    * Every note that produced an issue, whether or not it parsed. A note that
    * failed carries at least one `error`; a note that parsed carries only
-   * `info`, which is where `unknown-key` lives — and spec §7 requires that as a
+   * `info`, which is where `unknown-key` lives — and Brain architecture former §7 requires that as a
    * `frontmatter` finding, so dropping the success branch would leave the class
    * unimplementable. Membership in `index.notes` distinguishes the two.
    */
@@ -202,15 +202,16 @@ export function frontmatterExceeds(source: string, maxChars: number): boolean {
  * Fenced blocks and inline spans are removed before links are extracted. A note
  * that documents wikilink syntax — a conventions note, a template guide, this
  * product's own template — would otherwise emit an unresolved link for every
- * example, and spec §7 makes that an `error` that fails `brain lint`.
+ * example, and Brain architecture former §7 makes that an `error` that fails `brain lint`.
  */
 /**
  * The consequence to know about: an *unterminated* fence runs to end of input,
  * which is CommonMark-correct and is what `|$` encodes — so a stray triple
- * backtick deletes every link below it from the graph, with no finding. Spec
- * §6.4 says a graph with dangling half-edges is uncomputable; one silently
- * missing real edges is equally so, and this direction produces no signal at
- * all. Accepted because the alternative is a Markdown parser, but not silent.
+ * backtick deletes every link below it from the graph, with no finding. Brain
+ * architecture former §6.4 says a graph with dangling half-edges is uncomputable;
+ * one silently missing real edge is equally so, and this direction produces no
+ * signal at all. It accepts this because the alternative is a Markdown parser,
+ * but does not leave the tradeoff silent.
  *
  * No `m` flag, deliberately. Under `m` the closing alternative's `$` matches
  * the end of *any* line, so the lazy body matches nothing and the block's
@@ -301,7 +302,7 @@ function withoutExtension(path: string): string {
  * The `byBasename` tier exists because it is what Obsidian actually writes.
  * "Shortest path when possible" is its stock setting, so a vault authored there
  * contains `[[caching]]`, not `[[DEV/caching]]`. Without the tier every such
- * link is an unresolved-link `error` under spec §7 and `brain lint` fails on
+ * link is an unresolved-link `error` under Brain architecture former §7 and `brain lint` fails on
  * exactly the vaults this product claims to support.
  */
 interface LinkTier {
@@ -314,7 +315,7 @@ type Lookups = readonly LinkTier[];
 /**
  * Case folding for the *fallback* pass only. Obsidian's resolver is
  * case-insensitive on macOS and Windows, so `[[Caching]]` opens `caching.md` in
- * the editor; without this, that link is a spec §7 `links` error and `brain
+ * the editor; without this, that link is a Brain architecture former §7 `links` error and `brain
  * lint` fails on a vault that works. It is the same defect as a missing
  * bare-basename tier, at lower frequency.
  *
@@ -456,7 +457,7 @@ function toEntry(discovered: DiscoveredNote, source: string): EntryResult {
      *
      * The limitation that accepts: `readFile(path, "utf8")` maps every invalid
      * byte sequence to U+FFFD, so two notes differing only inside invalid UTF-8
-     * hash identically and spec §7's `duplicates` class calls them one note.
+     * hash identically and Brain architecture former §7's `duplicates` class calls them one note.
      * Obsidian writes UTF-8, so the trigger is an imported Latin-1 file. Fixing
      * it properly means `readFile` returning bytes, which changes a contract
      * Tasks 8 and 9 are written against — recorded here rather than done.
@@ -604,7 +605,7 @@ export async function buildIndex(
 
     /**
      * A note can parse *and* carry issues — every `unknown-key` finding lives
-     * on the success branch. Dropping them would make spec §7's `info` row and
+     * on the success branch. Dropping them would make Brain architecture former §7's `info` row and
      * Task 6's unterminated-frontmatter heuristic unreachable.
      */
     if (result.entry.issues.length > 0) {

@@ -101,7 +101,7 @@ describe("discoverNotes", () => {
 
   it("excludes a private folder nested inside a topic folder, at any depth", async () => {
     /**
-     * Spec §5 excludes these names "at any depth". Checking only directly under
+     * Brain architecture former §5 excludes these names "at any depth". Checking only directly under
      * `contentRoot` lets `content/DEV/_raw/` be enumerated, opened and indexed,
      * which is the quarantined-capture leak deny-by-default exists to stop.
      */
@@ -148,7 +148,7 @@ describe("discoverNotes", () => {
 
   it("discovers a note nested in a subdirectory of a topic folder", async () => {
     /**
-     * Spec §5 defines canonical notes as any `.md` file at any depth below
+     * Brain architecture former §5 defines canonical notes as any `.md` file at any depth below
      * `<contentRoot>/<topicFolder>/`. Written as prose because the glob for it
      * ends a block comment, and the previous version of this line kept the glob
      * by hiding a ZERO WIDTH JOINER inside it — an invisible character load-
@@ -714,7 +714,7 @@ describe("compareCanonical", () => {
      * every locale-aware collation puts `a` first. `compareCanonical` is the
      * comparator behind every array in `index.json`, so a `localeCompare`
      * implementation would make the index depend on the machine's locale — the
-     * thing spec §6.1 forbids.
+     * thing Brain architecture former §6.1 forbids.
      */
     expect(compareCanonical("B", "a")).toBeLessThan(0);
     expect("B".localeCompare("a")).toBeGreaterThan(0);

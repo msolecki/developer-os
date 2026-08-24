@@ -29,11 +29,11 @@ export interface CodexCliStep {
  * What this module produces is a **proposal**, not a `ChangePlanV1` — see the
  * Claude adapter's `install.ts` for why. `registration` is the part with no
  * analogue on that side: Claude never registers with a marketplace,
- * but Codex's own CLI is the only writer of `~/.codex/config.toml` (spec
- * §4.1), so registering and unregistering happen through `codex plugin`, not
+ * but Codex's own CLI is the only writer of `~/.codex/config.toml` (Codex
+ * architecture former §4.1), so registering and unregistering happen through `codex plugin`, not
  * through a file this adapter writes. The adapter proposes the argv; the
  * caller runs it in the apply phase, where a failure is a transaction
- * failure — this module never spawns a process (spec §2.3).
+ * failure — this module never spawns a process (Codex architecture former §2.3).
  */
 export interface CodexInstallProposal {
   readonly schemaVersion: 1;
@@ -41,9 +41,9 @@ export interface CodexInstallProposal {
   readonly operations: readonly ChangePlanOperationV1[];
   readonly registration: readonly CodexCliStep[];
   /**
-   * Which side of `operations` `registration` belongs on. Spec §4.1: the
+   * Which side of `operations` `registration` belongs on. Codex architecture former §4.1: the
    * plugin cannot be added from a marketplace that has no files at the path
-   * it names, so install registers *after* the tree is written. Spec §4.2:
+   * it names, so install registers *after* the tree is written. Codex architecture former §4.2:
    * uninstall reverses that, unregistering *before* the tree is deleted,
    * because a marketplace registered against a directory already removed is
    * worse than leaving both in place. `CodexInstallProposal` is one type for
@@ -139,18 +139,18 @@ function assertWithinPluginTree(relative: string): void {
 export type ManagedByPath = ReadonlyMap<string, ManagedArtifactV1>;
 
 /**
- * Spec §4.1: registration is marketplace-add then plugin-add, in that order —
+ * Codex architecture former §4.1: registration is marketplace-add then plugin-add, in that order —
  * the plugin cannot be added from a marketplace that is not yet registered.
  *
  * `codex plugin marketplace add` takes exactly one positional argument, the
  * source path — never a separate name. Task 17 ran the real 0.147.0 binary
  * against `["plugin", "marketplace", "add", MARKETPLACE_NAME,
- * marketplaceRoot(context)]` (the shape spec §4.1 documented before this
+ * marketplaceRoot(context)]` (the shape Codex architecture former §4.1 documented before this
  * observation) and it refused with `unexpected argument ... found` (exit 2):
  * clap accepts one positional there, not two. The marketplace's *name* is
  * read from the `name` field inside `marketplace.json` itself — already
  * `MARKETPLACE_NAME`, via `renderMarketplace` — so the CLI never needs it on
- * the command line. Amends spec §14.4, dated 2026-08-12.
+ * the command line. Amends Codex architecture former §14.4, dated 2026-08-12.
  */
 function installRegistration(context: InstallContext): readonly CodexCliStep[] {
   return [
@@ -166,7 +166,7 @@ function installRegistration(context: InstallContext): readonly CodexCliStep[] {
 }
 
 /**
- * Spec §4.2: uninstall reverses the install order — plugin-remove then
+ * Codex architecture former §4.2: uninstall reverses the install order — plugin-remove then
  * marketplace-remove — and runs *before* the tree is deleted, because a
  * marketplace registered against a directory we already removed is worse than
  * leaving both in place.
@@ -175,7 +175,7 @@ function installRegistration(context: InstallContext): readonly CodexCliStep[] {
  * more than one marketplace configured: Task 17 observed `codex plugin remove
  * developer-os` exit 1 with `plugin requires --marketplace unless passed as
  * <plugin>@<marketplace>`, the same qualified form `plugin add` already uses.
- * Amends spec §14.4, dated 2026-08-12.
+ * Amends Codex architecture former §14.4, dated 2026-08-12.
  */
 function uninstallRegistration(): readonly CodexCliStep[] {
   return [
@@ -233,7 +233,7 @@ export function proposeCodexInstall(
         expectedBeforeHash: existing?.installedHash ?? null,
         source: artifact.path,
         // `dedicated` because this adapter owns whole files and never
-        // three-way merges. Spec §4.1: the vendor's tool owns the vendor's
+        // three-way merges. Codex architecture former §4.1: the vendor's tool owns the vendor's
         // config, so nothing here touches `config.toml`.
         mergeStrategy: "dedicated" as const,
         proposedHash: hashBytes(Buffer.from(artifact.contents, "utf8")),
@@ -244,7 +244,7 @@ export function proposeCodexInstall(
 }
 
 /**
- * Spec §4.2: the tree is deleted file by file, one `remove` operation per
+ * Codex architecture former §4.2: the tree is deleted file by file, one `remove` operation per
  * managed artifact, matching `proposeClaudeUninstall`. `registration` runs
  * first — see `uninstallRegistration` — so by the time these removes apply,
  * Codex no longer knows about the plugin or the marketplace pointing at it.
