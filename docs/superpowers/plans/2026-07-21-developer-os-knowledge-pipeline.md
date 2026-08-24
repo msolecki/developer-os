@@ -386,8 +386,15 @@ Read **decision 4** for the third box. It is **rewritten to record the decline**
 > **The founder chose on 2026-08-21 to keep the commits local**, as they had for Track R the day
 > before. `ORDER.md`'s `NOW` section records A10 as work done with the CI gate unmet, in the same form
 > R2's row uses, rather than rounding it up.
+>
+> **Publication and the exact local gate are now present, but the CI evidence is not.** On 2026-08-24
+> the clean local `development`, `origin/development` and `origin/HEAD` all resolved to `c46b82c`.
+> A fresh `npm run check` on that commit exited 0: 123/123 test files, 2,335 tests passed, one skipped,
+> followed by `tsc -b` and `git diff --check`. The matching remote-tracking ref proves publication,
+> not the check result. The founder directed the continuing session not to push, so the checkbox
+> stays open rather than inventing that verdict or a second CI run on a closure commit.
 
-- [ ] **Step 6: Run the gate, commit the green tree and observe remote CI** — *the only thing left in DOS-P6; the final exact local gate belongs immediately before the commit, and the founder directed publication from `development`, without a separate branch*
+- [ ] **Step 6: Run the gate, commit the green tree and observe remote CI** — *the only thing left in DOS-P6; local gate, exact-path commit and publication are present at `c46b82c`; remote CI is unobserved, and the founder directed no push from the continuing session*
 
 ```bash
 npm run check
@@ -405,6 +412,10 @@ git commit -m "fix: preserve ingest recovery and the local gate"
 git push origin development
 # Observe the CI run on the pushed commit; do not infer green from the push exit.
 ```
+
+The command block records the step's required sequence; do not repeat its push. Publication is already
+present at `origin/development`. The next evidence is the CI result on `c46b82c`, not another remote
+mutation from this session.
 
 After that run is green, close A10 in the canonical documents in one exact-path commit and observe
 CI on that closure commit too. Until both runs exist, this box stays unticked and this plan stays.

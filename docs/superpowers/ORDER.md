@@ -36,15 +36,16 @@ week of confusion.
 
 **`NOW` is A10, and one release gate stands between it and closed.** The hold that blocked it — NEW-21, on an
 external usage limit — was released on 2026-08-20 and the row closed on 2026-08-21. **Task 17 and Task
-19 Step 5 have landed. Step 6 requires the exact local gate on the complete diff immediately before
-its exact-path commit, then CI green on that commit — the third condition the DOS-P6 checkpoint names.
-The focused ingest, temporary-HOME, macOS trust and lint checks passed during the 2026-08-24 review;
-they do not stand in for that final gate. **The founder directed that this work stays directly on
-`development`, with no separate branch**, without weakening either check.
+19 Step 5 have landed. Step 6's local half is now evidence:** the exact gate passed over all 123
+test files and 2,335 tests, the exact-path work is committed, and `origin/development` resolves to the
+same `c46b82c` as the clean local tree. What remains is an observed green CI result on that commit —
+the third condition the DOS-P6 checkpoint names — followed by the closure commit and its own observed
+CI. **The founder directed that this work stays directly on `development`, with no separate branch,
+and on 2026-08-24 directed the continuing session not to push.**
 
-**So A10's implementation is done and its own checkpoint is not.** Step 6 closes only after the final
-exact local gate, the commit and remote CI are all evidence, rather than rounding focused checks or an
-unpublished tree up to `done`. The founder publishes `development` and reads the run.
+**So A10's implementation is done and its own checkpoint is not.** Publication is no longer the gap;
+the unobserved CI verdict is. A matching remote-tracking ref proves which commit is published and says
+nothing about its checks, so it is not rounded up to `done`.
 
 `plans/2026-07-21-developer-os-knowledge-pipeline.md` survives for exactly one unticked step. It is
 **not** deleted, because a plan is deleted when its last step closes and Step 6 has not.
@@ -207,7 +208,7 @@ committed. All three belong to that row; do not start `I` before `P` is written,
 
 | # | Entry | Plan | Needs | Size | Done when | Status |
 |---|---|---|---|:---:|---|---|
-| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, one step left | nothing | L | program plan Task 6 checkpoint, after independent security review | **now** — **work done 2026-08-21; CI gate unmet.** `S` and `P` closed 2026-08-13; `I` is **19 of 19 tasks** and Task 19 Step 5 has landed. Step 6 needs a pull request, which the founder was asked for on 2026-08-21, after a direct push was refused, and declined |
+| A10 | DOS-P6 Knowledge pipeline — S / P / I | `plans/…-knowledge-pipeline.md`, one step left | nothing | L | program plan Task 6 checkpoint, after independent security review | **now** — **work committed and published; CI gate unobserved.** `S` and `P` closed 2026-08-13; `I` is **19 of 19 tasks** and Task 19 Step 5 has landed. The exact local gate is green and `origin/development` is at `c46b82c`; Step 6 still needs the remote CI verdict, then a closure commit and CI on it |
 | A11 | DOS-P7 Git, automation, update, release — S / P / I | two specs, two plans | nothing | L | program plan Task 7 checkpoint: full local lifecycle ready for cutover | **started 2026-08-21.** Spec 1 of 2 written and awaiting approval; spec 2, and both plans, owed |
 | A12 | DOS-P10 Managed instruction artifacts — S / P / I | to write | A11 | L | thirty-eight instruction artifacts install, drift-check and uninstall under manifest ownership on both vendors | blocked |
 | A13 | DOS-P11 Hooks — S / P / I | to write | A12 | L | a hook is observed firing in a test, and every shipped handler names the installed binary | blocked |
@@ -452,10 +453,9 @@ line (NEW-41).
 
 **A10 became startable on 2026-08-20** and is the only thing on the product path that is: NEW-21
 closed when the external usage limit reset, and Step 5 landed 2026-08-21, so what remains of A10 is
-Task 19 Step 6 alone, which needs a pull request. A11 waits
-on A10, and A12, A13 and A14 wait on A11 by the founder's sequencing ruling rather than by any
-technical dependency. **Step 6 opens a pull request**, which is the founder's call rather than a
-session's — see the `NOW` section.
+Task 19 Step 6 alone. Its exact local gate, commit and publication are present at `c46b82c`; its
+remote CI verdict is not observed. A11 waits on A10, and A12, A13 and A14 wait on A11 by the
+founder's sequencing ruling rather than by any technical dependency. See the `NOW` section.
 **Track R is closed as of 2026-08-20.** R2 was its only entry, and its eleven tasks landed in four
 commits — the three Foundation requests, the DOS-P7 gap, and the six §1 rows the decisions of
 2026-08-17 unblocked. The four §1 rows that were never R2's still wait on the founder or on a
