@@ -49,7 +49,7 @@ describe("temporary HOME inventory", () => {
     const aliasParent = dirname(home.binDir);
 
     /** Normal hosts use one repo-local root and have no split retry path. */
-    if (dirname(originalRoot) === aliasParent) return;
+    if (aliasParent === originalRoot) return;
 
     const originalMode = (await stat(aliasParent)).mode & 0o777;
     const executableRoot = await realpath(home.binDir);
