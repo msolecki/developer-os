@@ -387,16 +387,27 @@ Read **decision 4** for the third box. It is **rewritten to record the decline**
 > before. `ORDER.md`'s `NOW` section records A10 as work done with the CI gate unmet, in the same form
 > R2's row uses, rather than rounding it up.
 
-- [ ] **Step 6: Run the gate, commit, and open the pull request** — *the only thing left in DOS-P6; needs a pull request the founder has not opened*
+- [ ] **Step 6: Run the gate, commit the green tree and observe remote CI** — *the only thing left in DOS-P6; the final exact local gate belongs immediately before the commit, and the founder directed publication from `development`, without a separate branch*
 
 ```bash
 npm run check
-git add docs/architecture/knowledge-pipeline.md docs/superpowers/ORDER.md \
-        docs/superpowers/BACKLOG.md docs/superpowers/specs docs/superpowers/plans
-git commit -m "docs: close DOS-P6, and leave the architecture note that replaces its plan"
-git push -u origin <branch> && gh pr create --fill
-gh pr checks <n>
+git add apps/cli/src/commands/ingest.ts \
+        apps/cli/src/commands/ingest.test.ts \
+        package.json \
+        packages/platform-macos/src/macos.test.ts \
+        tests/helpers/temp-home.ts \
+        tests/integration/temp-home.test.ts \
+        tests/security/interruption.test.ts \
+        docs/superpowers/ORDER.md \
+        docs/superpowers/BACKLOG.md \
+        docs/superpowers/plans/2026-07-21-developer-os-knowledge-pipeline.md
+git commit -m "fix: preserve ingest recovery and the local gate"
+git push origin development
+# Observe the CI run on the pushed commit; do not infer green from the push exit.
 ```
+
+After that run is green, close A10 in the canonical documents in one exact-path commit and observe
+CI on that closure commit too. Until both runs exist, this box stays unticked and this plan stays.
 
 **A red run that nobody reads is worse than the no CI it replaced.** Watch it.
 
@@ -407,4 +418,3 @@ gh pr checks <n>
 **The complete local knowledge lifecycle is production-candidate for synthetic data** — program plan Task 6.
 
 It is met when all five criteria in Task 19 Step 2 hold with their evidence in a commit, the independent security review has returned and its findings are dispositioned, and CI is green on that commit. Not before: a green local tree is the state this repository was already in once, and it cost a week of confusion.
-

@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 import { EXIT_CODES } from "@developer-os/core";
 import type { TransactionPhase } from "@developer-os/core";
@@ -96,10 +97,12 @@ type Target = keyof typeof TARGETS;
  *
  * - **`ingest-stage`**: the status write is rolled back at every phase, so the
  *   capture is `accepted` and the next run tries it again.
- * - **`ingest-apply`**: `accepted` while nothing has been written — `planned`
- *   through `validated` — and `staging` from `applied` on, because the notes
- *   exist from that phase and a capture claiming `accepted` beside its own notes
- *   sends the next run at a path `create` refuses.
+ * - **`ingest-apply`**: always `staging`. The executor has not touched a target
+ *   through `validated`, but the caller receives only the thrown error, not the
+ *   transaction id or its durable phase. A generic failure while execution is
+ *   in progress therefore cannot prove that no mutation landed; preserving
+ *   `staging` is the deterministic recoverable state that never promises an
+ *   unsafe automatic retry.
  * - **`ingest-reindex`**: the notes landed before this transaction began, so
  *   every phase leaves `staging`.
  * - **`ingest-ingested`**: the same, until this transaction's own write lands —
@@ -114,7 +117,7 @@ function expectedStatus(target: Target, phase: TransactionPhase): string {
     case "the ingest stage":
       return "accepted";
     case "the ingest apply":
-      return written ? "staging" : "accepted";
+      return "staging";
     case "the ingest reindex":
       return "staging";
     case "the ingest ingested write":
@@ -249,7 +252,7 @@ const EXPECTED_COVERAGE: readonly string[] = [
 
 describe("an interruption at every forward phase", () => {
   it.each(CASES)(
-    "leaves %s retryable when it is killed at %s",
+    "leaves %s recoverable when it is killed at %s",
     async (target, phase) => {
       const kind = TARGETS[target];
       const fixture = await installSecurityFixture(
@@ -268,7 +271,13 @@ describe("an interruption at every forward phase", () => {
         const seeded = await fixture.seedAccepted(
           `an observation interrupted at ${phase}`,
         );
-        fixture.runner.reply(() => oneNote(seeded.id, "DEV/interrupted.md"));
+        const proposal = oneNote(seeded.id, "DEV/interrupted.md");
+        const expectedContents = (
+          proposal as {
+            readonly notes: readonly [{ readonly contents: string }];
+          }
+        ).notes[0].contents;
+        fixture.runner.reply(() => proposal);
         const result = await fixture.ingest();
         expect(result.ok, "the interruption must reach the caller").toBe(false);
         /**
@@ -281,6 +290,14 @@ describe("an interruption at every forward phase", () => {
         expect(await fixture.statusOf(seeded.id)).toBe(
           expectedStatus(target, phase),
         );
+        if (target === "the ingest apply") {
+          const note = join(fixture.content, "DEV/interrupted.md");
+          if (WRITTEN_FROM.includes(phase)) {
+            await expect(readFile(note, "utf8")).resolves.toBe(expectedContents);
+          } else {
+            await expect(readFile(note)).rejects.toMatchObject({ code: "ENOENT" });
+          }
+        }
       }
 
       /**

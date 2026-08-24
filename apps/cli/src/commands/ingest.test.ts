@@ -23,7 +23,7 @@ import { MacOsPlatformTrustError } from "@developer-os/platform-macos";
 import type { AgentDiscovery, AgentName } from "@developer-os/platform-macos";
 import { loadWorkflow } from "@developer-os/workflow-schema";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { runCapture } from "./capture.js";
 import {
@@ -41,7 +41,10 @@ import type { CommandFixture } from "./testing.js";
 import { loadOrCreateRedactionKey } from "../context.js";
 import { run } from "../main.js";
 
-afterEach(removeCommandFixtures);
+afterEach(() => {
+  vi.restoreAllMocks();
+  return removeCommandFixtures();
+});
 
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
 
@@ -503,7 +506,7 @@ describe("runIngest, the status ladder", () => {
     expect(formatJsonResult(result)).not.toContain("ghp_");
   });
 
-  it("rolls a capture back from staging to accepted, never to failed", async () => {
+  it("does not roll back after apply planning makes the outcome indeterminate", async () => {
     const fixture = await installedFixture("ingest-apply-throws", {
       interruptAfter: "staged",
       interruptKind: "ingest-apply",
@@ -514,11 +517,10 @@ describe("runIngest, the status ladder", () => {
     const result = await fixture.run();
 
     expect(result.ok).toBe(false);
-    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
+    expect(await fixture.statusOf(seeded.id)).toBe("staging");
     expect(await ladderOf(fixture)).toStrictEqual([
       "ingest-stage",
       "ingest-apply",
-      "ingest-rollback",
     ]);
   });
 
@@ -586,13 +588,164 @@ describe("runIngest, the status ladder", () => {
     expect(result.error.message).toContain("DEV/unverified.md");
   });
 
+  it("never attributes a foreign target that appears before executor planning", async () => {
+    const fixture = await installedFixture("ingest-apply-foreign-before-plan");
+    const seeded = await fixture.seedAccepted("an observation racing another writer");
+    const notePath = "DEV/foreign-before-plan.md";
+    const target = join(fixture.content, notePath);
+    const foreignBytes = Buffer.from("written by somebody else\n", "utf8");
+    fixture.reply(() => oneNote(seeded.id, notePath, "Raced note"));
+
+    let raced = false;
+    const execute = fixture.context.executor.execute.bind(fixture.context.executor);
+    vi.spyOn(fixture.context.executor, "execute").mockImplementation(async (plan) => {
+      if (plan.kind === "ingest-apply" && !raced) {
+        raced = true;
+        await nodeFs.writeFile(target, foreignBytes, { flag: "wx", mode: 0o600 });
+      }
+      return execute(plan);
+    });
+
+    const result = await fixture.run();
+
+    expect(raced, "the foreign file must land after the caller precheck").toBe(true);
+    await expect(nodeFs.readFile(target)).resolves.toStrictEqual(foreignBytes);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const report = result.error.data as unknown as {
+      readonly refused: readonly { readonly appliedNotes: readonly string[] }[];
+    };
+    expect(report.refused[0]?.appliedNotes).toStrictEqual([]);
+    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
+  });
+
+  it("attributes only matching note bytes when a foreign target appears after an earlier write", async () => {
+    const fixture = await installedFixture("ingest-apply-foreign-after-write");
+    const seeded = await fixture.seedAccepted("an observation with two racing notes");
+    const firstPath = "DEV/a-landed-before-race.md";
+    const foreignPath = "DEV/z-foreign-after-write.md";
+    const first = proposedNote(seeded.id, firstPath, "Landed note", "This run wrote me.");
+    const second = proposedNote(seeded.id, foreignPath, "Raced note", "This run did not write me.");
+    const firstTarget = join(fixture.content, firstPath);
+    const foreignTarget = join(fixture.content, foreignPath);
+    const foreignBytes = Buffer.from("foreign bytes that must never be attributed\n", "utf8");
+    fixture.reply(() => ({ schemaVersion: 1, notes: [first, second] }));
+
+    let raced = false;
+    const assertTarget = fixture.context.guards.transaction.assertTarget.bind(
+      fixture.context.guards.transaction,
+    );
+    vi.spyOn(fixture.context.guards.transaction, "assertTarget").mockImplementation(
+      async (path) => {
+        if (path === foreignTarget && !raced && (await exists(firstTarget))) {
+          raced = true;
+          await nodeFs.writeFile(foreignTarget, foreignBytes, {
+            flag: "wx",
+            mode: 0o600,
+          });
+        }
+        await assertTarget(path);
+      },
+    );
+
+    const result = await fixture.run();
+
+    expect(raced, "the foreign file must land after the first note").toBe(true);
+    await expect(nodeFs.readFile(firstTarget, "utf8")).resolves.toBe(first.contents);
+    await expect(nodeFs.readFile(foreignTarget)).resolves.toStrictEqual(foreignBytes);
+    expect(result.ok).toBe(false);
+    expect(await fixture.statusOf(seeded.id)).toBe("staging");
+    if (result.ok) return;
+    const report = result.error.data as unknown as {
+      readonly refused: readonly { readonly appliedNotes: readonly string[] }[];
+    };
+    expect(report.refused[0]?.appliedNotes).toStrictEqual([firstPath]);
+  });
+
+  it("keeps staging when a landed target is unreadable during attribution", async () => {
+    const fixture = await installedFixture("ingest-apply-unreadable-landed", {
+      interruptAfter: "applied",
+      interruptKind: "ingest-apply",
+    });
+    const seeded = await fixture.seedAccepted("an observation whose landed note cannot be read");
+    const notePath = "DEV/unreadable-landed.md";
+    const target = join(fixture.content, notePath);
+    fixture.reply(() => oneNote(seeded.id, notePath, "Unreadable landed note"));
+
+    const execute = fixture.context.executor.execute.bind(fixture.context.executor);
+    vi.spyOn(fixture.context.executor, "execute").mockImplementation(async (plan) => {
+      try {
+        return await execute(plan);
+      } catch (error) {
+        if (plan.kind === "ingest-apply" && (await exists(target))) {
+          await nodeFs.chmod(target, 0o000);
+        }
+        throw error;
+      }
+    });
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    expect(await fixture.statusOf(seeded.id)).toBe("staging");
+    if (result.ok) return;
+    const report = result.error.data as unknown as {
+      readonly refused: readonly { readonly appliedNotes: readonly string[] }[];
+    };
+    expect(report.refused[0]?.appliedNotes).toStrictEqual([]);
+    const recovery = result.error.recovery ?? "";
+    expect(recovery).toContain("no notes could be attributed");
+    expect(recovery).toContain("inspect the proposed target paths");
+    expect(recovery).not.toContain("wrote no notes");
+  });
+
+  it("keeps staging when a landed target is replaced before attribution", async () => {
+    const fixture = await installedFixture("ingest-apply-replaced-landed", {
+      interruptAfter: "applied",
+      interruptKind: "ingest-apply",
+    });
+    const seeded = await fixture.seedAccepted("an observation whose landed note is replaced");
+    const notePath = "DEV/replaced-landed.md";
+    const target = join(fixture.content, notePath);
+    const foreignBytes = Buffer.from("replacement written by somebody else\n", "utf8");
+    fixture.reply(() => oneNote(seeded.id, notePath, "Replaced landed note"));
+
+    const execute = fixture.context.executor.execute.bind(fixture.context.executor);
+    vi.spyOn(fixture.context.executor, "execute").mockImplementation(async (plan) => {
+      try {
+        return await execute(plan);
+      } catch (error) {
+        if (plan.kind === "ingest-apply" && (await exists(target))) {
+          await nodeFs.writeFile(target, foreignBytes);
+        }
+        throw error;
+      }
+    });
+
+    const result = await fixture.run();
+
+    await expect(nodeFs.readFile(target)).resolves.toStrictEqual(foreignBytes);
+    expect(result.ok).toBe(false);
+    expect(await fixture.statusOf(seeded.id)).toBe("staging");
+    if (result.ok) return;
+    const report = result.error.data as unknown as {
+      readonly refused: readonly { readonly appliedNotes: readonly string[] }[];
+    };
+    expect(report.refused[0]?.appliedNotes).toStrictEqual([]);
+    const recovery = result.error.recovery ?? "";
+    expect(recovery).toContain("no notes could be attributed");
+    expect(recovery).toContain("remove any conflicting target");
+    expect(recovery).not.toContain("wrote no notes");
+  });
+
   /**
-   * The other side of that judgement, and the reason it is not simply "any
-   * throw means applied": a failure *before* the mutations exist leaves the
-   * vault untouched, and the capture must go back to `accepted` so the next run
-   * retries it. `staged` is the last phase at which nothing has been written.
+   * The conservative side of that judgement: `staged` is before target writes,
+   * but a generic post-plan throw carries neither a transaction id nor its
+   * durable phase. The vault is untouched in this synthetic case, yet the
+   * caller cannot prove that from the error and must preserve `staging` instead
+   * of promising an automatic retry.
    */
-  it("still rolls back to accepted when the apply threw before writing anything", async () => {
+  it("keeps staging when a post-plan interruption cannot prove whether anything landed", async () => {
     const fixture = await installedFixture("ingest-apply-before-writing", {
       interruptAfter: "staged",
       interruptKind: "ingest-apply",
@@ -604,7 +757,7 @@ describe("runIngest, the status ladder", () => {
 
     expect(result.ok).toBe(false);
     expect(await vaultNotes(fixture)).not.toContain("DEV/never-written.md");
-    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
+    expect(await fixture.statusOf(seeded.id)).toBe("staging");
   });
 
   /**
@@ -709,7 +862,8 @@ describe("runIngest, the status ladder", () => {
     expect(result.error.message).toContain("refused, left at staging");
     expect(result.error.message).not.toContain("partly applied");
     const recovery = result.error.recovery ?? "";
-    expect(recovery).toContain("wrote no notes and did not get its status back");
+    expect(recovery).toContain("no notes could be attributed safely");
+    expect(recovery).toContain("inspect the proposed target paths");
     /** And not the line for the state it is not in. */
     expect(recovery).not.toContain("already in the vault");
   });

@@ -34,17 +34,17 @@ week of confusion.
 
 ## NOW
 
-**`NOW` is A10, and one gate stands between it and closed.** The hold that blocked it — NEW-21, on an
+**`NOW` is A10, and one release gate stands between it and closed.** The hold that blocked it — NEW-21, on an
 external usage limit — was released on 2026-08-20 and the row closed on 2026-08-21. **Task 17 and Task
-19 Step 5 have landed. What remains is Step 6, and Step 6 is not a session's to take**: it requires
-CI green on the commit, which is the third of the three conditions the DOS-P6 checkpoint names, and
-the only route to it is a pushed branch and a pull request. **The founder chose on 2026-08-21 to keep
-the commits local**, as they had for Track R the day before.
+19 Step 5 have landed. Step 6 requires the exact local gate on the complete diff immediately before
+its exact-path commit, then CI green on that commit — the third condition the DOS-P6 checkpoint names.
+The focused ingest, temporary-HOME, macOS trust and lint checks passed during the 2026-08-24 review;
+they do not stand in for that final gate. **The founder directed that this work stays directly on
+`development`, with no separate branch**, without weakening either check.
 
-**So A10 is finished in the sense that its work is done and its local gate is green, and not finished
-in the sense its own checkpoint defines** — the same honest state R2's row carried, and stated the same
-way rather than rounded up to `done`. Nineteen commits are unpushed. Whoever pushes them opens the
-pull request and reads the run.
+**So A10's implementation is done and its own checkpoint is not.** Step 6 closes only after the final
+exact local gate, the commit and remote CI are all evidence, rather than rounding focused checks or an
+unpublished tree up to `done`. The founder publishes `development` and reads the run.
 
 `plans/2026-07-21-developer-os-knowledge-pipeline.md` survives for exactly one unticked step. It is
 **not** deleted, because a plan is deleted when its last step closes and Step 6 has not.
@@ -166,8 +166,8 @@ pattern rather than a first.
 - **Whether a model-run command can write raw bytes into the stream this product parses is
   unexamined** — NEW-47, which decides NEW-45's tie-break and settles from vendor source without
   spending anything.
-- **The Brain spec's lint-class table documents none of the four warnings that class emits** —
-  NEW-48, raised by the review of NEW-30's closure.
+- **The Brain spec's five-warning amendment is written and awaiting founder ratification** — NEW-48,
+  raised by the review of NEW-30's closure.
 - **`maxTurns` is bounded under Claude and silently dropped under Codex**, one shared schema with two
   behaviours. `codex-adapter.md` §11 is the full list with owners.
 

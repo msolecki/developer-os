@@ -61,7 +61,7 @@ Open work only. Program Tasks 0 to 5 are closed and are not rows here.
 | Area | Where | What is left |
 |---|---|---|
 | Program (umbrella) | 1 plan | Tasks 6–9 open, **25 unticked steps**; Tasks 0–5 closed and not rows here |
-| DOS-P6 | spec approved and plan written, both 2026-08-13 | **two unticked steps** — Task 19 Steps 5–6 (close the documents, run the gate). Task 17 closed 2026-08-20 when NEW-21 did. Eighteen of nineteen tasks have landed and their step lists are deleted |
+| DOS-P6 | spec approved and plan written, both 2026-08-13 | **one unticked step** — Task 19 Step 6 (run the final exact local gate, commit that `development` tree and observe remote CI; the founder rejected a separate branch on 2026-08-24). Task 17 closed 2026-08-20 when NEW-21 did; Tasks 1–18 have landed and Task 19 Steps 1–5 are checked |
 | DOS-P7 | no document yet | 1 spec, 1 plan, 1 implementation |
 | DOS-P10, DOS-P11, DOS-P12 | no documents; added 2026-08-20 | **3 specs, 3 plans, 3 implementations.** The shared-runtime layers no subsystem owned: thirty-eight instruction artifacts, eleven event hooks, nine tooling scripts |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each. **The cutover's scope grew on 2026-08-20** — it now retires the shared runtime entirely, so it follows DOS-P12 rather than DOS-P7 |

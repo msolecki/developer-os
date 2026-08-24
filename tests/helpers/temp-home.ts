@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   lstat,
   mkdir,
@@ -8,8 +8,12 @@ import {
   readlink,
   realpath,
   rm,
+  rmdir,
+  symlink,
+  unlink,
   writeFile,
 } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,7 +21,7 @@ import { MacOsPlatformAdapter } from "@developer-os/platform-macos";
 import { redactText } from "@developer-os/security";
 
 /**
- * **Under the repository, not `/tmp`, and the reason changed on 2026-08-17.**
+ * **A short alias under the repository; the bytes normally live there too.**
  *
  * It was `/tmp` and deliberately not `os.tmpdir()`: on macOS the per-user temporary
  * directory is `/var/folders/<2>/<30 random chars>/T/`, and an executable path beneath it
@@ -35,15 +39,34 @@ import { redactText } from "@developer-os/security";
  *
  * **Whether the repository root satisfies the trust check is a claim about the reader's
  * machine, and this file does not make it — it tests it.** `assertTrustedPath` below runs
- * the product's own `assertTrustedExecutable` against every planted binary, so a checkout
- * somewhere the guard refuses (under `/private/tmp`, which agent worktrees and some CI
- * runners produce) fails with a sentence naming this file rather than as an agent
- * mysteriously reported absent. `.tmp-home/` is git-ignored; `removeTempHome` deletes each
- * sandbox, and the base directory itself is left in place between runs.
+ * the product's own `assertTrustedExecutable` against every planted binary.
+ *
+ * A managed Codex workspace adds one more constraint: it can permit `mkdir`, symlink and
+ * unlink below the checkout while refusing regular-file creation and `rmdir`. A one-time
+ * capability probe detects that host. There, ordinary HOME bytes live under `/tmp` (short,
+ * writable and removable), executable bytes live under the user's private `os.tmpdir()`
+ * (not world-writable), and `.tmp-home/dosXXXXXX` is only the short lexical symlink placed
+ * on `PATH`. The trust guard checks both the declared and resolved chains, so this remains
+ * a real trust test rather than an exemption. `.tmp-home/` is git-ignored and every backing
+ * directory plus its alias is removed after the case.
  */
 const SANDBOX_BASE = fileURLToPath(new URL("../../.tmp-home", import.meta.url));
 const PREFIX = "dos";
 const SANDBOX_NAME = /^dos[A-Za-z0-9]{6}$/u;
+
+interface SplitSandboxCleanup {
+  readonly root: string;
+  readonly executableRoot: string;
+  readonly alias: string;
+  validated: boolean;
+  rootRemoved: boolean;
+  executableRootRemoved: boolean;
+  aliasRemoved: boolean;
+}
+
+const SPLIT_SANDBOXES = new WeakMap<TempHome, SplitSandboxCleanup>();
+const SPLIT_SANDBOXES_BY_ROOT = new Map<string, SplitSandboxCleanup>();
+let canCreateWorkspaceFiles: Promise<boolean> | null = null;
 
 /**
  * Any 32 bytes. The redactor's verdict depends on the text, never on the key —
@@ -82,6 +105,31 @@ export interface TempHome {
   readonly tempDir: string;
 }
 
+async function probeWorkspaceFileCreation(): Promise<boolean> {
+  await mkdir(SANDBOX_BASE, { recursive: true, mode: 0o700 });
+  const probeDirectory = join(SANDBOX_BASE, ".capability-probe");
+  await mkdir(probeDirectory, { recursive: true, mode: 0o700 });
+  const probe = join(
+    probeDirectory,
+    `.write-probe-${randomBytes(8).toString("hex")}`,
+  );
+  try {
+    await writeFile(probe, "", { flag: "wx", mode: 0o600 });
+    await unlink(probe);
+    await rmdir(probeDirectory);
+    return true;
+  } catch (error) {
+    await unlink(probe).catch(() => undefined);
+    if (isDenied(error)) return false;
+    throw error;
+  }
+}
+
+function workspaceAcceptsRegularFiles(): Promise<boolean> {
+  canCreateWorkspaceFiles ??= probeWorkspaceFileCreation();
+  return canCreateWorkspaceFiles;
+}
+
 /**
  * Creates an isolated environment for one test. The name is random and
  * deliberately uninformative: `mkdtemp` already adds six characters, and every
@@ -96,6 +144,10 @@ export interface TempHome {
 export async function createTempHome(): Promise<TempHome> {
   await mkdir(SANDBOX_BASE, { recursive: true, mode: 0o700 });
   const base = await realpath(SANDBOX_BASE);
+  if (!(await workspaceAcceptsRegularFiles())) {
+    return createSplitTempHome(base);
+  }
+
   const root = await realpath(await mkdtemp(join(base, PREFIX)));
 
   const home = join(root, "home");
@@ -116,12 +168,173 @@ export async function createTempHome(): Promise<TempHome> {
   };
 }
 
+async function createSplitTempHome(aliasBase: string): Promise<TempHome> {
+  const dataBase = await realpath("/tmp");
+  const root = await realpath(await mkdtemp(join(dataBase, PREFIX)));
+  const executableBase = await realpath(tmpdir());
+  const executableRoot = await realpath(
+    await mkdtemp(join(executableBase, `${basename(root)}-bin-`)),
+  );
+  const alias = join(aliasBase, basename(root));
+
+  try {
+    await symlink(executableRoot, alias, "dir");
+    const home = join(root, "home");
+    const tempDir = join(root, "tmp");
+    for (const directory of [home, tempDir]) {
+      await mkdir(directory, { recursive: true, mode: 0o700 });
+    }
+    assertDiscoverablePath(join(alias, "claude"));
+
+    const sandbox: TempHome = {
+      root,
+      home,
+      productHome: join(home, ".developer-os"),
+      brain: join(home, "DeveloperBrain"),
+      binDir: alias,
+      tempDir,
+    };
+    const cleanup: SplitSandboxCleanup = {
+      root,
+      executableRoot,
+      alias,
+      validated: false,
+      rootRemoved: false,
+      executableRootRemoved: false,
+      aliasRemoved: false,
+    };
+    SPLIT_SANDBOXES.set(sandbox, cleanup);
+    SPLIT_SANDBOXES_BY_ROOT.set(root, cleanup);
+    return sandbox;
+  } catch (error) {
+    const cleanupFailures = await cleanupSplitTargets({
+      root,
+      executableRoot,
+      alias,
+      validated: true,
+      rootRemoved: false,
+      executableRootRemoved: false,
+      aliasRemoved: false,
+    });
+    if (cleanupFailures.length > 0) {
+      throw new AggregateError(
+        [error, ...cleanupFailures],
+        "split sandbox creation and cleanup both failed",
+      );
+    }
+    throw error;
+  }
+}
+
+async function unlinkIfPresent(path: string): Promise<void> {
+  try {
+    await unlink(path);
+  } catch (error) {
+    if (!isMissing(error)) throw error;
+  }
+}
+
+async function cleanupSplitTargets(
+  cleanup: SplitSandboxCleanup,
+): Promise<readonly unknown[]> {
+  const results = await Promise.allSettled([
+    cleanup.rootRemoved
+      ? Promise.resolve()
+      : rm(cleanup.root, { recursive: true, force: true, maxRetries: 3 }).then(
+          () => {
+            cleanup.rootRemoved = true;
+          },
+        ),
+    cleanup.executableRootRemoved
+      ? Promise.resolve()
+      : rm(cleanup.executableRoot, {
+          recursive: true,
+          force: true,
+          maxRetries: 3,
+        }).then(() => {
+          cleanup.executableRootRemoved = true;
+        }),
+    cleanup.aliasRemoved
+      ? Promise.resolve()
+      : unlinkIfPresent(cleanup.alias).then(() => {
+          cleanup.aliasRemoved = true;
+        }),
+  ]);
+  const failures: unknown[] = [];
+  for (const result of results) {
+    if (result.status === "rejected") failures.push(result.reason as unknown);
+  }
+  return failures;
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch (error) {
+    if (isMissing(error)) return false;
+    throw error;
+  }
+}
+
 /**
  * Deletes the exact directory this helper created and nothing else. The name
  * check is the guard: a recursive delete driven by a value a test computed is
  * the one operation in this suite that could reach outside the sandbox.
  */
 export async function removeTempHome(home: TempHome): Promise<void> {
+  const split = SPLIT_SANDBOXES.get(home);
+  if (split !== undefined) {
+    if (home.root !== split.root || home.binDir !== split.alias) {
+      throw new Error(
+        `refusing to remove split sandbox ${home.root}: its roots or alias changed`,
+      );
+    }
+    if (!split.validated) {
+      const dataBase = await realpath("/tmp");
+      const executableBase = await realpath(tmpdir());
+      const executableName = basename(split.executableRoot);
+      if (
+        !isAbsolute(split.root) ||
+        dirname(split.root) !== dataBase ||
+        !SANDBOX_NAME.test(basename(split.root)) ||
+        split.alias !== home.binDir ||
+        dirname(split.alias) !== (await realpath(SANDBOX_BASE)) ||
+        basename(split.alias) !== basename(split.root) ||
+        dirname(split.executableRoot) !== executableBase ||
+        !executableName.startsWith(`${basename(split.root)}-bin-`) ||
+        (await realpath(split.alias)) !== split.executableRoot
+      ) {
+        throw new Error(
+          `refusing to remove split sandbox ${home.root}: its roots or alias changed`,
+        );
+      }
+      split.validated = true;
+    }
+
+    const cleanupFailures = await cleanupSplitTargets(split);
+    const [rootExists, executableRootExists, aliasExists] = await Promise.all([
+      pathExists(split.root),
+      pathExists(split.executableRoot),
+      pathExists(split.alias),
+    ]);
+    split.rootRemoved = !rootExists;
+    split.executableRootRemoved = !executableRootExists;
+    split.aliasRemoved = !aliasExists;
+    const targetsRemain = rootExists || executableRootExists || aliasExists;
+    if (!targetsRemain) {
+      SPLIT_SANDBOXES.delete(home);
+      SPLIT_SANDBOXES_BY_ROOT.delete(split.root);
+    }
+    if (cleanupFailures.length > 0 || targetsRemain) {
+      throw new AggregateError(
+        cleanupFailures,
+        `split sandbox cleanup left one or more targets for ${home.root}`,
+      );
+    }
+    return;
+  }
+
   const base = await realpath(SANDBOX_BASE);
   if (
     !isAbsolute(home.root) ||
@@ -217,13 +430,17 @@ function isDenied(error: unknown): boolean {
   );
 }
 
-async function walk(directory: string, into: Map<string, string>): Promise<void> {
+async function walk(
+  directory: string,
+  into: Map<string, string>,
+  visibleDirectory = directory,
+): Promise<void> {
   let names: readonly string[];
   try {
     names = (await readdir(directory)).sort();
   } catch (error) {
     if (isDenied(error)) {
-      into.set(directory, "unreadable");
+      into.set(visibleDirectory, "unreadable");
       return;
     }
     if (isMissing(error)) return;
@@ -232,6 +449,7 @@ async function walk(directory: string, into: Map<string, string>): Promise<void>
 
   for (const name of names) {
     const path = join(directory, name);
+    const visiblePath = join(visibleDirectory, name);
     let stats;
     try {
       stats = await lstat(path);
@@ -246,27 +464,27 @@ async function walk(directory: string, into: Map<string, string>): Promise<void>
      * confusion the symlink-escape cases exist to detect.
      */
     if (stats.isSymbolicLink()) {
-      into.set(path, `link:${await readlink(path)}`);
+      into.set(visiblePath, `link:${await readlink(path)}`);
       continue;
     }
     if (stats.isDirectory()) {
-      into.set(path, "dir");
-      await walk(path, into);
+      into.set(visiblePath, "dir");
+      await walk(path, into, visiblePath);
       continue;
     }
     if (stats.isFile()) {
       try {
         into.set(
-          path,
+          visiblePath,
           `file:${createHash("sha256").update(await readFile(path)).digest("hex")}`,
         );
       } catch (error) {
         if (!isDenied(error)) throw error;
-        into.set(path, "unreadable");
+        into.set(visiblePath, "unreadable");
       }
       continue;
     }
-    into.set(path, "other");
+    into.set(visiblePath, "other");
   }
 }
 
@@ -278,6 +496,12 @@ async function walk(directory: string, into: Map<string, string>): Promise<void>
 export async function inventory(root: string): Promise<Inventory> {
   const entries = new Map<string, string>();
   await walk(root, entries);
+  const split = SPLIT_SANDBOXES_BY_ROOT.get(root);
+  if (split !== undefined) {
+    const visibleBin = join(root, "bin");
+    entries.set(visibleBin, "dir");
+    await walk(split.executableRoot, entries, visibleBin);
+  }
   return entries;
 }
 

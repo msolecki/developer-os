@@ -15,7 +15,7 @@
     "test:e2e": "vitest run tests/e2e",
     "render:claude": "tsc -b && node tests/dist/tools/render-claude.js",
     "render:codex": "tsc -b && node tests/dist/tools/render-codex.js",
-    "check": "npm run lint && npm test && pnpm build && git diff --check"
+    "check": "npm run lint && npm test && pnpm --pm-on-fail=ignore build && git diff --check"
   },
   "devDependencies": {
     "@eslint/js": "9.39.4",

@@ -1,4 +1,15 @@
-import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import {
+  access,
+  chmod,
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { homedir, release, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -560,9 +571,37 @@ describe("MacOsPlatformAdapter.assertTrustedExecutable", () => {
  * this guard shipped with were invisible to it by construction, and both are forty lines
  * of real `symlink` away (BACKLOG NEW-15).
  *
- * The base sits under the user's home so no ancestor is world-writable except the one the
- * case creates.
+ * The base prefers the user's private per-user temporary directory after checking that the
+ * current user owns it, neither group nor other may write it, and this process can write it.
+ * `os.tmpdir()` honors `TMPDIR`, so `/tmp` is not assumed private merely because that API
+ * returned it. An unsafe override falls back to the original home-based fixture on hosts
+ * where the home is writable.
  */
+async function sandboxBase(
+  candidatePath = tmpdir(),
+  fallbackPath = homedir(),
+): Promise<string> {
+  try {
+    const candidate = await realpath(candidatePath);
+    const candidateStats = await stat(candidate);
+    const currentUid = process.getuid?.() ?? -1;
+    if (
+      candidateStats.isDirectory() &&
+      candidateStats.uid === currentUid &&
+      (candidateStats.mode & 0o022) === 0
+    ) {
+      await access(candidate, constants.W_OK);
+      return candidate;
+    }
+  } catch {
+    // The original home fixture below remains the safe fallback.
+  }
+
+  const fallback = await realpath(fallbackPath);
+  await access(fallback, constants.W_OK);
+  return fallback;
+}
+
 describe("MacOsPlatformAdapter.assertTrustedExecutable, against a real filesystem", () => {
   const roots: string[] = [];
 
@@ -579,10 +618,24 @@ describe("MacOsPlatformAdapter.assertTrustedExecutable, against a real filesyste
   });
 
   async function sandbox(): Promise<string> {
-    const root = await realpath(await mkdtemp(join(homedir(), ".dos-trust-")));
+    const root = await realpath(
+      await mkdtemp(join(await sandboxBase(), ".dos-trust-")),
+    );
     roots.push(root);
     return root;
   }
+
+  it("falls back when the temporary-directory candidate is a regular file", async () => {
+    const root = await sandbox();
+    const candidate = join(root, "tmpdir-file");
+    const fallback = join(root, "fallback");
+    await writeFile(candidate, "not a directory", { mode: 0o600 });
+    await mkdir(fallback, { mode: 0o700 });
+
+    await expect(sandboxBase(candidate, fallback)).resolves.toBe(
+      await realpath(fallback),
+    );
+  });
 
   function realAdapter(): MacOsPlatformAdapter {
     return new MacOsPlatformAdapter({
