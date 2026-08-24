@@ -6,6 +6,7 @@ import {
   EXIT_CODES,
   success,
   TransactionConflictError,
+  TransactionPlanError,
   TransactionPreconditionError,
 } from "@developer-os/core";
 import type {
@@ -120,10 +121,10 @@ interface RefusedCaptureV1 {
   readonly recovery: string | null;
   /**
    * The notes already written when the failure landed — empty unless the apply
-   * transaction wrote them, in which case the capture is at `staging` with these
-   * files in the vault. It is a different event from a refusal that wrote
-   * nothing and it is labelled differently, because a user reading the line has
-   * to know their vault changed.
+   * transaction can prove it wrote them. An empty list does not prove nothing
+   * landed: after a post-plan failure a target may be unreadable, replaced or
+   * removed before attribution. In that indeterminate case `leftAt` remains
+   * `staging` so the command never promises a retry it cannot prove safe.
    */
   readonly appliedNotes: readonly string[];
   /**
@@ -309,15 +310,14 @@ const PARTLY_APPLIED_RECOVERY =
   "a capture reported as partly applied is at staging with the notes named on its line already in the vault, and ingest never selects staging: read those notes, then set the status by hand — ingested if they are what you wanted, or accepted after removing them to try the capture again";
 
 /**
- * The third state, and the one the two lines above between them described
- * wrongly: a capture whose status reached `staging` and whose notes never
- * landed. It is reached when the rollback itself fails, and it is the state a
- * run killed after `ingest-stage` finalizes leaves behind — `staging` with an
- * empty vault, which "wrote nothing and is still accepted" and "the notes named
- * on its line are already in the vault" are both false of.
+ * The third state: `staging` with no note this process can safely attribute.
+ * That includes a failed rollback before apply, but also a post-plan failure
+ * whose target became unreadable, was replaced, or disappeared before the
+ * attribution scan. Empty attribution is therefore not evidence of an empty
+ * vault and must never promise a blind retry.
  */
 const STRANDED_RECOVERY =
-  "a capture reported as left at staging wrote no notes and did not get its status back, and ingest never selects staging: set its status back to accepted by hand to try it again";
+  "a capture reported as left at staging has an indeterminate apply: no notes could be attributed safely, but that does not prove the apply wrote nothing, and ingest never selects staging: inspect the proposed target paths and any incomplete transaction, then remove any conflicting target before setting its status back to accepted by hand";
 
 /**
  * The fourth state, which is a *success* wearing a failure's exit code: the
@@ -958,10 +958,11 @@ async function statusOnDisk(
  *
  * **Returned rather than thrown**, because the caller has two questions with
  * different answers: *what happened* is `reason`, which is what the user is told
- * and what decides the exit code, and *what is on disk* is `notes`, which
- * decides whether the capture may be rolled back to `accepted`. A failure that
- * wrote nothing still throws — there is nothing to report about it that the
- * error itself does not carry.
+ * and what decides the exit code, and *what can be attributed* is `notes`.
+ * Every post-plan failure is returned, including an empty attribution: once
+ * execution began, an unreadable, replaced or removed target makes absence of
+ * matching bytes inconclusive. Only `TransactionPlanError` proves the apply
+ * never began and still throws directly.
  */
 type ApplyOutcome =
   | { readonly ok: true; readonly notes: readonly string[] }
@@ -1001,8 +1002,12 @@ async function applyNotes(
   writes: readonly PlannedNoteWriteV1[],
 ): Promise<ApplyOutcome> {
   const mutations: PlannedFileMutation[] = [];
-  /** Each mutation's canonical target beside the note name it was planned for. */
-  const planned: { readonly path: string; readonly target: string }[] = [];
+  /** Each mutation's canonical target and desired digest beside its note name. */
+  const planned: {
+    readonly path: string;
+    readonly target: string;
+    readonly expectedHash: string;
+  }[] = [];
 
   for (const write of writes) {
     const target = join(contentRoot, write.path);
@@ -1037,7 +1042,11 @@ async function applyNotes(
       operation: "create",
       content: write.bytes,
     });
-    planned.push({ path: write.path, target: canonical });
+    planned.push({
+      path: write.path,
+      target: canonical,
+      expectedHash: createHash("sha256").update(write.bytes).digest("hex"),
+    });
   }
 
   /**
@@ -1052,12 +1061,16 @@ async function applyNotes(
    *
    * **Which notes landed is asked of the filesystem rather than inferred from
    * the journal**, because the journal is not in hand: `execute` throws instead
-   * of returning it, and its id is not recoverable from the error. The question
-   * "is this path occupied" is also the exact question the next run will ask, so
-   * an answer taken from the disk cannot disagree with it — where a phase read
-   * from the journal could, if a later phase had removed what an earlier one
-   * wrote. An empty answer leaves `applied` unset and the capture retryable,
-   * which is the pre-transaction state and the correct one.
+   * of returning it, and its id is not recoverable from the error. Existence is
+   * not provenance: another writer can occupy a planned target in either race
+   * window. A target counts only when a guarded read hashes to the desired bytes
+   * retained beside it. A mismatch, missing target or failed read is not proof
+   * that nothing landed — another writer may have replaced or removed bytes
+   * after apply. `TransactionPlanError` is stronger still: it is raised
+   * before the executor applies any mutation, so none of its targets belong to
+   * this ingest even when one now exists. Every other failure returns an answer,
+   * including an empty one, so the caller preserves `staging` when provenance is
+   * indeterminate.
    */
   try {
     await context.executor.execute({
@@ -1065,11 +1078,20 @@ async function applyNotes(
       mutations,
     });
   } catch (error) {
+    if (error instanceof TransactionPlanError) throw error;
     const landed: string[] = [];
     for (const entry of planned) {
-      if (await exists(context, entry.target)) landed.push(entry.path);
+      let observedHash: string;
+      try {
+        observedHash = await context.guards.readText(entry.target, async (handle) => {
+          const bytes = await handle.readFile();
+          return createHash("sha256").update(bytes).digest("hex");
+        });
+      } catch {
+        continue;
+      }
+      if (observedHash === entry.expectedHash) landed.push(entry.path);
     }
-    if (landed.length === 0) throw error;
     return { ok: false, notes: landed, reason: error };
   }
 
@@ -1177,22 +1199,20 @@ interface IngestEnvironment {
  *   → status → ingested                                 (ingest-ingested)
  * ```
  *
- * **Nothing that fails here produces `failed`**, and which of the other two it
- * leaves depends on whether the notes landed. `failed` describes a capture whose
- * own envelope is unreadable, and collapsing it with a refusal would make a
- * transient model failure look like data loss — the capture is fine and the
+ * **Nothing that fails here produces `failed`.** `failed` describes a capture
+ * whose own envelope is unreadable, and collapsing it with a refusal would make
+ * a transient model failure look like data loss — the capture is fine and the
  * proposal was not.
  *
- * - **While no note of this proposal exists on disk**, the capture is rolled
- *   back to `accepted` and the next run tries it again.
- * - **Once any of them does** — which is from the moment `ingest-apply` writes
- *   its mutations, *before* it verifies them and well before it finalizes — the
- *   capture stays at `staging`, which `selectCaptures` never selects.
- *   `accepted` would be a lie there — a second run would meet this run's own
- *   output and refuse — so the capture is left in the state that is true, is
- *   reported as *partly applied*, and waits for a person. `applyNotes` decides
- *   this by asking the filesystem which of its targets exist, because a throw
- *   out of `execute` says nothing about how far it got.
+ * - **A failure proved to precede apply execution** — including a
+ *   `TransactionPlanError` — rolls the capture back to `accepted`; no target
+ *   from this proposal could have changed, so the next run is safe.
+ * - **Every other throw from apply execution** leaves the capture at `staging`,
+ *   which `selectCaptures` never selects. Matching target bytes are reported as
+ *   applied notes, but an empty attribution is not proof of an empty vault: a
+ *   target may have become unreadable, been replaced or disappeared after a
+ *   mutation. Preserving `staging` never promises an automatic retry the caller
+ *   cannot prove safe.
  * - **A rollback that itself fails** leaves the capture at `staging` with
  *   nothing applied. It is a third state, labelled and given its own recovery
  *   line rather than folded into either of the two above.
@@ -1220,7 +1240,12 @@ async function ingestOne(
    */
   let capturePath: string | null = null;
   let staged: CaptureEnvelopeV1 | null = null;
-  /** Non-null once `ingest-apply` finalized, holding the notes it wrote. */
+  /**
+   * Null means apply execution never began and rollback is still safe. Non-null
+   * means apply either succeeded or failed after planning began; the empty list
+   * is the indeterminate failure sentinel that blocks an unsafe rollback when
+   * no target bytes could be attributed.
+   */
   let applied: readonly string[] | null = null;
 
   try {
@@ -1310,8 +1335,12 @@ async function ingestOne(
        * and every later run refused it.
        */
       const outcome = await applyNotes(context, environment.contentRoot, plan.writes);
+      if (!outcome.ok) {
+        /** Empty is still non-null: attribution failed after planning began. */
+        applied = outcome.notes;
+        throw outcome.reason;
+      }
       applied = outcome.notes.length === 0 ? null : outcome.notes;
-      if (!outcome.ok) throw outcome.reason;
       await reindexVault(context, environment.config, paths, brainConfig);
     }
 
