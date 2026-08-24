@@ -38,7 +38,7 @@ end**, which is Foundation residual 9 and this document's first section of subst
 
 - **Nothing here reaches a model.** No verb in this document invokes a vendor CLI, and §3.3 makes
   that structural for scheduled jobs rather than a rule someone has to remember.
-- **Nothing here captures.** Knowledge-pipeline spec §3.1 decided that capture content is
+- **Nothing here captures.** Knowledge-pipeline architecture note §2 records the decision that capture content is
   agent-authored and that nothing automatic captures anything; the founder accepted the cost. A
   scheduler does not reopen it.
 - **Nothing here rewrites history.** §3.2 is the whole of the Git surface, and conflict resolution,

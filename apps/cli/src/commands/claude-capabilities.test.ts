@@ -174,9 +174,9 @@ describe("reportClaudeCapabilities", () => {
   });
 
   /**
-   * A capture reaches the vault because somebody ran a command. Knowledge-pipeline spec §8.2's
+   * A capture reaches the vault because somebody ran a command. The knowledge-pipeline architecture note §2's
    * fallback to the wrapper, and the `hook` branch beside it, both name paths
-   * this product is not building (knowledge-pipeline spec §3.1).
+   * this product is not building (knowledge-pipeline architecture note §2).
    */
   it("names the command as the capture route", async () => {
     const report = await reportClaudeCapabilities({

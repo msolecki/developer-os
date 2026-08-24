@@ -614,7 +614,7 @@ function createRedactionKey(file: string): Uint8Array {
  * The product's first secret at rest, and deliberately **not** a managed
  * artifact: absent from `installation-manifest.json`, so it is never hashed into
  * a drift report and never printed by a diagnostic that enumerates manifest
- * contents (knowledge-pipeline spec §3.5, §8.4).
+ * contents (knowledge-pipeline architecture note §8.1).
  *
  * Losing it makes old fingerprints incomparable, never captures unreadable —
  * content is not encrypted with it, only fingerprints are derived from it.

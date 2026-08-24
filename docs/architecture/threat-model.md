@@ -1,7 +1,8 @@
 # Developer OS — Threat Model
 
-**Consolidated 2026-08-14 by DOS-P6 Task 18**, per the knowledge-pipeline design spec §8.5 and the
-row `docs/superpowers/BACKLOG.md` §5 carried from the day the program file map was written.
+**Consolidated 2026-08-14 by DOS-P6 Task 18**, as the companion trust-boundary record named by the
+knowledge-pipeline architecture note §12, and the row `docs/superpowers/BACKLOG.md` §5 carried from
+the day the program file map was written.
 
 This document **consolidates a posture that already exists**; it invents none. Everything in it was
 already recorded in `docs/architecture/claude-adapter.md`, `docs/architecture/codex-adapter.md`,

@@ -327,7 +327,7 @@ function renderSteps(contract: WorkflowContractV1): readonly string[] {
     lines.push(`Effect: \`${screen(step.do)}\``, "");
     /**
      * The command an agent would run for this verb, named right beside the
-     * effect it names — the fix for knowledge-pipeline spec §4's finding that three shipped
+     * effect it names — the fix for knowledge-pipeline architecture note §1's finding that three shipped
      * skills, in both vendor trees, named commands that do not exist because
      * nothing in the pipeline mapped a verb to an invocation. `lookupVerb`
      * returns `undefined` for a verb outside the vocabulary and `null` for

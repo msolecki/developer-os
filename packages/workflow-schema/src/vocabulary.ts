@@ -25,7 +25,7 @@ export interface EffectFootprint {
    * different facts: a command is a declaration of what an agent would run,
    * `implemented` is whether running it does anything yet. Claiming a handler
    * before one exists is the defect `implemented` guards against one layer
-   * down; naming no command for a verb that has one is the defect knowledge-pipeline spec §4
+   * down; naming no command for a verb that has one is the defect knowledge-pipeline architecture note §1
    * records against three shipped skills, in both vendor trees, before this
    * field existed.
    */
@@ -95,8 +95,8 @@ export const EFFECT_VOCABULARY: Readonly<Record<string, EffectFootprint>> =
     "capture.list": { read: QUARANTINE, write: [], staging: false, capability: null, owner: "DOS-P6", implemented: true, command: "developer-os review" },
     "capture.setStatus": { read: [], write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: true, command: "developer-os review" },
     /**
-     * Knowledge-pipeline spec §4's seventh Brain-adjacent verb, and a separate verb from
-     * `capture.setStatus` because an edit is a *content* transition: knowledge-pipeline spec §5.5
+     * Knowledge-pipeline architecture note §§4 and 6's seventh Brain-adjacent verb, and a separate verb from
+     * `capture.setStatus` because an edit is a *content* transition: §6
      * has no status meaning "edited", and adding one would put a seventh
      * member into a frozen ordered list to say what the file's own mtime
      * already says. Same quarantine footprint as `capture.setStatus`, plus the
@@ -140,7 +140,7 @@ export function isKnownVerb(verb: string): boolean {
  * from the table rather than written down beside it.
  *
  * **The derivation is narrower than the phrase the spec uses, and deliberately
- * so.** Knowledge-pipeline spec §6.6 says "one JSON Schema file per
+ * so.** Knowledge-pipeline architecture note §1's structured-result schemas row says "one JSON Schema file per
  * agent-invoking verb"; this returns the `structured_result` set, which is not
  * the same words. `agent.prompt` also invokes an agent and needs no schema of
  * ours — the adapters own that verb and its caller supplies

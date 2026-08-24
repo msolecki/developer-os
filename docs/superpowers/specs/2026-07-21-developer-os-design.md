@@ -13,7 +13,7 @@ remaining product entries A10–A16 close.
 > "not yet built" shipped with DOS-P2 on 2026-08-10. DOS-P6 also superseded the automatic-capture,
 > hook and wrapper assumptions in §2 and §18: capture is agent-authored, neither adapter ships a
 > hook, `developer-os run claude|codex` is not built, and the affected capabilities report
-> `not-used`. The approved amendment is the knowledge-pipeline spec §3.1–§3.2; its implementation
+> `not-used`. The approved amendment is recorded in the knowledge-pipeline architecture note §2; its implementation
 > record is `docs/architecture/knowledge-pipeline.md` §2 and the amendment index is `BACKLOG.md` §8.
 > The original clauses remain below as the approved baseline they amended.
 
@@ -514,10 +514,10 @@ data boundary and write scope. The agent produces a structured change manifest i
 the transaction staging directory. It cannot write directly to the canonical
 vault during proposal generation.
 
-**Amended by the knowledge-pipeline spec §6.3, ratified 2026-08-13, discharged by DOS-P6 Task 12.**
+**Amended by the knowledge-pipeline architecture note §7, ratified 2026-08-13, discharged by DOS-P6 Task 12.**
 "The staged result" is not what the `deterministic reindex` validator runs over: it runs over an
 **in-memory projection** of the vault plus the proposal, because nothing is staged at the point this
-paragraph names — this section and the knowledge-pipeline spec's own §6.3 preamble contradicted each
+paragraph names — this section and the retired design's §6.3 preamble contradicted each
 other on that. Staging first was rejected rather than merely avoided: it would make every file in
 staging attacker-influenced content that the validators would have to re-read as hostile. The rest of
 the list below is unchanged. `BACKLOG.md` §8 carries the row.
@@ -677,7 +677,7 @@ logs, backups, process invocations, and absence of unexpected network calls.
 
 ### 17.5 Security cases
 
-**Narrowed by the knowledge-pipeline spec §9, ratified 2026-08-13, discharged by DOS-P6 Task 15 —
+**Narrowed by the knowledge-pipeline architecture note §11, ratified 2026-08-13, discharged by DOS-P6 Task 15 —
 and the narrowing was not taken.** §9 reduced this list to six suites and dropped two that `BACKLOG.md`
 §7's standing gate still requires from DOS-P6 onward: **attempted implicit network access** and
 **concurrent user edits**. The plan registered the narrowing rather than inheriting it and shipped

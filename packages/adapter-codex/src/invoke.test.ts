@@ -546,7 +546,7 @@ describe("invokeCodex against the stream Task 17 actually observed", () => {
 
   it("shows every line of a real stream to be a JSON object carrying a discriminating type", () => {
     /**
-     * Knowledge-pipeline spec §10.2 asks two questions of a real run. This answers the second:
+     * Knowledge-pipeline architecture note §10 asks two questions of a real run. This answers the second:
      * **yes, `type` is a discriminating field** and it is present on every
      * line. Nothing filtered on it until 2026-08-20, because a narrowing wanted
      * a stream where the old rule and the new one agreed; what arrived instead
@@ -627,7 +627,7 @@ describe("invokeCodex against the successful turn NEW-21 observed", () => {
      * branches and a claim about one is not a claim about both.** The
      * `workspace-write` run of 2026-08-20 is recorded beside the `read-only`
      * one for that reason; the sentence "identical under both sandbox modes"
-     * in `agent.ts` and in knowledge-pipeline spec §10.3 rests on this file rather than on
+     * in `agent.ts` and in knowledge-pipeline architecture note §10 rests on this file rather than on
      * somebody's memory of a terminal.
      */
     const other = readFileSync(
@@ -709,7 +709,7 @@ describe("invokeCodex against the successful turn NEW-21 observed", () => {
 
   it("shows the terminal event of a successful turn is not the response", () => {
     /**
-     * This is the question knowledge-pipeline spec §10.2 put to a real run and that the failed
+     * This is the question knowledge-pipeline architecture note §10 put to a real run and that the failed
      * turn of 2026-08-15 could not answer. The answer is **no**: the last
      * line is `turn.completed`, a usage record. The rule that shipped until
      * 2026-08-20 took exactly this line, and `parseStructuredPayload` would

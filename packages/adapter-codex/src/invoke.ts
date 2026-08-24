@@ -24,7 +24,7 @@ import type { CodexInstallation } from "./discover.js";
  *
  * **The write-scope row is provisional, and the first real caller will have to
  * revisit it.** No production caller passes a write scope today — `ingest`
- * passes `[]` under knowledge-pipeline spec §3.3 — so keeping both rules there costs nothing and
+ * passes `[]` under knowledge-pipeline architecture note §5 — so keeping both rules there costs nothing and
  * is the safe default for a value a workflow author will eventually write. But
  * `--add-dir` takes a *directory*, and `resolveScopeGlob` returns a
  * vault-relative glob, so whoever wires the first scope will join it onto the

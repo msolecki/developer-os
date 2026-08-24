@@ -25,7 +25,7 @@ describe("resolveCapabilities", () => {
   /**
    * Codex architecture former §15.1: the plugin-bundled hooks path is documented and unobserved, and
    * this plan ships no hooks file at all. That was `unknown` while hooks were
-   * merely unobserved; knowledge-pipeline spec §3.1 **declines** them, which is
+   * merely unobserved; knowledge-pipeline architecture note §2 **declines** them, which is
    * a settled fact rather than a missing one.
    */
   it("reports plugin_hooks as not-used, because no hooks file ships", () => {

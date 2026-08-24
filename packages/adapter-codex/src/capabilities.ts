@@ -16,7 +16,7 @@ export type CodexCapabilities = Readonly<Record<CodexCapabilityKey, CapabilitySt
  * `plugin_hooks` was already here under the name `UNSETTLED`: this subsystem
  * ships no hooks file (see the plan's opening decisions) and Codex architecture former §15.1 records
  * the plugin-bundled path as documented and unobserved. The other five join it
- * because knowledge-pipeline spec §3.1 declines both automatic capture paths —
+ * because knowledge-pipeline architecture note §2 declines both automatic capture paths —
  * no lifecycle hook fires, and no `developer-os run codex` wrapper is built.
  *
  * **Removing a key from this list requires, in the same change, the artifact it
@@ -46,7 +46,7 @@ export const CODEX_NOT_USED_KEYS: readonly CodexCapabilityKey[] = [
  * Degradation never points toward `yes`. A key the probe said nothing about
  * (`observations.has(key)` is `false`) is `unknown` — it used to be
  * `wrapper-required`, on the reasoning that the wrapper was a working path
- * rather than a degraded state, and knowledge-pipeline decision 3.1 declines
+ * rather than a degraded state, and knowledge-pipeline architecture note §2 declines
  * to build that wrapper. A key the probe could not check (`unavailable`) is
  * `unknown` for the older reason: "we could not ask" is not "it is not there",
  * and collapsing the two would let a probe failure masquerade as settled

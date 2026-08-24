@@ -1,9 +1,8 @@
 # Developer OS — The Knowledge Pipeline
 
-**Written 2026-08-15 by DOS-P6 Task 19**, as the document that replaces
-`plans/2026-07-21-developer-os-knowledge-pipeline.md` when that plan is deleted. The plan's design of
-record is `docs/superpowers/specs/2026-07-21-developer-os-knowledge-pipeline-design.md`, approved by
-the founder on 2026-08-13; this note is what points at it.
+**Written 2026-08-15 by DOS-P6 Task 19; closed 2026-08-24.** This is the canonical
+design and implementation record for the completed knowledge pipeline. Its completed plan and
+specification were deleted at closure; git history is the archive.
 
 `capture`, `review` and `ingest` are three CLI verbs over one data type. An observation an agent
 wrote in its own words becomes a redacted file in quarantine, a human decides on it, a vendor model
@@ -26,7 +25,9 @@ produced it.
 | the three verbs | `apps/cli/src/commands/capture.ts`, `review.ts`, `ingest.ts` |
 | the envelope, its statuses, and their transitions | `packages/brain/src/schema/capture.ts`, `packages/brain/src/capture/`, `packages/brain/src/review/` |
 | the proposal, the nine validators, and the apply | `packages/brain/src/ingest/` |
+| structured-result schemas | `packages/workflow-schema/src/vocabulary.ts`: every verb declaring `structured_result` gets one product-shipped JSON Schema; today that set is `ingest.stage` |
 | the contracts the vendor trees render | `workflows/{capture,review,ingest,brain-search,shared}/workflow.yaml`, all five at `2.0.0`. That glob matches **six** files: `workflows/doctor/workflow.yaml` is unchanged at `1.0.0` |
+| the closed verb-mapping defect | Before DOS-P6, three shipped skills in each vendor tree named commands with no handler. The effect vocabulary now binds each implemented verb to its command in `packages/workflow-schema/src/vocabulary.ts`; `workflow-schema.md` §§5, 7 records the compiler side |
 | the security suites | `tests/security/`, nine suites, 90 cases |
 | the end-to-end run against the compiled binary | `tests/e2e/knowledge-lifecycle/lifecycle.test.ts` |
 | trust boundaries and the mechanism enforcing each | `docs/architecture/threat-model.md` |
@@ -42,8 +43,8 @@ field on no code path (`tests/repository/transcript-path.test.ts`). So the obser
 from the agent, mid-session, at the point of insight: the rendered skill tells it to run
 `developer-os capture` with its own summary.
 
-**Hooks are therefore declined, not deferred** (spec §3.1). Both adapter notes recorded the blocker
-as a missing executable bit; that was wrong and is corrected here as well as in the spec, because a
+**Hooks are therefore declined, not deferred.** Both adapter notes recorded the blocker
+as a missing executable bit; that was wrong and is corrected here, because a
 later reader would otherwise solve the wrong problem. A `"type": "command"` handler names a command
 *string*, so naming the installed binary ships no script and needs no mode bit. What hooks lacked was
 content to capture.
@@ -91,8 +92,8 @@ discarded for exactly that reason.
 exhausted on 2026-08-15 and every `codex exec` ended `turn.failed` before a shell command could report
 an environment. Every capture written inside a Codex session in that window records
 `sourceAgent: "unknown"` and `sourceAgentVersion: "unknown"`. **Those captures are correct and are
-never rewritten.** A guessed row would have been exactly the undocumented capability assumption the
-design spec names as a release blocker.
+never rewritten.** A guessed row would have been exactly the undocumented capability assumption this
+subsystem treats as a release blocker.
 
 **Which of four observed variables became the row is the part worth carrying.** A shell command inside
 `codex exec` saw `CODEX_CI=1`, `CODEX_SANDBOX=seatbelt`, `CODEX_SANDBOX_NETWORK_DISABLED=1` and
@@ -141,7 +142,7 @@ resolving into the other.
 
 **A duplicate is reported at exit 0 and writes nothing** (`apps/cli/src/commands/capture.test.ts:256`), including when this
 run loses the race to write it (`:322`) and when the existing file cannot be parsed (`:290`). It is
-**not** the `O_EXCL` create spec §5.2 describes, and cannot be: no transaction-mediated write can
+**not** an `O_EXCL` create, and cannot be: no transaction-mediated write can
 deliver that precondition. `ORDER.md` carries the Foundation change that would close it — §10.2 below.
 
 ---
@@ -174,8 +175,8 @@ that verb in DOS-P6: the workflow's `decision` input offered `edit` while its on
 
 ## 5. Ingest is four transactions per capture, plus a compensating fifth
 
-**Spec §6.1's headline sentence — "one capture, one agent call, one transaction" — is false and
-cannot be made true.** It is the correction this subsystem owes its own design of record.
+**The retired design's headline sentence — "one capture, one agent call, one transaction" — is false
+and cannot be made true.** This section is the surviving correction.
 
 ```text
 accepted capture
@@ -213,7 +214,7 @@ double-apply. It is visible, and a hand edit of the status is what moves it — 
 the output while neither line alone says both. **No arrangement of these transactions removes that
 window**, because no two of them can share one.
 
-**The model gets zero declared write scopes** (spec §3.3), and each vendor's sandbox follows from that
+**The model gets zero declared write scopes**, and each vendor's sandbox follows from that
 count rather than from an argument: `invokeCodex` derives `-s read-only` from `writeScopes.length === 0`,
 and the Claude side passes a tool list carrying no write tool — no `Write`, no `Edit`, no `Bash`, no
 `Task` (`ingest.ts:210-226`, `:699-715`, `:732`). The alternative, a staging-only write scope, was rejected:
@@ -280,7 +281,7 @@ the file **never the value** (`:67-72`) — the report is written and logged, an
 output that has just read material an attacker may have written.
 
 **Two of the nine refuse at exit 5 rather than exit 1**: `secret-scan` and `write-scope`
-(`ingest.ts:284-292`). Spec §6.4 names exit 5 for write-scope; extending it to the secret scan is this
+(`ingest.ts:284-292`). The shipped contract names exit 5 for write-scope; extending it to the secret scan is this
 subsystem's reading and is stated rather than buried — a secret coming back from a model and a path
 trying to leave the vault are the same kind of event, and different in kind from a model that got a
 frontmatter key wrong.
@@ -432,7 +433,7 @@ in §10 below with their owners.
 | **NEW-20** — `capture` proves its quarantine root, then follows the declared path again | DOS-P7 by default | XS, security, **theoretical**: it needs a won race and is not a regression. The declared path is the contract — it is what `CaptureResultV1.path` publishes — so closing the window means the two paths disagreeing inside one function. `threat-model.md` §5.2 describes it |
 | **NEW-19** — `reindex` builds its owned root textually, as `capture` used to | **closed 2026-08-15** by Track R entry R1 | XS, security. `reindex` calls `resolveContainedRoot` (`apps/cli/src/commands/reindex.ts:466`) rather than joining the path textually, so a `content/_indexes` replaced by a link out of the vault is refused instead of written through. Regression tests: `tests/security/symlink-escape.test.ts:369,410` |
 | **NEW-15** — nothing that executes a discovered binary pays the check its own type demands | **closed 2026-08-17** by Track R entry R2 | S, security. `assertTrustedExecutable` canonicalizes, refuses a non-regular-file target, and walks three ancestor chains refusing an owner that is neither the current uid nor root, any other-writable directory, and a group-writable one the current uid does not own. All three executors call it — `apps/cli/src/commands/capture.ts:263`, `apps/cli/src/commands/doctor.ts:439`, `apps/cli/src/commands/ingest.ts:544`. **Three residuals stay open**: NEW-32 (a middle symlink hop, a working bypass), ACL blindness, and NEW-35 (check-then-use); NEW-33 is a false refusal awaiting the founder |
-| **NEW-16** — spec §8.2's user-configured redaction patterns are unreachable | **closed 2026-08-17** by Track R entry R2 | S. `configSchema` carries an optional `[redaction]` table (`packages/core/src/config/loader.ts:208`) and the three redacting commands bind the user's patterns through `createRedactor` at their composition roots. `tests/repository/redactor-entry.test.ts` refuses a new call site that reaches for `redactText` directly. Residuals NEW-24, NEW-25 and NEW-26 stay open |
+| **NEW-16** — user-configured redaction patterns are unreachable | **closed 2026-08-17** by Track R entry R2 | S. `configSchema` carries an optional `[redaction]` table (`packages/core/src/config/loader.ts:208`) and the three redacting commands bind the user's patterns through `createRedactor` at their composition roots. `tests/repository/redactor-entry.test.ts` refuses a new call site that reaches for `redactText` directly. Residuals NEW-24, NEW-25 and NEW-26 stay open |
 | **NEW-17** — `brain` is the one command whose config parse failure is not content-free | **closed**, removed from `BACKLOG.md` §1 | XS, security. `readConfig` now routes through `readConfigFile` (`apps/cli/src/commands/brain.ts:117`) and rethrows `ConfigurationError` unmodified, so no command parses configuration outside the wrapper |
 | **NEW-18** — `assertSafeCommand`'s four NUL branches have no test anywhere | **closed 2026-08-15** by Track R entry R1 | XS. One case per `containsNul` site — executable, working directory, any argument, stdin (`packages/security/src/process.test.ts:101,111,119,127`) |
 | **NEW-12** — the argv screen's word list also screens a value nobody chose | **closed 2026-08-17** by Track R entry R2 | XS, security-adjacent. Closed in two halves and **not** by narrowing the pattern, which the row forbade: the prose half on 2026-08-15 (`screenProseArgument` for the prompt), the path half on 2026-08-17 (`screenDerivedPathArgument` for `workingRoot` and `outputSchemaPath`, which this product assembles). The word list is byte-identical and each of its three alternatives is now guarded by a sample that isolates it. **Two residuals:** `ingest` can no longer produce a screening refusal at all, so `invokeVendor`'s refusal-detail interpolation is unreachable in production and uncovered end-to-end; and the first caller to pass a real write scope will hand a derived path to the screen that still carries the word list, re-creating the defect one field over |
@@ -450,7 +451,7 @@ They are stated in `ORDER.md` in full; the arithmetic is what matters here.
 
 1. **and 2. An optional caller-supplied precondition on `PlannedFileMutation`**
    (`ORDER.md:92-101`). The executor computes `expectedBeforeHash` from the snapshot it takes when
-   `execute()` runs, so a command cannot supply one. It costs `capture` the `O_EXCL` create spec §5.2
+  `execute()` runs, so a command cannot supply one. It costs `capture` an `O_EXCL` create
    describes — tolerable there, since the id is the content hash and colliding captures are
    byte-identical — and it costs `review --decision edit` a read-to-execute window in which **the
    discarded content is the user's own hand edit**. **Counted as two of the four and raised as one
@@ -488,7 +489,7 @@ rarer; it is unmeasured and possibly still live.
 from `quarantined`, so nothing moved a capture from `accepted` to `rejected`: a user who accepted a
 capture and changed their mind — or whose capture refused ingest deterministically — had only a hand
 edit of the frontmatter, which is what both of `ingest`'s recovery strings told them to do. The
-decision was the founder's on 2026-08-17, spec §5.5 carries the amended table, and the table is now
+decision was the founder's on 2026-08-17, this note's §6 carries the amended table, and the table is now
 `LEGAL_FROM` (`packages/brain/src/review/decide.ts:70`). Both recovery strings name the verb.
 
 **What is still open is finding the capture.** `review`'s own listing shows `quarantined` only, so a
@@ -533,22 +534,22 @@ because nothing in the repository had ever handed that file to the binary. The r
 `claude-adapter.md` §14.3 names but does not specify is still unresolved, which is why `ingest` passes
 bare tool names (`apps/cli/src/commands/ingest.ts:216-222`).
 
-**Task 17's diff needs its own security pass.** The independent review covered Tasks 1–18 only, and
-this diff changes an adapter's stdout-parsing documentation and a detection table on the capture path
-— the two places a vendor's real output first meets this product.
+**Task 17's diff received its own security pass before `5c56892`.** The independent review that
+covered Tasks 1–18 was therefore not used to waive review of its adapter stdout parsing and capture
+detection changes.
 
-### 10.4 Open items the design of record did not close
+### 10.4 Six carried-forward design residuals
 
-**Spec §13 has six, not three**, and all six are stated here with their disposition, because that
-section is the last word on what the approved design left open.
+**All six are stated here with their disposition.** This is the surviving record of what the
+completed design left open.
 
-| Spec §13 | Disposition |
+| Residual | Disposition |
 |---|---|
 | 1. `buildConflictEvidence` still has no consumer | **open.** Both adapters declined the design it was built for; it waits for the first subsystem with a real three-way merge, which is not this one |
 | 2. the Codex supported floor is one observed version, not a range | **open.** Owner: DOS-P9 |
 | 3. a re-rendered plugin tree may not be a re-loaded one — Codex resolves skills through a cache copy | **open.** Owner: DOS-P7, whose update lifecycle re-renders in place |
 | 4. `NEW-11` and `NEW-12` are repository defects rather than pipeline ones, and are not taken here | **both left this subsystem and were decided elsewhere, which is what this row predicted.** `NEW-12` is **closed** — its prose half by Task 19's review on 2026-08-15, its path half by Track R entry R2 on 2026-08-17, and §10.1 carries the two residuals it left. `NEW-11` was decided by the founder on 2026-08-17 (an invisible tag is a lint warning) and is implemented by that same entry |
-| 5. line-wrap drift wants a repository formatting decision, not a hand pass | **open and unowned.** No decision was taken here, and nothing in this subsystem's scope could take one — it is a repository-wide formatting question, and this is the only place it is written down outside the spec |
+| 5. line-wrap drift wants a repository formatting decision, not a hand pass | **open and unowned.** No decision was taken here, and nothing in this subsystem's scope could take one — it is a repository-wide formatting question, and this is the only place it is written down outside the closed design |
 | 6. automatic capture is not designed, only declined | **decided, not deferred**, and §2 above is the substance. If a future version wants it, the honest route is a documented, stable transcript contract with a regression fixture landing in the same change — the condition both adapter specs already set for lifting the refusal. Nothing in this subsystem weakened it |
 
 ---
@@ -578,4 +579,81 @@ suite that was opened. One is weaker than its claim and says so there.
 | the capability model — two gates, three values, recorded twice on purpose | `claude-adapter.md` §3, `codex-adapter.md` §3 |
 | per-vendor residuals with owners | `codex-adapter.md` §11, `claude-adapter.md` §9 |
 | transactions, ownership, exit codes, and what Foundation deliberately cannot do | `docs/architecture/foundation.md`, `foundation-constraints.md` |
-| the design as approved, before implementation corrected §6.1 and §9 | `docs/superpowers/specs/2026-07-21-developer-os-knowledge-pipeline-design.md` |
+
+---
+
+## 13. Complete former-section map for legacy source comments
+
+The completed knowledge-pipeline design was deleted at closure. Its section numbers remain in source
+comments written before 2026-08-24, so a bare `spec §…` or `design spec §…` **about the knowledge
+lifecycle** resolves through this complete table, never to a deleted document. Route ambiguous
+numbers by subject: **§8** is the surviving umbrella design only for the CLI contract or
+mutating-command flags; retired §8/§8.1–§8.5 security seams or redaction resolve here. **§12** is
+the surviving umbrella design only for Brain ordinary-Markdown compatibility; retired §12 amendments
+resolve here. A bare lifecycle **§10** is the retired verified-surfaces section and resolves through
+this map; only explicit product spec **§10** resolves to the surviving umbrella design. **§§13.1–13.5,
+14.1–14.6, and 17.5**, and explicit product spec **§11**, resolve to
+`docs/superpowers/specs/2026-07-21-developer-os-design.md`. All other knowledge-lifecycle references
+matching a former section below resolve through this note.
+
+| Former section | Surviving owner |
+|---|---|
+| §1 | this note §1 |
+| §2 | this note §2; §5 for the no-write model boundary |
+| §2.1 | this note §2; `docs/architecture/claude-adapter.md` §5; `docs/architecture/codex-adapter.md` §5 |
+| §2.2 | this note §2; `docs/architecture/claude-adapter.md` §9; `docs/architecture/codex-adapter.md` §11 |
+| §2.3 | this note §2 |
+| §2.4 | this note §5; `docs/architecture/threat-model.md` §5.3 |
+| §2.5 | this note §4 |
+| §2.6 | this note §2 |
+| §2.7 | `docs/architecture/threat-model.md` §7 |
+| §2.8 | `docs/architecture/brain.md` §2 |
+| §3 | this note §§2, 5, 8.1; `docs/architecture/claude-adapter.md` §3; `docs/architecture/codex-adapter.md` §3 |
+| §3.1 | this note §2 |
+| §3.2 | this note §2; `claude-adapter.md` §3; `codex-adapter.md` §3 |
+| §3.3 | this note §5; `threat-model.md` §§5.3–5.5 |
+| §3.4 | this note §§3–4; `foundation.md` §4 |
+| §3.5 | this note §8.1; `threat-model.md` §5.8 |
+| §4 | this note §1; `workflow-schema.md` §§5, 7 |
+| §5 | this note §§3–4, 6 |
+| §5.1 | this note §3 |
+| §5.2 | this note §3; `foundation.md` §3 |
+| §5.3 | this note §§3–4 |
+| §5.4 | this note §§2, 10.3 |
+| §5.5 | this note §6 |
+| §5.6 | this note §4 |
+| §6 | ingest — this note §§5, 7; `docs/architecture/threat-model.md` §§5.3–5.4 |
+| §6.1 | this note §5 |
+| §6.2 | this note §5; `threat-model.md` §5.3 |
+| §6.3 | this note §7 |
+| §6.4 | this note §7; `threat-model.md` §5.4 |
+| §6.5 | this note §5; `brain.md` §6.3 |
+| §6.6 | this note §1's structured-result-schemas row; `codex-adapter.md` §11 |
+| §7 | this note §§8.2, 10; `docs/architecture/workflow-schema.md` §§7–8; `docs/architecture/claude-adapter.md` §3; `docs/architecture/codex-adapter.md` §3 |
+| §7.1 | this note §8.2; `workflow-schema.md` §8.1 |
+| §7.2 | `claude-adapter.md` §3; `codex-adapter.md` §3; this note §2 |
+| §7.3 | `workflow-schema.md` §7 |
+| §7.4 | this note §10.1; `claude-adapter.md` §9; `codex-adapter.md` §11 |
+| §7.5 | this note §10; `BACKLOG.md` §1 |
+| §8 | see the subject-routing rule above; lifecycle security/redaction is owned by former §§8.1–8.5 and `docs/architecture/threat-model.md` §§5.3, 5.7–5.8 |
+| §8.1 | `threat-model.md` §5.7 |
+| §8.2 | `threat-model.md` §5.7; `BACKLOG.md` §1 NEW-16 |
+| §8.3 | `threat-model.md` §5.3 |
+| §8.4 | this note §8.1; `threat-model.md` §5.8 |
+| §8.5 | `threat-model.md` §§1–9 |
+| §9 | testing/evidence — this note §§9, 11; `docs/architecture/threat-model.md` §8; `docs/superpowers/plans/2026-07-21-developer-os-program.md` Task 6 |
+| §9.1 | `threat-model.md` §§5.7, 8; this note §11 |
+| §9.2 | `threat-model.md` §§5.3–5.4, 8; this note §11 |
+| §9.3 | `threat-model.md` §§5.4, 8; this note §11 |
+| §9.4 | `threat-model.md` §§5.5, 8; this note §11 |
+| §9.5 | `threat-model.md` §§5.10, 8; this note §11 |
+| §9.6 | `threat-model.md` §§5.9, 8; this note §11 |
+| §9.7 | this note §§1, 11; `docs/superpowers/plans/2026-07-21-developer-os-program.md` Task 6 |
+| §9.8 | this note §9; `threat-model.md` §8 |
+| §10 | verified vendor surfaces — this note §§10.3, 11; `docs/architecture/claude-adapter.md` §11; `docs/architecture/codex-adapter.md` §7 |
+| §10.1 | `docs/architecture/claude-adapter.md` §11; `docs/architecture/codex-adapter.md` §7; this note §11; `docs/superpowers/plans/2026-07-21-developer-os-program.md` Task 6 |
+| §10.2 | this note §10.3; `codex-adapter.md` §7 |
+| §10.3 | this note §§2, 10.3 |
+| §11 | this note §§1–8 for the capture/review/ingest interfaces, commands, handlers, redaction and persistent key; `docs/architecture/codex-adapter.md` §§7, 11 for schemas and invocation; `docs/architecture/claude-adapter.md` §§8, 11 for rendered handler commands and invocation; `docs/architecture/threat-model.md` for the interface boundaries |
+| §12 | this note §§2, 4–8; `BACKLOG.md` §8 |
+| §13 | this note §10.4; `BACKLOG.md` §§1–3 |

@@ -124,7 +124,7 @@ describe("resolveCapabilities", () => {
 
 /**
  * Six of the nine keys name surfaces this product decided not to touch
- * (knowledge-pipeline spec §3.1, §3.2): no hooks file ships, and the
+ * (knowledge-pipeline architecture note §2): no hooks file ships, and the
  * `developer-os run claude` wrapper the old word advised is not being built.
  * A state that advises a command which will not exist is a value that
  * validates while the property it names is false.

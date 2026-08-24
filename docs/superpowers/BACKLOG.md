@@ -51,23 +51,23 @@ replacement text says where it went.
 
 ## 0. Status at a glance
 
-Open work only. Program Tasks 0 to 5 are closed and are not rows here.
+Open work only. Program Tasks 0 to 6 are closed and are not rows here.
 
 | Area | Where | What is left |
 |---|---|---|
-| Program (umbrella) | 1 plan | Tasks 6–9 open, **25 unticked steps**; Tasks 0–5 closed and not rows here |
-| DOS-P6 | spec approved and plan written, both 2026-08-13 | **one unticked step** — Task 19 Step 6. Its exact local gate passed, its exact-path work is committed, and `origin/development` is at `c46b82c`; the remote CI verdict is unobserved. Once that run is green, A10 still needs its closure commit and observed CI on that commit. The founder rejected a separate branch and directed the 2026-08-24 continuing session not to push. Task 17 closed 2026-08-20 when NEW-21 did; Tasks 1–18 have landed and Task 19 Steps 1–5 are checked |
+| Program (umbrella) | 1 plan | Tasks 7–9 open, **25 unticked steps**; Tasks 0–6 closed and not rows here |
 | DOS-P7 | spec 1 of 2 written, awaiting approval | approval of spec 1; spec 2; 2 plans; 2 implementations |
 | DOS-P10, DOS-P11, DOS-P12 | no documents; added 2026-08-20 | **3 specs, 3 plans, 3 implementations.** The shared-runtime layers no subsystem owned: thirty-eight instruction artifacts, eleven event hooks, nine tooling scripts |
 | DOS-P8 cutover, DOS-P9 release | program plan Tasks 8–9 | every artifact; one open decision each. **The cutover's scope grew on 2026-08-20** — it now retires the shared runtime entirely, so it follows DOS-P12 rather than DOS-P7 |
-| Repository-level | §1 | **twenty-four open rows** of twenty-nine headings, five closed — NEW-13, NEW-30, NEW-41 and NEW-43 on 2026-08-21, NEW-48 on 2026-08-24 — and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **four** need somebody or something no session has (NEW-42 an interactive vendor session, NEW-45 the founder's credits, NEW-20 deliberately not fixed, NEW-7 a machine with Obsidian); **sixteen** of the eighteen that came out of R2's own reviews are still open — NEW-27 and NEW-28 from closing NEW-12, NEW-24/25/26/29 from NEW-16, NEW-30 and NEW-31 from NEW-11, NEW-32, NEW-33 and NEW-35 from NEW-15, NEW-34 from Foundation request 2, and NEW-36, NEW-37, NEW-38 and NEW-39 from request 3, NEW-40 from Task 8, and NEW-41 from Task 9; **four** — NEW-44, NEW-46, NEW-47 and **NEW-49** — are startable in a session. 4 + 16 + 4 = 24. **NEW-21 left six rows and one has gone; NEW-43 was one of four a session could have taken**, not the only one — NEW-44, NEW-46 and NEW-47 are still there, and NEW-47 needs no credits either |
+| Repository-level | §1 | **twenty-four open rows** of twenty-nine headings, five closed — NEW-13, NEW-30, NEW-41 and NEW-43 on 2026-08-21, NEW-48 on 2026-08-24 — and the breakdown adds up: **none** awaits a fix from Track R **R2** — all five decided rows closed 2026-08-17; **four** need somebody or something no session has (NEW-42 an interactive vendor session, NEW-45 the founder's credits, NEW-20 deliberately not fixed, NEW-7 a machine with Obsidian); **sixteen** of the eighteen that came out of R2's own reviews are still open — NEW-27 and NEW-28 from closing NEW-12, NEW-24/25/26/29 from NEW-16, NEW-31 from NEW-11, NEW-32, NEW-33 and NEW-35 from NEW-15, NEW-34 from Foundation request 2, and NEW-36, NEW-37, NEW-38, NEW-39 and NEW-40 from requests 3 and Task 8; NEW-30 and NEW-41 are the two closed review rows. **Four** — NEW-44, NEW-46, NEW-47 and **NEW-49** — are startable in a session. 4 + 16 + 4 = 24. **NEW-21 left six rows and one has gone; NEW-43 was one of four a session could have taken**, not the only one — NEW-44, NEW-46 and NEW-47 are still there, and NEW-47 needs no credits either |
 | Repository infrastructure | §5 | **nothing** — the last row left 2026-08-14 with `docs/architecture/threat-model.md`; §5 is now what four closures left behind |
 | Legacy runtime | §6 | **nothing** — closed 2026-08-10, checklist deleted; §6 is what a cutover still needs to know |
 | Outside this room | `ORDER.md` Track L | license approval, remote verification |
 
-**Foundation, DOS-P2, DOS-P3, DOS-P4 and DOS-P5 are closed.** None is a row above. What each left
+**Foundation, DOS-P2, DOS-P3, DOS-P4, DOS-P5 and DOS-P6 are closed.** None is a row above. What each left
 behind is `docs/architecture/foundation.md`, `brain.md`, `workflow-schema.md`, `claude-adapter.md`
-and `codex-adapter.md`, plus §2 here for Foundation's open questions; every one of those plans is
+and `codex-adapter.md`, plus `knowledge-pipeline.md` and `threat-model.md` for DOS-P6, and §2 here
+for Foundation's open questions; every one of those plans is
 deleted and git history is the archive. **Both adapter notes are written for DOS-P6**, the one
 subsystem that consumes both — `codex-adapter.md` §9 carries the two-adapter table, while its §11
 and `claude-adapter.md` §9 distinguish closed findings from live residuals with owners.
@@ -375,7 +375,7 @@ not.
 - **How to close it:** run `developer-os capture` from inside each vendor's interactive session with
   every `CLAUDE*`/`CODEX*`/`ANTHROPIC*` variable stripped from the parent, and record what the child
   sees. It needs a human at a terminal rather than an agent, which is why it is registered rather than
-  done. Amend knowledge-pipeline spec §10.3 with what is found, dated, on the terms that section sets.
+  done. Record what is found, dated, in `docs/architecture/knowledge-pipeline.md` §10.
 
 ### NEW-20 — `capture` proves its quarantine root, then follows the path again
 
@@ -1032,10 +1032,9 @@ that subsystem in §3.
 
 ## 3. Missing specs and plans
 
-**Ten documents left, across four subsystems.** DOS-P6's spec was approved by the founder on
-2026-08-13 and its implementation plan was written the same day. On the remaining product path,
-DOS-P7's first split spec exists; its second split spec plus the plans for both DOS-P7 halves and
-the specs and plans for DOS-P10 through DOS-P12 still owe nine documents.
+**Ten documents total, across four open subsystems.** DOS-P7's first split spec exists; its second
+spec plus the plans for both DOS-P7 halves and the specs and plans for DOS-P10 through DOS-P12 still
+owe nine documents.
 
 **The three new ones exist because a parity read found layers with no owner.** On 2026-08-20 the
 founder ruled that the legacy shared runtime is retired **entirely** rather than partially. Read
@@ -1048,7 +1047,7 @@ Each subsystem after Foundation requires an approved spec **and** an implementat
 before any code work — this is a Global Constraint of the program plan, not a preference.
 Every spec starts with a brainstorming/approval cycle, and approval is the founder's.
 
-**The four closed subsystems are not rows here.** Each deleted its plan at closure and its completed
+**The five closed subsystems are not rows here.** Each deleted its plan at closure and its completed
 spec on 2026-08-24, after the architecture note absorbed the surviving record:
 
 | Closed | Surviving design and implementation record | Plan recoverable at |
@@ -1057,40 +1056,7 @@ spec on 2026-08-24, after the architecture note absorbed the surviving record:
 | DOS-P3 | `docs/architecture/workflow-schema.md` | `a47e965` |
 | DOS-P4 | `docs/architecture/claude-adapter.md` | `17968cb` |
 | DOS-P5 | `docs/architecture/codex-adapter.md` | the commit that closed DOS-P5 |
-
-**Read both adapter notes before starting DOS-P6** — between them they record why in-place discovery
-beat a marketplace copy on one vendor and a local marketplace won on the other, the two-adapter
-table DOS-P6 designs against, and thirteen residuals it inherits. The Codex note's §7 carries the
-four amendments forced on 2026-08-12 by first contact with a real binary.
-
-### DOS-P6 — Knowledge pipeline hardening
-
-**Kept here only until Task 19 Step 6 closes A10.** The spec's obligations — capture fields,
-lifecycle transitions, retention, redaction classes, atomic quarantine writes, post-redaction
-deduplication, accept/edit/reject review, the untrusted-source contract, the six required security
-suites and the five gate criteria — are **discharged**, and the record of each is
-`docs/architecture/knowledge-pipeline.md` and program plan Task 6's **Test** table. Do not read the
-list of what the spec "must decide" back into this section; it was decided and shipped.
-
-- **Spec:** `specs/2026-07-21-developer-os-knowledge-pipeline-design.md` — **approved by the founder
-  2026-08-13.** Read its §3 first. The decision that reshapes the subsystem is 3.1: capture content is
-  **agent-authored**, so no hooks ship, `developer-os run claude|codex` is never built, and **nothing
-  automatic captures anything**. §12 lists the six documents it amends; §8 here carries them.
-- **Plan:** `plans/2026-07-21-developer-os-knowledge-pipeline.md` — written 2026-08-13, all nineteen
-  tasks landed. **One step is unticked** and it is the whole of what is left: Task 19 Step 6.
-  Task 17 closed 2026-08-20 with NEW-21; Task 19 Step 5 landed 2026-08-21.
-- **Program task:** 6 · **Complexity:** L · **Blocked by:** nothing since 2026-08-20, when NEW-21
-  closed. It had been held on that row by the founder's decision of 2026-08-15 to keep the subsystem
-  open rather than close it carrying a residual.
-- **Absorbs:** legacy follow-up Steps 5, 7, 9 and 12, frozen on the legacy runtime 2026-07-27 and
-  rebuilt here instead.
-- **The residuals it hands forward**, of the thirteen it inherited from the two adapters:
-  the **direct-invocation `maxTurns` asymmetry** — Claude accepts a bound, Codex has no field, while
-  the shared `agent.prompt` parser refuses the key fail-closed until DOS-P7 resolves both vendors —
-  and **NEW-42**, that no interactive vendor session has ever been observed.
-  **The JSONL terminal-event rule is no longer among them** — NEW-21 settled it on 2026-08-20 by
-  showing it was wrong rather than merely unverified, and the fix shipped with the observation.
-
+| DOS-P6 | `docs/architecture/knowledge-pipeline.md`, `docs/architecture/threat-model.md` | the commit that closed DOS-P6 |
 
 ### DOS-P7 — Git, automation, update and release lifecycle
 
@@ -1102,10 +1068,8 @@ list of what the spec "must decide" back into this section; it was decided and s
 - **Split on the founder's ruling of 2026-08-21**, because the four areas are two clusters rather than
   four: configuration mutability gates both opt-ins, update gates migration, and between the clusters
   Git sync and checksum verification share only the manifest. §8 carries the program plan amendment.
-- **Program task:** 7 · **Complexity:** L · **Blocked by:** nothing, since 2026-08-21. It was blocked
-  by DOS-P6 under the strict-sequence ruling of 2026-08-20; the founder suspended that ruling on
-  2026-08-21 once A10 turned out to be held on a decision rather than on work, so the spec cycle could
-  start while A10 waits for its remote CI verdict.
+- **Program task:** 7 · **Complexity:** L · **Blocked by:** founder approval of spec 1. Its plan is not
+  written before that approval.
 - **The spec must decide:** Git initialization, existing-remote connection, scoped
   staging, commit, push and every error state; the exact `launchd` jobs, schedules, logs,
   lock ownership and opt-in boundaries; signed/checksummed release metadata; dry-run
@@ -1117,7 +1081,7 @@ list of what the spec "must decide" back into this section; it was decided and s
   uninstall removes only manifest-owned artifacts **and the redaction key**.
 - **That last clause is an amendment, ratified 2026-08-13 and discharged by DOS-P6 Task 1.** The gate
   read "only manifest-owned artifacts" without exception. The redaction key is deliberately **not** a
-  manifest artifact — knowledge-pipeline spec §3.5 keeps it out — and spec §8.4 requires `uninstall`
+  manifest artifact — `docs/architecture/knowledge-pipeline.md` §8.1 keeps it out — and requires `uninstall`
   to remove it, so the gate as written forbade what another approved section required. Making the key
   a hash-exempt manifest entry was rejected: it would put the key's path into a file that every
   enumerating diagnostic reads. **The exception is exactly one path wide and is asserted by test.**
@@ -1465,12 +1429,12 @@ one in front of you is still current.
 **Completed-spec migration, directed by the founder 2026-08-24.** The Brain, workflow compiler,
 Claude adapter, Codex adapter, and kernel transaction-lock specs governed no unfinished work, so
 their surviving contracts moved into the corresponding architecture notes and the five specs were
-deleted. References in the still-active product and knowledge-pipeline specs were retargeted to
-those notes; no product contract changed. `SESSION.md` and this file now make that the standing
+deleted. References in still-active documents were retargeted to those notes; no product contract
+changed. `SESSION.md` and this file now make that the standing
 retention rule. This is a ratified documentation migration, not an unratified amendment row.
 
-**The knowledge-pipeline spec's six were ratified on 2026-08-13**, in the same conversation that
-approved the spec. They are listed below with their outcome rather than their question, and each is
+**The knowledge-pipeline design's six decisions were ratified on 2026-08-13**, in the same conversation
+that approved it. They are listed below with their outcome rather than their question, and each is
 discharged by the DOS-P6 task named beside it — a row leaves this table when the amended document
 carries the cross-reference, not when the decision is taken.
 
@@ -1495,9 +1459,9 @@ was written into the amended documents on 2026-08-21:
 
 | Amended document | What it now says, that it did not | Discharged by |
 |---|---|---|
-| knowledge-pipeline spec §12 | **five** canonical workflows go to `2.0.0`, not two. It said two. `ingest` gains a step and widens its write scopes, `brain-search` gains one and widens its read scopes, and `review` gains the `capture.edit` step its `decision` input already advertised — **with its scopes unchanged, which is what makes it the easy one to miss.** A step list and a scope set are both the contract, and `extends` pins `id@version` exactly | 7 |
+| `docs/architecture/knowledge-pipeline.md` §2 | **five** canonical workflows go to `2.0.0`, not two. The retired design said two. `ingest` gains a step and widens its write scopes, `brain-search` gains one and widens its read scopes, and `review` gains the `capture.edit` step its `decision` input already advertised — **with its scopes unchanged, which is what makes it the easy one to miss.** A step list and a scope set are both the contract, and `extends` pins `id@version` exactly | 7 |
 | `docs/architecture/workflow-schema.md` §8.1 | the globs stop being literals and resolve at the **handler boundary** through `resolveScopeGlob(glob, config)`; the table keeps canonical names. Templating inside the YAML was rejected — it invents a substitution syntax in the schema and puts a configuration value in the one document meant to be comparable across installs. The section had no mention of either | 6 |
-| §7 of this file, the DOS-P7 uninstall gate | "…and the redaction key". The gate read "only manifest-owned artifacts" with no exception, while spec §3.5 keeps the key out of the manifest and §8.4 requires `uninstall` to remove it — so the gate forbade what another approved section required | 1 |
+| §7 of this file, the DOS-P7 uninstall gate | "…and the redaction key". The gate read "only manifest-owned artifacts" with no exception, while `docs/architecture/knowledge-pipeline.md` §8.1 keeps the key out of the manifest and requires `uninstall` to remove it — so the gate forbade what another approved section required | 1 |
 | product design spec §13.4 | the `deterministic reindex` validator runs over an **in-memory projection**, not "the staged result" this section named; nothing is staged at that point. Staging first was rejected because it would make every file in staging attacker-influenced content the validators must re-read as hostile | 12 |
 | product design spec §17.5 | the narrowing to six suites **was not taken** — the plan shipped eight, so `network` and `concurrent-edit`, which §9 dropped and §7 still requires, are covered and this list stands as written | 15 |
 | program plan Task 6, third box | already carried it. The box records that hooks are **declined** and corrects the stated blocker: a `"type": "command"` handler needs no executable bit, and what hooks lacked was content to capture | 19 |
@@ -1529,9 +1493,9 @@ is precisely the kind of rule that goes unread by whoever is editing past it.
 |---|---|---|
 | `docs/architecture/foundation.md` §2, the frozen `configSchema` | an **optional** `[redaction]` table with a bounded list of literal `patterns`. Additive on the same terms as the `brain` section that preceded it: `configSchema` stays `.strict()`, `schemaVersion` stays `1`, `serializeConfig` emits the table only when the key is present, and `exactOptionalPropertyTypes` keeps absent distinguishable from present-and-undefined — so a configuration written before it still loads and still serializes byte-identically. **Without it spec §8.2's user-extensible redaction class is unreachable**: `redactText` took the option and no production caller passed it, because there was no key a user could set | R2 Task 2, `BACKLOG.md` §1 **NEW-16** |
 | `docs/architecture/foundation.md` §2, the frozen `CliError` | an **optional** `data?: RedactedPayload` member, so a partly-succeeded run can report machine-readably what moved. Additive on the same terms as the two config amendments: absent when unset, so every `--json` document a command emitted before it is byte-identical, and no existing caller changes because nothing populates a field that does not exist yet. It creates a new **publishing** surface, which the other two did not — the failure arm is serialized into `--json` — so `failureFrom` redacts every string leaf including keys, and the slot is typed `RedactedPayload`, a `unique symbol` brand whose only producer is `redactPayload`, which takes the redactor and performs the walk rather than asserting. Every *shape* that writes the field another way is a compile error, `failure` rebuilds the arm it publishes from five named fields — `kind`, `message` and `recovery` coerced to strings, `paths` copied and frozen, `data` accepted only by identity — the arm is branded so a hand-built one is a compile error, and `publish` — which decides the body and the exit status in one place, because they were decided separately and disagreed — rebuilds any failure arm `failure` did not return — the last of the three being what actually closes the class, since a phantom brand survives `Object.assign`, spread, `Proxy` and `structuredClone` while the runtime guarantees it stood for do not. What remains, verified by running each candidate against the built module, is exactly two things: a redactor that does not redact, and a producer call outside the composition root. `Object.defineProperty` and `Object.assign` before the call are **not** among them, and they are closed by two different mechanisms rather than one: the copying forms yield a value the payload registry does not hold, so `failure` drops the field, while in-place `Object.assign(payload, …)` returns the payload itself and is refused by the deep freeze. Three earlier versions of this sentence were wrong, the last of them by crediting the registry with both. The brand replaced a repository sweep that tried to enumerate the syntax instead and was falsified in five review rounds. The sweep survives with a different job: its load-bearing rule is that `redactPayload` is called only at the composition root, and beside it it detects over thirty spellings, split between casts onto the brand and ways of reaching the producer under another name; the exact split is left to the test file, because two reviews counting it disagreed and three documents repeating a number is how that drifts. The enumeration no longer carries the guarantee, so falsifying one more spelling costs a row on a list rather than the property. Three commands wanted it: `ingest`, `brain lint`, and `doctor` (recorded in `releases/foundation-checkpoint.md`) | Track R R2 Task 7, 2026-08-19 |
-| knowledge-pipeline spec §5.5, the transition table | a row for **`accepted → rejected`**, taken by `review --decision reject`. The table had one row per decision, all from `quarantined`, so a user who accepted a capture and then changed their mind had no verb — the only way to stop `ingest` retrying it was to hand-edit the frontmatter back to `quarantined`, which is what both of `ingest`'s recovery strings told them to do. A product that recommends a hand edit of its own data has a gap where a verb should be, and that same hand edit is what `failed` exists to describe going wrong. **`accept` and `edit` deliberately did not gain the equivalent row**: re-accepting is not a transition — `accepted → accepted` is not a row this table can hold — and `edit` maps to `quarantined`, so running it from `accepted` would silently withdraw an approval as a side effect of changing the text — the verb's name says nothing about un-approving, and a user who wants that has `reject`. Rejection is the only safe direction from `accepted`, because `rejected` is terminal for automation and no later phase reads it. **`CAPTURE_STATUSES` gains no member** — a row in a transition table, not a seventh status. Both retired recovery strings now name the verb, and `review`'s own refusal names the decisions legal from wherever the capture actually is rather than telling the user to edit their frontmatter | Track R R2 Task 9, 2026-08-20 |
+| `docs/architecture/knowledge-pipeline.md` §6, the transition table | a row for **`accepted → rejected`**, taken by `review --decision reject`. The table had one row per decision, all from `quarantined`, so a user who accepted a capture and then changed their mind had no verb — the only way to stop `ingest` retrying it was to hand-edit the frontmatter back to `quarantined`, which is what both of `ingest`'s recovery strings told them to do. A product that recommends a hand edit of its own data has a gap where a verb should be, and that same hand edit is what `failed` exists to describe going wrong. **`accept` and `edit` deliberately did not gain the equivalent row**: re-accepting is not a transition — `accepted → accepted` is not a row this table can hold — and `edit` maps to `quarantined`, so running it from `accepted` would silently withdraw an approval as a side effect of changing the text — the verb's name says nothing about un-approving, and a user who wants that has `reject`. Rejection is the only safe direction from `accepted`, because `rejected` is terminal for automation and no later phase reads it. **`CAPTURE_STATUSES` gains no member** — a row in a transition table, not a seventh status. Both retired recovery strings now name the verb, and `review`'s own refusal names the decisions legal from wherever the capture actually is rather than telling the user to edit their frontmatter | Track R R2 Task 9, 2026-08-20 |
 | `plans/2026-07-21-developer-os-program.md`, Task 7 | **Task 7 produces two specs and two plans, not one of each.** Its "must decide" list covers Git, scheduled automation, release and update, and schema migration; read against their dependencies those are two clusters — configuration mutability gates both opt-ins, update gates migration — sharing only the manifest. The checkpoint is unchanged and is met when **both** halves land: nothing is added to or removed from what Task 7 must deliver, only the number of documents it delivers it in. The first, `specs/2026-08-21-developer-os-opt-in-surfaces-design.md`, is written; the second is owed after it is approved. **Registered rather than applied**, because the program plan's Global Constraints require an approved spec before the work each task names, and this row is the founder's to ratify | the DOS-P7 spec cycle, 2026-08-21 |
-| knowledge-pipeline spec §5.6, the `review` surface block | a `--status <status>` line. **§5.5's `accepted → rejected` row had no route to it**: that transition exists for a user who accepts a capture and then changes their mind, and the listing filtered to `quarantined`, so the id was unreachable through the command — the verb existed and nothing led to it. **The default is unchanged rather than widened**, which is the narrower of the two answers NEW-41 left open; the other, mixing statuses in one listing, needs the listing to say which row is which and is a display decision the row declined to take. The flag is refused beside `--id` or `--decision`, because it chooses what a listing shows rather than what a decision applies to | `BACKLOG.md` §1 NEW-41, 2026-08-21 |
+| `docs/architecture/knowledge-pipeline.md` §4, the `review` surface | a `--status <status>` line. **The `accepted → rejected` row had no route to it**: that transition exists for a user who accepts a capture and then changes their mind, and the listing filtered to `quarantined`, so the id was unreachable through the command — the verb existed and nothing led to it. **The default is unchanged rather than widened**, which is the narrower of the two answers NEW-41 left open; the other, mixing statuses in one listing, needs the listing to say which row is which and is a display decision the row declined to take. The flag is refused beside `--id` or `--decision`, because it chooses what a listing shows rather than what a decision applies to | `BACKLOG.md` §1 NEW-41, 2026-08-21 |
 
 **One row was raised by the scope ruling of 2026-08-20**, and it is ratified in substance and
 undischarged in the document. The founder ruled that the legacy shared runtime is retired entirely and
@@ -1554,35 +1518,35 @@ cross-reference.
 
 | Amended | Outcome, **ratified 2026-08-15** | Raised by |
 |---|---|---|
-| the knowledge-pipeline spec §6.1, "one capture, one agent call, **one transaction**" | the last third is false and cannot be made true. The ladder performs four mutations and **the executor's lock is per-execution**, so it ships as **four transactions per capture** — `ingest-stage` (the capture file, `accepted → staging`), `ingest-apply` (the proposed notes), `ingest-reindex` (the index artifacts), `ingest-ingested` (the capture file, `staging → ingested`) — plus a compensating `ingest-rollback` on failure. Two independent reasons no two of them merge: `BrainService.reindex()` **reads the vault**, so it cannot run until the apply has finalized; and `validateChangePlan` grants ownership from the manifest, where the index artifacts are recorded and a capture is deliberately absent (spec §3.4 keeps a capture hand-editable in Obsidian). **The residual, accepted rather than closed:** a crash between the apply and the last transaction leaves a capture at `staging` with its notes already applied — inert, because the next run selects only `accepted` captures and cannot double-apply, and recoverable by `repair` plus a hand edit. **Cost of overturning:** there is no cheaper arrangement to overturn it to; the alternative is a Foundation change letting one execution span a read of what it just wrote. **Ratified as shipped by the founder on 2026-08-15**, four transactions and the accepted `staging`-with-notes residual together; the Foundation alternative was declined rather than deferred | DOS-P6 Task 13, plan correction 4 |
-| the knowledge-pipeline spec §6.3, `confidence and lifecycle` | the spec names the validator and says "required frontmatter for the note's declared stage is absent" — **it never says which frontmatter**. Shipped rule: `established` requires `reviewed` to be a date, `deprecated` requires `updated` to be present, `emerging` requires nothing extra. It is **defensible but invented**: nothing in the tree enforced either before this task. It is grounded in a contradiction the product already flags — `lint.ts:285-294` grades an agent-authored, never-reviewed note as `provenance` at severity **warn**, so ingest turns only the narrower `established`-while-never-reviewed claim into a refusal. **The broad reading was checked and rejected**: refusing every `author: agent` + `reviewed: null` note would refuse every proposal this pipeline can produce. **Cost of overturning:** two `if`s at `packages/brain/src/ingest/validate.ts:444-461`; this validator writes no data, so nothing has to be migrated. **Ratified as shipped by the founder on 2026-08-15**: the invented rule stands as written, so the spec's silence is closed by this row rather than by a change to the code | DOS-P6 Task 12, `validate.ts` |
+| `docs/architecture/knowledge-pipeline.md` §5, four transactions per capture | The retired design's one-transaction claim is false: `ingest-stage`, `ingest-apply`, `ingest-reindex`, and `ingest-ingested` are separate transactions, with compensating `ingest-rollback`. `BrainService.reindex()` must read finalized notes, while manifest ownership only exists after apply, so none can merge. The accepted residual is `staging` with notes after a crash; it is inert and recoverable by `repair` plus a hand edit. A Foundation execution that spans a read of its own write was declined | DOS-P6 Task 13 |
+| `docs/architecture/knowledge-pipeline.md` §7, `confidence and lifecycle` | The retired design named this validator but did not say which frontmatter was required. Shipped rule: `established` requires a `reviewed` date, `deprecated` requires `updated`, and `emerging` needs neither. The narrower `established`-while-never-reviewed refusal was ratified as shipped; refusing every agent-authored unreviewed note would refuse every proposal | DOS-P6 Task 12, `validate.ts` |
 
 **One row is the founder correcting the spec after a pre-flight scan**, and it is the most
 consequential amendment DOS-P6 has taken:
 
 | Amended | By | What changed |
 |---|---|---|
-| `specs/…-knowledge-pipeline-design.md` §5.3 and §5.6 | an adversarial pre-flight scan of Tasks 3–19, **settled by the founder 2026-08-13** | **`captureId` becomes immutable** — assigned once at capture time, never recomputed. As written, §5.3 recomputed it on every hand edit and §5.6 refused on a mismatch; since the id is `H(redacted content)`, *any* content-changing edit changed it, so **every** edit refused and the pasted secret stayed in the vault file. The verb decision 1 bumped `review` to `2.0.0` for could never do the one thing it exists for, and Task 8's parse-level assertion would have looked clean because a refusal object carries no content. Now `deduplicationHash` tracks content, `edit` re-redacts and rewrites in place, and the mismatch refusal keeps the job it was really for: a renamed file or a hand-edited id field. **Cost accepted:** two captures whose text converges after an edit can both exist |
+| `docs/architecture/knowledge-pipeline.md` §§3–4 | an adversarial pre-flight scan of Tasks 3–19, **settled by the founder 2026-08-13** | **`captureId` becomes immutable** — assigned once at capture time, never recomputed. The retired design recomputed it on every hand edit and refused a mismatch; any content-changing edit therefore refused and left a pasted secret in the vault. `deduplicationHash` now tracks content, `edit` re-redacts and rewrites in place, and a mismatch still catches a renamed file or hand-edited id. **Cost accepted:** two captures whose text converge after an edit can both exist |
 
 **One row is the plan correcting itself**, which is the shape the DOS-P5 note below warns to expect:
 
 | Amended | By | What changed |
 |---|---|---|
-| `plans/…-knowledge-pipeline.md` Task 1, Step 3 | the fresh-context review of Task 1's first implementation, **settled by the founder 2026-08-13** | the instruction "`createProductionContext` replaces `randomBytes(…)` with `loadOrCreateRedactionKey(paths.stateDir)`" was **wrong, not merely awkward**. Context is built before dispatch for every command, so a create-if-missing load there made `doctor`, `status` and both `--dry-run` commands write a new secret — against Foundation's "`doctor` reports rather than repairs", which that plan's own Global Constraints carry. Three consequences followed: `uninstall` removed the key and the next command put it back permanently, because `runUninstall` early-returns on an absent manifest; a symlinked or truncated key failed **every** command including the diagnostic that would have reported it; and a FIFO at that path hung the CLI forever, since `open(O_RDONLY)` blocks before the file-type guard runs. **The load splits in two** — a read-only, never-create, never-throw `readRedactionKey` at the composition root, and the create-capable `loadOrCreateRedactionKey` at each command's own point of use |
+| `docs/architecture/knowledge-pipeline.md` §8.1 | the fresh-context review of Task 1's first implementation, **settled by the founder 2026-08-13** | A create-if-missing load at the composition root was wrong: `doctor`, `status`, and `--dry-run` would create a secret. The load splits into never-create, never-throw `readRedactionKey` at the root and create-capable `loadOrCreateRedactionKey` only at each command's point of use |
 
-**Two approved architecture notes are corrected by this work, and the correction is the spec's
-rather than the plan's**, recorded here because §8 is where a reader of either note learns its
+**Two approved architecture notes are corrected by this work, and the correction is the founder's
+ratified decision rather than the implementation plan's**, recorded here because §8 is where a reader of either note learns its
 status:
 
 | Amended | By | What changed |
 |---|---|---|
-| `docs/architecture/claude-adapter.md` §5 and `docs/architecture/codex-adapter.md` §5 | the knowledge-pipeline spec §3.1, approved 2026-08-13 | both state that restoring hooks needs "the hook bodies, a mechanism for marking a generated artifact executable, and a test that observes a hook firing". **The middle requirement was never needed** — a `"type": "command"` handler names a command string, so nothing executable ships. What hooks lacked was content to capture. Hooks are now **declined**, not owed |
-| `docs/architecture/workflow-schema.md` §7 and §8.1 | the same spec, and this plan's decision 2 | three of §7's four recorded gaps close here — the `review` workflow's missing `capture.edit`, `ingest` stopping at apply, and `brain-search` never reading a note. §8.1's glob residual is discharged in the narrower `resolveScopeGlob` form rather than by templating the contract |
+| `docs/architecture/claude-adapter.md` §5 and `docs/architecture/codex-adapter.md` §5 | `docs/architecture/knowledge-pipeline.md` §2, approved 2026-08-13 | both state that restoring hooks needs "the hook bodies, a mechanism for marking a generated artifact executable, and a test that observes a hook firing". **The middle requirement was never needed** — a `"type": "command"` handler names a command string, so nothing executable ships. What hooks lacked was content to capture. Hooks are now **declined**, not owed |
+| `docs/architecture/workflow-schema.md` §7 and §8.1 | `docs/architecture/knowledge-pipeline.md` §§2 and 8.2 | three of §7's four recorded gaps close here — the `review` workflow's missing `capture.edit`, `ingest` stopping at apply, and `brain-search` never reading a note. §8.1's glob residual is discharged in the narrower `resolveScopeGlob` form rather than by templating the contract |
 
-**Two canonical workflows change by the spec's own decision, and that is a contract change rather
+**Two canonical workflows change by the founder-approved decision, and that is a contract change rather
 than an amendment:** `workflows/capture/workflow.yaml` drops `session_end` and
 `workflows/shared/workflow.yaml` drops `session_start` — both name triggers nothing can fire.
-**Three more change by the plan's**, which is the first ratified row above: `ingest`, `brain-search`
+**Three more change by the implementation correction**, which is the first ratified row above: `ingest`, `brain-search`
 and `review`. All five go to `2.0.0`.
 
 **Every amendment raised through DOS-P5 was ratified** by the founder on or before 2026-08-12, and

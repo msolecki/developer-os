@@ -277,8 +277,8 @@ async function buildPlan(context: CliContext): Promise<InitPlan> {
   }
 
   /**
-   * One JSON Schema file per structured-result verb (knowledge-pipeline spec
-   * §6.6), planned **per file** rather than gated on "this run created the
+   * One JSON Schema file per structured-result verb (knowledge-pipeline architecture note
+   * §1's structured-result schemas row), planned **per file** rather than gated on "this run created the
    * home". `init` is the upgrade path as well as the install path, so a run on
    * a machine that already has a home is the run that has to install a schema
    * added since — while an unconditional plan would emit a `create` over a
@@ -715,7 +715,7 @@ export async function runInit(
      * `capture` ever records depends on this being the same key every run.
      * Deliberately outside `mutationsFor`/`recordArtifacts`: it is not a
      * managed artifact, so it never appears in `installation-manifest.json`
-     * and a drift report never hashes it (DOS-P6 Task 1, spec §3.5, §8.4).
+     * and a drift report never hashes it (DOS-P6 Task 1, knowledge-pipeline architecture note §8.1).
      *
      * It is not in `plan.created` either, and that gap is deliberate:
      * `created` enumerates the *managed artifacts* a run installs, so naming a

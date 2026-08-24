@@ -18,7 +18,7 @@ export type ClaudeCapabilities = Readonly<
  * `plugin_hooks` was already here under the name `UNSETTLED`, for this
  * adapter's missing hooks file (founder-ratified 2026-08-12 — see `plugin.ts`'s
  * docblock on `hooks/hooks.json`). The other five join it because
- * knowledge-pipeline spec §3.1 declines both automatic capture paths: no
+ * knowledge-pipeline architecture note §2 declines both automatic capture paths: no
  * lifecycle hook fires, and no `developer-os run claude` wrapper is built, so
  * the three lifecycle keys describe surfaces nothing will ever reach.
  * `subagents` and `durable_project_guidance` are reported for `doctor`'s matrix
@@ -45,7 +45,7 @@ export const CLAUDE_NOT_USED_KEYS: readonly ClaudeCapabilityKey[] = [
  * facts and only one of them justifies telling a user their install lacks a
  * feature. Everything else uncertain reports `unknown` too: it used to report
  * `wrapper-required`, which claimed a wrapper produced the same capture, and
- * knowledge-pipeline decision 3.1 declines to build that wrapper.
+ * knowledge-pipeline architecture note §2 declines to build that wrapper.
  *
  * `CLAUDE_NOT_USED_KEYS` resolve unconditionally, before the table or the
  * observation is even consulted — no artifact ships for any of them, so a table

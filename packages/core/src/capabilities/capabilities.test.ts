@@ -13,7 +13,7 @@ describe("the shared capability vocabulary", () => {
 
   /**
    * `wrapper-required` is **replaced**, not kept beside the new word
-   * (knowledge-pipeline spec §3.2). It meant "we are not certain, and the
+   * (knowledge-pipeline architecture note §2). It meant "we are not certain, and the
    * `developer-os run claude|codex` wrapper produces the same capture anyway";
    * decision 3.1 declines that wrapper, so all that survives is advice to run
    * a command that will not exist.

@@ -72,7 +72,7 @@ describe("EFFECT_VOCABULARY", () => {
    * `reindex | lint | search | status` — there is no `developer-os brain
    * read-index` and no `read-note`, and inventing one would render a skill
    * telling an agent to run a command that does not exist, which is the whole
-   * defect knowledge-pipeline spec §4 closes.
+   * defect knowledge-pipeline architecture note §1 closes.
    */
   const COMMANDLESS = [
     "agent.prompt",

@@ -384,7 +384,7 @@ export type Redactor = (text: string) => RedactionResult;
  * **The one production entry to `redactText`, and the reason it exists is the key rather
  * than the patterns.** Binding both into a closure stops the key travelling as a
  * parameter through capture, review, ingest and init — fourteen call sites that each had
- * to be trusted not to log, hash or persist it (knowledge-pipeline spec §8.4). A closure
+ * to be trusted not to log, hash or persist it (knowledge-pipeline architecture note §8.1). A closure
  * cannot be interpolated into a diagnostic by accident; a `Uint8Array` in scope can.
  *
  * The patterns come from `config.toml`'s `[redaction]` table and are literal substrings.

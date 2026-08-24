@@ -99,9 +99,9 @@ existed still loads and still serializes byte-identically. The surviving rationa
 
 **A second amendment landed on 2026-08-17, on exactly the same terms.** Track R entry R2 gave
 `DeveloperOsConfigV1` an optional `redaction?: { patterns }` member — a bounded list of literal
-substrings, never expressions — because the knowledge-pipeline spec §8.2 describes a
+substrings, never expressions — because `threat-model.md` §5.7 and `BACKLOG.md` §1 NEW-16 record the
 user-extensible redaction class that was **unreachable**: `redactText` accepted the option and no
-production caller passed it, and this schema had no key a user could set (`BACKLOG.md` §1 NEW-16).
+production caller passed it, and this schema had no key a user could set.
 Additive in the same three senses as `brain`: `.strict()` and `schemaVersion = 1` are unchanged, the
 table is emitted only when present, and a configuration predating it loads and re-serializes
 byte-identically. `BACKLOG.md` §8 carries the row, **unratified** — the founder decided to implement

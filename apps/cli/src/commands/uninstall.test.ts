@@ -550,9 +550,8 @@ describe("runUninstall", () => {
   });
 
   /**
-   * Spec §2.5: uninstall never deletes a capture. There is no `capture`
-   * command yet (DOS-P6 builds it after this task), so this plants a
-   * synthetic quarantined file at the path captures will live at and checks
+   * Knowledge-pipeline architecture note §4: uninstall never deletes a capture.
+   * This plants a synthetic quarantined file at the path captures live at and checks
    * the same guarantee the Brain-preservation tests above already exercise
    * generally — the vault is an excluded root uninstall never writes into —
    * pinned specifically for the one directory a capture is never allowed to

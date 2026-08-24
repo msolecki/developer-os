@@ -63,7 +63,7 @@ export interface ClaudeCapabilityReport {
    * A single-member union rather than a dropped field, because the line
    * `doctor` prints still has to say it. It was `"hook" | "wrapper"`, chosen by
    * `session_end_capture === "yes"`; that key is `not-used` unconditionally now
-   * (knowledge-pipeline spec §3.1 declines both automatic paths), so the
+   * (knowledge-pipeline architecture note §2 declines both automatic paths), so the
    * ternary was dead code that read as a live possibility.
    */
   readonly captureVia: "command";

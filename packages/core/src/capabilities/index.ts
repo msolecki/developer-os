@@ -11,7 +11,7 @@
  * is how a `yes` gets earned by an observation alone.
  *
  * **`not-used` replaces `wrapper-required` rather than joining it**
- * (knowledge-pipeline spec §3.2). The old word meant "we are not certain, and
+ * (knowledge-pipeline architecture note §2). The old word meant "we are not certain, and
  * the `developer-os run claude|codex` wrapper produces the same capture
  * anyway"; decision 3.1 declines that wrapper, so all that survived was advice
  * to run a command that will not exist — a state that validates while the

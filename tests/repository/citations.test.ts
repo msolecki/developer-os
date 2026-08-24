@@ -88,8 +88,8 @@ const BASELINES: ReadonlyMap<string, number> = new Map([
  * by its own Task 10 — a baseline on a file scheduled for deletion is the moving target this
  * map replaced. The note stays because the *reason* outlives the file: a plan is deleted when
  * it closes, so a floor is worth writing only for the plans that survive their own execution.
- * `specs/…knowledge-pipeline-design.md` carries a single citation, which is below any floor
- * worth writing.
+ * The completed knowledge-pipeline design was deleted at closure; its surviving citation record is
+ * `docs/architecture/knowledge-pipeline.md`, whose floor appears above.
  */
 
 /** Notes that cite files without line numbers. Asserted, so the claim cannot rot. */

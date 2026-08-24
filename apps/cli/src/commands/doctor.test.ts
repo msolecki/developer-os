@@ -146,7 +146,7 @@ describe("runDoctor", () => {
      * No Codex is installed in this fixture, and no `recovery=` is printed for
      * one that is either: the advice named `/hooks`, the command that grants
      * Codex's hook trust gate, and no hooks ship for it to gate
-     * (knowledge-pipeline spec §3.1). The suite below pins that for the
+     * (knowledge-pipeline architecture note §2). The suite below pins that for the
      * installed case, where the advice used to be printed.
      */
     const codexAbsent = result.data.checks.find(

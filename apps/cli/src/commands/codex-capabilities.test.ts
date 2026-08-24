@@ -163,7 +163,7 @@ describe("reportCodexCapabilities", () => {
 
   /**
    * `plugin_hooks` is on the not-used list — no hooks file ships
-   * (knowledge-pipeline spec §3.1) — and must report that regardless of what
+   * (knowledge-pipeline architecture note §2) — and must report that regardless of what
    * the probe observed for anything else.
    */
   it("reports plugin_hooks as not-used even when the probe observes our tree", async () => {
@@ -190,7 +190,7 @@ describe("reportCodexCapabilities", () => {
   /**
    * A capture reaches the vault because somebody ran a command. The route was
    * `wrapper` on every branch and `hook` on one unreachable one; neither of
-   * those two things is being built (knowledge-pipeline spec §3.1).
+   * those two things is being built (knowledge-pipeline architecture note §2).
    */
   it("names the command as the capture route even once probed", async () => {
     const report = await reportCodexCapabilities({
@@ -221,7 +221,7 @@ describe("reportCodexCapabilities", () => {
 });
 
 /**
- * No hooks file ships (knowledge-pipeline spec §3.1), so the one command that
+ * No hooks file ships (knowledge-pipeline architecture note §2), so the one command that
  * would grant Codex's hook trust gate opens a gate onto nothing. The advice
  * was carried on **every** branch precisely so a report could never omit it
  * (`codex-adapter.md` §5); with nothing behind the gate it is removed rather

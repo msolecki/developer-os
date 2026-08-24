@@ -602,7 +602,7 @@ async function checkCodexCapabilities(
   });
   /**
    * No `recovery=` any more. It named the one command that grants Codex's hook
-   * trust gate, and knowledge-pipeline spec §3.1 ships no hooks, so the gate
+   * trust gate, and knowledge-pipeline architecture note §2 ships no hooks, so the gate
    * opens onto nothing — advice to run `/hooks` for a hook that does not exist
    * is the same defect as a capability word naming a wrapper nobody can run.
    * Removed from the report itself rather than hidden here, so no reader of

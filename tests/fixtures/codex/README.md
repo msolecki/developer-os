@@ -51,7 +51,7 @@ re-taken under on 2026-08-15.
 The response is the line before it: an `item.completed` whose `item.type` is `agent_message`, whose
 `text` holds the schema-constrained JSON **as a string**. The rule that shipped until 2026-08-20 —
 "the last line that parses to a non-null object" — returned the usage record, and
-`parseStructuredPayload` returned it as `ok: true`. That is the question knowledge-pipeline spec §10.2 put to a real run
+`parseStructuredPayload` returned it as `ok: true`. That is the question knowledge-pipeline architecture note §10 put to a real run
 and that the failed turn of 2026-08-15 could not answer.
 
 **Two `item.completed` events, and only one of them is the answer.** The first is a
