@@ -192,6 +192,37 @@ coverage is a measured list rather than an argument.
 `BACKLOG.md` §8 carries the row, **unratified** — the founder decided to implement Foundation
 request 3, which is not the same as ratifying the amendment it required.
 
+**A fourth frozen-interface amendment was ratified for DOS-P7 on 2026-08-25, before its code
+lands.** `DeveloperOsConfigV1` keeps `schemaVersion: 1`, its required `git.enabled` and
+`automation.enabled` booleans, and strict unknown-key refusal, and adds exactly two optional nested
+records: `git.lifecycle?: GitSyncConfigV1` and
+`automation.lifecycle?: AutomationConfigV1`. Serialization emits each record only when present;
+absent remains distinct from present-and-undefined, so pre-DOS-P7 configuration still loads and
+serializes byte-identically. An enabled flag without its complete record is readable but
+operationally inert; even a complete record is inert without the matching active arm in the
+manifest-owned `LifecycleActivationRecordV1` and a clear `LifecycleJournalClosureV1`. Both lifecycle
+records are strict, exhaustive recursive schemas with bounded paths, Git identity/scope, normalized
+closed schedules, and canonical encodings; interrupted or malformed participant journals make every
+otherwise matching lifecycle state recovery-required rather than active, apart from the exact non-
+clear Git `retry_only` outcome that may consume only its persisted push plan, and the exact typed
+`uninstall_draining` outcome that grants only silent exit to a runner whose bound lease was removed.
+The active opt-in-
+surfaces design §2.2 is the full lifecycle contract, and
+`BACKLOG.md` §8 carries the same-change ratification record.
+
+**The 2026-08-27 final review correction closes the command interface around that schema without
+widening it.** `config get/set` has exhaustive readable/mutable dotted-key unions, one
+`CanonicalJsonV1` value argument with per-key types, `null` only for complete optional `brain` or
+`redaction` removal, typed canonical-JSON results, and a publishable projection that exposes
+redaction patterns only as `patternsCount`. Schema/lifecycle/telemetry state stays readable but cannot
+be mutated through `config set`. The same correction separates allocation-free
+`LifecyclePlanPreviewV1` from the internal `LifecycleExecutionPlanV1`: preview performs no write,
+allocation, staging creation, or inode capture, and apply revalidates its hash under the global lock
+before reserving IDs. The active opt-in-surfaces design §§2.2–2.4 is the exact contract; this was a
+ratified correction to the then-pending written specification, not approval of that complete document
+at that point. The founder approved the complete Spec 1 on 2026-08-28; its written implementation
+plan remains blocked on Spec 2's `InstallationManifestV2` handoff.
+
 ## 3. The mutation pipeline
 
 Every filesystem mutation in the product goes through seven phases, recorded in a journal at
@@ -230,6 +261,94 @@ be run from inside a transaction's verify phase — it reads journals through a 
 `TransactionStore` and would deadlock. Nothing in production registers an `afterPhase` hook, so
 this is a constraint on future changes rather than an observed failure.
 
+**DOS-P7 cross-reference, ratified 2026-08-25.** Foundation's file executor remains unchanged.
+The active opt-in-surfaces design §2.4 extends the same phased/journaled guarantee to two states that
+are not manifest-owned files: exact `.git` internals (including an explicitly configured bare local
+Git destination) and the closed Developer OS launchd base/generated labels. A local push uses separate source and
+destination Git-effect journals; before-files and after-files launchd effects are likewise distinct,
+so no participant is consumed on two sides of another publication. Their exact phase/cursor/
+observation table keeps a completed effect `verified` and compensatable until the composite operation's
+point of no return, then finalizes it; apply-before-journal states resolve only from pre-recorded
+identity. A local receive runs entirely between private shadows before coordinator intent and the later
+destination effect is process-free promotion. Its private bare config forces `receive.unpackLimit=0`,
+so every ref-update command uses the pinned `index-pack` branch, including a zero-object pack; the
+measured already-up-to-date target emits no pack/index child and binds a zero-transition destination
+effect after the real destination target ref verifies at the commit. Git rollback restores source/
+destination control preimages first but never deletes an already published source object,
+destination pack/index, or newly published `.git` root; it verifies and relinquishes the exact object
+inode or tree-root identity as ownership-neutral because a concurrent Git writer could have made it
+reachable or mutated descendants without changing that identity. Neither compensation nor compaction
+recursively deletes published Git state.
+Launchd uses plan-derived generation labels observable through exact domain-targeted
+`launchctl print gui/<uid>/<label>` service probes rather than claiming launchd exposes plist hashes or
+using the caller's implicit bootstrap namespace. Its hash-bound process table also confines
+`bootstrap`/`bootout`, streams, deadlines, and whole-group termination. Authority, pre-recorded inode
+evidence, no-replace verification/compensation, and the push-last exception are indexed in
+`BACKLOG.md` §8. Git execution is additionally confined to an exact root-owned
+`SupportedGitDistributionV1`/canonical `SupportedGitProcessTableV1` row and an owner-only
+`GitExecGatewayV1` whose Node-24 trampolines and one-shot `GitProcessSupervisorV1` graph mediate every
+dynamic child. SSH enters its internal bridge through that gateway and consumes a second supervised
+same-PID edge before the pinned system client. The extension grants no ownership over either Git
+worktree's files or unrelated services.
+
+The 2026-08-27 closure keeps both boundaries exact. A source Git snapshot tags its index as absent or
+present, permitting absence only for the supported unborn empty repository and never synthesizing a
+hash. An automation reconcile whose config, activation, manifest, and plist bytes are unchanged may
+select `automation_reconcile/live_only`: its sole participant is the hash-bound after-files launchd
+effect, with no Foundation/manifest mutation, and it may contain zero transitions when every expected
+generation is already loaded. A later same-day closure requires every new standalone/participant
+Foundation journal and coordinator journal to prove before ID reservation that every reachable exact
+encoding fits its derived/plan-bound 1-MiB ceiling; launchd effects prove the same ceiling and Git
+effects prove their plan-bound 16-MiB ceiling. The Git process table now hashes counted-stream and
+per-invocation phase budgets with whole-group termination: a descendant/internal attempt cannot reset
+the current push's 600 seconds, while a later exact `push_pending` invocation receives a fresh bounded
+phase rather than a persisted lifetime clock. Launchd plist generation is one exact five-key XML/
+calendar grammar rather than an implementation-selected serializer. The final same-day correction
+also gives guarded Git configs/index/`HEAD`/loose refs numeric pre-read limits, freezes the legacy
+Foundation mutation-index grammar at canonical `0..4294967294`, inventories exact
+`launchd-process/{home,tmp}` staging, and makes the existing per-job zero-byte lock a runner lifetime
+lease acquired before the global lock. The post-package correction hash-binds the launchd-process
+root/home/tmp path-owner-mode-device-inode identities, classifies a removed lease only from marker,
+manifest, or the exact typed uninstall ledger, and makes fresh absent-manifest admission process-free
+before any recovery ID because no product-owned generated label remains derivable. Git source and
+destination shadows likewise bind one canonical `SanitizedGitShadowConfigV1` byte projection before
+spawn, including `http.followRedirects=false`; a redirect cannot authorize a second request target.
+The subsequent correction additionally puts the guarded product home in generation-bound scheduled
+argv, distinguishes symbolic/OID Git `HEAD` state so an empty bare destination is representable,
+persists a path-slot shadow-config template hash across retries, and rejects alternate-object path
+bytes that Git could interpret as list/C-quote syntax.
+The final review correction narrows those boundaries again: only enable may publish a new `.git`, so
+even the first unborn sync uses existing-repository object/index/reflog/ref transitions. Source
+`logs/HEAD`, source branch logs, and local bare branch logs are bounded staged/CAS postimages whenever
+the validated Git policy or an existing log requires them; compensation restores refs before logs.
+`GitConfigQuotedPathV1` excludes controls/line breaks from generated config paths, and the in-process
+pack/ref reader streams under exact compressed/object/inflation/delta/RAM/temp limits plus the one
+inherited 600-second phase. Launchd bootstrap no longer passes the verified plist's mutable pathname:
+on a separately certified pinned row it inherits only the descriptor of the already-unlinked,
+immutable private snapshot as FD 3 and passes only `/dev/fd/3`; the real source plist descriptor is
+never inherited and there is no fallback. A scheduled runner first authenticates manifest/plist/generation
+installation evidence independently of current active provenance, then under its lease/global lock
+runs an eligible handler, writes only `automation_disabled` for inactive automation, or writes only
+`git_disabled` when active automation's installed sync job alone is Git-ineligible, without resolving
+Brain or reaching Git/vendor/network authority in either inert branch.
+Any retained or missing install/label derivation evidence remains recovery-required.
+The post-final correction makes the reflog postimage bound exactly 64 MiB plus its separately bounded
+4-KiB append and binds every append bijectively to its effect/ref projection; the private pack header,
+admitted-entry, and closed-OID counts are equal and capped at 200,001 before a child permit. Launchd
+bootstrap copies the verified planned plist into an already-unlinked private snapshot, inherits only
+FD 3, and closes every source/snapshot descriptor on every path, so an in-place write to the real plist
+cannot change loaded bytes. Before the permanent global lock exists, init and fresh absent-manifest
+uninstall use the exact transient `LifecycleBootstrapLockV1` protocol with a second complete
+inventory; key absence returns before ID/coordinator creation, while key presence alone derives the
+two redaction-key transitions in a flat bootstrap-locked recovery envelope rather than creating the
+installed four-root ledger. A live attempt removes only its identity-recorded empty directories; after
+crash, the indistinguishable exact empty product/state skeleton is preserved, and bounded prefix-typed
+creation temps make initial nonce/allocator recovery deterministic. Launchd inherits only the
+already-unlinked snapshot; its sole linked creation prefix is frontier-bound and recoverable, while
+the flat key-present coordinator admits one final journal plus one bounded rewrite temp. The active opt-in-surfaces design
+§§2.3–2.4, 4.4, 5.3–5.4, 6, and 7 is
+normative; implementation remains pending.
+
 ## 4. Ownership
 
 The installation manifest at `<product home>/installation-manifest.json` records every
@@ -244,20 +363,143 @@ Two ownership universes exist over that one manifest, and the difference is the 
 | `init` revert | product home **and** a Brain it just created | `backups/` | undoes its own work completely, Brain skeleton included |
 | `uninstall` | product home only | the Brain | Brain artifacts are refused by location, whatever the manifest says |
 
-Drift compares each recorded artifact against the filesystem on three axes — presence, kind,
-and content — and reports one of four findings: `missing`, `type_changed`, `content_changed`,
-or `target_changed` (symlinks, whose "content" is the hash of their target). Every read goes
-through the guard's canonical path, with `O_NOFOLLOW` and a `dev`/`ino` re-check after open.
+**DOS-P7 manifest/ownership amendment, ratified 2026-08-25.** Spec 2 upgrades the stored interface to
+`InstallationManifestV2`/`ManagedArtifactV2` before the opt-in surfaces land. The artifact is a
+kind/verification-mode tagged union: regular files support `content`, `schema`, or exact-path
+`ephemeral`; directories and symlinks support `content` with kind-specific evidence. Every V1 owner,
+path, product version, restore field, source, merge strategy, and verification timestamp survives.
+`schema_invalid` joins the drift classes. Restore evidence is legal only for regular-file
+content/schema entries; directories, symlinks, and ephemeral reservations require
+`existedBefore: false` and null restore fields. Migration verifies shared-file backups and refuses V1
+symlinks, shared directories, unsafe backup evidence, or pre-existing ephemeral-path collisions
+before writing V2. It also refuses before reading artifact bytes if either a V1 declared/canonical
+artifact path or any existing filesystem leaf collides with the newly reserved exact lifecycle-
+activation path; no V1 claim is adopted or retyped there. The active opt-in-surfaces design §2.1
+freezes every retained sync/marker/status/lock/log path and record schema plus the three owned journal
+directories that spec 2 must reserve/create at migration.
 
-Any finding stops `init` and `uninstall`. A `missing` finding is skipped by the revert itself,
-because a file that is already gone is not work this run did — which is also why a deleted
-managed artifact currently blocks `init` while the revert would have tolerated it (residual 2).
+The manifest remains Foundation's durable direct-write exception, not a managed artifact and not a
+nested file transaction. DOS-P7 adds `ManifestStatePlanV1`, whose before/after arms are exact
+`present { bytes, hash }` or `absent`, plus exact sibling tombstones and present-inode identity. A
+present preimage is atomically moved no-replace to its journal-owned tombstone and verified before an
+exact present postimage is no-replace-published or committed absence is durably recorded. Rollback uses
+only no-replace moves, and every concurrent third state is preserved rather than overwritten or
+unlinked. The composite journal retains its bytes, tombstones, and backups until the manifest postimage
+and all participants are terminal, so recovery can finish or restore around every move, publication,
+or absence-commit boundary. The active opt-in-surfaces design §2.4 owns ordering and failure semantics;
+`BACKLOG.md` §8 carries the same-change ratification record.
+
+For coordinator-owned Foundation participants, §2.4 also pre-stages the exact canonical initial
+`planned` journal and records its device/inode before coordinator intent is published. Under the
+existing stable transaction lock, the coordinator no-replace-publishes that bound inode or resumes an
+already published identical inode before handing control to the unchanged executor. This is limited
+to the first journal write: ordinary transaction phases/schema and post-publication generic rewrite-
+temp recovery stay unchanged. Before first participant intent, one guarded owner-owned
+empty/partial/complete initial plan/journal temp may instead be deleted only when the exact surrounding
+coordinator/effect/participant ledger proves that no target or live transition began; once one did,
+the temp is preserved as recovery evidence. This removes both the crash state in which a valid first-
+write temp existed with no final journal and the opposite risk of deleting evidence after an effect.
+The executor's ordinary staged mutation bytes live at their
+existing exact `<product home>/staging/transactions/<id>/<index>.bin[.sha256]` paths and are likewise
+durable before coordinator intent. DOS-P7 raises their common bounded payload ceiling to 16 MiB,
+matching `SyncRecordV1`, and requires streaming size/hash verification; the separate planned-journal
+file remains bounded to 1 MiB. The lifecycle staging tree holds only the separately named initial
+journal plus external-effect quarantine.
+
+**DOS-P7 compensation/collection amendment, ratified 2026-08-26.** The executor still runs a reached
+Foundation participant through `finalized` and still cannot roll that journal back. Every such
+participant that occurs before the composite operation's exact point of no return therefore binds a
+second, separately pre-staged Foundation transaction containing the exact inverse mutations in reverse
+order. Prior bytes belong to that inverse plan before the forward executor starts, so the existing
+terminal backup prune cannot destroy composite rollback authority. A current non-finalized forward
+journal may use the executor's ordinary rollback; an already finalized prefix is restored only by its
+paired inverse transaction. The active opt-in-surfaces design §2.4 owns the closed operation table,
+pairing rules, and point-of-no-return table.
+
+The same ratification answers Foundation's permanent-lock question in favor of bounded terminal
+collection. Once a generic Foundation transaction or composite lifecycle coordinator is terminal and
+no recovery may consume its evidence, a guarded compactor runs under the global mutation lock plus the
+still-held stable ID locks. It removes only journal-derived staged/backup leaves and empty exact ID
+directories. A coordinator unlinks its journal, then the exact held lock inode, and its immutable plan
+last, so crashes leave plan-plus-lock or plan-only recovery evidence and never a lock-only envelope. An immutable
+installation nonce plus crash-safely advanced monotonic allocator reserves every new Foundation/
+lifecycle ID under that global lock before publication, so collection never permits reuse within the
+installation epoch. New Foundation plans are bounded to 256 mutations. The active design also freezes
+aggregate journal/staging/backup caps, phase-specific reservation, and a guarded planless-orphan
+cleanup grammar for the staging/backup directories and lock that today's executor can leave before its
+first journal write. That grammar admits remove-induced numeric gaps and only the exact three
+highest-index partial `writeStaged` states; the same guarded pre-intent proof controls initial
+coordinator, participant, and effect plan/journal temps. A partial allocator temp is cleanable only while the old
+allocator inode remains authoritative and no ID was exposed. Foundation journal bytes keep the
+implemented `JSON.stringify` insertion order (`FoundationJournalJsonV1`) rather than silently adopting
+the new coordinator's `CanonicalJsonV1`; new work derives its largest reachable encoded journal before
+ID reservation, binds the exact maximum in composite refs, and checks every rewrite before rename.
+Legacy journal reads keep the current strict-schema
+compatibility. A lifecycle compaction cursor makes every participant/envelope deletion resumable, and
+a journal-less plan or lock is collectible only after all referenced state is proved absent. Unknown
+children, identity swaps, and non-empty directories are preserved. The global
+lifecycle lock remains never-unlinked. Until DOS-P7 implementation lands, the current code and
+residual §8 item 4 still retain terminal journals, metadata, staging, and per-ID locks; the design decision
+is closed, not yet shipped.
+
+The same ratified DOS-P7 contract makes
+`<product home>/state/lifecycle-activation.json` an ordinary V2 regular-file `content` artifact,
+created only by the first successful lifecycle enable with `existedBefore: false`. Its strict
+`LifecycleActivationRecordV1` has independent inactive/active arms for Git and automation; each active
+arm binds SHA-256 of the exact canonical complete lifecycle configuration plus literal enabled state.
+Lifecycle apply updates the record and its manifest installed hash through the composite coordinator.
+Config without matching active provenance is inert, disable records the corresponding arm inactive,
+and independent record/manifest edits are content drift or missing ownership rather than an enable
+surface. Operational provenance additionally requires `LifecycleJournalClosureV1.clear`: malformed,
+unknown, or non-terminal participant journals in the active spec's exact four-root ledger keep
+matching config/record/manifest bytes inert. The
+exact bound Git `push_pending` journal is a separate non-clear `retry_only` outcome that can consume
+only its persisted push plan; exact verified uninstall lease removal is non-clear
+`uninstall_draining` and grants only silent runner exit plus recovery of that uninstall. The activation-
+record/manifest pair is not a
+cryptographic boundary against a hostile process that rewrites both, in line with the threat model's
+existing local-write scope. The active opt-in-surfaces design §2.2 defines the exact encoding and
+failure gates.
+
+The uninstall ownership universe above does not widen for V2. DOS-P7 separately authorizes only the
+exact regular-file plist path derived from each closed Developer OS launchd label under the canonical
+user `Library/LaunchAgents`, with product-created restore fields and matching content evidence. Every
+other out-of-home artifact and every Brain-located artifact is preserved by the declared-and-canonical
+partition regardless of what the manifest claims.
+
+The already-ratified exact redaction-key exception remains outside the manifest and is not content
+hashed. DOS-P7 coordinates it through `RedactionKeyStatePlanV1` as a secret-opaque same-directory
+rename: the journal records only the one architecture-defined path, its exact tombstone, and
+type/device/inode identity, never key bytes or a content hash. Before the manifest becomes absent,
+rollback may rename that bound tombstone back; manifest absence is the uninstall point of no return,
+after which recovery only force-forwards the guarded tombstone unlink. This operationalizes the
+existing one-path exception without widening either ownership universe.
+
+When the manifest is absent, that exception is available only after a complete bounded no-follow
+inventory of the entire product home. Fresh admission accepts exactly an absent/empty product home,
+an exact empty `state` skeleton, or that skeleton with the redaction key as its sole leaf, plus absence
+of every closed external plist. Any other known or unknown file or directory, identity race, special
+entry, or inventory-limit overrun preserves everything as recovery-required before the key is read,
+renamed, or deleted. A selected-known-path checklist is not ownership evidence.
+
+For a V1 manifest, drift compares each recorded artifact against the filesystem on three axes —
+presence, kind, and content — and reports one of four findings: `missing`, `type_changed`,
+`content_changed`, or `target_changed` (symlinks, whose "content" is the hash of their target). Any V1
+finding stops `init` and `uninstall`. A V1 `missing` finding is skipped by the revert itself, because a
+file that is already gone is not work this run did — which is also why a deleted managed artifact
+currently blocks `init` while the revert would have tolerated it (residual 2).
+
+For a V2 manifest, the tagged verification mode controls the result: `schema_invalid` is the fifth
+finding; absence is clean only for an `ephemeral` reservation and is `missing` for every other arm;
+content/schema files, directories, and symlinks use their kind-specific evidence from the amendment
+above. Any V2 finding stops the owning operation. Every V1 or V2 read goes through the guard's
+canonical path, with `O_NOFOLLOW` and a `dev`/`ino` re-check after open.
 
 ## 5. Invariants that must not be collapsed
 
 Each of these looks like redundancy and is not, and every one was written in response to a
 defect that shipped. What follows is a summary; the full, verbatim record from the tasks that
-shipped the code — including two questions still open for the founder — is in
+shipped the code — including the one question still open for the founder — is in
 [`foundation-constraints.md`](./foundation-constraints.md). Read that before changing any
 behaviour described here.
 
@@ -388,6 +630,13 @@ three are the ones a user can hit.
    survives is the same content in `staging/`, which nothing removes, so the residual is
    narrower rather than closed: `tests/e2e/foundation.test.ts` now asserts both halves, an
    empty `backups/` copy list and a surviving staged one.
+
+   **Disposition ratified 2026-08-26, implementation pending in DOS-P7.** Terminal collection is
+   required, including exact staging/backup metadata, journals/plans, and per-ID stable locks; the
+   global lifecycle lock alone remains permanent. The guarded, crash-resumable protocol, monotonic ID
+   allocator, legacy planless-orphan cleanup, aggregate caps, and capacity reservation are in the
+   active opt-in-surfaces design §2.4. This residual remains an observed fact about the current
+   implementation until that plan ships.
 5. **A `kind: "symlink"` artifact would delete its target, not the link.** Latent: Foundation
    emits no symlink artifacts. It lands in the Claude and Codex adapters, which will.
 6. **Directory removal retains a check-to-use window.** Narrowed to one canonicalization before

@@ -511,8 +511,100 @@ turns it red and leaves all eleven sentinel cases green — which is how the gap
 only other removals are `removeOwnedTemp` on a durable-write temporary and the `unlink` of a `remove`
 mutation's own target. The staged bytes are *redacted* content, so their survival costs disk rather
 than a secret; the backup's did not, which is why the prune was a security fix and this is a
-housekeeping one. It sits beside the open founder question `BACKLOG.md` §2 carries about
-`<state>/transactions/` accumulating one permanent lock file per transaction id.
+housekeeping one. It sits beside the former founder question `BACKLOG.md` §2 carried about
+`<state>/transactions/` accumulating one permanent lock file per transaction id. **Disposition
+ratified 2026-08-26, implementation pending:** DOS-P7 requires guarded terminal collection of both
+staging and per-ID transaction evidence/locks under the permanent global mutation lock. An immutable
+installation nonce plus monotonic allocator prevents collected IDs from reappearing; exact aggregate
+caps/reservation prevent ledger exhaustion; and a guarded planless-orphan grammar removes only the
+pre-journal staging/backup/lock residue the shipped executor can prove never reached target mutation,
+including remove-index gaps and only the three real highest-index `writeStaged` partial states. A
+pre-rename allocator temp is removable only while the old allocator identity remains authoritative;
+one initial coordinator/participant/effect plan-or-journal temp is likewise removable only while the
+surrounding ledger proves that no participant, target, or live transition began. Staged Foundation
+mutation payloads are streamed through a 16-MiB size/hash bound rather than inheriting the 1-MiB
+journal ceiling;
+coordinator envelope collection removes journal → held lock → plan, leaving no lock-only crash state;
+and lifecycle-owned Foundation journals retain the shipped `JSON.stringify` insertion-order encoding
+instead of being silently migrated to the coordinator's canonical serializer. Before any new ID,
+standalone/participant Foundation and coordinator planning computes the largest reachable exact journal
+encoding, rejects above 1 MiB, binds the composite maxima, and checks every complete rewrite before
+rename; a maximum legal path vector therefore cannot create unreadable residue after mutation.
+The same pending DOS-P7 design removes two recovery races outside Foundation: local receive pins
+`receive.unpackLimit=0` so every ref-update command produces a self-contained `index-pack` closure;
+an already-up-to-date target produces no pack/index child and is admitted only after its existing real
+target ref verifies at the commit. Git rollback restores exact source/destination control preimages
+but preserves already-published source objects, destination pack/index files, and a newly published
+`.git` root as ownership-neutral state rather than racing another Git writer with reachability-check-
+then-unlink or recursive tree deletion. Launchd recovery
+observes only plan/manifest/plist-derived labels through exact `gui/<uid>/<label>` service targets; it
+does not use caller-context `launchctl list`, enumerate unowned prefix labels, or treat a plist hash as
+launchd-observable state. The exact current/old/new/base target set detects every product-owned or exact
+collision state, while the generation-bound hidden runner keeps any unrelated label inert.
+Its live-only reconcile variant binds the preserved config, activation, manifest, and plist bytes but
+runs only the after-files launchd effect, so recovering an unloaded expected job never needs a fake
+file mutation. Git source replay separately tags the index absent/present and permits absence only for
+the supported unborn empty repository, preventing an absent path from being confused with attacker-
+chosen present bytes.
+Each Git effect also proves before ID reservation that its largest reachable cumulative journal fits
+its plan-bound 16-MiB parser ceiling. The exact process table hashes per-edge stdin/stdout/stderr byte
+budgets, idle/wall/phase deadlines, counted proxying across same-PID exec, and SIGTERM→SIGKILL group
+termination; the 600-second push phase is per top-level invocation, cannot reset within that process
+tree, and may begin fresh only when a later invocation revalidates the exact `push_pending` plan.
+Launchd separately binds the root-owned `/bin/launchctl` identity, exact sanitized argv/environment,
+stream/idle/wall/transition limits, and the same terminate/reap discipline; post-intent uncertainty
+retains the effect cursor for recovery rather than guessing command success. Canonical launchd
+plist bytes contain only Label, ProgramArguments, StartCalendarInterval, and the two literal null-sink
+paths, with exact XML/calendar encoding, so a serializer cannot smuggle a second trigger or service
+behavior into an otherwise matching plan. Its process root/`HOME`/`TMPDIR` path-owner-mode-device-
+inode identities are exact and hash-bound; either child must be empty before/after spawn, and any
+created child is retained as recovery-required. The per-job zero-byte runtime lock is also the
+process-lifetime lease acquired before any global-lock wait, so uninstall drains runners without
+guessing from service absence. A removed lease is silent only when a marker, absent manifest, or exact
+typed uninstall coordinator proves it. Fresh absent-manifest admission requires exact absence of
+config, activation, runtime, lease, plist, and lifecycle evidence but performs no service probe before
+the recovery epoch; without retained evidence no generated label is owned, and base/prefix labels grant
+no authority. Git metadata inputs have numeric pre-read limits, while canonical hash-bound source/
+destination shadow configs set `http.followRedirects=false` before spawn and prevent a redirect from
+creating a second destination request. Persisted retries bind a path-slot shadow-config template even
+without a source effect, and the one alternate-object path rejects list/C-quote syntax. Bare
+destination `HEAD` state is semantic, so an empty repository binds its symbolic ref without an
+invented OID. Scheduled plist argv carries the guarded product home inside its generation and ignores
+ambient path overrides before reading state. Legacy Foundation staging accepts only canonical mutation
+indices `0..4294967294`.
+The final 2026-08-27 correction removes the remaining authority gaps. Public lifecycle preview is
+allocation-free and contains no staging identity; apply must revalidate its hash before it can reserve
+authority. Generated Git-config paths reject controls/line breaks. Enable alone may publish `.git`;
+every later sync includes required bounded HEAD/branch reflog CAS transitions around its direct ref
+publication. The in-process pack/ref reader counts compressed bytes, objects, inflation, delta depth/
+work, RAM, private temp, and the inherited deadline, destroying quarantine on the first overrun before
+intent. On a certified pinned row, Launchd bootstrap passes only the descriptor of the already-unlinked,
+immutable private snapshot through inherited FD 3 and `/dev/fd/3`; the real source plist descriptor is
+never inherited, closing the verify-path/swap/open race without a pathname fallback. A stale runner first
+authenticates installed manifest/plist/generation evidence, then may
+write only `automation_disabled` if current provenance is inactive; unowned invocations cannot write.
+Finally, absent-manifest uninstall walks the complete product home and refuses every known or unknown
+entry outside the exact empty/key-only grammar, so deleting the key cannot erase the last uninspected
+installation evidence.
+The post-final correction closes the remaining races inside those rules. Reflog postimages carry the
+exact append-expanded size and are bijective with journal transitions/ref projections; pack process,
+header, admitted, and unique-closure counts share the 200,001 ceiling. Launchd no longer exposes even
+the verified real-plist inode to bootstrap: it copies exact bytes to a private leaf, unlinks it, passes
+only FD 3, and returns every descriptor count to baseline, so rename, replacement, and in-place writes
+cannot change loaded bytes. A transient pre-product `LifecycleBootstrapLockV1` linearizes concurrent
+init/fresh uninstall and forces a second whole-home inventory; only its exact locked residue projects
+away. The absent-key arm allocates nothing, while the present-key arm alone creates recoverable key
+transitions in a closed flat bootstrap envelope, never by adopting or creating the installed ledger.
+Directory-creation authority is deliberately not reconstructed after process death: an exact empty
+product/state skeleton may remain, while file/control residue never gains that exception. Initial
+nonce/allocator temps are admitted only through their exact bounded prefix grammars.
+The same closure applies at launchd's byte boundary: only a current-frontier linked planned-byte
+prefix may precede unlink, and the child inherits only the unlinked snapshot FD. A flat absent-manifest
+coordinator rewrite crash may retain only its authoritative final journal plus one bounded temp.
+Runner installation authentication remains stage 1 and active provenance remains solely
+the locked stage-2 eligibility decision.
+The active opt-in-surfaces design §2.4 carries the crash-resumable protocol. This paragraph remains the
+observed current-state threat record until that implementation lands, not an open decision.
 
 **Two related residuals, both open and both stated where a reader meets them.** `PlannedFileMutation`
 carries no caller-supplied precondition, so the executor computes `expectedBeforeHash` from its own
@@ -632,6 +724,12 @@ rather than a detail — see the last row.
 | A parse failure never prints the file it failed on — **through `readConfigFile`** | a `loadConfig` throw becomes a content-free `ConfigurationError`, because `smol-toml` embeds three raw source lines in `TomlError.message` and propagating it printed whatever was read into `status`, `doctor` and their `--json` (`apps/cli/src/commands/doctor.ts:195-200,234-238`). Redaction is deliberately not the only thing standing on this path | `tests/e2e/foundation.test.ts:1277` — `never quotes the configuration it failed to parse` |
 | The same boundary on a `brain` run | **holds.** `readConfig` reads through `readConfigFile` (`apps/cli/src/commands/brain.ts:117`) and rethrows `ConfigurationError` unmodified, so a `TomlError` never reaches `redactDiagnostic`. NEW-17, closed | `apps/cli/src/commands/brain.test.ts` |
 | Telemetry cannot be switched on by editing the file | the key is `z.literal(false)` (`packages/core/src/config/loader.ts:209`), so `telemetry = true` fails the load | `packages/core/src/config/config.test.ts` |
+
+**Pending DOS-P7 command boundary, ratified 2026-08-27:** `config get/set` will enumerate exact
+readable/mutable keys, accept one per-key `CanonicalJsonV1` value, allow `null` only for whole optional
+sections, and emit typed canonical results. Lifecycle/schema/telemetry fields remain non-mutable, and
+redaction reads expose only the pattern count. Values and pattern text never appear in parse errors.
+The active opt-in-surfaces design §2.2 is normative; implementation has not landed.
 
 **What configuration carries that it did not, and §5.7 explains why it matters:** an optional
 `[redaction]` table, added on 2026-08-17 when NEW-16 closed, so the `user-pattern` class is
@@ -797,7 +895,7 @@ have made rarer; it is unmeasured and possibly still live.
 | The two-adapter differences table DOS-P6 designs against | `codex-adapter.md` §9 |
 | Fourteen Codex residuals and twelve Claude ones, most with owners | `codex-adapter.md` §11, `claude-adapter.md` §9 |
 | The mutation pipeline, ownership, exit codes and what Foundation cannot do | `foundation.md` §3, §4, §6, §7 |
-| The verbatim per-task Foundation constraints, and two open founder questions | `foundation-constraints.md` |
+| The verbatim per-task Foundation constraints, one open founder question, and the ratified terminal-collection disposition | `foundation-constraints.md` |
 | The two Brain invariants and their two exemptions | `brain.md` §5 |
 | The security seams as designed, before implementation corrected them | design spec §8 |
 | Open defects, the standing gates, and the amendment index | `BACKLOG.md` §1, §7, §8 |

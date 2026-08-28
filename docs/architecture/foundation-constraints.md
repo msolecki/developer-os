@@ -10,10 +10,63 @@ exists because collapsing it broke something.
 start. This file is the record — read it before changing any of the behaviour it describes, and
 before assuming a piece of apparent redundancy is safe to remove.
 
-Two items here are **open founder questions**, not settled decisions, both from Task 5:
-whether `SpawnLockfRunner`'s non-blocking `lockf -t 0` call needs a watchdog, and whether
-`<state>/transactions/` accumulating one permanent `0600` lock file per transaction id wants
-collection. `docs/superpowers/BACKLOG.md` §2 routes readers here for them.
+One item here remains an **open founder question** from Task 5: whether `SpawnLockfRunner`'s
+non-blocking `lockf -t 0` call needs a watchdog. A former second question was answered on 2026-08-26:
+DOS-P7 requires guarded terminal collection of per-ID transaction locks and their terminal evidence,
+with IDs reserved by an immutable installation nonce plus monotonic allocator, while the global
+lifecycle lock remains permanent. The active opt-in-surfaces design §2.4 owns the crash-resumable
+protocol, plan-last coordinator-envelope cleanup, exact partial allocator/staging orphan grammars,
+guarded cleanup of one initial plan/journal temp only before participant/effect mutation, the unchanged
+`FoundationJournalJsonV1` encoding, 16-MiB streamed mutation payloads, and aggregate caps;
+every new standalone/participant Foundation and coordinator journal now proves before ID reservation
+that all reachable encodings fit its derived/plan-bound 1-MiB ceiling, while Git effects separately
+prove their plan-bound 16-MiB ceiling. Launchd uses an exact `gui/<uid>` domain and a hash-bound,
+deadline/stream/group-termination process table for domain-targeted `print`, `bootstrap`, and `bootout`.
+The seven-finding 2026-08-27 review correction preserves published source/destination Git objects and a newly
+published `.git` root during compensation, closes launchd-process staging as exact empty
+`{home,tmp}` directories, promotes each per-job zero-byte runtime lock to a runner lifetime lease
+acquired before the global lock, requires no-install evidence for absent-manifest uninstall, adds
+numeric pre-read bounds to Git metadata, and fixes the streamed legacy mutation-index grammar at
+canonical `0..4294967294`.
+The approved post-package correction binds the launchd-process root/home/tmp path-owner-mode-device-
+inode identities into the process table, gives an absent runner lease the marker/manifest/exact-
+uninstall-closure discriminator, and makes fresh absent-manifest admission process-free before any
+recovery ID. Canonical hash-bound Git shadow config bytes include `http.followRedirects=false`, so a
+redirect cannot create a second destination request. Coordinator rollback legality names every
+relinquished source/destination object role and the source `.git` root only after the corresponding
+control preimage verifies.
+The subsequent approved correction generation-binds a guarded product-home argument for every
+scheduled runner, adds semantic `GitHeadStateV1` for empty bare destinations, persists the path-slot
+shadow-config template across retry, and narrows the alternate-object path so Git list/C-quote parsing
+cannot widen read authority.
+The final approved correction separates allocation-free public lifecycle previews from allocated
+execution envelopes, closes `config get/set` key/value/result/redaction-output grammar, and makes
+enable the sole publisher of a new `.git`; every sync uses bounded object/index/reflog/ref effects.
+Required source/destination reflogs are exact staged CAS postimages, generated Git-config paths reject
+controls/line breaks, and the in-process pack reader has explicit compressed/object/inflation/delta/
+RAM/temp/deadline budgets. On a certified pinned row, Launchd bootstrap inherits as FD 3 only the
+descriptor of the already-unlinked, immutable private snapshot; the real source plist descriptor is
+never inherited and there is no pathname fallback. Runner admission first authenticates installed manifest/plist/
+generation evidence, then decides active handler versus inert `automation_disabled` status under its
+lease/global lock. Fresh absent-manifest uninstall inventories the complete product home and admits
+only exact empty/key-only shapes before touching the redaction key.
+The approved post-final correction makes every reflog append transition/projection-bijective and
+represents the legal 64-MiB-plus-4-KiB postimage, aligns the pack process/header/reader/closure count
+at 200,001, and replaces the real-plist FD with an already-unlinked private snapshot whose descriptor
+ownership closes on every outcome. It also adds the transient pre-product
+`LifecycleBootstrapLockV1`: init and fresh absent-manifest uninstall re-inventory under that lock,
+project away only its exact control residue, and clean it by inode while held. An absent key returns
+before allocation; a present key alone creates the two-step coordinator in an exact flat `state`
+recovery envelope, without creating the installed ledger roots. Only a live attempt's recorded empty
+directories are removable; after crash the exact empty skeleton is preserved, and initial nonce/
+allocator temps have closed path/metadata/byte-prefix recovery grammars. Launchd never inherits the
+real source descriptor, its linked snapshot prefix is legal only at the current effect frontier, and
+the flat coordinator admits one final journal plus one bounded rewrite temp. Runner generation
+authentication remains independent of current provenance until the locked eligibility decision.
+The founder approved the complete Spec 1 on 2026-08-28 and its implementation plan is written;
+implementation is still pending and blocked on Spec 2's `InstallationManifestV2` handoff.
+`docs/superpowers/BACKLOG.md` §2 routes
+readers here for the surviving question and the disposition.
 
 ---
 
@@ -53,12 +106,17 @@ collection. `docs/superpowers/BACKLOG.md` §2 routes readers here for them.
 >   identity *after* `lockf` returns, and it validates the descriptor's type and
 >   owner *before* `chmod(0o600)`. Four adversarial tests pin this. Do not
 >   simplify them away when adding platform facts.
-> - The stable lock file is never unlinked. `<state>/transactions/` therefore
->   accumulates one permanent `0600` lock file per transaction id, and a core
->   test asserts that file's presence — wiring the real provider must not break
->   it. Whether that accumulation wants collection is an open founder question.
+> - The stable lock file is never unlinked in the shipped Foundation checkpoint.
+>   `<state>/transactions/` therefore accumulates one permanent `0600` lock file
+>   per transaction id, and a core test asserts that file's presence — wiring the
+>   real provider must not break it before the replacement contract lands.
+>   **Superseded prospectively on 2026-08-26:** DOS-P7 requires guarded terminal
+>   collection under the global mutation lock, with monotonically allocated IDs never reused and
+>   the lock inode unlinked only while its descriptor remains held. The global
+>   lifecycle lock keeps the never-unlink rule. Current code/tests change only
+>   when that implementation plan executes.
 > - `SpawnLockfRunner` calls non-blocking `lockf -t 0` with no watchdog. Whether
->   it needs one is the second open founder question.
+>   it needs one is the sole surviving open founder question.
 >
 > **Environment note.** The offline `pnpm` store cannot materialize a full
 > install in this checkout, so `pnpm install --frozen-lockfile --offline` fails
