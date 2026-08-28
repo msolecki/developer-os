@@ -440,23 +440,26 @@ in §10 below with their owners.
 | **NEW-11** — the invisible-title rule stops at `title` | **closed 2026-08-17** by Track R entry R2 | S. `tags` and `summary` now carry NEW-10's predicate as a **lint warning** — the note still indexes — and `duplicates` keys on a perceptual grouping key rather than on that boolean. `isBlank` moved to `packages/security/src/text.ts` rather than being copied. **Two residual rows, plus accepted consequences** — **NEW-30 closed 2026-08-21**, leaving one: NEW-30 (`aliases` was the fourth field with the same gap; the rule now lives beside the other two in `lint.ts`) and NEW-31 (a stray U+200D still hides a duplicate, because the joiner is deliberately exempt). The accepted consequences — an emoji grouping with its text presentation, and two others — are enumerated in `text.ts` rather than carried as rows |
 | **NEW-13** — two artifact roots share one type | DOS-P6 Task 4's nominal brands | **closed 2026-08-21.** The brands shipped with Task 4 and the `@ts-expect-error` case pins them (`packages/adapter-codex/src/install.test.ts:185`); the row went on reading `Status: open` for nine days, and this note recorded the discrepancy rather than letting it pass. Task 19 Step 5 closed it. If a row and the tree ever disagree again, the tree is the answer |
 
-### 10.2 The four Foundation requests `ORDER.md` carries
+### 10.2 The four Foundation changes that survived DOS-P6
 
 **No DOS-P6 task extends `packages/core/src/transactions/` or `packages/core/src/result.ts`**, which
 is where every one of these lands. Two tasks did reach `packages/core` — Task 3 owns
 `packages/core/src/capabilities/index.ts` and Task 4 owns `packages/core/src/agent-prompt/index.ts`,
 both in the plan's own file-structure table — so the reason none of these was done here is that they
 are executor and result-type changes nobody's file list named, not that the package was untouchable.
-They are stated in `ORDER.md` in full; the arithmetic is what matters here.
+Their implementations and this architecture note are the surviving record; `ORDER.md` now contains
+unfinished work only.
 
 1. **and 2. An optional caller-supplied precondition on `PlannedFileMutation`**
-   (`ORDER.md:92-101`). The executor computes `expectedBeforeHash` from the snapshot it takes when
+   (`packages/core/src/transactions/types.ts:79`, enforced at
+   `packages/core/src/transactions/executor.ts:357-358`). The executor computes
+  `expectedBeforeHash` from the snapshot it takes when
   `execute()` runs, so a command cannot supply one. It costs `capture` an `O_EXCL` create
    describes — tolerable there, since the id is the content hash and colliding captures are
    byte-identical — and it costs `review --decision edit` a read-to-execute window in which **the
    discarded content is the user's own hand edit**. **Counted as two of the four and raised as one
    pair**, because a session that fixes one and not the other has fixed neither.
-3. **Prune the transaction backup — closed 2026-08-17** (`ORDER.md`, Foundation request 2).
+3. **Prune the transaction backup — closed 2026-08-17.**
    `review --decision edit` removes a secret from a vault file and `TransactionExecutor.backUp` wrote
    the pre-edit file raw to `~/.developer-os/backups/transactions/<id>/0.bin`, where nothing removed
    it: the user was told the secret was gone and a copy survived. `pruneBackups` now unlinks every
@@ -465,10 +468,8 @@ They are stated in `ORDER.md` in full; the arithmetic is what matters here.
    prune is swept by the next `repair`. `tests/security/sentinel.test.ts` sweeps that directory as
    its own artifact rather than routing around it, and `doctor`'s `transactions` check reports a
    payload that outlived its transaction.
-4. **A `data` slot on `CliError`, or a partial-success arm on `CliResult`** (`ORDER.md:155-160`, where it is the **third** of the
-   three still-open requests — this line quoted it as "a fourth Foundation request, and it is the
-   cheapest of the four", a phrase that appears nowhere in `ORDER.md`, and the numbering moved when the
-   prune closed). `ingest` processes a batch and contains
+4. **A `data` slot on `CliError`, or a partial-success arm on `CliResult`**
+   (`packages/core/src/result.ts:579-632`). `ingest` processes a batch and contains
    each capture's refusal to that capture; when any refuses, the run ends on the failure arm and the
    per-capture outcomes ship as lines inside the error message — the precedent `brain lint` already
    set under the identical constraint. A consumer parses prose where it should read fields. It changes

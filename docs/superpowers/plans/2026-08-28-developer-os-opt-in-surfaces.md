@@ -1927,12 +1927,3 @@ Create a topic branch/PR as required by `docs/superpowers/SESSION.md`, read `gh 
 | §8.1 interface ownership | Global Spec 2 dependency plus the explicit `Produces` block of Tasks 1–23 |
 | §8.2 sequencing | This plan may be written now but execution begins only after Spec 2 implementation |
 | §8.3 accepted residuals | Global constraints and Task 24 architecture/release-document handoff |
-
-## Plan Self-Review Checklist
-
-- [x] Every normative row in Spec 1 §§1–7 maps to at least one task and named focused or integration fixture.
-- [x] Every interface in Spec 1 §8.1 has exactly one producing task and package owner.
-- [x] Later task signatures use the exact names exported by earlier tasks.
-- [x] The plan contains no code implementation against `InstallationManifestV1`; the Spec 2 gate remains first and explicit.
-- [x] No task authorizes a live user repository, credential, launchd service, vendor process, or model invocation in tests.
-- [x] No placeholder instruction remains; every test, implementation, command, and commit step names its exact target and expected outcome.

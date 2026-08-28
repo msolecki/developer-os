@@ -65,7 +65,7 @@ Every input is in this repository. Nothing below resolves outside it.
 - Frozen source classification: `docs/migration/source-manifest.json`
 - Publication boundary: `docs/migration/exclusion-policy.md`
 - Frozen legacy behavior: `docs/migration/baseline-capabilities.json` — the recorded Claude Code, Codex, and Brain capability surface as of 2026-07-21, and the only admissible statement about what the legacy runtime did
-- Cutover preconditions: `docs/superpowers/BACKLOG.md` §6. The exit checklist that held them closed on 2026-08-10 and its plan is deleted; §6 is now the record of what a cutover has to know about the founder's machine
+- Cutover requirements: `docs/superpowers/BACKLOG.md` §4 and Task 8 below.
 
 Three former inputs were retired on 2026-07-27 because they contradicted this program's own exclusion policy: the legacy `README.md` and `AGENTS.md` were never publication candidates, and the two Brain proposals are `private-content`. Their product-relevant substance is `baseline-capabilities.json`; their unresolved obligations are cutover preconditions, not build inputs.
 
@@ -114,114 +114,6 @@ P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5
 
 ---
 
-### Tasks 0 to 5 — closed, and not described here
-
-| Task | Closed | What survives it |
-|---|---|---|
-| 0 — preserve sources, establish the publication boundary | 2026-07-21 | the three files in `docs/migration/`, and the self-containment constraint in Global Constraints above — enforced by `npm run lint` since 2026-08-01 rather than by prose |
-| 1 — public foundation and CLI lifecycle | 2026-08-01 | `docs/architecture/foundation.md`, `docs/architecture/foundation-constraints.md`, `docs/releases/foundation-checkpoint.md` |
-| 2 — Brain engine | 2026-08-10 | `docs/architecture/brain.md`; completed plan and spec are recoverable from git history |
-| 3 — workflow compiler | 2026-08-10 | `docs/architecture/workflow-schema.md`; completed plan and spec are recoverable from git history |
-| 4 — Claude Code adapter | 2026-08-11 | `docs/architecture/claude-adapter.md`; completed plan and spec are recoverable from git history |
-| 5 — Codex adapter | 2026-08-12 | `docs/architecture/codex-adapter.md`; completed plan and spec are recoverable from git history |
-
-None can be re-run and none should be read as instruction: Task 0's inputs are deliberately out
-of reach, and every plan behind these six was deleted when its last step closed. The recovery
-commits are in `BACKLOG.md`'s rules, which is the one place that index lives — a second copy here
-is how two indexes come to disagree.
-
-**Their step lists are deleted rather than kept as ticked boxes.** A closed task carrying a
-checklist is a document inviting the next session to redo it, and a checkbox nobody can trust is
-worse than no checkbox — this repository has produced both, in both directions, three times.
-The last occurrence was in the *open* tasks: `9a196c9` ticked thirteen boxes across Tasks 4 to 7
-while none of the code existed, corrected 2026-08-11. Deleting a closed list does not defend
-against that direction; the staging rule does. `git add` the paths your own task owns, and read
-`git show --stat HEAD` before believing a commit contains only what you meant.
-
-**Tasks 4 and 5 initially closed half met; Task 6 later paid the missing command half.** Recorded
-here because the two checkpoint sentences alone read as whole. What Tasks 4 and 5 proved: all six
-Claude artifacts pass `claude plugin validate` against a real installation, all six Codex skills
-are discoverable in a real disposable installation, and `doctor` reports both adapters with their
-differences. A paid Claude session is still required to prove actual skill discovery there. DOS-P6
-then shipped the commands named by `capture`, `ingest`, `review`, `doctor` and `brain-search`;
-`agent.prompt` is now the sole verb without a step executor.
-- **Neither ships `hooks/hooks.json`**, ratified for both adapters at once on 2026-08-12: a
-  `type: "command"` handler needs an executable file, nothing in this pipeline can express an
-  executable bit, and the only nameable command is the `developer-os` capture entrypoint, which is
-  Task 6's. All three lifecycle capabilities therefore report `wrapper-required` and `plugin_hooks`
-  reports `unknown`. **Both halves of that sentence were overtaken on 2026-08-13**, the day the spec
-  was approved, decision 4 taken, and the vocabulary shipped (`69f294c`). The stated
-  blocker was wrong — a `"type": "command"` handler needs no executable bit — and hooks were
-  *declined* rather than deferred, so the three lifecycle keys and `plugin_hooks` now report
-  `not-used`. Task 6's third box below carries the decision.
-
-`claude-adapter.md` §8 and §9 and `codex-adapter.md` §10 and §11 are the full record, with owners.
-
-**One thing Task 3's file list said that its checkpoint did not need.** It asked for the command
-names frozen in `docs/migration/baseline-capabilities.json` — `lint`, `reindex`, `ingest`,
-`test` — to be encoded as canonical workflows. The approved DOS-P3 spec names six workflows and
-those are what shipped; `lint` and `reindex` are served by the `brain` CLI group DOS-P2 shipped,
-which is a command surface rather than an agent workflow, and `test` is a repository gate. The
-spec wins over the plan, and this is recorded rather than left as an apparent omission.
-
-### Task 6: Harden capture, review, ingest, security, and recovery
-
-**Complexity:** L
-
-**Files:**
-- Create: `docs/superpowers/specs/2026-07-21-developer-os-knowledge-pipeline-design.md`
-- Create: `docs/superpowers/plans/2026-07-21-developer-os-knowledge-pipeline.md`
-- Extend: `packages/brain/src/capture/`, `packages/brain/src/review/`, and `packages/brain/src/ingest/`
-- Extend: `packages/security/src/`
-- Extend: `packages/core/src/transactions/`
-- Extend: `apps/cli/src/commands/` — the `capture`, `ingest` and `review` verbs both vendor trees already name
-- Extend: `packages/adapter-claude/` and `packages/adapter-codex/` — hook bodies only; both façades are frozen
-- Create: `tests/security/` and `tests/e2e/knowledge-lifecycle/`
-
-**Interfaces:**
-- Consumes: both adapter structured-run contracts, `BrainService`, `TransactionStore`, and `SecurityPolicy`.
-- Produces: complete `CaptureEnvelopeV1` transitions, `ReviewDecision`, `IngestProposal`, `IngestValidationResult`, `ApplyResult`, and recovery commands.
-
-**What:** Make the complete knowledge loop safe under secrets, prompt injection, malformed output, concurrency, and process interruption.
-
-**Where:** Brain, security, transaction packages, and end-to-end fixtures.
-
-**How:**
-
-- [x] Approve exact capture fields, lifecycle transitions, retention behavior, and redaction classes. — *the knowledge-pipeline architecture note, carrying the founder-approved 2026-08-13 decision; DOS-P6 Tasks 2 and 8 implement it. The clause about hook bodies is superseded by the box below: the decision made a lifecycle capability `not-used` rather than observable.*
-- [x] Ship the `capture`, `ingest` and `review` verbs that the six shipped skills already name, in both vendor trees. — *DOS-P6 Tasks 5, 9, 10 and 13. `claude-adapter.md` §8, `codex-adapter.md` §10.*
-- [ ] **Hooks are declined, not deferred — this box is rewritten rather than ticked, and nothing shipped for it.** It read "restore `hooks/hooks.json` for both adapters in one change — hook bodies, a mechanism that can express an executable bit, and a test that observes a hook firing", ratified for both adapters 2026-08-12. `docs/architecture/knowledge-pipeline.md` **§2** declines hooks and corrects the stated blocker: a `"type": "command"` handler names a command string, so no executable bit was ever needed — what hooks lacked was *content to capture*, which a `session_end` hook cannot supply without `transcript_path`, and this product opens that field on no code path. Capture content is agent-authored instead, at the point of insight. **The consequences, each accepted by the founder:** no hooks ship in either vendor tree in v1, `developer-os run claude|codex` is never built, and nothing automatic captures anything. The capability words changed with the decision: `plugin_hooks` and the three lifecycle keys report **`not-used`**, not `unknown` or `wrapper-required` (DOS-P6 Task 3). `docs/architecture/knowledge-pipeline.md` §2 is the record; `BACKLOG.md` §8 carries the row.
-- [x] Implement atomic quarantine writes and post-redaction deduplication. — *DOS-P6 Tasks 8 and 9.*
-- [x] Implement accept/edit/reject review without automatic deletion. — *DOS-P6 Task 10.*
-- [x] Invoke agents with source material marked as untrusted data and a staging-only write contract. — *DOS-P6 Task 11, and **satisfied by something stronger than this box asks.** `docs/architecture/knowledge-pipeline.md` §5 rejects the staging-only reading — the literal reading of design spec §13.4 — and grants the agent **zero** declared write scopes, so the vendor's own sandbox enforces it before the model runs rather than our validators proving it afterwards. Ticked with that clause rather than silently.*
-- [x] Validate schema, provenance, links, duplicates, confidence, secrets, indexes, generated artifacts, and write scope. — *DOS-P6 Task 12; the nine are `VALIDATOR_IDS` in `packages/brain/src/ingest/validate.ts:33-43`.*
-- [x] Add per-file backup, atomic replacement, transaction journal, resume, rollback, and concurrent-edit refusal. — *Foundation shipped the machinery in `packages/core/src/transactions/` and `packages/platform-macos/src/transaction-lock.ts`; DOS-P6 Tasks 9, 10 and 13 route every mutation through it, and Task 15's interruption and concurrent-edit suites are the evidence. **No DOS-P6 task extends `packages/core/src/transactions/`**, which this task's file list names: what the box owed was hardening against the capture and ingest paths, which is exercise rather than extension.*
-- [x] Add sentinel secret, prompt injection, symlink escape, multiline command, malformed manifest, and interruption tests. — *DOS-P6 Task 15. `tests/security/` holds **nine** suites, not six: the six named above plus **network**, **concurrent edit**, and **backup-prune**, which `BACKLOG.md` §7's standing gate requires and the retired design omitted.*
-- [x] Run independent security review before accepting the checkpoint. — *DOS-P6 Task 19 Step 1, run 2026-08-14/15 by an agent that authored no task in the plan. **One Critical, two Important and five Minor.** Every accepted finding was fixed with a regression test watched fail first, across four fix rounds and four independent verdicts — `455ae1d`, `2ae7de0`, `1886d5f`, `b49d33a`, `7ae7d15`, `d6bb382`, `4d693bf`. Final verdict: **ready for the checkpoint.** Two findings were registered rather than fixed, with owners — `BACKLOG.md` §1 **NEW-19** and **NEW-20**. **The review covered Tasks 1–18 only.** Task 17's separate security pass, by an independent reviewer over six rounds, accepted and fixed 33 findings before `5c56892`. NEW-21 then closed on 2026-08-20 after five real Codex invocations falsified and replaced the terminal-event rule, corrected the unsupported output schema, and observed `CODEX_THREAD_ID`; `docs/architecture/knowledge-pipeline.md` §10 carries the final evidence and remaining interactive-session residual.*
-
-**Test — verified 2026-08-15 against the tree, not against the plan's own table:**
-
-| Criterion | Evidence, opened | Holds |
-|---|---|---|
-| the same secret sentinel is absent from capture, logs, hashes, model input, staging, reports and canonical notes | `tests/security/sentinel.test.ts`, eight per-artifact cases plus `planted a sentinel the redactor actually recognised`, which is what stops the eight passing over an empty sweep | yes |
-| every interruption point returns either the pre-transaction state or a deterministic recoverable state | `tests/security/interruption.test.ts`, **35 cases** — five forward transaction kinds × seven phases — plus a measured coverage case. The plan's table said fourteen; Task 19's review found the suite reached two of five kinds and it was extended | yes, and wider than the plan claimed |
-| duplicate replay is idempotent | `apps/cli/src/commands/capture.test.ts:256`, `:290`, `:322` — the duplicate at exit 0 writing nothing, the unparseable duplicate, and the loser of a write race — plus `tests/e2e/knowledge-lifecycle/lifecycle.test.ts` | yes |
-| model output cannot widen write scope or bypass canonical validators | `tests/security/symlink-escape.test.ts` and `packages/brain/src/ingest/validate.test.ts:709-900`, the `write-scope` block | yes |
-| failure leaves the capture retryable and never marks it ingested | `apps/cli/src/commands/ingest.test.ts:393`, `:486`, `:513`, `:575`, `:597`, `:704`, and every interruption case's `expectedStatus` | yes |
-
-**One criterion's evidence is weaker than its claim, and it is the first.** `tests/security/` holds
-90 cases and **38 carried no watched-failure demonstration at 85** — three excluded for a stated reason,
-twenty added on 2026-08-15 whose expectations were derived rather than watched fail, and fifteen with
-no evidence and no excuse. The split is `BACKLOG.md` §5 and `docs/architecture/threat-model.md` §8,
-which also records that the per-suite breakdown cannot be re-derived from the tree. Three of the
-sentinel suite's nine cases are among the unevidenced — `the logs`, `the --json output` and `the
-deduplication hash`. The criterion holds; the *strength* of the evidence behind three of its eight
-artifacts is assertion rather than demonstration.
-
-**Checkpoint:** The complete local knowledge lifecycle is production-candidate for synthetic data.
-
----
-
 ### Task 7: Implement optional Git, automation, update, and release lifecycle
 
 **Complexity:** L
@@ -239,10 +131,8 @@ implementation plan is `docs/superpowers/plans/2026-08-28-developer-os-opt-in-su
 is written but must not execute before Spec 2's manifest migration/new-init handoff lands.
 
 **Files:**
-- Create: the two Task 7 specifications above, registering Spec 2's exact path when its design cycle
-  begins
-- Create: `docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md` for approved Spec 1,
-  plus one implementation plan for Spec 2 after that specification is approved
+- Create: Spec 2, registering its exact path when its design cycle begins.
+- Create: one implementation plan for Spec 2 after that specification is approved.
 - Extend: `apps/cli/src/commands/git/`, `apps/cli/src/commands/automation/`, and `apps/cli/src/commands/update/`
 - Extend: `packages/platform-macos/src/launchd/`
 - Extend: `packages/core/src/update/` and `packages/core/src/migrations/`
@@ -250,6 +140,15 @@ is written but must not execute before Spec 2's manifest migration/new-init hand
 
 **Interfaces:**
 - Consumes: Foundation transactions, Brain migrations, security scan, and both adapter update plans.
+- Existing interfaces to extend rather than duplicate:
+  - configuration shape at `packages/core/src/config/types.ts:20`;
+  - configuration loading at `packages/core/src/config/loader.ts:221`;
+  - configuration serialization at `packages/core/src/config/loader.ts:234`;
+  - managed-artifact grammar at `packages/core/src/manifest/types.ts:18`;
+  - installation-manifest grammar at `packages/core/src/manifest/types.ts:32`;
+  - planned mutation preconditions at `packages/core/src/transactions/types.ts:54`;
+  - injected process runner at `packages/security/src/process.ts:77`;
+  - current uninstall composition at `apps/cli/src/commands/uninstall.ts:527`.
 - Internal split dependency: spec 2 produces and implements the `InstallationManifestV2` migration and
   `ManifestStatePlanV1`; spec 1 consumes them only after that implementation lands.
 - Produces: `ManagedArtifactV2`, `InstallationManifestV2`, `ManifestStatePlanV1`,
@@ -287,10 +186,8 @@ is written but must not execute before Spec 2's manifest migration/new-init hand
 
 **Where:** CLI, core update/migration code, macOS adapter, and isolated integration fixtures.
 
-**How:**
+**How — unfinished work only:**
 
-- [x] Specify Git initialization, existing remote connection, scoped staging, commit, push, and error states.
-- [x] Specify exact `launchd` jobs, schedules, logs, lock ownership, and opt-in boundaries.
 - [ ] Implement Git against temporary repositories and bare remotes; never use real credentials in tests.
 - [ ] Implement `launchd` plan/apply/status/disable through an injected filesystem/runner in tests.
 - [ ] Implement signed/checksummed release metadata, dry-run updates, schema migration staging, and rollback.
@@ -424,7 +321,8 @@ is written but must not execute before Spec 2's manifest migration/new-init hand
 **Boundary — this is the only task in the program that touches the legacy runtime, and it does so as a finished product, not as a builder.** Everything it reads is user data through shipped read-only commands; nothing here is a source-material input, and nothing here may be copied into the repository. Two consequences follow:
 
 - No task from Foundation through Task 7 may borrow from this one. If an earlier task wants to "just check what the old system did", the answer is `docs/migration/baseline-capabilities.json` or a spec gap — never a legacy checkout.
-- The cutover preconditions closed on 2026-08-10 and no longer gate this task. `docs/superpowers/BACKLOG.md` §6 records what they left behind — a declined credential-rotation decision, a corrected commit gate, two clean trees, and one live constraint this task must not break: the weekly job's preflight refuses pre-existing changes under `content`, so any cutover step that edits the vault and does not commit the edit will abort the next scheduled run.
+- The weekly job's preflight refuses pre-existing changes under `content`, so any cutover step that
+  edits the vault and does not commit the edit will abort the next scheduled run.
 
 **How:**
 
