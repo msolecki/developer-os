@@ -14,7 +14,7 @@ its closure conditions.
 
 | Entry | Work still required | Blocked by |
 |---|---|---|
-| A11 · DOS-P7 | Spec 2, approval, plan 2, manifest/new-init handoff, Spec 1 implementation, remaining Spec 2 implementation | current |
+| A11 · DOS-P7 | Spec 2 approval, plan 2, manifest/new-init handoff, Spec 1 implementation, remaining Spec 2 implementation | current |
 | A12 · DOS-P10 | spec, plan, implementation for 38 instruction artifacts | A11 |
 | A13 · DOS-P11 | spec, plan, implementation for 11 non-capture hooks | A12 |
 | A14 · DOS-P12 | spec, plan, implementation for nine tooling scripts | A13 |
@@ -65,8 +65,10 @@ There are 24 numbered rows. They are not automatically ordered ahead of A11.
 
 ### A11 · DOS-P7
 
-- [ ] Write and approve Spec 2: signed/checksummed release metadata, dry-run updates,
-  managed-artifact upgrades, schema-migration staging, and rollback.
+- [ ] Approve the written Spec 2 at
+  `docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md`: signed/checksummed
+  release metadata, dry-run updates, managed-artifact upgrades, schema-migration staging, and
+  rollback.
 - [ ] Write Spec 2's implementation plan.
 - [ ] Implement `ManagedArtifactV2`, `InstallationManifestV2`, `ManifestStatePlanV1`, existing-install
   migration, and the V2 new-init handoff.

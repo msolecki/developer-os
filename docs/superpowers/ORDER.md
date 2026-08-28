@@ -13,14 +13,16 @@ notes are the archive.
 Spec 1 is approved and its plan exists at
 `plans/2026-08-28-developer-os-opt-in-surfaces.md`, but none of its 24 implementation tasks has
 started; the first begins at
-`docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md:46`. The next action is the Spec 2
-design cycle. Spec 1 implementation remains blocked until
-Spec 2 implements the `InstallationManifestV2` migration and V2 new-init handoff.
+`docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md:46`. Spec 2 is written at
+`docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md` after section-by-section
+design approval. The next action is founder review and approval of the complete written
+specification. Spec 1 implementation remains blocked until Spec 2 implements the
+`InstallationManifestV2` migration and V2 new-init handoff.
 
 Open sequence inside A11:
 
-1. Write Spec 2 for release metadata, dry-run update, managed-artifact upgrade, schema migration,
-   and rollback using `superpowers:brainstorming`.
+1. Completed: write Spec 2 for release metadata, dry-run update, managed-artifact upgrade, schema
+   migration, and rollback using `superpowers:brainstorming`.
 2. Obtain founder approval for Spec 2.
 3. Write Spec 2's implementation plan using `superpowers:writing-plans`.
 4. Implement Spec 2's `InstallationManifestV2` migration and V2 new-init handoff.

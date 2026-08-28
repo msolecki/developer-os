@@ -130,12 +130,24 @@ Spec 2's manifest migration must land before Spec 1 implementation.
 implementation plan is `docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md`. That plan
 is written but must not execute before Spec 2's manifest migration/new-init handoff lands.
 
+**Spec 2 document gate:** written on 2026-08-28 after section-by-section founder approval at
+`docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md`; the complete written
+specification is awaiting founder review and approval before its implementation plan is written.
+
 **Files:**
-- Create: Spec 2, registering its exact path when its design cycle begins.
+- Create: `docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md` (written;
+  awaiting founder approval).
 - Create: one implementation plan for Spec 2 after that specification is approved.
-- Extend: `apps/cli/src/commands/git/`, `apps/cli/src/commands/automation/`, and `apps/cli/src/commands/update/`
-- Extend: `packages/platform-macos/src/launchd/`
-- Extend: `packages/core/src/update/` and `packages/core/src/migrations/`
+- Create: `apps/launcher/`
+- Extend: `apps/cli/src/commands/git/`, `apps/cli/src/commands/automation/`,
+  `apps/cli/src/commands/update/`, and `apps/cli/src/update/`
+- Extend: `packages/core/src/manifest/`, `packages/core/src/update/`, and
+  `packages/core/src/migrations/`
+- Create: `packages/brain/src/migrations/update/`, `packages/adapter-claude/src/update/`, and
+  `packages/adapter-codex/src/update/` for token-only pure planner entrypoints.
+- Create: `packages/security/src/update/`
+- Extend: `packages/platform-macos/src/launchd/` and create
+  `packages/platform-macos/src/launcher/`
 - Create: `tests/integration/git/`, `tests/integration/launchd/`, and `tests/e2e/upgrade/`
 
 **Interfaces:**
@@ -158,7 +170,7 @@ is written but must not execute before Spec 2's manifest migration/new-init hand
   `LifecycleCoordinatorJournalV1`, `LifecyclePlanPreviewV1`, `LifecycleExecutionPlanV1`,
   `LifecycleCoordinatorPlanV1`, `LifecycleJournalClosureV1`, `ConfigReadableKeyV1`,
   `ConfigMutableKeyV1`, `ConfigGetResultV1`, `ConfigSetResultV1`,
-  `FoundationParticipantRefV1`, `FoundationTerminalCompactionV1`,
+  `FoundationParticipantRefV1`, `FoundationParticipantRefV2`, `FoundationTerminalCompactionV1`,
   `LifecycleTerminalCompactionV1`, `GitIndexStateV1`, `GitHeadStateV1`, `GitReflogStateV1`,
   `GitReflogPlanV1`, `GitSourceStateV1`, `GitScopeSnapshotV1`, `GitPlanPreviewV1`, `GitEnablePlan`, `GitDisablePlan`,
   `GitSyncPlanV1`, `PersistedGitPushPlanV1`,
@@ -179,12 +191,72 @@ is written but must not execute before Spec 2's manifest migration/new-init hand
   `GitProcessSupervisorV1`, `SanitizedGitEnvironmentV1`, `SanitizedGitShadowConfigV1`, `SanitizedGitShadowConfigTemplateV1`, `SanitizedGitShadowConfigBytesV1`, `SanitizedGitShadowV1`,
   `SanitizedBareDestinationShadowV1`, `SanitizedSshBridgeV1`,
   `SanitizedLocalRemoteHelperV1`, `LaunchdPlanV1`, `LifecycleFileBindingV1`,
-  `SecretOpaqueFileStateV1`, `UpdatePlan`, `SchemaMigrationPlan`, and
+  `SecretOpaqueFileStateV1`, `ManagedArtifactV2`, `InstallationManifestV2`,
+  `ManifestStatePlanV1`, `FreshV2InitPlanV1`, `FreshV2InitJournalV1`,
+  `ManifestMigrationPlanV1`, `ManifestMigrationJournalV1`, `BootstrapExternalShapeProjectionV1`,
+  `BootstrapExpectedPayloadRefV1`, `BootstrapPayloadPlanV1`, `BootstrapPayloadSourceV1`,
+  `BootstrapMigrationPreimageAuthorityV1`, `BootstrapPayloadEvidenceV1`,
+  `BootstrapPayloadWriteStateV1`, `BootstrapPlannedParentV1`, `PlannedCreatedPathV1`,
+  `CreatedPathEvidenceV1`, `UpdateExpectedPayloadRefV1`, `BootstrapPayloadPathV1`,
+  `ManifestPayloadPathV1`, `CanonicalStatePayloadPathV1`,
+  `FoundationInitialJournalPayloadPathV1`, `UpdatePayloadPathV1`,
+  `UpdateRecoveryExecutorStagedPathV1`, `OfflineReleaseTrustV1`, `ReleaseKeyDelegationV1`,
+  `ReleaseIndexV1`, `ReleaseBundleManifestV1`,
+  `ReleaseIdentityV1`, `ReleaseMetadataIdentityV1`, `ActiveReleaseRecordV1`,
+  `ReleaseTrustStateV1`, `TenDigitZeroPaddedOrdinalV1`, `UpdatePlanPreviewV1`,
+  `UpdateRollbackPreviewV1`, `UpdateCapacityProjectionV1`, `PreparedUpdateCandidateV1`,
+  `PreparedUpdateMaterializationV1`, `PreparedOutputBlobIdentityV1`,
+  `PreparedInverseProjectionV1`,
+  `ReleasePlanningScratchV1`, `ReleasePlanningScratchJournalV1`,
+  `ReleaseScratchPathWriteStateV1`, `ReleaseScratchEntryWriteStateV1`,
+  `ReleaseScratchEntryEvidenceV1`,
+  `UpdatePlannerRequestV1`, `TargetUpdateDraftV1`, `PlannerArtifactInputV1`,
+  `PlannerBrainSnapshotV1`, `PlannerManifestSnapshotV1`, `PlannerPathRefV1`,
+  `PlannerInstalledContentDraftV1`, `OwnerUpdateDraftV1`, `OwnerExternalEffectDraftV1`,
+  `SchemaMigrationDraftV1`,
+  `PlannerInputBlobRefV1`, `PlannerOutputBlobRefV1`, `PlannerWireBoundsV1`,
+  `PlannerTranscriptIdentityV1`, `SchemaMigrationPlanV1`,
+  `SchemaMigrationExecutionJournalV1`, `UpdateConstructionPlanV1`,
+  `UpdateConstructionJournalV1`, `UpdateConstructionDirectoryPlanV1`,
+  `UpdateConstructionDirectoryIdentityV1`, `UpdateConstructionFilePlanV1`,
+  `UpdateConstructionOutputFrameV1`, `UpdateConstructionOutputConsumerV1`,
+  `UpdateConstructionRollbackSourceV1`, `UpdateConstructionRollbackSourceEntryV1`,
+  `UpdateConstructionRollbackEntrySourceV1`, `UpdateConstructionPayloadSourceV1`,
+  `UpdateConstructionPreimageAuthorityV1`, `UpdateConstructionPlanDerivedSourceV1`,
+  `UpdateConstructionWriteStateV1`, `UpdateConstructionFileEvidenceV1`,
+  `UpdateConstructionOuterFileV1`, `UpdateConstructionOuterWriteStateV1`,
+  `UpdateConstructionOuterIdentityV1`, `ImmutableUpdateConstructionRefV1`, `UpdateExecutionPlanV1`,
+  `BundleSourceStagingPlanV1`, `BundleSourceReadyEvidenceV1`,
+  `BundlePublicationSourceV1`, `BundlePublicationPlanV1`,
+  `OwnerUpdatePlanV1`, `PersistedOwnerChangeOperationV1`,
+  `OwnerExternalEffectPlanV1`, `OwnerExternalEffectProcessPolicyV1`,
+  `OwnerExternalEffectJournalV1`,
+  `OwnerExternalEffectEvidenceV1`, `CanonicalStateFilePlanV1`,
+  `RollbackPayloadSourceStagingPlanV1`, `RollbackPayloadSourceReadyEvidenceV1`,
+  `RollbackPayloadPublicationSourceV1`, `DurableSourceEntryEvidenceV1`,
+  `RollbackPayloadStatePlanV1`,
+  `TargetVerificationPlanV1`, `UpdateTerminalRetirementPlanV1`,
+  `BoundedUpdateInversePlanV1`, `RetainedOwnerInversePlanV1`,
+  `RetainedExternalEffectInversePlanV1`, `RetainedSchemaMigrationInversePlanV1`,
+  `UpdateInitialJournalRefV1`, `UpdateStateParticipantJournalV1`,
+  `OwnerUpdateJournalV1`, `BundleSourceStagingJournalV1`,
+  `RollbackPayloadSourceStagingJournalV1`, `BundlePublicationJournalV1`,
+  `RollbackPayloadPublicationJournalV1`, `UpdateSourceStructureWriteStateV1`,
+  `UpdateSourceMetadataWriteStateV1`, `UpdateSourceEntryWriteStateV1`,
+  `UpdateSourceReadyWriteStateV1`, `UpdatePublicationStructureWriteStateV1`,
+  `UpdatePublicationEntryWriteStateV1`, `UpdatePublicationMetadataWriteStateV1`,
+  `DurablePublicationEntryEvidenceV1`,
+  `UpdateLifecycleCoordinatorPlanV2`,
+  `UpdateLifecycleCoordinatorJournalV2`, `UpdateLifecycleTerminalCompactionV1`,
+  `UpdateStateCompactionEntryV1`, `LifecycleJournalClosureV2`, `RollbackRecordV1`,
+  `RollbackPayloadInventoryV1`, `UpdateRecoveryExecutorRecordV1`,
+  `UpdateRecoveryExecutorStagedFileV1`, `UpdateDirectoryIdentityV1`, and
   verified uninstall/rollback results.
 
 **What:** Add the explicitly optional background and release lifecycle without hidden network or data loss.
 
-**Where:** CLI, core update/migration code, macOS adapter, and isolated integration fixtures.
+**Where:** CLI, Core update/migration code, Brain token-only migration planners, Claude/Codex
+token-only adapter planners, macOS adapter, and isolated integration fixtures.
 
 **How — unfinished work only:**
 
