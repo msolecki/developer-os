@@ -262,12 +262,25 @@ describe("InstallationManifestV2", () => {
     const context = admission({ admitOwnerPath: (_owner, path) => { admissions += 1; return path; } });
     expectMigratableRefusal(new TextEncoder().encode('{\n}'), context);
     expect(admissions).toBe(0);
-    expect(() => validateManifestV2({ ...manifestWith(), artifacts: { length: 1_000_001 } as never }, context)).toThrow(ManifestStateError);
+    let elementReads = 0;
+    const firstOver = new Proxy([], {
+      get(_target, key) {
+        if (key === "length") return 1_000_001;
+        if (key === "0") elementReads += 1;
+        return undefined;
+      },
+    });
+    expect(Array.isArray(firstOver)).toBe(true);
+    expect(() => validateManifestV2({ ...manifestWith(), artifacts: firstOver }, context)).toThrow(ManifestStateError);
+    expect(elementReads).toBe(0);
     expect(admissions).toBe(0);
   });
 
   it("refuses a legacy alternate encoding before artifact bytes are read", () => {
     const legacy = { schemaVersion: 1, productVersion: "1.2.3", installedAt: "2026-08-29T12:00:00.000Z", artifacts: [{ owner: "core", path: "/synthetic/product/file", kind: "file", productVersion: "1.2.3", existedBefore: false, beforeHash: null, backupRelativePath: null, installedHash: hash, source: "templates/file", mergeStrategy: "dedicated", verifiedAt: "2026-08-29T12:00:00.000Z" }] };
-    expect(() => validateMigratableManifestV1(new TextEncoder().encode(JSON.stringify(legacy, null, 2) + "\n"), admission())).toThrow(ManifestV1NotMigratableError);
+    let admissions = 0;
+    const context = admission({ admitOwnerPath: (_owner, path) => { admissions += 1; return path; } });
+    expectMigratableRefusal(new TextEncoder().encode(JSON.stringify(legacy, null, 2) + "\n"), context);
+    expect(admissions).toBe(0);
   });
 });
