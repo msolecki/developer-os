@@ -228,18 +228,28 @@ function parseBase64Url(value: unknown, label: string, length: number): Base64Ur
   return input as Base64UrlNoPaddingV1;
 }
 function publicKeyId(key: Base64UrlNoPaddingV1): LowerHexSha256 { return createHash("sha256").update(Buffer.from(key, "base64url")).digest("hex") as LowerHexSha256; }
+function parseIpv4Number(value: string): bigint | null {
+  if (/^0x[0-9a-f]+$/.test(value)) return BigInt(value);
+  if (/^0[0-7]+$/.test(value) && value.length > 1) return BigInt(`0o${value.slice(1)}`);
+  if (/^(?:0|[1-9][0-9]*)$/.test(value)) return BigInt(value);
+  return null;
+}
 function isIpv4Literal(value: string): boolean {
   const labels = value.split(".");
-  return labels.length === 4 && labels.every((label) => /^[0-9]+$/.test(label) && Number(label) <= 255);
+  if (labels.length < 1 || labels.length > 4) return false;
+  const numbers = labels.map(parseIpv4Number);
+  if (numbers.some((number) => number === null)) return false;
+  const numeric = numbers as bigint[];
+  if (numeric.slice(0, -1).some((number) => number > 255n)) return false;
+  const finalMaximum = (1n << BigInt(8 * (5 - numeric.length))) - 1n;
+  return (numeric[numeric.length - 1] as bigint) <= finalMaximum;
 }
 
 export function parseLowercaseAsciiDnsName(value: unknown): LowercaseAsciiDnsNameV1 {
   const input = string(value, "LowercaseAsciiDnsNameV1");
   if (bytes(input) < 1 || bytes(input) > 253 || input === "localhost" || input.includes("%") || !/^[a-z0-9-]+(?:\.[a-z0-9-]+)*$/.test(input)) invalid("LowercaseAsciiDnsNameV1");
   const labels = input.split(".");
-  let canonical: string;
-  try { canonical = new URL(`https://${input}`).hostname; } catch { invalid("LowercaseAsciiDnsNameV1"); }
-  if (labels.length > 127 || input.startsWith("xn--") || labels.some((label) => label.startsWith("xn--") || label.length > 63 || label.startsWith("-") || label.endsWith("-")) || isIpv4Literal(input) || canonical !== input || isIpv4Literal(canonical)) invalid("LowercaseAsciiDnsNameV1");
+  if (labels.length > 127 || input.startsWith("xn--") || labels.some((label) => label.startsWith("xn--") || label.length > 63 || label.startsWith("-") || label.endsWith("-")) || isIpv4Literal(input)) invalid("LowercaseAsciiDnsNameV1");
   return input as LowercaseAsciiDnsNameV1;
 }
 

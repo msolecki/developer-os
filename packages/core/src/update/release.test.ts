@@ -338,6 +338,12 @@ describe("release schemas", () => {
     expect(parseLowercaseHost(`${"a".repeat(63)}.${"b".repeat(63)}.${"c".repeat(63)}.${"d".repeat(61)}`)).toHaveLength(253);
     expect(parseLowercaseHost(Array.from({ length: 127 }, () => "a").join("."))).toHaveLength(253);
   });
+  it("admits legal LDH names with a numeric final label", () => {
+    expect(parseLowercaseHost("foo.123")).toBe("foo.123");
+  });
+  it.each(["127.0.0.1", "127.1", "0x7f.1", "0177.0.0.1", "2130706433"])("refuses alternate IPv4 spelling %s", (host) => {
+    expect(() => parseLowercaseHost(host)).toThrow();
+  });
 
   it("admits exact URL path bounds and refuses their first overages", () => {
     expect(parseOfficialReleasePathPrefix(`/${"a".repeat(2046)}/`)).toHaveLength(2048);
@@ -410,6 +416,23 @@ describe("release schemas", () => {
     const reordered = { manifestSha256: fixture.selected.bundle.manifestSha256, manifestBytes: fixture.selected.bundle.manifestBytes, manifestPath: fixture.selected.bundle.manifestPath, archiveSha256: fixture.selected.bundle.archiveSha256, archiveBytes: fixture.selected.bundle.archiveBytes, archivePath: fixture.selected.bundle.archivePath, archiveFormat: fixture.selected.bundle.archiveFormat, architecture: fixture.selected.bundle.architecture, platform: fixture.selected.bundle.platform };
     expect(admitReleaseIdentity(fixture.identity, evidence, { ...fixture.context, selected: { ...fixture.selected, bundle: reordered } } as never)).toEqual(fixture.identity);
   });
+  it("refuses a coherent identity/context manifest hash that differs from the selected bundle hash", () => {
+    const fixture = identityAdmissionFixture();
+    const coherentHash = parseLowerHexSha256(hex("coherent-manifest"));
+    const identity = { ...fixture.identity, bundleManifestHash: coherentHash };
+    const context = { ...fixture.context, bundleManifestHash: coherentHash };
+    expect(() => admitReleaseIdentity(identity, evidence, context as never)).toThrow("ReleaseIdentityV1 context");
+  });
+
+  it("refuses a folded alias after its directory parent in unsigned UTF-8 order", () => {
+    const manifest = validManifest();
+    const foldedAlias = { path: "bin/Verifier", kind: "file", mode: 384, bytes: "1", sha256: hash };
+    expect(() => validateBundleManifest({ ...manifest, entries: [manifest.entries[0], foldedAlias, ...manifest.entries.slice(1)] })).toThrow("entries order");
+  });
+  it("refuses an independently out-of-order inventory vector", () => {
+    const manifest = validManifest();
+    expect(() => validateBundleManifest({ ...manifest, entries: [manifest.entries[0], { path: "bin/zz", kind: "file", mode: 384, bytes: "1", sha256: hash }, ...manifest.entries.slice(1)] })).toThrow("entries order");
+  });
 
   it.each(["delegation", "index", "release"] as const)("allows independent higher %s watermark advancement", (field) => {
     const current = trustFixture(); const accepted = acceptedFixture();
@@ -430,6 +453,17 @@ describe("release schemas", () => {
     ["release hash", { releaseIdentityHash: hex("other") }],
   ])("refuses equal %s watermark mismatch", (_name, mutation) => {
     expect(() => advanceReleaseTrust(trustFixture(), { ...acceptedFixture(), ...mutation } as never)).toThrow();
+  });
+  it.each([
+    ["delegation", (accepted: ReturnType<typeof acceptedAtTwo>) => ({ ...accepted, delegationSequence: "1" }), "delegation replay"],
+    ["index", (accepted: ReturnType<typeof acceptedAtTwo>) => ({ ...accepted, releaseIndexSequence: "1" }), "index replay"],
+    ["release", (accepted: ReturnType<typeof acceptedAtTwo>) => ({ ...accepted, releaseSequence: "1" }), "release replay"],
+  ])("refuses branch-valid lower %s watermark observations", (_name, mutate, expectedError) => {
+    expect(() => advanceReleaseTrust(trustAtTwo(), mutate(acceptedAtTwo()) as never)).toThrow(expectedError);
+  });
+  it("keeps equal matching and independent higher trust observations valid", () => {
+    expect(advanceReleaseTrust(trustAtTwo(), acceptedAtTwo() as never)).toEqual(trustAtTwo());
+    expect(advanceReleaseTrust(trustAtTwo(), { ...acceptedAtTwo(), releaseIndexSequence: "3", releaseIndexHash: hex("i3") } as never)).toMatchObject({ highestReleaseIndexSequence: "3" });
   });
 
   it.each([
@@ -476,6 +510,12 @@ describe("release schemas", () => {
     (fixture.identity as { bundleRoot: string }).bundleRoot = "/product/releases/mutated/darwin-arm64";
     expect(admitted.bundleRoot).toBe("/product/releases/2.0.0/darwin-arm64");
   });
+  it("composes a validated active record through context-bound identity admission", () => {
+    const fixture = identityAdmissionFixture();
+    const active = validateActiveReleaseRecord({ schemaVersion: 1, ...fixture.identity, activatedAt: "2026-08-29T12:00:00.000Z" }, evidence);
+    const identity = { version: active.version, releaseSequence: active.releaseSequence, releaseIdentityHash: active.releaseIdentityHash, delegationSequence: active.delegationSequence, delegationHash: active.delegationHash, releaseIndexSequence: active.releaseIndexSequence, releaseIndexHash: active.releaseIndexHash, bundleManifestHash: active.bundleManifestHash, bundleRoot: active.bundleRoot, platform: active.platform, architecture: active.architecture, launcherProtocol: active.launcherProtocol, updateProtocol: active.updateProtocol };
+    expect(admitReleaseIdentity(identity, evidence, fixture.context as never)).toEqual(identity);
+  });
 
   it.each([
     ["offline root", () => validateOfflineReleaseTrust({ ...offlineTrustFixture(), extra: true })],
@@ -517,6 +557,8 @@ function identityAdmissionFixture() {
 }
 function trustFixture() { return validateReleaseTrustState({ schemaVersion: 1, highestDelegationSequence: "1", delegationHash: hash, delegatedReleaseKeyId: key, highestReleaseIndexSequence: "1", releaseIndexHash: hash, highestAcceptedReleaseSequence: "1", releaseIdentityHash: hash }); }
 function acceptedFixture() { return { delegationSequence: "1", delegationHash: hash, delegatedReleaseKeyId: key, releaseIndexSequence: "1", releaseIndexHash: hash, releaseSequence: "1", releaseIdentityHash: hash }; }
+function trustAtTwo() { return validateReleaseTrustState({ schemaVersion: 1, highestDelegationSequence: "2", delegationHash: hex("d2"), delegatedReleaseKeyId: hex("k2"), highestReleaseIndexSequence: "2", releaseIndexHash: hex("i2"), highestAcceptedReleaseSequence: "2", releaseIdentityHash: hex("r2") }); }
+function acceptedAtTwo() { return { delegationSequence: "2", delegationHash: hex("d2"), delegatedReleaseKeyId: hex("k2"), releaseIndexSequence: "2", releaseIndexHash: hex("i2"), releaseSequence: "2", releaseIdentityHash: hex("r2") }; }
 function offlineTrustFixture() {
   const publicKey = Buffer.alloc(32, 17);
   return { schemaVersion: 1, handoffProtocol: 1, onlineRootKeyId: hex(publicKey), acceptedRoots: [{ role: "online_current", algorithm: "ed25519", keyId: hex(publicKey), publicKey: publicKey.toString("base64url") }], delegationLocator: { origin: "https://github.com", repositoryPath: "/msolecki/developer-os/releases/latest/download/", assetName: "release-key-delegation-v1.json" }, indexLocator: { origin: "https://github.com", repositoryPath: "/msolecki/developer-os/releases/latest/download/", assetName: "release-index-v1.json" }, metadataRedirectOrigins: [origin("redirect")] };
