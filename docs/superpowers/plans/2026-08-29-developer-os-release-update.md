@@ -69,11 +69,11 @@ it("encodes one canonical object order and one LF", () => {
   expect(encodeCanonicalJson({ z: 1, a: "é" })).toBe('{"a":"é","z":1}\n');
 });
 
-it.each(["0", "0000000000", "0000999999"])("round-trips canonical ordinal %s", value => {
+it.each(["0000000000", "0000999999"])("round-trips canonical ordinal %s", value => {
   expect(encodeTenDigitOrdinal(decodeTenDigitOrdinal(value))).toBe(value);
 });
 
-it.each(["1", "00000000000", "+000000001", "00000000١٠"])("refuses noncanonical ordinal %s", value => {
+it.each(["0", "1", "00000000000", "+000000001", "00000000١٠"])("refuses noncanonical ordinal %s", value => {
   expect(() => decodeTenDigitOrdinal(value)).toThrow();
 });
 ```
