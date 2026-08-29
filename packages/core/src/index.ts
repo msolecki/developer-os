@@ -41,6 +41,10 @@ export {
   ManifestStore,
   ManifestUnsupportedArtifactError,
   validateManifest,
+  validateManifestBytes,
+  validateManifestV1,
+  validateManifestV2,
+  validateMigratableManifestV1,
 } from "./manifest/index.js";
 export type {
   ArtifactKind,
@@ -57,6 +61,12 @@ export type {
   ManifestGuards,
   ManifestStoreDependencies,
   MergeStrategy,
+  InstallationManifest,
+  InstallationManifestV2,
+  ManagedArtifactCommonV2,
+  ManagedArtifactSchemaIdV1,
+  ManagedArtifactV2,
+  MigratableInstallationManifestV1,
 } from "./manifest/index.js";
 export { ChangePlanError, validateChangePlan } from "./plans/index.js";
 export type {

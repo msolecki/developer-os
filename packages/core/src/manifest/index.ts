@@ -11,6 +11,7 @@ export {
   ManifestUnsupportedArtifactError,
   validateManifest,
 } from "./store.js";
+export { validateManifestBytes, validateManifestV1, validateManifestV2, validateMigratableManifestV1 } from "./v2.js";
 export type {
   ArtifactKind,
   ArtifactOwner,
@@ -26,4 +27,10 @@ export type {
   ManifestGuards,
   ManifestStoreDependencies,
   MergeStrategy,
+  InstallationManifest,
+  InstallationManifestV2,
+  ManagedArtifactCommonV2,
+  ManagedArtifactSchemaIdV1,
+  ManagedArtifactV2,
+  MigratableInstallationManifestV1,
 } from "./types.js";

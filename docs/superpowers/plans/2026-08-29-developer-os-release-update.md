@@ -199,12 +199,13 @@ git commit -m "feat(core): define release identity and trust schemas"
 - Modify: `packages/core/src/manifest/types.ts`
 - Modify: `packages/core/src/manifest/index.ts`
 - Modify: `packages/core/src/index.ts`
+- Modify: `packages/core/src/index.test.ts`
 
 **Interfaces:**
 - Consumes: Task 1 scalars/path/source codecs and existing V1 types.
 - Produces: `ManagedArtifactV2`, `InstallationManifestV2`, `ManagedArtifactSchemaIdV1`, `MigratableInstallationManifestV1`, `validateManifestV1`, `validateMigratableManifestV1`, `validateManifestV2`, `InstallationManifest = InstallationManifestV1 | InstallationManifestV2`.
 
-- [ ] **Step 1: Write failing tagged-union and migratable-V1 tests**
+- [x] **Step 1: Write failing tagged-union and migratable-V1 tests**
 
 ```ts
 it.each(validV2Arms)("round-trips $kind/$mode", ({ value }) => {
@@ -222,13 +223,13 @@ it("refuses a legacy alternate encoding before artifact bytes are read", () => {
 
 Cover exact keys at every depth, content/schema/ephemeral files, content directories/symlinks, the four initial schema IDs, empty/maximum/first-over artifacts and source/path bounds, exact/NFC/folded duplicates, stable product versions, calendar-valid UTC milliseconds, directory empty-hash sentinel, V1 symlink/config-entry/shared-directory/unsafe-backup refusals.
 
-- [ ] **Step 2: Run manifest validator tests and verify V2 arms fail**
+- [x] **Step 2: Run manifest validator tests and verify V2 arms fail**
 
 Run: `npx vitest run --root packages/core src/manifest/v2.test.ts src/manifest/manifest.test.ts`
 
 Expected: FAIL because V2 types/codecs are absent; existing V1 cases remain green.
 
-- [ ] **Step 3: Implement V2 and strict migratable-V1 validation**
+- [x] **Step 3: Implement V2 and strict migratable-V1 validation**
 
 ```ts
 export type ManagedArtifactV2 =
@@ -250,16 +251,16 @@ export function validateManifestBytes(bytes: Uint8Array): InstallationManifest;
 
 Parse V1 only through the legacy compact round-trip byte check and V2 only through canonical JSON plus LF. Stream/count the artifact array within 64 MiB and 1,000,000 rows; perform complete collision validation before any caller receives artifact paths.
 
-- [ ] **Step 4: Run manifest validator tests**
+- [x] **Step 4: Run manifest validator tests**
 
 Run: `npx vitest run --root packages/core src/manifest/v2.test.ts src/manifest/manifest.test.ts`
 
 Expected: PASS without changing accepted V1 bytes.
 
-- [ ] **Step 5: Commit Task 3**
+- [x] **Step 5: Commit Task 3**
 
 ```bash
-git add packages/core/src/manifest/v2.ts packages/core/src/manifest/v2.test.ts packages/core/src/manifest/types.ts packages/core/src/manifest/index.ts packages/core/src/index.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
+git add packages/core/src/manifest/v2.ts packages/core/src/manifest/v2.test.ts packages/core/src/manifest/types.ts packages/core/src/manifest/index.ts packages/core/src/index.ts packages/core/src/index.test.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
 git commit -m "feat(core): add installation manifest v2"
 ```
 

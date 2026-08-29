@@ -8,6 +8,16 @@ import type {
   rename,
   unlink,
 } from "node:fs/promises";
+import type {
+  BoundedArtifactSourceV1,
+  CanonicalAbsolutePathV1,
+  VaultFreeRelativePathV1,
+} from "../update/paths.js";
+import type {
+  LowerHexSha256,
+  StableSemverV1,
+  UtcTimestampV1,
+} from "../update/scalars.js";
 
 export type ArtifactOwner = "core" | "claude" | "codex" | "macos";
 
@@ -35,6 +45,44 @@ export interface InstallationManifestV1 {
   readonly installedAt: string;
   readonly artifacts: readonly ManagedArtifactV1[];
 }
+
+export type ManagedArtifactSchemaIdV1 =
+  | "developer-os-config-v1"
+  | "lifecycle-id-allocator-v1"
+  | "active-release-record-v1"
+  | "release-trust-state-v1";
+
+export interface ManagedArtifactCommonV2 {
+  readonly owner: ArtifactOwner;
+  readonly path: CanonicalAbsolutePathV1;
+  readonly productVersion: StableSemverV1;
+  readonly existedBefore: boolean;
+  readonly beforeHash: LowerHexSha256 | null;
+  readonly backupRelativePath: VaultFreeRelativePathV1 | null;
+  readonly source: BoundedArtifactSourceV1;
+  readonly mergeStrategy: MergeStrategy;
+  readonly verifiedAt: UtcTimestampV1;
+}
+
+export type ManagedArtifactV2 =
+  | (ManagedArtifactCommonV2 & { readonly kind: "file"; readonly verification: { readonly mode: "content"; readonly installedHash: LowerHexSha256 } })
+  | (ManagedArtifactCommonV2 & { readonly kind: "file"; readonly verification: { readonly mode: "schema"; readonly schemaId: ManagedArtifactSchemaIdV1; readonly installedHash: LowerHexSha256 } })
+  | (ManagedArtifactCommonV2 & { readonly kind: "file"; readonly verification: { readonly mode: "ephemeral" } })
+  | (ManagedArtifactCommonV2 & { readonly kind: "directory"; readonly verification: { readonly mode: "content" } })
+  | (ManagedArtifactCommonV2 & { readonly kind: "symlink"; readonly verification: { readonly mode: "content"; readonly installedHash: LowerHexSha256 } });
+
+export interface InstallationManifestV2 {
+  readonly schemaVersion: 2;
+  readonly productVersion: StableSemverV1;
+  readonly installedAt: UtcTimestampV1;
+  readonly artifacts: readonly ManagedArtifactV2[];
+}
+
+export type InstallationManifest = InstallationManifestV1 | InstallationManifestV2;
+declare const migratableInstallationManifestV1: unique symbol;
+export type MigratableInstallationManifestV1 = InstallationManifestV1 & {
+  readonly [migratableInstallationManifestV1]: true;
+};
 
 export type DriftKind =
   | "missing"
