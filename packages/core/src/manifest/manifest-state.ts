@@ -963,12 +963,13 @@ export class ManifestStateParticipant {
     plan: ManifestStatePlanV1,
   ): Promise<void> {
     // The bytes cannot distinguish apply's preimage move from compensation's
-    // postimage-to-payload move, so adopt the union of both mutations' parents.
-    await this.makeAffectedParentsDurable([
-      plan.manifestPath,
-      plan.tombstonePath,
-      this.payloadPath(plan),
-    ]);
+    // postimage-to-payload move when a postimage exists, so adopt exactly the
+    // conservative union of parents for mutations that the plan can perform.
+    await this.makeAffectedParentsDurable(
+      plan.after.state === "present"
+        ? [plan.manifestPath, plan.tombstonePath, this.payloadPath(plan)]
+        : [plan.manifestPath, plan.tombstonePath],
+    );
     await this.requirePreimageInventory(plan);
   }
 

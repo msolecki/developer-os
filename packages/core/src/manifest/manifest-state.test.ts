@@ -107,6 +107,7 @@ class SimulatedDeath extends Error {}
 class MemoryFileSystem {
   readonly entries = new Map<string, MemoryEntry>();
   readonly events: string[] = [];
+  readonly openAttempts: string[] = [];
   private readonly occurrences = new Map<string, number>();
   private readonly awaitingReopen = new Set<string>();
   private fault: Fault | null = null;
@@ -175,6 +176,7 @@ class MemoryFileSystem {
     this.fault = null;
     this.atomicUnlinkSwap = null;
     this.events.length = 0;
+    this.openAttempts.length = 0;
     this.occurrences.clear();
     this.awaitingReopen.clear();
   }
@@ -212,6 +214,7 @@ class MemoryFileSystem {
   }
 
   open(path: string): Promise<FileHandle> {
+    this.openAttempts.push(path);
     const entry = this.entries.get(path);
     if (entry === undefined) return Promise.reject(missingError());
     if (entry.kind === "file") return Promise.resolve(this.fileHandle(path, entry));
@@ -1098,7 +1101,6 @@ function compensateDeathRows(row: ExecutionRow, payloadParent: string): readonly
     points.push(
       ...durabilityDeathPoints("ambiguous preimage adoption", [
         { label: "manifest/tombstone", path: MANIFEST_PARENT },
-        { label: "payload", path: payloadParent },
       ]),
       ...moveDeathPoints(
         "restore-preimage",
@@ -1292,7 +1294,9 @@ describe.each(executionRows.filter((row) => row.before === "present"))(
     const deathRows = numberDeathOccurrences([
       ...durabilityDeathPoints("ambiguous preimage adoption", [
         { label: "manifest/tombstone", path: MANIFEST_PARENT },
-        { label: "payload", path: payloadParent },
+        ...(row.after === "present"
+          ? [{ label: "payload", path: payloadParent }]
+          : []),
       ]),
       ...moveDeathPoints(
         "restore-preimage",
@@ -1362,6 +1366,23 @@ describe("outer-cursor direction and point-of-no-return table", () => {
     fixture.fs.moveUnchecked(MANIFEST_PATH, fixture.tombstonePath);
     await expect(fixture.participant.compensate(plan)).resolves.toEqual({ state: "compensated" });
     expectBeforeInventory(fixture, "present", "absent");
+  });
+
+  it("compensates an absent-after preimage without the unused payload parent", async () => {
+    const fixture = createFixture({ before: "present", after: "absent" });
+    const plan = fixture.admit();
+    const payloadParent = dirname(fixture.payloadPath);
+    fixture.fs.moveUnchecked(MANIFEST_PATH, fixture.tombstonePath);
+    fixture.fs.remove(payloadParent);
+    fixture.fs.clearFaultAndEvents();
+
+    await expect(fixture.participant.compensate(plan)).resolves.toEqual({
+      state: "compensated",
+    });
+
+    expectBeforeInventory(fixture, "present", "absent");
+    expect(fixture.fs.openAttempts).not.toContain(payloadParent);
+    expect(fixture.fs.events.some((event) => event.endsWith(`:${payloadParent}`))).toBe(false);
   });
 
   it("force-forwards an applied postimage when apply is selected", async () => {
