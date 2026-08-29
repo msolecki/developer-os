@@ -41,6 +41,19 @@ function manifestWith(...artifacts: readonly ManagedArtifactV2[]): InstallationM
   return { schemaVersion: 2, productVersion: "1.2.3", installedAt: "2026-08-29T12:00:00.000Z", artifacts } as InstallationManifestV2;
 }
 
+function legacyBytes(rows: readonly Record<string, unknown>[], overrides: Record<string, unknown> = {}): Uint8Array {
+  return new TextEncoder().encode(`${JSON.stringify({ schemaVersion: 1, productVersion: "1.2.3", installedAt: "2026-08-29T12:00:00.000Z", artifacts: rows, ...overrides })}\n`);
+}
+
+function legacyRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return { owner: "core", path: "/synthetic/product/file", kind: "file", productVersion: "1.2.3", existedBefore: false, beforeHash: null, backupRelativePath: null, installedHash: hash, source: "templates/file", mergeStrategy: "dedicated", verifiedAt: "2026-08-29T12:00:00.000Z", ...overrides };
+}
+
+function expectMigratableRefusal(bytes: Uint8Array, context = admission()): void {
+  expect(() => validateMigratableManifestV1(bytes, context)).toThrow(ManifestV1NotMigratableError);
+  expect(() => validateMigratableManifestV1(bytes, context)).toThrow(expect.objectContaining({ reason: "manifest_v1_not_migratable" }));
+}
+
 describe("InstallationManifestV2", () => {
   it("requires one admission context to bind owner, source, and backup authority", () => {
     const value = manifestWith(artifact({ existedBefore: true, beforeHash: hash, backupRelativePath: "before/file" }));
@@ -49,6 +62,23 @@ describe("InstallationManifestV2", () => {
       evidence: { ...evidence, hasFoldedAlias: () => true },
     }))).toThrow(ManifestStateError);
     expect(() => validateManifestV2(value, admission({ admitOwnerPath: (_owner, path) => `${path}/other` as never }))).toThrow(ManifestStateError);
+  });
+
+  it.each([
+    { name: "file content", arm: artifact() },
+    { name: "file schema", arm: artifact({ verification: { mode: "schema", schemaId: "developer-os-config-v1", installedHash: hash } }) },
+    { name: "file ephemeral", arm: artifact({ verification: { mode: "ephemeral" } }) },
+    { name: "directory content", arm: artifact({ kind: "directory", verification: { mode: "content" } }) },
+    { name: "symlink content", arm: artifact({ kind: "symlink", verification: { mode: "content", installedHash: hash } }) },
+  ])("admits exactly the legal restore-field states for $name", ({ name, arm }) => {
+    for (const existedBefore of [false, true]) for (const beforeHash of [null, hash]) for (const backupRelativePath of [null, "before/file"]) {
+      const legal = (name === "file content" || name === "file schema")
+        ? (!existedBefore && beforeHash === null && backupRelativePath === null) || (existedBefore && beforeHash === hash && backupRelativePath === "before/file")
+        : !existedBefore && beforeHash === null && backupRelativePath === null;
+      const value = manifestWith(artifact({ ...arm, existedBefore, beforeHash, backupRelativePath }));
+      if (legal) expect(validateManifestV2(value, admission())).toStrictEqual(value);
+      else expect(() => validateManifestV2(value, admission())).toThrow(ManifestStateError);
+    }
   });
 
   it("maps every migratable V1 refusal to the content-free reason", () => {
@@ -86,9 +116,16 @@ describe("InstallationManifestV2", () => {
     expect(() => validateManifestV2(manifestWith(value), admission())).toThrow(ManifestStateError);
   });
 
-  it("rejects exact, NFC, and folded duplicate paths", () => {
-    expect(() => validateManifestV2(manifestWith(artifact(), artifact({ path: "/synthetic/product/FILE" })), admission())).toThrow(ManifestStateError);
-    expect(() => validateManifestV2(manifestWith(artifact(), artifact({ path: "/synthetic/product/e\u0301" })), admission())).toThrow(ManifestStateError);
+  it("rejects exact duplicate paths", () => {
+    expect(() => validateManifestV2(manifestWith(artifact(), artifact()), admission())).toThrow(ManifestStateError);
+  });
+
+  it("rejects a non-NFC path before collision analysis", () => {
+    expect(() => validateManifestV2(manifestWith(artifact({ path: "/synthetic/product/e\u0301" })), admission())).toThrow(ManifestStateError);
+  });
+
+  it("reaches folded-collision validation after UTF-8 ordering", () => {
+    expect(() => validateManifestV2(manifestWith(artifact({ path: "/synthetic/product/FILE" }), artifact({ path: "/synthetic/product/file" })), admission())).toThrow(ManifestStateError);
   });
 
   it("accepts only canonical V2 bytes", () => {
@@ -149,6 +186,39 @@ describe("InstallationManifestV2", () => {
     expect(() => validateManifestBytes(new TextEncoder().encode(tooMany), admission())).toThrow(ManifestStateError);
   });
 
+  it("enforces cardinality before element work while a one-million row shape reaches it", () => {
+    let oneMillionReads = 0;
+    const oneMillion = new Proxy([], {
+      get(_target, key) {
+        if (key === "length") return 1_000_000;
+        if (key === "0") oneMillionReads += 1;
+        return undefined;
+      },
+      getOwnPropertyDescriptor(_target, key) {
+        if (key === "length") return { configurable: false, enumerable: false, value: 1_000_000, writable: true };
+        if (key === "0") return { configurable: true, enumerable: true, value: "not-an-artifact", writable: true };
+        return undefined;
+      },
+    });
+    expect(() => validateManifestV2({ ...manifestWith(), artifacts: oneMillion }, admission())).toThrow(ManifestStateError);
+    expect(oneMillionReads).toBeGreaterThan(0);
+    let firstOverReads = 0;
+    const firstOver = new Proxy([], { get(_target, key) { if (key === "length") return 1_000_001; if (key === "0") firstOverReads += 1; return undefined; } });
+    expect(() => validateManifestV2({ ...manifestWith(), artifacts: firstOver }, admission())).toThrow(ManifestStateError);
+    expect(firstOverReads).toBe(0);
+  });
+
+  it("checks the byte cap before raw scanning", () => {
+    let exactReads = 0;
+    const exact = new Proxy({ byteLength: 67_108_864 }, { get(target, key) { if (key === "0") exactReads += 1; return target[key as keyof typeof target]; } }) as unknown as Uint8Array;
+    expect(() => validateManifestBytes(exact, admission())).toThrow(ManifestStateError);
+    expect(exactReads).toBeGreaterThan(0);
+    let firstOverReads = 0;
+    const firstOver = new Proxy({ byteLength: 67_108_865 }, { get(target, key) { if (key === "0") firstOverReads += 1; return target[key as keyof typeof target]; } }) as unknown as Uint8Array;
+    expect(() => validateManifestBytes(firstOver, admission())).toThrow(ManifestStateError);
+    expect(firstOverReads).toBe(0);
+  });
+
   it("accepts compact V1 bytes but rejects duplicate, trailing, and BOM variants", () => {
     const legacy = { schemaVersion: 1, productVersion: "legacy", installedAt: "2026-08-29T12:00:00.000Z", artifacts: [] };
     const compact = new TextEncoder().encode(`${JSON.stringify(legacy)}\n`);
@@ -166,9 +236,34 @@ describe("InstallationManifestV2", () => {
     { name: "unsafe source", patch: { source: "../private" } },
     { name: "unsafe backup", patch: { existedBefore: true, beforeHash: hash, backupRelativePath: "../backup" } },
   ])("refuses non-migratable V1 $name", ({ patch }) => {
-    const row = { owner: "core", path: "/synthetic/product/file", kind: "file", productVersion: "1.2.3", existedBefore: false, beforeHash: null, backupRelativePath: null, installedHash: hash, source: "templates/file", mergeStrategy: "dedicated", verifiedAt: "2026-08-29T12:00:00.000Z", ...patch };
-    const bytes = new TextEncoder().encode(`${JSON.stringify({ schemaVersion: 1, productVersion: "1.2.3", installedAt: "2026-08-29T12:00:00.000Z", artifacts: [row] })}\n`);
-    expect(() => validateMigratableManifestV1(bytes, admission())).toThrow(ManifestV1NotMigratableError);
+    expectMigratableRefusal(legacyBytes([legacyRow(patch)]));
+  });
+
+  it.each([
+    { name: "empty", bytes: legacyBytes([]) },
+    { name: "manifest unstable semver", bytes: legacyBytes([legacyRow()], { productVersion: "1.02.3" }) },
+    { name: "artifact unstable semver", bytes: legacyBytes([legacyRow({ productVersion: "1.02.3" })]) },
+    { name: "loose installed timestamp", bytes: legacyBytes([legacyRow()], { installedAt: "2026-08-29T12:00:00Z" }) },
+    { name: "loose verified timestamp", bytes: legacyBytes([legacyRow({ verifiedAt: "2026-08-29T12:00:00Z" })]) },
+    { name: "exact collision", bytes: legacyBytes([legacyRow(), legacyRow()]) },
+    { name: "folded collision", bytes: legacyBytes([legacyRow({ path: "/synthetic/product/FILE" }), legacyRow({ path: "/synthetic/product/file" })]) },
+    { name: "non NFC path", bytes: legacyBytes([legacyRow({ path: "/synthetic/product/e\u0301" })]) },
+  ])("gives only the migration refusal reason for V1 $name", ({ bytes }) => {
+    expectMigratableRefusal(bytes);
+  });
+
+  it("accepts both V1 restore variants", () => {
+    expect(validateMigratableManifestV1(legacyBytes([legacyRow()]), admission())).toMatchObject({ artifacts: [legacyRow()] });
+    expect(validateMigratableManifestV1(legacyBytes([legacyRow({ existedBefore: true, beforeHash: hash, backupRelativePath: "before/file" })]), admission())).toMatchObject({ artifacts: [legacyRow({ existedBefore: true, beforeHash: hash, backupRelativePath: "before/file" })] });
+  });
+
+  it("does no admission work for byte and cardinality refusal before content could be read", () => {
+    let admissions = 0;
+    const context = admission({ admitOwnerPath: (_owner, path) => { admissions += 1; return path; } });
+    expectMigratableRefusal(new TextEncoder().encode('{\n}'), context);
+    expect(admissions).toBe(0);
+    expect(() => validateManifestV2({ ...manifestWith(), artifacts: { length: 1_000_001 } as never }, context)).toThrow(ManifestStateError);
+    expect(admissions).toBe(0);
   });
 
   it("refuses a legacy alternate encoding before artifact bytes are read", () => {
