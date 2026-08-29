@@ -14,7 +14,9 @@ import type {
   DriftFileSystem,
   DriftFinding,
   DriftRequest,
+  DriftRequestV2,
   ManagedArtifactV1,
+  ManagedArtifactV2,
   ManifestGuards,
 } from "./types.js";
 
@@ -22,6 +24,7 @@ const DIFF_CONTEXT_LINES = 3;
 const MAX_DIFF_LINES = 1000;
 const MAX_DIFF_BYTES = 1024 * 1024;
 const MAX_READ_BYTES = 8 * 1024 * 1024;
+const MAX_LINK_TARGET_BYTES = 4096;
 const BINARY_NOTICE = "[binary content omitted]";
 const OVERSIZED_NOTICE = "[content too large to diff]";
 
@@ -35,6 +38,20 @@ function rethrowRedacted(error: unknown): never {
   throw new ManifestStateError();
 }
 
+async function readBounded(handle: Awaited<ReturnType<DriftFileSystem["open"]>>, size: number): Promise<Uint8Array> {
+  if (!Number.isSafeInteger(size) || size < 0 || size > MAX_READ_BYTES) throw new ManifestStateError();
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  while (offset < bytes.byteLength) {
+    const result = await handle.read(bytes, offset, bytes.byteLength - offset, offset);
+    if (result.bytesRead < 1) throw new ManifestStateError();
+    offset += result.bytesRead;
+  }
+  const extra = new Uint8Array(1);
+  if ((await handle.read(extra, 0, 1, bytes.byteLength)).bytesRead !== 0) throw new ManifestStateError();
+  return bytes;
+}
+
 /**
  * Reads a regular file through the canonical path the guard returned, so no
  * component is a symlink, then re-checks after open that the descriptor is the
@@ -46,7 +63,8 @@ async function readGuardedFile(
   guards: ManifestGuards,
   path: string,
 ): Promise<Uint8Array | null> {
-  const canonical = await guards.assertReadable(path);
+  let canonical: string;
+  try { canonical = await guards.assertReadable(path); } catch { throw new ManifestStateError(); }
 
   let stats;
   try {
@@ -69,12 +87,15 @@ async function readGuardedFile(
         !opened.isFile() ||
         opened.dev !== stats.dev ||
         opened.ino !== stats.ino ||
+        !Number.isSafeInteger(opened.size) ||
+        opened.size < 0 ||
         opened.size > MAX_READ_BYTES
       ) {
         throw new ManifestStateError();
       }
-      const bytes = await handle.readFile();
-      if (bytes.length > MAX_READ_BYTES) throw new ManifestStateError();
+      const bytes = await readBounded(handle, opened.size);
+      const after = await handle.stat();
+      if (bytes.length > MAX_READ_BYTES || !after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size || after.size !== bytes.length) throw new ManifestStateError();
       return bytes;
     } finally {
       await handle.close();
@@ -153,6 +174,97 @@ export async function detectDrift(
   const findings: DriftFinding[] = [];
   for (const artifact of request.manifest.artifacts) {
     const result = await inspectArtifact(artifact, request.fs, request.guards);
+    if (result !== null) findings.push(result);
+  }
+  return findings;
+}
+
+function v2Finding(
+  artifact: ManagedArtifactV2,
+  kind: DriftFinding["kind"],
+  actualHash: string | null,
+): DriftFinding {
+  const expectedHash = kind === "schema_invalid" || artifact.kind === "directory" || artifact.verification.mode === "ephemeral"
+    ? null
+    : artifact.verification.installedHash;
+  return { path: artifact.path, owner: artifact.owner, kind, expectedHash, actualHash };
+}
+
+async function guardedV2Path(
+  artifact: ManagedArtifactV2,
+  request: DriftRequestV2,
+): Promise<{ readonly canonical: string; readonly stats: Awaited<ReturnType<DriftRequestV2["fs"]["lstat"]>> } | null> {
+  let canonical: string;
+  try { canonical = await request.guards.assertReadable(artifact.path); } catch { throw new ManifestStateError(); }
+  try { return { canonical, stats: await request.fs.lstat(canonical) }; }
+  catch (error) { if (isMissing(error)) return null; throw new ManifestStateError(); }
+}
+
+async function readV2File(
+  artifact: ManagedArtifactV2,
+  request: DriftRequestV2,
+  canonical: string,
+  before: Awaited<ReturnType<DriftRequestV2["fs"]["lstat"]>>,
+): Promise<Uint8Array | null> {
+  if (before.isSymbolicLink() || !before.isFile()) return null;
+  if (!Number.isSafeInteger(before.size) || before.size < 0 || before.size > MAX_READ_BYTES) throw new ManifestStateError();
+  try {
+    const handle = await request.fs.open(canonical, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const opened = await handle.stat();
+      if (!opened.isFile() || !Number.isSafeInteger(opened.size) || opened.size < 0 || opened.dev !== before.dev || opened.ino !== before.ino || opened.size !== before.size || opened.size > MAX_READ_BYTES) throw new ManifestStateError();
+      const bytes = await readBounded(handle, opened.size);
+      const after = await handle.stat();
+      if (bytes.byteLength > MAX_READ_BYTES || !after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size || after.size !== bytes.byteLength) throw new ManifestStateError();
+      return bytes;
+    } finally { await handle.close(); }
+  } catch (error) { if (isMissing(error)) return null; if (error instanceof ManifestStateError) throw error; throw new ManifestStateError(); }
+}
+
+async function inspectV2Artifact(artifact: ManagedArtifactV2, request: DriftRequestV2): Promise<DriftFinding | null> {
+  const observed = await guardedV2Path(artifact, request);
+  if (observed === null) return artifact.verification.mode === "ephemeral" ? null : v2Finding(artifact, "missing", null);
+  const { canonical, stats } = observed;
+  if (artifact.kind === "directory") return stats.isDirectory() ? null : v2Finding(artifact, "type_changed", null);
+  if (artifact.kind === "symlink") {
+    if (!stats.isSymbolicLink()) return v2Finding(artifact, "type_changed", null);
+    let target: string;
+    try { target = await request.fs.readlink(canonical); } catch { throw new ManifestStateError(); }
+    let after;
+    try { after = await request.fs.lstat(canonical); } catch { throw new ManifestStateError(); }
+    if (!after.isSymbolicLink() || after.dev !== stats.dev || after.ino !== stats.ino) throw new ManifestStateError();
+    const targetBytes = new TextEncoder().encode(target);
+    if (targetBytes.byteLength > MAX_LINK_TARGET_BYTES) throw new ManifestStateError();
+    const actualHash = hashBytes(targetBytes);
+    return actualHash === artifact.verification.installedHash ? null : v2Finding(artifact, "target_changed", actualHash);
+  }
+  if (stats.isSymbolicLink() || !stats.isFile()) return v2Finding(artifact, "type_changed", null);
+  if (artifact.verification.mode === "ephemeral") {
+    try {
+      if (typeof stats.uid !== "number" || typeof stats.mode !== "number" || typeof stats.nlink !== "number") throw new ManifestStateError();
+      request.ephemerals.validate(artifact.owner, {
+        path: artifact.path,
+        uid: stats.uid,
+        mode: stats.mode & 0o777,
+        nlink: stats.nlink,
+      });
+      return null;
+    } catch { return v2Finding(artifact, "schema_invalid", null); }
+  }
+  const bytes = await readV2File(artifact, request, canonical, stats);
+  if (bytes === null) return v2Finding(artifact, "missing", null);
+  if (artifact.verification.mode === "schema") {
+    try { request.schemas.validate(artifact.verification.schemaId, bytes); return null; }
+    catch { return v2Finding(artifact, "schema_invalid", null); }
+  }
+  const actualHash = hashBytes(bytes);
+  return actualHash === artifact.verification.installedHash ? null : v2Finding(artifact, "content_changed", actualHash);
+}
+
+export async function inspectDrift(request: DriftRequestV2): Promise<readonly DriftFinding[]> {
+  const findings: DriftFinding[] = [];
+  for (const artifact of request.manifest.artifacts) {
+    const result = await inspectV2Artifact(artifact, request);
     if (result !== null) findings.push(result);
   }
   return findings;

@@ -16,7 +16,9 @@ import {
   ManifestUnsupportedArtifactError,
   validateManifest,
 } from "./index.js";
-import type { InstallationManifestV1, ManagedArtifactV1 } from "./index.js";
+import type { InstallationManifestV1, InstallationManifestV2, ManagedArtifactV1, ManifestAdmissionContextV1 } from "./index.js";
+import { admitCanonicalAbsolutePath, type CanonicalPathEvidenceV1 } from "../update/paths.js";
+import { encodeCanonicalJson } from "../lifecycle/canonical-json.js";
 
 const PRODUCT_VERSION = "0.0.0";
 const INSTALLED_TEXT = "installed-line-one\ninstalled-line-two\n";
@@ -75,6 +77,36 @@ async function readMode(path: string): Promise<number> {
 }
 
 const allowAll = { assertReadable: (path: string) => Promise.resolve(path) };
+const storeEvidence: CanonicalPathEvidenceV1 = {
+  reopenCanonicalAbsolutePath: (path) => path,
+  containsCanonicalPath: (root, candidate) => candidate === root || candidate.startsWith(`${root}/`),
+  hasFoldedAlias: () => false,
+};
+const storeGuards = allowAll;
+
+function storeAdmission(): ManifestAdmissionContextV1 {
+  return {
+    evidence: storeEvidence,
+    sourceRoot: admitCanonicalAbsolutePath("/synthetic/source", storeEvidence),
+    backupRoot: admitCanonicalAbsolutePath("/synthetic/backup", storeEvidence),
+    admitOwnerPath: (_owner, path) => path,
+  };
+}
+
+function v2Manifest(path: string): InstallationManifestV2 {
+  return {
+    schemaVersion: 2,
+    productVersion: "1.2.3",
+    installedAt: "2026-08-29T12:00:00.000Z",
+    artifacts: [{
+      owner: "core", path: path as never, productVersion: "1.2.3",
+      existedBefore: false, beforeHash: null, backupRelativePath: null,
+      source: "templates/file" as never, mergeStrategy: "dedicated",
+      verifiedAt: "2026-08-29T12:00:00.000Z", kind: "file",
+      verification: { mode: "content", installedHash: "a".repeat(64) as never },
+    }],
+  } as unknown as InstallationManifestV2;
+}
 
 /**
  * The contract a real policy must satisfy: canonicalize every ancestor, keep
@@ -158,7 +190,7 @@ describe("validateManifest", () => {
 describe("ManifestStore", () => {
   it("writes an owner-only manifest, reads it back exactly, and leaves no temporary file", async () => {
     const fixture = await createFixture("round-trip");
-    const store = new ManifestStore({ manifestFile: fixture.manifestFile, fs: nodeFs });
+    const store = new ManifestStore({ manifestFile: fixture.manifestFile, fs: nodeFs, guards: storeGuards });
     const source = manifestOf([artifact()]);
 
     try {
@@ -180,7 +212,7 @@ describe("ManifestStore", () => {
 
   it("replaces an existing manifest without widening its permissions", async () => {
     const fixture = await createFixture("replace");
-    const store = new ManifestStore({ manifestFile: fixture.manifestFile, fs: nodeFs });
+    const store = new ManifestStore({ manifestFile: fixture.manifestFile, fs: nodeFs, guards: storeGuards });
 
     try {
       await store.write(manifestOf([artifact()]));
@@ -195,7 +227,7 @@ describe("ManifestStore", () => {
 
   it("refuses to persist a manifest that does not validate", async () => {
     const fixture = await createFixture("write-invalid");
-    const store = new ManifestStore({ manifestFile: fixture.manifestFile, fs: nodeFs });
+    const store = new ManifestStore({ manifestFile: fixture.manifestFile, fs: nodeFs, guards: storeGuards });
 
     try {
       await expect(
@@ -214,7 +246,7 @@ describe("ManifestStore", () => {
     { name: "a forged manifest", write: JSON.stringify(manifestOf([artifact({ installedHash: "nope" })])) },
   ])("rejects reading $name with code 6", async ({ write }) => {
     const fixture = await createFixture("read-invalid");
-    const store = new ManifestStore({ manifestFile: fixture.manifestFile, fs: nodeFs });
+    const store = new ManifestStore({ manifestFile: fixture.manifestFile, fs: nodeFs, guards: storeGuards });
 
     try {
       await nodeFs.writeFile(fixture.manifestFile, write, { mode: 0o600 });
@@ -231,7 +263,7 @@ describe("ManifestStore", () => {
 
   it("separates a never-installed machine from a corrupted manifest", async () => {
     const fixture = await createFixture("read-absent");
-    const store = new ManifestStore({ manifestFile: fixture.manifestFile, fs: nodeFs });
+    const store = new ManifestStore({ manifestFile: fixture.manifestFile, fs: nodeFs, guards: storeGuards });
 
     try {
       expect(await store.readOptional()).toBeNull();
@@ -242,6 +274,132 @@ describe("ManifestStore", () => {
     } finally {
       await removeFixture(fixture);
     }
+  });
+
+  it("keeps compact V1 readable without V2 admission while refusing V2 without it", async () => {
+    const fixture = await createFixture("version-dispatch");
+    const store = new ManifestStore({ manifestFile: fixture.manifestFile, fs: nodeFs, guards: storeGuards });
+    try {
+      await store.writeV1(manifestOf([]));
+      expect(await store.read()).toStrictEqual(manifestOf([]));
+      const manifest = v2Manifest(fixture.manifestFile);
+      await nodeFs.writeFile(fixture.manifestFile, encodeCanonicalJson(manifest as never), { mode: 0o600 });
+      await expect(store.read()).rejects.toBeInstanceOf(ManifestStateError);
+      await expect(store.read(storeAdmission())).resolves.toStrictEqual(manifest);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  it("writes canonical V2 bytes only through an admission context", async () => {
+    const fixture = await createFixture("write-v2");
+    const store = new ManifestStore({ manifestFile: fixture.manifestFile, fs: nodeFs, guards: storeGuards });
+    const manifest = v2Manifest(fixture.manifestFile);
+    try {
+      await store.writeV2(manifest, storeAdmission());
+      expect(await nodeFs.readFile(fixture.manifestFile, "utf8")).toBe(encodeCanonicalJson(manifest as never));
+      expect(await store.read(storeAdmission())).toStrictEqual(manifest);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  it("uses the guarded parent canonicalization and refuses a symlink leaf", async () => {
+    const fixture = await createFixture("guarded-read");
+    const rawParent = join(fixture.root, "raw");
+    const canonicalParent = join(fixture.root, "canonical");
+    await nodeFs.mkdir(canonicalParent);
+    await nodeFs.symlink(canonicalParent, rawParent);
+    const raw = join(rawParent, "installation-manifest.json");
+    await nodeFs.writeFile(join(canonicalParent, "installation-manifest.json"), `${JSON.stringify(manifestOf([]))}\n`);
+    const store = new ManifestStore({
+      manifestFile: raw,
+      fs: nodeFs,
+      guards: { assertReadable: async (path) => join(await nodeFs.realpath(dirname(path)), basename(path)) },
+    });
+    try {
+      expect(await store.read()).toStrictEqual(manifestOf([]));
+      await nodeFs.unlink(join(canonicalParent, "installation-manifest.json"));
+      await nodeFs.symlink("/outside", join(canonicalParent, "installation-manifest.json"));
+      await expect(store.read()).rejects.toBeInstanceOf(ManifestStateError);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  it("treats a guarded ENOENT as never-installed but a post-lstat ENOENT as concurrent change", async () => {
+    const fixture = await createFixture("missing-race");
+    try {
+      const absent = new ManifestStore({
+        manifestFile: fixture.manifestFile,
+        fs: nodeFs,
+        guards: { assertReadable: (): Promise<string> => Promise.reject(Object.assign(new Error("missing"), { code: "ENOENT" })) },
+      });
+      expect(await absent.readOptional()).toBeNull();
+
+      await nodeFs.writeFile(fixture.manifestFile, `${JSON.stringify(manifestOf([]))}\n`);
+      const raced = new ManifestStore({
+        manifestFile: fixture.manifestFile,
+        fs: { ...nodeFs, open: (): Promise<never> => Promise.reject(Object.assign(new Error("gone"), { code: "ENOENT" })) },
+        guards: storeGuards,
+      });
+      await expect(raced.readOptional()).rejects.toBeInstanceOf(ManifestStateError);
+    } finally { await removeFixture(fixture); }
+  });
+
+  it("refuses a V1 serialization larger than its guarded reader cap", async () => {
+    const fixture = await createFixture("write-v1-cap");
+    const store = new ManifestStore({ manifestFile: fixture.manifestFile, fs: nodeFs, guards: storeGuards });
+    try {
+      await expect(store.writeV1(manifestOf([artifact({ source: "x".repeat(64 * 1024 * 1024) })]))).rejects.toBeInstanceOf(ManifestStateError);
+      await expect(nodeFs.lstat(fixture.manifestFile)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally { await removeFixture(fixture); }
+  });
+
+  it("checks descriptor size before allocation and rejects pre-open or post-read inode changes", async () => {
+    const fixture = await createFixture("read-descriptor");
+    await nodeFs.writeFile(fixture.manifestFile, `${JSON.stringify(manifestOf([]))}\n`);
+    try {
+      let opened = false;
+      const tooLarge = new ManifestStore({
+        manifestFile: fixture.manifestFile,
+        fs: {
+          ...nodeFs,
+          lstat: (path: Parameters<typeof nodeFs.lstat>[0]) => nodeFs.lstat(path).then((stats) => Object.assign(Object.create(stats), { size: 64 * 1024 * 1024 + 1 }) as unknown as typeof stats),
+          open: () => { opened = true; return nodeFs.open(fixture.manifestFile, "r"); },
+        } as unknown as ConstructorParameters<typeof ManifestStore>[0]["fs"],
+        guards: storeGuards,
+      });
+      await expect(tooLarge.read()).rejects.toBeInstanceOf(ManifestStateError);
+      expect(opened).toBe(false);
+
+      let legacyReadCalled = false;
+      const extraData = new ManifestStore({
+        manifestFile: fixture.manifestFile,
+        fs: {
+          ...nodeFs,
+          lstat: (path: Parameters<typeof nodeFs.lstat>[0]) => nodeFs.lstat(path).then((stats) => Object.assign(Object.create(stats), { size: 1 }) as unknown as typeof stats),
+          open: (path: Parameters<typeof nodeFs.open>[0], flags: Parameters<typeof nodeFs.open>[1]) => nodeFs.open(path, flags).then((handle) => ({ close: handle.close.bind(handle), read: handle.read.bind(handle), readFile: (): Promise<never> => { legacyReadCalled = true; return Promise.reject(new Error("unbounded read")); }, stat: () => handle.stat().then((stats) => Object.assign(Object.create(stats), { size: 1 }) as unknown as typeof stats) } as unknown as typeof handle)),
+        } as unknown as ConstructorParameters<typeof ManifestStore>[0]["fs"],
+        guards: storeGuards,
+      });
+      await expect(extraData.read()).rejects.toBeInstanceOf(ManifestStateError);
+      expect(legacyReadCalled).toBe(false);
+
+      const changing = (afterRead: boolean): ManifestStore => new ManifestStore({
+        manifestFile: fixture.manifestFile,
+        fs: {
+          ...nodeFs,
+          open: (path: Parameters<typeof nodeFs.open>[0], flags: Parameters<typeof nodeFs.open>[1]) => nodeFs.open(path, flags).then((handle) => {
+            let stats = 0;
+            return ({ close: handle.close.bind(handle), read: handle.read.bind(handle), readFile: handle.readFile.bind(handle), stat: () => handle.stat().then((value) => { stats += 1; const changed = Object.assign(Object.create(value), stats === (afterRead ? 2 : 1) ? { ino: value.ino + 1 } : {}) as unknown as typeof value; return changed; }) } as unknown as typeof handle);
+          }),
+        },
+        guards: storeGuards,
+      });
+      await expect(changing(false).read()).rejects.toBeInstanceOf(ManifestStateError);
+      await expect(changing(true).read()).rejects.toBeInstanceOf(ManifestStateError);
+    } finally { await removeFixture(fixture); }
   });
 });
 

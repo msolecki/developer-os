@@ -35,6 +35,7 @@ describe("the package's public door", () => {
         "containsPathLoosely",
         "foldPath",
         "detectDrift",
+        "inspectDrift",
         "hashBytes",
         "ManifestMissingError",
         "ManifestStateError",

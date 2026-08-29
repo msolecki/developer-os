@@ -283,14 +283,22 @@ git commit -m "feat(core): add installation manifest v2"
 - Modify: `packages/core/src/manifest/drift.ts`
 - Modify: `packages/core/src/manifest/store.ts`
 - Modify: `packages/core/src/manifest/types.ts`
+- Modify: `packages/core/src/manifest/v2.ts`
+- Modify: `packages/core/src/manifest/v2.test.ts`
+- Modify: `packages/core/src/manifest/index.ts`
+- Modify: `packages/core/src/index.ts`
+- Modify: `packages/core/src/index.test.ts`
 - Modify: `packages/core/src/manifest/manifest.test.ts`
 - Create: `packages/core/src/manifest/v2-drift.test.ts`
+- Modify: `apps/cli/src/context.ts`
+- Modify: `apps/cli/src/commands/testing.ts`
+- Modify: `tests/security/helpers.ts`
 
 **Interfaces:**
 - Consumes: Task 3 manifest union/codecs and existing guarded descriptor reads.
-- Produces: `DriftRequestV2`; `schema_invalid` drift; kind-specific V2 inspection; `ManifestStore.readOptional/read` returning the manifest union; `ManifestStore.writeV2` for canonical V2 bytes while retaining legacy `writeV1` compatibility until migration lands.
+- Produces: `DriftRequestV2`; `ManagedArtifactSchemaRegistry`; `ManagedArtifactEphemeralRegistryV1`; `schema_invalid` drift; kind-specific V2 inspection; guarded `ManifestStore.readOptional/read` returning the manifest union; `ManifestStore.writeV2` for canonical V2 bytes while retaining legacy `writeV1`/`write` compatibility until migration lands.
 
-- [ ] **Step 1: Write failing V2 drift/store tests**
+- [x] **Step 1: Write failing V2 drift/store tests**
 
 ```ts
 it.each([
@@ -302,36 +310,48 @@ it.each([
 });
 ```
 
-Assert wrong kind, missing rules, content/target hashes, directory type, schema strictness, guarded parent canonicalization, size-before-allocation, before/after inode identity, V1/V2 dispatch, canonical V2 write bytes, and refusal on unknown schema version.
+Assert wrong kind, missing rules, content/target hashes, directory type, schema strictness, ephemeral absence plus present-runtime-metadata acceptance/refusal, guarded parent canonicalization, size-before-allocation, before/after inode identity, V1/V2 dispatch with V2 context required only for V2, canonical V2 write bytes, and refusal on unknown schema version. Existing V1 callers must remain source-compatible after supplying the now-required store read guard.
 
-- [ ] **Step 2: Run drift/store tests and verify missing V2 behavior fails**
+- [x] **Step 2: Run drift/store tests and verify missing V2 behavior fails**
 
 Run: `npx vitest run --root packages/core src/manifest/v2-drift.test.ts src/manifest/manifest.test.ts`
 
 Expected: FAIL on `schema_invalid`, ephemeral absence, and V2 store dispatch.
 
-- [ ] **Step 3: Implement kind-specific inspection and union store dispatch**
+- [x] **Step 3: Implement kind-specific inspection and union store dispatch**
 
 ```ts
 export interface ManagedArtifactSchemaRegistry {
   validate(schemaId: ManagedArtifactSchemaIdV1, bytes: Uint8Array): void;
 }
 
+export interface ManagedArtifactEphemeralRegistryV1 {
+  validate(
+    owner: ArtifactOwner,
+    observation: {
+      readonly path: CanonicalAbsolutePathV1;
+      readonly uid: number;
+      readonly mode: number;
+      readonly nlink: number;
+    },
+  ): void;
+}
+
 export async function inspectDrift(request: DriftRequestV2): Promise<readonly DriftFinding[]>;
 ```
 
-Inject the schema registry into drift; never import CLI schemas into Core. Preserve leaf no-follow semantics and recheck the guarded opened inode. `ManifestStore.writeV2` writes canonical V2 bytes only; migration/task participants, not ordinary callers, decide when it is legal.
+Inject both registries into drift; never import CLI schemas or owner policy into Core. Missing ephemeral is clean; present ephemeral is clean only after the registry accepts its guarded owner/mode/link metadata without reading its bytes. Preserve leaf no-follow semantics and recheck the guarded opened inode after every file read. Manifest reads require `ManifestGuards`, reject wrong kind/symlink, enforce 64 MiB from descriptor metadata before allocation, and recheck dev/ino/size after read. `readOptional/read` accept an optional `ManifestAdmissionContextV1`: legacy compact V1 remains readable without it, while V2 refuses unless the context is supplied; Task 3 byte dispatch is widened only enough to encode that distinction. `ManifestStore.writeV2` requires the context and writes canonical V2 bytes only; migration/task participants, not ordinary callers, decide when it is legal. Preserve `write` as the V1 compatibility alias for existing callers and expose explicit `writeV1`.
 
-- [ ] **Step 4: Run drift/store tests**
+- [x] **Step 4: Run drift/store tests**
 
 Run: `npx vitest run --root packages/core src/manifest/v2-drift.test.ts src/manifest/manifest.test.ts`
 
 Expected: PASS for both manifest versions.
 
-- [ ] **Step 5: Commit Task 4**
+- [x] **Step 5: Commit Task 4**
 
 ```bash
-git add packages/core/src/manifest/drift.ts packages/core/src/manifest/store.ts packages/core/src/manifest/types.ts packages/core/src/manifest/manifest.test.ts packages/core/src/manifest/v2-drift.test.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
+git add packages/core/src/manifest/drift.ts packages/core/src/manifest/store.ts packages/core/src/manifest/types.ts packages/core/src/manifest/v2.ts packages/core/src/manifest/v2.test.ts packages/core/src/manifest/index.ts packages/core/src/index.ts packages/core/src/index.test.ts packages/core/src/manifest/manifest.test.ts packages/core/src/manifest/v2-drift.test.ts apps/cli/src/context.ts apps/cli/src/commands/testing.ts tests/security/helpers.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
 git commit -m "feat(core): inspect manifest v2 drift"
 ```
 

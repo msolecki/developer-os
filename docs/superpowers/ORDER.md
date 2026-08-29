@@ -13,9 +13,9 @@ notes are the archive.
 Spec 1 is approved and its plan exists at
 `plans/2026-08-28-developer-os-opt-in-surfaces.md`, but none of its 24 implementation tasks has
 started. Spec 2 was approved by the founder on 2026-08-29 and its 26-task implementation plan exists
-at `plans/2026-08-29-developer-os-release-update.md`. Spec 2 Task 3 completed
-2026-08-29; the next action is Task 4 at `docs/superpowers/plans/2026-08-29-developer-os-release-update.md:277`.
-Execute Tasks 3–9 first to
+at `plans/2026-08-29-developer-os-release-update.md`. Spec 2 Task 4 completed
+2026-08-29; the next action is Task 5 at `docs/superpowers/plans/2026-08-29-developer-os-release-update.md:358`.
+Execute Tasks 5–9 first to
 deliver the `InstallationManifestV2` migration and V2 new-init handoff, then execute the approved
 Spec 1 plan completely, then resume Spec 2 at Task 10.
 
@@ -26,7 +26,7 @@ Open sequence inside A11:
 2. Completed 2026-08-29: obtain founder approval for the complete Spec 2 document.
 3. Completed: write Spec 2's implementation plan using `superpowers:writing-plans`.
 4. Completed 2026-08-29: Spec 2 Task 1 added canonical JSON, scalar, ordinal, and path codecs.
-5. Now: execute Spec 2 Tasks 3–9 for the `InstallationManifestV2` migration and V2 new-init
+5. Now: execute Spec 2 Tasks 5–9 for the `InstallationManifestV2` migration and V2 new-init
    handoff.
 6. Execute the approved Spec 1 plan.
 7. Finish the remaining Spec 2 implementation and close the Task 7 checkpoint.
@@ -85,5 +85,5 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 - Product sequence: 6 open entries, A11–A16.
 - Program plan: 23 unchecked work steps across Tasks 7–9.
 - Repository backlog: 24 open numbered rows, plus the Foundation watchdog decision.
-- Active implementation plans: 49 untouched tasks — 25 in Spec 2 and 24 in Spec 1. Spec 2 Tasks
-  3–9 are the active prerequisite; Spec 1 remains blocked until that handoff passes.
+- Active implementation plans: 46 untouched tasks — 22 in Spec 2 and 24 in Spec 1. Spec 2 Tasks
+  5–9 are the active prerequisite; Spec 1 remains blocked until that handoff passes.

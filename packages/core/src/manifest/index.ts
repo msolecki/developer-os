@@ -1,4 +1,4 @@
-export { buildConflictEvidence, detectDrift } from "./drift.js";
+export { buildConflictEvidence, detectDrift, inspectDrift } from "./drift.js";
 export {
   containsPath,
   containsPathLoosely,
@@ -21,6 +21,7 @@ export type {
   DriftFinding,
   DriftKind,
   DriftRequest,
+  DriftRequestV2,
   InstallationManifestV1,
   ManagedArtifactV1,
   ManifestFileSystem,
@@ -32,6 +33,8 @@ export type {
   ManagedArtifactCommonV2,
   ManagedArtifactSchemaIdV1,
   ManagedArtifactV2,
+  ManagedArtifactSchemaRegistry,
+  ManagedArtifactEphemeralRegistryV1,
   ManifestAdmissionContextV1,
   MigratableInstallationManifestV1,
 } from "./types.js";

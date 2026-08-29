@@ -396,6 +396,7 @@ export async function createSecurityFixture(
     manifests: new ManifestStore({
       manifestFile: paths.manifestFile,
       fs: NODE_FILE_SYSTEM,
+      guards: guards.manifest,
     }),
     fs: NODE_FILE_SYSTEM,
     executor: new TransactionExecutor({

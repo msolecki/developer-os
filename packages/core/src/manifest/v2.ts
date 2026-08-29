@@ -95,11 +95,12 @@ export function validateMigratableManifestV1(bytes: Uint8Array, context: Manifes
   } catch { throw new ManifestV1NotMigratableError(); }
 }
 
-export function validateManifestBytes(bytes: Uint8Array, context: ManifestAdmissionContextV1): InstallationManifest {
+export function validateManifestBytes(bytes: Uint8Array, context?: ManifestAdmissionContextV1): InstallationManifest {
   if (bytes.byteLength < 1 || bytes.byteLength > MAX_BYTES) invalid();
   countArtifactsBeforeDecode(bytes);
   let text: string; try { text = decoder.decode(bytes); } catch { return invalid(); }
   let candidate: unknown; try { candidate = JSON.parse(text); } catch { return invalid(); }
   if (object(candidate).schemaVersion === 1) { legacyBytes(bytes); return validateManifestV1(candidate); }
+  if (object(candidate).schemaVersion !== 2 || context === undefined) invalid();
   try { return validateManifestV2(decodeCanonicalJson(bytes, MAX_BYTES), context); } catch { return invalid(); }
 }

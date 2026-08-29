@@ -98,7 +98,8 @@ export type DriftKind =
   | "missing"
   | "content_changed"
   | "type_changed"
-  | "target_changed";
+  | "target_changed"
+  | "schema_invalid";
 
 export interface DriftFinding {
   readonly path: string;
@@ -161,12 +162,39 @@ export interface ManifestGuards {
 export interface ManifestStoreDependencies {
   readonly manifestFile: string;
   readonly fs: ManifestFileSystem;
+  readonly guards: ManifestGuards;
 }
 
 export interface DriftRequest {
   readonly manifest: InstallationManifestV1;
   readonly fs: DriftFileSystem;
   readonly guards: ManifestGuards;
+}
+
+/** Strict schema validation belongs at the composition root: Core never imports owner schemas. */
+export interface ManagedArtifactSchemaRegistry {
+  validate(schemaId: ManagedArtifactSchemaIdV1, bytes: Uint8Array): void;
+}
+
+/** Owner runtime reservations have metadata rules distinct from content schemas. */
+export interface ManagedArtifactEphemeralRegistryV1 {
+  validate(
+    owner: ArtifactOwner,
+    observation: {
+      readonly path: CanonicalAbsolutePathV1;
+      readonly uid: number;
+      readonly mode: number;
+      readonly nlink: number;
+    },
+  ): void;
+}
+
+export interface DriftRequestV2 {
+  readonly manifest: InstallationManifestV2;
+  readonly fs: DriftFileSystem;
+  readonly guards: ManifestGuards;
+  readonly schemas: ManagedArtifactSchemaRegistry;
+  readonly ephemerals: ManagedArtifactEphemeralRegistryV1;
 }
 
 export interface ConflictEvidenceRequest {

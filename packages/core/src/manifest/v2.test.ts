@@ -228,6 +228,11 @@ describe("InstallationManifestV2", () => {
     expect(() => validateManifestBytes(new Uint8Array([0xef, 0xbb, 0xbf, ...compact]), admission())).toThrow(ManifestStateError);
   });
 
+  it("rejects an unknown manifest schema version before any V2 admission", () => {
+    const unknown = new TextEncoder().encode(encodeCanonicalJson({ schemaVersion: 3, productVersion: "1.2.3", installedAt: "2026-08-29T12:00:00.000Z", artifacts: [] }));
+    expect(() => validateManifestBytes(unknown)).toThrow(ManifestStateError);
+  });
+
   it.each([
     { name: "symlink", patch: { kind: "symlink" } },
     { name: "config entry", patch: { kind: "config-entry" } },

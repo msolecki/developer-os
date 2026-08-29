@@ -1,15 +1,22 @@
 import { createHash, randomUUID } from "node:crypto";
+import { constants } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import { EXIT_CODES } from "../result.js";
 import type {
   ArtifactKind,
   ArtifactOwner,
+  InstallationManifest,
   InstallationManifestV1,
+  InstallationManifestV2,
+  ManifestAdmissionContextV1,
   ManagedArtifactV1,
+  ManifestGuards,
   ManifestStoreDependencies,
   MergeStrategy,
 } from "./types.js";
+
+const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;
 
 const MANIFEST_KEYS = [
   "artifacts",
@@ -229,13 +236,29 @@ async function syncDirectory(
   }
 }
 
+async function readBounded(handle: Awaited<ReturnType<ManifestStoreDependencies["fs"]["open"]>>, size: number): Promise<Uint8Array> {
+  if (!Number.isSafeInteger(size) || size < 0 || size > MAX_MANIFEST_BYTES) throw new ManifestStateError();
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  while (offset < bytes.byteLength) {
+    const result = await handle.read(bytes, offset, bytes.byteLength - offset, offset);
+    if (result.bytesRead < 1) throw new ManifestStateError();
+    offset += result.bytesRead;
+  }
+  const extra = new Uint8Array(1);
+  if ((await handle.read(extra, 0, 1, bytes.byteLength)).bytesRead !== 0) throw new ManifestStateError();
+  return bytes;
+}
+
 export class ManifestStore {
   private readonly manifestFile: string;
   private readonly fs: ManifestStoreDependencies["fs"];
+  private readonly guards: ManifestGuards;
 
   constructor(dependencies: ManifestStoreDependencies) {
     this.manifestFile = dependencies.manifestFile;
     this.fs = dependencies.fs;
+    this.guards = dependencies.guards;
   }
 
   /**
@@ -243,30 +266,74 @@ export class ManifestStore {
    * is not a machine needing transaction recovery, so the absent case must not
    * reach callers as code 6.
    */
-  async readOptional(): Promise<InstallationManifestV1 | null> {
-    let serialized: string;
+  async readOptional(): Promise<InstallationManifestV1 | null>;
+  async readOptional(context: ManifestAdmissionContextV1): Promise<InstallationManifest | null>;
+  async readOptional(context?: ManifestAdmissionContextV1): Promise<InstallationManifest | null> {
+    let canonical: string;
+    try { canonical = await this.guards.assertReadable(this.manifestFile); }
+    catch (error) {
+      if (isMissing(error)) return null;
+      throw new ManifestStateError();
+    }
+    let before;
     try {
-      serialized = await this.fs.readFile(this.manifestFile, "utf8");
+      before = await this.fs.lstat(canonical);
     } catch (error) {
       if (isMissing(error)) return null;
       throw new ManifestStateError();
     }
+    if (before.isSymbolicLink() || !before.isFile() || before.size > MAX_MANIFEST_BYTES) throw new ManifestStateError();
+
+    let bytes: Uint8Array;
     try {
-      return validateManifest(JSON.parse(serialized) as unknown);
+      const handle = await this.fs.open(canonical, constants.O_RDONLY | constants.O_NOFOLLOW);
+      try {
+        const opened = await handle.stat();
+        if (!opened.isFile() || !Number.isSafeInteger(opened.size) || opened.size < 0 || opened.dev !== before.dev || opened.ino !== before.ino || opened.size !== before.size || opened.size > MAX_MANIFEST_BYTES) throw new ManifestStateError();
+        bytes = await readBounded(handle, opened.size);
+        const after = await handle.stat();
+        if (bytes.byteLength > MAX_MANIFEST_BYTES || !after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size || after.size !== bytes.byteLength) throw new ManifestStateError();
+      } finally {
+        await handle.close();
+      }
     } catch (error) {
       if (error instanceof ManifestStateError) throw error;
       throw new ManifestStateError();
     }
+    try {
+      const { validateManifestBytes } = await import("./v2.js");
+      return validateManifestBytes(bytes, context);
+    } catch { throw new ManifestStateError(); }
   }
 
-  async read(): Promise<InstallationManifestV1> {
-    const manifest = await this.readOptional();
+  async read(): Promise<InstallationManifestV1>;
+  async read(context: ManifestAdmissionContextV1): Promise<InstallationManifest>;
+  async read(context?: ManifestAdmissionContextV1): Promise<InstallationManifest> {
+    const manifest = context === undefined ? await this.readOptional() : await this.readOptional(context);
     if (manifest === null) throw new ManifestMissingError();
     return manifest;
   }
 
-  async write(manifest: InstallationManifestV1): Promise<void> {
+  async writeV1(manifest: InstallationManifestV1): Promise<void> {
     const validated = validateManifest(manifest);
+    const bytes = new TextEncoder().encode(`${JSON.stringify(validated)}\n`);
+    if (bytes.byteLength > MAX_MANIFEST_BYTES) throw new ManifestStateError();
+    await this.writeBytes(bytes);
+  }
+
+  /** Compatibility alias for the installed V1 callers. */
+  async write(manifest: InstallationManifestV1): Promise<void> { await this.writeV1(manifest); }
+
+  async writeV2(manifest: InstallationManifestV2, context: ManifestAdmissionContextV1): Promise<void> {
+    const [{ validateManifestV2 }, { encodeCanonicalJson }] = await Promise.all([
+      import("./v2.js"),
+      import("../lifecycle/canonical-json.js"),
+    ]);
+    const validated = validateManifestV2(manifest, context);
+    await this.writeBytes(new TextEncoder().encode(encodeCanonicalJson(validated as never)));
+  }
+
+  private async writeBytes(bytes: Uint8Array): Promise<void> {
     const directory = dirname(this.manifestFile);
     await this.fs.mkdir(directory, { recursive: true, mode: 0o700 });
     const temporary = join(directory, `.installation-manifest.${randomUUID()}.json.tmp`);
@@ -275,7 +342,7 @@ export class ManifestStore {
     try {
       const handle = await this.fs.open(temporary, "wx", 0o600);
       try {
-        await handle.writeFile(`${JSON.stringify(validated)}\n`, "utf8");
+        await handle.writeFile(bytes);
         await handle.chmod(0o600);
         await handle.sync();
       } finally {
