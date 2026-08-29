@@ -11,6 +11,7 @@ import type {
 import type {
   BoundedArtifactSourceV1,
   CanonicalAbsolutePathV1,
+  CanonicalPathEvidenceV1,
   VaultFreeRelativePathV1,
 } from "../update/paths.js";
 import type {
@@ -79,6 +80,15 @@ export interface InstallationManifestV2 {
 }
 
 export type InstallationManifest = InstallationManifestV1 | InstallationManifestV2;
+export interface ManifestAdmissionContextV1 {
+  readonly evidence: CanonicalPathEvidenceV1;
+  readonly sourceRoot: CanonicalAbsolutePathV1;
+  readonly backupRoot: CanonicalAbsolutePathV1;
+  readonly admitOwnerPath: (
+    owner: ArtifactOwner,
+    path: CanonicalAbsolutePathV1,
+  ) => CanonicalAbsolutePathV1;
+}
 declare const migratableInstallationManifestV1: unique symbol;
 export type MigratableInstallationManifestV1 = InstallationManifestV1 & {
   readonly [migratableInstallationManifestV1]: true;

@@ -40,6 +40,7 @@ describe("the package's public door", () => {
         "ManifestStateError",
         "ManifestStore",
         "ManifestUnsupportedArtifactError",
+        "ManifestV1NotMigratableError",
         "validateManifest",
         "validateManifestBytes",
         "validateManifestV1",

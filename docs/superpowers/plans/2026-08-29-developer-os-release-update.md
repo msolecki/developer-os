@@ -203,7 +203,7 @@ git commit -m "feat(core): define release identity and trust schemas"
 
 **Interfaces:**
 - Consumes: Task 1 scalars/path/source codecs and existing V1 types.
-- Produces: `ManagedArtifactV2`, `InstallationManifestV2`, `ManagedArtifactSchemaIdV1`, `MigratableInstallationManifestV1`, `validateManifestV1`, `validateMigratableManifestV1`, `validateManifestV2`, `InstallationManifest = InstallationManifestV1 | InstallationManifestV2`.
+- Produces: `ManagedArtifactV2`, `InstallationManifestV2`, `ManagedArtifactSchemaIdV1`, `MigratableInstallationManifestV1`, `ManifestAdmissionContextV1`, the content-free `manifest_v1_not_migratable` refusal reason, `validateManifestV1`, `validateMigratableManifestV1`, `validateManifestV2`, `InstallationManifest = InstallationManifestV1 | InstallationManifestV2`.
 
 - [x] **Step 1: Write failing tagged-union and migratable-V1 tests**
 
@@ -221,7 +221,7 @@ it("refuses a legacy alternate encoding before artifact bytes are read", () => {
 });
 ```
 
-Cover exact keys at every depth, content/schema/ephemeral files, content directories/symlinks, the four initial schema IDs, empty/maximum/first-over artifacts and source/path bounds, exact/NFC/folded duplicates, stable product versions, calendar-valid UTC milliseconds, directory empty-hash sentinel, V1 symlink/config-entry/shared-directory/unsafe-backup refusals.
+Cover exact keys at every depth, content/schema/ephemeral files, content directories/symlinks, the four initial schema IDs, empty/maximum/first-over artifacts and source/path/manifest-byte bounds, exact/NFC/folded duplicates, stable product versions, calendar-valid UTC milliseconds, the complete restore-field matrix, directory empty-hash sentinel, one positive migratable V1 vector, and V1 symlink/config-entry/shared-directory/unsafe-backup/non-stable/loose-timestamp/collision refusals. Each authority test must isolate owner-path, source-root, backup-root, and folded-alias admission, and migration refusals must expose only `manifest_v1_not_migratable` before any artifact or backup byte read.
 
 - [x] **Step 2: Run manifest validator tests and verify V2 arms fail**
 
@@ -246,10 +246,23 @@ export interface InstallationManifestV2 {
   readonly artifacts: readonly ManagedArtifactV2[];
 }
 
-export function validateManifestBytes(bytes: Uint8Array): InstallationManifest;
+export interface ManifestAdmissionContextV1 {
+  readonly evidence: CanonicalPathEvidenceV1;
+  readonly sourceRoot: CanonicalAbsolutePathV1;
+  readonly backupRoot: CanonicalAbsolutePathV1;
+  readonly admitOwnerPath: (
+    owner: ArtifactOwner,
+    path: CanonicalAbsolutePathV1,
+  ) => CanonicalAbsolutePathV1;
+}
+
+export function validateManifestBytes(
+  bytes: Uint8Array,
+  context: ManifestAdmissionContextV1,
+): InstallationManifest;
 ```
 
-Parse V1 only through the legacy compact round-trip byte check and V2 only through canonical JSON plus LF. Stream/count the artifact array within 64 MiB and 1,000,000 rows; perform complete collision validation before any caller receives artifact paths.
+Parse V1 only through the legacy compact round-trip byte check and V2 only through canonical JSON plus LF. Stream/count the artifact array within 64 MiB and 1,000,000 rows; perform complete collision validation before any caller receives artifact paths. Strict V2 and migratable-V1 admission must use the same required context: first admit the canonical absolute path, then require the owner callback to return that exact path, and admit every source/backup relative path with the Task 1 vault-free codec under its named guarded root. Any migratable-V1 failure, including one raised by the intentionally broader legacy validator, is mapped to the single content-free `manifest_v1_not_migratable` reason.
 
 - [x] **Step 4: Run manifest validator tests**
 

@@ -40,6 +40,7 @@ export {
   ManifestStateError,
   ManifestStore,
   ManifestUnsupportedArtifactError,
+  ManifestV1NotMigratableError,
   validateManifest,
   validateManifestBytes,
   validateManifestV1,
@@ -66,6 +67,7 @@ export type {
   ManagedArtifactCommonV2,
   ManagedArtifactSchemaIdV1,
   ManagedArtifactV2,
+  ManifestAdmissionContextV1,
   MigratableInstallationManifestV1,
 } from "./manifest/index.js";
 export { ChangePlanError, validateChangePlan } from "./plans/index.js";

@@ -1,8 +1,8 @@
 import { decodeCanonicalJson, encodeCanonicalJson } from "../lifecycle/canonical-json.js";
-import { admitCanonicalAbsolutePath, admitVaultFreeRelativePath, type CanonicalAbsolutePathV1, type CanonicalPathEvidenceV1 } from "../update/paths.js";
+import { admitCanonicalAbsolutePath, admitVaultFreeRelativePath } from "../update/paths.js";
 import { parseLowerHexSha256, parseStableSemver, parseUtcTimestamp } from "../update/scalars.js";
 import { ManifestStateError, validateManifest } from "./store.js";
-import type { ArtifactOwner, InstallationManifest, InstallationManifestV1, InstallationManifestV2, ManagedArtifactSchemaIdV1, ManagedArtifactV2, MergeStrategy, MigratableInstallationManifestV1 } from "./types.js";
+import type { ArtifactOwner, InstallationManifest, InstallationManifestV1, InstallationManifestV2, ManifestAdmissionContextV1, ManagedArtifactSchemaIdV1, ManagedArtifactV2, MergeStrategy, MigratableInstallationManifestV1 } from "./types.js";
 
 const MAX_BYTES = 64 * 1024 * 1024;
 const MAX_ARTIFACTS = 1_000_000;
@@ -14,34 +14,36 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 function invalid(): never { throw new ManifestStateError(); }
+export class ManifestV1NotMigratableError extends ManifestStateError {
+  readonly reason = "manifest_v1_not_migratable" as const;
+  constructor() { super("V1 installation manifest is not migratable"); this.name = "ManifestV1NotMigratableError"; }
+}
 function object(value: unknown): Record<string, unknown> { if (typeof value !== "object" || value === null || Array.isArray(value)) invalid(); return value as Record<string, unknown>; }
 function exact(value: Record<string, unknown>, keys: readonly string[]): void { const actual = Object.keys(value).sort(); const wanted = [...keys].sort(); if (actual.length !== wanted.length || actual.some((key, i) => key !== wanted[i])) invalid(); }
 function call<T>(fn: () => T): T { try { return fn(); } catch { return invalid(); } }
 function bytes(value: string): number { return encoder.encode(value).byteLength; }
-function unsafeCharacter(value: string): boolean { for (const character of value) { const point = character.codePointAt(0) as number; if (point <= 0x1f || (point >= 0x7f && point <= 0x9f) || /\p{Cf}/u.test(character)) return true; } return false; }
-function relative(value: unknown): string {
-  if (typeof value !== "string" || bytes(value) < 1 || bytes(value) > 4096 || value.normalize("NFC") !== value || value.startsWith("/") || value.includes("\\")) invalid();
-  const parts = value.split("/");
-  if (parts.length > 128 || parts.some((part) => bytes(part) < 1 || bytes(part) > 255 || part === "." || part === ".." || unsafeCharacter(part))) invalid();
-  return value;
-}
-function common(value: Record<string, unknown>, evidence: CanonicalPathEvidenceV1): Omit<ManagedArtifactV2, "kind" | "verification"> {
+function common(value: Record<string, unknown>, context: ManifestAdmissionContextV1): Omit<ManagedArtifactV2, "kind" | "verification"> {
   exact(value, ["backupRelativePath", "beforeHash", "existedBefore", "kind", "mergeStrategy", "owner", "path", "productVersion", "source", "verifiedAt", "verification"]);
   if (!owners.has(value.owner as ArtifactOwner) || !mergeStrategies.has(value.mergeStrategy as MergeStrategy) || typeof value.existedBefore !== "boolean") invalid();
-  const path = call(() => admitCanonicalAbsolutePath(value.path, evidence));
+  const owner = value.owner as ArtifactOwner;
+  const path = call(() => {
+    const canonical = admitCanonicalAbsolutePath(value.path, context.evidence);
+    if (context.admitOwnerPath(owner, canonical) !== canonical) invalid();
+    return canonical;
+  });
   const productVersion = call(() => parseStableSemver(value.productVersion));
   const verifiedAt = call(() => parseUtcTimestamp(value.verifiedAt));
-  const source = relative(value.source) as ManagedArtifactV2["source"];
+  const source = call(() => admitVaultFreeRelativePath(value.source, context.sourceRoot, context.evidence));
   const beforeHash = value.beforeHash === null ? null : call(() => parseLowerHexSha256(value.beforeHash));
-  const backupRelativePath = value.backupRelativePath === null ? null : relative(value.backupRelativePath) as ManagedArtifactV2["backupRelativePath"];
-  return { owner: value.owner as ArtifactOwner, path, productVersion, existedBefore: value.existedBefore, beforeHash, backupRelativePath, source, mergeStrategy: value.mergeStrategy as MergeStrategy, verifiedAt };
+  const backupRelativePath = value.backupRelativePath === null ? null : call(() => admitVaultFreeRelativePath(value.backupRelativePath, context.backupRoot, context.evidence));
+  return { owner, path, productVersion, existedBefore: value.existedBefore, beforeHash, backupRelativePath, source, mergeStrategy: value.mergeStrategy as MergeStrategy, verifiedAt };
 }
 function restore(base: ReturnType<typeof common>, allowed: boolean): void {
   if (!allowed && (base.existedBefore || base.beforeHash !== null || base.backupRelativePath !== null)) invalid();
   if (allowed && ((base.existedBefore && (base.beforeHash === null || base.backupRelativePath === null)) || (!base.existedBefore && (base.beforeHash !== null || base.backupRelativePath !== null)))) invalid();
 }
-function artifact(value: unknown, evidence: CanonicalPathEvidenceV1): ManagedArtifactV2 {
-  const input = object(value); const base = common(input, evidence); const verification = object(input.verification);
+function artifact(value: unknown, context: ManifestAdmissionContextV1): ManagedArtifactV2 {
+  const input = object(value); const base = common(input, context); const verification = object(input.verification);
   if (input.kind === "file" && verification.mode === "content") { exact(verification, ["installedHash", "mode"]); restore(base, true); return { ...base, kind: "file", verification: { mode: "content", installedHash: call(() => parseLowerHexSha256(verification.installedHash)) } }; }
   if (input.kind === "file" && verification.mode === "schema") { exact(verification, ["installedHash", "mode", "schemaId"]); restore(base, true); if (!schemas.has(verification.schemaId as ManagedArtifactSchemaIdV1)) invalid(); return { ...base, kind: "file", verification: { mode: "schema", schemaId: verification.schemaId as ManagedArtifactSchemaIdV1, installedHash: call(() => parseLowerHexSha256(verification.installedHash)) } }; }
   if (input.kind === "file" && verification.mode === "ephemeral") { exact(verification, ["mode"]); restore(base, false); return { ...base, kind: "file", verification: { mode: "ephemeral" } }; }
@@ -61,10 +63,10 @@ function isArtifactsKey(bytes: Uint8Array, start: number, end: number): boolean 
 /** Counts the raw top-level artifacts array without materializing values. The canonical decoder remains the authority for JSON semantics. */
 function countArtifactsBeforeDecode(bytes: Uint8Array): void { try { let index = skipWhitespace(bytes, 0); if (bytes[index] !== 0x7b) invalid(); index += 1; let found = false; for (;;) { index = skipWhitespace(bytes, index); if (bytes[index] === 0x7d) break; const start = index; const end = skipString(bytes, index); const artifacts = isArtifactsKey(bytes, start, end); index = skipWhitespace(bytes, end); if (bytes[index] !== 0x3a) invalid(); index = skipWhitespace(bytes, index + 1); if (artifacts) { if (found || bytes[index] !== 0x5b) invalid(); found = true; index += 1; index = skipWhitespace(bytes, index); let count = 0; if (bytes[index] !== 0x5d) for (;;) { index = skipValue(bytes, index); count += 1; if (count > MAX_ARTIFACTS) invalid(); index = skipWhitespace(bytes, index); if (bytes[index] === 0x5d) break; if (bytes[index] !== 0x2c) invalid(); index += 1; } index += 1; } else index = skipValue(bytes, index); index = skipWhitespace(bytes, index); if (bytes[index] === 0x7d) break; if (bytes[index] !== 0x2c) invalid(); index += 1; } if (!found) invalid(); } catch (error) { if (error instanceof ManifestStateError) throw error; invalid(); } }
 
-export function validateManifestV2(value: unknown, evidence: CanonicalPathEvidenceV1): InstallationManifestV2 {
+export function validateManifestV2(value: unknown, context: ManifestAdmissionContextV1): InstallationManifestV2 {
   const input = object(value); exact(input, ["artifacts", "installedAt", "productVersion", "schemaVersion"]); if (input.schemaVersion !== 2 || !Array.isArray(input.artifacts) || input.artifacts.length < 1 || input.artifacts.length > MAX_ARTIFACTS) invalid();
   if (bytes(call(() => encodeCanonicalJson(input as never))) > MAX_BYTES) invalid();
-  const manifest = { schemaVersion: 2 as const, productVersion: call(() => parseStableSemver(input.productVersion)), installedAt: call(() => parseUtcTimestamp(input.installedAt)), artifacts: input.artifacts.map((entry) => artifact(entry, evidence)) };
+  const manifest = { schemaVersion: 2 as const, productVersion: call(() => parseStableSemver(input.productVersion)), installedAt: call(() => parseUtcTimestamp(input.installedAt)), artifacts: input.artifacts.map((entry) => artifact(entry, context)) };
   validateInventory(manifest.artifacts); return manifest;
 }
 
@@ -76,24 +78,28 @@ function legacyBytes(bytes: Uint8Array): unknown {
   const validated = validateManifestV1(value); const roundTrip = `${JSON.stringify(validated)}\n`; const canonical = encoder.encode(roundTrip); if (canonical.byteLength !== bytes.byteLength || canonical.some((byte, index) => byte !== bytes[index])) invalid(); return value;
 }
 
-export function validateMigratableManifestV1(bytes: Uint8Array, evidence: CanonicalPathEvidenceV1, backupRoot: CanonicalAbsolutePathV1): MigratableInstallationManifestV1 {
-  if (bytes.byteLength < 1 || bytes.byteLength > MAX_BYTES) invalid(); countArtifactsBeforeDecode(bytes);
-  const raw = legacyBytes(bytes); const manifest = validateManifestV1(raw); if (manifest.artifacts.length < 1 || manifest.artifacts.length > MAX_ARTIFACTS) invalid(); call(() => parseStableSemver(manifest.productVersion)); call(() => parseUtcTimestamp(manifest.installedAt));
-  const paths = new Set<string>();
-  for (const item of manifest.artifacts) {
-    call(() => admitCanonicalAbsolutePath(item.path, evidence)); call(() => parseStableSemver(item.productVersion)); call(() => parseUtcTimestamp(item.verifiedAt)); call(() => parseLowerHexSha256(item.installedHash)); relative(item.source);
-    const folded = item.path.normalize("NFC").toLowerCase(); if (paths.has(folded) || item.kind === "symlink" || item.kind === "config-entry") invalid(); paths.add(folded);
-    if (item.existedBefore) { if (item.kind !== "file") invalid(); call(() => parseLowerHexSha256(item.beforeHash)); call(() => admitVaultFreeRelativePath(item.backupRelativePath, backupRoot, evidence)); }
-    else if (item.beforeHash !== null || item.backupRelativePath !== null || (item.kind === "directory" && item.installedHash !== EMPTY_HASH)) invalid();
-  }
-  return structuredClone(manifest) as MigratableInstallationManifestV1;
+export function validateMigratableManifestV1(bytes: Uint8Array, context: ManifestAdmissionContextV1): MigratableInstallationManifestV1 {
+  try {
+    if (bytes.byteLength < 1 || bytes.byteLength > MAX_BYTES) invalid(); countArtifactsBeforeDecode(bytes);
+    const raw = legacyBytes(bytes); const manifest = validateManifestV1(raw); if (manifest.artifacts.length < 1 || manifest.artifacts.length > MAX_ARTIFACTS) invalid(); call(() => parseStableSemver(manifest.productVersion)); call(() => parseUtcTimestamp(manifest.installedAt));
+    const paths = new Set<string>();
+    for (const item of manifest.artifacts) {
+      const owner = item.owner;
+      const path = call(() => { const canonical = admitCanonicalAbsolutePath(item.path, context.evidence); if (context.admitOwnerPath(owner, canonical) !== canonical) invalid(); return canonical; });
+      call(() => parseStableSemver(item.productVersion)); call(() => parseUtcTimestamp(item.verifiedAt)); call(() => parseLowerHexSha256(item.installedHash)); call(() => admitVaultFreeRelativePath(item.source, context.sourceRoot, context.evidence));
+      const folded = path.normalize("NFC").toLowerCase(); if (paths.has(folded) || item.kind === "symlink" || item.kind === "config-entry") invalid(); paths.add(folded);
+      if (item.existedBefore) { if (item.kind !== "file") invalid(); call(() => parseLowerHexSha256(item.beforeHash)); call(() => admitVaultFreeRelativePath(item.backupRelativePath, context.backupRoot, context.evidence)); }
+      else if (item.beforeHash !== null || item.backupRelativePath !== null || (item.kind === "directory" && item.installedHash !== EMPTY_HASH)) invalid();
+    }
+    return structuredClone(manifest) as MigratableInstallationManifestV1;
+  } catch { throw new ManifestV1NotMigratableError(); }
 }
 
-export function validateManifestBytes(bytes: Uint8Array, evidence: CanonicalPathEvidenceV1): InstallationManifest {
+export function validateManifestBytes(bytes: Uint8Array, context: ManifestAdmissionContextV1): InstallationManifest {
   if (bytes.byteLength < 1 || bytes.byteLength > MAX_BYTES) invalid();
   countArtifactsBeforeDecode(bytes);
   let text: string; try { text = decoder.decode(bytes); } catch { return invalid(); }
   let candidate: unknown; try { candidate = JSON.parse(text); } catch { return invalid(); }
   if (object(candidate).schemaVersion === 1) { legacyBytes(bytes); return validateManifestV1(candidate); }
-  try { return validateManifestV2(decodeCanonicalJson(bytes, MAX_BYTES), evidence); } catch { return invalid(); }
+  try { return validateManifestV2(decodeCanonicalJson(bytes, MAX_BYTES), context); } catch { return invalid(); }
 }
