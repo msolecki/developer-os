@@ -1239,6 +1239,7 @@ type BootstrapPayloadSourceV1 =
   | {
       readonly kind: "plan_derived";
       readonly role: "manifest_after" | "foundation_initial_journal" |
+        "foundation_config" | "foundation_staged_digest" |
         "lifecycle_nonce" | "lifecycle_allocator" |
         "active_release" | "release_trust";
       readonly value: CanonicalJsonV1;
@@ -1313,14 +1314,23 @@ A `plan_derived.projectionHash` is SHA-256 over the exact ASCII domain
 summary: `manifest_after` is the full V2 manifest, `foundation_initial_journal` is the complete
 timestamped initial journal, `lifecycle_nonce` and `lifecycle_allocator` are their complete initial
 state objects, and `active_release` and `release_trust` are their complete records derived from the
-verified packaged release. `valueBytes` is its no-LF UTF-8 length and the payload is exactly those
-bytes plus one LF. The matching outer plan must contain exactly one source of the right role and the
-value must validate against its closed schema plus every duplicated plan/ref/hash field; opaque or
-merely hash-shaped values refuse. Publisher and recovery recompute the projection, payload bytes,
-and `BootstrapExpectedPayloadRefV1.hash` without a dead process clock.
+verified packaged release. `foundation_config` is the complete strict config value whose payload is
+the deterministic existing TOML serialization; `foundation_staged_digest` is the exact content hash
+whose payload is lowercase ASCII plus LF. `valueBytes` is the derived payload length excluding its
+one final LF. The matching outer plan must contain exactly one source for each singular role and one
+digest source for every non-remove Foundation mutation; the value must validate against its closed
+schema plus every duplicated plan/ref/hash field. Opaque or merely hash-shaped values refuse.
+Publisher and recovery recompute the projection, payload bytes, and
+`BootstrapExpectedPayloadRefV1.hash` without a dead process clock.
 
 Arbitrary Foundation content uses `guarded_package_file` or, for V1 migration only,
-`guarded_migration_preimage`; it is never mislabeled plan-derived JSON. A migration authority selects
+`guarded_migration_preimage`; it is never mislabeled plan-derived JSON. The only fresh-init exception
+is `config.toml`: its runtime absolute `brainPath` cannot exist in immutable Homebrew bytes, so the
+closed `foundation_config` role retains the complete strict `DeveloperOsConfigV1` value and
+deterministically reconstructs the existing `serializeConfig` TOML bytes without a clock, randomness,
+or caller-selected serializer. The closed repeatable `foundation_staged_digest` role retains one
+content hash and reconstructs exactly its lowercase ASCII plus LF sidecar. Neither role accepts raw
+bytes or an invocation slot. A migration authority selects
 exactly the guarded V1 manifest, current managed-artifact row, or legacy backup row at the shown
 artifact ordinal. The reopened path/owner/mode/link/size/hash/inode must equal that selected V1
 manifest authority and migration ID. `constant_empty` is the sole zero-byte arm, is legal only for
@@ -1336,6 +1346,16 @@ once. IDs match the outer envelope, ordinals are contiguous, and paths are deriv
 The matching evidence path replaces `.payload` with `.payload.json`; its sole temp appends
 `.<lowercase-v4-uuid>.tmp`. Payloads/evidence are owner-owned single-link regular files, payload mode
 equals the ref, evidence is canonical `0600` and at most 1 KiB, and both are on the state device.
+
+Each non-`remove` `FoundationMutationRefV1` carries two distinct matching bootstrap refs: `content`
+for the exact standard `<transaction-id>/<ordinal>.bin` blob and `digest` for its adjacent
+`.bin.sha256` sidecar; `remove` carries null for both. The content ref hash/bytes equal the mutation's
+`contentHash`/`contentSize`, while the digest source is the closed `foundation_staged_digest` value
+for that same content hash. At the Foundation cursor the executor no-replace-publishes both evidenced
+inodes to those derived standard paths, syncs/reopens them, and only then publishes the participant's
+initial journal through the Task 6 bridge. A partial pair is adopted only from those exact two
+evidence identities or compensated before participant authority; no process-local Foundation bytes
+are needed after the outer plan becomes durable.
 
 The immutable outer plan and initial journal are durable before payload ordinal zero. For each row,
 the executor reopens the exact source, secret-screens private bytes before confirming the ref hash,
