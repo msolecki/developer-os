@@ -102,6 +102,22 @@ export type TransactionAfterPhase = (
   journal: TransactionJournalV1,
 ) => void | Promise<void>;
 
+/**
+ * The platform's single atomic move primitive used by the bootstrap coordinator. The
+ * executor derives both paths and supplies the already-reopened inode identity; the port
+ * may only publish that inode and must fail if the destination exists.
+ */
+export interface BootstrapInitialJournalPublicationV1 {
+  readonly sourcePath: string;
+  readonly destinationPath: string;
+  readonly expectedDev: string;
+  readonly expectedIno: string;
+}
+
+export type PublishBootstrapInitialJournalNoReplace = (
+  request: BootstrapInitialJournalPublicationV1,
+) => Promise<void>;
+
 export interface TransactionExecutorDependencies {
   readonly stateDir: string;
   readonly stagingDir: string;
@@ -112,6 +128,9 @@ export interface TransactionExecutorDependencies {
   readonly guards: TransactionGuards;
   readonly lockProvider: TransactionLockProvider;
   readonly afterPhase?: TransactionAfterPhase | undefined;
+  readonly publishBootstrapInitialJournalNoReplace?:
+    | PublishBootstrapInitialJournalNoReplace
+    | undefined;
 }
 
 export interface TransactionStoreDependencies {

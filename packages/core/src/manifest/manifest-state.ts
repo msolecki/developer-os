@@ -54,7 +54,7 @@ export interface BootstrapExpectedPayloadRefV1 {
   readonly path: BootstrapPayloadPathV1;
   readonly hash: LowerHexSha256;
   readonly bytes: number;
-  readonly mode: 0o600;
+  readonly mode: 0o600 | 0o700;
 }
 
 export interface UpdateExpectedPayloadRefV1 {

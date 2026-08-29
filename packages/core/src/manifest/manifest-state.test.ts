@@ -745,6 +745,16 @@ describe("external-effect partition table", () => {
 });
 
 describe("payload ordinal and binding tables", () => {
+  it("refuses a shared 0700 bootstrap payload at the manifest-specific 0600 boundary", () => {
+    const fixture = createFixture({ envelope: "fresh_v2_init" });
+    const after = rawPresentAfter(fixture);
+    const plan = {
+      ...fixture.plan,
+      after: { ...after, bytes: { ...after.bytes, mode: 0o700 } },
+    };
+    admissionRefuses(plan, fixture.context);
+  });
+
   it.each([
     { envelope: "lifecycle", ordinal: 0, accepted: true },
     { envelope: "lifecycle", ordinal: 1_099_999, accepted: true },

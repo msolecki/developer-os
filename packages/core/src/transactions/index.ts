@@ -13,8 +13,10 @@ export {
   validateJournal,
 } from "./store.js";
 export type {
+  BootstrapInitialJournalPublicationV1,
   FileMutation,
   PlannedFileMutation,
+  PublishBootstrapInitialJournalNoReplace,
   TransactionAfterPhase,
   TransactionExecutorDependencies,
   TransactionFileSystem,

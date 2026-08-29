@@ -13,6 +13,21 @@ export {
 } from "./store.js";
 export { ManifestV1NotMigratableError, validateManifestBytes, validateManifestV1, validateManifestV2, validateMigratableManifestV1 } from "./v2.js";
 export { ManifestStateParticipant, ManifestStateParticipantError, validateManifestStatePlan } from "./manifest-state.js";
+export {
+  BootstrapStateError,
+  bootstrapExternalShapeHash,
+  bootstrapPayloadSourceIdentityHash,
+  deriveBootstrapCreationEvidencePaths,
+  deriveBootstrapEnvelopePaths,
+  deriveBootstrapPayloadEvidencePaths,
+  inspectBootstrapClosure,
+  validateBootstrapExternalShapeProjection,
+  validateBootstrapFoundationOrdinal,
+  validateBootstrapJournal,
+  validateBootstrapPayloadEvidence,
+  validateBootstrapPlan,
+  validateCreatedPathEvidence,
+} from "./bootstrap.js";
 export type {
   ArtifactKind,
   ArtifactOwner,
@@ -55,3 +70,36 @@ export type {
   ManifestStatePlanV1,
   UpdateExpectedPayloadRefV1,
 } from "./manifest-state.js";
+export type {
+  BootstrapClosureAdmissionContextV1,
+  BootstrapClosureV1,
+  BootstrapEnvelopeInventoryV1,
+  BootstrapExecutionPlanV1,
+  BootstrapExternalShapeEntryV1,
+  BootstrapExternalShapeProjectionV1,
+  BootstrapInventoryV1,
+  BootstrapJournalPhaseV1,
+  BootstrapMigrationPreimageAuthorityV1,
+  BootstrapPayloadEvidenceV1,
+  BootstrapPayloadPlanV1,
+  BootstrapPayloadSourceV1,
+  BootstrapPayloadWriteStateV1,
+  BootstrapPlanAdmissionContextV1,
+  BootstrapPlannedParentV1,
+  BootstrapTempInventoryV1,
+  CreatedPathEvidenceV1,
+  FoundationMutationRefV1,
+  FoundationParticipantRefV2,
+  FoundationParticipantSlotV2,
+  FoundationTransactionIdV2,
+  FreshV2InitJournalV1,
+  FreshV2InitPlanV1,
+  LifecycleBootstrapLockV1,
+  LifecycleIdAllocatorV1,
+  LifecycleInstallNonceV1,
+  ManifestMigrationJournalV1,
+  ManifestMigrationPathsV1,
+  ManifestMigrationPlanV1,
+  PersistedBootstrapLockIdentityV1,
+  PlannedCreatedPathV1,
+} from "./bootstrap.js";

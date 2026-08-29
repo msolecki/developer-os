@@ -438,7 +438,7 @@ git commit -m "feat(core): recover manifest state transitions"
 - Consumes: Tasks 1, 3, and 5; Spec 2 §6 shared fresh/migration grammar.
 - Produces: `FreshV2InitIdV1`, `ManifestMigrationIdV1`, `LifecycleBootstrapLockV1`, `LifecycleInstallNonceV1`, `LifecycleIdAllocatorV1`, `PersistedBootstrapLockIdentityV1`, `BootstrapExternalShapeProjectionV1`, `BootstrapPayloadPlanV1`, `BootstrapPayloadSourceV1`, `BootstrapPayloadEvidenceV1`, `BootstrapPayloadWriteStateV1`, `PlannedCreatedPathV1`, `CreatedPathEvidenceV1`, `FoundationMutationRefV1`, the deterministic bootstrap arms of `FoundationTransactionIdV2`, `FoundationParticipantRefV2`, `FreshV2InitPlanV1`, `ManifestMigrationPlanV1`, both journals/codecs, `BootstrapPlanAdmissionContextV1`, `BootstrapClosureAdmissionContextV1`, `BootstrapInventoryV1`, and `BootstrapClosureV1`.
 
-- [ ] **Step 1: Write failing exact-set and cursor tests**
+- [x] **Step 1: Write failing exact-set and cursor tests**
 
 ```ts
 it.each([0, 255, 256])("validates deterministic Foundation pair ordinal %i", ordinal => {
@@ -453,13 +453,13 @@ it.each(bootstrapCursorMutations)("refuses $name", mutation => {
 
 Cover exact external shape rows/order, payload source arms, projection/source hashes, contiguous ordinals and use-once bijection, maximum staging aggregate, plan/journal/temp names and prefixes, created-parent refs, evidence identities, phase-owned cursors, compensation order, plan-last compaction, one-ID residue, and every first-over cursor/count/byte bound.
 
-- [ ] **Step 2: Run bootstrap schema tests and verify missing grammars fail**
+- [x] **Step 2: Run bootstrap schema tests and verify missing grammars fail**
 
 Run: `npx vitest run --root packages/core src/manifest/bootstrap.test.ts`
 
 Expected: FAIL because bootstrap plans/journals/closure do not exist.
 
-- [ ] **Step 3: Implement shared pure bootstrap schemas and tables**
+- [x] **Step 3: Implement shared pure bootstrap schemas and tables**
 
 ```ts
 export type BootstrapExecutionPlanV1 = FreshV2InitPlanV1 | ManifestMigrationPlanV1;
@@ -483,13 +483,13 @@ Add only the deterministic `tx_fi_...`/`tx_mm_...` transaction-ID and coordinato
 
 `BootstrapExpectedPayloadRefV1` remains the single shared ref type introduced by Task 5. Widen only its public `mode` field to the normative `0600 | 0700` needed by general bootstrap files; the manifest-state codec still admits only `0600` postimages and its tests must pin that unchanged runtime boundary. Do not create a second general payload-ref brand or duplicate interface.
 
-- [ ] **Step 4: Run bootstrap schema tests**
+- [x] **Step 4: Run bootstrap schema tests**
 
 Run: `npx vitest run --root packages/core src/manifest/bootstrap.test.ts src/transactions/transactions.test.ts`
 
 Expected: PASS with non-empty exhaustive cursor tables.
 
-- [ ] **Step 5: Commit Task 6**
+- [x] **Step 5: Commit Task 6**
 
 ```bash
 git add packages/core/src/manifest/bootstrap.ts packages/core/src/manifest/bootstrap.test.ts packages/core/src/manifest/manifest-state.ts packages/core/src/manifest/manifest-state.test.ts packages/core/src/manifest/index.ts packages/core/src/transactions/types.ts packages/core/src/transactions/store.ts packages/core/src/transactions/executor.ts packages/core/src/transactions/index.ts packages/core/src/transactions/transactions.test.ts packages/core/src/index.ts packages/core/src/index.test.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md

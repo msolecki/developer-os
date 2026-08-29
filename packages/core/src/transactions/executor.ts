@@ -2,8 +2,18 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 
+import type {
+  BootstrapPayloadEvidenceV1,
+  FoundationParticipantRefV2,
+} from "../manifest/bootstrap.js";
 import { EXIT_CODES } from "../result.js";
-import { TransactionStateError, TransactionStore } from "./store.js";
+import { parseUtcTimestamp } from "../update/scalars.js";
+import {
+  encodeFoundationJournalJsonV1,
+  TransactionStateError,
+  TransactionStore,
+  validateJournal,
+} from "./store.js";
 import type {
   FileMutation,
   TransactionExecutorDependencies,
@@ -223,6 +233,302 @@ async function syncDirectory(fs: TransactionFileSystem, path: string): Promise<v
   }
 }
 
+interface BootstrapJournalIdentity {
+  readonly dev: string;
+  readonly ino: string;
+}
+
+const BOOTSTRAP_FOUNDATION_ID_RE = new RegExp(
+  "^tx_(fi|mm)_([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})_([0-9]{10})_([fc])$",
+  "u",
+);
+
+async function optionalLstat(
+  fs: TransactionFileSystem,
+  path: string,
+): Promise<Awaited<ReturnType<TransactionFileSystem["lstat"]>> | null> {
+  try {
+    return await fs.lstat(path);
+  } catch (error) {
+    if (isMissing(error)) return null;
+    throw new TransactionStateError();
+  }
+}
+
+function assertBootstrapJournalStats(
+  stats: Awaited<ReturnType<TransactionFileSystem["lstat"]>>,
+  evidence: BootstrapPayloadEvidenceV1,
+): void {
+  const effectiveUid = process.geteuid?.();
+  if (
+    effectiveUid === undefined ||
+    stats.isSymbolicLink() ||
+    !stats.isFile() ||
+    stats.uid !== effectiveUid ||
+    (Number(stats.mode) & 0o7777) !== 0o600 ||
+    stats.nlink !== 1 ||
+    stats.size !== evidence.bytes ||
+    String(stats.dev) !== evidence.dev ||
+    String(stats.ino) !== evidence.ino
+  ) {
+    throw new TransactionStateError();
+  }
+}
+
+async function readExactBootstrapJournal(
+  fs: TransactionFileSystem,
+  path: string,
+  evidence: BootstrapPayloadEvidenceV1,
+): Promise<{ readonly bytes: Uint8Array; readonly identity: BootstrapJournalIdentity }> {
+  try {
+    const before = await fs.lstat(path);
+    assertBootstrapJournalStats(before, evidence);
+    const handle = await fs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    let bytes: Uint8Array;
+    try {
+      const opened = await handle.stat();
+      assertBootstrapJournalStats(opened, evidence);
+      if (opened.dev !== before.dev || opened.ino !== before.ino) {
+        throw new TransactionStateError();
+      }
+      bytes = await handle.readFile();
+      const afterRead = await handle.stat();
+      assertBootstrapJournalStats(afterRead, evidence);
+      if (afterRead.dev !== opened.dev || afterRead.ino !== opened.ino) {
+        throw new TransactionStateError();
+      }
+    } finally {
+      await handle.close();
+    }
+    const after = await fs.lstat(path);
+    assertBootstrapJournalStats(after, evidence);
+    if (after.dev !== before.dev || after.ino !== before.ino) {
+      throw new TransactionStateError();
+    }
+    if (
+      bytes.byteLength !== evidence.bytes ||
+      hash(bytes) !== evidence.sha256
+    ) {
+      throw new TransactionStateError();
+    }
+    return {
+      bytes,
+      identity: { dev: String(after.dev), ino: String(after.ino) },
+    };
+  } catch (error) {
+    if (error instanceof TransactionStateError) throw error;
+    throw new TransactionStateError();
+  }
+}
+
+async function syncReopenDirectory(
+  fs: TransactionFileSystem,
+  path: string,
+): Promise<void> {
+  try {
+    const before = await fs.lstat(path);
+    if (before.isSymbolicLink() || !before.isDirectory()) {
+      throw new TransactionStateError();
+    }
+    const first = await fs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const opened = await first.stat();
+      if (
+        !opened.isDirectory() ||
+        opened.dev !== before.dev ||
+        opened.ino !== before.ino
+      ) {
+        throw new TransactionStateError();
+      }
+      await first.sync();
+    } finally {
+      await first.close();
+    }
+    const middle = await fs.lstat(path);
+    if (
+      middle.isSymbolicLink() ||
+      !middle.isDirectory() ||
+      middle.dev !== before.dev ||
+      middle.ino !== before.ino
+    ) {
+      throw new TransactionStateError();
+    }
+    const reopened = await fs.open(
+      path,
+      constants.O_RDONLY | constants.O_NOFOLLOW,
+    );
+    try {
+      const reopenedStats = await reopened.stat();
+      if (
+        !reopenedStats.isDirectory() ||
+        reopenedStats.dev !== before.dev ||
+        reopenedStats.ino !== before.ino
+      ) {
+        throw new TransactionStateError();
+      }
+    } finally {
+      await reopened.close();
+    }
+    const after = await fs.lstat(path);
+    if (
+      after.isSymbolicLink() ||
+      !after.isDirectory() ||
+      after.dev !== before.dev ||
+      after.ino !== before.ino
+    ) {
+      throw new TransactionStateError();
+    }
+  } catch (error) {
+    if (error instanceof TransactionStateError) throw error;
+    throw new TransactionStateError();
+  }
+}
+
+function validateBootstrapFoundationBridgeInput(
+  participant: FoundationParticipantRefV2,
+  evidence: BootstrapPayloadEvidenceV1,
+  dependencies: TransactionExecutorDependencies,
+): TransactionJournalV1 {
+  const matched = BOOTSTRAP_FOUNDATION_ID_RE.exec(participant.id);
+  if (matched === null) throw new TransactionStateError();
+  const envelopePrefix = matched[1];
+  const uuid = matched[2];
+  const roleSuffix = matched[4];
+  if (
+    envelopePrefix === undefined ||
+    uuid === undefined ||
+    roleSuffix === undefined ||
+    (roleSuffix === "f" && participant.role.kind !== "forward") ||
+    (roleSuffix === "c" && participant.role.kind !== "compensation")
+  ) {
+    throw new TransactionStateError();
+  }
+  const expectedBootstrapId = `${envelopePrefix}_${uuid}`;
+  const expectedEnvelopeName =
+    envelopePrefix === "fi" ? "fresh-v2-init" : "manifest-migration";
+  const staged = participant.initialJournal.staged;
+  const expectedStagedPath = join(
+    dependencies.stateDir,
+    `.${expectedEnvelopeName}.${expectedBootstrapId}.${String(staged.ordinal).padStart(10, "0")}.payload`,
+  );
+  const expectedFinalPath = join(
+    dependencies.stateDir,
+    "transactions",
+    `${participant.id}.json`,
+  );
+  if (
+    staged.bootstrapId !== expectedBootstrapId ||
+    evidence.bootstrapId !== expectedBootstrapId ||
+    !Number.isSafeInteger(staged.ordinal) ||
+    staged.ordinal < 0 ||
+    staged.ordinal > 999_999 ||
+    evidence.ordinal !== staged.ordinal ||
+    staged.path !== expectedStagedPath ||
+    participant.initialJournal.finalPath !== expectedFinalPath ||
+    staged.mode !== 0o600 ||
+    evidence.mode !== 0o600 ||
+    staged.bytes < 1 ||
+    staged.bytes > 1_048_576 ||
+    staged.bytes > participant.maximumJournalBytes ||
+    evidence.bytes !== staged.bytes ||
+    evidence.sha256 !== staged.hash ||
+    participant.initialJournal.plannedBytesHash !== staged.hash ||
+    evidence.stagedPathHash !== hash(new TextEncoder().encode(staged.path)) ||
+    !/^[a-f0-9]{64}$/u.test(evidence.sourceIdentityHash) ||
+    !/^(?:0|[1-9][0-9]*)$/u.test(evidence.dev) ||
+    !/^(?:0|[1-9][0-9]*)$/u.test(evidence.ino) ||
+    participant.mutations.length < 1 ||
+    participant.mutations.length > 256
+  ) {
+    throw new TransactionStateError();
+  }
+
+  const mutations = participant.mutations.map((mutation, index): FileMutation => {
+    const expectedStagedRelativePath =
+      mutation.operation === "remove" ? null : `${String(index)}.bin`;
+    const expectedStandardStagedPath =
+      mutation.operation === "remove"
+        ? null
+        : join(
+            dependencies.stagingDir,
+            "transactions",
+            participant.id,
+            expectedStagedRelativePath as string,
+          );
+    const validShape =
+      mutation.operation === "create"
+        ? mutation.expectedBeforeHash === null &&
+          mutation.contentHash !== null &&
+          mutation.contentSize !== null
+        : mutation.operation === "remove"
+          ? mutation.expectedBeforeHash !== null &&
+            mutation.contentHash === null &&
+            mutation.contentSize === null
+          : mutation.expectedBeforeHash !== null &&
+            mutation.contentHash !== null &&
+            mutation.contentSize !== null;
+    if (
+      !validShape ||
+      mutation.stagedPath !== expectedStandardStagedPath ||
+      !isAbsolute(mutation.targetPath)
+    ) {
+      throw new TransactionStateError();
+    }
+    return {
+      targetPath: mutation.targetPath,
+      operation: mutation.operation,
+      expectedBeforeHash: mutation.expectedBeforeHash,
+      stagedRelativePath: expectedStagedRelativePath,
+    };
+  });
+
+  return {
+    schemaVersion: 1,
+    id: participant.id,
+    kind: participant.slot,
+    phase: "planned",
+    createdAt: "",
+    updatedAt: "",
+    mutations,
+  };
+}
+
+function decodeExactBootstrapFoundationJournal(
+  bytes: Uint8Array,
+  expected: TransactionJournalV1,
+): TransactionJournalV1 {
+  try {
+    const serialized = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    const journal = validateJournal(JSON.parse(serialized) as unknown);
+    parseUtcTimestamp(journal.createdAt);
+    parseUtcTimestamp(journal.updatedAt);
+    if (
+      journal.id !== expected.id ||
+      journal.kind !== expected.kind ||
+      journal.phase !== "planned" ||
+      journal.createdAt !== journal.updatedAt ||
+      journal.mutations.length !== expected.mutations.length ||
+      journal.mutations.some((mutation, index) => {
+        const planned = expected.mutations[index];
+        return (
+          planned === undefined ||
+          mutation.targetPath !== planned.targetPath ||
+          mutation.operation !== planned.operation ||
+          mutation.expectedBeforeHash !== planned.expectedBeforeHash ||
+          mutation.stagedRelativePath !== planned.stagedRelativePath
+        );
+      }) ||
+      serialized !== encodeFoundationJournalJsonV1(journal)
+    ) {
+      throw new TransactionStateError();
+    }
+    return journal;
+  } catch (error) {
+    if (error instanceof TransactionStateError) throw error;
+    throw new TransactionStateError();
+  }
+}
+
 async function removeOwnedTemp(
   fs: TransactionFileSystem,
   temporaryPath: string,
@@ -387,6 +693,75 @@ export class TransactionExecutor {
       });
       await this.runHook("planned", journal);
       return this.resume(id);
+    });
+  }
+
+  /**
+   * Publishes the bootstrap coordinator's already-planned Foundation journal, then enters
+   * the unchanged transaction state machine while the same stable transaction lock is held.
+   */
+  async executeBootstrapFoundationParticipant(
+    participant: FoundationParticipantRefV2,
+    evidence: BootstrapPayloadEvidenceV1,
+  ): Promise<TransactionJournalV1> {
+    const expected = validateBootstrapFoundationBridgeInput(
+      participant,
+      evidence,
+      this.dependencies,
+    );
+    const stagedPath = participant.initialJournal.staged.path;
+    const finalPath = participant.initialJournal.finalPath;
+
+    return this.store.withTransactionLock(participant.id, async () => {
+      const [stagedBefore, finalBefore] = await Promise.all([
+        optionalLstat(this.dependencies.fs, stagedPath),
+        optionalLstat(this.dependencies.fs, finalPath),
+      ]);
+      if (
+        (stagedBefore === null && finalBefore === null) ||
+        (stagedBefore !== null && finalBefore !== null)
+      ) {
+        throw new TransactionStateError();
+      }
+
+      if (stagedBefore !== null) {
+        const observed = await readExactBootstrapJournal(
+          this.dependencies.fs,
+          stagedPath,
+          evidence,
+        );
+        decodeExactBootstrapFoundationJournal(observed.bytes, expected);
+        const publish =
+          this.dependencies.publishBootstrapInitialJournalNoReplace;
+        if (publish === undefined) throw new TransactionStateError();
+        try {
+          await publish({
+            sourcePath: stagedPath,
+            destinationPath: finalPath,
+            expectedDev: observed.identity.dev,
+            expectedIno: observed.identity.ino,
+          });
+        } catch {
+          throw new TransactionStateError();
+        }
+      }
+
+      await syncReopenDirectory(this.dependencies.fs, dirname(stagedPath));
+      await syncReopenDirectory(this.dependencies.fs, dirname(finalPath));
+      const [stagedAfter, finalAfter] = await Promise.all([
+        optionalLstat(this.dependencies.fs, stagedPath),
+        optionalLstat(this.dependencies.fs, finalPath),
+      ]);
+      if (stagedAfter !== null || finalAfter === null) {
+        throw new TransactionStateError();
+      }
+      const final = await readExactBootstrapJournal(
+        this.dependencies.fs,
+        finalPath,
+        evidence,
+      );
+      decodeExactBootstrapFoundationJournal(final.bytes, expected);
+      return this.resumeLocked(participant.id);
     });
   }
 

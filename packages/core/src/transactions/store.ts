@@ -154,6 +154,13 @@ function cloneJournal(journal: TransactionJournalV1): TransactionJournalV1 {
   };
 }
 
+/** Internal wire encoder shared only with the coordinator-bound bootstrap bridge. */
+export function encodeFoundationJournalJsonV1(
+  journal: TransactionJournalV1,
+): string {
+  return `${JSON.stringify(validateJournal(journal))}\n`;
+}
+
 function isMissing(error: unknown): boolean {
   return isObject(error) && error.code === "ENOENT";
 }
@@ -330,7 +337,7 @@ export class TransactionStore {
     try {
       const handle = await this.fs.open(temporary, "wx", 0o600);
       try {
-        await handle.writeFile(`${JSON.stringify(journal)}\n`, "utf8");
+        await handle.writeFile(encodeFoundationJournalJsonV1(journal), "utf8");
         await handle.chmod(0o600);
         await handle.sync();
       } finally {
