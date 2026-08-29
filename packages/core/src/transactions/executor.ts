@@ -238,6 +238,103 @@ interface BootstrapJournalIdentity {
   readonly ino: string;
 }
 
+const admittedBootstrapFoundationInitialJournal: unique symbol = Symbol(
+  "admittedBootstrapFoundationInitialJournal",
+);
+
+/**
+ * A controller-bound capability for the one bootstrap publication the ordinary executor
+ * cannot create for itself. Its only runtime representation is registered in this module's
+ * private WeakMap, so neither a structural participant nor a cast object can reach the
+ * filesystem bridge.
+ */
+export interface AdmittedBootstrapFoundationInitialJournalV1 {
+  readonly [admittedBootstrapFoundationInitialJournal]: true;
+}
+
+export interface BootstrapFoundationInitialJournalAdmissionContextV1 {
+  readonly participantAdmissionId: string;
+  readonly evidenceAdmissionId: string;
+  readonly ownerUid: number;
+  readonly admitParticipant: (value: FoundationParticipantRefV2) => string;
+  readonly admitEvidence: (
+    value: BootstrapPayloadEvidenceV1,
+    participant: FoundationParticipantRefV2,
+  ) => string;
+}
+
+interface RetainedBootstrapFoundationInitialJournalV1 {
+  readonly participant: FoundationParticipantRefV2;
+  readonly evidence: BootstrapPayloadEvidenceV1;
+  readonly ownerUid: number;
+}
+
+const retainedBootstrapFoundationInitialJournals = new WeakMap<
+  AdmittedBootstrapFoundationInitialJournalV1,
+  RetainedBootstrapFoundationInitialJournalV1
+>();
+
+function validAdmissionId(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const bytes = new TextEncoder().encode(value).byteLength;
+  return bytes >= 1 && bytes <= 256;
+}
+
+/**
+ * Converts the controller's two independent opaque rulings into the only value accepted by
+ * the publication bridge. Callbacks receive disposable clones; the capability retains only
+ * the untouched pre-callback snapshots and the admitted owner identity.
+ */
+export function admitBootstrapFoundationInitialJournal(
+  participant: FoundationParticipantRefV2,
+  evidence: BootstrapPayloadEvidenceV1,
+  context: BootstrapFoundationInitialJournalAdmissionContextV1,
+): AdmittedBootstrapFoundationInitialJournalV1 {
+  try {
+    if (
+      !validAdmissionId(context.participantAdmissionId) ||
+      !validAdmissionId(context.evidenceAdmissionId) ||
+      context.participantAdmissionId === context.evidenceAdmissionId ||
+      !Number.isSafeInteger(context.ownerUid) ||
+      context.ownerUid < 0
+    ) {
+      throw new TransactionStateError();
+    }
+    const retainedParticipant = structuredClone(participant);
+    const retainedEvidence = structuredClone(evidence);
+    if (
+      context.admitParticipant(structuredClone(retainedParticipant)) !==
+        context.participantAdmissionId ||
+      context.admitEvidence(
+        structuredClone(retainedEvidence),
+        structuredClone(retainedParticipant),
+      ) !== context.evidenceAdmissionId
+    ) {
+      throw new TransactionStateError();
+    }
+    const admitted = Object.freeze({
+      [admittedBootstrapFoundationInitialJournal]: true as const,
+    });
+    retainedBootstrapFoundationInitialJournals.set(admitted, {
+      participant: retainedParticipant,
+      evidence: retainedEvidence,
+      ownerUid: context.ownerUid,
+    });
+    return admitted;
+  } catch (error) {
+    if (error instanceof TransactionStateError) throw error;
+    throw new TransactionStateError();
+  }
+}
+
+function consumeBootstrapFoundationInitialJournal(
+  admitted: AdmittedBootstrapFoundationInitialJournalV1,
+): RetainedBootstrapFoundationInitialJournalV1 {
+  const retained = retainedBootstrapFoundationInitialJournals.get(admitted);
+  if (retained === undefined) throw new TransactionStateError();
+  return retained;
+}
+
 const BOOTSTRAP_FOUNDATION_ID_RE = new RegExp(
   "^tx_(fi|mm)_([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})_([0-9]{10})_([fc])$",
   "u",
@@ -258,13 +355,12 @@ async function optionalLstat(
 function assertBootstrapJournalStats(
   stats: Awaited<ReturnType<TransactionFileSystem["lstat"]>>,
   evidence: BootstrapPayloadEvidenceV1,
+  ownerUid: number,
 ): void {
-  const effectiveUid = process.geteuid?.();
   if (
-    effectiveUid === undefined ||
     stats.isSymbolicLink() ||
     !stats.isFile() ||
-    stats.uid !== effectiveUid ||
+    stats.uid !== ownerUid ||
     (Number(stats.mode) & 0o7777) !== 0o600 ||
     stats.nlink !== 1 ||
     stats.size !== evidence.bytes ||
@@ -279,21 +375,22 @@ async function readExactBootstrapJournal(
   fs: TransactionFileSystem,
   path: string,
   evidence: BootstrapPayloadEvidenceV1,
+  ownerUid: number,
 ): Promise<{ readonly bytes: Uint8Array; readonly identity: BootstrapJournalIdentity }> {
   try {
     const before = await fs.lstat(path);
-    assertBootstrapJournalStats(before, evidence);
+    assertBootstrapJournalStats(before, evidence, ownerUid);
     const handle = await fs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     let bytes: Uint8Array;
     try {
       const opened = await handle.stat();
-      assertBootstrapJournalStats(opened, evidence);
+      assertBootstrapJournalStats(opened, evidence, ownerUid);
       if (opened.dev !== before.dev || opened.ino !== before.ino) {
         throw new TransactionStateError();
       }
       bytes = await handle.readFile();
       const afterRead = await handle.stat();
-      assertBootstrapJournalStats(afterRead, evidence);
+      assertBootstrapJournalStats(afterRead, evidence, ownerUid);
       if (afterRead.dev !== opened.dev || afterRead.ino !== opened.ino) {
         throw new TransactionStateError();
       }
@@ -301,7 +398,7 @@ async function readExactBootstrapJournal(
       await handle.close();
     }
     const after = await fs.lstat(path);
-    assertBootstrapJournalStats(after, evidence);
+    assertBootstrapJournalStats(after, evidence, ownerUid);
     if (after.dev !== before.dev || after.ino !== before.ino) {
       throw new TransactionStateError();
     }
@@ -701,9 +798,10 @@ export class TransactionExecutor {
    * the unchanged transaction state machine while the same stable transaction lock is held.
    */
   async executeBootstrapFoundationParticipant(
-    participant: FoundationParticipantRefV2,
-    evidence: BootstrapPayloadEvidenceV1,
+    admitted: AdmittedBootstrapFoundationInitialJournalV1,
   ): Promise<TransactionJournalV1> {
+    const { participant, evidence, ownerUid } =
+      consumeBootstrapFoundationInitialJournal(admitted);
     const expected = validateBootstrapFoundationBridgeInput(
       participant,
       evidence,
@@ -729,6 +827,7 @@ export class TransactionExecutor {
           this.dependencies.fs,
           stagedPath,
           evidence,
+          ownerUid,
         );
         decodeExactBootstrapFoundationJournal(observed.bytes, expected);
         const publish =
@@ -759,6 +858,7 @@ export class TransactionExecutor {
         this.dependencies.fs,
         finalPath,
         evidence,
+        ownerUid,
       );
       decodeExactBootstrapFoundationJournal(final.bytes, expected);
       return this.resumeLocked(participant.id);

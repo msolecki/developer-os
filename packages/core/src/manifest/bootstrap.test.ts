@@ -1155,6 +1155,56 @@ describe("immutable bootstrap plan exact grammar", () => {
     );
   });
 
+  it("refuses an in-place plan-derived callback mutation after the projection hash was checked", () => {
+    const fixture = fullPlanFixture();
+    const context = {
+      ...fixture.context,
+      admitPlanDerivedValue(role: string, value: unknown) {
+        if (role === "active_release") {
+          (value as { version: string }).version = "9.9.9";
+        }
+        return value;
+      },
+    };
+    expect(() => validateBootstrapPlan(fixture.plan, context as never)).toThrow(
+      BootstrapStateError,
+    );
+  });
+
+  it.each([
+    {
+      name: "a consumer hash differs from the matching staged payload row",
+      mutate(ref: { hash: string; bytes: number; mode: number }) {
+        ref.hash = hashA;
+      },
+    },
+    {
+      name: "a consumer byte length differs from the matching staged payload row",
+      mutate(ref: { hash: string; bytes: number; mode: number }) {
+        ref.bytes = 64;
+      },
+    },
+    {
+      name: "a consumer mode differs from the matching staged payload row",
+      mutate(ref: { hash: string; bytes: number; mode: number }) {
+        ref.mode = 0o700;
+      },
+    },
+  ])("refuses when $name even though the derived path is unchanged", (testCase) => {
+    const fixture = fullPlanFixture();
+    const candidate = structuredClone(fixture.plan) as never as {
+      createdPaths: Array<{ payload?: { hash: string; bytes: number; mode: number } }>;
+    };
+    const created = required(candidate.createdPaths[9]);
+    if (created.payload === undefined) throw new Error("nonce consumer fixture is required");
+    const nonceConsumer = { ...created.payload };
+    created.payload = nonceConsumer;
+    testCase.mutate(nonceConsumer);
+    expect(() => validateBootstrapPlan(candidate, fixture.context)).toThrow(
+      BootstrapStateError,
+    );
+  });
+
   it.each([
     {
       name: "the initial allocator names a different lifecycle nonce",
@@ -1607,6 +1657,9 @@ function closureContext(): BootstrapClosureAdmissionContextV1 {
     admitTemporaryPrefix: () => {
       throw new Error("no temp in a clear inventory");
     },
+    admitPreIntentObservation: () => {
+      throw new Error("no pre-intent observation in a clear inventory");
+    },
   };
 }
 
@@ -1656,6 +1709,10 @@ function planTempInventory(temporary = planTemporary()): BootstrapInventoryV1 {
         foundationStates: [],
         manifestState: null,
         terminalState: null,
+        preIntentObservation: {
+          proofId: "pre-intent-proof-1",
+          observation: { preimage: "exact", v2OnlyTargets: "absent" },
+        },
         stagingEntries: [],
         unknownEntries: [],
       },
@@ -1671,10 +1728,24 @@ function fullClosureContext(): BootstrapClosureAdmissionContextV1 {
     planAdmission: fixture.context,
     admitPayloadEvidence: (value) => structuredClone(value) as never,
     admitCreatedPathEvidence: (value) => structuredClone(value) as never,
-    admitFoundationState: (_value, participant) => participant.id,
-    admitManifestState: (_value, manifest) => manifest.participantId,
+    admitFoundationState: (value, participant, expectation) => {
+      const observed = value as {
+        readonly observedParticipantId?: string;
+        readonly state?: string;
+      };
+      return observed.observedParticipantId === participant.id &&
+        (expectation !== "terminal" || observed.state === "terminal")
+        ? participant.id
+        : "different-participant";
+    },
+    admitManifestState: (value, manifest) =>
+      (value as { readonly observedParticipantId?: string }).observedParticipantId ===
+      manifest.participantId
+        ? manifest.participantId
+        : "different-manifest",
     admitTerminalState: (value) => value === "terminal-postimage" ? "postimage" : "preimage",
     admitTemporaryPrefix: (value) => (value as never as { prefixEvidenceId: string }).prefixEvidenceId,
+    admitPreIntentObservation: (value) => value.proofId,
   };
 }
 
@@ -1725,6 +1796,7 @@ function plannedRecoveryInventory(): BootstrapInventoryV1 {
         })),
         manifestState: { observedParticipantId: fixture.plan.manifest.participantId, state: "preimage" },
         terminalState: null,
+        preIntentObservation: null,
         stagingEntries: [],
         unknownEntries: [],
       },
@@ -1824,7 +1896,10 @@ function recoveryInventoryFor(
         createdPathEvidence,
         foundationStates: fixture.plan.foundationParticipants.map((participant) => ({
           observedParticipantId: participant.id,
-          state: "context-bound",
+          state:
+            journalValue.phase === "compacting"
+              ? "terminal"
+              : "context-bound",
         })),
         manifestState: { observedParticipantId: fixture.plan.manifest.participantId, state: "context-bound" },
         terminalState:
@@ -1833,7 +1908,225 @@ function recoveryInventoryFor(
             : journalValue.terminalOutcome === "rolled_back"
               ? "terminal-preimage"
               : null,
+        preIntentObservation: null,
         stagingEntries,
+        unknownEntries: [],
+      },
+    ],
+    unknownEntries: [],
+  };
+}
+
+const finalizedCompactionEntries = [
+  ...Array.from({ length: 8 }, (_, ordinal) => ({
+    name: `payload-evidence ordinal ${String(ordinal)} unlink`,
+    kind: "payload" as const,
+    ordinal,
+  })),
+  ...Array.from({ length: 10 }, (_, ordinal) => ({
+    name: `ordinary creation-evidence ordinal ${String(ordinal)} unlink`,
+    kind: "creation" as const,
+    scope: "ordinary" as const,
+    ordinal,
+  })),
+  ...Array.from({ length: 7 }, (_, ordinal) => ({
+    name: `launchability creation-evidence ordinal ${String(ordinal)} unlink`,
+    kind: "creation" as const,
+    scope: "launchability" as const,
+    ordinal,
+  })),
+  {
+    name: "compensation Foundation terminal-evidence unlink",
+    kind: "foundation" as const,
+    ordinal: 0,
+  },
+  {
+    name: "forward Foundation terminal-evidence unlink",
+    kind: "foundation" as const,
+    ordinal: 1,
+  },
+  ...[
+    `/product/staging/transactions/${compensationId}/0.bin`,
+    `/product/staging/transactions/${compensationId}`,
+    "/product/staging/transactions",
+    `/product/staging/fresh-v2-init/${freshId}`,
+    "/product/staging/fresh-v2-init",
+    "/product/staging",
+  ].map((path) => ({
+    name: `derived staging child ${path} unlink`,
+    kind: "staging" as const,
+    path: path as CanonicalAbsolutePathV1,
+  })),
+  {
+    name: "bootstrap journal unlink before immutable plan-last cleanup",
+    kind: "journal" as const,
+  },
+] as const;
+
+const finalizedStagingCreationOrder: readonly CanonicalAbsolutePathV1[] = [
+  "/product/staging" as CanonicalAbsolutePathV1,
+  "/product/staging/fresh-v2-init" as CanonicalAbsolutePathV1,
+  `/product/staging/fresh-v2-init/${freshId}` as CanonicalAbsolutePathV1,
+  "/product/staging/transactions" as CanonicalAbsolutePathV1,
+  `/product/staging/transactions/${compensationId}` as CanonicalAbsolutePathV1,
+  `/product/staging/transactions/${compensationId}/0.bin` as CanonicalAbsolutePathV1,
+];
+
+function finalizedCompactionInventory(
+  cursor: number,
+  crashSide: "before" | "after",
+): BootstrapInventoryV1 {
+  const fixture = fullPlanFixture();
+  const removed = cursor + (crashSide === "after" ? 1 : 0);
+  const remaining = finalizedCompactionEntries.slice(removed);
+  const remainingPayloads = new Set(
+    remaining
+      .filter((entry) => entry.kind === "payload")
+      .map((entry) => entry.ordinal),
+  );
+  const remainingCreations = new Set(
+    remaining
+      .filter((entry) => entry.kind === "creation")
+      .map((entry) => `${entry.scope}:${String(entry.ordinal)}`),
+  );
+  const remainingFoundations = new Set<number>(
+    remaining
+      .filter((entry) => entry.kind === "foundation")
+      .map((entry) => entry.ordinal),
+  );
+  const remainingStaging = new Set<CanonicalAbsolutePathV1>(
+    remaining
+      .filter((entry) => entry.kind === "staging")
+      .map((entry) => entry.path),
+  );
+  const journalPresent = remaining.some((entry) => entry.kind === "journal");
+  const payloadEvidence = fullPayloadEvidence(8).filter((_, ordinal) =>
+    remainingPayloads.has(ordinal),
+  );
+  const createdPathEvidence = fullCreationEvidence(10, 7).filter((value) => {
+    const evidence = value as { readonly scope: string; readonly ordinal: number };
+    return remainingCreations.has(
+      `${evidence.scope}:${String(evidence.ordinal)}`,
+    );
+  });
+  const foundationStates = fixture.plan.foundationParticipants
+    .map((participant, ordinal) => ({
+      ordinal,
+      value: {
+        observedParticipantId: participant.id,
+        state: "terminal",
+      },
+    }))
+    .filter(({ ordinal }) => remainingFoundations.has(ordinal))
+    .map(({ value }) => value);
+  const stagingEntries = finalizedStagingCreationOrder.filter((path) =>
+    remainingStaging.has(path),
+  );
+  return {
+    schemaVersion: 1,
+    inventoryId: `guarded-finalized-compaction-${String(cursor)}-${crashSide}`,
+    entryCount:
+      1 +
+      (journalPresent ? 1 : 0) +
+      payloadEvidence.length +
+      createdPathEvidence.length +
+      foundationStates.length +
+      stagingEntries.length,
+    envelopes: [
+      {
+        operation: "fresh_v2_init",
+        id: freshId,
+        plan: fixture.plan,
+        journal: journalPresent
+          ? fullPlanJournal({
+              phase: "compacting",
+              nextPayload: 8,
+              nextCreatedPath: 10,
+              nextFoundationParticipant: 1,
+              nextLaunchabilityPath: 7,
+              manifestCursor: 3,
+              terminalOutcome: "finalized",
+              compactionNext: cursor,
+            })
+          : null,
+        planTemps: [],
+        journalTemps: [],
+        payloadEvidence,
+        createdPathEvidence,
+        foundationStates,
+        manifestState: journalPresent
+          ? {
+              observedParticipantId: fixture.plan.manifest.participantId,
+              state: "terminal",
+            }
+          : null,
+        terminalState: "terminal-postimage",
+        preIntentObservation: null,
+        stagingEntries,
+        unknownEntries: [],
+      },
+    ],
+    unknownEntries: [],
+  };
+}
+
+function rolledBackCompactionInventory(
+  cursor: number,
+  crashSide: "before" | "after",
+): BootstrapInventoryV1 {
+  const fixture = fullPlanFixture();
+  const removed = cursor + (crashSide === "after" ? 1 : 0);
+  const remaining = finalizedCompactionEntries.slice(removed);
+  const remainingFoundations = new Set<number>(
+    remaining
+      .filter((entry) => entry.kind === "foundation")
+      .map((entry) => entry.ordinal),
+  );
+  const journalPresent = remaining.some((entry) => entry.kind === "journal");
+  const foundationStates = fixture.plan.foundationParticipants
+    .map((participant, ordinal) => ({
+      ordinal,
+      value: {
+        observedParticipantId: participant.id,
+        state: "terminal",
+      },
+    }))
+    .filter(({ ordinal }) => remainingFoundations.has(ordinal))
+    .map(({ value }) => value);
+  return {
+    schemaVersion: 1,
+    inventoryId: `guarded-rolled-back-compaction-${String(cursor)}-${crashSide}`,
+    entryCount: 1 + (journalPresent ? 1 : 0) + foundationStates.length,
+    envelopes: [
+      {
+        operation: "fresh_v2_init",
+        id: freshId,
+        plan: fixture.plan,
+        journal: journalPresent
+          ? fullPlanJournal({
+              phase: "compacting",
+              direction: "compensating",
+              nextPayload: 8,
+              nextCreatedPath: 10,
+              compensationNext: -1,
+              terminalOutcome: "rolled_back",
+              compactionNext: cursor,
+            })
+          : null,
+        planTemps: [],
+        journalTemps: [],
+        payloadEvidence: [],
+        createdPathEvidence: [],
+        foundationStates,
+        manifestState: journalPresent
+          ? {
+              observedParticipantId: fixture.plan.manifest.participantId,
+              state: "terminal",
+            }
+          : null,
+        terminalState: "terminal-preimage",
+        preIntentObservation: null,
+        stagingEntries: [],
         unknownEntries: [],
       },
     ],
@@ -1866,8 +2159,8 @@ const bootstrapCursorMutations: readonly {
     inventory: {
       ...clearInventory(),
       envelopes: [
-        { operation: "fresh_v2_init", id: freshId, plan: null, journal: null, planTemps: [], journalTemps: [], payloadEvidence: [], createdPathEvidence: [], foundationStates: [], manifestState: null, terminalState: null, stagingEntries: [], unknownEntries: [] },
-        { operation: "fresh_v2_init", id: "fi_123e4567-e89b-42d3-a456-426614174002" as FreshV2InitIdV1, plan: null, journal: null, planTemps: [], journalTemps: [], payloadEvidence: [], createdPathEvidence: [], foundationStates: [], manifestState: null, terminalState: null, stagingEntries: [], unknownEntries: [] },
+        { operation: "fresh_v2_init", id: freshId, plan: null, journal: null, planTemps: [], journalTemps: [], payloadEvidence: [], createdPathEvidence: [], foundationStates: [], manifestState: null, terminalState: null, preIntentObservation: null, stagingEntries: [], unknownEntries: [] },
+        { operation: "fresh_v2_init", id: "fi_123e4567-e89b-42d3-a456-426614174002" as FreshV2InitIdV1, plan: null, journal: null, planTemps: [], journalTemps: [], payloadEvidence: [], createdPathEvidence: [], foundationStates: [], manifestState: null, terminalState: null, preIntentObservation: null, stagingEntries: [], unknownEntries: [] },
       ],
     },
     context: closureContext(),
@@ -1889,6 +2182,7 @@ const bootstrapCursorMutations: readonly {
           foundationStates: [],
           manifestState: null,
           terminalState: null,
+          preIntentObservation: null,
           stagingEntries: [],
           unknownEntries: [],
         },
@@ -1901,6 +2195,88 @@ const bootstrapCursorMutations: readonly {
 describe("bootstrap guarded closure", () => {
   it("admits the empty bounded guarded inventory as clear", () => {
     expect(inspectBootstrapClosure(clearInventory(), closureContext())).toEqual({ state: "clear" });
+  });
+
+  it("isolates an in-place guarded-inventory callback mutation from the retained exact inventory", () => {
+    const inventory = clearInventory();
+    const context = {
+      ...closureContext(),
+      admitGuardedInventory(value: BootstrapInventoryV1) {
+        (value as never as { unknownEntries: string[] }).unknownEntries.push(
+          "/product/state/callback-added-third-state",
+        );
+        return value.inventoryId;
+      },
+    };
+    expect(inspectBootstrapClosure(inventory, context)).toStrictEqual({ state: "clear" });
+    expect(inventory).toStrictEqual(clearInventory());
+  });
+
+  it.each([
+    {
+      name: "plan-prefix cleanup",
+      arrange() {
+        return planTempInventory();
+      },
+      want: "guarded_cleanable_plan_temp",
+    },
+    {
+      name: "plan-only pre-intent orphan cleanup",
+      arrange() {
+        const inventory = plannedRecoveryInventory();
+        const envelope = inventory.envelopes[0] as never as {
+          journal: unknown;
+          foundationStates: unknown[];
+          manifestState: unknown;
+        };
+        envelope.journal = null;
+        envelope.foundationStates = [];
+        envelope.manifestState = null;
+        return inventory;
+      },
+      want: "guarded_cleanable_plan_orphan",
+    },
+    {
+      name: "missing-initial-journal prefix cleanup",
+      arrange() {
+        const inventory = plannedRecoveryInventory();
+        const envelope = inventory.envelopes[0] as never as {
+          journal: unknown;
+          journalTemps: unknown[];
+          foundationStates: unknown[];
+          manifestState: unknown;
+        };
+        envelope.journal = null;
+        envelope.journalTemps = [journalTemporary()];
+        envelope.foundationStates = [];
+        envelope.manifestState = null;
+        return inventory;
+      },
+      want: "guarded_cleanable_journal_temp",
+    },
+  ])("admits $name only after the context returns its exact opaque pre-intent proof", (testCase) => {
+    const inventory = testCase.arrange();
+    const envelope = inventory.envelopes[0] as never as Record<string, unknown>;
+    envelope.preIntentObservation = {
+      proofId: "pre-intent-proof-1",
+      observation: { preimage: "exact", v2OnlyTargets: "absent" },
+    };
+    let calls = 0;
+    const context = {
+      ...fullClosureContext(),
+      admitPreIntentObservation(value: unknown) {
+        calls += 1;
+        expect(value).toStrictEqual({
+          proofId: "pre-intent-proof-1",
+          observation: { preimage: "exact", v2OnlyTargets: "absent" },
+        });
+        return "pre-intent-proof-1";
+      },
+    };
+    expect(inspectBootstrapClosure(inventory, context as never)).toMatchObject({
+      state: testCase.want,
+    });
+    expect(calls).toBe(1);
   });
 
   it("admits only the exact context-bound plan prefix temp as guarded-cleanable residue", () => {
@@ -1961,6 +2337,10 @@ describe("bootstrap guarded closure", () => {
     envelope.journal = null;
     envelope.foundationStates = [];
     envelope.manifestState = null;
+    (envelope as never as { preIntentObservation: unknown }).preIntentObservation = {
+      proofId: "pre-intent-proof-1",
+      observation: { preimage: "exact", v2OnlyTargets: "absent" },
+    };
     (inventory as never as { entryCount: number }).entryCount = 1;
     expect(inspectBootstrapClosure(inventory, fullClosureContext())).toEqual({
       state: "guarded_cleanable_plan_orphan",
@@ -2007,6 +2387,10 @@ describe("bootstrap guarded closure", () => {
     envelope.journalTemps = [journalTemporary()];
     envelope.foundationStates = [];
     envelope.manifestState = null;
+    (envelope as never as { preIntentObservation: unknown }).preIntentObservation = {
+      proofId: "pre-intent-proof-1",
+      observation: { preimage: "exact", v2OnlyTargets: "absent" },
+    };
     (inventory as never as { entryCount: number }).entryCount = 2;
     expect(inspectBootstrapClosure(inventory, fullClosureContext())).toMatchObject({
       state: "guarded_cleanable_journal_temp",
@@ -2156,20 +2540,6 @@ describe("bootstrap guarded closure", () => {
 
   it.each([
     {
-      name: "finalized compaction begins with the complete terminal evidence partition",
-      journal: fullPlanJournal({
-        phase: "compacting",
-        nextPayload: 8,
-        nextCreatedPath: 10,
-        nextFoundationParticipant: 1,
-        nextLaunchabilityPath: 7,
-        manifestCursor: 3,
-        terminalOutcome: "finalized",
-        compactionNext: 0,
-      }),
-      counts: { payload: 8, ordinary: 10, launchability: 7 },
-    },
-    {
       name: "rolled-back compaction begins after reverse cleanup removed payload and creation evidence",
       journal: fullPlanJournal({
         phase: "compacting",
@@ -2194,23 +2564,105 @@ describe("bootstrap guarded closure", () => {
     });
   });
 
-  it("refuses finalized compaction that deletes one payload authority before cursor zero advances", () => {
-    const journalValue = fullPlanJournal({
-      phase: "compacting",
-      nextPayload: 8,
-      nextCreatedPath: 10,
-      nextFoundationParticipant: 1,
-      nextLaunchabilityPath: 7,
-      manifestCursor: 3,
-      terminalOutcome: "finalized",
-      compactionNext: 0,
-    });
-    const inventory = recoveryInventoryFor(journalValue, {
-      payload: 8,
-      ordinary: 10,
-      launchability: 7,
-    });
-    (inventory.envelopes[0] as never as { payloadEvidence: unknown[] }).payloadEvidence.pop();
+  it.each(
+    finalizedCompactionEntries.flatMap((entry, cursor) =>
+      (["before", "after"] as const).map((crashSide) => ({
+        name: `${entry.name}: ${crashSide}-unlink crash branch`,
+        cursor,
+        crashSide,
+      })),
+    ),
+  )("admits $name", ({ cursor, crashSide }) => {
+    expect(
+      inspectBootstrapClosure(
+        finalizedCompactionInventory(cursor, crashSide),
+        fullClosureContext(),
+      ),
+    ).toMatchObject(
+      cursor === finalizedCompactionEntries.length - 1 && crashSide === "after"
+        ? { state: "plan_last_compaction", terminalOutcome: "finalized" }
+        : {
+            state: "recovery_required",
+            journal: { phase: "compacting", compactionNext: cursor },
+          },
+    );
+  });
+
+  it.each(
+    finalizedCompactionEntries.flatMap((entry, cursor) =>
+      (["before", "after"] as const).map((crashSide) => ({
+        name: `rolled-back ${entry.name}: ${crashSide}-unlink crash branch`,
+        cursor,
+        crashSide,
+      })),
+    ),
+  )("admits $name", ({ cursor, crashSide }) => {
+    expect(
+      inspectBootstrapClosure(
+        rolledBackCompactionInventory(cursor, crashSide),
+        fullClosureContext(),
+      ),
+    ).toMatchObject(
+      cursor === finalizedCompactionEntries.length - 1 && crashSide === "after"
+        ? { state: "plan_last_compaction", terminalOutcome: "rolled_back" }
+        : {
+            state: "recovery_required",
+            journal: { phase: "compacting", compactionNext: cursor },
+          },
+    );
+  });
+
+  it.each([
+    {
+      name: "a past payload-evidence ordinal reappears after cursor one authorized its unlink",
+      cursor: 1,
+      crashSide: "before" as const,
+      mutate(inventory: BootstrapInventoryV1) {
+        const envelope = required(inventory.envelopes[0]) as never as {
+          payloadEvidence: unknown[];
+        };
+        envelope.payloadEvidence.unshift(required(fullPayloadEvidence(8)[0]));
+      },
+    },
+    {
+      name: "a future payload-evidence ordinal disappears with only the current ordinal authorized",
+      cursor: 0,
+      crashSide: "after" as const,
+      mutate(inventory: BootstrapInventoryV1) {
+        const envelope = required(inventory.envelopes[0]) as never as {
+          payloadEvidence: unknown[];
+        };
+        envelope.payloadEvidence.shift();
+      },
+    },
+    {
+      name: "a future Foundation terminal observation disappears at the first Foundation cursor",
+      cursor: 25,
+      crashSide: "before" as const,
+      mutate(inventory: BootstrapInventoryV1) {
+        const envelope = required(inventory.envelopes[0]) as never as {
+          foundationStates: unknown[];
+        };
+        envelope.foundationStates.pop();
+      },
+    },
+    {
+      name: "a parent staging directory disappears while its later child is still present",
+      cursor: 27,
+      crashSide: "before" as const,
+      mutate(inventory: BootstrapInventoryV1) {
+        const envelope = required(inventory.envelopes[0]) as never as {
+          stagingEntries: string[];
+        };
+        envelope.stagingEntries.shift();
+      },
+    },
+  ])("refuses when $name", (testCase) => {
+    const inventory = finalizedCompactionInventory(
+      testCase.cursor,
+      testCase.crashSide,
+    );
+    testCase.mutate(inventory);
     expect(() => inspectBootstrapClosure(inventory, fullClosureContext())).toThrow(
       BootstrapStateError,
     );

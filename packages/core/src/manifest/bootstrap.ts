@@ -415,6 +415,11 @@ export interface BootstrapTempInventoryV1 {
   readonly ino: UInt64DecimalV1;
 }
 
+export interface BootstrapPreIntentObservationV1 {
+  readonly proofId: string;
+  readonly observation: unknown;
+}
+
 export interface BootstrapEnvelopeInventoryV1 {
   readonly operation: "fresh_v2_init" | "v1_to_v2";
   readonly id: FreshV2InitIdV1 | ManifestMigrationIdV1;
@@ -427,6 +432,7 @@ export interface BootstrapEnvelopeInventoryV1 {
   readonly foundationStates: readonly unknown[];
   readonly manifestState: unknown;
   readonly terminalState: unknown;
+  readonly preIntentObservation: BootstrapPreIntentObservationV1 | null;
   readonly stagingEntries: readonly CanonicalAbsolutePathV1[];
   readonly unknownEntries: readonly CanonicalAbsolutePathV1[];
 }
@@ -453,7 +459,11 @@ export interface BootstrapClosureAdmissionContextV1 {
     scope: "ordinary" | "launchability",
     ordinal: number,
   ) => CreatedPathEvidenceV1;
-  readonly admitFoundationState: (value: unknown, participant: FoundationParticipantRefV2) => string;
+  readonly admitFoundationState: (
+    value: unknown,
+    participant: FoundationParticipantRefV2,
+    expectation: "phase_bound" | "terminal",
+  ) => string;
   readonly admitManifestState: (value: unknown, manifest: ManifestStatePlanV1) => string;
   readonly admitTerminalState: (value: unknown, plan: BootstrapExecutionPlanV1) => "preimage" | "postimage";
   readonly admitTemporaryPrefix: (
@@ -461,6 +471,12 @@ export interface BootstrapClosureAdmissionContextV1 {
     kind: "plan" | "journal",
     operation: "fresh_v2_init" | "v1_to_v2",
     id: FreshV2InitIdV1 | ManifestMigrationIdV1,
+  ) => string;
+  readonly admitPreIntentObservation: (
+    value: BootstrapPreIntentObservationV1,
+    operation: "fresh_v2_init" | "v1_to_v2",
+    id: FreshV2InitIdV1 | ManifestMigrationIdV1,
+    plan: BootstrapExecutionPlanV1 | null,
   ) => string;
 }
 
@@ -578,6 +594,21 @@ function jsonEqual(left: unknown, right: unknown): boolean {
   } catch {
     return false;
   }
+}
+
+function retainedClone<T>(value: T): T {
+  try {
+    return structuredClone(value);
+  } catch {
+    return refuse();
+  }
+}
+
+function admitEqualValue<T>(value: T, callback: (candidate: T) => T): T {
+  const snapshot = retainedClone(value);
+  const admitted = callback(retainedClone(snapshot));
+  if (!jsonEqual(admitted, snapshot)) return refuse();
+  return snapshot;
 }
 
 function validateUuid(value: unknown): string {
@@ -988,11 +1019,23 @@ export function validateBootstrapJournal(
       compensationNext: input.compensationNext === null ? null : integer(input.compensationNext, -1, MAX_COMPENSATION_NEXT),
       payloadCleanupPart: input.payloadCleanupPart,
       terminalOutcome: input.terminalOutcome,
-      compactionNext: input.compactionNext === null ? null : integer(input.compactionNext, 0, Math.min(MAX_COMPACTION_NEXT, plan.payloads.length + plan.createdPaths.length + plan.foundationParticipants.length + plan.launchabilityPaths.length + 8)),
+      compactionNext:
+        input.compactionNext === null
+          ? null
+          : integer(input.compactionNext, 0, MAX_COMPACTION_NEXT),
       createdAt: timestamp(input.createdAt),
       updatedAt: timestamp(input.updatedAt),
     };
     validateJournalTable(journal, { payloads: plan.payloads.length, created: plan.createdPaths.length, foundation: forwardCount, launchability: plan.launchabilityPaths.length });
+    if (journal.phase === "compacting") {
+      const outcome = journal.terminalOutcome;
+      const cursor = journal.compactionNext;
+      if (
+        outcome === null ||
+        cursor === null ||
+        cursor >= bootstrapCompactionTable(plan).length
+      ) return refuse();
+    }
     if (encoder.encode(encodeCanonicalJson(journal as unknown as CanonicalJsonValue)).byteLength > plan.maximumJournalBytes) return refuse();
     return structuredClone(journal) as FreshV2InitJournalV1 | ManifestMigrationJournalV1;
   } catch (error) {
@@ -1048,11 +1091,42 @@ function validateTemporaryInventory(
     dev: uint64(input.dev),
     ino: uint64(input.ino),
   };
+  const snapshot = retainedClone(temporary);
+  const expectedProofId = snapshot.prefixEvidenceId;
   if (
-    context.admitTemporaryPrefix(temporary, kind, operation, id) !==
-    temporary.prefixEvidenceId
+    context.admitTemporaryPrefix(retainedClone(snapshot), kind, operation, id) !==
+    expectedProofId
   ) return refuse();
-  return temporary;
+  return snapshot;
+}
+
+function validatePreIntentObservation(
+  value: unknown,
+  operation: "fresh_v2_init" | "v1_to_v2",
+  id: FreshV2InitIdV1 | ManifestMigrationIdV1,
+  plan: BootstrapExecutionPlanV1 | null,
+  context: BootstrapClosureAdmissionContextV1,
+): BootstrapPreIntentObservationV1 {
+  const input = record(value);
+  exact(input, ["observation", "proofId"]);
+  if (
+    typeof input.proofId !== "string" ||
+    input.proofId.length < 1 ||
+    encoder.encode(input.proofId).byteLength > 256
+  ) return refuse();
+  const snapshot: BootstrapPreIntentObservationV1 = {
+    proofId: input.proofId,
+    observation: retainedClone(input.observation),
+  };
+  const expectedProofId = snapshot.proofId;
+  const admitted = context.admitPreIntentObservation(
+    retainedClone(snapshot),
+    operation,
+    id,
+    plan === null ? null : retainedClone(plan),
+  );
+  if (admitted !== expectedProofId) return refuse();
+  return snapshot;
 }
 
 function validateInventoryShape(inventory: BootstrapInventoryV1): void {
@@ -1076,6 +1150,7 @@ function validateInventoryShape(inventory: BootstrapInventoryV1): void {
       "payloadEvidence",
       "plan",
       "planTemps",
+      "preIntentObservation",
       "stagingEntries",
       "terminalState",
       "unknownEntries",
@@ -1117,13 +1192,177 @@ function closureEvidenceCounts(
   };
 }
 
+type BootstrapCompactionEntryV1 =
+  | { readonly kind: "payload"; readonly ordinal: number }
+  | {
+      readonly kind: "creation";
+      readonly scope: "ordinary" | "launchability";
+      readonly ordinal: number;
+    }
+  | { readonly kind: "foundation"; readonly ordinal: number }
+  | { readonly kind: "staging"; readonly path: CanonicalAbsolutePathV1 }
+  | { readonly kind: "journal" };
+
+interface BootstrapClosureEvidenceProjectionV1 {
+  readonly payloadOrdinals: readonly number[];
+  readonly creations: readonly {
+    readonly scope: "ordinary" | "launchability";
+    readonly ordinal: number;
+  }[];
+  readonly foundationOrdinals: readonly number[];
+  readonly foundationExpectation: "phase_bound" | "terminal";
+  readonly stagingEntries: readonly CanonicalAbsolutePathV1[];
+}
+
+function productStagingRootOf(plan: BootstrapExecutionPlanV1): CanonicalAbsolutePathV1 {
+  const envelopeRoot =
+    plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot;
+  return dirname(dirname(envelopeRoot)) as CanonicalAbsolutePathV1;
+}
+
+function plannedStagingEntries(
+  plan: BootstrapExecutionPlanV1,
+  productStagingRoot = productStagingRootOf(plan),
+): readonly CanonicalAbsolutePathV1[] {
+  return [...plan.createdPaths, ...plan.launchabilityPaths]
+    .map((planned) => planned.path)
+    .filter(
+      (path) =>
+        typeof path === "string" &&
+        (path === productStagingRoot ||
+          path.startsWith(`${productStagingRoot}/`)),
+    );
+}
+
+function bootstrapCompactionTable(
+  plan: BootstrapExecutionPlanV1,
+): readonly BootstrapCompactionEntryV1[] {
+  const foundation = plan.foundationParticipants.map((_, ordinal) => ({
+    kind: "foundation" as const,
+    ordinal,
+  }));
+  return [
+    ...plan.payloads.map((_, ordinal) => ({ kind: "payload" as const, ordinal })),
+    ...plan.createdPaths.map((_, ordinal) => ({
+      kind: "creation" as const,
+      scope: "ordinary" as const,
+      ordinal,
+    })),
+    ...plan.launchabilityPaths.map((_, ordinal) => ({
+      kind: "creation" as const,
+      scope: "launchability" as const,
+      ordinal,
+    })),
+    ...foundation,
+    ...[...plannedStagingEntries(plan)].reverse().map((path) => ({
+      kind: "staging" as const,
+      path,
+    })),
+    { kind: "journal" as const },
+  ];
+}
+
+function projectionFromCompactionSuffix(
+  plan: BootstrapExecutionPlanV1,
+  entries: readonly BootstrapCompactionEntryV1[],
+  terminalOutcome: "finalized" | "rolled_back",
+): BootstrapClosureEvidenceProjectionV1 | null {
+  if (!entries.some((entry) => entry.kind === "journal")) return null;
+  const terminalEntries =
+    terminalOutcome === "finalized"
+      ? entries
+      : entries.filter(
+          (entry) =>
+            entry.kind === "foundation" || entry.kind === "journal",
+        );
+  const staging = new Set(
+    terminalEntries
+      .filter((entry) => entry.kind === "staging")
+      .map((entry) => entry.path),
+  );
+  return {
+    payloadOrdinals: terminalEntries
+      .filter((entry) => entry.kind === "payload")
+      .map((entry) => entry.ordinal),
+    creations: terminalEntries
+      .filter((entry) => entry.kind === "creation")
+      .map((entry) => ({ scope: entry.scope, ordinal: entry.ordinal })),
+    foundationOrdinals: terminalEntries
+      .filter((entry) => entry.kind === "foundation")
+      .map((entry) => entry.ordinal),
+    foundationExpectation: "terminal",
+    stagingEntries: plannedStagingEntries(plan).filter((path) => staging.has(path)),
+  };
+}
+
+function closureEvidenceProjections(
+  plan: BootstrapExecutionPlanV1,
+  journal: FreshV2InitJournalV1 | ManifestMigrationJournalV1,
+  productStagingRoot: CanonicalAbsolutePathV1,
+): readonly BootstrapClosureEvidenceProjectionV1[] {
+  if (journal.phase === "compacting") {
+    const cursor = journal.compactionNext;
+    const outcome = journal.terminalOutcome;
+    if (cursor === null || outcome === null) return refuse();
+    const table = bootstrapCompactionTable(plan);
+    if (table[cursor] === undefined) return refuse();
+    const candidates = [
+      projectionFromCompactionSuffix(plan, table.slice(cursor), outcome),
+      projectionFromCompactionSuffix(plan, table.slice(cursor + 1), outcome),
+    ].filter(
+      (projection): projection is BootstrapClosureEvidenceProjectionV1 =>
+        projection !== null,
+    );
+    return candidates.filter(
+      (candidate, index) =>
+        !candidates
+          .slice(0, index)
+          .some((earlier) => jsonEqual(earlier, candidate)),
+    );
+  }
+  const counts = closureEvidenceCounts(plan, journal);
+  return [
+    {
+      payloadOrdinals: Array.from({ length: counts.payload }, (_, ordinal) => ordinal),
+      creations: [
+        ...Array.from({ length: counts.ordinary }, (_, ordinal) => ({
+          scope: "ordinary" as const,
+          ordinal,
+        })),
+        ...Array.from({ length: counts.launchability }, (_, ordinal) => ({
+          scope: "launchability" as const,
+          ordinal,
+        })),
+      ],
+      foundationOrdinals: plan.foundationParticipants.map((_, ordinal) => ordinal),
+      foundationExpectation: "phase_bound",
+      stagingEntries: [
+        ...plan.createdPaths.slice(0, counts.ordinary),
+        ...plan.launchabilityPaths.slice(0, counts.launchability),
+      ]
+        .map((planned) => planned.path)
+        .filter(
+          (path) =>
+            path === productStagingRoot ||
+            path.startsWith(`${productStagingRoot}/`),
+        ),
+    },
+  ];
+}
+
 export function inspectBootstrapClosure(
   inventory: BootstrapInventoryV1,
   context: BootstrapClosureAdmissionContextV1,
 ): BootstrapClosureV1 {
   try {
-    validateInventoryShape(inventory);
-    if (context.admitGuardedInventory(inventory) !== inventory.inventoryId) return refuse();
+    const retainedInventory = retainedClone(inventory);
+    validateInventoryShape(retainedInventory);
+    const expectedInventoryId = retainedInventory.inventoryId;
+    if (
+      context.admitGuardedInventory(retainedClone(retainedInventory)) !==
+      expectedInventoryId
+    ) return refuse();
+    inventory = retainedInventory;
     if (inventory.envelopes.length === 0) {
       if (inventory.entryCount !== 0) return refuse();
       return { state: "clear" };
@@ -1159,8 +1398,16 @@ export function inspectBootstrapClosure(
         envelope.foundationStates.length !== 0 ||
         envelope.manifestState !== null ||
         envelope.terminalState !== null ||
+        envelope.preIntentObservation === null ||
         envelope.stagingEntries.length !== 0
       ) return refuse();
+      validatePreIntentObservation(
+        envelope.preIntentObservation,
+        envelope.operation,
+        envelope.id,
+        null,
+        context,
+      );
       const temporary = validateTemporaryInventory(
         envelope.planTemps[0],
         "plan",
@@ -1178,7 +1425,14 @@ export function inspectBootstrapClosure(
     if (envelope.journal === null) {
       if (envelope.payloadEvidence.length !== 0 || envelope.createdPathEvidence.length !== 0 || envelope.foundationStates.length !== 0 || envelope.manifestState !== null || envelope.stagingEntries.length !== 0) return refuse();
       if (envelope.journalTemps.length === 1) {
-        if (envelope.terminalState !== null) return refuse();
+        if (envelope.terminalState !== null || envelope.preIntentObservation === null) return refuse();
+        validatePreIntentObservation(
+          envelope.preIntentObservation,
+          envelope.operation,
+          envelope.id,
+          plan,
+          context,
+        );
         const temporary = validateTemporaryInventory(
           envelope.journalTemps[0],
           "journal",
@@ -1193,17 +1447,38 @@ export function inspectBootstrapClosure(
           temporary,
         };
       }
-      if (envelope.terminalState === null) return { state: "guarded_cleanable_plan_orphan", plan };
-      const terminal = context.admitTerminalState(envelope.terminalState, plan);
+      if (envelope.terminalState === null) {
+        if (envelope.preIntentObservation === null) return refuse();
+        validatePreIntentObservation(
+          envelope.preIntentObservation,
+          envelope.operation,
+          envelope.id,
+          plan,
+          context,
+        );
+        return { state: "guarded_cleanable_plan_orphan", plan };
+      }
+      if (envelope.preIntentObservation !== null) return refuse();
+      const terminalSnapshot = retainedClone(envelope.terminalState);
+      const terminal = context.admitTerminalState(
+        retainedClone(terminalSnapshot),
+        retainedClone(plan),
+      );
       return { state: "plan_last_compaction", plan, terminalOutcome: terminal === "postimage" ? "finalized" : "rolled_back" };
     }
+
+    if (envelope.preIntentObservation !== null) return refuse();
 
     const journal = validateBootstrapJournal(plan, envelope.journal);
     if (journal.terminalOutcome === null) {
       if (envelope.terminalState !== null) return refuse();
     } else {
       if (envelope.terminalState === null) return refuse();
-      const observedTerminal = context.admitTerminalState(envelope.terminalState, plan);
+      const terminalSnapshot = retainedClone(envelope.terminalState);
+      const observedTerminal = context.admitTerminalState(
+        retainedClone(terminalSnapshot),
+        retainedClone(plan),
+      );
       const expectedTerminal =
         journal.terminalOutcome === "finalized" ? "postimage" : "preimage";
       if (observedTerminal !== expectedTerminal) return refuse();
@@ -1218,49 +1493,83 @@ export function inspectBootstrapClosure(
       )
       : null;
     if (journal.phase === "planned" && envelope.stagingEntries.length !== 0) return refuse();
-    const evidenceCounts = closureEvidenceCounts(plan, journal);
-    if (envelope.payloadEvidence.length !== evidenceCounts.payload) return refuse();
+    const projections = closureEvidenceProjections(
+      plan,
+      journal,
+      context.planAdmission.productStagingRoot,
+    );
+    const matchingProjections = projections.filter(
+      (projection) =>
+        envelope.payloadEvidence.length === projection.payloadOrdinals.length &&
+        envelope.createdPathEvidence.length === projection.creations.length &&
+        envelope.foundationStates.length === projection.foundationOrdinals.length &&
+        jsonEqual(envelope.stagingEntries, projection.stagingEntries),
+    );
+    if (matchingProjections.length !== 1) return refuse();
+    const projection = matchingProjections[0];
+    if (projection === undefined) return refuse();
     for (let index = 0; index < envelope.payloadEvidence.length; index += 1) {
-      const row = plan.payloads[index];
+      const ordinal = projection.payloadOrdinals[index];
+      if (ordinal === undefined) return refuse();
+      const row = plan.payloads[ordinal];
       if (row === undefined) return refuse();
-      const admitted = context.admitPayloadEvidence(envelope.payloadEvidence[index], row.ref, row.source);
-      if (!jsonEqual(admitted, envelope.payloadEvidence[index])) return refuse();
-      validateBootstrapPayloadEvidence(admitted, row.ref, row.source);
-    }
-    const reachedCreation = evidenceCounts.ordinary + evidenceCounts.launchability;
-    if (envelope.createdPathEvidence.length !== reachedCreation) return refuse();
-    for (let index = 0; index < evidenceCounts.ordinary; index += 1) {
-      const planned = plan.createdPaths[index];
-      if (planned === undefined) return refuse();
-      const admitted = context.admitCreatedPathEvidence(envelope.createdPathEvidence[index], planned, "ordinary", index);
-      if (!jsonEqual(admitted, envelope.createdPathEvidence[index])) return refuse();
-      validateCreatedPathEvidence(admitted, planned, plan.id, "ordinary", index);
-    }
-    for (let index = 0; index < evidenceCounts.launchability; index += 1) {
-      const planned = plan.launchabilityPaths[index];
-      if (planned === undefined) return refuse();
-      const evidenceIndex = evidenceCounts.ordinary + index;
-      const admitted = context.admitCreatedPathEvidence(envelope.createdPathEvidence[evidenceIndex], planned, "launchability", index);
-      if (!jsonEqual(admitted, envelope.createdPathEvidence[evidenceIndex])) return refuse();
-      validateCreatedPathEvidence(admitted, planned, plan.id, "launchability", index);
-    }
-    const expectedStagingEntries = [
-      ...plan.createdPaths.slice(0, evidenceCounts.ordinary),
-      ...plan.launchabilityPaths.slice(0, evidenceCounts.launchability),
-    ]
-      .map((planned) => planned.path)
-      .filter(
-        (path) =>
-          path === context.planAdmission.productStagingRoot ||
-          path.startsWith(`${context.planAdmission.productStagingRoot}/`),
+      const evidenceValue: unknown = envelope.payloadEvidence[index];
+      const evidenceSnapshot: unknown = retainedClone(evidenceValue);
+      const admitted = context.admitPayloadEvidence(
+        retainedClone(evidenceSnapshot),
+        retainedClone(row.ref),
+        retainedClone(row.source),
       );
-    if (!jsonEqual(envelope.stagingEntries, expectedStagingEntries)) return refuse();
-    if (envelope.foundationStates.length !== plan.foundationParticipants.length) return refuse();
-    for (let index = 0; index < plan.foundationParticipants.length; index += 1) {
-      const participant = plan.foundationParticipants[index] as FoundationParticipantRefV2;
-      if (context.admitFoundationState(envelope.foundationStates[index], participant) !== participant.id) return refuse();
+      if (!jsonEqual(admitted, evidenceSnapshot)) return refuse();
+      validateBootstrapPayloadEvidence(evidenceSnapshot, row.ref, row.source);
     }
-    if (envelope.manifestState === null || context.admitManifestState(envelope.manifestState, plan.manifest) !== plan.manifest.participantId) return refuse();
+    for (let index = 0; index < projection.creations.length; index += 1) {
+      const creation = projection.creations[index];
+      if (creation === undefined) return refuse();
+      const planned =
+        creation.scope === "ordinary"
+          ? plan.createdPaths[creation.ordinal]
+          : plan.launchabilityPaths[creation.ordinal];
+      if (planned === undefined) return refuse();
+      const evidenceValue: unknown = envelope.createdPathEvidence[index];
+      const evidenceSnapshot: unknown = retainedClone(evidenceValue);
+      const admitted = context.admitCreatedPathEvidence(
+        retainedClone(evidenceSnapshot),
+        retainedClone(planned),
+        creation.scope,
+        creation.ordinal,
+      );
+      if (!jsonEqual(admitted, evidenceSnapshot)) return refuse();
+      validateCreatedPathEvidence(
+        evidenceSnapshot,
+        planned,
+        plan.id,
+        creation.scope,
+        creation.ordinal,
+      );
+    }
+    for (let index = 0; index < projection.foundationOrdinals.length; index += 1) {
+      const ordinal = projection.foundationOrdinals[index];
+      if (ordinal === undefined) return refuse();
+      const participant = plan.foundationParticipants[ordinal];
+      if (participant === undefined) return refuse();
+      const expectedParticipantId = participant.id;
+      if (
+        context.admitFoundationState(
+          retainedClone(envelope.foundationStates[index]),
+          retainedClone(participant),
+          projection.foundationExpectation,
+        ) !== expectedParticipantId
+      ) return refuse();
+    }
+    const expectedManifestId = plan.manifest.participantId;
+    if (
+      envelope.manifestState === null ||
+      context.admitManifestState(
+        retainedClone(envelope.manifestState),
+        retainedClone(plan.manifest),
+      ) !== expectedManifestId
+    ) return refuse();
     return journalTemporary === null
       ? { state: "recovery_required", plan, journal }
       : {
@@ -1494,9 +1803,10 @@ function validatePlanDerivedSource(
   if (valueBytes !== payloadBytes.byteLength - 1 || ref.bytes !== payloadBytes.byteLength || ref.hash !== rawHash(payloadBytes)) return refuse();
   const projectionHash = sha256(input.projectionHash);
   if (projectionHash !== canonicalHash(`developer-os/bootstrap-plan-derived/${role}/v1\0`, { role, value })) return refuse();
-  const admittedValue = context.admitPlanDerivedValue(role, value);
-  if (!jsonEqual(admittedValue, value)) return refuse();
-  return { kind: "plan_derived", role, value: structuredClone(value), valueBytes, projectionHash };
+  const retainedValue = admitEqualValue(value, (candidate) =>
+    context.admitPlanDerivedValue(role, candidate),
+  );
+  return { kind: "plan_derived", role, value: retainedValue, valueBytes, projectionHash };
 }
 
 function validateRequiredPlanDerivedSources(
@@ -1589,9 +1899,9 @@ function validatePayloadSource(
   } else {
     return refuse();
   }
-  const admitted = context.admitPayloadSource(source, ref);
-  if (!jsonEqual(admitted, source)) return refuse();
-  return source;
+  return admitEqualValue(source, (candidate) =>
+    context.admitPayloadSource(candidate, retainedClone(ref)),
+  );
 }
 
 function validateParent(
@@ -1607,9 +1917,9 @@ function validateParent(
       dev: uint64(input.dev),
       ino: uint64(input.ino),
     };
-    const admitted = context.admitPreexistingParent(parent);
-    if (!jsonEqual(admitted, parent)) return refuse();
-    return parent;
+    return admitEqualValue(parent, (candidate) =>
+      context.admitPreexistingParent(candidate),
+    );
   }
   if (input.kind === "created_path") {
     exact(input, ["kind", "ordinal", "scope"]);
@@ -1645,9 +1955,9 @@ function validateCreatedPath(
     return refuse();
   }
   if (planned.ownerUid !== context.bootstrapIdentity.ownerUid) return refuse();
-  const admitted = context.admitPlannedCreatedPath(planned, scope, ordinal);
-  if (!jsonEqual(admitted, planned)) return refuse();
-  return planned;
+  return admitEqualValue(planned, (candidate) =>
+    context.admitPlannedCreatedPath(candidate, scope, ordinal),
+  );
 }
 
 function validateParentOrder(
@@ -1745,9 +2055,9 @@ function validateFoundationParticipant(
     initialJournal: { finalPath: participant.initialJournal.finalPath, staged: stagedProjection },
   };
   if (participant.planHash !== canonicalHash("developer-os/foundation-participant-plan/v2\0", projection as unknown as CanonicalJsonValue)) return refuse();
-  const admitted = context.admitFoundationParticipant(participant);
-  if (!jsonEqual(admitted, participant)) return refuse();
-  return participant;
+  return admitEqualValue(participant, (candidate) =>
+    context.admitFoundationParticipant(candidate),
+  );
 }
 
 function validateFoundationPairs(
@@ -1810,13 +2120,14 @@ function validateManifestBinding(
   refs: readonly FoundationParticipantRefV2[],
   context: BootstrapPlanAdmissionContextV1,
 ): ManifestStatePlanV1 {
-  const admitted = context.admitManifestParticipant(value);
-  if (!jsonEqual(admitted, value)) return refuse();
+  const retainedValue = admitEqualValue(value, (candidate) =>
+    context.admitManifestParticipant(candidate),
+  );
   const expectedKind = operation === "fresh_v2_init" ? "fresh_v2_init" : "v1_migration";
-  if (value.participantId !== `mf_${id}` || value.envelope.kind !== expectedKind || value.envelope.id !== id || value.bindings.externalEffects.length !== 0 || value.after.state !== "present" || value.after.hash !== v2ManifestHash || value.after.bytes?.kind !== "bootstrap_expected" || value.after.bytes.bootstrapId !== id || value.after.bytes.hash !== v2ManifestHash) return refuse();
+  if (retainedValue.participantId !== `mf_${id}` || retainedValue.envelope.kind !== expectedKind || retainedValue.envelope.id !== id || retainedValue.bindings.externalEffects.length !== 0 || retainedValue.after.state !== "present" || retainedValue.after.hash !== v2ManifestHash || retainedValue.after.bytes?.kind !== "bootstrap_expected" || retainedValue.after.bytes.bootstrapId !== id || retainedValue.after.bytes.hash !== v2ManifestHash) return refuse();
   const forwardIds = refs.filter((ref) => ref.role.kind === "forward").map((ref) => ref.id);
-  if (value.bindings.foundationTransactions.count !== forwardIds.length || value.bindings.foundationTransactions.orderedIdsHash !== foundationBindingHash(forwardIds)) return refuse();
-  return structuredClone(value);
+  if (retainedValue.bindings.foundationTransactions.count !== forwardIds.length || retainedValue.bindings.foundationTransactions.orderedIdsHash !== foundationBindingHash(forwardIds)) return refuse();
+  return retainedValue;
 }
 
 function validateRefUseBijection(
@@ -1826,8 +2137,13 @@ function validateRefUseBijection(
   foundation: readonly FoundationParticipantRefV2[],
   manifest: ManifestStatePlanV1,
 ): void {
+  const payloadByPath = new Map(
+    payloads.map((row) => [row.ref.path, row.ref] as const),
+  );
   const uses = new Map<string, number>();
   const add = (ref: BootstrapExpectedPayloadRefV1): void => {
+    const payloadRef = payloadByPath.get(ref.path);
+    if (payloadRef === undefined || !jsonEqual(ref, payloadRef)) return refuse();
     uses.set(ref.path, (uses.get(ref.path) ?? 0) + 1);
   };
   for (const planned of [...created, ...launchability]) if (planned.kind === "file") add(planned.payload);

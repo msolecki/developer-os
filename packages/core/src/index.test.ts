@@ -74,6 +74,7 @@ describe("the package's public door", () => {
          */
         "publish",
         "redactPayload",
+        "admitBootstrapFoundationInitialJournal",
         "recoverTransaction",
         "TransactionBackupRetentionError",
         "TransactionConflictError",

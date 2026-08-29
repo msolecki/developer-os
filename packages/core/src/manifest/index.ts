@@ -86,6 +86,7 @@ export type {
   BootstrapPayloadWriteStateV1,
   BootstrapPlanAdmissionContextV1,
   BootstrapPlannedParentV1,
+  BootstrapPreIntentObservationV1,
   BootstrapTempInventoryV1,
   CreatedPathEvidenceV1,
   FoundationMutationRefV1,

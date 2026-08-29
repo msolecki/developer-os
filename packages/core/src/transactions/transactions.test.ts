@@ -5,12 +5,14 @@ import { dirname, join, sep } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { encodeCanonicalJson } from '../lifecycle/canonical-json.js';
 import { EXIT_CODES } from '../result.js';
 import type {
   BootstrapPayloadEvidenceV1,
   FoundationParticipantRefV2,
 } from '../manifest/bootstrap.js';
 import {
+  admitBootstrapFoundationInitialJournal,
   recoverTransaction,
   TransactionBackupRetentionError,
   TransactionExecutor,
@@ -19,6 +21,7 @@ import {
   TransactionStore,
   validateJournal,
   type PlannedFileMutation,
+  type AdmittedBootstrapFoundationInitialJournalV1,
   type TransactionFileSystem,
   type TransactionGuards,
   type TransactionJournalV1,
@@ -78,6 +81,7 @@ interface ExecutorOverrides {
 interface BootstrapFoundationFixture {
   readonly participant: FoundationParticipantRefV2;
   readonly evidence: BootstrapPayloadEvidenceV1;
+  readonly admission: AdmittedBootstrapFoundationInitialJournalV1;
   readonly initialJournalPath: string;
   readonly finalJournalPath: string;
   readonly initialJournalBytes: Uint8Array;
@@ -337,7 +341,44 @@ async function expectMissing(targetPath: string): Promise<void> {
 const BOOTSTRAP_FOUNDATION_UUID = '123e4567-e89b-42d3-a456-426614174000';
 const BOOTSTRAP_FOUNDATION_ID =
   `tx_fi_${BOOTSTRAP_FOUNDATION_UUID}_0000000000_f` as const;
+const BOOTSTRAP_FOUNDATION_COMPENSATION_ID =
+  `tx_fi_${BOOTSTRAP_FOUNDATION_UUID}_0000000000_c` as const;
 const BOOTSTRAP_ID = `fi_${BOOTSTRAP_FOUNDATION_UUID}` as const;
+
+function canonicalDomainHash(domain: string, value: unknown): string {
+  const encoded = encodeCanonicalJson(value as never);
+  return createHash('sha256')
+    .update(domain)
+    .update(encoded.slice(0, -1))
+    .digest('hex');
+}
+
+function exactJsonValue(left: unknown, right: unknown): boolean {
+  return encodeCanonicalJson(left as never) === encodeCanonicalJson(right as never);
+}
+
+function admitFoundationInitialJournal(
+  participant: FoundationParticipantRefV2,
+  evidence: BootstrapPayloadEvidenceV1,
+  ownerUid: number,
+): AdmittedBootstrapFoundationInitialJournalV1 {
+  const participantAdmissionId = 'fixture-complete-participant-proof';
+  const evidenceAdmissionId = 'fixture-matching-payload-evidence-proof';
+  return admitBootstrapFoundationInitialJournal(participant, evidence, {
+    participantAdmissionId,
+    evidenceAdmissionId,
+    ownerUid,
+    admitParticipant: (candidate) =>
+      exactJsonValue(candidate, participant)
+        ? participantAdmissionId
+        : 'different-participant',
+    admitEvidence: (candidate, candidateParticipant) =>
+      exactJsonValue(candidate, evidence) &&
+      exactJsonValue(candidateParticipant, participant)
+        ? evidenceAdmissionId
+        : 'different-evidence',
+  });
+}
 
 async function installBootstrapFoundationFixture(
   fixture: Fixture,
@@ -401,51 +442,103 @@ async function installBootstrapFoundationFixture(
   });
   const stagedStats = await nodeFs.lstat(initialJournalPath);
 
-  return {
-    participant: {
+  const staged = {
+    kind: 'bootstrap_expected' as const,
+    bootstrapId: BOOTSTRAP_ID as never,
+    ordinal: 0,
+    path: initialJournalPath as never,
+    hash: initialJournalHash as never,
+    bytes: initialJournalBytes.byteLength,
+    mode: 0o600 as const,
+  };
+  const mutations = [
+    {
+      targetPath: targetPath as never,
+      operation: 'create' as const,
+      expectedBeforeHash: null,
+      contentHash: contentHash as never,
+      contentSize: CREATED_BYTES.byteLength,
+      stagedPath: standardStagedPath as never,
+    },
+  ];
+  const role = {
+    kind: 'forward' as const,
+    compensationId: BOOTSTRAP_FOUNDATION_COMPENSATION_ID,
+  };
+  const planHash = canonicalDomainHash(
+    'developer-os/foundation-participant-plan/v2\0',
+    {
+      schemaVersion: 2,
       id: BOOTSTRAP_FOUNDATION_ID,
       slot: 'fresh_init_artifacts',
-      role: { kind: 'forward', compensationId: null },
-      mutations: [
-        {
-          targetPath: targetPath as never,
-          operation: 'create',
-          expectedBeforeHash: null,
-          contentHash: contentHash as never,
-          contentSize: CREATED_BYTES.byteLength,
-          stagedPath: standardStagedPath as never,
-        },
-      ],
+      role,
+      mutations,
       maximumJournalBytes: 1_048_576,
-      planHash: 'a'.repeat(64) as never,
       initialJournal: {
-        finalPath: finalJournalPath as never,
-        plannedBytesHash: initialJournalHash as never,
+        finalPath: finalJournalPath,
         staged: {
-          kind: 'bootstrap_expected',
-          bootstrapId: BOOTSTRAP_ID as never,
-          ordinal: 0,
-          path: initialJournalPath as never,
-          hash: initialJournalHash as never,
-          bytes: initialJournalBytes.byteLength,
-          mode: 0o600,
+          kind: staged.kind,
+          bootstrapId: staged.bootstrapId,
+          ordinal: staged.ordinal,
+          path: staged.path,
+          bytes: staged.bytes,
+          mode: staged.mode,
         },
       },
     },
-    evidence: {
-      schemaVersion: 1,
-      bootstrapId: BOOTSTRAP_ID as never,
-      ordinal: 0,
-      stagedPathHash: createHash('sha256')
-        .update(initialJournalPath)
-        .digest('hex') as never,
-      sourceIdentityHash: 'b'.repeat(64) as never,
-      bytes: initialJournalBytes.byteLength,
-      sha256: initialJournalHash as never,
-      mode: 0o600,
-      dev: String(stagedStats.dev) as never,
-      ino: String(stagedStats.ino) as never,
+  );
+  const participant: FoundationParticipantRefV2 = {
+    id: BOOTSTRAP_FOUNDATION_ID,
+    slot: 'fresh_init_artifacts',
+    role,
+    mutations,
+    maximumJournalBytes: 1_048_576,
+    planHash: planHash as never,
+    initialJournal: {
+      finalPath: finalJournalPath as never,
+      plannedBytesHash: initialJournalHash as never,
+      staged,
     },
+  };
+  const initialJournalValue = JSON.parse(
+    new TextDecoder().decode(initialJournalBytes),
+  ) as unknown;
+  const payloadSource = {
+    kind: 'plan_derived',
+    role: 'foundation_initial_journal',
+    value: initialJournalValue,
+    valueBytes: initialJournalBytes.byteLength - 1,
+    projectionHash: canonicalDomainHash(
+      'developer-os/bootstrap-plan-derived/foundation_initial_journal/v1\0',
+      { role: 'foundation_initial_journal', value: initialJournalValue },
+    ),
+  };
+  const evidence: BootstrapPayloadEvidenceV1 = {
+    schemaVersion: 1,
+    bootstrapId: BOOTSTRAP_ID as never,
+    ordinal: 0,
+    stagedPathHash: createHash('sha256')
+      .update(initialJournalPath)
+      .digest('hex') as never,
+    sourceIdentityHash: canonicalDomainHash(
+      'developer-os/bootstrap-payload-source/v1\0',
+      payloadSource,
+    ) as never,
+    bytes: initialJournalBytes.byteLength,
+    sha256: initialJournalHash as never,
+    mode: 0o600,
+    dev: String(stagedStats.dev) as never,
+    ino: String(stagedStats.ino) as never,
+  };
+
+  return {
+    participant,
+    evidence,
+    admission: admitFoundationInitialJournal(
+      participant,
+      evidence,
+      stagedStats.uid,
+    ),
     initialJournalPath,
     finalJournalPath,
     initialJournalBytes,
@@ -677,6 +770,129 @@ describe('a precondition the caller read', () => {
 });
 
 describe('coordinator-bound bootstrap Foundation initial-journal publication', () => {
+  it('catches a numeric participant proof ID being coerced into an opaque controller admission', async () => {
+    const fixture = await createFixture('bootstrap-foundation-numeric-proof');
+    try {
+      const bootstrap = await installBootstrapFoundationFixture(fixture);
+      const stagedStats = await nodeFs.lstat(bootstrap.initialJournalPath);
+      expect(() =>
+        admitBootstrapFoundationInitialJournal(
+          bootstrap.participant,
+          bootstrap.evidence,
+          {
+            participantAdmissionId: 7,
+            evidenceAdmissionId: 'matching-evidence-proof',
+            ownerUid: stagedStats.uid,
+            admitParticipant: () => 7,
+            admitEvidence: () => 'matching-evidence-proof',
+          } as never,
+        ),
+      ).toThrow();
+      await expect(nodeFs.stat(bootstrap.initialJournalPath)).resolves.toBeDefined();
+      await expectMissing(bootstrap.finalJournalPath);
+      await expectMissing(bootstrap.targetPath);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  it('catches the public bridge accepting a raw complete ref and matching evidence before any context-bound admission', async () => {
+    const fixture = await createFixture('bootstrap-foundation-raw-structural');
+    try {
+      const bootstrap = await installBootstrapFoundationFixture(fixture);
+      let lstatCalls = 0;
+      const fs: TransactionFileSystem = {
+        ...nodeFs,
+        lstat: ((...parameters: Parameters<typeof nodeFs.lstat>) => {
+          lstatCalls += 1;
+          return nodeFs.lstat(...parameters);
+        }) as typeof nodeFs.lstat,
+      };
+      const executor = bootstrapFoundationExecutor(
+        fixture,
+        noReplacePublisher(),
+        fs,
+      );
+      const rawExecutor = executor as unknown as {
+        executeBootstrapFoundationParticipant(
+          participant: FoundationParticipantRefV2,
+          evidence: BootstrapPayloadEvidenceV1,
+        ): Promise<TransactionJournalV1>;
+      };
+
+      await expect(
+        rawExecutor.executeBootstrapFoundationParticipant(
+          bootstrap.participant,
+          bootstrap.evidence,
+        ),
+      ).rejects.toBeInstanceOf(Error);
+
+      expect(lstatCalls).toBe(0);
+      await expect(nodeFs.stat(bootstrap.initialJournalPath)).resolves.toBeDefined();
+      await expectMissing(bootstrap.finalJournalPath);
+      await expectMissing(bootstrap.targetPath);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  it('retains untouched admitted snapshots when the caller mutates both structural inputs after admission', async () => {
+    const fixture = await createFixture('bootstrap-foundation-retained-admission');
+    try {
+      const bootstrap = await installBootstrapFoundationFixture(fixture);
+      const mutableParticipant = bootstrap.participant as never as {
+        mutations: Array<{ targetPath: string }>;
+      };
+      const mutableEvidence = bootstrap.evidence as never as { sha256: string };
+      const mutableMutation = mutableParticipant.mutations[0];
+      if (mutableMutation === undefined) throw new Error('fixture mutation is missing');
+      mutableMutation.targetPath = join(
+        fixture.workspaceDir,
+        'caller-substituted-target.bin',
+      );
+      mutableEvidence.sha256 = 'f'.repeat(64);
+
+      const result = await bootstrapFoundationExecutor(
+        fixture,
+        noReplacePublisher(),
+      ).executeBootstrapFoundationParticipant(bootstrap.admission);
+
+      expect(result.phase).toBe('finalized');
+      await expectBytes(bootstrap.targetPath, CREATED_BYTES);
+      await expectMissing(join(fixture.workspaceDir, 'caller-substituted-target.bin'));
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  it('catches the bridge consulting ambient process UID instead of the owner identity admitted by its controller', async () => {
+    const fixture = await createFixture('bootstrap-foundation-owner-admission');
+    try {
+      const bootstrap = await installBootstrapFoundationFixture(fixture);
+      const stagedStats = await nodeFs.lstat(bootstrap.initialJournalPath);
+      const wrongOwnerAdmission = admitFoundationInitialJournal(
+        bootstrap.participant,
+        bootstrap.evidence,
+        stagedStats.uid + 1,
+      );
+      let publisherCalled = false;
+
+      await expect(
+        bootstrapFoundationExecutor(fixture, () => {
+          publisherCalled = true;
+          return Promise.resolve();
+        }).executeBootstrapFoundationParticipant(wrongOwnerAdmission),
+      ).rejects.toBeInstanceOf(Error);
+
+      expect(publisherCalled).toBe(false);
+      await expect(nodeFs.stat(bootstrap.initialJournalPath)).resolves.toBeDefined();
+      await expectMissing(bootstrap.finalJournalPath);
+      await expectMissing(bootstrap.targetPath);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
   it('catches a bridge that generates an ID or accepts caller-selected paths instead of deriving the admitted participant paths', async () => {
     const fixture = await createFixture('bootstrap-foundation-derived');
     try {
@@ -686,10 +902,7 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
       const result = await bootstrapFoundationExecutor(
         fixture,
         noReplacePublisher(publicationCalls),
-      ).executeBootstrapFoundationParticipant(
-        bootstrap.participant,
-        bootstrap.evidence,
-      );
+      ).executeBootstrapFoundationParticipant(bootstrap.admission);
 
       expect(result).toMatchObject({
         id: BOOTSTRAP_FOUNDATION_ID,
@@ -719,10 +932,7 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
       );
 
       await expect(
-        executor.executeBootstrapFoundationParticipant(
-          bootstrap.participant,
-          bootstrap.evidence,
-        ),
+        executor.executeBootstrapFoundationParticipant(bootstrap.admission),
       ).rejects.toBeInstanceOf(Error);
 
       const after = await nodeFs.lstat(bootstrap.initialJournalPath);
@@ -750,10 +960,7 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
         bootstrapFoundationExecutor(fixture, () => {
           publisherCalled = true;
           return Promise.resolve();
-        }).executeBootstrapFoundationParticipant(
-          bootstrap.participant,
-          bootstrap.evidence,
-        ),
+        }).executeBootstrapFoundationParticipant(bootstrap.admission),
       ).rejects.toBeInstanceOf(Error);
 
       expect(publisherCalled).toBe(false);
@@ -774,10 +981,7 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
         throw new Error('synthetic death after no-replace rename');
       });
       await expect(
-        executor.executeBootstrapFoundationParticipant(
-          bootstrap.participant,
-          bootstrap.evidence,
-        ),
+        executor.executeBootstrapFoundationParticipant(bootstrap.admission),
       ).rejects.toBeInstanceOf(Error);
 
       let retryPublicationCalled = false;
@@ -787,10 +991,7 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
           retryPublicationCalled = true;
           return Promise.reject(new Error('same-inode adoption must not republish'));
         },
-      ).executeBootstrapFoundationParticipant(
-        bootstrap.participant,
-        bootstrap.evidence,
-      );
+      ).executeBootstrapFoundationParticipant(bootstrap.admission);
 
       expect(retryPublicationCalled).toBe(false);
       expect(result.phase).toBe('finalized');
@@ -833,19 +1034,13 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
         fs,
       );
       await expect(
-        executor.executeBootstrapFoundationParticipant(
-          bootstrap.participant,
-          bootstrap.evidence,
-        ),
+        executor.executeBootstrapFoundationParticipant(bootstrap.admission),
       ).rejects.toBeInstanceOf(Error);
 
       const result = await bootstrapFoundationExecutor(
         fixture,
         () => Promise.reject(new Error('retry must adopt instead of publishing')),
-      ).executeBootstrapFoundationParticipant(
-        bootstrap.participant,
-        bootstrap.evidence,
-      );
+      ).executeBootstrapFoundationParticipant(bootstrap.admission);
       expect(result.phase).toBe('finalized');
       expect(deniedReopen).toBe(true);
     } finally {
@@ -871,10 +1066,7 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
       const result = await bootstrapFoundationExecutor(
         fixture,
         () => Promise.reject(new Error('adoption must not invoke the publisher')),
-      ).executeBootstrapFoundationParticipant(
-        bootstrap.participant,
-        bootstrap.evidence,
-      );
+      ).executeBootstrapFoundationParticipant(bootstrap.admission);
       expect(result.phase).toBe('finalized');
     } finally {
       await removeFixture(fixture);
@@ -895,10 +1087,7 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
 
       await expect(
         bootstrapFoundationExecutor(fixture, noReplacePublisher())
-          .executeBootstrapFoundationParticipant(
-            bootstrap.participant,
-            bootstrap.evidence,
-          ),
+          .executeBootstrapFoundationParticipant(bootstrap.admission),
       ).rejects.toBeInstanceOf(Error);
       expect(await nodeFs.readFile(bootstrap.finalJournalPath)).toStrictEqual(
         conflicting,
@@ -921,10 +1110,7 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
 
       await expect(
         bootstrapFoundationExecutor(fixture, noReplacePublisher())
-          .executeBootstrapFoundationParticipant(
-            bootstrap.participant,
-            bootstrap.evidence,
-          ),
+          .executeBootstrapFoundationParticipant(bootstrap.admission),
       ).rejects.toBeInstanceOf(Error);
       await expect(nodeFs.stat(bootstrap.initialJournalPath)).resolves.toBeDefined();
       await expect(nodeFs.stat(bootstrap.finalJournalPath)).resolves.toBeDefined();
@@ -966,13 +1152,15 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
       alteredEvidence.sha256 = alteredHash;
       alteredEvidence.dev = String(stats.dev);
       alteredEvidence.ino = String(stats.ino);
+      const alteredAdmission = admitFoundationInitialJournal(
+        alteredParticipant as unknown as FoundationParticipantRefV2,
+        alteredEvidence as unknown as BootstrapPayloadEvidenceV1,
+        stats.uid,
+      );
 
       await expect(
         bootstrapFoundationExecutor(fixture, noReplacePublisher())
-          .executeBootstrapFoundationParticipant(
-            alteredParticipant as unknown as FoundationParticipantRefV2,
-            alteredEvidence as unknown as BootstrapPayloadEvidenceV1,
-          ),
+          .executeBootstrapFoundationParticipant(alteredAdmission),
       ).rejects.toBeInstanceOf(Error);
       await expect(nodeFs.stat(bootstrap.initialJournalPath)).resolves.toBeDefined();
       await expectMissing(bootstrap.finalJournalPath);
@@ -991,10 +1179,7 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
           const bytes = await nodeFs.readFile(request.destinationPath);
           bytes[0] = 0x20;
           await nodeFs.writeFile(request.destinationPath, bytes);
-        }).executeBootstrapFoundationParticipant(
-          bootstrap.participant,
-          bootstrap.evidence,
-        ),
+        }).executeBootstrapFoundationParticipant(bootstrap.admission),
       ).rejects.toBeInstanceOf(Error);
       await expectMissing(bootstrap.targetPath);
       await expect(nodeFs.stat(bootstrap.finalJournalPath)).resolves.toBeDefined();

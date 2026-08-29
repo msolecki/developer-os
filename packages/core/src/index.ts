@@ -105,6 +105,7 @@ export type {
   BootstrapPayloadWriteStateV1,
   BootstrapPlanAdmissionContextV1,
   BootstrapPlannedParentV1,
+  BootstrapPreIntentObservationV1,
   BootstrapTempInventoryV1,
   CreatedPathEvidenceV1,
   FoundationMutationRefV1,
@@ -147,6 +148,7 @@ export type {
 export { compareVersions, tablePermits } from "./versions/index.js";
 export type { CapabilityVersionTable } from "./versions/index.js";
 export {
+  admitBootstrapFoundationInitialJournal,
   recoverTransaction,
   TransactionBackupRetentionError,
   TransactionConflictError,
@@ -159,6 +161,8 @@ export {
   validateJournal,
 } from "./transactions/index.js";
 export type {
+  AdmittedBootstrapFoundationInitialJournalV1,
+  BootstrapFoundationInitialJournalAdmissionContextV1,
   BootstrapInitialJournalPublicationV1,
   FileMutation,
   PlannedFileMutation,

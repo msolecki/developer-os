@@ -1,10 +1,15 @@
 export {
+  admitBootstrapFoundationInitialJournal,
   TransactionBackupRetentionError,
   TransactionConflictError,
   TransactionExecutor,
   TransactionGuardError,
   TransactionPlanError,
   TransactionPreconditionError,
+} from "./executor.js";
+export type {
+  AdmittedBootstrapFoundationInitialJournalV1,
+  BootstrapFoundationInitialJournalAdmissionContextV1,
 } from "./executor.js";
 export { recoverTransaction } from "./recovery.js";
 export {
