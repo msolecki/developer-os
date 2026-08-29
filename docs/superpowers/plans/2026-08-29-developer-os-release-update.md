@@ -123,12 +123,13 @@ git commit -m "feat(core): add canonical update codecs"
 - Create: `packages/core/src/update/release.ts`
 - Create: `packages/core/src/update/release.test.ts`
 - Modify: `packages/core/src/update/index.ts`
+- Modify: `packages/core/src/index.test.ts`
 
 **Interfaces:**
 - Consumes: Task 1 scalar/path/canonical codecs.
 - Produces: `ReleaseIdentityV1`, `ReleaseMetadataIdentityV1`, `ActiveReleaseRecordV1`, `ReleaseTrustStateV1`, `OfficialReleaseOriginV1`, `FixedReleaseMetadataLocatorV1`, `OfflineRootKeyV1`, `OfflineReleaseTrustV1`, `DelegatedReleaseKeyV1`, `ReleaseKeyDelegationV1`, `ReleaseIndexV1`, `ReleaseBundleManifestV1`, strict codecs, `releaseIdentityHash`, monotonic trust transition validation, and pure target selection.
 
-- [ ] **Step 1: Write failing exact metadata and replay tests**
+- [x] **Step 1: Write failing exact metadata and replay tests**
 
 ```ts
 it("binds a release identity to the architecture bundle but not index sequence", () => {
@@ -143,13 +144,13 @@ it.each(replayMutations)("refuses $name", mutation => {
 
 Cover one current/optional previous offline root, exact fixed GitHub locators, delegated origin grammar, one signature, stable SemVer ordering, two architecture rows, unique increasing release sequences/versions, latest equality, active equality, retained rollback exception, lower/equal/new delegation/index/release sequence/hash cases, manifest path order and entrypoint membership.
 
-- [ ] **Step 2: Run release schema tests and verify missing types fail**
+- [x] **Step 2: Run release schema tests and verify missing types fail**
 
 Run: `npx vitest run --root packages/core src/update/release.test.ts`
 
 Expected: FAIL on missing release codecs and selection functions.
 
-- [ ] **Step 3: Implement exact release schemas and pure transitions**
+- [x] **Step 3: Implement exact release schemas and pure transitions**
 
 ```ts
 export function validateReleaseIndex(value: unknown): ReleaseIndexV1;
@@ -167,16 +168,16 @@ export function advanceReleaseTrust(
 
 Use exact-key recursive validation and checked numeric comparison; identity hashes use the exact ASCII domains and no-LF canonical projections from Spec 2. Keep signature verification out of Core.
 
-- [ ] **Step 4: Run release schema tests**
+- [x] **Step 4: Run release schema tests**
 
 Run: `npx vitest run --root packages/core src/update/release.test.ts`
 
 Expected: PASS, including replay and both-architecture vectors.
 
-- [ ] **Step 5: Commit Task 2**
+- [x] **Step 5: Commit Task 2**
 
 ```bash
-git add packages/core/src/update/release.ts packages/core/src/update/release.test.ts packages/core/src/update/index.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
+git add packages/core/src/update/release.ts packages/core/src/update/release.test.ts packages/core/src/update/index.ts packages/core/src/index.test.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
 git commit -m "feat(core): define release identity and trust schemas"
 ```
 
