@@ -427,11 +427,14 @@ git commit -m "feat(core): recover manifest state transitions"
 - Modify: `packages/core/src/transactions/types.ts`
 - Modify: `packages/core/src/transactions/store.ts`
 - Modify: `packages/core/src/transactions/executor.ts`
+- Modify: `packages/core/src/transactions/index.ts`
 - Modify: `packages/core/src/transactions/transactions.test.ts`
+- Modify: `packages/core/src/index.ts`
+- Modify: `packages/core/src/index.test.ts`
 
 **Interfaces:**
 - Consumes: Tasks 1, 3, and 5; Spec 2 §6 shared fresh/migration grammar.
-- Produces: `FreshV2InitIdV1`, `ManifestMigrationIdV1`, `LifecycleBootstrapLockV1`, `LifecycleInstallNonceV1`, `LifecycleIdAllocatorV1`, `PersistedBootstrapLockIdentityV1`, `BootstrapExternalShapeProjectionV1`, `BootstrapPayloadPlanV1`, `BootstrapPayloadSourceV1`, `BootstrapPayloadEvidenceV1`, `BootstrapPayloadWriteStateV1`, `PlannedCreatedPathV1`, `CreatedPathEvidenceV1`, `FoundationMutationRefV1`, the deterministic bootstrap arms of `FoundationTransactionIdV2`, `FoundationParticipantRefV2`, `FreshV2InitPlanV1`, `ManifestMigrationPlanV1`, both journals/codecs, and `BootstrapClosureV1`.
+- Produces: `FreshV2InitIdV1`, `ManifestMigrationIdV1`, `LifecycleBootstrapLockV1`, `LifecycleInstallNonceV1`, `LifecycleIdAllocatorV1`, `PersistedBootstrapLockIdentityV1`, `BootstrapExternalShapeProjectionV1`, `BootstrapPayloadPlanV1`, `BootstrapPayloadSourceV1`, `BootstrapPayloadEvidenceV1`, `BootstrapPayloadWriteStateV1`, `PlannedCreatedPathV1`, `CreatedPathEvidenceV1`, `FoundationMutationRefV1`, the deterministic bootstrap arms of `FoundationTransactionIdV2`, `FoundationParticipantRefV2`, `FreshV2InitPlanV1`, `ManifestMigrationPlanV1`, both journals/codecs, `BootstrapPlanAdmissionContextV1`, `BootstrapClosureAdmissionContextV1`, `BootstrapInventoryV1`, and `BootstrapClosureV1`.
 
 - [ ] **Step 1: Write failing exact-set and cursor tests**
 
@@ -442,7 +445,7 @@ it.each([0, 255, 256])("validates deterministic Foundation pair ordinal %i", ord
 });
 
 it.each(bootstrapCursorMutations)("refuses $name", mutation => {
-  expect(() => inspectBootstrapClosure(mutation.inventory)).toThrow(BootstrapStateError);
+  expect(() => inspectBootstrapClosure(mutation.inventory, mutation.context)).toThrow(BootstrapStateError);
 });
 ```
 
@@ -458,15 +461,23 @@ Expected: FAIL because bootstrap plans/journals/closure do not exist.
 
 ```ts
 export type BootstrapExecutionPlanV1 = FreshV2InitPlanV1 | ManifestMigrationPlanV1;
-export function validateBootstrapPlan(value: unknown): BootstrapExecutionPlanV1;
+export function validateBootstrapPlan(
+  value: unknown,
+  context: BootstrapPlanAdmissionContextV1,
+): BootstrapExecutionPlanV1;
 export function validateBootstrapJournal(
   plan: BootstrapExecutionPlanV1,
   value: unknown,
 ): FreshV2InitJournalV1 | ManifestMigrationJournalV1;
-export function inspectBootstrapClosure(inventory: BootstrapInventoryV1): BootstrapClosureV1;
+export function inspectBootstrapClosure(
+  inventory: BootstrapInventoryV1,
+  context: BootstrapClosureAdmissionContextV1,
+): BootstrapClosureV1;
 ```
 
-Keep filesystem operations behind injected ports. Add only the deterministic `tx_fi_...`/`tx_mm_...` transaction-ID and pre-staged-initial-journal bridge required before an installed allocator exists; preserve all legacy transaction IDs/encodings and leave the later allocated lifecycle arm to the Spec 1 Foundation task. Derive all names from envelope kind/ID/ordinal, bind actual inode evidence only after publication, and make phase/cursor validity a closed table rather than condition fallthrough.
+Keep filesystem operations behind injected ports. Plan and closure admission are context-bound: consume already admitted product/state/staging roots and path evidence, the exact outer ID/bootstrap identity/external-shape authority, a bounded guarded inventory, and opaque validators for sources, payload/creation evidence, Foundation participants, and the manifest participant. Retain every supplied field and require the returned bound value/ID to equal it; never brand a caller absolute path, infer cleanup authority from spelling/live booleans, or accept an unguarded inventory. Recompute every derived final/temp/evidence path, prefix, hash, maximum, cursor partition, and use-once bijection.
+
+Add only the deterministic `tx_fi_...`/`tx_mm_...` transaction-ID and coordinator-bound pre-staged-initial-journal bridge required before an installed allocator exists. The bridge accepts only an admitted `FoundationParticipantRefV2` plus its matching `BootstrapPayloadEvidenceV1`, no-replace-publishes that exact staged inode to the ref's derived final path, syncs/reopens/verifies the transaction parent and exact planned `FoundationJournalJsonV1` bytes, then invokes the unchanged executor. It never generates an ID or accepts a caller-selected staged/final path. Preserve every legacy transaction ID, API, and encoding byte-for-byte and leave the later allocated lifecycle arm to the Spec 1 Foundation task. Derive all names from envelope kind/ID/ordinal, bind actual inode evidence only after publication, and make phase/cursor validity a closed table rather than condition fallthrough. Shared lifecycle/bootstrap names introduced here consume Task 1's canonical modules and are later consumed/re-exported by Spec 1 rather than redeclared.
 
 - [ ] **Step 4: Run bootstrap schema tests**
 
@@ -477,7 +488,7 @@ Expected: PASS with non-empty exhaustive cursor tables.
 - [ ] **Step 5: Commit Task 6**
 
 ```bash
-git add packages/core/src/manifest/bootstrap.ts packages/core/src/manifest/bootstrap.test.ts packages/core/src/manifest/index.ts packages/core/src/transactions/types.ts packages/core/src/transactions/store.ts packages/core/src/transactions/executor.ts packages/core/src/transactions/transactions.test.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
+git add packages/core/src/manifest/bootstrap.ts packages/core/src/manifest/bootstrap.test.ts packages/core/src/manifest/index.ts packages/core/src/transactions/types.ts packages/core/src/transactions/store.ts packages/core/src/transactions/executor.ts packages/core/src/transactions/index.ts packages/core/src/transactions/transactions.test.ts packages/core/src/index.ts packages/core/src/index.test.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
 git commit -m "feat(core): define v2 bootstrap recovery"
 ```
 
