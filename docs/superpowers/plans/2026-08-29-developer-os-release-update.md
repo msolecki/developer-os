@@ -423,6 +423,8 @@ git commit -m "feat(core): recover manifest state transitions"
 **Files:**
 - Create: `packages/core/src/manifest/bootstrap.ts`
 - Create: `packages/core/src/manifest/bootstrap.test.ts`
+- Modify: `packages/core/src/manifest/manifest-state.ts`
+- Modify: `packages/core/src/manifest/manifest-state.test.ts`
 - Modify: `packages/core/src/manifest/index.ts`
 - Modify: `packages/core/src/transactions/types.ts`
 - Modify: `packages/core/src/transactions/store.ts`
@@ -479,6 +481,8 @@ Keep filesystem operations behind injected ports. Plan and closure admission are
 
 Add only the deterministic `tx_fi_...`/`tx_mm_...` transaction-ID and coordinator-bound pre-staged-initial-journal bridge required before an installed allocator exists. The bridge accepts only an admitted `FoundationParticipantRefV2` plus its matching `BootstrapPayloadEvidenceV1`, no-replace-publishes that exact staged inode to the ref's derived final path, syncs/reopens/verifies the transaction parent and exact planned `FoundationJournalJsonV1` bytes, then invokes the unchanged executor. It never generates an ID or accepts a caller-selected staged/final path. Preserve every legacy transaction ID, API, and encoding byte-for-byte and leave the later allocated lifecycle arm to the Spec 1 Foundation task. Derive all names from envelope kind/ID/ordinal, bind actual inode evidence only after publication, and make phase/cursor validity a closed table rather than condition fallthrough. Shared lifecycle/bootstrap names introduced here consume Task 1's canonical modules and are later consumed/re-exported by Spec 1 rather than redeclared.
 
+`BootstrapExpectedPayloadRefV1` remains the single shared ref type introduced by Task 5. Widen only its public `mode` field to the normative `0600 | 0700` needed by general bootstrap files; the manifest-state codec still admits only `0600` postimages and its tests must pin that unchanged runtime boundary. Do not create a second general payload-ref brand or duplicate interface.
+
 - [ ] **Step 4: Run bootstrap schema tests**
 
 Run: `npx vitest run --root packages/core src/manifest/bootstrap.test.ts src/transactions/transactions.test.ts`
@@ -488,7 +492,7 @@ Expected: PASS with non-empty exhaustive cursor tables.
 - [ ] **Step 5: Commit Task 6**
 
 ```bash
-git add packages/core/src/manifest/bootstrap.ts packages/core/src/manifest/bootstrap.test.ts packages/core/src/manifest/index.ts packages/core/src/transactions/types.ts packages/core/src/transactions/store.ts packages/core/src/transactions/executor.ts packages/core/src/transactions/index.ts packages/core/src/transactions/transactions.test.ts packages/core/src/index.ts packages/core/src/index.test.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
+git add packages/core/src/manifest/bootstrap.ts packages/core/src/manifest/bootstrap.test.ts packages/core/src/manifest/manifest-state.ts packages/core/src/manifest/manifest-state.test.ts packages/core/src/manifest/index.ts packages/core/src/transactions/types.ts packages/core/src/transactions/store.ts packages/core/src/transactions/executor.ts packages/core/src/transactions/index.ts packages/core/src/transactions/transactions.test.ts packages/core/src/index.ts packages/core/src/index.test.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
 git commit -m "feat(core): define v2 bootstrap recovery"
 ```
 
