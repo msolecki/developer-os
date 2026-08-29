@@ -315,31 +315,42 @@ export class ManifestStore {
   }
 
   async writeV1(manifest: InstallationManifestV1): Promise<void> {
-    const validated = validateManifest(manifest);
-    const bytes = new TextEncoder().encode(`${JSON.stringify(validated)}\n`);
-    if (bytes.byteLength > MAX_MANIFEST_BYTES) throw new ManifestStateError();
-    await this.writeBytes(bytes);
+    try {
+      const validated = validateManifest(manifest);
+      const bytes = new TextEncoder().encode(`${JSON.stringify(validated)}\n`);
+      if (bytes.byteLength > MAX_MANIFEST_BYTES) throw new ManifestStateError();
+      await this.writeBytes(bytes);
+    } catch (error) {
+      if (error instanceof ManifestStateError) throw error;
+      throw new ManifestStateError();
+    }
   }
 
   /** Compatibility alias for the installed V1 callers. */
   async write(manifest: InstallationManifestV1): Promise<void> { await this.writeV1(manifest); }
 
   async writeV2(manifest: InstallationManifestV2, context: ManifestAdmissionContextV1): Promise<void> {
-    const [{ validateManifestV2 }, { encodeCanonicalJson }] = await Promise.all([
-      import("./v2.js"),
-      import("../lifecycle/canonical-json.js"),
-    ]);
-    const validated = validateManifestV2(manifest, context);
-    await this.writeBytes(new TextEncoder().encode(encodeCanonicalJson(validated as never)));
+    try {
+      const [{ validateManifestV2 }, { encodeCanonicalJson }] = await Promise.all([
+        import("./v2.js"),
+        import("../lifecycle/canonical-json.js"),
+      ]);
+      const validated = validateManifestV2(manifest, context);
+      await this.writeBytes(new TextEncoder().encode(encodeCanonicalJson(validated as never)));
+    } catch (error) {
+      if (error instanceof ManifestStateError) throw error;
+      throw new ManifestStateError();
+    }
   }
 
   private async writeBytes(bytes: Uint8Array): Promise<void> {
-    const directory = dirname(this.manifestFile);
-    await this.fs.mkdir(directory, { recursive: true, mode: 0o700 });
-    const temporary = join(directory, `.installation-manifest.${randomUUID()}.json.tmp`);
+    let temporary: string | null = null;
     let renamed = false;
 
     try {
+      const directory = dirname(this.manifestFile);
+      await this.fs.mkdir(directory, { recursive: true, mode: 0o700 });
+      temporary = join(directory, `.installation-manifest.${randomUUID()}.json.tmp`);
       const handle = await this.fs.open(temporary, "wx", 0o600);
       try {
         await handle.writeFile(bytes);
@@ -352,7 +363,7 @@ export class ManifestStore {
       renamed = true;
       await syncDirectory(this.fs, directory);
     } catch (error) {
-      if (!renamed) {
+      if (!renamed && temporary !== null) {
         try {
           await this.fs.unlink(temporary);
         } catch (cleanupError) {

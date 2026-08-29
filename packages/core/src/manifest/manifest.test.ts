@@ -401,6 +401,37 @@ describe("ManifestStore", () => {
       await expect(changing(true).read()).rejects.toBeInstanceOf(ManifestStateError);
     } finally { await removeFixture(fixture); }
   });
+
+  it("redacts mkdir and pre-write failures without leaving a temporary manifest", async () => {
+    const fixture = await createFixture("write-redaction");
+    const leaking = new Error(`EACCES ${fixture.homeDir}`);
+    const store = new ManifestStore({
+      manifestFile: fixture.manifestFile,
+      fs: { ...nodeFs, mkdir: (): Promise<never> => Promise.reject(leaking) },
+      guards: storeGuards,
+    });
+    try {
+      const error = await store.writeV1(manifestOf([])).catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(ManifestStateError);
+      expect(String(error)).not.toContain(fixture.homeDir);
+      await expect(nodeFs.lstat(fixture.manifestFile)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally { await removeFixture(fixture); }
+  });
+
+  it("redacts a temporary-file open refusal", async () => {
+    const fixture = await createFixture("write-open-redaction");
+    const leaking = new Error(`EACCES ${fixture.manifestFile}`);
+    const store = new ManifestStore({
+      manifestFile: fixture.manifestFile,
+      fs: { ...nodeFs, open: (): Promise<never> => Promise.reject(leaking) },
+      guards: storeGuards,
+    });
+    try {
+      const error = await store.writeV1(manifestOf([])).catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(ManifestStateError);
+      expect(String(error)).not.toContain(fixture.manifestFile);
+    } finally { await removeFixture(fixture); }
+  });
 });
 
 describe("detectDrift", () => {

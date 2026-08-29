@@ -243,7 +243,7 @@ async function inspectV2Artifact(artifact: ManagedArtifactV2, request: DriftRequ
     try {
       if (typeof stats.uid !== "number" || typeof stats.mode !== "number" || typeof stats.nlink !== "number") throw new ManifestStateError();
       request.ephemerals.validate(artifact.owner, {
-        path: artifact.path,
+        path: canonical as typeof artifact.path,
         uid: stats.uid,
         mode: stats.mode & 0o777,
         nlink: stats.nlink,
