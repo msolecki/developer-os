@@ -1,2 +1,54 @@
-export * from "./paths.js";
-export * from "./scalars.js";
+export {
+  admitCanonicalAbsolutePath,
+  admitOwnerRelativePath,
+  admitRollbackPayloadRelativePath,
+  admitVaultFreeRelativePath,
+  deriveBootstrapPayloadPath,
+  deriveCanonicalStatePayloadPath,
+  deriveExactProductStatePath,
+  deriveFoundationInitialJournalPayloadPath,
+  deriveManifestPayloadPath,
+  deriveUpdatePayloadPath,
+  deriveUpdateRecoveryExecutorStagedPath,
+} from "./paths.js";
+export type {
+  BootstrapPayloadPathV1,
+  BoundedArtifactSourceV1,
+  CanonicalAbsolutePathV1,
+  CanonicalPathEvidenceV1,
+  CanonicalProductStatePathV1,
+  CanonicalStatePayloadPathV1,
+  ExactProductStatePathV1,
+  ExactProductStateRoleV1,
+  FoundationInitialJournalPayloadPathV1,
+  ManifestPayloadPathV1,
+  OwnerRelativePathV1,
+  RollbackPayloadRelativePathV1,
+  UpdatePayloadPathV1,
+  UpdateRecoveryExecutorStagedPathV1,
+  VaultFreeRelativePathV1,
+} from "./paths.js";
+export {
+  decodeTenDigitOrdinal,
+  encodeTenDigitOrdinal,
+  parseLowerHexSha256,
+  parseLowercaseKebabId,
+  parsePositiveUInt32,
+  parseSafeReasonCode,
+  parseSchemaMigrationId,
+  parseStableSemver,
+  parseTenDigitZeroPaddedOrdinal,
+  parseUInt64Decimal,
+  parseUtcTimestamp,
+} from "./scalars.js";
+export type {
+  LowercaseKebabIdV1,
+  LowerHexSha256,
+  PositiveUInt32V1,
+  SafeReasonCodeV1,
+  SchemaMigrationIdV1,
+  StableSemverV1,
+  TenDigitZeroPaddedOrdinalV1,
+  UInt64DecimalV1,
+  UtcTimestampV1,
+} from "./scalars.js";
