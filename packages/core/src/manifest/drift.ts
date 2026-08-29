@@ -196,7 +196,8 @@ async function guardedV2Path(
 ): Promise<{ readonly canonical: string; readonly stats: Awaited<ReturnType<DriftRequestV2["fs"]["lstat"]>> } | null> {
   let canonical: string;
   try { canonical = await request.guards.assertReadable(artifact.path); } catch { throw new ManifestStateError(); }
-  try { return { canonical, stats: await request.fs.lstat(canonical) }; }
+  if (canonical !== artifact.path) throw new ManifestStateError();
+  try { return { canonical: artifact.path, stats: await request.fs.lstat(artifact.path) }; }
   catch (error) { if (isMissing(error)) return null; throw new ManifestStateError(); }
 }
 
@@ -243,7 +244,7 @@ async function inspectV2Artifact(artifact: ManagedArtifactV2, request: DriftRequ
     try {
       if (typeof stats.uid !== "number" || typeof stats.mode !== "number" || typeof stats.nlink !== "number") throw new ManifestStateError();
       request.ephemerals.validate(artifact.owner, {
-        path: canonical as typeof artifact.path,
+        path: artifact.path,
         uid: stats.uid,
         mode: stats.mode & 0o777,
         nlink: stats.nlink,

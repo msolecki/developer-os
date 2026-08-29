@@ -60,42 +60,59 @@ describe("V2 manifest drift", () => {
     } finally { await nodeFs.rm(root, { recursive: true, force: true }); }
   });
 
-  it("binds schema bytes and ephemeral owner metadata to the guarded canonical path", async () => {
+  it("binds schema bytes and ephemeral owner metadata to the admitted artifact path", async () => {
     const root = await nodeFs.mkdtemp(join(tmpdir(), "developer-os-v2-binding-"));
-    const canonicalParent = join(root, "canonical"); const rawParent = join(root, "raw"); const rawPath = join(rawParent, "artifact"); const canonicalPath = join(canonicalParent, "artifact");
+    const canonicalParent = join(root, "canonical"); const canonicalPath = join(canonicalParent, "artifact");
     try {
-      await nodeFs.mkdir(canonicalParent); await nodeFs.symlink(canonicalParent, rawParent); await nodeFs.writeFile(canonicalPath, "changed", { mode: 0o600 });
+      await nodeFs.mkdir(canonicalParent); await nodeFs.writeFile(canonicalPath, "changed", { mode: 0o600 });
       let received: readonly unknown[] = [];
       const canonicalGuards = { assertReadable: (): Promise<string> => Promise.resolve(canonicalPath) };
-      await expect(inspectDrift(request(artifact(rawPath, { verification: { mode: "schema", schemaId: "developer-os-config-v1", installedHash: hash("installed") } }), { guards: canonicalGuards, schemas: { validate: (id, bytes): void => { received = [id, bytes]; } } }))).resolves.toStrictEqual([]);
+      await expect(inspectDrift(request(artifact(canonicalPath, { verification: { mode: "schema", schemaId: "developer-os-config-v1", installedHash: hash("installed") } }), { guards: canonicalGuards, schemas: { validate: (id, bytes): void => { received = [id, bytes]; } } }))).resolves.toStrictEqual([]);
       expect(received).toStrictEqual(["developer-os-config-v1", new TextEncoder().encode("changed")]);
 
       const stats = await nodeFs.lstat(canonicalPath); let observed: unknown;
       const noReadFs = { ...nodeFs, open: (): Promise<never> => Promise.reject(new Error("bytes must stay unread")) };
-      await expect(inspectDrift(request(artifact(rawPath, { verification: { mode: "ephemeral" } }), { guards: canonicalGuards, fs: noReadFs, ephemerals: { validate: (owner, value): void => { observed = [owner, value]; } } }))).resolves.toStrictEqual([]);
+      await expect(inspectDrift(request(artifact(canonicalPath, { verification: { mode: "ephemeral" } }), { guards: canonicalGuards, fs: noReadFs, ephemerals: { validate: (owner, value): void => { observed = [owner, value]; } } }))).resolves.toStrictEqual([]);
       expect(observed).toStrictEqual(["core", { path: canonicalPath, uid: stats.uid, mode: stats.mode & 0o777, nlink: stats.nlink }]);
     } finally { await nodeFs.rm(root, { recursive: true, force: true }); }
   });
 
-  it("reports complete content and target findings through a canonicalized ancestor and refuses a short descriptor read", async () => {
+  it("reports complete content and target findings through the admitted artifact path and refuses a short descriptor read", async () => {
     const root = await nodeFs.mkdtemp(join(tmpdir(), "developer-os-v2-evidence-"));
-    const canonicalParent = join(root, "canonical"); const rawParent = join(root, "raw"); const rawPath = join(rawParent, "artifact"); const canonicalPath = join(canonicalParent, "artifact");
+    const canonicalParent = join(root, "canonical"); const canonicalPath = join(canonicalParent, "artifact");
     try {
-      await nodeFs.mkdir(canonicalParent); await nodeFs.symlink(canonicalParent, rawParent); await nodeFs.writeFile(canonicalPath, "changed");
+      await nodeFs.mkdir(canonicalParent); await nodeFs.writeFile(canonicalPath, "changed");
       const seen: string[] = [];
       const fs = { ...nodeFs, lstat: (path: Parameters<typeof nodeFs.lstat>[0]) => { seen.push(String(path)); return nodeFs.lstat(path); } };
       const guarded = { assertReadable: (): Promise<string> => Promise.resolve(canonicalPath) };
-      const content = await inspectDrift(request(artifact(rawPath), { guards: guarded, fs: fs as unknown as DriftRequestV2["fs"] }));
-      expect(content).toStrictEqual([{ path: rawPath, owner: "core", kind: "content_changed", expectedHash: hash("installed"), actualHash: hash("changed") }]);
+      const content = await inspectDrift(request(artifact(canonicalPath), { guards: guarded, fs: fs as unknown as DriftRequestV2["fs"] }));
+      expect(content).toStrictEqual([{ path: canonicalPath, owner: "core", kind: "content_changed", expectedHash: hash("installed"), actualHash: hash("changed") }]);
       expect(seen[0]).toBe(canonicalPath);
       await nodeFs.unlink(canonicalPath); await nodeFs.symlink("target", canonicalPath);
-      const target = await inspectDrift(request(artifact(rawPath, { kind: "symlink", verification: { mode: "content", installedHash: hash("other") } }), { guards: guarded }));
-      expect(target).toStrictEqual([{ path: rawPath, owner: "core", kind: "target_changed", expectedHash: hash("other"), actualHash: hash("target") }]);
+      const target = await inspectDrift(request(artifact(canonicalPath, { kind: "symlink", verification: { mode: "content", installedHash: hash("other") } }), { guards: guarded }));
+      expect(target).toStrictEqual([{ path: canonicalPath, owner: "core", kind: "target_changed", expectedHash: hash("other"), actualHash: hash("target") }]);
 
       await nodeFs.unlink(canonicalPath); await nodeFs.writeFile(canonicalPath, "installed");
       const shortReadFs = { ...nodeFs, open: (path: Parameters<typeof nodeFs.open>[0], flags: Parameters<typeof nodeFs.open>[1]) => nodeFs.open(path, flags).then((handle) => ({ close: handle.close.bind(handle), stat: handle.stat.bind(handle), read: (): Promise<{ bytesRead: number; buffer: Uint8Array }> => Promise.resolve({ bytesRead: 0, buffer: new Uint8Array() }) } as unknown as typeof handle)) };
-      await expect(inspectDrift(request(artifact(rawPath), { guards: guarded, fs: shortReadFs }))).rejects.toBeInstanceOf(Error);
+      await expect(inspectDrift(request(artifact(canonicalPath), { guards: guarded, fs: shortReadFs }))).rejects.toBeInstanceOf(Error);
     } finally { await nodeFs.rm(root, { recursive: true, force: true }); }
+  });
+
+  it("refuses a different guard result before filesystem or registry access", async () => {
+    const admittedPath = "/synthetic/admitted/artifact";
+    const alternativePath = "/synthetic/alternate/artifact";
+    let lstatCalls = 0;
+    let registryCalls = 0;
+    const result = inspectDrift(request(artifact(admittedPath, { verification: { mode: "ephemeral" } }), {
+      guards: { assertReadable: (): Promise<string> => Promise.resolve(alternativePath) },
+      fs: { ...nodeFs, lstat: (): Promise<never> => { lstatCalls += 1; return Promise.reject(new Error(alternativePath)); } },
+      ephemerals: { validate: (): void => { registryCalls += 1; } },
+    }));
+    const error = await result.catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(Error);
+    expect(String(error)).not.toContain(alternativePath);
+    expect(lstatCalls).toBe(0);
+    expect(registryCalls).toBe(0);
   });
 
   it("distinguishes wrong kinds and symlink target changes", async () => {
