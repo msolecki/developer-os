@@ -57,12 +57,13 @@
 - Create: `packages/core/src/update/paths.test.ts`
 - Create: `packages/core/src/update/index.ts`
 - Modify: `packages/core/src/index.ts`
+- Modify: `packages/core/src/index.test.ts`
 
 **Interfaces:**
 - Consumes: existing `hashBytes`, runtime absolute paths, Spec 2 §§2 and 4.3.
 - Produces: `CanonicalJsonV1`, `encodeCanonicalJson`, `decodeCanonicalJson`; `StableSemverV1`, `UInt64DecimalV1`, `PositiveUInt32V1`, `LowerHexSha256`, `UtcTimestampV1`, `LowercaseKebabIdV1`, `SafeReasonCodeV1`, `SchemaMigrationIdV1`, `TenDigitZeroPaddedOrdinalV1`; exact product/update/bootstrap/manifest/source/rollback path brands and constructors.
 
-- [ ] **Step 1: Write failing canonical, scalar, and path boundary tests**
+- [x] **Step 1: Write failing canonical, scalar, and path boundary tests**
 
 ```ts
 it("encodes one canonical object order and one LF", () => {
@@ -80,13 +81,13 @@ it.each(["0", "1", "00000000000", "+000000001", "00000000١٠"])("refuses noncan
 
 Add exact first/last/first-over tests for SemVer components, UInt64 decimal spelling, positive UInt32, kebab IDs, UTF-8 component/aggregate path lengths, dot/dot-dot, slash/backslash, C0/C1/format characters, NFC/folded aliases, and every role-derived exact path.
 
-- [ ] **Step 2: Run the focused tests and verify missing codecs fail**
+- [x] **Step 2: Run the focused tests and verify missing codecs fail**
 
-Run: `npx vitest run --root packages/core src/lifecycle/canonical-json.test.ts src/update/scalars.test.ts src/update/paths.test.ts`
+Run: `npx vitest run --root packages/core src/lifecycle/canonical-json.test.ts src/update/scalars.test.ts src/update/paths.test.ts src/index.test.ts`
 
 Expected: FAIL because the modules and exports do not exist.
 
-- [ ] **Step 3: Implement strict codecs and constructors**
+- [x] **Step 3: Implement strict codecs and constructors**
 
 ```ts
 export function encodeCanonicalJson(value: CanonicalJsonValue): CanonicalJsonV1;
@@ -103,16 +104,16 @@ export function deriveExactProductStatePath(
 
 Sort object keys by unsigned UTF-8 bytes, reject duplicate keys before object construction, reject noncanonical input by re-encoding byte equality, and use checked integer/string operations only. Constructors reopen containment policy through injected canonical evidence; no brand is exported as an assertion helper.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
-Run: `npx vitest run --root packages/core src/lifecycle/canonical-json.test.ts src/update/scalars.test.ts src/update/paths.test.ts`
+Run: `npx vitest run --root packages/core src/lifecycle/canonical-json.test.ts src/update/scalars.test.ts src/update/paths.test.ts src/index.test.ts`
 
 Expected: PASS across exact boundary vectors.
 
-- [ ] **Step 5: Commit Task 1**
+- [x] **Step 5: Commit Task 1**
 
 ```bash
-git add packages/core/src/lifecycle/canonical-json.ts packages/core/src/lifecycle/canonical-json.test.ts packages/core/src/update/scalars.ts packages/core/src/update/scalars.test.ts packages/core/src/update/paths.ts packages/core/src/update/paths.test.ts packages/core/src/update/index.ts packages/core/src/index.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
+git add packages/core/src/lifecycle/canonical-json.ts packages/core/src/lifecycle/canonical-json.test.ts packages/core/src/update/scalars.ts packages/core/src/update/scalars.test.ts packages/core/src/update/paths.ts packages/core/src/update/paths.test.ts packages/core/src/update/index.ts packages/core/src/index.ts packages/core/src/index.test.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
 git commit -m "feat(core): add canonical update codecs"
 ```
 

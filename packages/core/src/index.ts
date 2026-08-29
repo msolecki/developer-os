@@ -1,4 +1,7 @@
 export { parseAgentPromptArgs } from "./agent-prompt/index.js";
+export { decodeCanonicalJson, encodeCanonicalJson } from "./lifecycle/canonical-json.js";
+export type { CanonicalJsonV1, CanonicalJsonValue } from "./lifecycle/canonical-json.js";
+export * from "./update/index.js";
 export type {
   AgentPromptArgs,
   AgentPromptOutcome,
