@@ -1,15 +1,14 @@
 # Developer OS — Release, Update, and Manifest V2 Design
 
-**Status: written on 2026-08-28 after the founder approved the design section by section; the
-complete written specification is awaiting founder review and approval.** This is DOS-P7 Spec 2,
-the second half of `ORDER.md` entry A11 and program-plan Task 7. Spec 1 is the approved opt-in
-surfaces design at
+**Status: approved by the founder on 2026-08-29 after complete written-specification review.** This
+is DOS-P7 Spec 2, the second half of `ORDER.md` entry A11 and program-plan Task 7. Spec 1 is the
+approved opt-in surfaces design at
 `docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md`.
 
 This specification owns release trust, the stable launcher and versioned bundle contract,
 `ManagedArtifactV2`/`InstallationManifestV2`, V1 migration and V2 new init, update planning and
-apply, schema migration, and rollback. Its implementation gets its own plan only after the founder
-approves this complete document.
+apply, schema migration, and rollback. Its approved implementation plan is
+`docs/superpowers/plans/2026-08-29-developer-os-release-update.md`.
 
 The split has one hard implementation dependency. The V1→V2 migration and V2 new-init handoff in
 §6 must land first. Only then may Spec 1 implementation begin. The remaining release/update work in

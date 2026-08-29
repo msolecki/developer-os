@@ -12,20 +12,20 @@ notes are the archive.
 
 Spec 1 is approved and its plan exists at
 `plans/2026-08-28-developer-os-opt-in-surfaces.md`, but none of its 24 implementation tasks has
-started; the first begins at
-`docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md:46`. Spec 2 is written at
-`docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md` after section-by-section
-design approval. The next action is founder review and approval of the complete written
-specification. Spec 1 implementation remains blocked until Spec 2 implements the
-`InstallationManifestV2` migration and V2 new-init handoff.
+started. Spec 2 was approved by the founder on 2026-08-29 and its 26-task implementation plan exists
+at `plans/2026-08-29-developer-os-release-update.md`. The next action is Spec 2 Task 1 at
+`docs/superpowers/plans/2026-08-29-developer-os-release-update.md:49`. Execute Tasks 1–9 first to
+deliver the `InstallationManifestV2` migration and V2 new-init handoff, then execute the approved
+Spec 1 plan completely, then resume Spec 2 at Task 10.
 
 Open sequence inside A11:
 
 1. Completed: write Spec 2 for release metadata, dry-run update, managed-artifact upgrade, schema
    migration, and rollback using `superpowers:brainstorming`.
-2. Obtain founder approval for Spec 2.
-3. Write Spec 2's implementation plan using `superpowers:writing-plans`.
-4. Implement Spec 2's `InstallationManifestV2` migration and V2 new-init handoff.
+2. Completed 2026-08-29: obtain founder approval for the complete Spec 2 document.
+3. Completed: write Spec 2's implementation plan using `superpowers:writing-plans`.
+4. Now: execute Spec 2 Tasks 1–9 for the `InstallationManifestV2` migration and V2 new-init
+   handoff.
 5. Execute the approved Spec 1 plan.
 6. Finish the remaining Spec 2 implementation and close the Task 7 checkpoint.
 
@@ -83,5 +83,5 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 - Product sequence: 6 open entries, A11–A16.
 - Program plan: 23 unchecked work steps across Tasks 7–9.
 - Repository backlog: 24 open numbered rows, plus the Foundation watchdog decision.
-- Active Spec 1 plan: 24 untouched implementation tasks; execution is blocked by Spec 2's manifest
-  handoff.
+- Active implementation plans: 50 untouched tasks — 26 in Spec 2 and 24 in Spec 1. Spec 2 Tasks
+  1–9 are the active prerequisite; Spec 1 remains blocked until that handoff passes.
