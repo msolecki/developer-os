@@ -106,11 +106,13 @@ async function fixture(withBefore = true) {
     await expect(nodeFs.lstat(destination)).rejects.toMatchObject({ code: "ENOENT" });
     if (String(sourceStat.dev) !== expected.dev || String(sourceStat.ino) !== expected.ino) throw new Error("source changed");
     await nodeFs.rename(source, destination);
+    return { sourceParentSynced: true as const, destinationParentSynced: true as const, sourceReopened: true as const, destinationReopened: true as const };
   };
   const guardedUnlinkExact = async (path: string, expected: { dev: string; ino: string }) => {
     const stat = await nodeFs.lstat(path);
     if (String(stat.dev) !== expected.dev || String(stat.ino) !== expected.ino) throw new Error("tombstone changed");
     await nodeFs.unlink(path);
+    return { sourceParentSynced: true as const, destinationParentSynced: true as const, sourceReopened: true as const, destinationReopened: true as const };
   };
   const participant = new ManifestStateParticipant({ fs: nodeFs, guardedMoveNoReplace, guardedUnlinkExact, admission: context, uid: 501, manifestAdmission });
   return { root, plan, context, participant, manifestPath, payloadPath, tombstonePath: plan.tombstonePath, AFTER };
@@ -140,6 +142,7 @@ describe("ManifestStateParticipant", () => {
   it("commits planned absence without creating a manifest and accepts explicit forward recovery", async () => {
     const subject = await fixture(false);
     try {
+      await nodeFs.unlink(subject.payloadPath);
       const absentPlan = { ...subject.plan, after: { state: "absent" as const } };
       const plan = validateManifestStatePlan(absentPlan, subject.context);
       expect(await subject.participant.apply(plan)).toMatchObject({ state: "applied" });
@@ -191,7 +194,7 @@ describe("ManifestStateParticipant", () => {
     const subject = await fixture();
     try {
       let guardedMoves = 0;
-      const participant = new ManifestStateParticipant({ ...subject.participant.dependencies, guardedMoveNoReplace: async (...args) => { guardedMoves += 1; await subject.participant.dependencies.guardedMoveNoReplace(...args); } });
+      const participant = new ManifestStateParticipant({ ...subject.participant.dependencies, guardedMoveNoReplace: async (...args) => { guardedMoves += 1; return subject.participant.dependencies.guardedMoveNoReplace(...args); } });
       await participant.apply(validateManifestStatePlan(subject.plan, subject.context));
       expect(guardedMoves).toBe(2);
     } finally { await cleanup(subject.root); }
@@ -236,10 +239,47 @@ describe("ManifestStateParticipant", () => {
       await expect(subject.participant.observe(plan)).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
       await nodeFs.unlink(subject.payloadPath);
       let deleted = 0;
-      const participant = new ManifestStateParticipant({ ...subject.participant.dependencies, guardedUnlinkExact: async (...args) => { deleted += 1; await subject.participant.dependencies.guardedUnlinkExact(...args); } });
+      const participant = new ManifestStateParticipant({ ...subject.participant.dependencies, guardedUnlinkExact: async (...args) => { deleted += 1; return subject.participant.dependencies.guardedUnlinkExact(...args); } });
       await participant.compact(plan);
       expect(deleted).toBe(1);
       expect(await nodeFs.readFile(subject.manifestPath)).toEqual(Buffer.from(subject.AFTER));
+    } finally { await cleanup(subject.root); }
+  });
+
+  it("inspects the lifecycle payload slot even for committed absence", async () => {
+    const subject = await fixture(false);
+    try {
+      const plan = validateManifestStatePlan({ ...subject.plan, after: { state: "absent" as const } }, subject.context);
+      await expect(subject.participant.observe(plan)).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+    } finally { await cleanup(subject.root); }
+  });
+
+  it("rejects bootstrap committed absence and a present state over 64 MiB", async () => {
+    const subject = await fixture();
+    try {
+      const bootstrapId = "fi_11111111-1111-4111-8111-111111111111";
+      const bootstrap = { ...subject.plan, participantId: `mf_${bootstrapId}`, envelope: { kind: "fresh_v2_init" as const, id: bootstrapId }, tombstonePath: join(dirname(subject.manifestPath), `.installation-manifest.mf_${bootstrapId}.json.tombstone`), after: { state: "absent" as const } };
+      const context = { ...subject.context, admitParticipant: (envelope: unknown, participantId: unknown) => ({ envelope: envelope as never, participantId: participantId as never }) };
+      expect(() => validateManifestStatePlan(bootstrap, context)).toThrow(ManifestStateParticipantError);
+      expect(() => validateManifestStatePlan({ ...subject.plan, before: { ...subject.plan.before, size: String(64 * 1024 * 1024 + 1) } }, subject.context)).toThrow(ManifestStateParticipantError);
+    } finally { await cleanup(subject.root); }
+  });
+
+  it("refuses an authority that substitutes the participant ID", async () => {
+    const subject = await fixture();
+    try {
+      const context = { ...subject.context, admitParticipant: (envelope: unknown) => ({ envelope: envelope as never, participantId: "mf_substituted" as never }) };
+      expect(() => validateManifestStatePlan(subject.plan, context)).toThrow(ManifestStateParticipantError);
+    } finally { await cleanup(subject.root); }
+  });
+
+  it("compensates from the preimage cursor without moving an absent manifest", async () => {
+    const subject = await fixture();
+    try {
+      const plan = validateManifestStatePlan(subject.plan, subject.context);
+      await subject.participant.dependencies.guardedMoveNoReplace(plan.manifestPath, plan.tombstonePath, subject.participant.dependencies.admission.updatePayloadIdentity === undefined ? {} as never : { hash: plan.before.state === "present" ? plan.before.hash : "" as never, ownerUid: 501, mode: 0o600, nlink: 1, size: plan.before.state === "present" ? plan.before.size : "" as never, dev: plan.before.state === "present" ? plan.before.dev as never : "" as never, ino: plan.before.state === "present" ? plan.before.ino as never : "" as never });
+      await expect(subject.participant.compensate(plan)).resolves.toMatchObject({ state: "compensated" });
+      expect(await nodeFs.readFile(subject.manifestPath)).toEqual(Buffer.from(BEFORE));
     } finally { await cleanup(subject.root); }
   });
 });
