@@ -310,7 +310,7 @@ it.each([
 });
 ```
 
-Assert wrong kind, missing rules, content/target hashes, directory type, schema strictness, ephemeral absence plus present-runtime-metadata acceptance/refusal, guarded parent canonicalization, size-before-allocation, before/after inode identity, V1/V2 dispatch with V2 context required only for V2, canonical V2 write bytes, and refusal on unknown schema version. Existing V1 callers must remain source-compatible after supplying the now-required store read guard.
+Assert wrong kind, missing rules, content/target hashes, directory type, schema strictness, ephemeral absence plus present-runtime-metadata acceptance/refusal, guarded parent canonicalization for the manifest store, guard revalidation with exact-path equality for already-branded V2 artifact paths, size-before-allocation, before/after inode identity, V1/V2 dispatch with V2 context required only for V2, canonical V2 write bytes, and refusal on unknown schema version. Existing V1 callers must remain source-compatible after supplying the now-required store read guard.
 
 - [x] **Step 2: Run drift/store tests and verify missing V2 behavior fails**
 
@@ -340,7 +340,7 @@ export interface ManagedArtifactEphemeralRegistryV1 {
 export async function inspectDrift(request: DriftRequestV2): Promise<readonly DriftFinding[]>;
 ```
 
-Inject both registries into drift; never import CLI schemas or owner policy into Core. Missing ephemeral is clean; present ephemeral is clean only after the registry accepts its guarded owner/mode/link metadata without reading its bytes. Preserve leaf no-follow semantics and recheck the guarded opened inode after every file read. Manifest reads require `ManifestGuards`, reject wrong kind/symlink, enforce 64 MiB from descriptor metadata before allocation, and recheck dev/ino/size after read. `readOptional/read` accept an optional `ManifestAdmissionContextV1`: legacy compact V1 remains readable without it, while V2 refuses unless the context is supplied; Task 3 byte dispatch is widened only enough to encode that distinction. `ManifestStore.writeV2` requires the context and writes canonical V2 bytes only; migration/task participants, not ordinary callers, decide when it is legal. Preserve `write` as the V1 compatibility alias for existing callers and expose explicit `writeV1`.
+Inject both registries into drift; never import CLI schemas or owner policy into Core. Missing ephemeral is clean; present ephemeral is clean only after the registry accepts its guarded owner/mode/link metadata without reading its bytes. Task 3 has already admitted and owner-bound every V2 `artifact.path`; `ManifestGuards` must revalidate it and return the exact same string, never mint or relocate that brand. Preserve leaf no-follow semantics and recheck the guarded opened inode after every file read. Manifest reads require `ManifestGuards`, reject wrong kind/symlink, enforce 64 MiB from descriptor metadata before allocation, and recheck dev/ino/size after read. `readOptional/read` accept an optional `ManifestAdmissionContextV1`: legacy compact V1 remains readable without it, while V2 refuses unless the context is supplied; Task 3 byte dispatch is widened only enough to encode that distinction. `ManifestStore.writeV2` requires the context and writes canonical V2 bytes only; migration/task participants, not ordinary callers, decide when it is legal. Preserve `write` as the V1 compatibility alias for existing callers and expose explicit `writeV1`.
 
 - [x] **Step 4: Run drift/store tests**
 
