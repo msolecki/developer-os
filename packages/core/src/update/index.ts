@@ -56,6 +56,8 @@ export type {
   UtcTimestampV1,
 } from "./scalars.js";
 export {
+  admitReleaseAgainstTrust,
+  admitReleaseIdentity,
   advanceReleaseTrust,
   parseLowercaseAsciiDnsName,
   parseOfficialReleasePathPrefix,
@@ -98,5 +100,7 @@ export type {
   ReleaseKeyDelegationV1,
   ReleaseMetadataIdentityV1,
   ReleaseTrustStateV1,
+  ReleaseIdentityAdmissionContextV1,
+  SelectedReleaseV1,
   SignedReleaseDocumentV1,
 } from "./release.js";

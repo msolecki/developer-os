@@ -127,7 +127,7 @@ git commit -m "feat(core): add canonical update codecs"
 
 **Interfaces:**
 - Consumes: Task 1 scalar/path/canonical codecs.
-- Produces: `ReleaseIdentityV1`, `ReleaseMetadataIdentityV1`, `ActiveReleaseRecordV1`, `ReleaseTrustStateV1`, `OfficialReleaseOriginV1`, `FixedReleaseMetadataLocatorV1`, `OfflineRootKeyV1`, `OfflineReleaseTrustV1`, `DelegatedReleaseKeyV1`, `ReleaseKeyDelegationV1`, `ReleaseIndexV1`, `ReleaseBundleManifestV1`, strict codecs, `releaseIdentityHash`, monotonic trust transition validation, and pure target selection.
+- Produces: `ReleaseIdentityV1`, `ReleaseMetadataIdentityV1`, `ActiveReleaseRecordV1`, `ReleaseTrustStateV1`, `OfficialReleaseOriginV1`, `FixedReleaseMetadataLocatorV1`, `OfflineRootKeyV1`, `OfflineReleaseTrustV1`, `DelegatedReleaseKeyV1`, `ReleaseKeyDelegationV1`, `ReleaseIndexV1`, `ReleaseBundleManifestV1`, `SelectedReleaseV1`, strict codecs, `releaseIdentityHash`, context-bound release-identity admission, role-aware trust admission, monotonic trust transition validation, and pure path-free target selection.
 
 - [x] **Step 1: Write failing exact metadata and replay tests**
 
@@ -159,14 +159,24 @@ export function selectRelease(
   index: ReleaseIndexV1,
   request: { readonly version: StableSemverV1 | null; readonly active: ReleaseIdentityV1 },
 ): { readonly outcome: "up_to_date"; readonly active: ReleaseIdentityV1 } |
-   { readonly outcome: "selected"; readonly target: ReleaseIdentityV1 };
+   { readonly outcome: "selected"; readonly selected: SelectedReleaseV1 };
+export function admitReleaseIdentity(
+  value: unknown,
+  evidence: CanonicalPathEvidenceV1,
+  context: ReleaseIdentityAdmissionContextV1,
+): ReleaseIdentityV1;
+export function admitReleaseAgainstTrust(
+  trust: ReleaseTrustStateV1,
+  release: Pick<ReleaseIdentityV1, "releaseSequence" | "releaseIdentityHash">,
+  role: "online_target" | "guarded_active" | "guarded_retained_rollback",
+): void;
 export function advanceReleaseTrust(
   current: ReleaseTrustStateV1,
   accepted: ReleaseMetadataIdentityV1 & Pick<ReleaseIdentityV1, "releaseSequence" | "releaseIdentityHash">,
 ): ReleaseTrustStateV1;
 ```
 
-Use exact-key recursive validation and checked numeric comparison; identity hashes use the exact ASCII domains and no-LF canonical projections from Spec 2. Keep signature verification out of Core.
+Use exact-key recursive validation and checked numeric comparison; identity hashes use the exact ASCII domains and no-LF canonical projections from Spec 2. `selectRelease` returns only the validated index entry, architecture bundle, and computed identity hash: it must not fabricate a bundle root, retained metadata hash, or manifest-derived launcher protocol. `admitReleaseIdentity` is the separate point that binds a strict lexical path plus exact derived release root to the retained metadata, selected entry, verified manifest/hash, and every duplicated protocol/identity field. `admitReleaseAgainstTrust` preserves the stored high watermark: lower sequences are legal only for an externally guarded active or retained-rollback identity, equality requires the identical hash, and a higher observation is legal only as an online target. Keep signature verification out of Core.
 
 - [x] **Step 4: Run release schema tests**
 

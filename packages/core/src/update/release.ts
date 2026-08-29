@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
-import type { CanonicalAbsolutePathV1, CanonicalPathEvidenceV1 } from "./paths.js";
+import { admitCanonicalAbsolutePath, type CanonicalAbsolutePathV1, type CanonicalPathEvidenceV1 } from "./paths.js";
 import {
   parseLowerHexSha256,
   parsePositiveUInt32,
@@ -145,6 +145,18 @@ export interface ReleaseIdentityV1 {
   readonly launcherProtocol: PositiveUInt32V1;
   readonly updateProtocol: PositiveUInt32V1;
 }
+export interface SelectedReleaseV1 {
+  readonly entry: ReleaseIndexEntryV1;
+  readonly bundle: ReleaseBundleReferenceV1;
+  readonly releaseIdentityHash: LowerHexSha256;
+}
+export interface ReleaseIdentityAdmissionContextV1 {
+  readonly productHome: CanonicalAbsolutePathV1;
+  readonly selected: SelectedReleaseV1;
+  readonly metadata: ReleaseMetadataIdentityV1;
+  readonly bundleManifest: ReleaseBundleManifestV1;
+  readonly bundleManifestHash: LowerHexSha256;
+}
 
 export interface ReleaseMetadataIdentityV1 {
   readonly delegationSequence: UInt64DecimalV1;
@@ -216,12 +228,18 @@ function parseBase64Url(value: unknown, label: string, length: number): Base64Ur
   return input as Base64UrlNoPaddingV1;
 }
 function publicKeyId(key: Base64UrlNoPaddingV1): LowerHexSha256 { return createHash("sha256").update(Buffer.from(key, "base64url")).digest("hex") as LowerHexSha256; }
+function isIpv4Literal(value: string): boolean {
+  const labels = value.split(".");
+  return labels.length === 4 && labels.every((label) => /^[0-9]+$/.test(label) && Number(label) <= 255);
+}
 
 export function parseLowercaseAsciiDnsName(value: unknown): LowercaseAsciiDnsNameV1 {
   const input = string(value, "LowercaseAsciiDnsNameV1");
   if (bytes(input) < 1 || bytes(input) > 253 || input === "localhost" || input.includes("%") || !/^[a-z0-9-]+(?:\.[a-z0-9-]+)*$/.test(input)) invalid("LowercaseAsciiDnsNameV1");
   const labels = input.split(".");
-  if (labels.length > 127 || labels.every((label) => /^[0-9]+$/.test(label)) || labels.some((label) => label.length > 63 || label.startsWith("-") || label.endsWith("-"))) invalid("LowercaseAsciiDnsNameV1");
+  let canonical: string;
+  try { canonical = new URL(`https://${input}`).hostname; } catch { invalid("LowercaseAsciiDnsNameV1"); }
+  if (labels.length > 127 || input.startsWith("xn--") || labels.some((label) => label.startsWith("xn--") || label.length > 63 || label.startsWith("-") || label.endsWith("-")) || isIpv4Literal(input) || canonical !== input || isIpv4Literal(canonical)) invalid("LowercaseAsciiDnsNameV1");
   return input as LowercaseAsciiDnsNameV1;
 }
 
@@ -249,7 +267,7 @@ export function validateOfficialReleaseOrigin(value: unknown): OfficialReleaseOr
 export function validateFixedReleaseMetadataLocator(value: unknown): FixedReleaseMetadataLocatorV1 {
   const input = exact(value, "FixedReleaseMetadataLocatorV1", ["origin", "repositoryPath", "assetName"]);
   if (input.origin !== "https://github.com" || input.repositoryPath !== "/msolecki/developer-os/releases/latest/download/" || (input.assetName !== "release-key-delegation-v1.json" && input.assetName !== "release-index-v1.json")) invalid("FixedReleaseMetadataLocatorV1");
-  return input as unknown as FixedReleaseMetadataLocatorV1;
+  return { origin: "https://github.com", repositoryPath: "/msolecki/developer-os/releases/latest/download/", assetName: input.assetName };
 }
 
 function validateSignature(value: unknown): Ed25519SignatureV1 {
@@ -311,7 +329,9 @@ function validateBundleReference<TArchitecture extends "arm64" | "x64">(value: u
   const input = exact(value, "ReleaseBundleReferenceV1", ["platform", "architecture", "archiveFormat", "archivePath", "archiveBytes", "archiveSha256", "manifestPath", "manifestBytes", "manifestSha256"]);
   if (input.platform !== "darwin" || input.architecture !== architecture || input.archiveFormat !== "zstd-ustar-v1") invalid("ReleaseBundleReferenceV1");
   const archivePath = parseOfficialReleaseRelativePath(input.archivePath); if (!archivePath.endsWith(".tar.zst")) invalid("ReleaseBundleReferenceV1.archivePath");
-  return { platform: "darwin", architecture, archiveFormat: "zstd-ustar-v1", archivePath, archiveBytes: parseUInt64Decimal(input.archiveBytes), archiveSha256: parseLowerHexSha256(input.archiveSha256), manifestPath: parseOfficialReleaseRelativePath(input.manifestPath), manifestBytes: parseUInt64Decimal(input.manifestBytes), manifestSha256: parseLowerHexSha256(input.manifestSha256) };
+  const archiveBytes = parseUInt64Decimal(input.archiveBytes); const manifestBytes = parseUInt64Decimal(input.manifestBytes);
+  if (BigInt(archiveBytes) < 1n || BigInt(archiveBytes) > 2_147_483_648n || BigInt(manifestBytes) < 1n || BigInt(manifestBytes) > 16_777_216n) invalid("ReleaseBundleReferenceV1 bytes");
+  return { platform: "darwin", architecture, archiveFormat: "zstd-ustar-v1", archivePath, archiveBytes, archiveSha256: parseLowerHexSha256(input.archiveSha256), manifestPath: parseOfficialReleaseRelativePath(input.manifestPath), manifestBytes, manifestSha256: parseLowerHexSha256(input.manifestSha256) };
 }
 function validateReleaseIndexEntry(value: unknown): ReleaseIndexEntryV1 {
   const input = exact(value, "ReleaseIndexEntryV1", ["version", "releaseSequence", "minimumLauncherProtocol", "updateProtocol", "bundles"]);
@@ -378,13 +398,14 @@ export function validateBundleManifest(value: unknown): ReleaseBundleManifestV1 
   const input = exact(value, "ReleaseBundleManifestV1", ["schemaVersion", "version", "releaseSequence", "platform", "architecture", "launcherProtocol", "updateProtocol", "entrypoint", "runtimeEntrypoint", "plannerEntrypoint", "verifierEntrypoint", "entries"]);
   if (input.schemaVersion !== 1 || input.platform !== "darwin" || (input.architecture !== "arm64" && input.architecture !== "x64")) invalid("ReleaseBundleManifestV1");
   const architecture: "arm64" | "x64" = input.architecture === "arm64" ? "arm64" : "x64";
-  const entries = array(input.entries, "ReleaseBundleManifestV1.entries", 1, 200_000).map(validateBundleEntry); let total = 0n; const seen = new Set<string>();
+  const entries = array(input.entries, "ReleaseBundleManifestV1.entries", 1, 200_000).map(validateBundleEntry); let total = 0n; const seen = new Set<string>(); const directories = new Set<string>();
   for (let index = 0; index < entries.length; index += 1) {
     const current = entries[index] as ReleaseBundleEntryV1; const prior = entries[index - 1];
     if (seen.has(current.path) || seen.has(current.path.normalize("NFC").toLocaleLowerCase("en-US")) || (prior !== undefined && compareUtf8(prior.path, current.path) >= 0)) invalid("ReleaseBundleManifestV1.entries order");
     seen.add(current.path); seen.add(current.path.normalize("NFC").toLocaleLowerCase("en-US"));
     const parent = current.path.includes("/") ? current.path.slice(0, current.path.lastIndexOf("/")) : null;
-    if (parent !== null && !entries.slice(0, index).some((entry) => entry.path === parent && entry.kind === "directory")) invalid("ReleaseBundleManifestV1.entries parents");
+    if (parent !== null && !directories.has(parent)) invalid("ReleaseBundleManifestV1.entries parents");
+    if (current.kind === "directory") directories.add(current.path);
     if (current.kind === "file") { total += BigInt(current.bytes); if (total > maximumBundleBytes) invalid("ReleaseBundleManifestV1 aggregate bytes"); }
   }
   const entrypoint = parseBundleRelativePath(input.entrypoint); const runtimeEntrypoint = parseBundleRelativePath(input.runtimeEntrypoint); const plannerEntrypoint = parseBundleRelativePath(input.plannerEntrypoint); const verifierEntrypoint = parseBundleRelativePath(input.verifierEntrypoint);
@@ -397,11 +418,24 @@ export function validateBundleManifest(value: unknown): ReleaseBundleManifestV1 
 function validateIdentity(value: unknown, evidence: CanonicalPathEvidenceV1): ReleaseIdentityV1 {
   const input = exact(value, "ReleaseIdentityV1", ["version", "releaseSequence", "releaseIdentityHash", "delegationSequence", "delegationHash", "releaseIndexSequence", "releaseIndexHash", "bundleManifestHash", "bundleRoot", "platform", "architecture", "launcherProtocol", "updateProtocol"]);
   if (input.platform !== "darwin" || (input.architecture !== "arm64" && input.architecture !== "x64")) invalid("ReleaseIdentityV1");
-  const bundleRoot = string(input.bundleRoot, "ReleaseIdentityV1.bundleRoot");
-  if (evidence.reopenCanonicalAbsolutePath(bundleRoot) !== bundleRoot) invalid("ReleaseIdentityV1.bundleRoot");
-  return { version: parseStableSemver(input.version), releaseSequence: parseUInt64Decimal(input.releaseSequence), releaseIdentityHash: parseLowerHexSha256(input.releaseIdentityHash), delegationSequence: parseUInt64Decimal(input.delegationSequence), delegationHash: parseLowerHexSha256(input.delegationHash), releaseIndexSequence: parseUInt64Decimal(input.releaseIndexSequence), releaseIndexHash: parseLowerHexSha256(input.releaseIndexHash), bundleManifestHash: parseLowerHexSha256(input.bundleManifestHash), bundleRoot: bundleRoot as CanonicalAbsolutePathV1, platform: "darwin", architecture: input.architecture, launcherProtocol: parsePositiveUInt32(input.launcherProtocol), updateProtocol: parsePositiveUInt32(input.updateProtocol) };
+  const bundleRoot = admitCanonicalAbsolutePath(string(input.bundleRoot, "ReleaseIdentityV1.bundleRoot"), evidence);
+  return { version: parseStableSemver(input.version), releaseSequence: parseUInt64Decimal(input.releaseSequence), releaseIdentityHash: parseLowerHexSha256(input.releaseIdentityHash), delegationSequence: parseUInt64Decimal(input.delegationSequence), delegationHash: parseLowerHexSha256(input.delegationHash), releaseIndexSequence: parseUInt64Decimal(input.releaseIndexSequence), releaseIndexHash: parseLowerHexSha256(input.releaseIndexHash), bundleManifestHash: parseLowerHexSha256(input.bundleManifestHash), bundleRoot, platform: "darwin", architecture: input.architecture, launcherProtocol: parsePositiveUInt32(input.launcherProtocol), updateProtocol: parsePositiveUInt32(input.updateProtocol) };
 }
 export function validateReleaseIdentity(value: unknown, evidence: CanonicalPathEvidenceV1): ReleaseIdentityV1 { return validateIdentity(value, evidence); }
+export function admitReleaseIdentity(value: unknown, evidence: CanonicalPathEvidenceV1, context: ReleaseIdentityAdmissionContextV1): ReleaseIdentityV1 {
+  const identity = validateIdentity(value, evidence);
+  const selected = context.selected;
+  const entry = validateReleaseIndexEntry(selected.entry);
+  const architecture = selected.bundle.architecture;
+  const expectedBundle = entry.bundles[architecture === "arm64" ? 0 : 1];
+  const selectedBundle = validateBundleReference(selected.bundle, architecture);
+  const manifest = validateBundleManifest(context.bundleManifest);
+  const metadata = validateReleaseMetadataIdentity(context.metadata);
+  const productHome = admitCanonicalAbsolutePath(context.productHome, evidence);
+  const expectedRoot = `${productHome}/releases/${entry.version}/darwin-${architecture}`;
+  if (identity.bundleRoot !== expectedRoot || identity.version !== entry.version || identity.releaseSequence !== entry.releaseSequence || identity.releaseIdentityHash !== releaseIdentityHash(entry, architecture) || selected.releaseIdentityHash !== identity.releaseIdentityHash || selectedBundle.archivePath !== expectedBundle.archivePath || selectedBundle.archiveBytes !== expectedBundle.archiveBytes || selectedBundle.archiveSha256 !== expectedBundle.archiveSha256 || selectedBundle.manifestPath !== expectedBundle.manifestPath || selectedBundle.manifestBytes !== expectedBundle.manifestBytes || selectedBundle.manifestSha256 !== expectedBundle.manifestSha256 || identity.delegationSequence !== metadata.delegationSequence || identity.delegationHash !== metadata.delegationHash || identity.releaseIndexSequence !== metadata.releaseIndexSequence || identity.releaseIndexHash !== metadata.releaseIndexHash || identity.bundleManifestHash !== context.bundleManifestHash || context.bundleManifestHash !== expectedBundle.manifestSha256 || manifest.version !== entry.version || manifest.releaseSequence !== entry.releaseSequence || manifest.architecture !== architecture || identity.architecture !== architecture || identity.launcherProtocol !== manifest.launcherProtocol || identity.updateProtocol !== entry.updateProtocol || manifest.updateProtocol !== entry.updateProtocol) invalid("ReleaseIdentityV1 context");
+  return { ...identity };
+}
 export function validateActiveReleaseRecord(value: unknown, evidence: CanonicalPathEvidenceV1): ActiveReleaseRecordV1 {
   const input = exact(value, "ActiveReleaseRecordV1", ["schemaVersion", "version", "releaseSequence", "releaseIdentityHash", "delegationSequence", "delegationHash", "releaseIndexSequence", "releaseIndexHash", "bundleManifestHash", "bundleRoot", "platform", "architecture", "launcherProtocol", "updateProtocol", "activatedAt"]);
   if (input.schemaVersion !== 1) invalid("ActiveReleaseRecordV1"); const identity = validateIdentity(Object.fromEntries(Object.entries(input).filter(([key]) => key !== "schemaVersion" && key !== "activatedAt")), evidence);
@@ -440,12 +474,19 @@ export function advanceReleaseTrust(current: ReleaseTrustStateV1, accepted: Rele
   const [highestAcceptedReleaseSequence, nextReleaseIdentityHash] = advance(trust.highestAcceptedReleaseSequence, trust.releaseIdentityHash, releaseSequence, releaseIdentityHash, "release");
   return { schemaVersion: 1, highestDelegationSequence, delegationHash, delegatedReleaseKeyId: metadata.delegatedReleaseKeyId, highestReleaseIndexSequence, releaseIndexHash, highestAcceptedReleaseSequence, releaseIdentityHash: nextReleaseIdentityHash };
 }
+export function admitReleaseAgainstTrust(trust: ReleaseTrustStateV1, release: Pick<ReleaseIdentityV1, "releaseSequence" | "releaseIdentityHash">, role: "online_target" | "guarded_active" | "guarded_retained_rollback"): void {
+  const state = validateReleaseTrustState(trust); const sequence = parseUInt64Decimal(release.releaseSequence); const hash = parseLowerHexSha256(release.releaseIdentityHash); const comparison = compareUInt64(sequence, state.highestAcceptedReleaseSequence);
+  if (comparison === 0 && hash !== state.releaseIdentityHash) invalid("ReleaseTrustStateV1 release replay");
+  if (comparison < 0 && role === "online_target") invalid("ReleaseTrustStateV1 online downgrade");
+  if (comparison > 0 && role !== "online_target") invalid("ReleaseTrustStateV1 guarded advance");
+}
 
-/** Selection is path-free; later update planning replaces this active-path placeholder with its guarded target bundle root. */
-export function selectRelease(index: ReleaseIndexV1, request: { readonly version: StableSemverV1 | null; readonly active: ReleaseIdentityV1 }): { readonly outcome: "up_to_date"; readonly active: ReleaseIdentityV1 } | { readonly outcome: "selected"; readonly target: ReleaseIdentityV1 } {
+export function selectRelease(index: ReleaseIndexV1, request: { readonly version: StableSemverV1 | null; readonly active: ReleaseIdentityV1 }): { readonly outcome: "up_to_date"; readonly active: ReleaseIdentityV1 } | { readonly outcome: "selected"; readonly selected: SelectedReleaseV1 } {
   const trustedIndex = validateReleaseIndex(index); const desired = request.version === null ? trustedIndex.latestVersion : parseStableSemver(request.version); const active = request.active;
   const selected = trustedIndex.releases.find((entry) => entry.version === desired); if (selected === undefined) invalid("requested release");
-  const comparison = compareSemver(selected.version, active.version); if (comparison < 0) invalid("release downgrade"); if (comparison === 0) return { outcome: "up_to_date", active };
+  const comparison = compareSemver(selected.version, active.version); if (comparison < 0) invalid("release downgrade");
   const bundle = selected.bundles[active.architecture === "arm64" ? 0 : 1];
-  return { outcome: "selected", target: { version: selected.version, releaseSequence: selected.releaseSequence, releaseIdentityHash: releaseIdentityHash(selected, active.architecture), delegationSequence: active.delegationSequence, delegationHash: active.delegationHash, releaseIndexSequence: trustedIndex.sequence, releaseIndexHash: active.releaseIndexHash, bundleManifestHash: bundle.manifestSha256, bundleRoot: active.bundleRoot, platform: "darwin", architecture: active.architecture, launcherProtocol: selected.minimumLauncherProtocol, updateProtocol: selected.updateProtocol } };
+  const identityHash = releaseIdentityHash(selected, active.architecture);
+  if (comparison === 0) { if (selected.releaseSequence !== active.releaseSequence || identityHash !== active.releaseIdentityHash) invalid("active release identity rebound"); return { outcome: "up_to_date", active: { ...active } }; }
+  return { outcome: "selected", selected: { entry: { ...selected, bundles: [{ ...selected.bundles[0] }, { ...selected.bundles[1] }] }, bundle: { ...bundle }, releaseIdentityHash: identityHash } };
 }

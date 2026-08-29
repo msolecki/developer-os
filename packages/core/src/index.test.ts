@@ -64,6 +64,8 @@ describe("the package's public door", () => {
         "admitCanonicalAbsolutePath",
         "admitOwnerRelativePath",
         "admitRollbackPayloadRelativePath",
+        "admitReleaseAgainstTrust",
+        "admitReleaseIdentity",
         "admitVaultFreeRelativePath",
         "advanceReleaseTrust",
         "validateJournal",
