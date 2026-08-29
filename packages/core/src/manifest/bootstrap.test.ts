@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import { encodeCanonicalJson } from "../lifecycle/canonical-json.js";
+import {
+  decodeCanonicalJson,
+  encodeCanonicalJson,
+} from "../lifecycle/canonical-json.js";
+import { serializeConfig } from "../config/index.js";
 import type { CanonicalAbsolutePathV1 } from "../update/paths.js";
 import type { LowerHexSha256 } from "../update/scalars.js";
 import {
@@ -332,8 +336,6 @@ describe("bootstrap payload and creation evidence", () => {
 
 const compensationId = "tx_fi_123e4567-e89b-42d3-a456-426614174000_0000000000_c";
 const forwardId = "tx_fi_123e4567-e89b-42d3-a456-426614174000_0000000000_f";
-const compensationJournalHash = "012b39a7bd2ad74a52faeaa6be4d5c3c473fba659e38e4962bb35d7ddb9cfe55" as LowerHexSha256;
-const forwardJournalHash = "7f8df08f88eaa9d4eddcc4dc78b954505d471c5b12449fa108ea4b70944e9c3e" as LowerHexSha256;
 const manifestPayloadHash = "33b40975be5962d2fa7979b78ebf70b4fd662ec8382b1039f0a7e47acd4e914d" as LowerHexSha256;
 const noncePayloadHash = "4635042acefc14343e21753cde7f1465c323970e205d422248232ff8e2a0fad2" as LowerHexSha256;
 const allocatorPayloadHash = "30d0167472cb1c3d44bb1e24996fad87a49aac78d30ef59f497e590fce1c3816" as LowerHexSha256;
@@ -350,10 +352,10 @@ function compensationJournalValue() {
     updatedAt: "2026-08-29T12:00:00.000Z",
     mutations: [
       {
-        targetPath: "/product/legacy.txt",
-        operation: "create",
-        expectedBeforeHash: null,
-        stagedRelativePath: "0.bin",
+        targetPath: "/product/config.toml",
+        operation: "remove",
+        expectedBeforeHash: configPayloadHash,
+        stagedRelativePath: null,
       },
     ],
   } as const;
@@ -369,14 +371,27 @@ function forwardJournalValue() {
     updatedAt: "2026-08-29T12:00:00.000Z",
     mutations: [
       {
-        targetPath: "/product/legacy.txt",
-        operation: "remove",
-        expectedBeforeHash: hashA,
-        stagedRelativePath: null,
+        targetPath: "/product/config.toml",
+        operation: "create",
+        expectedBeforeHash: null,
+        stagedRelativePath: "0.bin",
       },
     ],
   } as const;
 }
+
+const configValue = {
+  schemaVersion: 1,
+  brainPath: "/product/brain",
+  adapters: { claude: true, codex: true },
+  git: { enabled: false },
+  automation: { enabled: false },
+  telemetry: false,
+} as const;
+const configPayloadBytes = new TextEncoder().encode(serializeConfig(configValue));
+const configPayloadHash = createHash("sha256").update(configPayloadBytes).digest("hex") as LowerHexSha256;
+const digestPayloadBytes = new TextEncoder().encode(`${configPayloadHash}\n`);
+const digestPayloadHash = createHash("sha256").update(digestPayloadBytes).digest("hex") as LowerHexSha256;
 
 function bootstrapRef(ordinal: number, hash: LowerHexSha256, bytes: number): BootstrapExpectedPayloadRefV1 {
   return {
@@ -391,27 +406,59 @@ function bootstrapRef(ordinal: number, hash: LowerHexSha256, bytes: number): Boo
 }
 
 function fullPlanFixture() {
-  const compensationRef = bootstrapRef(0, compensationJournalHash, 336);
-  const forwardRef = bootstrapRef(1, forwardJournalHash, 395);
+  const compensationJournalBytes = new TextEncoder().encode(`${JSON.stringify(compensationJournalValue())}\n`);
+  const forwardJournalBytes = new TextEncoder().encode(`${JSON.stringify(forwardJournalValue())}\n`);
+  const compensationJournalHash = createHash("sha256").update(compensationJournalBytes).digest("hex") as LowerHexSha256;
+  const forwardJournalHash = createHash("sha256").update(forwardJournalBytes).digest("hex") as LowerHexSha256;
+  const compensationRef = bootstrapRef(0, compensationJournalHash, compensationJournalBytes.byteLength);
+  const forwardRef = bootstrapRef(1, forwardJournalHash, forwardJournalBytes.byteLength);
   const packageRef = bootstrapRef(2, hashA, 1);
-  const manifestRef = bootstrapRef(3, manifestPayloadHash, 379);
-  const nonceRef = bootstrapRef(4, noncePayloadHash, 65);
-  const allocatorRef = bootstrapRef(5, allocatorPayloadHash, 120);
-  const activeRef = bootstrapRef(6, activePayloadHash, 635);
-  const trustRef = bootstrapRef(7, trustPayloadHash, 473);
+  const configRef = bootstrapRef(3, configPayloadHash, configPayloadBytes.byteLength);
+  const digestRef = bootstrapRef(4, digestPayloadHash, digestPayloadBytes.byteLength);
+  const manifestRef = bootstrapRef(5, manifestPayloadHash, 379);
+  const nonceRef = bootstrapRef(6, noncePayloadHash, 65);
+  const allocatorRef = bootstrapRef(7, allocatorPayloadHash, 120);
+  const activeRef = bootstrapRef(8, activePayloadHash, 635);
+  const trustRef = bootstrapRef(9, trustPayloadHash, 473);
   const compensationSource = {
     kind: "plan_derived",
     role: "foundation_initial_journal",
     value: compensationJournalValue(),
-    valueBytes: 335,
-    projectionHash: "d4b50ceee3efa65e3120ac2086cd5e3bcad80b66955ebd88156d65529f76ee96",
+    valueBytes: compensationJournalBytes.byteLength - 1,
+    projectionHash: canonicalDomainHash(
+      "developer-os/bootstrap-plan-derived/foundation_initial_journal/v1\0",
+      { role: "foundation_initial_journal", value: compensationJournalValue() },
+    ),
   } as const;
   const forwardSource = {
     kind: "plan_derived",
     role: "foundation_initial_journal",
     value: forwardJournalValue(),
-    valueBytes: 394,
-    projectionHash: "48f8d4863f857d7fac752dd891cc16b8dffaf917483b7025ef3ce3ccc93dcc6e",
+    valueBytes: forwardJournalBytes.byteLength - 1,
+    projectionHash: canonicalDomainHash(
+      "developer-os/bootstrap-plan-derived/foundation_initial_journal/v1\0",
+      { role: "foundation_initial_journal", value: forwardJournalValue() },
+    ),
+  } as const;
+  const configSource = {
+    kind: "plan_derived",
+    role: "foundation_config",
+    value: configValue,
+    valueBytes: configPayloadBytes.byteLength - 1,
+    projectionHash: canonicalDomainHash(
+      "developer-os/bootstrap-plan-derived/foundation_config/v1\0",
+      { role: "foundation_config", value: configValue },
+    ),
+  } as const;
+  const digestSource = {
+    kind: "plan_derived",
+    role: "foundation_staged_digest",
+    value: configPayloadHash,
+    valueBytes: digestPayloadBytes.byteLength - 1,
+    projectionHash: canonicalDomainHash(
+      "developer-os/bootstrap-plan-derived/foundation_staged_digest/v1\0",
+      { role: "foundation_staged_digest", value: configPayloadHash },
+    ),
   } as const;
   const packageSource = {
     kind: "guarded_package_file",
@@ -507,18 +554,20 @@ function fullPlanFixture() {
     projectionHash: "cfc26134f42de5756dc088a4bfd5e905b10119f1552115c765780a204cf6c497",
   } as const;
 
-  const compensation: FoundationParticipantRefV2 = {
+  let compensation: FoundationParticipantRefV2 = {
     id: compensationId,
     slot: "fresh_init_artifacts",
     role: { kind: "compensation", forwardId: forwardId as never },
     mutations: [
       {
-        targetPath: "/product/legacy.txt" as CanonicalAbsolutePathV1,
-        operation: "create",
-        expectedBeforeHash: null,
-        contentHash: hashA,
-        contentSize: 1,
-        stagedPath: `/product/staging/transactions/${compensationId}/0.bin` as CanonicalAbsolutePathV1,
+        targetPath: "/product/config.toml" as CanonicalAbsolutePathV1,
+        operation: "remove",
+        expectedBeforeHash: configPayloadHash,
+        contentHash: null,
+        contentSize: null,
+        stagedPath: null,
+        content: null,
+        digest: null,
       },
     ],
     maximumJournalBytes: 1_048_576,
@@ -529,18 +578,20 @@ function fullPlanFixture() {
       staged: compensationRef,
     },
   };
-  const forward: FoundationParticipantRefV2 = {
+  let forward: FoundationParticipantRefV2 = {
     id: forwardId,
     slot: "fresh_init_artifacts",
     role: { kind: "forward", compensationId: compensationId as never },
     mutations: [
       {
-        targetPath: "/product/legacy.txt" as CanonicalAbsolutePathV1,
-        operation: "remove",
-        expectedBeforeHash: hashA,
-        contentHash: null,
-        contentSize: null,
-        stagedPath: null,
+        targetPath: "/product/config.toml" as CanonicalAbsolutePathV1,
+        operation: "create",
+        expectedBeforeHash: null,
+        contentHash: configPayloadHash,
+        contentSize: configPayloadBytes.byteLength,
+        stagedPath: `/product/staging/transactions/${forwardId}/0.bin` as CanonicalAbsolutePathV1,
+        content: configRef,
+        digest: digestRef,
       },
     ],
     maximumJournalBytes: 1_048_576,
@@ -551,6 +602,36 @@ function fullPlanFixture() {
       staged: forwardRef,
     },
   };
+  const withParticipantPlanHash = (participant: FoundationParticipantRefV2): FoundationParticipantRefV2 => {
+    const staged = participant.initialJournal.staged;
+    return {
+      ...participant,
+      planHash: canonicalDomainHash(
+        "developer-os/foundation-participant-plan/v2\0",
+        {
+          schemaVersion: 2,
+          id: participant.id,
+          slot: participant.slot,
+          role: participant.role,
+          mutations: participant.mutations,
+          maximumJournalBytes: participant.maximumJournalBytes,
+          initialJournal: {
+            finalPath: participant.initialJournal.finalPath,
+            staged: {
+              kind: staged.kind,
+              bootstrapId: staged.bootstrapId,
+              ordinal: staged.ordinal,
+              path: staged.path,
+              bytes: staged.bytes,
+              mode: staged.mode,
+            },
+          },
+        },
+      ) as LowerHexSha256,
+    };
+  };
+  compensation = withParticipantPlanHash(compensation);
+  forward = withParticipantPlanHash(forward);
 
   const preexisting = (path: string, dev: string, ino: string) => ({
     kind: "preexisting" as const,
@@ -616,7 +697,7 @@ function fullPlanFixture() {
     },
     {
       kind: "directory",
-      path: `/product/staging/transactions/${compensationId}` as CanonicalAbsolutePathV1,
+      path: `/product/staging/transactions/${forwardId}` as CanonicalAbsolutePathV1,
       expectedBefore: "absent",
       ownerUid: 501,
       mode: 0o700,
@@ -625,10 +706,19 @@ function fullPlanFixture() {
     },
     {
       kind: "file",
-      path: `/product/staging/transactions/${compensationId}/0.bin` as CanonicalAbsolutePathV1,
+      path: `/product/staging/transactions/${forwardId}/0.bin` as CanonicalAbsolutePathV1,
       expectedBefore: "absent",
       ownerUid: 501,
-      payload: packageRef,
+      payload: configRef,
+      parent: created(6),
+      cleanup: "remove_on_compensation",
+    },
+    {
+      kind: "file",
+      path: `/product/staging/transactions/${forwardId}/0.bin.sha256` as CanonicalAbsolutePathV1,
+      expectedBefore: "absent",
+      ownerUid: 501,
+      payload: digestRef,
       parent: created(6),
       cleanup: "remove_on_compensation",
     },
@@ -660,6 +750,15 @@ function fullPlanFixture() {
     parent: created(1),
     cleanup: "remove_on_compensation" as const,
   }));
+  launchabilityPaths.splice(1, 0, {
+    kind: "file",
+    path: "/product/releases/0/bundle.txt" as CanonicalAbsolutePathV1,
+    expectedBefore: "absent",
+    ownerUid: 501,
+    payload: packageRef,
+    parent: { kind: "created_path", scope: "launchability", ordinal: 0 },
+    cleanup: "remove_on_compensation",
+  });
   launchabilityPaths.push(
     {
       kind: "file",
@@ -735,11 +834,13 @@ function fullPlanFixture() {
     stagingRoot: `/product/staging/fresh-v2-init/${freshId}` as CanonicalAbsolutePathV1,
     maximumPlanBytes: 268_435_456,
     maximumJournalBytes: 1_048_576,
-    maximumStagingEntries: 76,
+    maximumStagingEntries: 86,
     payloads: [
       { ref: compensationRef, source: compensationSource as unknown as BootstrapPayloadSourceV1 },
       { ref: forwardRef, source: forwardSource as unknown as BootstrapPayloadSourceV1 },
       { ref: packageRef, source: packageSource as unknown as BootstrapPayloadSourceV1 },
+      { ref: configRef, source: configSource as unknown as BootstrapPayloadSourceV1 },
+      { ref: digestRef, source: digestSource as unknown as BootstrapPayloadSourceV1 },
       { ref: manifestRef, source: manifestSource as unknown as BootstrapPayloadSourceV1 },
       { ref: nonceRef, source: nonceSource as unknown as BootstrapPayloadSourceV1 },
       { ref: allocatorRef, source: allocatorSource as unknown as BootstrapPayloadSourceV1 },
@@ -772,7 +873,7 @@ function fullPlanFixture() {
     admitManifestParticipant: () => structuredClone(manifest) as never,
     admitPlanDerivedValue: (_role: string, value: unknown) => structuredClone(value) as never,
   };
-  return { plan, context, compensationSource, forwardSource, packageSource, manifestSource };
+  return { plan, context, compensationSource, forwardSource, packageSource, configSource, digestSource, manifestSource };
 }
 
 const migrationId = "mm_123e4567-e89b-42d3-a456-426614174000" as ManifestMigrationIdV1;
@@ -812,7 +913,7 @@ function migrationPlanFixture(): {
     ref: Record<string, unknown>;
     source: Record<string, unknown>;
   }>;
-  required(payloads[2]).source = {
+  required(payloads[3]).source = {
     kind: "guarded_migration_preimage",
     authority: {
       kind: "v1_manifest",
@@ -823,8 +924,8 @@ function migrationPlanFixture(): {
     ownerUid: 501,
     mode: 0o600,
     nlink: 1,
-    bytes: 1,
-    sha256: hashA,
+    bytes: configPayloadBytes.byteLength,
+    sha256: configPayloadHash,
     dev: "1",
     ino: "30",
   };
@@ -915,7 +1016,7 @@ describe("immutable bootstrap plan exact grammar", () => {
       createHash("sha256")
         .update(encodeCanonicalJson(fixture.plan as never))
         .digest("hex"),
-    ).toBe("c3eb0826ecc678a1715d634628d8c453967333d8a6b448f227dcb90306cece17");
+    ).toBe("1f06595c298bc8b442127e115a8412bf67077db622f4132b910c257a15b579e3");
   });
 
   it("pins every admitted plan-derived role and guarded-package source to its independent source-identity digest", () => {
@@ -923,15 +1024,49 @@ describe("immutable bootstrap plan exact grammar", () => {
     expect(
       fixture.plan.payloads.map((row) => bootstrapPayloadSourceIdentityHash(row.source)),
     ).toStrictEqual([
-      "13e23bf4614d389742666ec6ccb663f1c34a42d3254286e080a5c84fdbd2cc0a",
-      "114ec9fc9a4bc675f943fe3535ce73f1fbbf5cf4d639cdd43daa71fd8e04286a",
+      "3e3c3a008dde6b3404b41ed6c26c029baed7ef9a5b38ce7a80a63f4dc0418f80",
+      "875ffa59546fa56dc17d123d634899d1166d0429a2edb638d404048fbafaa83d",
       "c49b8099913bae81d3d08b65e18809de9c5a935e4881c54866955139a9bb35c2",
+      "706b5a42ec2f753067ea7867a58eacd3438811b65ce26f8064ab159b99a5e612",
+      "54f51e5dd50541d161c726523ccdf6347f233cefca6b0a8d891319ae18cc4f76",
       "1984f60e07135df8cfbf4ceec34da80473cce0a7314f5a4a27c8533f64b9f084",
       "2180dc076301664f018df4aa75f44b64c62202954852741cd9321714d17c26d9",
       "e610cdbb85e8121b186bee38b89a61e65387df7692aad9177ec45b6dd4aef0bf",
       "e16c7411ffd8d02ccf410a54fedcde40fa46185099af895667d3db0f37d54832",
       "ddccb359d9b963399eed2f137b6eb26d6bf4b78f84b0d0b6827ae069520a31ca",
     ]);
+  });
+
+  it("reconstructs the singular fresh Foundation config and matching digest from closed retained values", () => {
+    const fixture = fullPlanFixture();
+    const admitted = validateBootstrapPlan(fixture.plan, fixture.context);
+    expect(admitted.payloads[3]?.source).toStrictEqual(fixture.configSource);
+    expect(admitted.payloads[4]?.source).toStrictEqual(fixture.digestSource);
+    expect(new TextDecoder().decode(configPayloadBytes)).toBe(serializeConfig(configValue));
+    expect(new TextDecoder().decode(digestPayloadBytes)).toBe(`${configPayloadHash}\n`);
+  });
+
+  it("normalizes initial Foundation journal values so canonical plan recovery reconstructs the admitted bytes", () => {
+    const fixture = fullPlanFixture();
+    const persisted = decodeCanonicalJson(
+      new TextEncoder().encode(encodeCanonicalJson(fixture.plan as never)),
+      268_435_456,
+    );
+    const admitted = validateBootstrapPlan(persisted, fixture.context);
+    for (const row of admitted.payloads) {
+      if (
+        row.source.kind !== "plan_derived" ||
+        row.source.role !== "foundation_initial_journal"
+      ) {
+        continue;
+      }
+      const bytes = new TextEncoder().encode(
+        `${JSON.stringify(row.source.value)}\n`,
+      );
+      expect(createHash("sha256").update(bytes).digest("hex")).toBe(
+        row.ref.hash,
+      );
+    }
   });
 
   it.each([
@@ -1047,7 +1182,46 @@ describe("immutable bootstrap plan exact grammar", () => {
       name: "a Foundation inverse forgets to reverse the forward operation",
       mutate(plan: Record<string, unknown>) {
         const refs = plan.foundationParticipants as Array<{ mutations: Array<Record<string, unknown>> }>;
-        required(required(refs[0]).mutations[0]).operation = "remove";
+        required(required(refs[0]).mutations[0]).operation = "create";
+      },
+    },
+    {
+      name: "a non-remove Foundation mutation omits its content ref",
+      mutate(plan: Record<string, unknown>) {
+        const refs = plan.foundationParticipants as Array<{ mutations: Array<Record<string, unknown>> }>;
+        required(required(refs[1]).mutations[0]).content = null;
+      },
+    },
+    {
+      name: "a non-remove Foundation mutation aliases its content and digest refs",
+      mutate(plan: Record<string, unknown>) {
+        const refs = plan.foundationParticipants as Array<{ mutations: Array<Record<string, unknown>> }>;
+        const mutation = required(required(refs[1]).mutations[0]);
+        mutation.digest = structuredClone(mutation.content);
+      },
+    },
+    {
+      name: "a remove Foundation mutation smuggles staged outer refs",
+      mutate(plan: Record<string, unknown>) {
+        const refs = plan.foundationParticipants as Array<{ mutations: Array<Record<string, unknown>> }>;
+        const mutation = required(required(refs[0]).mutations[0]);
+        const forward = required(required(refs[1]).mutations[0]);
+        mutation.content = structuredClone(forward.content);
+        mutation.digest = structuredClone(forward.digest);
+      },
+    },
+    {
+      name: "a Foundation digest source names a different content hash",
+      mutate(plan: Record<string, unknown>) {
+        const payloads = plan.payloads as Array<{ source: Record<string, unknown> }>;
+        required(payloads[4]).source.value = hashB;
+      },
+    },
+    {
+      name: "an unknown Foundation config key bypasses the strict serializer schema",
+      mutate(plan: Record<string, unknown>) {
+        const payloads = plan.payloads as Array<{ source: { value: Record<string, unknown> } }>;
+        required(payloads[3]).source.value.unknown = true;
       },
     },
     {
@@ -1100,7 +1274,7 @@ describe("immutable bootstrap plan exact grammar", () => {
     },
     {
       name: "the staging aggregate undercounts one reachable entry",
-      mutate(plan: Record<string, unknown>) { plan.maximumStagingEntries = 75; },
+      mutate(plan: Record<string, unknown>) { plan.maximumStagingEntries = 85; },
     },
     {
       name: "the manifest envelope points at a different bootstrap ID",
@@ -1195,7 +1369,7 @@ describe("immutable bootstrap plan exact grammar", () => {
     const candidate = structuredClone(fixture.plan) as never as {
       createdPaths: Array<{ payload?: { hash: string; bytes: number; mode: number } }>;
     };
-    const created = required(candidate.createdPaths[9]);
+    const created = required(candidate.createdPaths[10]);
     if (created.payload === undefined) throw new Error("nonce consumer fixture is required");
     const nonceConsumer = { ...created.payload };
     created.payload = nonceConsumer;
@@ -1247,13 +1421,13 @@ describe("immutable bootstrap plan exact grammar", () => {
       }>;
       createdPaths: Array<{ payload?: { hash: string; bytes: number } }>;
     };
-    const allocator = required(plan.payloads[5]);
+    const allocator = required(plan.payloads[7]);
     allocator.ref.hash = hash;
     allocator.ref.bytes = bytes;
     allocator.source.value = value;
     allocator.source.valueBytes = valueBytes;
     allocator.source.projectionHash = projectionHash;
-    required(plan.createdPaths[8]).payload = allocator.ref;
+    required(plan.createdPaths[9]).payload = allocator.ref;
     expect(() => validateBootstrapPlan(plan, fixture.context)).toThrow(BootstrapStateError);
   });
 });
@@ -1267,7 +1441,7 @@ describe("migration-only bootstrap grammar", () => {
       journal: "/product/state/manifest-migration.mm_123e4567-e89b-42d3-a456-426614174000.journal.json",
       stagingRoot: "/product/staging/manifest-migration/mm_123e4567-e89b-42d3-a456-426614174000",
     });
-    expect(fixture.plan.payloads[2]?.source).toMatchObject({
+    expect(fixture.plan.payloads[3]?.source).toMatchObject({
       kind: "guarded_migration_preimage",
       authority: {
         kind: "v1_manifest",
@@ -1275,17 +1449,17 @@ describe("migration-only bootstrap grammar", () => {
         v1ManifestHash: hashA,
       },
       path: "/product/state/installation-manifest.json",
-      bytes: 1,
-      sha256: hashA,
+      bytes: configPayloadBytes.byteLength,
+      sha256: configPayloadHash,
     });
     expect(
-      bootstrapPayloadSourceIdentityHash(required(fixture.plan.payloads[2]).source),
-    ).toBe("7c3509b4e184545fd160d17b9c6b5a37ee1355a5947740b6598089c05e895a08");
+      bootstrapPayloadSourceIdentityHash(required(fixture.plan.payloads[3]).source),
+    ).toBe("b93e11c2b9f8656016683709bac36eee8799a03b7dce0e1c93d967dde533cc56");
     expect(
       createHash("sha256")
         .update(encodeCanonicalJson(fixture.plan as never))
         .digest("hex"),
-    ).toBe("1945b2fdf0432ddbeefef851c67acae48533b4ffbe7cfe76440fb91df518cd67");
+    ).toBe("47aa938099b11fb04d7a0aac40dd3edb0da9d0148f20ab5d7bac2e063e27991e");
   });
 
   it.each([
@@ -1294,7 +1468,7 @@ describe("migration-only bootstrap grammar", () => {
       arrange() {
         const fixture = fullPlanFixture();
         const candidate = structuredClone(fixture.plan) as never as { payloads: Array<{ source: unknown }> };
-        required(candidate.payloads[2]).source = required(migrationPlanFixture().plan.payloads[2]).source;
+        required(candidate.payloads[3]).source = required(migrationPlanFixture().plan.payloads[3]).source;
         return { plan: candidate, context: fixture.context };
       },
     },
@@ -1305,9 +1479,20 @@ describe("migration-only bootstrap grammar", () => {
         const candidate = structuredClone(fixture.plan) as never as {
           payloads: Array<{ source: { authority?: { v1ManifestHash: string } } }>;
         };
-        const source = required(candidate.payloads[2]).source;
+        const source = required(candidate.payloads[3]).source;
         const authority = required(source.authority);
         authority.v1ManifestHash = hashB;
+        return { plan: candidate, context: fixture.context };
+      },
+    },
+    {
+      name: "a migration plan retains the fresh-only Foundation config role",
+      arrange() {
+        const fixture = migrationPlanFixture();
+        const candidate = structuredClone(fixture.plan) as never as {
+          payloads: Array<{ source: unknown }>;
+        };
+        required(candidate.payloads[3]).source = fullPlanFixture().configSource;
         return { plan: candidate, context: fixture.context };
       },
     },
@@ -1755,7 +1940,9 @@ function fullPlanJournal(
   return {
     schemaVersion: 1,
     id: freshId,
-    planHash: "c3eb0826ecc678a1715d634628d8c453967333d8a6b448f227dcb90306cece17" as LowerHexSha256,
+    planHash: createHash("sha256")
+      .update(encodeCanonicalJson(fullPlanFixture().plan as never))
+      .digest("hex") as LowerHexSha256,
     phase: "planned",
     direction: "forward",
     nextPayload: 0,
@@ -1806,9 +1993,11 @@ function plannedRecoveryInventory(): BootstrapInventoryV1 {
 }
 
 const fullSourceIdentityHashes = [
-  "13e23bf4614d389742666ec6ccb663f1c34a42d3254286e080a5c84fdbd2cc0a",
-  "114ec9fc9a4bc675f943fe3535ce73f1fbbf5cf4d639cdd43daa71fd8e04286a",
+  "3e3c3a008dde6b3404b41ed6c26c029baed7ef9a5b38ce7a80a63f4dc0418f80",
+  "875ffa59546fa56dc17d123d634899d1166d0429a2edb638d404048fbafaa83d",
   "c49b8099913bae81d3d08b65e18809de9c5a935e4881c54866955139a9bb35c2",
+  "706b5a42ec2f753067ea7867a58eacd3438811b65ce26f8064ab159b99a5e612",
+  "54f51e5dd50541d161c726523ccdf6347f233cefca6b0a8d891319ae18cc4f76",
   "1984f60e07135df8cfbf4ceec34da80473cce0a7314f5a4a27c8533f64b9f084",
   "2180dc076301664f018df4aa75f44b64c62202954852741cd9321714d17c26d9",
   "e610cdbb85e8121b186bee38b89a61e65387df7692aad9177ec45b6dd4aef0bf",
@@ -1918,18 +2107,18 @@ function recoveryInventoryFor(
 }
 
 const finalizedCompactionEntries = [
-  ...Array.from({ length: 8 }, (_, ordinal) => ({
+  ...Array.from({ length: 10 }, (_, ordinal) => ({
     name: `payload-evidence ordinal ${String(ordinal)} unlink`,
     kind: "payload" as const,
     ordinal,
   })),
-  ...Array.from({ length: 10 }, (_, ordinal) => ({
+  ...Array.from({ length: 11 }, (_, ordinal) => ({
     name: `ordinary creation-evidence ordinal ${String(ordinal)} unlink`,
     kind: "creation" as const,
     scope: "ordinary" as const,
     ordinal,
   })),
-  ...Array.from({ length: 7 }, (_, ordinal) => ({
+  ...Array.from({ length: 8 }, (_, ordinal) => ({
     name: `launchability creation-evidence ordinal ${String(ordinal)} unlink`,
     kind: "creation" as const,
     scope: "launchability" as const,
@@ -1946,8 +2135,9 @@ const finalizedCompactionEntries = [
     ordinal: 1,
   },
   ...[
-    `/product/staging/transactions/${compensationId}/0.bin`,
-    `/product/staging/transactions/${compensationId}`,
+    `/product/staging/transactions/${forwardId}/0.bin.sha256`,
+    `/product/staging/transactions/${forwardId}/0.bin`,
+    `/product/staging/transactions/${forwardId}`,
     "/product/staging/transactions",
     `/product/staging/fresh-v2-init/${freshId}`,
     "/product/staging/fresh-v2-init",
@@ -1968,8 +2158,9 @@ const finalizedStagingCreationOrder: readonly CanonicalAbsolutePathV1[] = [
   "/product/staging/fresh-v2-init" as CanonicalAbsolutePathV1,
   `/product/staging/fresh-v2-init/${freshId}` as CanonicalAbsolutePathV1,
   "/product/staging/transactions" as CanonicalAbsolutePathV1,
-  `/product/staging/transactions/${compensationId}` as CanonicalAbsolutePathV1,
-  `/product/staging/transactions/${compensationId}/0.bin` as CanonicalAbsolutePathV1,
+  `/product/staging/transactions/${forwardId}` as CanonicalAbsolutePathV1,
+  `/product/staging/transactions/${forwardId}/0.bin` as CanonicalAbsolutePathV1,
+  `/product/staging/transactions/${forwardId}/0.bin.sha256` as CanonicalAbsolutePathV1,
 ];
 
 function finalizedCompactionInventory(
@@ -2000,10 +2191,10 @@ function finalizedCompactionInventory(
       .map((entry) => entry.path),
   );
   const journalPresent = remaining.some((entry) => entry.kind === "journal");
-  const payloadEvidence = fullPayloadEvidence(8).filter((_, ordinal) =>
+  const payloadEvidence = fullPayloadEvidence(10).filter((_, ordinal) =>
     remainingPayloads.has(ordinal),
   );
-  const createdPathEvidence = fullCreationEvidence(10, 7).filter((value) => {
+  const createdPathEvidence = fullCreationEvidence(11, 8).filter((value) => {
     const evidence = value as { readonly scope: string; readonly ordinal: number };
     return remainingCreations.has(
       `${evidence.scope}:${String(evidence.ordinal)}`,
@@ -2040,10 +2231,10 @@ function finalizedCompactionInventory(
         journal: journalPresent
           ? fullPlanJournal({
               phase: "compacting",
-              nextPayload: 8,
-              nextCreatedPath: 10,
+              nextPayload: 10,
+              nextCreatedPath: 11,
               nextFoundationParticipant: 1,
-              nextLaunchabilityPath: 7,
+              nextLaunchabilityPath: 8,
               manifestCursor: 3,
               terminalOutcome: "finalized",
               compactionNext: cursor,
@@ -2106,8 +2297,8 @@ function rolledBackCompactionInventory(
           ? fullPlanJournal({
               phase: "compacting",
               direction: "compensating",
-              nextPayload: 8,
-              nextCreatedPath: 10,
+              nextPayload: 10,
+              nextCreatedPath: 11,
               compensationNext: -1,
               terminalOutcome: "rolled_back",
               compactionNext: cursor,
@@ -2443,18 +2634,18 @@ describe("bootstrap guarded closure", () => {
   it("refuses finalized compaction with no context-bound postimage terminal projection", () => {
     const journalValue = fullPlanJournal({
       phase: "compacting",
-      nextPayload: 8,
-      nextCreatedPath: 10,
+      nextPayload: 10,
+      nextCreatedPath: 11,
       nextFoundationParticipant: 1,
-      nextLaunchabilityPath: 7,
+      nextLaunchabilityPath: 8,
       manifestCursor: 3,
       terminalOutcome: "finalized",
       compactionNext: 0,
     });
     const inventory = recoveryInventoryFor(journalValue, {
-      payload: 8,
-      ordinary: 10,
-      launchability: 7,
+      payload: 10,
+      ordinary: 11,
+      launchability: 8,
     });
     (inventory.envelopes[0] as never as { terminalState: unknown }).terminalState = null;
     expect(() => inspectBootstrapClosure(inventory, fullClosureContext())).toThrow(
@@ -2470,60 +2661,60 @@ describe("bootstrap guarded closure", () => {
     },
     {
       name: "ordinary creation evidence is the exact completed path prefix",
-      journal: fullPlanJournal({ phase: "creating", nextPayload: 8, nextCreatedPath: 4 }),
-      counts: { payload: 8, ordinary: 4, launchability: 0 },
+      journal: fullPlanJournal({ phase: "creating", nextPayload: 10, nextCreatedPath: 4 }),
+      counts: { payload: 10, ordinary: 4, launchability: 0 },
     },
     {
       name: "Foundation execution retains every prior payload and ordinary identity",
       journal: fullPlanJournal({
         phase: "foundation_applying",
-        nextPayload: 8,
-        nextCreatedPath: 10,
+        nextPayload: 10,
+        nextCreatedPath: 11,
         nextFoundationParticipant: 1,
       }),
-      counts: { payload: 8, ordinary: 10, launchability: 0 },
+      counts: { payload: 10, ordinary: 11, launchability: 0 },
     },
     {
       name: "launchability evidence appends its own scoped ordinal prefix",
       journal: fullPlanJournal({
         phase: "launchability_publishing",
-        nextPayload: 8,
-        nextCreatedPath: 10,
+        nextPayload: 10,
+        nextCreatedPath: 11,
         nextFoundationParticipant: 1,
         nextLaunchabilityPath: 4,
       }),
-      counts: { payload: 8, ordinary: 10, launchability: 4 },
+      counts: { payload: 10, ordinary: 11, launchability: 4 },
     },
     {
       name: "manifest point-of-no-return state retains the complete reversible evidence set",
       journal: fullPlanJournal({
         phase: "manifest_publishing",
-        nextPayload: 8,
-        nextCreatedPath: 10,
+        nextPayload: 10,
+        nextCreatedPath: 11,
         nextFoundationParticipant: 1,
-        nextLaunchabilityPath: 7,
+        nextLaunchabilityPath: 8,
         manifestCursor: 2,
       }),
-      counts: { payload: 8, ordinary: 10, launchability: 7 },
+      counts: { payload: 10, ordinary: 11, launchability: 8 },
     },
     {
       name: "compensation retains only evidence at or below its reverse cursor",
       journal: fullPlanJournal({
         phase: "compensating",
         direction: "compensating",
-        nextPayload: 8,
-        nextCreatedPath: 10,
-        compensationNext: 11,
+        nextPayload: 10,
+        nextCreatedPath: 11,
+        compensationNext: 13,
       }),
-      counts: { payload: 8, ordinary: 4, launchability: 0 },
+      counts: { payload: 10, ordinary: 4, launchability: 0 },
     },
     {
       name: "rolled-back closure has removed every payload and creation authority",
       journal: fullPlanJournal({
         phase: "rolled_back",
         direction: "compensating",
-        nextPayload: 8,
-        nextCreatedPath: 10,
+        nextPayload: 10,
+        nextCreatedPath: 11,
         compensationNext: -1,
         terminalOutcome: "rolled_back",
       }),
@@ -2544,8 +2735,8 @@ describe("bootstrap guarded closure", () => {
       journal: fullPlanJournal({
         phase: "compacting",
         direction: "compensating",
-        nextPayload: 8,
-        nextCreatedPath: 10,
+        nextPayload: 10,
+        nextCreatedPath: 11,
         compensationNext: -1,
         terminalOutcome: "rolled_back",
         compactionNext: 0,
@@ -2621,7 +2812,7 @@ describe("bootstrap guarded closure", () => {
         const envelope = required(inventory.envelopes[0]) as never as {
           payloadEvidence: unknown[];
         };
-        envelope.payloadEvidence.unshift(required(fullPayloadEvidence(8)[0]));
+        envelope.payloadEvidence.unshift(required(fullPayloadEvidence(10)[0]));
       },
     },
     {
@@ -2701,9 +2892,9 @@ describe("bootstrap guarded closure", () => {
       },
     },
   ])("refuses when $name", (testCase) => {
-    const journalValue = fullPlanJournal({ phase: "creating", nextPayload: 8, nextCreatedPath: 4 });
+    const journalValue = fullPlanJournal({ phase: "creating", nextPayload: 10, nextCreatedPath: 4 });
     const inventory = recoveryInventoryFor(journalValue, {
-      payload: 8,
+      payload: 10,
       ordinary: 4,
       launchability: 0,
     });

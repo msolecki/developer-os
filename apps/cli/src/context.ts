@@ -56,6 +56,7 @@ import {
 import type { ProcessRunner } from "@developer-os/security";
 
 import type { CliIo } from "./io.js";
+import type { CliBootstrapContext } from "./bootstrap/context.js";
 
 export const PRODUCT_VERSION = "0.0.0";
 
@@ -174,6 +175,12 @@ export interface CliContext {
    * drive a fake, which is the discipline every other dependency here follows.
    */
   readonly runner: ProcessRunner;
+  /**
+   * Fresh-install authority is intentionally narrower than the command-wide
+   * context. Older direct context literals stay source-compatible, while the
+   * fresh arm refuses when the composition root did not supply this capability.
+   */
+  readonly bootstrap?: CliBootstrapContext | undefined;
 }
 
 export const NODE_FILE_SYSTEM: CliFileSystem = {
@@ -191,6 +198,64 @@ export const NODE_FILE_SYSTEM: CliFileSystem = {
   unlink,
   utimes,
 };
+
+/**
+ * Publishes a Task 6 initial Foundation journal without an overwrite window.
+ * The hard link first gives the destination the already-verified inode; only
+ * after that identity is rechecked is the staging name removed.
+ */
+export async function publishBootstrapInitialJournalNoReplace(request: {
+  readonly sourcePath: string;
+  readonly destinationPath: string;
+  readonly expectedDev: string;
+  readonly expectedIno: string;
+}): Promise<void> {
+  const source = await lstat(request.sourcePath);
+  if (
+    !source.isFile() ||
+    source.isSymbolicLink() ||
+    String(source.dev) !== request.expectedDev ||
+    String(source.ino) !== request.expectedIno
+  ) {
+    throw new SecurityRefusalError(
+      "the staged bootstrap journal changed before publication",
+    );
+  }
+
+  await link(request.sourcePath, request.destinationPath);
+  try {
+    const destination = await lstat(request.destinationPath);
+    if (
+      !destination.isFile() ||
+      destination.isSymbolicLink() ||
+      String(destination.dev) !== request.expectedDev ||
+      String(destination.ino) !== request.expectedIno
+    ) {
+      throw new SecurityRefusalError(
+        "the bootstrap journal destination did not retain the admitted inode",
+      );
+    }
+    await unlink(request.sourcePath);
+  } catch (error) {
+    await unlink(request.destinationPath).catch(() => undefined);
+    throw error;
+  }
+
+  for (const directory of new Set([
+    dirname(request.sourcePath),
+    dirname(request.destinationPath),
+  ])) {
+    const handle = await open(
+      directory,
+      fsSync.constants.O_RDONLY | fsSync.constants.O_NOFOLLOW,
+    );
+    try {
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  }
+}
 
 /**
  * Builds the `PathEnvironment` for a run. The overrides are omitted rather than
@@ -724,7 +789,17 @@ export function createProductionContext(
     redact: createRedactor(redactionKey),
   });
   const now = (): Date => new Date();
-
+  const transactionExecutor = new TransactionExecutor({
+    stateDir: paths.stateDir,
+    stagingDir: paths.stagingDir,
+    backupsDir: paths.backupsDir,
+    fs: NODE_FILE_SYSTEM,
+    clock: () => now().toISOString(),
+    generateId: () => `tx_${randomUUID()}`,
+    guards: guards.transaction,
+    lockProvider,
+    publishBootstrapInitialJournalNoReplace,
+  });
   return {
     io: options.io,
     env: options.env,
@@ -743,19 +818,11 @@ export function createProductionContext(
       guards: guards.manifest,
     }),
     fs: NODE_FILE_SYSTEM,
-    executor: new TransactionExecutor({
-      stateDir: paths.stateDir,
-      stagingDir: paths.stagingDir,
-      backupsDir: paths.backupsDir,
-      fs: NODE_FILE_SYSTEM,
-      clock: () => now().toISOString(),
-      generateId: () => `tx_${randomUUID()}`,
-      guards: guards.transaction,
-      lockProvider,
-    }),
+    executor: transactionExecutor,
     guards,
     paths,
     productVersion: PRODUCT_VERSION,
     runner,
+    bootstrap: { state: "unavailable_until_packaged_handoff" },
   };
 }

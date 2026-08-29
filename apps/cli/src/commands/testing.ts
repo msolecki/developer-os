@@ -1,4 +1,5 @@
 import * as nodeFs from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -25,13 +26,27 @@ import { ProtectedPathPolicy } from "@developer-os/security";
 import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 
 import {
+  BootstrapExecutor,
+  type FreshInitDeathPointV1,
+} from "../bootstrap/executor.js";
+import {
   createGuards,
   NODE_FILE_SYSTEM,
   pathEnvironmentFor,
   PRODUCT_VERSION,
+  publishBootstrapInitialJournalNoReplace,
 } from "../context.js";
 import type { CliContext } from "../context.js";
 import type { CliIo } from "../io.js";
+import {
+  admitRootVerifiedPackagedRelease,
+  type PackagedReleaseIdentityV1,
+} from "../update/packaged-release.js";
+import { BRAIN_TEMPLATE } from "./brain-template.js";
+import {
+  OUTPUT_SCHEMAS,
+  outputSchemaFileName,
+} from "./output-schemas.js";
 
 const REDACTION_KEY = new Uint8Array(32).fill(11);
 const PRODUCT_STATE_DIRECTORY = ".developer-os";
@@ -160,6 +175,10 @@ export interface CommandFixture {
   readonly paths: RuntimePaths;
   readonly io: RecordingIo;
   readonly context: CliContext;
+  readonly bootstrapTrace: string[];
+  readonly releaseRequests: string[];
+  readonly vendorProcesses: string[];
+  readonly disableBootstrapInterrupt: () => void;
 }
 
 export interface FixtureOptions {
@@ -190,9 +209,83 @@ export interface FixtureOptions {
    * exercise. Absent means every kind, which is what `repair`'s suite wants.
    */
   readonly interruptKind?: string;
+  /** Interrupts the fresh V2 coordinator at one of its durable boundaries. */
+  readonly bootstrapInterruptAfter?: FreshInitDeathPointV1;
+  /** Fails the fresh V2 coordinator so tests can exercise reverse compensation. */
+  readonly bootstrapFailureAfter?: FreshInitDeathPointV1;
+  /** Opts this fixture into the synthetic admitted fresh-V2 package handoff. */
+  readonly bootstrapAvailable?: boolean;
 }
 
 const fixtureRoots: string[] = [];
+
+function digest(bytes: Uint8Array | string): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+async function createSyntheticPackagedRelease(root: string) {
+  const packageRoot = join(root, "packaged-release");
+  const retained = {
+    delegation: "metadata/release-key-delegation.json",
+    releaseIndex: "metadata/release-index.json",
+    bundleManifest: "metadata/bundle-manifest.json",
+  } as const;
+  const delegationBytes = new TextEncoder().encode("synthetic delegation\n");
+  const indexBytes = new TextEncoder().encode("synthetic release index\n");
+  const manifestBytes = new TextEncoder().encode("synthetic bundle manifest\n");
+  const files: Array<{
+    readonly relativePath: string;
+    readonly bytes: Uint8Array;
+    readonly mode?: 0o600 | 0o700;
+  }> = [
+    { relativePath: retained.delegation, bytes: delegationBytes },
+    { relativePath: retained.releaseIndex, bytes: indexBytes },
+    { relativePath: retained.bundleManifest, bytes: manifestBytes },
+    {
+      relativePath: "bundle/bin/developer-os",
+      bytes: new TextEncoder().encode("#!/bin/sh\nexit 0\n"),
+      mode: 0o700,
+    },
+    ...OUTPUT_SCHEMAS.map((schema) => ({
+      relativePath: `templates/schemas/${outputSchemaFileName(schema.verb)}`,
+      bytes: new TextEncoder().encode(schema.content),
+    })),
+    ...BRAIN_TEMPLATE.map((file) => ({
+      relativePath: `templates/brain/${file.path}`,
+      bytes: new TextEncoder().encode(file.content),
+    })),
+  ];
+
+  await nodeFs.mkdir(packageRoot, { recursive: true, mode: 0o700 });
+  for (const file of files) {
+    const path = join(packageRoot, file.relativePath);
+    await nodeFs.mkdir(join(path, ".."), { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(path, file.bytes, { mode: file.mode ?? 0o600 });
+  }
+
+  const identity: PackagedReleaseIdentityV1 = {
+    version: "1.0.0",
+    releaseSequence: "1",
+    releaseIdentityHash: digest("synthetic release identity"),
+    delegationSequence: "1",
+    delegationHash: digest(delegationBytes),
+    delegatedReleaseKeyId: digest("synthetic delegated release key"),
+    releaseIndexSequence: "1",
+    releaseIndexHash: digest(indexBytes),
+    bundleManifestHash: digest(manifestBytes),
+    platform: "darwin",
+    architecture: "arm64",
+    launcherProtocol: 1,
+    updateProtocol: 1,
+  };
+
+  return admitRootVerifiedPackagedRelease({
+    packageRoot: await nodeFs.realpath(packageRoot),
+    retainedMetadata: retained,
+    bundleRoot: "bundle",
+    identity,
+  });
+}
 
 export async function createCommandFixture(
   label: string,
@@ -213,6 +306,13 @@ export async function createCommandFixture(
   const guards = createGuards(policy, REDACTION_KEY);
   const paths = resolveRuntimePaths(pathEnvironmentFor({ userHome, env }));
   const lockProvider = new InProcessLockProvider();
+  const packagedRelease = options.bootstrapAvailable === true
+    ? await createSyntheticPackagedRelease(root)
+    : null;
+  const bootstrapTrace: string[] = [];
+  const releaseRequests: string[] = [];
+  const vendorProcesses: string[] = [];
+  let bootstrapInterruptEnabled = true;
 
   const runner: ProcessRunner = options.runner ?? {
     run(): Promise<ProcessResult> {
@@ -226,6 +326,59 @@ export async function createCommandFixture(
   const now =
     options.now ??
     ((): Date => new Date(Date.UTC(2026, 6, 30, 12, 0, 0) + sequence));
+
+  const transactionExecutor = new TransactionExecutor({
+    stateDir: paths.stateDir,
+    stagingDir: paths.stagingDir,
+    backupsDir: paths.backupsDir,
+    fs: NODE_FILE_SYSTEM,
+    clock: () => now().toISOString(),
+    generateId: () => {
+      sequence += 1;
+      return `tx_fixture_${String(sequence).padStart(3, "0")}`;
+    },
+    guards: guards.transaction,
+    lockProvider,
+    publishBootstrapInitialJournalNoReplace,
+    afterPhase: (
+      phase: TransactionPhase,
+      journal: TransactionJournalV1,
+    ): void => {
+      if (phase !== options.interruptAfter) return;
+      if (
+        options.interruptKind !== undefined &&
+        journal.kind !== options.interruptKind
+      ) {
+        return;
+      }
+      throw new Error(`synthetic interruption after ${phase}`);
+    },
+  });
+  const bootstrapExecutor = packagedRelease === null
+    ? null
+    : new BootstrapExecutor({
+        paths,
+        userHome,
+        packagedRelease,
+        transactionExecutor,
+        now,
+        uuid: () => "00000000-0000-4000-8000-000000000001",
+        nonce: () => new Uint8Array(32).fill(17),
+        trace: (event) => bootstrapTrace.push(event),
+        interrupt: (point) => {
+          if (
+            bootstrapInterruptEnabled &&
+            point === options.bootstrapInterruptAfter
+          ) {
+            throw new Error(`synthetic bootstrap interruption at ${point}`);
+          }
+        },
+        fail: (point) => {
+          if (point === options.bootstrapFailureAfter) {
+            throw new Error(`synthetic bootstrap failure at ${point}`);
+          }
+        },
+      });
 
   const context: CliContext = {
     io,
@@ -262,39 +415,29 @@ export async function createCommandFixture(
       guards: guards.manifest,
     }),
     fs: NODE_FILE_SYSTEM,
-    executor: new TransactionExecutor({
-      stateDir: paths.stateDir,
-      stagingDir: paths.stagingDir,
-      backupsDir: paths.backupsDir,
-      fs: NODE_FILE_SYSTEM,
-      clock: () => now().toISOString(),
-      generateId: () => {
-        sequence += 1;
-        return `tx_fixture_${String(sequence).padStart(3, "0")}`;
-      },
-      guards: guards.transaction,
-      lockProvider,
-      afterPhase: (
-        phase: TransactionPhase,
-        journal: TransactionJournalV1,
-      ): void => {
-        if (phase !== options.interruptAfter) return;
-        if (
-          options.interruptKind !== undefined &&
-          journal.kind !== options.interruptKind
-        ) {
-          return;
-        }
-        throw new Error(`synthetic interruption after ${phase}`);
-      },
-    }),
+    executor: transactionExecutor,
     guards,
     paths,
     productVersion: PRODUCT_VERSION,
     runner,
+    bootstrap: bootstrapExecutor === null || packagedRelease === null
+      ? { state: "unavailable_until_packaged_handoff" }
+      : { state: "available", executor: bootstrapExecutor, packagedRelease },
   };
 
-  return { root, userHome, paths, io, context };
+  return {
+    root,
+    userHome,
+    paths,
+    io,
+    context,
+    bootstrapTrace,
+    releaseRequests,
+    vendorProcesses,
+    disableBootstrapInterrupt: () => {
+      bootstrapInterruptEnabled = false;
+    },
+  };
 }
 
 export async function removeCommandFixtures(): Promise<void> {

@@ -426,6 +426,15 @@ function recordingIo(): CliIo & { readonly err: string[] } {
 }
 
 describe("createProductionContext", () => {
+  it("exposes the narrow bootstrap projection with an unavailable fail-closed packaged release", async () => {
+    const fixture = await createFixture("production-context-bootstrap");
+    const context = createProductionContext({ io: NULL_IO, env: {}, userHome: fixture.homeDir });
+    expect(context.bootstrap).toStrictEqual({
+      state: "unavailable_until_packaged_handoff",
+    });
+    await expect(nodeFs.lstat(context.paths.home)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   /**
    * **The test this task exists for.** Everything else here checks the loader;
    * this checks the thing the loader was for. Revert the composition root's one

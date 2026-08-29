@@ -66,6 +66,44 @@ function failingVerifier(): InitDependencies {
 }
 
 describe("runInit", () => {
+  it("routes an unavailable packaged handoff to the fresh V1 compatibility arm", async () => {
+    const unavailable = await createCommandFixture("init-bootstrap-unavailable");
+    const compatible = await runInit(unavailable.context, {
+      dryRun: true,
+      assumeYes: true,
+    });
+    expect(compatible.ok && compatible.data.schemaVersion).toBe(1);
+  });
+
+  it("routes an available packaged handoff to fresh V2", async () => {
+    const available = await createCommandFixture("init-bootstrap-available", {
+      bootstrapAvailable: true,
+    });
+    const initialized = await runInit(available.context, {
+      dryRun: true,
+      assumeYes: true,
+    });
+    expect(initialized.ok && initialized.data.schemaVersion).toBe(2);
+  });
+
+  it("refuses invalid available package authority without falling back to V1", async () => {
+    const invalid = await createCommandFixture("init-bootstrap-invalid", {
+      bootstrapAvailable: true,
+    });
+    await nodeFs.chmod(
+      join(invalid.root, "packaged-release", "bundle", "bin", "developer-os"),
+      0o600,
+    );
+    const before = await inventory(invalid.root);
+    const refused = await runInit(invalid.context, {
+      dryRun: true,
+      assumeYes: true,
+    });
+    expect(refused.ok).toBe(false);
+    expect(!refused.ok && refused.code).toBe(EXIT_CODES.securityRefusal);
+    expect(await inventory(invalid.root)).toStrictEqual(before);
+  });
+
   it("changes nothing on a dry run and declares the plan it would apply", async () => {
     const fixture = await createCommandFixture("init-dry-run");
     const before = await inventory(fixture.root);

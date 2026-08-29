@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { dirname } from "node:path";
 
+import { serializeConfig, type DeveloperOsConfigV1 } from "../config/index.js";
 import {
   encodeCanonicalJson,
   type CanonicalJsonValue,
@@ -149,6 +150,8 @@ export type BootstrapPayloadSourceV1 =
       readonly role:
         | "manifest_after"
         | "foundation_initial_journal"
+        | "foundation_config"
+        | "foundation_staged_digest"
         | "lifecycle_nonce"
         | "lifecycle_allocator"
         | "active_release"
@@ -263,6 +266,10 @@ export interface FoundationMutationRefV1 {
   readonly contentHash: LowerHexSha256 | null;
   readonly contentSize: number | null;
   readonly stagedPath: CanonicalAbsolutePathV1 | null;
+  /** Required by the admitted V1 grammar; optional only for source compatibility with pre-Task-7 structural fixtures. */
+  readonly content?: BootstrapExpectedPayloadRefV1 | null;
+  /** Required by the admitted V1 grammar; optional only for source compatibility with pre-Task-7 structural fixtures. */
+  readonly digest?: BootstrapExpectedPayloadRefV1 | null;
 }
 
 export type FoundationParticipantSlotV2 =
@@ -1718,7 +1725,10 @@ function validateFoundationJournalValue(
   return { value: cloned, bytes: encoder.encode(`${JSON.stringify(cloned)}\n`) };
 }
 
-function foundationJournalBytesUnbound(value: CanonicalJsonValue): Uint8Array {
+function foundationJournalUnbound(value: CanonicalJsonValue): {
+  readonly value: CanonicalJsonValue;
+  readonly bytes: Uint8Array;
+} {
   const input = record(value);
   exact(input, ["createdAt", "id", "kind", "mutations", "phase", "schemaVersion", "updatedAt"]);
   if (
@@ -1761,22 +1771,37 @@ function foundationJournalBytesUnbound(value: CanonicalJsonValue): Uint8Array {
     createdAt,
     updatedAt: createdAt,
     mutations,
+  } as const;
+  return {
+    value: clone,
+    bytes: encoder.encode(`${JSON.stringify(clone)}\n`),
   };
-  return encoder.encode(`${JSON.stringify(clone)}\n`);
 }
 
 function validatePlanDerivedSource(
   input: Record<string, unknown>,
   ref: BootstrapExpectedPayloadRefV1,
+  operation: "fresh_v2_init" | "v1_to_v2",
   context: BootstrapPlanAdmissionContextV1,
 ): Extract<BootstrapPayloadSourceV1, { readonly kind: "plan_derived" }> {
   exact(input, ["kind", "projectionHash", "role", "value", "valueBytes"]);
-  const roles = ["manifest_after", "foundation_initial_journal", "lifecycle_nonce", "lifecycle_allocator", "active_release", "release_trust"] as const;
+  const roles = ["manifest_after", "foundation_initial_journal", "foundation_config", "foundation_staged_digest", "lifecycle_nonce", "lifecycle_allocator", "active_release", "release_trust"] as const;
   if (typeof input.role !== "string" || !roles.includes(input.role as (typeof roles)[number])) return refuse();
   const role = input.role as (typeof roles)[number];
   let value = input.value as CanonicalJsonValue;
   let payloadBytes: Uint8Array;
-  if (role === "lifecycle_nonce") {
+  if (role === "foundation_config") {
+    if (operation !== "fresh_v2_init") return refuse();
+    try {
+      payloadBytes = encoder.encode(serializeConfig(value as unknown as DeveloperOsConfigV1));
+    } catch {
+      return refuse();
+    }
+  } else if (role === "foundation_staged_digest") {
+    const contentHash = sha256(value);
+    value = contentHash;
+    payloadBytes = encoder.encode(`${contentHash}\n`);
+  } else if (role === "lifecycle_nonce") {
     const nonce = sha256(value);
     value = nonce;
     payloadBytes = encoder.encode(`${nonce}\n`);
@@ -1791,7 +1816,9 @@ function validatePlanDerivedSource(
     };
     payloadBytes = encoder.encode(encodeCanonicalJson(value));
   } else if (role === "foundation_initial_journal") {
-    payloadBytes = foundationJournalBytesUnbound(value);
+    const journal = foundationJournalUnbound(value);
+    value = journal.value;
+    payloadBytes = journal.bytes;
   } else {
     try {
       payloadBytes = encoder.encode(encodeCanonicalJson(value));
@@ -1812,6 +1839,8 @@ function validatePlanDerivedSource(
 function validateRequiredPlanDerivedSources(
   payloads: readonly BootstrapPayloadPlanV1[],
   foundationParticipants: readonly FoundationParticipantRefV2[],
+  operation: "fresh_v2_init" | "v1_to_v2",
+  productHome: CanonicalAbsolutePathV1,
 ): void {
   const sources = payloads
     .map((row) => row.source)
@@ -1827,7 +1856,13 @@ function validateRequiredPlanDerivedSources(
     count("lifecycle_allocator") !== 1 ||
     count("active_release") !== 1 ||
     count("release_trust") !== 1 ||
-    count("foundation_initial_journal") !== foundationParticipants.length
+    count("foundation_initial_journal") !== foundationParticipants.length ||
+    count("foundation_config") !== (operation === "fresh_v2_init" ? 1 : 0) ||
+    count("foundation_staged_digest") !== foundationParticipants.reduce(
+      (total, participant) =>
+        total + participant.mutations.filter((mutation) => mutation.operation !== "remove").length,
+      0,
+    )
   ) return refuse();
   const nonce = sources.find((source) => source.role === "lifecycle_nonce");
   const allocator = sources.find((source) => source.role === "lifecycle_allocator");
@@ -1840,6 +1875,35 @@ function validateRequiredPlanDerivedSources(
       { schemaVersion: 1, installNonce: nonce.value, nextCounter: "0" },
     )
   ) return refuse();
+
+  const payloadByPath = new Map(payloads.map((row) => [row.ref.path, row] as const));
+  let configMutations = 0;
+  for (const participant of foundationParticipants) {
+    for (const mutation of participant.mutations) {
+      if (mutation.operation === "remove") continue;
+      if (mutation.content == null || mutation.digest == null || mutation.contentHash === null) return refuse();
+      const content = payloadByPath.get(mutation.content.path);
+      const digest = payloadByPath.get(mutation.digest.path);
+      if (
+        content === undefined ||
+        digest === undefined ||
+        !jsonEqual(content.ref, mutation.content) ||
+        !jsonEqual(digest.ref, mutation.digest) ||
+        digest.source.kind !== "plan_derived" ||
+        digest.source.role !== "foundation_staged_digest" ||
+        digest.source.value !== mutation.contentHash
+      ) return refuse();
+      if (operation === "fresh_v2_init") {
+        const isConfig = mutation.targetPath === `${productHome}/config.toml`;
+        if (isConfig) configMutations += 1;
+        if (
+          (isConfig && (content.source.kind !== "plan_derived" || content.source.role !== "foundation_config")) ||
+          (!isConfig && content.source.kind !== "guarded_package_file")
+        ) return refuse();
+      } else if (content.source.kind !== "guarded_migration_preimage") return refuse();
+    }
+  }
+  if (operation === "fresh_v2_init" && configMutations !== 1) return refuse();
 }
 
 function validatePayloadSource(
@@ -1872,7 +1936,7 @@ function validatePayloadSource(
       sourceIno: uint64(input.sourceIno),
     };
   } else if (input.kind === "plan_derived") {
-    source = validatePlanDerivedSource(input, ref, context);
+    source = validatePlanDerivedSource(input, ref, plan.operation, context);
   } else if (input.kind === "guarded_migration_preimage") {
     exact(input, ["authority", "bytes", "dev", "ino", "kind", "mode", "nlink", "ownerUid", "path", "sha256"]);
     if (plan.operation !== "v1_to_v2" || plan.v1ManifestHash === undefined || input.nlink !== 1) return refuse();
@@ -1986,22 +2050,34 @@ function validateParentOrder(
 
 function validateMutation(
   value: unknown,
+  operation: "fresh_v2_init" | "v1_to_v2",
+  bootstrapId: FreshV2InitIdV1 | ManifestMigrationIdV1,
   context: BootstrapPlanAdmissionContextV1,
 ): FoundationMutationRefV1 {
   const input = record(value);
-  exact(input, ["contentHash", "contentSize", "expectedBeforeHash", "operation", "stagedPath", "targetPath"]);
+  exact(input, ["content", "contentHash", "contentSize", "digest", "expectedBeforeHash", "operation", "stagedPath", "targetPath"]);
   if (input.operation !== "create" && input.operation !== "replace" && input.operation !== "remove") return refuse();
   const targetPath = admitCanonicalAbsolutePath(input.targetPath, context.evidence);
   if (input.operation === "create") {
-    if (input.expectedBeforeHash !== null || input.contentHash === null || input.contentSize === null || input.stagedPath === null) return refuse();
-    return { targetPath, operation: "create", expectedBeforeHash: null, contentHash: sha256(input.contentHash), contentSize: integer(input.contentSize, 0, 16_777_216), stagedPath: admitCanonicalAbsolutePath(input.stagedPath, context.evidence) };
+    if (input.expectedBeforeHash !== null || input.contentHash === null || input.contentSize === null || input.stagedPath === null || input.content === null || input.digest === null) return refuse();
+    const contentHash = sha256(input.contentHash);
+    const contentSize = integer(input.contentSize, 0, 16_777_216);
+    const content = validatePayloadRef(input.content, operation, bootstrapId, context.productHome);
+    const digest = validatePayloadRef(input.digest, operation, bootstrapId, context.productHome);
+    if (content.hash !== contentHash || content.bytes !== contentSize || content.mode !== 0o600 || digest.mode !== 0o600 || content.path === digest.path) return refuse();
+    return { targetPath, operation: "create", expectedBeforeHash: null, contentHash, contentSize, stagedPath: admitCanonicalAbsolutePath(input.stagedPath, context.evidence), content, digest };
   }
   if (input.operation === "remove") {
-    if (input.expectedBeforeHash === null || input.contentHash !== null || input.contentSize !== null || input.stagedPath !== null) return refuse();
-    return { targetPath, operation: "remove", expectedBeforeHash: sha256(input.expectedBeforeHash), contentHash: null, contentSize: null, stagedPath: null };
+    if (input.expectedBeforeHash === null || input.contentHash !== null || input.contentSize !== null || input.stagedPath !== null || input.content !== null || input.digest !== null) return refuse();
+    return { targetPath, operation: "remove", expectedBeforeHash: sha256(input.expectedBeforeHash), contentHash: null, contentSize: null, stagedPath: null, content: null, digest: null };
   }
-  if (input.expectedBeforeHash === null || input.contentHash === null || input.contentSize === null || input.stagedPath === null) return refuse();
-  return { targetPath, operation: "replace", expectedBeforeHash: sha256(input.expectedBeforeHash), contentHash: sha256(input.contentHash), contentSize: integer(input.contentSize, 0, 16_777_216), stagedPath: admitCanonicalAbsolutePath(input.stagedPath, context.evidence) };
+  if (input.expectedBeforeHash === null || input.contentHash === null || input.contentSize === null || input.stagedPath === null || input.content === null || input.digest === null) return refuse();
+  const contentHash = sha256(input.contentHash);
+  const contentSize = integer(input.contentSize, 0, 16_777_216);
+  const content = validatePayloadRef(input.content, operation, bootstrapId, context.productHome);
+  const digest = validatePayloadRef(input.digest, operation, bootstrapId, context.productHome);
+  if (content.hash !== contentHash || content.bytes !== contentSize || content.mode !== 0o600 || digest.mode !== 0o600 || content.path === digest.path) return refuse();
+  return { targetPath, operation: "replace", expectedBeforeHash: sha256(input.expectedBeforeHash), contentHash, contentSize, stagedPath: admitCanonicalAbsolutePath(input.stagedPath, context.evidence), content, digest };
 }
 
 function validateFoundationParticipant(
@@ -2033,7 +2109,7 @@ function validateFoundationParticipant(
     id: participantId,
     slot: expectedSlot,
     role,
-    mutations: input.mutations.map((mutation) => validateMutation(mutation, context)),
+    mutations: input.mutations.map((mutation) => validateMutation(mutation, operation, id, context)),
     maximumJournalBytes: integer(input.maximumJournalBytes, 1, MAX_JOURNAL_BYTES),
     planHash: sha256(input.planHash),
     initialJournal: {
@@ -2085,10 +2161,10 @@ function validateFoundationPairs(
       const inverse = compensation.mutations[mutationIndex];
       if (original === undefined || inverse === undefined || original.targetPath !== inverse.targetPath) return refuse();
       if (original.operation === "create") {
-        if (inverse.operation !== "remove" || inverse.expectedBeforeHash !== original.contentHash || inverse.contentHash !== null || inverse.contentSize !== null || inverse.stagedPath !== null) return refuse();
+        if (inverse.operation !== "remove" || inverse.expectedBeforeHash !== original.contentHash || inverse.contentHash !== null || inverse.contentSize !== null || inverse.stagedPath !== null || inverse.content != null || inverse.digest != null) return refuse();
       } else if (original.operation === "remove") {
-        if (inverse.operation !== "create" || inverse.expectedBeforeHash !== null || inverse.contentHash !== original.expectedBeforeHash || inverse.contentSize === null || inverse.stagedPath === null) return refuse();
-      } else if (inverse.operation !== "replace" || inverse.expectedBeforeHash !== original.contentHash || inverse.contentHash !== original.expectedBeforeHash || inverse.contentSize === null || inverse.stagedPath === null) return refuse();
+        if (inverse.operation !== "create" || inverse.expectedBeforeHash !== null || inverse.contentHash !== original.expectedBeforeHash || inverse.contentSize === null || inverse.stagedPath === null || inverse.content == null || inverse.digest == null) return refuse();
+      } else if (inverse.operation !== "replace" || inverse.expectedBeforeHash !== original.contentHash || inverse.contentHash !== original.expectedBeforeHash || inverse.contentSize === null || inverse.stagedPath === null || inverse.content == null || inverse.digest == null) return refuse();
     }
   }
   const paths = forwardRefs.flatMap((ref) => ref.mutations.map((mutation) => mutation.targetPath));
@@ -2146,7 +2222,19 @@ function validateRefUseBijection(
     if (payloadRef === undefined || !jsonEqual(ref, payloadRef)) return refuse();
     uses.set(ref.path, (uses.get(ref.path) ?? 0) + 1);
   };
-  for (const planned of [...created, ...launchability]) if (planned.kind === "file") add(planned.payload);
+  const foundationStagedPaths = new Set<string>();
+  for (const participant of foundation) {
+    for (const mutation of participant.mutations) {
+      if (mutation.operation === "remove" || mutation.stagedPath === null || mutation.content == null || mutation.digest == null) continue;
+      foundationStagedPaths.add(mutation.stagedPath);
+      foundationStagedPaths.add(`${mutation.stagedPath}.sha256`);
+      add(mutation.content);
+      add(mutation.digest);
+    }
+  }
+  for (const planned of [...created, ...launchability]) {
+    if (planned.kind === "file" && !foundationStagedPaths.has(planned.path)) add(planned.payload);
+  }
   for (const participant of foundation) add(participant.initialJournal.staged);
   if (manifest.after.state === "present" && manifest.after.bytes?.kind === "bootstrap_expected") add(manifest.after.bytes);
   if (uses.size !== payloads.length) return refuse();
@@ -2156,15 +2244,29 @@ function validateRefUseBijection(
 function validateFoundationStaging(
   refs: readonly FoundationParticipantRefV2[],
   created: readonly PlannedCreatedPathV1[],
+  payloads: readonly BootstrapPayloadPlanV1[],
   productHome: CanonicalAbsolutePathV1,
 ): void {
   for (const participant of refs) {
     for (const [index, mutation] of participant.mutations.entries()) {
       if (mutation.operation === "remove") continue;
       const expected = `${productHome}/staging/transactions/${participant.id}/${String(index)}.bin`;
-      if (mutation.stagedPath !== expected) return refuse();
-      const planned = created.find((row) => row.path === mutation.stagedPath);
-      if (planned?.kind !== "file" || planned.payload.hash !== mutation.contentHash || planned.payload.bytes !== mutation.contentSize) return refuse();
+      const stagedPath = mutation.stagedPath;
+      if (stagedPath !== expected || mutation.content == null || mutation.digest == null || mutation.contentHash === null) return refuse();
+      const planned = created.find((row) => row.path === stagedPath);
+      const digestPlanned = created.find((row) => row.path === `${stagedPath}.sha256`);
+      const digestPayload = payloads.find((row) => row.ref.path === mutation.digest?.path);
+      if (
+        planned?.kind !== "file" ||
+        digestPlanned?.kind !== "file" ||
+        !jsonEqual(planned.payload, mutation.content) ||
+        !jsonEqual(digestPlanned.payload, mutation.digest) ||
+        planned.payload.hash !== mutation.contentHash ||
+        planned.payload.bytes !== mutation.contentSize ||
+        digestPayload?.source.kind !== "plan_derived" ||
+        digestPayload.source.role !== "foundation_staged_digest" ||
+        digestPayload.source.value !== mutation.contentHash
+      ) return refuse();
     }
   }
 }
@@ -2228,9 +2330,9 @@ export function validateBootstrapPlan(
     if (!Array.isArray(input.foundationParticipants)) return refuse();
     const foundationParticipants = input.foundationParticipants.map((candidate) => validateFoundationParticipant(candidate, operation, id, context));
     validateFoundationPairs(foundationParticipants, operation, id);
-    validateRequiredPlanDerivedSources(payloads, foundationParticipants);
+    validateRequiredPlanDerivedSources(payloads, foundationParticipants, operation, context.productHome);
     validateInitialJournals(foundationParticipants, payloads);
-    validateFoundationStaging(foundationParticipants, createdPaths, context.productHome);
+    validateFoundationStaging(foundationParticipants, createdPaths, payloads, context.productHome);
     const manifest = validateManifestBinding(input.manifest as ManifestStatePlanV1, operation, id, v2ManifestHash, foundationParticipants, context);
     validateRefUseBijection(payloads, createdPaths, launchabilityPaths, foundationParticipants, manifest);
     const aggregate = stagingAggregate(payloads.length, createdPaths.length, launchabilityPaths.length, foundationParticipants.length);

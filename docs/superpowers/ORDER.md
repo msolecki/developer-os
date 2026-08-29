@@ -14,7 +14,7 @@ Spec 1 is approved and its plan exists at
 `plans/2026-08-28-developer-os-opt-in-surfaces.md`, but none of its 24 implementation tasks has
 started. Spec 2 was approved by the founder on 2026-08-29 and its 26-task implementation plan exists
 at `plans/2026-08-29-developer-os-release-update.md`. Spec 2 Task 4 completed
-2026-08-29; Task 5 completed 2026-08-29; Task 6 completed 2026-08-29; the next action is Task 7 at `docs/superpowers/plans/2026-08-29-developer-os-release-update.md:499`.
+2026-08-29; Task 5 completed 2026-08-29; Task 6 completed 2026-08-29; Task 7 completed 2026-08-29; the next action is Task 8 at `docs/superpowers/plans/2026-08-29-developer-os-release-update.md:576`.
 Execute Tasks 7–9 first to
 deliver the `InstallationManifestV2` migration and V2 new-init handoff, then execute the approved
 Spec 1 plan completely, then resume Spec 2 at Task 10.

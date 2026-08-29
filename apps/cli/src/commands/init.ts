@@ -37,6 +37,10 @@ import {
   BRAIN_TEMPLATE_DIRECTORIES,
 } from "./brain-template.js";
 import type { CliContext } from "../context.js";
+import type {
+  FreshInitOutcomeV1,
+  FreshInitPreviewV1,
+} from "../bootstrap/executor.js";
 import {
   OUTPUT_SCHEMA_DIRECTORY,
   OUTPUT_SCHEMAS,
@@ -76,13 +80,17 @@ const EMPTY_MANIFEST: InstallationManifestV1 = {
 };
 
 export interface InitResultV1 {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 1 | 2;
   readonly productHome: string;
   readonly brainPath: string;
   readonly created: readonly string[];
   readonly unchanged: readonly string[];
   readonly transactionId: string | null;
 }
+
+export type InitResultV2 = InitResultV1 & { readonly schemaVersion: 2 };
+
+export type InitResult = InitResultV1;
 
 export interface InitOptions {
   readonly dryRun: boolean;
@@ -174,6 +182,151 @@ class InitRefusal extends Error {
 
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : "an unexpected failure";
+}
+
+async function rawManifest(
+  context: CliContext,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const parsed: unknown = JSON.parse(
+      await context.fs.readFile(context.paths.manifestFile, "utf8"),
+    );
+    return typeof parsed === "object" && parsed !== null
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error as { code?: unknown }).code === "ENOENT"
+    ) {
+      return null;
+    }
+    return null;
+  }
+}
+
+async function hasFreshBootstrapPlan(context: CliContext): Promise<boolean> {
+  try {
+    return (await context.fs.readdir(context.paths.stateDir)).some((name) =>
+      /^fresh-v2-init\.fi_[0-9a-f-]+\.plan\.json$/u.test(name),
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function isMissingPath(context: CliContext, path: string): Promise<boolean> {
+  try {
+    await context.fs.lstat(path);
+    return false;
+  } catch (error) {
+    return (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      ((error as { code?: unknown }).code === "ENOENT" ||
+        (error as { code?: unknown }).code === "ENOTDIR")
+    );
+  }
+}
+
+function describeFreshPreview(preview: FreshInitPreviewV1): string {
+  return [
+    "Developer OS will make the following changes:",
+    ...preview.created.map((path) => `  create ${renderPath(path)}`),
+    "Proceed?",
+  ].join("\n");
+}
+
+async function assertV2Undrifted(
+  context: CliContext,
+  manifest: Record<string, unknown>,
+): Promise<readonly string[]> {
+  const artifacts = manifest.artifacts;
+  if (!Array.isArray(artifacts)) {
+    throw new InitRefusal(
+      EXIT_CODES.securityRefusal,
+      "the V2 installation manifest has an invalid artifact inventory",
+      [context.paths.manifestFile],
+    );
+  }
+  const unchanged: string[] = [];
+  const drifted: string[] = [];
+  for (const candidate of artifacts) {
+    if (typeof candidate !== "object" || candidate === null) continue;
+    const artifact = candidate as {
+      readonly path?: unknown;
+      readonly kind?: unknown;
+      readonly verification?: {
+        readonly mode?: unknown;
+        readonly installedHash?: unknown;
+      };
+    };
+    if (typeof artifact.path !== "string") continue;
+    unchanged.push(artifact.path);
+    if (artifact.verification?.mode === "ephemeral") continue;
+    try {
+      const stats = await context.fs.lstat(artifact.path);
+      if (artifact.kind === "directory") {
+        if (!stats.isDirectory() || stats.isSymbolicLink()) drifted.push(artifact.path);
+        continue;
+      }
+      if (!stats.isFile() || stats.isSymbolicLink()) {
+        drifted.push(artifact.path);
+        continue;
+      }
+      const expected = artifact.verification?.installedHash;
+      if (
+        typeof expected !== "string" ||
+        hashBytes(await context.fs.readFile(artifact.path)) !== expected
+      ) {
+        drifted.push(artifact.path);
+      }
+    } catch {
+      drifted.push(artifact.path);
+    }
+  }
+  if (drifted.length > 0) {
+    throw new InitRefusal(
+      EXIT_CODES.decisionRequired,
+      "managed artifacts differ from their recorded state; resolve the drift before re-initializing",
+      drifted,
+    );
+  }
+  return unchanged;
+}
+
+async function settleExistingV2(
+  context: CliContext,
+  manifest: Record<string, unknown>,
+  options: InitOptions,
+): Promise<InitResultV2> {
+  const unchanged = await assertV2Undrifted(context, manifest);
+  const config = await readConfigFile(context, context.paths.configFile);
+  if (!options.dryRun) loadOrCreateRedactionKey(context.paths.stateDir);
+  return {
+    schemaVersion: 2,
+    productHome: context.paths.home,
+    brainPath: config?.brainPath ?? context.paths.brain,
+    created: [],
+    unchanged,
+    transactionId: null,
+  };
+}
+
+function outcomeResult(
+  outcome: FreshInitOutcomeV1,
+): InitResultV2 {
+  return {
+    schemaVersion: 2,
+    productHome: outcome.productHome,
+    brainPath: outcome.brainPath,
+    created: outcome.created,
+    unchanged: outcome.unchanged,
+    transactionId: outcome.transactionId,
+  };
 }
 
 async function assertUsableDirectory(
@@ -636,7 +789,7 @@ export async function runInit(
   context: CliContext,
   options: InitOptions,
   dependencies: InitDependencies = DEFAULT_DEPENDENCIES,
-): Promise<CliResult<InitResultV1>> {
+): Promise<CliResult<InitResult>> {
   /**
    * `context.guards` closes over whatever key existed when the context was
    * built — an ephemeral one on the machine `init` is initializing.
@@ -663,6 +816,64 @@ export async function runInit(
   try {
     await context.platform.inspect();
     await assertNoIncompleteTransaction(context);
+    const manifest = await rawManifest(context);
+    const resumableBootstrap = await hasFreshBootstrapPlan(context);
+    const configMissing = await isMissingPath(context, context.paths.configFile);
+
+    const fresh = manifest === null && configMissing;
+    const bootstrap = context.bootstrap;
+    const bootstrapAvailable = bootstrap?.state === "available";
+    if (resumableBootstrap && !bootstrapAvailable) {
+      throw new InitRefusal(
+        EXIT_CODES.capabilityUnavailable,
+        "fresh V2 recovery requires the admitted packaged bootstrap capability",
+        [context.paths.home],
+      );
+    }
+    if (resumableBootstrap || (fresh && bootstrapAvailable)) {
+      if (bootstrap?.state !== "available") {
+        throw new InitRefusal(
+          EXIT_CODES.capabilityUnavailable,
+          "fresh V2 initialization requires the admitted packaged bootstrap capability",
+          [context.paths.home],
+        );
+      }
+      const retainedConfig = await readConfigFile(
+        context,
+        context.paths.configFile,
+      );
+      const config = retainedConfig ?? defaultConfig(context.paths.brain);
+      await assertDisjointPaths([context.paths.home, config.brainPath]);
+      await assertRootsAnchored(
+        ownershipAnchorsFor(context),
+        [context.paths.home, config.brainPath],
+      );
+      const request = { config, brainPath: config.brainPath };
+      const preview = await bootstrap.executor.previewFreshInit(request);
+      const settled: InitResultV2 = {
+        ...preview,
+        transactionId: null,
+      };
+      if (options.dryRun) return success(settled);
+      if (
+        !options.assumeYes &&
+        !(await context.io.confirm(describeFreshPreview(preview)))
+      ) {
+        return failure(EXIT_CODES.decisionRequired, {
+          kind: "declined",
+          message: "initialization was declined",
+          paths: [],
+        });
+      }
+      const outcome = await bootstrap.executor.initializeFresh(request);
+      loadOrCreateRedactionKey(context.paths.stateDir);
+      return success(outcomeResult(outcome));
+    }
+
+    if (manifest?.schemaVersion === 2) {
+      return success(await settleExistingV2(context, manifest, options));
+    }
+
     await assertNoDrift(context);
 
     const plan = await buildPlan(context);
