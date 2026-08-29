@@ -96,6 +96,12 @@ interface Fault {
   readonly occurrence: number;
 }
 
+interface AtomicUnlinkSwap {
+  readonly path: string;
+  readonly bytes: Uint8Array;
+  readonly ino: number;
+}
+
 class SimulatedDeath extends Error {}
 
 class MemoryFileSystem {
@@ -104,6 +110,7 @@ class MemoryFileSystem {
   private readonly occurrences = new Map<string, number>();
   private readonly awaitingReopen = new Set<string>();
   private fault: Fault | null = null;
+  private atomicUnlinkSwap: AtomicUnlinkSwap | null = null;
   private nextIno = 1_000;
 
   constructor() {
@@ -160,8 +167,13 @@ class MemoryFileSystem {
     this.fault = { event, occurrence };
   }
 
+  armAtomicUnlinkSwap(path: string, bytes: Uint8Array, ino: number): void {
+    this.atomicUnlinkSwap = { path, bytes: Uint8Array.from(bytes), ino };
+  }
+
   clearFaultAndEvents(): void {
     this.fault = null;
+    this.atomicUnlinkSwap = null;
     this.events.length = 0;
     this.occurrences.clear();
     this.awaitingReopen.clear();
@@ -228,6 +240,11 @@ class MemoryFileSystem {
 
   guardedUnlinkExact(path: CanonicalAbsolutePathV1, expected: ManifestFileIdentityV1): Promise<void> {
     this.record("before:unlink:tombstone");
+    const swap = this.atomicUnlinkSwap;
+    if (swap !== null && swap.path === path) {
+      this.atomicUnlinkSwap = null;
+      this.addFile(swap.path, swap.bytes, swap.ino);
+    }
     const entry = this.entries.get(path);
     if (entry?.kind !== "file" || !matchesIdentity(entry, expected)) throw new Error("atomic unlink authority refused");
     this.entries.delete(path);
@@ -783,6 +800,98 @@ const executionRows = [
   { name: "migration bootstrap present-before/present-after", envelope: "v1_migration", before: "present", after: "present" },
 ] as const;
 
+type ExecutionRow = (typeof executionRows)[number];
+type ObservationState = "missing" | "before" | "after" | "third";
+type InventoryDirection = "observe" | "apply" | "compensate" | "compact";
+
+interface ObservationRow {
+  readonly name: string;
+  readonly manifest: ObservationState;
+  readonly tombstone: ObservationState;
+  readonly payload: ObservationState;
+}
+
+const allowedObservationKeys: Readonly<
+  Record<`${Presence}/${Presence}`, Readonly<Record<InventoryDirection, readonly string[]>>>
+> = {
+  "absent/absent": {
+    observe: ["missing/missing/missing"],
+    apply: ["missing/missing/missing"],
+    compensate: ["missing/missing/missing"],
+    compact: ["missing/missing/missing"],
+  },
+  "absent/present": {
+    observe: ["missing/missing/after", "after/missing/missing"],
+    apply: ["missing/missing/after", "after/missing/missing"],
+    compensate: ["missing/missing/after", "after/missing/missing"],
+    compact: ["after/missing/missing"],
+  },
+  "present/absent": {
+    observe: ["before/missing/missing", "missing/before/missing"],
+    apply: ["before/missing/missing", "missing/before/missing"],
+    compensate: ["before/missing/missing", "missing/before/missing"],
+    compact: ["missing/before/missing", "missing/missing/missing"],
+  },
+  "present/present": {
+    observe: ["before/missing/after", "missing/before/after", "after/before/missing"],
+    apply: ["before/missing/after", "missing/before/after", "after/before/missing"],
+    compensate: ["before/missing/after", "missing/before/after", "after/before/missing"],
+    compact: ["after/before/missing", "after/missing/missing"],
+  },
+};
+
+const inventoryDirections: readonly InventoryDirection[] = [
+  "observe",
+  "apply",
+  "compensate",
+  "compact",
+];
+
+function refusedObservationRows(
+  row: ExecutionRow,
+  direction: InventoryDirection,
+): readonly ObservationRow[] {
+  const states: ObservationState[] = ["missing"];
+  if (row.before === "present") states.push("before");
+  if (row.after === "present") states.push("after");
+  states.push("third");
+  const allowed = new Set(allowedObservationKeys[`${row.before}/${row.after}`][direction]);
+  const rows: ObservationRow[] = [];
+
+  for (const manifest of states) {
+    for (const tombstone of states) {
+      for (const payload of states) {
+        const name = `${manifest}/${tombstone}/${payload}`;
+        if (!allowed.has(name)) rows.push({ name, manifest, tombstone, payload });
+      }
+    }
+  }
+  return rows;
+}
+
+function arrangeObservation(fixture: Fixture, row: ObservationRow): void {
+  const observations = [
+    { path: MANIFEST_PATH, state: row.manifest, thirdIno: 901 },
+    { path: fixture.tombstonePath, state: row.tombstone, thirdIno: 902 },
+    { path: fixture.payloadPath, state: row.payload, thirdIno: 903 },
+  ] as const;
+
+  for (const observation of observations) {
+    fixture.fs.remove(observation.path);
+    if (observation.state === "before") {
+      fixture.fs.addFile(observation.path, BEFORE_BYTES, 101);
+    } else if (observation.state === "after") {
+      fixture.fs.addFile(observation.path, AFTER_BYTES, 202);
+    } else if (observation.state === "third") {
+      fixture.fs.addFile(
+        observation.path,
+        encoder.encode(`third:${observation.path}`),
+        observation.thirdIno,
+      );
+    }
+  }
+}
+
 describe("complete apply/compensate/compact execution table", () => {
   it.each(executionRows)("applies $name", async ({ envelope, before, after }) => {
     const fixture = createFixture({ envelope, before, after });
@@ -838,12 +947,24 @@ describe("closed manifest/tombstone/payload inventory table", () => {
     await refusesAndPreserves(fixture, () => fixture.participant.apply(fixture.admit()));
   });
 
-  it("refuses an atomic unlink source swap and preserves the swapped tombstone inode", async () => {
+  it("refuses an atomic unlink inode swap inside the guarded callback and preserves the swapped evidence", async () => {
     const fixture = createFixture();
     const plan = fixture.admit();
     await fixture.participant.apply(plan);
-    fixture.fs.addFile(fixture.tombstonePath, encoder.encode("third-tombstone"), 909);
-    await refusesAndPreserves(fixture, () => fixture.participant.compact(plan));
+    fixture.fs.clearFaultAndEvents();
+    const unaffected = fixture.fs.snapshot([MANIFEST_PATH, fixture.payloadPath]);
+    const swappedBytes = BEFORE_BYTES;
+    fixture.fs.armAtomicUnlinkSwap(fixture.tombstonePath, swappedBytes, 909);
+
+    await expect(fixture.participant.compact(plan)).rejects.toMatchObject({
+      code: EXIT_CODES.recoveryRequired,
+    });
+
+    expect(fixture.fs.snapshot([MANIFEST_PATH, fixture.payloadPath])).toEqual(unaffected);
+    expect(fixture.fs.snapshot([fixture.tombstonePath])[fixture.tombstonePath]).toMatchObject({
+      ino: 909,
+      bytes: Buffer.from(swappedBytes).toString("hex"),
+    });
   });
 
   it("refuses a wrong-device tombstone and preserves all evidence", async () => {
@@ -865,133 +986,341 @@ describe("closed manifest/tombstone/payload inventory table", () => {
   });
 });
 
-interface DeathRow {
+describe.each(executionRows)("full closed observation cartesian — $name", (row) => {
+  const refusalRows = inventoryDirections.flatMap((direction) =>
+    refusedObservationRows(row, direction).map((observation) => ({
+      ...observation,
+      direction,
+    })),
+  );
+
+  it.each(refusalRows)(
+    "$direction refuses and preserves unlisted $name",
+    async ({ direction, ...observation }) => {
+      const fixture = createFixture(row);
+      const plan = fixture.admit();
+      arrangeObservation(fixture, observation);
+      const action = (): Promise<unknown> => {
+        if (direction === "observe") return fixture.participant.observe(plan);
+        if (direction === "apply") return fixture.participant.apply(plan);
+        if (direction === "compensate") return fixture.participant.compensate(plan);
+        return fixture.participant.compact(plan);
+      };
+      await refusesAndPreserves(fixture, action);
+      if (direction === "compact") {
+        expect(fixture.fs.events).not.toContain("before:unlink:tombstone");
+      }
+    },
+  );
+});
+
+interface DeathPoint {
   readonly name: string;
   readonly event: string;
+}
+
+interface DeathRow extends DeathPoint {
   readonly occurrence?: number;
 }
 
-const payloadParent = dirname(
-  deriveManifestPayloadPath(PRODUCT_HOME as never, LIFECYCLE_ID as never, LIFECYCLE_PARTICIPANT_ID as never),
+function barrierDeathPoints(label: string, parent: string): readonly DeathPoint[] {
+  return [
+    { name: `before ${label} parent barrier`, event: `before:barrier:${parent}` },
+    { name: `during ${label} parent sync`, event: `sync:${parent}` },
+    { name: `before ${label} parent reopen`, event: `before:reopen:${parent}` },
+    { name: `after ${label} parent barrier`, event: `after:barrier:${parent}` },
+  ];
+}
+
+function durabilityDeathPoints(
+  label: string,
+  parents: readonly { readonly label: string; readonly path: string }[],
+): readonly DeathPoint[] {
+  const distinct = parents.filter(
+    (parent, index) => parents.findIndex((candidate) => candidate.path === parent.path) === index,
+  );
+  return distinct.flatMap((parent) => barrierDeathPoints(`${label} ${parent.label}`, parent.path));
+}
+
+function moveDeathPoints(
+  label: string,
+  transition: "preserve-preimage" | "publish-postimage" | "preserve-postimage" | "restore-preimage",
+  sourceParent: string,
+  destinationParent: string,
+): readonly DeathPoint[] {
+  return [
+    { name: `before ${label} mutation`, event: `before:move:${transition}` },
+    { name: `after ${label} mutation`, event: `after:move:${transition}` },
+    ...durabilityDeathPoints(label, [
+      { label: "source", path: sourceParent },
+      { label: "destination", path: destinationParent },
+    ]),
+  ];
+}
+
+function numberDeathOccurrences(points: readonly DeathPoint[]): readonly DeathRow[] {
+  const occurrences = new Map<string, number>();
+  return points.map((point) => {
+    const occurrence = (occurrences.get(point.event) ?? 0) + 1;
+    occurrences.set(point.event, occurrence);
+    return { ...point, occurrence };
+  });
+}
+
+function applyDeathRows(row: ExecutionRow, payloadParent: string): readonly DeathRow[] {
+  const points: DeathPoint[] = [];
+  if (row.before === "present") {
+    points.push(
+      ...moveDeathPoints(
+        "preserve-preimage",
+        "preserve-preimage",
+        MANIFEST_PARENT,
+        MANIFEST_PARENT,
+      ),
+    );
+  }
+  if (row.after === "present") {
+    points.push(
+      ...moveDeathPoints(
+        "publish-postimage",
+        "publish-postimage",
+        payloadParent,
+        MANIFEST_PARENT,
+      ),
+    );
+  }
+  return numberDeathOccurrences(points);
+}
+
+function compensateDeathRows(row: ExecutionRow, payloadParent: string): readonly DeathRow[] {
+  const points: DeathPoint[] = [];
+  if (row.before === "present" && row.after === "absent") {
+    points.push(
+      ...durabilityDeathPoints("ambiguous preimage adoption", [
+        { label: "manifest/tombstone", path: MANIFEST_PARENT },
+        { label: "payload", path: payloadParent },
+      ]),
+      ...moveDeathPoints(
+        "restore-preimage",
+        "restore-preimage",
+        MANIFEST_PARENT,
+        MANIFEST_PARENT,
+      ),
+    );
+    return numberDeathOccurrences(points);
+  }
+  if (row.after === "present") {
+    points.push(
+      ...durabilityDeathPoints("applied-postimage adoption", [
+        { label: "payload", path: payloadParent },
+        { label: "manifest", path: MANIFEST_PARENT },
+      ]),
+      ...moveDeathPoints(
+        "preserve-postimage",
+        "preserve-postimage",
+        MANIFEST_PARENT,
+        payloadParent,
+      ),
+    );
+  }
+  if (row.before === "present") {
+    points.push(
+      ...moveDeathPoints(
+        "restore-preimage",
+        "restore-preimage",
+        MANIFEST_PARENT,
+        MANIFEST_PARENT,
+      ),
+    );
+  }
+  return numberDeathOccurrences(points);
+}
+
+function compactDeathRows(row: ExecutionRow, payloadParent: string): readonly DeathRow[] {
+  const points: DeathPoint[] = [];
+  if (row.after === "present") {
+    points.push(
+      ...durabilityDeathPoints("applied-postimage adoption", [
+        { label: "payload", path: payloadParent },
+        { label: "manifest", path: MANIFEST_PARENT },
+      ]),
+    );
+  } else if (row.before === "present") {
+    points.push(
+      ...durabilityDeathPoints("applied-absence adoption", [
+        { label: "manifest/tombstone", path: MANIFEST_PARENT },
+      ]),
+    );
+  }
+  if (row.before === "present") {
+    points.push(
+      { name: "before exact tombstone unlink", event: "before:unlink:tombstone" },
+      { name: "after exact tombstone unlink", event: "after:unlink:tombstone" },
+      ...durabilityDeathPoints("tombstone unlink", [
+        { label: "manifest/tombstone", path: MANIFEST_PARENT },
+      ]),
+    );
+  }
+  return numberDeathOccurrences(points);
+}
+
+function protocolEvents(events: readonly string[]): readonly string[] {
+  return events.filter(
+    (event) =>
+      event.startsWith("before:move:") ||
+      event.startsWith("after:move:") ||
+      event === "before:unlink:tombstone" ||
+      event === "after:unlink:tombstone" ||
+      event.startsWith("before:barrier:") ||
+      event.startsWith("sync:") ||
+      event.startsWith("before:reopen:") ||
+      event.startsWith("after:barrier:"),
+  );
+}
+
+describe.each(executionRows)("cross-arm mutation and durability death table — $name", (row) => {
+  const payloadParent = dirname(createFixture(row).payloadPath);
+  const applyRows = applyDeathRows(row, payloadParent);
+  const compensationRows = compensateDeathRows(row, payloadParent);
+  const compactionRows = compactDeathRows(row, payloadParent);
+
+  if (applyRows.length === 0) {
+    it("apply has no mutation or durability arm", async () => {
+      const fixture = createFixture(row);
+      await fixture.participant.apply(fixture.admit());
+      expect(protocolEvents(fixture.fs.events)).toEqual([]);
+    });
+  } else {
+    it("enumerates the exact apply mutation and durability protocol", async () => {
+      const fixture = createFixture(row);
+      await fixture.participant.apply(fixture.admit());
+      expect(protocolEvents(fixture.fs.events)).toEqual(applyRows.map(({ event }) => event));
+    });
+
+    it.each(applyRows)("apply recovers death $name", async ({ event, occurrence }) => {
+      const fixture = createFixture(row);
+      const plan = fixture.admit();
+      fixture.fs.armDeath(event, occurrence);
+      await expect(fixture.participant.apply(plan)).rejects.toMatchObject({
+        code: EXIT_CODES.recoveryRequired,
+      });
+      fixture.fs.clearFaultAndEvents();
+      await expect(fixture.recreate().apply(plan)).resolves.toEqual({ state: "applied" });
+      expectAppliedInventory(fixture, row.before, row.after);
+    });
+  }
+
+  if (compensationRows.length === 0) {
+    it("compensate has no mutation or durability arm", async () => {
+      const fixture = createFixture(row);
+      const plan = fixture.admit();
+      await fixture.participant.apply(plan);
+      fixture.fs.clearFaultAndEvents();
+      await fixture.participant.compensate(plan);
+      expect(protocolEvents(fixture.fs.events)).toEqual([]);
+    });
+  } else {
+    it("enumerates the exact compensate mutation and durability protocol", async () => {
+      const fixture = createFixture(row);
+      const plan = fixture.admit();
+      await fixture.participant.apply(plan);
+      fixture.fs.clearFaultAndEvents();
+      await fixture.participant.compensate(plan);
+      expect(protocolEvents(fixture.fs.events)).toEqual(
+        compensationRows.map(({ event }) => event),
+      );
+    });
+
+    it.each(compensationRows)("compensate recovers death $name", async ({ event, occurrence }) => {
+      const fixture = createFixture(row);
+      const plan = fixture.admit();
+      await fixture.participant.apply(plan);
+      fixture.fs.clearFaultAndEvents();
+      fixture.fs.armDeath(event, occurrence);
+      await expect(fixture.participant.compensate(plan)).rejects.toMatchObject({
+        code: EXIT_CODES.recoveryRequired,
+      });
+      fixture.fs.clearFaultAndEvents();
+      await expect(fixture.recreate().compensate(plan)).resolves.toEqual({
+        state: "compensated",
+      });
+      expectBeforeInventory(fixture, row.before, row.after);
+    });
+  }
+
+  if (compactionRows.length === 0) {
+    it("compact has no mutation or durability arm", async () => {
+      const fixture = createFixture(row);
+      const plan = fixture.admit();
+      await fixture.participant.apply(plan);
+      fixture.fs.clearFaultAndEvents();
+      await fixture.participant.compact(plan);
+      expect(protocolEvents(fixture.fs.events)).toEqual([]);
+    });
+  } else {
+    it("enumerates the exact compact mutation and durability protocol", async () => {
+      const fixture = createFixture(row);
+      const plan = fixture.admit();
+      await fixture.participant.apply(plan);
+      fixture.fs.clearFaultAndEvents();
+      await fixture.participant.compact(plan);
+      expect(protocolEvents(fixture.fs.events)).toEqual(compactionRows.map(({ event }) => event));
+    });
+
+    it.each(compactionRows)("compact recovers death $name", async ({ event, occurrence }) => {
+      const fixture = createFixture(row);
+      const plan = fixture.admit();
+      await fixture.participant.apply(plan);
+      const appliedManifest = fixture.fs.snapshot([MANIFEST_PATH]);
+      fixture.fs.clearFaultAndEvents();
+      fixture.fs.armDeath(event, occurrence);
+      await expect(fixture.participant.compact(plan)).rejects.toMatchObject({
+        code: EXIT_CODES.recoveryRequired,
+      });
+      fixture.fs.clearFaultAndEvents();
+      await expect(fixture.recreate().compact(plan)).resolves.toBeUndefined();
+      expect(fixture.fs.snapshot([MANIFEST_PATH])).toEqual(appliedManifest);
+      expect(fixture.fs.snapshot([fixture.tombstonePath])[fixture.tombstonePath]).toBeNull();
+    });
+  }
+});
+
+describe.each(executionRows.filter((row) => row.before === "present"))(
+  "ambiguous compensation preimage durability table — $name",
+  (row) => {
+    const payloadParent = dirname(createFixture(row).payloadPath);
+    const deathRows = numberDeathOccurrences([
+      ...durabilityDeathPoints("ambiguous preimage adoption", [
+        { label: "manifest/tombstone", path: MANIFEST_PARENT },
+        { label: "payload", path: payloadParent },
+      ]),
+      ...moveDeathPoints(
+        "restore-preimage",
+        "restore-preimage",
+        MANIFEST_PARENT,
+        MANIFEST_PARENT,
+      ),
+    ]);
+
+    it.each(deathRows)("recovers death $name", async ({ event, occurrence }) => {
+      const fixture = createFixture(row);
+      const plan = fixture.admit();
+      fixture.fs.moveUnchecked(MANIFEST_PATH, fixture.tombstonePath);
+      fixture.fs.clearFaultAndEvents();
+      fixture.fs.armDeath(event, occurrence);
+      await expect(fixture.participant.compensate(plan)).rejects.toMatchObject({
+        code: EXIT_CODES.recoveryRequired,
+      });
+      fixture.fs.clearFaultAndEvents();
+      await expect(fixture.recreate().compensate(plan)).resolves.toEqual({
+        state: "compensated",
+      });
+      expectBeforeInventory(fixture, row.before, row.after);
+    });
+  },
 );
 
-const applyDeathRows: readonly DeathRow[] = [
-  { name: "before preserve-preimage mutation", event: "before:move:preserve-preimage" },
-  { name: "after preserve-preimage mutation", event: "after:move:preserve-preimage" },
-  { name: "before preserve-preimage parent barrier", event: `before:barrier:${MANIFEST_PARENT}` },
-  { name: "during preserve-preimage parent sync", event: `sync:${MANIFEST_PARENT}` },
-  { name: "before preserve-preimage parent reopen", event: `before:reopen:${MANIFEST_PARENT}` },
-  { name: "after preserve-preimage parent barrier", event: `after:barrier:${MANIFEST_PARENT}` },
-  { name: "before publish-postimage mutation", event: "before:move:publish-postimage" },
-  { name: "after publish-postimage mutation", event: "after:move:publish-postimage" },
-  { name: "before publish source-parent barrier", event: `before:barrier:${payloadParent}` },
-  { name: "during publish source-parent sync", event: `sync:${payloadParent}` },
-  { name: "before publish source-parent reopen", event: `before:reopen:${payloadParent}` },
-  { name: "after publish source-parent barrier", event: `after:barrier:${payloadParent}` },
-  { name: "before publish destination-parent barrier", event: `before:barrier:${MANIFEST_PARENT}`, occurrence: 2 },
-  { name: "during publish destination-parent sync", event: `sync:${MANIFEST_PARENT}`, occurrence: 2 },
-  { name: "before publish destination-parent reopen", event: `before:reopen:${MANIFEST_PARENT}`, occurrence: 2 },
-  { name: "after publish destination-parent barrier", event: `after:barrier:${MANIFEST_PARENT}`, occurrence: 2 },
-];
-
-describe("apply mutation and durability death table", () => {
-  it.each(applyDeathRows)("recovers death $name", async ({ event, occurrence }) => {
-    const fixture = createFixture();
-    const plan = fixture.admit();
-    fixture.fs.armDeath(event, occurrence);
-    await expect(fixture.participant.apply(plan)).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
-    fixture.fs.clearFaultAndEvents();
-    await expect(fixture.recreate().apply(plan)).resolves.toEqual({ state: "applied" });
-    expectAppliedInventory(fixture, "present", "present");
-  });
-});
-
-const compensateAppliedDeathRows: readonly DeathRow[] = [
-  { name: "before adopted publish source barrier", event: `before:barrier:${payloadParent}` },
-  { name: "after adopted publish source barrier", event: `after:barrier:${payloadParent}` },
-  { name: "before adopted publish destination barrier", event: `before:barrier:${MANIFEST_PARENT}` },
-  { name: "after adopted publish destination barrier", event: `after:barrier:${MANIFEST_PARENT}` },
-  { name: "before preserve-postimage mutation", event: "before:move:preserve-postimage" },
-  { name: "after preserve-postimage mutation", event: "after:move:preserve-postimage" },
-  { name: "before preserve-postimage source barrier", event: `before:barrier:${MANIFEST_PARENT}`, occurrence: 2 },
-  { name: "during preserve-postimage source sync", event: `sync:${MANIFEST_PARENT}`, occurrence: 2 },
-  { name: "before preserve-postimage source reopen", event: `before:reopen:${MANIFEST_PARENT}`, occurrence: 2 },
-  { name: "after preserve-postimage source barrier", event: `after:barrier:${MANIFEST_PARENT}`, occurrence: 2 },
-  { name: "before preserve-postimage destination barrier", event: `before:barrier:${payloadParent}`, occurrence: 2 },
-  { name: "after preserve-postimage destination barrier", event: `after:barrier:${payloadParent}`, occurrence: 2 },
-  { name: "before restore-preimage mutation", event: "before:move:restore-preimage" },
-  { name: "after restore-preimage mutation", event: "after:move:restore-preimage" },
-  { name: "before restore-preimage parent barrier", event: `before:barrier:${MANIFEST_PARENT}`, occurrence: 3 },
-  { name: "during restore-preimage parent sync", event: `sync:${MANIFEST_PARENT}`, occurrence: 3 },
-  { name: "before restore-preimage parent reopen", event: `before:reopen:${MANIFEST_PARENT}`, occurrence: 3 },
-  { name: "after restore-preimage parent barrier", event: `after:barrier:${MANIFEST_PARENT}`, occurrence: 3 },
-];
-
-describe("compensate-from-applied mutation and durability death table", () => {
-  it.each(compensateAppliedDeathRows)("recovers death $name", async ({ event, occurrence }) => {
-    const fixture = createFixture();
-    const plan = fixture.admit();
-    await fixture.participant.apply(plan);
-    fixture.fs.clearFaultAndEvents();
-    fixture.fs.armDeath(event, occurrence);
-    await expect(fixture.participant.compensate(plan)).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
-    fixture.fs.clearFaultAndEvents();
-    await expect(fixture.recreate().compensate(plan)).resolves.toEqual({ state: "compensated" });
-    expectBeforeInventory(fixture, "present", "present");
-  });
-});
-
-const compensatePreimageDeathRows: readonly DeathRow[] = [
-  { name: "before adopted preimage parent barrier", event: `before:barrier:${MANIFEST_PARENT}` },
-  { name: "after adopted preimage parent barrier", event: `after:barrier:${MANIFEST_PARENT}` },
-  { name: "before direct restore mutation", event: "before:move:restore-preimage" },
-  { name: "after direct restore mutation", event: "after:move:restore-preimage" },
-  { name: "before direct restore parent barrier", event: `before:barrier:${MANIFEST_PARENT}`, occurrence: 2 },
-  { name: "after direct restore parent barrier", event: `after:barrier:${MANIFEST_PARENT}`, occurrence: 2 },
-];
-
-describe("compensate-from-preimage mutation and durability death table", () => {
-  it.each(compensatePreimageDeathRows)("recovers death $name", async ({ event, occurrence }) => {
-    const fixture = createFixture();
-    const plan = fixture.admit();
-    fixture.fs.moveUnchecked(MANIFEST_PATH, fixture.tombstonePath);
-    fixture.fs.clearFaultAndEvents();
-    fixture.fs.armDeath(event, occurrence);
-    await expect(fixture.participant.compensate(plan)).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
-    fixture.fs.clearFaultAndEvents();
-    await expect(fixture.recreate().compensate(plan)).resolves.toEqual({ state: "compensated" });
-    expectBeforeInventory(fixture, "present", "present");
-  });
-});
-
-const compactDeathRows: readonly DeathRow[] = [
-  { name: "before adopted applied source barrier", event: `before:barrier:${payloadParent}` },
-  { name: "after adopted applied source barrier", event: `after:barrier:${payloadParent}` },
-  { name: "before adopted applied destination barrier", event: `before:barrier:${MANIFEST_PARENT}` },
-  { name: "after adopted applied destination barrier", event: `after:barrier:${MANIFEST_PARENT}` },
-  { name: "before exact tombstone unlink", event: "before:unlink:tombstone" },
-  { name: "after exact tombstone unlink", event: "after:unlink:tombstone" },
-  { name: "before unlink parent barrier", event: `before:barrier:${MANIFEST_PARENT}`, occurrence: 2 },
-  { name: "during unlink parent sync", event: `sync:${MANIFEST_PARENT}`, occurrence: 2 },
-  { name: "before unlink parent reopen", event: `before:reopen:${MANIFEST_PARENT}`, occurrence: 2 },
-  { name: "after unlink parent barrier", event: `after:barrier:${MANIFEST_PARENT}`, occurrence: 2 },
-];
-
-describe("compact mutation and durability death table", () => {
-  it.each(compactDeathRows)("recovers death $name", async ({ event, occurrence }) => {
-    const fixture = createFixture();
-    const plan = fixture.admit();
-    await fixture.participant.apply(plan);
-    const appliedManifest = fixture.fs.snapshot([MANIFEST_PATH]);
-    fixture.fs.clearFaultAndEvents();
-    fixture.fs.armDeath(event, occurrence);
-    await expect(fixture.participant.compact(plan)).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
-    fixture.fs.clearFaultAndEvents();
-    await expect(fixture.recreate().compact(plan)).resolves.toBeUndefined();
-    expect(fixture.fs.snapshot([MANIFEST_PATH])).toEqual(appliedManifest);
-    expect(fixture.fs.snapshot([fixture.tombstonePath])[fixture.tombstonePath]).toBeNull();
-  });
-
+describe("compaction point-of-no-return table", () => {
   it("durability-adopts only the exact tombstone-unlink-before-cursor state", async () => {
     const fixture = createFixture();
     const plan = fixture.admit();
@@ -1001,11 +1330,7 @@ describe("compact mutation and durability death table", () => {
     await expect(fixture.recreate().compact(plan)).resolves.toBeUndefined();
     expect(fixture.fs.events).toContain(`sync:${MANIFEST_PARENT}`);
     expect(fixture.fs.events).toContain(`after:barrier:${MANIFEST_PARENT}`);
-  });
-
-  it("refuses every other tombstone-missing state as compaction authority", async () => {
-    const fixture = createFixture();
-    await refusesAndPreserves(fixture, () => fixture.participant.compact(fixture.admit()));
+    expect(fixture.fs.events).not.toContain("before:unlink:tombstone");
   });
 
   it("orders tombstone durability before the enclosing immutable plan is removed", async () => {

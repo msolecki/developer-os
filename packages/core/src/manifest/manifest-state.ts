@@ -679,7 +679,7 @@ export class ManifestStateParticipant {
           classification = "preimage_preserved";
         }
       } else if (classification === "preimage_preserved") {
-        await this.adoptPreimageTransition(admitted);
+        await this.adoptApplyPreimageTransition(admitted);
       } else {
         return refuse();
       }
@@ -717,7 +717,7 @@ export class ManifestStateParticipant {
       }
 
       if (classification === "preimage_preserved") {
-        await this.adoptPreimageTransition(admitted);
+        await this.adoptAmbiguousCompensationPreimageTransition(admitted);
         await this.restorePreimage(admitted);
         await this.requireBeforeInventory(admitted);
         return { state: "compensated" };
@@ -954,8 +954,21 @@ export class ManifestStateParticipant {
     await this.moveAndMakeDurable(plan.tombstonePath, plan.manifestPath, plan.before);
   }
 
-  private async adoptPreimageTransition(plan: ManifestStatePlanV1): Promise<void> {
+  private async adoptApplyPreimageTransition(plan: ManifestStatePlanV1): Promise<void> {
     await this.makeMoveDurable(plan.manifestPath, plan.tombstonePath);
+    await this.requirePreimageInventory(plan);
+  }
+
+  private async adoptAmbiguousCompensationPreimageTransition(
+    plan: ManifestStatePlanV1,
+  ): Promise<void> {
+    // The bytes cannot distinguish apply's preimage move from compensation's
+    // postimage-to-payload move, so adopt the union of both mutations' parents.
+    await this.makeAffectedParentsDurable([
+      plan.manifestPath,
+      plan.tombstonePath,
+      this.payloadPath(plan),
+    ]);
     await this.requirePreimageInventory(plan);
   }
 
@@ -1001,7 +1014,13 @@ export class ManifestStateParticipant {
     source: CanonicalAbsolutePathV1,
     destination: CanonicalAbsolutePathV1,
   ): Promise<void> {
-    const parents = [dirname(source), dirname(destination)];
+    await this.makeAffectedParentsDurable([source, destination]);
+  }
+
+  private async makeAffectedParentsDurable(
+    affectedPaths: readonly CanonicalAbsolutePathV1[],
+  ): Promise<void> {
+    const parents = affectedPaths.map((path) => dirname(path));
     const distinctParents = parents.filter((parent, index) => parents.indexOf(parent) === index);
     for (const parent of distinctParents) await this.syncAndReopenParent(parent);
   }
