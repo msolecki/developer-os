@@ -229,6 +229,7 @@ function parseBase64Url(value: unknown, label: string, length: number): Base64Ur
 }
 function publicKeyId(key: Base64UrlNoPaddingV1): LowerHexSha256 { return createHash("sha256").update(Buffer.from(key, "base64url")).digest("hex") as LowerHexSha256; }
 function parseIpv4Number(value: string): bigint | null {
+  if (value === "0x") return 0n;
   if (/^0x[0-9a-f]+$/.test(value)) return BigInt(value);
   if (/^0[0-7]+$/.test(value) && value.length > 1) return BigInt(`0o${value.slice(1)}`);
   if (/^(?:0|[1-9][0-9]*)$/.test(value)) return BigInt(value);

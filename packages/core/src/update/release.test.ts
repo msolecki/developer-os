@@ -340,8 +340,9 @@ describe("release schemas", () => {
   });
   it("admits legal LDH names with a numeric final label", () => {
     expect(parseLowercaseHost("foo.123")).toBe("foo.123");
+    expect(parseLowercaseHost("0xg.example")).toBe("0xg.example");
   });
-  it.each(["127.0.0.1", "127.1", "0x7f.1", "0177.0.0.1", "2130706433"])("refuses alternate IPv4 spelling %s", (host) => {
+  it.each(["127.0.0.1", "127.1", "0x7f.1", "0177.0.0.1", "2130706433", "0x", "0x.1", "127.0.0x"])("refuses alternate IPv4 spelling %s", (host) => {
     expect(() => parseLowercaseHost(host)).toThrow();
   });
 
