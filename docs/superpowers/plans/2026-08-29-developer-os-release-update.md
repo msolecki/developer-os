@@ -506,7 +506,9 @@ git commit -m "feat(core): define v2 bootstrap recovery"
 - Create: `apps/cli/src/update/packaged-release.test.ts`
 - Modify: `apps/cli/src/commands/init.ts`
 - Modify: `apps/cli/src/commands/init.test.ts`
+- Modify: `apps/cli/src/commands/testing.ts`
 - Modify: `apps/cli/src/context.ts`
+- Modify: `apps/cli/src/context.test.ts`
 
 **Interfaces:**
 - Consumes: Tasks 1–6, existing Foundation filesystem/lock/guard ports, packaged release source injected by CLI composition.
@@ -550,6 +552,10 @@ export class BootstrapExecutor {
 
 Verify the packaged fallback metadata/inventory offline, stage every payload and initial Foundation journal before creation authority, create the exact permanent lifecycle/release/runtime roots and ephemeral reservations, publish trust then active last in the launchability suffix, transition the manifest through Task 5, and verify the complete V2 handoff before compaction.
 
+Keep `CliContext`'s existing command-wide contract source-compatible: expose bootstrap as an optional, narrow `CliBootstrapContext` projection and require it only on the fresh-init arm. `createProductionContext` and the shared command fixture are the two composition sites owned here, so their tests must pin the real and synthetic projections without forcing unrelated direct `CliContext` literals to fabricate bootstrap authority. Absence of the projection refuses before bootstrap mutation; it never silently selects the V1 writer.
+
+`PackagedReleaseSourceV1` is an injected, fail-closed capability over an already guarded package root, retained metadata set, selected release identity, and exact bundle inventory. Task 7 validates every supplied structural/hash/path/inode equality and stages only through the resulting opaque admission, but it does not duplicate Task 11's Ed25519 implementation, invent unsigned embedded release assets, accept an environment/custom path, or perform transport. Tests inject a synthetic local capability. The later stable-launcher/security/package tasks bind the same interface to root-verified Homebrew bytes; until that handoff exists, an unavailable production source refuses before durable bootstrap intent.
+
 - [ ] **Step 4: Run fresh-init tests**
 
 Run: `npx vitest run --root apps/cli src/bootstrap/executor.test.ts src/update/packaged-release.test.ts src/commands/init.test.ts`
@@ -559,7 +565,7 @@ Expected: PASS for dry-run, success, compensation, force-forward, and every inje
 - [ ] **Step 5: Commit Task 7**
 
 ```bash
-git add apps/cli/src/bootstrap/context.ts apps/cli/src/bootstrap/executor.ts apps/cli/src/bootstrap/executor.test.ts apps/cli/src/update/packaged-release.ts apps/cli/src/update/packaged-release.test.ts apps/cli/src/commands/init.ts apps/cli/src/commands/init.test.ts apps/cli/src/context.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
+git add apps/cli/src/bootstrap/context.ts apps/cli/src/bootstrap/executor.ts apps/cli/src/bootstrap/executor.test.ts apps/cli/src/update/packaged-release.ts apps/cli/src/update/packaged-release.test.ts apps/cli/src/commands/init.ts apps/cli/src/commands/init.test.ts apps/cli/src/commands/testing.ts apps/cli/src/context.ts apps/cli/src/context.test.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
 git commit -m "feat(cli): initialize manifest v2 installations"
 ```
 
