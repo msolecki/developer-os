@@ -88,10 +88,11 @@ async function fixture(withBefore = true) {
   const context: ManifestStatePlanAdmissionContextV1 = {
     evidence,
     productHome: admitCanonicalAbsolutePath(productHome, evidence),
-    manifestRoot: admitCanonicalAbsolutePath(dirname(manifestPath), evidence),
+    manifestPath: admitCanonicalAbsolutePath(manifestPath, evidence),
     foundationTransactionIds: [],
     externalEffects: [],
-    validateLifecycleCoordinatorId: (value) => value === COORDINATOR_ID ? value as never : (() => { throw new Error("invalid coordinator"); })(),
+    admitParticipant: (envelope, participantId) => envelope && typeof envelope === "object" && (envelope as { kind?: unknown }).kind === "lifecycle" && (envelope as { id?: unknown }).id === COORDINATOR_ID && participantId === PARTICIPANT_ID ? { envelope: envelope as never, participantId: participantId as never } : (() => { throw new Error("invalid participant"); })(),
+    admitExternalEffect: (value) => value as never,
     updatePayloadIdentity: (value) => value.path === payloadPath ? { dev: String(payloadStat.dev) as never, ino: String(payloadStat.ino) as never } : (() => { throw new Error("wrong payload"); })(),
   };
   const manifestAdmission: ManifestAdmissionContextV1 = {
@@ -100,7 +101,18 @@ async function fixture(withBefore = true) {
     backupRoot: admitCanonicalAbsolutePath(backupRoot, evidence),
     admitOwnerPath: (_owner, path) => path,
   };
-  const participant = new ManifestStateParticipant({ fs: nodeFs, admission: context, uid: 501, manifestAdmission });
+  const guardedMoveNoReplace = async (source: string, destination: string, expected: { dev: string; ino: string }) => {
+    const sourceStat = await nodeFs.lstat(source);
+    await expect(nodeFs.lstat(destination)).rejects.toMatchObject({ code: "ENOENT" });
+    if (String(sourceStat.dev) !== expected.dev || String(sourceStat.ino) !== expected.ino) throw new Error("source changed");
+    await nodeFs.rename(source, destination);
+  };
+  const guardedUnlinkExact = async (path: string, expected: { dev: string; ino: string }) => {
+    const stat = await nodeFs.lstat(path);
+    if (String(stat.dev) !== expected.dev || String(stat.ino) !== expected.ino) throw new Error("tombstone changed");
+    await nodeFs.unlink(path);
+  };
+  const participant = new ManifestStateParticipant({ fs: nodeFs, guardedMoveNoReplace, guardedUnlinkExact, admission: context, uid: 501, manifestAdmission });
   return { root, plan, context, participant, manifestPath, payloadPath, tombstonePath: plan.tombstonePath, AFTER };
 }
 
@@ -168,10 +180,66 @@ describe("ManifestStateParticipant", () => {
         ino: null,
         bytes: { kind: "bootstrap_expected" as const, bootstrapId, ordinal: 0, path: payloadPath, hash: subject.plan.after.hash, bytes: subject.AFTER.byteLength, mode: 0o600 as const },
       };
-      const context = { ...subject.context, validateFreshV2InitId: (value: unknown) => value === bootstrapId ? value as never : (() => { throw new Error("wrong bootstrap id"); })() };
+      const context = { ...subject.context, admitParticipant: (envelope: unknown, candidate: unknown) => candidate === participantId ? { envelope: envelope as never, participantId: candidate as never } : (() => { throw new Error("wrong bootstrap participant"); })() };
       const plan = { ...subject.plan, participantId, envelope: { kind: "fresh_v2_init" as const, id: bootstrapId }, tombstonePath: join(dirname(subject.manifestPath), `.installation-manifest.${participantId}.json.tombstone`), after };
       expect(validateManifestStatePlan(plan, context).after).toMatchObject({ state: "present", dev: null, ino: null });
       expect(() => validateManifestStatePlan({ ...plan, after: { ...after, dev: "1" } }, context)).toThrow(ManifestStateParticipantError);
+    } finally { await cleanup(subject.root); }
+  });
+
+  it("uses an injected identity-guarded move instead of path link/unlink authority", async () => {
+    const subject = await fixture();
+    try {
+      let guardedMoves = 0;
+      const participant = new ManifestStateParticipant({ ...subject.participant.dependencies, guardedMoveNoReplace: async (...args) => { guardedMoves += 1; await subject.participant.dependencies.guardedMoveNoReplace(...args); } });
+      await participant.apply(validateManifestStatePlan(subject.plan, subject.context));
+      expect(guardedMoves).toBe(2);
+    } finally { await cleanup(subject.root); }
+  });
+
+  it("rejects a V1 payload when it is observed as a postimage", async () => {
+    const subject = await fixture();
+    try {
+      const candidate = { ...subject.plan, after: { ...subject.plan.after, hash: HASH(BEFORE), size: String(BEFORE.byteLength), bytes: { ...(subject.plan.after.bytes as object), hash: HASH(BEFORE), bytes: BEFORE.byteLength } } };
+      await expect(subject.participant.apply(validateManifestStatePlan(candidate, subject.context))).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+    } finally { await cleanup(subject.root); }
+  });
+
+  it.each(["a payload over the manifest cap", "a non-0600 payload", "a mismatched payload hash"])("refuses %s", async name => {
+    const subject = await fixture();
+    try {
+      const bytes = subject.plan.after.bytes as Record<string, unknown>;
+      const replacement = name === "a payload over the manifest cap" ? { ...bytes, bytes: 64 * 1024 * 1024 + 1 } : name === "a non-0600 payload" ? { ...bytes, mode: 0o700 } : { ...bytes, hash: HEX };
+      expect(() => validateManifestStatePlan({ ...subject.plan, after: { ...subject.plan.after, bytes: replacement } }, subject.context)).toThrow(ManifestStateParticipantError);
+    }
+    finally { await cleanup(subject.root); }
+  });
+
+  it.each([
+    { name: "missing payload", change: async (subject: Awaited<ReturnType<typeof fixture>>) => { await nodeFs.unlink(subject.payloadPath); } },
+    { name: "changed payload inode", change: async (subject: Awaited<ReturnType<typeof fixture>>) => { await nodeFs.unlink(subject.payloadPath); await nodeFs.writeFile(subject.payloadPath, subject.AFTER, { mode: 0o600 }); } },
+  ])("preserves evidence and refuses $name", async ({ change }) => {
+    const subject = await fixture();
+    try {
+      await change(subject);
+      await expect(subject.participant.apply(validateManifestStatePlan(subject.plan, subject.context))).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+      expect(await nodeFs.readFile(subject.manifestPath)).toEqual(Buffer.from(BEFORE));
+    } finally { await cleanup(subject.root); }
+  });
+
+  it("refuses a two-copy postimage and compacts only through guarded tombstone deletion", async () => {
+    const subject = await fixture();
+    try {
+      const plan = validateManifestStatePlan(subject.plan, subject.context);
+      await subject.participant.apply(plan);
+      await nodeFs.writeFile(subject.payloadPath, subject.AFTER, { mode: 0o600 });
+      await expect(subject.participant.observe(plan)).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+      await nodeFs.unlink(subject.payloadPath);
+      let deleted = 0;
+      const participant = new ManifestStateParticipant({ ...subject.participant.dependencies, guardedUnlinkExact: async (...args) => { deleted += 1; await subject.participant.dependencies.guardedUnlinkExact(...args); } });
+      await participant.compact(plan);
+      expect(deleted).toBe(1);
+      expect(await nodeFs.readFile(subject.manifestPath)).toEqual(Buffer.from(subject.AFTER));
     } finally { await cleanup(subject.root); }
   });
 });

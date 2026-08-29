@@ -83,7 +83,7 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 ## Count
 
 - Product sequence: 6 open entries, A11–A16.
-- Program plan: 25 unchecked work steps across Tasks 5–9.
+- Program plan: 20 unchecked work steps across Tasks 6–9.
 - Repository backlog: 24 open numbered rows, plus the Foundation watchdog decision.
-- Active implementation plans: 46 untouched tasks — 22 in Spec 2 and 24 in Spec 1. Spec 2 Tasks
-  5–9 are the active prerequisite; Spec 1 remains blocked until that handoff passes.
+- Active implementation plans: 45 untouched tasks — 21 in Spec 2 and 24 in Spec 1. Spec 2 Tasks
+  6–9 are the active prerequisite; Spec 1 remains blocked until that handoff passes.
