@@ -1,4 +1,9 @@
-import { decodeTenDigitOrdinal, type SafeReasonCodeV1 } from "./scalars.js";
+import {
+  decodeTenDigitOrdinal,
+  parseSafeReasonCode,
+  parseSchemaMigrationId,
+  type SafeReasonCodeV1,
+} from "./scalars.js";
 
 declare const canonicalAbsolutePathV1: unique symbol;
 declare const exactProductStatePathV1: unique symbol;
@@ -35,6 +40,12 @@ export interface CanonicalPathEvidenceV1 {
 }
 
 export type ExactProductStateRoleV1 = "lifecycle_plan" | "lifecycle_journal";
+export type CanonicalStatePayloadRoleV1 =
+  | "release_metadata"
+  | "release_trust"
+  | "active_release"
+  | "rollback_record";
+export type BootstrapPayloadOperationV1 = "fresh_v2_init" | "v1_to_v2";
 
 const encoder = new TextEncoder();
 
@@ -65,6 +76,18 @@ function assertCanonicalAbsolutePath(value: string): void {
   for (const component of value.slice(1).split("/")) {
     if (component.length === 0 || component === "." || component === "..") fail("CanonicalAbsolutePathV1: component");
   }
+}
+
+export function parseCanonicalStatePayloadRole(value: unknown): CanonicalStatePayloadRoleV1 {
+  if (value === "release_metadata" || value === "release_trust" || value === "active_release" || value === "rollback_record") {
+    return value;
+  }
+  fail("CanonicalStatePayloadRoleV1");
+}
+
+function parseBootstrapPayloadOperation(value: unknown): BootstrapPayloadOperationV1 {
+  if (value === "fresh_v2_init" || value === "v1_to_v2") return value;
+  fail("BootstrapPayloadOperationV1");
 }
 
 export function admitCanonicalAbsolutePath(value: unknown, evidence: CanonicalPathEvidenceV1): CanonicalAbsolutePathV1 {
@@ -124,9 +147,14 @@ export function admitRollbackPayloadRelativePath(
 ): RollbackPayloadRelativePathV1 {
   const admitted = admitRelativePath(value, rollbackRoot, evidence, "RollbackPayloadRelativePathV1") as RollbackPayloadRelativePathV1;
   const blob = /^blobs\/([0-9]{10})\.bin$/.exec(admitted);
-  const plan = /^plans\/([a-z][a-z0-9_]*)\/([a-z][a-z0-9_]*|migration_[a-z][a-z0-9-]*)\.plan\.json$/.test(admitted);
   if (blob !== null) decodeTenDigitOrdinal(blob[1]);
-  else if (!plan) fail("RollbackPayloadRelativePathV1: not a role path");
+  else {
+    const owner = /^plans\/owner_inverse\/([a-z][a-z0-9_]*)\.plan\.json$/.exec(admitted);
+    const migration = /^plans\/schema_migration_inverse\/(migration_[a-z][a-z0-9-]*)\.plan\.json$/.exec(admitted);
+    if (owner !== null) parseSafeReasonCode(owner[1]);
+    else if (migration !== null) parseSchemaMigrationId(migration[1]);
+    else fail("RollbackPayloadRelativePathV1: not a role path");
+  }
   return admitted;
 }
 
@@ -147,12 +175,15 @@ export function deriveExactProductStatePath(
 
 export function deriveBootstrapPayloadPath(
   productHome: CanonicalAbsolutePathV1,
-  operation: "fresh_v2_init" | "manifest_migration",
+  operation: BootstrapPayloadOperationV1,
   id: SafeReasonCodeV1,
   ordinal: number,
 ): BootstrapPayloadPathV1 {
   if (!Number.isSafeInteger(ordinal) || ordinal < 0 || ordinal > 999_999) fail("bootstrap payload ordinal");
-  const prefix = operation === "fresh_v2_init" ? "fresh-v2-init" : "manifest-migration";
+  const admittedOperation = parseBootstrapPayloadOperation(operation);
+  let prefix: "fresh-v2-init" | "manifest-migration";
+  if (admittedOperation === "fresh_v2_init") prefix = "fresh-v2-init";
+  else prefix = "manifest-migration";
   return derive(productHome, `state/.${prefix}.${id}.${ordinal.toString(10).padStart(10, "0")}.payload`) as BootstrapPayloadPathV1;
 }
 
@@ -167,10 +198,11 @@ export function deriveManifestPayloadPath(
 export function deriveCanonicalStatePayloadPath(
   productHome: CanonicalAbsolutePathV1,
   coordinatorId: SafeReasonCodeV1,
-  role: SafeReasonCodeV1,
+  role: CanonicalStatePayloadRoleV1,
   id: SafeReasonCodeV1,
 ): CanonicalStatePayloadPathV1 {
-  return derive(productHome, `staging/lifecycle/${coordinatorId}/update/payloads/state/${role}/${id}.json`) as CanonicalStatePayloadPathV1;
+  const admittedRole = parseCanonicalStatePayloadRole(role);
+  return derive(productHome, `staging/lifecycle/${coordinatorId}/update/payloads/state/${admittedRole}/${id}.json`) as CanonicalStatePayloadPathV1;
 }
 
 export function deriveFoundationInitialJournalPayloadPath(

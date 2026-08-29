@@ -19,6 +19,7 @@ describe("the package's public door", () => {
     expect(Object.keys(door).sort()).toEqual(
       [
         "parseAgentPromptArgs",
+        "parseCanonicalStatePayloadRole",
         "CAPABILITY_STATES",
         "PROBE_OBSERVATIONS",
         "EXIT_CODES",

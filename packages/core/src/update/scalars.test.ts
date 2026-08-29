@@ -79,4 +79,9 @@ describe("stable update scalars", () => {
     expect(parseSchemaMigrationId("migration_schema-v2")).toBe("migration_schema-v2");
     expect(() => parseSchemaMigrationId("migration_schema_v2")).toThrow();
   });
+
+  it("catches a kebab-ID parser that loses the exact UTF-8 byte boundary", () => {
+    expect(parseLowercaseKebabId(`a${"0".repeat(95)}`)).toBe(`a${"0".repeat(95)}`);
+    expect(() => parseLowercaseKebabId(`a${"0".repeat(96)}`)).toThrow();
+  });
 });

@@ -73,7 +73,12 @@ function encodeValue(value: CanonicalJsonValue, stack: Set<object>): string {
   try {
     if (Array.isArray(value)) {
       const array = value as unknown as readonly CanonicalJsonValue[];
-      return `[${array.map((entry) => encodeValue(entry, stack)).join(",")}]`;
+      const encoded: string[] = [];
+      for (let index = 0; index < array.length; index += 1) {
+        if (!Object.hasOwn(array, index)) fail("array has a hole");
+        encoded.push(encodeValue(array[index] as CanonicalJsonValue, stack));
+      }
+      return `[${encoded.join(",")}]`;
     }
     const prototype = Object.getPrototypeOf(value) as object | null;
     if (prototype !== Object.prototype && prototype !== null) fail("object is not plain");

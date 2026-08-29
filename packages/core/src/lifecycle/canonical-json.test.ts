@@ -32,4 +32,11 @@ describe("CanonicalJsonV1", () => {
   it("catches a decoder that permits a value above its byte ceiling", () => {
     expect(() => decodeCanonicalJson(new TextEncoder().encode('{"a":1}\n'), 7)).toThrow();
   });
+
+  it("catches an encoder that serializes sparse array holes as invalid commas or drops them", () => {
+    const oneAfterHole = new Array<number>(2);
+    oneAfterHole[1] = 1;
+    expect(() => encodeCanonicalJson(oneAfterHole)).toThrow();
+    expect(() => encodeCanonicalJson(new Array(1) as unknown as readonly number[])).toThrow();
+  });
 });

@@ -10,6 +10,7 @@ export {
   deriveManifestPayloadPath,
   deriveUpdatePayloadPath,
   deriveUpdateRecoveryExecutorStagedPath,
+  parseCanonicalStatePayloadRole,
 } from "./paths.js";
 export type {
   BootstrapPayloadPathV1,
@@ -17,7 +18,9 @@ export type {
   CanonicalAbsolutePathV1,
   CanonicalPathEvidenceV1,
   CanonicalProductStatePathV1,
+  CanonicalStatePayloadRoleV1,
   CanonicalStatePayloadPathV1,
+  BootstrapPayloadOperationV1,
   ExactProductStatePathV1,
   ExactProductStateRoleV1,
   FoundationInitialJournalPayloadPathV1,
