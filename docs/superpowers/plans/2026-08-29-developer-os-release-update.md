@@ -361,17 +361,19 @@ git commit -m "feat(core): inspect manifest v2 drift"
 - Create: `packages/core/src/manifest/manifest-state.ts`
 - Create: `packages/core/src/manifest/manifest-state.test.ts`
 - Modify: `packages/core/src/manifest/index.ts`
+- Modify: `packages/core/src/index.ts`
+- Modify: `packages/core/src/index.test.ts`
 
 **Interfaces:**
 - Consumes: Tasks 1, 3, and 4; existing guarded file ports; bootstrap/lifecycle IDs as opaque validated strings.
 - Produces: `ManifestBytesStateV1`, `BootstrapExpectedPayloadRefV1`, `UpdateExpectedPayloadRefV1`, `ManifestPayloadRefV1`, `ManifestStatePlanV1`, `ManifestParticipantIdV1`, `ManifestParticipantObservationV1`, strict codecs, `ManifestStateParticipant`, and tombstone recovery/compaction tables.
 
-- [ ] **Step 1: Write failing transition/death-injection tests**
+- [x] **Step 1: Write failing transition/death-injection tests**
 
 ```ts
 it.each(manifestDeathPoints)("recovers death at $name", async point => {
   const fixture = await interruptManifestParticipant(point);
-  await fixture.participant.recover(fixture.plan);
+  await fixture.participant[point.direction](fixture.plan);
   expect(await fixture.observe()).toEqual(point.expected);
 });
 
@@ -381,15 +383,15 @@ it("preserves a concurrent third state", async () => {
 });
 ```
 
-Cover absent/present before/after, payload-kind/envelope/ID/path/hash/length/mode equality, bootstrap/update ordinal bounds, Foundation/external-effect binding bijections, tombstone naming/device, no-replace moves, committed absence, rollback, point of no return, tombstone-before-plan compaction, and every missing/two-copy/changed-inode third state.
+Cover absent/present before/after, payload-kind/envelope/ID/path/hash/length/mode equality, bootstrap/update ordinal bounds, Foundation/external-effect binding bijections, tombstone naming/device, no-replace moves, committed absence, rollback, point of no return, tombstone-before-plan compaction, and every missing/two-copy/changed-inode third state. `apply` and `compensate` are the two explicit recovery directions selected by the enclosing durable coordinator; there is no direction-guessing `recover(plan)` method.
 
-- [ ] **Step 2: Run participant tests and verify missing state machine fails**
+- [x] **Step 2: Run participant tests and verify missing state machine fails**
 
 Run: `npx vitest run --root packages/core src/manifest/manifest-state.test.ts`
 
 Expected: FAIL because the plan codec and participant do not exist.
 
-- [ ] **Step 3: Implement immutable plan validation and cursor-driven moves**
+- [x] **Step 3: Implement immutable plan validation and cursor-driven moves**
 
 ```ts
 export class ManifestStateParticipant {
@@ -401,18 +403,18 @@ export class ManifestStateParticipant {
 }
 ```
 
-The immutable plan stays under 16 MiB and refers to staged bytes by exact evidence, never embeds a near-64-MiB manifest. Move the guarded preimage no-replace to the derived tombstone, sync/reopen, publish or commit absence, verify strict V2, and expose each transition only after its durable cursor.
+The immutable plan stays under 16 MiB and refers to staged bytes by exact evidence, never embeds a near-64-MiB manifest. Its strict admission is context-bound: the caller supplies already admitted product/manifest roots, the exact enclosing Foundation and external-effect partitions, and opaque ID/payload-evidence validators; the codec recomputes participant/tombstone/payload paths and binding hashes before granting authority. Move the guarded preimage no-replace to the derived tombstone, sync/reopen, publish or commit absence, verify strict V2, and expose each transition only after its durable cursor. A bootstrap `after` payload does not exist when the immutable outer plan is published, so its planned `dev`/`ino` are `null` and become concrete only in the later matching `BootstrapPayloadEvidenceV1`; a lifecycle/update `after` retains concrete construction-evidence identity. `before.present` always retains concrete identity.
 
-- [ ] **Step 4: Run participant tests**
+- [x] **Step 4: Run participant tests**
 
 Run: `npx vitest run --root packages/core src/manifest/manifest-state.test.ts`
 
 Expected: PASS at every transition and third-state vector.
 
-- [ ] **Step 5: Commit Task 5**
+- [x] **Step 5: Commit Task 5**
 
 ```bash
-git add packages/core/src/manifest/manifest-state.ts packages/core/src/manifest/manifest-state.test.ts packages/core/src/manifest/index.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
+git add packages/core/src/manifest/manifest-state.ts packages/core/src/manifest/manifest-state.test.ts packages/core/src/manifest/index.ts packages/core/src/index.ts packages/core/src/index.test.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
 git commit -m "feat(core): recover manifest state transitions"
 ```
 

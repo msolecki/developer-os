@@ -12,6 +12,7 @@ export {
   validateManifest,
 } from "./store.js";
 export { ManifestV1NotMigratableError, validateManifestBytes, validateManifestV1, validateManifestV2, validateMigratableManifestV1 } from "./v2.js";
+export { ManifestStateParticipant, ManifestStateParticipantError, validateManifestStatePlan } from "./manifest-state.js";
 export type {
   ArtifactKind,
   ArtifactOwner,
@@ -38,3 +39,19 @@ export type {
   ManifestAdmissionContextV1,
   MigratableInstallationManifestV1,
 } from "./types.js";
+export type {
+  BootstrapExpectedPayloadRefV1,
+  FreshV2InitIdV1,
+  LifecycleCoordinatorIdV1,
+  ManifestBytesStateV1,
+  ManifestExternalEffectRefV1,
+  ManifestMigrationIdV1,
+  ManifestParticipantIdV1,
+  ManifestParticipantObservationV1,
+  ManifestPayloadIdentityV1,
+  ManifestPayloadRefV1,
+  ManifestStateParticipantDependencies,
+  ManifestStatePlanAdmissionContextV1,
+  ManifestStatePlanV1,
+  UpdateExpectedPayloadRefV1,
+} from "./manifest-state.js";
