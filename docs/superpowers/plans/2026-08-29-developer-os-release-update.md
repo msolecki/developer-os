@@ -513,6 +513,7 @@ git commit -m "feat(core): define v2 bootstrap recovery"
 - Modify: `apps/cli/src/commands/testing.ts`
 - Modify: `apps/cli/src/context.ts`
 - Modify: `apps/cli/src/context.test.ts`
+- Modify: `apps/cli/vitest.config.ts`
 
 **Interfaces:**
 - Consumes: Tasks 1–6, existing Foundation filesystem/lock/guard ports, packaged release source injected by CLI composition.
@@ -564,6 +565,8 @@ Close the discovered Task 6/7 payload seam in the shared bootstrap grammar. Ever
 
 The initial-journal bridge must also recover the exact post-link/pre-unlink Foundation publication state. When both staged and final names exist, Core admits only the same already-authorized inode with the exact owner/mode/content identity and delegates completion to the injected idempotent no-replace publication capability; distinct inodes or any mismatched identity remain a third state. This narrow Task 6 bridge extension is required because rejecting both names before calling the capability would make Task 7's crash-idempotent publisher unreachable after a cold retry.
 
+Run CLI test files serially within the CLI Vitest project while retaining the root suite's other project concurrency and every existing per-test timeout/assertion. Two exact full-gate runs moved an unchanged real-filesystem init timeout from one executor case to the next at 60.407 s and 60.236 s, while those same cases took 11.856 s and 11.783 s in isolation; in-file reordering therefore only transfers startup I/O starvation. `fileParallelism: false` on `apps/cli/vitest.config.ts` is the narrow scheduling control for the CLI project's process/fsync-heavy files, matching the existing repository test-project policy without converting load amplification into a larger timeout.
+
 - [x] **Step 4: Run fresh-init tests**
 
 Run: `npx vitest run --root packages/core src/manifest/bootstrap.test.ts src/transactions/transactions.test.ts && npx vitest run --root apps/cli src/bootstrap/executor.test.ts src/update/packaged-release.test.ts src/commands/init.test.ts`
@@ -573,7 +576,7 @@ Expected: PASS for dry-run, success, compensation, force-forward, and every inje
 - [x] **Step 5: Commit Task 7**
 
 ```bash
-git add packages/core/src/manifest/bootstrap.ts packages/core/src/manifest/bootstrap.test.ts packages/core/src/transactions/executor.ts packages/core/src/transactions/transactions.test.ts apps/cli/src/bootstrap/context.ts apps/cli/src/bootstrap/executor.ts apps/cli/src/bootstrap/executor.test.ts apps/cli/src/update/packaged-release.ts apps/cli/src/update/packaged-release.test.ts apps/cli/src/commands/init.ts apps/cli/src/commands/init.test.ts apps/cli/src/commands/testing.ts apps/cli/src/context.ts apps/cli/src/context.test.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
+git add packages/core/src/manifest/bootstrap.ts packages/core/src/manifest/bootstrap.test.ts packages/core/src/transactions/executor.ts packages/core/src/transactions/transactions.test.ts apps/cli/src/bootstrap/context.ts apps/cli/src/bootstrap/executor.ts apps/cli/src/bootstrap/executor.test.ts apps/cli/src/update/packaged-release.ts apps/cli/src/update/packaged-release.test.ts apps/cli/src/commands/init.ts apps/cli/src/commands/init.test.ts apps/cli/src/commands/testing.ts apps/cli/src/context.ts apps/cli/src/context.test.ts apps/cli/vitest.config.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
 git commit -m "feat(cli): initialize manifest v2 installations"
 ```
 
