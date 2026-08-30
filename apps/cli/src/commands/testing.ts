@@ -83,9 +83,11 @@ class RecordingLockProvider implements TransactionLockProvider {
   constructor(
     private readonly delegate: TransactionLockProvider,
     private readonly events: string[],
+    private readonly beforeAcquire?: (path: string) => Promise<void>,
   ) {}
 
   async acquire(path: string): Promise<TransactionLockHandle> {
+    await this.beforeAcquire?.(path);
     const handle = await this.delegate.acquire(path);
     if (path.endsWith("/.lifecycle-bootstrap.lock") || path.endsWith("/.lifecycle.lock")) {
       this.events.push(`acquire:${path}`);
@@ -249,6 +251,8 @@ export interface FixtureOptions {
   readonly bootstrapAvailable?: boolean;
   /** Uses the real kernel-backed lifecycle lock provider for exclusion tests. */
   readonly bootstrapProductionLocks?: boolean;
+  /** Inserts an adversarial namespace race immediately before lifecycle lock acquisition. */
+  readonly bootstrapBeforeLockAcquire?: (path: string) => Promise<void>;
 }
 
 const fixtureRoots: string[] = [];
@@ -368,6 +372,7 @@ export async function createCommandFixture(
         ? new MacOsTransactionLockProvider()
         : new InProcessLockProvider(),
       lifecycleLockEvents,
+      options.bootstrapBeforeLockAcquire,
     );
     const transactionExecutor = new TransactionExecutor({
       stateDir: paths.stateDir,
