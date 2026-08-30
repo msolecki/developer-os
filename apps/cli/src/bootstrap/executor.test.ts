@@ -99,6 +99,18 @@ async function persistedPlan(fixture: CommandFixture): Promise<{
   return { path, value: JSON.parse(await nodeFs.readFile(path, "utf8")) as JsonRecord };
 }
 
+async function persistedJournal(fixture: CommandFixture): Promise<{
+  readonly path: string;
+  readonly value: JsonRecord;
+}> {
+  const name = (await nodeFs.readdir(fixture.paths.stateDir)).find((candidate) =>
+    candidate.endsWith(".journal.json"),
+  );
+  if (name === undefined) throw new Error("fixture has no persisted bootstrap journal");
+  const path = join(fixture.paths.stateDir, name);
+  return { path, value: JSON.parse(await nodeFs.readFile(path, "utf8")) as JsonRecord };
+}
+
 async function writeCanonical(path: string, value: JsonRecord): Promise<void> {
   await nodeFs.writeFile(
     path,
@@ -111,6 +123,19 @@ function planRows(value: JsonRecord, key: "payloads" | "createdPaths"): JsonReco
   const rows = value[key];
   if (!Array.isArray(rows)) throw new Error(`plan ${key} is not an array`);
   return rows as JsonRecord[];
+}
+
+function futureOrdinaryDirectory(plan: JsonRecord, fixture: CommandFixture): string {
+  const future = planRows(plan, "createdPaths").find((row) =>
+    row.kind === "directory" &&
+    typeof row.path === "string" &&
+    !row.path.startsWith(`${fixture.paths.stagingDir}/`) &&
+    (dirname(row.path) === fixture.paths.home || dirname(row.path) === fixture.paths.stateDir),
+  );
+  if (future === undefined || typeof future.path !== "string") {
+    throw new Error("fixture has no suitable future planned directory");
+  }
+  return future.path;
 }
 
 function evidencePathFor(
@@ -407,6 +432,52 @@ describe("BootstrapExecutor fresh V2 initialization", () => {
     ]);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("preserves an already-compensated future target inserted before cold compensation resumes", async () => {
+    const fixture = await createCommandFixture("bootstrap-compensating-future-third-state", {
+      bootstrapAvailable: true,
+      bootstrapFailureAfter: "after_foundation",
+      bootstrapInterruptAfter: "before_payload_compensation_unlink",
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    const plan = (await persistedPlan(fixture)).value;
+    const future = futureOrdinaryDirectory(plan, fixture);
+    await nodeFs.mkdir(future, { mode: 0o700 });
+    const inserted = await nodeFs.lstat(future, { bigint: true });
+
+    fixture.disableBootstrapInterrupt();
+    fixture.disableBootstrapFailure();
+    const refused = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(refused.ok).toBe(false);
+    expect((await nodeFs.lstat(future, { bigint: true })).ino).toBe(inserted.ino);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("preserves a future target inserted beside a rolled-back journal", async () => {
+    const fixture = await createCommandFixture("bootstrap-rolled-back-future-third-state", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_journal",
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    const plan = (await persistedPlan(fixture)).value;
+    const journal = await persistedJournal(fixture);
+    Object.assign(journal.value, {
+      phase: "rolled_back",
+      direction: "compensating",
+      compensationNext: -1,
+      terminalOutcome: "rolled_back",
+    });
+    await writeCanonical(journal.path, journal.value);
+    const future = futureOrdinaryDirectory(plan, fixture);
+    await nodeFs.mkdir(future, { mode: 0o700 });
+    const inserted = await nodeFs.lstat(future, { bigint: true });
+
+    fixture.disableBootstrapInterrupt();
+    const refused = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(refused.ok).toBe(false);
+    expect((await nodeFs.lstat(future, { bigint: true })).ino).toBe(inserted.ino);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it.each([
     {
       name: "an out-of-root journal path",
@@ -508,6 +579,105 @@ describe("BootstrapExecutor fresh V2 initialization", () => {
 
     expect(refused.ok).toBe(false);
     expect(await nodeFs.readFile(temporary, "utf8")).toBe("tampered rewrite\n");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("preserves a plan temp whose well-formed external-shape hash is not the held pre-intent projection", async () => {
+    const fixture = await createCommandFixture("bootstrap-plan-prefix-wrong-external-hash", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_plan_temp_sync",
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    const name = (await nodeFs.readdir(fixture.paths.stateDir)).find((candidate) =>
+      candidate.endsWith(".plan.json.tmp"),
+    );
+    if (name === undefined) throw new Error("fixture has no plan temp");
+    const temporary = join(fixture.paths.stateDir, name);
+    const bytes = await nodeFs.readFile(temporary, "utf8");
+    await nodeFs.writeFile(
+      temporary,
+      bytes.replace(
+        /\{"admittedExternalShapeHash":"[0-9a-f]{64}"/u,
+        `{"admittedExternalShapeHash":"${"0".repeat(64)}"`,
+      ),
+      { mode: 0o600 },
+    );
+
+    fixture.disableBootstrapInterrupt();
+    const refused = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(refused.ok).toBe(false);
+    expect(await exists(temporary)).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("recovers a fully synced legal journal rewrite from a fresh executor", async () => {
+    const fixture = await createCommandFixture("bootstrap-journal-rewrite-resume", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_journal_rewrite_temp_sync" as never,
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    expect((await nodeFs.readdir(fixture.paths.stateDir)).some((candidate) =>
+      candidate.endsWith(".journal.json.tmp"),
+    )).toBe(true);
+
+    fixture.disableBootstrapInterrupt();
+    const resumed = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(resumed.ok && resumed.data.schemaVersion).toBe(2);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("preserves a journal rewrite temp equal to the current final instead of treating it as the next rewrite", async () => {
+    const fixture = await createCommandFixture("bootstrap-journal-rewrite-current-final", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_journal",
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    const plan = (await persistedPlan(fixture)).value;
+    const journal = await persistedJournal(fixture);
+    if (typeof plan.id !== "string") throw new Error("fixture plan id is absent");
+    const temporary = join(
+      fixture.paths.stateDir,
+      `.fresh-v2-init.${plan.id}.22222222-2222-4222-8222-222222222222.journal.json.tmp`,
+    );
+    await nodeFs.writeFile(temporary, await nodeFs.readFile(journal.path), { mode: 0o600 });
+
+    fixture.disableBootstrapInterrupt();
+    const refused = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(refused.ok).toBe(false);
+    expect(await exists(temporary)).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it.each([
+    { kind: "plan" as const, point: "after_plan_temp_sync" },
+    { kind: "initial-journal" as const, point: "after_journal_temp_sync" },
+    { kind: "rewrite-journal" as const, point: "after_journal_rewrite_temp_sync" },
+  ])("preserves a same-name $kind temp swap inside guarded unlink", async ({ kind, point }) => {
+    let swappedPath: string | undefined;
+    let swappedIno: bigint | undefined;
+    let swapped = false;
+    const options = {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: point as never,
+      bootstrapGuardedUnlinkHook: (path: string) => {
+        if (swapped || !path.endsWith(kind === "plan" ? ".plan.json.tmp" : ".journal.json.tmp")) return;
+        const replacement = `${path}.concurrent`;
+        fsSync.writeFileSync(replacement, fsSync.readFileSync(path), { mode: 0o600 });
+        fsSync.renameSync(replacement, path);
+        swappedPath = path;
+        swappedIno = fsSync.lstatSync(path, { bigint: true }).ino;
+        swapped = true;
+      },
+    };
+    const fixture = await createCommandFixture(`bootstrap-temp-swap-${kind}`, options);
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+
+    fixture.disableBootstrapInterrupt();
+    const refused = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(refused.ok).toBe(false);
+    expect(swapped).toBe(true);
+    if (swappedPath === undefined || swappedIno === undefined) throw new Error("temp swap hook did not run");
+    expect((await nodeFs.lstat(swappedPath, { bigint: true })).ino).toBe(swappedIno);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("preserves the immutable plan when a planned target appears before initial journal intent", async () => {
@@ -687,7 +857,10 @@ describe("BootstrapExecutor fresh V2 initialization", () => {
     const beforeRecovery = fixture.lifecycleLockEvents.length;
 
     fixture.disableBootstrapInterrupt();
-    expect((await runInit(fixture.rebuildContext(), ACCEPTED)).ok).toBe(true);
+    const resumed = await runInit(fixture.rebuildContext(), ACCEPTED);
+    if (!resumed.ok) {
+      throw new Error(JSON.stringify({ resumed, trace: fixture.bootstrapTrace.slice(-30) }));
+    }
 
     expect(fixture.lifecycleLockEvents.slice(beforeRecovery).some((event) =>
       event === `acquire:${join(fixture.paths.stateDir, ".lifecycle.lock")}`,
@@ -825,6 +998,56 @@ describe("BootstrapExecutor fresh V2 initialization", () => {
     const retained = await nodeFs.lstat(replacementPath, { bigint: true });
     expect(retained.ino).toBe(replacementIno);
     expect(await nodeFs.readFile(replacementPath)).toStrictEqual(replacementBytes);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it.each([
+    { state: "evidenced" as const, mutation: "same-name swap" as const },
+    { state: "writing" as const, mutation: "in-place mutation" as const },
+  ])("preserves a $mutation inside the guarded payload unlink for $state state", async ({ state, mutation }) => {
+    let retainedPath: string | undefined;
+    let retainedIno: bigint | undefined;
+    let retainedBytes: Buffer | undefined;
+    let mutated = false;
+    const options = {
+      bootstrapAvailable: true,
+      ...(state === "writing"
+        ? {
+            bootstrapInterruptAfter: "after_payload_writing_intent" as const,
+            bootstrapFailureAfter: "during_payload_write" as const,
+          }
+        : { bootstrapFailureAfter: "after_payloads" as const }),
+      bootstrapGuardedUnlinkHook: (path: string) => {
+        if (mutated || path.endsWith(".tmp")) return;
+        const original = fsSync.readFileSync(path);
+        if (mutation === "same-name swap") {
+          const replacement = `${path}.concurrent`;
+          fsSync.writeFileSync(replacement, original, { mode: 0o600 });
+          fsSync.renameSync(replacement, path);
+        } else {
+          fsSync.appendFileSync(path, "concurrent");
+        }
+        retainedPath = path;
+        retainedIno = fsSync.lstatSync(path, { bigint: true }).ino;
+        retainedBytes = fsSync.readFileSync(path);
+        mutated = true;
+      },
+    };
+    const fixture = await createCommandFixture(`bootstrap-guarded-payload-${state}`, options);
+    const first = await runInit(fixture.context, ACCEPTED);
+    expect(first.ok).toBe(false);
+    if (state === "writing") fixture.disableBootstrapInterrupt();
+
+    const refused = state === "writing"
+      ? await runInit(fixture.rebuildContext(), ACCEPTED)
+      : first;
+
+    expect(refused.ok).toBe(false);
+    expect(mutated).toBe(true);
+    if (retainedPath === undefined || retainedIno === undefined || retainedBytes === undefined) {
+      throw new Error("guarded payload mutation hook did not run");
+    }
+    expect((await nodeFs.lstat(retainedPath, { bigint: true })).ino).toBe(retainedIno);
+    expect(await nodeFs.readFile(retainedPath)).toStrictEqual(retainedBytes);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("retains the fresh V1 compatibility arm when the bootstrap projection is absent", async () => {
