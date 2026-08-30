@@ -159,6 +159,43 @@ function evidencePathFor(
   ).evidence;
 }
 
+function foundationParticipant(plan: JsonRecord, role: "forward" | "compensation"): JsonRecord {
+  const participants = plan.foundationParticipants;
+  if (!Array.isArray(participants)) throw new Error("plan Foundation participants are absent");
+  const participant = (participants as JsonRecord[]).find((candidate) =>
+    (candidate.role as JsonRecord | undefined)?.kind === role,
+  );
+  if (participant === undefined) throw new Error(`plan ${role} Foundation participant is absent`);
+  return participant;
+}
+
+function foundationNamespaceRow(
+  fixture: CommandFixture,
+  participant: JsonRecord,
+  kind: "staged" | "backup",
+): string {
+  if (typeof participant.id !== "string") throw new Error("Foundation participant id is absent");
+  if (kind === "backup") {
+    return join(fixture.paths.backupsDir, "transactions", participant.id, "0.json");
+  }
+  const mutations = participant.mutations;
+  if (!Array.isArray(mutations)) throw new Error("Foundation participant mutations are absent");
+  const mutation = (mutations as JsonRecord[]).find((candidate) => typeof candidate.stagedPath === "string");
+  if (mutation !== undefined && typeof mutation.stagedPath === "string") return mutation.stagedPath;
+  return join(fixture.paths.stagingDir, "transactions", participant.id, "0.bin");
+}
+
+function legalFoundationBackupBytes(participant: JsonRecord): string {
+  const mutations = participant.mutations;
+  if (!Array.isArray(mutations) || mutations.length < 1) {
+    throw new Error("Foundation participant backup mutation is absent");
+  }
+  const first = mutations[0] as JsonRecord;
+  return first.expectedBeforeHash === null
+    ? '{"existed":false,"mode":null,"atimeMs":null,"mtimeMs":null}\n'
+    : '{"existed":true,"mode":384,"atimeMs":0,"mtimeMs":0}\n';
+}
+
 describe("BootstrapExecutor fresh V2 initialization", () => {
   it("creates a complete V2 handoff without network, Git, launchd, vendor, or model calls", async () => {
     const fixture = await createCommandFixture("bootstrap-complete", {
@@ -478,6 +515,53 @@ describe("BootstrapExecutor fresh V2 initialization", () => {
     expect((await nodeFs.lstat(future, { bigint: true })).ino).toBe(inserted.ino);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it.each(
+    (["compensating", "rolled_back", "foundation_compacted"] as const).flatMap((phase) =>
+      (["forward", "compensation"] as const).flatMap((role) =>
+        (["staged", "backup"] as const).map((kind) => ({ phase, role, kind })),
+      ),
+    ),
+  )("preserves a reinserted $role Foundation $kind row while $phase", async ({ phase, role, kind }) => {
+    const fixture = await createCommandFixture(
+      `bootstrap-foundation-namespace-${phase}-${role}-${kind}`,
+      phase === "foundation_compacted"
+        ? {
+            bootstrapAvailable: true,
+            bootstrapInterruptAfter: "after_foundation_compaction",
+          }
+        : {
+            bootstrapAvailable: true,
+            bootstrapFailureAfter: "after_foundation",
+            bootstrapInterruptAfter: phase === "rolled_back"
+              ? "after_rolled_back"
+              : "before_payload_compensation_unlink",
+          },
+    );
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    const plan = (await persistedPlan(fixture)).value;
+    const participant = foundationParticipant(plan, role);
+    const row = foundationNamespaceRow(fixture, participant, kind);
+    await nodeFs.mkdir(dirname(row), { recursive: true, mode: 0o700 });
+    const replacement = `${row}.reinserted`;
+    const bytes = kind === "backup" && (phase !== "foundation_compacted" || role === "compensation")
+      ? legalFoundationBackupBytes(participant)
+      : `reinserted-${phase}-${role}-${kind}\n`;
+    await nodeFs.writeFile(replacement, bytes, { mode: 0o600 });
+    await nodeFs.rename(replacement, row);
+    const inserted = await nodeFs.lstat(row, { bigint: true });
+
+    fixture.disableBootstrapInterrupt();
+    fixture.disableBootstrapFailure();
+    const refused = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(refused.ok).toBe(false);
+    expect((await nodeFs.lstat(row, { bigint: true })).ino).toBe(inserted.ino);
+    const relative = row.slice(fixture.paths.home.length + 1);
+    expect(fixture.bootstrapTrace.some((event) =>
+      event.startsWith("inventory:unknown:") && event.includes(relative),
+    ), fixture.bootstrapTrace.slice(-30).join("\n")).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it.each([
     {
       name: "an out-of-root journal path",
@@ -625,6 +709,56 @@ describe("BootstrapExecutor fresh V2 initialization", () => {
     expect(resumed.ok && resumed.data.schemaVersion).toBe(2);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("recovers an exact partial legal journal rewrite left during its write", async () => {
+    const fixture = await createCommandFixture("bootstrap-journal-rewrite-partial-resume", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "during_journal_rewrite_write" as never,
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    const temporaryName = (await nodeFs.readdir(fixture.paths.stateDir)).find((candidate) =>
+      candidate.endsWith(".journal.json.tmp"),
+    );
+    if (temporaryName === undefined) throw new Error("fixture has no partial rewrite temp");
+    const temporary = join(fixture.paths.stateDir, temporaryName);
+    const partialSize = (await nodeFs.lstat(temporary)).size;
+    const finalSize = (await nodeFs.lstat((await persistedJournal(fixture)).path)).size;
+    expect(partialSize).toBeGreaterThan(0);
+    expect(partialSize).toBeLessThan(finalSize);
+
+    fixture.disableBootstrapInterrupt();
+    const resumed = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(resumed.ok && resumed.data.schemaVersion).toBe(2);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("preserves a legal next-cursor rewrite whose required creation evidence is absent", async () => {
+    const fixture = await createCommandFixture("bootstrap-journal-rewrite-projection-mismatch", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_global_lock_create",
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    const plan = (await persistedPlan(fixture)).value;
+    const journal = await persistedJournal(fixture);
+    if (typeof plan.id !== "string") throw new Error("fixture plan id is absent");
+    if (typeof journal.value.nextCreatedPath !== "number") {
+      throw new Error("fixture creation cursor is absent");
+    }
+    const temporary = join(
+      fixture.paths.stateDir,
+      `.fresh-v2-init.${plan.id}.44444444-4444-4444-8444-444444444444.journal.json.tmp`,
+    );
+    await writeCanonical(temporary, {
+      ...journal.value,
+      nextCreatedPath: journal.value.nextCreatedPath + 1,
+    });
+
+    fixture.disableBootstrapInterrupt();
+    const refused = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(refused.ok).toBe(false);
+    expect(await exists(temporary)).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("preserves a journal rewrite temp equal to the current final instead of treating it as the next rewrite", async () => {
     const fixture = await createCommandFixture("bootstrap-journal-rewrite-current-final", {
       bootstrapAvailable: true,
@@ -645,6 +779,68 @@ describe("BootstrapExecutor fresh V2 initialization", () => {
 
     expect(refused.ok).toBe(false);
     expect(await exists(temporary)).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("preserves a current-final-only prefix that reaches the unchanged phase value", async () => {
+    const fixture = await createCommandFixture("bootstrap-journal-rewrite-current-final-prefix", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_journal",
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    const plan = (await persistedPlan(fixture)).value;
+    const journal = await persistedJournal(fixture);
+    if (typeof plan.id !== "string") throw new Error("fixture plan id is absent");
+    const current = await nodeFs.readFile(journal.path, "utf8");
+    const phaseEnd = current.indexOf('","planHash"', current.indexOf('"phase"'));
+    if (phaseEnd < 0) throw new Error("fixture journal phase boundary is absent");
+    const temporary = join(
+      fixture.paths.stateDir,
+      `.fresh-v2-init.${plan.id}.33333333-3333-4333-8333-333333333333.journal.json.tmp`,
+    );
+    await nodeFs.writeFile(temporary, current.slice(0, phaseEnd + 1), { mode: 0o600 });
+
+    fixture.disableBootstrapInterrupt();
+    const refused = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(refused.ok).toBe(false);
+    expect(await exists(temporary)).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("preserves the exact rewrite temp when the final journal changes at cleanup detach", async () => {
+    let finalReplacementIno: bigint | undefined;
+    let temporaryPath: string | undefined;
+    let swapped = false;
+    const fixture = await createCommandFixture("bootstrap-journal-rewrite-final-swap", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_journal_rewrite_temp_sync" as never,
+      bootstrapGuardedUnlinkHook: (path: string) => {
+        if (swapped || !path.endsWith(".journal.json.tmp")) return;
+        temporaryPath = path;
+        const final = fsSync.readdirSync(fixture.paths.stateDir).find((candidate) =>
+          candidate.endsWith(".journal.json") && !candidate.startsWith("."),
+        );
+        if (final === undefined) throw new Error("fixture final journal is absent at cleanup");
+        const finalPath = join(fixture.paths.stateDir, final);
+        const replacement = `${finalPath}.replacement`;
+        fsSync.writeFileSync(replacement, fsSync.readFileSync(finalPath), { mode: 0o600 });
+        fsSync.renameSync(replacement, finalPath);
+        finalReplacementIno = fsSync.lstatSync(finalPath, { bigint: true }).ino;
+        swapped = true;
+      },
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+
+    fixture.disableBootstrapInterrupt();
+    const refused = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(refused.ok).toBe(false);
+    expect(swapped).toBe(true);
+    if (temporaryPath === undefined || finalReplacementIno === undefined) {
+      throw new Error("journal cleanup mutation hook did not run");
+    }
+    expect(await exists(temporaryPath)).toBe(true);
+    expect((await nodeFs.lstat((await persistedJournal(fixture)).path, { bigint: true })).ino)
+      .toBe(finalReplacementIno);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it.each([

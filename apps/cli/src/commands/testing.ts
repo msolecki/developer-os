@@ -1,7 +1,7 @@
 import * as nodeFs from "node:fs/promises";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { join } from "node:path";
 
 import {
   ManifestStore,
@@ -28,10 +28,10 @@ import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 
 import {
   BootstrapExecutor,
-  type BootstrapGuardedUnlinkRequestV1,
   type FreshInitDeathPointV1,
 } from "../bootstrap/executor.js";
 import {
+  createBootstrapGuardedUnlinkExact,
   createGuards,
   NODE_FILE_SYSTEM,
   pathEnvironmentFor,
@@ -356,56 +356,11 @@ export async function createCommandFixture(
   let bootstrapInterruptEnabled = true;
   let bootstrapFailureEnabled = true;
 
-  const guardedUnlinkExact = async (request: BootstrapGuardedUnlinkRequestV1): Promise<void> => {
-    options.bootstrapGuardedUnlinkHook?.(request.path);
-    const parent = await nodeFs.lstat(request.parent.path);
-    const target = await nodeFs.lstat(request.path);
-    const targetBytes = await nodeFs.readFile(request.path);
-    if (
-      !parent.isDirectory() || parent.isSymbolicLink() || parent.uid !== request.parent.ownerUid ||
-      (parent.mode & 0o777) !== request.parent.mode || String(parent.dev) !== request.parent.dev ||
-      String(parent.ino) !== request.parent.ino ||
-      !target.isFile() || target.isSymbolicLink() || target.uid !== request.target.ownerUid ||
-      (target.mode & 0o777) !== request.target.mode || target.nlink !== request.target.nlink ||
-      target.size !== request.target.bytes || String(target.dev) !== request.target.dev ||
-      String(target.ino) !== request.target.ino || digest(targetBytes) !== request.target.sha256
-    ) {
-      throw new Error("guarded bootstrap unlink identity changed at the primitive boundary");
-    }
-    const quarantine = join(root, `.guarded-unlink-${randomUUID()}-${basename(request.path)}`);
-    await nodeFs.rename(request.path, quarantine);
-    try {
-      const captured = await nodeFs.lstat(quarantine);
-      const capturedBytes = await nodeFs.readFile(quarantine);
-      if (
-        String(captured.dev) !== request.target.dev || String(captured.ino) !== request.target.ino ||
-        captured.uid !== request.target.ownerUid || (captured.mode & 0o777) !== request.target.mode ||
-        captured.nlink !== request.target.nlink || captured.size !== request.target.bytes ||
-        digest(capturedBytes) !== request.target.sha256
-      ) {
-        throw new Error("guarded bootstrap unlink captured a different target");
-      }
-      await request.validateDetached?.();
-      const final = await nodeFs.lstat(quarantine);
-      const finalBytes = await nodeFs.readFile(quarantine);
-      if (
-        String(final.dev) !== request.target.dev || String(final.ino) !== request.target.ino ||
-        final.uid !== request.target.ownerUid || (final.mode & 0o777) !== request.target.mode ||
-        final.nlink !== request.target.nlink || final.size !== request.target.bytes ||
-        digest(finalBytes) !== request.target.sha256
-      ) {
-        throw new Error("guarded bootstrap unlink target changed before deletion");
-      }
-      await nodeFs.unlink(quarantine);
-    } catch (error) {
-      if (await nodeFs.lstat(request.path).then(() => false).catch(() => true)) {
-        await nodeFs.rename(quarantine, request.path).catch(() => undefined);
-      }
-      throw error;
-    }
-    // The executor syncs the selected namespace parent after this capability.
-    if (dirname(request.path) === root) throw new Error("guarded unlink target escaped fixture scope");
-  };
+  const guardedUnlinkExact = createBootstrapGuardedUnlinkExact(paths.home, {
+    ...(options.bootstrapGuardedUnlinkHook === undefined
+      ? {}
+      : { afterCaptureBeforeDetach: options.bootstrapGuardedUnlinkHook }),
+  });
 
   const runner: ProcessRunner = options.runner ?? {
     run(): Promise<ProcessResult> {

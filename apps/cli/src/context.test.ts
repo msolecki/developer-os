@@ -1,9 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fsSync from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -15,6 +15,7 @@ import {
   assertReadableArtifactPath,
   assertRootsAnchored,
   createGuards,
+  createBootstrapGuardedUnlinkExact,
   createProductionContext,
   failureFrom,
   loadOrCreateRedactionKey,
@@ -22,6 +23,7 @@ import {
   publishBootstrapInitialJournalNoReplace,
   readRedactionKey,
 } from "./context.js";
+import type { BootstrapGuardedUnlinkRequestV1 } from "./bootstrap/executor.js";
 import type { CliContext } from "./context.js";
 import type { CliIo } from "./io.js";
 
@@ -178,6 +180,122 @@ describe("publishBootstrapInitialJournalNoReplace", () => {
 
     expect(await nodeFs.readFile(sourcePath, "utf8")).toBe("planned\n");
     expect(await nodeFs.readFile(destinationPath, "utf8")).toBe("concurrent\n");
+  });
+});
+
+async function guardedUnlinkRequest(path: string): Promise<BootstrapGuardedUnlinkRequestV1> {
+  const parentPath = dirname(path);
+  const [parent, target, bytes] = await Promise.all([
+    nodeFs.lstat(parentPath),
+    nodeFs.lstat(path),
+    nodeFs.readFile(path),
+  ]);
+  return {
+    path,
+    parent: {
+      path: parentPath,
+      ownerUid: parent.uid,
+      mode: parent.mode & 0o777,
+      dev: String(parent.dev),
+      ino: String(parent.ino),
+    },
+    target: {
+      ownerUid: target.uid,
+      mode: target.mode & 0o777,
+      nlink: target.nlink,
+      bytes: target.size,
+      dev: String(target.dev),
+      ino: String(target.ino),
+      sha256: createHash("sha256").update(bytes).digest("hex") as never,
+    },
+  };
+}
+
+describe("createBootstrapGuardedUnlinkExact", () => {
+  it("fails closed across a parent-name swap after capture", async () => {
+    const fixture = await createFixture("guarded-unlink-parent-swap");
+    const scope = join(fixture.root, "scope");
+    const parent = join(scope, "selected");
+    const moved = join(scope, "selected-moved");
+    const target = join(parent, "target");
+    await nodeFs.mkdir(parent, { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(target, "expected\n", { mode: 0o600 });
+    const request = await guardedUnlinkRequest(target);
+    const unlink = createBootstrapGuardedUnlinkExact(scope, {
+      afterCaptureBeforeDetach: async () => {
+        await nodeFs.rename(parent, moved);
+        await nodeFs.mkdir(parent, { mode: 0o700 });
+        await nodeFs.writeFile(target, "replacement\n", { mode: 0o600 });
+      },
+    });
+
+    await expect(unlink(request)).rejects.toBeDefined();
+
+    expect(await nodeFs.readFile(target, "utf8")).toBe("replacement\n");
+    expect(await nodeFs.readFile(join(moved, "target"), "utf8")).toBe("expected\n");
+  });
+
+  it("preserves a same-name target swap after capture", async () => {
+    const fixture = await createFixture("guarded-unlink-target-swap");
+    const scope = join(fixture.root, "scope");
+    const parent = join(scope, "selected");
+    const target = join(parent, "target");
+    const original = join(parent, "original");
+    await nodeFs.mkdir(parent, { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(target, "expected\n", { mode: 0o600 });
+    const request = await guardedUnlinkRequest(target);
+    const unlink = createBootstrapGuardedUnlinkExact(scope, {
+      afterCaptureBeforeDetach: async () => {
+        await nodeFs.rename(target, original);
+        await nodeFs.writeFile(target, "replacement\n", { mode: 0o600 });
+      },
+    });
+
+    await expect(unlink(request)).rejects.toBeDefined();
+
+    expect(await nodeFs.readFile(target, "utf8")).toBe("replacement\n");
+    expect(await nodeFs.readFile(original, "utf8")).toBe("expected\n");
+  });
+
+  it("preserves an in-place postimage mutation after capture", async () => {
+    const fixture = await createFixture("guarded-unlink-in-place");
+    const scope = join(fixture.root, "scope");
+    const parent = join(scope, "selected");
+    const target = join(parent, "target");
+    await nodeFs.mkdir(parent, { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(target, "expected\n", { mode: 0o600 });
+    const request = await guardedUnlinkRequest(target);
+    const unlink = createBootstrapGuardedUnlinkExact(scope, {
+      afterCaptureBeforeDetach: () => nodeFs.appendFile(target, "mutation\n"),
+    });
+
+    await expect(unlink(request)).rejects.toBeDefined();
+
+    expect(await nodeFs.readFile(target, "utf8")).toBe("expected\nmutation\n");
+  });
+
+  it("refuses an out-of-scope path before capture or mutation", async () => {
+    const fixture = await createFixture("guarded-unlink-containment");
+    const scope = join(fixture.root, "scope");
+    const outside = join(fixture.root, "outside");
+    const target = join(outside, "target");
+    await nodeFs.mkdir(scope, { mode: 0o700 });
+    await nodeFs.mkdir(outside, { mode: 0o700 });
+    await nodeFs.writeFile(target, "outside\n", { mode: 0o600 });
+    const request = await guardedUnlinkRequest(target);
+    let captured = false;
+    const unlink = createBootstrapGuardedUnlinkExact(scope, {
+      afterCaptureBeforeDetach: () => {
+        captured = true;
+      },
+    });
+
+    await expect(unlink(request)).rejects.toBeDefined();
+
+    expect(captured).toBe(false);
+    expect(await nodeFs.readFile(target, "utf8")).toBe("outside\n");
+    expect((await nodeFs.readdir(fixture.root)).some((name) => name.startsWith(".bootstrap-unlink-")))
+      .toBe(false);
   });
 });
 

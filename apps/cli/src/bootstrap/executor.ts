@@ -52,6 +52,7 @@ import type {
   ManifestStatePlanV1,
   PlannedCreatedPathV1,
   RuntimePaths,
+  TransactionJournalV1,
   TransactionExecutor,
   TransactionLockHandle,
   TransactionLockProvider,
@@ -114,6 +115,7 @@ export const freshInitFineGrainedDeathPoints = [
   { name: "after_journal_publication_parent_sync" },
   { name: "after_journal_temp_unlink" },
   { name: "after_journal_temp_parent_sync" },
+  { name: "during_journal_rewrite_write" },
   { name: "after_journal_rewrite_temp_sync" },
   { name: "after_payload_create_intent" },
   { name: "after_payload_empty_create" },
@@ -147,6 +149,8 @@ export const freshInitFineGrainedDeathPoints = [
   { name: "after_journal_parent_sync" },
   { name: "after_plan_unlink" },
   { name: "after_plan_parent_sync" },
+  { name: "after_rolled_back" },
+  { name: "after_foundation_compaction" },
 ] as const;
 
 export type FreshInitDeathPointV1 =
@@ -883,94 +887,412 @@ export class BootstrapExecutor {
     plan: FreshV2InitPlanV1,
     current: FreshV2InitJournalV1,
   ): Promise<boolean> {
-    let candidate: FreshV2InitJournalV1;
+    let text: string;
     try {
-      const decoded = decodeCanonicalJson(bytes, MAX_JOURNAL_BYTES);
-      candidate = validateBootstrapJournal(plan, decoded) as FreshV2InitJournalV1;
-      if (encodeCanonicalJson(candidate as unknown as CanonicalJsonValue) !== new TextDecoder().decode(bytes)) {
-        return false;
-      }
+      text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
     } catch {
       return false;
     }
-    if (sameValue(candidate, current) || candidate.createdAt !== current.createdAt) return false;
-    if (Date.parse(candidate.updatedAt) < Date.parse(current.updatedAt)) return false;
-    const keys = Object.keys(current) as Array<keyof FreshV2InitJournalV1>;
-    const changed = keys.filter((key) => key !== "updatedAt" && !sameValue(current[key], candidate[key]));
-    const exactly = (...expected: Array<keyof FreshV2InitJournalV1>): boolean =>
-      sameValue([...changed].sort(), [...expected].sort());
+    const successors: Array<{
+      readonly journal: FreshV2InitJournalV1;
+      readonly projection: (candidate: FreshV2InitJournalV1) => Promise<boolean>;
+    }> = [];
+    const add = (
+      patch: Partial<FreshV2InitJournalV1>,
+      projection: (candidate: FreshV2InitJournalV1) => Promise<boolean> = () => Promise.resolve(true),
+    ): void => {
+      try {
+        const candidate = validateBootstrapJournal(plan, {
+          ...current,
+          ...patch,
+          updatedAt: current.updatedAt,
+        }) as FreshV2InitJournalV1;
+        if (!sameValue(candidate, current) && !successors.some((row) => sameValue(row.journal, candidate))) {
+          successors.push({ journal: candidate, projection });
+        }
+      } catch {
+        // A structurally plausible transition that is illegal in this phase is not a frontier.
+      }
+    };
     const reached =
       current.nextPayload + (current.payloadWriteState.state === "idle" ? 0 : 1) +
       current.nextCreatedPath + current.nextFoundationParticipant +
       current.nextLaunchabilityPath + Math.min(current.manifestCursor, 1);
 
-    if (
-      exactly("phase") && candidate.direction === current.direction &&
-      ((current.phase === "planned" && candidate.phase === "payload_staging") ||
-        (current.phase === "payload_staging" && current.nextPayload === plan.payloads.length && candidate.phase === "creating") ||
-        (current.phase === "creating" && current.nextCreatedPath === plan.createdPaths.length && candidate.phase === "foundation_applying") ||
-        (current.phase === "foundation_applying" && current.nextFoundationParticipant === 1 && candidate.phase === "launchability_publishing") ||
-        (current.phase === "launchability_publishing" && current.nextLaunchabilityPath === plan.launchabilityPaths.length && candidate.phase === "manifest_publishing") ||
-        (current.phase === "manifest_publishing" && current.manifestCursor === 2 && candidate.phase === "verifying"))
-    ) return true;
-    if (
-      exactly("phase", "terminalOutcome") && current.phase === "verifying" &&
-      current.manifestCursor === 3 && candidate.phase === "finalized" &&
-      candidate.terminalOutcome === "finalized"
-    ) return true;
-    if (
-      exactly("phase", "compactionNext") &&
-      (current.phase === "finalized" || current.phase === "rolled_back") &&
-      candidate.phase === "compacting" && candidate.compactionNext === 0
-    ) return true;
-    if (
-      exactly("phase", "direction", "compensationNext") &&
-      current.direction === "forward" && candidate.phase === "compensating" &&
-      candidate.direction === "compensating" && candidate.compensationNext === reached - 1
-    ) return true;
-    if (
-      exactly("phase", "terminalOutcome") && current.phase === "compensating" &&
-      current.compensationNext === -1 && candidate.phase === "rolled_back" &&
-      candidate.terminalOutcome === "rolled_back"
-    ) return true;
-    if (exactly("nextCreatedPath") && candidate.nextCreatedPath === current.nextCreatedPath + 1) return true;
-    if (exactly("nextFoundationParticipant") && candidate.nextFoundationParticipant === current.nextFoundationParticipant + 1) return true;
-    if (exactly("nextLaunchabilityPath") && candidate.nextLaunchabilityPath === current.nextLaunchabilityPath + 1) return true;
-    if (exactly("manifestCursor") && candidate.manifestCursor === current.manifestCursor + 1) return true;
-    if (exactly("compactionNext") && candidate.compactionNext === (current.compactionNext ?? -1) + 1) return true;
-    if (
-      exactly("payloadWriteState") && current.payloadWriteState.state === "idle" &&
-      candidate.payloadWriteState.state === "create_intent" &&
-      candidate.payloadWriteState.ordinal === current.nextPayload
-    ) return true;
-    if (
-      exactly("payloadWriteState") && current.payloadWriteState.state === "create_intent" &&
-      candidate.payloadWriteState.state === "writing" &&
-      candidate.payloadWriteState.ordinal === current.payloadWriteState.ordinal
-    ) {
-      const row = plan.payloads[candidate.payloadWriteState.ordinal];
-      const target = row === undefined ? null : await lstatOptional(row.ref.path);
-      return target !== null && target.isFile() && !target.isSymbolicLink() && target.uid === uid() &&
-        mode(target) === row?.ref.mode && target.nlink === 1 && target.size === 0 &&
-        candidate.payloadWriteState.dev === String(target.dev) && candidate.payloadWriteState.ino === String(target.ino);
+    if (current.phase === "planned") add({ phase: "payload_staging" });
+    if (current.phase === "payload_staging" && current.nextPayload === plan.payloads.length) {
+      add({ phase: "creating" }, () => this.allPayloadsMatchJournalCursor(plan, current));
     }
-    if (
-      exactly("nextPayload", "payloadWriteState") &&
-      current.payloadWriteState.state === "writing" && candidate.payloadWriteState.state === "idle" &&
-      candidate.nextPayload === current.nextPayload + 1
-    ) return true;
-    if (
-      exactly("payloadCleanupPart") && current.phase === "compensating" &&
-      ((current.payloadCleanupPart === null && candidate.payloadCleanupPart === "staged_file") ||
-        (current.payloadCleanupPart === "staged_file" && candidate.payloadCleanupPart === "evidence"))
-    ) return true;
-    if (
-      current.phase === "compensating" && candidate.compensationNext === (current.compensationNext ?? 0) - 1 &&
-      candidate.payloadCleanupPart === null &&
-      (exactly("compensationNext") || exactly("compensationNext", "payloadCleanupPart") ||
-        exactly("compensationNext", "payloadCleanupPart", "payloadWriteState"))
-    ) return true;
+    if (current.phase === "creating" && current.nextCreatedPath === plan.createdPaths.length) {
+      add({ phase: "foundation_applying" }, () => this.allCreationsMatchJournalCursor(plan, current, "ordinary"));
+    }
+    if (current.phase === "foundation_applying" && current.nextFoundationParticipant === 1) {
+      add({ phase: "launchability_publishing" }, () => this.foundationSuccessorProjection(plan, "forward"));
+    }
+    if (current.phase === "launchability_publishing" && current.nextLaunchabilityPath === plan.launchabilityPaths.length) {
+      add({ phase: "manifest_publishing" }, () => this.allCreationsMatchJournalCursor(plan, current, "launchability"));
+    }
+    if (current.phase === "manifest_publishing" && current.manifestCursor === 2) {
+      add({ phase: "verifying" }, () => this.manifestPostimageMatches(plan));
+    }
+    if (current.phase === "verifying" && current.manifestCursor === 3) {
+      add(
+        { phase: "finalized", terminalOutcome: "finalized" },
+        () => this.manifestPostimageMatches(plan),
+      );
+    }
+    if (current.phase === "finalized" || current.phase === "rolled_back") {
+      add({ phase: "compacting", compactionNext: 0 });
+    }
+    if (current.direction === "forward") {
+      add({ phase: "compensating", direction: "compensating", compensationNext: reached - 1 });
+    }
+    if (current.phase === "compensating" && current.compensationNext === -1) {
+      add({ phase: "rolled_back", terminalOutcome: "rolled_back" });
+    }
+    add(
+      { nextCreatedPath: current.nextCreatedPath + 1 },
+      (candidate) => this.creationSuccessorProjection(plan, candidate, "ordinary", current.nextCreatedPath),
+    );
+    add(
+      { nextFoundationParticipant: current.nextFoundationParticipant + 1 },
+      () => this.foundationSuccessorProjection(plan, "forward"),
+    );
+    add(
+      { nextLaunchabilityPath: current.nextLaunchabilityPath + 1 },
+      (candidate) => this.creationSuccessorProjection(
+        plan,
+        candidate,
+        "launchability",
+        current.nextLaunchabilityPath,
+      ),
+    );
+    add(
+      { manifestCursor: current.manifestCursor + 1 },
+      async () => current.manifestCursor === 0 || await this.manifestPostimageMatches(plan),
+    );
+    add(
+      { compactionNext: (current.compactionNext ?? -1) + 1 },
+      () => this.compactionSuccessorProjection(plan, current.compactionNext ?? -1),
+    );
+    if (current.payloadWriteState.state === "idle") {
+      add({ payloadWriteState: { state: "create_intent", ordinal: current.nextPayload } });
+    }
+    if (current.payloadWriteState.state === "create_intent") {
+      const row = plan.payloads[current.payloadWriteState.ordinal];
+      const target = row === undefined ? null : await lstatOptional(row.ref.path);
+      if (target !== null && target.isFile() && !target.isSymbolicLink() && target.uid === uid() &&
+        mode(target) === row?.ref.mode && target.nlink === 1 && target.size === 0) {
+        add({
+          payloadWriteState: {
+            state: "writing",
+            ordinal: current.payloadWriteState.ordinal,
+            dev: String(target.dev) as Extract<
+              FreshV2InitJournalV1["payloadWriteState"],
+              { state: "writing" }
+            >["dev"],
+            ino: String(target.ino) as Extract<
+              FreshV2InitJournalV1["payloadWriteState"],
+              { state: "writing" }
+            >["ino"],
+          },
+        });
+      }
+    }
+    if (current.payloadWriteState.state === "writing") {
+      add(
+        { nextPayload: current.nextPayload + 1, payloadWriteState: { state: "idle" } },
+        (candidate) => this.payloadSuccessorProjection(plan, candidate, current.nextPayload),
+      );
+    }
+    if (current.phase === "compensating" && current.payloadCleanupPart === null) {
+      add({ payloadCleanupPart: "staged_file" });
+    }
+    if (current.phase === "compensating" && current.payloadCleanupPart === "staged_file") {
+      add(
+        { payloadCleanupPart: "evidence" },
+        () => this.compensatedPayloadTargetIsAbsent(plan, current.compensationNext ?? -1),
+      );
+    }
+    if (current.phase === "compensating") {
+      add(
+        {
+          compensationNext: (current.compensationNext ?? 0) - 1,
+          payloadCleanupPart: null,
+          ...(current.payloadWriteState.state !== "idle" && (current.compensationNext ?? -1) < plan.payloads.length
+            ? { payloadWriteState: { state: "idle" } as const }
+            : {}),
+        },
+        () => this.compensationSuccessorProjection(plan, current),
+      );
+    }
+
+    const marker = '"updatedAt":"';
+    for (const successor of successors) {
+      const frontier = encodeCanonicalJson(successor.journal as unknown as CanonicalJsonValue);
+      const markerIndex = frontier.lastIndexOf(marker);
+      if (markerIndex < 0) continue;
+      const timestampStart = markerIndex + marker.length;
+      const sharedHead = Math.min(text.length, timestampStart);
+      if (text.slice(0, sharedHead) !== frontier.slice(0, sharedHead)) continue;
+      let prefixMatches = text.length <= timestampStart;
+      const tail = text.slice(timestampStart);
+      const closingQuote = tail.indexOf('"');
+      if (!prefixMatches && closingQuote < 0) {
+        prefixMatches = this.admittedTimestampPrefix(tail, current.updatedAt);
+      }
+      if (!prefixMatches && closingQuote >= 0) {
+        const timestamp = tail.slice(0, closingQuote);
+        try {
+          if (new Date(timestamp).toISOString() !== timestamp || timestamp < current.updatedAt) continue;
+        } catch {
+          continue;
+        }
+        const exactFrontier = encoder.encode(encodeCanonicalJson({
+          ...successor.journal,
+          updatedAt: timestamp,
+        }));
+        prefixMatches = this.isBytePrefix(bytes, exactFrontier);
+      }
+      if (prefixMatches && await successor.projection(successor.journal)) return true;
+    }
     return false;
+  }
+
+  private async payloadSuccessorProjection(
+    plan: FreshV2InitPlanV1,
+    candidate: FreshV2InitJournalV1,
+    ordinal: number,
+  ): Promise<boolean> {
+    const row = plan.payloads[ordinal];
+    if (row === undefined) return false;
+    try {
+      return await this.admittedPayloadEvidenceSnapshot(plan, row, candidate) !== null;
+    } catch {
+      return false;
+    }
+  }
+
+  private async creationSuccessorProjection(
+    plan: FreshV2InitPlanV1,
+    candidate: FreshV2InitJournalV1,
+    scope: "ordinary" | "launchability",
+    ordinal: number,
+  ): Promise<boolean> {
+    const planned = (scope === "ordinary" ? plan.createdPaths : plan.launchabilityPaths)[ordinal];
+    if (planned === undefined) return false;
+    try {
+      return await this.admittedCreationEvidenceSnapshot(plan, planned, scope, ordinal, candidate) !== null;
+    } catch {
+      return false;
+    }
+  }
+
+  private async allPayloadsMatchJournalCursor(
+    plan: FreshV2InitPlanV1,
+    journal: FreshV2InitJournalV1,
+  ): Promise<boolean> {
+    for (let ordinal = 0; ordinal < journal.nextPayload; ordinal += 1) {
+      if (!await this.payloadSuccessorProjection(plan, journal, ordinal)) return false;
+    }
+    return journal.nextPayload === plan.payloads.length;
+  }
+
+  private async allCreationsMatchJournalCursor(
+    plan: FreshV2InitPlanV1,
+    journal: FreshV2InitJournalV1,
+    scope: "ordinary" | "launchability",
+  ): Promise<boolean> {
+    const cursor = scope === "ordinary" ? journal.nextCreatedPath : journal.nextLaunchabilityPath;
+    const rows = scope === "ordinary" ? plan.createdPaths : plan.launchabilityPaths;
+    for (let ordinal = 0; ordinal < cursor; ordinal += 1) {
+      if (!await this.creationSuccessorProjection(plan, journal, scope, ordinal)) return false;
+    }
+    return cursor === rows.length;
+  }
+
+  private async admittedFoundationJournalSnapshot(
+    plan: FreshV2InitPlanV1,
+    participant: FoundationParticipantRefV2,
+  ): Promise<TransactionJournalV1 | null> {
+    if (await lstatOptional(participant.initialJournal.finalPath) === null) return null;
+    try {
+      const bytes = await this.guardReadOwnedFile(
+        participant.initialJournal.finalPath,
+        participant.maximumJournalBytes,
+        [1],
+      );
+      const journal = validateJournal(JSON.parse(new TextDecoder().decode(bytes)) as unknown);
+      const initialSource = plan.payloads
+        .map((row) => row.source)
+        .find((source) =>
+          source.kind === "plan_derived" &&
+          source.role === "foundation_initial_journal" &&
+          typeof source.value === "object" && source.value !== null &&
+          "id" in source.value && source.value.id === participant.id);
+      const initial = initialSource?.kind === "plan_derived"
+        ? initialSource.value as unknown as {
+            readonly kind?: unknown;
+            readonly mutations?: unknown;
+            readonly createdAt?: unknown;
+          }
+        : null;
+      if (
+        initial === null || journal.id !== participant.id ||
+        !sameValue(journal.kind, initial.kind) ||
+        !sameValue(journal.mutations, initial.mutations) ||
+        journal.createdAt !== initial.createdAt
+      ) return null;
+      return journal;
+    } catch {
+      return null;
+    }
+  }
+
+  private async foundationSuccessorProjection(
+    plan: FreshV2InitPlanV1,
+    role: "forward" | "compensation",
+  ): Promise<boolean> {
+    const participant = plan.foundationParticipants.find((candidate) => candidate.role.kind === role);
+    if (participant === undefined) return false;
+    const journal = await this.admittedFoundationJournalSnapshot(plan, participant);
+    return journal?.phase === "finalized";
+  }
+
+  private async manifestPostimageMatches(plan: FreshV2InitPlanV1): Promise<boolean> {
+    try {
+      const stats = await lstatOptional(plan.manifest.manifestPath);
+      return stats !== null && stats.isFile() && !stats.isSymbolicLink() && stats.uid === uid() &&
+        stats.nlink === 1 && mode(stats) === 0o600 &&
+        lowerHash(await nodeFs.readFile(plan.manifest.manifestPath)) === plan.v2ManifestHash;
+    } catch {
+      return false;
+    }
+  }
+
+  private async compactionSuccessorProjection(
+    plan: FreshV2InitPlanV1,
+    completedOrdinal: number,
+  ): Promise<boolean> {
+    const entry = this.compactionTable(plan)[completedOrdinal];
+    if (entry === undefined || entry.kind === "journal") return false;
+    if (entry.kind === "payload") {
+      const row = plan.payloads[entry.ordinal];
+      return row !== undefined && await lstatOptional(row.ref.path) === null &&
+        await lstatOptional(deriveBootstrapPayloadEvidencePaths(row.ref.path, randomUUID()).evidence) === null;
+    }
+    if (entry.kind === "creation") {
+      const evidence = deriveBootstrapCreationEvidencePaths(
+        this.#dependencies.paths.home as CanonicalAbsolutePathV1,
+        "fresh_v2_init",
+        plan.id,
+        entry.scope,
+        entry.ordinal,
+        randomUUID(),
+      ).evidence;
+      return await lstatOptional(evidence) === null;
+    }
+    if (entry.kind === "foundation") {
+      const participant = plan.foundationParticipants[entry.ordinal];
+      if (participant === undefined || await lstatOptional(participant.initialJournal.finalPath) !== null) return false;
+      for (const mutation of participant.mutations) {
+        if (mutation.stagedPath !== null && (
+          await lstatOptional(mutation.stagedPath) !== null ||
+          await lstatOptional(`${mutation.stagedPath}.sha256`) !== null
+        )) return false;
+      }
+      return await lstatOptional(join(this.#dependencies.paths.stagingDir, "transactions", participant.id)) === null;
+    }
+    return await lstatOptional(entry.path) === null;
+  }
+
+  private async compensatedPayloadTargetIsAbsent(
+    plan: FreshV2InitPlanV1,
+    cursor: number,
+  ): Promise<boolean> {
+    const row = plan.payloads[cursor];
+    return row !== undefined && await lstatOptional(row.ref.path) === null;
+  }
+
+  private async compensationSuccessorProjection(
+    plan: FreshV2InitPlanV1,
+    current: FreshV2InitJournalV1,
+  ): Promise<boolean> {
+    const cursor = current.compensationNext ?? -1;
+    if (cursor < 0) return false;
+    const ordinaryBase = plan.payloads.length;
+    const foundationBase = ordinaryBase + plan.createdPaths.length;
+    const launchabilityBase = foundationBase + 1;
+    const manifestBase = launchabilityBase + plan.launchabilityPaths.length;
+    if (cursor < ordinaryBase) {
+      const row = plan.payloads[cursor];
+      return row !== undefined && await lstatOptional(row.ref.path) === null &&
+        await lstatOptional(deriveBootstrapPayloadEvidencePaths(row.ref.path, randomUUID()).evidence) === null;
+    }
+    if (cursor < foundationBase) {
+      const ordinal = cursor - ordinaryBase;
+      const planned = plan.createdPaths[ordinal];
+      if (planned === undefined) return false;
+      const evidence = deriveBootstrapCreationEvidencePaths(
+        this.#dependencies.paths.home as CanonicalAbsolutePathV1,
+        "fresh_v2_init",
+        plan.id,
+        "ordinary",
+        ordinal,
+        randomUUID(),
+      ).evidence;
+      return await lstatOptional(planned.path) === null && await lstatOptional(evidence) === null;
+    }
+    if (cursor === foundationBase) return this.foundationSuccessorProjection(plan, "compensation");
+    if (cursor < manifestBase) {
+      const ordinal = cursor - launchabilityBase;
+      const planned = plan.launchabilityPaths[ordinal];
+      if (planned === undefined) return false;
+      const evidence = deriveBootstrapCreationEvidencePaths(
+        this.#dependencies.paths.home as CanonicalAbsolutePathV1,
+        "fresh_v2_init",
+        plan.id,
+        "launchability",
+        ordinal,
+        randomUUID(),
+      ).evidence;
+      return await lstatOptional(planned.path) === null && await lstatOptional(evidence) === null;
+    }
+    return cursor === manifestBase && await lstatOptional(plan.manifest.manifestPath) === null;
+  }
+
+  private admittedTimestampPrefix(prefix: string, minimum: string): boolean {
+    if (prefix.length > 24) return false;
+    const fixed = new Map<number, string>([
+      [4, "-"], [7, "-"], [10, "T"], [13, ":"], [16, ":"], [19, "."], [23, "Z"],
+    ]);
+    for (let index = 0; index < prefix.length; index += 1) {
+      const character = prefix[index] as string;
+      const expected = fixed.get(index);
+      if (expected === undefined ? !/[0-9]/u.test(character) : character !== expected) return false;
+    }
+    if (minimum.startsWith(prefix)) return true;
+    const fieldPrefix = (start: number, length: number): string =>
+      prefix.length <= start ? "" : prefix.slice(start, Math.min(prefix.length, start + length));
+    const maximumMatching = (start: number, length: number, maximum: number): number | null => {
+      const wanted = fieldPrefix(start, length);
+      for (let value = maximum; value >= 0; value -= 1) {
+        if (String(value).padStart(length, "0").startsWith(wanted)) return value;
+      }
+      return null;
+    };
+    const year = maximumMatching(0, 4, 9999);
+    const month = maximumMatching(5, 2, 12);
+    if (year === null || month === null || month < 1) return false;
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const day = maximumMatching(8, 2, lastDay);
+    const hour = maximumMatching(11, 2, 23);
+    const minute = maximumMatching(14, 2, 59);
+    const second = maximumMatching(17, 2, 59);
+    const millisecond = maximumMatching(20, 3, 999);
+    if (day === null || day < 1 || hour === null || minute === null || second === null || millisecond === null) return false;
+    const maximumTimestamp = `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:${String(second).padStart(2, "0")}.${String(millisecond).padStart(3, "0")}Z`;
+    return maximumTimestamp.startsWith(prefix) && maximumTimestamp >= minimum;
   }
 
   private async admittedPlanOnlyPrefix(
@@ -1104,7 +1426,25 @@ export class BootstrapExecutor {
           } else if (temporaryStats.nlink !== 1) {
             throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "fresh envelope prefix changed link count");
           }
-          await this.guardedUnlinkFile(temporaryPath, temporaryBytes, [temporaryStats.nlink]);
+          await this.guardedUnlinkFile(temporaryPath, temporaryBytes, [temporaryStats.nlink], async () => {
+            const finalAfter = await lstatOptional(finalPath);
+            if (finalStats === null || finalBytes === null) {
+              if (finalAfter !== null) {
+                throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "bootstrap envelope final appeared during temp cleanup");
+              }
+              return;
+            }
+            if (
+              finalAfter === null || String(finalAfter.dev) !== String(finalStats.dev) ||
+              String(finalAfter.ino) !== String(finalStats.ino)
+            ) {
+              throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "bootstrap envelope final changed during temp cleanup");
+            }
+            const finalAfterBytes = await this.guardReadOwnedFile(finalPath, maximum, [1, 2]);
+            if (!Buffer.from(finalAfterBytes).equals(Buffer.from(finalBytes))) {
+              throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "bootstrap envelope final bytes changed during temp cleanup");
+            }
+          });
           await syncDirectory(this.#dependencies.paths.stateDir);
         };
         const planTemps = names.filter((name) => name.startsWith(`.fresh-v2-init.${id}.`) && name.endsWith(".plan.json.tmp"));
@@ -1318,10 +1658,34 @@ export class BootstrapExecutor {
         ) {
           throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "journal prefix changed after closure admission");
         }
-        await this.guardedUnlinkFile(closure.temporary.path, temporaryBytes, [1]);
+        const admittedPlan = closure.plan as FreshV2InitPlanV1;
+        const finalJournalPath = admittedPlan.journalPath;
+        const finalBefore = closure.finalJournal === "present"
+          ? await nodeFs.lstat(finalJournalPath)
+          : null;
+        const finalBytes = finalBefore === null
+          ? null
+          : await this.guardReadOwnedFile(finalJournalPath, MAX_JOURNAL_BYTES, [1]);
+        await this.guardedUnlinkFile(closure.temporary.path, temporaryBytes, [1], async () => {
+          const finalAfter = await lstatOptional(finalJournalPath);
+          if (finalBefore === null || finalBytes === null) {
+            if (finalAfter !== null) {
+              throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "bootstrap final journal appeared during prefix cleanup");
+            }
+            return;
+          }
+          if (
+            finalAfter === null || finalAfter.dev !== finalBefore.dev || finalAfter.ino !== finalBefore.ino
+          ) {
+            throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "bootstrap final journal changed during prefix cleanup");
+          }
+          const afterBytes = await this.guardReadOwnedFile(finalJournalPath, MAX_JOURNAL_BYTES, [1]);
+          if (!Buffer.from(afterBytes).equals(Buffer.from(finalBytes))) {
+            throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "bootstrap final journal bytes changed during prefix cleanup");
+          }
+        });
         await syncDirectory(dirname(closure.temporary.path));
         if (closure.finalJournal === "absent") {
-          const admittedPlan = closure.plan as FreshV2InitPlanV1;
           const journal = this.initialJournal(admittedPlan);
           await this.publishInitialEnvelope(
             admittedPlan,
@@ -2334,12 +2698,12 @@ export class BootstrapExecutor {
     return entries;
   }
 
-  private closureAllowedPaths(
+  private async closureAllowedPaths(
     plan: FreshV2InitPlanV1,
     journal: FreshV2InitJournalV1 | null,
     observed: readonly string[],
     terminalPlanOnly: boolean,
-  ): ReadonlySet<string> {
+  ): Promise<ReadonlySet<string>> {
     const home = this.#dependencies.paths.home;
     const allowed = new Set<string>();
     const add = (path: string): void => {
@@ -2388,54 +2752,93 @@ export class BootstrapExecutor {
         randomUUID(),
       ).evidence);
     };
-    const addFoundation = (targets: boolean, cleanup: boolean): void => {
+    const addFoundation = (targets: boolean): void => {
       for (const participant of plan.foundationParticipants) {
-        if (cleanup) {
-          add(participant.initialJournal.finalPath);
-          add(foundationLockPath(participant));
-          add(join(this.#dependencies.paths.stagingDir, "transactions", participant.id));
-          add(join(this.#dependencies.paths.backupsDir, "transactions"));
-          add(join(this.#dependencies.paths.backupsDir, "transactions", participant.id));
-        }
         if (!targets) continue;
         for (const mutation of participant.mutations) add(mutation.targetPath);
       }
     };
     const addFoundationDetail = (
       participants: readonly FoundationParticipantRefV2[],
-      targets = true,
-      backups = true,
-    ): void => {
-      for (const participant of participants) {
-      add(participant.initialJournal.finalPath);
-      add(foundationLockPath(participant));
-      add(join(this.#dependencies.paths.stagingDir, "transactions", participant.id));
-      if (backups) {
-        add(join(this.#dependencies.paths.backupsDir, "transactions"));
-        add(join(this.#dependencies.paths.backupsDir, "transactions", participant.id));
+      options: {
+        readonly targets?: boolean;
+        readonly backups?: boolean;
+        readonly participantState?: boolean;
+        readonly participantStaging?: boolean;
+        readonly backupsWithoutJournal?: boolean;
+      } = {},
+    ): Promise<void> => Promise.all(participants.map(async (participant) => {
+      const targets = options.targets ?? true;
+      const backups = options.backups ?? true;
+      const participantState = options.participantState ?? true;
+      const participantStaging = options.participantStaging ?? true;
+      const journalObserved = observed.includes(participant.initialJournal.finalPath);
+      const foundationJournal = journalObserved
+        ? await this.admittedFoundationJournalSnapshot(plan, participant)
+        : null;
+      if (participantState && foundationJournal !== null) {
+        add(participant.initialJournal.finalPath);
       }
+      if (participantStaging && foundationJournal !== null) {
+        const stagingDirectory = join(this.#dependencies.paths.stagingDir, "transactions", participant.id);
+        if (observed.includes(stagingDirectory)) add(stagingDirectory);
+      }
+      const lock = foundationLockPath(participant);
+      if (participantState && observed.includes(lock)) add(lock);
+      for (const mutation of participant.mutations) if (targets) add(mutation.targetPath);
+      if (
+        !backups ||
+        (foundationJournal === null && (journalObserved || options.backupsWithoutJournal !== true))
+      ) return;
+      const directory = join(this.#dependencies.paths.backupsDir, "transactions", participant.id);
       for (const [ordinal, mutation] of participant.mutations.entries()) {
-        if (targets) add(mutation.targetPath);
-        if (mutation.stagedPath !== null) {
-          add(mutation.stagedPath);
-          add(`${mutation.stagedPath}.sha256`);
+        const metadataPath = join(directory, `${String(ordinal)}.json`);
+        const digestPath = `${metadataPath}.sha256`;
+        if (!observed.includes(metadataPath) && !observed.includes(digestPath)) continue;
+        const metadata = await nodeFs.readFile(metadataPath).catch(() => null);
+        if (metadata === null) continue;
+        let value: unknown;
+        try {
+          value = JSON.parse(new TextDecoder().decode(metadata));
+        } catch {
+          continue;
         }
-        if (backups) {
-          add(join(this.#dependencies.paths.backupsDir, "transactions", participant.id, `${String(ordinal)}.json`));
-          add(join(this.#dependencies.paths.backupsDir, "transactions", participant.id, `${String(ordinal)}.json.sha256`));
+        const record = jsonRecord(value);
+        if (record === null || !sameValue(Object.keys(record).sort(), ["atimeMs", "existed", "mode", "mtimeMs"])) continue;
+        const existed = mutation.expectedBeforeHash !== null;
+        const validAbsent = !existed && record.existed === false && record.mode === null &&
+          record.atimeMs === null && record.mtimeMs === null &&
+          new TextDecoder().decode(metadata) === '{"existed":false,"mode":null,"atimeMs":null,"mtimeMs":null}\n';
+        const validPresent = existed && record.existed === true &&
+          typeof record.mode === "number" && Number.isInteger(record.mode) &&
+          typeof record.atimeMs === "number" && Number.isFinite(record.atimeMs) &&
+          typeof record.mtimeMs === "number" && Number.isFinite(record.mtimeMs) &&
+          new TextDecoder().decode(metadata) === `${JSON.stringify(record)}\n`;
+        if (!validAbsent && !validPresent) continue;
+        add(metadataPath);
+        if (observed.includes(digestPath)) {
+          const digest = await nodeFs.readFile(digestPath).catch(() => null);
+          if (digest !== null && new TextDecoder().decode(digest) === `${lowerHash(metadata)}\n`) add(digestPath);
         }
       }
-      }
-    };
-    const addFoundationBackups = (participants: readonly FoundationParticipantRefV2[]): void => {
-      for (const participant of participants.filter((candidate) => candidate.role.kind === "forward")) {
-        add(foundationLockPath(participant));
-        add(join(this.#dependencies.paths.backupsDir, "transactions"));
-        add(join(this.#dependencies.paths.backupsDir, "transactions", participant.id));
-        for (const ordinal of participant.mutations.keys()) {
-          add(join(this.#dependencies.paths.backupsDir, "transactions", participant.id, `${String(ordinal)}.json`));
-          add(join(this.#dependencies.paths.backupsDir, "transactions", participant.id, `${String(ordinal)}.json.sha256`));
-        }
+    })).then(() => undefined);
+    const addFoundationBackups = async (
+      participants: readonly FoundationParticipantRefV2[],
+      backupsWithoutJournal = false,
+    ): Promise<void> => {
+      const forwards = participants.filter((candidate) => candidate.role.kind === "forward");
+      await addFoundationDetail(
+        forwards,
+        {
+          targets: false,
+          participantState: false,
+          participantStaging: false,
+          backupsWithoutJournal,
+        },
+      );
+      for (const participant of forwards) {
+        const lock = foundationLockPath(participant);
+        if (observed.includes(lock)) add(lock);
       }
     };
     const addManifest = (): void => {
@@ -2446,8 +2849,8 @@ export class BootstrapExecutor {
     if (journal === null) {
       for (let ordinal = 0; ordinal < plan.createdPaths.length; ordinal += 1) addCreation("ordinary", ordinal, true, false);
       for (let ordinal = 0; ordinal < plan.launchabilityPaths.length; ordinal += 1) addCreation("launchability", ordinal, true, false);
-      addFoundation(true, false);
-      addFoundationBackups(plan.foundationParticipants);
+      addFoundation(true);
+      if (terminalPlanOnly) await addFoundationBackups(plan.foundationParticipants, true);
       addManifest();
     } else if (journal.phase === "compensating") {
       const cursor = journal.compensationNext ?? -1;
@@ -2470,16 +2873,29 @@ export class BootstrapExecutor {
       for (let ordinal = 0; ordinal < journal.nextCreatedPath; ordinal += 1) {
         if (ordinaryBase + ordinal <= cursor) addCreation("ordinary", ordinal, true, true);
       }
-      addFoundation(cursor >= foundationBase, journal.nextFoundationParticipant > 0);
+      addFoundation(cursor >= foundationBase);
       if (journal.nextFoundationParticipant > 0) {
-        addFoundationDetail(plan.foundationParticipants, cursor >= foundationBase);
+        const ordinaryPathLive = (path: string): boolean => {
+          const ordinal = plan.createdPaths.findIndex((planned) => planned.path === path);
+          return ordinal >= 0 && ordinaryBase + ordinal <= cursor;
+        };
+        const participantState = ordinaryPathLive(join(this.#dependencies.paths.stateDir, "transactions"));
+        const participantStaging = ordinaryPathLive(join(this.#dependencies.paths.stagingDir, "transactions"));
+        const backups = ordinaryPathLive(this.#dependencies.paths.backupsDir);
+        await addFoundationDetail(plan.foundationParticipants, {
+          targets: cursor >= foundationBase,
+          participantState,
+          participantStaging,
+          backups,
+          backupsWithoutJournal: backups && !participantState,
+        });
       }
       for (let ordinal = 0; ordinal < journal.nextLaunchabilityPath; ordinal += 1) {
         if (launchabilityBase + ordinal <= cursor) addCreation("launchability", ordinal, true, true);
       }
       if (journal.manifestCursor > 0 && manifestBase <= cursor) addManifest();
     } else if (journal.terminalOutcome === "rolled_back" && journal.phase !== "compacting") {
-      if (journal.nextFoundationParticipant > 0) addFoundationDetail(plan.foundationParticipants, false);
+      // Exact reverse compensation has already removed every dynamic Foundation namespace.
     } else if (journal.terminalOutcome === "finalized" || journal.phase === "compacting") {
       const finalized = journal.terminalOutcome === "finalized";
       const remaining = journal.phase === "compacting" && journal.compactionNext !== null
@@ -2488,6 +2904,22 @@ export class BootstrapExecutor {
       const payloadCleanup = new Set(remaining.filter((entry) => entry.kind === "payload").map((entry) => entry.ordinal));
       const creationCleanup = new Set(remaining.filter((entry) => entry.kind === "creation").map((entry) => `${entry.scope}:${String(entry.ordinal)}`));
       const stagingCleanup = new Set(remaining.filter((entry) => entry.kind === "staging").map((entry) => entry.path));
+      const remainingFoundation = remaining
+        .filter((entry): entry is Extract<FreshCompactionEntryV1, { kind: "foundation" }> => entry.kind === "foundation")
+        .map((entry) => plan.foundationParticipants[entry.ordinal])
+        .filter((participant): participant is FoundationParticipantRefV2 => participant !== undefined);
+      const foundationStaged = new Set(plan.foundationParticipants.flatMap((participant) =>
+        participant.mutations.flatMap((mutation) => mutation.stagedPath === null
+          ? []
+          : [mutation.stagedPath, `${mutation.stagedPath}.sha256`]),
+      ));
+      const remainingFoundationStaged = new Set(remainingFoundation
+        .filter((participant) => observed.includes(participant.initialJournal.finalPath))
+        .flatMap((participant) =>
+        participant.mutations.flatMap((mutation) => mutation.stagedPath === null
+          ? []
+          : [mutation.stagedPath, `${mutation.stagedPath}.sha256`]),
+        ));
       if (finalized) {
         for (let ordinal = 0; ordinal < plan.payloads.length; ordinal += 1) {
           addPayload(ordinal, payloadCleanup.has(ordinal), payloadCleanup.has(ordinal));
@@ -2495,23 +2927,20 @@ export class BootstrapExecutor {
         for (let ordinal = 0; ordinal < plan.createdPaths.length; ordinal += 1) {
           const planned = plan.createdPaths[ordinal];
           const target = planned !== undefined &&
-            (!planned.path.startsWith(`${this.#dependencies.paths.stagingDir}/`) || stagingCleanup.has(planned.path));
+            (!planned.path.startsWith(`${this.#dependencies.paths.stagingDir}/`) ||
+              (foundationStaged.has(planned.path)
+                ? remainingFoundationStaged.has(planned.path)
+                : stagingCleanup.has(planned.path)));
           addCreation("ordinary", ordinal, target, creationCleanup.has(`ordinary:${String(ordinal)}`));
         }
         for (let ordinal = 0; ordinal < plan.launchabilityPaths.length; ordinal += 1) {
           addCreation("launchability", ordinal, true, creationCleanup.has(`launchability:${String(ordinal)}`));
         }
-        addFoundation(true, false);
-        addFoundationBackups(plan.foundationParticipants);
+        addFoundation(true);
+        await addFoundationBackups(plan.foundationParticipants, true);
         addManifest();
-      } else if (journal.nextFoundationParticipant > 0) {
-        addFoundationBackups(plan.foundationParticipants);
       }
-      const remainingFoundation = remaining
-        .filter((entry): entry is Extract<FreshCompactionEntryV1, { kind: "foundation" }> => entry.kind === "foundation")
-        .map((entry) => plan.foundationParticipants[entry.ordinal])
-        .filter((participant): participant is FoundationParticipantRefV2 => participant !== undefined);
-      addFoundationDetail(remainingFoundation, finalized, false);
+      await addFoundationDetail(remainingFoundation, { targets: finalized, backups: false });
     } else {
       const payloadLimit = Math.min(
         plan.payloads.length,
@@ -2529,7 +2958,13 @@ export class BootstrapExecutor {
       );
       for (let ordinal = 0; ordinal < launchabilityLimit; ordinal += 1) addCreation("launchability", ordinal, true, true);
       const foundationCurrent = journal.nextFoundationParticipant > 0 || journal.phase === "foundation_applying";
-      if (foundationCurrent) addFoundationDetail(plan.foundationParticipants);
+      if (foundationCurrent) {
+        await addFoundationDetail(
+          journal.direction === "compensating"
+            ? plan.foundationParticipants
+            : plan.foundationParticipants.filter((participant) => participant.role.kind === "forward"),
+        );
+      }
       if (journal.manifestCursor > 0 || journal.phase === "manifest_publishing" || journal.phase === "verifying") addManifest();
     }
     for (const path of observed) {
@@ -2546,23 +2981,156 @@ export class BootstrapExecutor {
   }
 
   private async fileObservation(path: string, maximumBytes: number): Promise<CanonicalJsonValue | null> {
-    const stats = await lstatOptional(path);
-    if (stats === null) return null;
-    if (
-      !stats.isFile() || stats.isSymbolicLink() || stats.uid !== uid() ||
-      stats.nlink < 1 || stats.nlink > 2 || mode(stats) !== 0o600 ||
-      stats.size > maximumBytes
-    ) {
+    return (await this.guardedFileObservation(path, maximumBytes, [1, 2]))?.observation ?? null;
+  }
+
+  private async guardedFileObservation(
+    path: string,
+    maximumBytes: number,
+    admittedLinks: readonly number[],
+  ): Promise<{
+    readonly observation: CanonicalJsonValue;
+    readonly bytes: Uint8Array;
+    readonly stats: Stats;
+  } | null> {
+    const before = await lstatOptional(path);
+    if (before === null) return null;
+    const exactShape = (stats: Stats): boolean =>
+      stats.isFile() && !stats.isSymbolicLink() && stats.uid === uid() &&
+      admittedLinks.includes(stats.nlink) && mode(stats) === 0o600 &&
+      stats.size >= 0 && stats.size <= maximumBytes;
+    if (!exactShape(before)) {
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "bootstrap closure file changed shape");
     }
-    const bytes = await nodeFs.readFile(path);
-    return {
+    const handle = await nodeFs.open(
       path,
-      dev: String(stats.dev),
-      ino: String(stats.ino),
-      nlink: stats.nlink,
-      bytes: stats.size,
-      sha256: lowerHash(bytes),
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+    try {
+      const opened = await handle.stat();
+      const bytes = await handle.readFile();
+      const after = await nodeFs.lstat(path);
+      if (
+        !exactShape(opened) || !exactShape(after) ||
+        opened.dev !== before.dev || opened.ino !== before.ino ||
+        after.dev !== opened.dev || after.ino !== opened.ino ||
+        after.size !== bytes.byteLength
+      ) {
+        throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "bootstrap closure file changed during observation");
+      }
+      return {
+        observation: {
+          path,
+          dev: String(after.dev),
+          ino: String(after.ino),
+          nlink: after.nlink,
+          bytes: after.size,
+          sha256: lowerHash(bytes),
+        },
+        bytes,
+        stats: after,
+      };
+    } finally {
+      await handle.close();
+    }
+  }
+
+  private async foundationNamespaceObservation(
+    plan: FreshV2InitPlanV1,
+    journal: FreshV2InitJournalV1,
+    participant: FoundationParticipantRefV2,
+    observed: readonly string[],
+    allowed: ReadonlySet<string>,
+  ): Promise<CanonicalJsonValue> {
+    const directoryObservation = async (path: string): Promise<CanonicalJsonValue | null> => {
+      if (!allowed.has(path) || !observed.includes(path)) return null;
+      const stats = await nodeFs.lstat(path);
+      if (
+        !stats.isDirectory() || stats.isSymbolicLink() || stats.uid !== uid() || mode(stats) !== 0o700
+      ) {
+        throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "Foundation namespace directory changed shape");
+      }
+      return { path, dev: String(stats.dev), ino: String(stats.ino), mode: 0o700 };
+    };
+    const expectedFile = async (
+      ref: BootstrapExpectedPayloadRefV1,
+    ): Promise<CanonicalJsonValue | null> => {
+      if (!allowed.has(ref.path) || !observed.includes(ref.path)) return null;
+      const snapshot = await this.guardedFileObservation(ref.path, ref.bytes, [1]);
+      if (snapshot === null || mode(snapshot.stats) !== ref.mode) {
+        throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "Foundation staged namespace row changed postimage");
+      }
+      const payload = plan.payloads.find((row) => sameValue(row.ref, ref));
+      const writeState = journal.payloadWriteState;
+      const exactInProgress = payload !== undefined && payload.ref.ordinal === journal.nextPayload &&
+        writeState.state !== "idle" && writeState.ordinal === payload.ref.ordinal &&
+        (writeState.state === "create_intent"
+          ? snapshot.stats.size === 0
+          : String(snapshot.stats.dev) === writeState.dev && String(snapshot.stats.ino) === writeState.ino);
+      const exactPostimage = snapshot.bytes.byteLength === ref.bytes &&
+        snapshot.stats.size === ref.bytes && lowerHash(snapshot.bytes) === ref.hash;
+      if (!exactInProgress && !exactPostimage) {
+        throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "Foundation staged namespace row changed postimage");
+      }
+      return snapshot.observation;
+    };
+    const stagingDirectory = join(this.#dependencies.paths.stagingDir, "transactions", participant.id);
+    const backupRoot = join(this.#dependencies.paths.backupsDir, "transactions");
+    const backupDirectory = join(backupRoot, participant.id);
+    const stagedFiles: CanonicalJsonValue[] = [];
+    for (const mutation of participant.mutations) {
+      if (mutation.stagedPath === null || mutation.content == null || mutation.digest == null) continue;
+      const content = await expectedFile(mutation.content);
+      if (content !== null) stagedFiles.push(content);
+      const digest = await expectedFile(mutation.digest);
+      if (digest !== null) stagedFiles.push(digest);
+    }
+    const backupFiles: CanonicalJsonValue[] = [];
+    for (const [ordinal, mutation] of participant.mutations.entries()) {
+      const metadataPath = join(backupDirectory, `${String(ordinal)}.json`);
+      const digestPath = `${metadataPath}.sha256`;
+      if (!allowed.has(metadataPath) || !observed.includes(metadataPath)) continue;
+      const metadata = await this.guardedFileObservation(metadataPath, 1_024, [1]);
+      if (metadata === null) {
+        throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "Foundation backup metadata disappeared during observation");
+      }
+      let value: unknown;
+      try {
+        value = JSON.parse(new TextDecoder().decode(metadata.bytes));
+      } catch {
+        throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "Foundation backup metadata is not JSON");
+      }
+      const record = jsonRecord(value);
+      const existed = mutation.expectedBeforeHash !== null;
+      const validAbsent = record !== null && !existed && record.existed === false && record.mode === null &&
+        record.atimeMs === null && record.mtimeMs === null &&
+        new TextDecoder().decode(metadata.bytes) === '{"existed":false,"mode":null,"atimeMs":null,"mtimeMs":null}\n';
+      const validPresent = record !== null && existed && record.existed === true &&
+        typeof record.mode === "number" && Number.isInteger(record.mode) &&
+        typeof record.atimeMs === "number" && Number.isFinite(record.atimeMs) &&
+        typeof record.mtimeMs === "number" && Number.isFinite(record.mtimeMs) &&
+        new TextDecoder().decode(metadata.bytes) === `${JSON.stringify(record)}\n`;
+      if (!validAbsent && !validPresent) {
+        throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "Foundation backup metadata changed postimage");
+      }
+      backupFiles.push(metadata.observation);
+      if (allowed.has(digestPath) && observed.includes(digestPath)) {
+        const digest = await this.guardedFileObservation(digestPath, 65, [1]);
+        if (digest === null || new TextDecoder().decode(digest.bytes) !== `${lowerHash(metadata.bytes)}\n`) {
+          throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "Foundation backup digest changed postimage");
+        }
+        backupFiles.push(digest.observation);
+      }
+    }
+    return {
+      participantId: participant.id,
+      directories: (await Promise.all([
+        directoryObservation(stagingDirectory),
+        directoryObservation(backupRoot),
+        directoryObservation(backupDirectory),
+      ])).filter((value): value is CanonicalJsonValue => value !== null),
+      stagedFiles,
+      backupFiles,
     };
   }
 
@@ -2740,7 +3308,7 @@ export class BootstrapExecutor {
       }
     }
     const walked = await this.walkProductHomeBounded(MAX_CLOSURE_ENTRIES);
-    const allowed = this.closureAllowedPaths(plan, preliminaryJournal, walked, terminalPlanOnly);
+    const allowed = await this.closureAllowedPaths(plan, preliminaryJournal, walked, terminalPlanOnly);
     const unknown = walked.filter((path) => !allowed.has(path));
     if (unknown.length > 0) {
       this.trace(`inventory:unknown:${unknown.map((path) => path.slice(this.#dependencies.paths.home.length + 1)).join(",")}`);
@@ -2854,10 +3422,19 @@ export class BootstrapExecutor {
             .map((entry) => plan.foundationParticipants[entry.ordinal])
             .filter((participant): participant is FoundationParticipantRefV2 => participant !== undefined)
         : [...plan.foundationParticipants];
-    const foundationObservations = await Promise.all(observedFoundationParticipants.map(async (participant) => ({
+    const foundationObservations = preliminaryJournal === null
+      ? []
+      : await Promise.all(observedFoundationParticipants.map(async (participant) => ({
           participantId: participant.id,
           journal: await this.fileObservation(participant.initialJournal.finalPath, participant.maximumJournalBytes),
           lock: await this.fileObservation(foundationLockPath(participant), 0),
+          namespace: await this.foundationNamespaceObservation(
+            plan,
+            preliminaryJournal,
+            participant,
+            walked,
+            allowed,
+          ),
         })));
     const manifestObservation = preliminaryJournal === null
       ? null
@@ -2870,25 +3447,9 @@ export class BootstrapExecutor {
       for (const observation of foundationObservations) {
         const journalObservation = (observation as unknown as { journal: { path: string } | null }).journal;
         if (journalObservation !== null) {
-          const foundationJournal = validateJournal(JSON.parse(await nodeFs.readFile(journalObservation.path, "utf8")) as unknown);
           const participantId = (observation as unknown as { participantId: string }).participantId;
           const participant = plan.foundationParticipants.find((candidate) => candidate.id === participantId);
-          const initialSource = plan.payloads
-            .map((row) => row.source)
-            .find((source) =>
-              source.kind === "plan_derived" &&
-              source.role === "foundation_initial_journal" &&
-              typeof source.value === "object" && source.value !== null &&
-              "id" in source.value && source.value.id === participantId);
-          const initial = initialSource?.kind === "plan_derived"
-            ? initialSource.value as unknown as { kind?: unknown; mutations?: unknown; createdAt?: unknown }
-            : null;
-          if (
-            participant === undefined || initial === null || foundationJournal.id !== participantId ||
-            !sameValue(foundationJournal.kind, initial.kind) ||
-            !sameValue(foundationJournal.mutations, initial.mutations) ||
-            foundationJournal.createdAt !== initial.createdAt
-          ) {
+          if (participant === undefined || await this.admittedFoundationJournalSnapshot(plan, participant) === null) {
             throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "Foundation closure observation changed participant");
           }
         }
@@ -3136,7 +3697,34 @@ export class BootstrapExecutor {
     }) as FreshV2InitJournalV1;
     const bytes = encoder.encode(encodeCanonicalJson(next as unknown as CanonicalJsonValue));
     const temporary = this.envelopeTemporaryPath(plan, "journal");
-    await durableWriteNoReplace(temporary, bytes);
+    const handle = await nodeFs.open(
+      temporary,
+      constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW,
+      0o600,
+    );
+    try {
+      const split = Math.max(1, Math.floor(bytes.byteLength / 2));
+      let offset = 0;
+      while (offset < split) {
+        const result = await handle.write(bytes, offset, split - offset, offset);
+        if (result.bytesWritten < 1) {
+          throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "bootstrap journal rewrite made no progress");
+        }
+        offset += result.bytesWritten;
+      }
+      this.checkpoint("during_journal_rewrite_write");
+      while (offset < bytes.byteLength) {
+        const result = await handle.write(bytes, offset, bytes.byteLength - offset, offset);
+        if (result.bytesWritten < 1) {
+          throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "bootstrap journal rewrite made no progress");
+        }
+        offset += result.bytesWritten;
+      }
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await syncDirectory(dirname(temporary));
     this.checkpoint("after_journal_rewrite_temp_sync");
     await nodeFs.rename(temporary, plan.journalPath);
     await syncDirectory(dirname(plan.journalPath));
@@ -4087,6 +4675,7 @@ export class BootstrapExecutor {
       phase: "rolled_back",
       terminalOutcome: "rolled_back",
     });
+    this.checkpoint("after_rolled_back");
     await this.compactRollback(plan, journal);
   }
 
@@ -4348,6 +4937,9 @@ export class BootstrapExecutor {
         if (!isMissing(error)) throw error;
       });
       await syncDirectoryIfPresent(join(this.#dependencies.paths.stagingDir, "transactions"));
+      if (entry.ordinal === plan.foundationParticipants.length - 1) {
+        this.checkpoint("after_foundation_compaction");
+      }
       return;
     }
     if (entry.kind === "staging") {
