@@ -26,6 +26,14 @@ export default defineProject({
     environment: "node",
     include: ["src/**/*.test.ts"],
     /**
+     * A complete bootstrap init is ~11.8 s isolated but reached 60.2–60.4 s
+     * when CLI real-filesystem files started together under the root gate. Two
+     * exact full runs transferred that timeout between unchanged real-init
+     * cases. Serialize this project's files while retaining root/other-project
+     * concurrency, assertions, and the existing 60 s local real-fs ceilings.
+     */
+    fileParallelism: false,
+    /**
      * Raised from vitest's 5000 ms default because these are the only unit
      * tests that drive a real transaction against a real filesystem, and the
      * cost is fsync, not computation.

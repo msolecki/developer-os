@@ -22,6 +22,7 @@ import type {
   PlatformAdapter,
   PlatformFacts,
 } from "@developer-os/platform-macos";
+import { MacOsTransactionLockProvider } from "@developer-os/platform-macos";
 import { ProtectedPathPolicy } from "@developer-os/security";
 import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 
@@ -60,17 +61,43 @@ const PROPOSED_BRAIN_DIRECTORY = "DeveloperBrain";
 class InProcessLockProvider implements TransactionLockProvider {
   readonly #held = new Set<string>();
 
-  acquire(path: string): Promise<TransactionLockHandle> {
+  async acquire(path: string): Promise<TransactionLockHandle> {
     if (this.#held.has(path)) {
-      return Promise.reject(new Error("lock already held"));
+      throw new Error("lock already held");
+    }
+    if (path.endsWith("/.lifecycle-bootstrap.lock") || path.endsWith("/.lifecycle.lock")) {
+      await nodeFs.open(path, "a", 0o600).then((handle) => handle.close());
+      await nodeFs.chmod(path, 0o600);
     }
     this.#held.add(path);
-    return Promise.resolve({
+    return {
       release: (): Promise<void> => {
         this.#held.delete(path);
         return Promise.resolve();
       },
-    });
+    };
+  }
+}
+
+class RecordingLockProvider implements TransactionLockProvider {
+  constructor(
+    private readonly delegate: TransactionLockProvider,
+    private readonly events: string[],
+  ) {}
+
+  async acquire(path: string): Promise<TransactionLockHandle> {
+    const handle = await this.delegate.acquire(path);
+    if (path.endsWith("/.lifecycle-bootstrap.lock") || path.endsWith("/.lifecycle.lock")) {
+      this.events.push(`acquire:${path}`);
+    }
+    return {
+      release: async (): Promise<void> => {
+        await handle.release();
+        if (path.endsWith("/.lifecycle-bootstrap.lock") || path.endsWith("/.lifecycle.lock")) {
+          this.events.push(`release:${path}`);
+        }
+      },
+    };
   }
 }
 
@@ -176,9 +203,12 @@ export interface CommandFixture {
   readonly io: RecordingIo;
   readonly context: CliContext;
   readonly bootstrapTrace: string[];
+  readonly lifecycleLockEvents: string[];
   readonly releaseRequests: string[];
   readonly vendorProcesses: string[];
   readonly disableBootstrapInterrupt: () => void;
+  readonly disableBootstrapFailure: () => void;
+  readonly rebuildContext: () => CliContext;
 }
 
 export interface FixtureOptions {
@@ -213,8 +243,12 @@ export interface FixtureOptions {
   readonly bootstrapInterruptAfter?: FreshInitDeathPointV1;
   /** Fails the fresh V2 coordinator so tests can exercise reverse compensation. */
   readonly bootstrapFailureAfter?: FreshInitDeathPointV1;
+  /** Performs a synchronous adversarial mutation at a fresh-V2 failure boundary. */
+  readonly bootstrapFailureHook?: (point: FreshInitDeathPointV1) => void;
   /** Opts this fixture into the synthetic admitted fresh-V2 package handoff. */
   readonly bootstrapAvailable?: boolean;
+  /** Uses the real kernel-backed lifecycle lock provider for exclusion tests. */
+  readonly bootstrapProductionLocks?: boolean;
 }
 
 const fixtureRoots: string[] = [];
@@ -305,14 +339,15 @@ export async function createCommandFixture(
   const policy = new ProtectedPathPolicy(userHome);
   const guards = createGuards(policy, REDACTION_KEY);
   const paths = resolveRuntimePaths(pathEnvironmentFor({ userHome, env }));
-  const lockProvider = new InProcessLockProvider();
   const packagedRelease = options.bootstrapAvailable === true
     ? await createSyntheticPackagedRelease(root)
     : null;
   const bootstrapTrace: string[] = [];
+  const lifecycleLockEvents: string[] = [];
   const releaseRequests: string[] = [];
   const vendorProcesses: string[] = [];
   let bootstrapInterruptEnabled = true;
+  let bootstrapFailureEnabled = true;
 
   const runner: ProcessRunner = options.runner ?? {
     run(): Promise<ProcessResult> {
@@ -327,103 +362,114 @@ export async function createCommandFixture(
     options.now ??
     ((): Date => new Date(Date.UTC(2026, 6, 30, 12, 0, 0) + sequence));
 
-  const transactionExecutor = new TransactionExecutor({
-    stateDir: paths.stateDir,
-    stagingDir: paths.stagingDir,
-    backupsDir: paths.backupsDir,
-    fs: NODE_FILE_SYSTEM,
-    clock: () => now().toISOString(),
-    generateId: () => {
-      sequence += 1;
-      return `tx_fixture_${String(sequence).padStart(3, "0")}`;
-    },
-    guards: guards.transaction,
-    lockProvider,
-    publishBootstrapInitialJournalNoReplace,
-    afterPhase: (
-      phase: TransactionPhase,
-      journal: TransactionJournalV1,
-    ): void => {
-      if (phase !== options.interruptAfter) return;
-      if (
-        options.interruptKind !== undefined &&
-        journal.kind !== options.interruptKind
-      ) {
-        return;
-      }
-      throw new Error(`synthetic interruption after ${phase}`);
-    },
-  });
-  const bootstrapExecutor = packagedRelease === null
-    ? null
-    : new BootstrapExecutor({
-        paths,
-        userHome,
-        packagedRelease,
-        transactionExecutor,
-        now,
-        uuid: () => "00000000-0000-4000-8000-000000000001",
-        nonce: () => new Uint8Array(32).fill(17),
-        trace: (event) => bootstrapTrace.push(event),
-        interrupt: (point) => {
-          if (
-            bootstrapInterruptEnabled &&
-            point === options.bootstrapInterruptAfter
-          ) {
-            throw new Error(`synthetic bootstrap interruption at ${point}`);
-          }
-        },
-        fail: (point) => {
-          if (point === options.bootstrapFailureAfter) {
-            throw new Error(`synthetic bootstrap failure at ${point}`);
-          }
-        },
-      });
-
-  const context: CliContext = {
-    io,
-    env,
-    userHome,
-    now,
-    ids: {
-      next: (): string => {
+  const buildContext = (): CliContext => {
+    const lockProvider: TransactionLockProvider = new RecordingLockProvider(
+      options.bootstrapProductionLocks === true
+        ? new MacOsTransactionLockProvider()
+        : new InProcessLockProvider(),
+      lifecycleLockEvents,
+    );
+    const transactionExecutor = new TransactionExecutor({
+      stateDir: paths.stateDir,
+      stagingDir: paths.stagingDir,
+      backupsDir: paths.backupsDir,
+      fs: NODE_FILE_SYSTEM,
+      clock: () => now().toISOString(),
+      generateId: () => {
         sequence += 1;
         return `tx_fixture_${String(sequence).padStart(3, "0")}`;
       },
-    },
-    platform: new FakePlatformAdapter({
-      userHome,
-      ...(options.agents === undefined ? {} : { agents: options.agents }),
-      ...(options.inspectFailure === undefined
-        ? {}
-        : { inspectFailure: options.inspectFailure }),
-      ...(options.discoveryFailure === undefined
-        ? {}
-        : { discoveryFailure: options.discoveryFailure }),
-      ...(options.untrustedExecutable === undefined
-        ? {}
-        : { untrustedExecutable: options.untrustedExecutable }),
-    }),
-    transactions: new TransactionStore({
-      stateDir: paths.stateDir,
-      fs: NODE_FILE_SYSTEM,
+      guards: guards.transaction,
       lockProvider,
-    }),
-    manifests: new ManifestStore({
-      manifestFile: paths.manifestFile,
+      publishBootstrapInitialJournalNoReplace,
+      afterPhase: (
+        phase: TransactionPhase,
+        journal: TransactionJournalV1,
+      ): void => {
+        if (phase !== options.interruptAfter) return;
+        if (
+          options.interruptKind !== undefined &&
+          journal.kind !== options.interruptKind
+        ) {
+          return;
+        }
+        throw new Error(`synthetic interruption after ${phase}`);
+      },
+    });
+    const bootstrapExecutor = packagedRelease === null
+      ? null
+      : new BootstrapExecutor({
+          paths,
+          userHome,
+          packagedRelease,
+          transactionExecutor,
+          lockProvider,
+          now,
+          uuid: () => "00000000-0000-4000-8000-000000000001",
+          nonce: () => new Uint8Array(32).fill(17),
+          trace: (event) => bootstrapTrace.push(event),
+          interrupt: (point) => {
+            if (
+              bootstrapInterruptEnabled &&
+              point === options.bootstrapInterruptAfter
+            ) {
+              throw new Error(`synthetic bootstrap interruption at ${point}`);
+            }
+          },
+          fail: (point) => {
+            if (bootstrapFailureEnabled) options.bootstrapFailureHook?.(point);
+            if (bootstrapFailureEnabled && point === options.bootstrapFailureAfter) {
+              throw new Error(`synthetic bootstrap failure at ${point}`);
+            }
+          },
+        });
+
+    return {
+      io,
+      env,
+      userHome,
+      now,
+      ids: {
+        next: (): string => {
+          sequence += 1;
+          return `tx_fixture_${String(sequence).padStart(3, "0")}`;
+        },
+      },
+      platform: new FakePlatformAdapter({
+        userHome,
+        ...(options.agents === undefined ? {} : { agents: options.agents }),
+        ...(options.inspectFailure === undefined
+          ? {}
+          : { inspectFailure: options.inspectFailure }),
+        ...(options.discoveryFailure === undefined
+          ? {}
+          : { discoveryFailure: options.discoveryFailure }),
+        ...(options.untrustedExecutable === undefined
+          ? {}
+          : { untrustedExecutable: options.untrustedExecutable }),
+      }),
+      transactions: new TransactionStore({
+        stateDir: paths.stateDir,
+        fs: NODE_FILE_SYSTEM,
+        lockProvider,
+      }),
+      manifests: new ManifestStore({
+        manifestFile: paths.manifestFile,
+        fs: NODE_FILE_SYSTEM,
+        guards: guards.manifest,
+      }),
       fs: NODE_FILE_SYSTEM,
-      guards: guards.manifest,
-    }),
-    fs: NODE_FILE_SYSTEM,
-    executor: transactionExecutor,
-    guards,
-    paths,
-    productVersion: PRODUCT_VERSION,
-    runner,
-    bootstrap: bootstrapExecutor === null || packagedRelease === null
-      ? { state: "unavailable_until_packaged_handoff" }
-      : { state: "available", executor: bootstrapExecutor, packagedRelease },
+      executor: transactionExecutor,
+      guards,
+      paths,
+      productVersion: PRODUCT_VERSION,
+      runner,
+      bootstrap: bootstrapExecutor === null || packagedRelease === null
+        ? { state: "unavailable_until_packaged_handoff" }
+        : { state: "available", executor: bootstrapExecutor, packagedRelease },
+    };
   };
+  const context = buildContext();
 
   return {
     root,
@@ -432,11 +478,16 @@ export async function createCommandFixture(
     io,
     context,
     bootstrapTrace,
+    lifecycleLockEvents,
     releaseRequests,
     vendorProcesses,
     disableBootstrapInterrupt: () => {
       bootstrapInterruptEnabled = false;
     },
+    disableBootstrapFailure: () => {
+      bootstrapFailureEnabled = false;
+    },
+    rebuildContext: buildContext,
   };
 }
 

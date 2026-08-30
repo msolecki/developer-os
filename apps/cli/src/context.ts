@@ -209,51 +209,106 @@ export async function publishBootstrapInitialJournalNoReplace(request: {
   readonly destinationPath: string;
   readonly expectedDev: string;
   readonly expectedIno: string;
+  readonly interrupt?: (
+    event:
+      | "after_link"
+      | "before_destination_parent_sync"
+      | "after_destination_parent_sync"
+      | "after_source_unlink"
+      | "before_source_parent_sync"
+      | "after_source_parent_sync",
+  ) => void;
 }): Promise<void> {
-  const source = await lstat(request.sourcePath);
-  if (
-    !source.isFile() ||
-    source.isSymbolicLink() ||
-    String(source.dev) !== request.expectedDev ||
-    String(source.ino) !== request.expectedIno
-  ) {
-    throw new SecurityRefusalError(
-      "the staged bootstrap journal changed before publication",
-    );
-  }
-
-  await link(request.sourcePath, request.destinationPath);
-  try {
-    const destination = await lstat(request.destinationPath);
-    if (
-      !destination.isFile() ||
-      destination.isSymbolicLink() ||
-      String(destination.dev) !== request.expectedDev ||
-      String(destination.ino) !== request.expectedIno
-    ) {
-      throw new SecurityRefusalError(
-        "the bootstrap journal destination did not retain the admitted inode",
-      );
+  const optional = async (path: string) => {
+    try {
+      return await lstat(path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
     }
-    await unlink(request.sourcePath);
-  } catch (error) {
-    await unlink(request.destinationPath).catch(() => undefined);
-    throw error;
-  }
-
-  for (const directory of new Set([
-    dirname(request.sourcePath),
-    dirname(request.destinationPath),
-  ])) {
+  };
+  const exact = (value: Awaited<ReturnType<typeof lstat>> | null): boolean =>
+    value !== null &&
+    value.isFile() &&
+    !value.isSymbolicLink() &&
+    String(value.dev) === request.expectedDev &&
+    String(value.ino) === request.expectedIno;
+  const syncExactParent = async (path: string): Promise<void> => {
+    const before = await lstat(path);
+    if (!before.isDirectory() || before.isSymbolicLink()) {
+      throw new SecurityRefusalError("a bootstrap journal parent changed shape");
+    }
     const handle = await open(
-      directory,
+      path,
       fsSync.constants.O_RDONLY | fsSync.constants.O_NOFOLLOW,
     );
     try {
+      const opened = await handle.stat();
+      if (opened.dev !== before.dev || opened.ino !== before.ino) {
+        throw new SecurityRefusalError("a bootstrap journal parent changed identity");
+      }
       await handle.sync();
+      const reopened = await lstat(path);
+      if (reopened.dev !== before.dev || reopened.ino !== before.ino) {
+        throw new SecurityRefusalError("a bootstrap journal parent changed during sync");
+      }
     } finally {
       await handle.close();
     }
+  };
+
+  let [source, destination] = await Promise.all([
+    optional(request.sourcePath),
+    optional(request.destinationPath),
+  ]);
+  if (!exact(source) && !exact(destination)) {
+    throw new SecurityRefusalError("the bootstrap journal publication identity is absent");
+  }
+  if (source !== null && !exact(source)) {
+    throw new SecurityRefusalError("the staged bootstrap journal changed before publication");
+  }
+  if (destination !== null && !exact(destination)) {
+    throw new SecurityRefusalError("the bootstrap journal destination is a third state");
+  }
+  if (source !== null && destination !== null) {
+    if (source.nlink !== 2 || destination.nlink !== 2) {
+      throw new SecurityRefusalError("the bootstrap journal two-name state changed link count");
+    }
+  } else if ((source ?? destination)?.nlink !== 1) {
+    throw new SecurityRefusalError("the bootstrap journal publication changed link count");
+  }
+
+  if (destination === null) {
+    await link(request.sourcePath, request.destinationPath);
+    request.interrupt?.("after_link");
+    destination = await lstat(request.destinationPath);
+    source = await lstat(request.sourcePath);
+    if (!exact(source) || !exact(destination) || source.nlink !== 2 || destination.nlink !== 2) {
+      throw new SecurityRefusalError("the bootstrap journal destination did not retain the admitted inode");
+    }
+  }
+
+  request.interrupt?.("before_destination_parent_sync");
+  await syncExactParent(dirname(request.destinationPath));
+  request.interrupt?.("after_destination_parent_sync");
+
+  if (source !== null) {
+    await unlink(request.sourcePath);
+    request.interrupt?.("after_source_unlink");
+  }
+  request.interrupt?.("before_source_parent_sync");
+  await syncExactParent(dirname(request.sourcePath));
+  request.interrupt?.("after_source_parent_sync");
+
+  const [sourceAfter, destinationAfter] = await Promise.all([
+    optional(request.sourcePath),
+    optional(request.destinationPath),
+  ]);
+  if (
+    sourceAfter !== null || destinationAfter === null ||
+    !exact(destinationAfter) || destinationAfter.nlink !== 1
+  ) {
+    throw new SecurityRefusalError("the bootstrap journal publication did not reach one final name");
   }
 }
 

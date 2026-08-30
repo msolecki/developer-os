@@ -114,4 +114,29 @@ describe("PackagedReleaseSourceV1", () => {
       code: EXIT_CODES.securityRefusal,
     });
   });
+
+  it("revalidates one sealed file without rescanning unrelated package bytes", async () => {
+    const { root, source, files } = await fixture();
+    const admitted = await inspectPackagedRelease(source);
+    await nodeFs.writeFile(join(root, "unrelated-after-phase-admission"), "later\n", {
+      mode: 0o600,
+    });
+
+    expect(
+      new TextDecoder().decode(await admitted.readFile("bundle/bin/developer-os")),
+    ).toBe(files["bundle/bin/developer-os"]);
+  });
+
+  it("still refuses the selected file when its sealed inode is replaced", async () => {
+    const { root, source, files } = await fixture();
+    const admitted = await inspectPackagedRelease(source);
+    const selected = join(root, "bundle/bin/developer-os");
+    const replacement = join(root, "bundle/bin/replacement");
+    await nodeFs.writeFile(replacement, files["bundle/bin/developer-os"], { mode: 0o700 });
+    await nodeFs.rename(replacement, selected);
+
+    await expect(admitted.readFile("bundle/bin/developer-os")).rejects.toMatchObject({
+      code: EXIT_CODES.securityRefusal,
+    });
+  });
 });

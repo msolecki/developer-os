@@ -324,6 +324,73 @@ function sameInventory(left: SealedPackagedRelease, right: Awaited<ReturnType<ty
   );
 }
 
+async function assertSealedFileChain(
+  snapshot: SealedPackagedRelease,
+  expected: AdmittedPackagedReleaseFileV1,
+  sealedDirectories: ReadonlyMap<string, DirectorySnapshot>,
+): Promise<Stats> {
+  const assertSealedDirectory = async (
+    path: string,
+    sealedIdentity: { readonly dev: string; readonly ino: string },
+    root: boolean,
+  ): Promise<void> => {
+    const before = await nodeFs.lstat(path);
+    if (root) assertRoot(before);
+    else assertDirectory(before);
+    if (String(before.dev) !== sealedIdentity.dev || String(before.ino) !== sealedIdentity.ino) {
+      securityRefusal("packaged release directory changed before payload staging");
+    }
+    const handle = await nodeFs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const opened = await handle.stat();
+      if (root) assertRoot(opened);
+      else assertDirectory(opened);
+      const fresh = await nodeFs.lstat(path);
+      if (
+        String(opened.dev) !== sealedIdentity.dev ||
+        String(opened.ino) !== sealedIdentity.ino ||
+        fresh.dev !== opened.dev ||
+        fresh.ino !== opened.ino
+      ) {
+        securityRefusal("packaged release directory changed during guarded reopen");
+      }
+    } finally {
+      await handle.close();
+    }
+  };
+
+  await assertSealedDirectory(snapshot.handoff.packageRoot, snapshot.root, true);
+
+  const parts = expected.relativePath.split("/");
+  let relativeParent = "";
+  for (const part of parts.slice(0, -1)) {
+    relativeParent = relativeParent.length === 0 ? part : `${relativeParent}/${part}`;
+    const sealedDirectory = sealedDirectories.get(relativeParent);
+    if (sealedDirectory === undefined) {
+      securityRefusal("packaged release file escaped its sealed directory chain");
+    }
+    await assertSealedDirectory(
+      join(snapshot.handoff.packageRoot, relativeParent),
+      sealedDirectory,
+      false,
+    );
+  }
+
+  const stats = await nodeFs.lstat(
+    join(snapshot.handoff.packageRoot, expected.relativePath),
+  );
+  const observedMode = assertFile(stats);
+  if (
+    String(stats.dev) !== expected.dev ||
+    String(stats.ino) !== expected.ino ||
+    stats.size !== expected.bytes ||
+    observedMode !== expected.mode
+  ) {
+    securityRefusal("packaged release file no longer matches its sealed row");
+  }
+  return stats;
+}
+
 export async function admitRootVerifiedPackagedRelease(
   handoff: RootVerifiedPackagedReleaseV1,
 ): Promise<PackagedReleaseSourceV1> {
@@ -361,6 +428,12 @@ export async function inspectPackagedRelease(
   if (!sameInventory(snapshot, observed)) {
     securityRefusal("packaged release changed after root-verified admission");
   }
+  const filesByPath = new Map(
+    snapshot.files.map((file) => [file.relativePath, file] as const),
+  );
+  const directoriesByPath = new Map(
+    snapshot.directories.map((directory) => [directory.relativePath, directory] as const),
+  );
   const admitted: AdmittedPackagedReleaseV1 = {
     packageRoot: snapshot.handoff.packageRoot,
     packageRootDev: snapshot.root.dev,
@@ -371,13 +444,12 @@ export async function inspectPackagedRelease(
     identity: structuredClone(snapshot.handoff.identity),
     files: structuredClone(snapshot.files),
     readFile: async (relativePath: string): Promise<Uint8Array> => {
-      const fresh = await inventory(snapshot.handoff.packageRoot);
-      if (!sameInventory(snapshot, fresh)) {
-        securityRefusal("packaged release changed before payload staging");
+      const expected = filesByPath.get(relativePath);
+      if (expected === undefined) {
+        securityRefusal("packaged release read escaped its sealed inventory");
       }
-      const expected = requiredFile(snapshot.files, relativePath);
       const path = join(snapshot.handoff.packageRoot, expected.relativePath);
-      const stats = await nodeFs.lstat(path);
+      const stats = await assertSealedFileChain(snapshot, expected, directoriesByPath);
       const bytes = await readGuardedFile(path, stats);
       const digest = createHash("sha256").update(bytes).digest("hex");
       if (

@@ -1098,6 +1098,45 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
     }
   });
 
+  it('resumes an exact same-inode two-name publication through the injected idempotent primitive', async () => {
+    const fixture = await createFixture('bootstrap-foundation-two-name-recovery');
+    try {
+      const bootstrap = await installBootstrapFoundationFixture(fixture);
+      await expect(
+        bootstrapFoundationExecutor(fixture, async (request) => {
+          await nodeFs.link(request.sourcePath, request.destinationPath);
+          throw new Error('synthetic death after no-replace link');
+        }).executeBootstrapFoundationParticipant(bootstrap.admission),
+      ).rejects.toBeInstanceOf(Error);
+      const before = await Promise.all([
+        nodeFs.lstat(bootstrap.initialJournalPath),
+        nodeFs.lstat(bootstrap.finalJournalPath),
+      ]);
+      expect(before.map((stats) => [String(stats.dev), String(stats.ino), stats.nlink]))
+        .toStrictEqual([
+          [String(before[0].dev), String(before[0].ino), 2],
+          [String(before[0].dev), String(before[0].ino), 2],
+        ]);
+      let publicationCalled = false;
+
+      const result = await bootstrapFoundationExecutor(
+        fixture,
+        async (request) => {
+          publicationCalled = true;
+          await nodeFs.unlink(request.sourcePath);
+        },
+      ).executeBootstrapFoundationParticipant(bootstrap.admission);
+
+      expect(publicationCalled).toBe(true);
+      expect(result.phase).toBe('finalized');
+      await expectMissing(bootstrap.initialJournalPath);
+      expect((await nodeFs.lstat(bootstrap.finalJournalPath)).nlink).toBe(1);
+      await expectBytes(bootstrap.targetPath, CREATED_BYTES);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
   it('catches a both-present branch that chooses one inode and destroys the other', async () => {
     const fixture = await createFixture('bootstrap-foundation-both-present');
     try {

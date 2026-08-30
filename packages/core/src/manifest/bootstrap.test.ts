@@ -878,6 +878,30 @@ function fullPlanFixture() {
 
 const migrationId = "mm_123e4567-e89b-42d3-a456-426614174000" as ManifestMigrationIdV1;
 
+it("admits a fresh recovery shape commitment only through exact closure-bound authority", () => {
+  const fixture = fullPlanFixture();
+  const recoveryContext = {
+    ...fixture.context,
+    externalShape: null,
+    admitFreshRecoveryExternalShape: (
+      hash: LowerHexSha256,
+      identity: FreshV2InitPlanV1["bootstrapIdentity"],
+    ) =>
+      hash === fixture.plan.admittedExternalShapeHash &&
+      JSON.stringify(identity) === JSON.stringify(fixture.plan.bootstrapIdentity)
+        ? hash
+        : "refused",
+  };
+
+  expect(validateBootstrapPlan(fixture.plan, recoveryContext as never)).toStrictEqual(
+    fixture.plan,
+  );
+  expect(() => validateBootstrapPlan(fixture.plan, {
+    ...recoveryContext,
+    admitFreshRecoveryExternalShape: () => "refused",
+  })).toThrow(BootstrapStateError);
+});
+
 function canonicalDomainHash(domain: string, value: unknown): string {
   const encoded = encodeCanonicalJson(value as never);
   return createHash("sha256")
@@ -2727,6 +2751,38 @@ describe("bootstrap guarded closure", () => {
         fullClosureContext(),
       ),
     ).toMatchObject({ state: "recovery_required", journal: journalValue });
+  });
+
+  it.each([
+    {
+      name: "the current writing payload evidence before its durable cursor",
+      journal: fullPlanJournal({
+        phase: "payload_staging",
+        nextPayload: 3,
+        payloadWriteState: { state: "writing", ordinal: 3, dev: "1" as never, ino: "103" as never },
+      }),
+      counts: { payload: 4, ordinary: 0, launchability: 0 },
+    },
+    {
+      name: "the current ordinary creation evidence before its durable cursor",
+      journal: fullPlanJournal({ phase: "creating", nextPayload: 10, nextCreatedPath: 4 }),
+      counts: { payload: 10, ordinary: 5, launchability: 0 },
+    },
+    {
+      name: "the current launchability creation evidence before its durable cursor",
+      journal: fullPlanJournal({
+        phase: "launchability_publishing",
+        nextPayload: 10,
+        nextCreatedPath: 11,
+        nextFoundationParticipant: 1,
+        nextLaunchabilityPath: 4,
+      }),
+      counts: { payload: 10, ordinary: 11, launchability: 5 },
+    },
+  ])("admits $name as an exact evidence-derived forward prefix", ({ journal, counts }) => {
+    expect(
+      inspectBootstrapClosure(recoveryInventoryFor(journal, counts), fullClosureContext()),
+    ).toMatchObject({ state: "recovery_required", journal });
   });
 
   it.each([

@@ -389,6 +389,15 @@ export interface BootstrapPlanAdmissionContextV1 {
   readonly id: FreshV2InitIdV1 | ManifestMigrationIdV1;
   readonly bootstrapIdentity: PersistedBootstrapLockIdentityV1;
   readonly externalShape: BootstrapExternalShapeProjectionV1 | null;
+  /**
+   * Recovery-only authority issued after a bounded closure inventory proves the
+   * immutable plan's exact forward prefix. Initial planning must supply the
+   * complete observed projection instead.
+   */
+  readonly admitFreshRecoveryExternalShape?: (
+    hash: LowerHexSha256,
+    bootstrapIdentity: PersistedBootstrapLockIdentityV1,
+  ) => string;
   readonly admitPayloadSource: (
     source: BootstrapPayloadSourceV1,
     ref: BootstrapExpectedPayloadRefV1,
@@ -1328,15 +1337,14 @@ function closureEvidenceProjections(
     );
   }
   const counts = closureEvidenceCounts(plan, journal);
-  return [
-    {
-      payloadOrdinals: Array.from({ length: counts.payload }, (_, ordinal) => ordinal),
+  const projection = (candidate: typeof counts): BootstrapClosureEvidenceProjectionV1 => ({
+      payloadOrdinals: Array.from({ length: candidate.payload }, (_, ordinal) => ordinal),
       creations: [
-        ...Array.from({ length: counts.ordinary }, (_, ordinal) => ({
+        ...Array.from({ length: candidate.ordinary }, (_, ordinal) => ({
           scope: "ordinary" as const,
           ordinal,
         })),
-        ...Array.from({ length: counts.launchability }, (_, ordinal) => ({
+        ...Array.from({ length: candidate.launchability }, (_, ordinal) => ({
           scope: "launchability" as const,
           ordinal,
         })),
@@ -1344,8 +1352,8 @@ function closureEvidenceProjections(
       foundationOrdinals: plan.foundationParticipants.map((_, ordinal) => ordinal),
       foundationExpectation: "phase_bound",
       stagingEntries: [
-        ...plan.createdPaths.slice(0, counts.ordinary),
-        ...plan.launchabilityPaths.slice(0, counts.launchability),
+        ...plan.createdPaths.slice(0, candidate.ordinary),
+        ...plan.launchabilityPaths.slice(0, candidate.launchability),
       ]
         .map((planned) => planned.path)
         .filter(
@@ -1353,8 +1361,26 @@ function closureEvidenceProjections(
             path === productStagingRoot ||
             path.startsWith(`${productStagingRoot}/`),
         ),
-    },
-  ];
+    });
+  const candidates = [projection(counts)];
+  if (
+    journal.phase === "payload_staging" &&
+    journal.payloadWriteState.state === "writing" &&
+    journal.payloadWriteState.ordinal === journal.nextPayload &&
+    journal.nextPayload < plan.payloads.length
+  ) {
+    candidates.push(projection({ ...counts, payload: counts.payload + 1 }));
+  }
+  if (journal.phase === "creating" && journal.nextCreatedPath < plan.createdPaths.length) {
+    candidates.push(projection({ ...counts, ordinary: counts.ordinary + 1 }));
+  }
+  if (
+    journal.phase === "launchability_publishing" &&
+    journal.nextLaunchabilityPath < plan.launchabilityPaths.length
+  ) {
+    candidates.push(projection({ ...counts, launchability: counts.launchability + 1 }));
+  }
+  return candidates;
 }
 
 export function inspectBootstrapClosure(
@@ -2298,10 +2324,20 @@ export function validateBootstrapPlan(
     const bootstrapIdentity = validateBootstrapIdentity(input.bootstrapIdentity, context);
     const paths = deriveBootstrapEnvelopePaths(context.productHome, operation, id);
     if (operation === "fresh_v2_init") {
-      if (input.planPath !== paths.plan || input.journalPath !== paths.journal || input.stagingRoot !== paths.stagingRoot || context.externalShape === null) return refuse();
-      const external = validateBootstrapExternalShapeProjection(context.externalShape);
-      const [home, state, lock] = external.entries;
-      if (home.pathHash !== rawHash(context.productHome) || state.pathHash !== rawHash(context.stateRoot) || lock.pathHash !== rawHash(bootstrapIdentity.path) || home.ownerUid !== bootstrapIdentity.ownerUid || state.ownerUid !== bootstrapIdentity.ownerUid || lock.ownerUid !== bootstrapIdentity.ownerUid || lock.dev !== bootstrapIdentity.dev || lock.ino !== bootstrapIdentity.ino || input.admittedExternalShapeHash !== bootstrapExternalShapeHash(external)) return refuse();
+      if (input.planPath !== paths.plan || input.journalPath !== paths.journal || input.stagingRoot !== paths.stagingRoot) return refuse();
+      if (context.externalShape === null) {
+        const hash = sha256(input.admittedExternalShapeHash);
+        if (
+          context.admitFreshRecoveryExternalShape?.(
+            hash,
+            retainedClone(bootstrapIdentity),
+          ) !== hash
+        ) return refuse();
+      } else {
+        const external = validateBootstrapExternalShapeProjection(context.externalShape);
+        const [home, state, lock] = external.entries;
+        if (home.pathHash !== rawHash(context.productHome) || state.pathHash !== rawHash(context.stateRoot) || lock.pathHash !== rawHash(bootstrapIdentity.path) || home.ownerUid !== bootstrapIdentity.ownerUid || state.ownerUid !== bootstrapIdentity.ownerUid || lock.ownerUid !== bootstrapIdentity.ownerUid || lock.dev !== bootstrapIdentity.dev || lock.ino !== bootstrapIdentity.ino || input.admittedExternalShapeHash !== bootstrapExternalShapeHash(external)) return refuse();
+      }
     } else {
       const migrationPaths = record(input.paths);
       exact(migrationPaths, ["journal", "plan", "stagingRoot"]);

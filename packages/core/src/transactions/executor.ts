@@ -356,13 +356,14 @@ function assertBootstrapJournalStats(
   stats: Awaited<ReturnType<TransactionFileSystem["lstat"]>>,
   evidence: BootstrapPayloadEvidenceV1,
   ownerUid: number,
+  expectedNlink = 1,
 ): void {
   if (
     stats.isSymbolicLink() ||
     !stats.isFile() ||
     stats.uid !== ownerUid ||
     (Number(stats.mode) & 0o7777) !== 0o600 ||
-    stats.nlink !== 1 ||
+    stats.nlink !== expectedNlink ||
     stats.size !== evidence.bytes ||
     String(stats.dev) !== evidence.dev ||
     String(stats.ino) !== evidence.ino
@@ -376,21 +377,22 @@ async function readExactBootstrapJournal(
   path: string,
   evidence: BootstrapPayloadEvidenceV1,
   ownerUid: number,
+  expectedNlink = 1,
 ): Promise<{ readonly bytes: Uint8Array; readonly identity: BootstrapJournalIdentity }> {
   try {
     const before = await fs.lstat(path);
-    assertBootstrapJournalStats(before, evidence, ownerUid);
+    assertBootstrapJournalStats(before, evidence, ownerUid, expectedNlink);
     const handle = await fs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     let bytes: Uint8Array;
     try {
       const opened = await handle.stat();
-      assertBootstrapJournalStats(opened, evidence, ownerUid);
+      assertBootstrapJournalStats(opened, evidence, ownerUid, expectedNlink);
       if (opened.dev !== before.dev || opened.ino !== before.ino) {
         throw new TransactionStateError();
       }
       bytes = await handle.readFile();
       const afterRead = await handle.stat();
-      assertBootstrapJournalStats(afterRead, evidence, ownerUid);
+      assertBootstrapJournalStats(afterRead, evidence, ownerUid, expectedNlink);
       if (afterRead.dev !== opened.dev || afterRead.ino !== opened.ino) {
         throw new TransactionStateError();
       }
@@ -398,7 +400,7 @@ async function readExactBootstrapJournal(
       await handle.close();
     }
     const after = await fs.lstat(path);
-    assertBootstrapJournalStats(after, evidence, ownerUid);
+    assertBootstrapJournalStats(after, evidence, ownerUid, expectedNlink);
     if (after.dev !== before.dev || after.ino !== before.ino) {
       throw new TransactionStateError();
     }
@@ -816,8 +818,7 @@ export class TransactionExecutor {
         optionalLstat(this.dependencies.fs, finalPath),
       ]);
       if (
-        (stagedBefore === null && finalBefore === null) ||
-        (stagedBefore !== null && finalBefore !== null)
+        stagedBefore === null && finalBefore === null
       ) {
         throw new TransactionStateError();
       }
@@ -828,8 +829,25 @@ export class TransactionExecutor {
           stagedPath,
           evidence,
           ownerUid,
+          finalBefore === null ? 1 : 2,
         );
         decodeExactBootstrapFoundationJournal(observed.bytes, expected);
+        if (finalBefore !== null) {
+          const observedFinal = await readExactBootstrapJournal(
+            this.dependencies.fs,
+            finalPath,
+            evidence,
+            ownerUid,
+            2,
+          );
+          decodeExactBootstrapFoundationJournal(observedFinal.bytes, expected);
+          if (
+            observedFinal.identity.dev !== observed.identity.dev ||
+            observedFinal.identity.ino !== observed.identity.ino
+          ) {
+            throw new TransactionStateError();
+          }
+        }
         const publish =
           this.dependencies.publishBootstrapInitialJournalNoReplace;
         if (publish === undefined) throw new TransactionStateError();

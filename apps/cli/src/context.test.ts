@@ -19,6 +19,7 @@ import {
   failureFrom,
   loadOrCreateRedactionKey,
   pathEnvironmentFor,
+  publishBootstrapInitialJournalNoReplace,
   readRedactionKey,
 } from "./context.js";
 import type { CliContext } from "./context.js";
@@ -109,6 +110,76 @@ function codeOf(error: unknown): unknown {
     ? error.code
     : undefined;
 }
+
+describe("publishBootstrapInitialJournalNoReplace", () => {
+  it.each([
+    "after_link",
+    "before_destination_parent_sync",
+    "after_destination_parent_sync",
+    "after_source_unlink",
+    "before_source_parent_sync",
+    "after_source_parent_sync",
+  ] as const)("resumes the exact same-inode publication after %s", async (point) => {
+    const fixture = await createFixture(`bootstrap-journal-${point}`);
+    const sourceParent = join(fixture.root, "staged");
+    const destinationParent = join(fixture.root, "transactions");
+    await nodeFs.mkdir(sourceParent, { mode: 0o700 });
+    await nodeFs.mkdir(destinationParent, { mode: 0o700 });
+    const sourcePath = join(sourceParent, "initial.json");
+    const destinationPath = join(destinationParent, "final.json");
+    await nodeFs.writeFile(sourcePath, "journal\n", { mode: 0o600 });
+    const identity = await nodeFs.lstat(sourcePath);
+    let interrupted = false;
+
+    await expect(publishBootstrapInitialJournalNoReplace({
+      sourcePath,
+      destinationPath,
+      expectedDev: String(identity.dev),
+      expectedIno: String(identity.ino),
+      interrupt: (event) => {
+        if (!interrupted && event === point) {
+          interrupted = true;
+          throw new Error(`death at ${event}`);
+        }
+      },
+    })).rejects.toThrow(`death at ${point}`);
+
+    await publishBootstrapInitialJournalNoReplace({
+      sourcePath,
+      destinationPath,
+      expectedDev: String(identity.dev),
+      expectedIno: String(identity.ino),
+    });
+
+    await expect(nodeFs.lstat(sourcePath)).rejects.toMatchObject({ code: "ENOENT" });
+    const published = await nodeFs.lstat(destinationPath);
+    expect([String(published.dev), String(published.ino), published.nlink]).toStrictEqual([
+      String(identity.dev),
+      String(identity.ino),
+      1,
+    ]);
+    expect(await nodeFs.readFile(destinationPath, "utf8")).toBe("journal\n");
+  });
+
+  it("refuses and preserves a mismatched two-name state", async () => {
+    const fixture = await createFixture("bootstrap-journal-third-state");
+    const sourcePath = join(fixture.root, "source.json");
+    const destinationPath = join(fixture.root, "destination.json");
+    await nodeFs.writeFile(sourcePath, "planned\n", { mode: 0o600 });
+    const identity = await nodeFs.lstat(sourcePath);
+    await nodeFs.writeFile(destinationPath, "concurrent\n", { mode: 0o600 });
+
+    await expect(publishBootstrapInitialJournalNoReplace({
+      sourcePath,
+      destinationPath,
+      expectedDev: String(identity.dev),
+      expectedIno: String(identity.ino),
+    })).rejects.toBeDefined();
+
+    expect(await nodeFs.readFile(sourcePath, "utf8")).toBe("planned\n");
+    expect(await nodeFs.readFile(destinationPath, "utf8")).toBe("concurrent\n");
+  });
+});
 
 describe("loadOrCreateRedactionKey", () => {
   it("creates a 32-byte key at 0600 when none exists", async () => {
