@@ -501,6 +501,8 @@ git commit -m "feat(core): define v2 bootstrap recovery"
 **Files:**
 - Modify: `packages/core/src/manifest/bootstrap.ts`
 - Modify: `packages/core/src/manifest/bootstrap.test.ts`
+- Modify: `packages/core/src/transactions/executor.ts`
+- Modify: `packages/core/src/transactions/transactions.test.ts`
 - Create: `apps/cli/src/bootstrap/context.ts`
 - Create: `apps/cli/src/bootstrap/executor.ts`
 - Create: `apps/cli/src/bootstrap/executor.test.ts`
@@ -560,16 +562,18 @@ Keep `CliContext`'s existing command-wide contract source-compatible: expose boo
 
 Close the discovered Task 6/7 payload seam in the shared bootstrap grammar. Every non-remove `FoundationMutationRefV1` carries distinct `content` and `.sha256` digest bootstrap refs bound to its exact standard Foundation staging paths, hash, and size; remove mutations carry null for both. Both refs participate in the complete use-once bijection. Add the closed repeatable `foundation_staged_digest` plan-derived role, and the single fresh-only `foundation_config` role that reconstructs the existing strict `serializeConfig` TOML bytes from a complete `DeveloperOsConfigV1`. This is the sole generated Foundation content exception: all other fresh Foundation bytes remain `guarded_package_file`, migration bytes remain guarded preimages, no raw bytes or serializer callback enter the plan, and the redaction key remains secret-opaque outside manifest/bootstrap payloads. Publish and verify every staged Foundation blob/digest inode before the matching initial-journal bridge; partial pairs recover only from their outer payload evidence.
 
+The initial-journal bridge must also recover the exact post-link/pre-unlink Foundation publication state. When both staged and final names exist, Core admits only the same already-authorized inode with the exact owner/mode/content identity and delegates completion to the injected idempotent no-replace publication capability; distinct inodes or any mismatched identity remain a third state. This narrow Task 6 bridge extension is required because rejecting both names before calling the capability would make Task 7's crash-idempotent publisher unreachable after a cold retry.
+
 - [x] **Step 4: Run fresh-init tests**
 
-Run: `npx vitest run --root packages/core src/manifest/bootstrap.test.ts && npx vitest run --root apps/cli src/bootstrap/executor.test.ts src/update/packaged-release.test.ts src/commands/init.test.ts`
+Run: `npx vitest run --root packages/core src/manifest/bootstrap.test.ts src/transactions/transactions.test.ts && npx vitest run --root apps/cli src/bootstrap/executor.test.ts src/update/packaged-release.test.ts src/commands/init.test.ts`
 
 Expected: PASS for dry-run, success, compensation, force-forward, and every injected death point.
 
 - [x] **Step 5: Commit Task 7**
 
 ```bash
-git add packages/core/src/manifest/bootstrap.ts packages/core/src/manifest/bootstrap.test.ts apps/cli/src/bootstrap/context.ts apps/cli/src/bootstrap/executor.ts apps/cli/src/bootstrap/executor.test.ts apps/cli/src/update/packaged-release.ts apps/cli/src/update/packaged-release.test.ts apps/cli/src/commands/init.ts apps/cli/src/commands/init.test.ts apps/cli/src/commands/testing.ts apps/cli/src/context.ts apps/cli/src/context.test.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
+git add packages/core/src/manifest/bootstrap.ts packages/core/src/manifest/bootstrap.test.ts packages/core/src/transactions/executor.ts packages/core/src/transactions/transactions.test.ts apps/cli/src/bootstrap/context.ts apps/cli/src/bootstrap/executor.ts apps/cli/src/bootstrap/executor.test.ts apps/cli/src/update/packaged-release.ts apps/cli/src/update/packaged-release.test.ts apps/cli/src/commands/init.ts apps/cli/src/commands/init.test.ts apps/cli/src/commands/testing.ts apps/cli/src/context.ts apps/cli/src/context.test.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
 git commit -m "feat(cli): initialize manifest v2 installations"
 ```
 
