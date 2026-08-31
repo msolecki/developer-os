@@ -1,14 +1,16 @@
 # Developer OS — Release, Update, and Manifest V2 Design
 
-**Status: approved by the founder on 2026-08-29 after complete written-specification review.** This
-is DOS-P7 Spec 2, the second half of `ORDER.md` entry A11 and program-plan Task 7. Spec 1 is the
-approved opt-in surfaces design at
+**Status: 2026-08-29 baseline approved; the 2026-08-31 §6 retained-bootstrap-evidence correction
+was approved in design dialogue and awaits complete written-specification review.** This is DOS-P7
+Spec 2, the second half of `ORDER.md` entry A11 and program-plan Task 7. Spec 1 is the approved
+opt-in surfaces design at
 `docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md`.
 
 This specification owns release trust, the stable launcher and versioned bundle contract,
 `ManagedArtifactV2`/`InstallationManifestV2`, V1 migration and V2 new init, update planning and
-apply, schema migration, and rollback. Its approved implementation plan is
-`docs/superpowers/plans/2026-08-29-developer-os-release-update.md`.
+apply, schema migration, and rollback. Its baseline implementation plan is
+`docs/superpowers/plans/2026-08-29-developer-os-release-update.md`; Task 7 must be revised against
+the written §6 correction before implementation resumes.
 
 The split has one hard implementation dependency. The V1→V2 migration and V2 new-init handoff in
 §6 must land first. Only then may Spec 1 implementation begin. The remaining release/update work in
@@ -53,8 +55,9 @@ The subsystem preserves these standing boundaries:
   concurrent edit, an unsupported owner action, or insufficient bounded capacity before apply;
 - rollback never merges, overwrites a post-update edit, lowers the persisted release-trust high
   watermarks, or downloads a replacement;
-- uninstall preserves the Brain and unrelated agent configuration and removes release bundles only
-  through exact manifest and signed-inventory evidence; there is no recursive delete;
+- uninstall preserves the Brain, unrelated agent configuration, and every bootstrap plan, journal
+  slot, and retained tombstone; it removes release bundles only through exact manifest and
+  signed-inventory evidence, and there is no recursive delete;
 - all persisted DOS-P7 JSON uses `CanonicalJsonV1` plus one LF except unchanged legacy Foundation
   journals and an unchanged V1 manifest preimage retained for migration recovery;
 - secret-screen private bytes before any integrity hash; redact before diagnostic truncation,
@@ -166,16 +169,18 @@ The Homebrew-owned launcher first checks the exact optional update-recovery exec
 1. the active product-owned bundle named by `ActiveReleaseRecordV1`; or
 2. its colocated package-manager-owned fallback bundle when the active record is absent.
 
-Before normal selection, it also runs the bounded bootstrap-closure reader from §6. Exactly one
-valid non-terminal `fresh_v2_init` or `v1_to_v2` envelope is a recovery-routing arm, not normal
-active state. Before the launchability suffix completes, the launcher uses its colocated packaged
-fallback. After that cursor, it may use the copied product bundle only when active, trust, all three
-retained metadata files, and the complete bundle identity equal that same guarded package source.
-Either candidate may execute only the strict public `init` recovery command; every other argv is
-recovery-required. The selected CLI must resume/compensate the recorded envelope before dispatching
-ordinary init behavior. Missing/extra envelopes, a cursor/identity mismatch, active published before
-the fixed launchability suffix, or any malformed bootstrap residue is exit 6. This arm remains until
-terminal V2 verification and plan-last compaction make bootstrap closure clear.
+Before normal selection, it also runs the bounded bootstrap-closure reader from §6. Before a
+complete V2 handoff, exactly one valid non-terminal `fresh_v2_init` or `v1_to_v2` envelope is a
+recovery-routing arm, not normal active state. Before the launchability suffix completes, the
+launcher uses its colocated packaged fallback. After that cursor, it may use the copied product
+bundle only when active, trust, all three retained metadata files, and the complete bundle identity
+equal that same guarded package source. Either candidate may execute only the strict public `init`
+recovery command; every other argv is recovery-required. The selected CLI must resume/compensate
+the recorded envelope before dispatching ordinary init behavior. Missing/extra envelopes, a
+cursor/identity mismatch, active published before the fixed launchability suffix, or malformed
+active bootstrap residue is exit 6. Once terminal V2 verification establishes the complete handoff,
+bootstrap plans, journal slots, and retained tombstones are inert under §6.4 and do not intercept
+ordinary launcher selection even when retention is incomplete or later altered.
 
 It resolves the product home from the same guarded default/`DEVELOPER_OS_HOME` grammar as the CLI,
 without resolving a Brain. It opens the active record with no-follow/type/owner/mode/link/size and
@@ -911,11 +916,11 @@ digests and requires exact equality; the V1 Foundation digest/domain is never re
 A lifecycle `FoundationInitialJournalPayloadPathV1` is derived exactly as
 `staging/lifecycle/<coordinator-id>/participants/foundation/<transaction-id>/initial-journal.json`;
 bootstrap refs use only their ordinal-derived payload path. Both are included in their envelope's
-exact-set/orphan/compaction inventory.
+exact-set/orphan/terminal-closure inventory.
 
 Execution cursors count only the forward-role projection: at most 256 bootstrap, 3,907 owner, or 391
 schema refs. Compensation cursors address the reverse reached forward projection and dispatch its
-paired compensation ref; terminal compaction alone counts both halves. This is why bootstrap plans
+paired compensation ref; terminal closure alone counts both halves. This is why bootstrap plans
 permit 512 total refs while `nextFoundationParticipant` remains capped at 256.
 
 ## 6. V1 migration and V2 new init
@@ -937,7 +942,8 @@ interface FreshV2InitPlanV1 {
   readonly v2ManifestHash: LowerHexSha256;
   readonly bootstrapIdentity: PersistedBootstrapLockIdentityV1;
   readonly planPath: ExactProductStatePathV1;
-  readonly journalPath: ExactProductStatePathV1;
+  readonly journalSlot0Path: ExactProductStatePathV1;
+  readonly journalSlot1Path: ExactProductStatePathV1;
   readonly stagingRoot: CanonicalAbsolutePathV1;
   readonly maximumPlanBytes: Integer[1..268_435_456];
   readonly maximumJournalBytes: Integer[1..1_048_576];
@@ -975,9 +981,12 @@ interface FreshV2InitJournalV1 {
   readonly schemaVersion: 1;
   readonly id: FreshV2InitIdV1;
   readonly planHash: LowerHexSha256;
+  readonly slot: 0 | 1;
+  readonly sequence: UInt64DecimalV1;
+  readonly previousJournalHash: LowerHexSha256 | null;
   readonly phase: "planned" | "payload_staging" | "creating" | "foundation_applying" |
     "launchability_publishing" | "manifest_publishing" | "verifying" | "compensating" |
-    "finalized" | "rolled_back" | "compacting";
+    "finalized" | "rolled_back" | "retaining" | "retained";
   readonly direction: "forward" | "compensating";
   readonly nextPayload: Integer[0..1_000_000];
   readonly payloadWriteState: BootstrapPayloadWriteStateV1;
@@ -986,9 +995,9 @@ interface FreshV2InitJournalV1 {
   readonly nextLaunchabilityPath: Integer[0..200_006];
   readonly manifestCursor: Integer[0..3];
   readonly compensationNext: Integer[-1..2_200_264] | null;
-  readonly payloadCleanupPart: "staged_file" | "evidence" | null;
+  readonly payloadRetentionPart: "staged_file" | "evidence" | null;
   readonly terminalOutcome: "finalized" | "rolled_back" | null;
-  readonly compactionNext: Integer[0..2_200_526] | null;
+  readonly retentionNext: Integer[0..2_200_526] | null;
   readonly createdAt: UtcTimestampV1;
   readonly updatedAt: UtcTimestampV1;
 }
@@ -1008,20 +1017,21 @@ metadata/identity mismatch or any unprojected child refuses rather than treating
 generic content hash.
 
 The exact final paths are `state/fresh-v2-init.<id>.plan.json`,
-`state/fresh-v2-init.<id>.journal.json`, and `staging/fresh-v2-init/<id>`. Their sole temporary names,
-prefix rules, modes, byte bounds, plan-hash binding, journal rewrite discipline, one-ID residue
-admission, and plan-last compaction are the `fresh-v2-init`-prefixed equivalents of §6.3. Plan final
-and journal final are parent-synced before `payloads[0]`. The ordered cursor is payloads, ordinary
+`state/fresh-v2-init.<id>.journal.0.json`, `state/fresh-v2-init.<id>.journal.1.json`, and
+`staging/fresh-v2-init/<id>`. Their modes, byte bounds, plan-hash binding, two-slot journal rewrite
+discipline, active-envelope admission, and terminal same-parent retention are the
+`fresh-v2-init`-prefixed equivalents of §6.3 and §6.4. The immutable plan and initial journal slot
+are parent-synced before `payloads[0]`. The ordered cursor is payloads, ordinary
 created paths, Foundation participants, launchability paths, manifest preserve/publish, then full verification. Durable V2 manifest
-publication is the point of no return. Before it, compensation restores manifest absence and removes
-only journaled attempt-created identities in reverse; it never deletes a pre-plan empty skeleton or
-pre-existing Brain path. At/after it, recovery force-forwards verification and compaction. A plan or
-journal mismatch, mutation without the journal, unknown child, or cursor third state preserves all
+publication is the point of no return. Before it, compensation restores manifest absence and
+retains only journaled attempt-created identities in reverse; it never moves a pre-plan empty
+skeleton or pre-existing Brain path. At/after it, recovery force-forwards verification and
+retention. A plan or journal mismatch, mutation without the journal, unknown child, or cursor third state preserves all
 evidence as exit 6; only `init` resumes the envelope.
 
 As in migration, `createdPaths[0]` is the exact permanent global-lock transition. Later paths use the
 closed launchability order defined in §6.3. The process creates/acquires that lock while still holding bootstrap, records
-the post-create identity, and holds both descriptors through terminal compaction.
+the post-create identity, and holds both descriptors through terminal retention.
 
 With that durable envelope present, fresh init:
 
@@ -1036,8 +1046,8 @@ With that durable envelope present, fresh init:
 7. publishes `ActiveReleaseRecordV1` last among launchability state, only after the complete copied
    bundle, metadata, trust, nonce/allocator, roots, and reservations verify;
 8. writes the complete V2 manifest through a bootstrap-owned `ManifestStatePlanV1`; and
-9. verifies the full install before removing only attempt-created empty residue and the transient
-   lock inode while its descriptor remains held.
+9. verifies the full install before moving attempt-created residue and the transient lock inode to
+   their plan-derived same-parent retained tombstones while its descriptor remains held.
 
 The package-manager fallback carries the root-verified delegation, release index, and bundle
 manifest that identify its own stable release. Fresh init verifies those packaged bytes exactly as
@@ -1046,8 +1056,8 @@ copies the fallback inventory into product-owned storage.
 
 No network, vendor process, model, Git, launchd, or Brain migration runs. The global lifecycle lock
 is created only after the bootstrap-locked second inventory. Before the manifest point of no return,
-compensation removes it only through its exact `createdPaths[0]` identity; once that point is durable,
-the lock is permanent and never unlinked.
+compensation may retain it only through its exact `createdPaths[0]` identity; once that point is
+durable, the lock is permanent and never becomes a retention row.
 
 ### 6.2 V1 admission and mapping
 
@@ -1137,7 +1147,8 @@ type ManifestMigrationIdV1 = `mm_${LowercaseUuidV4}`;
 
 interface ManifestMigrationPathsV1 {
   readonly plan: ExactProductStatePathV1;
-  readonly journal: ExactProductStatePathV1;
+  readonly journalSlot0: ExactProductStatePathV1;
+  readonly journalSlot1: ExactProductStatePathV1;
   readonly stagingRoot: CanonicalAbsolutePathV1;
 }
 
@@ -1145,6 +1156,9 @@ interface ManifestMigrationJournalV1 {
   readonly schemaVersion: 1;
   readonly id: ManifestMigrationIdV1;
   readonly planHash: LowerHexSha256;
+  readonly slot: 0 | 1;
+  readonly sequence: UInt64DecimalV1;
+  readonly previousJournalHash: LowerHexSha256 | null;
   readonly phase:
     | "planned"
     | "payload_staging"
@@ -1156,7 +1170,8 @@ interface ManifestMigrationJournalV1 {
     | "compensating"
     | "finalized"
     | "rolled_back"
-    | "compacting";
+    | "retaining"
+    | "retained";
   readonly direction: "forward" | "compensating";
   readonly nextPayload: Integer[0..1_000_000];
   readonly payloadWriteState: BootstrapPayloadWriteStateV1;
@@ -1165,9 +1180,9 @@ interface ManifestMigrationJournalV1 {
   readonly nextLaunchabilityPath: Integer[0..200_006];
   readonly manifestCursor: Integer[0..3];
   readonly compensationNext: Integer[-1..2_200_264] | null;
-  readonly payloadCleanupPart: "staged_file" | "evidence" | null;
+  readonly payloadRetentionPart: "staged_file" | "evidence" | null;
   readonly terminalOutcome: "finalized" | "rolled_back" | null;
-  readonly compactionNext: Integer[0..2_200_526] | null;
+  readonly retentionNext: Integer[0..2_200_526] | null;
   readonly createdAt: UtcTimestampV1;
   readonly updatedAt: UtcTimestampV1;
 }
@@ -1190,7 +1205,7 @@ type PlannedCreatedPathV1 =
       readonly ownerUid: EffectiveUidV1;
       readonly mode: 448;
       readonly parent: BootstrapPlannedParentV1;
-      readonly cleanup: "remove_on_compensation";
+      readonly cleanup: "retain_on_compensation";
     }
   | {
       readonly kind: "global_lock";
@@ -1199,7 +1214,7 @@ type PlannedCreatedPathV1 =
       readonly ownerUid: EffectiveUidV1;
       readonly mode: 384;
       readonly parent: BootstrapPlannedParentV1;
-      readonly cleanup: "remove_on_compensation";
+      readonly cleanup: "retain_on_compensation";
     }
   | {
       readonly kind: "file";
@@ -1208,7 +1223,7 @@ type PlannedCreatedPathV1 =
       readonly ownerUid: EffectiveUidV1;
       readonly payload: BootstrapExpectedPayloadRefV1;
       readonly parent: BootstrapPlannedParentV1;
-      readonly cleanup: "remove_on_compensation";
+      readonly cleanup: "retain_on_compensation";
     };
 
 type BootstrapPlannedParentV1 =
@@ -1362,7 +1377,7 @@ the executor reopens the exact source, secret-screens private bytes before confi
 persists `create_intent`, creates the exact empty staged path no-replace, reopens it, persists the
 `writing` inode identity, writes at most the declared bytes, syncs/reopens it, then
 publishes `BootstrapPayloadEvidenceV1` and advances `nextPayload`. A crash during the payload write
-may only compensate and remove that exact identity; recovery never adopts its partial contents.
+may only compensate by retaining that exact identity; recovery never adopts its partial contents.
 `create_intent` may bind only the exact empty owner/mode/link path at the current ordinal, while a
 nonempty unbound path is a third state. `idle` is required between ordinals and after evidence.
 `sourceIdentityHash` is SHA-256 over
@@ -1371,8 +1386,8 @@ source must still match root/inventory/relative-path/file inode, mode, size, and
 source must recompute the self-contained exact canonical bytes for its closed role; a guarded
 migration preimage must still match its selected V1 authority; and constant-empty has no external
 source. Guarded-source change/unavailability before the complete payload cursor selects
-compensation before any `createdPaths` mutation, removes each exact staged inode then evidence with
-`payloadCleanupPart`, and permits a clean later retry. Once every payload is evidenced, guarded
+compensation before any `createdPaths` mutation, retains each exact staged inode then evidence with
+`payloadRetentionPart`, and permits a later retry beside the retained evidence. Once every payload is evidenced, guarded
 source changes are irrelevant to recovery.
 
 At a file create, recovery no-replace-renames the exact evidenced payload inode to the planned target,
@@ -1383,23 +1398,23 @@ file bytes are reconstructed from a later Homebrew package and no bootstrap plan
 that had to exist before the plan. Exact-set tests cover source identity change, every payload/source
 write boundary, missing/extra/reused refs, and first-over payload/evidence/envelope counts.
 
-The three final paths are derived, not caller supplied:
+The four final paths are derived, not caller supplied:
 
 ```text
 plan    = <product home>/state/manifest-migration.<id>.plan.json
-journal = <product home>/state/manifest-migration.<id>.journal.json
+journal slot 0 = <product home>/state/manifest-migration.<id>.journal.0.json
+journal slot 1 = <product home>/state/manifest-migration.<id>.journal.1.json
 staging = <product home>/staging/manifest-migration/<id>
 ```
 
-The only plan/journal pre-final temporary names are
-`state/.manifest-migration.<id>.<lowercase-v4-uuid>.plan.json.tmp` and
-`state/.manifest-migration.<id>.<lowercase-v4-uuid>.journal.json.tmp`. There may be at most one of
-each at its current frontier. A plan temp may be `BytePrefixOf<ManifestMigrationPlanV1>` only while
-the final plan, journal, staging root, and every V2-only target are absent. A journal temp may be a
-prefix only beside its valid final plan and either no final journal or the exact valid final journal
-whose next rewrite it represents. Every final/temporary envelope is owner-owned, single-link `0600`;
-the staging root and derived child directories are owner-only `0700`. The plan is canonical and at
-most 256 MiB; the journal is canonical and at most 1 MiB. `maximumPlanBytes`,
+The immutable plan has no rename-based publication temp. Under the held bootstrap lock, the executor
+creates its exact final path no-replace, retains the open inode, writes and syncs the canonical bytes,
+validates through that descriptor, and syncs `state`. An observed partial plan is legal only as the
+exact byte prefix of the one reconstructed plan while both journal slots, staging, and all V2-only
+targets remain absent; `init` resumes that inode or refuses without deleting it. Journal slots use
+the retained-descriptor rewrite protocol in §6.4 and have no temporary path. Every envelope file is
+owner-owned, single-link `0600`; the staging root and derived child directories are owner-only
+`0700`. The plan is canonical and at most 256 MiB; each journal is canonical and at most 1 MiB. `maximumPlanBytes`,
 `maximumJournalBytes`, and the complete path/entry maximum are recomputed before publication rather
 than trusted from the document.
 
@@ -1412,10 +1427,10 @@ only their named cursor and require every earlier cursor complete and every late
 `compensating` sets `compensationNext` to the greatest reached reversible step and decrements
 through the exact reverse order; `rolled_back` requires the V1 manifest and every preimage restored.
 Successful manifest publication is the point of no return: once `manifestCursor == 2` is durable,
-direction is forever forward, verification/compaction force-forward, and compensation is illegal.
-`finalized` requires the complete V2 handoff; `compacting` requires a terminal outcome and advances
-only through derived staging children, terminal Foundation evidence, the migration journal, and the
-plan last.
+direction is forever forward, verification/retention force-forward, and compensation is illegal.
+`finalized` requires the complete V2 handoff; `retaining` requires a terminal outcome and advances
+through the derived retention table. `retained` requires that table complete while both journal
+slots and the immutable plan remain durable.
 
 The bootstrap creation order is mandatory and derived, never caller-selected: `createdPaths[0]` is
 the exact permanent global-lock leaf and all remaining ordinary skeleton/reservation/schema paths
@@ -1424,7 +1439,7 @@ follow in unsigned-UTF-8 order with parents before children. After Foundation co
 delegation, release index, and bundle manifest, trust, and active release last. It has no ordinary
 path and every group is non-empty where its contract requires. `PersistedBootstrapLockIdentityV1` deliberately omits
 `createdByAttempt`, `productHomeCreatedByAttempt`, and `stateDirectoryCreatedByAttempt`. Those three
-live booleans are never serialized. Durable cleanup authority comes only from post-plan
+live booleans are never serialized. Durable retention authority comes only from post-plan
 `createdPaths` identities; after a crash, any pre-plan empty product/state skeleton is preserved
 under Spec 1's bootstrap rule.
 
@@ -1433,8 +1448,8 @@ For ordinal `n`, the canonical creation-evidence path is derived rather than cal
 `state/.manifest-migration.<id>.<scope>.<n-as-ten-decimal-digits>.creation.json`, where scope is
 exactly `ordinary` or `launchability`. Its sole publish temp adds
 `.<lowercase-v4-uuid>.tmp`. Both are owner-owned, single-link `0600`, canonical JSON, at most 1 KiB,
-and use the same no-replace publish, parent sync, prefix-only temp, and guarded-cleanup rules as the
-bootstrap journal. The evidence's `pathHash` is SHA-256 over the exact planned absolute path;
+and use no-replace publish, parent sync, prefix-only temp, and retained-evidence rules. The
+evidence's `pathHash` is SHA-256 over the exact planned absolute path;
 `postimageHash` is the file payload hash, SHA-256 of empty bytes for the permanent global lock, and
 null for a directory.
 
@@ -1445,9 +1460,9 @@ before evidence publication leaves exactly the current cursor target: recovery m
 evidence only when the reopened parent identity, target kind/owner/mode/link count/size/content hash,
 and all earlier evidence still equal the immutable plan; any mismatch is a third state. A cursor is
 valid only for the exact contiguous evidence prefix below it, with each reopened target's device,
-inode, and postimage equal to its evidence. Compensation removes an evidenced target only while
-that identity and postimage still match, then removes its evidence, in reverse ordinal order. It
-never derives cleanup authority from a live boolean or from path spelling alone.
+inode, and postimage equal to its evidence. Compensation retains an evidenced target only while
+that identity and postimage still match, then retains its evidence, in reverse ordinal order. It
+never derives mutation authority from a live boolean or from path spelling alone.
 
 A `preexisting` parent must be the exact reopened plan identity. A `created_path` parent scope/ordinal
 must name an earlier cursor position and resolves only through that earlier `CreatedPathEvidenceV1`;
@@ -1455,39 +1470,175 @@ adjacency and lexical containment must agree. Thus a nested parent created after
 pretends to have a pre-plan inode, while every create still has durable parent authority.
 
 Before plan publication, feasibility counts every payload/evidence, ordinary and launchability
-created target, creation-evidence final/temp,
-plan/journal temp and final, staging child, and directory against the single
+created target, creation-evidence final/temp, plan, both journal slots, every reachable retained
+tombstone, staging child, and directory against the single
 `maximumStagingEntries <= 1_000_000` aggregate. The type-level payload/ordinary/launchability bounds
 are therefore not entitlements: a plan whose complete reachable envelope exceeds the aggregate is
-refused before allocation. Terminal compaction removes creation evidence in ordinal order only
-after the terminal state no longer needs compensation, and still removes the journal before the
-immutable plan last.
+refused before allocation. Terminal retention moves the plan-derived residue in ordinal order only
+after the terminal state no longer needs compensation and permanently preserves the plan and both
+journal slots.
 
-The immutable plan and its largest reachable journal are proven feasible and no-replace-published
-through the exact plan temp before any V2-only path. The final journal is no-replace-published and
-parent-synced before the first staging or V2-only create. Each create is bound to an absent
+The immutable plan and its largest reachable journal are proven feasible and written through their
+retained final-path descriptors before any V2-only path. The initial journal slot is synced before
+the first staging or V2-only create. Each create is bound to an absent
 precondition and attempt-owned identity.
 The migration cursor records payload staging, nonce/allocator/global-lock and ordinary creation,
 Foundation participants, the bundle/metadata/trust/active launchability suffix, manifest transition,
-verification, and compaction.
+verification, and retention.
 
 Before durable V2 manifest publication, a semantic failure compensates Foundation participants,
-restores the exact V1 manifest, and removes only exact attempt-created empty/filesystem state in
-reverse order. After V2 publication, recovery force-forwards V2 verification and compaction. A
+restores the exact V1 manifest, and retains only exact attempt-created filesystem state in reverse
+order. After V2 publication, recovery force-forwards V2 verification and retention. A
 process death resumes the recorded direction; it never chooses rollback merely because the process
 died. Unknown children, identity swaps, a V2-looking path without plan evidence, and illegal partial
 nonce/allocator/control state remain recovery-required.
 
-Bootstrap admission enumerates at most 1,000,000 product/staging entries and admits either no
-migration envelope or exactly one ID whose plan, journal/temp, staging inventory, Foundation
-participants, manifest state, and cursor agree. A valid plan temp with no possible mutation and a
-valid plan-without-journal orphan are guarded-cleanable under the held bootstrap lock only while the
-original V1 manifest is byte-identical and every V2-only path is absent. A journal without its plan,
-two IDs, an unknown temp/child, an over-limit value, a path/identity mismatch, a cursor-inconsistent
-postimage, or any mutation without durable journal intent preserves all evidence as exit 6. After
-terminal compaction has removed the journal, the remaining plan is legal only with the exact
-terminal V1 or V2 state and empty derived staging; recovery removes that plan last. `init` is the
-only command that resumes or compacts this bootstrap envelope.
+Bootstrap admission enumerates the bounded product/staging/retained inventory and admits at most one
+active bootstrap ID plus the retained IDs allowed by §6.4. Before a complete V2 handoff, `init` is
+the only command that resumes an active envelope. A journal slot without its plan, two active IDs,
+an unknown active temp/child, an over-limit value, a path/identity mismatch, a cursor-inconsistent
+postimage, or mutation without durable journal intent preserves all evidence as exit 6. Nothing in
+bootstrap compensation, recovery, or terminal retention unlinks a file or removes a directory.
+
+### 6.4 Durable retained bootstrap evidence
+
+This correction supersedes every deletion, guarded-cleanup, journal-temp, and plan-last-compaction
+rule in §6.1 and §6.3. V2 bootstrap has not shipped, so the public schema remains version 1 and no
+migration grammar is introduced. The field and phase replacements in the interfaces above are
+normative: `payloadCleanupPart` becomes `payloadRetentionPart`, `compactionNext` becomes
+`retentionNext`, and terminal `compacting` becomes `retaining` then `retained`.
+
+**Immutable plan and two-slot journal.** The plan is written once at its final path and is never
+replaced or removed. Journal slots are the two fixed paths shown above. A journal contains its slot,
+a decimal monotonic `sequence`, and `previousJournalHash`; sequence zero has a null previous hash,
+and every successor contains raw SHA-256 of the complete canonical bytes, including final LF, of
+the immediately preceding valid journal. The journal hash is not a hash of a reopened pathname.
+
+The executor keeps an open descriptor for each admitted slot inode. To advance, it writes only the
+inactive slot through that retained descriptor, syncs it, reopens and validates the same inode and
+canonical bytes, syncs `state`, and only then treats it as current. A previously absent inactive
+slot is created once with no-replace semantics and retained thereafter; it is never published by a
+temporary pathname. Recovery accepts the highest valid current journal and at most one adjacent
+legal successor. An incomplete inactive slot is resumable only when its bytes are the exact prefix
+of that unique successor; otherwise the complete slot remains current and the malformed inactive
+slot is a third state before handoff. Two valid non-adjacent sequences, a slot-number mismatch,
+broken predecessor hash, two different values at one sequence, an illegal phase/cursor transition,
+or replacement of an already-open admitted slot inode is a third state and exit 6. Across process
+death, canonical bytes, predecessor hash, legal transition, and exact filesystem projection bind the
+newly reopened slot. This rule binds terminal retention progress to the original plan and legal
+journal chain rather than to whatever bytes later occupy a journal path.
+
+**Closed retention table.** The immutable plan, its admitted evidence, and the legal journal prefix
+derive one complete ordered `BootstrapRetentionEntryV1` table; the table is not duplicated as
+caller-selected journal data. Each row fixes:
+
+- the bootstrap ID and ten-decimal ordinal;
+- the source path, source kind, owner/mode/link bounds, device/inode identity, content postimage or
+  complete directory-tree projection, and guarded parent identity;
+- the same parent as source and the exact absent destination
+  `.developer-os-retained.<bootstrap-id>.<ten-decimal-ordinal>.tombstone`; and
+- whether the row represents a payload/evidence pair, creation evidence, a Foundation or manifest
+  bootstrap artifact, an attempt-owned staging subtree, a compensation-created target, or the
+  transient bootstrap lock.
+
+```ts
+interface BootstrapRetentionEntryV1 {
+  readonly schemaVersion: 1;
+  readonly bootstrapId: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly ordinal: Integer[0..999_999];
+  readonly role: "payload" | "payload_evidence" | "creation_evidence" |
+    "foundation_bootstrap" | "manifest_bootstrap" | "staging_subtree" |
+    "compensation_target" | "bootstrap_lock";
+  readonly sourcePath: CanonicalAbsolutePathV1;
+  readonly tombstonePath: CanonicalAbsolutePathV1;
+  readonly parent: { readonly path: CanonicalAbsolutePathV1;
+    readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1 };
+  readonly postimage:
+    | { readonly kind: "regular_file"; readonly ownerUid: EffectiveUidV1;
+        readonly mode: 384 | 448; readonly nlink: 1; readonly bytes: UInt64DecimalV1;
+        readonly sha256: LowerHexSha256; readonly dev: UInt64DecimalV1;
+        readonly ino: UInt64DecimalV1 }
+    | { readonly kind: "directory_tree"; readonly ownerUid: EffectiveUidV1;
+        readonly mode: 448; readonly nlink: PositiveUInt32V1;
+        readonly treeHash: LowerHexSha256; readonly entryCount: Integer[1..1_000_000];
+        readonly regularFileBytes: UInt64DecimalV1; readonly dev: UInt64DecimalV1;
+        readonly ino: UInt64DecimalV1 };
+}
+```
+
+`treeHash` is SHA-256 over `developer-os/bootstrap-retained-tree/v1\0` plus no-LF canonical bytes
+of the complete unsigned-UTF-8 relative-path-sorted descendant projection. Every descendant row
+contains relative path, kind, owner, mode, link count, device/inode, byte count, and regular-file
+hash; directories carry a null hash. The projection is non-empty and its aggregate counts equal the
+retention entry.
+
+The derivation emits maximal attempt-owned directory roots where the entire bounded subtree has one
+authority; their descendants are counted and verified but move as that single directory tombstone.
+Standalone files in a pre-existing parent remain individual rows. Installed targets, V1/V2
+installation manifests, the permanent global lock, and the immutable plan/journal slots are never
+retention rows.
+Foundation exact-byte adoption or reinsertion is legal only from its persisted payload/evidence and
+original inode/hash authority; current observations that merely contain the expected bytes do not
+manufacture a retention or restoration identity.
+
+For each row, recovery recognizes exactly two states: source matches and destination is absent, or
+source is absent and destination is the same admitted device/inode/postimage. Any both-present,
+both-absent-before-transition, destination-replaced, parent-changed, content-changed, or extra-child
+state is a third state. Transition is a no-replace rename to the same parent, followed by source and
+destination verification, parent sync, and one legal journal-slot advance. The transient bootstrap
+lock is renamed to its table destination while its descriptor is still held; the descriptor is
+released only after the rename, verification, sync, and journal advance. A matching reserved name
+without its exact row and identity grants no authority. There is no quarantine outside the source
+parent and no unlink, recursive delete, or `rmdir` in bootstrap compensation, recovery, retention,
+uninstall, or retry.
+
+**Authority switch at V2 handoff.** Until the complete V2 handoff below exists, an active envelope
+and its retention rows are recovery authority and only `init` may advance them. Once that handoff is
+complete, all bootstrap plans, journal slots, and tombstones are inert retained evidence:
+operational commands do not use them to establish installed state, drift, mutation authority, or
+deletion authority. `init` may finish a legal `retaining` cursor, while `doctor` only inventories and
+reports. Missing, added, or altered tombstones after handoff are warnings, not managed drift and not
+authority over any current path.
+
+A `retained` envelope whose `terminalOutcome` is `rolled_back` is likewise inert once exact V1 or
+fresh absence is restored, even though no V2 handoff exists. A later `init` may start a new ID beside
+it subject to the aggregate bounds below.
+
+After uninstall, an envelope with a valid terminal journal remains retained. An unparseable or
+altered envelope is classed `unverified` rather than active only when a bounded read-only inventory
+finds its complete residue confined to the exact plan/two-slot/retained-name envelope and finds no
+live staging, bootstrap lock, temp, V1/V2 target, or other source path attributable to that ID. Any
+non-retained live residue is active or ambiguous and blocks a new bootstrap as exit 6. This permits
+reinstall beside old evidence without allowing a corrupted terminal file to bless live residue.
+
+**Bounds and public behavior.** Before creating a bootstrap-owned product path, init performs a
+read-only aggregate preflight; after taking the bootstrap lock it repeats the projection before plan
+publication. Existing residue plus the new envelope's worst case may contain at most 256 bootstrap
+IDs, 1,000,000 filesystem entries including descendants of retained directory tombstones, and
+12,884,901,888 regular-file bytes (12 GiB). First-over in any dimension refuses before allocation
+or mutation and returns manual archive guidance; automatic archival or deletion is forbidden. At
+most one ID may be active. Old retained IDs do not otherwise block reinstall.
+
+`doctor` reports, without file contents, each ID as `verified`, `incomplete`, `altered`, or
+`unverified`, together with operation, terminal outcome when proved, logical `vaultPath` (the
+immutable plan path anchoring that distributed same-parent vault), entry count, and regular-file
+bytes. `verified` means terminal journal and every retained row match; `incomplete`
+means a legal active/retaining cursor; `altered` means valid terminal metadata with a missing, extra,
+or changed retained row; `unverified` means the metadata cannot prove either of those projections.
+Ordinary commands remain independent of this report after V2 handoff.
+`uninstall` succeeds when retained evidence is the only product residue, preserves every tombstone,
+plan, and journal slot, reports the same per-ID operation/outcome/vaultPath/count/bytes summary, and
+leaves the product home in place. Retained evidence is never automatically deleted, including by a
+later init or uninstall.
+
+**Required tests.** Task 7 covers exact-byte Foundation replacement attempts; death injection before
+and after every same-parent rename, parent sync, slot write, slot sync, and slot selection; partial
+slot writes; slot replacement/corruption; predecessor gaps and conflicts; source/destination third
+states; proof that bootstrap recovery calls no unlink/rmdir and creates no out-of-parent quarantine;
+retained-directory subtree projection; lock retention while held; ordinary-command inertness after
+handoff; doctor and uninstall reporting; reinstall beside retained/altered evidence; and every
+aggregate-cap boundary. Focused Core and CLI tests, full `npm run check`, and fresh-context review
+must pass before Task 7 can be accepted.
 
 On completion, the exact Spec 1 V2 handoff consists of:
 
@@ -1498,7 +1649,7 @@ On completion, the exact Spec 1 V2 handoff consists of:
 - guarded active-release/trust records, retained signed metadata, and current bundle inventory;
 - absent rollback/executor records and an empty guarded rollback root;
 - absent activation record until first lifecycle enable; and
-- a clear migration/lifecycle journal closure.
+- a clear lifecycle journal closure plus a terminal or inert retained bootstrap envelope.
 
 Spec 1 admission consumes that set and never migrates or repairs V1.
 
@@ -4510,10 +4661,10 @@ Every enumerating gate asserts a non-empty set per scope before asserting proper
 
 | Gate | Required evidence |
 |---|---|
-| launcher selects safely | absent active record uses packaged fallback; executing/terminal-cleanup recovery records route only to the bound current/fallback executor; a non-terminal bootstrap envelope routes only strict `init` through packaged fallback or the launchability-complete identical copy; death at every bundle/metadata/trust/active/manifest boundary and every malformed/orphan record/envelope or present-invalid active state refuses safely; retained metadata/inventory/path/platform/protocol/entrypoint mutations refuse before exec; exact-set and non-empty bundle gates cover both architectures |
+| launcher selects safely | absent active record uses packaged fallback; executing/terminal-cleanup lifecycle records route only to the bound current/fallback executor; before V2 handoff an active bootstrap envelope routes only strict `init` through packaged fallback or the launchability-complete identical copy and malformed/ambiguous active residue refuses; after handoff retained bootstrap evidence is inert even while retention is incomplete or altered; death at every bundle/metadata/trust/active/manifest boundary and every present-invalid active state refuses safely; retained release metadata/inventory/path/platform/protocol/entrypoint mutations refuse before exec; exact-set and non-empty bundle gates cover both architectures |
 | V2 validator is closed | exhaustive arm/key/schema-ID tests, every illegal restore combination, first-over-limit path/source/manifest/artifact count, duplicate exact/NFC/folded paths, and V1 byte compatibility |
 | migration preserves ownership | every migratable bounded V1 field maps unchanged; config alone becomes schema; alternate legacy encoding, empty/over-limit artifacts, non-stable version, loose timestamp/source/backup/path, shared directories, symlinks, config-entry, invalid backup, drift, collision, and unsafe V2-looking residue refuse before artifact/backup-byte reads or writes |
-| migration/new init recover | death injection around every plan/journal temp/final, bootstrap/global lock, nonce/allocator prefix, staging/directory/reservation/bundle/metadata publication, Foundation/manifest cursor, point of no return, verification, compensation, and compaction; deterministic Foundation ordinals cover zero, maximum admitted, first-over-bound, and every short/long/non-ASCII/non-canonical spelling; every orphan/third state preserves evidence and fresh init performs zero network/vendor/model calls |
+| migration/new init recover | death injection around immutable-plan write and every two-slot journal write/sync/selection, same-parent retention rename/parent sync, bootstrap/global lock, nonce/allocator prefix, staging/directory/reservation/bundle/metadata publication, Foundation/manifest cursor, point of no return, verification, compensation, and retention; slot replacement/corruption/gap/conflict, deterministic Foundation ordinals at zero/maximum/first-over and every short/long/non-ASCII/non-canonical spelling, exact-byte replacement attempts, source/tombstone third states, retained-subtree bounds, uninstall/doctor/reinstall and every aggregate cap preserve evidence, create no out-of-parent quarantine, invoke no unlink/rmdir, and fresh init performs zero network/vendor/model calls |
 | signature chain is exact | wrong root/release key, key ID, signature bytes/length, domain, canonical encoding, duplicate/unknown key, independent delegation/index/selected-release sequence/hash replay, retained metadata path/content, origin set, and document/body bound all refuse |
 | selection is stable | exact SemVer boundary cases, numeric ordering, latest equality, explicit version, active equality, previous-trusted reinstall, every downgrade/prerelease/build refusal |
 | transport is closed | only fixed metadata origin and one delegated asset redirect, no proxy/credential/header inheritance, shared deadlines, response/header/body caps, termination/reaping, effective URL revalidation, no raw-body diagnostics |

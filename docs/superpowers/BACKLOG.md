@@ -14,7 +14,7 @@ its closure conditions.
 
 | Entry | Work still required | Blocked by |
 |---|---|---|
-| A11 · DOS-P7 | Spec 2 approval, plan 2, manifest/new-init handoff, Spec 1 implementation, remaining Spec 2 implementation | current |
+| A11 · DOS-P7 | written §6 correction review, revised Task 7 plan/implementation, manifest/new-init handoff, Spec 1 implementation, remaining Spec 2 implementation | current |
 | A12 · DOS-P10 | spec, plan, implementation for 38 instruction artifacts | A11 |
 | A13 · DOS-P11 | spec, plan, implementation for 11 non-capture hooks | A12 |
 | A14 · DOS-P12 | spec, plan, implementation for nine tooling scripts | A13 |
@@ -65,11 +65,11 @@ There are 24 numbered rows. They are not automatically ordered ahead of A11.
 
 ### A11 · DOS-P7
 
-- [ ] Approve the written Spec 2 at
-  `docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md`: signed/checksummed
-  release metadata, dry-run updates, managed-artifact upgrades, schema-migration staging, and
-  rollback.
-- [ ] Write Spec 2's implementation plan.
+- [ ] Approve the written 2026-08-31 §6 retained-bootstrap-evidence correction in
+  `docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md`.
+- [ ] Revise Spec 2 Task 7's implementation plan against the approved §6 correction.
+- [ ] Reimplement Task 7 with immutable plans, two-slot journals, and same-parent permanent
+  tombstones; pass focused/full gates and fresh review.
 - [ ] Implement `ManagedArtifactV2`, `InstallationManifestV2`, `ManifestStatePlanV1`, existing-install
   migration, and the V2 new-init handoff.
 - [ ] Execute `plans/2026-08-28-developer-os-opt-in-surfaces.md` only after that handoff lands.
@@ -79,9 +79,11 @@ Required behavior:
 
 - Git and automation are disabled and effect-free by default.
 - Preview is deterministic and byte-inert; apply revalidates a bound preview before allocation.
-- Git, launchd, update, uninstall, recovery, and terminal compaction follow active Spec 1.
+- Git, launchd, update, and post-handoff lifecycle compaction follow active Spec 1. Bootstrap
+  compensation/recovery uses durable same-parent retention and never unlink/rmdir.
 - Update refuses drift. Uninstall removes manifest-owned artifacts plus the exact redaction-key path
-  while preserving the Brain and unrelated agent configuration.
+  while preserving the Brain, unrelated agent configuration, and every retained bootstrap
+  plan/journal/tombstone; it reports retained evidence and leaves the product home in place.
 
 ### A12 · DOS-P10
 
