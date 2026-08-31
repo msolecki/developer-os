@@ -15,10 +15,12 @@ Spec 1 is approved and its plan exists at
 started. Spec 2's 2026-08-29 baseline and 26-task plan exist at
 `specs/2026-08-28-developer-os-release-update-design.md` and
 `plans/2026-08-29-developer-os-release-update.md`. Tasks 1–6 are complete. Task 7's implementation
-passed local gates but fresh review rejected its deletion-based bootstrap closure; the founder
-approved the replacement retained-evidence design on 2026-08-31. The next action is complete review
-of the written §6 correction, followed by a revised Task 7 plan using
-`superpowers:writing-plans`. Task 8 is blocked until revised Task 7 passes fresh review.
+passed local gates but fresh review rejected its deletion-based bootstrap closure. The founder
+approved the complete retained-evidence correction and durable slot-identity addendum on 2026-08-31.
+Its six-task replacement plan is
+`plans/2026-08-31-developer-os-retained-bootstrap-evidence.md`; the next action is replacement Task
+1, the pure Core retained-bootstrap model. Baseline Task 8 remains blocked until all six replacement
+tasks pass fresh review.
 
 Open sequence inside A11:
 
@@ -28,12 +30,14 @@ Open sequence inside A11:
 3. Completed: write Spec 2's implementation plan using `superpowers:writing-plans`.
 4. Completed 2026-08-29: Spec 2 Tasks 1–6 established the codecs, release/manifest schemas,
    V2 drift/store dispatch, Foundation participant, and bootstrap-schema prerequisites.
-5. Now: approve the written Spec 2 §6 retained-bootstrap-evidence correction, revise Task 7's plan,
-   then re-execute Task 7 to fresh-review acceptance.
-6. Execute Spec 2 Tasks 8–9 for the complete `InstallationManifestV2` migration and V2 new-init
+5. Completed 2026-08-31: approve the written Spec 2 §6 retained-bootstrap-evidence correction and
+   durable slot-identity addendum, then write the focused replacement Task 7 plan.
+6. Now: execute all six tasks in
+   `plans/2026-08-31-developer-os-retained-bootstrap-evidence.md` to fresh-review acceptance.
+7. Execute Spec 2 Tasks 8–9 for the complete `InstallationManifestV2` migration and V2 new-init
    handoff.
-7. Execute the approved Spec 1 plan.
-8. Finish the remaining Spec 2 implementation and close the Task 7 checkpoint.
+8. Execute the approved Spec 1 plan.
+9. Finish the remaining Spec 2 implementation and close the Task 7 checkpoint.
 
 ## Product path
 
@@ -87,7 +91,7 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 ## Count
 
 - Product sequence: 6 open entries, A11–A16.
-- Program plan: Task 7 requires a revised plan; Tasks 8–9 contain 10 unchecked work steps.
+- Program plan: replacement Task 7 contains 36 unchecked work steps; baseline Tasks 8–9 contain 10.
 - Repository backlog: 24 open numbered rows, plus the Foundation watchdog decision.
-- Active implementation plans: 43 untouched tasks — 19 in Spec 2 and 24 in Spec 1 — plus the
-  rejected Task 7 revision. Spec 1 remains blocked until revised Task 7 and Tasks 8–9 pass.
+- Active implementation plans: 49 untouched tasks — 6 in replacement Task 7, 19 remaining in Spec
+  2, and 24 in Spec 1. Spec 1 remains blocked until replacement Task 7 and baseline Tasks 8–9 pass.

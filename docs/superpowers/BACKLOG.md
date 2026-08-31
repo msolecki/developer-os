@@ -14,7 +14,7 @@ its closure conditions.
 
 | Entry | Work still required | Blocked by |
 |---|---|---|
-| A11 · DOS-P7 | written §6 correction review, revised Task 7 plan/implementation, manifest/new-init handoff, Spec 1 implementation, remaining Spec 2 implementation | current |
+| A11 · DOS-P7 | retained-evidence Task 7 replacement implementation, manifest/new-init handoff, Spec 1 implementation, remaining Spec 2 implementation | current |
 | A12 · DOS-P10 | spec, plan, implementation for 38 instruction artifacts | A11 |
 | A13 · DOS-P11 | spec, plan, implementation for 11 non-capture hooks | A12 |
 | A14 · DOS-P12 | spec, plan, implementation for nine tooling scripts | A13 |
@@ -65,11 +65,10 @@ There are 24 numbered rows. They are not automatically ordered ahead of A11.
 
 ### A11 · DOS-P7
 
-- [ ] Approve the written 2026-08-31 §6 retained-bootstrap-evidence correction in
-  `docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md`.
-- [ ] Revise Spec 2 Task 7's implementation plan against the approved §6 correction.
-- [ ] Reimplement Task 7 with immutable plans, two-slot journals, and same-parent permanent
-  tombstones; pass focused/full gates and fresh review.
+- [ ] Execute all six tasks in
+  `docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md`: immutable plans,
+  identity-bound two-slot journals, descriptor-relative exclusive renames, same-parent permanent
+  tombstones, public retained-evidence reports, focused/full gates, and fresh review.
 - [ ] Implement `ManagedArtifactV2`, `InstallationManifestV2`, `ManifestStatePlanV1`, existing-install
   migration, and the V2 new-init handoff.
 - [ ] Execute `plans/2026-08-28-developer-os-opt-in-surfaces.md` only after that handoff lands.

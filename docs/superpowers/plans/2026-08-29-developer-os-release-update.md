@@ -496,7 +496,13 @@ git add packages/core/src/manifest/bootstrap.ts packages/core/src/manifest/boots
 git commit -m "feat(core): define v2 bootstrap recovery"
 ```
 
-### Task 7: Execute fresh V2 initialization with current-bundle seeding
+### Task 7: Superseded fresh V2 initialization checkpoint
+
+> **Do not execute or accept the checked steps below.** They record the deletion-based implementation
+> that reached commit `1557734` and was rejected by fresh review. The founder-approved replacement is
+> the six-task plan at
+> `docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md`. Baseline Task 8
+> remains blocked until that focused plan passes its final reviewer gate.
 
 **Files:**
 - Modify: `packages/core/src/manifest/bootstrap.ts`

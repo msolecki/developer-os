@@ -1,16 +1,18 @@
 # Developer OS — Release, Update, and Manifest V2 Design
 
 **Status: 2026-08-29 baseline approved; the 2026-08-31 §6 retained-bootstrap-evidence correction
-was approved in design dialogue and awaits complete written-specification review.** This is DOS-P7
-Spec 2, the second half of `ORDER.md` entry A11 and program-plan Task 7. Spec 1 is the approved
-opt-in surfaces design at
+and durable slot-identity addendum were approved after complete written-specification review.** This
+is DOS-P7 Spec 2, the second half of `ORDER.md` entry A11 and program-plan Task 7. Spec 1 is the
+approved opt-in surfaces design at
 `docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md`.
 
 This specification owns release trust, the stable launcher and versioned bundle contract,
 `ManagedArtifactV2`/`InstallationManifestV2`, V1 migration and V2 new init, update planning and
 apply, schema migration, and rollback. Its baseline implementation plan is
-`docs/superpowers/plans/2026-08-29-developer-os-release-update.md`; Task 7 must be revised against
-the written §6 correction before implementation resumes.
+`docs/superpowers/plans/2026-08-29-developer-os-release-update.md`; Task 7 is revised against the
+written §6 correction through the focused replacement plan at
+`docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md` before baseline Task
+8 begins.
 
 The split has one hard implementation dependency. The V1→V2 migration and V2 new-init handoff in
 §6 must land first. Only then may Spec 1 implementation begin. The remaining release/update work in
@@ -930,8 +932,9 @@ permit 512 total refs while `nextFoundationParticipant` remains capped at 256.
 Fresh `init --dry-run` remains byte-inert and reports the complete V2 created/unchanged set. A real
 fresh init uses Spec 1's transient `LifecycleBootstrapLockV1`, repeats the bounded absent-home
 inventory under that lock, and creates V2 directly. After at most creating the admitted empty
-product-home/`state` skeleton and exact bootstrap lock, but before any other durable path, it
-no-replace-publishes and syncs:
+product-home/`state` skeleton and exact bootstrap lock, it creates and syncs the two empty fixed
+journal-slot inodes no-replace, then publishes and syncs the immutable plan that binds them before
+any payload, evidence, staging, Foundation, launchability, or manifest path:
 
 ```ts
 interface FreshV2InitPlanV1 {
@@ -942,8 +945,10 @@ interface FreshV2InitPlanV1 {
   readonly v2ManifestHash: LowerHexSha256;
   readonly bootstrapIdentity: PersistedBootstrapLockIdentityV1;
   readonly planPath: ExactProductStatePathV1;
-  readonly journalSlot0Path: ExactProductStatePathV1;
-  readonly journalSlot1Path: ExactProductStatePathV1;
+  readonly journalSlots: readonly [
+    BootstrapJournalSlotIdentityV1,
+    BootstrapJournalSlotIdentityV1
+  ];
   readonly stagingRoot: CanonicalAbsolutePathV1;
   readonly maximumPlanBytes: Integer[1..268_435_456];
   readonly maximumJournalBytes: Integer[1..1_048_576];
@@ -961,6 +966,16 @@ interface BootstrapExternalShapeProjectionV1 {
     BootstrapExternalShapeEntryV1,
     BootstrapExternalShapeEntryV1
   ];
+}
+
+interface BootstrapJournalSlotIdentityV1 {
+  readonly slot: 0 | 1;
+  readonly path: ExactProductStatePathV1;
+  readonly ownerUid: EffectiveUidV1;
+  readonly mode: 384;
+  readonly nlink: 1;
+  readonly dev: UInt64DecimalV1;
+  readonly ino: UInt64DecimalV1;
 }
 
 interface BootstrapExternalShapeEntryV1 {
@@ -1020,8 +1035,8 @@ The exact final paths are `state/fresh-v2-init.<id>.plan.json`,
 `state/fresh-v2-init.<id>.journal.0.json`, `state/fresh-v2-init.<id>.journal.1.json`, and
 `staging/fresh-v2-init/<id>`. Their modes, byte bounds, plan-hash binding, two-slot journal rewrite
 discipline, active-envelope admission, and terminal same-parent retention are the
-`fresh-v2-init`-prefixed equivalents of §6.3 and §6.4. The immutable plan and initial journal slot
-are parent-synced before `payloads[0]`. The ordered cursor is payloads, ordinary
+`fresh-v2-init`-prefixed equivalents of §6.3 and §6.4. Both plan-bound slot inodes, the immutable
+plan, and initial journal slot are parent-synced before `payloads[0]`. The ordered cursor is payloads, ordinary
 created paths, Foundation participants, launchability paths, manifest preserve/publish, then full verification. Durable V2 manifest
 publication is the point of no return. Before it, compensation restores manifest absence and
 retains only journaled attempt-created identities in reverse; it never moves a pre-plan empty
@@ -1133,6 +1148,10 @@ interface ManifestMigrationPlanV1 {
   readonly v2ManifestHash: LowerHexSha256;
   readonly bootstrapIdentity: PersistedBootstrapLockIdentityV1;
   readonly paths: ManifestMigrationPathsV1;
+  readonly journalSlots: readonly [
+    BootstrapJournalSlotIdentityV1,
+    BootstrapJournalSlotIdentityV1
+  ];
   readonly maximumPlanBytes: Integer[1..268_435_456];
   readonly maximumJournalBytes: Integer[1..1_048_576];
   readonly maximumStagingEntries: Integer[1..1_000_000];
@@ -1147,8 +1166,6 @@ type ManifestMigrationIdV1 = `mm_${LowercaseUuidV4}`;
 
 interface ManifestMigrationPathsV1 {
   readonly plan: ExactProductStatePathV1;
-  readonly journalSlot0: ExactProductStatePathV1;
-  readonly journalSlot1: ExactProductStatePathV1;
   readonly stagingRoot: CanonicalAbsolutePathV1;
 }
 
@@ -1508,25 +1525,32 @@ migration grammar is introduced. The field and phase replacements in the interfa
 normative: `payloadCleanupPart` becomes `payloadRetentionPart`, `compactionNext` becomes
 `retentionNext`, and terminal `compacting` becomes `retaining` then `retained`.
 
-**Immutable plan and two-slot journal.** The plan is written once at its final path and is never
-replaced or removed. Journal slots are the two fixed paths shown above. A journal contains its slot,
-a decimal monotonic `sequence`, and `previousJournalHash`; sequence zero has a null previous hash,
-and every successor contains raw SHA-256 of the complete canonical bytes, including final LF, of
-the immediately preceding valid journal. The journal hash is not a hash of a reopened pathname.
+**Immutable plan and two-slot journal.** Under the held bootstrap lock, the executor creates both
+fixed slot paths as empty owner-owned single-link `0600` files with `O_CREAT | O_EXCL | O_NOFOLLOW`,
+retains their descriptors, syncs both inodes and `state`, and records their ordered path/device/inode
+identities in the immutable plan. The plan is then written once at its final path and is never
+replaced or removed. Only after that plan is durable may slot zero receive the initial journal. A
+journal contains its slot, a decimal monotonic `sequence`, and `previousJournalHash`; sequence zero
+has a null previous hash, and every successor contains raw SHA-256 of the complete canonical bytes,
+including final LF, of the immediately preceding valid journal. The journal hash is not a hash of a
+reopened pathname.
 
 The executor keeps an open descriptor for each admitted slot inode. To advance, it writes only the
-inactive slot through that retained descriptor, syncs it, reopens and validates the same inode and
-canonical bytes, syncs `state`, and only then treats it as current. A previously absent inactive
-slot is created once with no-replace semantics and retained thereafter; it is never published by a
-temporary pathname. Recovery accepts the highest valid current journal and at most one adjacent
-legal successor. An incomplete inactive slot is resumable only when its bytes are the exact prefix
-of that unique successor; otherwise the complete slot remains current and the malformed inactive
-slot is a third state before handoff. Two valid non-adjacent sequences, a slot-number mismatch,
-broken predecessor hash, two different values at one sequence, an illegal phase/cursor transition,
-or replacement of an already-open admitted slot inode is a third state and exit 6. Across process
-death, canonical bytes, predecessor hash, legal transition, and exact filesystem projection bind the
-newly reopened slot. This rule binds terminal retention progress to the original plan and legal
-journal chain rather than to whatever bytes later occupy a journal path.
+inactive slot through that retained descriptor, syncs it, reopens and validates the same plan-bound
+inode and canonical bytes, syncs `state`, and only then treats it as current. Slots have no
+temporary pathname and are never replaced. Recovery first requires both reopened slot identities to
+equal the immutable plan, then accepts the highest valid current journal and at most one adjacent
+legal successor. A partial inactive-slot write never becomes authority: the other complete slot
+remains current, and recovery may truncate/rewrite the inactive slot only through its exact
+plan-bound descriptor. Two valid non-adjacent sequences, a slot-number mismatch, broken predecessor
+hash, two different values at one sequence, an illegal phase/cursor transition, or replacement of a
+plan-bound slot inode is a third state and exit 6. This rule binds terminal retention progress to
+the original plan and legal journal chain rather than to whatever bytes later occupy a journal path.
+
+A death after one or both empty slot inodes exist but before the immutable plan is durable leaves an
+`unverified` pre-plan envelope. No later process truncates, adopts, renames, or removes those inodes;
+a new bootstrap ID may start beside them only within the aggregate caps below. Thus no path spelling
+alone grants slot-write authority.
 
 **Closed retention table.** The immutable plan, its admitted evidence, and the legal journal prefix
 derive one complete ordered `BootstrapRetentionEntryV1` table; the table is not duplicated as
@@ -1585,7 +1609,12 @@ For each row, recovery recognizes exactly two states: source matches and destina
 source is absent and destination is the same admitted device/inode/postimage. Any both-present,
 both-absent-before-transition, destination-replaced, parent-changed, content-changed, or extra-child
 state is a third state. Transition is a no-replace rename to the same parent, followed by source and
-destination verification, parent sync, and one legal journal-slot advance. The transient bootstrap
+destination verification, parent sync, and one legal journal-slot advance. On macOS the concrete
+rename port invokes descriptor-relative `renameatx_np` with
+`RENAME_EXCL | RENAME_NOFOLLOW_ANY | RENAME_RESOLVE_BENEATH` through the fixed root-owned
+`/usr/bin/osascript`, a fixed embedded JXA program, empty environment, and inherited parent
+descriptor FD 3. It accepts only the two derived ASCII basenames. There is no fallback to Node
+`rename`, `mv -n`, hard-link-plus-unlink, or any other check-then-overwrite sequence. The transient bootstrap
 lock is renamed to its table destination while its descriptor is still held; the descriptor is
 released only after the rename, verification, sync, and journal advance. A matching reserved name
 without its exact row and identity grants no authority. There is no quarantine outside the source
