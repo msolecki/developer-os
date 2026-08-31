@@ -53,7 +53,7 @@
 - Consumes: the current Task 7 bootstrap plan shapes, canonical JSON, `UInt64DecimalV1`, `LowerHexSha256`, canonical absolute paths, admitted payload/creation/Foundation evidence from Tasks 1–6.
 - Produces: `BootstrapJournalSlotIdentityV1`, `BootstrapJournalRecordV1`, `BootstrapRetentionEntryV1`, `BootstrapEvidenceSummaryV1`, `SameParentRenameNoReplaceV1`, `deriveBootstrapRetentionTable`, `selectBootstrapJournal`, `validateBootstrapJournalSuccessor`, `classifyBootstrapEvidence`, and `assertBootstrapRetentionCapacity`.
 
-- [ ] **Step 1: Write failing journal, table, classification, and cap tests**
+- [x] **Step 1: Write failing journal, table, classification, and cap tests**
 
 ```ts
 it("selects only one adjacent hash-bound journal successor", () => {
@@ -99,13 +99,13 @@ it.each([
 
 Cover sequence `0`, UInt64 maximum and overflow, raw hash including LF, slot order/identity mismatch, empty/partial inactive observations, every legal phase transition, `retaining`/`retained` cursor zero/last/first-over, duplicate destinations, parent mismatch, maximal directory-tree projection, Foundation evidence identity mismatch despite equal bytes, all four report statuses, zero/exact/first-over capacity, and checked-sum overflow.
 
-- [ ] **Step 2: Run the Core test and verify the module is absent**
+- [x] **Step 2: Run the Core test and verify the module is absent**
 
 Run: `npx vitest run --root packages/core src/manifest/bootstrap-retention.test.ts`
 
 Expected: FAIL because `bootstrap-retention.ts` and its exported contracts do not exist.
 
-- [ ] **Step 3: Implement the closed pure contracts**
+- [x] **Step 3: Implement the closed pure contracts**
 
 ```ts
 export const BOOTSTRAP_RETAINED_MAX_IDS = 256;
@@ -199,6 +199,11 @@ export type BootstrapRetentionPostimageV1 =
 
 export interface BootstrapRetentionEvidenceProjectionV1 {
   readonly bootstrapId: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  /** Pure admitted projection; this does not widen the persisted bootstrap grammar. */
+  readonly terminalJournal: BootstrapJournalRecordV1 | null;
+  readonly payloadEvidence: readonly BootstrapPayloadRetentionEvidenceV1[];
+  readonly createdPathEvidence: readonly CreatedPathEvidenceV1[];
+  readonly directoryTrees: readonly BootstrapRetentionDirectoryTreeEvidenceV1[];
   readonly rows: readonly {
     readonly role: "payload" | "payload_evidence" | "creation_evidence" |
       "foundation_bootstrap" | "manifest_bootstrap" | "staging_subtree" |
@@ -208,6 +213,32 @@ export interface BootstrapRetentionEvidenceProjectionV1 {
     readonly postimage: BootstrapRetentionPostimageV1;
   }[];
 }
+
+export interface BootstrapPayloadRetentionEvidenceV1 {
+  readonly value: BootstrapPayloadEvidenceV1;
+  readonly evidenceIdentity: {
+    readonly ownerUid: number;
+    readonly mode: 0o600;
+    readonly nlink: 1;
+    readonly dev: UInt64DecimalV1;
+    readonly ino: UInt64DecimalV1;
+  };
+}
+
+export interface BootstrapRetentionDirectoryTreeEvidenceV1 {
+  readonly rootPath: CanonicalAbsolutePathV1;
+  readonly entries: readonly BootstrapRetentionDirectoryEntryV1[];
+}
+
+export type BootstrapRetentionDirectoryEntryV1 =
+  | { readonly relativePath: string; readonly kind: "regular_file";
+      readonly ownerUid: number; readonly mode: 0o600 | 0o700; readonly nlink: 1;
+      readonly bytes: UInt64DecimalV1; readonly sha256: LowerHexSha256;
+      readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1 }
+  | { readonly relativePath: string; readonly kind: "directory";
+      readonly ownerUid: number; readonly mode: 0o700; readonly nlink: number;
+      readonly bytes: UInt64DecimalV1; readonly sha256: null;
+      readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1 };
 
 export interface BootstrapRetentionEntryV1 {
   readonly schemaVersion: 1;
@@ -241,11 +272,13 @@ export interface SameParentRenameNoReplaceV1 {
 
 export function selectBootstrapJournal(
   plan: BootstrapRetainedExecutionPlanV1,
+  evidence: BootstrapRetentionEvidenceProjectionV1,
   slots: readonly [unknown, unknown],
 ): BootstrapJournalSelectionV1;
 
 export function validateBootstrapJournalSuccessor(
   plan: BootstrapRetainedExecutionPlanV1,
+  evidence: BootstrapRetentionEvidenceProjectionV1,
   current: BootstrapJournalRecordV1,
   successor: BootstrapJournalRecordV1,
 ): BootstrapJournalRecordV1;
@@ -285,21 +318,21 @@ export function assertBootstrapRetentionCapacity(
 ): BootstrapRetentionCapacityV1;
 ```
 
-`BootstrapRetainedExecutionPlanV1` is a compile-safe projection of the approved future shape over the current Task 7 types; it has no validator or persisted codec yet. Task 5 atomically replaces the current plan/journal codecs, at which point the real `BootstrapExecutionPlanV1` is structurally identical to this projection, so Tasks 1–4 can pass the repository gate without widening the rejected persisted grammar. Use `encodeCanonicalJson(record)` bytes including LF for predecessor hashing. Derive table rows from the plan/evidence bijection, collapse only complete attempt-owned directory subtrees, sort the final rows by the approved semantic order, assign contiguous ordinals afterward, and reject a caller-supplied tombstone spelling. The rename request carries the derived table row, not caller-selected basenames. `classifyBootstrapEvidence` returns only metadata/counts and never carries content bytes.
+`BootstrapRetainedExecutionPlanV1` is a compile-safe projection of the approved future shape over the current Task 7 types; it has no validator or persisted codec yet. Task 5 atomically replaces the current plan/journal codecs, at which point the real `BootstrapExecutionPlanV1` is structurally identical to this projection, so Tasks 1–4 can pass the repository gate without widening the rejected persisted grammar. Use `encodeCanonicalJson(record)` bytes including LF for predecessor hashing. Journal selection and successor validation require no fabricated terminal evidence before retention; when retention starts, the admitted terminal `finalized` or `rolled_back` journal fixes the exact outcome and reached prefix used for table cardinality. The pure projection validates every persisted `BootstrapPayloadEvidenceV1`, its evidence-file identity/canonical bytes, created-path evidence, and complete directory descendant projection without altering `bootstrap.ts` schemas. Core derives exactly one current location for each completed payload inode: its staged payload path until a reached planned-file, Foundation, or manifest consumer moves it, its Foundation final path when that artifact remains evidence, or no retention row for an installed target/manifest. Directory hashes/counts/bytes derive from the complete unsigned-UTF-8-sorted descendant projection, every maximal root bijects to one projection, and descendants contribute to the exact aggregate caps before collapse. Sort final rows by the approved semantic order, assign contiguous ordinals afterward, and reject a caller-supplied tombstone spelling. The rename request carries the derived table row, not caller-selected basenames. `classifyBootstrapEvidence` returns only metadata/counts and never carries content bytes.
 
-- [ ] **Step 4: Run focused Core and public-door tests**
+- [x] **Step 4: Run focused Core and public-door tests**
 
 Run: `npx vitest run --root packages/core src/manifest/bootstrap-retention.test.ts src/index.test.ts`
 
 Expected: PASS with non-vacuous exact/first-over assertions and the intended exports pinned.
 
-- [ ] **Step 5: Run the repository gate and obtain fresh review**
+- [x] **Step 5: Run the repository gate and obtain fresh review**
 
 Run: `npm run check`
 
 Expected: PASS. Request fresh review of Task 1 for exact schema keys, transition completeness, derived rather than caller-selected authority, directory aggregation, checked arithmetic, and content-free reports. Add a failing regression for every accepted finding before correcting it.
 
-- [ ] **Step 6: Commit Task 1**
+- [x] **Step 6: Commit Task 1**
 
 ```bash
 git add packages/core/src/manifest/bootstrap-retention.ts packages/core/src/manifest/bootstrap-retention.test.ts packages/core/src/manifest/index.ts packages/core/src/index.ts packages/core/src/index.test.ts docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md docs/superpowers/ORDER.md

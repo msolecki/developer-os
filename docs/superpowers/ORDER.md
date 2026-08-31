@@ -19,7 +19,7 @@ passed local gates but fresh review rejected its deletion-based bootstrap closur
 approved the complete retained-evidence correction and durable slot-identity addendum on 2026-08-31.
 Its six-task replacement plan is
 `plans/2026-08-31-developer-os-retained-bootstrap-evidence.md`; the next action is replacement Task
-1, the pure Core retained-bootstrap model. Baseline Task 8 remains blocked until all six replacement
+2, the descriptor-relative macOS rename-exclusive port (docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md:342). Baseline Task 8 remains blocked until all six replacement
 tasks pass fresh review.
 
 Open sequence inside A11:
@@ -91,7 +91,8 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 ## Count
 
 - Product sequence: 6 open entries, A11–A16.
-- Program plan: replacement Task 7 contains 36 unchecked work steps; baseline Tasks 8–9 contain 10.
+- Program plan: replacement Task 7 contains 30 unchecked work steps across 5 unfinished tasks;
+  baseline Tasks 8–9 contain 10.
 - Repository backlog: 24 open numbered rows, plus the Foundation watchdog decision.
-- Active implementation plans: 49 untouched tasks — 6 in replacement Task 7, 19 remaining in Spec
+- Active implementation plans: 48 untouched tasks — 5 in replacement Task 7, 19 remaining in Spec
   2, and 24 in Spec 1. Spec 1 remains blocked until replacement Task 7 and baseline Tasks 8–9 pass.

@@ -28,6 +28,16 @@ export {
   validateBootstrapPlan,
   validateCreatedPathEvidence,
 } from "./bootstrap.js";
+export {
+  BOOTSTRAP_RETAINED_MAX_ENTRIES,
+  BOOTSTRAP_RETAINED_MAX_IDS,
+  BOOTSTRAP_RETAINED_MAX_REGULAR_BYTES,
+  assertBootstrapRetentionCapacity,
+  classifyBootstrapEvidence,
+  deriveBootstrapRetentionTable,
+  selectBootstrapJournal,
+  validateBootstrapJournalSuccessor,
+} from "./bootstrap-retention.js";
 export type {
   ArtifactKind,
   ArtifactOwner,
@@ -104,3 +114,21 @@ export type {
   PersistedBootstrapLockIdentityV1,
   PlannedCreatedPathV1,
 } from "./bootstrap.js";
+export type {
+  BootstrapEvidenceClassificationInputV1,
+  BootstrapEvidenceSummaryV1,
+  BootstrapJournalRecordV1,
+  BootstrapJournalSelectionV1,
+  BootstrapJournalSlotIdentityV1,
+  BootstrapRetainedExecutionPlanV1,
+  BootstrapRetainedJournalPhaseV1,
+  BootstrapRetentionCapacityV1,
+  BootstrapRetentionDirectoryEntryV1,
+  BootstrapRetentionDirectoryTreeEvidenceV1,
+  BootstrapRetentionEntryV1,
+  BootstrapRetentionEvidenceProjectionV1,
+  BootstrapRetentionParentIdentityV1,
+  BootstrapPayloadRetentionEvidenceV1,
+  BootstrapRetentionPostimageV1,
+  SameParentRenameNoReplaceV1,
+} from "./bootstrap-retention.js";
