@@ -350,7 +350,7 @@ git commit -m "feat(core): model retained bootstrap evidence"
 - Consumes: Task 1 `SameParentRenameNoReplaceV1`, guarded parent/source identity, absolute root-owned `/usr/bin/osascript`.
 - Produces: `RenameSameParentNoReplace`, `RenameAtxRunner`, `SpawnRenameAtxRunner`, `MacOsRetainedRename`, and classified unavailable/refusal/third-state errors.
 
-- [ ] **Step 1: Write failing fake-runner and real-Darwin tests**
+- [x] **Step 1: Write failing fake-runner and real-Darwin tests**
 
 ```ts
 it("passes only two derived basenames and retained parent FD 3", async () => {
@@ -378,13 +378,13 @@ it.runIf(process.platform === "darwin")(
 
 Cover wrong parent identity, symlink parent/source, non-ASCII or slash-bearing basenames, destination present, source missing, source replacement before child call, source replacement after child return, helper nonzero/signal/no-status, parent pathname swap while FD 3 remains open, successful regular file and directory moves, and post-move source/destination projection.
 
-- [ ] **Step 2: Run the platform test and verify the port is absent**
+- [x] **Step 2: Run the platform test and verify the port is absent**
 
 Run: `npx vitest run --root packages/platform-macos src/retained-rename.test.ts`
 
 Expected: FAIL because the retained rename module does not exist.
 
-- [ ] **Step 3: Implement the fixed JXA `renameatx_np` boundary**
+- [x] **Step 3: Implement the fixed JXA `renameatx_np` boundary**
 
 ```ts
 const OSASCRIPT = "/usr/bin/osascript";
@@ -448,19 +448,19 @@ grammar mismatch before spawn. Reopen and verify the destination as the expected
 child status, re-project both names and accept only the two spec states; never retry through another
 primitive.
 
-- [ ] **Step 4: Run focused platform tests**
+- [x] **Step 4: Run focused platform tests**
 
 Run: `npx vitest run --root packages/platform-macos src/retained-rename.test.ts src/transaction-lock.test.ts`
 
 Expected: PASS on macOS, including the real no-clobber and retained-parent tests; existing lock tests remain green.
 
-- [ ] **Step 5: Run the repository gate and obtain fresh review**
+- [x] **Step 5: Run the repository gate and obtain fresh review**
 
 Run: `npm run check`
 
 Expected: PASS. Fresh review must verify fixed executable/script/flags, empty environment, FD inheritance, no shell/path interpolation, exact error classification, and no fallback primitive.
 
-- [ ] **Step 6: Commit Task 2**
+- [x] **Step 6: Commit Task 2**
 
 ```bash
 git add packages/platform-macos/src/retained-rename.ts packages/platform-macos/src/retained-rename.test.ts packages/platform-macos/src/index.ts docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md docs/superpowers/ORDER.md

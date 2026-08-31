@@ -16,6 +16,20 @@ export type {
   PlatformFacts,
 } from "./types.js";
 export {
+  MacOsRetainedRename,
+  MacOsRetainedRenameRefusalError,
+  MacOsRetainedRenameThirdStateError,
+  MacOsRetainedRenameUnavailableError,
+  SpawnRenameAtxRunner,
+} from "./retained-rename.js";
+export type {
+  MacOsRetainedRenameDependencies,
+  RenameAtxRunner,
+  RenameAtxRunRequestV1,
+  RenameAtxRunResultV1,
+  RenameSameParentNoReplace,
+} from "./retained-rename.js";
+export {
   MacOsTransactionLockOperationalError,
   MacOsTransactionLockProvider,
   MacOsTransactionLockUnavailableError,
