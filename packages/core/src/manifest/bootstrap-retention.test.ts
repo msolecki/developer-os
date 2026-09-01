@@ -624,13 +624,14 @@ describe("retained bootstrap journal chains", () => {
     const drained = successor(evidence, {
       payloadRetentionPart: null,
       compensationNext: -1,
-      payloadWriteState: { state: "idle" },
     });
+    const rolledBack = successor(drained, { phase: "rolled_back", terminalOutcome: "rolled_back" });
 
     expect(validateBootstrapJournalSuccessor(plan, writing, compensating)).toEqual(compensating);
     expect(validateBootstrapJournalSuccessor(plan, compensating, staged)).toEqual(staged);
     expect(validateBootstrapJournalSuccessor(plan, staged, evidence)).toEqual(evidence);
     expect(validateBootstrapJournalSuccessor(plan, evidence, drained)).toEqual(drained);
+    expect(validateBootstrapJournalSuccessor(plan, drained, rolledBack)).toEqual(rolledBack);
 
     const createIntent = phaseRecord("compensating", {
       nextPayload: 0,
@@ -759,7 +760,7 @@ describe("retained bootstrap journal chains", () => {
         nextFoundationParticipant: 1, nextLaunchabilityPath: 0, manifestCursor: 0,
         compensationNext: -1, terminalOutcome: "rolled_back",
       }),
-      createdPathEvidence: base.createdPathEvidence.filter((row) => row.scope === "ordinary"),
+      createdPathEvidence: base.createdPathEvidence.filter((row) => row.value.scope === "ordinary"),
       rows: [
         ...base.rows.filter((row) =>
           row.role === "payload" ||
@@ -906,6 +907,7 @@ function syntheticDirectoryTree(rootPath: CanonicalAbsolutePathV1, baseIno = 601
       treeHash: domainHash("developer-os/bootstrap-retained-tree/v1\0", entries),
       entryCount: entries.length,
       regularFileBytes: parseUInt64Decimal("12"),
+      entries,
     }),
   };
 }
@@ -1025,8 +1027,8 @@ function admittedEvidence(
       ? payloadEvidence.find((candidate) => candidate.value.ordinal === planned.payload.ordinal)?.value
       : undefined;
     const targetIno = origin?.ino ?? parseUInt64Decimal(String(300 + identityOrdinal));
-    createdPathEvidence.push({
-      schemaVersion: 1,
+    const value = {
+      schemaVersion: 1 as const,
       bootstrapId: ID,
       scope,
       ordinal,
@@ -1035,12 +1037,26 @@ function admittedEvidence(
       dev: origin?.dev ?? parseUInt64Decimal("1"),
       ino: targetIno,
       postimageHash: planned.kind === "file" ? planned.payload.hash : planned.kind === "global_lock" ? hash("") : null,
-    });
+    };
+    const evidenceIdentity = {
+      ownerUid: 501,
+      mode: 0o600 as const,
+      nlink: 1 as const,
+      dev: parseUInt64Decimal("1"),
+      ino: parseUInt64Decimal(String(400 + identityOrdinal)),
+    };
+    createdPathEvidence.push({ value, evidenceIdentity });
+    const evidenceBytes = encodeCanonicalJson(value);
     rows.push({
       role: "creation_evidence",
       sourcePath: evidencePath,
       parent: parent(dirname(evidencePath), "2"),
-      postimage: regular(`creation-evidence-${scope}-${String(ordinal)}`, String(400 + identityOrdinal)),
+      postimage: regular("", evidenceIdentity.ino, {
+        bytes: parseUInt64Decimal(String(new TextEncoder().encode(evidenceBytes).byteLength)),
+        sha256: hash(evidenceBytes),
+        dev: evidenceIdentity.dev,
+        ino: evidenceIdentity.ino,
+      }),
     });
   };
   plan.createdPaths.slice(0, terminalJournal.nextCreatedPath)
@@ -1130,16 +1146,16 @@ function admittedEvidence(
         foundationArtifacts.some((artifact) => artifact.sourcePath === candidate.planned.path)
       ) continue;
       const targetEvidence = createdPathEvidence.find((entry) =>
-        entry.scope === candidate.scope && entry.ordinal === candidate.ordinal,
-      );
+        entry.value.scope === candidate.scope && entry.value.ordinal === candidate.ordinal,
+      )?.value;
       if (targetEvidence === undefined) throw new Error("fixture compensation target requires creation evidence");
       const plannedParent = candidate.planned.parent;
       const parentIdentity = plannedParent.kind === "preexisting"
         ? parent(plannedParent.path, plannedParent.ino)
         : (() => {
             const parentEvidence = createdPathEvidence.find((entry) =>
-              entry.scope === plannedParent.scope && entry.ordinal === plannedParent.ordinal,
-            );
+              entry.value.scope === plannedParent.scope && entry.value.ordinal === plannedParent.ordinal,
+            )?.value;
             const parentPlan = plannedParent.scope === "ordinary"
               ? plan.createdPaths[plannedParent.ordinal]
               : plan.launchabilityPaths[plannedParent.ordinal];
@@ -1157,7 +1173,10 @@ function admittedEvidence(
         } else {
           const projected = directoryTreeFromRows(candidate.planned.path, nestedRows);
           projectedEvidence = projected.evidence;
-          directoryPostimage = tree(targetEvidence.ino, projected.aggregate);
+          directoryPostimage = tree(targetEvidence.ino, {
+            ...projected.aggregate,
+            entries: projected.evidence.entries,
+          });
         }
         directoryTrees.push(projectedEvidence);
         rows.push({
@@ -1194,6 +1213,7 @@ function admittedEvidence(
   return {
     bootstrapId: ID,
     payloadEvidence,
+    interruptedPayload: null,
     terminalJournal,
     createdPathEvidence,
     directoryTrees,
@@ -1206,6 +1226,192 @@ function retentionEntryCount(): number {
 }
 
 describe("retained bootstrap table derivation", () => {
+  it("reopens the selected rolled_back journal with the exact interrupted writing inode", () => {
+    const interrupted = plan.payloads[1];
+    if (interrupted === undefined) throw new Error("fixture requires an interrupted payload");
+    const postimage = regular("partial", "199", {
+      dev: parseUInt64Decimal("1"),
+      ino: parseUInt64Decimal("199"),
+      mode: interrupted.ref.mode,
+    });
+    const writeState = {
+      state: "writing" as const,
+      ordinal: 1,
+      dev: postimage.dev,
+      ino: postimage.ino,
+    };
+    const terminalJournal = historicalJournal({
+      phase: "rolled_back",
+      direction: "compensating",
+      nextPayload: 1,
+      payloadWriteState: writeState,
+      compensationNext: -1,
+      terminalOutcome: "rolled_back",
+    });
+    const evidence = admittedEvidence(terminalJournal);
+    const projection = {
+      ...evidence,
+      interruptedPayload: {
+        writeState,
+        postimage,
+      },
+      rows: [...evidence.rows, {
+        role: "payload" as const,
+        sourcePath: interrupted.ref.path,
+        parent: parent(dirname(interrupted.ref.path), "2"),
+        postimage,
+      }],
+    };
+
+    const table = deriveBootstrapRetentionTable(
+      plan,
+      projection,
+    );
+    expect(table.find((row) => row.sourcePath === interrupted.ref.path)?.postimage).toEqual(postimage);
+    const retaining = successor(terminalJournal, { phase: "retaining", retentionNext: 0 });
+    const slots = retaining.slot === 0
+      ? [retaining, terminalJournal] as const
+      : [terminalJournal, retaining] as const;
+    expect(selectRetentionJournal(plan, projection, slots).current).toEqual(retaining);
+    const forgedPostimage = { ...postimage, ino: parseUInt64Decimal("200") };
+    expect(() => deriveBootstrapRetentionTable(plan, {
+      ...projection,
+      interruptedPayload: {
+        writeState: { ...writeState, ino: forgedPostimage.ino },
+        postimage: forgedPostimage,
+      },
+      rows: projection.rows.map((row) => row.sourcePath === interrupted.ref.path
+        ? { ...row, postimage: forgedPostimage }
+        : row),
+    })).toThrow();
+    expect(() => deriveBootstrapRetentionTable(plan, {
+      ...projection,
+      rows: projection.rows.map((row) => row.sourcePath === interrupted.ref.path
+        ? { ...row, postimage: { ...row.postimage, ino: parseUInt64Decimal("200") } }
+        : row),
+    })).toThrow();
+    expect(() => deriveBootstrapRetentionTable(plan, {
+      ...projection,
+      rows: projection.rows.filter((row) => row.sourcePath !== interrupted.ref.path),
+    })).toThrow();
+  });
+
+  it("binds creation authority to canonical evidence bytes and the evidence-file inode", () => {
+    const evidence = admittedEvidence();
+    const wrapped = evidence.createdPathEvidence;
+    const rows = evidence.rows.map((row) => {
+      if (row.role !== "creation_evidence") return row;
+      const admitted = wrapped.find((candidate) => {
+        const marker = `.${candidate.value.scope}.${String(candidate.value.ordinal).padStart(10, "0")}.creation.json`;
+        return row.sourcePath.endsWith(marker);
+      });
+      if (admitted === undefined) throw new Error("fixture creation row requires admitted evidence");
+      const bytes = encodeCanonicalJson(admitted.value as unknown as CanonicalJsonValue);
+      return {
+        ...row,
+        postimage: regular("", admitted.evidenceIdentity.ino, {
+          bytes: parseUInt64Decimal(String(new TextEncoder().encode(bytes).byteLength)),
+          sha256: hash(bytes),
+          dev: admitted.evidenceIdentity.dev,
+          ino: admitted.evidenceIdentity.ino,
+        }),
+      };
+    });
+    const projection = {
+      ...evidence,
+      createdPathEvidence: wrapped,
+      rows,
+    };
+
+    expect(() => deriveBootstrapRetentionTable(
+      plan,
+      projection,
+    )).not.toThrow();
+    expect(() => deriveBootstrapRetentionTable(plan, {
+      ...projection,
+      rows: rows.map((row) => row.role === "creation_evidence"
+        ? { ...row, postimage: { ...row.postimage, sha256: hash("forged creation evidence") } }
+        : row),
+    })).toThrow();
+    expect(() => deriveBootstrapRetentionTable(plan, {
+      ...projection,
+      rows: rows.map((row) => row.role === "creation_evidence"
+        ? { ...row, postimage: { ...row.postimage, ino: parseUInt64Decimal("999") } }
+        : row),
+    })).toThrow();
+  });
+
+  it("requires an exact directory descendant bijection and the plan-bound staging cap", () => {
+    const evidence = admittedEvidence();
+    const stagingRoot = plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot;
+    const admittedTree = evidence.directoryTrees.find((candidate) => candidate.rootPath === stagingRoot);
+    if (admittedTree === undefined) throw new Error("fixture requires staging-tree evidence");
+    const rows = evidence.rows.map((row) => row.sourcePath === stagingRoot
+      ? { ...row, postimage: { ...row.postimage, entries: admittedTree.entries } }
+      : row);
+    const exactProjection = { ...evidence, rows };
+
+    const table = deriveBootstrapRetentionTable(
+      plan,
+      exactProjection,
+    );
+    expect(table.find((row) => row.sourcePath === stagingRoot)?.postimage).toMatchObject({
+      entries: admittedTree.entries,
+    });
+
+    const extraEntry = {
+      relativePath: "unknown.bin",
+      kind: "regular_file" as const,
+      ownerUid: 501,
+      mode: 0o600 as const,
+      nlink: 1 as const,
+      bytes: parseUInt64Decimal("1"),
+      sha256: hash("x"),
+      dev: parseUInt64Decimal("1"),
+      ino: parseUInt64Decimal("999"),
+    };
+    const observedEntries = [...admittedTree.entries, extraEntry]
+      .sort((left, right) => left.relativePath < right.relativePath ? -1 : left.relativePath > right.relativePath ? 1 : 0);
+    const observedAggregate = {
+      treeHash: domainHash("developer-os/bootstrap-retained-tree/v1\0", observedEntries),
+      entryCount: observedEntries.length,
+      regularFileBytes: parseUInt64Decimal((observedEntries.reduce(
+        (total, candidate) => total + (candidate.kind === "regular_file" ? BigInt(candidate.bytes) : 0n),
+        0n,
+      )).toString()),
+    };
+    expect(() => deriveBootstrapRetentionTable(plan, {
+      ...evidence,
+      directoryTrees: evidence.directoryTrees.map((candidate) => candidate.rootPath === stagingRoot
+        ? { ...candidate, entries: observedEntries }
+        : candidate),
+      rows: evidence.rows.map((row) => row.sourcePath === stagingRoot
+        ? { ...row, postimage: { ...row.postimage, ...observedAggregate } }
+        : row),
+    })).toThrow();
+    expect(() => deriveBootstrapRetentionTable(plan, {
+      ...exactProjection,
+      directoryTrees: evidence.directoryTrees.map((candidate) => candidate.rootPath === stagingRoot
+        ? { ...candidate, entries: observedEntries }
+        : candidate),
+      rows: rows.map((row) => row.sourcePath === stagingRoot
+        ? { ...row, postimage: { ...row.postimage, ...observedAggregate } }
+        : row),
+    })).toThrow();
+
+    const cappedPlan = {
+      ...plan,
+      maximumStagingEntries: admittedTree.entries.length - 1,
+    } as BootstrapRetainedExecutionPlanV1;
+    expect(() => deriveBootstrapRetentionTable(cappedPlan, {
+      ...exactProjection,
+      terminalJournal: {
+        ...evidence.terminalJournal,
+        planHash: canonicalHash(cappedPlan),
+      },
+    } as unknown as BootstrapRetentionEvidenceProjectionV1)).toThrow();
+  });
+
   it("binds an unconsumed payload row to its persisted payload-evidence inode", () => {
     const rollbackEvidence = admittedEvidence(historicalJournal({
       phase: "rolled_back",
@@ -1627,7 +1833,7 @@ describe("retained bootstrap table derivation", () => {
     expect(() => deriveBootstrapRetentionTable(plan, {
       ...evidence,
       terminalJournal: rollbackJournal,
-      createdPathEvidence: evidence.createdPathEvidence.filter((row) => row.scope === "ordinary"),
+      createdPathEvidence: evidence.createdPathEvidence.filter((row) => row.value.scope === "ordinary"),
       rows: preexistingParentRows,
     })).toThrow();
 
@@ -1666,8 +1872,8 @@ describe("retained bootstrap table derivation", () => {
         nextLaunchabilityPath: 1,
       },
       rows: nestedRows,
-      createdPathEvidence: evidence.createdPathEvidence.map((row) => row.scope === "launchability"
-        ? { ...row, pathHash: hash(targetPath), ino: parseUInt64Decimal("77") }
+      createdPathEvidence: evidence.createdPathEvidence.map((row) => row.value.scope === "launchability"
+        ? { ...row, value: { ...row.value, pathHash: hash(targetPath), ino: parseUInt64Decimal("77") } }
         : row),
     })).toThrow();
   });
@@ -1721,21 +1927,37 @@ describe("retained bootstrap table derivation", () => {
     const globalEvidencePath = path(`/product/state/.fresh-v2-init.${ID}.ordinary.0000000000.creation.json`);
     const ordinaryEvidencePath = path(`/product/state/.fresh-v2-init.${ID}.ordinary.0000000001.creation.json`);
     const ordinaryTree = syntheticDirectoryTree(ordinaryPath, 701);
+    const globalCreationValue = {
+      schemaVersion: 1 as const, bootstrapId: ID, scope: "ordinary" as const, ordinal: 0,
+      pathHash: hash(globalLockPath), kind: "global_lock" as const, dev: parseUInt64Decimal("1"),
+      ino: parseUInt64Decimal("55"), postimageHash: hash(""),
+    };
+    const ordinaryCreationValue = {
+      schemaVersion: 1 as const, bootstrapId: ID, scope: "ordinary" as const, ordinal: 1,
+      pathHash: hash(ordinaryPath), kind: "directory" as const, dev: parseUInt64Decimal("1"),
+      ino: parseUInt64Decimal("56"), postimageHash: null,
+    };
+    const creationIdentity = (ino: string) => ({
+      ownerUid: 501, mode: 0o600 as const, nlink: 1 as const,
+      dev: parseUInt64Decimal("1"), ino: parseUInt64Decimal(ino),
+    });
+    const creationPostimage = (value: unknown, identity: ReturnType<typeof creationIdentity>) => {
+      const bytes = encodeCanonicalJson(value as CanonicalJsonValue);
+      return regular("", identity.ino, {
+        bytes: parseUInt64Decimal(String(new TextEncoder().encode(bytes).byteLength)),
+        sha256: hash(bytes), dev: identity.dev, ino: identity.ino,
+      });
+    };
+    const globalCreationIdentity = creationIdentity("41");
+    const ordinaryCreationIdentity = creationIdentity("42");
     const projection = {
       bootstrapId: ID,
       terminalJournal,
       payloadEvidence: base.payloadEvidence,
+      interruptedPayload: null,
       createdPathEvidence: [
-        {
-          schemaVersion: 1, bootstrapId: ID, scope: "ordinary", ordinal: 0,
-          pathHash: hash(globalLockPath), kind: "global_lock", dev: parseUInt64Decimal("1"),
-          ino: parseUInt64Decimal("55"), postimageHash: hash(""),
-        },
-        {
-          schemaVersion: 1, bootstrapId: ID, scope: "ordinary", ordinal: 1,
-          pathHash: hash(ordinaryPath), kind: "directory", dev: parseUInt64Decimal("1"),
-          ino: parseUInt64Decimal("56"), postimageHash: null,
-        },
+        { value: globalCreationValue, evidenceIdentity: globalCreationIdentity },
+        { value: ordinaryCreationValue, evidenceIdentity: ordinaryCreationIdentity },
       ],
       directoryTrees: [
         ...base.directoryTrees.filter((treeEvidence) => treeEvidence.rootPath === (plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot)),
@@ -1748,8 +1970,8 @@ describe("retained bootstrap table derivation", () => {
           row.role === "staging_subtree" ||
           row.role === "bootstrap_lock",
         ),
-        { role: "creation_evidence", sourcePath: globalEvidencePath, parent: parent("/product/state", "2"), postimage: regular("global-evidence", "41") },
-        { role: "creation_evidence", sourcePath: ordinaryEvidencePath, parent: parent("/product/state", "2"), postimage: regular("ordinary-evidence", "42") },
+        { role: "creation_evidence", sourcePath: globalEvidencePath, parent: parent("/product/state", "2"), postimage: creationPostimage(globalCreationValue, globalCreationIdentity) },
+        { role: "creation_evidence", sourcePath: ordinaryEvidencePath, parent: parent("/product/state", "2"), postimage: creationPostimage(ordinaryCreationValue, ordinaryCreationIdentity) },
         { role: "compensation_target", sourcePath: globalLockPath, parent: parent("/product/state", "2"), postimage: regular("", "55") },
         {
           role: "compensation_target",

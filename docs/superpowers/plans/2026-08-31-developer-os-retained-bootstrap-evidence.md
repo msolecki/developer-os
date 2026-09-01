@@ -605,12 +605,14 @@ git commit -m "feat(cli): persist bootstrap journal slots"
 **Files:**
 - Create: `apps/cli/src/bootstrap/retention.ts`
 - Create: `apps/cli/src/bootstrap/retention.test.ts`
+- Modify: `packages/core/src/manifest/bootstrap-retention.ts` (controller-routed breaker contracts only)
+- Modify: `packages/core/src/manifest/bootstrap-retention.test.ts` (controller-routed regressions only)
 
 **Interfaces:**
 - Consumes: Tasks 1–3 table/store contracts, Task 2 `MacOsRetainedRename`, retained bootstrap/global lock handles, guarded filesystem observations.
 - Produces: `BootstrapRetainer`, `BootstrapRetentionObservationV1`, `BootstrapRetentionDeathPointV1`, `projectRetainedDirectoryTree`, and `retainBootstrapEnvelope`.
 
-- [ ] **Step 1: Write failing row-state, directory-tree, lock, and death tests**
+- [x] **Step 1: Write failing row-state, directory-tree, lock, and death tests**
 
 ```ts
 it.each(retentionDeathPoints)("resumes $name from exactly one legal row state", async point => {
@@ -644,13 +646,13 @@ it("contains no bootstrap unlink, rm, rmdir, or out-of-parent quarantine call", 
 
 Cover before/after/both/neither states, destination wrong inode/content/tree, source changed, parent changed, extra descendant, regular-file and maximal-directory rows, first/last ordinal, journal advance failure after rename, parent sync failure, helper status loss, finalized versus rolled-back tables, permanent global-lock exclusion after point of no return, bootstrap-lock retention before release, and reserved matching name without a row.
 
-- [ ] **Step 2: Run the retention test and verify the engine is absent**
+- [x] **Step 2: Run the retention test and verify the engine is absent**
 
 Run: `npx vitest run --root apps/cli src/bootstrap/retention.test.ts`
 
 Expected: FAIL because `retention.ts` does not exist.
 
-- [ ] **Step 3: Implement exact two-state retention**
+- [x] **Step 3: Implement exact two-state retention**
 
 ```ts
 export type BootstrapRetentionObservationV1 =
@@ -702,19 +704,19 @@ export async function retainBootstrapEnvelope(
 
 `observe` no-follow inventories source and tombstone against the exact row, including the complete relative-path-sorted tree hash/count/bytes for a directory row. `retain` accepts only before or exact after, calls the Task 2 port once for before, reobserves exact after, and syncs the retained parent. `retainBootstrapEnvelope` then asks Task 3 to persist exactly one successor. A crash after rename but before cursor advance adopts only the exact after state. The lock variant keeps the handle held across that sequence; the envelope releases it only after the durable cursor.
 
-- [ ] **Step 4: Run focused retention and platform tests**
+- [x] **Step 4: Run focused retention and platform tests**
 
 Run: `npx vitest run --root apps/cli src/bootstrap/retention.test.ts src/bootstrap/journal-store.test.ts && npx vitest run --root packages/platform-macos src/retained-rename.test.ts`
 
 Expected: PASS with every death point converging and every third state preserving all names.
 
-- [ ] **Step 5: Run the repository gate and obtain fresh review**
+- [x] **Step 5: Run the repository gate and obtain fresh review**
 
 Run: `npm run check`
 
 Expected: PASS. Fresh review must verify the derived table is the sole mutation list, same-parent destinations are deterministic, directory roots are maximal/exact, wrong-state paths remain untouched, and lock release follows the durable cursor.
 
-- [ ] **Step 6: Commit Task 4**
+- [x] **Step 6: Commit Task 4**
 
 ```bash
 git add apps/cli/src/bootstrap/retention.ts apps/cli/src/bootstrap/retention.test.ts docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md docs/superpowers/ORDER.md

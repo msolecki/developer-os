@@ -123,10 +123,28 @@ export type BootstrapRetentionPostimageV1 =
       readonly regularFileBytes: UInt64DecimalV1;
       readonly dev: UInt64DecimalV1;
       readonly ino: UInt64DecimalV1;
+      /** Present on every derived table row; optional only on the admitted pre-derivation projection. */
+      readonly entries?: readonly BootstrapRetentionDirectoryEntryV1[];
     };
 
 export interface BootstrapPayloadRetentionEvidenceV1 {
   readonly value: BootstrapPayloadEvidenceV1;
+  readonly evidenceIdentity: {
+    readonly ownerUid: number;
+    readonly mode: 0o600;
+    readonly nlink: 1;
+    readonly dev: UInt64DecimalV1;
+    readonly ino: UInt64DecimalV1;
+  };
+}
+
+export interface BootstrapInterruptedPayloadRetentionEvidenceV1 {
+  readonly writeState: Extract<BootstrapPayloadWriteStateV1, { state: "writing" }>;
+  readonly postimage: Extract<BootstrapRetentionPostimageV1, { kind: "regular_file" }>;
+}
+
+export interface BootstrapCreatedPathRetentionEvidenceV1 {
+  readonly value: CreatedPathEvidenceV1;
   readonly evidenceIdentity: {
     readonly ownerUid: number;
     readonly mode: 0o600;
@@ -171,8 +189,10 @@ export interface BootstrapRetentionEvidenceProjectionV1 {
   readonly terminalJournal: BootstrapJournalRecordV1 | null;
   /** Admitted persisted payload values and evidence-file identities; this pure projection does not widen bootstrap codecs. */
   readonly payloadEvidence: readonly BootstrapPayloadRetentionEvidenceV1[];
+  /** Exact identity/content projection of a durable `writing` inode carried through terminal rollback. */
+  readonly interruptedPayload: BootstrapInterruptedPayloadRetentionEvidenceV1 | null;
   /** Admitted persisted creation identities; this pure projection does not widen bootstrap codecs. */
-  readonly createdPathEvidence: readonly CreatedPathEvidenceV1[];
+  readonly createdPathEvidence: readonly BootstrapCreatedPathRetentionEvidenceV1[];
   /** Complete descendant projections for every directory-tree row. */
   readonly directoryTrees: readonly BootstrapRetentionDirectoryTreeEvidenceV1[];
   readonly rows: readonly {
@@ -441,14 +461,18 @@ function validateJournalState(
       return;
     case "compensating":
       if (!(journal.direction === "compensating" && journal.manifestCursor < 2 && journal.compensationNext !== null && journal.compensationNext >= -1 && journal.compensationNext < reachedReversibleSteps(journal) && hasForwardPrefix(journal, value) && journal.terminalOutcome === null && journal.retentionNext === null)) return refuse();
-      if (journal.payloadWriteState.state !== "idle" && journal.compensationNext !== journal.nextPayload) return refuse();
+      if (
+        journal.payloadWriteState.state !== "idle" &&
+        journal.compensationNext !== journal.nextPayload &&
+        !(journal.payloadWriteState.state === "writing" && journal.compensationNext === -1)
+      ) return refuse();
       if (
         journal.payloadRetentionPart !== null &&
         !retentionEligiblePayload(journal, journal.compensationNext, value)
       ) return refuse();
       return;
     case "rolled_back":
-      if (!(journal.direction === "compensating" && idle && journal.manifestCursor < 2 && journal.compensationNext === -1 && journal.payloadRetentionPart === null && journal.terminalOutcome === "rolled_back" && journal.retentionNext === null && hasForwardPrefix(journal, value))) return refuse();
+      if (!(journal.direction === "compensating" && journal.payloadWriteState.state !== "create_intent" && journal.manifestCursor < 2 && journal.compensationNext === -1 && journal.payloadRetentionPart === null && journal.terminalOutcome === "rolled_back" && journal.retentionNext === null && hasForwardPrefix(journal, value))) return refuse();
       return;
     case "finalized":
       if (!(journal.direction === "forward" && idle && allComplete && journal.manifestCursor === 3 && noCompensation && journal.terminalOutcome === "finalized" && journal.retentionNext === null)) return refuse();
@@ -456,7 +480,9 @@ function validateJournalState(
     case "retaining":
     case "retained": {
       const terminalDirection = journal.terminalOutcome === "finalized" ? "forward" : "compensating";
-      if (!(idle && journal.direction === terminalDirection && journal.terminalOutcome !== null && journal.retentionNext !== null && journal.payloadRetentionPart === null)) return refuse();
+      const retainedPayloadState = idle ||
+        (journal.terminalOutcome === "rolled_back" && journal.payloadWriteState.state === "writing");
+      if (!(retainedPayloadState && journal.direction === terminalDirection && journal.terminalOutcome !== null && journal.retentionNext !== null && journal.payloadRetentionPart === null)) return refuse();
       if (journal.terminalOutcome === "finalized" && !(allComplete && journal.manifestCursor === 3 && journal.compensationNext === null)) return refuse();
       if (journal.terminalOutcome === "rolled_back" && !(journal.manifestCursor < 2 && journal.compensationNext === -1 && hasForwardPrefix(journal, value))) return refuse();
       if (journal.phase === "retaining" && journal.retentionNext >= retentionEntries) return refuse();
@@ -601,13 +627,11 @@ function isLegalSamePhaseTransition(
         next.payloadRetentionPart === "evidence" && next.compensationNext === cursor;
     }
     const inProgressWriting = cursor === current.nextPayload && current.payloadWriteState.state === "writing";
-    const expectedChanged = inProgressWriting
-      ? ["payloadWriteState", "compensationNext", "payloadRetentionPart"]
-      : ["compensationNext", "payloadRetentionPart"];
+    const expectedChanged = ["compensationNext", "payloadRetentionPart"];
     return sameValue(changed, expectedChanged) &&
       next.payloadRetentionPart === null &&
       next.compensationNext === cursor - 1 &&
-      (!inProgressWriting || next.payloadWriteState.state === "idle");
+      (!inProgressWriting || sameValue(next.payloadWriteState, current.payloadWriteState));
   }
   return false;
 }
@@ -806,7 +830,10 @@ function validateParent(value: unknown, sourcePath: CanonicalAbsolutePathV1): Bo
   return parent;
 }
 
-function validatePostimage(value: unknown): BootstrapRetentionPostimageV1 {
+function validatePostimage(
+  value: unknown,
+  rootPath?: CanonicalAbsolutePathV1,
+): BootstrapRetentionPostimageV1 {
   const input = record(value);
   if (input.kind === "regular_file") {
     exact(input, ["bytes", "dev", "ino", "kind", "mode", "nlink", "ownerUid", "sha256"]);
@@ -823,9 +850,12 @@ function validatePostimage(value: unknown): BootstrapRetentionPostimageV1 {
     };
   }
   if (input.kind === "directory_tree") {
-    exact(input, ["dev", "entryCount", "ino", "kind", "mode", "nlink", "ownerUid", "regularFileBytes", "treeHash"]);
+    const hasEntries = Object.hasOwn(input, "entries");
+    exact(input, hasEntries
+      ? ["dev", "entries", "entryCount", "ino", "kind", "mode", "nlink", "ownerUid", "regularFileBytes", "treeHash"]
+      : ["dev", "entryCount", "ino", "kind", "mode", "nlink", "ownerUid", "regularFileBytes", "treeHash"]);
     if (input.mode !== 0o700) return refuse();
-    return {
+    const postimage: Extract<BootstrapRetentionPostimageV1, { kind: "directory_tree" }> = {
       kind: "directory_tree",
       ownerUid: integer(input.ownerUid, 0, Number.MAX_SAFE_INTEGER),
       mode: 0o700,
@@ -836,6 +866,19 @@ function validatePostimage(value: unknown): BootstrapRetentionPostimageV1 {
       dev: uint64(input.dev),
       ino: uint64(input.ino),
     };
+    if (!hasEntries) return postimage;
+    if (rootPath === undefined) return refuse();
+    const tree = validateDirectoryTreeEvidence({ rootPath, entries: input.entries });
+    const regularFileBytes = tree.entries.reduce(
+      (total, entry) => total + (entry.kind === "regular_file" ? BigInt(entry.bytes) : 0n),
+      0n,
+    );
+    if (
+      postimage.treeHash !== retainedTreeHash(tree.entries) ||
+      postimage.entryCount !== tree.entries.length ||
+      postimage.regularFileBytes !== regularFileBytes.toString()
+    ) return refuse();
+    return { ...postimage, entries: tree.entries };
   }
   return refuse();
 }
@@ -870,6 +913,7 @@ interface Authority {
   readonly bytes?: number;
   readonly hash?: LowerHexSha256;
   readonly mode?: 0o600 | 0o700;
+  readonly interruptedPostimage?: Extract<BootstrapRetentionPostimageV1, { kind: "regular_file" }>;
 }
 
 function forwardFoundationOrdinals(
@@ -996,6 +1040,7 @@ function isForbiddenCompensationTarget(
 function authorities(
   plan: BootstrapRetainedExecutionPlanV1,
   journal: BootstrapJournalRecordV1,
+  interruptedPayload: BootstrapInterruptedPayloadRetentionEvidenceV1 | null,
 ): readonly Authority[] {
   const result: Authority[] = [];
   const retainedFoundation = foundationAuthorities(plan, journal);
@@ -1021,6 +1066,16 @@ function authorities(
       bytes: payload.ref.bytes,
       hash: payload.ref.hash,
       mode: payload.ref.mode,
+    });
+  }
+  if (interruptedPayload !== null) {
+    const payload = plan.payloads[interruptedPayload.writeState.ordinal];
+    if (payload === undefined) return refuse();
+    result.push({
+      role: "payload",
+      sourcePath: payload.ref.path,
+      payloadOrdinal: interruptedPayload.writeState.ordinal,
+      interruptedPostimage: interruptedPayload.postimage,
     });
   }
   for (const [ordinal, planned] of plan.createdPaths.entries()) {
@@ -1160,6 +1215,32 @@ function validateCreatedPathEvidence(
   };
 }
 
+function validateCreatedPathRetentionEvidence(
+  plan: BootstrapRetainedExecutionPlanV1,
+  value: unknown,
+): BootstrapCreatedPathRetentionEvidenceV1 {
+  const input = record(value);
+  exact(input, ["evidenceIdentity", "value"]);
+  const admitted = validateCreatedPathEvidence(plan, input.value);
+  const identity = record(input.evidenceIdentity);
+  exact(identity, ["dev", "ino", "mode", "nlink", "ownerUid"]);
+  if (
+    identity.ownerUid !== plan.bootstrapIdentity.ownerUid ||
+    identity.mode !== 0o600 ||
+    identity.nlink !== 1
+  ) return refuse();
+  return {
+    value: admitted,
+    evidenceIdentity: {
+      ownerUid: integer(identity.ownerUid, 0, Number.MAX_SAFE_INTEGER),
+      mode: 0o600,
+      nlink: 1,
+      dev: uint64(identity.dev),
+      ino: uint64(identity.ino),
+    },
+  };
+}
+
 function validatePayloadRetentionEvidence(
   plan: BootstrapRetainedExecutionPlanV1,
   journal: BootstrapJournalRecordV1,
@@ -1200,6 +1281,48 @@ function validatePayloadRetentionEvidence(
   return result;
 }
 
+function validateInterruptedPayloadRetentionEvidence(
+  plan: BootstrapRetainedExecutionPlanV1,
+  journal: BootstrapJournalRecordV1,
+  value: unknown,
+): BootstrapInterruptedPayloadRetentionEvidenceV1 | null {
+  if (value === null) {
+    if (journal.payloadWriteState.state === "writing") return refuse();
+    return null;
+  }
+  if (
+    journal.terminalOutcome !== "rolled_back" ||
+    journal.payloadWriteState.state !== "writing"
+  ) return refuse();
+  const input = record(value);
+  exact(input, ["postimage", "writeState"]);
+  const writeState = record(input.writeState);
+  exact(writeState, ["dev", "ino", "ordinal", "state"]);
+  const ordinal = integer(writeState.ordinal, 0, MAX_ORDINAL);
+  const payload = plan.payloads[ordinal];
+  if (
+    writeState.state !== "writing" ||
+    ordinal !== journal.nextPayload ||
+    !sameValue(writeState, journal.payloadWriteState) ||
+    payload === undefined
+  ) return refuse();
+  const postimage = validatePostimage(input.postimage);
+  const dev = uint64(writeState.dev);
+  const ino = uint64(writeState.ino);
+  if (
+    postimage.kind !== "regular_file" ||
+    postimage.ownerUid !== plan.bootstrapIdentity.ownerUid ||
+    postimage.mode !== payload.ref.mode ||
+    postimage.dev !== dev ||
+    postimage.ino !== ino ||
+    BigInt(postimage.bytes) > BigInt(payload.ref.bytes)
+  ) return refuse();
+  return {
+    writeState: { state: "writing", ordinal, dev, ino },
+    postimage,
+  };
+}
+
 function payloadRetentionEvidence(
   evidence: readonly BootstrapPayloadRetentionEvidenceV1[],
   ordinal: number,
@@ -1214,14 +1337,18 @@ function verifyAuthority(
   authority: Authority,
   row: { readonly role: BootstrapRetentionRoleV1; readonly sourcePath: CanonicalAbsolutePathV1; readonly parent: BootstrapRetentionParentIdentityV1; readonly postimage: BootstrapRetentionPostimageV1 },
   payloadEvidence: readonly BootstrapPayloadRetentionEvidenceV1[],
-  createdPathEvidence: readonly CreatedPathEvidenceV1[],
+  createdPathEvidence: readonly BootstrapCreatedPathRetentionEvidenceV1[],
 ): void {
+  if (authority.interruptedPostimage !== undefined) {
+    if (!sameValue(row.postimage, authority.interruptedPostimage)) return refuse();
+    return;
+  }
   if (authority.planned !== undefined) {
     const planned = authority.planned;
     if (authority.scope === undefined || authority.ordinal === undefined) return refuse();
     const targetEvidence = createdPathEvidence.find((candidate) =>
-      candidate.scope === authority.scope && candidate.ordinal === authority.ordinal,
-    );
+      candidate.value.scope === authority.scope && candidate.value.ordinal === authority.ordinal,
+    )?.value;
     if (
       targetEvidence === undefined ||
       row.postimage.dev !== targetEvidence.dev ||
@@ -1234,8 +1361,8 @@ function verifyAuthority(
       const parentOrdinal = planned.parent.ordinal;
       const parentPlanned = plannedCreatedPath(plan, parentScope, parentOrdinal);
       const parentEvidence = createdPathEvidence.find((candidate) =>
-        candidate.scope === parentScope && candidate.ordinal === parentOrdinal,
-      );
+        candidate.value.scope === parentScope && candidate.value.ordinal === parentOrdinal,
+      )?.value;
       if (
         parentPlanned.kind !== "directory" ||
         createdPathOrder(plan, parentScope, parentOrdinal) >= createdPathOrder(plan, authority.scope, authority.ordinal) ||
@@ -1315,6 +1442,22 @@ function verifyAuthority(
       row.postimage.ino !== admitted.evidenceIdentity.ino
     ) return refuse();
   }
+  if (row.role === "creation_evidence") {
+    if (authority.scope === undefined || authority.ordinal === undefined || row.postimage.kind !== "regular_file") return refuse();
+    const admitted = createdPathEvidence.find((candidate) =>
+      candidate.value.scope === authority.scope && candidate.value.ordinal === authority.ordinal,
+    );
+    if (admitted === undefined) return refuse();
+    const canonicalBytes = encoder.encode(encodeCanonicalJson(admitted.value as unknown as CanonicalJsonValue));
+    if (
+      row.postimage.ownerUid !== admitted.evidenceIdentity.ownerUid ||
+      row.postimage.mode !== admitted.evidenceIdentity.mode ||
+      row.postimage.bytes !== String(canonicalBytes.byteLength) ||
+      row.postimage.sha256 !== rawCanonicalHash(admitted.value) ||
+      row.postimage.dev !== admitted.evidenceIdentity.dev ||
+      row.postimage.ino !== admitted.evidenceIdentity.ino
+    ) return refuse();
+  }
 }
 
 function sameDirectoryEntryPostimage(
@@ -1368,7 +1511,9 @@ function verifyDirectoryTrees(
     if (
       root.postimage.treeHash !== retainedTreeHash(tree.entries) ||
       root.postimage.entryCount !== tree.entries.length ||
-      root.postimage.regularFileBytes !== regularFileBytes.toString()
+      root.postimage.regularFileBytes !== regularFileBytes.toString() ||
+      root.postimage.entries === undefined ||
+      !sameValue(root.postimage.entries, tree.entries)
     ) return refuse();
     for (const row of rows) {
       if (row.sourcePath === root.sourcePath || !row.sourcePath.startsWith(`${root.sourcePath}/`)) continue;
@@ -1389,21 +1534,27 @@ export function deriveBootstrapRetentionTable(
     evidence.terminalJournal === null ||
     !Array.isArray(evidence.rows) ||
     !Array.isArray(evidence.payloadEvidence) ||
+    !(evidence.interruptedPayload === null || typeof evidence.interruptedPayload === "object") ||
     !Array.isArray(evidence.createdPathEvidence) ||
     !Array.isArray(evidence.directoryTrees)
   ) return refuse();
   const terminalJournal = terminalRetentionJournal(plan, evidence.terminalJournal);
-  const applicableAuthorities = authorities(plan, terminalJournal);
+  const interruptedPayload = validateInterruptedPayloadRetentionEvidence(
+    plan,
+    terminalJournal,
+    evidence.interruptedPayload,
+  );
+  const applicableAuthorities = authorities(plan, terminalJournal, interruptedPayload);
   const expectedAuthorityKeys = new Set(applicableAuthorities.map(authorityKey));
   if (expectedAuthorityKeys.size !== applicableAuthorities.length) return refuse();
   const payloadEvidence = validatePayloadRetentionEvidence(plan, terminalJournal, evidence.payloadEvidence);
-  const createdPathEvidence = evidence.createdPathEvidence.map((value) => validateCreatedPathEvidence(plan, value));
-  if (new Set(createdPathEvidence.map((row) => `${row.scope}:${String(row.ordinal)}`)).size !== createdPathEvidence.length) return refuse();
+  const createdPathEvidence = evidence.createdPathEvidence.map((value) => validateCreatedPathRetentionEvidence(plan, value));
+  if (new Set(createdPathEvidence.map((row) => `${row.value.scope}:${String(row.value.ordinal)}`)).size !== createdPathEvidence.length) return refuse();
   const expectedCreatedEvidence = new Set(applicableAuthorities
     .filter((authority) => authority.role === "creation_evidence")
     .map((authority) => `${authority.scope as string}:${String(authority.ordinal)}`));
   if (
-    !sameStringSet(new Set(createdPathEvidence.map((row) => `${row.scope}:${String(row.ordinal)}`)), expectedCreatedEvidence)
+    !sameStringSet(new Set(createdPathEvidence.map((row) => `${row.value.scope}:${String(row.value.ordinal)}`)), expectedCreatedEvidence)
   ) return refuse();
   const roles = Object.keys(ROLE_ORDER);
   const rows = evidence.rows.map((candidate) => {
@@ -1415,7 +1566,7 @@ export function deriveBootstrapRetentionTable(
       role: input.role as BootstrapRetentionRoleV1,
       sourcePath,
       parent: validateParent(input.parent, sourcePath),
-      postimage: validatePostimage(input.postimage),
+      postimage: validatePostimage(input.postimage, sourcePath),
     };
   });
   if (new Set(rows.map((row) => row.sourcePath)).size !== rows.length) return refuse();
@@ -1452,16 +1603,24 @@ export function deriveBootstrapRetentionTable(
   }
 
   collapsed.sort((left, right) => ROLE_ORDER[left.role] - ROLE_ORDER[right.role] || compareUtf8(left.sourcePath, right.sourcePath));
-  const table = collapsed.map((row, ordinal): BootstrapRetentionEntryV1 => ({
-    schemaVersion: 1,
-    bootstrapId: plan.id,
-    ordinal,
-    role: row.role,
-    sourcePath: row.sourcePath,
-    tombstonePath: `${dirname(row.sourcePath)}/.developer-os-retained.${plan.id}.${String(ordinal).padStart(10, "0")}.tombstone` as CanonicalAbsolutePathV1,
-    parent: row.parent,
-    postimage: row.postimage,
-  }));
+  const table = collapsed.map((row, ordinal): BootstrapRetentionEntryV1 => {
+    let postimage = row.postimage;
+    if (postimage.kind === "directory_tree") {
+      const tree = directoryTrees.find((candidate) => candidate.rootPath === row.sourcePath);
+      if (tree === undefined) return refuse();
+      postimage = { ...postimage, entries: tree.entries };
+    }
+    return {
+      schemaVersion: 1,
+      bootstrapId: plan.id,
+      ordinal,
+      role: row.role,
+      sourcePath: row.sourcePath,
+      tombstonePath: `${dirname(row.sourcePath)}/.developer-os-retained.${plan.id}.${String(ordinal).padStart(10, "0")}.tombstone` as CanonicalAbsolutePathV1,
+      parent: row.parent,
+      postimage,
+    };
+  });
   const sources = new Set(table.map((row) => row.sourcePath));
   const destinations = new Set<string>();
   for (const row of table) {
@@ -1469,6 +1628,12 @@ export function deriveBootstrapRetentionTable(
     destinations.add(row.tombstonePath);
   }
   const descendantCount = directoryTrees.reduce((total, tree) => total + tree.entries.length, 0);
+  const maximumStagingEntries = integer(
+    plan.maximumStagingEntries,
+    0,
+    BOOTSTRAP_RETAINED_MAX_ENTRIES,
+  );
+  if (descendantCount > maximumStagingEntries) return refuse();
   let regularFileBytes = 0n;
   for (const row of table) {
     regularFileBytes += BigInt(row.postimage.kind === "regular_file"

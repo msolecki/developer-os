@@ -18,10 +18,12 @@ started. Spec 2's 2026-08-29 baseline and 26-task plan exist at
 passed local gates but fresh review rejected its deletion-based bootstrap closure. The founder
 approved the complete retained-evidence correction and durable slot-identity addendum on 2026-08-31.
 Its six-task replacement plan is
-`plans/2026-08-31-developer-os-retained-bootstrap-evidence.md`; 3 tasks and 18 unchecked steps
-remain. The next action is replacement Task 4, the same-parent retention engine
-(docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md:603). Baseline Task 8
-remains blocked until all six replacement tasks pass fresh review.
+`plans/2026-08-31-developer-os-retained-bootstrap-evidence.md`; replacement Tasks 1–4 are complete,
+so 2 tasks and 12 unchecked steps remain. The next action is replacement Task 5, switching fresh V2
+init and recovery to the retained envelope
+(docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md:726). Across the active
+implementation plans, 45 tasks remain untouched. Baseline Task 8 remains blocked until all six
+replacement tasks pass fresh review.
 
 Open sequence inside A11:
 
