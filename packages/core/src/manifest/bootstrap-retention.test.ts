@@ -411,6 +411,15 @@ function journal(overrides: Partial<BootstrapJournalRecordV1> = {}): BootstrapJo
   };
 }
 
+function historicalJournal(overrides: Partial<BootstrapJournalRecordV1> = {}): BootstrapJournalRecordV1 {
+  return journal({
+    slot: 1,
+    sequence: parseUInt64Decimal("1"),
+    previousJournalHash: hash("sequence-zero"),
+    ...overrides,
+  });
+}
+
 function successor(current: BootstrapJournalRecordV1, overrides: Partial<BootstrapJournalRecordV1>): BootstrapJournalRecordV1 {
   return journal({
     ...current, ...overrides, slot: current.slot === 0 ? 1 : 0,
@@ -441,23 +450,34 @@ function phaseRecord(phase: BootstrapJournalRecordV1["phase"], overrides: Partia
     retaining: { ...complete, manifestCursor: 3, terminalOutcome: "finalized", retentionNext: 0 },
     retained: { ...complete, manifestCursor: 3, terminalOutcome: "finalized", retentionNext: retentionEntryCount() },
   };
-  return journal({ phase, ...values[phase], ...overrides });
+  const value = { phase, ...values[phase], ...overrides };
+  return phase === "planned" ? journal(value) : historicalJournal(value);
 }
 
 describe("retained bootstrap journal chains", () => {
   it("selects only one adjacent hash-bound journal successor", () => {
-    const current = phaseRecord("retaining", { slot: 0, sequence: parseUInt64Decimal("41"), previousJournalHash: hash("journal-40"), retentionNext: 3 });
+    const terminal = phaseRecord("finalized", {
+      slot: 0,
+      sequence: parseUInt64Decimal("36"),
+      previousJournalHash: hash("journal-35"),
+    });
+    const current = phaseRecord("retaining", { slot: 0, sequence: parseUInt64Decimal("40"), previousJournalHash: hash("journal-39"), retentionNext: 3 });
     const next = successor(current, { retentionNext: 4 });
-    expect(selectBootstrapJournal(plan, [current, next])).toEqual({ current: next, inactiveSlot: 0 });
+    expect(selectRetentionJournal(plan, admittedEvidence(terminal), [current, next])).toEqual({ current: next, inactiveSlot: 0 });
   });
 
   it.each([
-    ["gap", "41", "43", 3, 4, true], ["fork", "41", "41", 3, 4, true],
-    ["wrong predecessor", "41", "42", 3, 4, false], ["illegal cursor", "41", "42", 3, 5, true],
+    ["gap", "40", "43", 3, 4, true], ["fork", "40", "40", 3, 4, true],
+    ["wrong predecessor", "40", "41", 3, 4, false], ["illegal cursor", "40", "41", 3, 5, true],
   ] as const)("refuses a %s journal chain", (_name, first, second, before, after, correctHash) => {
+    const terminal = phaseRecord("finalized", {
+      slot: 0,
+      sequence: parseUInt64Decimal("36"),
+      previousJournalHash: hash("journal-35"),
+    });
     const current = phaseRecord("retaining", { slot: 0, sequence: parseUInt64Decimal(first), previousJournalHash: hash("earlier"), retentionNext: before });
     const next = phaseRecord("retaining", { slot: 1, sequence: parseUInt64Decimal(second), previousJournalHash: correctHash ? canonicalHash(current) : hash("wrong"), retentionNext: after });
-    expect(() => selectBootstrapJournal(plan, [current, next])).toThrow();
+    expect(() => selectRetentionJournal(plan, admittedEvidence(terminal), [current, next])).toThrow();
   });
 
   it("refuses a same-slot tuple and invalid slot identities", () => {
@@ -513,19 +533,35 @@ describe("retained bootstrap journal chains", () => {
   it("admits sequence zero and UInt64 maximum but refuses predecessor and overflow errors", () => {
     expect(selectBootstrapJournal(plan, [journal(), null]).current.sequence).toBe("0");
     expect(() => selectBootstrapJournal(plan, [journal({ previousJournalHash: hash("not-null") }), null])).toThrow();
-    const maximum = journal({ sequence: parseUInt64Decimal(MAX_UINT64), previousJournalHash: hash("predecessor") });
-    expect(selectBootstrapJournal(plan, [maximum, null]).current.sequence).toBe(MAX_UINT64);
+    const maximum = historicalJournal({ sequence: parseUInt64Decimal(MAX_UINT64), previousJournalHash: hash("predecessor") });
+    expect(selectBootstrapJournal(plan, [null, maximum]).current.sequence).toBe(MAX_UINT64);
     expect(() => validateBootstrapJournalSuccessor(plan, maximum, {
-      ...maximum, slot: 1, sequence: "18446744073709551616" as BootstrapJournalRecordV1["sequence"], previousJournalHash: canonicalHash(maximum),
+      ...maximum, slot: 0, sequence: "18446744073709551616" as BootstrapJournalRecordV1["sequence"], previousJournalHash: canonicalHash(maximum),
     })).toThrow();
   });
 
+  it("refuses a terminal sequence-zero root instead of fabricating the initial planned authority", () => {
+    expect(() => selectBootstrapJournal(plan, [phaseRecord("finalized", {
+      slot: 0,
+      sequence: parseUInt64Decimal("0"),
+      previousJournalHash: null,
+    }), null])).toThrow();
+  });
+
+  it("refuses a journal whose slot does not equal its sequence parity", () => {
+    expect(() => selectBootstrapJournal(plan, [journal({
+      sequence: parseUInt64Decimal("1"),
+      previousJournalHash: hash("sequence-zero"),
+    }), null])).toThrow();
+  });
+
   it("hashes complete canonical predecessor bytes including LF", () => {
-    const current = phaseRecord("retaining", { sequence: parseUInt64Decimal("8"), previousJournalHash: hash("previous") });
+    const terminal = phaseRecord("finalized");
+    const current = successor(terminal, { phase: "retaining", retentionNext: 0 });
     const canonical = encodeCanonicalJson(current as unknown as CanonicalJsonValue);
     const withoutLf = parseLowerHexSha256(createHash("sha256").update(canonical.slice(0, -1)).digest("hex"));
-    expect(validateBootstrapJournalSuccessor(plan, current, successor(current, { retentionNext: 1 }))).toEqual(successor(current, { retentionNext: 1 }));
-    expect(() => validateBootstrapJournalSuccessor(plan, current, {
+    expect(validateRetentionJournalSuccessor(plan, admittedEvidence(terminal), current, successor(current, { retentionNext: 1 }))).toEqual(successor(current, { retentionNext: 1 }));
+    expect(() => validateRetentionJournalSuccessor(plan, admittedEvidence(terminal), current, {
       ...successor(current, { retentionNext: 1 }), previousJournalHash: withoutLf,
     })).toThrow();
   });
@@ -662,26 +698,41 @@ describe("retained bootstrap journal chains", () => {
   });
 
   it("checks retaining and retained cursor zero, last, and first-over", () => {
+    const terminal = phaseRecord("finalized");
     const last = retentionEntryCount() - 1;
-    const zero = phaseRecord("retaining", { retentionNext: 0 });
-    expect(validateBootstrapJournalSuccessor(plan, zero, successor(zero, { retentionNext: 1 })).retentionNext).toBe(1);
-    const retained = successor(phaseRecord("retaining", { retentionNext: last }), {
+    const zero = successor(terminal, { phase: "retaining", retentionNext: 0 });
+    expect(validateRetentionJournalSuccessor(plan, admittedEvidence(terminal), zero, successor(zero, { retentionNext: 1 })).retentionNext).toBe(1);
+    const lastSequence = BigInt(terminal.sequence) + BigInt(last) + 1n;
+    const lastRetaining = phaseRecord("retaining", {
+      slot: Number(lastSequence % 2n) as 0 | 1,
+      sequence: parseUInt64Decimal(lastSequence.toString()),
+      previousJournalHash: hash("last-retaining-predecessor"),
+      retentionNext: last,
+    });
+    const retained = successor(lastRetaining, {
       phase: "retained", retentionNext: retentionEntryCount(),
     });
-    expect(() => validateBootstrapJournalSuccessor(plan, retained, retained)).toThrow();
-    expect(validateBootstrapJournalSuccessor(
+    expect(() => validateRetentionJournalSuccessor(plan, admittedEvidence(terminal), retained, retained)).toThrow();
+    expect(validateRetentionJournalSuccessor(
       plan,
-      phaseRecord("retaining", { retentionNext: last }),
+      admittedEvidence(terminal),
+      lastRetaining,
       retained,
     ).retentionNext).toBe(retentionEntryCount());
-    expect(selectBootstrapJournal(plan, [phaseRecord("retained"), null]).current.retentionNext).toBe(retentionEntryCount());
-    expect(() => selectBootstrapJournal(plan, [phaseRecord("retained", { retentionNext: retentionEntryCount() + 1 }), null])).toThrow();
+    const retainedSlots = lastRetaining.slot === 0
+      ? [lastRetaining, retained] as const
+      : [retained, lastRetaining] as const;
+    expect(selectRetentionJournal(plan, admittedEvidence(terminal), retainedSlots).current.retentionNext).toBe(retentionEntryCount());
+    const firstOver = { ...retained, retentionNext: retentionEntryCount() + 1 };
+    expect(() => selectRetentionJournal(plan, admittedEvidence(terminal), lastRetaining.slot === 0
+      ? [lastRetaining, firstOver]
+      : [firstOver, lastRetaining])).toThrow();
   });
 
   it("refuses retained before the derived retention table is complete", () => {
     expect(() => selectBootstrapJournal(
       plan,
-      [phaseRecord("retained", { retentionNext: 0 }), null],
+      [null, phaseRecord("retained", { retentionNext: 0 })],
     )).toThrow();
   });
 
@@ -732,6 +783,41 @@ describe("retained bootstrap journal chains", () => {
       compensationNext: -1, terminalOutcome: "rolled_back", retentionNext: 0,
     });
     expect(() => selectRetentionJournal(plan, evidence, [current, null])).toThrow();
+  });
+
+  it.each([
+    ["created timestamp", (current: BootstrapJournalRecordV1) => ({
+      ...current,
+      createdAt: parseUtcTimestamp("2026-08-31T07:59:59.000Z"),
+    })],
+    ["sequence and slot order", (current: BootstrapJournalRecordV1) => ({
+      ...current,
+      slot: 1 as const,
+      sequence: parseUInt64Decimal("3"),
+    })],
+    ["terminal predecessor hash", (current: BootstrapJournalRecordV1) => ({
+      ...current,
+      previousJournalHash: hash("unrelated-terminal"),
+    })],
+  ] as const)("refuses retaining evidence with mismatched %s lineage", (_name, mutate) => {
+    const terminal = phaseRecord("finalized");
+    const retaining = mutate(successor(terminal, { phase: "retaining", retentionNext: 0 }));
+    const slots = retaining.slot === 0
+      ? [retaining, null] as const
+      : [null, retaining] as const;
+
+    expect(() => selectRetentionJournal(plan, admittedEvidence(terminal), slots)).toThrow();
+  });
+
+  it("refuses a later retaining record when its predecessor slot is unavailable", () => {
+    const terminal = phaseRecord("finalized");
+    const first = successor(terminal, { phase: "retaining", retentionNext: 0 });
+    const later = successor(first, { retentionNext: 1 });
+    const slots = later.slot === 0
+      ? [later, null] as const
+      : [null, later] as const;
+
+    expect(() => selectRetentionJournal(plan, admittedEvidence(terminal), slots)).toThrow();
   });
 
   it("refuses phase changes that skip a cursor or enter retention past zero", () => {
@@ -866,7 +952,7 @@ function directoryTreeFromRows(
 }
 
 function admittedEvidence(
-  terminalJournal: BootstrapJournalRecordV1 = journal({
+  terminalJournal: BootstrapJournalRecordV1 = historicalJournal({
     phase: "finalized",
     nextPayload: plan.payloads.length,
     nextCreatedPath: plan.createdPaths.length,
@@ -1121,7 +1207,7 @@ function retentionEntryCount(): number {
 
 describe("retained bootstrap table derivation", () => {
   it("binds an unconsumed payload row to its persisted payload-evidence inode", () => {
-    const rollbackEvidence = admittedEvidence(journal({
+    const rollbackEvidence = admittedEvidence(historicalJournal({
       phase: "rolled_back",
       direction: "compensating",
       nextPayload: plan.payloads.length,
@@ -1141,7 +1227,7 @@ describe("retained bootstrap table derivation", () => {
   it.each(["canonical bytes", "inode"] as const)(
     "binds a payload-evidence row to its persisted %s",
     (mutation) => {
-      const rollbackEvidence = admittedEvidence(journal({
+      const rollbackEvidence = admittedEvidence(historicalJournal({
         phase: "rolled_back",
         direction: "compensating",
         nextPayload: plan.payloads.length,
@@ -1215,7 +1301,7 @@ describe("retained bootstrap table derivation", () => {
   });
 
   it("tracks reached rollback consumers without retaining their old payload locations", () => {
-    const terminal = journal({
+    const terminal = historicalJournal({
       phase: "rolled_back",
       direction: "compensating",
       nextPayload: plan.payloads.length,
@@ -1627,7 +1713,7 @@ describe("retained bootstrap table derivation", () => {
         },
       ],
     } as BootstrapRetainedExecutionPlanV1;
-    const terminalJournal = journal({
+    const terminalJournal = historicalJournal({
       planHash: canonicalHash(globalLockPlan), phase: "rolled_back", direction: "compensating",
       nextPayload: plan.payloads.length, nextCreatedPath: 2, compensationNext: -1, terminalOutcome: "rolled_back",
     });

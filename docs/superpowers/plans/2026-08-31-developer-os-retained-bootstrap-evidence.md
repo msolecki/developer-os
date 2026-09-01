@@ -472,12 +472,14 @@ git commit -m "feat(platform-macos): add exclusive retained rename"
 **Files:**
 - Create: `apps/cli/src/bootstrap/journal-store.ts`
 - Create: `apps/cli/src/bootstrap/journal-store.test.ts`
+- Modify: `packages/core/src/manifest/bootstrap-retention.ts`
+- Modify: `packages/core/src/manifest/bootstrap-retention.test.ts`
 
 **Interfaces:**
 - Consumes: Task 1 slot/journal validation, canonical JSON, guarded Core paths, Node file handles, injected clock/death hook.
 - Produces: `BootstrapJournalStore.create`, `BootstrapJournalStore.open`, `BootstrapJournalStore.advance`, and `BootstrapJournalStoreDeathPointV1`.
 
-- [ ] **Step 1: Write failing plan/slot death and replacement tests**
+- [x] **Step 1: Write failing plan/slot death and replacement tests**
 
 ```ts
 it.each([
@@ -511,13 +513,13 @@ it("refuses a path replacement instead of truncating the replacement", async () 
 
 Cover zero-byte and every byte-prefix partial plan, pre-plan zero/one/two-slot residue, plan wrong slot path/order/dev/ino, plan replacement, durable plan with zero/partial initial slot, refusal to initialize when guarded inventory finds any post-plan mutation, current/inactive slot replacement, partial inactive at byte zero/middle/last-minus-one, canonical size first-over, short write/no progress, sync failure at inode/state, adjacent successor, two valid forked slots, sequence overflow, close failure, and descriptor leak checks.
 
-- [ ] **Step 2: Run the CLI journal-store test and verify the module is absent**
+- [x] **Step 2: Run the CLI journal-store test and verify the module is absent**
 
 Run: `npx vitest run --root apps/cli src/bootstrap/journal-store.test.ts`
 
 Expected: FAIL because the store does not exist.
 
-- [ ] **Step 3: Implement final-path plan publication and alternating slots**
+- [x] **Step 3: Implement final-path plan publication and alternating slots**
 
 ```ts
 export interface BootstrapJournalStoreOpenRequestV1 {
@@ -579,19 +581,19 @@ export class BootstrapJournalStore {
 
 Create both empty slots no-replace and retain their handles; sync each and `state`; build the plan with exact slot identities; create the final plan no-replace; write it in place through its retained handle; sync/reopen/validate; then write sequence zero to slot zero. A death before durable plan publication stays unverified and byte-identical. A durable exact plan with no valid initial journal may initialize slot zero with a new valid timestamp only after `admitInitialWrite` proves the guarded post-plan mutation set is empty. `advance` validates the unique successor before truncating the exact inactive plan-bound descriptor, writes with positional bounded loops, syncs, reopens the same inode/path, validates canonical bytes, syncs `state`, and changes the in-memory current slot only afterward. `open` never mutates unbound pre-plan residue.
 
-- [ ] **Step 4: Run focused CLI store tests**
+- [x] **Step 4: Run focused CLI store tests**
 
 Run: `npx vitest run --root apps/cli src/bootstrap/journal-store.test.ts`
 
 Expected: PASS for every write/sync/death boundary with no temp path or inode replacement.
 
-- [ ] **Step 5: Run the repository gate and obtain fresh review**
+- [x] **Step 5: Run the repository gate and obtain fresh review**
 
 Run: `npm run check`
 
 Expected: PASS. Fresh review must trace descriptor identity across create/open/advance, prove prior-current authority across partial inactive writes, and reject every plan/slot replacement without writing it.
 
-- [ ] **Step 6: Commit Task 3**
+- [x] **Step 6: Commit Task 3**
 
 ```bash
 git add apps/cli/src/bootstrap/journal-store.ts apps/cli/src/bootstrap/journal-store.test.ts docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md docs/superpowers/ORDER.md

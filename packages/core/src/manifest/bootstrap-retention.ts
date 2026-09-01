@@ -484,7 +484,10 @@ function validateJournalRecord(
   const nextPayload = integer(input.nextPayload, 0, valueCounts.payloads);
   const sequence = uint64(input.sequence);
   const previousJournalHash = input.previousJournalHash === null ? null : sha256(input.previousJournalHash);
-  if ((sequence === "0") !== (previousJournalHash === null) || (sequence === "0" && input.slot !== 0)) return refuse();
+  if (
+    (sequence === "0") !== (previousJournalHash === null) ||
+    input.slot !== Number(BigInt(sequence) % 2n)
+  ) return refuse();
   const journal: BootstrapJournalRecordV1 = {
     schemaVersion: 1,
     id: plan.id,
@@ -508,6 +511,7 @@ function validateJournalRecord(
     updatedAt: timestamp(input.updatedAt),
   };
   validateJournalState(journal, valueCounts, retentionEntries);
+  if (sequence === "0" && journal.phase !== "planned") return refuse();
   if (encoder.encode(encodeCanonicalJson(journal as unknown as CanonicalJsonValue)).byteLength > plan.maximumJournalBytes) return refuse();
   return structuredClone(journal);
 }
@@ -682,6 +686,10 @@ export function selectBootstrapJournal(
   if (present.length === 0) return refuse();
   if (present.length === 1) {
     const current = present[0] as BootstrapJournalRecordV1;
+    if (
+      current.phase === "retained" ||
+      (current.phase === "retaining" && current.retentionNext !== 0)
+    ) return refuse();
     validateRetentionTerminalBinding(plan, evidence, current);
     return { current, inactiveSlot: current.slot === 0 ? 1 : 0 };
   }
@@ -1079,6 +1087,17 @@ function validateRetentionTerminalBinding(
   for (const key of RETENTION_TERMINAL_PREFIX_KEYS) {
     if (!sameValue(journal[key], terminal[key])) return refuse();
   }
+  const retentionNext = journal.retentionNext as number;
+  const sequenceOffset = BigInt(retentionNext) + 1n;
+  const terminalSequence = BigInt(terminal.sequence);
+  if (
+    terminalSequence + sequenceOffset > MAX_UINT64 ||
+    BigInt(journal.sequence) !== terminalSequence + sequenceOffset ||
+    journal.slot !== ((terminal.slot + Number(sequenceOffset % 2n)) % 2) ||
+    journal.createdAt !== terminal.createdAt ||
+    Date.parse(journal.updatedAt) < Date.parse(terminal.updatedAt)
+  ) return refuse();
+  if (sequenceOffset === 1n && journal.previousJournalHash !== rawCanonicalHash(terminal)) return refuse();
 }
 
 function needsRetentionTable(value: unknown): boolean {
