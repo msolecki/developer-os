@@ -8,6 +8,7 @@ export default tseslint.config(
       "**/coverage/**",
       "**/vitest.config.ts",
       "eslint.config.mjs",
+      ".worktrees/**",
     ],
   },
   eslint.configs.recommended,
