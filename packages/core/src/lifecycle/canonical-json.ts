@@ -19,7 +19,8 @@ function assertString(value: string): void {
   for (let index = 0; index < value.length; index += 1) {
     const codeUnit = value.charCodeAt(index);
     if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1);
+      // Past the final index `charCodeAt` is NaN, which fails every comparison.
+      const next = index + 1 < value.length ? value.charCodeAt(index + 1) : -1;
       if (next < 0xdc00 || next > 0xdfff) fail("string has a lone high surrogate");
       index += 1;
     } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
@@ -46,15 +47,25 @@ function encodeString(value: string): string {
   return `${encoded}"`;
 }
 
-function compareUtf8(left: string, right: string): number {
-  const leftBytes = encoder.encode(left);
-  const rightBytes = encoder.encode(right);
-  const common = Math.min(leftBytes.length, rightBytes.length);
+function compareUtf8Bytes(left: Uint8Array, right: Uint8Array): number {
+  const common = Math.min(left.length, right.length);
   for (let index = 0; index < common; index += 1) {
-    const difference = (leftBytes[index] as number) - (rightBytes[index] as number);
+    const difference = (left[index] as number) - (right[index] as number);
     if (difference !== 0) return difference;
   }
-  return leftBytes.length - rightBytes.length;
+  return left.length - right.length;
+}
+
+/**
+ * Encodes each key once rather than once per comparison. `sort` performs
+ * O(k log k) comparisons, so encoding inside the comparator made key ordering
+ * the largest single cost in `developer-os init`.
+ */
+function sortKeysUtf8(keys: readonly string[]): readonly string[] {
+  if (keys.length < 2) return keys;
+  const encoded = keys.map((key) => ({ key, bytes: encoder.encode(key) }));
+  encoded.sort((left, right) => compareUtf8Bytes(left.bytes, right.bytes));
+  return encoded.map((entry) => entry.key);
 }
 
 function encodeValue(value: CanonicalJsonValue, stack: Set<object>): string {
@@ -83,7 +94,7 @@ function encodeValue(value: CanonicalJsonValue, stack: Set<object>): string {
     const prototype = Object.getPrototypeOf(value) as object | null;
     if (prototype !== Object.prototype && prototype !== null) fail("object is not plain");
     const object = value as { readonly [key: string]: CanonicalJsonValue };
-    const keys = Object.keys(object).sort(compareUtf8);
+    const keys = sortKeysUtf8(Object.keys(object));
     return `{${keys.map((key) => `${encodeString(key)}:${encodeValue(object[key] as CanonicalJsonValue, stack)}`).join(",")}}`;
   } finally {
     stack.delete(value);
