@@ -35,8 +35,13 @@ Open sequence inside A11:
    V2 drift/store dispatch, Foundation participant, and bootstrap-schema prerequisites.
 5. Completed 2026-08-31: approve the written Spec 2 §6 retained-bootstrap-evidence correction and
    durable slot-identity addendum, then write the focused replacement Task 7 plan.
-6. Now: execute replacement Task 6 in
-   `plans/2026-08-31-developer-os-retained-bootstrap-evidence.md` to fresh-review acceptance.
+6. Parked 2026-09-03: replacement Task 6 reached working resume and lock admission, but is
+   blocked by NEW-53. Its test runs two full inits at roughly 220s each against a 300000ms
+   budget, so it cannot pass while `init` is slow. See NEW-55 for the exact state and the
+   patch location.
+7. Now: close NEW-53. One `developer-os init` takes 219s and performs 126,916,440
+   `TextEncoder.encode` calls because the plan is re-encoded and rewritten on every journal
+   write. Closing it unblocks Task 6, the 30-minute CI timeout, and the push.
 7. Execute Spec 2 Tasks 8–9 for the complete `InstallationManifestV2` migration and V2 new-init
    handoff.
 8. Execute the approved Spec 1 plan.
@@ -101,6 +106,6 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 - Product sequence: 6 open entries, A11–A16.
 - Program plan: replacement Task 7 contains 6 unchecked work steps across 1 unfinished task;
   baseline Tasks 8–9 contain 10.
-- Repository backlog: 29 open numbered rows, plus the Foundation watchdog decision.
+- Repository backlog: 30 open numbered rows, plus the Foundation watchdog decision.
 - Active implementation plans: 44 untouched tasks — 1 in replacement Task 7, 19 remaining in Spec
   2, and 24 in Spec 1. Spec 1 remains blocked until replacement Task 7 and baseline Tasks 8–9 pass.
