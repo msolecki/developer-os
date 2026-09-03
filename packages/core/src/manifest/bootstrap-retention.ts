@@ -333,6 +333,15 @@ function rawCanonicalHash(value: unknown): LowerHexSha256 {
   }
 }
 
+/**
+ * For callers that already hold the canonical text. Verifying an evidence row
+ * needs both its byte length and its hash, and encoding the value twice to get
+ * them was the largest remaining cost of `developer-os init`.
+ */
+function hashCanonicalText(text: string): LowerHexSha256 {
+  return createHash("sha256").update(text).digest("hex") as LowerHexSha256;
+}
+
 function rawPathHash(value: CanonicalAbsolutePathV1): LowerHexSha256 {
   return createHash("sha256").update(value).digest("hex") as LowerHexSha256;
 }
@@ -1707,12 +1716,12 @@ function verifyAuthority(
   if (row.role === "payload_evidence") {
     if (authority.payloadOrdinal === undefined || row.postimage.kind !== "regular_file") return refuse();
     const admitted = payloadRetentionEvidence(payloadEvidence, authority.payloadOrdinal);
-    const canonicalBytes = encodeCanonicalJson(admitted.value as unknown as CanonicalJsonValue);
+    const canonicalText = encodeCanonicalJson(admitted.value as unknown as CanonicalJsonValue);
     if (
       row.postimage.ownerUid !== admitted.evidenceIdentity.ownerUid ||
       row.postimage.mode !== admitted.evidenceIdentity.mode ||
-      row.postimage.bytes !== String(encoder.encode(canonicalBytes).byteLength) ||
-      row.postimage.sha256 !== rawCanonicalHash(admitted.value) ||
+      row.postimage.bytes !== String(encoder.encode(canonicalText).byteLength) ||
+      row.postimage.sha256 !== hashCanonicalText(canonicalText) ||
       row.postimage.dev !== admitted.evidenceIdentity.dev ||
       row.postimage.ino !== admitted.evidenceIdentity.ino
     ) return refuse();
@@ -1723,12 +1732,13 @@ function verifyAuthority(
       candidate.value.scope === authority.scope && candidate.value.ordinal === authority.ordinal,
     );
     if (admitted === undefined) return refuse();
-    const canonicalBytes = encoder.encode(encodeCanonicalJson(admitted.value as unknown as CanonicalJsonValue));
+    const canonicalText = encodeCanonicalJson(admitted.value as unknown as CanonicalJsonValue);
+    const canonicalBytes = encoder.encode(canonicalText);
     if (
       row.postimage.ownerUid !== admitted.evidenceIdentity.ownerUid ||
       row.postimage.mode !== admitted.evidenceIdentity.mode ||
       row.postimage.bytes !== String(canonicalBytes.byteLength) ||
-      row.postimage.sha256 !== rawCanonicalHash(admitted.value) ||
+      row.postimage.sha256 !== hashCanonicalText(canonicalText) ||
       row.postimage.dev !== admitted.evidenceIdentity.dev ||
       row.postimage.ino !== admitted.evidenceIdentity.ino
     ) return refuse();
@@ -1805,7 +1815,34 @@ function verifyDirectoryTrees(
   return trees;
 }
 
+/**
+ * Keyed on both argument identities, which are immutable once admitted. The
+ * derivation is pure, and one `developer-os init` asked for the same table 1,475
+ * times while validating journals, re-verifying every evidence row each time. A
+ * different plan or evidence object derives again, so nothing is shared across
+ * identities and a refusal is never cached.
+ */
+const retentionTables = new WeakMap<object, WeakMap<object, readonly BootstrapRetentionEntryV1[]>>();
+
 export function deriveBootstrapRetentionTable(
+  plan: BootstrapRetainedExecutionPlanV1,
+  evidence: BootstrapRetentionEvidenceProjectionV1,
+): readonly BootstrapRetentionEntryV1[] {
+  const planKey = plan as unknown as object;
+  const evidenceKey = evidence as unknown as object;
+  const cached = retentionTables.get(planKey)?.get(evidenceKey);
+  if (cached !== undefined) return cached;
+  const derived = deriveBootstrapRetentionTableUncached(plan, evidence);
+  let perPlan = retentionTables.get(planKey);
+  if (perPlan === undefined) {
+    perPlan = new WeakMap<object, readonly BootstrapRetentionEntryV1[]>();
+    retentionTables.set(planKey, perPlan);
+  }
+  perPlan.set(evidenceKey, derived);
+  return derived;
+}
+
+function deriveBootstrapRetentionTableUncached(
   plan: BootstrapRetainedExecutionPlanV1,
   evidence: BootstrapRetentionEvidenceProjectionV1,
 ): readonly BootstrapRetentionEntryV1[] {

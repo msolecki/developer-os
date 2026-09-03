@@ -795,8 +795,21 @@ function validatePayloadWriteState(
   return refuse();
 }
 
+/**
+ * Keyed on the plan object, which is immutable once validated. Init validates a
+ * journal on every write and each validation re-encoded the entire plan, so this
+ * was the dominant cost of `developer-os init`. A plan that is not the same
+ * object is hashed again, so nothing is trusted across identities.
+ */
+const planHashes = new WeakMap<object, LowerHexSha256>();
+
 function planHash(plan: BootstrapExecutionPlanV1): LowerHexSha256 {
-  return rawHash(encodeCanonicalJson(plan as unknown as CanonicalJsonValue));
+  const key = plan as unknown as object;
+  const cached = planHashes.get(key);
+  if (cached !== undefined) return cached;
+  const computed = rawHash(encodeCanonicalJson(plan as unknown as CanonicalJsonValue));
+  planHashes.set(key, computed);
+  return computed;
 }
 
 function isCompleteBefore(

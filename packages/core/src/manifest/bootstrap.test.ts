@@ -903,6 +903,62 @@ describe("retained bootstrap persisted envelope", () => {
     expect(validateBootstrapPlan(fixture.plan, fixture.context as never)).toStrictEqual(fixture.plan);
   });
 
+  /**
+   * A count, not an elapsed time. Every journal validation re-encoded the whole
+   * plan to recompute its hash, and init validates a journal on every write, so
+   * one `developer-os init` performed 126,916,440 TextEncoder allocations.
+   */
+  it("catches a validator that re-encodes the plan for every journal it checks", () => {
+    const { plan } = retainedPlanFixture();
+    const journal = {
+      schemaVersion: 1,
+      id: freshId,
+      planHash: createHash("sha256")
+        .update(encodeCanonicalJson(plan as unknown as never))
+        .digest("hex"),
+      slot: 0,
+      sequence: "0",
+      previousJournalHash: null,
+      phase: "planned",
+      direction: "forward",
+      nextPayload: 0,
+      payloadWriteState: { state: "idle" },
+      nextCreatedPath: 0,
+      nextFoundationParticipant: 0,
+      nextLaunchabilityPath: 0,
+      manifestCursor: 0,
+      compensationNext: null,
+      payloadRetentionPart: null,
+      terminalOutcome: null,
+      retentionNext: null,
+      createdAt: "2026-08-31T12:00:00.000Z",
+      updatedAt: "2026-08-31T12:00:00.000Z",
+    } as const;
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- restored below; only ever invoked with an explicit `this`
+    const original = TextEncoder.prototype.encode;
+    const measure = (): number => {
+      let calls = 0;
+      try {
+        TextEncoder.prototype.encode = function encode(
+          this: InstanceType<typeof TextEncoder>,
+          input?: string,
+        ) {
+          calls += 1;
+          return original.call(this, input);
+        };
+        validateBootstrapJournal(plan, journal);
+      } finally {
+        TextEncoder.prototype.encode = original;
+      }
+      return calls;
+    };
+
+    const cold = measure();
+    const warm = measure();
+
+    expect(warm).toBeLessThan(cold);
+  });
+
   it("admits only the two-slot retained journal record shape", () => {
     const { plan } = retainedPlanFixture();
     const planned = {

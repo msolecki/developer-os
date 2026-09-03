@@ -1450,11 +1450,71 @@ function admittedEvidence(
   };
 }
 
+/** Measured before the double-encode was removed: 1710 with it, 1074 without. */
+const BASELINE_DERIVATION_ENCODES = 1200;
+
 function retentionEntryCount(): number {
   return deriveBootstrapRetentionTable(plan, admittedEvidence()).length;
 }
 
 describe("retained bootstrap table derivation", () => {
+  /**
+   * A count, not an elapsed time. Each evidence row was canonically encoded
+   * twice, once for its byte length and once for its hash, and init derives the
+   * table repeatedly, so this was the largest remaining cost of `init`.
+   */
+  /**
+   * One `developer-os init` derived this table 1,475 times from the same plan
+   * and evidence, re-verifying every row each time.
+   */
+  it("catches a derivation recomputed for a plan and evidence it has already seen", () => {
+    const evidence = admittedEvidence();
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- restored below; only ever invoked with an explicit `this`
+    const original = TextEncoder.prototype.encode;
+    const measure = (): number => {
+      let calls = 0;
+      try {
+        TextEncoder.prototype.encode = function encode(
+          this: InstanceType<typeof TextEncoder>,
+          input?: string,
+        ) {
+          calls += 1;
+          return original.call(this, input);
+        };
+        deriveBootstrapRetentionTable(plan, evidence);
+      } finally {
+        TextEncoder.prototype.encode = original;
+      }
+      return calls;
+    };
+
+    const cold = measure();
+    const warm = measure();
+
+    expect(warm).toBeLessThan(cold);
+  });
+
+  it("catches a derivation that canonically encodes each evidence row twice", () => {
+    const evidence = admittedEvidence();
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- restored below; only ever invoked with an explicit `this`
+    const original = TextEncoder.prototype.encode;
+    let calls = 0;
+    try {
+      TextEncoder.prototype.encode = function encode(
+        this: InstanceType<typeof TextEncoder>,
+        input?: string,
+      ) {
+        calls += 1;
+        return original.call(this, input);
+      };
+      deriveBootstrapRetentionTable(plan, evidence);
+    } finally {
+      TextEncoder.prototype.encode = original;
+    }
+
+    expect(calls).toBeLessThanOrEqual(BASELINE_DERIVATION_ENCODES);
+  });
+
   it("derives exact restart locations from the terminal plan without observed pathname authority", () => {
     const evidence = admittedEvidence();
     const table = deriveBootstrapRetentionTable(plan, evidence);
