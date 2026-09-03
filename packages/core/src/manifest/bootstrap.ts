@@ -44,7 +44,7 @@ const MAX_MIGRATION_PREIMAGE_BYTES = 67_108_864;
 const MAX_CREATED_PATHS = 1_000_000;
 const MAX_LAUNCHABILITY_PATHS = 200_006;
 const MAX_COMPENSATION_NEXT = 2_200_264;
-const MAX_COMPACTION_NEXT = 2_200_526;
+const MAX_RETENTION_NEXT = 2_200_526;
 const UUID_V4 = "[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
 const UUID_V4_RE = new RegExp(`^${UUID_V4}$`, "u");
 const FRESH_ID_RE = new RegExp(`^fi_(${UUID_V4})$`, "u");
@@ -315,18 +315,30 @@ interface BootstrapPlanCommonV1 {
   readonly manifest: ManifestStatePlanV1;
 }
 
+interface PersistedBootstrapJournalSlotIdentityV1 {
+  readonly slot: 0 | 1;
+  readonly path: ExactProductStatePathV1;
+  readonly ownerUid: number;
+  readonly mode: 0o600;
+  readonly nlink: 1;
+  readonly dev: UInt64DecimalV1;
+  readonly ino: UInt64DecimalV1;
+}
+
 export interface FreshV2InitPlanV1 extends BootstrapPlanCommonV1 {
   readonly operation: "fresh_v2_init";
   readonly id: FreshV2InitIdV1;
   readonly admittedExternalShapeHash: LowerHexSha256;
   readonly planPath: ExactProductStatePathV1;
-  readonly journalPath: ExactProductStatePathV1;
+  readonly journalSlots: readonly [
+    PersistedBootstrapJournalSlotIdentityV1,
+    PersistedBootstrapJournalSlotIdentityV1,
+  ];
   readonly stagingRoot: CanonicalAbsolutePathV1;
 }
 
 export interface ManifestMigrationPathsV1 {
   readonly plan: ExactProductStatePathV1;
-  readonly journal: ExactProductStatePathV1;
   readonly stagingRoot: CanonicalAbsolutePathV1;
 }
 
@@ -335,6 +347,10 @@ export interface ManifestMigrationPlanV1 extends BootstrapPlanCommonV1 {
   readonly id: ManifestMigrationIdV1;
   readonly v1ManifestHash: LowerHexSha256;
   readonly paths: ManifestMigrationPathsV1;
+  readonly journalSlots: readonly [
+    PersistedBootstrapJournalSlotIdentityV1,
+    PersistedBootstrapJournalSlotIdentityV1,
+  ];
 }
 
 export type BootstrapExecutionPlanV1 = FreshV2InitPlanV1 | ManifestMigrationPlanV1;
@@ -350,12 +366,21 @@ export type BootstrapJournalPhaseV1 =
   | "compensating"
   | "finalized"
   | "rolled_back"
-  | "compacting";
+  | "retaining"
+  | "retained";
+
+export interface BootstrapRetentionTerminalPreimageV1 {
+  readonly previousJournalHash: LowerHexSha256 | null;
+  readonly updatedAt: UtcTimestampV1;
+}
 
 interface BootstrapJournalCommonV1 {
   readonly schemaVersion: 1;
   readonly id: FreshV2InitIdV1 | ManifestMigrationIdV1;
   readonly planHash: LowerHexSha256;
+  readonly slot: 0 | 1;
+  readonly sequence: UInt64DecimalV1;
+  readonly previousJournalHash: LowerHexSha256 | null;
   readonly phase: BootstrapJournalPhaseV1;
   readonly direction: "forward" | "compensating";
   readonly nextPayload: number;
@@ -365,9 +390,10 @@ interface BootstrapJournalCommonV1 {
   readonly nextLaunchabilityPath: number;
   readonly manifestCursor: number;
   readonly compensationNext: number | null;
-  readonly payloadCleanupPart: "staged_file" | "evidence" | null;
+  readonly payloadRetentionPart: "staged_file" | "evidence" | null;
   readonly terminalOutcome: "finalized" | "rolled_back" | null;
-  readonly compactionNext: number | null;
+  readonly retentionNext: number | null;
+  readonly retentionTerminalPreimage?: BootstrapRetentionTerminalPreimageV1;
   readonly createdAt: UtcTimestampV1;
   readonly updatedAt: UtcTimestampV1;
 }
@@ -419,118 +445,6 @@ export interface BootstrapPlanAdmissionContextV1 {
     value: CanonicalJsonValue,
   ) => CanonicalJsonValue;
 }
-
-export interface BootstrapTempInventoryV1 {
-  readonly path: CanonicalAbsolutePathV1;
-  readonly prefixEvidenceId: string;
-  readonly ownerUid: number;
-  readonly mode: 0o600;
-  readonly nlink: 1;
-  readonly bytes: number;
-  readonly dev: UInt64DecimalV1;
-  readonly ino: UInt64DecimalV1;
-}
-
-export interface BootstrapPreIntentObservationV1 {
-  readonly proofId: string;
-  readonly observation: unknown;
-}
-
-export interface BootstrapEnvelopeInventoryV1 {
-  readonly operation: "fresh_v2_init" | "v1_to_v2";
-  readonly id: FreshV2InitIdV1 | ManifestMigrationIdV1;
-  readonly plan: unknown;
-  readonly journal: unknown;
-  readonly planTemps: readonly BootstrapTempInventoryV1[];
-  readonly journalTemps: readonly BootstrapTempInventoryV1[];
-  readonly payloadEvidence: readonly unknown[];
-  readonly createdPathEvidence: readonly unknown[];
-  readonly foundationStates: readonly unknown[];
-  readonly manifestState: unknown;
-  readonly terminalState: unknown;
-  readonly preIntentObservation: BootstrapPreIntentObservationV1 | null;
-  readonly stagingEntries: readonly CanonicalAbsolutePathV1[];
-  readonly unknownEntries: readonly CanonicalAbsolutePathV1[];
-}
-
-export interface BootstrapInventoryV1 {
-  readonly schemaVersion: 1;
-  readonly inventoryId: string;
-  readonly entryCount: number;
-  readonly envelopes: readonly BootstrapEnvelopeInventoryV1[];
-  readonly unknownEntries: readonly CanonicalAbsolutePathV1[];
-}
-
-export interface BootstrapClosureAdmissionContextV1 {
-  readonly admitGuardedInventory: (inventory: BootstrapInventoryV1) => string;
-  readonly planAdmission: BootstrapPlanAdmissionContextV1;
-  readonly admitPayloadEvidence: (
-    value: unknown,
-    ref: BootstrapExpectedPayloadRefV1,
-    source: BootstrapPayloadSourceV1,
-  ) => BootstrapPayloadEvidenceV1;
-  readonly admitCreatedPathEvidence: (
-    value: unknown,
-    planned: PlannedCreatedPathV1,
-    scope: "ordinary" | "launchability",
-    ordinal: number,
-  ) => CreatedPathEvidenceV1;
-  readonly admitFoundationState: (
-    value: unknown,
-    participant: FoundationParticipantRefV2,
-    expectation: "phase_bound" | "terminal",
-  ) => string;
-  readonly admitManifestState: (value: unknown, manifest: ManifestStatePlanV1) => string;
-  readonly admitTerminalState: (value: unknown, plan: BootstrapExecutionPlanV1) => "preimage" | "postimage";
-  readonly admitTemporaryPrefix: (
-    value: BootstrapTempInventoryV1,
-    kind: "plan" | "journal",
-    operation: "fresh_v2_init" | "v1_to_v2",
-    id: FreshV2InitIdV1 | ManifestMigrationIdV1,
-  ) => string;
-  readonly admitPreIntentObservation: (
-    value: BootstrapPreIntentObservationV1,
-    operation: "fresh_v2_init" | "v1_to_v2",
-    id: FreshV2InitIdV1 | ManifestMigrationIdV1,
-    plan: BootstrapExecutionPlanV1 | null,
-  ) => string;
-}
-
-export type BootstrapClosureV1 =
-  | { readonly state: "clear" }
-  | {
-      readonly state: "guarded_cleanable_plan_temp";
-      readonly operation: "fresh_v2_init" | "v1_to_v2";
-      readonly id: FreshV2InitIdV1 | ManifestMigrationIdV1;
-      readonly temporary: BootstrapTempInventoryV1;
-    }
-  | {
-      readonly state: "guarded_cleanable_plan_orphan";
-      readonly plan: BootstrapExecutionPlanV1;
-    }
-  | {
-      readonly state: "guarded_cleanable_journal_temp";
-      readonly finalJournal: "absent";
-      readonly plan: BootstrapExecutionPlanV1;
-      readonly temporary: BootstrapTempInventoryV1;
-    }
-  | {
-      readonly state: "guarded_cleanable_journal_temp";
-      readonly finalJournal: "present";
-      readonly plan: BootstrapExecutionPlanV1;
-      readonly journal: FreshV2InitJournalV1 | ManifestMigrationJournalV1;
-      readonly temporary: BootstrapTempInventoryV1;
-    }
-  | {
-      readonly state: "recovery_required";
-      readonly plan: BootstrapExecutionPlanV1;
-      readonly journal: FreshV2InitJournalV1 | ManifestMigrationJournalV1;
-    }
-  | {
-      readonly state: "plan_last_compaction";
-      readonly plan: BootstrapExecutionPlanV1;
-      readonly terminalOutcome: "finalized" | "rolled_back";
-    };
 
 function refuse(message?: string): never {
   throw new BootstrapStateError(message);
@@ -663,14 +577,16 @@ export function deriveBootstrapEnvelopePaths(
   id: FreshV2InitIdV1 | ManifestMigrationIdV1,
 ): {
   readonly plan: ExactProductStatePathV1;
-  readonly journal: ExactProductStatePathV1;
+  readonly journalSlots: readonly [ExactProductStatePathV1, ExactProductStatePathV1];
   readonly stagingRoot: CanonicalAbsolutePathV1;
 } {
   const admittedId = operationId(operation, id);
   const prefix = operation === "fresh_v2_init" ? "fresh-v2-init" : "manifest-migration";
   return {
     plan: deriveAbsolute(productHome, `state/${prefix}.${admittedId}.plan.json`) as ExactProductStatePathV1,
-    journal: deriveAbsolute(productHome, `state/${prefix}.${admittedId}.journal.json`) as ExactProductStatePathV1,
+    journalSlots: [0, 1].map((slot) =>
+      deriveAbsolute(productHome, `state/${prefix}.${admittedId}.journal.${String(slot)}.json`) as ExactProductStatePathV1,
+    ) as unknown as readonly [ExactProductStatePathV1, ExactProductStatePathV1],
     stagingRoot: deriveAbsolute(productHome, `staging/${prefix}/${admittedId}`),
   };
 }
@@ -933,9 +849,11 @@ function validateJournalTable(
   journal: BootstrapJournalCommonV1,
   counts: { readonly payloads: number; readonly created: number; readonly foundation: number; readonly launchability: number },
 ): void {
+  const retentionPhase = journal.phase === "retaining" || journal.phase === "retained";
+  if (retentionPhase !== (journal.retentionTerminalPreimage !== undefined)) refuse();
   const idle = journal.payloadWriteState.state === "idle";
-  const noCompensation = journal.compensationNext === null && journal.payloadCleanupPart === null;
-  const noTerminal = journal.terminalOutcome === null && journal.compactionNext === null;
+  const noCompensation = journal.compensationNext === null && journal.payloadRetentionPart === null;
+  const noTerminal = journal.terminalOutcome === null && journal.retentionNext === null;
   const allComplete =
     journal.nextPayload === counts.payloads &&
     journal.nextCreatedPath === counts.created &&
@@ -965,20 +883,27 @@ function validateJournalTable(
       if (!(journal.direction === "forward" && idle && allComplete && journal.manifestCursor >= 2 && journal.manifestCursor <= 3 && noCompensation && noTerminal)) refuse();
       return;
     case "compensating":
-      if (!(journal.direction === "compensating" && journal.manifestCursor < 2 && journal.compensationNext !== null && journal.compensationNext >= -1 && hasForwardPrefix(journal, counts) && journal.terminalOutcome === null && journal.compactionNext === null)) refuse();
+      if (!(journal.direction === "compensating" && journal.manifestCursor < 2 && journal.compensationNext !== null && journal.compensationNext >= -1 && hasForwardPrefix(journal, counts) && journal.terminalOutcome === null && journal.retentionNext === null)) refuse();
       if (journal.compensationNext >= reachedReversibleStepCount(journal)) refuse();
-      if (journal.payloadWriteState.state !== "idle" && journal.compensationNext !== journal.nextPayload) refuse();
-      if (journal.payloadCleanupPart !== null && (journal.compensationNext < 0 || journal.compensationNext >= counts.payloads)) refuse();
+      if (
+        journal.payloadWriteState.state !== "idle" &&
+        journal.compensationNext !== journal.nextPayload &&
+        !(journal.payloadWriteState.state === "writing" && journal.compensationNext === -1)
+      ) refuse();
+      if (journal.payloadRetentionPart !== null && (journal.compensationNext < 0 || journal.compensationNext >= counts.payloads)) refuse();
       return;
     case "rolled_back":
-      if (!(journal.direction === "compensating" && idle && journal.manifestCursor < 2 && journal.compensationNext === -1 && journal.payloadCleanupPart === null && journal.terminalOutcome === "rolled_back" && journal.compactionNext === null && hasForwardPrefix(journal, counts))) refuse();
+      if (!(journal.direction === "compensating" && journal.payloadWriteState.state !== "create_intent" && journal.manifestCursor < 2 && journal.compensationNext === -1 && journal.payloadRetentionPart === null && journal.terminalOutcome === "rolled_back" && journal.retentionNext === null && hasForwardPrefix(journal, counts))) refuse();
       return;
     case "finalized":
-      if (!(journal.direction === "forward" && idle && allComplete && journal.manifestCursor === 3 && noCompensation && journal.terminalOutcome === "finalized" && journal.compactionNext === null)) refuse();
+      if (!(journal.direction === "forward" && idle && allComplete && journal.manifestCursor === 3 && noCompensation && journal.terminalOutcome === "finalized" && journal.retentionNext === null)) refuse();
       return;
-    case "compacting": {
+    case "retaining":
+    case "retained": {
       const terminalDirection = journal.terminalOutcome === "finalized" ? "forward" : "compensating";
-      if (!(idle && journal.direction === terminalDirection && journal.terminalOutcome !== null && journal.compactionNext !== null && journal.payloadCleanupPart === null)) refuse();
+      const retainedPayloadState = idle ||
+        (journal.terminalOutcome === "rolled_back" && journal.payloadWriteState.state === "writing");
+      if (!(retainedPayloadState && journal.direction === terminalDirection && journal.terminalOutcome !== null && journal.retentionNext !== null && journal.payloadRetentionPart === null)) refuse();
       if (journal.terminalOutcome === "finalized" && !(allComplete && journal.manifestCursor === 3 && journal.compensationNext === null)) refuse();
       if (journal.terminalOutcome === "rolled_back" && !(journal.manifestCursor < 2 && journal.compensationNext === -1 && hasForwardPrefix(journal, counts))) refuse();
       return;
@@ -992,8 +917,8 @@ export function validateBootstrapJournal(
 ): FreshV2InitJournalV1 | ManifestMigrationJournalV1 {
   try {
     const input = record(value);
-    exact(input, [
-      "compactionNext",
+    const retentionPhase = input.phase === "retaining" || input.phase === "retained";
+    const journalKeys = [
       "compensationNext",
       "createdAt",
       "direction",
@@ -1003,27 +928,53 @@ export function validateBootstrapJournal(
       "nextFoundationParticipant",
       "nextLaunchabilityPath",
       "nextPayload",
-      "payloadCleanupPart",
+      "payloadRetentionPart",
       "payloadWriteState",
       "phase",
       "planHash",
+      "previousJournalHash",
+      "retentionNext",
       "schemaVersion",
+      "sequence",
+      "slot",
       "terminalOutcome",
       "updatedAt",
-    ]);
+    ] as const;
+    exact(input, retentionPhase
+      ? [...journalKeys, "retentionTerminalPreimage"]
+      : journalKeys);
     if (input.schemaVersion !== 1 || input.id !== plan.id || input.planHash !== planHash(plan)) return refuse();
-    const phases: readonly BootstrapJournalPhaseV1[] = ["planned", "payload_staging", "creating", "foundation_applying", "launchability_publishing", "manifest_publishing", "verifying", "compensating", "finalized", "rolled_back", "compacting"];
+    const phases: readonly BootstrapJournalPhaseV1[] = ["planned", "payload_staging", "creating", "foundation_applying", "launchability_publishing", "manifest_publishing", "verifying", "compensating", "finalized", "rolled_back", "retaining", "retained"];
     if (typeof input.phase !== "string" || !phases.includes(input.phase as BootstrapJournalPhaseV1)) return refuse();
     if (input.direction !== "forward" && input.direction !== "compensating") return refuse();
-    if (input.payloadCleanupPart !== null && input.payloadCleanupPart !== "staged_file" && input.payloadCleanupPart !== "evidence") return refuse();
+    if (input.payloadRetentionPart !== null && input.payloadRetentionPart !== "staged_file" && input.payloadRetentionPart !== "evidence") return refuse();
     if (input.terminalOutcome !== null && input.terminalOutcome !== "finalized" && input.terminalOutcome !== "rolled_back") return refuse();
+    if (input.slot !== 0 && input.slot !== 1) return refuse();
+    const sequence = uint64(input.sequence);
+    const previousJournalHash = input.previousJournalHash === null ? null : sha256(input.previousJournalHash);
+    if ((sequence === "0") !== (previousJournalHash === null) || input.slot !== Number(BigInt(sequence) % 2n)) return refuse();
     const forwardCount = plan.foundationParticipants.filter((participant) => participant.role.kind === "forward").length;
     const nextPayload = integer(input.nextPayload, 0, Math.min(MAX_STAGING_ENTRIES, plan.payloads.length));
     const payloadWriteState = validatePayloadWriteState(input.payloadWriteState, nextPayload, plan.payloads.length);
+    const retentionTerminalPreimage = retentionPhase
+      ? (() => {
+          const preimage = record(input.retentionTerminalPreimage);
+          exact(preimage, ["previousJournalHash", "updatedAt"]);
+          return {
+            previousJournalHash: preimage.previousJournalHash === null
+              ? null
+              : sha256(preimage.previousJournalHash),
+            updatedAt: timestamp(preimage.updatedAt),
+          } satisfies BootstrapRetentionTerminalPreimageV1;
+        })()
+      : undefined;
     const journal: BootstrapJournalCommonV1 = {
       schemaVersion: 1,
       id: plan.id,
       planHash: sha256(input.planHash),
+      slot: input.slot,
+      sequence,
+      previousJournalHash,
       phase: input.phase as BootstrapJournalPhaseV1,
       direction: input.direction,
       nextPayload,
@@ -1033,585 +984,20 @@ export function validateBootstrapJournal(
       nextLaunchabilityPath: integer(input.nextLaunchabilityPath, 0, Math.min(MAX_LAUNCHABILITY_PATHS, plan.launchabilityPaths.length)),
       manifestCursor: integer(input.manifestCursor, 0, 3),
       compensationNext: input.compensationNext === null ? null : integer(input.compensationNext, -1, MAX_COMPENSATION_NEXT),
-      payloadCleanupPart: input.payloadCleanupPart,
+      payloadRetentionPart: input.payloadRetentionPart,
       terminalOutcome: input.terminalOutcome,
-      compactionNext:
-        input.compactionNext === null
+      retentionNext:
+        input.retentionNext === null
           ? null
-          : integer(input.compactionNext, 0, MAX_COMPACTION_NEXT),
+          : integer(input.retentionNext, 0, MAX_RETENTION_NEXT),
+      ...(retentionTerminalPreimage === undefined ? {} : { retentionTerminalPreimage }),
       createdAt: timestamp(input.createdAt),
       updatedAt: timestamp(input.updatedAt),
     };
     validateJournalTable(journal, { payloads: plan.payloads.length, created: plan.createdPaths.length, foundation: forwardCount, launchability: plan.launchabilityPaths.length });
-    if (journal.phase === "compacting") {
-      const outcome = journal.terminalOutcome;
-      const cursor = journal.compactionNext;
-      if (
-        outcome === null ||
-        cursor === null ||
-        cursor >= bootstrapCompactionTable(plan).length
-      ) return refuse();
-    }
+    if (sequence === "0" && journal.phase !== "planned") return refuse();
     if (encoder.encode(encodeCanonicalJson(journal as unknown as CanonicalJsonValue)).byteLength > plan.maximumJournalBytes) return refuse();
     return structuredClone(journal) as FreshV2InitJournalV1 | ManifestMigrationJournalV1;
-  } catch (error) {
-    return normalizeFailure(error);
-  }
-}
-
-function validateTemporaryInventory(
-  value: unknown,
-  kind: "plan" | "journal",
-  operation: "fresh_v2_init" | "v1_to_v2",
-  id: FreshV2InitIdV1 | ManifestMigrationIdV1,
-  context: BootstrapClosureAdmissionContextV1,
-): BootstrapTempInventoryV1 {
-  const input = record(value);
-  exact(input, [
-    "bytes",
-    "dev",
-    "ino",
-    "mode",
-    "nlink",
-    "ownerUid",
-    "path",
-    "prefixEvidenceId",
-  ]);
-  const uuid = validateUuid(
-    typeof input.path === "string"
-      ? new RegExp(
-          `^${context.planAdmission.stateRoot.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}/\\.${operation === "fresh_v2_init" ? "fresh-v2-init" : "manifest-migration"}\\.${String(id).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\.(${UUID_V4})\\.${kind}\\.json\\.tmp$`,
-          "u",
-        ).exec(input.path)?.[1]
-      : undefined,
-  );
-  const expectedPath = `${context.planAdmission.stateRoot}/.${operation === "fresh_v2_init" ? "fresh-v2-init" : "manifest-migration"}.${id}.${uuid}.${kind}.json.tmp`;
-  const path = admitCanonicalAbsolutePath(input.path, context.planAdmission.evidence);
-  const maximumBytes = kind === "plan" ? MAX_PLAN_BYTES : MAX_JOURNAL_BYTES;
-  if (
-    path !== expectedPath ||
-    typeof input.prefixEvidenceId !== "string" ||
-    input.prefixEvidenceId.length < 1 ||
-    encoder.encode(input.prefixEvidenceId).byteLength > 256 ||
-    input.ownerUid !== context.planAdmission.bootstrapIdentity.ownerUid ||
-    input.mode !== 0o600 ||
-    input.nlink !== 1
-  ) return refuse();
-  const temporary: BootstrapTempInventoryV1 = {
-    path,
-    prefixEvidenceId: input.prefixEvidenceId,
-    ownerUid: uid(input.ownerUid),
-    mode: 0o600,
-    nlink: 1,
-    bytes: integer(input.bytes, 0, maximumBytes),
-    dev: uint64(input.dev),
-    ino: uint64(input.ino),
-  };
-  const snapshot = retainedClone(temporary);
-  const expectedProofId = snapshot.prefixEvidenceId;
-  if (
-    context.admitTemporaryPrefix(retainedClone(snapshot), kind, operation, id) !==
-    expectedProofId
-  ) return refuse();
-  return snapshot;
-}
-
-function validatePreIntentObservation(
-  value: unknown,
-  operation: "fresh_v2_init" | "v1_to_v2",
-  id: FreshV2InitIdV1 | ManifestMigrationIdV1,
-  plan: BootstrapExecutionPlanV1 | null,
-  context: BootstrapClosureAdmissionContextV1,
-): BootstrapPreIntentObservationV1 {
-  const input = record(value);
-  exact(input, ["observation", "proofId"]);
-  if (
-    typeof input.proofId !== "string" ||
-    input.proofId.length < 1 ||
-    encoder.encode(input.proofId).byteLength > 256
-  ) return refuse();
-  const snapshot: BootstrapPreIntentObservationV1 = {
-    proofId: input.proofId,
-    observation: retainedClone(input.observation),
-  };
-  const expectedProofId = snapshot.proofId;
-  const admitted = context.admitPreIntentObservation(
-    retainedClone(snapshot),
-    operation,
-    id,
-    plan === null ? null : retainedClone(plan),
-  );
-  if (admitted !== expectedProofId) return refuse();
-  return snapshot;
-}
-
-function validateInventoryShape(inventory: BootstrapInventoryV1): void {
-  const input = record(inventory);
-  exact(input, ["entryCount", "envelopes", "inventoryId", "schemaVersion", "unknownEntries"]);
-  if (input.schemaVersion !== 1 || typeof input.inventoryId !== "string" || input.inventoryId.length < 1) refuse();
-  integer(input.entryCount, 0, MAX_STAGING_ENTRIES);
-  if (!Array.isArray(input.envelopes) || input.envelopes.length > 1 || !Array.isArray(input.unknownEntries)) refuse();
-  if (inventory.unknownEntries.length !== 0) refuse();
-  const firstEnvelope = inventory.envelopes[0];
-  if (firstEnvelope !== undefined) {
-    const envelope = record(firstEnvelope);
-    exact(envelope, [
-      "createdPathEvidence",
-      "foundationStates",
-      "id",
-      "journal",
-      "journalTemps",
-      "manifestState",
-      "operation",
-      "payloadEvidence",
-      "plan",
-      "planTemps",
-      "preIntentObservation",
-      "stagingEntries",
-      "terminalState",
-      "unknownEntries",
-    ]);
-  }
-}
-
-function closureEvidenceCounts(
-  plan: BootstrapExecutionPlanV1,
-  journal: FreshV2InitJournalV1 | ManifestMigrationJournalV1,
-): { readonly payload: number; readonly ordinary: number; readonly launchability: number } {
-  if (journal.phase === "compensating" || journal.phase === "rolled_back") {
-    const remaining = (journal.compensationNext ?? -1) + 1;
-    return {
-      payload: Math.min(journal.nextPayload, Math.max(0, remaining)),
-      ordinary: Math.min(
-        journal.nextCreatedPath,
-        Math.max(0, remaining - plan.payloads.length),
-      ),
-      launchability: Math.min(
-        journal.nextLaunchabilityPath,
-        Math.max(
-          0,
-          remaining -
-            plan.payloads.length -
-            plan.createdPaths.length -
-            plan.foundationParticipants.filter((participant) => participant.role.kind === "forward").length,
-        ),
-      ),
-    };
-  }
-  if (journal.phase === "compacting" && journal.terminalOutcome === "rolled_back") {
-    return { payload: 0, ordinary: 0, launchability: 0 };
-  }
-  return {
-    payload: journal.nextPayload,
-    ordinary: journal.nextCreatedPath,
-    launchability: journal.nextLaunchabilityPath,
-  };
-}
-
-type BootstrapCompactionEntryV1 =
-  | { readonly kind: "payload"; readonly ordinal: number }
-  | {
-      readonly kind: "creation";
-      readonly scope: "ordinary" | "launchability";
-      readonly ordinal: number;
-    }
-  | { readonly kind: "foundation"; readonly ordinal: number }
-  | { readonly kind: "staging"; readonly path: CanonicalAbsolutePathV1 }
-  | { readonly kind: "journal" };
-
-interface BootstrapClosureEvidenceProjectionV1 {
-  readonly payloadOrdinals: readonly number[];
-  readonly creations: readonly {
-    readonly scope: "ordinary" | "launchability";
-    readonly ordinal: number;
-  }[];
-  readonly foundationOrdinals: readonly number[];
-  readonly foundationExpectation: "phase_bound" | "terminal";
-  readonly stagingEntries: readonly CanonicalAbsolutePathV1[];
-}
-
-function productStagingRootOf(plan: BootstrapExecutionPlanV1): CanonicalAbsolutePathV1 {
-  const envelopeRoot =
-    plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot;
-  return dirname(dirname(envelopeRoot)) as CanonicalAbsolutePathV1;
-}
-
-function plannedStagingEntries(
-  plan: BootstrapExecutionPlanV1,
-  productStagingRoot = productStagingRootOf(plan),
-): readonly CanonicalAbsolutePathV1[] {
-  return [...plan.createdPaths, ...plan.launchabilityPaths]
-    .map((planned) => planned.path)
-    .filter(
-      (path) =>
-        typeof path === "string" &&
-        (path === productStagingRoot ||
-          path.startsWith(`${productStagingRoot}/`)),
-    );
-}
-
-function bootstrapCompactionTable(
-  plan: BootstrapExecutionPlanV1,
-): readonly BootstrapCompactionEntryV1[] {
-  const foundation = plan.foundationParticipants.map((_, ordinal) => ({
-    kind: "foundation" as const,
-    ordinal,
-  }));
-  return [
-    ...plan.payloads.map((_, ordinal) => ({ kind: "payload" as const, ordinal })),
-    ...plan.createdPaths.map((_, ordinal) => ({
-      kind: "creation" as const,
-      scope: "ordinary" as const,
-      ordinal,
-    })),
-    ...plan.launchabilityPaths.map((_, ordinal) => ({
-      kind: "creation" as const,
-      scope: "launchability" as const,
-      ordinal,
-    })),
-    ...foundation,
-    ...[...plannedStagingEntries(plan)].reverse().map((path) => ({
-      kind: "staging" as const,
-      path,
-    })),
-    { kind: "journal" as const },
-  ];
-}
-
-function projectionFromCompactionSuffix(
-  plan: BootstrapExecutionPlanV1,
-  entries: readonly BootstrapCompactionEntryV1[],
-  terminalOutcome: "finalized" | "rolled_back",
-): BootstrapClosureEvidenceProjectionV1 | null {
-  if (!entries.some((entry) => entry.kind === "journal")) return null;
-  const terminalEntries =
-    terminalOutcome === "finalized"
-      ? entries
-      : entries.filter(
-          (entry) =>
-            entry.kind === "foundation" || entry.kind === "journal",
-        );
-  const staging = new Set(
-    terminalEntries
-      .filter((entry) => entry.kind === "staging")
-      .map((entry) => entry.path),
-  );
-  return {
-    payloadOrdinals: terminalEntries
-      .filter((entry) => entry.kind === "payload")
-      .map((entry) => entry.ordinal),
-    creations: terminalEntries
-      .filter((entry) => entry.kind === "creation")
-      .map((entry) => ({ scope: entry.scope, ordinal: entry.ordinal })),
-    foundationOrdinals: terminalEntries
-      .filter((entry) => entry.kind === "foundation")
-      .map((entry) => entry.ordinal),
-    foundationExpectation: "terminal",
-    stagingEntries: plannedStagingEntries(plan).filter((path) => staging.has(path)),
-  };
-}
-
-function closureEvidenceProjections(
-  plan: BootstrapExecutionPlanV1,
-  journal: FreshV2InitJournalV1 | ManifestMigrationJournalV1,
-  productStagingRoot: CanonicalAbsolutePathV1,
-): readonly BootstrapClosureEvidenceProjectionV1[] {
-  if (journal.phase === "compacting") {
-    const cursor = journal.compactionNext;
-    const outcome = journal.terminalOutcome;
-    if (cursor === null || outcome === null) return refuse();
-    const table = bootstrapCompactionTable(plan);
-    if (table[cursor] === undefined) return refuse();
-    const candidates = [
-      projectionFromCompactionSuffix(plan, table.slice(cursor), outcome),
-      projectionFromCompactionSuffix(plan, table.slice(cursor + 1), outcome),
-    ].filter(
-      (projection): projection is BootstrapClosureEvidenceProjectionV1 =>
-        projection !== null,
-    );
-    return candidates.filter(
-      (candidate, index) =>
-        !candidates
-          .slice(0, index)
-          .some((earlier) => jsonEqual(earlier, candidate)),
-    );
-  }
-  const counts = closureEvidenceCounts(plan, journal);
-  const projection = (candidate: typeof counts): BootstrapClosureEvidenceProjectionV1 => ({
-      payloadOrdinals: Array.from({ length: candidate.payload }, (_, ordinal) => ordinal),
-      creations: [
-        ...Array.from({ length: candidate.ordinary }, (_, ordinal) => ({
-          scope: "ordinary" as const,
-          ordinal,
-        })),
-        ...Array.from({ length: candidate.launchability }, (_, ordinal) => ({
-          scope: "launchability" as const,
-          ordinal,
-        })),
-      ],
-      foundationOrdinals: plan.foundationParticipants.map((_, ordinal) => ordinal),
-      foundationExpectation: "phase_bound",
-      stagingEntries: [
-        ...plan.createdPaths.slice(0, candidate.ordinary),
-        ...plan.launchabilityPaths.slice(0, candidate.launchability),
-      ]
-        .map((planned) => planned.path)
-        .filter(
-          (path) =>
-            path === productStagingRoot ||
-            path.startsWith(`${productStagingRoot}/`),
-        ),
-    });
-  const candidates = [projection(counts)];
-  if (
-    journal.phase === "payload_staging" &&
-    journal.payloadWriteState.state === "writing" &&
-    journal.payloadWriteState.ordinal === journal.nextPayload &&
-    journal.nextPayload < plan.payloads.length
-  ) {
-    candidates.push(projection({ ...counts, payload: counts.payload + 1 }));
-  }
-  if (journal.phase === "creating" && journal.nextCreatedPath < plan.createdPaths.length) {
-    candidates.push(projection({ ...counts, ordinary: counts.ordinary + 1 }));
-  }
-  if (
-    journal.phase === "launchability_publishing" &&
-    journal.nextLaunchabilityPath < plan.launchabilityPaths.length
-  ) {
-    candidates.push(projection({ ...counts, launchability: counts.launchability + 1 }));
-  }
-  return candidates;
-}
-
-export function inspectBootstrapClosure(
-  inventory: BootstrapInventoryV1,
-  context: BootstrapClosureAdmissionContextV1,
-): BootstrapClosureV1 {
-  try {
-    const retainedInventory = retainedClone(inventory);
-    validateInventoryShape(retainedInventory);
-    const expectedInventoryId = retainedInventory.inventoryId;
-    if (
-      context.admitGuardedInventory(retainedClone(retainedInventory)) !==
-      expectedInventoryId
-    ) return refuse();
-    inventory = retainedInventory;
-    if (inventory.envelopes.length === 0) {
-      if (inventory.entryCount !== 0) return refuse();
-      return { state: "clear" };
-    }
-
-    const envelope = inventory.envelopes[0];
-    if (envelope === undefined || envelope.operation !== context.planAdmission.operation || envelope.id !== context.planAdmission.id) return refuse();
-    operationId(envelope.operation, envelope.id);
-    if (
-      !Array.isArray(envelope.unknownEntries) ||
-      !Array.isArray(envelope.planTemps) ||
-      !Array.isArray(envelope.journalTemps) ||
-      !Array.isArray(envelope.payloadEvidence) ||
-      !Array.isArray(envelope.createdPathEvidence) ||
-      !Array.isArray(envelope.foundationStates) ||
-      !Array.isArray(envelope.stagingEntries) ||
-      envelope.unknownEntries.length !== 0 ||
-      envelope.planTemps.length > 1 ||
-      envelope.journalTemps.length > 1 ||
-      envelope.payloadEvidence.length > MAX_STAGING_ENTRIES ||
-      envelope.createdPathEvidence.length > MAX_STAGING_ENTRIES ||
-      envelope.foundationStates.length > MAX_FOUNDATION_PARTICIPANTS
-    ) return refuse();
-    if (envelope.journal !== null && envelope.plan === null) return refuse();
-
-    if (envelope.plan === null) {
-      if (
-        envelope.journal !== null ||
-        envelope.planTemps.length !== 1 ||
-        envelope.journalTemps.length !== 0 ||
-        envelope.payloadEvidence.length !== 0 ||
-        envelope.createdPathEvidence.length !== 0 ||
-        envelope.foundationStates.length !== 0 ||
-        envelope.manifestState !== null ||
-        envelope.terminalState !== null ||
-        envelope.preIntentObservation === null ||
-        envelope.stagingEntries.length !== 0
-      ) return refuse();
-      validatePreIntentObservation(
-        envelope.preIntentObservation,
-        envelope.operation,
-        envelope.id,
-        null,
-        context,
-      );
-      const temporary = validateTemporaryInventory(
-        envelope.planTemps[0],
-        "plan",
-        envelope.operation,
-        envelope.id,
-        context,
-      );
-      return { state: "guarded_cleanable_plan_temp", operation: envelope.operation, id: envelope.id, temporary: structuredClone(temporary) };
-    }
-
-    const plan = validateBootstrapPlan(envelope.plan, context.planAdmission);
-    if (plan.operation !== envelope.operation || plan.id !== envelope.id) return refuse();
-    if (envelope.planTemps.length !== 0) return refuse();
-
-    if (envelope.journal === null) {
-      if (envelope.payloadEvidence.length !== 0 || envelope.createdPathEvidence.length !== 0 || envelope.foundationStates.length !== 0 || envelope.manifestState !== null || envelope.stagingEntries.length !== 0) return refuse();
-      if (envelope.journalTemps.length === 1) {
-        if (envelope.terminalState !== null || envelope.preIntentObservation === null) return refuse();
-        validatePreIntentObservation(
-          envelope.preIntentObservation,
-          envelope.operation,
-          envelope.id,
-          plan,
-          context,
-        );
-        const temporary = validateTemporaryInventory(
-          envelope.journalTemps[0],
-          "journal",
-          envelope.operation,
-          envelope.id,
-          context,
-        );
-        return {
-          state: "guarded_cleanable_journal_temp",
-          finalJournal: "absent",
-          plan,
-          temporary,
-        };
-      }
-      if (envelope.terminalState === null) {
-        if (envelope.preIntentObservation === null) return refuse();
-        validatePreIntentObservation(
-          envelope.preIntentObservation,
-          envelope.operation,
-          envelope.id,
-          plan,
-          context,
-        );
-        return { state: "guarded_cleanable_plan_orphan", plan };
-      }
-      if (envelope.preIntentObservation !== null) return refuse();
-      const terminalSnapshot = retainedClone(envelope.terminalState);
-      const terminal = context.admitTerminalState(
-        retainedClone(terminalSnapshot),
-        retainedClone(plan),
-      );
-      return { state: "plan_last_compaction", plan, terminalOutcome: terminal === "postimage" ? "finalized" : "rolled_back" };
-    }
-
-    if (envelope.preIntentObservation !== null) return refuse();
-
-    const journal = validateBootstrapJournal(plan, envelope.journal);
-    if (journal.terminalOutcome === null) {
-      if (envelope.terminalState !== null) return refuse();
-    } else {
-      if (envelope.terminalState === null) return refuse();
-      const terminalSnapshot = retainedClone(envelope.terminalState);
-      const observedTerminal = context.admitTerminalState(
-        retainedClone(terminalSnapshot),
-        retainedClone(plan),
-      );
-      const expectedTerminal =
-        journal.terminalOutcome === "finalized" ? "postimage" : "preimage";
-      if (observedTerminal !== expectedTerminal) return refuse();
-    }
-    const journalTemporary = envelope.journalTemps.length === 1
-      ? validateTemporaryInventory(
-        envelope.journalTemps[0],
-        "journal",
-        envelope.operation,
-        envelope.id,
-        context,
-      )
-      : null;
-    if (journal.phase === "planned" && envelope.stagingEntries.length !== 0) return refuse();
-    const projections = closureEvidenceProjections(
-      plan,
-      journal,
-      context.planAdmission.productStagingRoot,
-    );
-    const matchingProjections = projections.filter(
-      (projection) =>
-        envelope.payloadEvidence.length === projection.payloadOrdinals.length &&
-        envelope.createdPathEvidence.length === projection.creations.length &&
-        envelope.foundationStates.length === projection.foundationOrdinals.length &&
-        jsonEqual(envelope.stagingEntries, projection.stagingEntries),
-    );
-    if (matchingProjections.length !== 1) return refuse();
-    const projection = matchingProjections[0];
-    if (projection === undefined) return refuse();
-    for (let index = 0; index < envelope.payloadEvidence.length; index += 1) {
-      const ordinal = projection.payloadOrdinals[index];
-      if (ordinal === undefined) return refuse();
-      const row = plan.payloads[ordinal];
-      if (row === undefined) return refuse();
-      const evidenceValue: unknown = envelope.payloadEvidence[index];
-      const evidenceSnapshot: unknown = retainedClone(evidenceValue);
-      const admitted = context.admitPayloadEvidence(
-        retainedClone(evidenceSnapshot),
-        retainedClone(row.ref),
-        retainedClone(row.source),
-      );
-      if (!jsonEqual(admitted, evidenceSnapshot)) return refuse();
-      validateBootstrapPayloadEvidence(evidenceSnapshot, row.ref, row.source);
-    }
-    for (let index = 0; index < projection.creations.length; index += 1) {
-      const creation = projection.creations[index];
-      if (creation === undefined) return refuse();
-      const planned =
-        creation.scope === "ordinary"
-          ? plan.createdPaths[creation.ordinal]
-          : plan.launchabilityPaths[creation.ordinal];
-      if (planned === undefined) return refuse();
-      const evidenceValue: unknown = envelope.createdPathEvidence[index];
-      const evidenceSnapshot: unknown = retainedClone(evidenceValue);
-      const admitted = context.admitCreatedPathEvidence(
-        retainedClone(evidenceSnapshot),
-        retainedClone(planned),
-        creation.scope,
-        creation.ordinal,
-      );
-      if (!jsonEqual(admitted, evidenceSnapshot)) return refuse();
-      validateCreatedPathEvidence(
-        evidenceSnapshot,
-        planned,
-        plan.id,
-        creation.scope,
-        creation.ordinal,
-      );
-    }
-    for (let index = 0; index < projection.foundationOrdinals.length; index += 1) {
-      const ordinal = projection.foundationOrdinals[index];
-      if (ordinal === undefined) return refuse();
-      const participant = plan.foundationParticipants[ordinal];
-      if (participant === undefined) return refuse();
-      const expectedParticipantId = participant.id;
-      if (
-        context.admitFoundationState(
-          retainedClone(envelope.foundationStates[index]),
-          retainedClone(participant),
-          projection.foundationExpectation,
-        ) !== expectedParticipantId
-      ) return refuse();
-    }
-    const expectedManifestId = plan.manifest.participantId;
-    if (
-      envelope.manifestState === null ||
-      context.admitManifestState(
-        retainedClone(envelope.manifestState),
-        retainedClone(plan.manifest),
-      ) !== expectedManifestId
-    ) return refuse();
-    return journalTemporary === null
-      ? { state: "recovery_required", plan, journal }
-      : {
-          state: "guarded_cleanable_journal_temp",
-          finalJournal: "present",
-          plan,
-          journal,
-          temporary: journalTemporary,
-        };
   } catch (error) {
     return normalizeFailure(error);
   }
@@ -1645,6 +1031,44 @@ function validateBootstrapIdentity(
   };
   if (identity.path !== `${context.stateRoot}/.lifecycle-bootstrap.lock` || !jsonEqual(identity, context.bootstrapIdentity)) return refuse();
   return identity;
+}
+
+function validateJournalSlots(
+  value: unknown,
+  expectedPaths: readonly [ExactProductStatePathV1, ExactProductStatePathV1],
+  context: BootstrapPlanAdmissionContextV1,
+): readonly [PersistedBootstrapJournalSlotIdentityV1, PersistedBootstrapJournalSlotIdentityV1] {
+  if (!Array.isArray(value) || value.length !== 2) return refuse();
+  const identities = new Set<string>();
+  const slots = ([0, 1] as const).map((expectedSlot) => {
+    const input = record(value[expectedSlot]);
+    exact(input, ["dev", "ino", "mode", "nlink", "ownerUid", "path", "slot"]);
+    const path = admitCanonicalAbsolutePath(input.path, context.evidence);
+    const dev = uint64(input.dev);
+    const ino = uint64(input.ino);
+    if (
+      input.slot !== expectedSlot ||
+      path !== expectedPaths[expectedSlot] ||
+      input.ownerUid !== context.bootstrapIdentity.ownerUid ||
+      input.mode !== 0o600 ||
+      input.nlink !== 1 ||
+      identities.has(`${dev}:${ino}`)
+    ) return refuse();
+    identities.add(`${dev}:${ino}`);
+    return {
+      slot: expectedSlot,
+      path: path as ExactProductStatePathV1,
+      ownerUid: uid(input.ownerUid),
+      mode: 0o600 as const,
+      nlink: 1 as const,
+      dev,
+      ino,
+    };
+  });
+  return slots as unknown as readonly [
+    PersistedBootstrapJournalSlotIdentityV1,
+    PersistedBootstrapJournalSlotIdentityV1,
+  ];
 }
 
 function validatePayloadRef(
@@ -2314,8 +1738,8 @@ export function validateBootstrapPlan(
     const input = record(value);
     if (input.operation !== "fresh_v2_init" && input.operation !== "v1_to_v2") return refuse();
     const operation = input.operation;
-    const freshKeys = ["admittedExternalShapeHash", "bootstrapIdentity", "createdPaths", "foundationParticipants", "id", "journalPath", "launchabilityPaths", "manifest", "maximumJournalBytes", "maximumPlanBytes", "maximumStagingEntries", "operation", "payloads", "planPath", "schemaVersion", "stagingRoot", "v2ManifestHash"];
-    const migrationKeys = ["bootstrapIdentity", "createdPaths", "foundationParticipants", "id", "launchabilityPaths", "manifest", "maximumJournalBytes", "maximumPlanBytes", "maximumStagingEntries", "operation", "paths", "payloads", "schemaVersion", "v1ManifestHash", "v2ManifestHash"];
+    const freshKeys = ["admittedExternalShapeHash", "bootstrapIdentity", "createdPaths", "foundationParticipants", "id", "journalSlots", "launchabilityPaths", "manifest", "maximumJournalBytes", "maximumPlanBytes", "maximumStagingEntries", "operation", "payloads", "planPath", "schemaVersion", "stagingRoot", "v2ManifestHash"];
+    const migrationKeys = ["bootstrapIdentity", "createdPaths", "foundationParticipants", "id", "journalSlots", "launchabilityPaths", "manifest", "maximumJournalBytes", "maximumPlanBytes", "maximumStagingEntries", "operation", "paths", "payloads", "schemaVersion", "v1ManifestHash", "v2ManifestHash"];
     exact(input, operation === "fresh_v2_init" ? freshKeys : migrationKeys);
     if (input.schemaVersion !== 1 || context.operation !== operation) return refuse();
     const id = operationId(operation, input.id);
@@ -2323,8 +1747,9 @@ export function validateBootstrapPlan(
     if (admitCanonicalAbsolutePath(context.productHome, context.evidence) !== context.productHome || context.stateRoot !== `${context.productHome}/state` || context.productStagingRoot !== `${context.productHome}/staging`) return refuse();
     const bootstrapIdentity = validateBootstrapIdentity(input.bootstrapIdentity, context);
     const paths = deriveBootstrapEnvelopePaths(context.productHome, operation, id);
+    const journalSlots = validateJournalSlots(input.journalSlots, paths.journalSlots, context);
     if (operation === "fresh_v2_init") {
-      if (input.planPath !== paths.plan || input.journalPath !== paths.journal || input.stagingRoot !== paths.stagingRoot) return refuse();
+      if (input.planPath !== paths.plan || input.stagingRoot !== paths.stagingRoot) return refuse();
       if (context.externalShape === null) {
         const hash = sha256(input.admittedExternalShapeHash);
         if (
@@ -2340,8 +1765,8 @@ export function validateBootstrapPlan(
       }
     } else {
       const migrationPaths = record(input.paths);
-      exact(migrationPaths, ["journal", "plan", "stagingRoot"]);
-      if (migrationPaths.plan !== paths.plan || migrationPaths.journal !== paths.journal || migrationPaths.stagingRoot !== paths.stagingRoot || context.externalShape !== null) return refuse();
+      exact(migrationPaths, ["plan", "stagingRoot"]);
+      if (migrationPaths.plan !== paths.plan || migrationPaths.stagingRoot !== paths.stagingRoot || context.externalShape !== null) return refuse();
     }
     if (input.maximumPlanBytes !== MAX_PLAN_BYTES || input.maximumJournalBytes !== MAX_JOURNAL_BYTES) return refuse();
     const v1ManifestHash = operation === "v1_to_v2" ? sha256(input.v1ManifestHash) : undefined;
@@ -2375,8 +1800,8 @@ export function validateBootstrapPlan(
     if (aggregate > MAX_STAGING_ENTRIES || input.maximumStagingEntries !== aggregate) return refuse();
     const common = { schemaVersion: 1 as const, id, v2ManifestHash, bootstrapIdentity, maximumPlanBytes: MAX_PLAN_BYTES, maximumJournalBytes: MAX_JOURNAL_BYTES, maximumStagingEntries: aggregate, payloads, createdPaths, foundationParticipants, launchabilityPaths, manifest };
     const plan: BootstrapExecutionPlanV1 = operation === "fresh_v2_init"
-      ? { ...common, operation, id: id as FreshV2InitIdV1, admittedExternalShapeHash: sha256(input.admittedExternalShapeHash), planPath: paths.plan, journalPath: paths.journal, stagingRoot: paths.stagingRoot }
-      : { ...common, operation, id: id as ManifestMigrationIdV1, v1ManifestHash: v1ManifestHash as LowerHexSha256, paths };
+      ? { ...common, operation, id: id as FreshV2InitIdV1, admittedExternalShapeHash: sha256(input.admittedExternalShapeHash), planPath: paths.plan, journalSlots, stagingRoot: paths.stagingRoot }
+      : { ...common, operation, id: id as ManifestMigrationIdV1, v1ManifestHash: v1ManifestHash as LowerHexSha256, paths: { plan: paths.plan, stagingRoot: paths.stagingRoot }, journalSlots };
     if (encoder.encode(encodeCanonicalJson(plan as unknown as CanonicalJsonValue)).byteLength > MAX_PLAN_BYTES) return refuse();
     return structuredClone(plan);
   } catch (error) {

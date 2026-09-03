@@ -738,12 +738,26 @@ git commit -m "feat(cli): retain bootstrap evidence"
 - Modify: `apps/cli/src/context.ts`
 - Modify: `apps/cli/src/context.test.ts`
 - Modify: `apps/cli/src/bootstrap/context.ts`
+- Modify (controller-routed prerequisite): `packages/platform-macos/src/retained-rename.ts`
+- Modify (controller-routed prerequisite): `packages/platform-macos/src/retained-rename.test.ts`
+- Modify (controller-routed prerequisite): `packages/platform-macos/src/index.ts`
+- Modify (controller-routed prerequisite): `packages/core/src/transactions/types.ts`
+- Modify (controller-routed prerequisite): `apps/cli/src/bootstrap/retention.ts`
+- Modify (controller-routed prerequisite): `apps/cli/src/bootstrap/retention.test.ts`
+- Modify (controller-routed prerequisite): `packages/core/src/manifest/bootstrap-retention.ts`
+- Modify (controller-routed prerequisite): `packages/core/src/manifest/bootstrap-retention.test.ts`
+- Modify (controller-routed prerequisite): `apps/cli/src/bootstrap/journal-store.ts`
+- Modify (controller-routed prerequisite): `apps/cli/src/bootstrap/journal-store.test.ts`
+- Modify (codec public-door composition): `packages/core/src/manifest/index.ts`
+- Modify (codec public-door composition): `packages/core/src/index.ts`
+- Modify (controller-routed public-door exact-set): `packages/core/src/index.test.ts`
+- Modify (controller-routed gate orchestration prerequisite): `package.json`
 
 **Interfaces:**
 - Consumes: Tasks 1–4 plus the existing packaged-release, Foundation participant, manifest participant, lock, and command-fixture contracts.
 - Produces: exact V1 `FreshV2InitPlanV1`/`FreshV2InitJournalV1` retained schemas, retained fresh-init execution/recovery, identity-bound Foundation publication, and a CLI composition with no bootstrap deletion gateway.
 
-- [ ] **Step 1: Replace rejected tests with failing retained-envelope integration tests**
+- [x] **Step 1: Replace rejected tests with failing retained-envelope integration tests**
 
 ```ts
 it("publishes two identity-bound slots and permanently retains the plan", async () => {
@@ -771,13 +785,13 @@ it.each(freshInitRetainedDeathPoints)("recovers retained bootstrap death at $nam
 
 Replace old temp/unlink/rmdir/compaction assertions with slot create/write/sync, immutable plan write/sync, forward no-replace rename, compensation retention, Foundation evidence, row rename/sync/cursor, bootstrap-lock retention, and `retained` terminal assertions. Keep dry-run byte inertness, zero network/vendor/model calls, lock ordering, active-last, manifest point of no return, force-forward, rollback, and all existing launchability/manifest coverage.
 
-- [ ] **Step 2: Run the focused suite and verify the old implementation fails**
+- [x] **Step 2: Run the focused suite and verify the old implementation fails**
 
 Run: `npx vitest run --root packages/core src/manifest/bootstrap-retention.test.ts src/manifest/bootstrap.test.ts src/transactions/transactions.test.ts && npx vitest run --root apps/cli src/bootstrap/journal-store.test.ts src/bootstrap/retention.test.ts src/bootstrap/executor.test.ts src/commands/init.test.ts src/context.test.ts`
 
 Expected: FAIL because the current plan has one journal path, Core accepts compaction fields, the executor publishes through temps, and context still exposes guarded unlink/quarantine authority.
 
-- [ ] **Step 3: Switch Core and CLI to the approved retained state machine**
+- [x] **Step 3: Switch Core and CLI to the approved retained state machine**
 
 ```ts
 export interface FreshV2InitPlanV1 extends BootstrapPlanCommonV1 {
@@ -808,22 +822,29 @@ Change `bootstrap.ts`'s two existing plan arms to the exact `journalSlots` keys 
 
 Change the Foundation bootstrap initial-journal bridge to consume the same no-replace rename port and persisted outer payload identity. Same bytes at a new inode are a third state; a death after exact rename is adopted from the final identity and legal outer cursor only. Do not infer authority from the current Foundation plan or journal body.
 
-- [ ] **Step 4: Run focused Core and CLI tests**
+- [x] **Step 4: Run focused Core and CLI tests**
 
 Run: `npx vitest run --root packages/core src/manifest/bootstrap-retention.test.ts src/manifest/bootstrap.test.ts src/transactions/transactions.test.ts && npx vitest run --root apps/cli src/bootstrap/journal-store.test.ts src/bootstrap/retention.test.ts src/bootstrap/executor.test.ts src/update/packaged-release.test.ts src/commands/init.test.ts src/context.test.ts`
 
 Expected: PASS. A repository search over `apps/cli/src/bootstrap/` returns no production `unlink`, `rm`, `rmdir`, quarantine, plan temp, journal temp, `compactionNext`, or `payloadCleanupPart` path.
 
-- [ ] **Step 5: Run the repository gate and obtain fresh review**
+- [x] **Step 5: Run the repository gate and obtain fresh review**
 
 Run: `npm run check`
 
+Controller-routed gate orchestration runs the exact complete-handoff test selection first, the
+other 68 executor names second, and the other 136 files third, all fail-closed. This preserves
+every assertion and timeout while isolating the one row that passed twice alone but timed out as
+the first row of the 69-test file. Cost if wrong: the hard-coded name adds a Vitest startup and
+must be updated on rename; a renamed test falls into the negative selection rather than being
+omitted, while a moved executor file makes the first invocation fail.
+
 Expected: PASS. Fresh review must re-evaluate the four rejected authority failures directly: Foundation bytes inferred from observations instead of persisted evidence; rewrite authority not bound to the admitted journal inode; pathname-racy/out-of-root quarantine deletion; and death after detach stranding an untracked target. It must also cover every slot/rename death point, exact Foundation evidence, context capability removal, and absence of a deletion fallback. Accepted findings get branch-valid regression tests first.
 
-- [ ] **Step 6: Commit Task 5**
+- [x] **Step 6: Commit Task 5**
 
 ```bash
-git add packages/core/src/manifest/bootstrap.ts packages/core/src/manifest/bootstrap.test.ts packages/core/src/transactions/executor.ts packages/core/src/transactions/transactions.test.ts apps/cli/src/bootstrap/executor.ts apps/cli/src/bootstrap/executor.test.ts apps/cli/src/commands/init.ts apps/cli/src/commands/init.test.ts apps/cli/src/commands/testing.ts apps/cli/src/context.ts apps/cli/src/context.test.ts apps/cli/src/bootstrap/context.ts docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md docs/superpowers/ORDER.md
+git add package.json packages/core/src/manifest/bootstrap.ts packages/core/src/manifest/bootstrap.test.ts packages/core/src/manifest/bootstrap-retention.ts packages/core/src/manifest/bootstrap-retention.test.ts packages/core/src/manifest/index.ts packages/core/src/index.ts packages/core/src/index.test.ts packages/core/src/transactions/executor.ts packages/core/src/transactions/transactions.test.ts packages/core/src/transactions/types.ts packages/platform-macos/src/retained-rename.ts packages/platform-macos/src/retained-rename.test.ts packages/platform-macos/src/index.ts apps/cli/src/bootstrap/executor.ts apps/cli/src/bootstrap/executor.test.ts apps/cli/src/bootstrap/journal-store.ts apps/cli/src/bootstrap/journal-store.test.ts apps/cli/src/bootstrap/retention.ts apps/cli/src/bootstrap/retention.test.ts apps/cli/src/commands/init.ts apps/cli/src/commands/init.test.ts apps/cli/src/commands/testing.ts apps/cli/src/context.ts apps/cli/src/context.test.ts apps/cli/src/bootstrap/context.ts docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md docs/superpowers/ORDER.md
 git commit -m "fix(cli): retain fresh bootstrap closure"
 ```
 

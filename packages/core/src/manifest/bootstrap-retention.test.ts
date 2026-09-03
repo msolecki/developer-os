@@ -25,6 +25,7 @@ import {
   BOOTSTRAP_RETAINED_MAX_REGULAR_BYTES,
   assertBootstrapRetentionCapacity,
   classifyBootstrapEvidence,
+  deriveBootstrapRetentionLocations,
   deriveBootstrapRetentionTable,
   selectBootstrapJournal as selectRetentionJournal,
   validateBootstrapJournalSuccessor as validateRetentionJournalSuccessor,
@@ -32,6 +33,7 @@ import {
   type BootstrapJournalSelectionV1,
   type BootstrapRetainedExecutionPlanV1,
   type BootstrapRetentionEvidenceProjectionV1,
+  type BootstrapRetentionDirectoryEntryV1,
   type BootstrapRetentionPostimageV1,
 } from "./bootstrap-retention.js";
 
@@ -220,16 +222,25 @@ function validatorAdmittedPlanFixture(): {
       ownerUid: 501, mode: 0o600, parent: stateParent, cleanup: "remove_on_compensation",
     },
     {
+      kind: "directory", path: path(`/product/staging/fresh-v2-init/${ID}`), expectedBefore: "absent",
+      ownerUid: 501, mode: 0o700,
+      parent: {
+        kind: "preexisting", path: path("/product/staging/fresh-v2-init"),
+        dev: parseUInt64Decimal("1"), ino: parseUInt64Decimal("21"),
+      },
+      cleanup: "remove_on_compensation",
+    },
+    {
       kind: "directory", path: path(`/product/staging/transactions/${forwardId}`), expectedBefore: "absent",
       ownerUid: 501, mode: 0o700, parent: transactionsParent, cleanup: "remove_on_compensation",
     },
     {
       kind: "file", path: stagedPath, expectedBefore: "absent", ownerUid: 501, payload: configRef,
-      parent: { kind: "created_path", scope: "ordinary", ordinal: 1 }, cleanup: "remove_on_compensation",
+      parent: { kind: "created_path", scope: "ordinary", ordinal: 2 }, cleanup: "remove_on_compensation",
     },
     {
       kind: "file", path: path(`${stagedPath}.sha256`), expectedBefore: "absent", ownerUid: 501, payload: digestRef,
-      parent: { kind: "created_path", scope: "ordinary", ordinal: 1 }, cleanup: "remove_on_compensation",
+      parent: { kind: "created_path", scope: "ordinary", ordinal: 2 }, cleanup: "remove_on_compensation",
     },
   ];
   const launchabilityPaths: PlannedCreatedPathV1[] = [
@@ -321,11 +332,14 @@ function validatorAdmittedPlanFixture(): {
       nlink: 1, size: 0, dev: parseUInt64Decimal("1"), ino: parseUInt64Decimal("10"),
     },
     planPath: exactPath(`/product/state/fresh-v2-init.${ID}.plan.json`),
-    journalPath: exactPath(`/product/state/fresh-v2-init.${ID}.journal.json`),
+    journalSlots: [
+      { slot: 0, path: exactPath(`/product/state/fresh-v2-init.${ID}.journal.0.json`), ownerUid: 501, mode: 0o600, nlink: 1, dev: parseUInt64Decimal("1"), ino: parseUInt64Decimal("11") },
+      { slot: 1, path: exactPath(`/product/state/fresh-v2-init.${ID}.journal.1.json`), ownerUid: 501, mode: 0o600, nlink: 1, dev: parseUInt64Decimal("1"), ino: parseUInt64Decimal("12") },
+    ],
     stagingRoot: path(`/product/staging/fresh-v2-init/${ID}`),
     maximumPlanBytes: 268_435_456,
     maximumJournalBytes: 1_048_576,
-    maximumStagingEntries: 62,
+    maximumStagingEntries: 65,
     payloads,
     createdPaths,
     foundationParticipants: [compensation, forward],
@@ -354,18 +368,12 @@ function validatorAdmittedPlanFixture(): {
     admitPlanDerivedValue: (_role, value) => structuredClone(value),
   };
   const admittedPersistedPlan = validateBootstrapPlan(persistedPlan, admissionContext) as FreshV2InitPlanV1;
-  const { journalPath: _rejectedJournalPath, ...retained } = admittedPersistedPlan;
-  void _rejectedJournalPath;
   return {
     persistedPlan,
     admittedPersistedPlan,
     admissionContext,
     plan: {
-      ...retained,
-      journalSlots: [
-        { slot: 0, path: exactPath(`/product/state/fresh-v2-init.${ID}.journal.0.json`), ownerUid: 501, mode: 0o600, nlink: 1, dev: parseUInt64Decimal("1"), ino: parseUInt64Decimal("11") },
-        { slot: 1, path: exactPath(`/product/state/fresh-v2-init.${ID}.journal.1.json`), ownerUid: 501, mode: 0o600, nlink: 1, dev: parseUInt64Decimal("1"), ino: parseUInt64Decimal("12") },
-      ],
+      ...admittedPersistedPlan,
     },
   };
 }
@@ -428,6 +436,25 @@ function successor(current: BootstrapJournalRecordV1, overrides: Partial<Bootstr
   });
 }
 
+function retentionTerminalPreimage(
+  terminal: BootstrapJournalRecordV1,
+): NonNullable<BootstrapJournalRecordV1["retentionTerminalPreimage"]> {
+  return {
+    previousJournalHash: terminal.previousJournalHash,
+    updatedAt: terminal.updatedAt,
+  };
+}
+
+function retainingSuccessor(
+  terminal: BootstrapJournalRecordV1,
+): BootstrapJournalRecordV1 {
+  return successor(terminal, {
+    phase: "retaining",
+    retentionNext: 0,
+    retentionTerminalPreimage: retentionTerminalPreimage(terminal),
+  });
+}
+
 function phaseRecord(phase: BootstrapJournalRecordV1["phase"], overrides: Partial<BootstrapJournalRecordV1> = {}): BootstrapJournalRecordV1 {
   const complete = {
     nextPayload: plan.payloads.length,
@@ -447,8 +474,26 @@ function phaseRecord(phase: BootstrapJournalRecordV1["phase"], overrides: Partia
     compensating: { direction: "compensating", nextPayload: 1, compensationNext: 0 },
     finalized: { ...complete, manifestCursor: 3, terminalOutcome: "finalized" },
     rolled_back: { direction: "compensating", nextPayload: 1, compensationNext: -1, terminalOutcome: "rolled_back" },
-    retaining: { ...complete, manifestCursor: 3, terminalOutcome: "finalized", retentionNext: 0 },
-    retained: { ...complete, manifestCursor: 3, terminalOutcome: "finalized", retentionNext: retentionEntryCount() },
+    retaining: {
+      ...complete,
+      manifestCursor: 3,
+      terminalOutcome: "finalized",
+      retentionNext: 0,
+      retentionTerminalPreimage: {
+        previousJournalHash: hash("sequence-zero"),
+        updatedAt: UPDATED_AT,
+      },
+    },
+    retained: {
+      ...complete,
+      manifestCursor: 3,
+      terminalOutcome: "finalized",
+      retentionNext: retentionEntryCount(),
+      retentionTerminalPreimage: {
+        previousJournalHash: hash("sequence-zero"),
+        updatedAt: UPDATED_AT,
+      },
+    },
   };
   const value = { phase, ...values[phase], ...overrides };
   return phase === "planned" ? journal(value) : historicalJournal(value);
@@ -461,7 +506,13 @@ describe("retained bootstrap journal chains", () => {
       sequence: parseUInt64Decimal("36"),
       previousJournalHash: hash("journal-35"),
     });
-    const current = phaseRecord("retaining", { slot: 0, sequence: parseUInt64Decimal("40"), previousJournalHash: hash("journal-39"), retentionNext: 3 });
+    const current = phaseRecord("retaining", {
+      slot: 0,
+      sequence: parseUInt64Decimal("40"),
+      previousJournalHash: hash("journal-39"),
+      retentionNext: 3,
+      retentionTerminalPreimage: retentionTerminalPreimage(terminal),
+    });
     const next = successor(current, { retentionNext: 4 });
     expect(selectRetentionJournal(plan, admittedEvidence(terminal), [current, next])).toEqual({ current: next, inactiveSlot: 0 });
   });
@@ -475,8 +526,20 @@ describe("retained bootstrap journal chains", () => {
       sequence: parseUInt64Decimal("36"),
       previousJournalHash: hash("journal-35"),
     });
-    const current = phaseRecord("retaining", { slot: 0, sequence: parseUInt64Decimal(first), previousJournalHash: hash("earlier"), retentionNext: before });
-    const next = phaseRecord("retaining", { slot: 1, sequence: parseUInt64Decimal(second), previousJournalHash: correctHash ? canonicalHash(current) : hash("wrong"), retentionNext: after });
+    const current = phaseRecord("retaining", {
+      slot: 0,
+      sequence: parseUInt64Decimal(first),
+      previousJournalHash: hash("earlier"),
+      retentionNext: before,
+      retentionTerminalPreimage: retentionTerminalPreimage(terminal),
+    });
+    const next = phaseRecord("retaining", {
+      slot: 1,
+      sequence: parseUInt64Decimal(second),
+      previousJournalHash: correctHash ? canonicalHash(current) : hash("wrong"),
+      retentionNext: after,
+      retentionTerminalPreimage: retentionTerminalPreimage(terminal),
+    });
     expect(() => selectRetentionJournal(plan, admittedEvidence(terminal), [current, next])).toThrow();
   });
 
@@ -557,13 +620,62 @@ describe("retained bootstrap journal chains", () => {
 
   it("hashes complete canonical predecessor bytes including LF", () => {
     const terminal = phaseRecord("finalized");
-    const current = successor(terminal, { phase: "retaining", retentionNext: 0 });
+    const current = retainingSuccessor(terminal);
     const canonical = encodeCanonicalJson(current as unknown as CanonicalJsonValue);
     const withoutLf = parseLowerHexSha256(createHash("sha256").update(canonical.slice(0, -1)).digest("hex"));
     expect(validateRetentionJournalSuccessor(plan, admittedEvidence(terminal), current, successor(current, { retentionNext: 1 }))).toEqual(successor(current, { retentionNext: 1 }));
     expect(() => validateRetentionJournalSuccessor(plan, admittedEvidence(terminal), current, {
       ...successor(current, { retentionNext: 1 }), previousJournalHash: withoutLf,
     })).toThrow();
+  });
+
+  it("selects the exact first retained cursor pair after terminal bytes leave both slots", () => {
+    const terminal = phaseRecord("finalized", {
+      slot: 0,
+      sequence: parseUInt64Decimal("36"),
+      previousJournalHash: hash("journal-35"),
+    });
+    const retainingZero = retainingSuccessor(terminal);
+    const retainingOne = successor(retainingZero, { retentionNext: 1 });
+    const slots = retainingZero.slot === 0
+      ? [retainingZero, retainingOne] as const
+      : [retainingOne, retainingZero] as const;
+
+    expect(selectRetentionJournal(plan, admittedEvidence(terminal), slots)).toEqual({
+      current: retainingOne,
+      inactiveSlot: retainingZero.slot,
+    });
+  });
+
+  it("selects an exact singleton retaining cursor zero", () => {
+    const terminal = phaseRecord("finalized");
+    const retainingZero = retainingSuccessor(terminal);
+    const slots = retainingZero.slot === 0
+      ? [retainingZero, null] as const
+      : [null, retainingZero] as const;
+
+    expect(selectRetentionJournal(plan, admittedEvidence(terminal), slots)).toEqual({
+      current: retainingZero,
+      inactiveSlot: terminal.slot,
+    });
+  });
+
+  it("refuses a first retained cursor pair forked from the terminal predecessor", () => {
+    const terminal = phaseRecord("finalized", {
+      slot: 0,
+      sequence: parseUInt64Decimal("36"),
+      previousJournalHash: hash("journal-35"),
+    });
+    const retainingZero = {
+      ...retainingSuccessor(terminal),
+      previousJournalHash: hash("forged-terminal-predecessor"),
+    };
+    const retainingOne = successor(retainingZero, { retentionNext: 1 });
+    const slots = retainingZero.slot === 0
+      ? [retainingZero, retainingOne] as const
+      : [retainingOne, retainingZero] as const;
+
+    expect(() => selectRetentionJournal(plan, admittedEvidence(terminal), slots)).toThrow();
   });
 
   it.each([
@@ -582,7 +694,7 @@ describe("retained bootstrap journal chains", () => {
     if (from === "manifest_publishing") current = phaseRecord(from, { manifestCursor: 2 });
     if (from === "verifying") current = phaseRecord(from, { manifestCursor: 3 });
     if (from === "rolled_back") {
-      next = successor(current, { phase: "retaining", retentionNext: 0 });
+      next = retainingSuccessor(current);
     } else {
       next = successor(current, next);
     }
@@ -701,7 +813,7 @@ describe("retained bootstrap journal chains", () => {
   it("checks retaining and retained cursor zero, last, and first-over", () => {
     const terminal = phaseRecord("finalized");
     const last = retentionEntryCount() - 1;
-    const zero = successor(terminal, { phase: "retaining", retentionNext: 0 });
+    const zero = retainingSuccessor(terminal);
     expect(validateRetentionJournalSuccessor(plan, admittedEvidence(terminal), zero, successor(zero, { retentionNext: 1 })).retentionNext).toBe(1);
     const lastSequence = BigInt(terminal.sequence) + BigInt(last) + 1n;
     const lastRetaining = phaseRecord("retaining", {
@@ -738,11 +850,12 @@ describe("retained bootstrap journal chains", () => {
   });
 
   it("refuses a retaining rollback journal whose outcome disagrees with the table's terminal journal", () => {
-    const current = journal({
-      phase: "retaining", direction: "compensating", nextPayload: 1, nextCreatedPath: 1,
+    const rollback = historicalJournal({
+      phase: "rolled_back", direction: "compensating", nextPayload: 1, nextCreatedPath: 1,
       nextFoundationParticipant: 1, nextLaunchabilityPath: 0, manifestCursor: 0,
-      compensationNext: -1, terminalOutcome: "rolled_back", retentionNext: 0,
+      compensationNext: -1, terminalOutcome: "rolled_back",
     });
+    const current = retainingSuccessor(rollback);
     expect(() => selectRetentionJournal(plan, admittedEvidence(), [current, null])).toThrow();
   });
 
@@ -753,13 +866,14 @@ describe("retained bootstrap journal chains", () => {
       row.role === "creation_evidence" && row.sourcePath.includes(".ordinary."),
     );
     if (ordinaryCreationEvidence === undefined) throw new Error("fixture requires ordinary creation evidence");
+    const terminal = historicalJournal({
+      phase: "rolled_back", direction: "compensating", nextPayload: 1, nextCreatedPath: 1,
+      nextFoundationParticipant: 1, nextLaunchabilityPath: 0, manifestCursor: 0,
+      compensationNext: -1, terminalOutcome: "rolled_back",
+    });
     const evidence = {
       ...base,
-      terminalJournal: journal({
-        phase: "rolled_back", direction: "compensating", nextPayload: 1, nextCreatedPath: 1,
-        nextFoundationParticipant: 1, nextLaunchabilityPath: 0, manifestCursor: 0,
-        compensationNext: -1, terminalOutcome: "rolled_back",
-      }),
+      terminalJournal: terminal,
       createdPathEvidence: base.createdPathEvidence.filter((row) => row.value.scope === "ordinary"),
       rows: [
         ...base.rows.filter((row) =>
@@ -778,11 +892,12 @@ describe("retained bootstrap journal chains", () => {
         },
       ],
     };
-    const current = journal({
-      phase: "retaining", direction: "compensating", nextPayload: 1, nextCreatedPath: 0,
+    const mismatchedTerminal = historicalJournal({
+      phase: "rolled_back", direction: "compensating", nextPayload: 1, nextCreatedPath: 0,
       nextFoundationParticipant: 0, nextLaunchabilityPath: 0, manifestCursor: 0,
-      compensationNext: -1, terminalOutcome: "rolled_back", retentionNext: 0,
+      compensationNext: -1, terminalOutcome: "rolled_back",
     });
+    const current = retainingSuccessor(mismatchedTerminal);
     expect(() => selectRetentionJournal(plan, evidence, [current, null])).toThrow();
   });
 
@@ -800,9 +915,23 @@ describe("retained bootstrap journal chains", () => {
       ...current,
       previousJournalHash: hash("unrelated-terminal"),
     })],
+    ["terminal preimage timestamp", (current: BootstrapJournalRecordV1) => ({
+      ...current,
+      retentionTerminalPreimage: {
+        ...(current.retentionTerminalPreimage as NonNullable<BootstrapJournalRecordV1["retentionTerminalPreimage"]>),
+        updatedAt: parseUtcTimestamp("2026-08-31T08:00:00.500Z"),
+      },
+    })],
+    ["terminal preimage predecessor", (current: BootstrapJournalRecordV1) => ({
+      ...current,
+      retentionTerminalPreimage: {
+        ...(current.retentionTerminalPreimage as NonNullable<BootstrapJournalRecordV1["retentionTerminalPreimage"]>),
+        previousJournalHash: hash("unrelated-terminal-preimage"),
+      },
+    })],
   ] as const)("refuses retaining evidence with mismatched %s lineage", (_name, mutate) => {
     const terminal = phaseRecord("finalized");
-    const retaining = mutate(successor(terminal, { phase: "retaining", retentionNext: 0 }));
+    const retaining = mutate(retainingSuccessor(terminal));
     const slots = retaining.slot === 0
       ? [retaining, null] as const
       : [null, retaining] as const;
@@ -810,9 +939,28 @@ describe("retained bootstrap journal chains", () => {
     expect(() => selectRetentionJournal(plan, admittedEvidence(terminal), slots)).toThrow();
   });
 
+  it("refuses terminal preimage drift in a retaining successor", () => {
+    const terminal = phaseRecord("finalized");
+    const first = retainingSuccessor(terminal);
+    const drifted = successor(first, {
+      retentionNext: 1,
+      retentionTerminalPreimage: {
+        ...retentionTerminalPreimage(terminal),
+        previousJournalHash: hash("drifted-terminal-preimage"),
+      },
+    });
+
+    expect(() => validateRetentionJournalSuccessor(
+      plan,
+      admittedEvidence(terminal),
+      first,
+      drifted,
+    )).toThrow();
+  });
+
   it("refuses a later retaining record when its predecessor slot is unavailable", () => {
     const terminal = phaseRecord("finalized");
-    const first = successor(terminal, { phase: "retaining", retentionNext: 0 });
+    const first = retainingSuccessor(terminal);
     const later = successor(first, { retentionNext: 1 });
     const slots = later.slot === 0
       ? [later, null] as const
@@ -912,6 +1060,25 @@ function syntheticDirectoryTree(rootPath: CanonicalAbsolutePathV1, baseIno = 601
   };
 }
 
+function emptyDirectoryTree(
+  rootPath: CanonicalAbsolutePathV1,
+  dev: ReturnType<typeof parseUInt64Decimal>,
+  ino: ReturnType<typeof parseUInt64Decimal>,
+) {
+  const entries: readonly BootstrapRetentionDirectoryEntryV1[] = [];
+  return {
+    evidence: { rootPath, entries },
+    postimage: tree(ino, {
+      treeHash: domainHash("developer-os/bootstrap-retained-tree/v1\0", entries),
+      entryCount: 0,
+      regularFileBytes: parseUInt64Decimal("0"),
+      dev,
+      ino,
+      entries,
+    }),
+  };
+}
+
 function directoryTreeFromRows(
   rootPath: CanonicalAbsolutePathV1,
   nestedRows: readonly BootstrapRetentionEvidenceProjectionV1["rows"][number][],
@@ -965,8 +1132,12 @@ function admittedEvidence(
   }),
 ): BootstrapRetentionEvidenceProjectionV1 {
   const stagingRoot = plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot;
-  const stagingTree = syntheticDirectoryTree(stagingRoot);
-  const directoryTrees: BootstrapRetentionEvidenceProjectionV1["directoryTrees"][number][] = [stagingTree.evidence];
+  const stagingOrdinal = plan.createdPaths.findIndex((planned) =>
+    planned.kind === "directory" && planned.path === stagingRoot,
+  );
+  const stagingReached = plan.operation !== "fresh_v2_init" ||
+    (stagingOrdinal >= 0 && stagingOrdinal < terminalJournal.nextCreatedPath);
+  const directoryTrees: BootstrapRetentionEvidenceProjectionV1["directoryTrees"][number][] = [];
   const rows: BootstrapRetentionEvidenceProjectionV1["rows"][number][] = [];
   const payloadEvidence: Array<{
     readonly value: BootstrapPayloadEvidenceV1;
@@ -1066,6 +1237,14 @@ function admittedEvidence(
   plan.launchabilityPaths.slice(0, terminalJournal.nextLaunchabilityPath).forEach((planned, ordinal) => {
     addCreationEvidence(planned, "launchability", ordinal, plan.createdPaths.length + ordinal);
   });
+  const stagingPlanned = stagingOrdinal < 0 ? undefined : plan.createdPaths[stagingOrdinal];
+  const stagingTargetEvidence = createdPathEvidence.find((entry) =>
+    entry.value.scope === "ordinary" && entry.value.ordinal === stagingOrdinal,
+  )?.value;
+  const stagingTree = stagingReached && stagingPlanned?.kind === "directory" && stagingTargetEvidence !== undefined
+    ? emptyDirectoryTree(stagingRoot, stagingTargetEvidence.dev, stagingTargetEvidence.ino)
+    : null;
+  if (stagingTree !== null) directoryTrees.push(stagingTree.evidence);
   const forwards = plan.foundationParticipants.filter((participant) => participant.role.kind === "forward");
   const forwardOrdinals = new Map(forwards.map((participant, ordinal) => [participant.id, ordinal]));
   const retainedParticipants = plan.foundationParticipants.filter((participant) => {
@@ -1076,25 +1255,49 @@ function admittedEvidence(
       ordinal < terminalJournal.nextFoundationParticipant &&
       (terminalJournal.terminalOutcome !== "finalized" || participant.role.kind === "forward");
   });
+  const foundationEvidence: BootstrapRetentionEvidenceProjectionV1["foundationEvidence"][number][] = [];
   const foundationArtifacts = retainedParticipants.flatMap((participant) => [
-    { sourcePath: participant.initialJournal.finalPath, payload: participant.initialJournal.staged },
+    { sourcePath: participant.initialJournal.finalPath, payload: participant.initialJournal.staged, participant },
     ...participant.mutations.flatMap((mutation) => mutation.stagedPath === null || mutation.content == null || mutation.digest == null
       ? []
       : [
-          { sourcePath: mutation.stagedPath, payload: mutation.content },
-          { sourcePath: path(`${mutation.stagedPath}.sha256`), payload: mutation.digest },
+          {
+            sourcePath: participant.role.kind === "forward"
+              ? mutation.targetPath
+              : mutation.stagedPath,
+            payload: mutation.content,
+            participant: null,
+          },
+          { sourcePath: path(`${mutation.stagedPath}.sha256`), payload: mutation.digest, participant: null },
         ]),
   ]);
   foundationArtifacts.forEach((artifact, ordinal) => {
     const origin = payloadEvidence.find((candidate) => candidate.value.ordinal === artifact.payload.ordinal)?.value;
     if (origin === undefined) throw new Error("fixture Foundation artifact requires payload evidence");
-    const postimage = regular("", origin.ino, {
-      bytes: parseUInt64Decimal(String(origin.bytes)),
-      sha256: origin.sha256,
-      mode: origin.mode,
-      dev: origin.dev,
-      ino: origin.ino,
+    let postimage = regular("", origin.ino, {
+      bytes: parseUInt64Decimal(String(origin.bytes)), sha256: origin.sha256,
+      mode: origin.mode, dev: origin.dev, ino: origin.ino,
     });
+    if (artifact.participant !== null) {
+      const source = plan.payloads[artifact.payload.ordinal]?.source;
+      if (source?.kind !== "plan_derived") throw new Error("fixture Foundation journal requires plan-derived source");
+      const initial = source.value as Record<string, unknown>;
+      const terminalValue = {
+        ...initial,
+        phase: "finalized",
+        updatedAt: initial.updatedAt,
+      };
+      const terminalBytes = `${JSON.stringify(terminalValue)}\n`;
+      postimage = regular(terminalBytes, origin.ino, {
+        dev: origin.dev,
+        ino: origin.ino,
+      });
+      foundationEvidence.push({
+        participantId: artifact.participant.id,
+        value: terminalValue,
+        postimage,
+      });
+    }
     rows.push({
       role: "foundation_bootstrap",
       sourcePath: artifact.sourcePath,
@@ -1143,7 +1346,11 @@ function admittedEvidence(
     for (const [index, candidate] of filesBeforeDirectories.entries()) {
       if (
         candidate.planned.kind === "global_lock" ||
-        foundationArtifacts.some((artifact) => artifact.sourcePath === candidate.planned.path)
+        candidate.planned.path === stagingRoot ||
+        foundationArtifacts.some((artifact) =>
+          artifact.sourcePath === candidate.planned.path ||
+          (candidate.planned.kind === "file" && artifact.payload.ordinal === candidate.planned.payload.ordinal),
+        )
       ) continue;
       const targetEvidence = createdPathEvidence.find((entry) =>
         entry.value.scope === candidate.scope && entry.value.ordinal === candidate.ordinal,
@@ -1208,7 +1415,28 @@ function admittedEvidence(
       }
     }
   }
-  rows.push({ role: "staging_subtree", sourcePath: stagingRoot, parent: parent(dirname(stagingRoot), "3"), postimage: stagingTree.postimage });
+  if (stagingReached) {
+    if (stagingPlanned?.kind !== "directory" || stagingTree === null) {
+      throw new Error("fixture staging root requires exact creation evidence");
+    }
+    const stagingPlannedParent = stagingPlanned.parent;
+    const stagingParent = stagingPlannedParent.kind === "preexisting"
+      ? parent(stagingPlannedParent.path, stagingPlannedParent.ino)
+      : (() => {
+          const parentPlanned = stagingPlannedParent.scope === "ordinary"
+            ? plan.createdPaths[stagingPlannedParent.ordinal]
+            : plan.launchabilityPaths[stagingPlannedParent.ordinal];
+          const parentEvidence = createdPathEvidence.find((entry) =>
+            entry.value.scope === stagingPlannedParent.scope &&
+            entry.value.ordinal === stagingPlannedParent.ordinal,
+          )?.value;
+          if (parentPlanned?.kind !== "directory" || parentEvidence === undefined) {
+            throw new Error("fixture staging parent requires exact creation evidence");
+          }
+          return parent(parentPlanned.path, parentEvidence.ino);
+        })();
+    rows.push({ role: "staging_subtree", sourcePath: stagingRoot, parent: stagingParent, postimage: stagingTree.postimage });
+  }
   rows.push({ role: "bootstrap_lock", sourcePath: plan.bootstrapIdentity.path, parent: parent(dirname(plan.bootstrapIdentity.path), "2"), postimage: regular("", "10") });
   return {
     bootstrapId: ID,
@@ -1216,6 +1444,7 @@ function admittedEvidence(
     interruptedPayload: null,
     terminalJournal,
     createdPathEvidence,
+    foundationEvidence,
     directoryTrees,
     rows,
   };
@@ -1226,6 +1455,88 @@ function retentionEntryCount(): number {
 }
 
 describe("retained bootstrap table derivation", () => {
+  it("derives exact restart locations from the terminal plan without observed pathname authority", () => {
+    const evidence = admittedEvidence();
+    const table = deriveBootstrapRetentionTable(plan, evidence);
+
+    expect(deriveBootstrapRetentionLocations(plan, evidence.terminalJournal)).toEqual(
+      table.map((entry) => ({
+        ordinal: entry.ordinal,
+        role: entry.role,
+        sourcePath: entry.sourcePath,
+        tombstonePath: entry.tombstonePath,
+        collapsesDescendants: entry.postimage.kind === "directory_tree",
+      })),
+    );
+  });
+
+  it("refuses an invalid Foundation terminal value and a jointly forged successor inode", () => {
+    const evidence = admittedEvidence();
+    const admitted = evidence.foundationEvidence[0];
+    if (admitted === undefined) throw new Error("fixture requires Foundation terminal evidence");
+    const participant = plan.foundationParticipants.find((candidate) => candidate.id === admitted.participantId);
+    if (participant === undefined) throw new Error("fixture Foundation participant is missing");
+
+    expect(() => deriveBootstrapRetentionTable(plan, {
+      ...evidence,
+      foundationEvidence: evidence.foundationEvidence.map((candidate) =>
+        candidate.participantId === admitted.participantId
+          ? { ...candidate, value: { ...(candidate.value as Record<string, unknown>), phase: "verified" } }
+          : candidate),
+    })).toThrow();
+
+    const forgedPostimage = { ...admitted.postimage, ino: parseUInt64Decimal("999999") };
+    expect(() => deriveBootstrapRetentionTable(plan, {
+      ...evidence,
+      foundationEvidence: evidence.foundationEvidence.map((candidate) =>
+        candidate.participantId === admitted.participantId
+          ? { ...candidate, postimage: forgedPostimage }
+          : candidate),
+      rows: evidence.rows.map((row) =>
+        row.sourcePath === participant.initialJournal.finalPath
+          ? { ...row, postimage: forgedPostimage }
+          : row),
+    })).toThrow();
+  });
+
+  it("admits an exact empty staging subtree while retaining its root row at a zero descendant cap", () => {
+    const evidence = admittedEvidence();
+    const stagingRoot = plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot;
+    const entries = [] as const;
+    const admittedStaging = evidence.rows.find((row) => row.sourcePath === stagingRoot)?.postimage;
+    if (admittedStaging?.kind !== "directory_tree") throw new Error("fixture requires admitted staging root");
+    const emptyPostimage = {
+      ...admittedStaging,
+      treeHash: domainHash("developer-os/bootstrap-retained-tree/v1\0", entries),
+      entryCount: 0,
+      regularFileBytes: parseUInt64Decimal("0"),
+      entries,
+    };
+    const cappedPlan = {
+      ...plan,
+      maximumStagingEntries: 0,
+    } as BootstrapRetainedExecutionPlanV1;
+    const projection = {
+      ...evidence,
+      terminalJournal: {
+        ...evidence.terminalJournal,
+        planHash: canonicalHash(cappedPlan),
+      },
+      directoryTrees: evidence.directoryTrees.map((candidate) =>
+        candidate.rootPath === stagingRoot ? { rootPath: stagingRoot, entries } : candidate),
+      rows: evidence.rows.map((row) =>
+        row.sourcePath === stagingRoot ? { ...row, postimage: emptyPostimage } : row),
+    } as BootstrapRetentionEvidenceProjectionV1;
+
+    const table = deriveBootstrapRetentionTable(cappedPlan, projection);
+
+    expect(table.find((row) => row.sourcePath === stagingRoot)).toMatchObject({
+      role: "staging_subtree",
+      postimage: { entryCount: 0, regularFileBytes: "0", entries: [] },
+    });
+    expect(table.length).toBeGreaterThan(0);
+  });
+
   it("reopens the selected rolled_back journal with the exact interrupted writing inode", () => {
     const interrupted = plan.payloads[1];
     if (interrupted === undefined) throw new Error("fixture requires an interrupted payload");
@@ -1268,7 +1579,7 @@ describe("retained bootstrap table derivation", () => {
       projection,
     );
     expect(table.find((row) => row.sourcePath === interrupted.ref.path)?.postimage).toEqual(postimage);
-    const retaining = successor(terminalJournal, { phase: "retaining", retentionNext: 0 });
+    const retaining = retainingSuccessor(terminalJournal);
     const slots = retaining.slot === 0
       ? [retaining, terminalJournal] as const
       : [terminalJournal, retaining] as const;
@@ -1483,7 +1794,7 @@ describe("retained bootstrap table derivation", () => {
       ...forward.mutations.flatMap((mutation) => mutation.stagedPath === null || mutation.content == null || mutation.digest == null
         ? []
         : [
-            [mutation.stagedPath, mutation.content] as const,
+            [mutation.targetPath, mutation.content] as const,
             [`${mutation.stagedPath}.sha256`, mutation.digest] as const,
           ]),
     ] as const;
@@ -1521,6 +1832,11 @@ describe("retained bootstrap table derivation", () => {
     const packageTarget = plan.launchabilityPaths[1];
     const forward = plan.foundationParticipants.find((participant) => participant.role.kind === "forward");
     if (packageTarget?.kind !== "file" || forward === undefined) throw new Error("fixture requires reached file and Foundation consumers");
+
+    const duplicatePaths = evidence.rows
+      .map((row) => row.sourcePath)
+      .filter((sourcePath, index, paths) => paths.indexOf(sourcePath) !== index);
+    expect(duplicatePaths).toEqual([]);
 
     const table = deriveBootstrapRetentionTable(plan, evidence);
     expect(table.some((row) => row.sourcePath === packageTarget.payload.path)).toBe(false);
@@ -1926,7 +2242,11 @@ describe("retained bootstrap table derivation", () => {
     const base = admittedEvidence(terminalJournal);
     const globalEvidencePath = path(`/product/state/.fresh-v2-init.${ID}.ordinary.0000000000.creation.json`);
     const ordinaryEvidencePath = path(`/product/state/.fresh-v2-init.${ID}.ordinary.0000000001.creation.json`);
-    const ordinaryTree = syntheticDirectoryTree(ordinaryPath, 701);
+    const ordinaryTree = emptyDirectoryTree(
+      ordinaryPath,
+      parseUInt64Decimal("1"),
+      parseUInt64Decimal("56"),
+    );
     const globalCreationValue = {
       schemaVersion: 1 as const, bootstrapId: ID, scope: "ordinary" as const, ordinal: 0,
       pathHash: hash(globalLockPath), kind: "global_lock" as const, dev: parseUInt64Decimal("1"),
@@ -1959,15 +2279,12 @@ describe("retained bootstrap table derivation", () => {
         { value: globalCreationValue, evidenceIdentity: globalCreationIdentity },
         { value: ordinaryCreationValue, evidenceIdentity: ordinaryCreationIdentity },
       ],
-      directoryTrees: [
-        ...base.directoryTrees.filter((treeEvidence) => treeEvidence.rootPath === (plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot)),
-        ordinaryTree.evidence,
-      ],
+      foundationEvidence: base.foundationEvidence,
+      directoryTrees: [ordinaryTree.evidence],
       rows: [
         ...base.rows.filter((row) =>
           row.role === "payload" ||
           row.role === "payload_evidence" ||
-          row.role === "staging_subtree" ||
           row.role === "bootstrap_lock",
         ),
         { role: "creation_evidence", sourcePath: globalEvidencePath, parent: parent("/product/state", "2"), postimage: creationPostimage(globalCreationValue, globalCreationIdentity) },
@@ -1977,7 +2294,7 @@ describe("retained bootstrap table derivation", () => {
           role: "compensation_target",
           sourcePath: ordinaryPath,
           parent: parent("/product/state", "2"),
-          postimage: { ...ordinaryTree.postimage, ino: parseUInt64Decimal("56") },
+          postimage: ordinaryTree.postimage,
         },
       ],
     } as unknown as BootstrapRetentionEvidenceProjectionV1;

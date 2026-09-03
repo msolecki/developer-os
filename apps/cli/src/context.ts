@@ -1,5 +1,4 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { spawn } from "node:child_process";
 import fsSync from "node:fs";
 import {
   chmod,
@@ -17,8 +16,7 @@ import {
   utimes,
 } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import { createInterface } from "node:readline";
+import { basename, dirname, join } from "node:path";
 
 import {
   containsPath,
@@ -44,6 +42,7 @@ import type {
 } from "@developer-os/core";
 import {
   MacOsPlatformAdapter,
+  MacOsRetainedRename,
   MacOsTransactionLockProvider,
 } from "@developer-os/platform-macos";
 import type { PlatformAdapter } from "@developer-os/platform-macos";
@@ -59,217 +58,12 @@ import type { ProcessRunner } from "@developer-os/security";
 
 import type { CliIo } from "./io.js";
 import type { CliBootstrapContext } from "./bootstrap/context.js";
-import type { BootstrapGuardedUnlinkRequestV1 } from "./bootstrap/executor.js";
 
 export const PRODUCT_VERSION = "0.0.0";
 
 export const REDACTION_KEY_BYTES = 32;
 
-const BOOTSTRAP_GUARDED_UNLINK_GATEWAY = String.raw`
-const crypto = require("node:crypto");
-const fs = require("node:fs");
-const configuration = JSON.parse(fs.readFileSync(3, "utf8"));
-const expected = configuration.expected;
-const targetName = configuration.targetName;
-const quarantinePath = configuration.quarantinePath;
-const mode = (stats) => stats.mode & 0o777;
-const hash = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
-const exactParent = (stats) => stats.isDirectory() && !stats.isSymbolicLink() &&
-  stats.uid === expected.parent.ownerUid && mode(stats) === expected.parent.mode &&
-  String(stats.dev) === expected.parent.dev && String(stats.ino) === expected.parent.ino;
-const exactTarget = (path) => {
-  const before = fs.lstatSync(path);
-  if (!before.isFile() || before.isSymbolicLink()) return false;
-  const handle = fs.openSync(path, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
-  try {
-    const opened = fs.fstatSync(handle);
-    const bytes = fs.readFileSync(handle);
-    const after = fs.lstatSync(path);
-    return opened.dev === before.dev && opened.ino === before.ino &&
-      after.dev === opened.dev && after.ino === opened.ino &&
-      after.uid === expected.target.ownerUid && mode(after) === expected.target.mode &&
-      after.nlink === expected.target.nlink && after.size === expected.target.bytes &&
-      String(after.dev) === expected.target.dev && String(after.ino) === expected.target.ino &&
-      bytes.byteLength === expected.target.bytes && hash(bytes) === expected.target.sha256;
-  } finally {
-    fs.closeSync(handle);
-  }
-};
-const restore = () => {
-  try {
-    fs.lstatSync(targetName);
-  } catch (error) {
-    if (error && error.code === "ENOENT") {
-      fs.linkSync(quarantinePath, targetName);
-      fs.unlinkSync(quarantinePath);
-    }
-  }
-};
-const refuse = () => {
-  process.stdout.write("REFUSED\n");
-  process.exitCode = 2;
-};
-if (!exactParent(fs.lstatSync(".")) || !exactTarget(targetName)) {
-  refuse();
-} else {
-  process.stdout.write("CAPTURED\n");
-  let pending = "";
-  process.stdin.setEncoding("utf8");
-  process.stdin.on("data", (chunk) => {
-    pending += chunk;
-    for (;;) {
-      const boundary = pending.indexOf("\n");
-      if (boundary < 0) break;
-      const command = pending.slice(0, boundary);
-      pending = pending.slice(boundary + 1);
-      try {
-        if (command === "ABORT") {
-          process.exitCode = 2;
-          process.stdin.destroy();
-        } else if (command === "DETACH") {
-          if (!exactParent(fs.lstatSync(expected.parent.path))) {
-            refuse();
-            process.stdin.destroy();
-            continue;
-          }
-          fs.renameSync(targetName, quarantinePath);
-          if (!exactParent(fs.lstatSync(expected.parent.path)) || !exactTarget(quarantinePath)) {
-            restore();
-            refuse();
-            process.stdin.destroy();
-            continue;
-          }
-          process.stdout.write("DETACHED\n");
-        } else if (command === "RESTORE") {
-          restore();
-          process.stdout.write("RESTORED\n");
-          process.stdin.destroy();
-        } else if (command === "DELETE") {
-          if (!exactParent(fs.lstatSync(expected.parent.path)) || !exactTarget(quarantinePath)) {
-            restore();
-            refuse();
-            process.stdin.destroy();
-            continue;
-          }
-          fs.unlinkSync(quarantinePath);
-          process.stdout.write("DELETED\n");
-          process.stdin.destroy();
-        } else {
-          refuse();
-          process.stdin.destroy();
-        }
-      } catch {
-        try { restore(); } catch {}
-        refuse();
-        process.stdin.destroy();
-      }
-    }
-  });
-}
-`;
-
-export interface BootstrapGuardedUnlinkOptionsV1 {
-  /** Test-only adversarial boundary; production composition omits it. */
-  readonly afterCaptureBeforeDetach?: (path: string) => void | Promise<void>;
-}
-
-/**
- * Builds the bootstrap cleanup primitive over a retained directory capability.
- * The helper's kernel CWD pins the admitted parent inode; every target operation
- * is descriptor-relative to that retained directory and no caller pathname is
- * used for detach or unlink.
- */
-export function createBootstrapGuardedUnlinkExact(
-  allowedRoot: string,
-  options: BootstrapGuardedUnlinkOptionsV1 = {},
-): (request: BootstrapGuardedUnlinkRequestV1) => Promise<void> {
-  const exactRoot = resolve(allowedRoot);
-  return async (request): Promise<void> => {
-    const exactPath = resolve(request.path);
-    const exactParentPath = resolve(request.parent.path);
-    if (
-      !isAbsolute(request.path) || request.path !== exactPath ||
-      !isAbsolute(request.parent.path) || request.parent.path !== exactParentPath ||
-      dirname(exactPath) !== exactParentPath || basename(exactPath) !== request.path.slice(exactParentPath.length + 1) ||
-      !containsPath(exactRoot, exactParentPath) || exactParentPath === exactRoot
-    ) {
-      throw new SecurityRefusalError("bootstrap guarded unlink escaped its admitted root");
-    }
-
-    const quarantineDirectory = join(dirname(exactRoot), `.bootstrap-unlink-${randomUUID()}`);
-    await mkdir(quarantineDirectory, { mode: 0o700 });
-    const quarantine = join(quarantineDirectory, "target");
-    const child = spawn(
-      process.execPath,
-      ["-e", BOOTSTRAP_GUARDED_UNLINK_GATEWAY],
-      { cwd: exactParentPath, env: {}, stdio: ["pipe", "pipe", "ignore", "pipe"] },
-    );
-    const controlPipe = child.stdin;
-    const statusPipe = child.stdout;
-    const configurationPipe = child.stdio[3];
-    if (
-      controlPipe === null || statusPipe === null || configurationPipe === undefined || configurationPipe === null ||
-      !("end" in configurationPipe)
-    ) {
-      child.kill();
-      await rmdir(quarantineDirectory);
-      throw new SecurityRefusalError("bootstrap guarded unlink gateway is missing a private pipe");
-    }
-    configurationPipe.end(JSON.stringify({
-      expected: { parent: request.parent, target: request.target },
-      targetName: basename(exactPath),
-      quarantinePath: quarantine,
-    }));
-    const lines = createInterface({ input: statusPipe });
-    const iterator = lines[Symbol.asyncIterator]();
-    const nextLine = async (): Promise<string> => {
-      const next = await iterator.next();
-      if (next.done) throw new SecurityRefusalError("bootstrap guarded unlink gateway closed unexpectedly");
-      return next.value;
-    };
-    const exited = new Promise<number | null>((done) => child.once("exit", done));
-    try {
-      if (await nextLine() !== "CAPTURED") {
-        throw new SecurityRefusalError("bootstrap guarded unlink capture refused");
-      }
-      try {
-        await options.afterCaptureBeforeDetach?.(request.path);
-      } catch (error) {
-        controlPipe.end("ABORT\n");
-        await exited;
-        throw error;
-      }
-      controlPipe.write("DETACH\n");
-      if (await nextLine() !== "DETACHED") {
-        throw new SecurityRefusalError("bootstrap guarded unlink detach refused");
-      }
-      try {
-        await request.validateDetached?.();
-      } catch (error) {
-        controlPipe.end("RESTORE\n");
-        await nextLine().catch(() => "REFUSED");
-        await exited;
-        throw error;
-      }
-      controlPipe.end("DELETE\n");
-      if (await nextLine() !== "DELETED" || await exited !== 0) {
-        throw new SecurityRefusalError("bootstrap guarded unlink deletion refused");
-      }
-    } finally {
-      lines.close();
-      if (child.exitCode === null) child.kill();
-      await rmdir(quarantineDirectory).catch(() => undefined);
-    }
-  };
-}
-
-/**
- * The union of every filesystem surface Foundation's core modules require,
- * plus the two operations the commands need directly: enumerating transaction
- * journals, and removing a directory the product created. `rmdir` rather than a
- * recursive remove is deliberate — it fails on a non-empty directory, so
- * uninstall can never take user content with it.
- */
+/** Filesystem surface shared by ordinary Foundation and CLI operations. */
 export interface CliFileSystem
   extends TransactionFileSystem,
     ManifestFileSystem,
@@ -399,124 +193,13 @@ export const NODE_FILE_SYSTEM: CliFileSystem = {
   unlink,
   utimes,
 };
+const BOOTSTRAP_RETAINED_RENAME = new MacOsRetainedRename();
+export const publishBootstrapInitialJournalNoReplace =
+  BOOTSTRAP_RETAINED_RENAME.renameNoReplace.bind(BOOTSTRAP_RETAINED_RENAME);
 
 /**
- * Publishes a Task 6 initial Foundation journal without an overwrite window.
- * The hard link first gives the destination the already-verified inode; only
- * after that identity is rechecked is the staging name removed.
- */
-export async function publishBootstrapInitialJournalNoReplace(request: {
-  readonly sourcePath: string;
-  readonly destinationPath: string;
-  readonly expectedDev: string;
-  readonly expectedIno: string;
-  readonly interrupt?: (
-    event:
-      | "after_link"
-      | "before_destination_parent_sync"
-      | "after_destination_parent_sync"
-      | "after_source_unlink"
-      | "before_source_parent_sync"
-      | "after_source_parent_sync",
-  ) => void;
-}): Promise<void> {
-  const optional = async (path: string) => {
-    try {
-      return await lstat(path);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
-      throw error;
-    }
-  };
-  const exact = (value: Awaited<ReturnType<typeof lstat>> | null): boolean =>
-    value !== null &&
-    value.isFile() &&
-    !value.isSymbolicLink() &&
-    String(value.dev) === request.expectedDev &&
-    String(value.ino) === request.expectedIno;
-  const syncExactParent = async (path: string): Promise<void> => {
-    const before = await lstat(path);
-    if (!before.isDirectory() || before.isSymbolicLink()) {
-      throw new SecurityRefusalError("a bootstrap journal parent changed shape");
-    }
-    const handle = await open(
-      path,
-      fsSync.constants.O_RDONLY | fsSync.constants.O_NOFOLLOW,
-    );
-    try {
-      const opened = await handle.stat();
-      if (opened.dev !== before.dev || opened.ino !== before.ino) {
-        throw new SecurityRefusalError("a bootstrap journal parent changed identity");
-      }
-      await handle.sync();
-      const reopened = await lstat(path);
-      if (reopened.dev !== before.dev || reopened.ino !== before.ino) {
-        throw new SecurityRefusalError("a bootstrap journal parent changed during sync");
-      }
-    } finally {
-      await handle.close();
-    }
-  };
-
-  let [source, destination] = await Promise.all([
-    optional(request.sourcePath),
-    optional(request.destinationPath),
-  ]);
-  if (!exact(source) && !exact(destination)) {
-    throw new SecurityRefusalError("the bootstrap journal publication identity is absent");
-  }
-  if (source !== null && !exact(source)) {
-    throw new SecurityRefusalError("the staged bootstrap journal changed before publication");
-  }
-  if (destination !== null && !exact(destination)) {
-    throw new SecurityRefusalError("the bootstrap journal destination is a third state");
-  }
-  if (source !== null && destination !== null) {
-    if (source.nlink !== 2 || destination.nlink !== 2) {
-      throw new SecurityRefusalError("the bootstrap journal two-name state changed link count");
-    }
-  } else if ((source ?? destination)?.nlink !== 1) {
-    throw new SecurityRefusalError("the bootstrap journal publication changed link count");
-  }
-
-  if (destination === null) {
-    await link(request.sourcePath, request.destinationPath);
-    request.interrupt?.("after_link");
-    destination = await lstat(request.destinationPath);
-    source = await lstat(request.sourcePath);
-    if (!exact(source) || !exact(destination) || source.nlink !== 2 || destination.nlink !== 2) {
-      throw new SecurityRefusalError("the bootstrap journal destination did not retain the admitted inode");
-    }
-  }
-
-  request.interrupt?.("before_destination_parent_sync");
-  await syncExactParent(dirname(request.destinationPath));
-  request.interrupt?.("after_destination_parent_sync");
-
-  if (source !== null) {
-    await unlink(request.sourcePath);
-    request.interrupt?.("after_source_unlink");
-  }
-  request.interrupt?.("before_source_parent_sync");
-  await syncExactParent(dirname(request.sourcePath));
-  request.interrupt?.("after_source_parent_sync");
-
-  const [sourceAfter, destinationAfter] = await Promise.all([
-    optional(request.sourcePath),
-    optional(request.destinationPath),
-  ]);
-  if (
-    sourceAfter !== null || destinationAfter === null ||
-    !exact(destinationAfter) || destinationAfter.nlink !== 1
-  ) {
-    throw new SecurityRefusalError("the bootstrap journal publication did not reach one final name");
-  }
-}
-
-/**
- * Builds the `PathEnvironment` for a run. The overrides are omitted rather than
- * set to `undefined` because `exactOptionalPropertyTypes` distinguishes the two,
- * and `resolveRuntimePaths` reads "absent" as "use the default".
+ * Builds the path environment without introducing explicit undefined overrides;
+ * `resolveRuntimePaths` reads an absent key as "use the default".
  */
 export function pathEnvironmentFor(context: {
   readonly userHome: string;

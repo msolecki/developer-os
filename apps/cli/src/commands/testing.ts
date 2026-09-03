@@ -1,5 +1,6 @@
 import * as nodeFs from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -15,14 +16,17 @@ import type {
   TransactionLockHandle,
   TransactionLockProvider,
   TransactionPhase,
+  TransactionFileSystem,
 } from "@developer-os/core";
 import type {
   AgentDiscovery,
   AgentName,
   PlatformAdapter,
   PlatformFacts,
+  RenameAtxRunRequestV1,
+  RenameAtxRunner,
 } from "@developer-os/platform-macos";
-import { MacOsTransactionLockProvider } from "@developer-os/platform-macos";
+import { MacOsRetainedRename, MacOsTransactionLockProvider } from "@developer-os/platform-macos";
 import { ProtectedPathPolicy } from "@developer-os/security";
 import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 
@@ -31,12 +35,10 @@ import {
   type FreshInitDeathPointV1,
 } from "../bootstrap/executor.js";
 import {
-  createBootstrapGuardedUnlinkExact,
   createGuards,
   NODE_FILE_SYSTEM,
   pathEnvironmentFor,
   PRODUCT_VERSION,
-  publishBootstrapInitialJournalNoReplace,
 } from "../context.js";
 import type { CliContext } from "../context.js";
 import type { CliIo } from "../io.js";
@@ -77,6 +79,46 @@ class InProcessLockProvider implements TransactionLockProvider {
         return Promise.resolve();
       },
     };
+  }
+}
+
+/**
+ * Command fixtures exercise the coordinator rather than the Darwin syscall
+ * shim. Keep the shim's descriptor/identity checks, but settle its injected
+ * runner in-process so a retained table with hundreds of rows does not spawn
+ * hundreds of `osascript` processes. Platform tests cover the real syscall.
+ */
+class InProcessRenameAtxRunner implements RenameAtxRunner {
+  readonly #parents = new Map<number, string>();
+  readonly requests: RenameAtxRunRequestV1[] = [];
+
+  bind(descriptor: number, path: string): void {
+    this.#parents.set(descriptor, path);
+  }
+
+  async run(request: RenameAtxRunRequestV1): Promise<{ readonly exitCode: number; readonly signal: null }> {
+    this.requests.push(structuredClone(request));
+    const sourceDescriptor = request.sourceParentDescriptor ?? request.parentDescriptor;
+    const destinationDescriptor = request.destinationParentDescriptor ?? request.parentDescriptor;
+    const destinationName = request.destinationName ?? request.tombstoneName;
+    const sourceParent = this.#parents.get(sourceDescriptor);
+    const destinationParent = this.#parents.get(destinationDescriptor);
+    if (sourceParent === undefined || destinationParent === undefined) {
+      return { exitCode: 1, signal: null };
+    }
+    const destinationPath = join(destinationParent, destinationName);
+    try {
+      await nodeFs.lstat(destinationPath);
+      return { exitCode: 1, signal: null };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    try {
+      await nodeFs.rename(join(sourceParent, request.sourceName), destinationPath);
+      return { exitCode: 0, signal: null };
+    } catch {
+      return { exitCode: 1, signal: null };
+    }
   }
 }
 
@@ -206,10 +248,13 @@ export interface CommandFixture {
   readonly io: RecordingIo;
   readonly context: CliContext;
   readonly bootstrapTrace: string[];
+  readonly bootstrapRenameRequests: readonly RenameAtxRunRequestV1[];
+  readonly transactionUnlinkRequests: readonly string[];
   readonly lifecycleLockEvents: string[];
   readonly releaseRequests: string[];
   readonly vendorProcesses: string[];
   readonly disableBootstrapInterrupt: () => void;
+  readonly setBootstrapInterrupt: (point: FreshInitDeathPointV1, occurrence?: number) => void;
   readonly disableBootstrapFailure: () => void;
   readonly rebuildContext: () => CliContext;
 }
@@ -254,11 +299,10 @@ export interface FixtureOptions {
   readonly bootstrapProductionLocks?: boolean;
   /** Inserts an adversarial namespace race immediately before lifecycle lock acquisition. */
   readonly bootstrapBeforeLockAcquire?: (path: string) => Promise<void>;
-  /** Inserts an adversarial mutation inside the exact bootstrap unlink primitive. */
-  readonly bootstrapGuardedUnlinkHook?: (path: string) => void;
 }
 
 const fixtureRoots: string[] = [];
+const fixtureBootstrapExecutors: BootstrapExecutor[] = [];
 
 function digest(bytes: Uint8Array | string): string {
   return createHash("sha256").update(bytes).digest("hex");
@@ -353,13 +397,24 @@ export async function createCommandFixture(
   const lifecycleLockEvents: string[] = [];
   const releaseRequests: string[] = [];
   const vendorProcesses: string[] = [];
+  const transactionUnlinkRequests: string[] = [];
   let bootstrapInterruptEnabled = true;
+  let bootstrapInterruptPoint = options.bootstrapInterruptAfter;
+  let bootstrapInterruptOccurrence = 1;
+  let bootstrapInterruptCount = 0;
   let bootstrapFailureEnabled = true;
 
-  const guardedUnlinkExact = createBootstrapGuardedUnlinkExact(paths.home, {
-    ...(options.bootstrapGuardedUnlinkHook === undefined
-      ? {}
-      : { afterCaptureBeforeDetach: options.bootstrapGuardedUnlinkHook }),
+  const renameRunner = new InProcessRenameAtxRunner();
+  const retainedRename = new MacOsRetainedRename({
+    runner: renameRunner,
+    openParent: async (path) => {
+      const handle = await nodeFs.open(
+        path,
+        constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+      );
+      renameRunner.bind(handle.fd, path);
+      return handle;
+    },
   });
 
   const runner: ProcessRunner = options.runner ?? {
@@ -371,6 +426,7 @@ export async function createCommandFixture(
   };
 
   let sequence = 0;
+  let bootstrapUuidSequence = 0;
   const now =
     options.now ??
     ((): Date => new Date(Date.UTC(2026, 6, 30, 12, 0, 0) + sequence));
@@ -383,11 +439,18 @@ export async function createCommandFixture(
       lifecycleLockEvents,
       options.bootstrapBeforeLockAcquire,
     );
+    const transactionFileSystem: TransactionFileSystem = {
+      ...NODE_FILE_SYSTEM,
+      unlink: async (path) => {
+        transactionUnlinkRequests.push(String(path));
+        return NODE_FILE_SYSTEM.unlink(path);
+      },
+    };
     const transactionExecutor = new TransactionExecutor({
       stateDir: paths.stateDir,
       stagingDir: paths.stagingDir,
       backupsDir: paths.backupsDir,
-      fs: NODE_FILE_SYSTEM,
+      fs: transactionFileSystem,
       clock: () => now().toISOString(),
       generateId: () => {
         sequence += 1;
@@ -395,7 +458,8 @@ export async function createCommandFixture(
       },
       guards: guards.transaction,
       lockProvider,
-      publishBootstrapInitialJournalNoReplace,
+      publishBootstrapInitialJournalNoReplace:
+        retainedRename.renameNoReplace.bind(retainedRename),
       afterPhase: (
         phase: TransactionPhase,
         journal: TransactionJournalV1,
@@ -418,17 +482,24 @@ export async function createCommandFixture(
           packagedRelease,
           transactionExecutor,
           lockProvider,
-          guardedUnlinkExact,
+          renameNoReplace: retainedRename.renameNoReplace.bind(retainedRename),
+          renameSameParentNoReplace: retainedRename.rename.bind(retainedRename),
           now,
-          uuid: () => "00000000-0000-4000-8000-000000000001",
+          uuid: () => {
+            bootstrapUuidSequence += 1;
+            return `00000000-0000-4000-8000-${bootstrapUuidSequence.toString(16).padStart(12, "0")}`;
+          },
           nonce: () => new Uint8Array(32).fill(17),
           trace: (event) => bootstrapTrace.push(event),
           interrupt: (point) => {
             if (
               bootstrapInterruptEnabled &&
-              point === options.bootstrapInterruptAfter
+              point === bootstrapInterruptPoint
             ) {
-              throw new Error(`synthetic bootstrap interruption at ${point}`);
+              bootstrapInterruptCount += 1;
+              if (bootstrapInterruptCount === bootstrapInterruptOccurrence) {
+                throw new Error(`synthetic bootstrap interruption at ${point}`);
+              }
             }
           },
           fail: (point) => {
@@ -438,6 +509,7 @@ export async function createCommandFixture(
             }
           },
         });
+    if (bootstrapExecutor !== null) fixtureBootstrapExecutors.push(bootstrapExecutor);
 
     return {
       io,
@@ -493,11 +565,19 @@ export async function createCommandFixture(
     io,
     context,
     bootstrapTrace,
+    bootstrapRenameRequests: renameRunner.requests,
+    transactionUnlinkRequests,
     lifecycleLockEvents,
     releaseRequests,
     vendorProcesses,
     disableBootstrapInterrupt: () => {
       bootstrapInterruptEnabled = false;
+    },
+    setBootstrapInterrupt: (point, occurrence = 1) => {
+      bootstrapInterruptEnabled = true;
+      bootstrapInterruptPoint = point;
+      bootstrapInterruptOccurrence = occurrence;
+      bootstrapInterruptCount = 0;
     },
     disableBootstrapFailure: () => {
       bootstrapFailureEnabled = false;
@@ -507,6 +587,9 @@ export async function createCommandFixture(
 }
 
 export async function removeCommandFixtures(): Promise<void> {
+  while (fixtureBootstrapExecutors.length > 0) {
+    await fixtureBootstrapExecutors.pop()?.close();
+  }
   while (fixtureRoots.length > 0) {
     const root = fixtureRoots.pop();
     if (root !== undefined) {

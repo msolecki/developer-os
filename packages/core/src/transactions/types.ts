@@ -11,6 +11,10 @@ import type {
   utimes,
 } from "node:fs/promises";
 
+import type { BootstrapRetentionPostimageV1 } from "../manifest/bootstrap-retention.js";
+import type { CanonicalAbsolutePathV1 } from "../update/paths.js";
+import type { UInt64DecimalV1 } from "../update/scalars.js";
+
 export type TransactionPhase =
   | "planned"
   | "backed_up"
@@ -108,10 +112,23 @@ export type TransactionAfterPhase = (
  * may only publish that inode and must fail if the destination exists.
  */
 export interface BootstrapInitialJournalPublicationV1 {
-  readonly sourcePath: string;
-  readonly destinationPath: string;
-  readonly expectedDev: string;
-  readonly expectedIno: string;
+  readonly sourcePath: CanonicalAbsolutePathV1;
+  readonly destinationPath: CanonicalAbsolutePathV1;
+  readonly sourceParent: {
+    readonly path: CanonicalAbsolutePathV1;
+    readonly ownerUid: number;
+    readonly mode: 0o700;
+    readonly dev: UInt64DecimalV1;
+    readonly ino: UInt64DecimalV1;
+  };
+  readonly destinationParent: {
+    readonly path: CanonicalAbsolutePathV1;
+    readonly ownerUid: number;
+    readonly mode: 0o700;
+    readonly dev: UInt64DecimalV1;
+    readonly ino: UInt64DecimalV1;
+  };
+  readonly postimage: BootstrapRetentionPostimageV1;
 }
 
 export type PublishBootstrapInitialJournalNoReplace = (

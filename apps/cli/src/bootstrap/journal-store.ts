@@ -528,7 +528,9 @@ export interface BootstrapJournalStoreOpenRequestV1 {
     plan: BootstrapRetainedExecutionPlanV1,
     timestamp: UtcTimestampV1,
   ) => BootstrapJournalRecordV1;
-  readonly admitInitialWrite: (plan: BootstrapRetainedExecutionPlanV1) => void;
+  readonly admitInitialWrite: (
+    plan: BootstrapRetainedExecutionPlanV1,
+  ) => void | Promise<void>;
   readonly now: () => Date;
   readonly interrupt?: (point: BootstrapJournalStoreDeathPointV1) => void;
 }
@@ -792,7 +794,7 @@ export class BootstrapJournalStore {
         await assertStateDirectory(stateDirectory, state.handle, state.identity, ownerUid);
         await assertBoundRegularFile(plan.journalSlots[0].path, slot0.handle, slot0.identity, ownerUid, plan.maximumJournalBytes);
         await assertBoundRegularFile(plan.journalSlots[1].path, slot1.handle, slot1.identity, ownerUid, plan.maximumJournalBytes);
-        request.admitInitialWrite(plan);
+        await request.admitInitialWrite(plan);
         request.interrupt?.("before_initial_slot_write");
         const persistedInitial = await writeCanonicalInPlace(
           plan.journalSlots[0].path,

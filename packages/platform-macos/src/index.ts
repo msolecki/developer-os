@@ -23,7 +23,10 @@ export {
   SpawnRenameAtxRunner,
 } from "./retained-rename.js";
 export type {
+  ExactNoReplaceRenameRequestV1,
+  ExactRenameParentIdentityV1,
   MacOsRetainedRenameDependencies,
+  RenameNoReplace,
   RenameAtxRunner,
   RenameAtxRunRequestV1,
   RenameAtxRunResultV1,

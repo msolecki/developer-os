@@ -86,6 +86,60 @@ describe("runInit", () => {
     expect(initialized.ok && initialized.data.schemaVersion).toBe(2);
   });
 
+  it("starts a distinct durable bootstrap beside an untouched noncanonical pre-plan envelope", async () => {
+    const fixture = await createCommandFixture("init-bootstrap-pre-plan-residue", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "during_plan_write",
+    });
+    const interrupted = await runInit(fixture.context, ACCEPTED);
+    expect(interrupted.ok).toBe(false);
+    const partialName = (await nodeFs.readdir(fixture.paths.stateDir)).find((name) =>
+      /^fresh-v2-init\.fi_.+\.plan\.json$/u.test(name),
+    );
+    if (partialName === undefined) throw new Error("pre-plan death left no plan prefix");
+    const partialPath = join(fixture.paths.stateDir, partialName);
+    const partialBefore = await nodeFs.readFile(partialPath);
+    const partialStats = await nodeFs.lstat(partialPath, { bigint: true });
+    const partialId = /^fresh-v2-init\.(fi_[^.]+)\./u.exec(partialName)?.[1];
+    const bootstrap = fixture.context.bootstrap;
+    if (bootstrap?.state === "available") await bootstrap.executor.close();
+    fixture.setBootstrapInterrupt("after_plan");
+    const durablePlanContext = fixture.rebuildContext();
+    const durablePlanInterrupted = await runInit(durablePlanContext, ACCEPTED);
+    expect(durablePlanInterrupted.ok).toBe(false);
+    const durableBootstrap = durablePlanContext.bootstrap;
+    if (durableBootstrap?.state === "available") await durableBootstrap.executor.close();
+    fixture.disableBootstrapInterrupt();
+
+    const installed = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(installed.ok).toBe(true);
+    const durableIds = new Set<string>();
+    for (const relative of await inventory(fixture.root)) {
+      const path = join(fixture.root, relative);
+      try {
+        const value = JSON.parse(await nodeFs.readFile(path, "utf8")) as Record<string, unknown>;
+        if (value.operation === "fresh_v2_init" && typeof value.id === "string") {
+          durableIds.add(value.id);
+        }
+      } catch {
+        // Directories and intentionally noncanonical pre-plan residue are inert.
+      }
+    }
+    expect(durableIds.size).toBe(1);
+    expect(durableIds.has(String(partialId))).toBe(false);
+    const partialAfter = await nodeFs.lstat(partialPath, { bigint: true });
+    expect({ dev: partialAfter.dev, ino: partialAfter.ino }).toEqual({
+      dev: partialStats.dev,
+      ino: partialStats.ino,
+    });
+    expect(await nodeFs.readFile(partialPath)).toEqual(partialBefore);
+
+    const repeated = await runInit(fixture.rebuildContext(), ACCEPTED);
+    expect(repeated.ok).toBe(true);
+    expect(await nodeFs.readFile(partialPath)).toEqual(partialBefore);
+  }, 300_000);
+
   it("refuses invalid available package authority without falling back to V1", async () => {
     const invalid = await createCommandFixture("init-bootstrap-invalid", {
       bootstrapAvailable: true,

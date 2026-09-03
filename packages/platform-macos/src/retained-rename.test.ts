@@ -28,6 +28,7 @@ import {
   MacOsRetainedRenameThirdStateError,
   MacOsRetainedRenameUnavailableError,
   SpawnRenameAtxRunner,
+  type ExactNoReplaceRenameRequestV1,
   type MacOsRetainedRenameDependencies,
   type RenameAtxRunner,
 } from "./retained-rename.js";
@@ -190,6 +191,198 @@ async function pathIdentity(path: string): Promise<{ readonly dev: bigint; reado
     throw error;
   }
 }
+
+async function createCrossParentRequest(label: string, kind: "file" | "directory" = "file"): Promise<{
+  readonly fixture: RenameFixture;
+  readonly destinationParent: string;
+  readonly destinationPath: string;
+  readonly request: ExactNoReplaceRenameRequestV1;
+}> {
+  const fixture = kind === "file"
+    ? await createFileFixture(label)
+    : await createDirectoryFixture(label);
+  const destinationParent = join(fixture.root, "publication-parent");
+  const destinationPath = join(destinationParent, "published.bin");
+  await nodeFs.mkdir(destinationParent, { mode: 0o700 });
+  await nodeFs.chmod(destinationParent, 0o700);
+  const [sourceParent, targetParent] = await Promise.all([
+    nodeFs.lstat(fixture.parentPath, { bigint: true }),
+    nodeFs.lstat(destinationParent, { bigint: true }),
+  ]);
+  return {
+    fixture,
+    destinationParent,
+    destinationPath,
+    request: {
+      sourcePath: fixture.sourcePath as CanonicalAbsolutePathV1,
+      destinationPath: destinationPath as CanonicalAbsolutePathV1,
+      sourceParent: {
+        path: fixture.parentPath as CanonicalAbsolutePathV1,
+        ownerUid: currentUid(),
+        mode: 0o700,
+        dev: decimal(sourceParent.dev),
+        ino: decimal(sourceParent.ino),
+      },
+      destinationParent: {
+        path: destinationParent as CanonicalAbsolutePathV1,
+        ownerUid: currentUid(),
+        mode: 0o700,
+        dev: decimal(targetParent.dev),
+        ino: decimal(targetParent.ino),
+      },
+      postimage: fixture.request.entry.postimage,
+    },
+  };
+}
+
+describe("MacOsRetainedRename cross-parent exact publication", () => {
+  it("passes retained source FD 3 and destination FD 4 to one exclusive rename", async () => {
+    const value = await createCrossParentRequest("cross-parent-arguments");
+    const calls: unknown[] = [];
+    const rename = new MacOsRetainedRename(dependencies({
+      run: async (request) => {
+        calls.push(request);
+        const mapped = request as unknown as {
+          readonly sourceParentDescriptor: number;
+          readonly destinationParentDescriptor: number;
+          readonly sourceName: string;
+          readonly destinationName: string;
+        };
+        expect(fstatSync(mapped.sourceParentDescriptor, { bigint: true }).ino).toBe(
+          BigInt(value.request.sourceParent.ino),
+        );
+        expect(fstatSync(mapped.destinationParentDescriptor, { bigint: true }).ino).toBe(
+          BigInt(value.request.destinationParent.ino),
+        );
+        await nodeFs.rename(value.fixture.sourcePath, value.destinationPath);
+        return { exitCode: 0, signal: null };
+      },
+    }));
+
+    try {
+      await rename.renameNoReplace(value.request);
+      expect(calls).toMatchObject([{
+        sourceName: SOURCE_NAME,
+        destinationName: "published.bin",
+      }]);
+      expect(await pathIdentity(value.fixture.sourcePath)).toBeNull();
+      expect(await pathIdentity(value.destinationPath)).toMatchObject({
+        ino: BigInt(value.request.postimage.ino),
+      });
+    } finally {
+      await removeFixture(value.fixture);
+    }
+  });
+
+  it("preserves both cross-parent names when the destination is occupied", async () => {
+    const value = await createCrossParentRequest("cross-parent-occupied");
+    await nodeFs.writeFile(value.destinationPath, "occupied", { mode: 0o600 });
+    const before = await Promise.all([
+      pathIdentity(value.fixture.sourcePath),
+      pathIdentity(value.destinationPath),
+    ]);
+    let calls = 0;
+    try {
+      await expect(new MacOsRetainedRename(dependencies({
+        run: () => {
+          calls += 1;
+          return Promise.resolve({ exitCode: 0, signal: null });
+        },
+      })).renameNoReplace(value.request)).rejects.toBeInstanceOf(
+        MacOsRetainedRenameThirdStateError,
+      );
+      expect(calls).toBe(0);
+      expect(await Promise.all([
+        pathIdentity(value.fixture.sourcePath),
+        pathIdentity(value.destinationPath),
+      ])).toStrictEqual(before);
+    } finally {
+      await removeFixture(value.fixture);
+    }
+  });
+
+  it.each(["source", "destination"] as const)(
+    "retains both descriptors but rejects a %s-parent pathname replacement",
+    async (side) => {
+      const value = await createCrossParentRequest(`cross-parent-swap-${side}`);
+      const selectedParent = side === "source" ? value.fixture.parentPath : value.destinationParent;
+      const displaced = `${selectedParent}.displaced`;
+      let descriptorIno: bigint | undefined;
+      try {
+        const error = await new MacOsRetainedRename(dependencies({
+          run: async (request) => {
+            const descriptor = side === "source"
+              ? request.sourceParentDescriptor
+              : request.destinationParentDescriptor;
+            if (descriptor === undefined) throw new Error("exact parent descriptor is absent");
+            descriptorIno = fstatSync(descriptor, { bigint: true }).ino;
+            await nodeFs.rename(selectedParent, displaced);
+            await nodeFs.mkdir(selectedParent, { mode: 0o700 });
+            expect(fstatSync(descriptor, { bigint: true }).ino).toBe(descriptorIno);
+            return { exitCode: null, signal: "SIGTERM" };
+          },
+        })).renameNoReplace(value.request).then(
+          () => undefined,
+          (caught: unknown) => caught,
+        );
+        expect(error).toBeInstanceOf(MacOsRetainedRenameThirdStateError);
+        expect(descriptorIno).toBe(BigInt(
+          side === "source" ? value.request.sourceParent.ino : value.request.destinationParent.ino,
+        ));
+      } finally {
+        await removeFixture(value.fixture);
+      }
+    },
+  );
+
+  it.each([
+    { exitCode: null, signal: "SIGTERM" as const },
+    { exitCode: null, signal: null },
+  ])("adopts the exact cross-parent post-state when helper status is lost", async (result) => {
+    const value = await createCrossParentRequest("cross-parent-lost-status");
+    try {
+      await new MacOsRetainedRename(dependencies({
+        run: async () => {
+          await nodeFs.rename(value.fixture.sourcePath, value.destinationPath);
+          return result;
+        },
+      })).renameNoReplace(value.request);
+      expect(await pathIdentity(value.fixture.sourcePath)).toBeNull();
+      expect(await pathIdentity(value.destinationPath)).toMatchObject({
+        ino: BigInt(value.request.postimage.ino),
+      });
+    } finally {
+      await removeFixture(value.fixture);
+    }
+  });
+
+  it("rejects a cross-parent destination replacement after the exclusive move", async () => {
+    const value = await createCrossParentRequest("cross-parent-destination-race");
+    const displaced = join(value.destinationParent, "displaced-published.bin");
+    try {
+      const error = await new MacOsRetainedRename(dependencies({
+        run: async () => {
+          await nodeFs.rename(value.fixture.sourcePath, value.destinationPath);
+          await nodeFs.rename(value.destinationPath, displaced);
+          await nodeFs.writeFile(value.destinationPath, "replacement", { mode: 0o600 });
+          return { exitCode: 0, signal: null };
+        },
+      })).renameNoReplace(value.request).then(
+        () => undefined,
+        (caught: unknown) => caught,
+      );
+      expect(error).toBeInstanceOf(MacOsRetainedRenameThirdStateError);
+      expect(await pathIdentity(displaced)).toMatchObject({
+        ino: BigInt(value.request.postimage.ino),
+      });
+      expect(await pathIdentity(value.destinationPath)).not.toMatchObject({
+        ino: BigInt(value.request.postimage.ino),
+      });
+    } finally {
+      await removeFixture(value.fixture);
+    }
+  });
+});
 
 describe("MacOsRetainedRename guarded port", () => {
   it("passes only two derived basenames and retained parent FD 3", async () => {
@@ -798,6 +991,50 @@ it("requires the fixed osascript capability on a supported macOS host", async ()
 });
 
 describe.runIf(process.platform === "darwin")("SpawnRenameAtxRunner real kernel boundary", () => {
+  it("atomically publishes a file across retained parent descriptors 3 and 4", async () => {
+    const value = await createCrossParentRequest("real-cross-parent-file");
+    try {
+      await new MacOsRetainedRename().renameNoReplace(value.request);
+      expect(await pathIdentity(value.fixture.sourcePath)).toBeNull();
+      expect(await pathIdentity(value.destinationPath)).toMatchObject({
+        ino: BigInt(value.request.postimage.ino),
+      });
+    } finally {
+      await removeFixture(value.fixture);
+    }
+  });
+
+  it("atomically publishes a directory tree across retained parent descriptors", async () => {
+    const value = await createCrossParentRequest("real-cross-parent-directory", "directory");
+    try {
+      await new MacOsRetainedRename().renameNoReplace(value.request);
+      expect(await pathIdentity(value.fixture.sourcePath)).toBeNull();
+      expect(await nodeFs.readFile(join(value.destinationPath, "synthetic-child"), "utf8")).toBe("child");
+    } finally {
+      await removeFixture(value.fixture);
+    }
+  });
+
+  it("atomically refuses an occupied cross-parent destination without changing either inode", async () => {
+    const value = await createCrossParentRequest("real-cross-parent-no-clobber");
+    await nodeFs.writeFile(value.destinationPath, "occupied", { mode: 0o600 });
+    const before = await Promise.all([
+      pathIdentity(value.fixture.sourcePath),
+      pathIdentity(value.destinationPath),
+    ]);
+    try {
+      await expect(new MacOsRetainedRename().renameNoReplace(value.request)).rejects.toBeInstanceOf(
+        MacOsRetainedRenameThirdStateError,
+      );
+      expect(await Promise.all([
+        pathIdentity(value.fixture.sourcePath),
+        pathIdentity(value.destinationPath),
+      ])).toStrictEqual(before);
+    } finally {
+      await removeFixture(value.fixture);
+    }
+  });
+
   it("atomically refuses an existing destination without changing either inode", async () => {
     const fixture = await createFileFixture("real-no-clobber");
     await nodeFs.writeFile(fixture.tombstonePath, "existing destination", { mode: 0o600 });

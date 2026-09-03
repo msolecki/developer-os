@@ -299,6 +299,44 @@ async function projectRetainedDirectoryTreeOnce(
   return projection;
 }
 
+/** Exact, no-follow projection shared by evidence construction and retained-row recovery. */
+export async function projectBootstrapRetentionPostimage(
+  path: CanonicalAbsolutePathV1,
+): Promise<BootstrapRetentionPostimageV1 | null> {
+  let firstStats: BigIntStats;
+  try {
+    firstStats = await nodeFs.lstat(path, { bigint: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    return refuse();
+  }
+  if (firstStats.isDirectory() && !firstStats.isSymbolicLink()) {
+    const first = await projectRetainedDirectoryTreeOnce(path);
+    const second = await projectRetainedDirectoryTreeOnce(path);
+    if (!sameValue(first, second)) return refuse();
+    return structuredClone(second);
+  }
+  if (!firstStats.isFile() || firstStats.isSymbolicLink()) return refuse();
+  const firstEntry = await projectRegularEntry(path, "file", firstStats);
+  const secondStats = await nodeFs.lstat(path, { bigint: true }).catch(() => refuse());
+  const secondEntry = await projectRegularEntry(path, "file", secondStats);
+  if (
+    firstEntry.relativePath !== "file" ||
+    secondEntry.relativePath !== "file" ||
+    !sameValue(firstEntry, secondEntry)
+  ) return refuse();
+  return {
+    kind: "regular_file",
+    ownerUid: secondEntry.ownerUid,
+    mode: secondEntry.mode,
+    nlink: secondEntry.nlink,
+    bytes: secondEntry.bytes,
+    sha256: secondEntry.sha256,
+    dev: secondEntry.dev,
+    ino: secondEntry.ino,
+  };
+}
+
 export async function projectRetainedDirectoryTree(
   root: CanonicalAbsolutePathV1,
   expectedRoot: Extract<BootstrapRetentionPostimageV1, { kind: "directory_tree" }>,
@@ -468,11 +506,23 @@ export async function retainBootstrapEnvelope(
   locks: HeldBootstrapLocksV1,
 ): Promise<BootstrapJournalRecordV1> {
   validateTable(table);
-  if (locks.bootstrap === null || locks.global === null) return refuse();
   let current = store.current();
+  const globalPlan = store.plan.createdPaths[0];
+  if (globalPlan?.kind !== "global_lock" || locks.bootstrap === null) return refuse();
+  const globalReached = current.nextCreatedPath > 0;
+  if ((globalReached && locks.global === null) || (!globalReached && locks.global !== null)) {
+    return refuse();
+  }
   if (current.id !== table[0]?.bootstrapId) return refuse();
   if (current.phase === "finalized" || current.phase === "rolled_back") {
-    current = await advance(store, current, { phase: "retaining", retentionNext: 0 });
+    current = await advance(store, current, {
+      phase: "retaining",
+      retentionNext: 0,
+      retentionTerminalPreimage: {
+        previousJournalHash: current.previousJournalHash,
+        updatedAt: current.updatedAt,
+      },
+    });
   }
   if (current.phase !== "retaining" && current.phase !== "retained") return refuse();
   if (
@@ -517,6 +567,6 @@ export async function retainBootstrapEnvelope(
     if (retained.state !== "after") return refuse();
   }
   if (!bootstrapReleased) await retainer.releaseHeldLock(locks.bootstrap);
-  await locks.global.release();
+  await locks.global?.release();
   return store.current();
 }

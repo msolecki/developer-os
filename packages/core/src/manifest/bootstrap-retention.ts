@@ -14,9 +14,9 @@ import {
 import type {
   BootstrapPayloadEvidenceV1,
   BootstrapPayloadWriteStateV1,
+  BootstrapRetentionTerminalPreimageV1,
   CreatedPathEvidenceV1,
   FreshV2InitPlanV1,
-  ManifestMigrationPathsV1,
   ManifestMigrationPlanV1,
   PlannedCreatedPathV1,
 } from "./bootstrap.js";
@@ -46,14 +46,9 @@ export interface BootstrapJournalSlotIdentityV1 {
   readonly ino: UInt64DecimalV1;
 }
 
-type FreshV2InitRetainedPlanV1 = Omit<FreshV2InitPlanV1, "journalPath"> & {
-  readonly journalSlots: readonly [BootstrapJournalSlotIdentityV1, BootstrapJournalSlotIdentityV1];
-};
+type FreshV2InitRetainedPlanV1 = FreshV2InitPlanV1;
 
-type ManifestMigrationRetainedPlanV1 = Omit<ManifestMigrationPlanV1, "paths"> & {
-  readonly paths: Omit<ManifestMigrationPathsV1, "journal">;
-  readonly journalSlots: readonly [BootstrapJournalSlotIdentityV1, BootstrapJournalSlotIdentityV1];
-};
+type ManifestMigrationRetainedPlanV1 = ManifestMigrationPlanV1;
 
 export type BootstrapRetainedExecutionPlanV1 =
   | FreshV2InitRetainedPlanV1
@@ -92,6 +87,7 @@ export interface BootstrapJournalRecordV1 {
   readonly payloadRetentionPart: "staged_file" | "evidence" | null;
   readonly terminalOutcome: "finalized" | "rolled_back" | null;
   readonly retentionNext: number | null;
+  readonly retentionTerminalPreimage?: BootstrapRetentionTerminalPreimageV1;
   readonly createdAt: UtcTimestampV1;
   readonly updatedAt: UtcTimestampV1;
 }
@@ -154,6 +150,12 @@ export interface BootstrapCreatedPathRetentionEvidenceV1 {
   };
 }
 
+export interface BootstrapFoundationTerminalJournalEvidenceV1 {
+  readonly participantId: string;
+  readonly value: unknown;
+  readonly postimage: Extract<BootstrapRetentionPostimageV1, { kind: "regular_file" }>;
+}
+
 export type BootstrapRetentionDirectoryEntryV1 =
   | {
       readonly relativePath: string;
@@ -193,6 +195,8 @@ export interface BootstrapRetentionEvidenceProjectionV1 {
   readonly interruptedPayload: BootstrapInterruptedPayloadRetentionEvidenceV1 | null;
   /** Admitted persisted creation identities; this pure projection does not widen bootstrap codecs. */
   readonly createdPathEvidence: readonly BootstrapCreatedPathRetentionEvidenceV1[];
+  /** Legal terminal Foundation journal bytes retained on the original outer payload inode. */
+  readonly foundationEvidence: readonly BootstrapFoundationTerminalJournalEvidenceV1[];
   /** Complete descendant projections for every directory-tree row. */
   readonly directoryTrees: readonly BootstrapRetentionDirectoryTreeEvidenceV1[];
   readonly rows: readonly {
@@ -212,6 +216,15 @@ export interface BootstrapRetentionEvidenceProjectionV1 {
 }
 
 type BootstrapRetentionRoleV1 = BootstrapRetentionEvidenceProjectionV1["rows"][number]["role"];
+
+/** Plan-derived logical locations used only to reopen a partially retained table. */
+export interface BootstrapRetentionLocationV1 {
+  readonly ordinal: number;
+  readonly role: BootstrapRetentionRoleV1;
+  readonly sourcePath: CanonicalAbsolutePathV1;
+  readonly tombstonePath: CanonicalAbsolutePathV1;
+  readonly collapsesDescendants: boolean;
+}
 
 export interface BootstrapRetentionEntryV1 {
   readonly schemaVersion: 1;
@@ -429,6 +442,8 @@ function validateJournalState(
   value: Counts,
   retentionEntries: number,
 ): void {
+  const retentionPhase = journal.phase === "retaining" || journal.phase === "retained";
+  if (retentionPhase !== (journal.retentionTerminalPreimage !== undefined)) return refuse();
   const idle = journal.payloadWriteState.state === "idle";
   const noCompensation = journal.compensationNext === null && journal.payloadRetentionPart === null;
   const noTerminal = journal.terminalOutcome === null && journal.retentionNext === null;
@@ -498,7 +513,10 @@ function validateJournalRecord(
   value: unknown,
 ): BootstrapJournalRecordV1 {
   const input = record(value);
-  exact(input, JOURNAL_KEYS);
+  const retentionPhase = input.phase === "retaining" || input.phase === "retained";
+  exact(input, retentionPhase
+    ? [...JOURNAL_KEYS, "retentionTerminalPreimage"]
+    : JOURNAL_KEYS);
   if (input.schemaVersion !== 1 || input.id !== plan.id || input.planHash !== rawCanonicalHash(plan)) return refuse();
   if (input.slot !== 0 && input.slot !== 1) return refuse();
   if (typeof input.phase !== "string" || !JOURNAL_PHASES.includes(input.phase as BootstrapRetainedJournalPhaseV1)) return refuse();
@@ -514,6 +532,18 @@ function validateJournalRecord(
     (sequence === "0") !== (previousJournalHash === null) ||
     input.slot !== Number(BigInt(sequence) % 2n)
   ) return refuse();
+  const retentionTerminalPreimage = retentionPhase
+    ? (() => {
+        const preimage = record(input.retentionTerminalPreimage);
+        exact(preimage, ["previousJournalHash", "updatedAt"]);
+        return {
+          previousJournalHash: preimage.previousJournalHash === null
+            ? null
+            : sha256(preimage.previousJournalHash),
+          updatedAt: timestamp(preimage.updatedAt),
+        } satisfies BootstrapRetentionTerminalPreimageV1;
+      })()
+    : undefined;
   const journal: BootstrapJournalRecordV1 = {
     schemaVersion: 1,
     id: plan.id,
@@ -533,6 +563,7 @@ function validateJournalRecord(
     payloadRetentionPart: input.payloadRetentionPart,
     terminalOutcome: input.terminalOutcome,
     retentionNext: input.retentionNext === null ? null : integer(input.retentionNext, 0, MAX_RETENTION_NEXT),
+    ...(retentionTerminalPreimage === undefined ? {} : { retentionTerminalPreimage }),
     createdAt: timestamp(input.createdAt),
     updatedAt: timestamp(input.updatedAt),
   };
@@ -545,7 +576,7 @@ function validateJournalRecord(
 const STATE_KEYS = [
   "phase", "direction", "nextPayload", "payloadWriteState", "nextCreatedPath",
   "nextFoundationParticipant", "nextLaunchabilityPath", "manifestCursor", "compensationNext",
-  "payloadRetentionPart", "terminalOutcome", "retentionNext",
+  "payloadRetentionPart", "terminalOutcome", "retentionNext", "retentionTerminalPreimage",
 ] as const;
 
 function sameValue(left: unknown, right: unknown): boolean {
@@ -553,7 +584,15 @@ function sameValue(left: unknown, right: unknown): boolean {
 }
 
 function changedStateKeys(current: BootstrapJournalRecordV1, successor: BootstrapJournalRecordV1): readonly string[] {
-  return STATE_KEYS.filter((key) => !sameValue(current[key], successor[key]));
+  return STATE_KEYS.filter((key) => {
+    const currentValue = key === "retentionTerminalPreimage"
+      ? current.retentionTerminalPreimage ?? null
+      : current[key];
+    const successorValue = key === "retentionTerminalPreimage"
+      ? successor.retentionTerminalPreimage ?? null
+      : successor[key];
+    return !sameValue(currentValue, successorValue);
+  });
 }
 
 const FORWARD_PHASE_TRANSITIONS = new Set([
@@ -648,7 +687,12 @@ function isLegalPhaseTransition(
       return sameValue(changed, ["phase", "terminalOutcome"]);
     }
     if (pair === "finalized:retaining" || pair === "rolled_back:retaining") {
-      return sameValue(changed, ["phase", "retentionNext"]) && next.retentionNext === 0;
+      return sameValue(changed, ["phase", "retentionNext", "retentionTerminalPreimage"]) &&
+        next.retentionNext === 0 &&
+        sameValue(next.retentionTerminalPreimage, {
+          previousJournalHash: current.previousJournalHash,
+          updatedAt: current.updatedAt,
+        });
     }
     if (pair === "retaining:retained") {
       return sameValue(changed, ["phase", "retentionNext"]) &&
@@ -666,7 +710,7 @@ function isLegalPhaseTransition(
   return false;
 }
 
-export function validateBootstrapJournalSuccessor(
+function validateBootstrapJournalSuccessorPair(
   plan: BootstrapRetainedExecutionPlanV1,
   evidence: BootstrapRetentionEvidenceProjectionV1,
   currentValue: BootstrapJournalRecordV1,
@@ -685,6 +729,20 @@ export function validateBootstrapJournalSuccessor(
   if (successor.createdAt !== current.createdAt || Date.parse(successor.updatedAt) < Date.parse(current.updatedAt)) return refuse();
   if (successor.phase === current.phase ? !isLegalSamePhaseTransition(current, successor, counts(plan)) : !isLegalPhaseTransition(current, successor, retentionEntries)) return refuse();
   return successor;
+}
+
+export function validateBootstrapJournalSuccessor(
+  plan: BootstrapRetainedExecutionPlanV1,
+  evidence: BootstrapRetentionEvidenceProjectionV1,
+  currentValue: BootstrapJournalRecordV1,
+  successorValue: BootstrapJournalRecordV1,
+): BootstrapJournalRecordV1 {
+  return validateBootstrapJournalSuccessorPair(
+    plan,
+    evidence,
+    currentValue,
+    successorValue,
+  );
 }
 
 export function selectBootstrapJournal(
@@ -721,7 +779,12 @@ export function selectBootstrapJournal(
   const second = present[1] as BootstrapJournalRecordV1;
   if (first.sequence === second.sequence) return refuse();
   const [current, successor] = BigInt(first.sequence) < BigInt(second.sequence) ? [first, second] : [second, first];
-  const selected = validateBootstrapJournalSuccessor(plan, evidence, current, successor);
+  const selected = validateBootstrapJournalSuccessorPair(
+    plan,
+    evidence,
+    current,
+    successor,
+  );
   validateRetentionTerminalBinding(plan, evidence, selected);
   return { current: selected, inactiveSlot: selected.slot === 0 ? 1 : 0 };
 }
@@ -772,7 +835,7 @@ function validateDirectoryTreeEvidence(value: unknown): BootstrapRetentionDirect
   const input = record(value);
   exact(input, ["entries", "rootPath"]);
   const rootPath = canonicalPath(input.rootPath);
-  if (!Array.isArray(input.entries) || input.entries.length < 1 || input.entries.length > BOOTSTRAP_RETAINED_MAX_ENTRIES) return refuse();
+  if (!Array.isArray(input.entries) || input.entries.length > BOOTSTRAP_RETAINED_MAX_ENTRIES) return refuse();
   const entries = input.entries.map((candidate) => {
     const entry = record(candidate);
     exact(entry, ["bytes", "dev", "ino", "kind", "mode", "nlink", "ownerUid", "relativePath", "sha256"]);
@@ -861,7 +924,7 @@ function validatePostimage(
       mode: 0o700,
       nlink: integer(input.nlink, 1, 4_294_967_295),
       treeHash: sha256(input.treeHash),
-      entryCount: integer(input.entryCount, 1, BOOTSTRAP_RETAINED_MAX_ENTRIES),
+      entryCount: integer(input.entryCount, 0, BOOTSTRAP_RETAINED_MAX_ENTRIES),
       regularFileBytes: uint64(input.regularFileBytes),
       dev: uint64(input.dev),
       ino: uint64(input.ino),
@@ -908,8 +971,10 @@ interface Authority {
   readonly scope?: "ordinary" | "launchability";
   readonly ordinal?: number;
   readonly payloadOrdinal?: number;
+  readonly payloadPostimage?: true;
   readonly foundationOrdinal?: number;
   readonly foundationKind?: "forward" | "compensation";
+  readonly foundationJournal?: true;
   readonly bytes?: number;
   readonly hash?: LowerHexSha256;
   readonly mode?: 0o600 | 0o700;
@@ -953,6 +1018,7 @@ function foundationAuthorities(
       payloadOrdinal: initial.ordinal,
       foundationOrdinal: ordinal,
       foundationKind: participant.role.kind,
+      foundationJournal: true,
       bytes: initial.bytes,
       hash: initial.hash,
       mode: initial.mode,
@@ -960,9 +1026,12 @@ function foundationAuthorities(
     for (const mutation of participant.mutations) {
       if (mutation.stagedPath === null || mutation.content == null || mutation.digest == null) continue;
       result.push({
-        role: "foundation_bootstrap",
-        sourcePath: mutation.stagedPath,
+      role: "foundation_bootstrap",
+        sourcePath: participant.role.kind === "forward"
+          ? mutation.targetPath
+          : mutation.stagedPath,
         payloadOrdinal: mutation.content.ordinal,
+        payloadPostimage: true,
         foundationOrdinal: ordinal,
         foundationKind: participant.role.kind,
         bytes: mutation.content.bytes,
@@ -973,6 +1042,7 @@ function foundationAuthorities(
         role: "foundation_bootstrap",
         sourcePath: `${mutation.stagedPath}.sha256` as CanonicalAbsolutePathV1,
         payloadOrdinal: mutation.digest.ordinal,
+        payloadPostimage: true,
         foundationOrdinal: ordinal,
         foundationKind: participant.role.kind,
         bytes: mutation.digest.bytes,
@@ -1024,6 +1094,7 @@ function forbiddenCompensationTargets(plan: BootstrapRetainedExecutionPlanV1): R
     plan.manifest.manifestPath,
     plan.manifest.tombstonePath,
     planPath,
+    stagingRoot(plan),
     ...plan.journalSlots.map((slot) => slot.path),
     ...plan.createdPaths.filter((planned) => planned.kind === "global_lock").map((planned) => planned.path),
     ...plan.launchabilityPaths.filter((planned) => planned.kind === "global_lock").map((planned) => planned.path),
@@ -1045,6 +1116,9 @@ function authorities(
   const result: Authority[] = [];
   const retainedFoundation = foundationAuthorities(plan, journal);
   const retainedFoundationPaths = new Set(retainedFoundation.map((authority) => authority.sourcePath));
+  const retainedFoundationPayloads = new Set(retainedFoundation
+    .filter((authority) => authority.payloadPostimage === true)
+    .map((authority) => authority.payloadOrdinal));
   const foundationByPayload = new Map(retainedFoundation.map((authority) => [authority.payloadOrdinal as number, authority]));
   for (let ordinal = 0; ordinal < journal.nextPayload; ordinal += 1) {
     const payload = plan.payloads[ordinal];
@@ -1063,6 +1137,7 @@ function authorities(
       role: "payload",
       sourcePath: payload.ref.path,
       payloadOrdinal: ordinal,
+      payloadPostimage: true,
       bytes: payload.ref.bytes,
       hash: payload.ref.hash,
       mode: payload.ref.mode,
@@ -1075,6 +1150,7 @@ function authorities(
       role: "payload",
       sourcePath: payload.ref.path,
       payloadOrdinal: interruptedPayload.writeState.ordinal,
+      payloadPostimage: true,
       interruptedPostimage: interruptedPayload.postimage,
     });
   }
@@ -1084,7 +1160,8 @@ function authorities(
     if (
       journal.terminalOutcome === "rolled_back" &&
       !isForbiddenCompensationTarget(plan, planned) &&
-      !retainedFoundationPaths.has(planned.path)
+      !retainedFoundationPaths.has(planned.path) &&
+      !(planned.kind === "file" && retainedFoundationPayloads.has(planned.payload.ordinal))
     ) {
       result.push({ role: "compensation_target", sourcePath: planned.path, planned, scope: "ordinary", ordinal });
     }
@@ -1095,7 +1172,8 @@ function authorities(
     if (
       journal.terminalOutcome === "rolled_back" &&
       !isForbiddenCompensationTarget(plan, planned) &&
-      !retainedFoundationPaths.has(planned.path)
+      !retainedFoundationPaths.has(planned.path) &&
+      !(planned.kind === "file" && retainedFoundationPayloads.has(planned.payload.ordinal))
     ) {
       result.push({ role: "compensation_target", sourcePath: planned.path, planned, scope: "launchability", ordinal });
     }
@@ -1104,9 +1182,69 @@ function authorities(
   if (journal.terminalOutcome === "finalized" && plan.manifest.before.state === "present") {
     result.push({ role: "manifest_bootstrap", sourcePath: plan.manifest.tombstonePath, mode: 0o600 });
   }
-  result.push({ role: "staging_subtree", sourcePath: stagingRoot(plan) });
+  const retainedStagingRoot = stagingRoot(plan);
+  const stagingOrdinal = plan.createdPaths.findIndex((planned) =>
+    planned.kind === "directory" && planned.path === retainedStagingRoot,
+  );
+  if (
+    plan.operation !== "fresh_v2_init" ||
+    (stagingOrdinal >= 0 && stagingOrdinal < journal.nextCreatedPath)
+  ) {
+    const planned = stagingOrdinal < 0 ? undefined : plan.createdPaths[stagingOrdinal];
+    result.push({
+      role: "staging_subtree",
+      sourcePath: retainedStagingRoot,
+      ...(planned === undefined
+        ? {}
+        : { planned, scope: "ordinary" as const, ordinal: stagingOrdinal }),
+    });
+  }
   result.push({ role: "bootstrap_lock", sourcePath: plan.bootstrapIdentity.path, bytes: 0, hash: createHash("sha256").update("").digest("hex") as LowerHexSha256, mode: 0o600 });
   return result;
+}
+
+export function deriveBootstrapRetentionLocations(
+  plan: BootstrapRetainedExecutionPlanV1,
+  terminalValue: unknown,
+): readonly BootstrapRetentionLocationV1[] {
+  const journal = terminalRetentionJournal(plan, terminalValue);
+  const listed = [...authorities(plan, journal, null)];
+  if (journal.payloadWriteState.state === "writing") {
+    const payload = plan.payloads[journal.payloadWriteState.ordinal];
+    if (payload === undefined || journal.payloadWriteState.ordinal !== journal.nextPayload) return refuse();
+    listed.push({
+      role: "payload",
+      sourcePath: payload.ref.path,
+      payloadOrdinal: journal.payloadWriteState.ordinal,
+    });
+  }
+  const directoryRoots = listed
+    .filter((authority) =>
+      authority.role === "staging_subtree" || authority.planned?.kind === "directory",
+    )
+    .sort((left, right) =>
+      left.sourcePath.length - right.sourcePath.length || compareUtf8(left.sourcePath, right.sourcePath),
+    );
+  const maximalRoots = directoryRoots.filter((row, index) =>
+    !directoryRoots.slice(0, index).some((ancestor) =>
+      row.sourcePath.startsWith(`${ancestor.sourcePath}/`),
+    ),
+  );
+  const collapsed = listed.filter((row) =>
+    !maximalRoots.some((root) =>
+      row.sourcePath !== root.sourcePath && row.sourcePath.startsWith(`${root.sourcePath}/`),
+    ),
+  );
+  collapsed.sort((left, right) =>
+    ROLE_ORDER[left.role] - ROLE_ORDER[right.role] || compareUtf8(left.sourcePath, right.sourcePath),
+  );
+  return collapsed.map((row, ordinal) => ({
+    ordinal,
+    role: row.role,
+    sourcePath: row.sourcePath,
+    tombstonePath: `${dirname(row.sourcePath)}/.developer-os-retained.${plan.id}.${String(ordinal).padStart(10, "0")}.tombstone` as CanonicalAbsolutePathV1,
+    collapsesDescendants: maximalRoots.some((root) => root.sourcePath === row.sourcePath),
+  }));
 }
 
 function terminalRetentionJournal(
@@ -1116,6 +1254,31 @@ function terminalRetentionJournal(
   const journal = validateJournalRecord(plan, 0, value);
   if (journal.phase !== "finalized" && journal.phase !== "rolled_back") return refuse();
   return journal;
+}
+
+function reconstructRetentionTerminal(
+  plan: BootstrapRetainedExecutionPlanV1,
+  journal: BootstrapJournalRecordV1,
+): BootstrapJournalRecordV1 {
+  if (
+    (journal.phase !== "retaining" && journal.phase !== "retained") ||
+    journal.retentionNext === null ||
+    journal.terminalOutcome === null ||
+    journal.retentionTerminalPreimage === undefined
+  ) return refuse();
+  const sequenceOffset = BigInt(journal.retentionNext) + 1n;
+  const terminalSequence = BigInt(journal.sequence) - sequenceOffset;
+  if (terminalSequence < 0n) return refuse();
+  const { retentionTerminalPreimage, ...terminalPrefix } = journal;
+  return terminalRetentionJournal(plan, {
+    ...terminalPrefix,
+    slot: Number(terminalSequence % 2n) as 0 | 1,
+    sequence: parseUInt64Decimal(terminalSequence.toString()),
+    previousJournalHash: retentionTerminalPreimage.previousJournalHash,
+    phase: journal.terminalOutcome === "finalized" ? "finalized" : "rolled_back",
+    retentionNext: null,
+    updatedAt: retentionTerminalPreimage.updatedAt,
+  });
 }
 
 const RETENTION_TERMINAL_PREFIX_KEYS = [
@@ -1139,20 +1302,25 @@ function validateRetentionTerminalBinding(
   if (journal.phase !== "retaining" && journal.phase !== "retained") return;
   if (evidence.terminalJournal === null) return refuse();
   const terminal = terminalRetentionJournal(plan, evidence.terminalJournal);
+  const reconstructedTerminal = reconstructRetentionTerminal(plan, journal);
+  if (!sameValue(reconstructedTerminal, terminal)) return refuse();
   for (const key of RETENTION_TERMINAL_PREFIX_KEYS) {
-    if (!sameValue(journal[key], terminal[key])) return refuse();
+    if (!sameValue(journal[key], reconstructedTerminal[key])) return refuse();
   }
   const retentionNext = journal.retentionNext as number;
   const sequenceOffset = BigInt(retentionNext) + 1n;
-  const terminalSequence = BigInt(terminal.sequence);
+  const terminalSequence = BigInt(reconstructedTerminal.sequence);
   if (
     terminalSequence + sequenceOffset > MAX_UINT64 ||
     BigInt(journal.sequence) !== terminalSequence + sequenceOffset ||
-    journal.slot !== ((terminal.slot + Number(sequenceOffset % 2n)) % 2) ||
-    journal.createdAt !== terminal.createdAt ||
-    Date.parse(journal.updatedAt) < Date.parse(terminal.updatedAt)
+    journal.slot !== ((reconstructedTerminal.slot + Number(sequenceOffset % 2n)) % 2) ||
+    journal.createdAt !== reconstructedTerminal.createdAt ||
+    Date.parse(journal.updatedAt) < Date.parse(reconstructedTerminal.updatedAt)
   ) return refuse();
-  if (sequenceOffset === 1n && journal.previousJournalHash !== rawCanonicalHash(terminal)) return refuse();
+  if (
+    sequenceOffset === 1n &&
+    journal.previousJournalHash !== rawCanonicalHash(reconstructedTerminal)
+  ) return refuse();
 }
 
 function needsRetentionTable(value: unknown): boolean {
@@ -1332,13 +1500,115 @@ function payloadRetentionEvidence(
   return admitted;
 }
 
+function validateFoundationTerminalEvidence(
+  plan: BootstrapRetainedExecutionPlanV1,
+  journal: BootstrapJournalRecordV1,
+  payloadEvidence: readonly BootstrapPayloadRetentionEvidenceV1[],
+  value: unknown,
+): ReadonlyMap<string, BootstrapFoundationTerminalJournalEvidenceV1> {
+  if (!Array.isArray(value)) return refuse();
+  const applicable = foundationAuthorities(plan, journal)
+    .filter((authority) => authority.foundationJournal === true);
+  const expected = new Map(applicable.map((authority) => [
+    `${authority.foundationKind as string}:${String(authority.foundationOrdinal)}`,
+    authority,
+  ]));
+  if (value.length !== expected.size) return refuse();
+  const result = new Map<string, BootstrapFoundationTerminalJournalEvidenceV1>();
+  for (const candidate of value) {
+    const input = record(candidate);
+    exact(input, ["participantId", "postimage", "value"]);
+    if (typeof input.participantId !== "string") return refuse();
+    const participant = plan.foundationParticipants.find((row) => row.id === input.participantId);
+    if (participant === undefined) return refuse();
+    const ordinal = foundationOrdinal(participant, forwardFoundationOrdinals(plan));
+    const key = `${participant.role.kind}:${String(ordinal)}`;
+    if (!expected.has(key) || result.has(key)) return refuse();
+    const initialPayload = plan.payloads[participant.initialJournal.staged.ordinal];
+    if (
+      initialPayload?.source.kind !== "plan_derived" ||
+      initialPayload.source.role !== "foundation_initial_journal"
+    ) return refuse();
+    const initial = record(initialPayload.source.value);
+    const terminal = record(input.value);
+    const journalKeys = ["createdAt", "id", "kind", "mutations", "phase", "schemaVersion", "updatedAt"] as const;
+    exact(initial, journalKeys);
+    exact(terminal, journalKeys);
+    if (
+      initial.schemaVersion !== 1 ||
+      terminal.schemaVersion !== 1 ||
+      initial.id !== participant.id ||
+      terminal.id !== participant.id ||
+      initial.kind !== participant.slot ||
+      terminal.kind !== participant.slot ||
+      initial.phase !== "planned" ||
+      terminal.phase !== "finalized" ||
+      typeof initial.createdAt !== "string" ||
+      terminal.createdAt !== initial.createdAt ||
+      typeof terminal.updatedAt !== "string" ||
+      Date.parse(terminal.updatedAt) < Date.parse(initial.createdAt) ||
+      !Array.isArray(initial.mutations) ||
+      !Array.isArray(terminal.mutations) ||
+      initial.mutations.length !== participant.mutations.length ||
+      terminal.mutations.length !== participant.mutations.length
+    ) return refuse();
+    timestamp(initial.createdAt);
+    timestamp(terminal.updatedAt);
+    const normalizedMutations = participant.mutations.map((mutation, index) => ({
+      targetPath: mutation.targetPath,
+      operation: mutation.operation,
+      expectedBeforeHash: mutation.expectedBeforeHash,
+      stagedRelativePath: mutation.operation === "remove" ? null : `${String(index)}.bin`,
+    }));
+    if (!sameValue(initial.mutations, normalizedMutations) || !sameValue(terminal.mutations, normalizedMutations)) {
+      return refuse();
+    }
+    const normalized = {
+      schemaVersion: 1,
+      id: participant.id,
+      kind: participant.slot,
+      phase: "finalized",
+      createdAt: initial.createdAt,
+      updatedAt: terminal.updatedAt,
+      mutations: normalizedMutations,
+    };
+    if (!sameValue(terminal, normalized)) return refuse();
+    const postimage = validatePostimage(input.postimage);
+    const origin = payloadRetentionEvidence(payloadEvidence, participant.initialJournal.staged.ordinal).value;
+    const wireBytes = encoder.encode(`${JSON.stringify(normalized)}\n`);
+    if (
+      postimage.kind !== "regular_file" ||
+      postimage.ownerUid !== plan.bootstrapIdentity.ownerUid ||
+      postimage.mode !== 0o600 ||
+      postimage.dev !== origin.dev ||
+      postimage.ino !== origin.ino ||
+      postimage.bytes !== String(wireBytes.byteLength) ||
+      postimage.sha256 !== createHash("sha256").update(wireBytes).digest("hex")
+    ) return refuse();
+    result.set(key, {
+      participantId: participant.id,
+      value: structuredClone(normalized),
+      postimage,
+    });
+  }
+  return result;
+}
+
 function verifyAuthority(
   plan: BootstrapRetainedExecutionPlanV1,
   authority: Authority,
   row: { readonly role: BootstrapRetentionRoleV1; readonly sourcePath: CanonicalAbsolutePathV1; readonly parent: BootstrapRetentionParentIdentityV1; readonly postimage: BootstrapRetentionPostimageV1 },
   payloadEvidence: readonly BootstrapPayloadRetentionEvidenceV1[],
   createdPathEvidence: readonly BootstrapCreatedPathRetentionEvidenceV1[],
+  foundationEvidence: ReadonlyMap<string, BootstrapFoundationTerminalJournalEvidenceV1>,
 ): void {
+  if (authority.foundationJournal === true) {
+    const admitted = authority.foundationKind === undefined || authority.foundationOrdinal === undefined
+      ? undefined
+      : foundationEvidence.get(`${authority.foundationKind}:${String(authority.foundationOrdinal)}`);
+    if (admitted === undefined || !sameValue(row.postimage, admitted.postimage)) return refuse();
+    return;
+  }
   if (authority.interruptedPostimage !== undefined) {
     if (!sameValue(row.postimage, authority.interruptedPostimage)) return refuse();
     return;
@@ -1397,6 +1667,11 @@ function verifyAuthority(
     if (authority.mode !== undefined && row.postimage.mode !== authority.mode) return refuse();
   } else if (authority.bytes !== undefined || authority.hash !== undefined || authority.mode === 0o600) {
     return refuse();
+  }
+  if (authority.payloadPostimage === true) {
+    if (authority.payloadOrdinal === undefined || row.postimage.kind !== "regular_file") return refuse();
+    const origin = payloadRetentionEvidence(payloadEvidence, authority.payloadOrdinal).value;
+    if (row.postimage.dev !== origin.dev || row.postimage.ino !== origin.ino) return refuse();
   }
   if (row.role === "bootstrap_lock") {
     if (row.postimage.kind !== "regular_file" || row.postimage.dev !== plan.bootstrapIdentity.dev || row.postimage.ino !== plan.bootstrapIdentity.ino || row.postimage.ownerUid !== plan.bootstrapIdentity.ownerUid) return refuse();
@@ -1521,6 +1796,11 @@ function verifyDirectoryTrees(
       const entry = tree.entries.find((candidate) => candidate.relativePath === relativePath);
       if (entry === undefined || !sameDirectoryEntryPostimage(entry, row.postimage)) return refuse();
     }
+    for (const entry of tree.entries) {
+      const sourcePath = `${root.sourcePath}/${entry.relativePath}`;
+      const row = rows.find((candidate) => candidate.sourcePath === sourcePath);
+      if (row === undefined || !sameDirectoryEntryPostimage(entry, row.postimage)) return refuse();
+    }
   }
   return trees;
 }
@@ -1536,6 +1816,7 @@ export function deriveBootstrapRetentionTable(
     !Array.isArray(evidence.payloadEvidence) ||
     !(evidence.interruptedPayload === null || typeof evidence.interruptedPayload === "object") ||
     !Array.isArray(evidence.createdPathEvidence) ||
+    !Array.isArray(evidence.foundationEvidence) ||
     !Array.isArray(evidence.directoryTrees)
   ) return refuse();
   const terminalJournal = terminalRetentionJournal(plan, evidence.terminalJournal);
@@ -1548,6 +1829,12 @@ export function deriveBootstrapRetentionTable(
   const expectedAuthorityKeys = new Set(applicableAuthorities.map(authorityKey));
   if (expectedAuthorityKeys.size !== applicableAuthorities.length) return refuse();
   const payloadEvidence = validatePayloadRetentionEvidence(plan, terminalJournal, evidence.payloadEvidence);
+  const foundationEvidence = validateFoundationTerminalEvidence(
+    plan,
+    terminalJournal,
+    payloadEvidence,
+    evidence.foundationEvidence,
+  );
   const createdPathEvidence = evidence.createdPathEvidence.map((value) => validateCreatedPathRetentionEvidence(plan, value));
   if (new Set(createdPathEvidence.map((row) => `${row.value.scope}:${String(row.value.ordinal)}`)).size !== createdPathEvidence.length) return refuse();
   const expectedCreatedEvidence = new Set(applicableAuthorities
@@ -1574,7 +1861,7 @@ export function deriveBootstrapRetentionTable(
   for (const row of rows) {
     const authority = applicableAuthorities.find((candidate) => authorityKey(candidate) === authorityKey(row));
     if (authority === undefined) return refuse();
-    verifyAuthority(plan, authority, row, payloadEvidence, createdPathEvidence);
+    verifyAuthority(plan, authority, row, payloadEvidence, createdPathEvidence, foundationEvidence);
   }
 
   const directoryRoots = rows

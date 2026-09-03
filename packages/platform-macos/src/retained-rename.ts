@@ -9,13 +9,16 @@ import { basename, dirname, isAbsolute, join } from "node:path";
 
 import {
   EXIT_CODES,
+  type CanonicalAbsolutePathV1,
   type BootstrapRetentionPostimageV1,
   type SameParentRenameNoReplaceV1,
+  type UInt64DecimalV1,
 } from "@developer-os/core";
 
 const OSASCRIPT = "/usr/bin/osascript";
 const RENAME_FLAGS = 0x34;
-const PARENT_FD = 3;
+const SOURCE_PARENT_FD = 3;
+const DESTINATION_PARENT_FD = 4;
 const MAX_ORDINAL = 999_999;
 const UINT64 = /^(?:0|[1-9][0-9]*)$/u;
 const BOOTSTRAP_ID = /^(?:fi|mm)_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -27,7 +30,7 @@ ObjC.bindFunction("renameatx_np", [
 const argv = $.NSProcessInfo.processInfo.arguments;
 const source = argv.objectAtIndex(5).UTF8String;
 const destination = argv.objectAtIndex(6).UTF8String;
-const result = $.renameatx_np(${PARENT_FD}, source, ${PARENT_FD}, destination, 0x${RENAME_FLAGS.toString(16)});
+const result = $.renameatx_np(${SOURCE_PARENT_FD}, source, ${DESTINATION_PARENT_FD}, destination, 0x${RENAME_FLAGS.toString(16)});
 if (result !== 0) throw new Error("renameatx_np refused");
 `;
 
@@ -35,9 +38,33 @@ export type RenameSameParentNoReplace = (
   request: SameParentRenameNoReplaceV1,
 ) => Promise<void>;
 
+export interface ExactRenameParentIdentityV1 {
+  readonly path: CanonicalAbsolutePathV1;
+  readonly ownerUid: number;
+  readonly mode: 0o700;
+  readonly dev: UInt64DecimalV1;
+  readonly ino: UInt64DecimalV1;
+}
+
+export interface ExactNoReplaceRenameRequestV1 {
+  readonly sourcePath: CanonicalAbsolutePathV1;
+  readonly destinationPath: CanonicalAbsolutePathV1;
+  readonly sourceParent: ExactRenameParentIdentityV1;
+  readonly destinationParent: ExactRenameParentIdentityV1;
+  readonly postimage: BootstrapRetentionPostimageV1;
+}
+
+export type RenameNoReplace = (
+  request: ExactNoReplaceRenameRequestV1,
+) => Promise<void>;
+
 export interface RenameAtxRunRequestV1 {
+  readonly sourceParentDescriptor?: number;
+  readonly destinationParentDescriptor?: number;
+  /** Compatibility aliases retained for the row-bound Task 4 adapter tests. */
   readonly parentDescriptor: number;
   readonly sourceName: string;
+  readonly destinationName?: string;
   readonly tombstoneName: string;
 }
 
@@ -102,18 +129,23 @@ function isAsciiBasename(value: string): boolean {
   return true;
 }
 
-function isRetainedBasename(value: string): boolean {
-  return /^\.developer-os-retained\.(?:fi|mm)_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.[0-9]{10}\.tombstone$/u.test(value);
+function hasExactParentMode(value: unknown): boolean {
+  return typeof value === "object" && value !== null &&
+    (value as Record<string, unknown>).mode === 0o700;
 }
 
 function assertRunnerRequest(request: RenameAtxRunRequestV1): void {
+  const sourceParentDescriptor = request.sourceParentDescriptor ?? request.parentDescriptor;
+  const destinationParentDescriptor = request.destinationParentDescriptor ?? request.parentDescriptor;
+  const destinationName = request.destinationName ?? request.tombstoneName;
   if (
-    !Number.isSafeInteger(request.parentDescriptor) ||
-    request.parentDescriptor < 0 ||
+    !Number.isSafeInteger(sourceParentDescriptor) ||
+    sourceParentDescriptor < 0 ||
+    !Number.isSafeInteger(destinationParentDescriptor) ||
+    destinationParentDescriptor < 0 ||
     !isAsciiBasename(request.sourceName) ||
-    !isAsciiBasename(request.tombstoneName) ||
-    !isRetainedBasename(request.tombstoneName) ||
-    request.sourceName === request.tombstoneName
+    !isAsciiBasename(destinationName) ||
+    request.sourceName === destinationName
   ) {
     throw new MacOsRetainedRenameRefusalError();
   }
@@ -122,13 +154,16 @@ function assertRunnerRequest(request: RenameAtxRunRequestV1): void {
 export class SpawnRenameAtxRunner implements RenameAtxRunner {
   run(request: RenameAtxRunRequestV1): Promise<RenameAtxRunResultV1> {
     assertRunnerRequest(request);
+    const sourceParentDescriptor = request.sourceParentDescriptor ?? request.parentDescriptor;
+    const destinationParentDescriptor = request.destinationParentDescriptor ?? request.parentDescriptor;
+    const destinationName = request.destinationName ?? request.tombstoneName;
     const child = spawn(
       OSASCRIPT,
-      ["-l", "JavaScript", "-e", RENAME_PROGRAM, request.sourceName, request.tombstoneName],
+      ["-l", "JavaScript", "-e", RENAME_PROGRAM, request.sourceName, destinationName],
       {
         shell: false,
         env: {},
-        stdio: ["ignore", "ignore", "ignore", request.parentDescriptor],
+        stdio: ["ignore", "ignore", "ignore", sourceParentDescriptor, destinationParentDescriptor],
       },
     );
     return waitForRename(child);
@@ -232,19 +267,59 @@ export class MacOsRetainedRename {
 
   async rename(request: SameParentRenameNoReplaceV1): Promise<void> {
     const names = this.validateRequest(request);
-    const executableIdentity = await this.assertTrustedExecutable();
     const uid = this.readUid();
-    const parentIdentity = this.parentIdentity(request);
-    let parentHandle: FileHandle | undefined;
+    const parent = {
+      path: request.entry.parent.path,
+      ownerUid: uid,
+      mode: 0o700 as const,
+      dev: request.entry.parent.dev,
+      ino: request.entry.parent.ino,
+    };
+    await this.renameValidated({
+      sourcePath: request.entry.sourcePath,
+      destinationPath: request.entry.tombstonePath,
+      sourceParent: parent,
+      destinationParent: parent,
+      postimage: request.entry.postimage,
+    }, { source: names.source, destination: names.tombstone }, uid);
+  }
+
+  async renameNoReplace(request: ExactNoReplaceRenameRequestV1): Promise<void> {
+    const names = this.validateExactRequest(request);
+    const uid = this.readUid();
+    if (
+      request.sourceParent.ownerUid !== uid ||
+      request.destinationParent.ownerUid !== uid
+    ) throw new MacOsRetainedRenameRefusalError();
+    await this.renameValidated(request, names, uid);
+  }
+
+  private async renameValidated(
+    request: ExactNoReplaceRenameRequestV1,
+    names: { readonly source: string; readonly destination: string },
+    uid: number,
+  ): Promise<void> {
+    const executableIdentity = await this.assertTrustedExecutable();
+    const sourceParentIdentity = this.parentIdentity(request.sourceParent);
+    const destinationParentIdentity = this.parentIdentity(request.destinationParent);
+    let sourceParentHandle: FileHandle | undefined;
+    let destinationParentHandle: FileHandle | undefined;
 
     try {
-      await this.assertParentPath(request.entry.parent.path, parentIdentity, uid);
+      await Promise.all([
+        this.assertParentPath(request.sourceParent.path, sourceParentIdentity, uid),
+        this.assertParentPath(request.destinationParent.path, destinationParentIdentity, uid),
+      ]);
       try {
-        parentHandle = await this.dependencies.openParent(request.entry.parent.path);
+        sourceParentHandle = await this.dependencies.openParent(request.sourceParent.path);
+        destinationParentHandle = await this.dependencies.openParent(request.destinationParent.path);
       } catch {
         throw new MacOsRetainedRenameThirdStateError();
       }
-      await this.assertParentDescriptor(parentHandle, parentIdentity, uid);
+      await Promise.all([
+        this.assertParentDescriptor(sourceParentHandle, sourceParentIdentity, uid),
+        this.assertParentDescriptor(destinationParentHandle, destinationParentIdentity, uid),
+      ]);
 
       const initial = await this.project(request);
       if (initial === "post") {
@@ -253,7 +328,12 @@ export class MacOsRetainedRename {
       }
       if (initial !== "pre") throw new MacOsRetainedRenameThirdStateError();
 
-      await this.assertParentDescriptor(parentHandle, parentIdentity, uid);
+      await Promise.all([
+        this.assertParentPath(request.sourceParent.path, sourceParentIdentity, uid),
+        this.assertParentPath(request.destinationParent.path, destinationParentIdentity, uid),
+        this.assertParentDescriptor(sourceParentHandle, sourceParentIdentity, uid),
+        this.assertParentDescriptor(destinationParentHandle, destinationParentIdentity, uid),
+      ]);
       if (await this.project(request) !== "pre") {
         throw new MacOsRetainedRenameThirdStateError();
       }
@@ -261,9 +341,12 @@ export class MacOsRetainedRename {
       let childSettlement: Promise<RenameAtxSettlement>;
       try {
         childSettlement = this.dependencies.runner.run({
-          parentDescriptor: parentHandle.fd,
+          sourceParentDescriptor: sourceParentHandle.fd,
+          destinationParentDescriptor: destinationParentHandle.fd,
+          parentDescriptor: sourceParentHandle.fd,
           sourceName: names.source,
-          tombstoneName: names.tombstone,
+          destinationName: names.destination,
+          tombstoneName: names.destination,
         }).then(
           (result): RenameAtxSettlement => ({ status: "fulfilled", result }),
           (): RenameAtxSettlement => ({ status: "rejected" }),
@@ -280,6 +363,12 @@ export class MacOsRetainedRename {
       }
 
       const settlement = await childSettlement;
+      await Promise.all([
+        this.assertParentPath(request.sourceParent.path, sourceParentIdentity, uid),
+        this.assertParentPath(request.destinationParent.path, destinationParentIdentity, uid),
+        this.assertParentDescriptor(sourceParentHandle, sourceParentIdentity, uid),
+        this.assertParentDescriptor(destinationParentHandle, destinationParentIdentity, uid),
+      ]);
       const projection = await this.project(request);
       if (projection === "third") throw new MacOsRetainedRenameThirdStateError();
       if (executableRefusal !== undefined) throw executableRefusal;
@@ -309,11 +398,12 @@ export class MacOsRetainedRename {
       if (isDomainError(error)) throw error;
       throw new MacOsRetainedRenameUnavailableError();
     } finally {
-      if (parentHandle !== undefined) {
+      for (const handle of [destinationParentHandle, sourceParentHandle]) {
+        if (handle === undefined) continue;
         try {
-          await parentHandle.close();
+          await handle.close();
         } catch {
-          // The child has exited before this close. A close failure cannot authorize another mutation.
+          // The child has settled. A close failure cannot authorize another mutation.
         }
       }
     }
@@ -362,6 +452,42 @@ export class MacOsRetainedRename {
     return { source, tombstone };
   }
 
+  private validateExactRequest(request: ExactNoReplaceRenameRequestV1): {
+    readonly source: string;
+    readonly destination: string;
+  } {
+    const source = basename(request.sourcePath);
+    const destination = basename(request.destinationPath);
+    if (
+      !isAbsolute(request.sourcePath) ||
+      !isAbsolute(request.destinationPath) ||
+      request.sourcePath.includes("\0") ||
+      request.destinationPath.includes("\0") ||
+      dirname(request.sourcePath) !== request.sourceParent.path ||
+      dirname(request.destinationPath) !== request.destinationParent.path ||
+      join(request.sourceParent.path, source) !== request.sourcePath ||
+      join(request.destinationParent.path, destination) !== request.destinationPath ||
+      !isAsciiBasename(source) ||
+      !isAsciiBasename(destination) ||
+      (request.sourceParent.path === request.destinationParent.path && source === destination) ||
+      !hasExactParentMode(request.sourceParent) ||
+      !hasExactParentMode(request.destinationParent) ||
+      !Number.isSafeInteger(request.sourceParent.ownerUid) ||
+      request.sourceParent.ownerUid < 0 ||
+      !Number.isSafeInteger(request.destinationParent.ownerUid) ||
+      request.destinationParent.ownerUid < 0 ||
+      toUInt64(request.sourceParent.dev) === null ||
+      toUInt64(request.sourceParent.ino) === null ||
+      toUInt64(request.destinationParent.dev) === null ||
+      toUInt64(request.destinationParent.ino) === null ||
+      toUInt64(request.postimage.dev) === null ||
+      toUInt64(request.postimage.ino) === null ||
+      !Number.isSafeInteger(request.postimage.ownerUid) ||
+      request.postimage.ownerUid < 0
+    ) throw new MacOsRetainedRenameRefusalError();
+    return { source, destination };
+  }
+
   private readUid(): number {
     try {
       const uid = this.dependencies.getUid();
@@ -373,9 +499,9 @@ export class MacOsRetainedRename {
     }
   }
 
-  private parentIdentity(request: SameParentRenameNoReplaceV1): FileIdentity {
-    const dev = toUInt64(request.entry.parent.dev);
-    const ino = toUInt64(request.entry.parent.ino);
+  private parentIdentity(parent: ExactRenameParentIdentityV1): FileIdentity {
+    const dev = toUInt64(parent.dev);
+    const ino = toUInt64(parent.ino);
     if (dev === null || ino === null) throw new MacOsRetainedRenameRefusalError();
     return { dev, ino };
   }
@@ -432,19 +558,19 @@ export class MacOsRetainedRename {
     }
   }
 
-  private async project(request: SameParentRenameNoReplaceV1): Promise<Projection> {
+  private async project(request: ExactNoReplaceRenameRequestV1): Promise<Projection> {
     const [source, destination] = await Promise.all([
-      this.observe(request.entry.sourcePath),
-      this.observe(request.entry.tombstonePath),
+      this.observe(request.sourcePath),
+      this.observe(request.destinationPath),
     ]);
-    const sourceMatches = source !== null && matchesPostimage(source, request.entry.postimage);
-    const destinationMatches = destination !== null && matchesPostimage(destination, request.entry.postimage);
+    const sourceMatches = source !== null && matchesPostimage(source, request.postimage);
+    const destinationMatches = destination !== null && matchesPostimage(destination, request.postimage);
     if (sourceMatches && destination === null) return "pre";
     if (source === null && destinationMatches) return "post";
     return "third";
   }
 
-  private async assertDestinationDescriptor(request: SameParentRenameNoReplaceV1): Promise<void> {
+  private async assertDestinationDescriptor(request: ExactNoReplaceRenameRequestV1): Promise<void> {
     let handle: FileHandle | undefined;
     let failure:
       | MacOsRetainedRenameUnavailableError
@@ -455,9 +581,9 @@ export class MacOsRetainedRename {
       const flags = constants.O_RDONLY |
         constants.O_NONBLOCK |
         constants.O_NOFOLLOW |
-        (request.entry.postimage.kind === "directory_tree" ? constants.O_DIRECTORY : 0);
+        (request.postimage.kind === "directory_tree" ? constants.O_DIRECTORY : 0);
       try {
-        handle = await open(request.entry.tombstonePath, flags);
+        handle = await open(request.destinationPath, flags);
       } catch {
         if (await this.project(request) !== "post") {
           throw new MacOsRetainedRenameThirdStateError();
@@ -471,7 +597,7 @@ export class MacOsRetainedRename {
       } catch {
         throw new MacOsRetainedRenameUnavailableError();
       }
-      if (!matchesPostimage(stats, request.entry.postimage)) {
+      if (!matchesPostimage(stats, request.postimage)) {
         throw new MacOsRetainedRenameThirdStateError();
       }
     } catch (error) {

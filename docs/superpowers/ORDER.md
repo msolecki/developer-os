@@ -18,11 +18,11 @@ started. Spec 2's 2026-08-29 baseline and 26-task plan exist at
 passed local gates but fresh review rejected its deletion-based bootstrap closure. The founder
 approved the complete retained-evidence correction and durable slot-identity addendum on 2026-08-31.
 Its six-task replacement plan is
-`plans/2026-08-31-developer-os-retained-bootstrap-evidence.md`; replacement Tasks 1–4 are complete,
-so 2 tasks and 12 unchecked steps remain. The next action is replacement Task 5, switching fresh V2
-init and recovery to the retained envelope
-(docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md:726). Across the active
-implementation plans, 45 tasks remain untouched. Baseline Task 8 remains blocked until all six
+`plans/2026-08-31-developer-os-retained-bootstrap-evidence.md`; replacement Tasks 1–5 are complete,
+so 1 task and 6 unchecked steps remain. The next action is
+replacement Task 6, adding reports, reinstall bounds, inertness, and checkpoint evidence
+(docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md:851). Across the active
+implementation plans, 44 tasks remain untouched. Baseline Task 8 remains blocked until all six
 replacement tasks pass fresh review.
 
 Open sequence inside A11:
@@ -35,7 +35,7 @@ Open sequence inside A11:
    V2 drift/store dispatch, Foundation participant, and bootstrap-schema prerequisites.
 5. Completed 2026-08-31: approve the written Spec 2 §6 retained-bootstrap-evidence correction and
    durable slot-identity addendum, then write the focused replacement Task 7 plan.
-6. Now: execute all six tasks in
+6. Now: execute replacement Task 6 in
    `plans/2026-08-31-developer-os-retained-bootstrap-evidence.md` to fresh-review acceptance.
 7. Execute Spec 2 Tasks 8–9 for the complete `InstallationManifestV2` migration and V2 new-init
    handoff.
@@ -94,8 +94,8 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 ## Count
 
 - Product sequence: 6 open entries, A11–A16.
-- Program plan: replacement Task 7 contains 18 unchecked work steps across 3 unfinished tasks;
+- Program plan: replacement Task 7 contains 6 unchecked work steps across 1 unfinished task;
   baseline Tasks 8–9 contain 10.
 - Repository backlog: 24 open numbered rows, plus the Foundation watchdog decision.
-- Active implementation plans: 46 untouched tasks — 3 in replacement Task 7, 19 remaining in Spec
+- Active implementation plans: 44 untouched tasks — 1 in replacement Task 7, 19 remaining in Spec
   2, and 24 in Spec 1. Spec 1 remains blocked until replacement Task 7 and baseline Tasks 8–9 pass.

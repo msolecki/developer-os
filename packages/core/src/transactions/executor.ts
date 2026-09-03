@@ -8,6 +8,8 @@ import type {
 } from "../manifest/bootstrap.js";
 import { EXIT_CODES } from "../result.js";
 import { parseUtcTimestamp } from "../update/scalars.js";
+import type { CanonicalAbsolutePathV1 } from "../update/paths.js";
+import type { UInt64DecimalV1 } from "../update/scalars.js";
 import {
   encodeFoundationJournalJsonV1,
   TransactionStateError,
@@ -15,6 +17,7 @@ import {
   validateJournal,
 } from "./store.js";
 import type {
+  BootstrapInitialJournalPublicationV1,
   FileMutation,
   TransactionExecutorDependencies,
   TransactionFileSystem,
@@ -234,9 +237,14 @@ async function syncDirectory(fs: TransactionFileSystem, path: string): Promise<v
 }
 
 interface BootstrapJournalIdentity {
-  readonly dev: string;
-  readonly ino: string;
+  readonly dev: UInt64DecimalV1;
+  readonly ino: UInt64DecimalV1;
 }
+
+type JournalTransition = (
+  journal: TransactionJournalV1,
+  nextPhase: TransactionPhase,
+) => Promise<TransactionJournalV1>;
 
 const admittedBootstrapFoundationInitialJournal: unique symbol = Symbol(
   "admittedBootstrapFoundationInitialJournal",
@@ -255,10 +263,19 @@ export interface AdmittedBootstrapFoundationInitialJournalV1 {
 export interface BootstrapFoundationInitialJournalAdmissionContextV1 {
   readonly participantAdmissionId: string;
   readonly evidenceAdmissionId: string;
+  readonly mutationPublicationsAdmissionId: string;
   readonly ownerUid: number;
+  readonly sourceParent: BootstrapInitialJournalPublicationV1["sourceParent"];
+  readonly destinationParent: BootstrapInitialJournalPublicationV1["destinationParent"];
+  readonly mutationPublications: readonly BootstrapInitialJournalPublicationV1[];
+  readonly initialJournal: TransactionJournalV1;
   readonly admitParticipant: (value: FoundationParticipantRefV2) => string;
   readonly admitEvidence: (
     value: BootstrapPayloadEvidenceV1,
+    participant: FoundationParticipantRefV2,
+  ) => string;
+  readonly admitMutationPublications: (
+    value: readonly BootstrapInitialJournalPublicationV1[],
     participant: FoundationParticipantRefV2,
   ) => string;
 }
@@ -267,6 +284,10 @@ interface RetainedBootstrapFoundationInitialJournalV1 {
   readonly participant: FoundationParticipantRefV2;
   readonly evidence: BootstrapPayloadEvidenceV1;
   readonly ownerUid: number;
+  readonly sourceParent: BootstrapInitialJournalPublicationV1["sourceParent"];
+  readonly destinationParent: BootstrapInitialJournalPublicationV1["destinationParent"];
+  readonly mutationPublications: readonly BootstrapInitialJournalPublicationV1[];
+  readonly initialJournal: TransactionJournalV1;
 }
 
 const retainedBootstrapFoundationInitialJournals = new WeakMap<
@@ -278,6 +299,70 @@ function validAdmissionId(value: unknown): value is string {
   if (typeof value !== "string") return false;
   const bytes = new TextEncoder().encode(value).byteLength;
   return bytes >= 1 && bytes <= 256;
+}
+
+function retainedPublicationParent(
+  value: BootstrapInitialJournalPublicationV1["sourceParent"],
+  expectedPath: string,
+  ownerUid: number,
+): BootstrapInitialJournalPublicationV1["sourceParent"] {
+  if (
+    value.path !== expectedPath ||
+    value.ownerUid !== ownerUid ||
+    !/^(?:0|[1-9][0-9]*)$/u.test(value.dev) ||
+    !/^(?:0|[1-9][0-9]*)$/u.test(value.ino)
+  ) {
+    throw new TransactionStateError();
+  }
+  return structuredClone(value);
+}
+
+function retainedMutationPublications(
+  participant: FoundationParticipantRefV2,
+  value: readonly BootstrapInitialJournalPublicationV1[],
+  ownerUid: number,
+): readonly BootstrapInitialJournalPublicationV1[] {
+  const expected = participant.role.kind === "forward"
+    ? participant.mutations
+    : [];
+  if (value.length !== expected.length) throw new TransactionStateError();
+  return value.map((request, index) => {
+    const mutation = expected[index];
+    const observedNlink: unknown = request.postimage.nlink;
+    if (
+      mutation === undefined ||
+      mutation.operation !== "create" ||
+      mutation.expectedBeforeHash !== null ||
+      mutation.stagedPath === null ||
+      mutation.contentHash === null ||
+      mutation.contentSize === null ||
+      request.sourcePath !== mutation.stagedPath ||
+      request.destinationPath !== mutation.targetPath ||
+      request.postimage.kind !== "regular_file" ||
+      request.postimage.ownerUid !== ownerUid ||
+      request.postimage.mode !== 0o600 ||
+      observedNlink !== 1 ||
+      request.postimage.bytes !== String(mutation.contentSize) ||
+      request.postimage.sha256 !== mutation.contentHash ||
+      !/^(?:0|[1-9][0-9]*)$/u.test(request.postimage.dev) ||
+      !/^(?:0|[1-9][0-9]*)$/u.test(request.postimage.ino)
+    ) throw new TransactionStateError();
+    return {
+      sourcePath: request.sourcePath,
+      destinationPath: request.destinationPath,
+      sourceParent: retainedPublicationParent(
+        request.sourceParent,
+        dirname(request.sourcePath),
+        ownerUid,
+      ),
+      destinationParent: retainedPublicationParent(
+        request.destinationParent,
+        dirname(request.destinationPath),
+        ownerUid,
+      ),
+      postimage: structuredClone(request.postimage),
+    };
+  });
 }
 
 /**
@@ -294,7 +379,10 @@ export function admitBootstrapFoundationInitialJournal(
     if (
       !validAdmissionId(context.participantAdmissionId) ||
       !validAdmissionId(context.evidenceAdmissionId) ||
+      !validAdmissionId(context.mutationPublicationsAdmissionId) ||
       context.participantAdmissionId === context.evidenceAdmissionId ||
+      context.mutationPublicationsAdmissionId === context.participantAdmissionId ||
+      context.mutationPublicationsAdmissionId === context.evidenceAdmissionId ||
       !Number.isSafeInteger(context.ownerUid) ||
       context.ownerUid < 0
     ) {
@@ -302,13 +390,40 @@ export function admitBootstrapFoundationInitialJournal(
     }
     const retainedParticipant = structuredClone(participant);
     const retainedEvidence = structuredClone(evidence);
+    const initialJournal = validateJournal(structuredClone(context.initialJournal));
+    const initialBytes = new TextEncoder().encode(encodeFoundationJournalJsonV1(initialJournal));
+    if (
+      initialJournal.phase !== "planned" ||
+      initialJournal.createdAt !== initialJournal.updatedAt ||
+      initialBytes.byteLength !== retainedEvidence.bytes ||
+      hash(initialBytes) !== retainedEvidence.sha256
+    ) throw new TransactionStateError();
+    const sourceParent = retainedPublicationParent(
+      context.sourceParent,
+      dirname(retainedParticipant.initialJournal.staged.path),
+      context.ownerUid,
+    );
+    const destinationParent = retainedPublicationParent(
+      context.destinationParent,
+      dirname(retainedParticipant.initialJournal.finalPath),
+      context.ownerUid,
+    );
+    const mutationPublications = retainedMutationPublications(
+      retainedParticipant,
+      context.mutationPublications,
+      context.ownerUid,
+    );
     if (
       context.admitParticipant(structuredClone(retainedParticipant)) !==
         context.participantAdmissionId ||
       context.admitEvidence(
         structuredClone(retainedEvidence),
         structuredClone(retainedParticipant),
-      ) !== context.evidenceAdmissionId
+      ) !== context.evidenceAdmissionId ||
+      context.admitMutationPublications(
+        structuredClone(mutationPublications),
+        structuredClone(retainedParticipant),
+      ) !== context.mutationPublicationsAdmissionId
     ) {
       throw new TransactionStateError();
     }
@@ -319,6 +434,10 @@ export function admitBootstrapFoundationInitialJournal(
       participant: retainedParticipant,
       evidence: retainedEvidence,
       ownerUid: context.ownerUid,
+      sourceParent,
+      destinationParent,
+      mutationPublications,
+      initialJournal,
     });
     return admitted;
   } catch (error) {
@@ -342,7 +461,7 @@ const BOOTSTRAP_FOUNDATION_ID_RE = new RegExp(
 
 async function optionalLstat(
   fs: TransactionFileSystem,
-  path: string,
+  path: CanonicalAbsolutePathV1,
 ): Promise<Awaited<ReturnType<TransactionFileSystem["lstat"]>> | null> {
   try {
     return await fs.lstat(path);
@@ -412,12 +531,213 @@ async function readExactBootstrapJournal(
     }
     return {
       bytes,
-      identity: { dev: String(after.dev), ino: String(after.ino) },
+      identity: {
+        dev: String(after.dev) as UInt64DecimalV1,
+        ino: String(after.ino) as UInt64DecimalV1,
+      },
     };
   } catch (error) {
     if (error instanceof TransactionStateError) throw error;
     throw new TransactionStateError();
   }
+}
+
+async function readExactBootstrapJournalByIdentity(
+  fs: TransactionFileSystem,
+  path: CanonicalAbsolutePathV1,
+  identity: BootstrapJournalIdentity,
+  ownerUid: number,
+  expectedBytes: Uint8Array,
+): Promise<TransactionJournalV1> {
+  let handle: Awaited<ReturnType<TransactionFileSystem["open"]>> | undefined;
+  let result: TransactionJournalV1 | undefined;
+  let failure: TransactionStateError | undefined;
+  try {
+    const before = await fs.lstat(path);
+    if (
+      before.isSymbolicLink() ||
+      !before.isFile() ||
+      before.uid !== ownerUid ||
+      (before.mode & 0o7777) !== 0o600 ||
+      before.nlink !== 1 ||
+      before.size !== expectedBytes.byteLength ||
+      String(before.dev) !== identity.dev ||
+      String(before.ino) !== identity.ino
+    ) throw new TransactionStateError();
+    handle = await fs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const opened = await handle.stat();
+    if (
+      opened.dev !== before.dev ||
+      opened.ino !== before.ino ||
+      opened.size !== expectedBytes.byteLength
+    ) throw new TransactionStateError();
+    const bytes = await handle.readFile();
+    const afterRead = await handle.stat();
+    if (
+      afterRead.dev !== opened.dev ||
+      afterRead.ino !== opened.ino ||
+      afterRead.size !== expectedBytes.byteLength ||
+      bytes.byteLength !== expectedBytes.byteLength ||
+      hash(bytes) !== hash(expectedBytes)
+    ) throw new TransactionStateError();
+    const journal = validateJournal(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as unknown);
+    if (encodeFoundationJournalJsonV1(journal) !== new TextDecoder().decode(expectedBytes)) {
+      throw new TransactionStateError();
+    }
+    result = journal;
+  } catch {
+    failure = new TransactionStateError();
+  }
+  try {
+    await handle?.close();
+  } catch {
+    failure ??= new TransactionStateError();
+  }
+  if (failure !== undefined || result === undefined) throw failure ?? new TransactionStateError();
+  return result;
+}
+
+function exactBootstrapFoundationJournalShape(
+  journal: TransactionJournalV1,
+  expected: TransactionJournalV1,
+): boolean {
+  return journal.id === expected.id &&
+    journal.kind === expected.kind &&
+    journal.createdAt === expected.createdAt &&
+    Date.parse(journal.updatedAt) >= Date.parse(journal.createdAt) &&
+    journal.phase !== "rolled_back" &&
+    journal.mutations.length === expected.mutations.length &&
+    journal.mutations.every((mutation, index) => {
+      const planned = expected.mutations[index];
+      return planned !== undefined &&
+        mutation.targetPath === planned.targetPath &&
+        mutation.operation === planned.operation &&
+        mutation.expectedBeforeHash === planned.expectedBeforeHash &&
+        mutation.stagedRelativePath === planned.stagedRelativePath;
+    });
+}
+
+async function restoreBootstrapFoundationInitialJournalByIdentity(
+  fs: TransactionFileSystem,
+  path: CanonicalAbsolutePathV1,
+  identity: BootstrapJournalIdentity,
+  ownerUid: number,
+  expected: TransactionJournalV1,
+): Promise<TransactionJournalV1> {
+  let handle: Awaited<ReturnType<TransactionFileSystem["open"]>> | undefined;
+  let failure: TransactionStateError | undefined;
+  let rewritten = false;
+  const expectedBytes = new TextEncoder().encode(encodeFoundationJournalJsonV1(expected));
+  try {
+    const before = await fs.lstat(path);
+    if (
+      before.isSymbolicLink() ||
+      !before.isFile() ||
+      before.uid !== ownerUid ||
+      (before.mode & 0o7777) !== 0o600 ||
+      before.nlink !== 1 ||
+      before.size < 0 ||
+      before.size > 1_048_576 ||
+      String(before.dev) !== identity.dev ||
+      String(before.ino) !== identity.ino
+    ) throw new TransactionStateError();
+    handle = await fs.open(path, constants.O_RDWR | constants.O_NOFOLLOW);
+    const opened = await handle.stat();
+    if (opened.dev !== before.dev || opened.ino !== before.ino || opened.size !== before.size) {
+      throw new TransactionStateError();
+    }
+    const bytes = await handle.readFile();
+    const afterRead = await handle.stat();
+    const linkedAfter = await fs.lstat(path);
+    if (
+      afterRead.dev !== opened.dev || afterRead.ino !== opened.ino ||
+      linkedAfter.dev !== opened.dev || linkedAfter.ino !== opened.ino ||
+      afterRead.size !== bytes.byteLength || linkedAfter.size !== bytes.byteLength
+    ) throw new TransactionStateError();
+    let exactLegalBody = false;
+    let crashResidue = bytes.byteLength === 0;
+    if (!crashResidue) {
+      let serialized: string;
+      try {
+        serialized = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      } catch {
+        serialized = "";
+        crashResidue = true;
+      }
+      if (!crashResidue) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(serialized);
+        } catch {
+          parsed = undefined;
+          crashResidue = true;
+        }
+        if (!crashResidue) {
+          let journal: TransactionJournalV1;
+          try {
+            journal = validateJournal(parsed);
+            parseUtcTimestamp(journal.createdAt);
+            parseUtcTimestamp(journal.updatedAt);
+          } catch {
+            throw new TransactionStateError();
+          }
+          if (!exactBootstrapFoundationJournalShape(journal, expected)) {
+            throw new TransactionStateError();
+          }
+          const canonical = encodeFoundationJournalJsonV1(journal);
+          if (serialized === canonical) {
+            exactLegalBody = true;
+          } else if (`${serialized}\n` === canonical) {
+            crashResidue = true;
+          } else {
+            throw new TransactionStateError();
+          }
+        }
+      }
+    }
+    if (!exactLegalBody || bytes.byteLength !== expectedBytes.byteLength || hash(bytes) !== hash(expectedBytes)) {
+      await handle.truncate(0);
+      let offset = 0;
+      while (offset < expectedBytes.byteLength) {
+        const write = await handle.write(
+          expectedBytes,
+          offset,
+          expectedBytes.byteLength - offset,
+          offset,
+        );
+        if (write.bytesWritten < 1) throw new TransactionStateError();
+        offset += write.bytesWritten;
+      }
+      await handle.truncate(expectedBytes.byteLength);
+      await handle.sync();
+      const restored = await handle.stat();
+      if (
+        String(restored.dev) !== identity.dev ||
+        String(restored.ino) !== identity.ino ||
+        restored.size !== expectedBytes.byteLength
+      ) throw new TransactionStateError();
+      rewritten = true;
+    }
+  } catch {
+    failure = new TransactionStateError();
+  }
+  try {
+    await handle?.close();
+  } catch {
+    failure ??= new TransactionStateError();
+  }
+  if (failure !== undefined) throw failure;
+  if (rewritten) {
+    await syncReopenDirectory(fs, dirname(path));
+    await readExactBootstrapJournalByIdentity(
+      fs,
+      path,
+      identity,
+      ownerUid,
+      expectedBytes,
+    );
+  }
+  return expected;
 }
 
 async function syncReopenDirectory(
@@ -477,6 +797,46 @@ async function syncReopenDirectory(
     ) {
       throw new TransactionStateError();
     }
+  } catch (error) {
+    if (error instanceof TransactionStateError) throw error;
+    throw new TransactionStateError();
+  }
+}
+
+async function exactPublicationParent(
+  fs: TransactionFileSystem,
+  path: CanonicalAbsolutePathV1,
+  expected: BootstrapInitialJournalPublicationV1["sourceParent"],
+): Promise<{
+  readonly path: CanonicalAbsolutePathV1;
+  readonly ownerUid: number;
+  readonly mode: 0o700;
+  readonly dev: UInt64DecimalV1;
+  readonly ino: UInt64DecimalV1;
+}> {
+  try {
+    const stats = await fs.lstat(path);
+    if (
+      stats.isSymbolicLink() ||
+      !stats.isDirectory() ||
+      stats.uid !== expected.ownerUid ||
+      (stats.mode & 0o7777) !== 0o700
+    ) {
+      throw new TransactionStateError();
+    }
+    const observed = {
+      path,
+      ownerUid: expected.ownerUid,
+      mode: 0o700,
+      dev: String(stats.dev) as UInt64DecimalV1,
+      ino: String(stats.ino) as UInt64DecimalV1,
+    } satisfies BootstrapInitialJournalPublicationV1["sourceParent"];
+    if (
+      observed.dev !== expected.dev ||
+      observed.ino !== expected.ino ||
+      observed.path !== expected.path
+    ) throw new TransactionStateError();
+    return observed;
   } catch (error) {
     if (error instanceof TransactionStateError) throw error;
     throw new TransactionStateError();
@@ -802,13 +1162,29 @@ export class TransactionExecutor {
   async executeBootstrapFoundationParticipant(
     admitted: AdmittedBootstrapFoundationInitialJournalV1,
   ): Promise<TransactionJournalV1> {
-    const { participant, evidence, ownerUid } =
+    const {
+      participant,
+      evidence,
+      ownerUid,
+      sourceParent: admittedSourceParent,
+      destinationParent: admittedDestinationParent,
+      mutationPublications,
+      initialJournal,
+    } =
       consumeBootstrapFoundationInitialJournal(admitted);
-    const expected = validateBootstrapFoundationBridgeInput(
+    const expectedShape = validateBootstrapFoundationBridgeInput(
       participant,
       evidence,
       this.dependencies,
     );
+    const expected = {
+      ...expectedShape,
+      createdAt: initialJournal.createdAt,
+      updatedAt: initialJournal.updatedAt,
+    };
+    if (encodeFoundationJournalJsonV1(expected) !== encodeFoundationJournalJsonV1(initialJournal)) {
+      throw new TransactionStateError();
+    }
     const stagedPath = participant.initialJournal.staged.path;
     const finalPath = participant.initialJournal.finalPath;
 
@@ -829,34 +1205,35 @@ export class TransactionExecutor {
           stagedPath,
           evidence,
           ownerUid,
-          finalBefore === null ? 1 : 2,
+          1,
         );
         decodeExactBootstrapFoundationJournal(observed.bytes, expected);
         if (finalBefore !== null) {
-          const observedFinal = await readExactBootstrapJournal(
-            this.dependencies.fs,
-            finalPath,
-            evidence,
-            ownerUid,
-            2,
-          );
-          decodeExactBootstrapFoundationJournal(observedFinal.bytes, expected);
-          if (
-            observedFinal.identity.dev !== observed.identity.dev ||
-            observedFinal.identity.ino !== observed.identity.ino
-          ) {
-            throw new TransactionStateError();
-          }
+          throw new TransactionStateError();
         }
         const publish =
           this.dependencies.publishBootstrapInitialJournalNoReplace;
         if (publish === undefined) throw new TransactionStateError();
+        const [sourceParent, destinationParent] = await Promise.all([
+          exactPublicationParent(this.dependencies.fs, dirname(stagedPath) as CanonicalAbsolutePathV1, admittedSourceParent),
+          exactPublicationParent(this.dependencies.fs, dirname(finalPath) as CanonicalAbsolutePathV1, admittedDestinationParent),
+        ]);
         try {
           await publish({
             sourcePath: stagedPath,
             destinationPath: finalPath,
-            expectedDev: observed.identity.dev,
-            expectedIno: observed.identity.ino,
+            sourceParent,
+            destinationParent,
+            postimage: {
+              kind: "regular_file",
+              ownerUid,
+              mode: 0o600,
+              nlink: 1,
+              bytes: String(evidence.bytes) as UInt64DecimalV1,
+              sha256: evidence.sha256,
+              dev: observed.identity.dev,
+              ino: observed.identity.ino,
+            },
           });
         } catch {
           throw new TransactionStateError();
@@ -872,23 +1249,167 @@ export class TransactionExecutor {
       if (stagedAfter !== null || finalAfter === null) {
         throw new TransactionStateError();
       }
-      const final = await readExactBootstrapJournal(
+      const finalJournal = await restoreBootstrapFoundationInitialJournalByIdentity(
         this.dependencies.fs,
         finalPath,
-        evidence,
+        { dev: evidence.dev, ino: evidence.ino },
         ownerUid,
+        expected,
       );
-      decodeExactBootstrapFoundationJournal(final.bytes, expected);
-      return this.resumeLocked(participant.id);
+      const identity = {
+        dev: String(finalAfter.dev) as UInt64DecimalV1,
+        ino: String(finalAfter.ino) as UInt64DecimalV1,
+      };
+      if (identity.dev !== evidence.dev || identity.ino !== evidence.ino) {
+        throw new TransactionStateError();
+      }
+      return this.resumeBootstrapFoundationLocked(
+        participant,
+        mutationPublications,
+        (journal, nextPhase) => this.transitionBootstrapFoundationInPlace(
+          journal,
+          nextPhase,
+          finalPath,
+          identity,
+          ownerUid,
+        ),
+        finalJournal,
+      );
     });
+  }
+
+  private async assertExactBootstrapPublicationPostimage(
+    path: CanonicalAbsolutePathV1,
+    request: BootstrapInitialJournalPublicationV1,
+  ): Promise<void> {
+    const expected = request.postimage;
+    if (expected.kind !== "regular_file") throw new TransactionStateError();
+    const before = await optionalLstat(this.dependencies.fs, path);
+    if (
+      before === null ||
+      before.isSymbolicLink() ||
+      !before.isFile() ||
+      before.uid !== expected.ownerUid ||
+      (Number(before.mode) & 0o7777) !== expected.mode ||
+      before.nlink !== expected.nlink ||
+      before.size !== Number(expected.bytes) ||
+      String(before.dev) !== expected.dev ||
+      String(before.ino) !== expected.ino
+    ) throw new TransactionStateError();
+    const bytes = await this.dependencies.fs.readFile(path);
+    const after = await optionalLstat(this.dependencies.fs, path);
+    if (
+      after === null ||
+      String(after.dev) !== expected.dev ||
+      String(after.ino) !== expected.ino ||
+      hash(bytes) !== expected.sha256
+    ) throw new TransactionStateError();
+  }
+
+  private async publishBootstrapMutationNoReplace(
+    request: BootstrapInitialJournalPublicationV1,
+  ): Promise<void> {
+    const publish = this.dependencies.publishBootstrapInitialJournalNoReplace;
+    if (publish === undefined) throw new TransactionStateError();
+    const [sourceBefore, destinationBefore] = await Promise.all([
+      optionalLstat(this.dependencies.fs, request.sourcePath),
+      optionalLstat(this.dependencies.fs, request.destinationPath),
+    ]);
+    if ((sourceBefore === null) === (destinationBefore === null)) {
+      throw new TransactionStateError();
+    }
+    await Promise.all([
+      exactPublicationParent(this.dependencies.fs, request.sourceParent.path, request.sourceParent),
+      exactPublicationParent(this.dependencies.fs, request.destinationParent.path, request.destinationParent),
+    ]);
+    if (sourceBefore !== null) {
+      await this.assertExactBootstrapPublicationPostimage(request.sourcePath, request);
+      try {
+        await publish(structuredClone(request));
+      } catch {
+        throw new TransactionStateError();
+      }
+    } else {
+      await this.assertExactBootstrapPublicationPostimage(request.destinationPath, request);
+    }
+    await syncReopenDirectory(this.dependencies.fs, dirname(request.sourcePath));
+    await syncReopenDirectory(this.dependencies.fs, dirname(request.destinationPath));
+    const sourceAfter = await optionalLstat(this.dependencies.fs, request.sourcePath);
+    if (sourceAfter !== null) throw new TransactionStateError();
+    await this.assertExactBootstrapPublicationPostimage(request.destinationPath, request);
+    await Promise.all([
+      exactPublicationParent(this.dependencies.fs, request.sourceParent.path, request.sourceParent),
+      exactPublicationParent(this.dependencies.fs, request.destinationParent.path, request.destinationParent),
+    ]);
+  }
+
+  private async verifyBootstrapMutationPublications(
+    publications: readonly BootstrapInitialJournalPublicationV1[],
+  ): Promise<void> {
+    for (const request of publications) {
+      if (await optionalLstat(this.dependencies.fs, request.sourcePath) !== null) {
+        throw new TransactionStateError();
+      }
+      await this.assertExactBootstrapPublicationPostimage(request.destinationPath, request);
+    }
+  }
+
+  private async resumeBootstrapFoundationLocked(
+    participant: FoundationParticipantRefV2,
+    publications: readonly BootstrapInitialJournalPublicationV1[],
+    transition: JournalTransition,
+    admittedJournal: TransactionJournalV1,
+  ): Promise<TransactionJournalV1> {
+    let journal = admittedJournal;
+    if (participant.role.kind === "forward" && publications.length !== journal.mutations.length) {
+      throw new TransactionStateError();
+    }
+    while (journal.phase !== "finalized") {
+      switch (journal.phase) {
+        case "planned":
+          journal = await transition(journal, "backed_up");
+          break;
+        case "backed_up":
+          journal = await transition(journal, "staged");
+          break;
+        case "staged":
+          journal = await transition(journal, "validated");
+          break;
+        case "validated":
+          for (const request of publications) {
+            await this.publishBootstrapMutationNoReplace(request);
+          }
+          journal = await transition(journal, "applied");
+          break;
+        case "applied":
+          await this.verifyBootstrapMutationPublications(publications);
+          journal = await transition(journal, "verified");
+          break;
+        case "verified":
+          await this.verifyBootstrapMutationPublications(publications);
+          journal = await transition(journal, "finalized");
+          break;
+        case "rolled_back":
+          throw new TransactionStateError();
+        default:
+          throw new TransactionStateError();
+      }
+    }
+    await this.verifyBootstrapMutationPublications(publications);
+    return journal;
   }
 
   async resume(id: string): Promise<TransactionJournalV1> {
     return this.store.withTransactionLock(id, () => this.resumeLocked(id));
   }
 
-  private async resumeLocked(id: string): Promise<TransactionJournalV1> {
-    let journal = await this.store.read(id);
+  private async resumeLocked(
+    id: string,
+    transition: JournalTransition = (journal, nextPhase) => this.transition(journal, nextPhase),
+    admittedJournal?: TransactionJournalV1,
+    bootstrapBound = false,
+  ): Promise<TransactionJournalV1> {
+    let journal = admittedJournal ?? await this.store.read(id);
     if (journal.phase === "finalized") {
       /**
        * **The crash window, swept on the next resume.** The prune runs after the
@@ -904,6 +1425,7 @@ export class TransactionExecutor {
        * reverse would destroy the only copy while a rollback might need it — but it is
        * only *safe* because of this line.
        */
+      if (bootstrapBound) await this.verifyDesired(journal);
       await this.pruneBackups(journal, { raiseOnFailure: true });
       return journal;
     }
@@ -912,23 +1434,23 @@ export class TransactionExecutor {
     while (journal.phase !== "finalized") {
       switch (journal.phase) {
         case "planned":
-          journal = await this.backUp(journal);
+          journal = await this.backUp(journal, transition);
           break;
         case "backed_up":
-          journal = await this.stage(journal);
+          journal = await this.stage(journal, transition);
           break;
         case "staged":
-          journal = await this.validate(journal);
+          journal = await this.validate(journal, transition);
           break;
         case "validated":
-          journal = await this.apply(journal);
+          journal = await this.apply(journal, transition);
           break;
         case "applied":
-          journal = await this.verifyAndTransition(journal);
+          journal = await this.verifyAndTransition(journal, transition);
           break;
         case "verified":
           await this.verifyDesired(journal);
-          journal = await this.transition(journal, "finalized");
+          journal = await transition(journal, "finalized");
           /**
            * **The one prune site a command can reach, so the one that must not raise.**
            * `execute` funnels through here, and its seven call sites — six commands, `ingest`
@@ -1273,7 +1795,10 @@ export class TransactionExecutor {
     }
   }
 
-  private async backUp(journal: TransactionJournalV1): Promise<TransactionJournalV1> {
+  private async backUp(
+    journal: TransactionJournalV1,
+    transition: JournalTransition = (current, phase) => this.transition(current, phase),
+  ): Promise<TransactionJournalV1> {
     await this.ensureTransactionDirectories(journal.id);
     for (const [index, mutation] of journal.mutations.entries()) {
       await this.assertTarget(mutation.targetPath);
@@ -1321,29 +1846,38 @@ export class TransactionExecutor {
         0o600,
       );
     }
-    return this.transition(journal, "backed_up");
+    return transition(journal, "backed_up");
   }
 
-  private async stage(journal: TransactionJournalV1): Promise<TransactionJournalV1> {
+  private async stage(
+    journal: TransactionJournalV1,
+    transition: JournalTransition = (current, phase) => this.transition(current, phase),
+  ): Promise<TransactionJournalV1> {
     for (const mutation of journal.mutations) {
       await this.stagedBytes(journal, mutation);
     }
-    return this.transition(journal, "staged");
+    return transition(journal, "staged");
   }
 
-  private async validate(journal: TransactionJournalV1): Promise<TransactionJournalV1> {
+  private async validate(
+    journal: TransactionJournalV1,
+    transition: JournalTransition = (current, phase) => this.transition(current, phase),
+  ): Promise<TransactionJournalV1> {
     for (const mutation of journal.mutations) {
       await this.assertTarget(mutation.targetPath);
       await this.stagedBytes(journal, mutation);
     }
-    return this.transition(journal, "validated");
+    return transition(journal, "validated");
   }
 
-  private async apply(journal: TransactionJournalV1): Promise<TransactionJournalV1> {
+  private async apply(
+    journal: TransactionJournalV1,
+    transition: JournalTransition = (current, phase) => this.transition(current, phase),
+  ): Promise<TransactionJournalV1> {
     for (const [index, mutation] of journal.mutations.entries()) {
       await this.applyMutation(journal, index, mutation);
     }
-    return this.transition(journal, "applied");
+    return transition(journal, "applied");
   }
 
   private async applyMutation(
@@ -1412,9 +1946,10 @@ export class TransactionExecutor {
 
   private async verifyAndTransition(
     journal: TransactionJournalV1,
+    transition: JournalTransition = (current, phase) => this.transition(current, phase),
   ): Promise<TransactionJournalV1> {
     await this.verifyDesired(journal);
-    return this.transition(journal, "verified");
+    return transition(journal, "verified");
   }
 
   private async verifyDesired(journal: TransactionJournalV1): Promise<void> {
@@ -1698,6 +2233,97 @@ export class TransactionExecutor {
     );
     await this.runHook(nextPhase, next);
     return next;
+  }
+
+  /** Bootstrap alone keeps the outer payload inode as the rewrite authority. */
+  private async transitionBootstrapFoundationInPlace(
+    journal: TransactionJournalV1,
+    nextPhase: TransactionPhase,
+    path: CanonicalAbsolutePathV1,
+    identity: BootstrapJournalIdentity,
+    ownerUid: number,
+  ): Promise<TransactionJournalV1> {
+    const next = validateJournal({
+      ...journal,
+      phase: nextPhase,
+      updatedAt: this.dependencies.clock(),
+    });
+    const expectedCurrent = encodeFoundationJournalJsonV1(journal);
+    const nextBytes = new TextEncoder().encode(encodeFoundationJournalJsonV1(next));
+    let handle: Awaited<ReturnType<TransactionFileSystem["open"]>> | undefined;
+    let writeFailure: TransactionStateError | undefined;
+    try {
+      const linkedBefore = await this.dependencies.fs.lstat(path);
+      if (
+        linkedBefore.isSymbolicLink() ||
+        !linkedBefore.isFile() ||
+        linkedBefore.uid !== ownerUid ||
+        (linkedBefore.mode & 0o7777) !== 0o600 ||
+        linkedBefore.nlink !== 1 ||
+        String(linkedBefore.dev) !== identity.dev ||
+        String(linkedBefore.ino) !== identity.ino
+      ) throw new TransactionStateError();
+      handle = await this.dependencies.fs.open(
+        path,
+        constants.O_RDWR | constants.O_NOFOLLOW,
+      );
+      const opened = await handle.stat();
+      if (
+        !opened.isFile() ||
+        opened.uid !== ownerUid ||
+        (opened.mode & 0o7777) !== 0o600 ||
+        opened.nlink !== 1 ||
+        String(opened.dev) !== identity.dev ||
+        String(opened.ino) !== identity.ino ||
+        opened.size < 1 ||
+        opened.size > 1_048_576
+      ) throw new TransactionStateError();
+      const currentBytes = await handle.readFile();
+      if (new TextDecoder().decode(currentBytes) !== expectedCurrent) {
+        throw new TransactionStateError();
+      }
+      await handle.truncate(0);
+      let offset = 0;
+      while (offset < nextBytes.byteLength) {
+        const result = await handle.write(
+          nextBytes,
+          offset,
+          nextBytes.byteLength - offset,
+          offset,
+        );
+        if (result.bytesWritten < 1) throw new TransactionStateError();
+        offset += result.bytesWritten;
+      }
+      await handle.truncate(nextBytes.byteLength);
+      await handle.sync();
+      const descriptorAfter = await handle.stat();
+      if (
+        String(descriptorAfter.dev) !== identity.dev ||
+        String(descriptorAfter.ino) !== identity.ino ||
+        descriptorAfter.size !== nextBytes.byteLength
+      ) throw new TransactionStateError();
+    } catch {
+      writeFailure = new TransactionStateError();
+    }
+    try {
+      await handle?.close();
+    } catch {
+      writeFailure ??= new TransactionStateError();
+    }
+    if (writeFailure !== undefined) throw writeFailure;
+    await syncReopenDirectory(this.dependencies.fs, dirname(path));
+    const reopened = await readExactBootstrapJournalByIdentity(
+      this.dependencies.fs,
+      path,
+      identity,
+      ownerUid,
+      nextBytes,
+    );
+    if (reopened.phase !== nextPhase || reopened.id !== journal.id) {
+      throw new TransactionStateError();
+    }
+    await this.runHook(nextPhase, reopened);
+    return reopened;
   }
 
   private async runHook(

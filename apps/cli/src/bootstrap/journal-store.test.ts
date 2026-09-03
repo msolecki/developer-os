@@ -542,6 +542,54 @@ describe("BootstrapJournalStore creation and recovery", () => {
     expect(await inventory(fixture)).toEqual(before);
   });
 
+  it("awaits an asynchronous guarded admission before writing the initial slot", async () => {
+    const fixture = await createFixture();
+    await prepareDurablePlan(fixture);
+    let admitStarted = false;
+    let admit: (() => void) | undefined;
+    const admitted = new Promise<void>((resolve) => {
+      admit = resolve;
+    });
+
+    const opening = BootstrapJournalStore.open({
+      ...fixture.openRequest,
+      admitInitialWrite: async () => {
+        admitStarted = true;
+        await admitted;
+      },
+    });
+    await vi.waitFor(() => {
+      expect(admitStarted).toBe(true);
+    });
+    try {
+      expect((await Promise.all(fixture.slotPaths.map((path) => nodeFs.readFile(path))))
+        .map((bytes) => bytes.byteLength)).toEqual([0, 0]);
+    } finally {
+      admit?.();
+    }
+    const store = await opening;
+    expect(store.current()).toMatchObject({ slot: 0, sequence: "0", phase: "planned" });
+    await store.close();
+  });
+
+  it("preserves both slot bytes when an asynchronous guarded admission refuses", async () => {
+    const fixture = await createFixture();
+    const prepared = await prepareDurablePlan(fixture);
+    const candidate = canonicalBytes(initialJournal(prepared.plan, parseUtcTimestamp(NOW)));
+    await writeExactPrefix(fixture.slotPaths[0], candidate, candidate.byteLength - 1);
+    const before = await Promise.all(fixture.slotPaths.map((path) => nodeFs.readFile(path)));
+
+    await expect(BootstrapJournalStore.open({
+      ...fixture.openRequest,
+      admitInitialWrite: async () => {
+        await Promise.resolve();
+        throw new Error("asynchronous post-plan inventory refusal");
+      },
+    })).rejects.toThrow("asynchronous post-plan inventory refusal");
+    expect(await Promise.all(fixture.slotPaths.map((path) => nodeFs.readFile(path))))
+      .toEqual(before);
+  });
+
   it.each([
     ["operation", { expectedOperation: "v1_to_v2" as const }],
     ["id", { expectedId: "fi_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as FreshV2InitIdV1 }],

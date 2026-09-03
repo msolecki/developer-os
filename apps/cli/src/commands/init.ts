@@ -1,7 +1,11 @@
+import { constants } from "node:fs";
+import * as nodeFs from "node:fs/promises";
 import { join } from "node:path";
 
 import {
   EXIT_CODES,
+  decodeCanonicalJson,
+  encodeCanonicalJson,
   failure,
   foldPath,
   hashBytes,
@@ -209,9 +213,60 @@ async function rawManifest(
 
 async function hasFreshBootstrapPlan(context: CliContext): Promise<boolean> {
   try {
-    return (await context.fs.readdir(context.paths.stateDir)).some((name) =>
-      /^fresh-v2-init\.fi_[0-9a-f-]+\.plan\.json$/u.test(name),
-    );
+    for (const name of await context.fs.readdir(context.paths.stateDir)) {
+      const id = /^fresh-v2-init\.(fi_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.plan\.json$/u.exec(name)?.[1];
+      if (id === undefined) continue;
+      try {
+        const path = join(context.paths.stateDir, name);
+        const before = await nodeFs.lstat(path, { bigint: true });
+        if (
+          !before.isFile() || before.isSymbolicLink() ||
+          before.uid !== BigInt(process.getuid?.() ?? -1) ||
+          (before.mode & 0o777n) !== 0o600n || before.nlink !== 1n ||
+          before.size < 1n || before.size > 268_435_456n
+        ) continue;
+        const handle = await nodeFs.open(
+          path,
+          constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+        );
+        try {
+          const opened = await handle.stat({ bigint: true });
+          const bytes = await handle.readFile();
+          const after = await nodeFs.lstat(path, { bigint: true });
+          if (
+            opened.dev !== before.dev || opened.ino !== before.ino ||
+            after.dev !== before.dev || after.ino !== before.ino ||
+            opened.size !== before.size || after.size !== before.size
+          ) continue;
+          const value = decodeCanonicalJson(bytes, 268_435_456);
+          const record = typeof value === "object" && value !== null
+            ? value as Record<string, unknown>
+            : null;
+          const slots = Array.isArray(record?.journalSlots) ? record.journalSlots : [];
+          const canonical = new TextEncoder().encode(
+            encodeCanonicalJson(value),
+          );
+          if (
+            record?.schemaVersion === 1 && record.operation === "fresh_v2_init" && record.id === id &&
+            record.planPath === path && slots.length === 2 &&
+            slots.every((candidate, ordinal) => {
+              const slot = typeof candidate === "object" && candidate !== null
+                ? candidate as Record<string, unknown>
+                : null;
+              return slot?.slot === ordinal &&
+                slot.path === join(context.paths.stateDir, `fresh-v2-init.${id}.journal.${String(ordinal)}.json`);
+            }) &&
+            canonical.byteLength === bytes.byteLength &&
+            canonical.every((byte, index) => byte === bytes[index])
+          ) return true;
+        } finally {
+          await handle.close();
+        }
+      } catch {
+        continue;
+      }
+    }
+    return false;
   } catch {
     return false;
   }

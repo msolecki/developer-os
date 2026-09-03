@@ -67,6 +67,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 import type { BootstrapJournalStore } from "./journal-store.js";
 import {
   BootstrapRetainer,
+  projectBootstrapRetentionPostimage,
   projectRetainedDirectoryTree,
   retainBootstrapEnvelope,
   type BootstrapRetentionDeathPointV1,
@@ -179,6 +180,54 @@ function parentProjection(row: BootstrapRetentionEntryV1): BootstrapRetentionPos
   });
 }
 
+describe("projectBootstrapRetentionPostimage public boundary", () => {
+  it("projects an exact regular file and directory tree through the shared no-follow observer", async () => {
+    const root = await nodeFs.mkdtemp(join(tmpdir(), "developer-os-retained-project-"));
+    roots.add(root);
+    await nodeFs.chmod(root, 0o700);
+    const file = join(root, "payload");
+    const subtree = join(root, "subtree");
+    const nested = join(subtree, "nested");
+    await nodeFs.writeFile(file, "payload\n", { mode: 0o600 });
+    await nodeFs.mkdir(subtree, { mode: 0o700 });
+    await nodeFs.writeFile(nested, "nested\n", { mode: 0o600 });
+
+    const projectedFile = await projectBootstrapRetentionPostimage(path(file));
+    expect(projectedFile).toMatchObject({
+      kind: "regular_file",
+      mode: 0o600,
+      nlink: 1,
+      bytes: "8",
+      sha256: hash("payload\n"),
+    });
+    const projectedTree = await projectBootstrapRetentionPostimage(path(subtree));
+    expect(projectedTree).toMatchObject({
+      kind: "directory_tree",
+      mode: 0o700,
+      entryCount: 1,
+      regularFileBytes: "7",
+      entries: [{ relativePath: "nested", kind: "regular_file", sha256: hash("nested\n") }],
+    });
+  });
+
+  it("distinguishes missing from a forbidden third state and preserves the latter", async () => {
+    const root = await nodeFs.mkdtemp(join(tmpdir(), "developer-os-retained-project-refusal-"));
+    roots.add(root);
+    await nodeFs.chmod(root, 0o700);
+    const missing = join(root, "missing");
+    const target = join(root, "target");
+    const symlink = join(root, "candidate");
+    await nodeFs.writeFile(target, "target\n", { mode: 0o600 });
+    await nodeFs.symlink(target, symlink);
+
+    await expect(projectBootstrapRetentionPostimage(path(missing))).resolves.toBeNull();
+    await expect(projectBootstrapRetentionPostimage(path(symlink)))
+      .rejects.toBeInstanceOf(BootstrapStateError);
+    expect(await nodeFs.readlink(symlink)).toBe(target);
+    expect(await nodeFs.readFile(target, "utf8")).toBe("target\n");
+  });
+});
+
 function terminalJournal(outcome: "finalized" | "rolled_back" = "finalized"): BootstrapJournalRecordV1 {
   return {
     schemaVersion: 1,
@@ -229,6 +278,8 @@ function retentionFixture(options: {
   readonly helperStatusLoss?: boolean;
   readonly journalFailures?: number;
   readonly syncFailures?: number;
+  readonly globalReached?: boolean;
+  readonly provideGlobalLock?: boolean;
 } = {}): RetentionFixture {
   const rows = table();
   const projections = new Map<string, BootstrapRetentionPostimageV1>();
@@ -245,7 +296,10 @@ function retentionFixture(options: {
   let syncFailures = options.syncFailures ?? 0;
   let bootstrapReleaseFailures = options.bootstrapReleaseFailures ?? 0;
   let globalReleaseFailures = options.globalReleaseFailures ?? 0;
-  let current = terminalJournal(options.outcome);
+  let current = {
+    ...terminalJournal(options.outcome),
+    nextCreatedPath: options.globalReached === false ? 0 : 1,
+  };
   const released = { bootstrap: 0, global: 0 };
   const lock = (kind: keyof typeof released): TransactionLockHandle => {
     let releasedOnce = false;
@@ -265,10 +319,13 @@ function retentionFixture(options: {
   };
   const freshLocks = (): HeldBootstrapLocksV1 => ({
     bootstrap: lock("bootstrap"),
-    global: lock("global"),
+    global: options.provideGlobalLock === false ? null : lock("global"),
   });
   const locks = freshLocks();
   const store = {
+    plan: {
+      createdPaths: [{ kind: "global_lock" }],
+    },
     current: () => structuredClone(current),
     advance: (successor: BootstrapJournalRecordV1) => {
       const previous = current;
@@ -635,6 +692,31 @@ describe("retainBootstrapEnvelope crash convergence and lock ordering", () => {
     expect(fixture.released).toEqual({ bootstrap: 1, global: 1 });
   });
 
+  it("retains an authentic pre-global rollback with only the persisted bootstrap lock", async () => {
+    const fixture = retentionFixture({
+      outcome: "rolled_back",
+      globalReached: false,
+      provideGlobalLock: false,
+    });
+
+    await expect(fixture.retain()).resolves.toMatchObject({ phase: "retained" });
+    expect(fixture.released).toEqual({ bootstrap: 1, global: 0 });
+  });
+
+  it("refuses a missing reached global lock before any retained mutation", async () => {
+    const fixture = retentionFixture({ provideGlobalLock: false });
+
+    await expect(fixture.retain()).rejects.toBeInstanceOf(BootstrapStateError);
+    expect(fixture.renameRequests).toStrictEqual([]);
+  });
+
+  it("refuses an unjournaled global lock before any retained mutation", async () => {
+    const fixture = retentionFixture({ globalReached: false });
+
+    await expect(fixture.retain()).rejects.toBeInstanceOf(BootstrapStateError);
+    expect(fixture.renameRequests).toStrictEqual([]);
+  });
+
   it("contains no unlink, rm, rmdir, quarantine, or out-of-parent request", async () => {
     const fixture = retentionFixture();
     const forbiddenMutation = () => {
@@ -671,6 +753,48 @@ describe("retainBootstrapEnvelope crash convergence and lock ordering", () => {
 });
 
 describe("projectRetainedDirectoryTree", () => {
+  it("refuses an expected-empty subtree with one actual child before rename", async () => {
+    const root = await nodeFs.mkdtemp(join(tmpdir(), "developer-os-retained-empty-third-state-"));
+    roots.add(root);
+    await nodeFs.chmod(root, 0o700);
+    const rootStats = await nodeFs.lstat(root);
+    const entries = [] as const;
+    const expected = {
+      kind: "directory_tree" as const,
+      ownerUid: rootStats.uid,
+      mode: 0o700 as const,
+      nlink: rootStats.nlink,
+      treeHash: parseLowerHexSha256(createHash("sha256")
+        .update("developer-os/bootstrap-retained-tree/v1\0")
+        .update(encodeCanonicalJson(entries).slice(0, -1))
+        .digest("hex")),
+      entryCount: 0,
+      regularFileBytes: parseUInt64Decimal("0"),
+      dev: parseUInt64Decimal(String(rootStats.dev)),
+      ino: parseUInt64Decimal(String(rootStats.ino)),
+      entries,
+    };
+    const row = entry(0, "staging_subtree", path(root), expected);
+    await nodeFs.writeFile(join(root, "unexpected"), "third state\n", { mode: 0o600 });
+    let renameCalls = 0;
+    const retainer = new BootstrapRetainer({
+      renameSameParentNoReplace: () => {
+        renameCalls += 1;
+        return Promise.resolve();
+      },
+      projectPostimage: (candidate) => {
+        if (candidate === row.parent.path) return Promise.resolve(parentProjection(row));
+        if (candidate === row.sourcePath) return projectRetainedDirectoryTree(path(root), expected);
+        return Promise.resolve(null);
+      },
+      syncDirectory: () => Promise.resolve(),
+    });
+
+    await expect(retainer.retain(row)).rejects.toBeInstanceOf(BootstrapStateError);
+    expect(renameCalls).toBe(0);
+    expect(await nodeFs.readFile(join(root, "unexpected"), "utf8")).toBe("third state\n");
+  });
+
   it("returns the complete UTF-8-sorted, domain-separated exact descendant projection", async () => {
     const root = await nodeFs.mkdtemp(join(tmpdir(), "developer-os-retained-tree-"));
     roots.add(root);
