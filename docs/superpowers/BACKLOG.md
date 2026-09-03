@@ -23,10 +23,15 @@ its closure conditions.
 
 ## 1. Open repository rows
 
-There are 24 numbered rows. They are not automatically ordered ahead of A11.
+There are 29 numbered rows. They are not automatically ordered ahead of A11.
 
 | ID | Owner / blocker | Work required to close |
 |---|---|---|
+| NEW-54 | Core encoder / correctness | `assertString` in `packages/core/src/lifecycle/canonical-json.ts` does not reject a **trailing** lone high surrogate: at the last index `charCodeAt(index + 1)` is `NaN` and both range comparisons are false. `encodeCanonicalJson({ "\uD800": 1, "�": 2 })` therefore emits two identical `EF BF BD` keys — a wire form this module's own `decodeCanonicalJson` rejects as a duplicate key, and two distinct inputs that hash to the same SHA-256. Decide whether to reject at encode time and record the migration for anything already hashed. |
+| NEW-53 | A11 / performance / blocks push | `developer-os init` takes 219s: roughly 101s canonical JSON encoding and 78s I/O wait. One init performs 126,916,440 `TextEncoder.encode` calls even after the key-ordering fix, because the plan is fully re-encoded and rewritten on every journal write. Reduce the number of whole-plan encode-and-rewrite cycles; this needs a Spec 2 §6 decision because it changes the approved bootstrap journal design. |
+| NEW-52 | test gate / blocks CI | `apps/cli/src/bootstrap/executor.test.ts` needs roughly 200s per test across 69 tests, so `npm test` cannot finish inside `check.yml`'s `timeout-minutes: 30` on its macOS runner. `db5e5c1` also rewrote the `test` script into three `vitest` invocations to isolate one test that is not isolation-safe. Restore a single `vitest run` once NEW-53 makes the suite fit the gate. |
+| NEW-51 | manifest guards / security | `pathEvidence()` in `apps/cli/src/bootstrap/executor.ts` supplies `reopenCanonicalAbsolutePath: (path) => resolve(path)`. `node:path.resolve` is lexical, so it returns any already-canonical absolute path unchanged and the refusal at `packages/core/src/update/paths.ts:96` can never fire for any consumer. Provide a reopening canonicalizer that detects symlinks, or delete the dead guard and record the accepted limit. Separately, give `uninstall.ts` the owner-authority bound the executor uses instead of `admitOwnerPath: (_owner, path) => path`. |
+| NEW-50 | Core encoder / performance | Five file-local copies of the per-comparison `compareUtf8` remain in `packages/core/src/manifest/bootstrap.ts`, `packages/core/src/update/release.ts`, `packages/core/src/manifest/bootstrap-retention.ts`, `apps/cli/src/bootstrap/retention.ts`, and `apps/cli/src/update/packaged-release.ts`; three pass it straight to `.sort()` and carry the same O(k log k)-encodes cost fixed in `canonical-json.ts`. Apply the same encode-once ordering, or extract one shared helper. |
 | NEW-49 | review workflow / startable | Add a status input and correct the stale description at `workflows/review/workflow.yaml:4`, bump its version, regenerate both vendor skills, and pass drift tests. |
 | NEW-47 | Codex adapter / startable | Read Codex source to prove whether model-run commands can emit raw bytes into the JSONL consumed by `packages/adapter-codex/src/invoke.ts:178`; record the dated result and use it with NEW-45 to choose message selection. No model call is required. |
 | NEW-46 | A11 / security | Stop the ambient-marker-selected spawn at `apps/cli/src/commands/capture.ts:263` from resolving through same-uid `PATH`, or design manifest-owned persisted executable identity with upgrade/move drift behavior. |
@@ -134,6 +139,12 @@ Required behavior:
   other repositories only when that cross-repository cleanup is explicitly taken up.
 
 ## 5. Gate-integrity work
+
+- [x] ESLint 9 flat config does not read `.gitignore`. `dbfd875` git-ignored `.worktrees/` but did
+  not add it to the `ignores` list in `eslint.config.mjs`, so `npm run check` failed at lint
+  whenever a worktree existed — and because that script is an `&&` chain, every commit made in that
+  window ran zero tests. Fixed 2026-09-03. When excluding a path, update every tool that keeps its
+  own ignore list.
 
 - [ ] Close NEW-29's load-sensitive and intermittent test class with deterministic assertions or an
   explicit bounded-retry policy.

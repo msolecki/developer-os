@@ -79,8 +79,13 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 
 ## Delivery evidence still owed
 
-- The current topic branch's pull request and CI status cannot be inspected from this environment
-  because GitHub CLI configuration is not readable. Confirm CI on the exact commit before merging.
+- GitHub CLI configuration became readable on 2026-09-03: `gh auth status`, `gh pr list`, and
+  `gh run list` all succeed. The `baseline` ruleset on `development` carries only `deletion` and
+  `non_fast_forward`, so neither a required status check nor a pull request gates a direct push —
+  the comment in `check.yml` asserting a pull-request rule is stale. L2 still owes release
+  permissions.
+- `development` holds 46 unpushed commits and CI has not run since 2026-08-28 (`d72287a`). Do not
+  push until NEW-53 closes: `check.yml` sets `timeout-minutes: 30` and the suite exceeds it.
 - When a full-suite failure occurs, retain the complete log. NEW-29 owns the load-sensitive and
   intermittent-test cleanup.
 
@@ -96,6 +101,6 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 - Product sequence: 6 open entries, A11–A16.
 - Program plan: replacement Task 7 contains 6 unchecked work steps across 1 unfinished task;
   baseline Tasks 8–9 contain 10.
-- Repository backlog: 24 open numbered rows, plus the Foundation watchdog decision.
+- Repository backlog: 29 open numbered rows, plus the Foundation watchdog decision.
 - Active implementation plans: 44 untouched tasks — 1 in replacement Task 7, 19 remaining in Spec
   2, and 24 in Spec 1. Spec 1 remains blocked until replacement Task 7 and baseline Tasks 8–9 pass.
