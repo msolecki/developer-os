@@ -1467,6 +1467,41 @@ describe("retained bootstrap table derivation", () => {
    * One `developer-os init` derived this table 1,475 times from the same plan
    * and evidence, re-verifying every row each time.
    */
+  /**
+   * Validating a journal record re-hashed the entire plan to check `planHash`,
+   * and init validates records 12,241 times per run. That single call site was
+   * 60,947,939 of the 91,052,556 key encodes one `init` performed.
+   */
+  it("catches a record validator that re-hashes the plan for every journal it checks", () => {
+    const forward = phaseRecord("payload_staging", { nextPayload: 1 });
+    const compensating = successor(forward, phaseRecord("compensating"));
+    // A distinct object, so the measurement is not warmed by an earlier test.
+    const unseenPlan = structuredClone(plan);
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- restored below; only ever invoked with an explicit `this`
+    const original = TextEncoder.prototype.encode;
+    const measure = (): number => {
+      let calls = 0;
+      try {
+        TextEncoder.prototype.encode = function encode(
+          this: InstanceType<typeof TextEncoder>,
+          input?: string,
+        ) {
+          calls += 1;
+          return original.call(this, input);
+        };
+        validateBootstrapJournalSuccessor(unseenPlan, forward, compensating);
+      } finally {
+        TextEncoder.prototype.encode = original;
+      }
+      return calls;
+    };
+
+    const cold = measure();
+    const warm = measure();
+
+    expect(warm).toBeLessThan(cold);
+  });
+
   it("catches a derivation recomputed for a plan and evidence it has already seen", () => {
     const evidence = admittedEvidence();
     // eslint-disable-next-line @typescript-eslint/unbound-method -- restored below; only ever invoked with an explicit `this`

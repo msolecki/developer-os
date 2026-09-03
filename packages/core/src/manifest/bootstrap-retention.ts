@@ -338,6 +338,23 @@ function rawCanonicalHash(value: unknown): LowerHexSha256 {
  * needs both its byte length and its hash, and encoding the value twice to get
  * them was the largest remaining cost of `developer-os init`.
  */
+/**
+ * Keyed on the plan object, which is immutable once admitted. Every journal
+ * record carries the plan hash, and re-deriving it per record was 60,947,939 of
+ * the 91,052,556 key encodes one `developer-os init` performed. A different plan
+ * object hashes again, so nothing is trusted across identities.
+ */
+const retainedPlanHashes = new WeakMap<object, LowerHexSha256>();
+
+function retainedPlanHash(plan: BootstrapRetainedExecutionPlanV1): LowerHexSha256 {
+  const key = plan as unknown as object;
+  const cached = retainedPlanHashes.get(key);
+  if (cached !== undefined) return cached;
+  const computed = rawCanonicalHash(plan);
+  retainedPlanHashes.set(key, computed);
+  return computed;
+}
+
 function hashCanonicalText(text: string): LowerHexSha256 {
   return createHash("sha256").update(text).digest("hex") as LowerHexSha256;
 }
@@ -526,7 +543,7 @@ function validateJournalRecord(
   exact(input, retentionPhase
     ? [...JOURNAL_KEYS, "retentionTerminalPreimage"]
     : JOURNAL_KEYS);
-  if (input.schemaVersion !== 1 || input.id !== plan.id || input.planHash !== rawCanonicalHash(plan)) return refuse();
+  if (input.schemaVersion !== 1 || input.id !== plan.id || input.planHash !== retainedPlanHash(plan)) return refuse();
   if (input.slot !== 0 && input.slot !== 1) return refuse();
   if (typeof input.phase !== "string" || !JOURNAL_PHASES.includes(input.phase as BootstrapRetainedJournalPhaseV1)) return refuse();
   if (input.direction !== "forward" && input.direction !== "compensating") return refuse();
