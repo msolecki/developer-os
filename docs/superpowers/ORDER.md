@@ -10,20 +10,25 @@ notes are the archive.
 
 **A11 — DOS-P7 Git, automation, update, and release lifecycle.**
 
-Spec 1 is approved and its plan exists at
-`plans/2026-08-28-developer-os-opt-in-surfaces.md`, but none of its 24 implementation tasks has
-started. Spec 2's 2026-08-29 baseline and 26-task plan exist at
-`specs/2026-08-28-developer-os-release-update-design.md` and
-`plans/2026-08-29-developer-os-release-update.md`. Tasks 1–6 are complete. Task 7's implementation
-passed local gates but fresh review rejected its deletion-based bootstrap closure. The founder
-approved the complete retained-evidence correction and durable slot-identity addendum on 2026-08-31.
-Its six-task replacement plan is
-`plans/2026-08-31-developer-os-retained-bootstrap-evidence.md`; replacement Tasks 1–5 are complete,
-so 1 task and 6 unchecked steps remain. The next action is
-replacement Task 6, adding reports, reinstall bounds, inertness, and checkpoint evidence
-(docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md:851). Across the active
-implementation plans, 44 tasks remain untouched. Baseline Task 8 remains blocked until all six
-replacement tasks pass fresh review.
+Spec 2's Task 7 checkpoint is accepted. The six-task replacement plan
+`plans/2026-08-31-developer-os-retained-bootstrap-evidence.md` is complete, committed as
+`050fc0d..c5022a7`, and each of its tasks was reviewed by an agent that did not author it; a
+whole-range fresh review returned `READY` after one Critical fix.
+
+The next action is roadmap Phase 1 — isolate the ingest invocation on both vendors (NEW-58)
+(`docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md:41`). It comes before every
+other A11 task because it is a security defect in shipped code: an ingest run loads the user's own
+permission settings, hooks and MCP servers, and on Codex persists a thread in the user's history.
+Phase 1 also closes NEW-44. **The plan it requires,
+`plans/<date>-developer-os-ingest-isolation.md`, does not exist and must be written first**, through
+`superpowers:brainstorming` → `superpowers:writing-plans`, as `SESSION.md` requires.
+
+Spec 1 is approved and its plan exists at `plans/2026-08-28-developer-os-opt-in-surfaces.md`, but
+none of its 24 implementation tasks has started. Spec 2's 2026-08-29 baseline and 26-task plan exist
+at `specs/2026-08-28-developer-os-release-update-design.md` and
+`plans/2026-08-29-developer-os-release-update.md`; its Tasks 1–7 are complete and Tasks 8–26 remain.
+Across the active implementation plans, 43 tasks remain untouched. Baseline Tasks 8–9 are roadmap
+Phase 3 and stay behind Phases 1 and 2.
 
 Open sequence inside A11:
 
@@ -42,18 +47,22 @@ Open sequence inside A11:
    retention row, every outcome), §6.1 (global-lock admission after a crash that lost its creation
    evidence) and the `admittedPreexistingPaths` plan grammar. All three are recorded as dated
    amendments.
-8. Now: execute `plans/2026-09-04-developer-os-task6-closure.md`, six tasks, which turns the
-   uncommitted replacement Task 6 tree into the accepted Task 7 checkpoint. Nothing from Task 6 is
-   committed outside that plan's tasks.
-9. Execute Spec 2 Tasks 8–9 for the complete `InstallationManifestV2` migration and V2 new-init
-   handoff.
-10. Execute the approved Spec 1 plan.
-11. Finish the remaining Spec 2 implementation and close the Task 7 checkpoint.
+8. Completed 2026-09-04: the uncommitted replacement Task 6 tree became the accepted Task 7
+   checkpoint, `050fc0d..c5022a7` — spec amendments, global-lock admission after a crash, one
+   retention derivation that never retains forward content, the gate blockers, the review residuals,
+   and the retained-evidence reports. Fresh review `READY`; the closure plan was deleted at closure.
+9. Now: roadmap Phase 1, ingest isolation (NEW-58, NEW-44). Write
+   `plans/<date>-developer-os-ingest-isolation.md` first; it does not exist.
+10. Roadmap Phase 2: bootstrap performance and the first push (NEW-53, NEW-52).
+11. Execute Spec 2 Tasks 8–9 for the complete `InstallationManifestV2` migration and V2 new-init
+    handoff (roadmap Phase 3).
+12. Execute the approved Spec 1 plan, split into 1a and 1b by NEW-67.
+13. Finish the remaining Spec 2 implementation and close the Task 7 checkpoint.
 
-Everything after A11 is sequenced by
-`plans/2026-09-04-developer-os-completion-roadmap.md` (phases 1–11, the founder decisions of
-2026-09-04, and the spec or plan each phase requires). `docs/migration/instruction-inventory.md`
-is the scope of A12, A12b, A13 and A14.
+Phase 1 onward is sequenced by
+`plans/2026-09-04-developer-os-completion-roadmap.md` (12 open phases, 1 through 11 with a 5b, the
+founder decisions of 2026-09-04, and the spec or plan each phase requires).
+`docs/migration/instruction-inventory.md` is the scope of A12, A12b, A13 and A14.
 
 ## Product path
 
@@ -75,8 +84,8 @@ The full closure conditions are in `BACKLOG.md` §1.
 
 Startable without another product gate:
 
-- NEW-58 — isolate the ingest invocation on both vendors; first after the Task 6 checkpoint
-  (roadmap Phase 1).
+- NEW-58 — isolate the ingest invocation on both vendors; this is the current `NOW` (roadmap
+  Phase 1).
 - NEW-49 — expose decided captures through the agent-facing review workflow.
 - NEW-47 — verify from Codex source whether model-run commands can write raw JSONL bytes.
 - NEW-46 — close the same-uid `PATH` spawn surface or design persisted executable identity.
@@ -99,12 +108,14 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
   `gh run list` all succeed. The `baseline` ruleset on `development` carries only `deletion` and
   `non_fast_forward`, so neither a required status check nor a pull request gates a direct push —
   the `check.yml` comment now says so. L2 still owes release permissions.
-- `development` holds 56 unpushed commits and CI has not run since 2026-08-28 (`d72287a`), when
+- `development` holds 72 unpushed commits and CI has not run since 2026-08-28 (`d72287a`), when
   the whole check took three and a half minutes. Do not push until the four-job `check.yml` in the
   working tree is green on a probe branch (roadmap Phase 2): the `suite` job must build `dist`
   before it runs, and `test:suite` must exclude `e2e/**`. Measured 2026-09-04: `npm run test:suite`
-  alone took 41 minutes and failed two gates (control bytes, citations), both owned by the Task 6
-  closure plan.
+  alone took 41 minutes and failed two gates, control bytes and citations; both are fixed
+  (`ed158c2`, `c5022a7`). The local `check` gate now runs `lint`, `test:bootstrap`, `test:suite`,
+  `test:e2e`, the build and `git diff --check`, so `e2e/**` is covered locally as well as by its
+  own CI job. The full `check` timing after the Task 6 checkpoint is still unmeasured.
 - When a full-suite failure occurs, retain the complete log. NEW-29 owns the load-sensitive and
   intermittent-test cleanup.
 
@@ -118,10 +129,11 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 ## Count
 
 - Product sequence: 7 open entries, A11, A12, A12b, A13, A14, A15, A16.
-- Program plan: replacement Task 6 closure plan contains 6 tasks; baseline Tasks 8–9 contain 10
-  unchecked steps.
-- Repository backlog: 43 open numbered rows, plus the Foundation watchdog decision.
-- Active implementation plans: `plans/2026-09-04-developer-os-task6-closure.md` (6 tasks, 0 done),
-  Spec 2 baseline Tasks 8–26 (19 tasks), Spec 1 (24 tasks, to be split by NEW-67), and the
-  completion roadmap (11 phases). Spec 1 remains blocked until the Task 6 closure and baseline
-  Tasks 8–9 pass.
+- Program plan: baseline Tasks 8–9 contain 10 unchecked steps.
+- Repository backlog: 44 open numbered rows, plus the Foundation watchdog decision.
+- Active implementation plans: Spec 2 baseline Tasks 8–26 (19 tasks) and Spec 1 (24 tasks, to be
+  split by NEW-67) — 43 untouched tasks — plus the completion roadmap's 12 open phases. Spec 1
+  remains blocked until roadmap Phases 1–3 pass.
+- `plans/2026-08-31-developer-os-retained-bootstrap-evidence.md` is complete, six of six tasks, and
+  carries no unchecked step. Roadmap Phase 1 requires
+  `plans/<date>-developer-os-ingest-isolation.md`, which has not been written.

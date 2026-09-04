@@ -850,7 +850,7 @@ git commit -m "fix(cli): retain fresh bootstrap closure"
 
 ### Task 6: Add reports, reinstall bounds, inertness, and checkpoint evidence
 
-> **2026-09-04:** executed through `docs/superpowers/plans/2026-09-04-developer-os-task6-closure.md`, which records the two founder rulings the fresh review of 2026-09-04 required before this task could be accepted. Steps below remain the acceptance contract.
+> **Accepted 2026-09-04** as the six-commit checkpoint `050fc0d..c5022a7`. The three founder rulings the fresh review required are dated amendments in `docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md` §6.1, §6.3 and §6.4; the surviving implementation constraints are in `docs/architecture/foundation.md` and `docs/architecture/threat-model.md`. Steps below remain the acceptance contract and carry their evidence.
 
 **Files:**
 - Create: `apps/cli/src/bootstrap/report.ts`
@@ -879,7 +879,9 @@ git commit -m "fix(cli): retain fresh bootstrap closure"
 - Consumes: Tasks 1–5, current doctor/uninstall result publishing, manifest state, bootstrap capability, synthetic E2E home.
 - Produces: `inspectBootstrapEvidence`, `BootstrapEvidenceReportV1`, doctor/uninstall retained summaries, bounded reinstall, ordinary-command inertness, and accepted Task 7 checkpoint evidence.
 
-- [ ] **Step 1: Write failing report, uninstall, reinstall, inertness, and E2E tests**
+- [x] **Step 1: Write failing report, uninstall, reinstall, inertness, and E2E tests**
+
+Evidence: `4474885` staged `apps/cli/src/bootstrap/report.test.ts`, `tests/e2e/fresh-v2-retained-bootstrap.test.ts` and the doctor/uninstall/init/status/main inertness cases the earlier tasks had left untracked; `a80cf34` replaced the assertions that could not fail.
 
 ```ts
 it.each(["verified", "incomplete", "altered", "unverified"] as const)(
@@ -922,13 +924,17 @@ it.each([
 
 Also prove: dry-run report byte inertness; altered/missing/extra tombstones after V2 are warnings; a valid rolled-back retained envelope allows retry; unverified metadata permits retry only with residue confined to exact retained namespaces; a valid plan discovers a compensation tombstone in an admitted external owner parent without scanning unrelated siblings; live staging/lock/source residue blocks; at most one active ID; exact cap passes; ordinary status/Brain/config commands do not invoke the bootstrap inspector; `init` alone advances legal retention; doctor never writes; uninstall without a manifest still reports/preserves evidence; human and JSON uninstall output both report retained evidence instead of claiming nothing remains; and no network/vendor/model process is invoked.
 
-- [ ] **Step 2: Run public/E2E tests and verify reports and caps are absent**
+- [x] **Step 2: Run public/E2E tests and verify reports and caps are absent**
+
+Evidence: the failing run preceded `4474885`, which added the report module beside the tests that name it; `c5022a7` put `test:e2e` back into the local `check` gate so the E2E half is run, not assumed.
 
 Run: `npx vitest run --root apps/cli src/bootstrap/report.test.ts src/commands/doctor.test.ts src/commands/uninstall.test.ts src/commands/init.test.ts src/commands/status.test.ts src/main.test.ts && npx vitest run --root tests e2e/fresh-v2-retained-bootstrap.test.ts security/network.test.ts`
 
 Expected: FAIL because retained evidence is not in public reports, reinstall does not enforce aggregate caps, and no E2E retained-bootstrap fixture exists.
 
-- [ ] **Step 3: Implement read-only reports and public command behavior**
+- [x] **Step 3: Implement read-only reports and public command behavior**
+
+Evidence: `4474885` (reports, doctor and uninstall summaries, reinstall caps), `3d686b4` and `36df8a1` (one retention derivation, forward content never retained), `587f818` and `95c2d7e` (global-lock admission under the held bootstrap lock and the crash resume it needed), `a80cf34` (refusal without the bootstrap capability, confined admitted paths), `d95ed2b` (lint).
 
 ```ts
 export interface BootstrapEvidenceReportV1 {
@@ -996,7 +1002,9 @@ export interface UninstallResultV1 {
 
 Implement `BootstrapEvidenceGuardedReaderV1` in the bootstrap context over descriptor-bound, no-follow opens: directory enumeration rechecks the retained directory identity before and after, and regular files are read through an `O_NOFOLLOW` handle whose identity must equal the inventory entry before and after the bounded read. First inventory only exact bootstrap plan/slot/tombstone/staging/lock namespaces under the context-admitted `initialRoots`. After a plan validates through the operation-specific Core admission context, derive its complete retention table and perform a second bounded inventory only in the distinct parent directories carried by those rows; this is how a distributed same-parent vault is counted without walking unrelated home directories. Never hand raw `readdir`/`readFile` pathname functions to the classifier or accept caller-selected second-pass roots. Add the report to `DoctorReportV1` and `UninstallResultV1`; render one content-free doctor check per ID and one human uninstall summary per retained ID. After V2 handoff, altered/unverified retained rows are warnings and never enter drift. Before a new init ID or pre-plan slot allocation, combine the read-only aggregate with the exact projected new envelope and enforce all three caps. Uninstall excludes every retained path and required ancestor directory from artifact removal, leaves product home, and succeeds when evidence is the only residue.
 
-- [ ] **Step 4: Run all focused, security, and E2E gates**
+- [x] **Step 4: Run all focused, security, and E2E gates**
+
+Evidence: `ed158c2` removed the NUL separators, scoped `test:suite` and made the CI `suite` job build first; `f68ecc3` corrected the recorded CI bound; `c5022a7` restored `test:e2e` to the local `check` gate.
 
 Run: `npx vitest run --root packages/core src/manifest/bootstrap-retention.test.ts src/manifest/bootstrap.test.ts src/transactions/transactions.test.ts`
 
@@ -1008,19 +1016,23 @@ Run: `npx vitest run --root tests e2e/fresh-v2-retained-bootstrap.test.ts securi
 
 Expected: PASS with non-empty enumerations and exact/first-over bounds.
 
-- [ ] **Step 5: Run the full gate and obtain independent final Task 7 review**
+- [x] **Step 5: Run the full gate and obtain independent final Task 7 review**
+
+Evidence: a fresh reviewer who authored none of the range read `a3ad015..c5022a7` and returned `READY` after its one Critical finding was fixed in `95c2d7e`; each of the six tasks was separately reviewed by an agent that did not author it. The full `npm run check` runs outside this commit; its result is owed to `ORDER.md` "Delivery evidence still owed".
 
 Run: `npm run check`
 
 Expected: PASS. Request a fresh reviewer against Spec 2 §6, this complete plan, the four rejected authority failures restated in Task 5 Step 5, and the final diff from `1557734`. The verdict must explicitly confirm: no bootstrap unlink/rmdir/out-of-parent quarantine; immutable plan/two exact slot identities; adjacent hash chain; exact Foundation authority; same-parent exclusive rename; crash-safe lock retention; post-handoff inertness; doctor/uninstall preservation; reinstall caps. Resolve every accepted finding with a focused failing regression and rerun Step 4 plus `npm run check` until `READY`.
 
-- [ ] **Step 6: Update canonical state and commit the accepted Task 7 checkpoint**
+- [x] **Step 6: Update canonical state and commit the accepted Task 7 checkpoint**
 
-Move surviving implementation facts into `foundation.md` and `threat-model.md`. Mark this six-task plan complete, change baseline Task 7's supersession note to accepted, advance `ORDER.md` to baseline Task 8, and remove completed Task 7 rows from `BACKLOG.md`. Do not delete either active Spec 2 plan because Tasks 8–26 remain unfinished.
+Evidence: `8ca0477` and `6e3ce69` moved the surviving constraints into `docs/architecture/foundation.md` and `docs/architecture/threat-model.md`; `050fc0d`, `ddaea3e` and `9bd85bb` recorded the three rulings, the legacy inventory and the completion roadmap; this commit ticks the governance rows, rewrites `BACKLOG.md` NEW-56 and NEW-59, and deletes the closure plan.
+
+Move surviving implementation facts into `foundation.md` and `threat-model.md`. Mark this six-task plan complete, change baseline Task 7's supersession note to accepted, advance `ORDER.md`, and remove completed Task 7 rows from `BACKLOG.md`. Do not delete either active Spec 2 plan because Tasks 8–26 remain unfinished. `ORDER.md` `NOW` becomes roadmap Phase 1 (ingest isolation, NEW-58), not baseline Task 8: the completion roadmap of 2026-09-04 places Phases 1 and 2 ahead of it.
 
 ```bash
 git add apps/cli/src/bootstrap/report.ts apps/cli/src/bootstrap/report.test.ts apps/cli/src/bootstrap/context.ts apps/cli/src/commands/doctor.ts apps/cli/src/commands/doctor.test.ts apps/cli/src/commands/uninstall.ts apps/cli/src/commands/uninstall.test.ts apps/cli/src/commands/init.ts apps/cli/src/commands/init.test.ts apps/cli/src/commands/status.test.ts apps/cli/src/commands/testing.ts apps/cli/src/main.ts apps/cli/src/main.test.ts tests/e2e/fresh-v2-retained-bootstrap.test.ts tests/security/network.test.ts docs/architecture/foundation.md docs/architecture/threat-model.md docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md docs/superpowers/ORDER.md docs/superpowers/BACKLOG.md
 git commit -m "feat(cli): report retained bootstrap evidence"
 ```
 
-After this commit, baseline Spec 2 Task 8 is the next action. Do not begin it in the same implementation task; let the Task 7 checkpoint and reviewer verdict stand independently.
+After this commit, roadmap Phase 1 (ingest isolation, NEW-58) is the next action; baseline Spec 2 Task 8 is roadmap Phase 3. Do not begin either in the same implementation task; let the Task 7 checkpoint and reviewer verdict stand independently.

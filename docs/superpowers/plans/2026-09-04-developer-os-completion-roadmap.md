@@ -16,8 +16,8 @@ Recorded here because they change the program's sequence; the umbrella design's 
 
 | # | Decision | Amends |
 |---|---|---|
-| D1 | Spec 2 §6.4: forward-participant content is never a retention row, for every terminal outcome; the global-lock admission rule of §6.1. Recorded as dated amendments by `plans/2026-09-04-developer-os-task6-closure.md` Task 1. | Spec 2 §6.1, §6.3, §6.4 |
-| D2 | The uncommitted replacement Task 6 tree is committed as one checkpoint through that plan's six tasks. | — |
+| D1 | Spec 2 §6.4: forward-participant content is never a retention row, for every terminal outcome; the global-lock admission rule of §6.1; the `admittedPreexistingPaths` plan grammar. Recorded as dated amendments in `specs/2026-08-28-developer-os-release-update-design.md` by `050fc0d`, `ddaea3e` and `9bd85bb`. | Spec 2 §6.1, §6.3, §6.4 |
+| D2 | The uncommitted replacement Task 6 tree is committed as one checkpoint through six separately reviewed tasks. Done 2026-09-04, `050fc0d..c5022a7`. | — |
 | D3 | The legacy runtime stays untouched until the cutover; its security guards return through product hooks (A13) at cutover time. Risk accepted: the legacy machine runs without pre-tool guards and without its weekly knowledge pipeline until then. | program plan Task 8 |
 | D4 | The founder's vault is migrated once, by hand with a reviewed throwaway script; `BRAIN_MIGRATIONS` stays empty. Inbox files enter through a new `import` verb; `capture` → quarantine remains the only path into ingest. | design §12, §13 |
 | D5 | Every legacy instruction artifact, hook and automation script becomes part of the product as a public, redacted default; personal overrides live in the product home as user data. No parallel private repository. | `BACKLOG.md` A12 ("mechanism and neutral defaults only") is widened |
@@ -34,9 +34,9 @@ Sizes are S/M/L complexity. "Gate" is what must be true before the next phase st
 
 ### Phase 0 — Close replacement Task 6 · L
 
-- [ ] Execute `docs/superpowers/plans/2026-09-04-developer-os-task6-closure.md` (six tasks: spec amendments, global-lock admission, single retention derivation, gate blockers, review residuals, checkpoint).
+- [x] Closed 2026-09-04 as `050fc0d..c5022a7`, six tasks: spec amendments, global-lock admission, single retention derivation, gate blockers, review residuals, checkpoint. The plan that carried them was deleted at closure; its constraints live in Spec 2 §6.1/§6.3/§6.4 as amended and in `docs/architecture/foundation.md` and `docs/architecture/threat-model.md`.
 
-Gate: `npm run check` green; `ORDER.md` `NOW` = Spec 2 Task 8; NEW-52, NEW-54, NEW-55, NEW-56, NEW-57 closed or rewritten.
+Gate: `npm run check` green; `ORDER.md` `NOW` = Phase 1; NEW-52, NEW-55, NEW-56, NEW-57 closed or rewritten. **Corrected 2026-09-04, twice.** This line read "`NOW` = Spec 2 Task 8", written before Phases 1 and 2 were inserted ahead of it; Spec 2 Tasks 8–9 are Phase 3. It also named NEW-54, the trailing lone-surrogate encoder defect, which this checkpoint never touched and which stays open. The full `npm run check` was still running when the checkpoint was committed; the document gates (citations, control bytes) and `lint` passed.
 
 ### Phase 1 — Ingest isolation (NEW-58) · M
 
@@ -151,7 +151,7 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 
 | Phase | Document |
 |---|---|
-| 0 | `plans/2026-09-04-developer-os-task6-closure.md` (exists) |
+| 0 | closed 2026-09-04; the plan it named was deleted at closure |
 | 1 | `plans/<date>-developer-os-ingest-isolation.md` |
 | 2 | `plans/<date>-developer-os-bootstrap-performance.md` |
 | 3 | Spec 2 §6.2/§6.3 amendment; baseline plan Tasks 8–9 |
