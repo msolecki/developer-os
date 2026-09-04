@@ -1960,7 +1960,7 @@ describe("retained bootstrap table derivation", () => {
       }
       const sidecarPaths = plan.foundationParticipants
         .flatMap((participant) => participant.mutations)
-        .flatMap((mutation) => mutation.stagedPath === null ? [] : [`${mutation.stagedPath}.sha256` as CanonicalAbsolutePathV1]);
+        .flatMap((mutation) => mutation.stagedPath === null ? [] : [`${mutation.stagedPath}.sha256`]);
       expect(sidecarPaths.length).toBeGreaterThan(0);
       for (const sidecar of sidecarPaths) {
         // A maximal retained directory (`collapsesDescendants`) covers this path via its
