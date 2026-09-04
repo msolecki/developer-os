@@ -40,9 +40,10 @@ first) turned out **not to discriminate** on 2.1.261 — see Claude row 3 and it
 different credit-free discriminator does — a value-taking option given no value fails at argument
 parsing regardless of `--help`, and the failure wording differs for a registered option
 ("argument missing") versus an unrecognized one ("unknown option"). Rows 14-17 apply this and
-settle F1 outright: `--max-turns` is a real, registered, value-taking option on 2.1.261, hidden
-from `--help` on purpose (`.hideHelp()`), with a help description matching what the adapter
-assumes. See the note after row 17 for the full chain of evidence.
+settle registration: `--max-turns` is a real, registered, value-taking option on 2.1.261, hidden
+from `--help` on purpose (`.hideHelp()`), with an embedded description stating it applies in
+non-interactive mode. Whether it bounds a real run the way the adapter expects was not observed
+and would need a session. See the note after row 17 for the full chain of evidence.
 
 ## Binaries actually executed
 
@@ -80,18 +81,22 @@ All rows: vendor version `2.1.261 (Claude Code)`, date `2026-09-05`.
 | 16 | **F1 settled**: `claude --max-turns` given no value produces the *same* shape as the known-option control (row 14), not the unknown-option control (row 15) — `--max-turns` is a registered, value-taking option on 2.1.261 | `claude --max-turns` (no value, no `--help`, no prompt; same background/3s-kill shape) | Returned well inside the 3s window, no kill needed. Exit `1`. Stderr: `error: option '--max-turns <turns>' argument missing` — matches row 14's "argument missing" shape exactly, not row 15's "unknown option" shape. | 2.1.261 | 2026-09-05 |
 | 17 | Static evidence (d), independent of row 16: the resolved Mach-O binary contains the literal option string, registered via a hidden-option code path | `strings -a /Users/msolecki/.local/share/claude/versions/2.1.261 \| grep -c -- "max-turns"` and `\| grep -m5 -- "max-turns"` | Count: `9`. First three matches are short and kept verbatim: `max-turns-note-forgery`, `--max-turns`, `--max-turns <turns>`. The remaining six matches are single lines from a minified JS bundle ranging 3-51KB each — not reproduced verbatim for size, but one, searched for the `--max-turns` substring in context, reads: `` addOption(new Y("--max-turns <turns>","Maximum number of agentic turns in non-interactive mode. This will early exit the conversation after the specified number of turns. (only works with --print)").argParser(Ai).hideHelp()) `` — confirming the option is registered with `.hideHelp()`, which is exactly why it never appears in `--help` (rows 1, 3-4). | 2.1.261 | 2026-09-05 |
 
-**F1 is now settled (rows 14-17), without a model turn.** Rows 14 and 15 establish that this build
-produces two distinguishable error shapes for a value-taking option given no value: a *registered*
-option says `argument missing`, an *unrecognized* one says `unknown option`. Row 16 shows
-`--max-turns` produces the `argument missing` shape — it is registered. Row 17 corroborates this
-statically: the binary contains `.hideHelp()`-registered code for exactly this flag, with a
-description ("Maximum number of agentic turns in non-interactive mode... only works with
---print") that matches what `packages/adapter-claude/src/invoke.ts` assumes. **Nothing here
-remains open for F1**: the flag is real, hidden from `--help` on purpose, requires a value, and (by
-its own description) behaves as the adapter expects in `--print` mode. What Task 1 still cannot
-show without a real run is whether passing a *valid* value (`--max-turns 5`) succeeds all the way
-through a live invocation — but the earlier "is it even a real flag" question, which the Step 2
-discriminator failed to answer, is closed.
+**F1's registration question is now settled (rows 14-17), without a model turn.** Rows 14 and 15
+establish that this build produces two distinguishable error shapes for a value-taking option
+given no value: a *registered* option says `argument missing`, an *unrecognized* one says `unknown
+option`. Row 16 shows `--max-turns` produces the `argument missing` shape — it is registered. Row
+17 corroborates this statically: the binary contains `.hideHelp()`-registered code for exactly
+this flag, naming its value placeholder `<turns>` and carrying an embedded description that says
+it applies "in non-interactive mode" and "only works with --print". **What was observed, stated
+without inferring past it**: the flag is real, hidden from `--help` on purpose, requires a value
+named `<turns>`, and its own embedded description says it applies in non-interactive mode. Whether
+it actually bounds a real run the way `packages/adapter-claude/src/invoke.ts` expects — or does
+anything at all with the value it is given — was not observed here; a help string is a claim the
+binary makes about itself, not a run of the code path it describes, and settling that needs a
+session, which Task 1 does not cross. What Task 1 still cannot show without a real run is whether
+passing a *valid* value (`--max-turns 5`) succeeds all the way through a live invocation and
+produces the bound the adapter relies on — but the earlier "is it even a real flag" question, which
+the Step 2 discriminator failed to answer, is closed.
 
 **Weaker evidence, stated explicitly (row 13):** a zero exit under `env -i --help` shows the binary
 *starts* and can print help with no environment variables at all. It does **not** show that a real
