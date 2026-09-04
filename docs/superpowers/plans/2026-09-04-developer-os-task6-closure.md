@@ -14,7 +14,7 @@
 
 - Founder rulings of 2026-09-04, recorded in Task 1 before any code changes:
   1. **§6.4:** the mutation content of a forward Foundation participant that the journal cursor has reached is never a retention row, for every `terminalOutcome`. Its `.bin.sha256` sidecar and the participant's initial journal remain `foundation_bootstrap` rows. A compensation participant's row is its own `stagedPath`. No `installedTarget` flag survives.
-  2. **§6.1:** under the held bootstrap lock, an existing regular, zero-byte, single-link, owner-owned `0600` file at the exact planned `.lifecycle.lock` path whose creation evidence for `createdPaths[0]` is absent is admitted as attempt-created with lost evidence; resume records its identity as that ordinal's creation evidence. Any other state at that path remains exit 6.
+  2. **§6.1:** under the held bootstrap lock, an existing regular, zero-byte, single-link, owner-owned `0600` file at the exact planned `.lifecycle.lock` path whose creation evidence for `createdPaths[0]` is absent is admitted as attempt-created with lost evidence; resume records its identity as that ordinal's creation evidence. Every other state at that path remains a refusal: a non-empty file, a foreign owner, another mode or a symlink fails the shape check before evidence is consulted and exits 5 (`securityRefusal`); a present evidence file whose device/inode differ from the current inode, or a cursor past ordinal 0 without matching evidence, exits 6 (`recoveryRequired`). **Correction, same day:** this constraint first said "remains exit 6" for every one of these states; the implemented shape check runs before the evidence check and refuses with exit 5, so only the two evidence-mismatch cases exit 6.
   3. **§6.1:** `FreshV2InitPlanV1.admittedPreexistingPaths` is part of the persisted plan grammar: at most 4096 canonical absolute paths, strictly ascending in UTF-8 byte order, every one equal to or below the product home (the plan first said §6.3; the interface block is under §6.1, corrected 2026-09-04).
 - Every commit in this plan is part of the single replacement Task 6 checkpoint (founder decision 2B). Each task still commits separately so fresh review can reject one task.
 - Bootstrap init, compensation, recovery, retention, retry, doctor and uninstall never call `unlink`, `rm` or `rmdir` for bootstrap envelope or evidence paths.
@@ -74,9 +74,13 @@ cursor still names ordinal 0, the process admits an existing regular file at the
 path when it is owner-owned, `0600`, single-link and zero bytes and no creation-evidence file
 exists for ordinal 0; it acquires that inode, records the post-acquire identity as ordinal 0's
 creation evidence, and continues. The bootstrap lock is what makes this sound: the executor is the
-only writer of that path while it is held, and the file carries no content. A present evidence
-file whose device/inode differ from the current inode, a non-empty file, a foreign owner, another
-mode, a symlink, or a cursor past ordinal 0 without matching evidence remains exit 6.
+only writer of that path while it is held, and the file carries no content. Every other state at
+that path remains a refusal. A non-empty file, a foreign owner, another mode or a symlink fails
+the shape check before evidence is consulted and exits 5 (`securityRefusal`); a present evidence
+file whose device/inode differ from the current inode, or a cursor past ordinal 0 without matching
+evidence, exits 6 (`recoveryRequired`). **Correction, same day:** this amendment first said
+"remains exit 6" for every one of these states; the implemented shape check runs before the
+evidence check and refuses with exit 5, so only the two evidence-mismatch cases above exit 6.
 ```
 
 - [ ] **Step 3: Amend §6.4**

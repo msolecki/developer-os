@@ -1062,9 +1062,13 @@ cursor still names ordinal 0, the process admits an existing regular file at the
 path when it is owner-owned, `0600`, single-link and zero bytes and no creation-evidence file
 exists for ordinal 0; it acquires that inode, records the post-acquire identity as ordinal 0's
 creation evidence, and continues. The bootstrap lock is what makes this sound: the executor is the
-only writer of that path while it is held, and the file carries no content. A present evidence
-file whose device/inode differ from the current inode, a non-empty file, a foreign owner, another
-mode, a symlink, or a cursor past ordinal 0 without matching evidence remains exit 6.
+only writer of that path while it is held, and the file carries no content. Every other state at
+that path remains a refusal. A non-empty file, a foreign owner, another mode or a symlink fails
+the shape check before evidence is consulted and exits 5 (`securityRefusal`); a present evidence
+file whose device/inode differ from the current inode, or a cursor past ordinal 0 without matching
+evidence, exits 6 (`recoveryRequired`). **Correction, same day:** this amendment first said
+"remains exit 6" for every one of these states; the implemented shape check runs before the
+evidence check and refuses with exit 5, so only the two evidence-mismatch cases above exit 6.
 
 With that durable envelope present, fresh init:
 
