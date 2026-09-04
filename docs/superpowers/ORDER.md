@@ -35,17 +35,21 @@ Open sequence inside A11:
    V2 drift/store dispatch, Foundation participant, and bootstrap-schema prerequisites.
 5. Completed 2026-08-31: approve the written Spec 2 §6 retained-bootstrap-evidence correction and
    durable slot-identity addendum, then write the focused replacement Task 7 plan.
-6. Parked 2026-09-03: replacement Task 6 reached working resume and lock admission, but is
-   blocked by NEW-53. Its test runs two full inits at roughly 220s each against a 300000ms
-   budget, so it cannot pass while `init` is slow. See NEW-55 for the exact state and the
-   patch location.
-7. Now: close NEW-53. One `developer-os init` takes 219s and performs 126,916,440
-   `TextEncoder.encode` calls because the plan is re-encoded and rewritten on every journal
-   write. Closing it unblocks Task 6, the 30-minute CI timeout, and the push.
-7. Execute Spec 2 Tasks 8–9 for the complete `InstallationManifestV2` migration and V2 new-init
+6. Closed 2026-09-04: NEW-53 no longer blocks replacement Task 6. `init` fell to roughly 101s and
+   the e2e test now passes at 299.5s against its 600000ms timeout. NEW-53 stays open only as a
+   performance question.
+7. Now: founder decision on Spec 2 §6.4. The 2026-09-04 fresh review rejected replacement Task 6,
+   and the blocker is a data-destroying defect on the success path: a successful `init` renames 14
+   of its own 105 manifest artifacts to tombstones — `config.toml`, one schema, and twelve files
+   inside the user's Brain — then exits 0 claiming all 105 installed. `bootstrap-retention.ts:1060`
+   makes a forward Foundation participant's installed target a retention row, which §6.4 line 1601
+   forbids; but §6.4 does not say what replaces it, and the two readings that follow from the text
+   both refuse against the real filesystem. NEW-55 carries the reproduction, the cause, and the
+   exact question to answer. Do not resume Task 6 implementation before it is answered.
+8. Execute Spec 2 Tasks 8–9 for the complete `InstallationManifestV2` migration and V2 new-init
    handoff.
-8. Execute the approved Spec 1 plan.
-9. Finish the remaining Spec 2 implementation and close the Task 7 checkpoint.
+9. Execute the approved Spec 1 plan.
+10. Finish the remaining Spec 2 implementation and close the Task 7 checkpoint.
 
 ## Product path
 
@@ -90,7 +94,9 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
   the comment in `check.yml` asserting a pull-request rule is stale. L2 still owes release
   permissions.
 - `development` holds 46 unpushed commits and CI has not run since 2026-08-28 (`d72287a`). Do not
-  push until NEW-53 closes: `check.yml` sets `timeout-minutes: 30` and the suite exceeds it.
+  push until NEW-52 closes. Measured 2026-09-04: `npm run check` was still inside the second of its
+  three `vitest` invocations when it was killed at 29 minutes, so the suite does not fit
+  `check.yml`'s `timeout-minutes: 30`. NEW-53 lowered `init` to roughly 101s but did not close this.
 - When a full-suite failure occurs, retain the complete log. NEW-29 owns the load-sensitive and
   intermittent-test cleanup.
 
@@ -106,6 +112,6 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 - Product sequence: 6 open entries, A11–A16.
 - Program plan: replacement Task 7 contains 6 unchecked work steps across 1 unfinished task;
   baseline Tasks 8–9 contain 10.
-- Repository backlog: 30 open numbered rows, plus the Foundation watchdog decision.
+- Repository backlog: 31 open numbered rows, plus the Foundation watchdog decision.
 - Active implementation plans: 44 untouched tasks — 1 in replacement Task 7, 19 remaining in Spec
   2, and 24 in Spec 1. Spec 1 remains blocked until replacement Task 7 and baseline Tasks 8–9 pass.
