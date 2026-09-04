@@ -532,6 +532,19 @@ behaviour described here.
 - **Every `doctor` check has its own error boundary.** Doctor is the command run on exactly the
   machines where reads fail, and an escaping rejection there became an unhandled top-level
   rejection with a stack trace and no report at all.
+- **The full check set is `platform`, `product-home`, `configuration`, `manifest`, `transactions`,
+  `drift`, `brain`, `redaction-key`, `agents`, `claude-capabilities`, `codex-capabilities`, and one
+  `bootstrap-evidence:<id>` row per retained bootstrap envelope** (`apps/cli/src/commands/doctor.ts`).
+  `redaction-key` reports the key's presence, symlink/regular-file/size shape, and octal mode from
+  `lstat` alone — never its bytes — and is a `warn` in every state but exactly `0600`, never a
+  `fail`: nothing is encrypted with the key, so a lost or loose one degrades a diagnostic, not the
+  knowledge it protects. `claude-capabilities` and `codex-capabilities` report each agent's
+  capability summary and `capture-via`, and both are `pass` in every branch — Product spec §11 asks
+  for a matrix of what was detected, not a verdict on it. Each `bootstrap-evidence:<id>` row reports
+  its envelope's operation, status (`verified`, `incomplete`, `altered`, or `unverified`), entry
+  count, and retained regular-file bytes at its vault path, as a `warn`; if inspecting bootstrap
+  evidence itself throws, an unsuffixed `bootstrap-evidence` row reports the failure as a `fail`
+  instead.
 - **`init`'s post-install gate is scoped to the checks it is answerable for**, listed in
   `INIT_OWNED_CHECKS`: `product-home`, `configuration`, `manifest`, `drift`, `brain`. It used to
   gate on the whole `doctor` report, which meant any check failing for a reason the install did
@@ -591,7 +604,8 @@ not exist here" look identical from outside and are not the same thing.
   finds nothing, is reported and never blocks a command: nothing in Foundation depends on an
   agent being present.
 - **No Brain content.** `init` creates a vault directory and one `.gitkeep` when the vault does
-  not exist. It writes no canonical note, and it never modifies a vault that already exists.
+  not exist. `init` installs the synthetic Brain template (four example notes, one note template,
+  seven `.gitkeep` files) only when it creates the vault; an existing vault is never modified.
 - **No credentials.** No Keychain, no token store. The protected-path policy refuses `.ssh`,
   `.aws`, `.gnupg`, `.env` and `.env.*` — but *not* `.envrc` or `.environment` — and three
   exact files (`.config/gh/hosts.yml`, `.codex/auth.json`, `.claude/.credentials.json`), on

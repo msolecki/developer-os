@@ -617,6 +617,18 @@ second writer is `expectedBeforeHash` rather than the lock. Both are in `ORDER.m
 concurrent-edit suite's own docblock states both halves so a reader does not inherit the stronger
 belief.
 
+**Spec 2 §6.1's global-lock admission rule, amended 2026-09-04.** Under the held bootstrap lock, an
+existing regular, zero-byte, single-link, owner-owned `0600` file at the exact planned
+`.lifecycle.lock` path, for which no creation evidence exists for ordinal 0, is admitted as
+attempt-created with lost evidence; resume records its post-acquire identity as that ordinal's
+creation evidence. The bootstrap lock is what makes this sound: it makes the executor the only
+writer of that path while it is held, and the admitted file carries no content, so admitting it
+cannot admit anyone else's data. Every other state at that path remains a refusal: a wrong shape —
+a non-empty file, a foreign owner, another mode, or a symlink — exits 5 (`securityRefusal`) because
+the shape check runs before evidence is consulted, and an evidence mismatch — a present evidence
+file whose identity does not match the current inode, or a cursor past ordinal 0 without matching
+evidence — exits 6 (`recoveryRequired`).
+
 ### 5.10 The installation manifest
 
 | Boundary | Mechanism | Evidence |
