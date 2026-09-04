@@ -1,27 +1,12 @@
 import { isAbsolute } from "node:path";
 import { cwd } from "node:process";
-import {
-  parseStructuredPayload,
-  screenProseArgument,
-  screenValueArgument,
-} from "@developer-os/security";
+import { parseStructuredPayload, screenProseArgument } from "@developer-os/security";
 import type { ProcessRunner } from "@developer-os/security";
 import type { ClaudeInstallation } from "./discover.js";
 
 export interface ClaudeInvocation {
   readonly prompt: string;
   readonly maxTurns: number;
-  /**
-   * Claude architecture former §8: where a compile-time scope becomes a runtime restriction. The
-   * workflow's derived read and write scopes translate into allowed-tool rules,
-   * so the equality rule DOS-P3 enforces on paper is enforced again by the
-   * agent's own permission system.
-   *
-   * Defence in depth, not a replacement — `workflow-schema.md` §8.6 records
-   * that `steps[].with` sits outside the scope guarantee entirely, which is
-   * what `parseAgentPromptArgs` exists to cover.
-   */
-  readonly allowedTools: readonly string[];
   readonly timeoutMs: number;
 }
 
@@ -56,6 +41,10 @@ const MAX_TURNS_CEILING = 50;
  * exists for is outside this package (wherever a workflow step becomes a
  * `ClaudeInvocation`), so a package-internal export alone would leave it
  * unreachable by the one consumer it was added for.
+ *
+ * `--max-turns` is registered on Claude Code 2.1.261 but hidden from
+ * `--help` (`.hideHelp()`) — `docs/architecture/vendor-invocation.md`,
+ * Claude table rows 14-17.
  */
 export const DEFAULT_MAX_TURNS = 5;
 
@@ -95,13 +84,33 @@ export async function invokeClaude(
   if (promptRefusal !== null) {
     return { ok: false, reason: "refused", detail: promptRefusal };
   }
-  for (const tool of invocation.allowedTools) {
-    const refusal = screenValueArgument(tool, "an allowed tool");
-    if (refusal !== null) {
-      return { ok: false, reason: "refused", detail: refusal };
-    }
-  }
 
+  /**
+   * Every flag below is a mechanical fact from `claude --help` on 2.1.261
+   * (`docs/architecture/vendor-invocation.md`, Claude table), not a restatement
+   * of its own name:
+   * - `--tools ""` — an empty tool *set*, per the flag's own help text: `""`
+   *   disables all tools (row 2). Not a grant list; there is no allow-list left.
+   * - `--strict-mcp-config` — with no `--mcp-config` given, loads zero MCP
+   *   servers (row 9).
+   * - `--restricted` — ignores user, project and local settings files (row 11).
+   * - `--safe-mode` — starts with hooks, plugins, skills, CLAUDE.md, MCP
+   *   servers, custom commands and agents disabled; auth and built-in tools
+   *   stay (row 11).
+   * - `--no-session-persistence` — keeps the run out of the user's resumable
+   *   history; print mode only (row 11).
+   * - `--permission-prompts none` — denies anything that would prompt in print
+   *   mode (row 11).
+   *
+   * Deliberately NOT passed: `--setting-sources ""` (row 6 — whether an empty
+   * value means "load none" is unobserved); `--permission-mode` (row 8 — the
+   * help gives no ordering of its six values, and with no tools it decides
+   * nothing); `--json-schema` (row 10 — registered, but the shape it produces
+   * under `--output-format json` is unobserved; a later plan may add it against
+   * an observation). Whether these six flags interact with each other at
+   * runtime is unobserved and needs a session —
+   * `docs/architecture/vendor-invocation.md`.
+   */
   const args = [
     "-p",
     invocation.prompt,
@@ -109,10 +118,15 @@ export async function invokeClaude(
     "json",
     "--max-turns",
     String(invocation.maxTurns),
+    "--tools",
+    "",
+    "--strict-mcp-config",
+    "--restricted",
+    "--safe-mode",
+    "--no-session-persistence",
+    "--permission-prompts",
+    "none",
   ];
-  if (invocation.allowedTools.length > 0) {
-    args.push("--allowedTools", ...invocation.allowedTools);
-  }
 
   let result;
   try {

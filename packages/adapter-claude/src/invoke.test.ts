@@ -15,7 +15,6 @@ const installation = {
 const invocation: ClaudeInvocation = {
   prompt: "summarise",
   maxTurns: 3,
-  allowedTools: ["Read", "Bash(git log *)"],
   timeoutMs: 60_000,
 };
 
@@ -48,11 +47,11 @@ function capturing(result: Partial<ProcessResult>): {
  * exhaustive hostile-value matrix and the payload/`__proto__` cases, live in
  * `packages/security/src/cli.test.ts`. What remains here is Claude-specific:
  * the argv shape, `maxTurns`, and the process-result handling this function
- * still owns, plus two minimal tests proving the shared screen is actually
- * wired in at both of its call sites (prompt and each allowed tool).
+ * still owns, plus one minimal test proving the shared screen is actually
+ * wired in at its one remaining call site (the prompt).
  */
 describe("invokeClaude", () => {
-  it("passes argv as an array, in print mode, asking for json", async () => {
+  it("passes argv as an array, in print mode, with no tools and no user configuration", async () => {
     const { runner, seen } = capturing({ stdout: '{"result":"ok"}' });
     await invokeClaude(installation, invocation, { runner });
     expect(seen()?.args).toEqual([
@@ -62,9 +61,14 @@ describe("invokeClaude", () => {
       "json",
       "--max-turns",
       "3",
-      "--allowedTools",
-      "Read",
-      "Bash(git log *)",
+      "--tools",
+      "",
+      "--strict-mcp-config",
+      "--restricted",
+      "--safe-mode",
+      "--no-session-persistence",
+      "--permission-prompts",
+      "none",
     ]);
   });
 
@@ -73,16 +77,6 @@ describe("invokeClaude", () => {
     await invokeClaude(installation, invocation, { runner });
     expect(seen()?.env).toEqual({});
     expect(seen()?.stdin).toBe("");
-  });
-
-  it("omits allowedTools entirely when the list is empty", async () => {
-    const { runner, seen } = capturing({ stdout: "{}" });
-    await invokeClaude(
-      installation,
-      { ...invocation, allowedTools: [] },
-      { runner },
-    );
-    expect(seen()?.args).not.toContain("--allowedTools");
   });
 
   /**
@@ -175,33 +169,6 @@ describe("invokeClaude", () => {
     expect(seen()?.args).toContain(prompt);
   });
 
-  it("refuses before spawning when an allowed tool fails the shared screen", async () => {
-    const { runner, seen } = capturing({ stdout: "{}" });
-    const result = await invokeClaude(
-      installation,
-      { ...invocation, allowedTools: ["--dangerously-skip-permissions=true", "Read"] },
-      { runner },
-    );
-    expect(result.ok, "a hostile tool must be refused").toBe(false);
-    expect(seen(), "a refused invocation must never reach a spawn").toBeNull();
-  });
-
-  /** The hostile entry sits after an ordinary one, so this also pins that the
-   * loop over `allowedTools` keeps checking past the first element rather
-   * than stopping once one tool has passed the screen. */
-  it("refuses when a later allowed tool fails the shared screen, not only the first", async () => {
-    const { runner, seen } = capturing({ stdout: "{}" });
-    const result = await invokeClaude(
-      installation,
-      { ...invocation, allowedTools: ["Read", "--mcp-config"] },
-      { runner },
-    );
-    expect(result.ok, "a hostile tool later in the list must be refused").toBe(
-      false,
-    );
-    expect(seen(), "a refused invocation must never reach a spawn").toBeNull();
-  });
-
   /**
    * `maxTurns` lands in a value position too, so `-1` is one more `-`-prefixed
    * argv element and `NaN` is a string the vendor interprets however it likes.
@@ -273,31 +240,4 @@ describe("invokeClaude", () => {
     });
   });
 
-  /**
-   * Every surviving screen case above trips the leading-dash rule
-   * (`--dangerously-skip-permissions`, `--mcp-config`), so the word-list rule
-   * — `permission|danger|bypass`, catching a hostile value with no leading
-   * dash at all — was unexercised end to end on this adapter's own wiring.
-   */
-  it("refuses an allowed tool naming a permission surface even without a leading dash", async () => {
-    const { runner, seen } = capturing({ stdout: "{}" });
-    const result = await invokeClaude(
-      installation,
-      { ...invocation, allowedTools: ["bypassPermissions"] },
-      { runner },
-    );
-    expect(result).toMatchObject({ ok: false, reason: "refused" });
-    expect(seen()).toBeNull();
-  });
-
-  it("still allows an ordinary tool list through", async () => {
-    const { runner, seen } = capturing({ stdout: "{}" });
-    const result = await invokeClaude(
-      installation,
-      { ...invocation, allowedTools: ["Read", "Bash(git log *)"] },
-      { runner },
-    );
-    expect(result.ok).toBe(true);
-    expect(seen()?.args).toContain("--allowedTools");
-  });
 });

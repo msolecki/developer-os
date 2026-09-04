@@ -396,12 +396,6 @@ function argumentAfter(call: VendorCall | undefined, flag: string): string | nul
   return index < 0 ? null : (call.args[index + 1] ?? null);
 }
 
-function allowedTools(call: VendorCall | undefined): readonly string[] {
-  if (call === undefined) return [];
-  const index = call.args.indexOf("--allowedTools");
-  return index < 0 ? [] : call.args.slice(index + 1);
-}
-
 function dataOf(result: IngestOutcome): IngestResultV1 {
   expect(result.ok, result.ok ? "" : result.error.message).toBe(true);
   if (!result.ok) throw new Error("the run did not succeed");
@@ -1669,21 +1663,16 @@ describe("runIngest, the agent call", () => {
     );
   });
 
-  it("gives claude no write tool in --allowedTools", async () => {
+  it("gives claude no tools at all, so the read scope is the prompt and nothing else", async () => {
     const fixture = await installedFixture("ingest-claude-tools", { codex: false });
     const seeded = await fixture.seedAccepted("an observation about tools");
     fixture.reply(() => oneNote(seeded.id));
 
     await fixture.run();
 
-    const allowed = allowedTools(fixture.calls[0]);
-    expect(allowed.length, "an empty tool list proves nothing").toBeGreaterThan(0);
-    for (const forbidden of ["Write", "Edit", "NotebookEdit", "Bash", "Task"]) {
-      expect(
-        allowed.some((tool) => tool.startsWith(forbidden)),
-        forbidden,
-      ).toBe(false);
-    }
+    const call = fixture.calls[0];
+    expect(argumentAfter(call, "--tools")).toBe("");
+    expect(call?.args).not.toContain("--allowedTools");
   });
 
   /**

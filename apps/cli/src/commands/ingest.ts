@@ -210,24 +210,6 @@ export const INGEST_DECLARED_WRITE_SCOPES = [
 const VENDOR_ORDER: readonly AgentName[] = ["claude", "codex"];
 
 /**
- * The Claude side of "zero declared write scopes" (spec §6.1): read tools only,
- * and **no write tool** — no `Write`, no `Edit`, no `Bash`, no `Task`. That is
- * what makes "the model cannot write" a property the vendor's own permission
- * system enforced before the model ran, rather than one our validators must
- * prove afterwards.
- *
- * Bare tool names rather than path-scoped permission rules, deliberately. The
- * read scope this command declares is a glob, and neither adapter's invocation
- * type carries a read-scope field at all: Codex expresses the read side as a
- * working root plus `-s read-only`, and Claude's `--allowedTools` takes
- * permission-rule syntax whose scoped form `claude-adapter.md` §14.3 names but
- * does not specify. Spec §10 is normative for external surfaces and an
- * implementation may not depend on one it does not carry, so the scoped form is
- * left to Task 17, which is the task that spends a real run against each vendor.
- */
-const CLAUDE_READ_ONLY_TOOLS: readonly string[] = ["Read", "Grep", "Glob"];
-
-/**
  * The verb whose JSON Schema `init` installs, and therefore the only value
  * `--output-schema` may be pointed at. `outputSchemaPath` is the one function
  * that names it, because `init` writing the file and this command naming it are
@@ -769,12 +751,12 @@ interface AgentOutcome {
  *
  * **Zero write scopes, and each sandbox follows from that count rather than
  * from an argument.** `invokeCodex` derives `-s read-only` from
- * `writeScopes.length === 0`; the Claude side passes `CLAUDE_READ_ONLY_TOOLS`,
- * which carries no write tool. Neither invocation type has a *read* scope
- * field, so the read side is each vendor's own vocabulary: Codex gets the
- * content root as its working root, and Claude gets the tool list. The resolved
- * `content/**` glob this workflow declares is what Developer OS states it
- * reads, not a string either CLI accepts.
+ * `writeScopes.length === 0`; the Claude side now passes no tools at all
+ * (`--tools ""`), rather than a read-only allow-list. Neither invocation type
+ * has a *read* scope field, so the read side is each vendor's own vocabulary:
+ * Codex gets the content root as its working root; Claude no longer has one.
+ * The resolved `content/**` glob this workflow declares is what Developer OS
+ * states it reads, not a string either CLI accepts.
  *
  * **`outputSchemaPath` reaches Codex only.** `invokeClaude` has no
  * `--output-schema` flag, so on that vendor the schema is described in the
@@ -800,7 +782,6 @@ async function invokeVendor(
           {
             prompt,
             maxTurns: DEFAULT_MAX_TURNS,
-            allowedTools: CLAUDE_READ_ONLY_TOOLS,
             timeoutMs: INGEST_TIMEOUT_MS,
           },
           dependencies,
@@ -847,11 +828,7 @@ async function invokeVendor(
    *   zero declared write scopes;
    * - the **turn bound** is `DEFAULT_MAX_TURNS`, a compile-time constant well
    *   inside the 1–50 window `invokeClaude` enforces, so it cannot be refused
-   *   by a value this command chooses;
-   * - the **tool list** is `CLAUDE_READ_ONLY_TOOLS`, which `invokeClaude` screens
-   *   per entry — measured, each of `Read`, `Grep` and `Glob` passes. It is a
-   *   fifth source and an earlier version of this list said "all four", having
-   *   been corrected once already for the same class of omission.
+   *   by a value this command chooses.
    *
    * The user described above no longer exists — but the first caller to pass a
    * real write scope brings them back, so the interpolation stays. **Nothing
