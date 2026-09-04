@@ -262,7 +262,12 @@ export interface BootstrapEvidenceClassificationInputV1 {
   readonly operation: "fresh_v2_init" | "v1_to_v2";
   readonly journal: BootstrapJournalSelectionV1 | null;
   readonly terminalOutcome: "finalized" | "rolled_back" | null;
-  readonly expectedRows: readonly BootstrapRetentionEntryV1[];
+  /**
+   * Only the count is read. Callers derive expectations as retention locations
+   * before a table exists, so naming both arms keeps the caller honest instead
+   * of forcing an `as never` that reaches the slot without naming anything.
+   */
+  readonly expectedRows: readonly (BootstrapRetentionEntryV1 | BootstrapRetentionLocationV1)[];
   readonly matchingRows: number;
   readonly alteredRows: number;
   readonly unboundEntries: number;
@@ -1025,11 +1030,19 @@ function foundationOrdinal(
   return ordinal;
 }
 
+interface FoundationAuthorityBookkeeping {
+  readonly rows: readonly Authority[];
+  readonly consumedPayloadOrdinals: ReadonlySet<number>;
+  readonly consumedPaths: ReadonlySet<string>;
+}
+
 function foundationAuthorities(
   plan: BootstrapRetainedExecutionPlanV1,
   journal: BootstrapJournalRecordV1,
-): readonly Authority[] {
-  const result: Authority[] = [];
+): FoundationAuthorityBookkeeping {
+  const rows: Authority[] = [];
+  const consumedPayloadOrdinals = new Set<number>();
+  const consumedPaths = new Set<string>();
   const ordinals = forwardFoundationOrdinals(plan);
   for (const participant of plan.foundationParticipants) {
     const ordinal = foundationOrdinal(participant, ordinals);
@@ -1038,7 +1051,7 @@ function foundationAuthorities(
       (journal.terminalOutcome === "finalized" && participant.role.kind !== "forward")
     ) continue;
     const initial = participant.initialJournal.staged;
-    result.push({
+    rows.push({
       role: "foundation_bootstrap",
       sourcePath: participant.initialJournal.finalPath,
       payloadOrdinal: initial.ordinal,
@@ -1049,22 +1062,28 @@ function foundationAuthorities(
       hash: initial.hash,
       mode: initial.mode,
     });
+    consumedPaths.add(participant.initialJournal.finalPath);
     for (const mutation of participant.mutations) {
       if (mutation.stagedPath === null || mutation.content == null || mutation.digest == null) continue;
-      result.push({
-      role: "foundation_bootstrap",
-        sourcePath: participant.role.kind === "forward"
-          ? mutation.targetPath
-          : mutation.stagedPath,
-        payloadOrdinal: mutation.content.ordinal,
-        payloadPostimage: true,
-        foundationOrdinal: ordinal,
-        foundationKind: participant.role.kind,
-        bytes: mutation.content.bytes,
-        hash: mutation.content.hash,
-        mode: mutation.content.mode,
-      });
-      result.push({
+      consumedPayloadOrdinals.add(mutation.content.ordinal);
+      consumedPayloadOrdinals.add(mutation.digest.ordinal);
+      consumedPaths.add(mutation.targetPath);
+      consumedPaths.add(mutation.stagedPath);
+      // Spec 2 §6.4 (Amended 2026-09-04): forward content is never a row, any outcome.
+      if (participant.role.kind === "compensation") {
+        rows.push({
+          role: "foundation_bootstrap",
+          sourcePath: mutation.stagedPath,
+          payloadOrdinal: mutation.content.ordinal,
+          payloadPostimage: true,
+          foundationOrdinal: ordinal,
+          foundationKind: participant.role.kind,
+          bytes: mutation.content.bytes,
+          hash: mutation.content.hash,
+          mode: mutation.content.mode,
+        });
+      }
+      rows.push({
         role: "foundation_bootstrap",
         sourcePath: `${mutation.stagedPath}.sha256` as CanonicalAbsolutePathV1,
         payloadOrdinal: mutation.digest.ordinal,
@@ -1075,9 +1094,10 @@ function foundationAuthorities(
         hash: mutation.digest.hash,
         mode: mutation.digest.mode,
       });
+      consumedPaths.add(`${mutation.stagedPath}.sha256`);
     }
   }
-  return result;
+  return { rows, consumedPayloadOrdinals, consumedPaths };
 }
 
 function plannedConsumer(
@@ -1140,11 +1160,10 @@ function authorities(
   interruptedPayload: BootstrapInterruptedPayloadRetentionEvidenceV1 | null,
 ): readonly Authority[] {
   const result: Authority[] = [];
-  const retainedFoundation = foundationAuthorities(plan, journal);
-  const retainedFoundationPaths = new Set(retainedFoundation.map((authority) => authority.sourcePath));
-  const retainedFoundationPayloads = new Set(retainedFoundation
-    .filter((authority) => authority.payloadPostimage === true)
-    .map((authority) => authority.payloadOrdinal));
+  const foundation = foundationAuthorities(plan, journal);
+  const retainedFoundation = foundation.rows;
+  const retainedFoundationPaths = foundation.consumedPaths;
+  const retainedFoundationPayloads = foundation.consumedPayloadOrdinals;
   const foundationByPayload = new Map(retainedFoundation.map((authority) => [authority.payloadOrdinal as number, authority]));
   for (let ordinal = 0; ordinal < journal.nextPayload; ordinal += 1) {
     const payload = plan.payloads[ordinal];
@@ -1155,7 +1174,7 @@ function authorities(
       payloadOrdinal: ordinal,
       mode: 0o600,
     });
-    if (foundationByPayload.has(ordinal)) continue;
+    if (foundationByPayload.has(ordinal) || retainedFoundationPayloads.has(ordinal)) continue;
     const consumer = plannedConsumer(plan, ordinal);
     if (consumer !== null && plannedConsumerReached(consumer, journal)) continue;
     if (manifestPayloadOrdinal(plan) === ordinal && journal.manifestCursor >= 2) continue;
@@ -1533,7 +1552,7 @@ function validateFoundationTerminalEvidence(
   value: unknown,
 ): ReadonlyMap<string, BootstrapFoundationTerminalJournalEvidenceV1> {
   if (!Array.isArray(value)) return refuse();
-  const applicable = foundationAuthorities(plan, journal)
+  const applicable = foundationAuthorities(plan, journal).rows
     .filter((authority) => authority.foundationJournal === true);
   const expected = new Map(applicable.map((authority) => [
     `${authority.foundationKind as string}:${String(authority.foundationOrdinal)}`,

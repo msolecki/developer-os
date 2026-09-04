@@ -326,6 +326,7 @@ function validatorAdmittedPlanFixture(): {
     operation: "fresh_v2_init",
     id: ID,
     admittedExternalShapeHash: bootstrapExternalShapeHash(externalShape),
+    admittedPreexistingPaths: [],
     v2ManifestHash: manifestRef.hash,
     bootstrapIdentity: {
       path: path("/product/state/.lifecycle-bootstrap.lock"), ownerUid: 501, mode: 0o600,
@@ -1256,21 +1257,33 @@ function admittedEvidence(
       (terminalJournal.terminalOutcome !== "finalized" || participant.role.kind === "forward");
   });
   const foundationEvidence: BootstrapRetentionEvidenceProjectionV1["foundationEvidence"][number][] = [];
+  // Spec 2 §6.4 (Amended 2026-09-04): a forward participant's mutation content is never a row,
+  // for any terminal outcome, so `foundationArtifacts` never carries one; suppression of the
+  // `payload` and `compensation_target` rows it still owns is tracked separately below.
   const foundationArtifacts = retainedParticipants.flatMap((participant) => [
     { sourcePath: participant.initialJournal.finalPath, payload: participant.initialJournal.staged, participant },
     ...participant.mutations.flatMap((mutation) => mutation.stagedPath === null || mutation.content == null || mutation.digest == null
       ? []
       : [
-          {
-            sourcePath: participant.role.kind === "forward"
-              ? mutation.targetPath
-              : mutation.stagedPath,
-            payload: mutation.content,
-            participant: null,
-          },
+          ...(participant.role.kind === "compensation"
+            ? [{ sourcePath: mutation.stagedPath, payload: mutation.content, participant: null }]
+            : []),
           { sourcePath: path(`${mutation.stagedPath}.sha256`), payload: mutation.digest, participant: null },
         ]),
   ]);
+  const consumedFoundationPaths = new Set<CanonicalAbsolutePathV1>();
+  const consumedFoundationPayloadOrdinals = new Set<number>();
+  retainedParticipants.forEach((participant) => {
+    consumedFoundationPaths.add(participant.initialJournal.finalPath);
+    participant.mutations.forEach((mutation) => {
+      if (mutation.stagedPath === null || mutation.content == null || mutation.digest == null) return;
+      consumedFoundationPayloadOrdinals.add(mutation.content.ordinal);
+      consumedFoundationPayloadOrdinals.add(mutation.digest.ordinal);
+      consumedFoundationPaths.add(mutation.targetPath);
+      consumedFoundationPaths.add(mutation.stagedPath);
+      consumedFoundationPaths.add(path(`${mutation.stagedPath}.sha256`));
+    });
+  });
   foundationArtifacts.forEach((artifact, ordinal) => {
     const origin = payloadEvidence.find((candidate) => candidate.value.ordinal === artifact.payload.ordinal)?.value;
     if (origin === undefined) throw new Error("fixture Foundation artifact requires payload evidence");
@@ -1305,7 +1318,10 @@ function admittedEvidence(
       postimage,
     });
   });
-  const foundationPayloads = new Set(foundationArtifacts.map((artifact) => artifact.payload.ordinal));
+  const foundationPayloads = new Set([
+    ...foundationArtifacts.map((artifact) => artifact.payload.ordinal),
+    ...consumedFoundationPayloadOrdinals,
+  ]);
   const manifestPayload = plan.manifest.after.state === "present" && plan.manifest.after.bytes?.kind === "bootstrap_expected"
     ? plan.manifest.after.bytes.ordinal
     : null;
@@ -1347,10 +1363,8 @@ function admittedEvidence(
       if (
         candidate.planned.kind === "global_lock" ||
         candidate.planned.path === stagingRoot ||
-        foundationArtifacts.some((artifact) =>
-          artifact.sourcePath === candidate.planned.path ||
-          (candidate.planned.kind === "file" && artifact.payload.ordinal === candidate.planned.payload.ordinal),
-        )
+        consumedFoundationPaths.has(candidate.planned.path) ||
+        (candidate.planned.kind === "file" && consumedFoundationPayloadOrdinals.has(candidate.planned.payload.ordinal))
       ) continue;
       const targetEvidence = createdPathEvidence.find((entry) =>
         entry.value.scope === candidate.scope && entry.value.ordinal === candidate.ordinal,
@@ -1875,7 +1889,7 @@ describe("retained bootstrap table derivation", () => {
     expect(table.some((row) => row.sourcePath === file.path)).toBe(false);
   });
 
-  it("maps every finalized Foundation artifact to its originating persisted payload identity", () => {
+  it("maps every retained finalized Foundation artifact to its payload identity and keeps installed targets out of the table", () => {
     const evidence = admittedEvidence() as BootstrapRetentionEvidenceProjectionV1 & {
       readonly payloadEvidence: readonly {
         readonly value: BootstrapPayloadEvidenceV1;
@@ -1888,10 +1902,7 @@ describe("retained bootstrap table derivation", () => {
       [forward.initialJournal.finalPath, forward.initialJournal.staged],
       ...forward.mutations.flatMap((mutation) => mutation.stagedPath === null || mutation.content == null || mutation.digest == null
         ? []
-        : [
-            [mutation.targetPath, mutation.content] as const,
-            [`${mutation.stagedPath}.sha256`, mutation.digest] as const,
-          ]),
+        : [[`${mutation.stagedPath}.sha256`, mutation.digest] as const]),
     ] as const;
 
     const table = deriveBootstrapRetentionTable(plan, evidence);
@@ -1901,7 +1912,65 @@ describe("retained bootstrap table derivation", () => {
       expect(row?.postimage).toMatchObject({ dev: origin?.dev, ino: origin?.ino });
       expect(table.some((candidate) => candidate.sourcePath === payloadRef.path)).toBe(false);
     }
+
+    /**
+     * Spec 2 §6.4 (Amended 2026-09-04): a finalized forward mutation has been
+     * renamed onto its installed target, so the target is never a row. Its
+     * payload stays suppressed all the same — dropping the row must not
+     * resurrect the `payload` row the mutation owns.
+     */
+    const installed = forward.mutations.flatMap((mutation) =>
+      mutation.stagedPath === null || mutation.content == null || mutation.digest == null
+        ? []
+        : [[mutation.targetPath, mutation.content] as const]);
+    expect(installed.length).toBeGreaterThan(0);
+    for (const [targetPath, content] of installed) {
+      expect(table.some((candidate) => candidate.sourcePath === targetPath)).toBe(false);
+      expect(table.some((candidate) => candidate.sourcePath === content.path)).toBe(false);
+    }
   });
+
+  it.each(["finalized", "rolled_back"] as const)(
+    "never emits a forward participant's content path or any installed target as a row when %s",
+    (terminalOutcome) => {
+      const forwardParticipants = plan.foundationParticipants
+        .filter((participant) => participant.role.kind === "forward").length;
+      const terminal = historicalJournal({
+        phase: terminalOutcome,
+        direction: terminalOutcome === "finalized" ? "forward" : "compensating",
+        nextPayload: plan.payloads.length,
+        nextCreatedPath: plan.createdPaths.length,
+        nextFoundationParticipant: forwardParticipants,
+        nextLaunchabilityPath: plan.launchabilityPaths.length,
+        manifestCursor: terminalOutcome === "finalized" ? 3 : 0,
+        compensationNext: terminalOutcome === "finalized" ? null : -1,
+        terminalOutcome,
+      });
+      const forwardTargets = new Set(plan.foundationParticipants
+        .filter((participant) => participant.role.kind === "forward")
+        .flatMap((participant) => participant.mutations.map((mutation) => mutation.targetPath)));
+      const installed = new Set(plan.manifest.after.state === "present"
+        ? [plan.manifest.manifestPath] : []);
+
+      const locations = deriveBootstrapRetentionLocations(plan, terminal);
+
+      for (const location of locations) {
+        expect(forwardTargets.has(location.sourcePath)).toBe(false);
+        expect(installed.has(location.sourcePath)).toBe(false);
+      }
+      const sidecarPaths = plan.foundationParticipants
+        .flatMap((participant) => participant.mutations)
+        .flatMap((mutation) => mutation.stagedPath === null ? [] : [`${mutation.stagedPath}.sha256` as CanonicalAbsolutePathV1]);
+      expect(sidecarPaths.length).toBeGreaterThan(0);
+      for (const sidecar of sidecarPaths) {
+        // A maximal retained directory (`collapsesDescendants`) covers this path via its
+        // tree evidence instead of a standalone row; either form retains the sidecar.
+        const retained = locations.some((location) => location.sourcePath === sidecar) ||
+          locations.some((location) => location.collapsesDescendants && sidecar.startsWith(`${location.sourcePath}/`));
+        expect(retained).toBe(true);
+      }
+    },
+  );
 
   it("does not retain a finalized manifest payload after publication consumes its inode", () => {
     const manifestRef = plan.manifest.after.state === "present" ? plan.manifest.after.bytes : null;
