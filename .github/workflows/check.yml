@@ -8,16 +8,21 @@ name: check
 # `push:` is scoped rather than bare. Unscoped, a branch with an open pull
 # request runs the whole suite twice for every commit — once for the push and
 # once for the pull request — which was measured on this workflow's own first
-# run. Nothing is lost by scoping it: a repository rule requires a pull request
-# to reach the default branch, so every commit that can land is still checked,
-# and a topic branch with no pull request open is not yet asking to land.
+# run.
+#
+# **This comment used to claim a repository rule required a pull request to
+# reach the default branch, and that was checked and found false on
+# 2026-09-03.** The `baseline` ruleset on `development` carries only `deletion`
+# and `non_fast_forward`; nothing requires a pull request and nothing requires a
+# status check. So the `push:` trigger below is not a second net behind a rule —
+# for a direct push it is the only net there is. Scoping it to `development`
+# keeps that net in place while leaving topic branches with no open pull request
+# unchecked, which is the intended trade and not an oversight.
 #
 # **The scoped branch was `feat/foundation` until 2026-08-21, and by then it did
 # not exist on the remote.** It had been the default branch when this file was
 # written; the default moved to `development` and this trigger did not follow.
-# The rule above still held, so nothing could land unchecked — but this trigger
-# had stopped naming anything, and a safety net that names a deleted branch is
-# not one. It now names the branch that is actually the default.
+# It now names the branch that is actually the default.
 on:
   push:
     branches:
@@ -34,26 +39,33 @@ concurrency:
   group: check-${{ github.ref }}
   cancel-in-progress: true
 
+# **Sharded on 2026-09-04, because the suite stopped fitting one job.** A whole
+# `npm run check` was measured still inside its bootstrap-executor phase when it
+# was killed at 29 minutes, against a `timeout-minutes: 30` — so the gate was
+# not reporting a failure, it was reporting nothing at all. NEW-52 owns making
+# the suite smaller; this makes the bound meaningful in the meantime.
+#
+# The split is the one `npm test` already used internally, now named in
+# `package.json` so each job runs a script a developer can run verbatim. That
+# preserves what the single `npm run check` step was protecting: CI cannot drift
+# from local, because neither side spells the vitest invocations itself.
+# `npm run check` remains the one local command and still runs all of it.
 jobs:
-  check:
-    # macOS, and not a preference. `packages/platform-macos` shells out to
-    # `/usr/bin/lockf` for advisory locking, and the e2e suite drives the real
-    # provider rather than a double. On Linux the transaction lock has no
-    # implementation, so a green Linux run would be measuring a different
-    # product.
+  # macOS on every job, and not a preference. `packages/platform-macos` shells
+  # out to `/usr/bin/lockf` for advisory locking, and the e2e suite drives the
+  # real provider rather than a double. On Linux the transaction lock has no
+  # implementation, so a green Linux run would be measuring a different product.
+  lint:
     runs-on: macos-15
-    timeout-minutes: 30
-
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
-          # `npm run check` ends in `git diff --check`, which needs a real
-          # working tree. It does not need history, so the default shallow
-          # fetch is right — but `tests/repository/` enumerates files through
-          # `git ls-files`, so the repository must be a checkout and not an
-          # export.
+          # `git diff --check` needs a real working tree. It does not need
+          # history, so the default shallow fetch is right — but
+          # `tests/repository/` enumerates files through `git ls-files`, so the
+          # repository must be a checkout and not an export.
           fetch-depth: 1
-
       - uses: actions/setup-node@v4
         with:
           # The range `package.json` declares, so CI tests what the product
@@ -62,24 +74,95 @@ jobs:
           # user — `Intl.Segmenter` in particular carries an ICU version, and
           # `packages/brain` pins its locale for exactly that reason.
           node-version: '24'
-
       - name: Enable pnpm through corepack
         # `packageManager` in `package.json` names the exact version, so this
         # cannot drift from what the lockfile was written by.
         run: corepack enable
-
       - name: Install
         # Frozen: a lockfile the install is allowed to rewrite is not a lockfile.
         run: pnpm install --frozen-lockfile
+      - name: Lint
+        # Includes the self-containment enumerator and the control-byte scan.
+        run: npm run lint
+      - name: Build
+        run: pnpm --pm-on-fail=ignore build
+      - name: Working tree
+        run: git diff --check
 
-      - name: Gates
-        # `npm run check` is `lint && test && build && git diff --check`, and
-        # `lint` includes the self-containment enumerator and the control-byte
-        # scan. One command, so CI cannot drift from what a developer runs.
-        run: npm run check
+  bootstrap-executor:
+    # `apps/cli/src/bootstrap/executor.test.ts` alone, in the two invocations
+    # `npm run test:bootstrap` performs. It is split from the rest because one
+    # of its 69 cases is not isolation-safe as the first row of the file, and
+    # because it dominates the suite's wall clock — a fresh V2 `init` is roughly
+    # 101s and this file runs many.
+    #
+    # **Measured 2026-09-04 on the development laptop:** the first invocation is
+    # 96s and the second is 6963s, so `test:bootstrap` is close to two hours.
+    # Read that as a lower bound rather than a target — that run ended red, and a
+    # green run has to carry every case to completion — and a macOS hosted runner
+    # is generally slower than the machine it was measured on. Hence three hours.
+    #
+    # A three-hour CI job is not acceptable as a resting state; it is what makes
+    # the gate report something instead of being killed mid-phase. NEW-52 and
+    # NEW-53's remainder own bringing it down, and this bound should be lowered
+    # from the first green run's real figure.
+    runs-on: macos-15
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Enable pnpm through corepack
+        run: corepack enable
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Bootstrap executor
+        run: npm run test:bootstrap
 
+  suite:
+    # Every test file except the executor file and tests/e2e, which the jobs above and below own.
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Enable pnpm through corepack
+        run: corepack enable
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        # tests/security and tests/repository import the compiled CLI from dist.
+        run: pnpm --pm-on-fail=ignore build
+      - name: Suite
+        run: npm run test:suite
+
+  e2e:
+    # Separate here as it is locally: these spawn the compiled binary under a
+    # temporary HOME and are the only tests that exercise the real transaction,
+    # the real lock, and the real filesystem.
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Enable pnpm through corepack
+        run: corepack enable
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        # `tests/e2e` imports from `dist`, which the `lint` job builds in its own
+        # runner and this one does not inherit.
+        run: pnpm --pm-on-fail=ignore build
       - name: End to end
-        # Separate from `check` here as it is locally: these spawn the compiled
-        # binary under a temporary HOME and are the only tests that exercise
-        # the real transaction, the real lock, and the real filesystem.
         run: pnpm test:e2e

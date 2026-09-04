@@ -11,7 +11,9 @@
   "scripts": {
     "build": "tsc -b",
     "lint": "tsc -b --pretty false && eslint . && node tests/dist/repository/check.js",
-    "test": "vitest run apps/cli/src/bootstrap/executor.test.ts -t 'publishes a complete V2 handoff and permanently retains its exact plan and two slots' && vitest run apps/cli/src/bootstrap/executor.test.ts -t '^(?!.*publishes a complete V2 handoff and permanently retains its exact plan and two slots).*$' && vitest run --exclude 'src/bootstrap/executor.test.ts'",
+    "test": "npm run test:bootstrap && npm run test:suite",
+    "test:bootstrap": "vitest run apps/cli/src/bootstrap/executor.test.ts -t 'publishes a complete V2 handoff and permanently retains its exact plan and two slots' && vitest run apps/cli/src/bootstrap/executor.test.ts -t '^(?!.*publishes a complete V2 handoff and permanently retains its exact plan and two slots).*$'",
+    "test:suite": "vitest run --exclude 'src/bootstrap/executor.test.ts' --exclude 'e2e/**'",
     "test:e2e": "vitest run tests/e2e",
     "render:claude": "tsc -b && node tests/dist/tools/render-claude.js",
     "render:codex": "tsc -b && node tests/dist/tools/render-codex.js",

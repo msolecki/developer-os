@@ -34,6 +34,9 @@ import {
   BootstrapExecutor,
   type FreshInitDeathPointV1,
 } from "../bootstrap/executor.js";
+import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
+import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
+import type { BootstrapEvidenceReportV1 } from "../bootstrap/report.js";
 import {
   createGuards,
   NODE_FILE_SYSTEM,
@@ -248,10 +251,18 @@ export interface CommandFixture {
   readonly io: RecordingIo;
   readonly context: CliContext;
   readonly bootstrapTrace: string[];
+  readonly bootstrapEvidenceInspections: number;
+  readonly bootstrapEvidenceIdentities: () => Promise<readonly {
+    readonly id: string;
+    readonly path: string;
+    readonly kind: "regular_file" | "directory";
+    readonly dev: string;
+    readonly ino: string;
+    readonly bytes: string;
+  }[]>;
   readonly bootstrapRenameRequests: readonly RenameAtxRunRequestV1[];
   readonly transactionUnlinkRequests: readonly string[];
   readonly lifecycleLockEvents: string[];
-  readonly releaseRequests: string[];
   readonly vendorProcesses: string[];
   readonly disableBootstrapInterrupt: () => void;
   readonly setBootstrapInterrupt: (point: FreshInitDeathPointV1, occurrence?: number) => void;
@@ -299,6 +310,12 @@ export interface FixtureOptions {
   readonly bootstrapProductionLocks?: boolean;
   /** Inserts an adversarial namespace race immediately before lifecycle lock acquisition. */
   readonly bootstrapBeforeLockAcquire?: (path: string) => Promise<void>;
+  /** Synthetic aggregate used only to exercise exact/first-over admission boundaries. */
+  readonly bootstrapEvidenceAggregate?: {
+    readonly idCount: number;
+    readonly entryCount: number;
+    readonly regularFileBytes: string;
+  };
 }
 
 const fixtureRoots: string[] = [];
@@ -395,7 +412,6 @@ export async function createCommandFixture(
     : null;
   const bootstrapTrace: string[] = [];
   const lifecycleLockEvents: string[] = [];
-  const releaseRequests: string[] = [];
   const vendorProcesses: string[] = [];
   const transactionUnlinkRequests: string[] = [];
   let bootstrapInterruptEnabled = true;
@@ -403,6 +419,7 @@ export async function createCommandFixture(
   let bootstrapInterruptOccurrence = 1;
   let bootstrapInterruptCount = 0;
   let bootstrapFailureEnabled = true;
+  let bootstrapEvidenceInspections = 0;
 
   const renameRunner = new InProcessRenameAtxRunner();
   const retainedRename = new MacOsRetainedRename({
@@ -417,11 +434,23 @@ export async function createCommandFixture(
     },
   });
 
-  const runner: ProcessRunner = options.runner ?? {
+  const spawnable: ProcessRunner = options.runner ?? {
     run(): Promise<ProcessResult> {
       return Promise.reject(
         new Error("this fixture has no process runner; pass one to spawn"),
       );
+    },
+  };
+  /**
+   * Records before delegating, so "this command spawned nothing" is a claim a
+   * test can fail. The default runner rejects, but `doctor` gives every check
+   * its own error boundary, so a spawn there would be swallowed and an
+   * unrecorded empty list would still look like proof.
+   */
+  const runner: ProcessRunner = {
+    run(request): Promise<ProcessResult> {
+      vendorProcesses.push([request.executable, ...request.args].join(" "));
+      return spawnable.run(request);
     },
   };
 
@@ -432,6 +461,23 @@ export async function createCommandFixture(
     ((): Date => new Date(Date.UTC(2026, 6, 30, 12, 0, 0) + sequence));
 
   const buildContext = (): CliContext => {
+    const inspectEvidence = async () => {
+      bootstrapEvidenceInspections += 1;
+      const admitted = await inspectBootstrapEvidenceAdmission(createBootstrapEvidenceInspectionRequest({
+        productHome: paths.home,
+        stateDirectory: paths.stateDir,
+        initialRoots: [paths.home, paths.stateDir, userHome],
+      }));
+      return options.bootstrapEvidenceAggregate === undefined
+        ? admitted
+        : {
+            ...admitted,
+            report: {
+              ...admitted.report,
+              aggregate: options.bootstrapEvidenceAggregate as BootstrapEvidenceReportV1["aggregate"],
+            },
+          };
+    };
     const lockProvider: TransactionLockProvider = new RecordingLockProvider(
       options.bootstrapProductionLocks === true
         ? new MacOsTransactionLockProvider()
@@ -508,6 +554,7 @@ export async function createCommandFixture(
               throw new Error(`synthetic bootstrap failure at ${point}`);
             }
           },
+          inspectEvidence,
         });
     if (bootstrapExecutor !== null) fixtureBootstrapExecutors.push(bootstrapExecutor);
 
@@ -553,10 +600,32 @@ export async function createCommandFixture(
       runner,
       bootstrap: bootstrapExecutor === null || packagedRelease === null
         ? { state: "unavailable_until_packaged_handoff" }
-        : { state: "available", executor: bootstrapExecutor, packagedRelease },
+        : { state: "available", executor: bootstrapExecutor, packagedRelease, inspectEvidence },
     };
   };
   const context = buildContext();
+
+  const bootstrapEvidenceIdentities = async () => {
+    const entries = await nodeFs.readdir(root, { recursive: true, withFileTypes: true });
+    const result = [];
+    for (const candidate of entries) {
+      const path = join(candidate.parentPath, candidate.name);
+      const name = candidate.name;
+      const id = /(?:fresh-v2-init\.|\.fresh-v2-init\.|\.developer-os-retained\.)((?:fi|mm)_[0-9a-f-]+)/u.exec(name)?.[1];
+      if (id === undefined) continue;
+      const stats = await nodeFs.lstat(path, { bigint: true });
+      if (!stats.isFile() && !stats.isDirectory()) continue;
+      result.push({
+        id,
+        path,
+        kind: stats.isFile() ? "regular_file" as const : "directory" as const,
+        dev: stats.dev.toString(),
+        ino: stats.ino.toString(),
+        bytes: stats.size.toString(),
+      });
+    }
+    return result.sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)));
+  };
 
   return {
     root,
@@ -565,10 +634,13 @@ export async function createCommandFixture(
     io,
     context,
     bootstrapTrace,
+    get bootstrapEvidenceInspections() {
+      return bootstrapEvidenceInspections;
+    },
+    bootstrapEvidenceIdentities,
     bootstrapRenameRequests: renameRunner.requests,
     transactionUnlinkRequests,
     lifecycleLockEvents,
-    releaseRequests,
     vendorProcesses,
     disableBootstrapInterrupt: () => {
       bootstrapInterruptEnabled = false;
@@ -607,6 +679,24 @@ export async function inventory(root: string): Promise<readonly string[]> {
   return entries
     .map((entry) => join(entry.parentPath, entry.name).slice(root.length + 1))
     .sort();
+}
+
+/**
+ * `inventory` compares path names, so it answers "was anything created or
+ * removed" and nothing else. A claim that bytes did not change needs this:
+ * every regular file carries its digest, so an in-place rewrite that preserves
+ * the name — and even the length — fails.
+ */
+export async function inventoryDigest(root: string): Promise<readonly string[]> {
+  const entries = await nodeFs.readdir(root, { recursive: true, withFileTypes: true });
+  const rows = await Promise.all(entries.map(async (entry) => {
+    const absolute = join(entry.parentPath, entry.name);
+    const relative = absolute.slice(root.length + 1);
+    if (!entry.isFile()) return `${relative}\0${entry.isDirectory() ? "dir" : "other"}`;
+    const digest = createHash("sha256").update(await nodeFs.readFile(absolute)).digest("hex");
+    return `${relative}\0${digest}`;
+  }));
+  return rows.sort();
 }
 
 export async function exists(path: string): Promise<boolean> {
