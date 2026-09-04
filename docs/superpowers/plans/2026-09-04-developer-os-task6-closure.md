@@ -4,18 +4,18 @@
 
 **Goal:** Turn the uncommitted replacement Task 6 tree into an accepted, committed Task 7 checkpoint by recording the two founder rulings of 2026-09-04 in Spec 2, implementing them, and making `npm run check` green.
 
-**Architecture:** Two Spec 2 amendments are written first (§6.1 global-lock admission after a crash, §6.4 forward-participant content is never a retention row, §6.3 `admittedPreexistingPaths`). Core owns one derivation of the retention table with explicit bookkeeping instead of a flag on rows; the CLI evidence builder consumes that derivation instead of re-deriving it. Gate blockers that are independent of the rulings (NUL bytes, stale citations, CI `suite` job) are fixed in their own task so a reviewer can reject one task without rejecting the others.
+**Architecture:** Two Spec 2 amendments are written first (§6.1 global-lock admission after a crash, §6.4 forward-participant content is never a retention row, §6.1 `admittedPreexistingPaths`). Core owns one derivation of the retention table with explicit bookkeeping instead of a flag on rows; the CLI evidence builder consumes that derivation instead of re-deriving it. Gate blockers that are independent of the rulings (NUL bytes, stale citations, CI `suite` job) are fixed in their own task so a reviewer can reject one task without rejecting the others.
 
 **Tech Stack:** TypeScript 5.9 strict ESM, Node.js 24 built-ins, Vitest 4, existing canonical JSON and Foundation transactions, macOS 15+ CI.
 
-**Spec:** `docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md` §6.1, §6.3, §6.4, amended by Task 1 of this plan. Parent plan: `docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md` Task 6.
+**Spec:** `docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md` §6.1, §6.4, amended by Task 1 of this plan. Parent plan: `docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md` Task 6.
 
 ## Global Constraints
 
 - Founder rulings of 2026-09-04, recorded in Task 1 before any code changes:
   1. **§6.4:** the mutation content of a forward Foundation participant that the journal cursor has reached is never a retention row, for every `terminalOutcome`. Its `.bin.sha256` sidecar and the participant's initial journal remain `foundation_bootstrap` rows. A compensation participant's row is its own `stagedPath`. No `installedTarget` flag survives.
   2. **§6.1:** under the held bootstrap lock, an existing regular, zero-byte, single-link, owner-owned `0600` file at the exact planned `.lifecycle.lock` path whose creation evidence for `createdPaths[0]` is absent is admitted as attempt-created with lost evidence; resume records its identity as that ordinal's creation evidence. Any other state at that path remains exit 6.
-  3. **§6.3:** `FreshV2InitPlanV1.admittedPreexistingPaths` is part of the persisted plan grammar: at most 4096 canonical absolute paths, strictly ascending in UTF-8 byte order, every one equal to or below the product home.
+  3. **§6.1:** `FreshV2InitPlanV1.admittedPreexistingPaths` is part of the persisted plan grammar: at most 4096 canonical absolute paths, strictly ascending in UTF-8 byte order, every one equal to or below the product home (the plan first said §6.3; the interface block is under §6.1, corrected 2026-09-04).
 - Every commit in this plan is part of the single replacement Task 6 checkpoint (founder decision 2B). Each task still commits separately so fresh review can reject one task.
 - Bootstrap init, compensation, recovery, retention, retry, doctor and uninstall never call `unlink`, `rm` or `rmdir` for bootstrap envelope or evidence paths.
 - Every test written here must be observed failing for the stated reason before its implementation step.
@@ -27,7 +27,7 @@
 
 | Area | Files | Responsibility |
 |---|---|---|
-| Spec amendments | `docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md` | §6.1, §6.3, §6.4 dated amendments |
+| Spec amendments | `docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md` | §6.1, §6.4 dated amendments |
 | Governance | `docs/superpowers/BACKLOG.md`, `docs/superpowers/ORDER.md`, this plan | NEW-52/55/56/57 rows, `NOW`, counts |
 | Global-lock recovery | `apps/cli/src/bootstrap/executor.ts:2791-2905` | `createPlannedPath` global-lock branch |
 | Core retention table | `packages/core/src/manifest/bootstrap-retention.ts:1000-1250` | `foundationAuthorities`, `authorities` |
@@ -40,7 +40,7 @@
 ### Task 1: Record the founder rulings in Spec 2 and the governance documents
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md:3-4` (status line), `:1047-1049` (§6.1), `:1601-1603` (§6.4), §6.3 plan grammar near `:1143`
+- Modify: `docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md:3-4` (status line), `:1047-1049` (§6.1), `:1601-1603` (§6.4), §6.1 `admittedPreexistingPaths` plan grammar (in `FreshV2InitPlanV1`, beside `admittedExternalShapeHash`)
 - Modify: `docs/superpowers/BACKLOG.md:26-33` (row count, NEW-57, NEW-56, NEW-55)
 - Modify: `docs/superpowers/ORDER.md` (`NOW` items 7–8, Count)
 - Modify: `docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md:851` (Task 6 note pointing here)
@@ -48,7 +48,7 @@
 
 **Interfaces:**
 - Consumes: the rulings in Global Constraints.
-- Produces: the amended §6.1/§6.3/§6.4 text every later task argues from; BACKLOG rows NEW-55 (closed pending commit), NEW-57 (rule recorded), NEW-56 (residuals), and this plan registered.
+- Produces: the amended §6.1/§6.4 text every later task argues from; BACKLOG rows NEW-55 (closed pending commit), NEW-57 (rule recorded), NEW-56 (residuals), and this plan registered.
 
 - [ ] **Step 1: Amend the spec status line**
 
@@ -57,7 +57,7 @@ Replace the first sentence of the bold status at `:3-4` with:
 ```markdown
 **Status: 2026-08-29 baseline approved; the 2026-08-31 §6 retained-bootstrap-evidence correction
 and durable slot-identity addendum were approved after complete written-specification review; the
-2026-09-04 §6.1 global-lock admission rule, §6.3 `admittedPreexistingPaths` grammar and §6.4
+2026-09-04 §6.1 global-lock admission rule, §6.1 `admittedPreexistingPaths` grammar and §6.4
 forward-content rule were approved by the founder in conversation and are marked "Amended
 2026-09-04" in place.**
 ```
@@ -95,9 +95,9 @@ compensation participant's content row is its own `stagedPath`. The derivation c
 explicit bookkeeping beside the rows, never as a flag on a row.
 ```
 
-- [ ] **Step 4: Amend §6.3 plan grammar**
+- [ ] **Step 4: Amend §6.1 plan grammar**
 
-Inside the `FreshV2InitPlanV1` interface block in §6.3 (the block that declares `admittedExternalShapeHash`), add directly after `admittedExternalShapeHash`:
+Inside the `FreshV2InitPlanV1` interface block in §6.1 (the block that declares `admittedExternalShapeHash`), add directly after `admittedExternalShapeHash`:
 
 ```ts
   /** Amended 2026-09-04. Names that may legally exist beside this plan: retained evidence and
@@ -781,7 +781,7 @@ Expected: PASS. If it exceeds 40 minutes locally, that is NEW-53 and does not bl
 
 - [ ] **Step 2: Request fresh-context review**
 
-Dispatch a reviewer that authored none of Tasks 1–5 with: Spec 2 §6.1/§6.3/§6.4 as amended, this plan, and `git diff a3ad015..HEAD`. The verdict must explicitly confirm: no bootstrap unlink/rmdir; forward content never a row in either outcome; global-lock admission only under the held bootstrap lock with absent evidence and exact shape; one derivation of the table; every gate in Task 5 observed failing before passing. For every accepted finding add a failing regression first, fix, rerun `npm run check`, and re-request the verdict until `READY`.
+Dispatch a reviewer that authored none of Tasks 1–5 with: Spec 2 §6.1/§6.4 as amended, this plan, and `git diff a3ad015..HEAD`. The verdict must explicitly confirm: no bootstrap unlink/rmdir; forward content never a row in either outcome; global-lock admission only under the held bootstrap lock with absent evidence and exact shape; one derivation of the table; every gate in Task 5 observed failing before passing. For every accepted finding add a failing regression first, fix, rerun `npm run check`, and re-request the verdict until `READY`.
 
 - [ ] **Step 3: Move surviving facts into the architecture notes**
 

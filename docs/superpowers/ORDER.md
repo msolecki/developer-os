@@ -39,8 +39,9 @@ Open sequence inside A11:
    the e2e test now passes at 299.5s against its 600000ms timeout. NEW-53 stays open only as a
    performance question.
 7. Completed 2026-09-04: the founder ruled Spec 2 §6.4 (forward-participant content is never a
-   retention row, every outcome) and §6.1 (global-lock admission after a crash that lost its
-   creation evidence). Both are recorded as dated amendments.
+   retention row, every outcome), §6.1 (global-lock admission after a crash that lost its creation
+   evidence) and the `admittedPreexistingPaths` plan grammar. All three are recorded as dated
+   amendments.
 8. Now: execute `plans/2026-09-04-developer-os-task6-closure.md`, six tasks, which turns the
    uncommitted replacement Task 6 tree into the accepted Task 7 checkpoint. Nothing from Task 6 is
    committed outside that plan's tasks.

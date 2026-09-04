@@ -2,7 +2,7 @@
 
 **Status: 2026-08-29 baseline approved; the 2026-08-31 §6 retained-bootstrap-evidence correction
 and durable slot-identity addendum were approved after complete written-specification review; the
-2026-09-04 §6.1 global-lock admission rule, §6.3 `admittedPreexistingPaths` grammar and §6.4
+2026-09-04 §6.1 global-lock admission rule, §6.1 `admittedPreexistingPaths` grammar and §6.4
 forward-content rule were approved by the founder in conversation and are marked "Amended
 2026-09-04" in place.** This
 is DOS-P7 Spec 2, the second half of `ORDER.md` entry A11 and program-plan Task 7. Spec 1 is the
