@@ -1,0 +1,122 @@
+# Vendor invocation — what the installed binaries actually accept
+
+Recorded observations of specific vendor binary versions, produced by Task 1 of
+`docs/superpowers/plans/2026-09-04-developer-os-ingest-isolation.md` so that later tasks build the
+isolated ingest invocation from what was observed running, not from memory.
+
+Four rules govern every row below:
+
+1. Each row records observations of a **specific vendor version**. A row is **void** when the
+   vendor version changes — it must be re-observed, not assumed to still hold.
+2. Every row carries the **exact command run** and its **verbatim output**. Where the output is
+   long, the cell keeps the relevant lines and says exactly which ones were kept.
+3. **Nothing here is inferred.** A row states what was observed; where a probe could not
+   distinguish two possibilities, the row says so instead of guessing.
+4. This document spent **no model credits**. Every command below is a `--help`, `--version`, or a
+   static, offline generator (`codex app-server generate-json-schema`). No `-p`, no bare prompt, no
+   `codex exec` with a prompt, and no interactive session was run.
+
+## Version note
+
+The plan's Global Constraints (`docs/superpowers/plans/2026-09-04-developer-os-ingest-isolation.md`
+lines 28-30) were verified against Claude Code 2.1.260 and Codex 0.151.0. The binary installed on
+this machine is Claude Code **2.1.261**, not 2.1.260 — a version drift discovered by running
+`claude --version`. Codex is installed at 0.151.0, matching the plan exactly; no Codex row below is
+affected by drift.
+
+Because a row is void when the vendor version changes, every Claude observation the plan made
+against 2.1.260 was re-run against 2.1.261 below (Claude table, rows 1-11). Result: every one of
+those observations **still holds** on 2.1.261 — `--tools ""` still exists and disables all tools,
+`--strict-mcp-config` still exists with the same help text, `--json-schema` still exists,
+`--permission-mode` still lists the same six values with no per-value description,
+`--setting-sources` still exists with help text that does not say whether `""` means "load none",
+`--max-turns` still does not appear in the help, and `--restricted`, `--bare`, `--safe-mode`,
+`--no-session-persistence`, `--permission-prompts` are all still present. One thing changed: the
+methodology the plan used to test `--max-turns` (append `--help` and see whether the CLI errors
+first) turned out **not to discriminate** on 2.1.261 — see Claude row 3 and its control test (row
+4). This is a new finding, not a re-confirmation.
+
+## Binaries actually executed
+
+| Field | Claude | Codex |
+|---|---|---|
+| `which` | `/Users/msolecki/.local/bin/claude` | `/Users/msolecki/.local/bin/codex` |
+| `readlink -f` | `/Users/msolecki/.local/share/claude/versions/2.1.261` | `/Users/msolecki/.codex/packages/standalone/releases/0.151.0-aarch64-apple-darwin/bin/codex` |
+| `file` on the resolved target | `Mach-O 64-bit executable arm64` | `Mach-O 64-bit executable arm64` |
+| `--version` | `2.1.261 (Claude Code)` | `codex-cli 0.151.0` |
+
+The resolved absolute paths above (not the `which` symlinks) were used for the `env -i` probes in
+the Claude/Codex table's `env -i` rows.
+
+## Claude (`claude`)
+
+All rows: vendor version `2.1.261 (Claude Code)`, date `2026-09-05`.
+
+| # | observation | command | verbatim output | vendor version | date |
+|---|---|---|---|---|---|
+| 1 | `--max-turns` does not appear in `--help` | `claude --help 2>&1 \| grep -c -- "--max-turns"` | `0` (exit 1, `grep -c` exits 1 when the count is zero) | 2.1.261 | 2026-09-05 |
+| 2 | `--tools ""` exists and disables all tools, per its own help text | `claude --help 2>&1 \| grep -A3 -- "--tools <tools"` | `--tools <tools...>                    Specify the list of available tools from`<br>`                                        the built-in set. Use "" to disable all`<br>`                                        tools, "default" to use all tools, or`<br>`                                        specify tool names (e.g.`<br>`                                        "Bash,Edit,Read").` | 2.1.261 | 2026-09-05 |
+| 3 | `claude --max-turns 5 --help` does not distinguish "accepted" from "rejected" | `claude --max-turns 5 --help 2>&1` (piped to a file, `diff`'d against `claude --help` alone) | Exit `0`. Byte-identical to plain `claude --help` (304 lines, `diff` reported no difference). No error, no mention of `--max-turns` anywhere in the output. | 2.1.261 | 2026-09-05 |
+| 4 | **Control test proving row 3's method is broken on 2.1.261**: a deliberately nonexistent flag produces the *same* result as row 3 | `claude --this-flag-does-not-exist-xyz 5 --help 2>&1` (diff'd against plain `claude --help`) | Exit `0`. Byte-identical to plain `claude --help` — same as row 3. This is the plan's own discriminator methodology (Task 1 Step 2: "a CLI that rejects unknown flags errors before reaching `--help`") applied to a flag known not to exist. Because a genuinely unknown flag produces the identical exit-0/identical-output result as `--max-turns` did, **the discriminator does not discriminate on 2.1.261**: appending `--help` after any option — registered or not — short-circuits argument validation and always prints help with exit 0. | 2.1.261 | 2026-09-05 |
+| 5 | The same nonexistent flag, run *without* `--help`, is rejected immediately and does not open a session | `claude --this-flag-does-not-exist-xyz 5` (run in background, killed after 3s if still alive) | Exit `1`, returned immediately (no 3-second wait needed): `error: unknown option '--this-flag-does-not-exist-xyz'`. No interactive session opened. | 2.1.261 | 2026-09-05 |
+| 6 | `--setting-sources ""` does not distinguish "accepted" from "silently ignored" | `claude --setting-sources "" --help 2>&1` (diff'd against plain `claude --help`) | Exit `0`. Byte-identical to plain `claude --help`. Same ambiguity as the plan recorded for 2.1.260; unresolved. | 2.1.261 | 2026-09-05 |
+| 7 | `--setting-sources none` **is** rejected, with a value-validation error that fires before `--help` is honored | `claude --setting-sources none --help 2>&1` | Exit `1`. First line: `Error processing --setting-sources: Invalid setting source: none. Valid options are: user, project, local` (no help text printed at all). This shows the `--help`-short-circuit behavior in row 3/4 is specific to genuinely *unknown* options; an option that exists but has a validated value type is checked eagerly regardless of `--help`. | 2.1.261 | 2026-09-05 |
+| 8 | `--permission-mode`'s six values, verbatim, with no per-value description | `claude --help 2>&1 \| grep -A5 -- "--permission-mode"` | `--permission-mode <mode>              Permission mode to use for the session`<br>`                                        (choices: "acceptEdits", "auto",`<br>`                                        "bypassPermissions", "manual",`<br>`                                        "dontAsk", "plan")` | 2.1.261 | 2026-09-05 |
+| 9 | `--strict-mcp-config` exists; with no `--mcp-config`, its own text says it loads zero MCP servers | `claude --help 2>&1 \| grep -A3 -- "^  --strict-mcp-config"` | `--strict-mcp-config                   Only use MCP servers from --mcp-config,`<br>`                                        ignoring all other MCP configurations` | 2.1.261 | 2026-09-05 |
+| 10 | `--json-schema` exists | `claude --help 2>&1 \| grep -A3 -- "--json-schema"` | `--json-schema <schema>                JSON Schema for structured output`<br>`                                        validation. Example:`<br>`                                        {"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}` | 2.1.261 | 2026-09-05 |
+| 11 | `--restricted`, `--bare`, `--safe-mode`, `--no-session-persistence`, `--permission-prompts` are all present | `claude --help 2>&1 \| grep -A3 -- "--restricted\b\|--bare\b\|--safe-mode\b\|--no-session-persistence\b\|--permission-prompts\b"` | All five appear with full help text (kept: the flag names and their first description line each). `--restricted`: "Restricted mode: removes the built-in tools that run commands or code (Bash, PowerShell, REPL and the other code-running tools) and WebFetch unless...". `--bare`: "Minimal mode: skip hooks, LSP, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and CLAUDE.md auto-discovery...". `--safe-mode`: "Start with all customizations (CLAUDE.md, skills, plugins, hooks, MCP servers, custom commands and agents, output styles, workflows, custom themes, keybindings, and more) disabled...". `--no-session-persistence`: "Disable session persistence - sessions will not be saved to disk and cannot be resumed (only works with --print)". `--permission-prompts`: "Who answers permission prompts with --print: \"host\" (the SDK host or --permission-prompt-tool) or \"none\" (nobody: anything that would prompt is denied automatically...)". | 2.1.261 | 2026-09-05 |
+| 12 | `-h` and `--help` are identical | `claude -h 2>&1` diff'd against `claude --help 2>&1` | No diff output — byte-identical, 304 lines each. | 2.1.261 | 2026-09-05 |
+| 13 | `env -i` with an empty environment still prints help | `env -i /Users/msolecki/.local/share/claude/versions/2.1.261 --help >/dev/null 2>&1; echo $?` | `0` | 2.1.261 | 2026-09-05 |
+
+**Weaker evidence, stated explicitly (row 13):** a zero exit under `env -i --help` shows the binary
+*starts* and can print help with no environment variables at all. It does **not** show that a real
+invocation (auth, network, model turn) succeeds with an empty environment — that would need a real
+run, which is a founder stop condition this task does not cross. Treat row 13 as evidence about
+process startup only.
+
+**Permission-mode ordering (Step 4): unresolved, not guessed.** The help text (row 8) gives no
+per-value description and no probe run here distinguishes the six values' relative strictness.
+Per the brief, this is recorded as unresolved rather than inferred from the names. Prefer `--tools
+""` plus `--strict-mcp-config` (rows 2 and 9), which are unambiguous, over selecting a
+`--permission-mode` value by guess.
+
+## Codex (`codex`)
+
+All rows: vendor version `codex-cli 0.151.0`, date `2026-09-05`, except where noted.
+
+| # | observation | command | verbatim output | vendor version | date |
+|---|---|---|---|---|---|
+| 1 | `codex exec --help`'s isolation-relevant entries | `codex exec --help 2>&1` | `--ephemeral` → "Run without persisting session files to disk". `--ignore-user-config` → "Do not load `$CODEX_HOME/config.toml`; auth still uses `CODEX_HOME`". `--ignore-rules` → "Do not load user or project execpolicy `.rules` files". `--json` → "Print events to stdout as JSONL". `--output-schema <FILE>` → "Path to a JSON Schema file describing the model's final response shape". `-s, --sandbox <SANDBOX_MODE>` → "Select the sandbox policy to use when executing model-generated shell commands" (possible values: read-only, workspace-write, danger-full-access). `--skip-git-repo-check` → "Allow running Codex outside a Git repository". `-C, --cd <DIR>` → "Tell the agent to use the specified directory as its working root". | 0.151.0 | 2026-09-05 |
+| 2 | No flag in `codex exec --help` disables MCP servers for one call | `codex exec --help 2>&1` (full text read; searched for any MCP-disabling flag) | No flag among the ~25 options listed touches MCP server loading. The nearest lever is `--ignore-user-config`, which stops `$CODEX_HOME/config.toml` from loading at all (and with it, any MCP servers configured there) — a config-wide switch, not a per-call MCP toggle. | 0.151.0 | 2026-09-05 |
+| 3 | `--ephemeral`, `--ignore-user-config`, `--ignore-rules` exist only on `codex exec`, not top-level | `codex --help 2>&1 \| grep -n -- "--ephemeral\|--ignore-user-config\|--ignore-rules"` | No matches — none of the three strings appear anywhere in top-level `codex --help`. | 0.151.0 | 2026-09-05 |
+| 4 | `codex app-server generate-json-schema` requires `--out <DIR>` | `codex app-server generate-json-schema 2>&1` | Exit `2`. `error: the following required arguments were not provided:`<br>`  --out <DIR>`<br><br>`Usage: codex app-server generate-json-schema --out <DIR>` | 0.151.0 | 2026-09-05 |
+| 5 | With `--out`, the v2 protocol's `TurnCompletedNotification` and `Turn` carry no `last_agent_message` field | `codex app-server generate-json-schema --out <scratch-dir>` (static, offline; then `v2/TurnCompletedNotification.json` was read) | `TurnCompletedNotification` schema: `properties: {threadId: string, turn: $ref Turn}`, `required: [threadId, turn]`. `Turn` schema: `properties: {id, items: ThreadItem[], status, startedAt, completedAt, durationMs, error, itemsView}`, `required: [id, items, status]`. Neither object defines a `last_agent_message` (or `lastAgentMessage`) property. | 0.151.0 | 2026-09-05 |
+| 6 | The v2 protocol carries the agent's reply as a `ThreadItem` of type `agentMessage`, inside `turn.items` | Same generator run as row 5; `ThreadItem`'s `oneOf` variants read from the same schema file | One `ThreadItem` variant: `title: "AgentMessageThreadItem"`, `properties: {id: string, text: string, type: "agentMessage", delivery, memoryCitation, phase}`, `required: [id, text, type]`. This matches the plan's F3 description exactly. | 0.151.0 | 2026-09-05 |
+| 7 | `env -i` with an empty environment still prints `codex exec --help` | `env -i /Users/msolecki/.codex/packages/standalone/releases/0.151.0-aarch64-apple-darwin/bin/codex --help >/dev/null 2>&1; echo $?` | `0` | 0.151.0 | 2026-09-05 |
+
+**F3's evidence gap, stated explicitly (rows 5-6):** Task 1 has **no source-reading step**; the
+only evidence gathered here is the static, offline `app-server generate-json-schema` output above.
+`app-server` speaks JSON-RPC — a different interface from `codex exec --json`'s JSONL stream, which
+is what the shipped adapter actually parses. `codex exec --help` (row 1) shows that `--json` prints
+"events" as JSONL and `--output-schema` shapes the *final* response, but neither flag's help text
+describes the JSONL event schema itself, and no probe here inspected one (running `codex exec
+--json` with a prompt would open a model turn, which this task refuses per the safety rule). So
+rows 5-6 are suggestive — the same "agentMessage" vocabulary the app-server protocol uses is also
+what the shipped `finalAgentMessage` code already reads from 0.147.0 JSONL fixtures — but not
+conclusive proof that the 0.151.0 `codex exec --json` stream matches the app-server protocol's
+shape. This gap is exactly what the plan's F3 row already says: "suggestive and not conclusive."
+
+**Weaker evidence, stated explicitly (row 7):** same caveat as the Claude table's row 13 — `--help`
+succeeding under `env -i` is not evidence a real `codex exec` run succeeds with no environment.
+
+## Probes not run, and why
+
+- `claude --max-turns 5` **without** `--help` (would test whether `--max-turns` is genuinely
+  unregistered without the `--help` short-circuit): refused. If `--max-turns` turns out to be a
+  registered option, an invocation with no `-p` and no prompt following it is exactly the shape
+  of an interactive session start, which the safety rule forbids regardless of intent. Row 5's
+  control test (a flag *known* not to exist) shows an unrecognized option is rejected immediately
+  and safely — but that does not license running an option of unknown status the same way.
+- `codex exec --json` with any prompt, or `codex exec` interactively: refused outright — a model
+  turn, forbidden by the safety rule.
+- No probe hung longer than a few seconds; none needed to be killed.
