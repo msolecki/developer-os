@@ -89,10 +89,10 @@ There are 44 numbered rows. They are not automatically ordered ahead of A11.
 
 ### A11 · DOS-P7
 
-- [x] Accepted 2026-09-04 as `050fc0d..c5022a7`: the six tasks of
-  `docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md` — immutable plans,
-  identity-bound two-slot journals, descriptor-relative exclusive renames, same-parent permanent
-  tombstones, public retained-evidence reports, focused/full gates, and fresh review.
+- [x] Accepted 2026-09-04 as `050fc0d..c5022a7`: the six-task retained-bootstrap-evidence plan —
+  immutable plans, identity-bound two-slot journals, descriptor-relative exclusive renames,
+  same-parent permanent tombstones, public retained-evidence reports, focused/full gates, and fresh
+  review.
 - [ ] Isolate the ingest invocation on both vendors (NEW-58, roadmap Phase 1); then bootstrap
   performance and the first push (NEW-53, NEW-52, roadmap Phase 2).
 - [ ] Implement `ManagedArtifactV2`, `InstallationManifestV2`, `ManifestStatePlanV1`, existing-install

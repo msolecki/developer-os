@@ -12,10 +12,9 @@ approved opt-in surfaces design at
 This specification owns release trust, the stable launcher and versioned bundle contract,
 `ManagedArtifactV2`/`InstallationManifestV2`, V1 migration and V2 new init, update planning and
 apply, schema migration, and rollback. Its baseline implementation plan is
-`docs/superpowers/plans/2026-08-29-developer-os-release-update.md`; Task 7 is revised against the
-written §6 correction through the focused replacement plan at
-`docs/superpowers/plans/2026-08-31-developer-os-retained-bootstrap-evidence.md` before baseline Task
-8 begins.
+`docs/superpowers/plans/2026-08-29-developer-os-release-update.md`; Task 7 was revised against the
+written §6 correction through the six-task replacement plan, accepted 2026-09-04 as
+`050fc0d..c5022a7`, before baseline Task 8 begins.
 
 The split has one hard implementation dependency. The V1→V2 migration and V2 new-init handoff in
 §6 must land first. Only then may Spec 1 implementation begin. The remaining release/update work in

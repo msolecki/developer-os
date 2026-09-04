@@ -10,8 +10,7 @@ notes are the archive.
 
 **A11 — DOS-P7 Git, automation, update, and release lifecycle.**
 
-Spec 2's Task 7 checkpoint is accepted. The six-task replacement plan
-`plans/2026-08-31-developer-os-retained-bootstrap-evidence.md` is complete, committed as
+Spec 2's Task 7 checkpoint is accepted. The six-task replacement plan is complete, committed as
 `050fc0d..c5022a7`, and each of its tasks was reviewed by an agent that did not author it; a
 whole-range fresh review returned `READY` after one Critical fix.
 
@@ -134,6 +133,5 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 - Active implementation plans: Spec 2 baseline Tasks 8–26 (19 tasks) and Spec 1 (24 tasks, to be
   split by NEW-67) — 43 untouched tasks — plus the completion roadmap's 12 open phases. Spec 1
   remains blocked until roadmap Phases 1–3 pass.
-- `plans/2026-08-31-developer-os-retained-bootstrap-evidence.md` is complete, six of six tasks, and
-  carries no unchecked step. Roadmap Phase 1 requires
-  `plans/<date>-developer-os-ingest-isolation.md`, which has not been written.
+- Roadmap Phase 1 requires `plans/<date>-developer-os-ingest-isolation.md`, which has not been
+  written.
