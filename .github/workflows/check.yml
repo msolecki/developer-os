@@ -49,7 +49,16 @@ concurrency:
 # `package.json` so each job runs a script a developer can run verbatim. That
 # preserves what the single `npm run check` step was protecting: CI cannot drift
 # from local, because neither side spells the vitest invocations itself.
-# `npm run check` remains the one local command and still runs all of it.
+#
+# Both paths cover the same files, by different routes. Here: four parallel jobs
+# — `lint` (`npm run lint`, the build, `git diff --check`), `bootstrap-executor`
+# (`npm run test:bootstrap`), `suite` (`npm run test:suite`, which excludes the
+# executor file and `e2e/**`), and `e2e` (`npm run test:e2e`). Locally:
+# `npm run check` runs `npm run lint`, then `npm test` (`test:bootstrap` and
+# `test:suite`), then `npm run test:e2e`, then the build, then
+# `git diff --check`. `test:e2e` is spelled out in `check` because `test:suite`
+# excludes `e2e/**` for the sharding above, so `npm test` alone no longer
+# reaches it.
 jobs:
   # macOS on every job, and not a preference. `packages/platform-macos` shells
   # out to `/usr/bin/lockf` for advisory locking, and the e2e suite drives the
