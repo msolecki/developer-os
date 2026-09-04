@@ -38,18 +38,20 @@ Open sequence inside A11:
 6. Closed 2026-09-04: NEW-53 no longer blocks replacement Task 6. `init` fell to roughly 101s and
    the e2e test now passes at 299.5s against its 600000ms timeout. NEW-53 stays open only as a
    performance question.
-7. Now: founder decision on Spec 2 §6.4. The 2026-09-04 fresh review rejected replacement Task 6,
-   and the blocker is a data-destroying defect on the success path: a successful `init` renames 14
-   of its own 105 manifest artifacts to tombstones — `config.toml`, one schema, and twelve files
-   inside the user's Brain — then exits 0 claiming all 105 installed. `bootstrap-retention.ts:1060`
-   makes a forward Foundation participant's installed target a retention row, which §6.4 line 1601
-   forbids; but §6.4 does not say what replaces it, and the two readings that follow from the text
-   both refuse against the real filesystem. NEW-55 carries the reproduction, the cause, and the
-   exact question to answer. Do not resume Task 6 implementation before it is answered.
-8. Execute Spec 2 Tasks 8–9 for the complete `InstallationManifestV2` migration and V2 new-init
+7. Completed 2026-09-04, uncommitted: the founder settled the Spec 2 §6.4 question — a finalized
+   forward Foundation participant emits no mutation content row — and it is implemented, verified
+   and reviewed READY. A successful `init` no longer retires any of its own manifest artifacts.
+   NEW-55 carries the evidence; NEW-56 carries the residuals, three of which are also closed.
+8. Now: close NEW-57, which is what keeps `npm run check` red and the work uncommitted. The
+   uncommitted Task 6 implementation regresses crash recovery at four fine-grained death points that
+   pass at `a3ad015`; one is fixed and three remain, all resuming to exit 6 `existing global lock
+   escaped admitted rolled-back evidence`. Answering it needs a Spec 2 §6.1/§6.4 ruling on what
+   admits a plan-owned global lock whose creation evidence did not survive the crash. Nothing from
+   this task may be committed until the gate is green.
+9. Execute Spec 2 Tasks 8–9 for the complete `InstallationManifestV2` migration and V2 new-init
    handoff.
-9. Execute the approved Spec 1 plan.
-10. Finish the remaining Spec 2 implementation and close the Task 7 checkpoint.
+10. Execute the approved Spec 1 plan.
+11. Finish the remaining Spec 2 implementation and close the Task 7 checkpoint.
 
 ## Product path
 
@@ -112,6 +114,6 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 - Product sequence: 6 open entries, A11–A16.
 - Program plan: replacement Task 7 contains 6 unchecked work steps across 1 unfinished task;
   baseline Tasks 8–9 contain 10.
-- Repository backlog: 31 open numbered rows, plus the Foundation watchdog decision.
+- Repository backlog: 32 open numbered rows, plus the Foundation watchdog decision.
 - Active implementation plans: 44 untouched tasks — 1 in replacement Task 7, 19 remaining in Spec
   2, and 24 in Spec 1. Spec 1 remains blocked until replacement Task 7 and baseline Tasks 8–9 pass.
