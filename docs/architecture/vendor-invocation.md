@@ -36,6 +36,14 @@ methodology the plan used to test `--max-turns` (append `--help` and see whether
 first) turned out **not to discriminate** on 2.1.261 — see Claude row 3 and its control test (row
 4). This is a new finding, not a re-confirmation.
 
+**F1 update:** although the `--help`-based discriminator (rows 3-4) does not work on 2.1.261, a
+different credit-free discriminator does — a value-taking option given no value fails at argument
+parsing regardless of `--help`, and the failure wording differs for a registered option
+("argument missing") versus an unrecognized one ("unknown option"). Rows 14-17 apply this and
+settle F1 outright: `--max-turns` is a real, registered, value-taking option on 2.1.261, hidden
+from `--help` on purpose (`.hideHelp()`), with a help description matching what the adapter
+assumes. See the note after row 17 for the full chain of evidence.
+
 ## Binaries actually executed
 
 | Field | Claude | Codex |
@@ -54,7 +62,7 @@ All rows: vendor version `2.1.261 (Claude Code)`, date `2026-09-05`.
 
 | # | observation | command | verbatim output | vendor version | date |
 |---|---|---|---|---|---|
-| 1 | `--max-turns` does not appear in `--help` | `claude --help 2>&1 \| grep -c -- "--max-turns"` | `0` (exit 1, `grep -c` exits 1 when the count is zero) | 2.1.261 | 2026-09-05 |
+| 1 | `--max-turns` does not appear in `--help` | `claude --help 2>&1 \| grep -c -- "--max-turns"; echo "exit: $?"` | `0`<br>`exit: 1` (observed: `grep -c` exits 1 when the count is zero) | 2.1.261 | 2026-09-05 |
 | 2 | `--tools ""` exists and disables all tools, per its own help text | `claude --help 2>&1 \| grep -A3 -- "--tools <tools"` | `--tools <tools...>                    Specify the list of available tools from`<br>`                                        the built-in set. Use "" to disable all`<br>`                                        tools, "default" to use all tools, or`<br>`                                        specify tool names (e.g.`<br>`                                        "Bash,Edit,Read").` | 2.1.261 | 2026-09-05 |
 | 3 | `claude --max-turns 5 --help` does not distinguish "accepted" from "rejected" | `claude --max-turns 5 --help 2>&1` (piped to a file, `diff`'d against `claude --help` alone) | Exit `0`. Byte-identical to plain `claude --help` (304 lines, `diff` reported no difference). No error, no mention of `--max-turns` anywhere in the output. | 2.1.261 | 2026-09-05 |
 | 4 | **Control test proving row 3's method is broken on 2.1.261**: a deliberately nonexistent flag produces the *same* result as row 3 | `claude --this-flag-does-not-exist-xyz 5 --help 2>&1` (diff'd against plain `claude --help`) | Exit `0`. Byte-identical to plain `claude --help` — same as row 3. This is the plan's own discriminator methodology (Task 1 Step 2: "a CLI that rejects unknown flags errors before reaching `--help`") applied to a flag known not to exist. Because a genuinely unknown flag produces the identical exit-0/identical-output result as `--max-turns` did, **the discriminator does not discriminate on 2.1.261**: appending `--help` after any option — registered or not — short-circuits argument validation and always prints help with exit 0. | 2.1.261 | 2026-09-05 |
@@ -67,6 +75,23 @@ All rows: vendor version `2.1.261 (Claude Code)`, date `2026-09-05`.
 | 11 | `--restricted`, `--bare`, `--safe-mode`, `--no-session-persistence`, `--permission-prompts` are all present | `claude --help 2>&1 \| grep -A3 -- "--restricted\b\|--bare\b\|--safe-mode\b\|--no-session-persistence\b\|--permission-prompts\b"` | All five appear with full help text (kept: the flag names and their first description line each). `--restricted`: "Restricted mode: removes the built-in tools that run commands or code (Bash, PowerShell, REPL and the other code-running tools) and WebFetch unless...". `--bare`: "Minimal mode: skip hooks, LSP, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and CLAUDE.md auto-discovery...". `--safe-mode`: "Start with all customizations (CLAUDE.md, skills, plugins, hooks, MCP servers, custom commands and agents, output styles, workflows, custom themes, keybindings, and more) disabled...". `--no-session-persistence`: "Disable session persistence - sessions will not be saved to disk and cannot be resumed (only works with --print)". `--permission-prompts`: "Who answers permission prompts with --print: \"host\" (the SDK host or --permission-prompt-tool) or \"none\" (nobody: anything that would prompt is denied automatically...)". | 2.1.261 | 2026-09-05 |
 | 12 | `-h` and `--help` are identical | `claude -h 2>&1` diff'd against `claude --help 2>&1` | No diff output — byte-identical, 304 lines each. | 2.1.261 | 2026-09-05 |
 | 13 | `env -i` with an empty environment still prints help | `env -i /Users/msolecki/.local/share/claude/versions/2.1.261 --help >/dev/null 2>&1; echo $?` | `0` | 2.1.261 | 2026-09-05 |
+| 14 | Control (a): a known, value-taking option given no value fails at argument parsing, with an "argument missing" shape | `claude --output-format` (no value, no `--help`, no prompt; run in background, would be killed at 3s if still alive) | Returned well inside the 3s window, no kill needed. Exit `1`. Stderr: `error: option '--output-format <format>' argument missing` | 2.1.261 | 2026-09-05 |
+| 15 | Control (b): an unknown option given no value fails at argument parsing, with an "unknown option" shape — distinct wording from row 14 | `claude --this-flag-does-not-exist-xyz` (no value, no `--help`, no prompt; same background/3s-kill shape) | Returned well inside the 3s window, no kill needed. Exit `1`. Stderr: `error: unknown option '--this-flag-does-not-exist-xyz'` | 2.1.261 | 2026-09-05 |
+| 16 | **F1 settled**: `claude --max-turns` given no value produces the *same* shape as the known-option control (row 14), not the unknown-option control (row 15) — `--max-turns` is a registered, value-taking option on 2.1.261 | `claude --max-turns` (no value, no `--help`, no prompt; same background/3s-kill shape) | Returned well inside the 3s window, no kill needed. Exit `1`. Stderr: `error: option '--max-turns <turns>' argument missing` — matches row 14's "argument missing" shape exactly, not row 15's "unknown option" shape. | 2.1.261 | 2026-09-05 |
+| 17 | Static evidence (d), independent of row 16: the resolved Mach-O binary contains the literal option string, registered via a hidden-option code path | `strings -a /Users/msolecki/.local/share/claude/versions/2.1.261 \| grep -c -- "max-turns"` and `\| grep -m5 -- "max-turns"` | Count: `9`. First three matches are short and kept verbatim: `max-turns-note-forgery`, `--max-turns`, `--max-turns <turns>`. The remaining six matches are single lines from a minified JS bundle ranging 3-51KB each — not reproduced verbatim for size, but one, searched for the `--max-turns` substring in context, reads: `` addOption(new Y("--max-turns <turns>","Maximum number of agentic turns in non-interactive mode. This will early exit the conversation after the specified number of turns. (only works with --print)").argParser(Ai).hideHelp()) `` — confirming the option is registered with `.hideHelp()`, which is exactly why it never appears in `--help` (rows 1, 3-4). | 2.1.261 | 2026-09-05 |
+
+**F1 is now settled (rows 14-17), without a model turn.** Rows 14 and 15 establish that this build
+produces two distinguishable error shapes for a value-taking option given no value: a *registered*
+option says `argument missing`, an *unrecognized* one says `unknown option`. Row 16 shows
+`--max-turns` produces the `argument missing` shape — it is registered. Row 17 corroborates this
+statically: the binary contains `.hideHelp()`-registered code for exactly this flag, with a
+description ("Maximum number of agentic turns in non-interactive mode... only works with
+--print") that matches what `packages/adapter-claude/src/invoke.ts` assumes. **Nothing here
+remains open for F1**: the flag is real, hidden from `--help` on purpose, requires a value, and (by
+its own description) behaves as the adapter expects in `--print` mode. What Task 1 still cannot
+show without a real run is whether passing a *valid* value (`--max-turns 5`) succeeds all the way
+through a live invocation — but the earlier "is it even a real flag" question, which the Step 2
+discriminator failed to answer, is closed.
 
 **Weaker evidence, stated explicitly (row 13):** a zero exit under `env -i --help` shows the binary
 *starts* and can print help with no environment variables at all. It does **not** show that a real
@@ -82,7 +107,7 @@ Per the brief, this is recorded as unresolved rather than inferred from the name
 
 ## Codex (`codex`)
 
-All rows: vendor version `codex-cli 0.151.0`, date `2026-09-05`, except where noted.
+All rows: vendor version `codex-cli 0.151.0`, date `2026-09-05`.
 
 | # | observation | command | verbatim output | vendor version | date |
 |---|---|---|---|---|---|
