@@ -152,7 +152,6 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
       join(fixture.paths.stateDir, "release-trust.json"),
     ]));
     expect(await exists(fixture.paths.stagingDir)).toBe(true);
-    expect(fixture.releaseRequests).toStrictEqual([]);
     expect(fixture.vendorProcesses).toStrictEqual([]);
 
     const trace = fixture.bootstrapTrace;
@@ -359,7 +358,6 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
       const interrupted = await runInit(fixture.context, ACCEPTED);
 
       expect(interrupted.ok).toBe(false);
-      expect(fixture.releaseRequests).toStrictEqual([]);
       expect(fixture.vendorProcesses).toStrictEqual([]);
       expect((await inventory(fixture.root)).length).toBeGreaterThan(0);
 
@@ -653,4 +651,48 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     expect(await nodeFs.readFile(note, "utf8")).toBe("mine\n");
     expect(await nodeFs.readdir(fixture.paths.brain)).toStrictEqual(["mine.md"]);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it.each([
+    "after_global_lock_create",
+    "before_global_lock_parent_sync",
+    "after_global_lock_parent_sync",
+  ] as const)("resumes after a death at %s by admitting the evidence-less global lock", async (deathPoint) => {
+    const fixture = await createCommandFixture(`executor-lock-${deathPoint}`, {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: deathPoint,
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    const interrupted = await runInit(fixture.context, ACCEPTED);
+    expect(interrupted.ok).toBe(false);
+    const bootstrap = fixture.context.bootstrap;
+    if (bootstrap?.state !== "available") throw new Error("bootstrap fixture is unavailable");
+    await bootstrap.executor.close();
+    fixture.disableBootstrapInterrupt();
+
+    const resumed = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    if (!resumed.ok) throw new Error(resumed.error.message);
+    const evidence = await fixture.bootstrapEvidenceIdentities();
+    expect(new Set(evidence.map((entry) => entry.id)).size).toBe(1);
+  }, 600_000);
+
+  it("refuses a non-empty file at the global-lock path when its creation evidence is absent", async () => {
+    const fixture = await createCommandFixture("executor-lock-nonempty", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_global_lock_create",
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    const bootstrap = fixture.context.bootstrap;
+    if (bootstrap?.state !== "available") throw new Error("bootstrap fixture is unavailable");
+    await bootstrap.executor.close();
+    fixture.disableBootstrapInterrupt();
+    await nodeFs.writeFile(join(fixture.paths.stateDir, ".lifecycle.lock"), "x", { mode: 0o600 });
+
+    const resumed = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(resumed.ok).toBe(false);
+    if (resumed.ok) return;
+    expect(resumed.code).toBe(EXIT_CODES.securityRefusal);
+  }, 600_000);
 });

@@ -5,8 +5,6 @@ import * as nodeFs from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 
 import {
-  BOOTSTRAP_RETAINED_MAX_IDS,
-  BOOTSTRAP_RETAINED_MAX_REGULAR_BYTES,
   admitBootstrapFoundationInitialJournal,
   bootstrapExternalShapeHash,
   bootstrapPayloadSourceIdentityHash,
@@ -36,7 +34,6 @@ import type {
   BootstrapPayloadPlanV1,
   BootstrapPayloadSourceV1,
   BootstrapRetentionEvidenceProjectionV1,
-  BootstrapRetentionPostimageV1,
   CanonicalAbsolutePathV1,
   CanonicalJsonValue,
   CreatedPathEvidenceV1,
@@ -66,6 +63,14 @@ import {
   projectBootstrapRetentionPostimage,
   retainBootstrapEnvelope,
 } from "./retention.js";
+import { createBootstrapEvidenceInspectionRequest } from "./context.js";
+import {
+  admitBootstrapEvidencePlan,
+  assertCombinedBootstrapCapacity,
+  buildBootstrapRetentionEvidence,
+  inspectBootstrapEvidenceAdmission,
+} from "./report.js";
+import type { BootstrapEvidenceAdmissionV1, BootstrapEvidenceReportV1 } from "./report.js";
 
 import { BRAIN_TEMPLATE, BRAIN_TEMPLATE_DIRECTORIES } from "../commands/brain-template.js";
 import {
@@ -83,10 +88,6 @@ const encoder = new TextEncoder();
 const EMPTY_HASH = hashBytes(new Uint8Array()) as LowerHexSha256;
 const MAX_PLAN_BYTES = 268_435_456;
 const MAX_JOURNAL_BYTES = 1_048_576;
-const MAX_BOOTSTRAP_ENTRIES = 1_000_000;
-const MAX_CREATED_PATHS = 1_000_000;
-const MAX_LAUNCHABILITY_PATHS = 200_006;
-const MAX_FOUNDATION_PARTICIPANTS = 512;
 
 export const freshInitDeathPoints = [
   { name: "after_plan" },
@@ -181,6 +182,7 @@ export interface BootstrapExecutorDependencies {
   readonly trace?: (event: string) => void;
   readonly interrupt?: (point: FreshInitDeathPointV1) => void;
   readonly fail?: (point: FreshInitDeathPointV1) => void;
+  readonly inspectEvidence?: (() => Promise<BootstrapEvidenceAdmissionV1>) | undefined;
 }
 
 class FreshBootstrapError extends Error {
@@ -205,6 +207,11 @@ interface HeldLifecycleLocks {
   global: { readonly handle: TransactionLockHandle; readonly dev: string; readonly ino: string } | null;
 }
 
+interface PlanIdentityStats {
+  readonly dev: string | number | bigint;
+  readonly ino: string | number | bigint;
+}
+
 function lowerHash(bytes: Uint8Array | string): LowerHexSha256 {
   return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
 }
@@ -225,20 +232,13 @@ function sameValue(left: unknown, right: unknown): boolean {
   }
 }
 
-function jsonRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
-}
-
-function boundedArray(
-  value: unknown,
-  minimum: number,
-  maximum: number,
-): readonly unknown[] | null {
-  return Array.isArray(value) && value.length >= minimum && value.length <= maximum
-    ? value
-    : null;
+function retainedChildNames(root: string, paths: readonly string[]): readonly string[] {
+  const prefix = `${root}/`;
+  return [...new Set(paths.flatMap((path) => {
+    if (!path.startsWith(prefix)) return [];
+    const child = path.slice(prefix.length).split("/")[0];
+    return child === undefined || child.length === 0 ? [] : [child];
+  }))];
 }
 
 function isMissing(error: unknown): boolean {
@@ -393,6 +393,8 @@ export class BootstrapExecutor {
   readonly #heldLocks = new Map<string, HeldLifecycleLocks>();
   readonly #journalStores = new Map<string, BootstrapJournalStore>();
   readonly #retentionEvidence = new Map<string, BootstrapRetentionEvidenceProjectionV1>();
+  readonly #preflightEvidence = new Map<string, BootstrapEvidenceAdmissionV1>();
+  readonly #preflightReusableDirectories = new Map<string, readonly string[]>();
 
   constructor(dependencies: BootstrapExecutorDependencies) {
     this.#dependencies = dependencies;
@@ -400,6 +402,20 @@ export class BootstrapExecutor {
 
   private trace(event: string): void {
     this.#dependencies.trace?.(event);
+  }
+
+  private inspectEvidence(): Promise<BootstrapEvidenceAdmissionV1> {
+    return this.#dependencies.inspectEvidence?.() ?? inspectBootstrapEvidenceAdmission(
+      createBootstrapEvidenceInspectionRequest({
+        productHome: this.#dependencies.paths.home,
+        stateDirectory: this.#dependencies.paths.stateDir,
+        initialRoots: [
+          this.#dependencies.paths.home,
+          this.#dependencies.paths.stateDir,
+          this.#dependencies.userHome,
+        ],
+      }),
+    );
   }
 
   private interrupt(point: FreshInitDeathPointV1): void {
@@ -448,6 +464,21 @@ export class BootstrapExecutor {
       await handle.release().catch(() => undefined);
       throw error;
     }
+  }
+
+  private async acquireIdentityCheckedGlobalLock(
+    plan: FreshV2InitPlanV1,
+    planned: PlannedCreatedPathV1,
+    stats: Stats,
+    bootstrap: NonNullable<HeldLifecycleLocks["bootstrap"]>,
+  ): Promise<void> {
+    const global = await this.acquireLifecycleLock(planned.path);
+    if (global.dev !== String(stats.dev) || global.ino !== String(stats.ino)) {
+      await global.handle.release().catch(() => undefined);
+      throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "global lock changed during recovery acquisition");
+    }
+    this.#heldLocks.set(plan.id, { bootstrap, global });
+    this.trace("lock:global");
   }
 
   private async releaseLifecycleLocks(id: string): Promise<void> {
@@ -581,8 +612,11 @@ export class BootstrapExecutor {
     this.trace("lock:global");
   }
 
-  async previewFreshInit(request: FreshInitRequestV1): Promise<FreshInitPreviewV1> {
-    const existing = await this.existingPlan();
+  async previewFreshInit(
+    request: FreshInitRequestV1,
+    admittedPlan: FreshV2InitPlanV1 | null = null,
+  ): Promise<FreshInitPreviewV1> {
+    const existing = admittedPlan ?? (await this.inspectEvidence()).active?.plan ?? null;
     if (existing !== null) {
         const source = existing.payloads
           .map((row) => row.source)
@@ -622,8 +656,11 @@ export class BootstrapExecutor {
     };
   }
 
-  async initializeFresh(request: FreshInitRequestV1): Promise<FreshInitOutcomeV1> {
-    const existing = await this.existingPlan();
+  async initializeFresh(
+    request: FreshInitRequestV1,
+    admittedPlan: FreshV2InitPlanV1 | null = null,
+  ): Promise<FreshInitOutcomeV1> {
+    const existing = admittedPlan ?? (await this.inspectEvidence()).active?.plan ?? null;
     if (existing !== null) return this.executeFreshInit(existing);
     const plan = await this.planFreshInit(request);
     return this.executeFreshInit(plan);
@@ -774,14 +811,22 @@ export class BootstrapExecutor {
   private async inspectExactPreIntentShape(
     bootstrapLock: string,
     held: { readonly dev: string; readonly ino: string },
-    newId: FreshV2InitIdV1,
+    admitted: BootstrapEvidenceAdmissionV1,
+    reusableDirectories: readonly string[],
   ): Promise<{
     readonly homeStats: Stats;
     readonly stateStats: Stats;
     readonly lockStats: Stats;
   }> {
     const paths = this.#dependencies.paths;
-    const residueNames = await this.inspectUnverifiedPrePlanEnvelopes(newId);
+    const retainedHomeNames = retainedChildNames(paths.home, [
+      ...admitted.retainedPaths,
+      ...reusableDirectories,
+    ]);
+    const retainedStateNames = retainedChildNames(paths.stateDir, [
+      ...admitted.retainedPaths,
+      ...reusableDirectories,
+    ]);
     const [homeStats, stateStats, lockStats, homeNames, stateNames] = await Promise.all([
       nodeFs.lstat(paths.home),
       nodeFs.lstat(paths.stateDir),
@@ -791,7 +836,22 @@ export class BootstrapExecutor {
     ]);
     homeNames.sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
     stateNames.sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
-    const expectedStateNames = [basename(bootstrapLock), ...residueNames]
+    const expectedHomeNames = [...new Set([basename(paths.stateDir), ...retainedHomeNames])]
+      .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
+    const reusableGlobalLock = admitted.reusableGlobalLock;
+    const reusableGlobalStats = reusableGlobalLock === null
+      ? null
+      : await lstatOptional(reusableGlobalLock.path);
+    if (
+      reusableGlobalLock !== null &&
+      (reusableGlobalStats === null || !reusableGlobalStats.isFile() || reusableGlobalStats.isSymbolicLink() ||
+        reusableGlobalStats.uid !== uid() || mode(reusableGlobalStats) !== 0o600 ||
+        reusableGlobalStats.nlink !== 1 || reusableGlobalStats.size !== 0 ||
+        String(reusableGlobalStats.dev) !== reusableGlobalLock.dev ||
+        String(reusableGlobalStats.ino) !== reusableGlobalLock.ino)
+    ) throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "retained global lock authority changed before publication");
+    const reusableGlobalName = reusableGlobalLock === null ? [] : [basename(reusableGlobalLock.path)];
+    const expectedStateNames = [...new Set([basename(bootstrapLock), ...reusableGlobalName, ...retainedStateNames])]
       .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
     if (
       !homeStats.isDirectory() || homeStats.isSymbolicLink() || homeStats.uid !== uid() || mode(homeStats) !== 0o700 ||
@@ -799,7 +859,7 @@ export class BootstrapExecutor {
       !lockStats.isFile() || lockStats.isSymbolicLink() || lockStats.uid !== uid() || mode(lockStats) !== 0o600 ||
       lockStats.nlink !== 1 || lockStats.size !== 0 ||
       String(lockStats.dev) !== held.dev || String(lockStats.ino) !== held.ino ||
-      homeNames.length !== 1 || homeNames[0] !== basename(paths.stateDir) ||
+      !sameValue(homeNames, expectedHomeNames) ||
       !sameValue(stateNames, expectedStateNames)
     ) {
       throw new FreshBootstrapError(
@@ -808,88 +868,6 @@ export class BootstrapExecutor {
       );
     }
     return { homeStats, stateStats, lockStats };
-  }
-
-  private async inspectUnverifiedPrePlanEnvelopes(
-    excludedId: FreshV2InitIdV1,
-  ): Promise<readonly string[]> {
-    const paths = this.#dependencies.paths;
-    const excluded = deriveBootstrapEnvelopePaths(
-      paths.home as CanonicalAbsolutePathV1,
-      "fresh_v2_init",
-      excludedId,
-    );
-    const excludedNames = new Set([
-      basename(excluded.plan),
-      ...excluded.journalSlots.map((slot) => basename(slot)),
-    ]);
-    const names = (await nodeFs.readdir(paths.stateDir))
-      .filter((name) => name !== ".lifecycle-bootstrap.lock" && !excludedNames.has(name))
-      .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
-    const groups = new Map<FreshV2InitIdV1, string[]>();
-    for (const name of names) {
-      const id = /^fresh-v2-init\.(fi_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.(?:journal\.[01]|plan)\.json$/u.exec(name)?.[1] as FreshV2InitIdV1 | undefined;
-      if (id === undefined || id === excludedId) {
-        throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "non-envelope state blocks a new bootstrap intent");
-      }
-      const group = groups.get(id) ?? [];
-      group.push(name);
-      groups.set(id, group);
-    }
-    if (groups.size > BOOTSTRAP_RETAINED_MAX_IDS) {
-      throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "unverified bootstrap envelope cap exceeded");
-    }
-    let aggregateBytes = 0n;
-    for (const [id, observed] of groups) {
-      observed.sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
-      const envelope = deriveBootstrapEnvelopePaths(
-        paths.home as CanonicalAbsolutePathV1,
-        "fresh_v2_init",
-        id,
-      );
-      const slot0Name = basename(envelope.journalSlots[0]);
-      const slot1Name = basename(envelope.journalSlots[1]);
-      const planName = basename(envelope.plan);
-      const legalPrefixes = [
-        [slot0Name],
-        [slot0Name, slot1Name],
-        [slot0Name, slot1Name, planName],
-      ].map((candidate) => candidate.sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right))));
-      if (!legalPrefixes.some((candidate) => sameValue(candidate, observed))) {
-        throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "unverified bootstrap envelope is not a creation prefix");
-      }
-      for (const name of observed) {
-        const artifactPath = join(paths.stateDir, name) as CanonicalAbsolutePathV1;
-        const postimage = await projectBootstrapRetentionPostimage(artifactPath);
-        if (
-          postimage?.kind !== "regular_file" ||
-          postimage.ownerUid !== uid() || postimage.mode !== 0o600 ||
-          ((name === slot0Name || name === slot1Name) && (
-            postimage.bytes !== "0" || postimage.sha256 !== EMPTY_HASH
-          )) ||
-          (name === planName && BigInt(postimage.bytes) > BigInt(MAX_PLAN_BYTES))
-        ) {
-          throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "unverified bootstrap residue changed exact shape");
-        }
-        aggregateBytes += BigInt(postimage.bytes);
-        if (aggregateBytes > BOOTSTRAP_RETAINED_MAX_REGULAR_BYTES) {
-          throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "unverified bootstrap residue byte cap exceeded");
-        }
-        if (name === planName) {
-          const bytes = await this.guardReadOwnedFile(artifactPath, MAX_PLAN_BYTES, [1]);
-          if (hashBytes(bytes) !== postimage.sha256) {
-            throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "unverified plan residue changed during projection");
-          }
-          try {
-            decodeCanonicalJson(bytes, MAX_PLAN_BYTES);
-          } catch {
-            continue;
-          }
-          throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "canonical final-path plan cannot be treated as unverified residue");
-        }
-      }
-    }
-    return names;
   }
 
   private async admitPostPlanInitialWrite(plan: FreshV2InitPlanV1): Promise<void> {
@@ -913,12 +891,14 @@ export class BootstrapExecutor {
     };
     const expectedHome = parentIdentity(paths.home);
     const expectedState = parentIdentity(paths.stateDir);
-    const residueNames = await this.inspectUnverifiedPrePlanEnvelopes(plan.id).catch(() => {
-      throw new FreshBootstrapError(
-        EXIT_CODES.securityRefusal,
-        "post-plan inventory changed before initial journal write",
-      );
-    });
+    /**
+     * Read from the plan, not from this process's memory. The plan is written
+     * before any mutation and its hash is chained into every journal slot, so
+     * a process that resumes after a crash replays the same admitted set the
+     * planning process observed under the lock.
+     */
+    const retainedHomeNames = retainedChildNames(paths.home, plan.admittedPreexistingPaths);
+    const retainedStateNames = retainedChildNames(paths.stateDir, plan.admittedPreexistingPaths);
     const [homeStats, stateStats, lockStats, homeNames, stateNames] = await Promise.all([
       nodeFs.lstat(paths.home),
       nodeFs.lstat(paths.stateDir),
@@ -928,12 +908,24 @@ export class BootstrapExecutor {
     ]);
     homeNames.sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
     stateNames.sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
-    const expectedStateNames = [
+    const lifecycleLock = join(paths.stateDir, ".lifecycle.lock");
+    const lifecycleLockStats = await lstatOptional(lifecycleLock);
+    const lifecycleLockName = lifecycleLockStats === null ? [] : [basename(lifecycleLock)];
+    if (
+      lifecycleLockStats !== null &&
+      (!lifecycleLockStats.isFile() || lifecycleLockStats.isSymbolicLink() ||
+        lifecycleLockStats.uid !== uid() || mode(lifecycleLockStats) !== 0o600 ||
+        lifecycleLockStats.nlink !== 1 || lifecycleLockStats.size !== 0)
+    ) throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "lifecycle lock residue changed shape");
+    const expectedStateNames = [...new Set([
       basename(plan.bootstrapIdentity.path),
+      ...lifecycleLockName,
       basename(plan.planPath),
       ...plan.journalSlots.map((slot) => basename(slot.path)),
-      ...residueNames,
-    ].sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
+      ...retainedStateNames,
+    ])].sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
+    const expectedHomeNames = [...new Set([basename(paths.stateDir), ...retainedHomeNames])]
+      .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
     if (
       held === null || held === undefined ||
       !homeStats.isDirectory() || homeStats.isSymbolicLink() ||
@@ -948,19 +940,292 @@ export class BootstrapExecutor {
       String(lockStats.dev) !== plan.bootstrapIdentity.dev ||
       String(lockStats.ino) !== plan.bootstrapIdentity.ino ||
       held.dev !== plan.bootstrapIdentity.dev || held.ino !== plan.bootstrapIdentity.ino ||
-      !sameValue(homeNames, [basename(paths.stateDir)]) ||
+      !sameValue(homeNames, expectedHomeNames) ||
       !sameValue(stateNames, expectedStateNames)
     ) {
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "post-plan inventory changed before initial journal write");
     }
   }
 
+  /**
+   * Pure worst-case projection for one new envelope. It deliberately builds
+   * the same plan graph as publication, with fixed-width worst-case inode
+   * identities and nonce bytes, before a UUID or product path is allocated.
+   */
+  private async projectFreshInitEnvelope(
+    request: FreshInitRequestV1,
+    packaged: AdmittedPackagedReleaseV1,
+    preview: FreshInitPreviewV1,
+    brainStats: Stats | null,
+    reusableDirectories: ReadonlyMap<string, Stats>,
+    retainedPaths: readonly CanonicalAbsolutePathV1[],
+  ): Promise<BootstrapEvidenceReportV1["aggregate"]> {
+    const maximumIdentity = "18446744073709551615";
+    const id = "fi_00000000-0000-4000-8000-000000000000" as FreshV2InitIdV1;
+    const projectedIdentity: PlanIdentityStats = { dev: maximumIdentity, ino: maximumIdentity };
+    const externalShape = validateBootstrapExternalShapeProjection({
+      entries: [
+        {
+          role: "product_home",
+          pathHash: pathHash(this.#dependencies.paths.home),
+          kind: "directory",
+          ownerUid: uid(),
+          mode: 0o700,
+          nlink: 1,
+          size: "0",
+          dev: maximumIdentity,
+          ino: maximumIdentity,
+        },
+        {
+          role: "state_directory",
+          pathHash: pathHash(this.#dependencies.paths.stateDir),
+          kind: "directory",
+          ownerUid: uid(),
+          mode: 0o700,
+          nlink: 1,
+          size: "0",
+          dev: maximumIdentity,
+          ino: maximumIdentity,
+        },
+        {
+          role: "bootstrap_lock",
+          pathHash: pathHash(join(this.#dependencies.paths.stateDir, ".lifecycle-bootstrap.lock")),
+          kind: "regular_file",
+          ownerUid: uid(),
+          mode: 0o600,
+          nlink: 1,
+          size: "0",
+          dev: maximumIdentity,
+          ino: maximumIdentity,
+        },
+      ],
+    });
+    const built = await this.buildPlan({
+      id,
+      request,
+      packaged,
+      preview,
+      externalShape,
+      homeStats: projectedIdentity,
+      stateStats: projectedIdentity,
+      lockStats: projectedIdentity,
+      brainStats: brainStats === null ? null : projectedIdentity,
+      preexistingDirectories: new Map(
+        [...reusableDirectories.keys()].map((path) => [path, projectedIdentity]),
+      ),
+      retainedPaths,
+      nonce: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" as LowerHexSha256,
+    });
+    const plan = {
+      ...built.plan,
+      journalSlots: built.plan.journalSlots.map((slot) => ({
+        ...slot,
+        dev: maximumIdentity,
+        ino: maximumIdentity,
+      })) as unknown as FreshV2InitPlanV1["journalSlots"],
+    };
+    const planBytes = encoder.encode(encodeCanonicalJson(plan as unknown as CanonicalJsonValue)).byteLength;
+    const payloadEvidenceBytes = plan.payloads.reduce((total, row) => total + encoder.encode(encodeCanonicalJson({
+      schemaVersion: 1,
+      bootstrapId: plan.id,
+      ordinal: row.ref.ordinal,
+      stagedPathHash: pathHash(row.ref.path),
+      sourceIdentityHash: bootstrapPayloadSourceIdentityHash(row.source),
+      bytes: row.ref.bytes,
+      sha256: row.ref.hash,
+      mode: row.ref.mode,
+      dev: maximumIdentity,
+      ino: maximumIdentity,
+    })).byteLength, 0);
+    const creationEvidenceBytes = ([
+      ...plan.createdPaths.map((planned, ordinal) => ({ planned, ordinal, scope: "ordinary" as const })),
+      ...plan.launchabilityPaths.map((planned, ordinal) => ({ planned, ordinal, scope: "launchability" as const })),
+    ]).reduce((total, row) => total + encoder.encode(encodeCanonicalJson({
+      schemaVersion: 1,
+      bootstrapId: plan.id,
+      scope: row.scope,
+      ordinal: row.ordinal,
+      pathHash: pathHash(row.planned.path),
+      kind: row.planned.kind,
+      dev: maximumIdentity,
+      ino: maximumIdentity,
+      postimageHash: row.planned.kind === "file"
+        ? row.planned.payload.hash
+        : row.planned.kind === "global_lock" ? EMPTY_HASH : null,
+    })).byteLength, 0);
+    const retentionEntries = plan.maximumStagingEntries + 3;
+    const maximumSequence = (
+      3 * plan.payloads.length +
+      plan.createdPaths.length +
+      plan.foundationParticipants.length +
+      plan.launchabilityPaths.length +
+      retentionEntries + 16
+    ).toString();
+    const timestamp = this.#dependencies.now().toISOString() as FreshV2InitJournalV1["createdAt"];
+    const journalBytes = encoder.encode(encodeCanonicalJson({
+      ...this.initialJournalForTimestamp(plan, timestamp),
+      slot: Number(BigInt(maximumSequence) % 2n),
+      sequence: maximumSequence,
+      previousJournalHash: "f".repeat(64),
+      phase: "retained",
+      direction: "forward",
+      nextPayload: plan.payloads.length,
+      payloadWriteState: { state: "idle" },
+      nextCreatedPath: plan.createdPaths.length,
+      nextFoundationParticipant: plan.foundationParticipants.filter((participant) => participant.role.kind === "forward").length,
+      nextLaunchabilityPath: plan.launchabilityPaths.length,
+      manifestCursor: 3,
+      compensationNext: null,
+      payloadRetentionPart: null,
+      terminalOutcome: "finalized",
+      retentionNext: retentionEntries,
+      retentionTerminalPreimage: {
+        previousJournalHash: "f".repeat(64),
+        updatedAt: timestamp,
+      },
+    })).byteLength;
+    const payloadBytes = plan.payloads.reduce((total, row) => total + BigInt(row.ref.bytes), 0n);
+    const regularFileBytes = BigInt(planBytes) + BigInt(2 * journalBytes) + payloadBytes +
+      BigInt(payloadEvidenceBytes) + BigInt(creationEvidenceBytes);
+    return {
+      idCount: 1,
+      entryCount: retentionEntries,
+      regularFileBytes: regularFileBytes.toString() as UInt64DecimalV1,
+    };
+  }
+
+  async projectFreshInitRetentionCapacity(
+    request: FreshInitRequestV1,
+  ): Promise<BootstrapEvidenceReportV1["aggregate"]> {
+    const packaged = await inspectPackagedRelease(this.#dependencies.packagedRelease);
+    const preview = await this.previewNewFreshInit(request, packaged);
+    const brainStats = await lstatOptional(request.brainPath);
+    const evidence = await this.inspectEvidence();
+    const reusableDirectories = await this.inspectReusableFreshDirectories(evidence);
+    return this.projectFreshInitEnvelope(
+      request,
+      packaged,
+      preview,
+      brainStats,
+      reusableDirectories,
+      evidence.retainedPaths,
+    );
+  }
+
+  private reusableFreshDirectoryCandidates(): readonly string[] {
+    const paths = this.#dependencies.paths;
+    return [
+      paths.backupsDir,
+      paths.logsDir,
+      join(paths.home, "schemas"),
+      paths.stagingDir,
+      join(paths.stagingDir, "fresh-v2-init"),
+      join(paths.stagingDir, "transactions"),
+      join(paths.stateDir, "transactions"),
+      join(paths.stateDir, "lifecycle-journals"),
+      join(paths.stateDir, "git-effect-journals"),
+      join(paths.stateDir, "launchd-effect-journals"),
+      join(paths.stateDir, "rollback"),
+    ];
+  }
+
+  private async inspectReusableFreshDirectories(
+    admitted: BootstrapEvidenceAdmissionV1,
+  ): Promise<ReadonlyMap<string, Stats>> {
+    const result = new Map<string, Stats>();
+    for (const path of this.reusableFreshDirectoryCandidates()) {
+      const stats = await lstatOptional(path);
+      if (stats === null) continue;
+      const allowed = path === this.#dependencies.paths.backupsDir || admitted.retainedPaths.some((retained) =>
+        retained.startsWith(`${path}/`),
+      );
+      if (
+        !allowed || !stats.isDirectory() || stats.isSymbolicLink() ||
+        stats.uid !== uid() || mode(stats) !== 0o700
+      ) {
+        throw new FreshBootstrapError(
+          EXIT_CODES.recoveryRequired,
+          `product home contains an unbound reusable directory: ${path}`,
+        );
+      }
+      result.set(path, stats);
+    }
+    return result;
+  }
+
+  private sameReusableDirectoryObservation(
+    before: ReadonlyMap<string, Stats>,
+    after: ReadonlyMap<string, Stats>,
+  ): boolean {
+    return sameValue(
+      [...before].map(([path, stats]) => ({ path, dev: String(stats.dev), ino: String(stats.ino) })),
+      [...after].map(([path, stats]) => ({ path, dev: String(stats.dev), ino: String(stats.ino) })),
+    );
+  }
+
   async planFreshInit(request: FreshInitRequestV1): Promise<FreshV2InitPlanV1> {
     const packaged = await inspectPackagedRelease(this.#dependencies.packagedRelease);
     const preview = await this.previewNewFreshInit(request, packaged);
+    const brainObservation = await lstatOptional(request.brainPath);
+    const evidenceBefore = await this.inspectEvidence();
+    if (evidenceBefore.blocksNewIntent) {
+      throw new FreshBootstrapError(
+        EXIT_CODES.recoveryRequired,
+        "retained bootstrap evidence requires manual archive before a new bootstrap intent",
+      );
+    }
+    const reusableBefore = await this.inspectReusableFreshDirectories(evidenceBefore);
+    const projectedEnvelope = await this.projectFreshInitEnvelope(
+      request,
+      packaged,
+      preview,
+      brainObservation,
+      reusableBefore,
+      evidenceBefore.retainedPaths,
+    );
+    try {
+      assertCombinedBootstrapCapacity(evidenceBefore.report.aggregate, projectedEnvelope);
+    } catch {
+      throw new FreshBootstrapError(
+        EXIT_CODES.recoveryRequired,
+        "retained bootstrap capacity would be exceeded; manual archive is required before retry",
+      );
+    }
     const paths = this.#dependencies.paths;
+    const [preexistingBootstrapLock, preexistingGlobalLock] = await Promise.all([
+      lstatOptional(join(paths.stateDir, ".lifecycle-bootstrap.lock")),
+      lstatOptional(join(paths.stateDir, ".lifecycle.lock")),
+    ]);
+    const reusableGlobalLock = evidenceBefore.reusableGlobalLock;
+    const exactReusableGlobalLock = preexistingGlobalLock !== null && reusableGlobalLock !== null &&
+      preexistingGlobalLock.isFile() && !preexistingGlobalLock.isSymbolicLink() &&
+      preexistingGlobalLock.uid === uid() && mode(preexistingGlobalLock) === 0o600 &&
+      preexistingGlobalLock.nlink === 1 && preexistingGlobalLock.size === 0 &&
+      String(preexistingGlobalLock.dev) === reusableGlobalLock.dev &&
+      String(preexistingGlobalLock.ino) === reusableGlobalLock.ino;
+    /**
+     * Shape, not presence. Retention never unlinks, so a well-formed bootstrap
+     * lock outlives every envelope it belonged to; refusing on its existence
+     * made the first interrupted init permanent. Spec 2 blocks only *live*
+     * residue, and liveness is what `acquireLifecycleLock` below decides.
+     */
+    const exactReusableBootstrapLock = preexistingBootstrapLock !== null &&
+      preexistingBootstrapLock.isFile() && !preexistingBootstrapLock.isSymbolicLink() &&
+      preexistingBootstrapLock.uid === uid() && mode(preexistingBootstrapLock) === 0o600 &&
+      preexistingBootstrapLock.nlink === 1 && preexistingBootstrapLock.size === 0;
+    if (
+      (preexistingBootstrapLock !== null && !exactReusableBootstrapLock) ||
+      (preexistingGlobalLock !== null && !exactReusableGlobalLock)
+    ) {
+      throw new FreshBootstrapError(
+        EXIT_CODES.recoveryRequired,
+        "live lifecycle lock residue requires recovery before a new bootstrap intent",
+      );
+    }
     const uuid = (this.#dependencies.uuid ?? randomUUID)();
     const id = `fi_${uuid}` as FreshV2InitIdV1;
+    this.#preflightEvidence.set(id, evidenceBefore);
+    this.#preflightReusableDirectories.set(id, [...reusableBefore.keys()]);
     const homeBefore = await lstatOptional(paths.home);
     if (homeBefore !== null) {
       if (!homeBefore.isDirectory() || homeBefore.isSymbolicLink()) {
@@ -968,22 +1233,37 @@ export class BootstrapExecutor {
       }
       const entries = await nodeFs.readdir(paths.home);
       const stateBefore = await lstatOptional(paths.stateDir);
-      const residueNames = stateBefore !== null && stateBefore.isDirectory() && !stateBefore.isSymbolicLink()
-        ? await this.inspectUnverifiedPrePlanEnvelopes(id)
-        : [];
       const stateNames = stateBefore === null ? [] : await nodeFs.readdir(paths.stateDir);
+      const retainedHomeNames = retainedChildNames(paths.home, [
+        ...evidenceBefore.retainedPaths,
+        ...reusableBefore.keys(),
+      ]);
+      const retainedStateNames = retainedChildNames(paths.stateDir, [
+        ...evidenceBefore.retainedPaths,
+        ...reusableBefore.keys(),
+      ]);
       const resumableSkeleton =
-        entries.length === 1 &&
-        entries[0] === "state" &&
+        entries.every((name) => name === "state" || retainedHomeNames.includes(name)) &&
         stateBefore !== null &&
         stateBefore.isDirectory() &&
         !stateBefore.isSymbolicLink() &&
         mode(stateBefore) === 0o700 &&
         stateNames.every((name) =>
-          name === ".lifecycle-bootstrap.lock" || residueNames.includes(name)
+          retainedStateNames.includes(name) ||
+          (exactReusableGlobalLock && name === ".lifecycle.lock") ||
+          (exactReusableBootstrapLock && name === ".lifecycle-bootstrap.lock")
         );
       if (entries.length !== 0 && !resumableSkeleton) {
-        throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "product home is not a fresh installation");
+        const unboundHome = entries.filter((name) => name !== "state" && !retainedHomeNames.includes(name)).length;
+        const unboundState = stateNames.filter((name) =>
+          !retainedStateNames.includes(name) &&
+          !(exactReusableGlobalLock && name === ".lifecycle.lock") &&
+          !(exactReusableBootstrapLock && name === ".lifecycle-bootstrap.lock")
+        ).length;
+        throw new FreshBootstrapError(
+          EXIT_CODES.recoveryRequired,
+          `product home is not a fresh installation (${String(unboundHome)} unbound home entries; ${String(unboundState)} unbound state entries)`,
+        );
       }
     } else {
       await nodeFs.mkdir(paths.home, { mode: 0o700 });
@@ -1002,7 +1282,8 @@ export class BootstrapExecutor {
       const { homeStats, stateStats, lockStats } = await this.inspectExactPreIntentShape(
         bootstrapLock,
         heldBootstrap,
-        id,
+        evidenceBefore,
+        [...reusableBefore.keys()],
       );
       const externalShape = validateBootstrapExternalShapeProjection({
         entries: [
@@ -1013,18 +1294,6 @@ export class BootstrapExecutor {
       });
       this.trace("inventory:second");
 
-      const brainStats = await lstatOptional(request.brainPath);
-      const built = await this.buildPlan({
-        id,
-        request,
-        packaged,
-        preview,
-        externalShape,
-        homeStats,
-        stateStats,
-        lockStats,
-        brainStats,
-      });
       const envelope = deriveBootstrapEnvelopePaths(
         paths.home as CanonicalAbsolutePathV1,
         "fresh_v2_init",
@@ -1040,6 +1309,61 @@ export class BootstrapExecutor {
         foundationEvidence: [],
         directoryTrees: [],
         rows: [],
+      });
+      const evidenceAfterLock = await this.inspectEvidence();
+      if (
+        evidenceAfterLock.fingerprint !== evidenceBefore.fingerprint ||
+        evidenceAfterLock.blocksNewIntent !== evidenceBefore.blocksNewIntent
+      ) {
+        throw new FreshBootstrapError(
+          EXIT_CODES.securityRefusal,
+          "retained bootstrap evidence changed between preflight and plan publication",
+        );
+      }
+      const brainStats = await lstatOptional(request.brainPath);
+      const reusableAfter = await this.inspectReusableFreshDirectories(evidenceAfterLock);
+      const sameBrain = (brainObservation === null) === (brainStats === null) && (
+        brainObservation === null || brainStats === null ||
+        (brainObservation.dev === brainStats.dev && brainObservation.ino === brainStats.ino)
+      );
+      const projectedAfterLock = await this.projectFreshInitEnvelope(
+        request,
+        packaged,
+        preview,
+        brainStats,
+        reusableAfter,
+        evidenceAfterLock.retainedPaths,
+      );
+      if (
+        !sameBrain || !this.sameReusableDirectoryObservation(reusableBefore, reusableAfter) ||
+        !sameValue(projectedEnvelope, projectedAfterLock)
+      ) {
+        throw new FreshBootstrapError(
+          EXIT_CODES.securityRefusal,
+          "fresh bootstrap plan projection changed between preflight and publication",
+        );
+      }
+      try {
+        assertCombinedBootstrapCapacity(evidenceAfterLock.report.aggregate, projectedAfterLock);
+      } catch {
+        throw new FreshBootstrapError(
+          EXIT_CODES.recoveryRequired,
+          "retained bootstrap capacity changed; manual archive is required before retry",
+        );
+      }
+      const built = await this.buildPlan({
+        id,
+        request,
+        packaged,
+        preview,
+        externalShape,
+        homeStats,
+        stateStats,
+        lockStats,
+        brainStats,
+        preexistingDirectories: reusableAfter,
+        retainedPaths: evidenceAfterLock.retainedPaths,
+        nonce: Buffer.from((this.#dependencies.nonce ?? (() => randomBytes(32)))()).toString("hex") as LowerHexSha256,
       });
       const store = await BootstrapJournalStore.create({
         stateDirectory: paths.stateDir as CanonicalAbsolutePathV1,
@@ -1075,10 +1399,14 @@ export class BootstrapExecutor {
       });
       const admitted = store.plan as FreshV2InitPlanV1;
       this.#journalStores.set(id, store);
+      this.#preflightEvidence.delete(id);
+      this.#preflightReusableDirectories.delete(id);
       this.trace("intent:plan");
       this.trace("intent:journal");
       return admitted;
     } catch (error) {
+      this.#preflightEvidence.delete(id);
+      this.#preflightReusableDirectories.delete(id);
       await this.releaseLifecycleLocks(id).catch(() => undefined);
       throw error;
     }
@@ -1147,6 +1475,8 @@ export class BootstrapExecutor {
     const stores = [...this.#journalStores.values()];
     this.#journalStores.clear();
     this.#retentionEvidence.clear();
+    this.#preflightEvidence.clear();
+    this.#preflightReusableDirectories.clear();
     for (const store of stores) await store.close();
   }
 
@@ -1261,10 +1591,13 @@ export class BootstrapExecutor {
     readonly packaged: AdmittedPackagedReleaseV1;
     readonly preview: FreshInitPreviewV1;
     readonly externalShape: BootstrapExternalShapeProjectionV1;
-    readonly homeStats: Stats;
-    readonly stateStats: Stats;
-    readonly lockStats: Stats;
-    readonly brainStats: Stats | null;
+    readonly homeStats: PlanIdentityStats;
+    readonly stateStats: PlanIdentityStats;
+    readonly lockStats: PlanIdentityStats;
+    readonly brainStats: PlanIdentityStats | null;
+    readonly preexistingDirectories: ReadonlyMap<string, PlanIdentityStats>;
+    readonly retainedPaths: readonly CanonicalAbsolutePathV1[];
+    readonly nonce: LowerHexSha256;
   }): Promise<{ readonly plan: FreshV2InitPlanV1 }> {
     const paths = this.#dependencies.paths;
     const uuid = String(input.id).slice(3);
@@ -1438,7 +1771,7 @@ export class BootstrapExecutor {
       forwardJournal,
     );
 
-    const nonce = Buffer.from((this.#dependencies.nonce ?? (() => randomBytes(32)))()).toString("hex") as LowerHexSha256;
+    const nonce = input.nonce;
     const nonceRef = addDerived("lifecycle_nonce", nonce);
     const allocatorRef = addDerived("lifecycle_allocator", {
       schemaVersion: 1,
@@ -1484,13 +1817,16 @@ export class BootstrapExecutor {
         : []),
     ];
     const rowSpecs = [
-      ...ordinaryDirectories.map((path) => ({ kind: "directory" as const, path })),
+      ...ordinaryDirectories
+        .filter((path) => !input.preexistingDirectories.has(path))
+        .map((path) => ({ kind: "directory" as const, path })),
       ...[...fileRefs].map(([path, payload]) => ({ kind: "file" as const, path, payload })),
     ].sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)));
-    const preexisting = new Map<string, Stats>([
+    const preexisting = new Map<string, PlanIdentityStats>([
       [paths.home, input.homeStats],
       [paths.stateDir, input.stateStats],
       ...(input.brainStats === null ? [] : [[input.request.brainPath, input.brainStats] as const]),
+      ...input.preexistingDirectories,
       [this.#dependencies.userHome, await nodeFs.lstat(this.#dependencies.userHome)],
     ]);
     const ordinaryPathOrdinal = new Map(rowSpecs.map((row, ordinal) => [row.path, ordinal + 1] as const));
@@ -1598,6 +1934,12 @@ export class BootstrapExecutor {
       operation: "fresh_v2_init",
       id: input.id,
       admittedExternalShapeHash: bootstrapExternalShapeHash(input.externalShape),
+      admittedPreexistingPaths: [...new Set<string>([
+        ...input.retainedPaths,
+        ...input.preexistingDirectories.keys(),
+      ])]
+        .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)))
+        .map((path) => path as CanonicalAbsolutePathV1),
       v2ManifestHash: manifestRef.hash,
       bootstrapIdentity: {
         path: join(paths.stateDir, ".lifecycle-bootstrap.lock") as CanonicalAbsolutePathV1,
@@ -1634,7 +1976,7 @@ export class BootstrapExecutor {
       value: CanonicalJsonValue,
     ) => BootstrapExpectedPayloadRefV1,
     createdPaths: readonly PlannedCreatedPathV1[],
-    preexisting: ReadonlyMap<string, Stats>,
+    preexisting: ReadonlyMap<string, PlanIdentityStats>,
     activatedAt: string,
   ): { readonly paths: readonly PlannedCreatedPathV1[] } {
     const paths = this.#dependencies.paths;
@@ -2050,109 +2392,15 @@ export class BootstrapExecutor {
     value: unknown,
     id: FreshV2InitIdV1,
   ): FreshV2InitPlanV1 {
-    const input = jsonRecord(value);
-    const bootstrapIdentity = jsonRecord(input?.bootstrapIdentity);
-    const payloads = boundedArray(input?.payloads, 1, MAX_BOOTSTRAP_ENTRIES);
-    const createdPaths = boundedArray(input?.createdPaths, 1, MAX_CREATED_PATHS);
-    const participants = boundedArray(
-      input?.foundationParticipants,
-      2,
-      MAX_FOUNDATION_PARTICIPANTS,
-    );
-    const launchabilityPaths = boundedArray(
-      input?.launchabilityPaths,
-      7,
-      MAX_LAUNCHABILITY_PATHS,
-    );
-    const manifest = jsonRecord(input?.manifest);
-    const journalSlots = boundedArray(input?.journalSlots, 2, 2);
-    const envelope = deriveBootstrapEnvelopePaths(
-      this.#dependencies.paths.home as CanonicalAbsolutePathV1,
-      "fresh_v2_init",
-      id,
-    );
-    const structurallyBounded =
-      input !== null && input.schemaVersion === 1 && input.operation === "fresh_v2_init" && input.id === id &&
-      input.planPath === envelope.plan && input.stagingRoot === envelope.stagingRoot &&
-      journalSlots !== null &&
-      journalSlots.every((slot, ordinal) => jsonRecord(slot)?.path === envelope.journalSlots[ordinal]) &&
-      input.maximumPlanBytes === MAX_PLAN_BYTES && input.maximumJournalBytes === MAX_JOURNAL_BYTES &&
-      Number.isSafeInteger(input.maximumStagingEntries) &&
-      (input.maximumStagingEntries as number) >= 1 &&
-      (input.maximumStagingEntries as number) <= MAX_BOOTSTRAP_ENTRIES &&
-      bootstrapIdentity !== null &&
-      bootstrapIdentity.path === join(this.#dependencies.paths.stateDir, ".lifecycle-bootstrap.lock") &&
-      payloads !== null && createdPaths !== null && participants !== null && launchabilityPaths !== null && manifest !== null;
-    if (!structurallyBounded) {
-      throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "persisted bootstrap plan failed bounded structural admission");
-    }
-    for (const row of payloads) {
-      const record = jsonRecord(row);
-      if (record === null || jsonRecord(record.ref) === null || jsonRecord(record.source) === null) {
-        throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "persisted bootstrap payload inventory is malformed");
-      }
-    }
-    for (const planned of [...createdPaths, ...launchabilityPaths]) {
-      const record = jsonRecord(planned);
-      if (
-        record === null || jsonRecord(record.parent) === null ||
-        (record.kind === "file" && jsonRecord(record.payload) === null)
-      ) {
-        throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "persisted bootstrap creation inventory is malformed");
-      }
-    }
-    for (const participant of participants) {
-      const record = jsonRecord(participant);
-      const mutations = boundedArray(record?.mutations, 0, MAX_BOOTSTRAP_ENTRIES);
-      if (
-        record === null || jsonRecord(record.role) === null ||
-        jsonRecord(record.initialJournal) === null || mutations === null ||
-        mutations.some((mutation) => jsonRecord(mutation) === null)
-      ) {
-        throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "persisted bootstrap Foundation inventory is malformed");
-      }
-    }
-    const candidate = input as unknown as FreshV2InitPlanV1;
     try {
-      // This first admission sanitizes structure and path grammar only. The
-      // later closure admission still requires the retained filesystem
-      // inventory before it grants recovery authority.
-      return validateBootstrapPlan(
-        candidate,
-        this.planAdmission(candidate, null, null, () => true),
-      ) as FreshV2InitPlanV1;
+      return admitBootstrapEvidencePlan(value, {
+        productHome: this.#dependencies.paths.home as CanonicalAbsolutePathV1,
+        stateDirectory: this.#dependencies.paths.stateDir as CanonicalAbsolutePathV1,
+        expectedId: id,
+      });
     } catch {
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "persisted bootstrap plan failed structural grammar admission");
     }
-  }
-
-  private async existingPlan(): Promise<FreshV2InitPlanV1 | null> {
-    const state = await lstatOptional(this.#dependencies.paths.stateDir);
-    if (state === null) return null;
-    const names = (await nodeFs.readdir(this.#dependencies.paths.stateDir))
-      .filter((name) => /^fresh-v2-init\.fi_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.plan\.json$/u.test(name))
-      .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
-    if (names.length === 0) return null;
-    const admitted: FreshV2InitPlanV1[] = [];
-    for (const name of names) {
-      const id = /^fresh-v2-init\.(fi_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.plan\.json$/u.exec(name)?.[1] as FreshV2InitIdV1 | undefined;
-      if (id === undefined) {
-        throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "bootstrap plan filename identity is malformed");
-      }
-      const path = join(this.#dependencies.paths.stateDir, name);
-      const bytes = await this.guardReadOwnedFile(path, MAX_PLAN_BYTES, [1]);
-      let value: unknown;
-      try {
-        value = decodeCanonicalJson(bytes, MAX_PLAN_BYTES);
-      } catch {
-        continue;
-      }
-      admitted.push(this.admitPersistedPlanStructure(value, id));
-    }
-    if (admitted.length > 1) {
-      throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "multiple durable fresh bootstrap plans require recovery");
-    }
-    return admitted[0] ?? null;
   }
 
   private async readOrCreateJournal(plan: FreshV2InitPlanV1): Promise<FreshV2InitJournalV1> {
@@ -2616,13 +2864,36 @@ export class BootstrapExecutor {
       }
       const retained = this.#heldLocks.get(plan.id);
       if (retained?.global === null || retained?.global === undefined) {
-        const global = await this.acquireLifecycleLock(planned.path);
-        if (global.dev !== String(stats.dev) || global.ino !== String(stats.ino)) {
-          await global.handle.release().catch(() => undefined);
-          throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "global lock changed during recovery acquisition");
+        if (retained?.bootstrap === null || retained?.bootstrap === undefined) {
+          throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "global lock recovery requires the held bootstrap lock");
         }
-        this.#heldLocks.set(plan.id, { bootstrap: retained?.bootstrap ?? null, global });
-        this.trace("lock:global");
+        const evidencePath = deriveBootstrapCreationEvidencePaths(
+          this.#dependencies.paths.home as CanonicalAbsolutePathV1,
+          "fresh_v2_init",
+          plan.id,
+          scope,
+          ordinal,
+          randomUUID(),
+        ).evidence;
+        const evidenceStats = await lstatOptional(evidencePath);
+        if (evidenceStats === null) {
+          // Spec 2 §6.1 (Amended 2026-09-04): shape already verified above, evidence never
+          // became durable, bootstrap lock held — admit and let the caller record evidence.
+          await this.acquireIdentityCheckedGlobalLock(plan, planned, stats, retained.bootstrap);
+        } else {
+          const evidenceAdmission = await this.inspectEvidence();
+          const reusable = evidenceAdmission.reusableGlobalLock;
+          if (
+            reusable === null || reusable.path !== planned.path ||
+            reusable.dev !== String(stats.dev) || reusable.ino !== String(stats.ino)
+          ) {
+            throw new FreshBootstrapError(
+              EXIT_CODES.recoveryRequired,
+              "existing global lock escaped admitted rolled-back evidence",
+            );
+          }
+          await this.acquireIdentityCheckedGlobalLock(plan, planned, stats, retained.bootstrap);
+        }
       } else if (retained.global.dev !== String(stats.dev) || retained.global.ino !== String(stats.ino)) {
         throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "held global lock changed during recovery");
       }
@@ -2706,6 +2977,13 @@ export class BootstrapExecutor {
     participant: FoundationParticipantRefV2,
     plan: FreshV2InitPlanV1,
   ) {
+    const evidenceAdmission = await this.inspectEvidence();
+    if (evidenceAdmission.active?.plan.id !== plan.id) {
+      throw new FreshBootstrapError(
+        EXIT_CODES.recoveryRequired,
+        "Foundation bootstrap evidence no longer selects the executing plan",
+      );
+    }
     const row = plan.payloads.find((payload) => sameValue(payload.ref, participant.initialJournal.staged));
     if (row === undefined) throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "Foundation journal payload is unbound");
     const evidence = await this.readPayloadEvidence(row);
@@ -2716,10 +2994,12 @@ export class BootstrapExecutor {
     const sourceParent = await this.foundationPublicationParent(
       plan,
       dirname(participant.initialJournal.staged.path) as CanonicalAbsolutePathV1,
+      evidenceAdmission,
     );
     const destinationParent = await this.foundationPublicationParent(
       plan,
       dirname(participant.initialJournal.finalPath) as CanonicalAbsolutePathV1,
+      evidenceAdmission,
     );
     const mutationPublications = participant.role.kind === "forward"
       ? await Promise.all(participant.mutations.map(async (mutation) => {
@@ -2742,8 +3022,16 @@ export class BootstrapExecutor {
           const [creationEvidence, payloadEvidence, sourceParent, destinationParent] = await Promise.all([
             this.readCreationEvidence(plan, "ordinary", sourceOrdinal),
             this.readPayloadEvidence(payload),
-            this.foundationPublicationParent(plan, dirname(mutation.stagedPath) as CanonicalAbsolutePathV1),
-            this.foundationPublicationParent(plan, dirname(mutation.targetPath) as CanonicalAbsolutePathV1),
+            this.foundationPublicationParent(
+              plan,
+              dirname(mutation.stagedPath) as CanonicalAbsolutePathV1,
+              evidenceAdmission,
+            ),
+            this.foundationPublicationParent(
+              plan,
+              dirname(mutation.targetPath) as CanonicalAbsolutePathV1,
+              evidenceAdmission,
+            ),
           ]);
           if (
             creationEvidence.kind !== "file" ||
@@ -2802,6 +3090,7 @@ export class BootstrapExecutor {
   private async foundationPublicationParent(
     plan: FreshV2InitPlanV1,
     path: CanonicalAbsolutePathV1,
+    evidenceAdmission: BootstrapEvidenceAdmissionV1,
   ) {
     const createdOrdinal = plan.createdPaths.findIndex((candidate) =>
       candidate.kind === "directory" && candidate.path === path,
@@ -2826,21 +3115,37 @@ export class BootstrapExecutor {
       .map((candidate) => candidate.parent)
       .filter((candidate) => candidate.kind === "preexisting" && candidate.path === path);
     const first = preexisting[0];
-    if (
-      first?.kind !== "preexisting" ||
-      preexisting.some((candidate) =>
+    if (first?.kind === "preexisting") {
+      if (preexisting.some((candidate) =>
         candidate.kind !== "preexisting" ||
         candidate.dev !== first.dev ||
         candidate.ino !== first.ino)
+      ) {
+        throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "Foundation publication parent has conflicting plan authority");
+      }
+      return {
+        path,
+        ownerUid: uid(),
+        mode: 0o700 as const,
+        dev: first.dev,
+        ino: first.ino,
+      };
+    }
+    const retained = evidenceAdmission.retainedParentAuthorities.find((candidate) => candidate.path === path);
+    const stats = await lstatOptional(path);
+    if (
+      retained === undefined || stats === null || !stats.isDirectory() || stats.isSymbolicLink() ||
+      stats.uid !== uid() || mode(stats) !== 0o700 ||
+      String(stats.dev) !== retained.dev || String(stats.ino) !== retained.ino
     ) {
-      throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "Foundation publication parent escaped the immutable plan");
+      throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "Foundation publication parent escaped admitted retained evidence");
     }
     return {
       path,
       ownerUid: uid(),
       mode: 0o700 as const,
-      dev: first.dev,
-      ino: first.ino,
+      dev: retained.dev,
+      ino: retained.ino,
     };
   }
 
@@ -3167,284 +3472,24 @@ export class BootstrapExecutor {
     this.checkpoint("after_rolled_back");
   }
 
-  private async evidenceFile<T>(
-    path: CanonicalAbsolutePathV1,
-    admitValue: (value: unknown) => T,
-  ): Promise<{
-    readonly value: T;
-    readonly evidenceIdentity: {
-      readonly ownerUid: number;
-      readonly mode: 0o600;
-      readonly nlink: 1;
-      readonly dev: UInt64DecimalV1;
-      readonly ino: UInt64DecimalV1;
-    };
-  }> {
-    const postimage = await projectBootstrapRetentionPostimage(path);
-    if (postimage?.kind !== "regular_file" || postimage.mode !== 0o600) {
-      throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "retention evidence file changed shape");
-    }
-    const value = admitValue(decodeCanonicalJson(await nodeFs.readFile(path), MAX_JOURNAL_BYTES));
-    return {
-      value,
-      evidenceIdentity: {
-        ownerUid: postimage.ownerUid,
-        mode: 0o600,
-        nlink: 1,
-        dev: postimage.dev,
-        ino: postimage.ino,
-      },
-    };
-  }
-
-  private async retentionRow(
-    role: BootstrapRetentionEvidenceProjectionV1["rows"][number]["role"],
-    sourcePath: CanonicalAbsolutePathV1,
-    physicalPath: CanonicalAbsolutePathV1 = sourcePath,
-    physicalParent: CanonicalAbsolutePathV1 = dirname(physicalPath) as CanonicalAbsolutePathV1,
-  ): Promise<BootstrapRetentionEvidenceProjectionV1["rows"][number]> {
-    const postimage = await projectBootstrapRetentionPostimage(physicalPath);
-    const parentPostimage = await projectBootstrapRetentionPostimage(
-      physicalParent,
-    );
-    if (postimage === null || parentPostimage?.kind !== "directory_tree") {
-      throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "retention authority changed before projection");
-    }
-    return {
-      role,
-      sourcePath,
-      parent: {
-        path: dirname(sourcePath) as CanonicalAbsolutePathV1,
-        dev: parentPostimage.dev,
-        ino: parentPostimage.ino,
-      },
-      postimage,
-    };
-  }
-
   private async buildRetentionEvidence(
     plan: FreshV2InitPlanV1,
     terminal: FreshV2InitJournalV1,
   ): Promise<BootstrapRetentionEvidenceProjectionV1> {
-    const payloadEvidence = [];
-    const locations = deriveBootstrapRetentionLocations(plan, terminal);
-    const physicalPath = async (
-      logicalPath: CanonicalAbsolutePathV1,
-    ): Promise<CanonicalAbsolutePathV1> => {
-      const exact = locations.find((location) => location.sourcePath === logicalPath);
-      const collapsedRoot = locations
-        .filter((location) =>
-          location.collapsesDescendants && logicalPath.startsWith(`${location.sourcePath}/`),
-        )
-        .sort((left, right) => right.sourcePath.length - left.sourcePath.length)[0];
-      const retainedPath = exact?.tombstonePath ?? (collapsedRoot === undefined
-        ? null
-        : `${collapsedRoot.tombstonePath}${logicalPath.slice(collapsedRoot.sourcePath.length)}` as CanonicalAbsolutePathV1);
-      if (retainedPath === null) {
-        if (await lstatOptional(logicalPath) === null) {
-          throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "retention parent escaped its plan-derived table");
-        }
-        return logicalPath;
-      }
-      const [source, retained] = await Promise.all([
-        lstatOptional(logicalPath),
-        lstatOptional(retainedPath),
-      ]);
-      if ((source === null) === (retained === null)) {
-        throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "retention path is in a third state");
-      }
-      return source === null ? retainedPath : logicalPath;
-    };
-    for (let ordinal = 0; ordinal < terminal.nextPayload; ordinal += 1) {
-      const row = plan.payloads[ordinal];
-      if (row === undefined) throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "payload evidence cursor escaped plan");
-      const evidencePath = `${row.ref.path}.json` as CanonicalAbsolutePathV1;
-      payloadEvidence.push(await this.evidenceFile<BootstrapPayloadEvidenceV1>(
-        await physicalPath(evidencePath),
-        (value) => value as BootstrapPayloadEvidenceV1,
-      ));
-    }
-    const createdPathEvidence = [];
-    for (const scope of ["ordinary", "launchability"] as const) {
-      const count = scope === "ordinary" ? terminal.nextCreatedPath : terminal.nextLaunchabilityPath;
-      for (let ordinal = 0; ordinal < count; ordinal += 1) {
-        const evidencePath = deriveBootstrapCreationEvidencePaths(
-          this.#dependencies.paths.home as CanonicalAbsolutePathV1,
-          "fresh_v2_init",
-          plan.id,
-          scope,
-          ordinal,
-          randomUUID(),
-        ).evidence;
-        createdPathEvidence.push(await this.evidenceFile<CreatedPathEvidenceV1>(
-          await physicalPath(evidencePath),
-          (value) => value as CreatedPathEvidenceV1,
-        ));
-      }
-    }
-
-    const interruptedPayload = terminal.payloadWriteState.state === "writing"
-      ? {
-          writeState: terminal.payloadWriteState,
-          postimage: await projectBootstrapRetentionPostimage(await physicalPath(
-            plan.payloads[terminal.payloadWriteState.ordinal]?.ref.path as CanonicalAbsolutePathV1,
-          )),
-        }
-      : null;
-    if (interruptedPayload !== null && interruptedPayload.postimage?.kind !== "regular_file") {
-      throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "interrupted payload postimage is absent");
-    }
-
-    const rows: Array<BootstrapRetentionEvidenceProjectionV1["rows"][number]> = [];
-    const foundationEvidence: BootstrapRetentionEvidenceProjectionV1["foundationEvidence"][number][] = [];
-    const add = async (
-      role: BootstrapRetentionEvidenceProjectionV1["rows"][number]["role"],
-      path: CanonicalAbsolutePathV1,
-    ): Promise<void> => {
-      const physical = await physicalPath(path);
-      const physicalParent = await physicalPath(dirname(path) as CanonicalAbsolutePathV1);
-      rows.push(await this.retentionRow(role, path, physical, physicalParent));
-    };
-    const foundationParticipants = plan.foundationParticipants.filter((participant) =>
-      terminal.nextFoundationParticipant > 0 &&
-      (terminal.terminalOutcome === "rolled_back" || participant.role.kind === "forward"),
+    return buildBootstrapRetentionEvidence(
+      createBootstrapEvidenceInspectionRequest({
+        productHome: this.#dependencies.paths.home,
+        stateDirectory: this.#dependencies.paths.stateDir,
+        initialRoots: [
+          this.#dependencies.paths.home,
+          this.#dependencies.paths.stateDir,
+          this.#dependencies.userHome,
+        ],
+      }),
+      plan,
+      terminal,
     );
-    const foundationPayloadOrdinals = new Set<number>();
-    const foundationPaths = new Set<string>();
-    for (const participant of foundationParticipants) {
-      foundationPayloadOrdinals.add(participant.initialJournal.staged.ordinal);
-      foundationPaths.add(participant.initialJournal.finalPath);
-      const foundationPhysicalPath = await physicalPath(participant.initialJournal.finalPath);
-      const foundationPostimageBefore = await projectBootstrapRetentionPostimage(foundationPhysicalPath);
-      if (foundationPostimageBefore?.kind !== "regular_file") {
-        throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "Foundation terminal journal is absent");
-      }
-      const foundationBytes = await this.guardReadOwnedFile(
-        foundationPhysicalPath,
-        participant.maximumJournalBytes,
-        [1],
-      );
-      const foundationPostimageAfter = await projectBootstrapRetentionPostimage(foundationPhysicalPath);
-      if (!sameValue(foundationPostimageBefore, foundationPostimageAfter)) {
-        throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "Foundation terminal journal changed during projection");
-      }
-      const foundationValue = validateJournal(JSON.parse(
-        new TextDecoder("utf-8", { fatal: true }).decode(foundationBytes),
-      ) as unknown);
-      foundationEvidence.push({
-        participantId: participant.id,
-        value: foundationValue,
-        postimage: foundationPostimageAfter as Extract<BootstrapRetentionPostimageV1, { kind: "regular_file" }>,
-      });
-      await add("foundation_bootstrap", participant.initialJournal.finalPath);
-      for (const mutation of participant.mutations) {
-        if (mutation.stagedPath === null || mutation.content == null || mutation.digest == null) continue;
-        const contentPath = participant.role.kind === "forward"
-          ? mutation.targetPath
-          : mutation.stagedPath;
-        foundationPayloadOrdinals.add(mutation.content.ordinal);
-        foundationPayloadOrdinals.add(mutation.digest.ordinal);
-        foundationPaths.add(contentPath);
-        foundationPaths.add(`${mutation.stagedPath}.sha256`);
-        await add("foundation_bootstrap", contentPath);
-        await add("foundation_bootstrap", `${mutation.stagedPath}.sha256` as CanonicalAbsolutePathV1);
-      }
-    }
-
-    const consumerReached = (payloadOrdinal: number): boolean => {
-      const ordinary = plan.createdPaths.findIndex((candidate) =>
-        candidate.kind === "file" && candidate.payload.ordinal === payloadOrdinal,
-      );
-      if (ordinary >= 0 && ordinary < terminal.nextCreatedPath) return true;
-      const launchability = plan.launchabilityPaths.findIndex((candidate) =>
-        candidate.kind === "file" && candidate.payload.ordinal === payloadOrdinal,
-      );
-      return launchability >= 0 && launchability < terminal.nextLaunchabilityPath;
-    };
-    const manifestOrdinal = plan.manifest.after.state === "present" &&
-      plan.manifest.after.bytes?.kind === "bootstrap_expected"
-      ? plan.manifest.after.bytes.ordinal
-      : -1;
-    for (let ordinal = 0; ordinal < terminal.nextPayload; ordinal += 1) {
-      const payload = plan.payloads[ordinal] as BootstrapPayloadPlanV1;
-      await add("payload_evidence", `${payload.ref.path}.json` as CanonicalAbsolutePathV1);
-      if (
-        !foundationPayloadOrdinals.has(ordinal) &&
-        !consumerReached(ordinal) &&
-        !(manifestOrdinal === ordinal && terminal.manifestCursor >= 2)
-      ) {
-        await add("payload", payload.ref.path);
-      }
-    }
-    if (interruptedPayload !== null) {
-      const row = plan.payloads[interruptedPayload.writeState.ordinal];
-      if (row === undefined) throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "interrupted payload escaped plan");
-      await add("payload", row.ref.path);
-    }
-    for (const scope of ["ordinary", "launchability"] as const) {
-      const plannedPaths = scope === "ordinary" ? plan.createdPaths : plan.launchabilityPaths;
-      const count = scope === "ordinary" ? terminal.nextCreatedPath : terminal.nextLaunchabilityPath;
-      for (let ordinal = 0; ordinal < count; ordinal += 1) {
-        const evidencePath = deriveBootstrapCreationEvidencePaths(
-          this.#dependencies.paths.home as CanonicalAbsolutePathV1,
-          "fresh_v2_init",
-          plan.id,
-          scope,
-          ordinal,
-          randomUUID(),
-        ).evidence;
-        await add("creation_evidence", evidencePath);
-        const planned = plannedPaths[ordinal];
-        if (
-          terminal.terminalOutcome === "rolled_back" &&
-          planned !== undefined &&
-          planned.kind !== "global_lock" &&
-          planned.path !== plan.stagingRoot &&
-          planned.path !== plan.manifest.manifestPath &&
-          planned.path !== plan.manifest.tombstonePath &&
-          !foundationPaths.has(planned.path) &&
-          !(planned.kind === "file" && foundationPayloadOrdinals.has(planned.payload.ordinal))
-        ) {
-          await add("compensation_target", planned.path);
-        }
-      }
-    }
-    const stagingOrdinal = plan.createdPaths.findIndex((candidate) =>
-      candidate.kind === "directory" && candidate.path === plan.stagingRoot,
-    );
-    if (stagingOrdinal >= 0 && stagingOrdinal < terminal.nextCreatedPath) {
-      await add("staging_subtree", plan.stagingRoot);
-    }
-    await add("bootstrap_lock", plan.bootstrapIdentity.path);
-
-    const directoryRows = rows
-      .filter((row) => row.postimage.kind === "directory_tree")
-      .sort((left, right) => left.sourcePath.length - right.sourcePath.length);
-    const maximalRoots = directoryRows.filter((row, index) =>
-      !directoryRows.slice(0, index).some((parent) =>
-        row.sourcePath.startsWith(`${parent.sourcePath}/`),
-      ),
-    );
-    return {
-      bootstrapId: plan.id,
-      terminalJournal: terminal,
-      payloadEvidence,
-      interruptedPayload: interruptedPayload === null
-        ? null
-        : {
-            writeState: interruptedPayload.writeState,
-            postimage: interruptedPayload.postimage as Extract<BootstrapRetentionPostimageV1, { kind: "regular_file" }>,
-          },
-      createdPathEvidence,
-      foundationEvidence,
-      directoryTrees: maximalRoots.map((row) => ({
-        rootPath: row.sourcePath,
-        entries: (row.postimage as Extract<BootstrapRetentionPostimageV1, { kind: "directory_tree" }>).entries ?? [],
-      })),
-      rows,
-    };
   }
-
   private async retainTerminal(
     plan: FreshV2InitPlanV1,
     store: BootstrapJournalStore,
