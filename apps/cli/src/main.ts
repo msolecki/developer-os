@@ -358,9 +358,9 @@ function renderRepair(result: RepairResultV1): readonly string[] {
 
 function renderUninstall(result: UninstallResultV1): readonly string[] {
   const lines =
-    result.removed.length === 0
+    result.removed.length === 0 && result.retainedBootstrapEvidence.length === 0
       ? ["Nothing owned by Developer OS remains."]
-      : [
+      : result.removed.length === 0 ? [] : [
           "Developer OS removed:",
           ...result.removed.map((path) => `  ${renderPath(path)}`),
         ];
@@ -375,6 +375,13 @@ function renderUninstall(result: UninstallResultV1): readonly string[] {
     lines.push(
       "Preserved:",
       ...result.preserved.map((path) => `  ${renderPath(path)}`),
+    );
+  }
+  if (result.retainedBootstrapEvidence.length > 0) {
+    lines.push(
+      "Retained bootstrap evidence:",
+      ...result.retainedBootstrapEvidence.map((summary) =>
+        `  ${summary.operation} ${summary.status}: ${String(summary.entryCount)} entries, ${summary.regularFileBytes} regular-file bytes at ${renderPath(summary.vaultPath)}`),
     );
   }
   return lines;

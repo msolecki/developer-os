@@ -8,6 +8,8 @@ import { runCapture } from "@developer-os/cli/dist/commands/capture.js";
 import { runDoctor } from "@developer-os/cli/dist/commands/doctor.js";
 import { runReview } from "@developer-os/cli/dist/commands/review.js";
 import { runStatus } from "@developer-os/cli/dist/commands/status.js";
+import { runInit } from "@developer-os/cli/dist/commands/init.js";
+import { runUninstall } from "@developer-os/cli/dist/commands/uninstall.js";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -78,6 +80,16 @@ interface CommandCase {
 }
 
 const COMMANDS: readonly CommandCase[] = [
+  {
+    label: "init dry-run",
+    localSpawns: 0,
+    run: (fixture) => runInit(fixture.context, { dryRun: true, assumeYes: true }),
+  },
+  {
+    label: "uninstall dry-run",
+    localSpawns: 0,
+    run: (fixture) => runUninstall(fixture.context, { dryRun: true, assumeYes: true }),
+  },
   {
     label: "capture, with no agent detected",
     localSpawns: 0,

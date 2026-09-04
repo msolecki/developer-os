@@ -10,6 +10,7 @@ import {
   success,
 } from "@developer-os/core";
 import type {
+  BootstrapEvidenceSummaryV1,
   CliResult,
   DeveloperOsConfigV1,
   DriftFinding,
@@ -32,6 +33,8 @@ import {
   runtimePathsFor,
 } from "../context.js";
 import type { CliContext } from "../context.js";
+import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
+import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
 
 const AGENT_NAMES: readonly AgentName[] = ["claude", "codex"];
 const JOURNAL_ID = /^[A-Za-z0-9._-]+$/;
@@ -47,6 +50,7 @@ export interface DoctorCheck {
 export interface DoctorReportV1 {
   readonly schemaVersion: 1;
   readonly checks: readonly DoctorCheck[];
+  readonly retainedBootstrapEvidence: readonly BootstrapEvidenceSummaryV1[];
 }
 
 export interface IncompleteTransaction {
@@ -997,7 +1001,10 @@ async function guarded(
 async function collectFindings(
   context: CliContext,
   options: DoctorOptions,
-): Promise<readonly Finding[]> {
+): Promise<{
+  readonly findings: readonly Finding[];
+  readonly retainedBootstrapEvidence: readonly BootstrapEvidenceSummaryV1[];
+}> {
   /**
    * Emitted here, before the first check, and unconditionally on the flag
    * rather than on whether a Claude installation was discovered. Warning about
@@ -1035,7 +1042,44 @@ async function collectFindings(
     },
   );
 
-  return [
+  /**
+   * The inspector throws on a partial slot, on a foreign-uid entry whose
+   * basename matches the namespace, and on the retention cap itself. Unguarded,
+   * that became an unhandled rejection with a stack trace and no report at all,
+   * which is the failure `guarded` exists to prevent.
+   *
+   * The cap case still degrades: the throw discards the ids the inspector had
+   * already computed, so a user over the cap is told to archive without being
+   * told what. Separating cap enforcement from inspection is NEW-56.
+   */
+  let evidenceIds: readonly BootstrapEvidenceSummaryV1[] = [];
+  let evidenceFailure: Finding | null = null;
+  try {
+    const evidence = context.bootstrap?.state === "available"
+      ? await context.bootstrap.inspectEvidence()
+      : await inspectBootstrapEvidenceAdmission(createBootstrapEvidenceInspectionRequest({
+          productHome: context.paths.home,
+          stateDirectory: context.paths.stateDir,
+          initialRoots: [context.paths.home, context.paths.stateDir, context.userHome],
+        }));
+    evidenceIds = evidence.report.ids;
+  } catch (error) {
+    evidenceFailure = fail(
+      "bootstrap-evidence",
+      context.guards.redactDiagnostic(
+        error instanceof Error ? error.message : "bootstrap evidence could not be inspected",
+      ),
+      [],
+      exitCodeOf(error),
+    );
+  }
+  const evidenceFindings = evidenceFailure !== null ? [evidenceFailure] : evidenceIds.map((summary) => warn(
+    `bootstrap-evidence:${summary.id}`,
+    `${summary.operation} ${summary.status}; ${String(summary.entryCount)} entries; ${summary.regularFileBytes} regular-file bytes retained at ${summary.vaultPath}`,
+    [summary.vaultPath],
+  ));
+
+  return { findings: [
     platform,
     await guarded(context, "product-home", [paths.home], () =>
       checkProductHome(context, paths),
@@ -1063,7 +1107,8 @@ async function collectFindings(
     await guarded(context, "codex-capabilities", [], () =>
       checkCodexCapabilities(context, options.probe),
     ),
-  ];
+    ...evidenceFindings,
+  ], retainedBootstrapEvidence: evidenceIds };
 }
 
 export function doctorExitCode(findings: readonly Finding[]): ExitCode {
@@ -1083,10 +1128,11 @@ export async function runDoctorReport(
   context: CliContext,
   options: DoctorOptions = NO_PROBE,
 ): Promise<DoctorReportV1> {
-  const findings = await collectFindings(context, options);
+  const { findings, retainedBootstrapEvidence } = await collectFindings(context, options);
   return {
     schemaVersion: 1,
     checks: findings.map((finding) => finding.check),
+    retainedBootstrapEvidence,
   };
 }
 
@@ -1142,10 +1188,11 @@ export async function runDoctor(
   context: CliContext,
   options: DoctorOptions = NO_PROBE,
 ): Promise<CliResult<DoctorReportV1>> {
-  const findings = await collectFindings(context, options);
+  const { findings, retainedBootstrapEvidence } = await collectFindings(context, options);
   const report: DoctorReportV1 = {
     schemaVersion: 1,
     checks: findings.map((finding) => finding.check),
+    retainedBootstrapEvidence,
   };
   const code = doctorExitCode(findings);
 

@@ -1,4 +1,4 @@
-import { isAbsolute, join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 
 import {
   containsPath,
@@ -8,12 +8,16 @@ import {
   failure,
   hashBytes,
   success,
+  validateManifestBytes,
   validateChangePlan,
 } from "@developer-os/core";
 import type {
+  BootstrapEvidenceSummaryV1,
+  CanonicalAbsolutePathV1,
   CliResult,
   DriftFinding,
   ManagedArtifactV1,
+  InstallationManifestV1,
   PlannedFileMutation,
 } from "@developer-os/core";
 
@@ -24,6 +28,8 @@ import {
   runtimePathsFor,
 } from "../context.js";
 import type { CliContext } from "../context.js";
+import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
+import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
 import { readConfigFile } from "./doctor.js";
 
 export interface UninstallResultV1 {
@@ -31,6 +37,7 @@ export interface UninstallResultV1 {
   readonly removed: readonly string[];
   readonly restored: readonly string[];
   readonly preserved: readonly string[];
+  readonly retainedBootstrapEvidence: readonly BootstrapEvidenceSummaryV1[];
   readonly transactionId: string | null;
 }
 
@@ -134,10 +141,10 @@ function isRemovableAt(
     roots.canonicalOwned.some((root) => containsPath(root, canonicalPath));
   const insideExcluded =
     roots.declaredExcluded.some((root) =>
-      containsPathLoosely(root, declaredPath),
+      containsPathLoosely(root, declaredPath) || containsPathLoosely(declaredPath, root),
     ) ||
     roots.canonicalExcluded.some((root) =>
-      containsPathLoosely(root, canonicalPath),
+      containsPathLoosely(root, canonicalPath) || containsPathLoosely(canonicalPath, root),
     );
 
   return insideOwned && !insideExcluded;
@@ -524,12 +531,72 @@ function describePlan(removable: readonly ResolvedArtifact[]): string {
   ].join("\n");
 }
 
+async function readUninstallManifest(
+  context: CliContext,
+): Promise<InstallationManifestV1 | null> {
+  try {
+    return await context.manifests.readOptional();
+  } catch {
+    const request = createBootstrapEvidenceInspectionRequest({
+      productHome: context.paths.home,
+      stateDirectory: context.paths.stateDir,
+      initialRoots: [context.paths.manifestFile],
+    });
+    const entries = await request.reader.inventoryExactNamespaces([
+      context.paths.manifestFile as CanonicalAbsolutePathV1,
+    ]);
+    const manifestEntry = entries.find((entry) => entry.path === context.paths.manifestFile && entry.kind === "regular_file");
+    if (manifestEntry === undefined) return null;
+    const bytes = await request.reader.readRegularFile(manifestEntry, 64 * 1024 * 1024);
+    const manifest = validateManifestBytes(bytes, {
+      evidence: {
+        reopenCanonicalAbsolutePath: (path) => resolve(path),
+        containsCanonicalPath: (root, candidate) => candidate === root || candidate.startsWith(`${root}/`),
+        hasFoldedAlias: () => false,
+      },
+      sourceRoot: context.paths.home as CanonicalAbsolutePathV1,
+      backupRoot: context.paths.backupsDir as CanonicalAbsolutePathV1,
+      admitOwnerPath: (_owner, path) => path,
+    });
+    if (manifest.schemaVersion === 1) return manifest;
+    return {
+      schemaVersion: 1,
+      productVersion: manifest.productVersion,
+      installedAt: manifest.installedAt,
+      artifacts: manifest.artifacts.map((artifact): ManagedArtifactV1 => ({
+        owner: artifact.owner,
+        path: artifact.path,
+        kind: artifact.kind,
+        productVersion: artifact.productVersion,
+        existedBefore: artifact.existedBefore,
+        installedHash: artifact.kind === "directory"
+          ? hashBytes(new Uint8Array())
+          : artifact.verification.mode === "ephemeral"
+            ? hashBytes(new Uint8Array())
+            : artifact.verification.installedHash,
+        beforeHash: artifact.beforeHash,
+        backupRelativePath: artifact.backupRelativePath,
+        source: artifact.source,
+        mergeStrategy: artifact.mergeStrategy,
+        verifiedAt: artifact.verifiedAt,
+      })),
+    };
+  }
+}
+
 export async function runUninstall(
   context: CliContext,
   options: UninstallOptions,
 ): Promise<CliResult<UninstallResultV1>> {
   try {
-    const manifest = await context.manifests.readOptional();
+    const evidence = context.bootstrap?.state === "available"
+      ? await context.bootstrap.inspectEvidence()
+      : await inspectBootstrapEvidenceAdmission(createBootstrapEvidenceInspectionRequest({
+          productHome: context.paths.home,
+          stateDirectory: context.paths.stateDir,
+          initialRoots: [context.paths.home, context.paths.stateDir, context.userHome],
+        }));
+    const manifest = await readUninstallManifest(context);
     if (manifest === null) {
       /**
        * **Above the early return, deliberately.** The key is not a managed
@@ -544,7 +611,8 @@ export async function runUninstall(
         schemaVersion: 1,
         removed: [],
         restored: [],
-        preserved: [],
+        preserved: evidence.retainedPaths,
+        retainedBootstrapEvidence: evidence.report.ids,
         transactionId: null,
       });
     }
@@ -566,7 +634,7 @@ export async function runUninstall(
       kind: "uninstall",
       artifacts: manifest.artifacts,
       ownedRoots: [paths.home],
-      excludedRoots: [paths.brain],
+      excludedRoots: [paths.brain, ...evidence.retainedPaths],
     };
 
     const preview = await planUninstall(context, request);
@@ -576,7 +644,8 @@ export async function runUninstall(
         schemaVersion: 1,
         removed: preview.removable.map((entry) => entry.artifact.path),
         restored: [],
-        preserved: [...preview.preserved],
+        preserved: [...new Set([...preview.preserved, ...evidence.retainedPaths])],
+        retainedBootstrapEvidence: evidence.report.ids,
         transactionId: null,
       });
     }
@@ -602,7 +671,12 @@ export async function runUninstall(
     const outcome = await revertArtifacts(context, request);
     await removeManifestFile(context);
 
-    return success({ schemaVersion: 1, ...outcome });
+    return success({
+      schemaVersion: 1,
+      ...outcome,
+      preserved: [...new Set([...outcome.preserved, ...evidence.retainedPaths])],
+      retainedBootstrapEvidence: evidence.report.ids,
+    });
   } catch (error) {
     return failureFrom(
       context,

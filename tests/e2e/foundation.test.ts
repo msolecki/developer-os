@@ -474,6 +474,7 @@ describe("Foundation temporary-HOME lifecycle", () => {
         removed: [],
         restored: [],
         preserved: [],
+        retainedBootstrapEvidence: [],
         transactionId: null,
       });
 

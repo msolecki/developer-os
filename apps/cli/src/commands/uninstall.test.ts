@@ -13,6 +13,7 @@ import {
   createCommandFixture,
   exists,
   inventory,
+  inventoryDigest,
   removeCommandFixtures,
 } from "./testing.js";
 import type { CommandFixture } from "./testing.js";
@@ -96,6 +97,63 @@ async function seedDirectoryArtifact(
 }
 
 describe("runUninstall", () => {
+  it("uninstalls successfully while preserving every retained bootstrap evidence inode", async () => {
+    const fixture = await createCommandFixture("uninstall-bootstrap-evidence", {
+      bootstrapAvailable: true,
+    });
+    const initialized = await runInit(fixture.context, ACCEPTED);
+    expect(initialized.ok).toBe(true);
+    const before = await fixture.bootstrapEvidenceIdentities();
+    expect(before.length).toBeGreaterThan(0);
+
+    const result = await runUninstall(fixture.context, ACCEPTED);
+
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.ok).toBe(true);
+    expect(result.data.retainedBootstrapEvidence).toHaveLength(1);
+    expect(await fixture.bootstrapEvidenceIdentities()).toEqual(before);
+    expect(await exists(fixture.paths.home)).toBe(true);
+  }, 300_000);
+
+  it("dry-runs and reports retained evidence without changing a byte", async () => {
+    const fixture = await createCommandFixture("uninstall-bootstrap-dry-run", {
+      bootstrapAvailable: true,
+    });
+    const initialized = await runInit(fixture.context, ACCEPTED);
+    expect(initialized.ok).toBe(true);
+    const before = await fixture.bootstrapEvidenceIdentities();
+    const allBefore = await inventoryDigest(fixture.root);
+
+    const result = await runUninstall(fixture.context, {
+      dryRun: true,
+      assumeYes: true,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.retainedBootstrapEvidence).toHaveLength(1);
+    expect(await fixture.bootstrapEvidenceIdentities()).toEqual(before);
+    expect(await inventoryDigest(fixture.root)).toEqual(allBefore);
+  }, 300_000);
+
+  it("still reports and preserves retained evidence when the manifest is absent", async () => {
+    const fixture = await createCommandFixture("uninstall-bootstrap-no-manifest", {
+      bootstrapAvailable: true,
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    expect((await runUninstall(fixture.context, ACCEPTED)).ok).toBe(true);
+    const before = await fixture.bootstrapEvidenceIdentities();
+    expect(before.length).toBeGreaterThan(0);
+
+    const result = await runUninstall(fixture.rebuildContext(), ACCEPTED);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.removed).toEqual([]);
+    expect(result.data.retainedBootstrapEvidence).toHaveLength(1);
+    expect(await fixture.bootstrapEvidenceIdentities()).toEqual(before);
+  }, 300_000);
+
   it("refuses a directory artifact that reaches the Brain through a symlinked ancestor", async () => {
     const fixture = await createCommandFixture("uninstall-symlink-escape");
     await runInit(fixture.context, ACCEPTED);

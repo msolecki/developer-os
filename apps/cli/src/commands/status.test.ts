@@ -46,6 +46,22 @@ async function seedIncompleteTransaction(
 }
 
 describe("runStatus", () => {
+  /**
+   * `bootstrapAvailable` is what makes this falsifiable. Without it the context
+   * carries no `inspectEvidence`, so the counter is pinned to 0 by construction
+   * and the test passes even against a `runStatus` that inspects on every call.
+   */
+  it("does not invoke the retained-bootstrap inspector", async () => {
+    const fixture = await createCommandFixture("status-bootstrap-inert", {
+      bootstrapAvailable: true,
+    });
+    expect(fixture.context.bootstrap?.state).toBe("available");
+
+    await runStatus(fixture.context);
+
+    expect(fixture.bootstrapEvidenceInspections).toBe(0);
+  });
+
   it("reports an uninitialized machine without changing it", async () => {
     const fixture = await createCommandFixture("status-fresh");
     const before = await inventory(fixture.root);

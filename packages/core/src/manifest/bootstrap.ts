@@ -329,6 +329,13 @@ export interface FreshV2InitPlanV1 extends BootstrapPlanCommonV1 {
   readonly operation: "fresh_v2_init";
   readonly id: FreshV2InitIdV1;
   readonly admittedExternalShapeHash: LowerHexSha256;
+  /**
+   * Retained residue and reusable directories observed under the held lock
+   * before this plan was published. Persisted because a later process that
+   * resumes the plan has no memory of the preflight, and the post-plan shape
+   * check needs the exact set of names that may legally exist beside it.
+   */
+  readonly admittedPreexistingPaths: readonly CanonicalAbsolutePathV1[];
   readonly planPath: ExactProductStatePathV1;
   readonly journalSlots: readonly [
     PersistedBootstrapJournalSlotIdentityV1,
@@ -1743,6 +1750,26 @@ function stagingAggregate(
   return 2 * payloads + 3 * (created + launchability) + 5 + 2 * foundation;
 }
 
+/**
+ * Ordered, deduplicated and confined to the product home. The set is replayed
+ * by a later process to decide which names may legally exist beside the plan,
+ * so an unbounded or unconfined list would widen that whitelist.
+ */
+function boundedPaths(value: unknown, context: BootstrapPlanAdmissionContextV1): readonly CanonicalAbsolutePathV1[] {
+  if (!Array.isArray(value) || value.length > 4096) return refuse();
+  const admitted = value.map((candidate) => {
+    const path = admitCanonicalAbsolutePath(candidate, context.evidence);
+    if (path !== context.productHome && !path.startsWith(`${context.productHome}/`)) return refuse();
+    return path;
+  });
+  for (let index = 1; index < admitted.length; index += 1) {
+    const previous = admitted[index - 1] as string;
+    const current = admitted[index] as string;
+    if (Buffer.compare(Buffer.from(previous), Buffer.from(current)) >= 0) return refuse();
+  }
+  return admitted;
+}
+
 export function validateBootstrapPlan(
   value: unknown,
   context: BootstrapPlanAdmissionContextV1,
@@ -1751,7 +1778,7 @@ export function validateBootstrapPlan(
     const input = record(value);
     if (input.operation !== "fresh_v2_init" && input.operation !== "v1_to_v2") return refuse();
     const operation = input.operation;
-    const freshKeys = ["admittedExternalShapeHash", "bootstrapIdentity", "createdPaths", "foundationParticipants", "id", "journalSlots", "launchabilityPaths", "manifest", "maximumJournalBytes", "maximumPlanBytes", "maximumStagingEntries", "operation", "payloads", "planPath", "schemaVersion", "stagingRoot", "v2ManifestHash"];
+    const freshKeys = ["admittedExternalShapeHash", "admittedPreexistingPaths", "bootstrapIdentity", "createdPaths", "foundationParticipants", "id", "journalSlots", "launchabilityPaths", "manifest", "maximumJournalBytes", "maximumPlanBytes", "maximumStagingEntries", "operation", "payloads", "planPath", "schemaVersion", "stagingRoot", "v2ManifestHash"];
     const migrationKeys = ["bootstrapIdentity", "createdPaths", "foundationParticipants", "id", "journalSlots", "launchabilityPaths", "manifest", "maximumJournalBytes", "maximumPlanBytes", "maximumStagingEntries", "operation", "paths", "payloads", "schemaVersion", "v1ManifestHash", "v2ManifestHash"];
     exact(input, operation === "fresh_v2_init" ? freshKeys : migrationKeys);
     if (input.schemaVersion !== 1 || context.operation !== operation) return refuse();
@@ -1761,8 +1788,10 @@ export function validateBootstrapPlan(
     const bootstrapIdentity = validateBootstrapIdentity(input.bootstrapIdentity, context);
     const paths = deriveBootstrapEnvelopePaths(context.productHome, operation, id);
     const journalSlots = validateJournalSlots(input.journalSlots, paths.journalSlots, context);
+    let admittedPreexistingPaths: readonly CanonicalAbsolutePathV1[] = [];
     if (operation === "fresh_v2_init") {
       if (input.planPath !== paths.plan || input.stagingRoot !== paths.stagingRoot) return refuse();
+      admittedPreexistingPaths = boundedPaths(input.admittedPreexistingPaths, context);
       if (context.externalShape === null) {
         const hash = sha256(input.admittedExternalShapeHash);
         if (
@@ -1813,7 +1842,7 @@ export function validateBootstrapPlan(
     if (aggregate > MAX_STAGING_ENTRIES || input.maximumStagingEntries !== aggregate) return refuse();
     const common = { schemaVersion: 1 as const, id, v2ManifestHash, bootstrapIdentity, maximumPlanBytes: MAX_PLAN_BYTES, maximumJournalBytes: MAX_JOURNAL_BYTES, maximumStagingEntries: aggregate, payloads, createdPaths, foundationParticipants, launchabilityPaths, manifest };
     const plan: BootstrapExecutionPlanV1 = operation === "fresh_v2_init"
-      ? { ...common, operation, id: id as FreshV2InitIdV1, admittedExternalShapeHash: sha256(input.admittedExternalShapeHash), planPath: paths.plan, journalSlots, stagingRoot: paths.stagingRoot }
+      ? { ...common, operation, id: id as FreshV2InitIdV1, admittedExternalShapeHash: sha256(input.admittedExternalShapeHash), admittedPreexistingPaths, planPath: paths.plan, journalSlots, stagingRoot: paths.stagingRoot }
       : { ...common, operation, id: id as ManifestMigrationIdV1, v1ManifestHash: v1ManifestHash as LowerHexSha256, paths: { plan: paths.plan, stagingRoot: paths.stagingRoot }, journalSlots };
     if (encoder.encode(encodeCanonicalJson(plan as unknown as CanonicalJsonValue)).byteLength > MAX_PLAN_BYTES) return refuse();
     return structuredClone(plan);
