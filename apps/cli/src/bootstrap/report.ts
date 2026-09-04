@@ -505,10 +505,10 @@ async function exactV2Handoff(
   plan: FreshV2InitPlanV1,
 ): Promise<boolean> {
   const manifestPath = plan.manifest.manifestPath;
-  const rows = await request.reader.inventoryExactNamespaces([manifestPath]);
-  const file = rows.find((row) => row.path === manifestPath && row.kind === "regular_file");
-  if (file === undefined || plan.manifest.after.state !== "present") return false;
   try {
+    const rows = await request.reader.inventoryExactNamespaces([manifestPath]);
+    const file = rows.find((row) => row.path === manifestPath && row.kind === "regular_file");
+    if (file === undefined || plan.manifest.after.state !== "present") return false;
     const bytes = await request.reader.readRegularFile(file, plan.manifest.maximumPlanBytes);
     if (hashBytes(bytes) !== plan.manifest.after.hash) return false;
     validateManifestV2(decodeCanonicalJson(bytes, plan.manifest.maximumPlanBytes), {
@@ -570,7 +570,12 @@ async function exactRestoredBase(
     }
   }
 
-  const manifestRows = await request.reader.inventoryExactNamespaces([plan.manifest.manifestPath]);
+  let manifestRows: readonly BootstrapEvidenceGuardedEntryV1[];
+  try {
+    manifestRows = await request.reader.inventoryExactNamespaces([plan.manifest.manifestPath]);
+  } catch {
+    return false;
+  }
   const manifest = manifestRows.find((candidate) => candidate.path === plan.manifest.manifestPath);
   if (plan.manifest.before.state === "absent") {
     if (manifest !== undefined) return false;
@@ -920,7 +925,7 @@ async function inspectPlan(
     matchingRows: matching,
     alteredRows: altered,
     unboundEntries: unboundEntries.length,
-    confinedToRetainedNamespace: true,
+    confinedToRetainedNamespace: confinedUnboundEntries,
     entryCount: counted.entries,
     regularFileBytes: counted.bytes.toString() as UInt64DecimalV1,
   });

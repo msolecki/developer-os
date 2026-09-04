@@ -7,7 +7,9 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   createCommandFixture,
+  firstRegularFile,
   removeCommandFixtures,
+  retainedTombstones,
 } from "./commands/testing.js";
 import type { CommandFixture } from "./commands/testing.js";
 import type { CliIo } from "./io.js";
@@ -126,6 +128,7 @@ async function refuses(argv: readonly string[]): Promise<void> {
  * one.
  */
 const UNKNOWN_COMMAND = "reticulate";
+const RETAINED_SECRET = "synthetic retained secret";
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -137,6 +140,38 @@ async function exists(path: string): Promise<boolean> {
 }
 
 describe("run", () => {
+  it("renders retained evidence after uninstall instead of claiming nothing remains", async () => {
+    const fixture = await createCommandFixture("main-uninstall-bootstrap-evidence", {
+      bootstrapAvailable: true,
+    });
+    const harness: Harness = {
+      fixture,
+      out: fixture.io.out,
+      err: fixture.io.err,
+      invoke: (argv) => run(argv, fixture.io, () => fixture.context),
+    };
+    expect(await harness.invoke(["init", "--yes"])).toBe(0);
+    fixture.io.out.length = 0;
+    const tombstones = await retainedTombstones(fixture.root);
+    const target = await firstRegularFile(tombstones);
+    if (target === null) throw new Error("fixture retained no regular-file tombstone");
+    await nodeFs.writeFile(target, RETAINED_SECRET, { mode: 0o600 });
+
+    expect(await harness.invoke(["uninstall", "--yes"])).toBe(0);
+
+    expect(harness.out.join("\n")).toContain("Retained bootstrap evidence:");
+    expect(harness.out.join("\n")).toContain("fresh_v2_init");
+    expect(harness.out.join("\n")).not.toContain("Nothing owned by Developer OS remains.");
+    expect(harness.out.join("\n")).not.toContain(RETAINED_SECRET);
+
+    fixture.io.out.length = 0;
+    expect(await harness.invoke(["uninstall", "--yes", "--json"])).toBe(0);
+    expect(harness.out).toHaveLength(1);
+    expect(harness.out[0]).toContain('"retainedBootstrapEvidence":[{');
+    expect(harness.out[0]).toContain('"operation":"fresh_v2_init"');
+    expect(harness.out[0]).not.toContain(RETAINED_SECRET);
+  }, 300_000);
+
   it("prints the product version", async () => {
     const lines: string[] = [];
 

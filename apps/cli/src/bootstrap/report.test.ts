@@ -9,9 +9,10 @@ import { runInit } from "../commands/init.js";
 import { runDoctorReport } from "../commands/doctor.js";
 import {
   createCommandFixture,
-  inventory,
+  firstRegularFile,
   inventoryDigest,
   removeCommandFixtures,
+  retainedTombstones,
 } from "../commands/testing.js";
 import {
   createBootstrapEvidenceInspectionRequest,
@@ -31,23 +32,6 @@ function requestFor(fixture: Awaited<ReturnType<typeof createCommandFixture>>) {
   });
 }
 
-async function retainedTombstones(root: string): Promise<readonly string[]> {
-  const result: string[] = [];
-  for (const relative of await inventory(root)) {
-    if (relative.split("/").at(-1)?.startsWith(".developer-os-retained.")) {
-      result.push(join(root, relative));
-    }
-  }
-  return result.sort();
-}
-
-async function firstRegularFile(paths: readonly string[]): Promise<string | null> {
-  for (const path of paths) {
-    if ((await nodeFs.lstat(path)).isFile()) return path;
-  }
-  return null;
-}
-
 async function firstExternalRegularFile(
   paths: readonly string[],
   initialRoots: readonly string[],
@@ -60,7 +44,7 @@ async function firstExternalRegularFile(
 }
 
 describe("inspectBootstrapEvidence", () => {
-  it("reports a verified retained envelope without reading its contents into the report", async () => {
+  it("reports a retained envelope as altered without reading its contents into the report", async () => {
     const fixture = await createCommandFixture("bootstrap-report-verified", {
       bootstrapAvailable: true,
     });
@@ -69,14 +53,16 @@ describe("inspectBootstrapEvidence", () => {
     expect(initialized.ok).toBe(true);
     const tombstones = await retainedTombstones(fixture.root);
     expect(tombstones.length).toBeGreaterThan(0);
-    expect(await firstRegularFile(tombstones)).not.toBeNull();
+    const target = await firstRegularFile(tombstones);
+    if (target === null) throw new Error("fixture retained no regular-file tombstone");
+    await nodeFs.writeFile(target, RETAINED_SECRET, { mode: 0o600 });
 
     const report = await inspectBootstrapEvidence(requestFor(fixture));
 
     expect(report.schemaVersion).toBe(1);
     expect(report.ids).toHaveLength(1);
     expect(report.ids[0]).toMatchObject({
-      status: "verified",
+      status: "altered",
       operation: "fresh_v2_init",
     });
     expect(report.ids[0]?.vaultPath).toContain(".plan.json");
@@ -214,5 +200,25 @@ describe("inspectBootstrapEvidence", () => {
     const actual = envelope.evidence.rows.map((row) => [row.role, row.sourcePath]);
 
     expect(actual).toEqual(expected);
+  }, 300_000);
+
+  it("classifies a finalized envelope instead of throwing when the handoff manifest cannot be inventoried", async () => {
+    const fixture = await createCommandFixture("bootstrap-report-manifest-read-failure", {
+      bootstrapAvailable: true,
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    /**
+     * `exactV2Handoff`/`exactRestoredBase` read this path with
+     * `inventoryExactNamespaces`, which throws when a root is neither a file
+     * nor a directory (a dangling symlink, here) — exactly the shape a
+     * partially-restored or adversarial filesystem can leave behind.
+     */
+    await nodeFs.rm(fixture.paths.manifestFile);
+    await nodeFs.symlink("/nonexistent-manifest-target", fixture.paths.manifestFile);
+
+    const report = await inspectBootstrapEvidence(requestFor(fixture));
+
+    expect(report.ids[0]?.status).toBe("verified");
   }, 300_000);
 });

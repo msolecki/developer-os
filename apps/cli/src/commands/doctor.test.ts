@@ -22,8 +22,11 @@ import { runInit } from "./init.js";
 import { runRepair } from "./repair.js";
 import {
   createCommandFixture,
+  firstRegularFile,
   inventory,
+  inventoryDigest,
   removeCommandFixtures,
+  retainedTombstones,
 } from "./testing.js";
 import type { CommandFixture } from "./testing.js";
 
@@ -52,6 +55,7 @@ function asSyntheticInstallTree(
 }
 
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
+const RETAINED_SECRET = "synthetic retained secret";
 
 afterEach(removeCommandFixtures);
 
@@ -117,6 +121,66 @@ async function plantBackupFile(
 }
 
 describe("runDoctor", () => {
+  it("publishes one content-free warning check per retained bootstrap ID without writing or disclosing", async () => {
+    const fixture = await createCommandFixture("doctor-bootstrap-evidence", {
+      bootstrapAvailable: true,
+    });
+    const initialized = await runInit(fixture.context, ACCEPTED);
+    expect(initialized.ok).toBe(true);
+    const tombstones = await retainedTombstones(fixture.root);
+    const target = await firstRegularFile(tombstones);
+    if (target === null) throw new Error("fixture retained no regular-file tombstone");
+    await nodeFs.writeFile(target, RETAINED_SECRET, { mode: 0o600 });
+    const before = await inventoryDigest(fixture.root);
+
+    const report = await runDoctorReport(fixture.context);
+
+    expect(report.retainedBootstrapEvidence).toHaveLength(1);
+    expect(report.retainedBootstrapEvidence[0]).toMatchObject({
+      status: "altered",
+      operation: "fresh_v2_init",
+    });
+    expect(report.retainedBootstrapEvidence[0]?.vaultPath).toContain(".plan.json");
+    expect(typeof report.retainedBootstrapEvidence[0]?.entryCount).toBe("number");
+    expect(typeof report.retainedBootstrapEvidence[0]?.regularFileBytes).toBe("string");
+    const evidenceChecks = report.checks.filter((check) =>
+      check.id.startsWith("bootstrap-evidence:"),
+    );
+    expect(evidenceChecks).toHaveLength(1);
+    expect(evidenceChecks[0]?.status).toBe("warn");
+    expect(JSON.stringify(report)).not.toContain(RETAINED_SECRET);
+    expect(await inventoryDigest(fixture.root)).toEqual(before);
+  }, 300_000);
+
+  /**
+   * Doctor is run on exactly the machines where this read fails — a partial
+   * slot, a foreign-uid entry in the namespace, or residue over the retention
+   * cap. Unguarded, the inspection escaped as an unhandled rejection and the
+   * user got a stack trace instead of a report.
+   */
+  it("reports a failing check instead of throwing when the evidence inspector refuses", async () => {
+    const fixture = await createCommandFixture("doctor-bootstrap-evidence-refusal", {
+      bootstrapAvailable: true,
+    });
+    const bootstrap = fixture.context.bootstrap;
+    if (bootstrap?.state !== "available") throw new Error("fixture requires an available bootstrap");
+
+    const report = await runDoctorReport({
+      ...fixture.context,
+      bootstrap: {
+        ...bootstrap,
+        inspectEvidence: () =>
+          Promise.reject(new Error("retained bootstrap evidence exceeds its cap")),
+      },
+    });
+
+    expect(report.retainedBootstrapEvidence).toStrictEqual([]);
+    const refusals = report.checks.filter((check) => check.id === "bootstrap-evidence");
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]?.status).toBe("fail");
+    expect(report.checks.some((check) => check.id.startsWith("bootstrap-evidence:"))).toBe(false);
+  }, 120_000);
+
   it("passes every check on a healthy installation", async () => {
     const fixture = await createCommandFixture("doctor-healthy");
     await runInit(fixture.context, ACCEPTED);

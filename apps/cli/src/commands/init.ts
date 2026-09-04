@@ -1,11 +1,7 @@
-import { constants } from "node:fs";
-import * as nodeFs from "node:fs/promises";
 import { join } from "node:path";
 
 import {
   EXIT_CODES,
-  decodeCanonicalJson,
-  encodeCanonicalJson,
   failure,
   foldPath,
   hashBytes,
@@ -28,6 +24,8 @@ import {
   createRedactor,
 } from "@developer-os/security";
 
+import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
+import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
 import {
   assertRootsAnchored,
   failureFrom,
@@ -208,67 +206,6 @@ async function rawManifest(
       return null;
     }
     return null;
-  }
-}
-
-async function hasFreshBootstrapPlan(context: CliContext): Promise<boolean> {
-  try {
-    for (const name of await context.fs.readdir(context.paths.stateDir)) {
-      const id = /^fresh-v2-init\.(fi_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.plan\.json$/u.exec(name)?.[1];
-      if (id === undefined) continue;
-      try {
-        const path = join(context.paths.stateDir, name);
-        const before = await nodeFs.lstat(path, { bigint: true });
-        if (
-          !before.isFile() || before.isSymbolicLink() ||
-          before.uid !== BigInt(process.getuid?.() ?? -1) ||
-          (before.mode & 0o777n) !== 0o600n || before.nlink !== 1n ||
-          before.size < 1n || before.size > 268_435_456n
-        ) continue;
-        const handle = await nodeFs.open(
-          path,
-          constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-        );
-        try {
-          const opened = await handle.stat({ bigint: true });
-          const bytes = await handle.readFile();
-          const after = await nodeFs.lstat(path, { bigint: true });
-          if (
-            opened.dev !== before.dev || opened.ino !== before.ino ||
-            after.dev !== before.dev || after.ino !== before.ino ||
-            opened.size !== before.size || after.size !== before.size
-          ) continue;
-          const value = decodeCanonicalJson(bytes, 268_435_456);
-          const record = typeof value === "object" && value !== null
-            ? value as Record<string, unknown>
-            : null;
-          const slots = Array.isArray(record?.journalSlots) ? record.journalSlots : [];
-          const canonical = new TextEncoder().encode(
-            encodeCanonicalJson(value),
-          );
-          if (
-            record?.schemaVersion === 1 && record.operation === "fresh_v2_init" && record.id === id &&
-            record.planPath === path && slots.length === 2 &&
-            slots.every((candidate, ordinal) => {
-              const slot = typeof candidate === "object" && candidate !== null
-                ? candidate as Record<string, unknown>
-                : null;
-              return slot?.slot === ordinal &&
-                slot.path === join(context.paths.stateDir, `fresh-v2-init.${id}.journal.${String(ordinal)}.json`);
-            }) &&
-            canonical.byteLength === bytes.byteLength &&
-            canonical.every((byte, index) => byte === bytes[index])
-          ) return true;
-        } finally {
-          await handle.close();
-        }
-      } catch {
-        continue;
-      }
-    }
-    return false;
-  } catch {
-    return false;
   }
 }
 
@@ -872,12 +809,19 @@ export async function runInit(
     await context.platform.inspect();
     await assertNoIncompleteTransaction(context);
     const manifest = await rawManifest(context);
-    const resumableBootstrap = await hasFreshBootstrapPlan(context);
     const configMissing = await isMissingPath(context, context.paths.configFile);
 
     const fresh = manifest === null && configMissing;
     const bootstrap = context.bootstrap;
     const bootstrapAvailable = bootstrap?.state === "available";
+    const evidence = bootstrapAvailable
+      ? await bootstrap.inspectEvidence()
+      : await inspectBootstrapEvidenceAdmission(createBootstrapEvidenceInspectionRequest({
+          productHome: context.paths.home,
+          stateDirectory: context.paths.stateDir,
+          initialRoots: [context.paths.home, context.paths.stateDir, context.userHome],
+        }));
+    const resumableBootstrap = evidence.active !== null;
     if (resumableBootstrap && !bootstrapAvailable) {
       throw new InitRefusal(
         EXIT_CODES.capabilityUnavailable,
@@ -893,6 +837,13 @@ export async function runInit(
           [context.paths.home],
         );
       }
+      if (evidence.blocksNewIntent && evidence.active === null) {
+        throw new InitRefusal(
+          EXIT_CODES.recoveryRequired,
+          "retained bootstrap evidence requires manual archive before a new bootstrap intent",
+          evidence.retainedPaths,
+        );
+      }
       const retainedConfig = await readConfigFile(
         context,
         context.paths.configFile,
@@ -904,7 +855,7 @@ export async function runInit(
         [context.paths.home, config.brainPath],
       );
       const request = { config, brainPath: config.brainPath };
-      const preview = await bootstrap.executor.previewFreshInit(request);
+      const preview = await bootstrap.executor.previewFreshInit(request, evidence.active?.plan ?? null);
       const settled: InitResultV2 = {
         ...preview,
         transactionId: null,
@@ -920,7 +871,7 @@ export async function runInit(
           paths: [],
         });
       }
-      const outcome = await bootstrap.executor.initializeFresh(request);
+      const outcome = await bootstrap.executor.initializeFresh(request, evidence.active?.plan ?? null);
       loadOrCreateRedactionKey(context.paths.stateDir);
       return success(outcomeResult(outcome));
     }

@@ -8,11 +8,14 @@ import { runInit } from "@developer-os/cli/dist/commands/init.js";
 import { runStatus } from "@developer-os/cli/dist/commands/status.js";
 import {
   createCommandFixture,
+  firstRegularFile,
   removeCommandFixtures,
+  retainedTombstones,
 } from "@developer-os/cli/dist/commands/testing.js";
 import { runUninstall } from "@developer-os/cli/dist/commands/uninstall.js";
 
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
+const RETAINED_SECRET = "synthetic retained secret";
 
 afterEach(removeCommandFixtures);
 
@@ -26,10 +29,22 @@ describe("fresh V2 retained bootstrap lifecycle", () => {
     expect(initialized.ok).toBe(true);
     const before = await fixture.bootstrapEvidenceIdentities();
     expect(before.length).toBeGreaterThan(0);
+    /**
+     * Planted and reverted around the one call whose disclosure is asserted:
+     * the rest of this lifecycle (uninstall, reinstall) compares retained
+     * identities against `before`, which a lingering mutation would desync
+     * from the real tree without exercising anything this residual covers.
+     */
+    const tombstones = await retainedTombstones(fixture.root);
+    const target = await firstRegularFile(tombstones);
+    if (target === null) throw new Error("fixture retained no regular-file tombstone");
+    const original = await nodeFs.readFile(target);
+    await nodeFs.writeFile(target, RETAINED_SECRET, { mode: 0o600 });
 
     const doctor = await runDoctorReport(fixture.context);
     expect(doctor.retainedBootstrapEvidence).toHaveLength(1);
-    expect(JSON.stringify(doctor)).not.toContain("synthetic retained secret");
+    expect(JSON.stringify(doctor)).not.toContain(RETAINED_SECRET);
+    await nodeFs.writeFile(target, original, { mode: 0o600 });
 
     const statusInspections = fixture.bootstrapEvidenceInspections;
     await runStatus(fixture.context);

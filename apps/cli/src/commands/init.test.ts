@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EXIT_CODES, loadConfig, serializeConfig } from "@developer-os/core";
+import { MacOsTransactionLockProvider } from "@developer-os/platform-macos";
 import { structuredResultVerbs } from "@developer-os/workflow-schema";
 import type * as SecurityModule from "@developer-os/security";
 
@@ -14,6 +15,7 @@ import {
   createCommandFixture,
   exists,
   inventory,
+  inventoryDigest,
   removeCommandFixtures,
 } from "./testing.js";
 
@@ -66,6 +68,150 @@ function failingVerifier(): InitDependencies {
 }
 
 describe("runInit", () => {
+  it("starts a distinct ID beside a valid rolled-back retained envelope", async () => {
+    const fixture = await createCommandFixture("init-bootstrap-retained-retry", {
+      bootstrapAvailable: true,
+      bootstrapFailureAfter: "after_global_lock",
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    const rolledBack = await runInit(fixture.context, ACCEPTED);
+    expect(rolledBack.ok).toBe(false);
+    const retainedBefore = await fixture.bootstrapEvidenceIdentities();
+    expect(retainedBefore.length).toBeGreaterThan(0);
+    const oldIds = new Set(retainedBefore.map((entry) => entry.id));
+    expect(oldIds.size).toBe(1);
+    const unrelated = join(fixture.userHome, "unrelated-user-sibling.txt");
+    await nodeFs.writeFile(unrelated, "unrelated sibling\n", { mode: 0o600 });
+    const retainedBootstrap = fixture.context.bootstrap;
+    const rolledBackReport = retainedBootstrap?.state === "available"
+      ? await retainedBootstrap.inspectEvidence()
+      : null;
+    expect(rolledBackReport?.blocksNewIntent).toBe(false);
+    expect(rolledBackReport?.report.ids[0]).toMatchObject({
+      status: "verified",
+      terminalOutcome: "rolled_back",
+    });
+    expect(JSON.stringify(rolledBackReport)).not.toContain("unrelated sibling");
+    expect(await nodeFs.readFile(unrelated, "utf8")).toBe("unrelated sibling\n");
+    fixture.disableBootstrapFailure();
+    fixture.setBootstrapInterrupt("after_journal");
+
+    const retried = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(retried.ok).toBe(false);
+    const retainedAfter = await fixture.bootstrapEvidenceIdentities();
+    const newIds = new Set(retainedAfter.map((entry) => entry.id));
+    expect(newIds.size).toBe(2);
+    for (const entry of retainedBefore) expect(retainedAfter).toContainEqual(entry);
+  }, 300_000);
+
+  it.each([
+    { aggregate: { idCount: 257, entryCount: 3, regularFileBytes: "0" }, reason: "bootstrap IDs" },
+    { aggregate: { idCount: 1, entryCount: 1_000_001, regularFileBytes: "0" }, reason: "filesystem entries" },
+    { aggregate: { idCount: 1, entryCount: 3, regularFileBytes: "12884901889" }, reason: "regular-file bytes" },
+  ])("refuses reinstall first-over $reason before mutation", async ({ aggregate }) => {
+    const fixture = await createCommandFixture("init-bootstrap-cap", {
+      bootstrapAvailable: true,
+      bootstrapEvidenceAggregate: aggregate,
+    });
+    const before = await inventoryDigest(fixture.root);
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain("manual archive");
+    expect(await inventoryDigest(fixture.root)).toEqual(before);
+    expect(fixture.bootstrapTrace).toStrictEqual([]);
+  });
+
+  it.each([
+    "live bootstrap lock",
+    "live staging subtree",
+    "live payload source",
+  ] as const)("refuses %s before publishing a new intent", async (residue) => {
+    const fixture = await createCommandFixture(`init-bootstrap-${residue.replaceAll(" ", "-")}`, {
+      bootstrapAvailable: true,
+      bootstrapProductionLocks: residue === "live bootstrap lock",
+    });
+    const residueId = "fi_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    /**
+     * Held, not merely present. Retention never unlinks the bootstrap lock, so
+     * a bare file of the same name is ordinary residue that Spec 2 lets a later
+     * init start beside; only a lock another process still holds is live.
+     */
+    let heldResidueLock: { release(): Promise<void> } | null = null;
+    if (residue === "live bootstrap lock") {
+      await nodeFs.mkdir(fixture.paths.stateDir, { recursive: true, mode: 0o700 });
+      heldResidueLock = await new MacOsTransactionLockProvider().acquire(
+        join(fixture.paths.stateDir, ".lifecycle-bootstrap.lock"),
+      );
+    } else if (residue === "live staging subtree") {
+      const staging = join(fixture.paths.stagingDir, "fresh-v2-init", residueId);
+      await nodeFs.mkdir(staging, { recursive: true, mode: 0o700 });
+      await nodeFs.writeFile(join(staging, "live-source"), "synthetic live residue\n", { mode: 0o600 });
+    } else {
+      await nodeFs.mkdir(fixture.paths.stateDir, { recursive: true, mode: 0o700 });
+      await nodeFs.writeFile(
+        join(fixture.paths.stateDir, `.fresh-v2-init.${residueId}.0000000000.payload`),
+        "synthetic live residue\n",
+        { mode: 0o600 },
+      );
+    }
+    if (residue !== "live bootstrap lock") {
+      const bootstrap = fixture.context.bootstrap;
+      if (bootstrap?.state !== "available") throw new Error("bootstrap fixture is unavailable");
+      const evidence = await bootstrap.inspectEvidence();
+      expect(evidence.report.ids).toContainEqual(expect.objectContaining({
+        id: residueId,
+        status: "unverified",
+      }));
+      expect(evidence.blocksNewIntent).toBe(true);
+    }
+    const before = await inventoryDigest(fixture.root);
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    try {
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+      expect(await inventoryDigest(fixture.root)).toEqual(before);
+      expect(fixture.bootstrapTrace).toStrictEqual([]);
+    } finally {
+      await heldResidueLock?.release();
+    }
+  }, 300_000);
+
+  it("accepts the exact aggregate boundary projected by the publication plan", async () => {
+    const aggregate = { idCount: 0, entryCount: 0, regularFileBytes: "0" };
+    const fixture = await createCommandFixture("init-bootstrap-cap-exact", {
+      bootstrapAvailable: true,
+      bootstrapEvidenceAggregate: aggregate,
+    });
+    if (fixture.context.bootstrap?.state !== "available") throw new Error("bootstrap fixture is unavailable");
+    const config = {
+      schemaVersion: 1 as const,
+      brainPath: fixture.paths.brain,
+      adapters: { claude: false, codex: false },
+      git: { enabled: false },
+      automation: { enabled: false },
+      telemetry: false as const,
+    };
+    const projected = await fixture.context.bootstrap.executor.projectFreshInitRetentionCapacity({
+      config,
+      brainPath: config.brainPath,
+    });
+    aggregate.idCount = 256 - projected.idCount;
+    aggregate.entryCount = 1_000_000 - projected.entryCount;
+    aggregate.regularFileBytes = (12_884_901_888n - BigInt(projected.regularFileBytes)).toString();
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    expect(result.ok).toBe(true);
+  }, 300_000);
+
   it("routes an unavailable packaged handoff to the fresh V1 compatibility arm", async () => {
     const unavailable = await createCommandFixture("init-bootstrap-unavailable");
     const compatible = await runInit(unavailable.context, {
@@ -456,6 +602,51 @@ describe("runInit", () => {
     expect(result.code).toBe(EXIT_CODES.securityRefusal);
   });
 
+  /**
+   * `verify()` runs before retention, so a retention row naming an installed
+   * target retires it after the install has already been declared good. The
+   * manifest then names artifacts that are absent, `init` still exits 0, and
+   * the next run reads a `config.toml` that is not there. Spec 2 §6.4:
+   * installed targets are never retention rows.
+   */
+  it("leaves every artifact its manifest names present after a V2 bootstrap init", async () => {
+    const fixture = await createCommandFixture("init-v2-artifacts-present", {
+      bootstrapAvailable: true,
+    });
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    if (!result.ok) throw new Error(result.error.message);
+    const manifest = JSON.parse(
+      await nodeFs.readFile(fixture.paths.manifestFile, "utf8"),
+    ) as { readonly artifacts: readonly { readonly path: string }[] };
+    expect(manifest.artifacts.length).toBeGreaterThan(0);
+    const absent: string[] = [];
+    for (const artifact of manifest.artifacts) {
+      if (!(await exists(artifact.path))) absent.push(artifact.path);
+    }
+    expect(absent).toStrictEqual([]);
+  }, 900_000);
+
+  /**
+   * The V1 path is covered below. This is the V2 bootstrap path, where a second
+   * `init` must recognise the finished envelope and report the existing
+   * installation rather than falling through to the drift check and refusing
+   * over artifacts retention has already tombstoned.
+   */
+  it("is idempotent when re-run on a completed V2 bootstrap installation", async () => {
+    const fixture = await createCommandFixture("init-v2-idempotent", {
+      bootstrapAvailable: true,
+    });
+    const first = await runInit(fixture.context, ACCEPTED);
+    expect(first.ok).toBe(true);
+
+    const second = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    if (!second.ok) throw new Error(second.error.message);
+    expect(second.ok).toBe(true);
+  }, 900_000);
+
   it("is idempotent when re-run with the same inputs", async () => {
     const fixture = await createCommandFixture("init-idempotent");
 
@@ -597,6 +788,7 @@ describe("runInit", () => {
       verify: () =>
         Promise.resolve({
           schemaVersion: 1,
+          retainedBootstrapEvidence: [],
           checks: [
             {
               id: "manifest",
@@ -622,6 +814,7 @@ describe("runInit", () => {
       verify: () =>
         Promise.resolve({
           schemaVersion: 1,
+          retainedBootstrapEvidence: [],
           checks: [
             {
               id: "agents",
@@ -648,6 +841,7 @@ describe("runInit", () => {
       verify: () =>
         Promise.resolve({
           schemaVersion: 1,
+          retainedBootstrapEvidence: [],
           checks: [
             {
               id: "agents",
@@ -681,4 +875,34 @@ describe("runInit", () => {
     if (result.ok) return;
     expect(result.code).toBe(EXIT_CODES.capabilityUnavailable);
   });
+
+  it("refuses with capabilityUnavailable when a persisted V2 plan exists and the bootstrap capability is absent", async () => {
+    const seeded = await createCommandFixture("init-v2-plan-no-capability-seed", { bootstrapAvailable: true });
+    await nodeFs.mkdir(seeded.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(seeded.context, ACCEPTED)).ok).toBe(true);
+
+    const fixture = await createCommandFixture("init-v2-plan-no-capability", { root: seeded.root });
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(EXIT_CODES.capabilityUnavailable);
+  }, 600_000);
+
+  it("admits a stray retained tombstone in the user's home instead of refusing the plan grammar", async () => {
+    const fixture = await createCommandFixture("init-stray-tombstone-in-user-home", {
+      bootstrapAvailable: true,
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(
+      join(fixture.userHome, ".developer-os-retained.fi_00000000-0000-4000-8000-000000000000.0000000000.tombstone"),
+      "",
+      { mode: 0o600 },
+    );
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    expect(result.ok).toBe(true);
+  }, 300_000);
 });

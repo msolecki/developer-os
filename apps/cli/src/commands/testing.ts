@@ -272,6 +272,13 @@ export interface CommandFixture {
 
 export interface FixtureOptions {
   /**
+   * Reuses an existing fixture's root instead of creating a fresh temporary
+   * home. Test scaffolding for building a second, independent context over
+   * the tree an earlier fixture already populated (e.g. a capability-absent
+   * `init` observing a V2 plan a prior fixture persisted).
+   */
+  readonly root?: string;
+  /**
    * A fake process runner. Omitted, the fixture supplies one that **rejects**,
    * so a command that spawns unexpectedly fails loudly rather than reaching a
    * real binary from a test.
@@ -393,11 +400,16 @@ export async function createCommandFixture(
   label: string,
   options: FixtureOptions = {},
 ): Promise<CommandFixture> {
-  const created = await nodeFs.mkdtemp(
-    join(tmpdir(), `developer-os-cli-${label}-`),
-  );
-  const root = await nodeFs.realpath(created);
-  fixtureRoots.push(root);
+  let root: string;
+  if (options.root === undefined) {
+    const created = await nodeFs.mkdtemp(
+      join(tmpdir(), `developer-os-cli-${label}-`),
+    );
+    root = await nodeFs.realpath(created);
+    fixtureRoots.push(root);
+  } else {
+    root = options.root;
+  }
 
   const userHome = join(root, "home");
   await nodeFs.mkdir(userHome, { recursive: true, mode: 0o700 });
@@ -697,6 +709,23 @@ export async function inventoryDigest(root: string): Promise<readonly string[]> 
     return `${relative}\0${digest}`;
   }));
   return rows.sort();
+}
+
+export async function retainedTombstones(root: string): Promise<readonly string[]> {
+  const result: string[] = [];
+  for (const relative of await inventory(root)) {
+    if (relative.split("/").at(-1)?.startsWith(".developer-os-retained.")) {
+      result.push(join(root, relative));
+    }
+  }
+  return result.sort();
+}
+
+export async function firstRegularFile(paths: readonly string[]): Promise<string | null> {
+  for (const path of paths) {
+    if ((await nodeFs.lstat(path)).isFile()) return path;
+  }
+  return null;
 }
 
 export async function exists(path: string): Promise<boolean> {

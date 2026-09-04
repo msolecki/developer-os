@@ -818,6 +818,7 @@ function fullPlanFixture() {
     operation: "fresh_v2_init",
     id: freshId,
     admittedExternalShapeHash: "2061e8dbdf8a71cc29673a6a7a767f5a8a65665c266b2bd1cd4ddd95369f8c40" as LowerHexSha256,
+    admittedPreexistingPaths: [],
     v2ManifestHash: manifestPayloadHash,
     bootstrapIdentity: {
       path: "/product/state/.lifecycle-bootstrap.lock" as CanonicalAbsolutePathV1,
@@ -1102,6 +1103,7 @@ function migrationPlanFixture(): {
     stagingRoot: `/product/staging/manifest-migration/${migrationId}`,
   };
   delete candidate.admittedExternalShapeHash;
+  delete candidate.admittedPreexistingPaths;
   delete candidate.planPath;
   delete candidate.stagingRoot;
 
@@ -1212,7 +1214,7 @@ describe("immutable bootstrap plan exact grammar", () => {
       createHash("sha256")
         .update(encodeCanonicalJson(fixture.plan as never))
         .digest("hex"),
-    ).toBe("e50d2aa9636b93f6c83a7286e2fc5d561e8a67e5584f4b7f1f168f4b20d45975");
+    ).toBe("badc30f944a16e793d7924b2862a2eab178c6875c89d99ec7b2d083b483b95b3");
   });
 
   it("pins every admitted plan-derived role and guarded-package source to its independent source-identity digest", () => {
@@ -1628,6 +1630,26 @@ describe("immutable bootstrap plan exact grammar", () => {
   });
 });
 
+describe("admittedPreexistingPaths", () => {
+  const admitted = () => fullPlanFixture();
+  it.each([
+    ["a path outside the product home", ["/elsewhere/.developer-os-retained.x.0000000000.tombstone"]],
+    ["descending order", ["/product/state/b", "/product/state/a"]],
+    ["a duplicate", ["/product/state/a", "/product/state/a"]],
+    ["more than 4096 entries", Array.from({ length: 4097 }, (_, index) => `/product/state/${String(index).padStart(5, "0")}`)],
+  ])("refuses %s", (_, paths) => {
+    const { plan, context } = admitted();
+    expect(() => validateBootstrapPlan({ ...plan, admittedPreexistingPaths: paths }, context)).toThrow();
+  });
+  it("admits an ascending confined list", () => {
+    const { plan, context } = admitted();
+    expect(() => validateBootstrapPlan(
+      { ...plan, admittedPreexistingPaths: ["/product/state/a", "/product/state/b"] },
+      context,
+    )).not.toThrow();
+  });
+});
+
 describe("migration-only bootstrap grammar", () => {
   it("admits the complete v1_to_v2 arm with literal derived envelope paths and guarded V1 preimage authority", () => {
     const fixture = migrationPlanFixture();
@@ -1718,6 +1740,7 @@ function admittedJournalPlan(): FreshV2InitPlanV1 {
     operation: "fresh_v2_init",
     id: freshId,
     admittedExternalShapeHash: hashA,
+    admittedPreexistingPaths: [],
     v2ManifestHash: hashB,
     bootstrapIdentity: {
       path: "/product/state/.lifecycle-bootstrap.lock" as CanonicalAbsolutePathV1,

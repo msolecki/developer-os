@@ -1938,6 +1938,7 @@ export class BootstrapExecutor {
         ...input.retainedPaths,
         ...input.preexistingDirectories.keys(),
       ])]
+        .filter((path) => path === paths.home || path.startsWith(`${paths.home}/`))
         .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)))
         .map((path) => path as CanonicalAbsolutePathV1),
       v2ManifestHash: manifestRef.hash,
