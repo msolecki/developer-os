@@ -38,20 +38,21 @@ Open sequence inside A11:
 6. Closed 2026-09-04: NEW-53 no longer blocks replacement Task 6. `init` fell to roughly 101s and
    the e2e test now passes at 299.5s against its 600000ms timeout. NEW-53 stays open only as a
    performance question.
-7. Completed 2026-09-04, uncommitted: the founder settled the Spec 2 §6.4 question — a finalized
-   forward Foundation participant emits no mutation content row — and it is implemented, verified
-   and reviewed READY. A successful `init` no longer retires any of its own manifest artifacts.
-   NEW-55 carries the evidence; NEW-56 carries the residuals, three of which are also closed.
-8. Now: close NEW-57, which is what keeps `npm run check` red and the work uncommitted. The
-   uncommitted Task 6 implementation regresses crash recovery at four fine-grained death points that
-   pass at `a3ad015`; one is fixed and three remain, all resuming to exit 6 `existing global lock
-   escaped admitted rolled-back evidence`. Answering it needs a Spec 2 §6.1/§6.4 ruling on what
-   admits a plan-owned global lock whose creation evidence did not survive the crash. Nothing from
-   this task may be committed until the gate is green.
+7. Completed 2026-09-04: the founder ruled Spec 2 §6.4 (forward-participant content is never a
+   retention row, every outcome) and §6.1 (global-lock admission after a crash that lost its
+   creation evidence). Both are recorded as dated amendments.
+8. Now: execute `plans/2026-09-04-developer-os-task6-closure.md`, six tasks, which turns the
+   uncommitted replacement Task 6 tree into the accepted Task 7 checkpoint. Nothing from Task 6 is
+   committed outside that plan's tasks.
 9. Execute Spec 2 Tasks 8–9 for the complete `InstallationManifestV2` migration and V2 new-init
    handoff.
 10. Execute the approved Spec 1 plan.
 11. Finish the remaining Spec 2 implementation and close the Task 7 checkpoint.
+
+Everything after A11 is sequenced by
+`plans/2026-09-04-developer-os-completion-roadmap.md` (phases 1–11, the founder decisions of
+2026-09-04, and the spec or plan each phase requires). `docs/migration/instruction-inventory.md`
+is the scope of A12, A12b, A13 and A14.
 
 ## Product path
 
@@ -60,9 +61,10 @@ Strict sequence; do not start a blocked row early.
 | # | Work | Needs | Done when | Status |
 |---|---|---|---|---|
 | A11 | DOS-P7 Git, automation, update, release | nothing | full local lifecycle is ready for cutover | now |
-| A12 | DOS-P10 Managed instruction artifacts — spec, plan, implementation | A11 | all 38 artifacts install, drift-check, and uninstall on both vendors | blocked |
-| A13 | DOS-P11 Hooks — spec, plan, implementation | A12 | every supported hook is observed firing and names the installed binary | blocked |
-| A14 | DOS-P12 Repository tooling verbs — spec, plan, implementation | A13 | all nine scripts are product verbs or documented refusals | blocked |
+| A12 | DOS-P10 Managed instruction artifacts — spec, plan, implementation | A11 | every artifact in `docs/migration/instruction-inventory.md` §1–§3, §6 installs, drift-checks, and uninstalls on both vendors | blocked |
+| A12b | Brain workflows — spec, plan, implementation | A12 | every workflow and verb in the inventory §7 is proven on the synthetic vault | blocked |
+| A13 | DOS-P11 Hooks — spec, plan, implementation | A12b | every hook in the inventory §4 plus session-start injection is observed firing and names the installed binary | blocked |
+| A14 | DOS-P12 Repository tooling verbs — spec, plan, implementation | A13 | all 14 scripts in the inventory §5 are product verbs or documented refusals | blocked |
 | A15 | DOS-P8 Founder shadow migration — dedicated plan and execution | A14, L2 | rollback is exercised and one stable cycle completes | blocked |
 | A16 | DOS-P9 Public beta and v1 | A15, L1, L2 | `v1.0.0` is published and reproducible | blocked |
 
@@ -72,6 +74,8 @@ The full closure conditions are in `BACKLOG.md` §1.
 
 Startable without another product gate:
 
+- NEW-58 — isolate the ingest invocation on both vendors; first after the Task 6 checkpoint
+  (roadmap Phase 1).
 - NEW-49 — expose decided captures through the agent-facing review workflow.
 - NEW-47 — verify from Codex source whether model-run commands can write raw JSONL bytes.
 - NEW-46 — close the same-uid `PATH` spawn surface or design persisted executable identity.
@@ -93,12 +97,13 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 - GitHub CLI configuration became readable on 2026-09-03: `gh auth status`, `gh pr list`, and
   `gh run list` all succeed. The `baseline` ruleset on `development` carries only `deletion` and
   `non_fast_forward`, so neither a required status check nor a pull request gates a direct push —
-  the comment in `check.yml` asserting a pull-request rule is stale. L2 still owes release
-  permissions.
-- `development` holds 46 unpushed commits and CI has not run since 2026-08-28 (`d72287a`). Do not
-  push until NEW-52 closes. Measured 2026-09-04: `npm run check` was still inside the second of its
-  three `vitest` invocations when it was killed at 29 minutes, so the suite does not fit
-  `check.yml`'s `timeout-minutes: 30`. NEW-53 lowered `init` to roughly 101s but did not close this.
+  the `check.yml` comment now says so. L2 still owes release permissions.
+- `development` holds 56 unpushed commits and CI has not run since 2026-08-28 (`d72287a`), when
+  the whole check took three and a half minutes. Do not push until the four-job `check.yml` in the
+  working tree is green on a probe branch (roadmap Phase 2): the `suite` job must build `dist`
+  before it runs, and `test:suite` must exclude `e2e/**`. Measured 2026-09-04: `npm run test:suite`
+  alone took 41 minutes and failed two gates (control bytes, citations), both owned by the Task 6
+  closure plan.
 - When a full-suite failure occurs, retain the complete log. NEW-29 owns the load-sensitive and
   intermittent-test cleanup.
 
@@ -111,9 +116,11 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 
 ## Count
 
-- Product sequence: 6 open entries, A11–A16.
-- Program plan: replacement Task 7 contains 6 unchecked work steps across 1 unfinished task;
-  baseline Tasks 8–9 contain 10.
-- Repository backlog: 32 open numbered rows, plus the Foundation watchdog decision.
-- Active implementation plans: 44 untouched tasks — 1 in replacement Task 7, 19 remaining in Spec
-  2, and 24 in Spec 1. Spec 1 remains blocked until replacement Task 7 and baseline Tasks 8–9 pass.
+- Product sequence: 7 open entries, A11, A12, A12b, A13, A14, A15, A16.
+- Program plan: replacement Task 6 closure plan contains 6 tasks; baseline Tasks 8–9 contain 10
+  unchecked steps.
+- Repository backlog: 43 open numbered rows, plus the Foundation watchdog decision.
+- Active implementation plans: `plans/2026-09-04-developer-os-task6-closure.md` (6 tasks, 0 done),
+  Spec 2 baseline Tasks 8–26 (19 tasks), Spec 1 (24 tasks, to be split by NEW-67), and the
+  completion roadmap (11 phases). Spec 1 remains blocked until the Task 6 closure and baseline
+  Tasks 8–9 pass.

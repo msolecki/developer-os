@@ -323,3 +323,30 @@ resolve here:
 | §13 | §1 and §11 |
 | §14 | §3, §6 and §9 |
 | §15 | §9 and §10 |
+
+## 13. Observed against Claude Code 2.1.260 on 2026-09-04
+
+Measured in a disposable `HOME` during the 2026-09-04 audit; each row names the section it bears on.
+
+- **The skills-directory shape loads.** `claude plugin list` reports `developer-os@skills-dir`,
+  `Status: ✔ loaded`, and `claude plugin details developer-os` lists all six skills. `claude plugin
+  init` scaffolds the same location. §4 stands.
+- **`claude plugin validate` no longer inspects `SKILL.md`.** It returns `"contents": []` and
+  validates the manifest alone, so the probe (§3) proves file presence, not loading. The integration
+  test should assert `claude plugin details` output. `--strict` fails on the `{ name }` manifest for
+  missing `version`, `description` and `author`; those three fields predate the floor in §3 and can
+  be added without raising it.
+- **`validate` still mutates `HOME`** (`~/.claude.json`, `~/.claude/backups/`). §9.4 stands.
+- **`--allowedTools` grants; it does not restrict.** The invocation in §11 therefore runs with the
+  user's own permission settings, hooks and MCP servers loaded. `--tools`, `--disallowedTools`,
+  `--restricted`, `--permission-mode`, `--strict-mcp-config` and `--setting-sources` exist in this
+  version; `--json-schema` exists and supersedes the prompt-described schema. `--max-turns` still
+  parses but is absent from `--help`. Owner: `BACKLOG.md` NEW-58 (roadmap Phase 1).
+- **Hook events available:** `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `SessionStart`,
+  `SessionEnd`, `Stop`, `SubagentStop`, `UserPromptSubmit`, `PreCompact`, `PermissionRequest`,
+  `InstructionsLoaded`, `ConfigChange`. Every legacy non-transcript hook in
+  `docs/migration/instruction-inventory.md` §4 maps onto one of these. §5's decline of
+  transcript-based capture stands; the founder's 2026-09-04 decision reopens
+  `session_start_injection` for A13.
+- **`proposeClaudeUninstall` filters by path prefix only**, without the `owner` check its Codex
+  twin performs. Owner: roadmap Phase 5.

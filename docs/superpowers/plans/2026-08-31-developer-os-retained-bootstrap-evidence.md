@@ -850,6 +850,8 @@ git commit -m "fix(cli): retain fresh bootstrap closure"
 
 ### Task 6: Add reports, reinstall bounds, inertness, and checkpoint evidence
 
+> **2026-09-04:** executed through `docs/superpowers/plans/2026-09-04-developer-os-task6-closure.md`, which records the two founder rulings the fresh review of 2026-09-04 required before this task could be accepted. Steps below remain the acceptance contract.
+
 **Files:**
 - Create: `apps/cli/src/bootstrap/report.ts`
 - Create: `apps/cli/src/bootstrap/report.test.ts`

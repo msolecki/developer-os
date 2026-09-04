@@ -23,7 +23,7 @@ Read, in order:
 
 1. `docs/superpowers/ORDER.md` — the `NOW` entry is the only product entry to advance.
 2. The complete active task or plan linked by that entry.
-3. `docs/superpowers/BACKLOG.md` §6 — per-commit gates.
+3. `docs/superpowers/BACKLOG.md` §7 — per-commit gates.
 4. The architecture note for each subsystem the task touches.
 
 Do not read inactive plans or reconstruct finished work from git history.

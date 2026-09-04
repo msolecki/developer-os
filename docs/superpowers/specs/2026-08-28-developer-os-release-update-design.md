@@ -1,7 +1,10 @@
 # Developer OS — Release, Update, and Manifest V2 Design
 
 **Status: 2026-08-29 baseline approved; the 2026-08-31 §6 retained-bootstrap-evidence correction
-and durable slot-identity addendum were approved after complete written-specification review.** This
+and durable slot-identity addendum were approved after complete written-specification review; the
+2026-09-04 §6.1 global-lock admission rule, §6.3 `admittedPreexistingPaths` grammar and §6.4
+forward-content rule were approved by the founder in conversation and are marked "Amended
+2026-09-04" in place.** This
 is DOS-P7 Spec 2, the second half of `ORDER.md` entry A11 and program-plan Task 7. Spec 1 is the
 approved opt-in surfaces design at
 `docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md`.
@@ -942,6 +945,10 @@ interface FreshV2InitPlanV1 {
   readonly operation: "fresh_v2_init";
   readonly id: FreshV2InitIdV1;
   readonly admittedExternalShapeHash: LowerHexSha256;
+  /** Amended 2026-09-04. Names that may legally exist beside this plan: retained evidence and
+   *  reusable empty directories observed before publication. At most 4096, strictly ascending
+   *  in UTF-8 byte order, each equal to or below the product home. */
+  readonly admittedPreexistingPaths: readonly CanonicalAbsolutePathV1[0..4096];
   readonly v2ManifestHash: LowerHexSha256;
   readonly bootstrapIdentity: PersistedBootstrapLockIdentityV1;
   readonly planPath: ExactProductStatePathV1;
@@ -1047,6 +1054,17 @@ evidence as exit 6; only `init` resumes the envelope.
 As in migration, `createdPaths[0]` is the exact permanent global-lock transition. Later paths use the
 closed launchability order defined in §6.3. The process creates/acquires that lock while still holding bootstrap, records
 the post-create identity, and holds both descriptors through terminal retention.
+
+**Amended 2026-09-04 — admission of a global lock whose creation evidence did not survive.** A
+death between creating `createdPaths[0]` and making its creation evidence durable leaves the lock
+inode present with no evidence row. On resume, while the bootstrap lock is held and the journal
+cursor still names ordinal 0, the process admits an existing regular file at the exact planned
+path when it is owner-owned, `0600`, single-link and zero bytes and no creation-evidence file
+exists for ordinal 0; it acquires that inode, records the post-acquire identity as ordinal 0's
+creation evidence, and continues. The bootstrap lock is what makes this sound: the executor is the
+only writer of that path while it is held, and the file carries no content. A present evidence
+file whose device/inode differ from the current inode, a non-empty file, a foreign owner, another
+mode, a symlink, or a cursor past ordinal 0 without matching evidence remains exit 6.
 
 With that durable envelope present, fresh init:
 
@@ -1599,8 +1617,15 @@ retention entry.
 The derivation emits maximal attempt-owned directory roots where the entire bounded subtree has one
 authority; their descendants are counted and verified but move as that single directory tombstone.
 Standalone files in a pre-existing parent remain individual rows. Installed targets, V1/V2
-installation manifests, the permanent global lock, and the immutable plan/journal slots are never
-retention rows.
+installation manifests, the permanent global lock, and the immutable
+plan/journal slots are never retention rows. **Amended 2026-09-04:** the mutation content of a
+forward Foundation participant that the journal cursor has reached is never a retention row, for
+every terminal outcome. After `finalized` it is the installed target; after `rolled_back` it is the
+compensated target. In both cases its payload ordinal is consumed by the planned staged file that
+`createdPaths` names for it, so no `payload` row is emitted for that ordinal either. The
+participant's `.bin.sha256` sidecar and its initial journal remain `foundation_bootstrap` rows. A
+compensation participant's content row is its own `stagedPath`. The derivation carries this as
+explicit bookkeeping beside the rows, never as a flag on a row.
 Foundation exact-byte adoption or reinsertion is legal only from its persisted payload/evidence and
 original inode/hash authority; current observations that merely contain the expected bytes do not
 manufacture a retention or restoration identity.

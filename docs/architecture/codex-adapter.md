@@ -487,3 +487,35 @@ resolve here:
 | §13 | §12 |
 | §14 | §3, §4, §6 and §7 |
 | §15 | §3 and §11 |
+
+## 14. Observed against Codex CLI 0.151.0 on 2026-09-04
+
+Measured in a disposable `CODEX_HOME` during the 2026-09-04 audit.
+
+- **The install sequence in §4 works unchanged** (`marketplace add` with one positional, `plugin
+  add --json`, `plugin list --json` with `installed[].source.path` naming the product tree, all six
+  skills in `codex debug prompt-input`). `"skills": "skills"` without `./` is accepted.
+- **Codex loads skills from its cache, not from the tree this adapter writes.** `codex debug
+  prompt-input` roots the skills at `<CODEX_HOME>/plugins/cache/developer-os/developer-os/0.0.0/skills`,
+  and an edit to the product tree is invisible until `codex plugin add` runs again. §4's premise
+  holds for listing and fails for loading; §11.14 is confirmed rather than suspected. The
+  `PLUGIN_VERSION` literal `0.0.0` names the cache directory. Owner: `BACKLOG.md` NEW-61 (roadmap
+  Phase 5 and the update lifecycle).
+- **Hook events available:** `pre_tool_use`, `post_tool_use`, `pre_compact`, `session_start`,
+  `user_prompt_submit`, `stop`, `subagent_start`. There is no session-end event, so
+  `sessionEndCapture` parity is impossible on this vendor. A plugin manifest may carry `"hooks"`.
+- **Hooks require per-hook trust** recorded in the user's config file, which this adapter never
+  writes (§2). A product-installed hook runs only after interactive approval; the founder accepted
+  manual trust on 2026-09-04 (A13). The executable-bit blocker described beside `PLUGIN_TREE_PREFIX`
+  is self-imposed; a `type: "command"` hook may name the installed `developer-os` binary.
+- **`codex exec` isolation flags exist and are not used:** `--ephemeral`, `--ignore-user-config`,
+  `--ignore-rules`. Without them an ingest run persists a thread in the user's history and loads the
+  user's config, rules and MCP servers. `--output-last-message` exists, and this version's
+  `turn.completed` event carries `last_agent_message`, a deterministic replacement for the
+  `finalAgentMessage` selection in §7. No fixture in `tests/fixtures/codex/` comes from this version.
+  Owner: NEW-58 with NEW-45/NEW-47.
+- **`renderMarketplace` emits no `policy`/`category`**, so the plugin inherits the vendor's default
+  `authPolicy: ON_INSTALL`.
+- **Capability resolution has no `no` state**: `absent` and `unavailable` probe observations both
+  resolve to `unknown` (`packages/core/src/capabilities/index.ts`), contrary to the docblocks in both
+  adapters' `capabilities.ts`. Owner: NEW-62.
