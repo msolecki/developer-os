@@ -1965,7 +1965,7 @@ describe("retained bootstrap table derivation", () => {
       for (const sidecar of sidecarPaths) {
         // A maximal retained directory (`collapsesDescendants`) covers this path via its
         // tree evidence instead of a standalone row; either form retains the sidecar.
-        const retained = locations.some((location) => location.sourcePath === sidecar) ||
+        const retained = locations.some((location) => location.role === "foundation_bootstrap" && location.sourcePath === sidecar) ||
           locations.some((location) => location.collapsesDescendants && sidecar.startsWith(`${location.sourcePath}/`));
         expect(retained).toBe(true);
       }

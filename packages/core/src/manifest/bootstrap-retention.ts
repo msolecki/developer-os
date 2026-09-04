@@ -1067,7 +1067,7 @@ function foundationAuthorities(
       if (mutation.stagedPath === null || mutation.content == null || mutation.digest == null) continue;
       consumedPayloadOrdinals.add(mutation.content.ordinal);
       consumedPayloadOrdinals.add(mutation.digest.ordinal);
-      consumedPaths.add(mutation.targetPath);
+      if (participant.role.kind === "forward") consumedPaths.add(mutation.targetPath);
       consumedPaths.add(mutation.stagedPath);
       // Spec 2 §6.4 (Amended 2026-09-04): forward content is never a row, any outcome.
       if (participant.role.kind === "compensation") {
