@@ -18,9 +18,21 @@ The next action is roadmap Phase 1 — isolate the ingest invocation on both ven
 (`docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md:41`). It comes before every
 other A11 task because it is a security defect in shipped code: an ingest run loads the user's own
 permission settings, hooks and MCP servers, and on Codex persists a thread in the user's history.
-Phase 1 also closes NEW-44. **The plan it requires,
-`plans/<date>-developer-os-ingest-isolation.md`, does not exist and must be written first**, through
-`superpowers:brainstorming` → `superpowers:writing-plans`, as `SESSION.md` requires.
+Phase 1 also closes NEW-44. **The plan is written —
+`plans/2026-09-04-developer-os-ingest-isolation.md` — and is the active document for Phase 1. It is
+awaiting founder approval and execution MUST NOT begin (do not start Task 2) until the founder
+settles the three decisions the plan's own table names F1, F2 and F3:**
+
+- **F1** — whether `--max-turns` is dropped or kept: it does not appear anywhere in `claude --help`
+  for 2.1.260, so either it is undocumented or every real Claude ingest run today fails on an
+  unknown flag.
+- **F2** — whether the process-environment allowlist widens the currently-empty `env: {}` at all,
+  and on what evidence; the plan's position is to admit a variable only against a recorded
+  observation of the vendor failing without it, never a proxy variable.
+- **F3** — whether Codex's final-answer selection can be settled from Codex source (NEW-47) or
+  needs one paid observational run (NEW-45), a founder stop condition.
+
+The plan's Task 1 produces the evidence for all three; it spends no model credits.
 
 Spec 1 is approved and its plan exists at `plans/2026-08-28-developer-os-opt-in-surfaces.md`, but
 none of its 24 implementation tasks has started. Spec 2's 2026-08-29 baseline and 26-task plan exist
@@ -50,8 +62,8 @@ Open sequence inside A11:
    checkpoint, `050fc0d..c5022a7` — spec amendments, global-lock admission after a crash, one
    retention derivation that never retains forward content, the gate blockers, the review residuals,
    and the retained-evidence reports. Fresh review `READY`; the closure plan was deleted at closure.
-9. Now: roadmap Phase 1, ingest isolation (NEW-58, NEW-44). Write
-   `plans/<date>-developer-os-ingest-isolation.md` first; it does not exist.
+9. Now: roadmap Phase 1, ingest isolation (NEW-58, NEW-44). Plan written 2026-09-04 as
+   `plans/2026-09-04-developer-os-ingest-isolation.md`; blocked on founder approval of F1, F2, F3.
 10. Roadmap Phase 2: bootstrap performance and the first push (NEW-53, NEW-52).
 11. Execute Spec 2 Tasks 8–9 for the complete `InstallationManifestV2` migration and V2 new-init
     handoff (roadmap Phase 3).
@@ -84,7 +96,7 @@ The full closure conditions are in `BACKLOG.md` §1.
 Startable without another product gate:
 
 - NEW-58 — isolate the ingest invocation on both vendors; this is the current `NOW` (roadmap
-  Phase 1).
+  Phase 1). Plan written, blocked on founder decisions F1–F3.
 - NEW-49 — expose decided captures through the agent-facing review workflow.
 - NEW-47 — verify from Codex source whether model-run commands can write raw JSONL bytes.
 - NEW-46 — close the same-uid `PATH` spawn surface or design persisted executable identity.
@@ -129,9 +141,10 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 
 - Product sequence: 7 open entries, A11, A12, A12b, A13, A14, A15, A16.
 - Program plan: baseline Tasks 8–9 contain 10 unchecked steps.
-- Repository backlog: 44 open numbered rows, plus the Foundation watchdog decision.
-- Active implementation plans: Spec 2 baseline Tasks 8–26 (19 tasks) and Spec 1 (24 tasks, to be
-  split by NEW-67) — 43 untouched tasks — plus the completion roadmap's 12 open phases. Spec 1
-  remains blocked until roadmap Phases 1–3 pass.
-- Roadmap Phase 1 requires `plans/<date>-developer-os-ingest-isolation.md`, which has not been
-  written.
+- Repository backlog: 45 open numbered rows, plus the Foundation watchdog decision.
+- Active implementation plans: `plans/2026-09-04-developer-os-ingest-isolation.md` (9 tasks, written
+  2026-09-04, blocked on founder decisions F1–F3) is the active document for roadmap Phase 1. Spec 2
+  baseline Tasks 8–26 (19 tasks) and Spec 1 (24 tasks, to be split by NEW-67) — 43 untouched tasks —
+  follow behind roadmap Phases 1–3, plus the completion roadmap's 12 open phases.
+- Roadmap Phase 1's plan is written and registered: `plans/2026-09-04-developer-os-ingest-isolation.md`.
+  Execution is blocked on founder decisions F1, F2 and F3 (see `NOW` above).

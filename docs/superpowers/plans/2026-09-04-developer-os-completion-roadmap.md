@@ -42,10 +42,10 @@ Gate: `npm run check` green; `ORDER.md` `NOW` = Phase 1; NEW-52, NEW-55, NEW-56,
 
 Before any other A11 task, because it is a security defect in shipped code.
 
-- [ ] Claude: `--tools ""`, the most restrictive permission mode the installed CLI offers, `--strict-mcp-config`, `--setting-sources ""`, `--json-schema <installed schema>`; remove `--allowedTools`; pin `--max-turns` with a test against the real binary. Files: `packages/adapter-claude/src/invoke.ts`, `apps/cli/src/commands/ingest.ts`.
-- [ ] Codex: `--ephemeral --ignore-user-config --ignore-rules`; select the final answer from `turn.completed` `last_agent_message` with `finalAgentMessage` as fallback; record a fixture from the installed version. Files: `packages/adapter-codex/src/invoke.ts`, `tests/fixtures/codex/`.
+- [ ] Claude: `--tools ""`, the most restrictive permission mode the installed CLI offers, `--strict-mcp-config`, `--setting-sources ""`, `--json-schema <installed schema>`; remove `--allowedTools`; pin `--max-turns` with a test against the real binary. Files: `packages/adapter-claude/src/invoke.ts`, `apps/cli/src/commands/ingest.ts`. **Corrected 2026-09-04:** `--max-turns` does not appear anywhere in `claude --help` for 2.1.260, so "pin with a test against the real binary" cannot be done as written — either the flag is undocumented, or every real Claude ingest run today fails on an unknown flag. `plans/2026-09-04-developer-os-ingest-isolation.md` Task 1 Step 2 settles which case it is; founder decision F1 (that plan's table) decides whether the flag is dropped or kept before this bullet's other flags are implemented.
+- [ ] Codex: `--ephemeral --ignore-user-config --ignore-rules`; select the final answer from `turn.completed` `last_agent_message` with `finalAgentMessage` as fallback; record a fixture from the installed version. Files: `packages/adapter-codex/src/invoke.ts`, `tests/fixtures/codex/`. **Corrected 2026-09-04:** the `last_agent_message` claim is not established. `codex app-server generate-json-schema` shows the v2 protocol's `TurnCompletedNotification` carries no such field — an agent reply there is a `ThreadItem` `{type: "agentMessage", text}` — but app-server is JSON-RPC, a different interface from `codex exec --json`'s JSONL stream, so this is suggestive, not conclusive. `plans/2026-09-04-developer-os-ingest-isolation.md` Task 4 settles it from Codex source (NEW-47), or stops for the founder (decision F3) rather than spending a paid observational run.
 - [ ] Prompt: capture text plus a bounded index excerpt (title, summary, path; 32 KiB cap) instead of a `content/**` read scope for the model. Files: `packages/brain/src/ingest/prompt.ts`, `workflows/ingest/workflow.yaml`, regenerated skills.
-- [ ] Process environment allowlist (`PATH`, `HOME`, `TMPDIR`, proxy and certificate variables). File: `packages/security/src/process.ts`.
+- [ ] Process environment allowlist (`PATH`, `HOME`, `TMPDIR`, proxy and certificate variables). File: `packages/security/src/process.ts`. **Corrected 2026-09-04:** this is a widening, not a hardening. Both adapters pass `env: {}` today, so the vendor child gets a completely empty environment; `tests/security/network.test.ts:72` pins that. The proxy-variable mention here contradicts `tests/security/network.test.ts:228`, which proves a parent's proxy does not reach the child. `plans/2026-09-04-developer-os-ingest-isolation.md` Task 6 (founder decision F2) admits a variable only against a recorded observation of the vendor failing without it, never a proxy variable, or keeps the empty environment.
 - [ ] NEW-44: two matching detection rows → `unknown` agent. File: `packages/brain/src/capture/agent.ts`.
 
 Test: integration tests under `tests/integration/*` that plant a user hook writing a marker file and assert it never runs during ingest; fixtures from the installed vendor versions; regenerated skill trees byte-identical to `plugins/*`.
@@ -152,7 +152,7 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 | Phase | Document |
 |---|---|
 | 0 | closed 2026-09-04; the plan it named was deleted at closure |
-| 1 | `plans/<date>-developer-os-ingest-isolation.md` |
+| 1 | `plans/2026-09-04-developer-os-ingest-isolation.md` — written 2026-09-04, awaiting founder approval of F1, F2, F3 |
 | 2 | `plans/<date>-developer-os-bootstrap-performance.md` |
 | 3 | Spec 2 §6.2/§6.3 amendment; baseline plan Tasks 8–9 |
 | 4 | Spec 1 amendment; `plans/<date>-developer-os-opt-in-surfaces-1a.md` |
