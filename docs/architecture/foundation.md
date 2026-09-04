@@ -603,9 +603,11 @@ not exist here" look identical from outside and are not the same thing.
   Foundation because determining it requires running the binary. Discovery that refuses, or
   finds nothing, is reported and never blocks a command: nothing in Foundation depends on an
   agent being present.
-- **No Brain content.** `init` creates a vault directory and one `.gitkeep` when the vault does
-  not exist. `init` installs the synthetic Brain template (four example notes, one note template,
-  seven `.gitkeep` files) only when it creates the vault; an existing vault is never modified.
+- **No modification of an existing vault.** When the vault does not exist, `init` creates it and
+  installs the synthetic Brain template: four example notes, one note template, and eight
+  `.gitkeep` files — one at the vault root, seven within `content/`. The example notes are
+  canonical once indexed, the same as any note a user writes; what `init` will not do is touch a
+  vault that already exists.
 - **No credentials.** No Keychain, no token store. The protected-path policy refuses `.ssh`,
   `.aws`, `.gnupg`, `.env` and `.env.*` — but *not* `.envrc` or `.environment` — and three
   exact files (`.config/gh/hosts.yml`, `.codex/auth.json`, `.claude/.credentials.json`), on
