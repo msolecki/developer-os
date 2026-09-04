@@ -695,4 +695,45 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     if (resumed.ok) return;
     expect(resumed.code).toBe(EXIT_CODES.securityRefusal);
   }, 600_000);
+
+  it("resumes when the global lock's creation evidence outlived the journal advance", async () => {
+    const fixture = await createCommandFixture("executor-lock-after-evidence", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_creation_evidence",
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    expect(await currentJournal((await persistedPlan(fixture)).value)).toMatchObject({
+      phase: "creating",
+      nextCreatedPath: 0,
+    });
+    await closeBootstrapProcess(fixture);
+    fixture.disableBootstrapInterrupt();
+
+    const resumed = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    if (!resumed.ok) throw new Error(JSON.stringify({ resumed, trace: fixture.bootstrapTrace.slice(-30) }));
+    expect(resumed.data.schemaVersion).toBe(2);
+  }, 600_000);
+
+  it("refuses a replaced global lock inode when its creation evidence survived", async () => {
+    const fixture = await createCommandFixture("executor-lock-evidence-mismatch", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_creation_evidence",
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    await closeBootstrapProcess(fixture);
+    fixture.disableBootstrapInterrupt();
+    const lock = join(fixture.paths.stateDir, ".lifecycle.lock");
+    await nodeFs.rename(lock, join(fixture.root, "displaced-lifecycle-lock"));
+    await nodeFs.writeFile(lock, new Uint8Array(), { mode: 0o600, flag: "wx" });
+
+    const resumed = await runInit(fixture.rebuildContext(), ACCEPTED);
+
+    expect(resumed.ok).toBe(false);
+    if (resumed.ok) return;
+    expect(resumed.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(resumed.error.message).toBe("existing global lock escaped admitted rolled-back evidence");
+  }, 600_000);
 });

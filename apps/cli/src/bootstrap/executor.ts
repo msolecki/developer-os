@@ -130,6 +130,7 @@ export const freshInitFineGrainedDeathPoints = [
   { name: "after_global_lock_create" },
   { name: "before_global_lock_parent_sync" },
   { name: "after_global_lock_parent_sync" },
+  { name: "after_creation_evidence" },
   { name: "after_directory_create" },
   { name: "before_directory_parent_sync" },
   { name: "after_directory_parent_sync" },
@@ -291,6 +292,18 @@ async function syncDirectory(path: string): Promise<void> {
   } finally {
     await handle.close();
   }
+}
+
+function matchesGlobalLockCreationEvidence(
+  path: string,
+  evidence: CreatedPathEvidenceV1,
+  identity: { readonly dev: string; readonly ino: string },
+): boolean {
+  return evidence.kind === "global_lock" &&
+    evidence.pathHash === pathHash(path) &&
+    evidence.dev === identity.dev &&
+    evidence.ino === identity.ino &&
+    evidence.postimageHash === EMPTY_HASH;
 }
 
 async function durableWriteNoReplace(path: string, bytes: Uint8Array, fileMode = 0o600): Promise<void> {
@@ -575,13 +588,7 @@ export class BootstrapExecutor {
       await global.handle.release().catch(() => undefined);
       throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "global lock creation evidence disappeared");
     }
-    if (
-      evidence.kind !== "global_lock" ||
-      evidence.pathHash !== pathHash(planned.path) ||
-      evidence.dev !== global.dev ||
-      evidence.ino !== global.ino ||
-      evidence.postimageHash !== EMPTY_HASH
-    ) {
+    if (!matchesGlobalLockCreationEvidence(planned.path, evidence, global)) {
       await global.handle.release().catch(() => undefined);
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "global lock no longer matches creation evidence");
     }
@@ -2882,16 +2889,22 @@ export class BootstrapExecutor {
           // became durable, bootstrap lock held — admit and let the caller record evidence.
           await this.acquireIdentityCheckedGlobalLock(plan, planned, stats, retained.bootstrap);
         } else {
-          const evidenceAdmission = await this.inspectEvidence();
-          const reusable = evidenceAdmission.reusableGlobalLock;
-          if (
-            reusable === null || reusable.path !== planned.path ||
-            reusable.dev !== String(stats.dev) || reusable.ino !== String(stats.ino)
-          ) {
-            throw new FreshBootstrapError(
-              EXIT_CODES.recoveryRequired,
-              "existing global lock escaped admitted rolled-back evidence",
-            );
+          const identity = { dev: String(stats.dev), ino: String(stats.ino) };
+          // A death between the creation-evidence write and the journal advance leaves
+          // matching evidence at cursor zero; refusing it stranded that evidence
+          // untombstoned and made the next intent permanently unrunnable.
+          const observed = await this.readCreationEvidence(plan, scope, ordinal);
+          if (!matchesGlobalLockCreationEvidence(planned.path, observed, identity)) {
+            const reusable = (await this.inspectEvidence()).reusableGlobalLock;
+            if (
+              reusable === null || reusable.path !== planned.path ||
+              reusable.dev !== identity.dev || reusable.ino !== identity.ino
+            ) {
+              throw new FreshBootstrapError(
+                EXIT_CODES.recoveryRequired,
+                "existing global lock escaped admitted rolled-back evidence",
+              );
+            }
           }
           await this.acquireIdentityCheckedGlobalLock(plan, planned, stats, retained.bootstrap);
         }
@@ -2952,6 +2965,7 @@ export class BootstrapExecutor {
         throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "creation evidence changed identity");
       }
     }
+    this.checkpoint("after_creation_evidence");
     return evidence;
   }
 
