@@ -117,10 +117,16 @@ closed.
   the push exists to get CI green. (a) `apps/cli/src/bootstrap/executor.test.ts`, "retains
   post-Foundation rollback targets and artifacts without invoking deletion authority", expects a
   resumed `init` after a rolled-back bootstrap to fail with `recoveryRequired` and it now succeeds;
-  reproduced identically at `06438e5` in a clean worktree, so it is not Phase 1's doing. It is the
-  surface of `95c2d7e`. Settle by analysis: a test pins the contract, so establish whether the
-  resume rule is now too permissive — a rolled-back bootstrap silently resumable is a real defect —
-  or whether the contract changed and the test was never updated. (b) Eight retained-evidence cases
+  reproduced identically at `06438e5` in a clean worktree, so it is not Phase 1's doing.
+  **Corrected 2026-09-05, second time:** this was first attributed to `95c2d7e`, and that
+  attribution is disproven — reverting only `apps/cli/src/bootstrap/executor.ts` to `95c2d7e~1`
+  (byte-identical to `c5022a7`) reproduces the failure unchanged. The gating that decides it is
+  `apps/cli/src/commands/init.ts:824-846`, where `evidence.blocksNewIntent` is consulted only inside
+  a branch requiring `resumableBootstrap || (fresh && bootstrapAvailable)`; on this resume both are
+  false, so a report that blocks a new intent is never read and the run completes as an ordinary V1
+  init. That pattern traces to `edc00bb`, 2026-08-30. Settle by analysis: a test pins the contract,
+  so establish whether the code is too permissive — a rolled-back bootstrap silently resumable is a
+  real defect — or whether amendment D1 replaced the contract and the test was never updated. (b) Eight retained-evidence cases
   in `main`, `bootstrap/report`, `commands/doctor` and `commands/uninstall` time out at 300 s under
   full-suite parallelism while each passes standalone in 95-115 s. They were introduced by the
   Task 7 checkpoint (`3d686b4`, `4474885`, `a80cf34`) and have never passed in a completed
@@ -221,7 +227,7 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 |---|---|
 | 0 | closed 2026-09-04; the plan it named was deleted at closure |
 | 1 | closed 2026-09-05; the plan it named was deleted at closure |
-| 2 | `plans/<date>-developer-os-bootstrap-performance.md` |
+| 2 | `plans/2026-09-05-developer-os-bootstrap-performance.md` — written 2026-09-05, awaiting founder approval |
 | 3 | Spec 2 §6.2/§6.3 amendment; baseline plan Tasks 8–9 |
 | 4 | Spec 1 amendment; `plans/<date>-developer-os-opt-in-surfaces-1a.md` |
 | 5 | `specs/<date>-developer-os-instruction-artifacts-design.md` and its plan |

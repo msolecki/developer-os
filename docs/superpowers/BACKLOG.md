@@ -94,8 +94,11 @@ There are 43 numbered rows. They are not automatically ordered ahead of A11.
   F2 was decided against widening, so none became a founder stop. The plan was deleted at closure;
   its surviving constraints are in `docs/architecture/vendor-invocation.md` and the adapter and
   threat-model notes. Two residuals opened: NEW-74 and NEW-75.
-- [ ] Bootstrap performance and the first push (NEW-53, NEW-52, roadmap Phase 2), which now also
-  owns the two failures the first completed full gate found on `development`.
+- [ ] Bootstrap performance and the first push (NEW-53, NEW-52, NEW-51, NEW-59, roadmap Phase 2),
+  which also owns the two failures the first completed full gate found on `development` and the CI
+  coverage gap where no job runs `test:vendor-ingest`. Plan written 2026-09-05 as
+  `plans/2026-09-05-developer-os-bootstrap-performance.md`, ten tasks, **awaiting founder approval;
+  execution has not begun.**
 - [ ] Implement `ManagedArtifactV2`, `InstallationManifestV2`, `ManifestStatePlanV1`, existing-install
   migration, and the V2 new-init handoff.
 - [ ] Execute `plans/2026-08-28-developer-os-opt-in-surfaces.md` only after that handoff lands.

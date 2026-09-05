@@ -23,19 +23,22 @@ past `lint`, and it found two failures that predate Phase 1:
 - `apps/cli/src/bootstrap/executor.test.ts`, "retains post-Foundation rollback targets and artifacts
   without invoking deletion authority", expects a resumed `init` after a rolled-back bootstrap to
   fail with `recoveryRequired`; it now succeeds. Reproduced identically at `06438e5` in a clean
-  worktree, so Phase 1 did not cause it. It is the surface of `95c2d7e`, and a test pins the
-  contract — so settle by analysis whether the resume rule is now too permissive or the contract
-  moved and the test was left behind. Do not edit the assertion first.
+  worktree, so Phase 1 did not cause it. It was first attributed to `95c2d7e`; that is disproven —
+  reverting only the executor to `95c2d7e~1` reproduces it unchanged, and the deciding gate is in
+  `apps/cli/src/commands/init.ts:824-846`, from `edc00bb`. A test pins the contract, so settle by
+  analysis whether the code is too permissive or amendment D1 replaced the contract. Do not edit the
+  assertion first.
 - Eight retained-evidence cases in `main`, `bootstrap/report`, `commands/doctor` and
   `commands/uninstall` time out at 300 s under full-suite parallelism while each passes standalone
   in 95-115 s. They arrived with the Task 7 checkpoint (`3d686b4`, `4474885`, `a80cf34`) and have
   never passed in a completed full-suite run at any commit. The 95-115 s is NEW-53's slowness;
   the load sensitivity is NEW-29's.
 
-**Phase 2 has no plan yet.** `docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md`
-names `plans/<date>-developer-os-bootstrap-performance.md` as the document it expects. Write it with
-`superpowers:writing-plans`, register it here and in `BACKLOG.md`, and obtain founder approval
-before executing it.
+**Phase 2's plan is written and is the active document: `plans/2026-09-05-developer-os-bootstrap-performance.md`, ten tasks.**
+It is **awaiting founder approval and execution must not begin.** It also carries a third thing the
+roadmap did not ask for: `.github/workflows/check.yml` has four jobs while `npm run check` has five
+steps, and no CI job runs `test:vendor-ingest`, so the test proving the ingest invocation loads no
+user hooks currently runs in nobody's CI. Its Task 2 closes that before the push.
 
 Spec 1 is approved and its plan exists at `plans/2026-08-28-developer-os-opt-in-surfaces.md`, but
 none of its 24 implementation tasks has started. Spec 2's 2026-08-29 baseline and 26-task plan exist
@@ -145,7 +148,8 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 - Product sequence: 7 open entries, A11, A12, A12b, A13, A14, A15, A16.
 - Program plan: baseline Tasks 8–9 contain 10 unchecked steps.
 - Repository backlog: 43 open numbered rows, plus the Foundation watchdog decision.
-- Active implementation plans: none for the current `NOW`. Roadmap Phase 2 needs
-  `plans/<date>-developer-os-bootstrap-performance.md`, which does not exist yet. Spec 2 baseline
+- Active implementation plans: `plans/2026-09-05-developer-os-bootstrap-performance.md` (10 tasks,
+  written 2026-09-05, awaiting founder approval) is the active document for roadmap Phase 2. Spec 2
+  baseline
   Tasks 8–26 (19 tasks) and Spec 1 (24 tasks, to be split by NEW-67) — 43 untouched tasks — follow
   behind roadmap Phases 2 and 3, plus the completion roadmap's 11 open phases.
