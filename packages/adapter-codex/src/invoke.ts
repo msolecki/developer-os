@@ -265,10 +265,10 @@ export async function invokeCodex(
   const args = [
     "exec",
     "--ephemeral",
+    // --ignore-user-config stops $CODEX_HOME/config.toml loading entirely, which
+    // is also the only way to keep the user's MCP servers out of this run: 0.151.0
+    // has no per-invocation MCP flag (vendor-invocation.md, Codex rows 1-2).
     "--ignore-user-config",
-    // Also the only way to keep the user's MCP servers out of this run: it stops
-    // $CODEX_HOME/config.toml from loading at all, and 0.151.0 has no
-    // per-invocation MCP flag (vendor-invocation.md, Codex rows 1-2).
     "--ignore-rules",
     "--json",
     "--output-schema",
