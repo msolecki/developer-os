@@ -1,8 +1,9 @@
 # Vendor invocation — what the installed binaries actually accept
 
-Recorded observations of specific vendor binary versions, produced by Task 1 of
-`docs/superpowers/plans/2026-09-04-developer-os-ingest-isolation.md` so that later tasks build the
-isolated ingest invocation from what was observed running, not from memory.
+Recorded observations of specific vendor binary versions, produced during roadmap Phase 1 (ingest
+isolation, closed 2026-09-05) so that the isolated ingest invocation is built from what was observed
+running, not from memory. The plan that produced them was deleted at closure; this file is what
+survives it.
 
 Four rules govern every row below:
 
@@ -18,8 +19,7 @@ Four rules govern every row below:
 
 ## Version note
 
-The plan's Global Constraints (`docs/superpowers/plans/2026-09-04-developer-os-ingest-isolation.md`
-lines 28-30) were verified against Claude Code 2.1.260 and Codex 0.151.0. The binary installed on
+Roadmap Phase 1's own constraints were verified against Claude Code 2.1.260 and Codex 0.151.0. The binary installed on
 this machine is Claude Code **2.1.261**, not 2.1.260 — a version drift discovered by running
 `claude --version`. Codex is installed at 0.151.0, matching the plan exactly; no Codex row below is
 affected by drift.
@@ -265,6 +265,40 @@ the user's own settings and hooks is bought by the flags Tasks 2 and 3 added
 `--ignore-rules` for Codex (`packages/adapter-codex/src/invoke.ts:289-297`)
 — not by the empty environment. A future change that relaxes any of those
 flags is not compensated for by `EXPECTED_VENDOR_ENVIRONMENT` staying `{}`.
+
+## What an isolated Claude run still writes and still sends, observed 2026-09-05
+
+Recorded because the isolation this product buys is narrower than the flag names suggest, and a
+reader who assumes otherwise will assume too much. Both observations come from Task 8's harness
+(`tests/integration/ingest/no-user-hooks.test.ts`), which runs the real binary with the shipped
+argv against a temporary `HOME`, pointing `ANTHROPIC_BASE_URL` at a loopback port nothing listens
+on and supplying a fake key, so no model turn can complete.
+
+- **`--no-session-persistence` does not stop the run writing into `HOME`.** Against a genuinely
+  fresh home, one isolated invocation durably creates `.claude.json`, `.claude/.last-cleanup`,
+  `.claude/backups/` with a timestamped snapshot of `.claude.json`, and `.claude/sessions/` holding
+  a per-process `.json` and `.key`. The flag's own help text says sessions "will not be saved to
+  disk and cannot be resumed"; what was observed is narrower than that sentence. The harness pins
+  this set, so a change in it fails a test rather than passing unnoticed.
+- **This compounds with the empty environment.** The child is handed `env: {}`, so it has no
+  `HOME` of its own and resolves one through `getpwuid_r` (see the Task 6 section above) — which
+  means the files above land in the *developer's real* `~/.claude` during a production ingest run,
+  not in a sandbox. The test avoids this only because it sets `HOME` explicitly, which production
+  does not.
+- **The run opens outbound HTTPS to an Anthropic-owned address even with the base URL overridden.**
+  Observed during the un-isolated control run. It is not the model API — the override points
+  elsewhere and the key is fake, so no billable request can complete — and it is most likely
+  telemetry or an update check. Recorded so nobody reads "unreachable base URL" as "no network".
+
+## The Codex half of the hook harness was not built, and why
+
+Task 8 proved for Claude that a planted user hook does not fire under the shipped argv. The
+equivalent for Codex was investigated through `codex exec --help` and `strings` only, with no
+`exec` run. Codex does have hooks — `SessionStart` among them, configured as
+`HookHandlerConfig::Command` in `config.toml` — but the TOML shape is undocumented, unlike
+Claude's spelled-out example, and hooks additionally require a persisted trust step with no
+recorded mechanism. That is more than a test's worth of unknowns. Owner: roadmap Phase 6 (A13),
+which specifies hook installation for both vendors and is where the trust step belongs.
 
 ## Probes not run, and why
 
