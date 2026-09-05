@@ -17,6 +17,14 @@ export const MAX_PROMPT_CONTENT_GRAPHEMES = 16 * 1024;
  * bytes, for the same reason as `MAX_PROMPT_CONTENT_GRAPHEMES`: a byte cap has
  * no precedent in this module and behaves differently for non-ASCII vault
  * content.
+ *
+ * **`renderIndexExcerpt`'s own budgeting enforces this in UTF-16 code points,
+ * not graphemes** — a grapheme cluster is never fewer code points than one, so
+ * counting code points can only make the entry-count truncation stop *earlier*
+ * than a true grapheme count would, never later. The rendered excerpt is
+ * therefore always within this cap; a vault whose titles or summaries carry
+ * multi-code-point graphemes (most emoji, some combining scripts) simply gets
+ * a shorter excerpt than the cap technically allows.
  */
 export const MAX_PROMPT_INDEX_GRAPHEMES = 32 * 1024;
 
@@ -66,6 +74,11 @@ function scalar(value: string): string {
 }
 
 function renderIndexEntry(entry: IndexExcerptEntryV1): string {
+  /** `scalar`, not `boundedProse`: a path has no paragraphs to preserve, and `scalar`'s
+   * whitespace collapse already removes the only column-0 lever a path could carry — a
+   * literal newline. The block-start and fence hazards `boundedProse` guards against are
+   * still covered here, by `neutralizeBlockStart` on `title`/`summary` and by `fenced()`
+   * sizing over the whole assembled entry list. */
   const path = scalar(entry.path);
   const title = boundedProse(entry.title, INDEX_ENTRY_FIELD_CAP);
   const summary = boundedProse(entry.summary, INDEX_ENTRY_FIELD_CAP);
