@@ -57,11 +57,14 @@ note says so rather than restating it as a coincidence.
    puts the field in every hook payload, so the file is one `readFile` away at all times; the
    refusal may be lifted only by an amendment naming a stable documented contract and landing a
    regression fixture in the same change.
-5. **Three flags are refused permanently, by test rather than by convention:**
-   `--dangerously-bypass-approvals-and-sandbox`, `--dangerously-bypass-hook-trust` and
-   `--ignore-user-config`. `danger-full-access` is unreachable *by construction* rather than
-   unwritten — the sandbox mode is chosen from the declared write-scope count, never from an
-   argument.
+5. **Two flags are refused permanently, by test rather than by convention, and never appear in the
+   argv at all:** `--dangerously-bypass-approvals-and-sandbox` and `--dangerously-bypass-hook-trust`.
+   A third, `--ignore-user-config`, is different as of `7cce445`: the product now passes it
+   unconditionally in the fixed argv (§7), so it always appears. What stays refused is a *caller*
+   supplying it — no value position lets a workflow author add it, remove it, or duplicate it, the
+   same refusal test that guards the other two. `danger-full-access` is unreachable *by construction*
+   rather than unwritten — the sandbox mode is chosen from the declared write-scope count, never from
+   an argument.
 6. **The managed-hook trust bypass is not offered.** `requirements.toml` would let our hooks skip
    the vendor's consent prompt. Routing around a gate the vendor placed deliberately is the wrong
    default for a product whose pitch is that it does not surprise you. Not offered, not
