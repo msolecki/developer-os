@@ -100,6 +100,9 @@ export interface BootstrapEvidenceInspectionRequestV1 {
     plan: BootstrapExecutionPlanV1,
     slots: readonly [unknown, unknown],
   ) => BootstrapJournalSelectionV1;
+  readonly projectPostimage: (
+    path: CanonicalAbsolutePathV1,
+  ) => Promise<BootstrapRetentionPostimageV1 | null>;
 }
 
 export interface BootstrapEvidenceAdmissionV1 {
@@ -153,6 +156,25 @@ function sameValue(left: unknown, right: unknown): boolean {
 
 function lowerHash(value: Uint8Array | string): LowerHexSha256 {
   return createHash("sha256").update(value).digest("hex") as LowerHexSha256;
+}
+
+/**
+ * Scoped to one inspection call: a cache that survived past it would hand back
+ * a postimage taken before a later change the double read inside
+ * `projectPostimage` exists to catch, turning that safety check into a source
+ * of stale answers.
+ */
+function memoizePostimageProjector(
+  project: BootstrapEvidenceInspectionRequestV1["projectPostimage"],
+): BootstrapEvidenceInspectionRequestV1["projectPostimage"] {
+  const cache = new Map<CanonicalAbsolutePathV1, Promise<BootstrapRetentionPostimageV1 | null>>();
+  return (path) => {
+    const cached = cache.get(path);
+    if (cached !== undefined) return cached;
+    const projected = project(path);
+    cache.set(path, projected);
+    return projected;
+  };
 }
 
 function pathEvidence() {
@@ -357,12 +379,12 @@ export async function buildBootstrapRetentionEvidence(
       ? null
       : `${collapsed.tombstonePath}${logicalPath.slice(collapsed.sourcePath.length)}` as CanonicalAbsolutePathV1);
     if (retainedPath === null) {
-      if (await projectBootstrapRetentionPostimage(logicalPath) === null) throw new Error("retention parent escaped its plan-derived table");
+      if (await request.projectPostimage(logicalPath) === null) throw new Error("retention parent escaped its plan-derived table");
       return logicalPath;
     }
     const [source, retained] = await Promise.all([
-      projectBootstrapRetentionPostimage(logicalPath),
-      projectBootstrapRetentionPostimage(retainedPath),
+      request.projectPostimage(logicalPath),
+      request.projectPostimage(retainedPath),
     ]);
     if (source !== null && retained !== null && exact?.role === "bootstrap_lock" &&
       (source.dev !== plan.bootstrapIdentity.dev || source.ino !== plan.bootstrapIdentity.ino)) return retainedPath;
@@ -376,8 +398,8 @@ export async function buildBootstrapRetentionEvidence(
     const physical = await physicalPath(sourcePath);
     const physicalParent = await physicalPath(dirname(sourcePath) as CanonicalAbsolutePathV1);
     const [postimage, parent] = await Promise.all([
-      projectBootstrapRetentionPostimage(physical),
-      projectBootstrapRetentionPostimage(physicalParent),
+      request.projectPostimage(physical),
+      request.projectPostimage(physicalParent),
     ]);
     if (postimage === null || parent?.kind !== "directory_tree") throw new Error("retention authority changed before projection");
     return {
@@ -421,7 +443,7 @@ export async function buildBootstrapRetentionEvidence(
   const interrupted = terminal.payloadWriteState.state === "writing"
     ? {
         writeState: terminal.payloadWriteState,
-        postimage: await projectBootstrapRetentionPostimage(await physicalPath(
+        postimage: await request.projectPostimage(await physicalPath(
           plan.payloads[terminal.payloadWriteState.ordinal]?.ref.path as CanonicalAbsolutePathV1,
         )),
       }
@@ -433,6 +455,7 @@ export async function buildBootstrapRetentionEvidence(
     (terminal.terminalOutcome === "rolled_back" || participant.role.kind === "forward"));
   for (const participant of participants) {
     const physical = await physicalPath(participant.initialJournal.finalPath);
+    /** Deliberately unmemoized: this pair must observe the file, not a cached answer, across the read below. */
     const before = await projectBootstrapRetentionPostimage(physical);
     const observed = await request.reader.inventoryExactNamespaces([physical]);
     const file = observed.find((candidate) => candidate.path === physical);
@@ -538,6 +561,7 @@ async function exactV2Handoff(
 }
 
 async function exactReusableGlobalLock(
+  request: BootstrapEvidenceInspectionRequestV1,
   plan: FreshV2InitPlanV1,
   selection: BootstrapJournalSelectionV1,
   evidence: BootstrapRetentionEvidenceProjectionV1 | null,
@@ -551,7 +575,7 @@ async function exactReusableGlobalLock(
   const planned = plan.createdPaths[ordinal];
   const created = evidence.createdPathEvidence[ordinal]?.value;
   if (planned?.kind !== "global_lock" || created?.kind !== "global_lock") return null;
-  const current = await projectBootstrapRetentionPostimage(planned.path);
+  const current = await request.projectPostimage(planned.path);
   if (
     current?.kind !== "regular_file" || current.ownerUid !== planned.ownerUid ||
     current.mode !== planned.mode || current.bytes !== "0" ||
@@ -577,7 +601,7 @@ async function exactRestoredBase(
       continue;
     }
     if (retained.some((candidate) => candidate.path === location.sourcePath)) return false;
-    if (location.collapsesDescendants && await projectBootstrapRetentionPostimage(location.sourcePath) !== null) {
+    if (location.collapsesDescendants && await request.projectPostimage(location.sourcePath) !== null) {
       return false;
     }
   }
@@ -831,7 +855,7 @@ async function inspectPlan(
     let exact = physical.ownerUid === plan.bootstrapIdentity.ownerUid && physical.nlink >= 1;
     const expectedTableRow = table?.find((row) => row.ordinal === location.ordinal);
     if (expectedTableRow !== undefined) {
-      const projected = await projectBootstrapRetentionPostimage(physical.path);
+      const projected = await request.projectPostimage(physical.path);
       exact = projected !== null && sameValue(projected, expectedTableRow.postimage);
     }
     if (location.role === "bootstrap_lock") exact = exact && physical.kind === "regular_file" && physical.mode === 0o600 && physical.bytes === "0";
@@ -944,7 +968,7 @@ async function inspectPlan(
   const terminalRetained = selection.current.phase === "retained";
   const retainedOutcome = terminalRetained ? selection.current.terminalOutcome : null;
   const reusableGlobalLock = exactSelection
-    ? await exactReusableGlobalLock(plan, selection, exactEvidence)
+    ? await exactReusableGlobalLock(request, plan, selection, exactEvidence)
     : null;
   /**
    * The installation this envelope produced is still present. Uninstall removes
@@ -991,8 +1015,12 @@ async function inspectPlan(
 }
 
 export async function inspectBootstrapEvidenceAdmission(
-  request: BootstrapEvidenceInspectionRequestV1,
+  outerRequest: BootstrapEvidenceInspectionRequestV1,
 ): Promise<BootstrapEvidenceAdmissionV1> {
+  const request: BootstrapEvidenceInspectionRequestV1 = {
+    ...outerRequest,
+    projectPostimage: memoizePostimageProjector(outerRequest.projectPostimage),
+  };
   const initial = (await request.reader.inventoryExactNamespaces(request.initialRoots))
     .filter((candidate) => basename(candidate.path) !== ".lifecycle-bootstrap.lock");
   const plans = initial.filter((candidate) => candidate.kind === "regular_file" && FRESH_PLAN.test(basename(candidate.path)));

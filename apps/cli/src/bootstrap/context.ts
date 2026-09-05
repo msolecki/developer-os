@@ -2,7 +2,7 @@ import { constants, type BigIntStats } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
-import type { CanonicalAbsolutePathV1, UInt64DecimalV1 } from "@developer-os/core";
+import type { BootstrapRetentionPostimageV1, CanonicalAbsolutePathV1, UInt64DecimalV1 } from "@developer-os/core";
 
 import type { BootstrapExecutor } from "./executor.js";
 import type {
@@ -15,6 +15,7 @@ import {
   admitBootstrapEvidencePlan,
   selectBootstrapEvidenceJournal,
 } from "./report.js";
+import { projectBootstrapRetentionPostimage } from "./retention.js";
 import type { PackagedReleaseSourceV1 } from "../update/packaged-release.js";
 
 const INITIAL_NAMESPACE = /^(?:fresh-v2-init\.fi_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:plan|journal\.[01])\.json|\.fresh-v2-init\.fi_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\..+|\.developer-os-retained\.(?:fi|mm)_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.[0-9]{10}\.tombstone|\.lifecycle-bootstrap\.lock)$/u;
@@ -221,6 +222,9 @@ export function createBootstrapEvidenceInspectionRequest(input: {
   readonly stateDirectory: string;
   readonly initialRoots: readonly string[];
   readonly reader?: BootstrapEvidenceGuardedReaderV1;
+  readonly projectPostimage?: (
+    path: CanonicalAbsolutePathV1,
+  ) => Promise<BootstrapRetentionPostimageV1 | null>;
 }): BootstrapEvidenceInspectionRequestV1 {
   return {
     productHome: input.productHome as CanonicalAbsolutePathV1,
@@ -230,6 +234,7 @@ export function createBootstrapEvidenceInspectionRequest(input: {
       join(input.productHome, "staging", "fresh-v2-init"),
     ])].map((root) => root as CanonicalAbsolutePathV1),
     reader: input.reader ?? new NodeBootstrapEvidenceGuardedReader(),
+    projectPostimage: input.projectPostimage ?? projectBootstrapRetentionPostimage,
     validatePlan: (value) => {
       const candidate = typeof value === "object" && value !== null && !Array.isArray(value)
         ? value as { readonly id?: unknown }

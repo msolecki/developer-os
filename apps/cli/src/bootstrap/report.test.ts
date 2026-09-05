@@ -4,6 +4,7 @@ import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { deriveBootstrapRetentionLocations } from "@developer-os/core";
+import type { CanonicalAbsolutePathV1 } from "@developer-os/core";
 
 import { runInit } from "../commands/init.js";
 import { runDoctorReport } from "../commands/doctor.js";
@@ -18,6 +19,7 @@ import {
   createBootstrapEvidenceInspectionRequest,
 } from "./context.js";
 import { inspectBootstrapEvidence, inspectBootstrapEvidenceAdmission } from "./report.js";
+import { projectBootstrapRetentionPostimage, projectRetainedDirectoryTreeOnce } from "./retention.js";
 
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
 const RETAINED_SECRET = "synthetic retained secret";
@@ -220,5 +222,35 @@ describe("inspectBootstrapEvidence", () => {
     const report = await inspectBootstrapEvidence(requestFor(fixture));
 
     expect(report.ids[0]?.status).toBe("verified");
+  }, 300_000);
+
+  it("projects a retained directory tree exactly twice per inspection", async () => {
+    const fixture = await createCommandFixture("bootstrap-report-projection-count", {
+      bootstrapAvailable: true,
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    const tombstones = await retainedTombstones(fixture.root);
+    let retainedDirectory: string | null = null;
+    for (const tombstone of tombstones) {
+      if ((await nodeFs.lstat(tombstone)).isDirectory()) {
+        retainedDirectory = tombstone;
+        break;
+      }
+    }
+    if (retainedDirectory === null) throw new Error("fixture retained no directory tombstone");
+    let walks = 0;
+    const countingWalk = (root: CanonicalAbsolutePathV1) => {
+      if (root === retainedDirectory) walks += 1;
+      return projectRetainedDirectoryTreeOnce(root);
+    };
+    const request = {
+      ...requestFor(fixture),
+      projectPostimage: (path: CanonicalAbsolutePathV1) => projectBootstrapRetentionPostimage(path, countingWalk),
+    };
+
+    await inspectBootstrapEvidenceAdmission(request);
+
+    expect(walks).toBe(2);
   }, 300_000);
 });

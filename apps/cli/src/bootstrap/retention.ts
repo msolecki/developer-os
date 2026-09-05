@@ -255,7 +255,8 @@ async function walkDirectory(
   if (closeFailure !== undefined) return refuse();
 }
 
-async function projectRetainedDirectoryTreeOnce(
+/** Exported so tests can inject a counting wrapper via `projectBootstrapRetentionPostimage`'s parameter; production callers rely on the default. */
+export async function projectRetainedDirectoryTreeOnce(
   root: CanonicalAbsolutePathV1,
 ): Promise<Extract<BootstrapRetentionPostimageV1, { kind: "directory_tree" }>> {
   const rootBefore = await nodeFs.lstat(root, { bigint: true }).catch(() => refuse());
@@ -302,6 +303,7 @@ async function projectRetainedDirectoryTreeOnce(
 /** Exact, no-follow projection shared by evidence construction and retained-row recovery. */
 export async function projectBootstrapRetentionPostimage(
   path: CanonicalAbsolutePathV1,
+  walkDirectoryTreeOnce: typeof projectRetainedDirectoryTreeOnce = projectRetainedDirectoryTreeOnce,
 ): Promise<BootstrapRetentionPostimageV1 | null> {
   let firstStats: BigIntStats;
   try {
@@ -311,8 +313,8 @@ export async function projectBootstrapRetentionPostimage(
     return refuse();
   }
   if (firstStats.isDirectory() && !firstStats.isSymbolicLink()) {
-    const first = await projectRetainedDirectoryTreeOnce(path);
-    const second = await projectRetainedDirectoryTreeOnce(path);
+    const first = await walkDirectoryTreeOnce(path);
+    const second = await walkDirectoryTreeOnce(path);
     if (!sameValue(first, second)) return refuse();
     return structuredClone(second);
   }
