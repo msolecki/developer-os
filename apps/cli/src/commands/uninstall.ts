@@ -1,4 +1,4 @@
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 import {
   containsPath,
@@ -30,6 +30,7 @@ import {
   runtimePathsFor,
 } from "../context.js";
 import type { CliContext } from "../context.js";
+import { createCanonicalPathEvidence, createOwnerPathAdmission } from "../bootstrap/admission.js";
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
 import { readConfigFile } from "./doctor.js";
@@ -542,32 +543,33 @@ function describePlan(removable: readonly ResolvedArtifact[]): string {
  * coincidentally, the same pair `runUninstall` builds `ownedRoots` and
  * `excludedRoots` from a few lines below — reading the manifest and removing
  * from it are bounded by the same authority. Confining here mirrors
- * `BootstrapExecutor.manifestAdmission`
- * (`apps/cli/src/bootstrap/executor.ts:2252`) instead of admitting every
- * path irrespective of owner, which is what an identity `admitOwnerPath` did
- * by accident (NEW-51). Removal itself stays independently bounded by
- * `isRemovableAt` regardless of what this predicate decides, so a manifest
- * whose Brain moved out from under it refuses to *parse* rather than
- * silently widening what a stale record can direct.
+ * `BootstrapExecutor.manifestAdmission` (`apps/cli/src/bootstrap/executor.ts`)
+ * instead of admitting every path irrespective of owner, which is what an
+ * identity `admitOwnerPath` did by accident (NEW-51). Removal itself stays
+ * independently bounded by `isRemovableAt` regardless of what this predicate
+ * decides, so a manifest whose Brain moved out from under it refuses to
+ * *parse* rather than silently widening what a stale record can direct.
+ *
+ * `sourceRoot` is `productHome`, not a package root, and that is a deliberate
+ * choice, not the accidental one this predicate used to carry alongside its
+ * identity `admitOwnerPath`: a bare on-disk manifest records only a
+ * `VaultFreeRelativePathV1` string (e.g. `"templates/file"`), never the
+ * package root it was resolved against, so — unlike `BootstrapExecutor`,
+ * which holds the live packaged release's `packageRoot`, and unlike
+ * `report.ts`'s `exactV2Handoff`, which can recover one from the retained
+ * plan's own `guarded_package_file` payload — there is no root here to
+ * recover a package identity from. `productHome` is the only root this
+ * function can name with any honesty, matching `report.ts`'s own fallback
+ * for the case where no such payload root exists.
  */
 function manifestAdmissionFor(paths: RuntimePaths): ManifestAdmissionContextV1 {
   const productHome = paths.home as CanonicalAbsolutePathV1;
   const brainPath = paths.brain as CanonicalAbsolutePathV1;
   return {
-    evidence: {
-      reopenCanonicalAbsolutePath: (path) => resolve(path),
-      containsCanonicalPath: (root, candidate) => candidate === root || candidate.startsWith(`${root}/`),
-      hasFoldedAlias: () => false,
-    },
+    evidence: createCanonicalPathEvidence(),
     sourceRoot: productHome,
     backupRoot: paths.backupsDir as CanonicalAbsolutePathV1,
-    admitOwnerPath: (_owner, path) =>
-      path === productHome ||
-      path.startsWith(`${productHome}/`) ||
-      path === brainPath ||
-      path.startsWith(`${brainPath}/`)
-        ? path
-        : (`${path}/outside-authority` as CanonicalAbsolutePathV1),
+    admitOwnerPath: createOwnerPathAdmission({ kind: "confined", roots: [productHome, brainPath] }),
   };
 }
 

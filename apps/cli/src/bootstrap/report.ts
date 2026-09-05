@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import {
   BOOTSTRAP_RETAINED_MAX_ENTRIES,
@@ -45,6 +45,7 @@ import type {
   UInt64DecimalV1,
 } from "@developer-os/core";
 
+import { createCanonicalPathEvidence, createOwnerPathAdmission } from "./admission.js";
 import { projectBootstrapRetentionPostimage } from "./retention.js";
 
 const MAX_PLAN_BYTES = 268_435_456;
@@ -185,15 +186,6 @@ function memoizePostimageProjector(
   };
 }
 
-function pathEvidence() {
-  return {
-    reopenCanonicalAbsolutePath: (path: string) => resolve(path),
-    containsCanonicalPath: (root: string, candidate: string) =>
-      candidate === root || candidate.startsWith(`${root}/`),
-    hasFoldedAlias: () => false,
-  };
-}
-
 function manifestPlanAdmission(
   plan: FreshV2InitPlanV1,
   productHome: CanonicalAbsolutePathV1,
@@ -202,7 +194,7 @@ function manifestPlanAdmission(
     .filter((participant) => participant.role.kind === "forward")
     .map((participant) => participant.id);
   return {
-    evidence: pathEvidence(),
+    evidence: createCanonicalPathEvidence(),
     productHome,
     manifestPath: join(productHome, "installation-manifest.json") as CanonicalAbsolutePathV1,
     foundationTransactionIds: forwardIds,
@@ -225,7 +217,7 @@ function planAdmission(
   stateDirectory: CanonicalAbsolutePathV1,
 ): BootstrapPlanAdmissionContextV1 {
   return {
-    evidence: pathEvidence(),
+    evidence: createCanonicalPathEvidence(),
     productHome,
     stateRoot: stateDirectory,
     productStagingRoot: join(productHome, "staging") as CanonicalAbsolutePathV1,
@@ -543,6 +535,22 @@ function sumEntries(entries: Iterable<BootstrapEvidenceGuardedEntryV1>): { reado
   return { entries: count, bytes };
 }
 
+/**
+ * No live request is in scope here — `plan` is a retained, possibly
+ * historical plan this process did not create, and neither
+ * `FreshV2InitPlanV1` nor `ManifestStatePlanV1` carries a declared Brain root
+ * this inspection could confine against (`packages/core/src/manifest/bootstrap.ts:328`,
+ * `packages/core/src/manifest/manifest-state.ts:99`). Inventing one from the
+ * *current* environment, the way `BootstrapExecutor.manifestAdmission` can,
+ * would assert a live fact ("the Brain is still here") about a manifest that
+ * may predate it — exactly the naive widening NEW-51 forbids.
+ *
+ * Declaring `unconfined` here is sound rather than merely unavoidable: the
+ * bytes below are hash-pinned against `plan.manifest.after.hash` **before**
+ * this call, so `validateManifestV2` only re-derives structure from content
+ * this call already knows is byte-identical to what the plan's own (confined)
+ * construction produced. There is no owner-path decision left to make.
+ */
 async function exactV2Handoff(
   request: BootstrapEvidenceInspectionRequestV1,
   plan: FreshV2InitPlanV1,
@@ -555,12 +563,15 @@ async function exactV2Handoff(
     const bytes = await request.reader.readRegularFile(file, plan.manifest.maximumPlanBytes);
     if (hashBytes(bytes) !== plan.manifest.after.hash) return false;
     validateManifestV2(decodeCanonicalJson(bytes, plan.manifest.maximumPlanBytes), {
-      evidence: pathEvidence(),
+      evidence: createCanonicalPathEvidence(),
       sourceRoot: plan.payloads.find((row) => row.source.kind === "guarded_package_file")?.source.kind === "guarded_package_file"
         ? (plan.payloads.find((row) => row.source.kind === "guarded_package_file")?.source as { readonly packageRoot: CanonicalAbsolutePathV1 }).packageRoot
         : request.productHome,
       backupRoot: join(request.productHome, "backups") as CanonicalAbsolutePathV1,
-      admitOwnerPath: (_owner, path) => path,
+      admitOwnerPath: createOwnerPathAdmission({
+        kind: "unconfined",
+        reason: "retained manifest bytes are hash-pinned to plan.manifest.after.hash before this call; no live owner authority exists for a historical plan",
+      }),
     });
     return true;
   } catch {

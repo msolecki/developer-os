@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import type { Stats } from "node:fs";
 import * as nodeFs from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import {
   admitBootstrapFoundationInitialJournal,
@@ -57,6 +57,7 @@ import type {
 } from "@developer-os/core";
 import type { RenameNoReplace, RenameSameParentNoReplace } from "@developer-os/platform-macos";
 
+import { createCanonicalPathEvidence, createOwnerPathAdmission } from "./admission.js";
 import { BootstrapJournalStore } from "./journal-store.js";
 import {
   BootstrapRetainer,
@@ -2240,31 +2241,26 @@ export class BootstrapExecutor {
     return validateManifestV2(manifest, this.manifestAdmission(input.request, input.packaged.packageRoot));
   }
 
-  private pathEvidence() {
-    return {
-      reopenCanonicalAbsolutePath: (path: string) => resolve(path),
-      containsCanonicalPath: (root: string, candidate: string) =>
-        candidate === root || candidate.startsWith(`${root}/`),
-      hasFoldedAlias: () => false,
-    };
-  }
-
+  /**
+   * The live request names both roots this bootstrap run may own: the
+   * product home it is installing into and the Brain the request declares
+   * (`FreshInitRequestV1.brainPath`). Confining against them here is real
+   * confinement, not a placeholder — unlike `report.ts`'s `exactV2Handoff`,
+   * which inspects a retained plan with no live request in scope.
+   */
   private manifestAdmission(
     request: FreshInitRequestV1,
     packageRoot: string,
   ): ManifestAdmissionContextV1 {
-    const productHome = this.#dependencies.paths.home;
+    const productHome = this.#dependencies.paths.home as CanonicalAbsolutePathV1;
     return {
-      evidence: this.pathEvidence(),
+      evidence: createCanonicalPathEvidence(),
       sourceRoot: packageRoot as CanonicalAbsolutePathV1,
       backupRoot: this.#dependencies.paths.backupsDir as CanonicalAbsolutePathV1,
-      admitOwnerPath: (_owner, path) =>
-        path === productHome ||
-        path.startsWith(`${productHome}/`) ||
-        path === request.brainPath ||
-        path.startsWith(`${request.brainPath}/`)
-          ? path
-          : `${path}/outside-authority` as CanonicalAbsolutePathV1,
+      admitOwnerPath: createOwnerPathAdmission({
+        kind: "confined",
+        roots: [productHome, request.brainPath as CanonicalAbsolutePathV1],
+      }),
     };
   }
 
@@ -2285,7 +2281,7 @@ export class BootstrapExecutor {
       .filter((participant) => participant.role.kind === "forward")
       .map((participant) => participant.id);
     return {
-      evidence: this.pathEvidence(),
+      evidence: createCanonicalPathEvidence(),
       productHome: this.#dependencies.paths.home as CanonicalAbsolutePathV1,
       manifestPath: this.#dependencies.paths.manifestFile as CanonicalAbsolutePathV1,
       foundationTransactionIds: forwardIds,
@@ -2313,7 +2309,7 @@ export class BootstrapExecutor {
     const findPayload = (source: BootstrapPayloadSourceV1, ref: BootstrapExpectedPayloadRefV1) =>
       plan.payloads.find((row) => sameValue(row.ref, ref) && sameValue(row.source, source));
     return {
-      evidence: this.pathEvidence(),
+      evidence: createCanonicalPathEvidence(),
       productHome: this.#dependencies.paths.home as CanonicalAbsolutePathV1,
       stateRoot: this.#dependencies.paths.stateDir as CanonicalAbsolutePathV1,
       productStagingRoot: this.#dependencies.paths.stagingDir as CanonicalAbsolutePathV1,
