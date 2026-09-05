@@ -172,6 +172,25 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     ]);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("inspects bootstrap evidence exactly three times for a fresh, uninterrupted init", async () => {
+    const fixture = await createCommandFixture("bootstrap-evidence-inspection-count", {
+      bootstrapAvailable: true,
+    });
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    if (!result.ok) throw new Error(JSON.stringify({ result, trace: fixture.bootstrapTrace.slice(-30) }));
+    /**
+     * One inspection at `init.ts`'s entry (the source of truth threaded down
+     * through `previewFreshInit`, `initializeFresh` and `planFreshInit`), one
+     * at `evidenceAfterLock` (observes drift since the bootstrap lock was
+     * acquired), and one from `admittedFoundation` (observes drift right
+     * before Foundation files are mutated). Anything above 3 means a site
+     * that should be reusing the threaded value is re-walking the filesystem.
+     */
+    expect(fixture.bootstrapEvidenceInspections).toBe(3);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("keeps a fresh dry-run byte inert while returning the complete V2 preview", async () => {
     const fixture = await createCommandFixture("bootstrap-dry-run", {
       bootstrapAvailable: true,

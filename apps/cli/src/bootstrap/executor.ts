@@ -621,9 +621,9 @@ export class BootstrapExecutor {
 
   async previewFreshInit(
     request: FreshInitRequestV1,
-    admittedPlan: FreshV2InitPlanV1 | null = null,
+    evidence: BootstrapEvidenceAdmissionV1,
   ): Promise<FreshInitPreviewV1> {
-    const existing = admittedPlan ?? (await this.inspectEvidence()).active?.plan ?? null;
+    const existing = evidence.active?.plan ?? null;
     if (existing !== null) {
         const source = existing.payloads
           .map((row) => row.source)
@@ -665,11 +665,11 @@ export class BootstrapExecutor {
 
   async initializeFresh(
     request: FreshInitRequestV1,
-    admittedPlan: FreshV2InitPlanV1 | null = null,
+    evidence: BootstrapEvidenceAdmissionV1,
   ): Promise<FreshInitOutcomeV1> {
-    const existing = admittedPlan ?? (await this.inspectEvidence()).active?.plan ?? null;
+    const existing = evidence.active?.plan ?? null;
     if (existing !== null) return this.executeFreshInit(existing);
-    const plan = await this.planFreshInit(request);
+    const plan = await this.planFreshInit(request, evidence);
     return this.executeFreshInit(plan);
   }
 
@@ -1170,11 +1170,14 @@ export class BootstrapExecutor {
     );
   }
 
-  async planFreshInit(request: FreshInitRequestV1): Promise<FreshV2InitPlanV1> {
+  async planFreshInit(
+    request: FreshInitRequestV1,
+    evidence?: BootstrapEvidenceAdmissionV1,
+  ): Promise<FreshV2InitPlanV1> {
     const packaged = await inspectPackagedRelease(this.#dependencies.packagedRelease);
     const preview = await this.previewNewFreshInit(request, packaged);
     const brainObservation = await lstatOptional(request.brainPath);
-    const evidenceBefore = await this.inspectEvidence();
+    const evidenceBefore = evidence ?? await this.inspectEvidence();
     if (evidenceBefore.blocksNewIntent) {
       throw new FreshBootstrapError(
         EXIT_CODES.recoveryRequired,
@@ -1317,6 +1320,9 @@ export class BootstrapExecutor {
         directoryTrees: [],
         rows: [],
       });
+      // Re-inspects rather than reusing evidenceBefore: this is the read that
+      // must observe whatever changed on disk while the bootstrap lock was
+      // being acquired above, which the fingerprint comparison below depends on.
       const evidenceAfterLock = await this.inspectEvidence();
       if (
         evidenceAfterLock.fingerprint !== evidenceBefore.fingerprint ||
@@ -2895,6 +2901,10 @@ export class BootstrapExecutor {
           // untombstoned and made the next intent permanently unrunnable.
           const observed = await this.readCreationEvidence(plan, scope, ordinal);
           if (!matchesGlobalLockCreationEvidence(planned.path, observed, identity)) {
+            // Re-inspects rather than reusing the plan-time evidence: this is
+            // resuming a run whose global lock predates this call, so it must
+            // observe whatever the current admission considers reusable right
+            // now, not what an earlier read in this process saw.
             const reusable = (await this.inspectEvidence()).reusableGlobalLock;
             if (
               reusable === null || reusable.path !== planned.path ||
@@ -2992,6 +3002,10 @@ export class BootstrapExecutor {
     participant: FoundationParticipantRefV2,
     plan: FreshV2InitPlanV1,
   ) {
+    // Re-inspects rather than reusing evidenceAfterLock or the resume-time
+    // evidence: this is the last check before Foundation files are mutated,
+    // so it must observe whatever created-path and lock activity happened
+    // between planning and this exact moment, not an earlier snapshot.
     const evidenceAdmission = await this.inspectEvidence();
     if (evidenceAdmission.active?.plan.id !== plan.id) {
       throw new FreshBootstrapError(

@@ -865,7 +865,7 @@ export async function runInit(
         [context.paths.home, config.brainPath],
       );
       const request = { config, brainPath: config.brainPath };
-      const preview = await bootstrap.executor.previewFreshInit(request, evidence.active?.plan ?? null);
+      const preview = await bootstrap.executor.previewFreshInit(request, evidence);
       const settled: InitResultV2 = {
         ...preview,
         transactionId: null,
@@ -881,7 +881,7 @@ export async function runInit(
           paths: [],
         });
       }
-      const outcome = await bootstrap.executor.initializeFresh(request, evidence.active?.plan ?? null);
+      const outcome = await bootstrap.executor.initializeFresh(request, evidence);
       loadOrCreateRedactionKey(context.paths.stateDir);
       return success(outcomeResult(outcome));
     }
