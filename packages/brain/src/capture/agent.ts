@@ -79,17 +79,24 @@ export const AGENT_DETECTION_ROWS: readonly AgentDetectionRow[] = Object.freeze(
  * An exported-but-empty variable is *absent*: `FOO=` is what a shell leaves
  * behind when a wrapper clears a value, and naming an agent on the strength of
  * an empty string is the same guess this function exists to refuse.
+ *
+ * More than one row matching is a nested session (NEW-44) rather than a tie:
+ * a Claude Code session exports `CLAUDECODE=1` to its children, so a Codex
+ * process started from inside one carries both vendors' markers at once. That
+ * environment is not attributable to either vendor, so it gets the same
+ * `UNKNOWN_AGENT` as no match at all instead of the first row's agent.
  */
 export function matchObservedAgent(
   rows: readonly AgentDetectionRow[],
   env: Readonly<Record<string, string | undefined>>,
 ): string {
-  for (const row of rows) {
+  const matches = rows.filter((row) => {
     const observed = env[row.variable];
-    if (observed === undefined || observed.length === 0) continue;
-    if (row.value === null || row.value === observed) return row.agent;
-  }
-  return UNKNOWN_AGENT;
+    if (observed === undefined || observed.length === 0) return false;
+    return row.value === null || row.value === observed;
+  });
+  const [only, ...rest] = matches;
+  return only !== undefined && rest.length === 0 ? only.agent : UNKNOWN_AGENT;
 }
 
 /**

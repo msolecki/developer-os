@@ -59,29 +59,26 @@ describe("detectSourceAgent", () => {
     expect(detectSourceAgent({ CODEX_THREAD_ID: "a-different-thread" })).toBe("codex");
   });
 
-  it("names claude when both markers are present, because the table is ordered", () => {
+  it("names no agent when two markers match, because a nested session is not attributable", () => {
     /**
-     * **A nested session is the environment that produces this, and the answer
-     * it gives is wrong half the time.** Running `codex exec` from a shell
-     * inside a Claude Code session hands the Codex child an inherited
-     * `CLAUDECODE=1` alongside the `CODEX_THREAD_ID` its own vendor set, and
-     * `matchObservedAgent` returns the **first** matching row — so a capture
-     * taken in that session records `claude`.
+     * **A nested session is the environment that produces this.** A Claude
+     * Code session exports `CLAUDECODE=1` to its children, so a Codex process
+     * started from inside one — a second-opinion MCP server does exactly that
+     * — inherits it alongside the `CODEX_THREAD_ID` its own vendor sets. The
+     * capture is genuinely Codex-authored, but the environment carries both
+     * vendors' markers at once.
      *
-     * **It is pinned rather than fixed, and the reason is that no order is
-     * right.** Reversing the rows moves the error to the other nesting, and
-     * refusing to name either vendor would record `unknown` for the ordinary
-     * un-nested case that a marker leaked into. Choosing needs an observation
-     * nobody has: whether either vendor's marker is *distinguishable* from an
-     * inherited copy of itself. `BACKLOG.md` §1 NEW-44 carries it.
-     *
-     * This case exists so the behaviour is a decision on record rather than a
-     * property of the array literal's order, which is what it was until
-     * 2026-08-20.
+     * **Two matches mean the environment is a nested session, not a tie to
+     * break.** Naming either vendor would be a guess — Claude's row would be
+     * wrong here, and there is no rule that makes Codex's row the reliable
+     * pick either. `unknown` is the answer this module already treats as safe
+     * and never rewrites (spec §5.4), so refusing to attribute is the fix
+     * rather than a new special case. `BACKLOG.md` §1 NEW-44 is closed by
+     * this.
      */
     expect(
       detectSourceAgent({ CLAUDECODE: "1", CODEX_THREAD_ID: "00000000-0000-7000-0000-000000000001" }),
-    ).toBe("claude");
+    ).toBe("unknown");
   });
 
   it("carries no row without the observation that justifies it", () => {
@@ -96,9 +93,9 @@ describe("detectSourceAgent", () => {
 describe("matchObservedAgent", () => {
   /**
    * The real table drives both value branches since 2026-08-20 — Claude's row
-   * matches an exact value, Codex's matches on presence — and the tie-break as
-   * well, which a case in the `detectSourceAgent` block above pins against the
-   * real rows rather than against these.
+   * matches an exact value, Codex's matches on presence — and the double-match
+   * case as well, which a case in the `detectSourceAgent` block above pins
+   * against the real rows rather than against these.
    * What still needs a synthetic row is the empty-string branch: `CLAUDECODE=`
    * reaches it, but nothing in the product produces that environment.
    *
@@ -149,13 +146,13 @@ describe("matchObservedAgent", () => {
     expect(matchObservedAgent([exact], { SYNTHETIC_MODE: "batch" })).toBe("unknown");
   });
 
-  it("takes the first row that matches, so declaration order is the tie-break", () => {
+  it("returns unknown when more than one row matches, so declaration order is not a tie-break", () => {
     expect(
       matchObservedAgent([presence, exact], {
         SYNTHETIC_AGENT: "1",
         SYNTHETIC_MODE: "interactive",
       }),
-    ).toBe("synthetic-presence");
+    ).toBe("unknown");
   });
 
   it("records unknown rather than guessing when no row matches", () => {
