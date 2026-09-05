@@ -15,6 +15,7 @@ import type {
   CanonicalAbsolutePathV1,
   CliResult,
   DriftFinding,
+  InstallationManifest,
   ManagedArtifactV1,
   ManagedArtifactV2,
   ManifestAdmissionContextV1,
@@ -66,16 +67,19 @@ export interface RevertOutcome {
 export class UninstallRefusal extends Error {
   readonly code: typeof EXIT_CODES.decisionRequired | typeof EXIT_CODES.recoveryRequired;
   readonly paths: readonly string[];
+  readonly recovery: string | undefined;
 
   constructor(
     code: UninstallRefusal["code"],
     message: string,
     paths: readonly string[],
+    recovery?: string,
   ) {
     super(message);
     this.name = "UninstallRefusal";
     this.code = code;
     this.paths = paths;
+    this.recovery = recovery;
   }
 }
 
@@ -561,15 +565,32 @@ function describePlan(removable: readonly ResolvedArtifact[]): string {
  * recover a package identity from. `productHome` is the only root this
  * function can name with any honesty, matching `report.ts`'s own fallback
  * for the case where no such payload root exists.
+ *
+ * `refusedOwnerPaths` is populated, not thrown from, here: `admitOwnerPath`'s
+ * contract is a value comparison the caller turns into a refusal
+ * (`packages/core/src/manifest/v2.ts:31`), so this wrapper cannot itself
+ * distinguish "confinement refused this artifact" from "the document never
+ * got this far" — it can only record what it saw before `readOptional`
+ * collapses every cause into one generic `ManifestStateError`. Whoever awaits
+ * `readOptional` reads this array *after* the rejection to recover that
+ * distinction.
  */
-function manifestAdmissionFor(paths: RuntimePaths): ManifestAdmissionContextV1 {
+function manifestAdmissionFor(
+  paths: RuntimePaths,
+  refusedOwnerPaths: string[],
+): ManifestAdmissionContextV1 {
   const productHome = paths.home as CanonicalAbsolutePathV1;
   const brainPath = paths.brain as CanonicalAbsolutePathV1;
+  const admitOwnerPath = createOwnerPathAdmission({ kind: "confined", roots: [productHome, brainPath] });
   return {
     evidence: createCanonicalPathEvidence(),
     sourceRoot: productHome,
     backupRoot: paths.backupsDir as CanonicalAbsolutePathV1,
-    admitOwnerPath: createOwnerPathAdmission({ kind: "confined", roots: [productHome, brainPath] }),
+    admitOwnerPath: (owner, path) => {
+      const admitted = admitOwnerPath(owner, path);
+      if (admitted !== path) refusedOwnerPaths.push(path);
+      return admitted;
+    },
   };
 }
 
@@ -625,6 +646,33 @@ async function downcastArtifactV2(
 }
 
 /**
+ * `admitOwnerPath` refusing an artifact and a genuinely malformed document
+ * both surface from `readOptional` as the same generic
+ * `ManifestStateError("installation manifest is malformed or incomplete")`,
+ * exit 6, no paths, no recovery text — the store collapses every cause into
+ * that one shape (`packages/core/src/manifest/store.ts:303-306`,
+ * `packages/core/src/manifest/v2.ts:104-105`). A user who legitimately moved
+ * their Brain gets that message with nothing pointing at the cause and no way
+ * out, indistinguishable from a corrupted file. `refusedOwnerPaths` is the
+ * one artifact this run actually saw and rejected (`.map`'s admission check
+ * throws on the first mismatch, so at most one is ever recorded — and by
+ * construction it is the shortest, since every other Brain-owned artifact's
+ * path is that root plus a suffix): naming it, and the Brain the
+ * configuration currently points at, is the whole diagnosis and the whole fix.
+ */
+function relocatedBrainRefusal(
+  recordedPath: string,
+  configuredBrain: string,
+): UninstallRefusal {
+  return new UninstallRefusal(
+    EXIT_CODES.recoveryRequired,
+    "the installation manifest records a managed artifact outside the product home and the configured Brain — the Brain path likely changed since install",
+    [recordedPath, configuredBrain],
+    `the manifest records it under ${recordedPath}; the configured Brain is ${configuredBrain}. Point the configuration's brainPath back at ${recordedPath}, or move the Brain back there, then retry uninstall`,
+  );
+}
+
+/**
  * NEW-59: every V2 manifest used to reach a hand-rolled fallback read because
  * `readOptional()` was called with no admission context, and
  * `validateManifestBytes` refuses every `schemaVersion === 2` document
@@ -632,15 +680,24 @@ async function downcastArtifactV2(
  * manifest never hit that refusal — `validateManifestBytes` resolves schema
  * 1 before the context is even consulted — so once V2 is admitted correctly
  * there is no remaining failure this function should swallow. A symlink at
- * the manifest path, a device/inode race on reopen, or a corrupted document
- * now all propagate and refuse the run, rather than being silently re-read
- * through a weaker path with no genuine caller left to justify it.
+ * the manifest path or a device/inode race on reopen still propagates and
+ * refuses the run, rather than being silently re-read through a weaker path
+ * with no genuine caller left to justify it — but a refused owner path is
+ * distinguished from those and given the recovery text above.
  */
 async function readUninstallManifest(
   context: CliContext,
   paths: RuntimePaths,
 ): Promise<InstallationManifestV1 | null> {
-  const manifest = await context.manifests.readOptional(manifestAdmissionFor(paths));
+  const refusedOwnerPaths: string[] = [];
+  let manifest: InstallationManifest | null;
+  try {
+    manifest = await context.manifests.readOptional(manifestAdmissionFor(paths, refusedOwnerPaths));
+  } catch (error) {
+    const recordedPath = refusedOwnerPaths[0];
+    if (recordedPath === undefined) throw error;
+    throw relocatedBrainRefusal(recordedPath, paths.brain);
+  }
   if (manifest === null || manifest.schemaVersion === 1) return manifest;
   return {
     schemaVersion: 1,
@@ -755,6 +812,7 @@ export async function runUninstall(
       context,
       error,
       error instanceof UninstallRefusal ? error.paths : [],
+      error instanceof UninstallRefusal ? error.recovery : undefined,
     );
   }
 }

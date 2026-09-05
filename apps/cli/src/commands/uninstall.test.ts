@@ -5,9 +5,15 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { EXIT_CODES } from "@developer-os/core";
-import type { ManagedArtifactV1 } from "@developer-os/core";
+import type {
+  CanonicalAbsolutePathV1,
+  InstallationManifestV2,
+  ManagedArtifactV1,
+  ManifestAdmissionContextV1,
+} from "@developer-os/core";
 
 import { loadOrCreateRedactionKey } from "../context.js";
+import { createCanonicalPathEvidence, createOwnerPathAdmission } from "../bootstrap/admission.js";
 import { runInit } from "./init.js";
 import {
   createCommandFixture,
@@ -773,6 +779,78 @@ describe("runUninstall", () => {
     expect(result.data.removed).toContain(lockFile);
     expect(await exists(lockFile)).toBe(false);
   }, 300_000);
+
+  /**
+   * Round-1 review on this fix: an admission refusal and a genuinely
+   * malformed manifest both used to surface as the same generic
+   * `ManifestStateError("installation manifest is malformed or
+   * incomplete")`, exit 6, no paths, no recovery text — a user who
+   * legitimately moved their Brain got an error indistinguishable from
+   * corruption, with nothing pointing at the cause and no way out. This
+   * writes a V2 manifest whose one artifact is recorded under a Brain path
+   * that no longer matches the configured one, and asserts the specific,
+   * actionable refusal rather than the generic one.
+   */
+  it("names a relocated Brain instead of the generic malformed-manifest refusal", async () => {
+    const fixture = await createCommandFixture("uninstall-relocated-brain");
+    await runInit(fixture.context, ACCEPTED);
+
+    const recordedBrainPath = join(fixture.root, "old-brain");
+    await nodeFs.mkdir(recordedBrainPath, { recursive: true, mode: 0o700 });
+
+    const testAdmission: ManifestAdmissionContextV1 = {
+      evidence: createCanonicalPathEvidence(),
+      sourceRoot: fixture.paths.home as CanonicalAbsolutePathV1,
+      backupRoot: fixture.paths.backupsDir as CanonicalAbsolutePathV1,
+      admitOwnerPath: createOwnerPathAdmission({
+        kind: "unconfined",
+        reason: "test fixture seeds a manifest whose Brain has since relocated",
+      }),
+    };
+    const relocatedBrainManifest = {
+      schemaVersion: 2,
+      productVersion: fixture.context.productVersion as never,
+      installedAt: "2026-07-30T12:00:00.000Z" as never,
+      artifacts: [
+        {
+          owner: "core",
+          path: recordedBrainPath as never,
+          kind: "directory",
+          productVersion: fixture.context.productVersion as never,
+          existedBefore: false,
+          beforeHash: null,
+          backupRelativePath: null,
+          source: "generated/directory" as never,
+          mergeStrategy: "dedicated",
+          verifiedAt: "2026-07-30T12:00:00.000Z" as never,
+          verification: { mode: "content" },
+        },
+      ],
+    } as unknown as InstallationManifestV2;
+    await fixture.context.manifests.writeV2(relocatedBrainManifest, testAdmission);
+
+    const result = await runUninstall(fixture.context, ACCEPTED);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(result.error.message).not.toBe(
+      "installation manifest is malformed or incomplete",
+    );
+    expect(result.error.message).toContain("Brain");
+    /**
+     * `paths` is the one field of `CliError` the redactor leaves alone
+     * (`apps/cli/src/context.ts`'s `failureFrom` docstring on `paths` is
+     * explicit that this is a known, open exemption, not a guarantee this
+     * test invents) — a temp-directory fixture path reads as high-entropy to
+     * `redactDiagnostic`, so `message`/`recovery` are asserted on shape and
+     * vocabulary rather than on the raw path text they redact.
+     */
+    expect(result.error.paths).toContain(recordedBrainPath);
+    expect(result.error.paths).toContain(fixture.paths.brain);
+    expect(result.error.recovery).toBeDefined();
+    expect(result.error.recovery).toContain("brainPath");
+  });
 
   it("leaves every quarantined capture in place, because a capture is never deleted", async () => {
     const fixture = await createCommandFixture("uninstall-quarantine");
