@@ -281,25 +281,37 @@ declined; the capture and ingest commands ship; and the six unused keys resolve 
 
 ## 11. Invocation and security contract
 
-`invokeClaude` accepts an absolute discovered executable plus a `ClaudeInvocation` carrying prompt,
-`maxTurns`, `allowedTools` and `timeoutMs`. It invokes the security runner with an argv array —
-never a shell string — as:
+`invokeClaude` accepts an absolute discovered executable plus a `ClaudeInvocation` carrying only
+`prompt`, `maxTurns` and `timeoutMs` — no scope-shaped field at all, since 349511e (`invoke.ts`). It
+invokes the security runner with an argv array — never a shell string — as:
 
 ```text
-claude -p <prompt> --output-format json --max-turns <N> [--allowedTools <tool> ...]
+claude -p <prompt> --output-format json --max-turns <N> --tools "" --strict-mcp-config
+  --restricted --safe-mode --no-session-persistence --permission-prompts none
 ```
 
-Stdin and environment are empty. The prompt is screened as prose and each allowed-tool value is
-screened as an argument before spawn. `maxTurns` must be an integer from 1 through 50; the exported
-default is 5 for the future cross-vendor call site. The shared `agent.prompt` argument parser in
-`packages/core` is strict, accepts only bounded non-empty `prompt`, refuses hostile prototype keys,
-and currently refuses a workflow-supplied `maxTurns` until both vendors enforce one.
+Stdin and environment are empty. The prompt is screened as prose before spawn. `maxTurns` must be
+an integer from 1 through 50; the exported default is 5 for the future cross-vendor call site. The
+shared `agent.prompt` argument parser in `packages/core` is strict, accepts only bounded non-empty
+`prompt`, refuses hostile prototype keys, and currently refuses a workflow-supplied `maxTurns` until
+both vendors enforce one.
 
-`--allowedTools` is emitted only when non-empty and is the runtime defence-in-depth counterpart to
-compiled scopes. The runner enforces `timeoutMs`; timeout, signal death, non-zero exit, spawn
-failure, argument refusal and malformed structured output remain distinct result variants. Only a
-zero-exit JSON structured payload reaches a consumer, and malformed output is never best-effort
-parsed.
+**There is no `--allowedTools` and no allow-list to screen.** `--tools ""` disables every tool
+outright (`docs/architecture/vendor-invocation.md`, Claude table row 2 — `""` disables all tools),
+so the model reaches no file, no command and no network through a tool call on this side at all;
+what replaced the read scope a tool grant used to carry is the bounded index excerpt
+`buildIngestPrompt` puts in the prompt instead (`packages/brain/src/ingest/index.ts`). The other five
+flags are what make this an isolated invocation rather than an empty-tools one loaded with the
+user's own configuration: `--strict-mcp-config` loads zero MCP servers with no `--mcp-config` given
+(row 9), `--restricted` ignores user, project and local settings files (row 18), `--safe-mode`
+starts with hooks, plugins, skills, CLAUDE.md, MCP servers, custom commands and agents disabled (row
+19), `--no-session-persistence` keeps the run out of the user's resumable history (row 20), and
+`--permission-prompts none` denies anything that would otherwise prompt (row 21). Pinned by exact-argv
+equality in `invoke.test.ts`.
+
+The runner enforces `timeoutMs`; timeout, signal death, non-zero exit, spawn failure, argument
+refusal and malformed structured output remain distinct result variants. Only a zero-exit JSON
+structured payload reaches a consumer, and malformed output is never best-effort parsed.
 
 ## 12. Former spec section map
 
@@ -337,11 +349,17 @@ Measured in a disposable `HOME` during the 2026-09-04 audit; each row names the 
   missing `version`, `description` and `author`; those three fields predate the floor in §3 and can
   be added without raising it.
 - **`validate` still mutates `HOME`** (`~/.claude.json`, `~/.claude/backups/`). §9.4 stands.
-- **`--allowedTools` grants; it does not restrict.** The invocation in §11 therefore runs with the
-  user's own permission settings, hooks and MCP servers loaded. `--tools`, `--disallowedTools`,
-  `--restricted`, `--permission-mode`, `--strict-mcp-config` and `--setting-sources` exist in this
-  version; `--json-schema` exists and supersedes the prompt-described schema. `--max-turns` still
-  parses but is absent from `--help`. Owner: `BACKLOG.md` NEW-58 (roadmap Phase 1).
+- **`--allowedTools` grants; it does not restrict — this is why the invocation changed, not a
+  property of it today.** This bullet records the 2026-09-04 audit finding *against the invocation
+  that predated 349511e*, which passed `--allowedTools` and none of `--tools`, `--restricted`,
+  `--permission-mode`, `--strict-mcp-config` or `--setting-sources`, so that run executed with the
+  user's own permission settings, hooks and MCP servers loaded. §11 no longer describes that
+  invocation: it now passes `--tools ""` plus `--strict-mcp-config --restricted --safe-mode
+  --no-session-persistence --permission-prompts none`, and `ClaudeInvocation` has had no
+  `allowedTools` field since. `--tools`, `--disallowedTools`, `--restricted`, `--permission-mode`,
+  `--strict-mcp-config` and `--setting-sources` exist in this version; `--json-schema` exists and
+  supersedes the prompt-described schema. `--max-turns` still parses but is absent from `--help`.
+  NEW-58 (roadmap Phase 1) is the fix this audit finding drove.
 - **Hook events available:** `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `SessionStart`,
   `SessionEnd`, `Stop`, `SubagentStop`, `UserPromptSubmit`, `PreCompact`, `PermissionRequest`,
   `InstructionsLoaded`, `ConfigChange`. Every legacy non-transcript hook in

@@ -30,12 +30,11 @@ import type { CodexInstallation } from "./discover.js";
  * vault-relative glob, so whoever wires the first scope will join it onto the
  * user's own vault root and hand this function a **derived path wearing a write
  * scope's name**. At that moment a vault at `~/Danger/DeveloperBrain` refuses
- * again, by exactly the mechanism NEW-12 closed, one field over. The same trap
- * is set in `adapter-claude`, whose `allowedTools` entries are documented as
- * carrying derived read and write scopes. **The concrete `Read(<path>/**)`
- * spelling is an inference from the vendor's own `--allowedTools` syntax, not
- * something that docblock states** — the trap does not depend on the spelling,
- * only on a derived path reaching a screen that carries the word list.
+ * again, by exactly the mechanism NEW-12 closed, one field over. **This trap is
+ * Codex-only since 349511e**: `adapter-claude`'s `ClaudeInvocation` carries no
+ * scope-shaped field at all — no `allowedTools`, no derived path, nothing for
+ * a screen to see — because Claude is invoked with `--tools ""` instead of a
+ * tool allow-list (`packages/adapter-claude/src/invoke.ts:7-11`).
  */
 export interface CodexInvocation {
   readonly prompt: string;

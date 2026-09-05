@@ -367,7 +367,7 @@ The completed design's table, updated with the implemented DOS-P6 outcome.
 | hooks shipped | **no — neither adapter ships one (§5)** | **no** |
 | hooks active on install | n/a — none ship | n/a — none ship; a trust gate would apply if they did |
 | enablement source | settings read | `codex plugin list --json`, `installed[].enabled` |
-| scope enforcement | `--allowedTools` | `-s <sandbox>` plus `--add-dir` |
+| scope enforcement | `--tools ""` — an empty tool set, not a grant list (since 349511e) | `-s <sandbox>` plus `--add-dir` |
 | structured result | `--output-format json` | `--json` (JSONL, reduced — §7) plus `--output-schema` |
 | probe cost | **mutating** — writes `~/.claude.json` and a backup | read-only structured query |
 | probe settles | `skills` only | `skills` only |
