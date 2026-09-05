@@ -13,11 +13,12 @@
     "lint": "tsc -b --pretty false && eslint . && node tests/dist/repository/check.js",
     "test": "npm run test:bootstrap && npm run test:suite",
     "test:bootstrap": "vitest run apps/cli/src/bootstrap/executor.test.ts -t 'publishes a complete V2 handoff and permanently retains its exact plan and two slots' && vitest run apps/cli/src/bootstrap/executor.test.ts -t '^(?!.*publishes a complete V2 handoff and permanently retains its exact plan and two slots).*$'",
-    "test:suite": "vitest run --exclude 'src/bootstrap/executor.test.ts' --exclude 'e2e/**'",
+    "test:suite": "vitest run --exclude 'src/bootstrap/executor.test.ts' --exclude 'e2e/**' --exclude 'integration/ingest/no-user-hooks.test.ts'",
     "test:e2e": "vitest run tests/e2e",
+    "test:vendor-ingest": "vitest run tests/integration/ingest/no-user-hooks.test.ts",
     "render:claude": "tsc -b && node tests/dist/tools/render-claude.js",
     "render:codex": "tsc -b && node tests/dist/tools/render-codex.js",
-    "check": "npm run lint && npm test && npm run test:e2e && pnpm --pm-on-fail=ignore build && git diff --check"
+    "check": "npm run lint && npm test && npm run test:e2e && npm run test:vendor-ingest && pnpm --pm-on-fail=ignore build && git diff --check"
   },
   "devDependencies": {
     "@eslint/js": "9.39.4",
