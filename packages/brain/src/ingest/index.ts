@@ -81,14 +81,17 @@
  *
  * **Codex's agent gets read-only access to a vault that may contain secrets
  * the user wrote into their own notes; Claude's does not, since 27771d2 — it
- * gets the bounded index excerpt above, screened the same way the capture body
- * is.** Redacting the user's canonical content is not this product's business;
- * catching it on the way back is, and that is the secret scan among the nine
- * validators. That redaction policy is unchanged by 27771d2: the excerpt's
- * fields are screened for prompt-injection shape (`boundedProse`, in
- * `./prompt.ts`), not scanned for secrets — no different from any other vault
- * note, which was scanned only once, when it was itself originally proposed
- * and written.
+ * gets the bounded index excerpt above.** That asymmetry is why the excerpt
+ * gets a redaction pass Codex's raw vault access never did: `readIndexExcerpt`
+ * (`apps/cli/src/commands/ingest.ts`) runs `path`, `title` and `summary`
+ * through the run's own redactor before returning them, on read from disk,
+ * for the same reason `packages/brain/src/capture/parse.ts` re-redacts a
+ * capture body on read — a hand edit to a vault note is how a secret or a
+ * configured client name gets into on-disk text, and the index is that same
+ * class of text. Only after that does `./prompt.ts` screen the already-redacted
+ * fields for prompt-injection shape (`boundedProse`) and cap and fence them;
+ * screening and redaction are two different mechanisms with two different
+ * owners, and the excerpt gets both.
  */
 export { planIngestApply } from "./apply.js";
 export type { ApplyResult, PlannedNoteWriteV1 } from "./apply.js";

@@ -1746,7 +1746,7 @@ describe("runIngest, the agent call", () => {
     await fixture.seedAccepted(`an observation holding ${SECRET}`);
     /** The excerpt is a second channel into the same prompt; it must not undo the redaction above. */
     await writeIndex(fixture, [
-      { path: "DEV/unrelated.md", title: "Unrelated note", summary: "Nothing secret here." },
+      { path: "DEV/unrelated.md", title: "Unrelated note", summary: `Also holds ${SECRET}.` },
     ]);
     fixture.reply(() => nothingProposed());
 
@@ -1870,7 +1870,7 @@ describe("runIngest, the agent call", () => {
       "utf8",
     );
     await writeIndex(fixture, [
-      { path: "DEV/unrelated.md", title: "Unrelated note", summary: "Nothing about clients here." },
+      { path: "DEV/unrelated.md", title: "Unrelated note", summary: "Also mentions Northwind Traders." },
     ]);
     fixture.reply(() => oneNote(seeded.id));
 

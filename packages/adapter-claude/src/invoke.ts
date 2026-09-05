@@ -93,10 +93,11 @@ export async function invokeClaude(
    *   disables all tools (row 2). Not a grant list; there is no allow-list left.
    * - `--strict-mcp-config` — with no `--mcp-config` given, loads zero MCP
    *   servers (row 9).
-   * - `--restricted` — ignores user, project and local settings files (row 18).
+   * - `--restricted` — ignores user, project and local settings files (managed
+   *   settings and `--settings` still apply) (row 18).
    * - `--safe-mode` — starts with hooks, plugins, skills, CLAUDE.md, MCP
-   *   servers, custom commands and agents disabled; auth and built-in tools
-   *   stay (row 19).
+   *   servers, custom commands and agents disabled; admin-managed (policy)
+   *   settings still apply, and auth and built-in tools stay (row 19).
    * - `--no-session-persistence` — keeps the run out of the user's resumable
    *   history; print mode only (row 20).
    * - `--permission-prompts none` — denies anything that would prompt in print

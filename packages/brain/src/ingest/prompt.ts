@@ -24,7 +24,9 @@ export const MAX_PROMPT_CONTENT_GRAPHEMES = 16 * 1024;
  * than a true grapheme count would, never later. The rendered excerpt is
  * therefore always within this cap; a vault whose titles or summaries carry
  * multi-code-point graphemes (most emoji, some combining scripts) simply gets
- * a shorter excerpt than the cap technically allows.
+ * a shorter excerpt than the cap technically allows. The entry loop also
+ * reserves room for the "N more notes omitted" line it may append afterward,
+ * so that line's own length is inside this cap too, not added on top of it.
  */
 export const MAX_PROMPT_INDEX_GRAPHEMES = 32 * 1024;
 
@@ -85,20 +87,36 @@ function renderIndexEntry(entry: IndexExcerptEntryV1): string {
   return `- ${path} — ${title}: ${summary}`;
 }
 
+function omittedLine(omitted: number): string {
+  return `… ${String(omitted)} more indexed note${omitted === 1 ? "" : "s"} omitted to stay within the excerpt bound.`;
+}
+
 /**
  * Truncates whole entries, never mid-entry, so a partial path is never
  * presented as a real one. States how many entries were left out whenever any
  * were, so the model does not mistake a truncated excerpt for the whole index.
+ *
+ * **The entry loop budgets against the cap minus the omitted-count line's own
+ * worst-case cost, not against the cap itself.** `entries.length` is the
+ * largest an eventual omitted count could ever be, so sizing the reservation
+ * off it — rather than off the actual `omitted` value, unknown until the loop
+ * finishes — always reserves at least as much room as the line that gets
+ * appended after. Appending the line unbudgeted, as before, could push the
+ * rendered excerpt past `MAX_PROMPT_INDEX_GRAPHEMES` by exactly that line's
+ * length.
  */
 function renderIndexExcerpt(entries: readonly IndexExcerptEntryV1[]): string {
   const lines: string[] = [];
   let used = 0;
   let included = 0;
+  const reserved =
+    entries.length === 0 ? 0 : Array.from(omittedLine(entries.length)).length + 1;
+  const budget = MAX_PROMPT_INDEX_GRAPHEMES - reserved;
 
   for (const entry of entries) {
     const line = renderIndexEntry(entry);
     const cost = Array.from(line).length + 1;
-    if (used + cost > MAX_PROMPT_INDEX_GRAPHEMES) break;
+    if (used + cost > budget) break;
     lines.push(line);
     used += cost;
     included += 1;
@@ -106,9 +124,7 @@ function renderIndexExcerpt(entries: readonly IndexExcerptEntryV1[]): string {
 
   const omitted = entries.length - included;
   if (omitted > 0) {
-    lines.push(
-      `… ${String(omitted)} more indexed note${omitted === 1 ? "" : "s"} omitted to stay within the excerpt bound.`,
-    );
+    lines.push(omittedLine(omitted));
   }
 
   return lines.join("\n");

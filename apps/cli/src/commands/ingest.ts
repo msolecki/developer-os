@@ -1461,11 +1461,20 @@ function isIndexDocumentShape(
  * `context.io.stderr`, the same channel `runIngest` already uses for a
  * recoverable, run-level condition (see `EPHEMERAL_KEY_WARNING`). A vault that
  * has simply never been reindexed is not a status worth a line on every run.
+ *
+ * **`path`, `title` and `summary` are each passed through `redact` before
+ * they are returned.** This is on-disk, hand-editable vault text — the same
+ * class `packages/brain/src/capture/parse.ts` re-redacts on every read for
+ * exactly this reason — and it reaches a vendor model through
+ * `buildIngestPrompt`'s excerpt block, so a secret or a configured client name
+ * pasted into a note's title or summary must not survive the round trip
+ * through the index any more than a capture body would.
  */
 async function readIndexExcerpt(
   context: CliContext,
   paths: RuntimePaths,
   brainConfig: BrainConfigV1,
+  redact: Redactor,
 ): Promise<readonly IndexExcerptEntryV1[]> {
   const indexPath = join(paths.brain, artifactPaths(brainConfig).index);
   if (!(await exists(context, indexPath))) return [];
@@ -1498,9 +1507,9 @@ async function readIndexExcerpt(
   }
 
   return parsed.notes.filter(isIndexNoteShape).map((note) => ({
-    path: note.path,
-    title: note.title,
-    summary: note.summary,
+    path: redact(note.path).text,
+    title: redact(note.title).text,
+    summary: redact(note.summary).text,
   }));
 }
 
@@ -1838,23 +1847,26 @@ export async function runIngest(
         ),
     );
 
-    /**
-     * Once per run, not once per capture — see `readIndexExcerpt`.
-     */
-    const indexExcerpt = await readIndexExcerpt(context, paths, brainConfig);
-
     const key = loadOrCreateRedactionKey(paths.stateDir);
     /**
      * Built once, where the key and the configuration are both in scope, and carried on
      * the environment below. Spec §8.2's user patterns must reach the *prompt* above all:
      * `buildIngestPrompt` puts a capture body in front of a vendor model, and a client
      * name no generic class catches is exactly what this table exists to keep out of it
-     * (BACKLOG NEW-16).
+     * (BACKLOG NEW-16). The index excerpt is read below, after this exists, for the same
+     * reason: it is on-disk vault text a hand edit can plant a secret into, exactly like a
+     * capture body (`packages/brain/src/capture/parse.ts`'s re-redaction on read), so it
+     * must pass through `redact` before it ever reaches `buildIngestPrompt`.
      */
     const redact = createRedactor(key, {
       userPatterns: config.redaction?.patterns ?? [],
     });
     guards = guardsWith(context.guards, redact);
+
+    /**
+     * Once per run, not once per capture — see `readIndexExcerpt`.
+     */
+    const indexExcerpt = await readIndexExcerpt(context, paths, brainConfig, redact);
 
     const selection = await selectCaptures(context, quarantine, redact, limit);
     const environment: IngestEnvironment = {
