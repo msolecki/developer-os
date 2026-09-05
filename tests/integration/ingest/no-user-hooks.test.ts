@@ -4,11 +4,17 @@ import { dirname, join } from "node:path";
 import { env as processEnv } from "node:process";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { invokeClaude } from "@developer-os/adapter-claude";
+import type { ClaudeInvocation } from "@developer-os/adapter-claude";
+import type {
+  ProcessRequest,
+  ProcessResult,
+  ProcessRunner,
+} from "@developer-os/security";
 import {
   addedPaths,
   createTempHome,
   inventory,
-  isInside,
   removeTempHome,
 } from "../../helpers/temp-home.js";
 import type { TempHome } from "../../helpers/temp-home.js";
@@ -79,38 +85,72 @@ function invocationEnv(home: TempHome): Record<string, string> {
   };
 }
 
+const VENDOR_TIMEOUT_MS = 15_000;
+
 /**
- * The exact fixed flags `packages/adapter-claude/src/invoke.ts` builds today
- * (its `-p`/prompt and `--max-turns` value are literals here since this test
- * calls the binary directly, not through `invokeClaude`).
+ * A `ProcessRunner` that never spawns anything: it records the request
+ * `invokeClaude` built and resolves immediately with a synthetic result.
+ * `invokeClaude` never sees the difference between this and a real spawn, so
+ * the argv it hands the runner is the same argv it would hand `child_process`
+ * in production.
  */
-function isolatedArgs(): readonly string[] {
-  return [
-    "-p",
-    "ping",
-    "--output-format",
-    "json",
-    "--max-turns",
-    "1",
-    "--tools",
-    "",
-    "--strict-mcp-config",
-    "--restricted",
-    "--safe-mode",
-    "--no-session-persistence",
-    "--permission-prompts",
-    "none",
-  ];
+function capturingRunner(): {
+  runner: ProcessRunner;
+  seen: () => ProcessRequest | null;
+} {
+  let request: ProcessRequest | null = null;
+  return {
+    seen: () => request,
+    runner: {
+      run(incoming: ProcessRequest): Promise<ProcessResult> {
+        request = incoming;
+        return Promise.resolve({
+          stdout: "",
+          stderr: "",
+          exitCode: 0,
+          signal: null,
+          timedOut: false,
+        });
+      },
+    },
+  };
+}
+
+/**
+ * The argv `packages/adapter-claude/src/invoke.ts` builds today, derived by
+ * actually calling `invokeClaude` against `capturingRunner` rather than
+ * hand-copied as a literal (I5): a flag dropped from the shipped invocation —
+ * `--restricted` included — changes what this function returns, which fails
+ * every case built on it, instead of leaving a stale literal that still
+ * exercises a flag list the product no longer sends. `installation` is
+ * synthetic because nothing here spawns it; only the argv `invokeClaude`
+ * assembles is read back.
+ */
+async function isolatedArgs(): Promise<readonly string[]> {
+  const { runner, seen } = capturingRunner();
+  const invocation: ClaudeInvocation = {
+    prompt: "ping",
+    maxTurns: 1,
+    timeoutMs: VENDOR_TIMEOUT_MS,
+  };
+  await invokeClaude(
+    { executable: "/opt/synthetic/bin/claude", version: "0.0.0" },
+    invocation,
+    { runner },
+  );
+  const args = seen()?.args;
+  if (args === undefined) {
+    throw new Error("invokeClaude did not reach the runner; no argv to derive");
+  }
+  return args;
 }
 
 /** The isolated argv with exactly the two flags under test removed. */
-function controlArgs(): readonly string[] {
-  return isolatedArgs().filter(
+async function controlArgs(): Promise<readonly string[]> {
+  return (await isolatedArgs()).filter(
     (arg) => arg !== "--restricted" && arg !== "--safe-mode",
   );
 }
-
-const VENDOR_TIMEOUT_MS = 15_000;
 
 /**
  * Plants a `SessionStart` hook the way the installed Claude Code (2.1.261)
@@ -192,7 +232,7 @@ describe("a planted user hook against a real Claude Code installation", () => {
 
       await runVendorExpectingLocalFailure(
         claude ?? "",
-        controlArgs(),
+        await controlArgs(),
         invocationEnv(home),
       );
 
@@ -212,15 +252,41 @@ describe("a planted user hook against a real Claude Code installation", () => {
 
       await runVendorExpectingLocalFailure(
         claude ?? "",
-        isolatedArgs(),
+        await isolatedArgs(),
         invocationEnv(home),
       );
 
       const after = await inventory(home.root);
       expect(after.has(sentinel)).toBe(false);
 
+      /**
+       * **The property the plan asked for is "nothing was written outside the
+       * paths this run is entitled to write", not "nothing was written outside
+       * the sandbox"** — `added` is already computed from `inventory(home.root)`,
+       * whose walk only ever records paths beneath the root it is given
+       * (`tests/helpers/temp-home.ts`'s `walk`), so `isInside(home.root, path)`
+       * over `added` could not fail regardless of what the invocation wrote (I1).
+       *
+       * **The entitled subset is not empty, despite `--no-session-persistence`.**
+       * A run under this exact argv was observed writing
+       * `.claude/sessions/<pid>.json` and its matching `.key` file under `HOME`
+       * even though the flag's own help text says sessions "will not be saved to
+       * disk" — the SIGKILL this harness sends (see
+       * `runVendorExpectingLocalFailure`) catches that per-run bookkeeping before
+       * the vendor's own cleanup removes it, the same way `plugin-loads.test.ts`
+       * records `claude plugin validate` mutating a home it was pointed at. That is
+       * vendor state, not a hook, and it is confined to `.claude/sessions/`, so
+       * the assertion below allows only that prefix and refuses everything else —
+       * in particular a sentinel a hook could plant anywhere outside it.
+       * Falsifiability was checked by temporarily substituting `controlArgs()`
+       * (no `--restricted`/`--safe-mode`) for `isolatedArgs()` here: `added` then
+       * also contained the control sentinel outside `.claude/sessions/`, and this
+       * assertion went red.
+       */
+      const entitled = join(home.home, ".claude", "sessions");
       const added = addedPaths(before, after);
-      expect(added.every((path) => isInside(home.root, path))).toBe(true);
+      const outside = added.filter((path) => !path.startsWith(`${entitled}/`));
+      expect(outside).toStrictEqual([]);
     },
     120_000,
   );
