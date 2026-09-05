@@ -92,6 +92,7 @@ export type { ReviewDecision, ReviewOutcome } from "./review/index.js";
 export {
   buildIngestPrompt,
   MAX_PROMPT_CONTENT_GRAPHEMES,
+  MAX_PROMPT_INDEX_GRAPHEMES,
   MAX_PROPOSED_NOTE_CHARS,
   MAX_PROPOSED_NOTES,
   MAX_PROPOSED_PATH_CHARS,
@@ -102,6 +103,7 @@ export {
 } from "./ingest/index.js";
 export type {
   ApplyResult,
+  IndexExcerptEntryV1,
   IngestProposal,
   IngestProposalOutcome,
   IngestProposalRefusal,

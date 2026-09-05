@@ -19,6 +19,7 @@ import type {
 import { DEFAULT_MAX_TURNS, invokeClaude } from "@developer-os/adapter-claude";
 import { invokeCodex } from "@developer-os/adapter-codex";
 import {
+  artifactPaths,
   BrainService,
   buildIngestPrompt,
   parseCaptureFile,
@@ -32,6 +33,7 @@ import type {
   BrainConfigV1,
   CaptureEnvelopeV1,
   CaptureStatus,
+  IndexExcerptEntryV1,
   IngestValidationFinding,
   PlannedNoteWriteV1,
   ValidatorId,
@@ -1159,6 +1161,11 @@ interface IngestEnvironment {
   readonly contentRoot: string;
   readonly vendor: Vendor;
   readonly ingestContract: readonly string[];
+  /**
+   * Read once here, from the vault's own index, rather than once per capture
+   * — see `readIndexExcerpt`, which reads it and is called once in `runIngest`.
+   */
+  readonly indexExcerpt: readonly IndexExcerptEntryV1[];
 }
 
 /**
@@ -1205,7 +1212,7 @@ async function ingestOne(
   environment: IngestEnvironment,
   fileName: string,
 ): Promise<CaptureOutcome> {
-  const { brainConfig, paths, quarantine, redact, vendor } = environment;
+  const { brainConfig, indexExcerpt, paths, quarantine, redact, vendor } = environment;
   const captureId = fileName.slice(0, -CAPTURE_FILE_SUFFIX.length);
 
   /**
@@ -1268,7 +1275,7 @@ async function ingestOne(
     const outcome = await invokeVendor(
       context,
       vendor,
-      buildIngestPrompt(envelope, { config: brainConfig }),
+      buildIngestPrompt(envelope, { config: brainConfig, indexExcerpt }),
       environment.contentRoot,
       outputSchemaPath(paths.home, INGEST_VERB),
     );
@@ -1416,6 +1423,85 @@ function guardsWith(guards: CliGuards, redact: Redactor): CliGuards {
     ...guards,
     redactDiagnostic: (text: string): string => redact(text).text,
   };
+}
+
+function isIndexNoteShape(
+  value: unknown,
+): value is { path: string; title: string; summary: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { path?: unknown }).path === "string" &&
+    typeof (value as { title?: unknown }).title === "string" &&
+    typeof (value as { summary?: unknown }).summary === "string"
+  );
+}
+
+function isIndexDocumentShape(
+  value: unknown,
+): value is { schemaVersion: 1; notes: readonly unknown[] } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as { schemaVersion?: unknown }).schemaVersion === 1 &&
+    Array.isArray((value as { notes?: unknown }).notes)
+  );
+}
+
+/**
+ * The vault's own index, as the bounded excerpt `buildIngestPrompt` carries in
+ * place of a read scope over the vault. Read once here, at run setup, and
+ * handed down on `IngestEnvironment` — never re-read per capture, which would
+ * make one run's cost scale with its capture count instead of its vault size.
+ *
+ * **A fresh vault has no index until the first `brain reindex`, and that is
+ * not this run's problem to solve.** Absent, unreadable or unparsable, the
+ * excerpt is empty and ingest proceeds; only a status a user would want
+ * explained — the file exists but this run could not use it — reaches
+ * `context.io.stderr`, the same channel `runIngest` already uses for a
+ * recoverable, run-level condition (see `EPHEMERAL_KEY_WARNING`). A vault that
+ * has simply never been reindexed is not a status worth a line on every run.
+ */
+async function readIndexExcerpt(
+  context: CliContext,
+  paths: RuntimePaths,
+  brainConfig: BrainConfigV1,
+): Promise<readonly IndexExcerptEntryV1[]> {
+  const indexPath = join(paths.brain, artifactPaths(brainConfig).index);
+  if (!(await exists(context, indexPath))) return [];
+
+  let text: string;
+  try {
+    text = await context.guards.readText(indexPath);
+  } catch (error) {
+    context.io.stderr(
+      `the vault index at ${renderPath(indexPath)} could not be read (${String(error)}), so ingest proceeds without an index excerpt`,
+    );
+    return [];
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    context.io.stderr(
+      `the vault index at ${renderPath(indexPath)} is not valid JSON (${String(error)}), so ingest proceeds without an index excerpt`,
+    );
+    return [];
+  }
+
+  if (!isIndexDocumentShape(parsed)) {
+    context.io.stderr(
+      `the vault index at ${renderPath(indexPath)} does not parse as an index document, so ingest proceeds without an index excerpt`,
+    );
+    return [];
+  }
+
+  return parsed.notes.filter(isIndexNoteShape).map((note) => ({
+    path: note.path,
+    title: note.title,
+    summary: note.summary,
+  }));
 }
 
 function compareIds(left: IngestedCaptureV1, right: IngestedCaptureV1): number {
@@ -1752,6 +1838,11 @@ export async function runIngest(
         ),
     );
 
+    /**
+     * Once per run, not once per capture — see `readIndexExcerpt`.
+     */
+    const indexExcerpt = await readIndexExcerpt(context, paths, brainConfig);
+
     const key = loadOrCreateRedactionKey(paths.stateDir);
     /**
      * Built once, where the key and the configuration are both in scope, and carried on
@@ -1774,6 +1865,7 @@ export async function runIngest(
       contentRoot,
       redact,
       vendor,
+      indexExcerpt,
       /**
        * Resolved once per invocation, here, because resolution is per-install:
        * the declared globs are constants and the strings they become depend on

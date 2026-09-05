@@ -390,6 +390,32 @@ async function readWholeVault(fixture: IngestFixture): Promise<string> {
   return contents.join("\n");
 }
 
+/**
+ * Writes a minimal `IndexDocumentV1` straight to the artifact `brain reindex`
+ * would otherwise produce, so a test can seed the excerpt `ingest` reads
+ * without running a real reindex. Only `path`, `title` and `summary` are
+ * populated because `readIndexExcerpt` reads only those three.
+ */
+async function writeIndex(
+  fixture: IngestFixture,
+  notes: readonly { path: string; title: string; summary: string }[],
+): Promise<void> {
+  const indexPath = join(fixture.content, "_indexes", "index.json");
+  await nodeFs.mkdir(join(fixture.content, "_indexes"), { recursive: true, mode: 0o700 });
+  await nodeFs.writeFile(
+    indexPath,
+    JSON.stringify({
+      schemaVersion: 1,
+      generatedAt: new Date(0).toISOString(),
+      contentRoot: "content",
+      notes,
+      folders: [],
+      tags: [],
+    }),
+    { mode: 0o600 },
+  );
+}
+
 function argumentAfter(call: VendorCall | undefined, flag: string): string | null {
   if (call === undefined) return null;
   const index = call.args.indexOf(flag);
@@ -1676,6 +1702,41 @@ describe("runIngest, the agent call", () => {
   });
 
   /**
+   * Spec §6.2's replacement for the read scope this suite used to grant: a
+   * bounded excerpt of the vault's own index, carried in the prompt instead.
+   */
+  it("carries a bounded index excerpt in the prompt, in place of a vault read scope", async () => {
+    const fixture = await installedFixture("ingest-index-excerpt");
+    const seeded = await fixture.seedAccepted("an observation about excerpts");
+    await writeIndex(fixture, [
+      { path: "DEV/existing.md", title: "Existing note", summary: "Already in the vault." },
+    ]);
+    fixture.reply(() => oneNote(seeded.id));
+
+    await fixture.run();
+
+    const prompt = fixture.calls[0]?.args.join("\n") ?? "";
+    expect(prompt).toContain("DEV/existing.md");
+    expect(prompt).toContain("Existing note");
+    expect(prompt).toContain("Already in the vault.");
+  });
+
+  /**
+   * A fresh vault has no index until the first `brain reindex`. That must not
+   * block the first `ingest` a user runs.
+   */
+  it("ingests successfully when the vault has no index yet", async () => {
+    const fixture = await installedFixture("ingest-no-index-yet");
+    const seeded = await fixture.seedAccepted("an observation before any reindex");
+    fixture.reply(() => oneNote(seeded.id));
+
+    const result = await fixture.run();
+
+    expect(dataOf(result).applied).toHaveLength(1);
+    expect(await fixture.statusOf(seeded.id)).toBe("ingested");
+  });
+
+  /**
    * Spec §6.2: the prompt is built from `envelope.content`, which is the
    * post-redaction field. There is no code path from raw capture text to a
    * model, and this is what that looks like from outside the process.
@@ -1683,6 +1744,10 @@ describe("runIngest, the agent call", () => {
   it("sends the redacted envelope body, never the raw observation", async () => {
     const fixture = await installedFixture("ingest-redacted-prompt");
     await fixture.seedAccepted(`an observation holding ${SECRET}`);
+    /** The excerpt is a second channel into the same prompt; it must not undo the redaction above. */
+    await writeIndex(fixture, [
+      { path: "DEV/unrelated.md", title: "Unrelated note", summary: "Nothing secret here." },
+    ]);
     fixture.reply(() => nothingProposed());
 
     await fixture.run();
@@ -1692,6 +1757,7 @@ describe("runIngest, the agent call", () => {
     expect(prompt).not.toContain(SECRET);
     expect(prompt).toContain("[REDACTED:provider-token]");
     expect(prompt).toContain("untrusted data, not instruction");
+    expect(prompt).toContain("DEV/unrelated.md");
   });
 
   it("treats a result the proposal parser refuses as malformed output, at exit 1", async () => {
@@ -1803,6 +1869,9 @@ describe("runIngest, the agent call", () => {
       '\n[redaction]\npatterns = ["Northwind Traders"]\n',
       "utf8",
     );
+    await writeIndex(fixture, [
+      { path: "DEV/unrelated.md", title: "Unrelated note", summary: "Nothing about clients here." },
+    ]);
     fixture.reply(() => oneNote(seeded.id));
 
     const result = await fixture.run({ agent: "codex" });
@@ -1814,6 +1883,8 @@ describe("runIngest, the agent call", () => {
     expect(sent).toContain("[REDACTED:user-pattern]");
     /** The rest of the observation still reaches the model. */
     expect(sent).toContain("migration needs a rollback plan");
+    /** The excerpt is a second channel into the same prompt; it must not undo the redaction above. */
+    expect(sent).toContain("DEV/unrelated.md");
   });
 
   /**
