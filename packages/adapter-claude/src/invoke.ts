@@ -98,9 +98,9 @@ export async function invokeClaude(
    *   servers, custom commands and agents disabled; auth and built-in tools
    *   stay (row 19).
    * - `--no-session-persistence` — keeps the run out of the user's resumable
-   *   history; print mode only (row 11).
+   *   history; print mode only (row 20).
    * - `--permission-prompts none` — denies anything that would prompt in print
-   *   mode (row 11).
+   *   mode (row 21).
    *
    * Deliberately NOT passed: `--setting-sources ""` (row 6 — whether an empty
    * value means "load none" is unobserved); `--permission-mode` (row 8 — the
