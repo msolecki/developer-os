@@ -34,7 +34,7 @@ import type { CodexInstallation } from "./discover.js";
  * Codex-only since 349511e**: `adapter-claude`'s `ClaudeInvocation` carries no
  * scope-shaped field at all — no `allowedTools`, no derived path, nothing for
  * a screen to see — because Claude is invoked with `--tools ""` instead of a
- * tool allow-list (`packages/adapter-claude/src/invoke.ts:7-11`).
+ * tool allow-list (the `adapter-claude` package's `invoke.ts`, lines 7-11).
  */
 export interface CodexInvocation {
   readonly prompt: string;
