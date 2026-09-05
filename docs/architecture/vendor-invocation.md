@@ -143,6 +143,62 @@ shape. This gap is exactly what the plan's F3 row already says: "suggestive and 
 **Weaker evidence, stated explicitly (row 7):** same caveat as the Claude table's row 13 — `--help`
 succeeding under `env -i` is not evidence a real `codex exec` run succeeds with no environment.
 
+### Source rows (Task 4, F3 / NEW-47) — distinct from the probes above
+
+Rows 1-7 above are **binary probes**: they run the installed 0.151.0 executable and record what it
+prints. Rows 8-12 below are **source reads**: they quote the public Rust source at GitHub
+`openai/codex`, tag `rust-v0.151.0`, commit `d8673cb68e349c208659b986697773d3145dbb14`, fetched with
+`gh api "repos/openai/codex/contents/<path>?ref=rust-v0.151.0" --jq '.content' | base64 -d`. A source
+row is evidence about what the vendor's code is written to do; it is not a run and is weaker than a
+probe exactly where behaviour depends on runtime conditions (see the note after row 12). Every row
+was corroborated against the installed binary before being trusted — see the corroboration note
+below the table.
+
+| # | observation | source location (at `rust-v0.151.0`) | verbatim quote | vendor version | date |
+|---|---|---|---|---|---|
+| 8 | The exact set of `codex exec --json` event `type` values | `codex-rs/exec/src/exec_events.rs`, `enum ThreadEvent` | `#[serde(tag = "type")]`<br>`pub enum ThreadEvent { ... }` with variants tagged `#[serde(rename = "thread.started")]`, `"turn.started"`, `"turn.completed"`, `"turn.failed"`, `"item.started"`, `"item.updated"`, `"item.completed"`, `"error"` | 0.151.0 | 2026-09-05 |
+| 9 | `turn.completed` exists but carries only a usage record, no final-message field | `codex-rs/exec/src/exec_events.rs`, `struct TurnCompletedEvent` | `pub struct TurnCompletedEvent {`<br>`    pub usage: Usage,`<br>`}` — no other field | 0.151.0 | 2026-09-05 |
+| 10 | The final message reaches the user only through a separate file-write flag, never through the `--json` stream | `codex-rs/exec/src/cli.rs`, `Cli.last_message_file` | `/// Specifies file where the last message from the agent should be written.`<br>`#[arg(long = "output-last-message", short = 'o', value_name = "FILE", global = true)]`<br>`pub last_message_file: Option<PathBuf>,` | 0.151.0 | 2026-09-05 |
+| 11 | The wire item-type tag for an agent reply is `agent_message` (snake_case), matching `finalAgentMessage`'s check, and distinct from the app-server v2 protocol's `agentMessage` (row 6) | `codex-rs/exec/src/exec_events.rs`, `enum ThreadItemDetails` | `#[serde(tag = "type", rename_all = "snake_case")]`<br>`pub enum ThreadItemDetails { AgentMessage(AgentMessageItem), ... }` | 0.151.0 | 2026-09-05 |
+| 12 | The vendor's own equivalent of `finalAgentMessage` selects the *last* `agent_message` in a turn, and the streaming path that emits `item.completed`/`agent_message` onto the JSONL stream overwrites its notion of "the final message" on every such item as the stream is produced — both are last-wins | `codex-rs/exec/src/event_processor_with_jsonl_output.rs`, `fn final_message_from_turn_items` and the `ServerNotification::ItemCompleted` arm of `fn collect_thread_events` | `items.iter().rev().find_map(|item| match item { ThreadItem::AgentMessage { text, .. } => Some(text.clone()), _ => None })` — and — `if let ThreadItemDetails::AgentMessage(AgentMessageItem { text }) = &item.details { self.final_message = Some(text.clone()); }` (this second block runs once per `ItemCompleted` notification, so a later `agent_message` overwrites an earlier one) | 0.151.0 | 2026-09-05 |
+
+**Binary corroboration (Task 4, item 2 of the brief):** before trusting rows 8-12, the literal wire
+strings named in the fetched source were searched for in the installed Mach-O binary with `strings -a
+<binary> | grep -F -- "<literal>"`. All matched: `thread.started` (7), `turn.started` (1),
+`turn.completed` (1), `turn.failed` (1), `item.started` (1), `item.updated` (1), `item.completed` (1),
+`agent_message` (44), `output-last-message` (1), `ignore-user-config` (1), `ignore-rules` (1),
+`output-schema` (1), `thread_id` (399) — counts are `grep -c` results, not claims about how many times
+each string is used at runtime. One literal did **not** match: `AgentMessageThreadItem` (0) — that
+string is the JSON-Schema `title` field `app-server generate-json-schema` emits for its v2-protocol
+type (already recorded above, row 6), not a wire tag `codex exec --json` ever prints, so its absence
+from the binary's strings does not weaken rows 8-12. Because every wire-tag literal that source claims
+this build emits was found in the binary, rows 8-12 are treated as describing the installed 0.151.0
+build, not merely a same-numbered release that could differ.
+
+**What source settles and what it does not, stated separately from the probes' own caveats.** Row 9
+settles, from the struct definition rather than one recording, that `turn.completed` cannot carry a
+final-message field in this version — there is no such field to add, so Task 4 Step 2's outcome 1
+("prefer `turn.completed`'s final-message field") does not apply. Row 12 settles that the vendor's
+own code already implements last-wins as its intended selection rule when more than one
+`agent_message` exists in a turn — but it does not settle, and cannot settle from source alone,
+whether a real turn against this product's schema-constrained prompts ever actually emits more than
+one; that is a runtime fact `BACKLOG.md` §1 NEW-45 still owns. Row 11 settles the field-name question
+outright: `agent_message` is unchanged in 0.151.0, so no rename risk exists for this version.
+
+**Fixture-currency check (Task 4, item 6 of the brief).** `tests/fixtures/codex/` recordings were
+captured against `codex-cli 0.147.0` (see that directory's README). Comparing those recordings
+field-for-field against the 0.151.0 struct definitions above: every event `type` value the fixtures
+use (`thread.started`, `turn.started`, `item.started`, `item.completed`, `turn.completed`) matches a
+0.151.0 `ThreadEvent` variant tag exactly; the fixtures' `turn.completed.usage` object's five fields
+(`input_tokens`, `cached_input_tokens`, `cache_write_input_tokens`, `output_tokens`,
+`reasoning_output_tokens`) match `struct Usage` in `exec_events.rs` field-for-field, in the same
+order; and the fixtures' `agent_message` item shape (`id`, `type`, `text`) matches
+`AgentMessageItem`/`ThreadItem`. No field or tag drift was found between what the 0.147.0 fixtures
+show and what the 0.151.0 source defines. This is a **shape comparison against source**, not a new
+observed run of 0.151.0 — it does not prove the 0.147.0 recordings are what a live 0.151.0 turn
+produces, only that the wire schema the source defines has not changed in a way the fixtures would
+have missed.
+
 ## Probes not run, and why
 
 - `claude --max-turns 5` **without** `--help` (would test whether `--max-turns` is genuinely

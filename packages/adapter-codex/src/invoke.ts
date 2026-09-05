@@ -151,7 +151,7 @@ export function invocationFromAgentPrompt(
  * answer. A failure a caller can act on is worth more than a coincidence that
  * held on one stream shape.
  *
- * **Two things select the response, and only one of them is observed.**
+ * **Two things select the response, and source now settles both — differently.**
  *
  * The `item.type` test is: the observed stream carries two `item.completed`
  * events and the first is a `command_execution`. It has no `text`, so that
@@ -159,15 +159,38 @@ export function invocationFromAgentPrompt(
  * item that *does* carry `text` and is not the response, which is the shape of
  * a reasoning item, and `invoke.test.ts` pins exactly that.
  *
- * **The last-wins tie-break is an inference and is labelled as one**, per Codex
- * architecture former §14.1's rule that an unobserved claim is not written as an observation. The
- * recording contains exactly **one** `agent_message`. Nothing observed says
- * whether `--output-schema` constrains every assistant message or only the
- * terminal one, so nothing rules out a free-text summary arriving after the
- * structured response — under which this returns the summary and every Codex
- * ingest fails as `malformed-output`. That is the same silent-and-total shape
- * this function was rewritten to end, which is why it is named here rather than
- * left implicit. `BACKLOG.md` §1 NEW-45.
+ * **`turn.completed` does not carry the response — settled from source, not
+ * inferred from one recording.** Codex source at tag `rust-v0.151.0` (commit
+ * `d8673cb68e349c208659b986697773d3145dbb14`), `codex-rs/exec/src/exec_events.rs`,
+ * defines `pub struct TurnCompletedEvent { pub usage: Usage }` — no message
+ * field of any kind. The only mechanism that exposes a final message outside
+ * this scan is `--output-last-message`/`-o` (`codex-rs/exec/src/cli.rs`), which
+ * writes to a *separate file*, never onto the `--json` stdout stream this
+ * function parses — so there is no cheaper field on `turn.completed` to prefer.
+ * `docs/architecture/vendor-invocation.md`'s Codex table (Task 4 rows) quotes
+ * the struct verbatim.
+ *
+ * **The last-wins tie-break is source-corroborated, but not the same thing as
+ * an observed run.** `codex-rs/exec/src/event_processor_with_jsonl_output.rs`
+ * shows the vendor's own equivalent of this function, `final_message_from_turn_items`,
+ * selects the response with `items.iter().rev().find_map(...)` over
+ * `AgentMessage` items — the *last* one in turn order — and the streaming path
+ * that emits each `item.completed`/`agent_message` event unconditionally
+ * overwrites its own `self.final_message` on every such item as the stream is
+ * produced, i.e. last write wins. That is source evidence that when more than
+ * one `agent_message` occurs, the vendor's own code already treats the last one
+ * as canonical, the same rule this function applies. It is not evidence that a
+ * real turn against this product's schema-constrained prompts ever emits more
+ * than one — that remains unobserved and is still owned by `BACKLOG.md` §1
+ * NEW-45. Source is weaker than an observed run exactly here, because whether
+ * multiple `agent_message` items occur depends on runtime model behaviour, not
+ * on what the vendor's code is capable of.
+ *
+ * **The field name is unchanged in this version.** `exec_events.rs`'s
+ * `ThreadItemDetails` enum carries `#[serde(tag = "type", rename_all =
+ * "snake_case")]`, so the wire value is `"agent_message"` (snake_case) — not
+ * the app-server v2 protocol's `agentMessage` — so the `message.type !==
+ * "agent_message"` check below needs no rename for 0.151.0.
  *
  * **What keeps the failure path safe is still not this function.** On a failed
  * turn no `agent_message` is ever emitted, so this returns `""`; but the

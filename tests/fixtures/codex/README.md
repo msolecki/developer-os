@@ -18,6 +18,16 @@ All ran against `codex-cli 0.147.0` on macOS.
 0.147.0's output protocol only; whether it still describes 0.151.0 is unsettled here and is owned
 by Task 4 of `docs/superpowers/plans/2026-09-04-developer-os-ingest-isolation.md`.
 
+**2026-09-05, Task 4: no drift found, by shape comparison against source, not by a new run.** Task 4
+read the public 0.151.0 Rust source (`openai/codex`, tag `rust-v0.151.0`) and compared it
+field-for-field against these recordings: every event `type` these fixtures use, the five fields of
+`turn.completed`'s `usage` object, and the `agent_message` item shape all match the 0.151.0 struct
+definitions exactly (see `docs/architecture/vendor-invocation.md`, Codex table, source rows 8-12).
+That settles that the *wire schema* has not changed between 0.147.0 and 0.151.0 in a way these
+recordings would have missed — it does not mean these are recordings *of* 0.151.0, only that nothing
+found in source contradicts them. Re-recording against 0.151.0 remains a founder decision (a paid
+run), not something this comparison authorises.
+
 **Every one of them is read by a test, and the word is *read* rather than *cited*.** A recording only
 named in a comment is a claim nobody checks — a fresh-context review found that
 `observed-exec-schema-refusal.jsonl` could be deleted with the whole suite green while a docblock went
