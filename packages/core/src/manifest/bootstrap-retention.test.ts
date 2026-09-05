@@ -2155,6 +2155,51 @@ describe("retained bootstrap table derivation", () => {
     },
   );
 
+  it("admits an untracked descendant that matches the pinned tree hash, but not one that does not", () => {
+    /**
+     * `verifyDirectoryTrees` gave up requiring an evidence row for every
+     * entry a directory's recursive walk observes -- ordinary content with
+     * no authority of its own (a seed file, here) never gets one. What still
+     * covers it: the root's `treeHash`, checked below against these exact
+     * entries before the per-entry loop runs, so a tampered untracked entry
+     * is refused there regardless of whether it has a row.
+     */
+    const evidence = admittedEvidence();
+    const stagingRoot = plan.operation === "fresh_v2_init" ? plan.stagingRoot : plan.paths.stagingRoot;
+    const entries = [{
+      relativePath: "seed.txt",
+      kind: "regular_file" as const,
+      ownerUid: 501,
+      mode: 0o600 as const,
+      nlink: 1,
+      bytes: parseUInt64Decimal(String(Buffer.byteLength("seed-content"))),
+      sha256: hash("seed-content"),
+      dev: parseUInt64Decimal("1"),
+      ino: parseUInt64Decimal("701"),
+    }];
+    const derived = {
+      treeHash: domainHash("developer-os/bootstrap-retained-tree/v1\0", entries),
+      entryCount: entries.length,
+      regularFileBytes: parseUInt64Decimal(String(Buffer.byteLength("seed-content"))),
+      entries,
+    };
+    const projection = {
+      ...evidence,
+      directoryTrees: [{ rootPath: stagingRoot, entries }],
+      rows: evidence.rows.map((row) => row.sourcePath === stagingRoot
+        ? { ...row, postimage: { ...row.postimage, ...derived } }
+        : row),
+    } as unknown as BootstrapRetentionEvidenceProjectionV1;
+
+    expect(() => deriveBootstrapRetentionTable(plan, projection)).not.toThrow();
+
+    const tamperedEntries = [{ ...entries[0], sha256: hash("tampered-content") } as typeof entries[number]];
+    expect(() => deriveBootstrapRetentionTable(plan, {
+      ...projection,
+      directoryTrees: [{ rootPath: stagingRoot, entries: tamperedEntries }],
+    } as unknown as BootstrapRetentionEvidenceProjectionV1)).toThrow();
+  });
+
   it("requires one and only one complete projection for every maximal directory root", () => {
     const evidence = admittedEvidence();
     const extra = syntheticDirectoryTree(path("/product/staging/unadmitted"), 801).evidence;
