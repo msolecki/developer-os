@@ -50,15 +50,18 @@ concurrency:
 # preserves what the single `npm run check` step was protecting: CI cannot drift
 # from local, because neither side spells the vitest invocations itself.
 #
-# Both paths cover the same files, by different routes. Here: four parallel jobs
-# — `lint` (`npm run lint`, the build, `git diff --check`), `bootstrap-executor`
-# (`npm run test:bootstrap`), `suite` (`npm run test:suite`, which excludes the
-# executor file and `e2e/**`), and `e2e` (`npm run test:e2e`). Locally:
-# `npm run check` runs `npm run lint`, then `npm test` (`test:bootstrap` and
-# `test:suite`), then `npm run test:e2e`, then the build, then
-# `git diff --check`. `test:e2e` is spelled out in `check` because `test:suite`
-# excludes `e2e/**` for the sharding above, so `npm test` alone no longer
-# reaches it.
+# Both paths cover the same files, by different routes. Here: five parallel
+# jobs — `lint` (`npm run lint`, the build, `git diff --check`),
+# `bootstrap-executor` (`npm run test:bootstrap`), `suite`
+# (`npm run test:suite`, which excludes the executor file, `e2e/**` and
+# `integration/ingest/no-user-hooks.test.ts`), `e2e` (`npm run test:e2e`), and
+# `vendor-ingest` (`npm run test:vendor-ingest`). Locally: `npm run check` runs
+# `npm run lint`, then `npm test` (`test:bootstrap` and `test:suite`), then
+# `npm run test:e2e`, then `npm run test:vendor-ingest`, then the build, then
+# `git diff --check`. `test:e2e` and `test:vendor-ingest` are spelled out in
+# `check` because `test:suite` excludes `e2e/**` and
+# `integration/ingest/no-user-hooks.test.ts` for the sharding above, so
+# `npm test` alone no longer reaches either.
 jobs:
   # macOS on every job, and not a preference. `packages/platform-macos` shells
   # out to `/usr/bin/lockf` for advisory locking, and the e2e suite drives the
@@ -175,3 +178,41 @@ jobs:
         run: pnpm --pm-on-fail=ignore build
       - name: End to end
         run: pnpm test:e2e
+
+  vendor-ingest:
+    # `tests/integration/ingest/no-user-hooks.test.ts` alone, excluded from
+    # `suite` on 2026-09-05: it spawns the real `claude` binary twice and
+    # holds each process ~15s because the vendor never exits on its own.
+    # Measured that day, leaving it inside the parallel suite pushed eight
+    # already-slow retained-evidence tests past their 300s timeout; excluding
+    # it took the suite from ten failures to two. Same treatment `e2e/**`
+    # already gets, per founder decision D10.
+    #
+    # This job proves the isolation property only on a runner that has
+    # `claude` installed. The test's own `it.skipIf` makes the job pass
+    # without running a single case when the binary is absent, and hosted
+    # `macos-15` runners do not ship it — so a green run here is not evidence
+    # that no user hook loaded. The actual guarantee comes from `npm run
+    # check` on a developer machine that has the vendor installed; this job
+    # exists so a machine that *does* have it is still covered by CI, not to
+    # replace that local gate.
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Enable pnpm through corepack
+        run: corepack enable
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        # The test imports `@developer-os/adapter-claude` and
+        # `@developer-os/security`, both of which resolve through `exports`
+        # to `dist/index.js` rather than source.
+        run: pnpm --pm-on-fail=ignore build
+      - name: Vendor ingest isolation
+        run: npm run test:vendor-ingest
