@@ -508,12 +508,17 @@ Measured in a disposable `CODEX_HOME` during the 2026-09-04 audit.
   writes (§2). A product-installed hook runs only after interactive approval; the founder accepted
   manual trust on 2026-09-04 (A13). The executable-bit blocker described beside `PLUGIN_TREE_PREFIX`
   is self-imposed; a `type: "command"` hook may name the installed `developer-os` binary.
-- **`codex exec` isolation flags exist and are not used:** `--ephemeral`, `--ignore-user-config`,
-  `--ignore-rules`. Without them an ingest run persists a thread in the user's history and loads the
-  user's config, rules and MCP servers. `--output-last-message` exists, and this version's
-  `turn.completed` event carries `last_agent_message`, a deterministic replacement for the
-  `finalAgentMessage` selection in §7. No fixture in `tests/fixtures/codex/` comes from this version.
-  Owner: NEW-58 with NEW-45/NEW-47.
+- **`codex exec` isolation flags are passed as of `7cce445`:** `--ephemeral`, `--ignore-user-config`,
+  `--ignore-rules` are all three in the fixed argv this adapter builds, so an ingest run no longer
+  persists a thread in the user's history or loads the user's config, rules or MCP servers. This
+  closes NEW-58. **There is no deterministic replacement for the `finalAgentMessage` selection in §7,
+  and none is needed:** Codex source at tag `rust-v0.151.0` (commit
+  `78c290807ce710180111df227df3b7a4fe845452`), `codex-rs/exec/src/exec_events.rs`, defines
+  `pub struct TurnCompletedEvent { pub usage: Usage }` — `turn.completed` carries only a usage
+  record, no `last_agent_message` or any other message field, in this version. This closes NEW-47.
+  No fixture in `tests/fixtures/codex/` comes from this version, though a source-level comparison
+  found no schema drift against it (`docs/architecture/vendor-invocation.md`, Codex table).
+  Owner: NEW-45 still, for whether a real turn ever emits more than one `agent_message`.
 - **`renderMarketplace` emits no `policy`/`category`**, so the plugin inherits the vendor's default
   `authPolicy: ON_INSTALL`.
 - **Capability resolution has no `no` state**: `absent` and `unavailable` probe observations both

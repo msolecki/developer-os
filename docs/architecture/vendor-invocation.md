@@ -147,7 +147,11 @@ succeeding under `env -i` is not evidence a real `codex exec` run succeeds with 
 
 Rows 1-7 above are **binary probes**: they run the installed 0.151.0 executable and record what it
 prints. Rows 8-12 below are **source reads**: they quote the public Rust source at GitHub
-`openai/codex`, tag `rust-v0.151.0`, commit `d8673cb68e349c208659b986697773d3145dbb14`, fetched with
+`openai/codex`, tag `rust-v0.151.0`, which dereferences to commit
+`78c290807ce710180111df227df3b7a4fe845452` (verified with
+`gh api repos/openai/codex/git/tags/d8673cb68e349c208659b986697773d3145dbb14 --jq '.object.sha, .tag'` —
+`d8673cb68e349c208659b986697773d3145dbb14` is the *annotated tag object's own sha*, not the commit it
+points at; the commit is what is cited below). Fetched with
 `gh api "repos/openai/codex/contents/<path>?ref=rust-v0.151.0" --jq '.content' | base64 -d`. A source
 row is evidence about what the vendor's code is written to do; it is not a run and is weaker than a
 probe exactly where behaviour depends on runtime conditions (see the note after row 12). Every row

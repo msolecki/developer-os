@@ -151,7 +151,8 @@ export function invocationFromAgentPrompt(
  * answer. A failure a caller can act on is worth more than a coincidence that
  * held on one stream shape.
  *
- * **Two things select the response, and source now settles both — differently.**
+ * **Four things bear on how the response is selected. One predates this task's
+ * source read; the other three are what that read settled.**
  *
  * The `item.type` test is: the observed stream carries two `item.completed`
  * events and the first is a `command_execution`. It has no `text`, so that
@@ -160,8 +161,9 @@ export function invocationFromAgentPrompt(
  * a reasoning item, and `invoke.test.ts` pins exactly that.
  *
  * **`turn.completed` does not carry the response — settled from source, not
- * inferred from one recording.** Codex source at tag `rust-v0.151.0` (commit
- * `d8673cb68e349c208659b986697773d3145dbb14`), `codex-rs/exec/src/exec_events.rs`,
+ * inferred from one recording.** Codex source at tag `rust-v0.151.0` (which
+ * dereferences to commit `78c290807ce710180111df227df3b7a4fe845452`),
+ * `codex-rs/exec/src/exec_events.rs`,
  * defines `pub struct TurnCompletedEvent { pub usage: Usage }` — no message
  * field of any kind. The only mechanism that exposes a final message outside
  * this scan is `--output-last-message`/`-o` (`codex-rs/exec/src/cli.rs`), which
