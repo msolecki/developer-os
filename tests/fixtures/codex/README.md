@@ -14,6 +14,10 @@ synthetic ones are built from the shape these show rather than from a guess.
 
 All ran against `codex-cli 0.147.0` on macOS.
 
+**2026-09-05: the installed vendor is now 0.151.0.** Every recording below is evidence about
+0.147.0's output protocol only; whether it still describes 0.151.0 is unsettled here and is owned
+by Task 4 of `docs/superpowers/plans/2026-09-04-developer-os-ingest-isolation.md`.
+
 **Every one of them is read by a test, and the word is *read* rather than *cited*.** A recording only
 named in a comment is a claim nobody checks — a fresh-context review found that
 `observed-exec-schema-refusal.jsonl` could be deleted with the whole suite green while a docblock went

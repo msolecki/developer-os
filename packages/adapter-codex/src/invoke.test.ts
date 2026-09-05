@@ -294,6 +294,9 @@ describe("invokeCodex argv", () => {
     });
     expect(seen()?.args).toEqual([
       "exec",
+      "--ephemeral",
+      "--ignore-user-config",
+      "--ignore-rules",
       "--json",
       "--output-schema",
       "/synthetic/work/schema.json",
