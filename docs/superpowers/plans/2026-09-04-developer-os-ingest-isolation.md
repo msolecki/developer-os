@@ -66,11 +66,11 @@ Three of roadmap Phase 1's bullets are contradicted by the installed binaries or
 
 This task spends **no model credits**. Every probe below either prints help, rejects a flag, or fails fast. If any probe would start a model turn, do not run it — record it as unresolved and say so.
 
-- [ ] **Step 1: Create the document with its rules**
+- [x] **Step 1: Create the document with its rules**
 
 Write `docs/architecture/vendor-invocation.md` with a preamble stating: this file records observations of specific vendor versions, each row carries the exact command and its verbatim output, a row is void when the vendor version changes, and nothing here may be inferred — only observed. Then an empty table per vendor with columns: observation · command · verbatim output · vendor version · date.
 
-- [ ] **Step 2: Settle F1 — does `claude` accept `--max-turns`?**
+- [x] **Step 2: Settle F1 — does `claude` accept `--max-turns`?**
 
 Run, and record all three:
 
@@ -82,7 +82,7 @@ claude --tools "" --help 2>&1 | head -20
 
 The second command is the discriminator: a CLI that rejects unknown flags errors before reaching `--help`. Record which happened, verbatim. **If `claude` rejects `--max-turns`, that is a live defect** — `packages/adapter-claude/src/invoke.ts` passes it on every invocation, so every real ingest run fails. Say so in the row, and stop to report it before continuing; it changes F1 from a preference into a bug.
 
-- [ ] **Step 3: Settle the `--setting-sources ""` ambiguity**
+- [x] **Step 3: Settle the `--setting-sources ""` ambiguity**
 
 Run:
 
@@ -93,15 +93,15 @@ claude --setting-sources none --help 2>&1 | head -20
 
 Record whether an empty value is accepted, rejected, or silently ignored. If neither probe distinguishes "accepted" from "ignored", record that the semantics are **unresolved without a model run** and mark `--setting-sources` as not-yet-usable rather than guessing.
 
-- [ ] **Step 4: Record `--permission-mode`'s values and pick the most restrictive**
+- [x] **Step 4: Record `--permission-mode`'s values and pick the most restrictive**
 
 Run `claude --help 2>&1 | grep -A5 -- "--permission-mode"` and record the six values verbatim. Then state which is most restrictive **and the evidence for that claim**. If the help gives no ordering and no probe distinguishes them, record it as unresolved and prefer `--tools ""` plus `--strict-mcp-config`, which are unambiguous, over a permission mode chosen by guess.
 
-- [ ] **Step 5: Record the codex exec flags**
+- [x] **Step 5: Record the codex exec flags**
 
 Run `codex exec --help` and record verbatim the entries for `--ephemeral`, `--ignore-user-config`, `--ignore-rules`, `--json`, `--output-schema`, `-s`/`--sandbox`, `--skip-git-repo-check`, `-C`. Note explicitly that no flag disables MCP servers for one call.
 
-- [ ] **Step 6: Settle F2 — does either vendor need any environment variable?**
+- [x] **Step 6: Settle F2 — does either vendor need any environment variable?**
 
 Both adapters pass `env: {}` today. Determine whether that is survivable by running each binary with an empty environment and a command that cannot start a model turn:
 
@@ -112,14 +112,14 @@ env -i /absolute/path/to/codex --help >/dev/null 2>&1; echo "codex --help under 
 
 Use the absolute paths that `which claude` and `which codex` report. Record both exit codes verbatim. A zero exit is evidence the binary starts with no environment at all; a non-zero exit is evidence a variable is needed, and the error text names which. **Record only what you observed.** Do not extrapolate from `--help` succeeding to a real run succeeding — say in the row that `--help` is weaker evidence than a real invocation, and that the stronger evidence needs a model run the founder has not authorised.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add docs/architecture/vendor-invocation.md
 git commit -m "docs: record what the installed vendor binaries accept"
 ```
 
-- [ ] **Step 8: Report the three founder decisions**
+- [x] **Step 8: Report the three founder decisions**
 
 Stop here and report F1, F2 and F3 with the evidence Steps 2–6 produced. Do not begin Task 2 until the founder has settled them. If F1 turned out to be a live defect, say so first.
 
@@ -129,7 +129,9 @@ Stop here and report F1, F2 and F3 with the evidence Steps 2–6 produced. Do no
 
 **Files:**
 - Modify: `packages/adapter-claude/src/invoke.ts:11-26` (`ClaudeInvocation`), `:105-115` (argv), `:79-89` (the `maxTurns` guard, per F1)
-- Modify: `packages/adapter-claude/src/invoke.test.ts:55,71,78,178,192,236,282,293`
+- Modify: `packages/adapter-claude/src/invoke.test.ts` — the tool-grant cases. This row carried their
+  pre-change line numbers until 2026-09-05, when executing the task deleted those lines and the
+  citation gate refused the now out-of-range reference.
 - Modify: `packages/adapter-claude/src/index.test.ts:37` (pins the exact export list)
 
 **Interfaces:**
