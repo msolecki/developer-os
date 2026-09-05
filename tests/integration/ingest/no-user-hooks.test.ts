@@ -216,6 +216,52 @@ async function runVendorExpectingLocalFailure(
   }
 }
 
+/**
+ * **Observed, not assumed: three runs of the isolated argv against a genuinely fresh
+ * `createTempHome()` — a home no other case in this file had touched — each wrote exactly
+ * these eight paths under `HOME`, with only a pid, a session-key hash and a backup
+ * timestamp varying between runs:**
+ *
+ * ```text
+ * .claude
+ * .claude.json
+ * .claude/.last-cleanup
+ * .claude/backups
+ * .claude/backups/.claude.json.backup.<epoch-ms>
+ * .claude/sessions
+ * .claude/sessions/<pid>.<sha256-hex>.key
+ * .claude/sessions/<pid>.json
+ * ```
+ *
+ * **These are the vendor's own writes, not ours to suppress, and this list bounds the
+ * blast radius of an isolated invocation — it does not claim the run writes nothing.**
+ * `.claude.json` and a new timestamped entry under `.claude/backups/` land durably on
+ * every run, despite nothing here asking Claude Code to persist anything; the two files
+ * under `.claude/sessions/` land despite `--no-session-persistence`'s own help text
+ * claiming sessions "will not be saved to disk" (the SIGKILL `runVendorExpectingLocalFailure`
+ * sends catches them before the vendor's own cleanup removes them). A path outside this set
+ * — in particular a sentinel a hook could plant anywhere else under `HOME` — is what the
+ * assertion below refuses.
+ */
+const ENTITLED_CLAUDE_WRITES: readonly RegExp[] = [
+  /^\.claude$/u,
+  /^\.claude\.json$/u,
+  /^\.claude\/\.last-cleanup$/u,
+  /^\.claude\/backups$/u,
+  /^\.claude\/backups\/\.claude\.json\.backup\.\d+$/u,
+  /^\.claude\/sessions$/u,
+  /^\.claude\/sessions\/\d+\.[0-9a-f]{64}\.key$/u,
+  /^\.claude\/sessions\/\d+\.json$/u,
+];
+
+/** `path` relative to `home.home`, matched against the observed set above. */
+function isEntitledClaudeWrite(home: TempHome, path: string): boolean {
+  const prefix = `${home.home}/`;
+  if (!path.startsWith(prefix)) return false;
+  const relative = path.slice(prefix.length);
+  return ENTITLED_CLAUDE_WRITES.some((pattern) => pattern.test(relative));
+}
+
 describe("a planted user hook against a real Claude Code installation", () => {
   /**
    * The positive control this whole file exists to require. Without it, the
@@ -245,48 +291,50 @@ describe("a planted user hook against a real Claude Code installation", () => {
   it.skipIf(claude === null)(
     "never runs the planted user hook during an isolated ingest invocation",
     async () => {
-      const home = temporary();
-      const sentinel = join(home.home, "sentinel-isolated");
-      await plantSessionStartHook(home, sentinel);
-      const before = await inventory(home.root);
-
-      await runVendorExpectingLocalFailure(
-        claude ?? "",
-        await isolatedArgs(),
-        invocationEnv(home),
-      );
-
-      const after = await inventory(home.root);
-      expect(after.has(sentinel)).toBe(false);
-
       /**
-       * **The property the plan asked for is "nothing was written outside the
-       * paths this run is entitled to write", not "nothing was written outside
-       * the sandbox"** — `added` is already computed from `inventory(home.root)`,
-       * whose walk only ever records paths beneath the root it is given
-       * (`tests/helpers/temp-home.ts`'s `walk`), so `isInside(home.root, path)`
-       * over `added` could not fail regardless of what the invocation wrote (I1).
-       *
-       * **The entitled subset is not empty, despite `--no-session-persistence`.**
-       * A run under this exact argv was observed writing
-       * `.claude/sessions/<pid>.json` and its matching `.key` file under `HOME`
-       * even though the flag's own help text says sessions "will not be saved to
-       * disk" — the SIGKILL this harness sends (see
-       * `runVendorExpectingLocalFailure`) catches that per-run bookkeeping before
-       * the vendor's own cleanup removes it, the same way `plugin-loads.test.ts`
-       * records `claude plugin validate` mutating a home it was pointed at. That is
-       * vendor state, not a hook, and it is confined to `.claude/sessions/`, so
-       * the assertion below allows only that prefix and refuses everything else —
-       * in particular a sentinel a hook could plant anywhere outside it.
-       * Falsifiability was checked by temporarily substituting `controlArgs()`
-       * (no `--restricted`/`--safe-mode`) for `isolatedArgs()` here: `added` then
-       * also contained the control sentinel outside `.claude/sessions/`, and this
-       * assertion went red.
+       * **A home of its own, not the describe block's shared `temporary()`.** The
+       * positive control above plants `.claude/settings.json` and its own sentinel in
+       * the shared home; running against that same home here would let its writes
+       * (`.claude.json`, `.claude/backups/`, `.claude/.last-cleanup`) already exist
+       * before this case's own "before" snapshot, so they would never register as
+       * added regardless of test order — the defect a fresh-context re-review found
+       * (I1, round 2). A dedicated `createTempHome()` makes this case's before/after
+       * bracket only its own run, independent of which sibling ran first or whether
+       * it ran at all.
        */
-      const entitled = join(home.home, ".claude", "sessions");
-      const added = addedPaths(before, after);
-      const outside = added.filter((path) => !path.startsWith(`${entitled}/`));
-      expect(outside).toStrictEqual([]);
+      const home = await createTempHome();
+      try {
+        const sentinel = join(home.home, "sentinel-isolated");
+        await plantSessionStartHook(home, sentinel);
+        const before = await inventory(home.root);
+
+        await runVendorExpectingLocalFailure(
+          claude ?? "",
+          await isolatedArgs(),
+          invocationEnv(home),
+        );
+
+        const after = await inventory(home.root);
+        expect(after.has(sentinel)).toBe(false);
+
+        /**
+         * **The property the plan asked for is "nothing was written outside the
+         * paths this run is entitled to write", not "nothing was written outside
+         * the sandbox"** — `added` is already computed from `inventory(home.root)`,
+         * whose walk only ever records paths beneath the root it is given
+         * (`tests/helpers/temp-home.ts`'s `walk`), so `isInside(home.root, path)`
+         * over `added` could not fail regardless of what the invocation wrote (I1).
+         * `isEntitledClaudeWrite` above is the entitled set, established by observing
+         * this exact argv against a fresh home three times; anything outside it —
+         * in particular a sentinel a hook could plant anywhere else under `HOME` —
+         * fails the assertion below.
+         */
+        const added = addedPaths(before, after);
+        const outside = added.filter((path) => !isEntitledClaudeWrite(home, path));
+        expect(outside).toStrictEqual([]);
+      } finally {
+        await removeTempHome(home);
+      }
     },
     120_000,
   );
