@@ -588,7 +588,7 @@ async function exactRestoredBase(
   request: BootstrapEvidenceInspectionRequestV1,
   plan: FreshV2InitPlanV1,
   locations: ReturnType<typeof deriveBootstrapRetentionLocations>,
-  retained: readonly BootstrapEvidenceGuardedEntryV1[],
+  retainedByPath: ReadonlyMap<CanonicalAbsolutePathV1, BootstrapEvidenceGuardedEntryV1>,
   confinedUnboundEntries: boolean,
   terminalOutcome: "finalized" | "rolled_back",
   reusableGlobalLock: BootstrapEvidenceAdmissionV1["reusableGlobalLock"],
@@ -596,11 +596,11 @@ async function exactRestoredBase(
   if (!confinedUnboundEntries) return false;
   for (const location of locations) {
     if (location.role === "bootstrap_lock") {
-      const source = retained.find((candidate) => candidate.path === location.sourcePath);
+      const source = retainedByPath.get(location.sourcePath);
       if (source !== undefined && identityMatches(source, plan.bootstrapIdentity)) return false;
       continue;
     }
-    if (retained.some((candidate) => candidate.path === location.sourcePath)) return false;
+    if (retainedByPath.has(location.sourcePath)) return false;
     if (location.collapsesDescendants && await request.projectPostimage(location.sourcePath) !== null) {
       return false;
     }
@@ -816,14 +816,10 @@ async function inspectPlan(
     ? []
     : [...new Set(table.map((row) => row.parent.path))]
         .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
-  const [exactRows, parentNamespaceRows] = await Promise.all([
-    request.reader.inventoryExactNamespaces(roots),
-    request.reader.inventoryExactNamespaces(rowParents),
-  ]);
+  const retentionInventory = await request.reader.inventoryExactNamespaces([...roots, ...rowParents]);
   let retained = [...new Map([
     ...[planEntry, ...initial, ...initialForId].map((candidate) => [candidate.path, candidate] as const),
-    ...exactRows.map((candidate) => [candidate.path, candidate] as const),
-    ...parentNamespaceRows.map((candidate) => [candidate.path, candidate] as const),
+    ...retentionInventory.map((candidate) => [candidate.path, candidate] as const),
   ]).values()];
   if (selection.current.phase === "retained") {
     const retainedLock = locations.find((location) => location.role === "bootstrap_lock");
@@ -840,11 +836,12 @@ async function inspectPlan(
       retained = retained.filter((candidate) => candidate.path !== liveLock.path);
     }
   }
+  const retainedByPath = new Map(retained.map((candidate) => [candidate.path, candidate] as const));
   let matching = 0;
   let altered = 0;
   for (const location of locations) {
-    const source = retained.find((candidate) => candidate.path === location.sourcePath);
-    const tombstone = retained.find((candidate) => candidate.path === location.tombstonePath);
+    const source = retainedByPath.get(location.sourcePath);
+    const tombstone = retainedByPath.get(location.tombstonePath);
     const shouldBeTombstone = selection.current.phase === "retained" ||
       (selection.current.phase === "retaining" && selection.current.retentionNext !== null && location.ordinal < selection.current.retentionNext);
     const physical = shouldBeTombstone ? tombstone : source;
@@ -983,7 +980,7 @@ async function inspectPlan(
       request,
       plan,
       locations,
-      retained,
+      retainedByPath,
       confinedUnboundEntries,
       retainedOutcome,
       reusableGlobalLock,

@@ -4,7 +4,7 @@ import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { deriveBootstrapRetentionLocations } from "@developer-os/core";
-import type { CanonicalAbsolutePathV1 } from "@developer-os/core";
+import type { CanonicalAbsolutePathV1, UInt64DecimalV1 } from "@developer-os/core";
 
 import { runInit } from "../commands/init.js";
 import { runDoctorReport } from "../commands/doctor.js";
@@ -17,7 +17,9 @@ import {
 } from "../commands/testing.js";
 import {
   createBootstrapEvidenceInspectionRequest,
+  NodeBootstrapEvidenceGuardedReader,
 } from "./context.js";
+import type { BootstrapEvidenceGuardedEntryV1, BootstrapEvidenceGuardedReaderV1 } from "./report.js";
 import { inspectBootstrapEvidence, inspectBootstrapEvidenceAdmission } from "./report.js";
 import { projectBootstrapRetentionPostimage, projectRetainedDirectoryTreeOnce } from "./retention.js";
 
@@ -252,5 +254,117 @@ describe("inspectBootstrapEvidence", () => {
     await inspectBootstrapEvidenceAdmission(request);
 
     expect(walks).toBe(2);
+  }, 300_000);
+
+  it("walks a plan's retention roots and row parents in a single inventory call", async () => {
+    const fixture = await createCommandFixture("bootstrap-report-walk-count", {
+      bootstrapAvailable: true,
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+
+    const real = new NodeBootstrapEvidenceGuardedReader();
+    let walks = 0;
+    const countingReader: BootstrapEvidenceGuardedReaderV1 = {
+      inventoryExactNamespaces: (roots) => {
+        walks += 1;
+        return real.inventoryExactNamespaces(roots);
+      },
+      readRegularFile: (entry, maximumBytes) => real.readRegularFile(entry, maximumBytes),
+    };
+
+    await inspectBootstrapEvidenceAdmission({ ...requestFor(fixture), reader: countingReader });
+
+    /**
+     * Measured against this fixture's 156-location plan: the outer
+     * `initialRoots` walk (1), the plan's journal-slot walk (1), one walk per
+     * payload/created-path/foundation-participant evidence read, the
+     * manifest-handoff check (1) — and, until the roots/row-parents walks are
+     * grouped into one call, two more instead of one. 155 is that total with
+     * the group; it moves in lockstep with the fixture's shape, not a fixed
+     * constant, so a future change to the fixture is expected to move it too.
+     */
+    expect(walks).toBe(155);
+  }, 300_000);
+
+  it("looks up retained rows by key instead of scanning them per location", async () => {
+    const fixture = await createCommandFixture("bootstrap-report-row-lookup-scale", {
+      bootstrapAvailable: true,
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    const admission = await inspectBootstrapEvidenceAdmission(requestFor(fixture));
+    const envelope = admission.retainedEnvelopes[0];
+    if (envelope === undefined) throw new Error("fixture retained no envelope");
+    const locations = deriveBootstrapRetentionLocations(envelope.plan, envelope.terminalJournal);
+    const reference = locations[0];
+    if (reference === undefined) throw new Error("fixture plan retains no locations");
+    const junkDirectory = dirname(reference.tombstonePath);
+
+    /**
+     * `retained` is a plain array built from reader output and scanned with
+     * `Array#find` inside `inspectPlan`, a closure not exposed to callers the
+     * way `reader`/`projectPostimage` are, so there is no injectable seam to
+     * count *which* comparisons ran. Wrapping every
+     * `BootstrapEvidenceGuardedEntryV1` in a counting accessor was tried and
+     * rejected: those objects also flow through `encodeCanonicalJson`,
+     * structural cloning, and Map/Set keys elsewhere in this file, so an
+     * accessor would count every one of those unrelated reads too, not just
+     * the scan this test targets. A wall-time bound was tried next and also
+     * rejected: at 500,000 padding rows the fix's own share of the work
+     * measured at only ~300ms against a ~2.5s baseline dominated by this
+     * file's other O(retained) costs (the Map dedup, `sumEntries`, and the
+     * canonical-JSON fingerprint over every entry) — a margin this file's
+     * own noise (a 2x swing recorded elsewhere between otherwise identical
+     * runs) would make flaky in either direction.
+     *
+     * What is directly countable is *how many times* `Array#find` runs
+     * against the padded array, independent of how expensive each run is.
+     * `Array.prototype.find` is patched for the duration of this call to
+     * count invocations on arrays longer than `retained` could plausibly be
+     * without the padding below, then restored. `retained.find` at two
+     * call sites survives this fix on purpose — a single per-plan lookup for
+     * the live/tombstone bootstrap lock, not one multiplied by location count
+     * — so the exact count is 2 (that pair) once the per-location scan is
+     * gone, not 0.
+     */
+    const junkRowCount = 2_000;
+    const junk: BootstrapEvidenceGuardedEntryV1[] = Array.from({ length: junkRowCount }, (_, index) => ({
+      path: `${junkDirectory}/.developer-os-retained.${envelope.plan.id}.${String(index).padStart(10, "0")}.tombstone` as CanonicalAbsolutePathV1,
+      kind: "regular_file",
+      ownerUid: 0,
+      mode: 0o600,
+      nlink: 1,
+      bytes: "0" as UInt64DecimalV1,
+      dev: "1" as UInt64DecimalV1,
+      ino: `9${String(index)}` as UInt64DecimalV1,
+    }));
+    const real = new NodeBootstrapEvidenceGuardedReader();
+    const paddedReader: BootstrapEvidenceGuardedReaderV1 = {
+      inventoryExactNamespaces: async (roots) => {
+        const found = await real.inventoryExactNamespaces(roots);
+        return roots.length > 50 ? [...junk, ...found] : found;
+      },
+      readRegularFile: (entry, maximumBytes) => real.readRegularFile(entry, maximumBytes),
+    };
+
+    const LARGE_ARRAY_THRESHOLD = 500;
+    const nativeFind = Array.prototype.find;
+    let largeArrayFindCalls = 0;
+    Array.prototype.find = function countingFind(
+      this: readonly unknown[],
+      predicate: (value: unknown, index: number, array: readonly unknown[]) => boolean,
+      thisArg?: unknown,
+    ): unknown {
+      if (this.length > LARGE_ARRAY_THRESHOLD) largeArrayFindCalls += 1;
+      return nativeFind.call(this, predicate, thisArg);
+    } as typeof Array.prototype.find;
+    try {
+      await inspectBootstrapEvidenceAdmission({ ...requestFor(fixture), reader: paddedReader });
+    } finally {
+      Array.prototype.find = nativeFind;
+    }
+
+    expect(largeArrayFindCalls).toBe(2);
   }, 300_000);
 });
