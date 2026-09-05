@@ -8,7 +8,6 @@ import {
   failure,
   hashBytes,
   success,
-  validateManifestBytes,
   validateChangePlan,
 } from "@developer-os/core";
 import type {
@@ -17,8 +16,11 @@ import type {
   CliResult,
   DriftFinding,
   ManagedArtifactV1,
+  ManagedArtifactV2,
+  ManifestAdmissionContextV1,
   InstallationManifestV1,
   PlannedFileMutation,
+  RuntimePaths,
 } from "@developer-os/core";
 
 import {
@@ -531,57 +533,121 @@ function describePlan(removable: readonly ResolvedArtifact[]): string {
   ].join("\n");
 }
 
+/**
+ * `uninstall` has no live install request the way `BootstrapExecutor` does —
+ * it is reading a manifest a past, possibly unrelated `init` wrote. The roots
+ * authoritative for that read are the ones `init` itself would have used to
+ * build this exact manifest: the product home and the Brain, both resolved
+ * fresh from the current environment and configuration. That is also, not
+ * coincidentally, the same pair `runUninstall` builds `ownedRoots` and
+ * `excludedRoots` from a few lines below — reading the manifest and removing
+ * from it are bounded by the same authority. Confining here mirrors
+ * `BootstrapExecutor.manifestAdmission`
+ * (`apps/cli/src/bootstrap/executor.ts:2252`) instead of admitting every
+ * path irrespective of owner, which is what an identity `admitOwnerPath` did
+ * by accident (NEW-51). Removal itself stays independently bounded by
+ * `isRemovableAt` regardless of what this predicate decides, so a manifest
+ * whose Brain moved out from under it refuses to *parse* rather than
+ * silently widening what a stale record can direct.
+ */
+function manifestAdmissionFor(paths: RuntimePaths): ManifestAdmissionContextV1 {
+  const productHome = paths.home as CanonicalAbsolutePathV1;
+  const brainPath = paths.brain as CanonicalAbsolutePathV1;
+  return {
+    evidence: {
+      reopenCanonicalAbsolutePath: (path) => resolve(path),
+      containsCanonicalPath: (root, candidate) => candidate === root || candidate.startsWith(`${root}/`),
+      hasFoldedAlias: () => false,
+    },
+    sourceRoot: productHome,
+    backupRoot: paths.backupsDir as CanonicalAbsolutePathV1,
+    admitOwnerPath: (_owner, path) =>
+      path === productHome ||
+      path.startsWith(`${productHome}/`) ||
+      path === brainPath ||
+      path.startsWith(`${brainPath}/`)
+        ? path
+        : (`${path}/outside-authority` as CanonicalAbsolutePathV1),
+  };
+}
+
+/**
+ * An `ephemeral` V2 artifact carries no hash at all — its content is expected
+ * to vary after install, which is exactly why V2's own drift inspection
+ * (`inspectV2Artifact`, `packages/core/src/manifest/drift.ts:243`) never
+ * compares one by content. The V1 shape this file's machinery still needs
+ * has no such mode and always hash-compares, so downcasting with a fixed
+ * empty-content hash reintroduces that comparison by accident: a lock
+ * residue or reservation file that legitimately holds bytes at uninstall
+ * time no longer matches, and `planUninstall` refuses removal as if the
+ * artifact had been edited since install. Recording the hash of what the
+ * file holds *right now* keeps the V1 comparison a no-op, which is what V2
+ * already decided for this artifact.
+ */
+async function currentContentHash(
+  context: CliContext,
+  path: string,
+): Promise<string> {
+  try {
+    const canonical = await context.guards.manifest.assertReadable(path);
+    const stats = await context.fs.lstat(canonical);
+    if (stats.isSymbolicLink() || !stats.isFile()) return hashBytes(new Uint8Array());
+    return hashBytes(await context.fs.readFile(canonical));
+  } catch {
+    return hashBytes(new Uint8Array());
+  }
+}
+
+async function downcastArtifactV2(
+  context: CliContext,
+  artifact: ManagedArtifactV2,
+): Promise<ManagedArtifactV1> {
+  const installedHash = artifact.kind === "directory"
+    ? hashBytes(new Uint8Array())
+    : artifact.verification.mode === "ephemeral"
+      ? await currentContentHash(context, artifact.path)
+      : artifact.verification.installedHash;
+  return {
+    owner: artifact.owner,
+    path: artifact.path,
+    kind: artifact.kind,
+    productVersion: artifact.productVersion,
+    existedBefore: artifact.existedBefore,
+    installedHash,
+    beforeHash: artifact.beforeHash,
+    backupRelativePath: artifact.backupRelativePath,
+    source: artifact.source,
+    mergeStrategy: artifact.mergeStrategy,
+    verifiedAt: artifact.verifiedAt,
+  };
+}
+
+/**
+ * NEW-59: every V2 manifest used to reach a hand-rolled fallback read because
+ * `readOptional()` was called with no admission context, and
+ * `validateManifestBytes` refuses every `schemaVersion === 2` document
+ * without one (`packages/core/src/manifest/v2.ts:104`). A genuine V1
+ * manifest never hit that refusal — `validateManifestBytes` resolves schema
+ * 1 before the context is even consulted — so once V2 is admitted correctly
+ * there is no remaining failure this function should swallow. A symlink at
+ * the manifest path, a device/inode race on reopen, or a corrupted document
+ * now all propagate and refuse the run, rather than being silently re-read
+ * through a weaker path with no genuine caller left to justify it.
+ */
 async function readUninstallManifest(
   context: CliContext,
+  paths: RuntimePaths,
 ): Promise<InstallationManifestV1 | null> {
-  try {
-    return await context.manifests.readOptional();
-  } catch {
-    const request = createBootstrapEvidenceInspectionRequest({
-      productHome: context.paths.home,
-      stateDirectory: context.paths.stateDir,
-      initialRoots: [context.paths.manifestFile],
-    });
-    const entries = await request.reader.inventoryExactNamespaces([
-      context.paths.manifestFile as CanonicalAbsolutePathV1,
-    ]);
-    const manifestEntry = entries.find((entry) => entry.path === context.paths.manifestFile && entry.kind === "regular_file");
-    if (manifestEntry === undefined) return null;
-    const bytes = await request.reader.readRegularFile(manifestEntry, 64 * 1024 * 1024);
-    const manifest = validateManifestBytes(bytes, {
-      evidence: {
-        reopenCanonicalAbsolutePath: (path) => resolve(path),
-        containsCanonicalPath: (root, candidate) => candidate === root || candidate.startsWith(`${root}/`),
-        hasFoldedAlias: () => false,
-      },
-      sourceRoot: context.paths.home as CanonicalAbsolutePathV1,
-      backupRoot: context.paths.backupsDir as CanonicalAbsolutePathV1,
-      admitOwnerPath: (_owner, path) => path,
-    });
-    if (manifest.schemaVersion === 1) return manifest;
-    return {
-      schemaVersion: 1,
-      productVersion: manifest.productVersion,
-      installedAt: manifest.installedAt,
-      artifacts: manifest.artifacts.map((artifact): ManagedArtifactV1 => ({
-        owner: artifact.owner,
-        path: artifact.path,
-        kind: artifact.kind,
-        productVersion: artifact.productVersion,
-        existedBefore: artifact.existedBefore,
-        installedHash: artifact.kind === "directory"
-          ? hashBytes(new Uint8Array())
-          : artifact.verification.mode === "ephemeral"
-            ? hashBytes(new Uint8Array())
-            : artifact.verification.installedHash,
-        beforeHash: artifact.beforeHash,
-        backupRelativePath: artifact.backupRelativePath,
-        source: artifact.source,
-        mergeStrategy: artifact.mergeStrategy,
-        verifiedAt: artifact.verifiedAt,
-      })),
-    };
-  }
+  const manifest = await context.manifests.readOptional(manifestAdmissionFor(paths));
+  if (manifest === null || manifest.schemaVersion === 1) return manifest;
+  return {
+    schemaVersion: 1,
+    productVersion: manifest.productVersion,
+    installedAt: manifest.installedAt,
+    artifacts: await Promise.all(
+      manifest.artifacts.map((artifact) => downcastArtifactV2(context, artifact)),
+    ),
+  };
 }
 
 export async function runUninstall(
@@ -596,7 +662,25 @@ export async function runUninstall(
           stateDirectory: context.paths.stateDir,
           initialRoots: [context.paths.home, context.paths.stateDir, context.userHome],
         }));
-    const manifest = await readUninstallManifest(context);
+    /**
+     * Read before the manifest, not after. `readUninstallManifest`'s V2
+     * admission needs the same product-home-or-Brain authority `ownedRoots`
+     * and `excludedRoots` build below it, and that authority is
+     * config-dependent — a custom `brainPath` moves it. A drifted or
+     * corrupted configuration must not block removal, and must not widen it
+     * either: `ownedRoots` is the product home alone, so an artifact outside
+     * it is preserved whatever the Brain path turns out to be, and the
+     * manifest-null branch immediately below never consults `paths` at all.
+     */
+    let config = null;
+    try {
+      config = await readConfigFile(context, context.paths.configFile);
+    } catch {
+      config = null;
+    }
+    const paths = runtimePathsFor(context, config ?? undefined);
+
+    const manifest = await readUninstallManifest(context, paths);
     if (manifest === null) {
       /**
        * **Above the early return, deliberately.** The key is not a managed
@@ -617,19 +701,6 @@ export async function runUninstall(
       });
     }
 
-    /**
-     * A drifted or corrupted configuration must not block removal, and must not
-     * widen it either: `ownedRoots` is the product home alone, so an artifact
-     * outside it is preserved whatever the Brain path turns out to be. The
-     * exclusion below is defence in depth on top of that.
-     */
-    let config = null;
-    try {
-      config = await readConfigFile(context, context.paths.configFile);
-    } catch {
-      config = null;
-    }
-    const paths = runtimePathsFor(context, config ?? undefined);
     const request: RevertRequest = {
       kind: "uninstall",
       artifacts: manifest.artifacts,

@@ -741,6 +741,39 @@ describe("runUninstall", () => {
     expect(await nodeFs.readFile(deepFile, "utf8")).toBe("deeply retained\n");
   }, 300_000);
 
+  /**
+   * NEW-59: `readUninstallManifest` used to reach every `schemaVersion === 2`
+   * manifest through a catch that re-parsed it with an identity
+   * `admitOwnerPath` and downcast `ephemeral` artifacts to a fixed
+   * empty-content hash. `.lifecycle.lock` is recorded that way, and a real
+   * fresh init leaves it at exactly zero bytes — matching the fixed
+   * placeholder by coincidence. Writing real bytes into it afterwards, the
+   * way a lock residue legitimately can, exposes the bug: the fallback's
+   * expected hash stays the hash of empty content, so `detectDrift` reports
+   * `content_changed` and `planUninstall` refuses removal as if the artifact
+   * had been edited since install. Reading through the store's V2-aware path
+   * records the artifact's real, current hash instead, which keeps the
+   * comparison a no-op and lets uninstall proceed.
+   */
+  it("removes an ephemeral V2 artifact holding real content instead of refusing on a phantom edit", async () => {
+    const fixture = await createCommandFixture("uninstall-v2-ephemeral-hash", {
+      bootstrapAvailable: true,
+    });
+    const initialized = await runInit(fixture.context, ACCEPTED);
+    expect(initialized.ok).toBe(true);
+
+    const lockFile = join(fixture.paths.stateDir, ".lifecycle.lock");
+    expect(await exists(lockFile)).toBe(true);
+    await nodeFs.writeFile(lockFile, "stale-lock-residue", { mode: 0o600 });
+
+    const result = await runUninstall(fixture.context, ACCEPTED);
+
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.ok).toBe(true);
+    expect(result.data.removed).toContain(lockFile);
+    expect(await exists(lockFile)).toBe(false);
+  }, 300_000);
+
   it("leaves every quarantined capture in place, because a capture is never deleted", async () => {
     const fixture = await createCommandFixture("uninstall-quarantine");
     await runInit(fixture.context, ACCEPTED);
