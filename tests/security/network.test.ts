@@ -61,13 +61,26 @@ import type { InstalledFixture, VendorCall } from "./helpers.js";
 
 /**
  * What the vendor's child process is handed. Both adapters pass `env: {}`
- * (`packages/adapter-claude/src/invoke.ts:125`,
- * `packages/adapter-codex/src/invoke.ts:251`), so this is empty today.
+ * (`packages/adapter-claude/src/invoke.ts:139`,
+ * `packages/adapter-codex/src/invoke.ts:324`), so this is empty today.
  *
  * Declared as an expectation rather than written as `toEqual({})` inline: an
  * empty environment is stricter than spec §2.7 asks and this constant is where a
  * vendor CLI that genuinely needs `HOME` would be admitted, deliberately, in one
- * place a reviewer can see.
+ * place a reviewer can see, against a recorded observation of it failing without
+ * the variable — never for a proxy (the case below named "does not pass a
+ * proxy..." already proves one does not reach the child). Kept empty per F2,
+ * `docs/architecture/vendor-invocation.md`'s Task 6 section, 2026-09-05.
+ *
+ * **What this constant being `{}` does not prove.** An empty environment is not
+ * evidence the child cannot find the invoking user's home directory: both
+ * installed binaries statically import `getpwuid_r` (`nm -u`), the libc call a
+ * process with no `HOME` falls back to via the system password database — see
+ * the Task 6 section cited above for the probes that established this and why
+ * no permitted probe could observe it at runtime. What actually keeps the
+ * vendor away from the user's own settings and hooks is `--restricted` /
+ * `--safe-mode` (Claude) and `--ignore-user-config` (Codex), not this
+ * constant staying empty.
  */
 const EXPECTED_VENDOR_ENVIRONMENT: Readonly<Record<string, string>> = {};
 
@@ -254,6 +267,50 @@ describe("the one outbound call this product makes", () => {
     } finally {
       restore("HTTP_PROXY", before.HTTP_PROXY);
       restore("HTTPS_PROXY", before.HTTPS_PROXY);
+    }
+  });
+
+  /**
+   * **The exhaustiveness case the two pins above cannot be.** Asserting that
+   * two named variables are absent (the proxy case) or that one named
+   * variable is present (the two-key smoke case elsewhere in this file) can
+   * never catch a leak of a variable nobody thought to pin — an allowlist
+   * asserted only positively passes even when it lets everything through.
+   * `toStrictEqual` against `EXPECTED_VENDOR_ENVIRONMENT` closes that gap: it
+   * fails on any key the child received that this constant does not name,
+   * known or not, including the plausible-secret-shaped one seeded below.
+   */
+  it("hands the child exactly EXPECTED_VENDOR_ENVIRONMENT, not a superset, against a sweep of parent variables", async () => {
+    const before = {
+      HTTP_PROXY: process.env["HTTP_PROXY"],
+      DEVELOPER_OS_PROBE: process.env["DEVELOPER_OS_PROBE"],
+      ANTHROPIC_API_KEY: process.env["ANTHROPIC_API_KEY"],
+    };
+    process.env["HTTP_PROXY"] = PROXY;
+    process.env["DEVELOPER_OS_PROBE"] = "sweep";
+    process.env["ANTHROPIC_API_KEY"] = "sk-ant-fake00000000000000000000000000";
+
+    try {
+      const fixture = await installSecurityFixture("network-env-sweep", {
+        env: {
+          HTTP_PROXY: PROXY,
+          DEVELOPER_OS_PROBE: "sweep",
+          ANTHROPIC_API_KEY: "sk-ant-fake00000000000000000000000000",
+        },
+      });
+      await fixture.seedAccepted("an observation for the exhaustiveness sweep");
+      fixture.runner.reply(() => nothingProposed());
+
+      await fixture.ingest();
+
+      const spawned = fixture.runner.calls.filter((call) => !isVersionProbe(call));
+      expect(spawned).toHaveLength(1);
+      const child = spawned[0] as VendorCall;
+      expect(child.env).toStrictEqual(EXPECTED_VENDOR_ENVIRONMENT);
+    } finally {
+      restore("HTTP_PROXY", before.HTTP_PROXY);
+      restore("DEVELOPER_OS_PROBE", before.DEVELOPER_OS_PROBE);
+      restore("ANTHROPIC_API_KEY", before.ANTHROPIC_API_KEY);
     }
   });
 

@@ -22,9 +22,10 @@
  * - **Codex** gets `workingRoot` — the resolved content root as a directory —
  *   and `-s read-only`, which `invokeCodex` derives from
  *   `writeScopes.length === 0` rather than from an argument.
- * - **Claude** gets an `allowedTools` list carrying read tools and no write
- *   tool. There is no `--output-schema` on that side either, so the schema is
- *   described in the prompt and enforced by `parseIngestProposal` afterwards.
+ * - **Claude** gets `--tools ""` — an empty tool set, not a grant list; the
+ *   model reaches no file through a tool call on this side at all. There is no
+ *   `--output-schema` on that side either, so the schema is described in the
+ *   prompt and enforced by `parseIngestProposal` afterwards.
  *
  * The read scope is therefore the *sandbox*, not a string handed over: the
  * resolved `content/**` glob is what Developer OS declares it reads, and the

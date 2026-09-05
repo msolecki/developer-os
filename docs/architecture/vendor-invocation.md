@@ -203,6 +203,69 @@ observed run of 0.151.0 — it does not prove the 0.147.0 recordings are what a 
 produces, only that the wire schema the source defines has not changed in a way the fixtures would
 have missed.
 
+## Task 6: the vendor child process environment (F2), decided 2026-09-05
+
+**Decision: the empty environment is retained. No variable is admitted.** Both
+adapters pass `env: {}` today (`packages/adapter-claude/src/invoke.ts:139`,
+`packages/adapter-codex/src/invoke.ts:324`), so both vendors start with **no
+environment at all** — not `HOME`, not a proxy variable, nothing inherited
+from the parent. Task 1 Step 6 recorded both binaries exiting `0` under
+`env -i … --help` (Claude row 13, Codex row 7 above), and no observation
+anywhere in this document — across Tasks 1, 4 or 6 — records either vendor
+failing for want of a variable. Per the Task 6 brief's own Step 1, this is the
+expected outcome, and it is what the plan's roadmap correction sanctions.
+`EXPECTED_VENDOR_ENVIRONMENT` in `tests/security/network.test.ts:72` remains
+the single place a future admission would be made, and it may be made only
+against a recorded observation of a vendor failing without the variable —
+never for a proxy variable, which `tests/security/network.test.ts:228`
+(`"does not pass a proxy the parent process was given"`) already proves does
+not reach the child.
+
+**What an empty environment does not buy — established for these two
+binaries, not assumed.** An empty environment removes every inherited
+variable; it does not by itself stop a child from locating the invoking
+user's real home directory, because a process with no `HOME` can still
+resolve one from the system password database. The brief's suggested
+comparison (`env -i <path> --help` against a config-discovery command) cannot
+settle this for either binary: the Claude table's rows 3-4 already establish
+that appending `--help` after *any* option or subcommand short-circuits
+argument parsing and always prints help without running the command's own
+logic, so `env -i <claude> doctor --help` and `env -i <codex> exec --help`
+diff byte-identically against their non-`env -i` counterparts (verified
+below) and never exercise whatever config-discovery code a real run would.
+What settles the question instead is a static, offline check of the same kind
+already used for row 17 (`strings -a`) — here `nm -u`, which lists a Mach-O
+binary's *undefined dynamic symbols*, i.e. the libc functions the binary's own
+code actually calls into, not merely text that happens to appear in it:
+
+| # | observation | command | verbatim output | vendor version | date |
+|---|---|---|---|---|---|
+| 1 | `env -i` does not change Claude's `doctor --help` output — the `--help` short-circuit (Claude table rows 3-4) applies to subcommands too, so this probe cannot exercise real config discovery | `diff <(env -i /Users/msolecki/.local/share/claude/versions/2.1.261 doctor --help 2>&1) <(/Users/msolecki/.local/share/claude/versions/2.1.261 doctor --help 2>&1)` | No output; `diff` exit `0` (byte-identical) | 2.1.261 | 2026-09-05 |
+| 2 | Same short-circuit holds for Codex's `exec --help` | `diff <(env -i <codex-path> exec --help 2>&1) <(<codex-path> exec --help 2>&1)` | No output; `diff` exit `0` (byte-identical) | 0.151.0 | 2026-09-05 |
+| 3 | Claude's installed binary imports `getpwuid_r` as an undefined dynamic symbol — the libc call that resolves a home directory from the password database, and the one Node's `os.homedir()`/libuv fall back to when `$HOME` is unset | `nm -u /Users/msolecki/.local/share/claude/versions/2.1.261 \| grep -i "getpwuid\|homedir"` | `_getpwuid_r` | 2.1.261 | 2026-09-05 |
+| 4 | Codex's installed binary imports both `getpwuid` and `getpwuid_r` as undefined dynamic symbols | `nm -u <codex-path> \| grep -i "getpwuid\|homedir"` | `_getpwuid`<br>`_getpwuid_r` | 0.151.0 | 2026-09-05 |
+
+**What rows 3-4 of the table above establish, stated at the strength they support.** An
+undefined dynamic symbol is one the dynamic linker must resolve at load time
+because the binary's own compiled code calls it — this is stronger than a
+`strings -a` text match (which can hit a coincidental data string) but still
+short of a live run: it shows the binary *carries the capability* to resolve
+a home directory via the password database, not that this path executes on
+every invocation or specifically when `HOME` is unset. No permitted probe
+(`--help`, `--version`, `-h` only; no prompt, no bare interactive) can observe
+that condition directly, because — per rows 1-2 above — the only way to
+reach a subcommand's real logic is to run it without `--help`, which this
+task's safety rule forbids. **The consequence, not the mechanism, is the
+point:** whatever a vendor can independently discover about the invoking
+user (a home directory, and through it whatever that directory's ownership
+or existence reveals) is not something `env: {}` closes off. Isolation from
+the user's own settings and hooks is bought by the flags Tasks 2 and 3 added
+— `--restricted`, `--safe-mode` and `--strict-mcp-config` for Claude
+(`packages/adapter-claude/src/invoke.ts:87-118`); `--ignore-user-config` and
+`--ignore-rules` for Codex (`packages/adapter-codex/src/invoke.ts:289-297`)
+— not by the empty environment. A future change that relaxes any of those
+flags is not compensated for by `EXPECTED_VENDOR_ENVIRONMENT` staying `{}`.
+
 ## Probes not run, and why
 
 - `claude --max-turns 5` **without** `--help` (would test whether `--max-turns` is genuinely
