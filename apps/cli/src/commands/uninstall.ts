@@ -634,7 +634,7 @@ export async function runUninstall(
       kind: "uninstall",
       artifacts: manifest.artifacts,
       ownedRoots: [paths.home],
-      excludedRoots: [paths.brain, ...evidence.retainedPaths],
+      excludedRoots: [paths.brain, ...evidence.retainedRoots],
     };
 
     const preview = await planUninstall(context, request);

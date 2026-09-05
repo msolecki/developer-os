@@ -615,6 +615,132 @@ describe("runUninstall", () => {
    * pinned specifically for the one directory a capture is never allowed to
    * vanish from.
    */
+  /**
+   * `excludedRoots` used to carry every retained file and directory
+   * (`evidence.retainedPaths`), which made every removability check pay for
+   * the size of whatever the retained tree collapsed to. `isRemovableAt`
+   * already prefix-matches, so the maximal roots
+   * `deriveBootstrapRetentionLocations` produces (`evidence.retainedRoots`)
+   * cover the same ground without listing each descendant.
+   */
+  it("keeps retention roots rather than every descendant of a retained tree", async () => {
+    const fixture = await createCommandFixture("uninstall-retention-roots", {
+      bootstrapAvailable: true,
+    });
+    const initialized = await runInit(fixture.context, ACCEPTED);
+    expect(initialized.ok).toBe(true);
+    if (fixture.context.bootstrap?.state !== "available") {
+      throw new Error("fixture bootstrap is not available");
+    }
+
+    const identities = await fixture.bootstrapEvidenceIdentities();
+    const retainedDirectory = identities.find(
+      (candidate) =>
+        candidate.kind === "directory" &&
+        candidate.path.includes(".developer-os-retained."),
+    );
+    if (retainedDirectory === undefined) {
+      throw new Error("no retained directory tombstone in the fixture");
+    }
+
+    const plantedPaths: string[] = [];
+    for (let index = 0; index < 40; index += 1) {
+      const nested = join(
+        retainedDirectory.path,
+        `sub-${String(index % 4)}`,
+        `file-${String(index)}.txt`,
+      );
+      await nodeFs.mkdir(join(nested, ".."), { recursive: true, mode: 0o700 });
+      await nodeFs.writeFile(nested, `synthetic retained file ${String(index)}\n`, {
+        mode: 0o600,
+      });
+      plantedPaths.push(nested);
+    }
+
+    const evidence = await fixture.context.bootstrap.inspectEvidence();
+
+    /**
+     * Every planted descendant is genuinely retained content — this is what
+     * makes the roots-only exclusion meaningful rather than vacuous.
+     */
+    expect(evidence.retainedPaths).toEqual(expect.arrayContaining(plantedPaths));
+    expect(evidence.retainedRoots).toContain(retainedDirectory.path);
+    for (const path of plantedPaths) {
+      expect(evidence.retainedRoots).not.toContain(path);
+    }
+  }, 300_000);
+
+  /**
+   * The assertion that keeps the roots-only exclusion honest: a manifest
+   * artifact planted deep inside a retained tombstoned tree must still be
+   * refused, because `containsPathLoosely` has to actually cover the
+   * descendant, not merely the root itself.
+   */
+  it("still refuses to remove a manifest artifact deep inside a retained tree", async () => {
+    const fixture = await createCommandFixture("uninstall-retention-deep-file", {
+      bootstrapAvailable: true,
+    });
+    const initialized = await runInit(fixture.context, ACCEPTED);
+    expect(initialized.ok).toBe(true);
+
+    const identities = await fixture.bootstrapEvidenceIdentities();
+    const retainedDirectory = identities.find(
+      (candidate) =>
+        candidate.kind === "directory" &&
+        candidate.path.includes(".developer-os-retained."),
+    );
+    if (retainedDirectory === undefined) {
+      throw new Error("no retained directory tombstone in the fixture");
+    }
+
+    const deepFile = join(
+      retainedDirectory.path,
+      "level-one",
+      "level-two",
+      "level-three",
+      "level-four",
+      "deep.txt",
+    );
+    await nodeFs.mkdir(join(deepFile, ".."), { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(deepFile, "deeply retained\n", { mode: 0o600 });
+
+    /**
+     * A `bootstrapAvailable` install writes a schema-v2 manifest, which
+     * `context.manifests.read()` cannot parse without the admission context
+     * `readUninstallManifest`'s fallback supplies. This test only needs
+     * `runUninstall` to see one manifest-owned artifact deep in the retained
+     * tree, so it writes a fresh schema-v1 manifest rather than merging into
+     * the v2 one.
+     */
+    await fixture.context.manifests.write({
+      schemaVersion: 1,
+      productVersion: fixture.context.productVersion,
+      installedAt: "2026-07-30T12:00:00.000Z",
+      artifacts: [
+        {
+          owner: "core",
+          path: deepFile,
+          kind: "file",
+          productVersion: fixture.context.productVersion,
+          existedBefore: false,
+          beforeHash: null,
+          backupRelativePath: null,
+          installedHash: hashOf("deeply retained\n"),
+          source: "generated/deep",
+          mergeStrategy: "dedicated",
+          verifiedAt: "2026-07-30T12:00:00.000Z",
+        },
+      ],
+    });
+
+    const result = await runUninstall(fixture.context, ACCEPTED);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.removed).not.toContain(deepFile);
+    expect(await nodeFs.readFile(deepFile, "utf8")).toBe("deeply retained\n");
+  }, 300_000);
+
   it("leaves every quarantined capture in place, because a capture is never deleted", async () => {
     const fixture = await createCommandFixture("uninstall-quarantine");
     await runInit(fixture.context, ACCEPTED);

@@ -114,6 +114,14 @@ export interface BootstrapEvidenceAdmissionV1 {
     readonly journal: BootstrapJournalSelectionV1 | null;
   } | null;
   readonly retainedPaths: readonly CanonicalAbsolutePathV1[];
+  /**
+   * The maximal roots `retainedPaths` collapses to: each retained subtree's
+   * `sourcePath`/`tombstonePath` rather than every descendant. A prefix-match
+   * exclusion check needs only these, and callers that list every retained
+   * path (like `uninstall`'s removability guard) pay an O(retained-file-count)
+   * cost that this set avoids.
+   */
+  readonly retainedRoots: readonly CanonicalAbsolutePathV1[];
   /** Exact parent identities derived from fully admitted terminal retention tables. */
   readonly retainedParentAuthorities: readonly {
     readonly path: CanonicalAbsolutePathV1;
@@ -658,6 +666,7 @@ async function inspectPlan(
   readonly summary: BootstrapEvidenceSummaryV1;
   readonly active: BootstrapEvidenceAdmissionV1["active"];
   readonly retained: readonly BootstrapEvidenceGuardedEntryV1[];
+  readonly roots: readonly CanonicalAbsolutePathV1[];
   readonly parentAuthorities: BootstrapEvidenceAdmissionV1["retainedParentAuthorities"];
   readonly reusableGlobalLock: BootstrapEvidenceAdmissionV1["reusableGlobalLock"];
   readonly blocksNewIntent: boolean;
@@ -684,6 +693,7 @@ async function inspectPlan(
       },
       active: null,
       retained: [planEntry],
+      roots: [planEntry.path],
       parentAuthorities: [],
       reusableGlobalLock: null,
       verifiedEnvelope: null,
@@ -706,6 +716,7 @@ async function inspectPlan(
       summary: { id, status: "unverified", operation: "fresh_v2_init", terminalOutcome: null, vaultPath: plan.planPath, entryCount: counted.entries, regularFileBytes: counted.bytes.toString() as UInt64DecimalV1 },
       active: null,
       retained: [planEntry, ...initial],
+      roots: [planEntry.path, ...initial.map((entry) => entry.path)],
       parentAuthorities: [],
       reusableGlobalLock: null,
       verifiedEnvelope: null,
@@ -751,6 +762,7 @@ async function inspectPlan(
         summary: { id, status: "incomplete", operation: "fresh_v2_init", terminalOutcome: null, vaultPath: plan.planPath, entryCount: counted.entries, regularFileBytes: counted.bytes.toString() as UInt64DecimalV1 },
         active: { plan, journal: null },
         retained: [planEntry, ...initial],
+        roots: [planEntry.path, ...initial.map((entry) => entry.path)],
         parentAuthorities: [],
         reusableGlobalLock: null,
         verifiedEnvelope: null,
@@ -769,6 +781,7 @@ async function inspectPlan(
       summary: { id, status: "unverified", operation: "fresh_v2_init", terminalOutcome: null, vaultPath: plan.planPath, entryCount: counted.entries, regularFileBytes: counted.bytes.toString() as UInt64DecimalV1 },
       active: null,
       retained: [planEntry, ...initial],
+      roots: [planEntry.path, ...initial.map((entry) => entry.path)],
       parentAuthorities: [],
       reusableGlobalLock: null,
       verifiedEnvelope: null,
@@ -803,6 +816,7 @@ async function inspectPlan(
         summary: { id, status: "unverified", operation: "fresh_v2_init", terminalOutcome: null, vaultPath: plan.planPath, entryCount: counted.entries, regularFileBytes: counted.bytes.toString() as UInt64DecimalV1 },
         active: null,
         retained: [planEntry, ...initial],
+        roots: [planEntry.path, ...initial.map((entry) => entry.path)],
         parentAuthorities: [],
         reusableGlobalLock: null,
         verifiedEnvelope: null,
@@ -1000,6 +1014,12 @@ async function inspectPlan(
       ? { plan, journal: selection }
       : null,
     retained,
+    roots: [...new Set([
+      planEntry.path,
+      ...initial.map((entry) => entry.path),
+      ...initialForId.map((entry) => entry.path),
+      ...roots,
+    ])],
     parentAuthorities: exactSelection && terminalRetained && table !== null
       ? [...new Map(table.map((row) => [row.parent.path, row.parent] as const)).values()]
       : [],
@@ -1146,6 +1166,10 @@ export async function inspectBootstrapEvidenceAdmission(
     report,
     active: active.length === 1 ? active[0] ?? null : null,
     retainedPaths: [...allEntries.keys()].sort(),
+    retainedRoots: [...new Set([
+      ...initial.map((candidate) => candidate.path),
+      ...results.flatMap((result) => result.roots),
+    ])].sort(),
     retainedParentAuthorities: orderedParentAuthorities,
     reusableGlobalLock,
     fingerprint,
