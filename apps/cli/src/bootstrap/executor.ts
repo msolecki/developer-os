@@ -1172,12 +1172,12 @@ export class BootstrapExecutor {
 
   async planFreshInit(
     request: FreshInitRequestV1,
-    evidence?: BootstrapEvidenceAdmissionV1,
+    evidence: BootstrapEvidenceAdmissionV1,
   ): Promise<FreshV2InitPlanV1> {
     const packaged = await inspectPackagedRelease(this.#dependencies.packagedRelease);
     const preview = await this.previewNewFreshInit(request, packaged);
     const brainObservation = await lstatOptional(request.brainPath);
-    const evidenceBefore = evidence ?? await this.inspectEvidence();
+    const evidenceBefore = evidence;
     if (evidenceBefore.blocksNewIntent) {
       throw new FreshBootstrapError(
         EXIT_CODES.recoveryRequired,
@@ -3002,10 +3002,10 @@ export class BootstrapExecutor {
     participant: FoundationParticipantRefV2,
     plan: FreshV2InitPlanV1,
   ) {
-    // Re-inspects rather than reusing evidenceAfterLock or the resume-time
-    // evidence: this is the last check before Foundation files are mutated,
-    // so it must observe whatever created-path and lock activity happened
-    // between planning and this exact moment, not an earlier snapshot.
+    // Re-inspects rather than reusing an earlier snapshot: the check below
+    // compares only `active?.plan.id`, so it rules out the on-disk evidence
+    // now naming a different plan (or none) as active — not created-path or
+    // lock drift, which this call does not detect.
     const evidenceAdmission = await this.inspectEvidence();
     if (evidenceAdmission.active?.plan.id !== plan.id) {
       throw new FreshBootstrapError(
