@@ -16,8 +16,10 @@
  * as.
  *
  * **Neither `ClaudeInvocation` nor `CodexInvocation` has a read-scope field**,
- * so no glob is passed to either CLI. Each vendor expresses the read side in
- * its own vocabulary and the command speaks each one:
+ * so no glob is passed to either CLI. That used to mean each vendor expressed
+ * the read side in its own vocabulary; since 27771d2 it means Codex still
+ * does and Claude expresses none at all — an empty tool set is the absence of
+ * a read vocabulary, not a second one:
  *
  * - **Codex** gets `workingRoot` — the resolved content root as a directory —
  *   and `-s read-only`, which `invokeCodex` derives from
@@ -27,20 +29,28 @@
  *   `--output-schema` on that side either, so the schema is described in the
  *   prompt and enforced by `parseIngestProposal` afterwards.
  *
- * The read scope is therefore the *sandbox*, not a string handed over: the
- * resolved `content/**` glob is what Developer OS declares it reads, and the
- * declaration and the enforcement are two different artifacts. Only the **write**
- * side crosses as a value — `writeScopes: []` — and it is the count that matters.
+ * **For Codex, the read scope is therefore the *sandbox*, not a string handed
+ * over:** the resolved `content/**` glob is what Developer OS declares it
+ * reads, and the declaration and the enforcement are two different artifacts.
+ * Claude has no sandbox-conferred read scope to compare against — since
+ * 27771d2 it instead receives a bounded, screened excerpt of the vault's index
+ * (`IngestPromptOptions.indexExcerpt`, `./prompt.ts`: path, title and summary
+ * per note, capped and rendered as prompt text), never a filesystem grant.
+ * `writeScopes: []` crosses as a value on the Codex call only — `ClaudeInvocation`
+ * has no `writeScopes` field, because its zero tools already admit no write
+ * regardless of any count.
  *
  * **That declared read scope is wider than `ingest.stage`'s declared footprint,
- * and the two are not the same kind of statement.** `EFFECT_VOCABULARY` gives
- * `ingest.stage` `read: content/_raw/quarantine/**` — the files *Developer OS*
- * itself opens to perform the step. What the sandbox described above grants is
- * the *model's* reach, and spec §6.2 sets it deliberately wider: "the agent has
+ * and the two are not the same kind of statement — for Codex.** `EFFECT_VOCABULARY`
+ * gives `ingest.stage` `read: content/_raw/quarantine/**` — the files *Developer OS*
+ * itself opens to perform the step. What Codex's sandbox grants is that vendor's
+ * model's reach, and spec §6.2 sets it deliberately wider: "the agent has
  * read-only access to the vault", because a model that cannot see the vault
  * cannot propose notes that link to existing ones or notice it is duplicating
  * one. Nothing is over-declared by this — a declared footprint is not a
- * permission set.
+ * permission set. **Claude's reach is narrower than spec §6.2 describes**,
+ * deliberately, since 27771d2: the index excerpt carries three fields of
+ * already-indexed notes, not the vault itself.
  *
  * **The write side carries the same distinction, and it is now code.** After
  * Task 7 the `ingest` contract declares `write: [content/**, content/_indexes/**]`,
@@ -54,20 +64,31 @@
  * is false; the bound is still consulted, which is why narrowing the contract
  * to `content/QA/**` refuses a note in `DEV/`.
  *
- * **Zero write scopes, and the sandbox follows from the count rather than
+ * **Zero write scopes, and Codex's sandbox follows from the count rather than
  * from an argument.** `invokeCodex` derives `-s read-only` from
- * `writeScopes.length === 0`, and the Claude side passes no write tool in
- * `--allowedTools`. That is what makes "the model cannot write outside
- * staging" a property the vendor's own sandbox enforced *before* the model
- * ran, rather than one our validators must prove afterwards (spec §3.3). The
- * `--output-schema` the same call names is the file `init` installs; its path
- * comes from `outputSchemaPath` in `apps/cli/src/commands/output-schemas.ts`,
- * because `invokeCodex` only screens that path and never writes it.
+ * `writeScopes.length === 0`. Claude carries no count to derive anything from:
+ * since 349511e it is invoked with `--tools ""` — an explicit empty tool set,
+ * not a write tool withheld from an allow-list, because there is no allow-list
+ * left (`--allowedTools` is gone from this call entirely) — plus
+ * `--strict-mcp-config --restricted --safe-mode --no-session-persistence
+ * --permission-prompts none` (`packages/adapter-claude/src/invoke.ts`). Either
+ * way, "the model cannot write outside staging" is a property the vendor's own
+ * invocation enforced *before* the model ran, rather than one our validators
+ * must prove afterwards (spec §3.3). The `--output-schema` the same call names
+ * is the file `init` installs; its path comes from `outputSchemaPath` in
+ * `apps/cli/src/commands/output-schemas.ts`, because `invokeCodex` only
+ * screens that path and never writes it.
  *
- * The agent gets read-only access to a vault that may contain secrets the user
- * wrote into their own notes. Redacting the user's canonical content is not
- * this product's business; catching it on the way back is, and that is the
- * secret scan among the nine validators.
+ * **Codex's agent gets read-only access to a vault that may contain secrets
+ * the user wrote into their own notes; Claude's does not, since 27771d2 — it
+ * gets the bounded index excerpt above, screened the same way the capture body
+ * is.** Redacting the user's canonical content is not this product's business;
+ * catching it on the way back is, and that is the secret scan among the nine
+ * validators. That redaction policy is unchanged by 27771d2: the excerpt's
+ * fields are screened for prompt-injection shape (`boundedProse`, in
+ * `./prompt.ts`), not scanned for secrets — no different from any other vault
+ * note, which was scanned only once, when it was itself originally proposed
+ * and written.
  */
 export { planIngestApply } from "./apply.js";
 export type { ApplyResult, PlannedNoteWriteV1 } from "./apply.js";
