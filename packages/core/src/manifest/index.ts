@@ -33,6 +33,7 @@ export {
   BOOTSTRAP_RETAINED_MAX_REGULAR_BYTES,
   assertBootstrapRetentionCapacity,
   classifyBootstrapEvidence,
+  deriveBootstrapRetentionAuthorities,
   deriveBootstrapRetentionLocations,
   deriveBootstrapRetentionTable,
   selectBootstrapJournal,

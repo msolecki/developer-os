@@ -46,6 +46,7 @@ export {
   deriveBootstrapCreationEvidencePaths,
   deriveBootstrapEnvelopePaths,
   deriveBootstrapPayloadEvidencePaths,
+  deriveBootstrapRetentionAuthorities,
   deriveBootstrapRetentionLocations,
   deriveBootstrapRetentionTable,
   inspectDrift,

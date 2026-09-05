@@ -1248,11 +1248,10 @@ function authorities(
   return result;
 }
 
-export function deriveBootstrapRetentionLocations(
+function listedRetentionAuthorities(
   plan: BootstrapRetainedExecutionPlanV1,
-  terminalValue: unknown,
-): readonly BootstrapRetentionLocationV1[] {
-  const journal = terminalRetentionJournal(plan, terminalValue);
+  journal: BootstrapJournalRecordV1,
+): readonly Authority[] {
   const listed = [...authorities(plan, journal, null)];
   if (journal.payloadWriteState.state === "writing") {
     const payload = plan.payloads[journal.payloadWriteState.ordinal];
@@ -1263,6 +1262,33 @@ export function deriveBootstrapRetentionLocations(
       payloadOrdinal: journal.payloadWriteState.ordinal,
     });
   }
+  return listed;
+}
+
+/**
+ * The uncollapsed authority set `deriveBootstrapRetentionTable` validates
+ * evidence rows against: one entry per plan-tracked path, including every
+ * descendant `deriveBootstrapRetentionLocations` folds into a directory
+ * root's rename. Evidence-building needs this shape, not the collapsed one,
+ * or its rows can never satisfy the table's own authority-set check.
+ */
+export function deriveBootstrapRetentionAuthorities(
+  plan: BootstrapRetainedExecutionPlanV1,
+  terminalValue: unknown,
+): readonly Pick<BootstrapRetentionLocationV1, "role" | "sourcePath">[] {
+  const journal = terminalRetentionJournal(plan, terminalValue);
+  return listedRetentionAuthorities(plan, journal).map((authority) => ({
+    role: authority.role,
+    sourcePath: authority.sourcePath,
+  }));
+}
+
+export function deriveBootstrapRetentionLocations(
+  plan: BootstrapRetainedExecutionPlanV1,
+  terminalValue: unknown,
+): readonly BootstrapRetentionLocationV1[] {
+  const journal = terminalRetentionJournal(plan, terminalValue);
+  const listed = listedRetentionAuthorities(plan, journal);
   const directoryRoots = listed
     .filter((authority) =>
       authority.role === "staging_subtree" || authority.planned?.kind === "directory",
@@ -1845,7 +1871,16 @@ function verifyDirectoryTrees(
     for (const entry of tree.entries) {
       const sourcePath = `${root.sourcePath}/${entry.relativePath}`;
       const row = rows.find((candidate) => candidate.sourcePath === sourcePath);
-      if (row === undefined || !sameDirectoryEntryPostimage(entry, row.postimage)) return refuse();
+      /**
+       * Ordinary content the tree carries with no authority of its own (a
+       * seed file under a tracked directory, say) has nothing to cross-check
+       * against — `root.postimage.treeHash` above already pins the whole
+       * subtree byte-for-byte. Only entries that ARE also independently
+       * tracked (a nested `compensation_target` directory, for instance) get
+       * the cross-check, guarding against the row and the tree walk having
+       * observed different moments in time.
+       */
+      if (row !== undefined && !sameDirectoryEntryPostimage(entry, row.postimage)) return refuse();
     }
   }
   return trees;

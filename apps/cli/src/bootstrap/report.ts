@@ -10,6 +10,7 @@ import {
   decodeCanonicalJson,
   deriveBootstrapCreationEvidencePaths,
   deriveBootstrapEnvelopePaths,
+  deriveBootstrapRetentionAuthorities,
   deriveBootstrapRetentionLocations,
   deriveBootstrapRetentionTable,
   encodeCanonicalJson,
@@ -445,9 +446,20 @@ export async function buildBootstrapRetentionEvidence(
       postimage: after,
     });
   }
+  /**
+   * `deriveBootstrapRetentionTable` checks evidence rows against the full,
+   * uncollapsed authority set (BUG: it always did, but `rows` here used to
+   * come from the collapsed `locations` — the physical rename set — so the
+   * two could never agree once a directory authority had a tracked
+   * descendant, e.g. Foundation-created subdirectories under a collapsed
+   * root). `physicalPath` below still resolves through the collapsed
+   * `locations` for tombstone redirection; only row construction needs the
+   * uncollapsed set.
+   */
+  const authorities = deriveBootstrapRetentionAuthorities(plan, terminal);
   const rows: BootstrapRetentionEvidenceProjectionV1["rows"][number][] = [];
-  for (const location of locations) {
-    rows.push(await retentionRow(location.role, location.sourcePath));
+  for (const authority of authorities) {
+    rows.push(await retentionRow(authority.role, authority.sourcePath));
   }
   const directoryRows = rows.filter((row) => row.postimage.kind === "directory_tree")
     .sort((left, right) => left.sourcePath.length - right.sourcePath.length);
