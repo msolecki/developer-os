@@ -822,6 +822,23 @@ export async function runInit(
           initialRoots: [context.paths.home, context.paths.stateDir, context.userHome],
         }));
     const resumableBootstrap = evidence.active !== null;
+    /**
+     * `active` names a plan this call can resume; `blocksNewIntent` names
+     * unresolved bootstrap residue that forbids starting *anything* new. A
+     * rolled-back envelope interrupted before its retention rename has
+     * neither: there is no plan left to resume (`active === null`), and the
+     * live, not-yet-tombstoned targets still block a fresh attempt
+     * (`blocksNewIntent === true`) until an operator archives them. The two
+     * fields answer different questions, so this must run on every path that
+     * could start work, not only the resumable/fresh-V2 one below.
+     */
+    if (evidence.blocksNewIntent && evidence.active === null) {
+      throw new InitRefusal(
+        EXIT_CODES.recoveryRequired,
+        "retained bootstrap evidence requires manual archive before a new bootstrap intent",
+        evidence.retainedPaths,
+      );
+    }
     if (resumableBootstrap && !bootstrapAvailable) {
       throw new InitRefusal(
         EXIT_CODES.capabilityUnavailable,
@@ -835,13 +852,6 @@ export async function runInit(
           EXIT_CODES.capabilityUnavailable,
           "fresh V2 initialization requires the admitted packaged bootstrap capability",
           [context.paths.home],
-        );
-      }
-      if (evidence.blocksNewIntent && evidence.active === null) {
-        throw new InitRefusal(
-          EXIT_CODES.recoveryRequired,
-          "retained bootstrap evidence requires manual archive before a new bootstrap intent",
-          evidence.retainedPaths,
         );
       }
       const retainedConfig = await readConfigFile(

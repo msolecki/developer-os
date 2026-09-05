@@ -184,6 +184,43 @@ describe("runInit", () => {
     }
   }, 300_000);
 
+  it("refuses a non-fresh, non-resumable init when evidence blocks a new intent", async () => {
+    const fixture = await createCommandFixture("init-blocks-non-fresh", {
+      bootstrapAvailable: true,
+    });
+    const residueId = "fi_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const staging = join(fixture.paths.stagingDir, "fresh-v2-init", residueId);
+    await nodeFs.mkdir(staging, { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(join(staging, "live-source"), "synthetic live residue\n", { mode: 0o600 });
+    /**
+     * A config file already on disk is what makes this `init` non-fresh
+     * without a completed V2 install, so `resumableBootstrap` is false too —
+     * the exact combination the executor regression case reaches by
+     * interrupting a rollback instead.
+     */
+    const config = {
+      schemaVersion: 1 as const,
+      brainPath: fixture.paths.brain,
+      adapters: { claude: false, codex: false },
+      git: { enabled: false },
+      automation: { enabled: false },
+      telemetry: false as const,
+    };
+    await nodeFs.writeFile(fixture.paths.configFile, serializeConfig(config), { mode: 0o600 });
+
+    const bootstrap = fixture.context.bootstrap;
+    if (bootstrap?.state !== "available") throw new Error("bootstrap fixture is unavailable");
+    const evidence = await bootstrap.inspectEvidence();
+    expect(evidence.active).toBeNull();
+    expect(evidence.blocksNewIntent).toBe(true);
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+  });
+
   it("accepts the exact aggregate boundary projected by the publication plan", async () => {
     const aggregate = { idCount: 0, entryCount: 0, regularFileBytes: "0" };
     const fixture = await createCommandFixture("init-bootstrap-cap-exact", {
