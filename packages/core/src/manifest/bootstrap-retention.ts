@@ -842,6 +842,19 @@ function compareUtf8(left: string, right: string): number {
   return leftBytes.length - rightBytes.length;
 }
 
+/**
+ * Evidence rows, retention locations, and the verified retention table must
+ * all land in this exact order, because callers compare one against another
+ * (report.test.ts pins evidence rows against locations); 9ecdd91 once forked
+ * this comparison into copies that silently drifted apart.
+ */
+function compareRetentionRowOrder(
+  left: { readonly role: BootstrapRetentionRoleV1; readonly sourcePath: CanonicalAbsolutePathV1 },
+  right: { readonly role: BootstrapRetentionRoleV1; readonly sourcePath: CanonicalAbsolutePathV1 },
+): number {
+  return ROLE_ORDER[left.role] - ROLE_ORDER[right.role] || compareUtf8(left.sourcePath, right.sourcePath);
+}
+
 function canonicalRelativePath(value: unknown, rootPath: CanonicalAbsolutePathV1): string {
   if (
     typeof value !== "string" ||
@@ -1279,9 +1292,7 @@ export function deriveBootstrapRetentionAuthorities(
   const journal = terminalRetentionJournal(plan, terminalValue);
   return listedRetentionAuthorities(plan, journal)
     .map((authority) => ({ role: authority.role, sourcePath: authority.sourcePath }))
-    .sort((left, right) =>
-      ROLE_ORDER[left.role] - ROLE_ORDER[right.role] || compareUtf8(left.sourcePath, right.sourcePath),
-    );
+    .sort(compareRetentionRowOrder);
 }
 
 export function deriveBootstrapRetentionLocations(
@@ -1307,9 +1318,7 @@ export function deriveBootstrapRetentionLocations(
       row.sourcePath !== root.sourcePath && row.sourcePath.startsWith(`${root.sourcePath}/`),
     ),
   );
-  collapsed.sort((left, right) =>
-    ROLE_ORDER[left.role] - ROLE_ORDER[right.role] || compareUtf8(left.sourcePath, right.sourcePath),
-  );
+  collapsed.sort(compareRetentionRowOrder);
   return collapsed.map((row, ordinal) => ({
     ordinal,
     role: row.role,
@@ -1998,7 +2007,7 @@ function deriveBootstrapRetentionTableUncached(
     identities.add(identity);
   }
 
-  collapsed.sort((left, right) => ROLE_ORDER[left.role] - ROLE_ORDER[right.role] || compareUtf8(left.sourcePath, right.sourcePath));
+  collapsed.sort(compareRetentionRowOrder);
   const table = collapsed.map((row, ordinal): BootstrapRetentionEntryV1 => {
     let postimage = row.postimage;
     if (postimage.kind === "directory_tree") {
