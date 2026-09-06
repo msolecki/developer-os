@@ -198,6 +198,23 @@ describe("runUninstall", () => {
     expect(await exists(vaultDirectory)).toBe(true);
   });
 
+  it("refuses a product home that is a symlink instead of a real directory", async () => {
+    const fixture = await createCommandFixture("uninstall-home-symlink");
+    const outside = join(fixture.root, "outside");
+    const kept = join(outside, "keep.txt");
+    await nodeFs.mkdir(outside, { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(kept, "user data\n");
+    await nodeFs.symlink(outside, fixture.paths.home);
+
+    const result = await runUninstall(fixture.context, ACCEPTED);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(result.error.message).toMatch(/not a directory/iu);
+    expect(await nodeFs.readFile(kept, "utf8")).toBe("user data\n");
+  });
+
   it("refuses a directory artifact whose ancestor becomes a symlink after the ownership decision", async () => {
     const fixture = await createCommandFixture("uninstall-symlink-race");
     await runInit(fixture.context, ACCEPTED);

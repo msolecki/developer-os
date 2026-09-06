@@ -709,11 +709,35 @@ async function readUninstallManifest(
   };
 }
 
+/**
+ * Before the evidence inventory: `inventoryExactNamespaces` throws an
+ * unclassified error the moment one of its roots is a symlink rather than
+ * refusing it through `UninstallRefusal`.
+ */
+async function assertHomeShape(context: CliContext): Promise<void> {
+  let stats;
+  try {
+    stats = await context.fs.lstat(context.paths.home);
+  } catch (error) {
+    if (isMissing(error)) return;
+    throw error;
+  }
+  if (stats.isSymbolicLink() || !stats.isDirectory()) {
+    throw new UninstallRefusal(
+      EXIT_CODES.recoveryRequired,
+      "the product home exists and is not a directory",
+      [context.paths.home],
+      `replace ${context.paths.home} with a real directory before uninstall can proceed`,
+    );
+  }
+}
+
 export async function runUninstall(
   context: CliContext,
   options: UninstallOptions,
 ): Promise<CliResult<UninstallResultV1>> {
   try {
+    await assertHomeShape(context);
     const evidence = context.bootstrap?.state === "available"
       ? await context.bootstrap.inspectEvidence()
       : await inspectBootstrapEvidenceAdmission(createBootstrapEvidenceInspectionRequest({
