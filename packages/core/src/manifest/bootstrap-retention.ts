@@ -1277,10 +1277,11 @@ export function deriveBootstrapRetentionAuthorities(
   terminalValue: unknown,
 ): readonly Pick<BootstrapRetentionLocationV1, "role" | "sourcePath">[] {
   const journal = terminalRetentionJournal(plan, terminalValue);
-  return listedRetentionAuthorities(plan, journal).map((authority) => ({
-    role: authority.role,
-    sourcePath: authority.sourcePath,
-  }));
+  return listedRetentionAuthorities(plan, journal)
+    .map((authority) => ({ role: authority.role, sourcePath: authority.sourcePath }))
+    .sort((left, right) =>
+      ROLE_ORDER[left.role] - ROLE_ORDER[right.role] || compareUtf8(left.sourcePath, right.sourcePath),
+    );
 }
 
 export function deriveBootstrapRetentionLocations(
