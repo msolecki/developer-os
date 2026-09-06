@@ -691,14 +691,27 @@ fsync-bound, not CPU-bound.
 
 | Measurement | Before | After |
 |---|---|---|
+| The plan's e2e target — `fresh V2 retained bootstrap lifecycle` in `tests/e2e/fresh-v2-retained-bootstrap.test.ts`, run with `npx vitest run tests/e2e/fresh-v2-retained-bootstrap.test.ts` | 299.5 s against its 600000 ms timeout (2026-09-04, recorded in `BACKLOG.md` NEW-53) | **141.00 s** (2026-09-06, 03:55:12→03:57:34, quiet machine, load average 2.5) |
 | `npm run test:bootstrap`, whole script | ~169 minutes (2026-09-05; phase 2 alone measured 10010 s) | **127.5 minutes** (2026-09-06, 00:08:48→02:16:19) |
-| `test:bootstrap` phase 1 (the named retained-plan case) | ~118-127 s (2026-09-05) | **97.89 s** (2026-09-06) |
+| `test:bootstrap` phase 1 — an internal proxy, **not** the plan's e2e target above; it is the single named case "publishes a complete V2 handoff and permanently retains its exact plan and two slots" inside `executor.test.ts`, run separately so its evidence is on record before phase 2 starts | ~118-127 s (2026-09-05) | 97.89 s (2026-09-06) |
 | `npm run test:suite` | 54 minutes, 135 files, 4570 cases (2026-09-05); 41 minutes recorded at the prior program checkpoint | **35.4 minutes** (2026-09-06, 03:07:29→03:42:51), 133 files and 4583 tests passed |
 | Eight retained-evidence cases timing out under full-suite parallelism | 300 s each (2026-09-05, `npm run test:suite` at load average 47 from several concurrent test runs) | **gone — they do not appear at all** (2026-09-06, `npm run test:suite` on a quiet machine, load average 2.4 at start) |
 | Three uninstall cases previously timing out | 300 s each | 112.11 s, 117.25 s, 119.60 s (measured during Task 6, `npx vitest run apps/cli/src/commands/uninstall.test.ts`) |
 | Evidence inspections per fresh `init` | 6 | **3**, counted by a test rather than estimated |
 | Retention tree projections per inspection | 6 | **2** (the surviving anti-TOCTOU pair) |
 | Retained-row lookups | 314 linear `Array.prototype.find` calls | **2** |
+
+**The `test:bootstrap` whole-script run that produced 127.5 minutes and the 97.89 s proxy figure
+contained a since-fixed regression.** That run reported `1 failed | 75 passed | 1 skipped`: Task 1's
+change made one unrelated case, "refuses an unmatched post-terminal staging child before any
+retained rename", start passing when it should refuse. The fix, commit `044f7d2`, was verified
+only by re-running the named cases it touched in isolation, never by a second clean run of the
+whole two-hour file — that cost is exactly what this program was trying to avoid spending twice.
+The fix adds one per-root emptiness check to `buildBootstrapRetentionEvidence`, scoped to
+`staging_subtree` roots only, which is unlikely to move wall time materially; so 127.5 minutes and
+97.89 s are treated as expectations for the fixed code, not as measurements of it. The plan's own
+final gate runs `test:bootstrap` again in full; that run will produce a clean number and
+supersedes this one.
 
 **The eight timeouts had two causes, and only one of them was the code.** They were first
 measured while several vitest processes ran on the same machine at once — self-inflicted
@@ -708,14 +721,17 @@ fewer redundant evidence inspections, tree walks, and linear scans in the retain
 admission path. Anyone who sees one of these cases hit 300 s again should check the machine's
 load average before concluding the suite regressed.
 
-**Neither of the plan's two targets was met.** The targets were the phase-1 retained-plan case
-under 60 s and the whole `executor.test.ts` file under 10 minutes. Phase 1 finished at 97.89 s
-and the whole file at 127.5 minutes — a real, measured 25% improvement, and still well short of
-both targets. The shortfall is not the eight timeouts, which are gone; it is the remaining
-~126 minutes of ordinary cases in phase 2, each paying the same real journal/backup/stage/
-validate/apply/verify/finalize cost this program never targeted. Tasks 3-8 removed redundant
-computation inside that pipeline; they did not reduce the number of real, fsync-backed
-transactions the file exercises, and that count is what phase 2's wall time is now made of.
+**Neither of the plan's two targets was met.** The targets were the retained-init e2e case —
+`tests/e2e/fresh-v2-retained-bootstrap.test.ts` — under 60 s, and the whole `executor.test.ts`
+file under 10 minutes. The e2e case fell from 299.5 s to 141.00 s, a bit over half, and is still
+missed by more than double. The whole file fell from ~169 minutes to 127.5 minutes — a real,
+measured 25% improvement (subject to the regression disclosure above) — and is still short of its
+target by more than twelvefold. The shortfall is not the eight timeouts, which are gone; it is
+the remaining ~126 minutes of ordinary cases in `executor.test.ts` phase 2, each paying the same
+real journal/backup/stage/validate/apply/verify/finalize cost this program never targeted. Tasks
+3-8 removed redundant computation inside that pipeline; they did not reduce the number of real,
+fsync-backed transactions the file exercises, and that count is what phase 2's wall time is now
+made of.
 
 **Decision: no timeout changes.** Raising `executor.test.ts`'s or any case's timeout would hide
 that remaining cost rather than pay it down, and every retained-evidence case that used to hit
