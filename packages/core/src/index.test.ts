@@ -46,6 +46,7 @@ describe("the package's public door", () => {
         "deriveBootstrapCreationEvidencePaths",
         "deriveBootstrapEnvelopePaths",
         "deriveBootstrapPayloadEvidencePaths",
+        "deriveBootstrapRetentionAuthorities",
         "deriveBootstrapRetentionLocations",
         "deriveBootstrapRetentionTable",
         "inspectDrift",
