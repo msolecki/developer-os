@@ -3526,14 +3526,16 @@ export class BootstrapExecutor {
     }
     let evidence: BootstrapRetentionEvidenceProjectionV1;
     let table: readonly ReturnType<typeof deriveBootstrapRetentionTable>[number][];
+    let stage: "evidence assembly" | "table derivation" = "evidence assembly";
     try {
       evidence = this.#retentionEvidence.get(plan.id) ??
         await this.buildRetentionEvidence(plan, terminal);
+      stage = "table derivation";
       table = deriveBootstrapRetentionTable(plan, evidence);
     } catch {
       throw new FreshBootstrapError(
         EXIT_CODES.recoveryRequired,
-        "retention table derivation failed",
+        `retention ${stage} failed`,
       );
     }
     this.#retentionEvidence.set(plan.id, evidence);
