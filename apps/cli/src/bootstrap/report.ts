@@ -488,6 +488,25 @@ export async function buildBootstrapRetentionEvidence(
     .sort((left, right) => left.sourcePath.length - right.sourcePath.length);
   const maximalRoots = directoryRows.filter((row, index) => !directoryRows.slice(0, index)
     .some((parent) => row.sourcePath.startsWith(`${parent.sourcePath}/`)));
+  /**
+   * `verifyDirectoryTrees`'s `treeHash` pin is no defense against tampering
+   * that predates this call: it is derived from the very filesystem read
+   * that also produces the tree it is checked against, so the two can never
+   * disagree over content that was already there before either read
+   * happened. The bootstrap engine is the sole writer under its own staging
+   * root, and gives every file it places there an individual authority row
+   * -- so once none remain outstanding beneath a `staging_subtree` root,
+   * nothing else may legitimately exist there, independent of what any
+   * postimage claims.
+   */
+  for (const root of maximalRoots) {
+    if (root.role !== "staging_subtree" || root.postimage.kind !== "directory_tree") continue;
+    const hasOutstandingAuthority = rows.some((row) =>
+      row.sourcePath !== root.sourcePath && row.sourcePath.startsWith(`${root.sourcePath}/`));
+    if (!hasOutstandingAuthority && (root.postimage.entries?.length ?? 0) !== 0) {
+      throw new Error("staging root holds content no outstanding bootstrap authority accounts for");
+    }
+  }
   return {
     bootstrapId: plan.id,
     terminalJournal: terminal,

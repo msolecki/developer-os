@@ -3524,11 +3524,11 @@ export class BootstrapExecutor {
     if (terminal === null) {
       throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "bootstrap retention has no terminal state");
     }
-    const evidence = this.#retentionEvidence.get(plan.id) ??
-      await this.buildRetentionEvidence(plan, terminal);
-    this.#retentionEvidence.set(plan.id, evidence);
+    let evidence: BootstrapRetentionEvidenceProjectionV1;
     let table: readonly ReturnType<typeof deriveBootstrapRetentionTable>[number][];
     try {
+      evidence = this.#retentionEvidence.get(plan.id) ??
+        await this.buildRetentionEvidence(plan, terminal);
       table = deriveBootstrapRetentionTable(plan, evidence);
     } catch {
       throw new FreshBootstrapError(
@@ -3536,6 +3536,7 @@ export class BootstrapExecutor {
         "retention table derivation failed",
       );
     }
+    this.#retentionEvidence.set(plan.id, evidence);
     const held = this.#heldLocks.get(plan.id);
     const globalReached = terminal.nextCreatedPath > 0;
     if (
