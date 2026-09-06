@@ -673,3 +673,53 @@ three are the ones a user can hit.
    all refuse, including the recovery `doctor` itself prints. Affects `git.enabled` and
    `automation.enabled` today. Found after Foundation closed; owner and full detail in
    [`foundation-constraints.md`](./foundation-constraints.md), "Found after Foundation closed".
+
+## 9. Bootstrap and test-suite cost, measured
+
+No earlier version of this file recorded a number here; this section exists because the
+2026-09-05 bootstrap-performance program needed a baseline and found none to check itself
+against. Every row below names the exact command that produced it, because a number without
+its command cannot be reproduced or challenged.
+
+`test:bootstrap` and `test:suite` are the two long-running `package.json` scripts outside
+`npm test`. `test:bootstrap` runs `apps/cli/src/bootstrap/executor.test.ts` in two phases — the
+single named case that retains a complete V2 handoff, then every other case in the file — and
+must never be run as one untimed invocation; budget hours. `test:suite` is the main run,
+excluding that file, `e2e`, and the vendor-ingest integration case. Both exercise the real
+seven-phase transactional pipeline (section 3) against a real filesystem, so their cost is
+fsync-bound, not CPU-bound.
+
+| Measurement | Before | After |
+|---|---|---|
+| `npm run test:bootstrap`, whole script | ~169 minutes (2026-09-05; phase 2 alone measured 10010 s) | **127.5 minutes** (2026-09-06, 00:08:48→02:16:19) |
+| `test:bootstrap` phase 1 (the named retained-plan case) | ~118-127 s (2026-09-05) | **97.89 s** (2026-09-06) |
+| `npm run test:suite` | 54 minutes, 135 files, 4570 cases (2026-09-05); 41 minutes recorded at the prior program checkpoint | **35.4 minutes** (2026-09-06, 03:07:29→03:42:51), 133 files and 4583 tests passed |
+| Eight retained-evidence cases timing out under full-suite parallelism | 300 s each (2026-09-05, `npm run test:suite` at load average 47 from several concurrent test runs) | **gone — they do not appear at all** (2026-09-06, `npm run test:suite` on a quiet machine, load average 2.4 at start) |
+| Three uninstall cases previously timing out | 300 s each | 112.11 s, 117.25 s, 119.60 s (measured during Task 6, `npx vitest run apps/cli/src/commands/uninstall.test.ts`) |
+| Evidence inspections per fresh `init` | 6 | **3**, counted by a test rather than estimated |
+| Retention tree projections per inspection | 6 | **2** (the surviving anti-TOCTOU pair) |
+| Retained-row lookups | 314 linear `Array.prototype.find` calls | **2** |
+
+**The eight timeouts had two causes, and only one of them was the code.** They were first
+measured while several vitest processes ran on the same machine at once — self-inflicted
+contention that drove load average to 47 — and on a quiet machine, which is what a CI runner
+gives each job, they do not reproduce at all. The other cause was real and Tasks 3-8 fixed it:
+fewer redundant evidence inspections, tree walks, and linear scans in the retained-bootstrap
+admission path. Anyone who sees one of these cases hit 300 s again should check the machine's
+load average before concluding the suite regressed.
+
+**Neither of the plan's two targets was met.** The targets were the phase-1 retained-plan case
+under 60 s and the whole `executor.test.ts` file under 10 minutes. Phase 1 finished at 97.89 s
+and the whole file at 127.5 minutes — a real, measured 25% improvement, and still well short of
+both targets. The shortfall is not the eight timeouts, which are gone; it is the remaining
+~126 minutes of ordinary cases in phase 2, each paying the same real journal/backup/stage/
+validate/apply/verify/finalize cost this program never targeted. Tasks 3-8 removed redundant
+computation inside that pipeline; they did not reduce the number of real, fsync-backed
+transactions the file exercises, and that count is what phase 2's wall time is now made of.
+
+**Decision: no timeout changes.** Raising `executor.test.ts`'s or any case's timeout would hide
+that remaining cost rather than pay it down, and every retained-evidence case that used to hit
+300 s under contention now finishes in 112-120 s against the same 300 s budget — headroom, not
+danger. Lowering that budget risks reintroducing exactly the flakiness the eight
+now-unreproducible timeouts already demonstrated on a merely busy machine. No number measured
+here justifies moving a timeout in either direction, so none moved.
