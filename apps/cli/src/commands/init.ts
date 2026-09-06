@@ -814,6 +814,12 @@ export async function runInit(
     const fresh = manifest === null && configMissing;
     const bootstrap = context.bootstrap;
     const bootstrapAvailable = bootstrap?.state === "available";
+    /**
+     * Before the evidence inventory: `inventoryExactNamespaces` throws an
+     * unclassified error the moment one of its roots is a symlink rather than
+     * refusing it as invalid input.
+     */
+    await assertUsableDirectory(context, context.paths.home, "product home");
     const evidence = bootstrapAvailable
       ? await bootstrap.inspectEvidence()
       : await inspectBootstrapEvidenceAdmission(createBootstrapEvidenceInspectionRequest({
