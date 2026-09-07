@@ -568,19 +568,35 @@ describe("redactText", () => {
         // implementations, per the calibration above.
         expect(withPatterns).toBeLessThan(baseline * 3 + 20);
       },
-      // Declared explicitly rather than inherited from vitest's 5 s
-      // default: this test deliberately does more work than its
-      // neighbours (six full passes over 512 KB), and fix pass 4's
-      // version of this test blowing past that same *inherited* default
-      // under parallel-worker load is the failure this pass exists to
-      // fix. 2,000 ms is a wide multiple of every measurement above: the
-      // heaviest combined `baseline` + `withPatterns` min-time observed,
-      // under synthetic 16-way background CPU load at this same 512 KB
-      // size, was ~550 ms — and that number already excludes the two
-      // untimed warm-up calls, so it undercounts the real body time
-      // somewhat, which is exactly why the multiple is wide rather than
-      // tight.
-      2_000,
+      // **2,000 ms was arithmetically wrong and is corrected to 15,000 ms on
+      // 2026-09-07.** The assertion above is unchanged; only the budget moves.
+      //
+      // The old note derived 2,000 from "the heaviest combined `baseline` +
+      // `withPatterns` min-time observed ... was ~550 ms". That 550 ms is the
+      // sum of two *minimums*, i.e. two passes. The body runs **eight**: two
+      // untimed warm-ups plus three timed repetitions each. At ~275 ms a pass
+      // under load that is ~2,200 ms of work inside a 2,000 ms budget, so this
+      // was already short on this laptop and only ever passed because the
+      // machine was usually quieter than the calibration run. GitHub's
+      // `macos-15` runner, measured at ~1.9x this machine on 2026-09-07, made
+      // it fail outright: `Test timed out in 2000ms` in run 34133320221.
+      //
+      // 15,000 ms is ~3.5x the projected 4,180 ms on that runner. It is
+      // deliberately loose because this budget guards against a hang, while the
+      // *ratio* assertion above is what guards the algorithm — a wide timeout
+      // costs nothing when the test passes and prevents a false red when the
+      // machine is busy.
+      //
+      // **Why this is still an elapsed-time test, against NEW-29's preference
+      // for deterministic counts.** The property is that `addUserPatterns`
+      // folds the haystack once and then scans it per needle, rather than
+      // re-folding per pattern. Counting that directly means observing
+      // `buildFoldedHaystack` invocations, and it is module-private with no
+      // injection seam; exporting it purely for a test would widen this
+      // package's public surface to measure an internal. So NEW-29's documented
+      // fallback applies here, and the row records what production seam would
+      // retire this test's timing dependence.
+      15_000,
     );
 
     it("keeps overlap resolution: the first candidate wins and the second is dropped", () => {

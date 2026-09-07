@@ -791,3 +791,23 @@ that remaining cost rather than pay it down, and every retained-evidence case th
 danger. Lowering that budget risks reintroducing exactly the flakiness the eight
 now-unreproducible timeouts already demonstrated on a merely busy machine. No number measured
 here justifies moving a timeout in either direction, so none moved.
+
+**Amended 2026-09-07: the per-test budget moved from 300 s to 900 s, and the decision above is
+why it took CI to justify it.** Every measurement behind "headroom, not danger" was taken on this
+laptop. Run 34133320221 failed `apps/cli/src/commands/init.test.ts`'s "starts a distinct durable
+bootstrap beside an untouched noncanonical pre-plan envelope" with `Test timed out in 300000ms`,
+while the same case measures **121.21 s here in isolation**. Two factors multiply on a hosted
+runner and neither was in the original reasoning: GitHub's `macos-15` was measured at **~1.9x**
+this machine on 2026-09-07 (identical retained-evidence cases at 237,571 ms and 208,545 ms
+against 112-120 s here), and this section already records full-suite contention pushing 112-120 s
+cases to 300 s. 121 s x 1.9 x contention does not fit 300 s.
+
+The distinction the original decision missed is what a per-test timeout is *for*. It guards
+against a hang. It is not a performance bound — that is NEW-53's job, and nothing here accepts
+the cost. A budget that fires on a healthy but slow machine reports a failure that did not
+happen, which is worse than no signal: four hours of 2026-09-07 went into three CI cycles whose
+red was entirely clock, not code. The budget now lives in one place,
+`apps/cli/src/commands/testing.ts`'s `REAL_FILESYSTEM_TIMEOUT_MS`, rather than as the literal
+`300_000` repeated at 24 sites across six files with a private copy of the same name in
+`executor.test.ts`. Lower it only against a measurement taken on the slowest machine that runs
+it.

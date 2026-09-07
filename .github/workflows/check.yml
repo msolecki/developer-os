@@ -93,6 +93,32 @@ jobs:
       - name: Install
         # Frozen: a lockfile the install is allowed to rewrite is not a lockfile.
         run: pnpm install --frozen-lockfile
+      # **Temporary diagnostic, added 2026-09-07. Delete it once NEW-77 is
+      # closed.** Run 34133320221 failed the four `SpawnRenameAtxRunner real
+      # kernel boundary` cases with `MacOsRetainedRenameRefusalError`, and the
+      # stack pinned `retained-rename.ts:392` — the `result.exitCode !== 0` arm,
+      # so `osascript` ran and exited non-zero. It is not the trust check: both
+      # `refuses an untrusted osascript` and `requires the fixed osascript
+      # capability on a supported macOS host` passed on that same runner.
+      #
+      # The product reads only the exit code and discards stderr, by design, so
+      # a refusal cannot say which half failed: the JXA ObjC bridge being
+      # unavailable in a headless session, or `renameatx_np` itself refusing on
+      # the runner's filesystem. This step prints what the product cannot. It
+      # never fails the job — a diagnostic that can red a gate is a second
+      # source of false failures, which is the thing being diagnosed.
+      - name: Diagnose the osascript JXA bridge (temporary, NEW-77)
+        continue-on-error: true
+        run: |
+          echo "--- osascript identity ---"
+          ls -ln /usr/bin/osascript || true
+          echo "--- does the JXA ObjC bridge load at all? ---"
+          osascript -l JavaScript -e 'ObjC.import("Foundation"); ObjC.bindFunction("getpid", ["int", []]); $.getpid()' 2>&1 || true
+          echo "--- can it bind renameatx_np specifically? ---"
+          osascript -l JavaScript -e 'ObjC.bindFunction("renameatx_np", ["int", ["int", "char*", "int", "char*", "unsigned int"]]); "bound"' 2>&1 || true
+          echo "--- filesystem of the work directory ---"
+          df -T apfs "$PWD" 2>&1 || df "$PWD" || true
+          mount | grep -i "on / " || true
       - name: Lint
         # Includes the self-containment enumerator and the control-byte scan.
         run: npm run lint

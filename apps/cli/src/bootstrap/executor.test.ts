@@ -7,12 +7,7 @@ import { deriveBootstrapRetentionLocations, EXIT_CODES } from "@developer-os/cor
 import { MacOsTransactionLockProvider } from "@developer-os/platform-macos";
 
 import { runInit } from "../commands/init.js";
-import {
-  createCommandFixture,
-  exists,
-  inventory,
-  removeCommandFixtures,
-} from "../commands/testing.js";
+import { createCommandFixture, exists, inventory, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../commands/testing.js";
 import type { CommandFixture } from "../commands/testing.js";
 import {
   BootstrapExecutor,
@@ -23,7 +18,6 @@ import {
 afterEach(removeCommandFixtures);
 
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
-const REAL_FILESYSTEM_TIMEOUT_MS = 300_000;
 const REAL_FILESYSTEM_DEATH_MATRIX_TIMEOUT_MS = 600_000;
 const PRE_PLAN_DEATH_POINTS = new Set([
   "after_slot_0_create",

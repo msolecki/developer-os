@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   createCommandFixture,
   firstRegularFile,
+  REAL_FILESYSTEM_TIMEOUT_MS,
   removeCommandFixtures,
   retainedTombstones,
 } from "./commands/testing.js";
@@ -170,7 +171,7 @@ describe("run", () => {
     expect(harness.out[0]).toContain('"retainedBootstrapEvidence":[{');
     expect(harness.out[0]).toContain('"operation":"fresh_v2_init"');
     expect(harness.out[0]).not.toContain(RETAINED_SECRET);
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("prints the product version", async () => {
     const lines: string[] = [];

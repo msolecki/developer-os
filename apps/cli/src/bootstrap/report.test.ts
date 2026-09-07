@@ -8,13 +8,7 @@ import type { CanonicalAbsolutePathV1, UInt64DecimalV1 } from "@developer-os/cor
 
 import { runInit } from "../commands/init.js";
 import { runDoctorReport } from "../commands/doctor.js";
-import {
-  createCommandFixture,
-  firstRegularFile,
-  inventoryDigest,
-  removeCommandFixtures,
-  retainedTombstones,
-} from "../commands/testing.js";
+import { createCommandFixture, firstRegularFile, inventoryDigest, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures, retainedTombstones } from "../commands/testing.js";
 import {
   createBootstrapEvidenceInspectionRequest,
   NodeBootstrapEvidenceGuardedReader,
@@ -79,7 +73,7 @@ describe("inspectBootstrapEvidence", () => {
       regularFileBytes: report.ids[0]?.regularFileBytes,
     });
     expect(JSON.stringify(report)).not.toContain(RETAINED_SECRET);
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("reports an interrupted legal cursor as incomplete and leaves every byte unchanged", async () => {
     const fixture = await createCommandFixture("bootstrap-report-incomplete", {
@@ -108,7 +102,7 @@ describe("inspectBootstrapEvidence", () => {
     const completed = await runInit(fixture.rebuildContext(), ACCEPTED);
 
     expect(completed.ok).toBe(true);
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("reports changed retained bytes as altered without disclosing them", async () => {
     const fixture = await createCommandFixture("bootstrap-report-altered", {
@@ -130,7 +124,7 @@ describe("inspectBootstrapEvidence", () => {
     expect(doctor.retainedBootstrapEvidence[0]?.status).toBe("altered");
     expect(doctor.checks.find((check) => check.id.startsWith("bootstrap-evidence:"))?.status).toBe("warn");
     expect(doctor.checks.find((check) => check.id === "drift")?.status).not.toBe("fail");
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("reports missing and extra retained rows as altered without changing unrelated siblings", async () => {
     const fixture = await createCommandFixture("bootstrap-report-row-set", {
@@ -162,7 +156,7 @@ describe("inspectBootstrapEvidence", () => {
     expect(added.ids[0]?.status).toBe("altered");
     expect(JSON.stringify(added)).not.toContain(RETAINED_SECRET);
     expect(await nodeFs.readFile(unrelated, "utf8")).toBe("unrelated sibling\n");
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("reports a pre-plan prefix as unverified without adopting or changing it", async () => {
     const fixture = await createCommandFixture("bootstrap-report-unverified", {
@@ -184,7 +178,7 @@ describe("inspectBootstrapEvidence", () => {
     });
     expect(report.ids[0]?.vaultPath).toContain(".plan.json");
     expect(await inventoryDigest(fixture.root)).toEqual(before);
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("emits exactly the rows Core derives, in Core order", async () => {
     const fixture = await createCommandFixture("bootstrap-report-single-derivation", {
@@ -204,7 +198,7 @@ describe("inspectBootstrapEvidence", () => {
     const actual = envelope.evidence.rows.map((row) => [row.role, row.sourcePath]);
 
     expect(actual).toEqual(expected);
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("classifies a finalized envelope instead of throwing when the handoff manifest cannot be inventoried", async () => {
     const fixture = await createCommandFixture("bootstrap-report-manifest-read-failure", {
@@ -224,7 +218,7 @@ describe("inspectBootstrapEvidence", () => {
     const report = await inspectBootstrapEvidence(requestFor(fixture));
 
     expect(report.ids[0]?.status).toBe("verified");
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("projects a retained directory tree exactly twice per inspection", async () => {
     const fixture = await createCommandFixture("bootstrap-report-projection-count", {
@@ -254,7 +248,7 @@ describe("inspectBootstrapEvidence", () => {
     await inspectBootstrapEvidenceAdmission(request);
 
     expect(walks).toBe(2);
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("walks a plan's retention roots and row parents in a single inventory call", async () => {
     const fixture = await createCommandFixture("bootstrap-report-walk-count", {
@@ -285,7 +279,7 @@ describe("inspectBootstrapEvidence", () => {
      * constant, so a future change to the fixture is expected to move it too.
      */
     expect(walks).toBe(155);
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("looks up retained rows by key instead of scanning them per location", async () => {
     const fixture = await createCommandFixture("bootstrap-report-row-lookup-scale", {
@@ -366,5 +360,5 @@ describe("inspectBootstrapEvidence", () => {
     }
 
     expect(largeArrayFindCalls).toBe(2);
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

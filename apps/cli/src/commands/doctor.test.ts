@@ -20,14 +20,7 @@ import { codexPluginRoot, runDoctor, runDoctorReport } from "./doctor.js";
 import type { DoctorReportV1 } from "./doctor.js";
 import { runInit } from "./init.js";
 import { runRepair } from "./repair.js";
-import {
-  createCommandFixture,
-  firstRegularFile,
-  inventory,
-  inventoryDigest,
-  removeCommandFixtures,
-  retainedTombstones,
-} from "./testing.js";
+import { createCommandFixture, firstRegularFile, inventory, inventoryDigest, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures, retainedTombstones } from "./testing.js";
 import type { CommandFixture } from "./testing.js";
 
 /**
@@ -150,7 +143,7 @@ describe("runDoctor", () => {
     expect(evidenceChecks[0]?.status).toBe("warn");
     expect(JSON.stringify(report)).not.toContain(RETAINED_SECRET);
     expect(await inventoryDigest(fixture.root)).toEqual(before);
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   /**
    * Doctor is run on exactly the machines where this read fails — a partial

@@ -11,13 +11,7 @@ import type * as SecurityModule from "@developer-os/security";
 
 import { runInit } from "./init.js";
 import type { InitDependencies } from "./init.js";
-import {
-  createCommandFixture,
-  exists,
-  inventory,
-  inventoryDigest,
-  removeCommandFixtures,
-} from "./testing.js";
+import { createCommandFixture, exists, inventory, inventoryDigest, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "./testing.js";
 
 /**
  * Which key a redaction used is not observable from any value the CLI returns —
@@ -103,7 +97,7 @@ describe("runInit", () => {
     const newIds = new Set(retainedAfter.map((entry) => entry.id));
     expect(newIds.size).toBe(2);
     for (const entry of retainedBefore) expect(retainedAfter).toContainEqual(entry);
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it.each([
     { aggregate: { idCount: 257, entryCount: 3, regularFileBytes: "0" }, reason: "bootstrap IDs" },
@@ -182,7 +176,7 @@ describe("runInit", () => {
     } finally {
       await heldResidueLock?.release();
     }
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("refuses a non-fresh, non-resumable init when evidence blocks a new intent", async () => {
     const fixture = await createCommandFixture("init-blocks-non-fresh", {
@@ -247,7 +241,7 @@ describe("runInit", () => {
     const result = await runInit(fixture.context, ACCEPTED);
 
     expect(result.ok).toBe(true);
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("routes an unavailable packaged handoff to the fresh V1 compatibility arm", async () => {
     const unavailable = await createCommandFixture("init-bootstrap-unavailable");
@@ -321,7 +315,7 @@ describe("runInit", () => {
     const repeated = await runInit(fixture.rebuildContext(), ACCEPTED);
     expect(repeated.ok).toBe(true);
     expect(await nodeFs.readFile(partialPath)).toEqual(partialBefore);
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("refuses invalid available package authority without falling back to V1", async () => {
     const invalid = await createCommandFixture("init-bootstrap-invalid", {
@@ -941,5 +935,5 @@ describe("runInit", () => {
     const result = await runInit(fixture.context, ACCEPTED);
 
     expect(result.ok).toBe(true);
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

@@ -15,13 +15,7 @@ import type {
 import { loadOrCreateRedactionKey } from "../context.js";
 import { createCanonicalPathEvidence, createOwnerPathAdmission } from "../bootstrap/admission.js";
 import { runInit } from "./init.js";
-import {
-  createCommandFixture,
-  exists,
-  inventory,
-  inventoryDigest,
-  removeCommandFixtures,
-} from "./testing.js";
+import { createCommandFixture, exists, inventory, inventoryDigest, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "./testing.js";
 import type { CommandFixture } from "./testing.js";
 import { runUninstall } from "./uninstall.js";
 
@@ -119,7 +113,7 @@ describe("runUninstall", () => {
     expect(result.data.retainedBootstrapEvidence).toHaveLength(1);
     expect(await fixture.bootstrapEvidenceIdentities()).toEqual(before);
     expect(await exists(fixture.paths.home)).toBe(true);
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("dry-runs and reports retained evidence without changing a byte", async () => {
     const fixture = await createCommandFixture("uninstall-bootstrap-dry-run", {
@@ -140,7 +134,7 @@ describe("runUninstall", () => {
     expect(result.data.retainedBootstrapEvidence).toHaveLength(1);
     expect(await fixture.bootstrapEvidenceIdentities()).toEqual(before);
     expect(await inventoryDigest(fixture.root)).toEqual(allBefore);
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("still reports and preserves retained evidence when the manifest is absent", async () => {
     const fixture = await createCommandFixture("uninstall-bootstrap-no-manifest", {
@@ -158,7 +152,7 @@ describe("runUninstall", () => {
     expect(result.data.removed).toEqual([]);
     expect(result.data.retainedBootstrapEvidence).toHaveLength(1);
     expect(await fixture.bootstrapEvidenceIdentities()).toEqual(before);
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("refuses a directory artifact that reaches the Brain through a symlinked ancestor", async () => {
     const fixture = await createCommandFixture("uninstall-symlink-escape");
@@ -691,7 +685,7 @@ describe("runUninstall", () => {
     for (const path of plantedPaths) {
       expect(evidence.retainedRoots).not.toContain(path);
     }
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   /**
    * The assertion that keeps the roots-only exclusion honest: a manifest
@@ -762,7 +756,7 @@ describe("runUninstall", () => {
     if (!result.ok) return;
     expect(result.data.removed).not.toContain(deepFile);
     expect(await nodeFs.readFile(deepFile, "utf8")).toBe("deeply retained\n");
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   /**
    * NEW-59: `readUninstallManifest` used to reach every `schemaVersion === 2`
@@ -795,7 +789,7 @@ describe("runUninstall", () => {
     expect(result.ok).toBe(true);
     expect(result.data.removed).toContain(lockFile);
     expect(await exists(lockFile)).toBe(false);
-  }, 300_000);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   /**
    * Round-1 review on this fix: an admission refusal and a genuinely

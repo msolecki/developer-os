@@ -149,6 +149,32 @@ class RecordingLockProvider implements TransactionLockProvider {
   }
 }
 
+/**
+ * The per-test budget for a case that drives a real transaction against a real
+ * filesystem. One constant, because the literal `300_000` was repeated at 24
+ * sites across six files and `executor.test.ts` kept a private copy of it under
+ * this same name; a budget that has to be corrected in 24 places is a budget
+ * that gets corrected in 23.
+ *
+ * **Raised from 300 s to 900 s on 2026-09-07, on CI evidence that 300 s was not
+ * reachable there.** `docs/architecture/foundation.md` section 9 decided in
+ * 2026-09-06 not to move any timeout, reasoning that retained-evidence cases
+ * finishing in 112-120 s against 300 s was "headroom, not danger". That was true
+ * of this laptop and false of a hosted runner: run 34133320221 failed
+ * `init.test.ts`'s "starts a distinct durable bootstrap beside an untouched
+ * noncanonical pre-plan envelope" with `Test timed out in 300000ms`, and the
+ * same case measures 121.21 s here in isolation. GitHub's `macos-15` runner was
+ * measured at ~1.9x this machine, and section 9 separately records full-suite
+ * contention pushing 112-120 s cases to 300 s, so the two multiply.
+ *
+ * **This budget guards against a hang; it is not a performance bound.** The
+ * performance bound is NEW-53's, and nothing here should be read as accepting
+ * the cost — a timeout that fires on a healthy but slow machine reports a
+ * failure that is not one, which is strictly worse than useless. Lower it only
+ * against a measurement taken on the slowest machine that runs it.
+ */
+export const REAL_FILESYSTEM_TIMEOUT_MS = 900_000;
+
 export interface FakePlatformOptions {
   readonly userHome: string;
   readonly agents?: Readonly<Record<AgentName, AgentDiscovery>>;
