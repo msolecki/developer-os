@@ -51,8 +51,17 @@ export default defineProject({
     fileParallelism: false,
     /**
      * Raised from vitest's 5000 ms default because these are the only unit
-     * tests that drive a real transaction against a real filesystem, and the
-     * cost is fsync, not computation.
+     * tests that drive a real transaction against a real filesystem.
+     *
+     * **"The cost is fsync, not computation" stood here until 2026-09-07 and was
+     * wrong**, disproved by the measurement in the very next sentence: 0.8 s of
+     * disk against an `init` that costs ~101 s (`BACKLOG.md` NEW-53), which is
+     * ~99% spent elsewhere — 91,052,556 canonical JSON key encodes for those 73
+     * files. A profile of the live suite that day put
+     * `EncodeUtf8String` at the top and measured a CPU/wall ratio of 1.01 with
+     * zero fsync frames. `docs/architecture/foundation.md` section 9 carries the
+     * full correction; the same false claim was in three places at once, and it
+     * is why the remaining cost was written off instead of attacked.
      *
      * A measured install writes 73 files in about 0.8 s on an idle disk, and
      * `init`'s rollback cases pay that twice — apply, then revert. Run alone

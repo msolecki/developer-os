@@ -720,8 +720,26 @@ its command cannot be reproduced or challenged.
 single named case that retains a complete V2 handoff, then every other case in the file — and
 must never be run as one untimed invocation; budget hours. `test:suite` is the main run,
 excluding that file, `e2e`, and the vendor-ingest integration case. Both exercise the real
-seven-phase transactional pipeline (section 3) against a real filesystem, so their cost is
-fsync-bound, not CPU-bound.
+seven-phase transactional pipeline (section 3) against a real filesystem.
+
+**Corrected 2026-09-07: that cost is CPU-bound, not fsync-bound, and this section said the
+opposite.** The claim mattered, because it is what let the residual below be written off as an
+inherent price of durability. Measured against the live `test:suite` worker of the 2026-09-07
+gate: CPU time advanced 20.30 s in a 20 s wall window, a ratio of **1.01**, where a process
+waiting on fsync sits near 0.1-0.3; a 5 s stack sample contained **zero** `fsync`,
+`F_FULLFSYNC` or `uv_fs_fsync` frames; the heaviest leaf frame was
+`node::encoding_binding::BindingData::EncodeUtf8String`, which is
+`encoder.encode(encodeCanonicalJson(value))` at `apps/cli/src/bootstrap/journal-store.ts`; and
+`MarkCompact` — major GC — appeared 109 times, matching the allocation counts in `BACKLOG.md`
+NEW-53. The pipeline does fsync, through `handle.sync()` in `packages/core/src/transactions/`
+and `packages/core/src/manifest/`; the time simply is not spent there.
+
+The arithmetic already in this repository says the same thing and predates the profile.
+`apps/cli/vitest.config.ts` records that **a real install writes its 73 files in about 0.8 s on
+an idle disk**, while NEW-53 records that one `init` costs **roughly 101 s**. So about 99% of an
+`init` is not disk, and NEW-53's own profile names what it is instead: **91,052,556 canonical
+JSON key encodes** for those 73 files. Read the wall-clock rows below as measurements of that
+overhead, not of durability.
 
 | Measurement | Before | After |
 |---|---|---|

@@ -41,6 +41,38 @@ assume, and three of the four were open questions blocking a row rather than seq
 | D15 | **NEW-75 stays open, and the decision that would have closed it was withdrawn the same day.** The founder first chose to admit `HOME` so an isolated run would stop writing into the user's own home. Fresh-context review found the two halves are one mechanism, from evidence already in this repository: `codex exec --help` records that `--ignore-user-config` leaves auth on `$CODEX_HOME`, which derives from `$HOME`, and with `env: {}` the vendor resolves the user's real home through `getpwuid_r` — which is how it finds its credentials today. Supplying a product-owned `HOME` would move the credential lookup with it. Both adapters therefore keep `env: {}` and F2 stands. **NEW-75's closure condition is now explicit**: each vendor's credential path supplied separately, plus one real authenticated `ingest` per vendor proving it, which is a founder stop condition for model credits. | withdraws nothing already shipped; NEW-75's row in `BACKLOG.md` |
 
 
+### Amendment to D13, 2026-09-07, same day
+
+D13 is quoted above unchanged and its **decision** stands: Phase 2 closes with its two
+performance targets missed and the miss recorded, rather than by moving the targets. One clause
+of its *reasoning* is corrected, because it was measured after the decision was written and it
+changes what the residual asks of whoever picks it up.
+
+> "NEW-53 is rewritten to the residual it actually leaves — roughly 126 minutes of real
+> fsync-backed transactions this program never targeted"
+
+**"Real fsync-backed transactions" is wrong.** That remaining time is not durability, and calling
+it durability turns a closable defect into an inherent cost — which is the practical effect the
+sentence had. Evidence, gathered 2026-09-07 against the live gate and from numbers already in
+this repository:
+
+- CPU time advanced 20.30 s in a 20 s wall window on the running `test:suite` worker — a ratio of
+  **1.01**. An fsync-bound process sits near 0.1-0.3.
+- A 5 s stack sample held **zero** `fsync`, `F_FULLFSYNC` or `uv_fs_fsync` frames. The heaviest
+  leaf frame was `node::encoding_binding::BindingData::EncodeUtf8String`, i.e.
+  `encoder.encode(encodeCanonicalJson(value))` in `apps/cli/src/bootstrap/journal-store.ts`.
+  `MarkCompact` appeared 109 times.
+- `apps/cli/vitest.config.ts` already recorded that a real install writes its **73 files in about
+  0.8 s**, and NEW-53 already recorded that one `init` costs **~101 s**. About 99% of an `init`
+  was therefore never disk, and NEW-53's own profile names the rest: **91,052,556 canonical JSON
+  key encodes** to write 73 files.
+
+The pipeline does fsync, via `handle.sync()`; the time is not spent there. The same false claim
+was standing in three places — `docs/architecture/foundation.md` §9,
+`apps/cli/vitest.config.ts`, and D13's clause above — and all three are corrected as of
+2026-09-07. NEW-53's residual is rewritten to the encoder cost and the headroom it implies rather
+than to durability.
+
 ## Phases
 
 Sizes are S/M/L complexity. "Gate" is what must be true before the next phase starts.
