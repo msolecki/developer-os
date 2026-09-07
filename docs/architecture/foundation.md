@@ -495,6 +495,40 @@ content/schema files, directories, and symlinks use their kind-specific evidence
 above. Any V2 finding stops the owning operation. Every V1 or V2 read goes through the guard's
 canonical path, with `O_NOFOLLOW` and a `dev`/`ino` re-check after open.
 
+**One canonicalizer and one owner-admission predicate, in `apps/cli/src/bootstrap/admission.ts`.**
+The executor, the bootstrap report and `uninstall` each carried their own copy, and all three
+supplied `reopenCanonicalAbsolutePath: (path) => resolve(path)` beside `hasFoldedAlias: () => false`.
+`node:path.resolve` is lexical, so on an already-canonical absolute string it returns that same
+string and `admitCanonicalAbsolutePath`'s `reopenCanonicalAbsolutePath(value) !== value` refusal
+(`packages/core/src/update/paths.ts`) could never fire: a symlinked ancestor was indistinguishable
+from a plain one. Two of the three also supplied an identity `admitOwnerPath`, which made
+`validateManifestV2`'s `admitOwnerPath(owner, canonical) !== canonical` check
+(`packages/core/src/manifest/v2.ts`) a tautology. That pair of defects
+was `BACKLOG.md` NEW-51, closed 2026-09-05.
+
+The shared canonicalizer resolves **existing ancestors only** and leaves the final component exactly
+as given, mirroring `ManifestGuards.assertReadable` (`packages/core/src/manifest/types.ts`):
+canonicalizing ancestors closes the hole a leaf-only guard cannot, and preserving the leaf keeps a
+later identity check on it meaningful. Tolerating a path that does not exist yet is load-bearing
+rather than lenient — the executor canonicalizes the manifest it is *about to* write, naming paths
+one plan ordinal away from existing, so a canonicalizer that required existence would throw on every
+fresh `init` before a single file was created.
+
+**The confinement difference between the three sites is preserved rather than averaged away**, and
+this is the reason the module is a factory instead of a constant. `createOwnerPathAdmission` takes a
+closed `OwnerPathConfinementV1`. The executor and `uninstall` are `confined` to the product home and
+the Brain, because each acts on a live request whose owner authority is known. The bootstrap report
+is `unconfined`, because it validates a *historical* plan's manifest whose bytes are already
+hash-pinned to `plan.manifest.after.hash` and for which no live owner authority exists — and an
+unconfined site must state that in a `reason` field it cannot omit, since there is no default arm and
+no zero-argument call. A refused path is rewritten to a value guaranteed to differ from its input
+rather than thrown, because `admitOwnerPath`'s contract is a value comparison and `validateManifestV2`
+is what turns the mismatch into a refusal.
+
+Folded-alias detection (NFC/case aliasing) is still not implemented. None of the three predecessors
+had it and NEW-51 was scoped to the confinement predicate silently admitting everything, so the gap
+is carried forward knowingly rather than closed as a side effect.
+
 ## 5. Invariants that must not be collapsed
 
 Each of these looks like redundancy and is not, and every one was written in response to a
