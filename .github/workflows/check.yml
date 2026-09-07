@@ -145,8 +145,26 @@ jobs:
 
   suite:
     # Every test file except the executor file and tests/e2e, which the jobs above and below own.
+    #
+    # **Raised from 40 to 75 on 2026-09-07, because 40 was never a measured
+    # bound.** Run 34121831849 killed this job at 40.3 minutes with no test
+    # having failed — every step through `Build` succeeded and `Suite` was cut
+    # off mid-run, which reports nothing about the code. The three measurements
+    # that exist: 35.4 min local on a quiet machine (2026-09-06), 46.3 min local
+    # under load (2026-09-07, green, 4598 passed), and >40.3 min on a `macos-15`
+    # hosted runner, which is generally slower than either. A 40-minute bound
+    # left 4.6 minutes of headroom over the most favourable of those and none at
+    # all over the others.
+    #
+    # 75 is the worst observed run times roughly 1.5, the same ratio
+    # `bootstrap-executor` uses (~118 min measured, 180 budgeted). Like that
+    # one, read it as the bound that makes the gate *report* rather than as a
+    # target: NEW-52 owns restoring a single `vitest run` once the suite fits
+    # one 30-minute job, and NEW-53's residual owns the reason it does not —
+    # ~99% of an `init` is canonical-JSON encoding, not the 0.8 s of disk that
+    # writing its 73 files actually costs.
     runs-on: macos-15
-    timeout-minutes: 40
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
         with:
