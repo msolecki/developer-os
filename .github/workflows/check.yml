@@ -118,8 +118,22 @@ jobs:
     # the gate report something instead of being killed mid-phase. NEW-52 and
     # NEW-53's remainder own bringing it down, and this bound should be lowered
     # from the first green run's real figure.
+    #
+    # **Raised 180 -> 330 on 2026-09-07, before it was ever observed failing.**
+    # The 180 was derived from a local measurement and the note above already
+    # warned a hosted runner is slower; run 34125923469 measured how much
+    # slower — ~1.9-2x, from retained-evidence cases taking 237,571 ms against
+    # 112-120 s locally. `npm run test:bootstrap` measured 124.5 min locally on
+    # 2026-09-07, which projects to ~236 min here, over the old bound. Raising
+    # it after watching two other jobs die on the clock rather than paying a
+    # third cycle to confirm the arithmetic.
+    #
+    # A 5.5-hour bound is indefensible as a steady state and is not defended:
+    # it is the measurement bound, and NEW-53's residual is the reason it is
+    # needed. About 99% of an `init` is canonical-JSON encoding, not the 0.8 s
+    # of disk its 73 files cost, and the named call sites are in that row.
     runs-on: macos-15
-    timeout-minutes: 180
+    timeout-minutes: 330
     steps:
       - uses: actions/checkout@v4
         with:
@@ -156,15 +170,19 @@ jobs:
     # left 4.6 minutes of headroom over the most favourable of those and none at
     # all over the others.
     #
-    # 75 is the worst observed run times roughly 1.5, the same ratio
-    # `bootstrap-executor` uses (~118 min measured, 180 budgeted). Like that
-    # one, read it as the bound that makes the gate *report* rather than as a
-    # target: NEW-52 owns restoring a single `vitest run` once the suite fits
-    # one 30-minute job, and NEW-53's residual owns the reason it does not —
-    # ~99% of an `init` is canonical-JSON encoding, not the 0.8 s of disk that
-    # writing its 73 files actually costs.
+    # **75 was also wrong, and run 34125923469 killed this job again at 75.4
+    # min.** Both guesses assumed a hosted runner is ~1.5x this laptop. The
+    # measurement says ~1.9-2x: the same retained-evidence cases that take
+    # 112-120 s locally took 237,571 ms and 208,545 ms there. So the suite needs
+    # about 46.3 x 1.9 = 88 min, and neither 40 nor 75 was ever reachable.
+    #
+    # 150 is deliberately oversized. Its purpose is to obtain the number, since
+    # a job killed mid-run reports nothing and two budgets have now been guessed
+    # in a row. Lower it to the first green run's real figure plus margin, and
+    # cite that run. An unused budget minute is not billed; a killed job costs a
+    # whole cycle.
     runs-on: macos-15
-    timeout-minutes: 75
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
         with:
