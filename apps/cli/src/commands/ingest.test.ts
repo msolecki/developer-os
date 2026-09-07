@@ -1,5 +1,7 @@
 import * as nodeFs from "node:fs/promises";
-import { basename, join } from "node:path";
+import { tmpdir } from "node:os";
+import { basename, isAbsolute, join } from "node:path";
+import { getuid } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -30,6 +32,7 @@ import {
   INGEST_DECLARED_WRITE_SCOPES,
   renderIngest,
   CAPTURE_LEFT_AT,
+  prepareAgentWorkspace,
   renderValidationFinding,
   runIngest,
 } from "./ingest.js";
@@ -43,6 +46,7 @@ import { run } from "../main.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   return removeCommandFixtures();
 });
 
@@ -1555,6 +1559,197 @@ describe("runIngest, resolved against this vault rather than a default", () => {
   });
 });
 
+/**
+ * `prepareAgentWorkspace` decides on `lstat`, not on `mkdir` — `mkdir` with
+ * `recursive` succeeds on an existing directory, follows a symlink at the leaf,
+ * and does not re-apply `mode` to something already there. These drive it
+ * through an injected filesystem because the real path is a fixed name under
+ * `tmpdir()`, which every parallel test file would share.
+ */
+describe("prepareAgentWorkspace", () => {
+  function contextWith(fs: {
+    mkdir?: () => Promise<void>;
+    lstat?: () => Promise<{
+      isDirectory: () => boolean;
+      uid: number | undefined;
+      mode: number;
+    }>;
+  }): CliContext {
+    return {
+      fs: {
+        mkdir: fs.mkdir ?? ((): Promise<void> => Promise.resolve()),
+        lstat:
+          fs.lstat ??
+          ((): Promise<{
+            isDirectory: () => boolean;
+            uid: number | undefined;
+            mode: number;
+          }> =>
+            Promise.resolve({ isDirectory: () => true, uid: getuid?.(), mode: 0o40700 })),
+      },
+    } as unknown as CliContext;
+  }
+
+  it("returns a private directory this user owns", async () => {
+    const workspace = await prepareAgentWorkspace(contextWith({}));
+    expect(isAbsolute(workspace)).toBe(true);
+    expect(basename(workspace)).toBe("developer-os-agent-workspace");
+  });
+
+  it("refuses a symlink at the leaf, which mkdir reports as success", async () => {
+    await expect(
+      prepareAgentWorkspace(
+        contextWith({
+          lstat: () =>
+            Promise.resolve({
+              isDirectory: () => false,
+              uid: getuid?.(),
+              mode: 0o120700,
+            }),
+        }),
+      ),
+    ).rejects.toThrow(/not a private directory this user owns/);
+  });
+
+  /** The refusal is the product's own, carrying its exit code — not a bare Error. */
+  it("refuses with the product's operational-failure exit code", async () => {
+    await expect(
+      prepareAgentWorkspace(
+        contextWith({
+          lstat: () =>
+            Promise.resolve({
+              isDirectory: () => false,
+              uid: getuid?.(),
+              mode: 0o120700,
+            }),
+        }),
+      ),
+    ).rejects.toMatchObject({ code: EXIT_CODES.operationalFailure });
+  });
+
+  /**
+   * The `/tmp` case. `tmpdir()` falls back to a shared `/tmp` whenever `TMPDIR`,
+   * `TMP` and `TEMP` are all unset — a launchd daemon, a cron entry, a
+   * container — and there the fixed name is pre-creatable by another local user.
+   */
+  it("refuses a directory owned by somebody else", async () => {
+    await expect(
+      prepareAgentWorkspace(
+        contextWith({
+          lstat: () =>
+            Promise.resolve({
+              isDirectory: () => true,
+              uid: (getuid?.() ?? 0) + 1,
+              mode: 0o40700,
+            }),
+        }),
+      ),
+    ).rejects.toThrow(/not a private directory this user owns/);
+  });
+
+  /** `mkdir` does not re-apply `mode` to a directory that already exists. */
+  it("refuses a directory others can reach, since mkdir would not have narrowed it", async () => {
+    await expect(
+      prepareAgentWorkspace(
+        contextWith({
+          lstat: () =>
+            Promise.resolve({
+              isDirectory: () => true,
+              uid: getuid?.(),
+              mode: 0o40707,
+            }),
+        }),
+      ),
+    ).rejects.toThrow(/not a private directory this user owns/);
+  });
+
+  it("refuses a leaf whose uid the platform did not report", async () => {
+    await expect(
+      prepareAgentWorkspace(
+        contextWith({
+          lstat: () =>
+            Promise.resolve({ isDirectory: () => true, uid: undefined, mode: 0o40700 }),
+        }),
+      ),
+    ).rejects.toThrow(/not a private directory this user owns/);
+  });
+
+  /**
+   * `tmpdir()` returns `$TMPDIR` verbatim, so a relative one makes `join` produce
+   * a relative path — and `mkdir` would then create the directory under this
+   * process's own cwd, which is the vault whenever the user runs `ingest` from
+   * inside it. `screenDerivedPathArgument` rejects only a leading `-`, so a
+   * relative `-C` value clears the adapter screen.
+   */
+  it("refuses a relative TMPDIR rather than creating the directory under the cwd", async () => {
+    vi.stubEnv("TMPDIR", "relative/tmp");
+
+    await expect(prepareAgentWorkspace(contextWith({}))).rejects.toThrow(
+      /is not an absolute path/,
+    );
+  });
+
+  /**
+   * The path travels as `paths`, which `failureFrom` forwards unredacted and
+   * `main.ts` prints through `renderPath`. In the message it did not survive:
+   * `redactText`'s high-entropy rule has `/` and `-` inside its character class,
+   * so a macOS tmpdir path is one 40-character token and the whole thing became
+   * `[REDACTED:high-entropy]` — a refusal that named no directory.
+   */
+  it("carries the directory as a path rather than in the message the redactor eats", async () => {
+    await expect(
+      prepareAgentWorkspace(
+        contextWith({
+          lstat: () =>
+            Promise.resolve({ isDirectory: () => true, uid: (getuid?.() ?? -1) + 1, mode: 0o40700 }),
+        }),
+      ),
+    ).rejects.toMatchObject({
+      paths: [join(tmpdir(), "developer-os-agent-workspace")],
+      recovery: expect.stringContaining("TMPDIR") as unknown as string,
+    });
+  });
+
+  /** Fails rather than returning when the call resolves, so a silent pass is impossible. */
+  async function refusalFrom(work: Promise<unknown>): Promise<Error> {
+    try {
+      await work;
+    } catch (reason) {
+      return reason as Error;
+    }
+    throw new Error("expected prepareAgentWorkspace to refuse, and it resolved");
+  }
+
+  it("names the errno rather than the message node:fs put the path in", async () => {
+    const refusal = await refusalFrom(
+      prepareAgentWorkspace(
+        contextWith({
+          mkdir: () =>
+            Promise.reject(Object.assign(new Error("boom /secret/path"), { code: "EACCES" })),
+        }),
+      ),
+    );
+
+    expect(refusal.message).toBe(
+      "the scratch directory this run gives the agent could not be prepared (EACCES)",
+    );
+    expect(refusal.message).not.toContain("/secret/path");
+  });
+
+  it("does not leak an error message that was never screened", async () => {
+    const refusal = await refusalFrom(
+      prepareAgentWorkspace(
+        contextWith({ mkdir: () => Promise.reject(new Error("boom /secret/path")) }),
+      ),
+    );
+
+    expect(refusal.message).toBe(
+      "the scratch directory this run gives the agent could not be prepared (unknown)",
+    );
+    expect(refusal.message).not.toContain("/secret/path");
+  });
+});
+
 describe("runIngest, the agent call", () => {
   it("invokes the first installed vendor in the fixed order claude, then codex", async () => {
     const fixture = await installedFixture("ingest-default-vendor");
@@ -1565,6 +1760,62 @@ describe("runIngest, the agent call", () => {
 
     expect(dataOf(result).agent).toBe("claude");
     expect(fixture.calls.map((call) => call.executable)).toStrictEqual([CLAUDE]);
+  });
+
+  /**
+   * The scratch directory is Codex's alone — `invokeClaude` has no working-root
+   * field — and Claude is the first vendor in `VENDOR_ORDER`, so checking it
+   * unconditionally turned one `sudo developer-os ingest` leftover, or any
+   * pre-created leaf on a shared `/tmp`, into a permanent block on the *default*
+   * vendor's ingest. A run that reads nothing from the path must not be refused
+   * by it.
+   */
+  it("does not refuse the claude path over a scratch directory it never uses", async () => {
+    const fixture = await installedFixture("ingest-claude-scratch-irrelevant");
+    const seeded = await fixture.seedAccepted("an observation for claude");
+    fixture.reply(() => oneNote(seeded.id));
+
+    const hostileTmp = join(fixture.root, "hostile-tmp");
+    const leaf = join(hostileTmp, "developer-os-agent-workspace");
+    await nodeFs.mkdir(leaf, { recursive: true });
+    await nodeFs.chmod(leaf, 0o777);
+    vi.stubEnv("TMPDIR", hostileTmp);
+    /** Without this the case passes vacuously if the stub ever stops reaching `os.tmpdir()`. */
+    expect(tmpdir()).toBe(hostileTmp);
+
+    const result = await fixture.run();
+
+    expect(dataOf(result).agent).toBe("claude");
+    expect(fixture.calls.map((call) => call.executable)).toStrictEqual([CLAUDE]);
+  });
+
+  /**
+   * NEW-74. Roadmap Phase 1 left Claude with no read grant at all — `--tools ""` —
+   * while Codex was still told to treat the vault's own content root as its
+   * working root, so one verb had two read scopes depending on which binary
+   * answered. The narrowing is real but partial and is recorded as such in
+   * `docs/architecture/vendor-invocation.md`: `-C` decides what the agent is
+   * told to work in, while `-s read-only` governs model-generated shell
+   * commands, which may still read outside it.
+   */
+  it("does not hand codex the vault as its working root", async () => {
+    const fixture = await installedFixture("ingest-codex-working-root", {
+      claude: false,
+    });
+    const seeded = await fixture.seedAccepted("an observation for codex");
+    fixture.reply(() => oneNote(seeded.id));
+
+    await fixture.run();
+
+    const call = fixture.calls[0];
+    const workingRoot = call?.args[call.args.indexOf("-C") + 1];
+    expect(workingRoot).toBeDefined();
+    expect(isAbsolute(workingRoot ?? "")).toBe(true);
+    expect(workingRoot).not.toBe(fixture.content);
+    expect(workingRoot).not.toBe(fixture.paths.brain);
+    /** The property the architecture note argues for: outside the closed set. */
+    expect(workingRoot?.startsWith(fixture.paths.home)).toBe(false);
+    expect(workingRoot?.startsWith(fixture.paths.brain)).toBe(false);
   });
 
   it("falls to codex when claude is not installed", async () => {

@@ -237,7 +237,8 @@ is now paid on both sides.
 ## 7. Invocation
 
 ```text
-codex exec --json --output-schema <schema-file> -s <sandbox> [--add-dir <dir>]... \
+codex exec --ephemeral --ignore-user-config --ignore-rules --json \
+           --output-schema <schema-file> -s <sandbox> [--add-dir <dir>]... \
            --skip-git-repo-check -C <working-root> <prompt>
 ```
 
@@ -252,7 +253,10 @@ output schema path are assembled by this product and also keep the positional ru
 (`screenDerivedPathArgument`). That last split closed `BACKLOG.md` §1 NEW-12 on 2026-08-17: applying
 the *nominal* half to a path derived from the user's own `brainPath` refused a vault at
 `~/Danger/DeveloperBrain` permanently, and applying it to a capture body refused every observation
-that quoted an `EACCES` message.
+that quoted an `EACCES` message. **The screen is unchanged; what `ingest` sends through it is not.**
+Since 2026-09-07 (NEW-74) that caller passes an empty scratch directory rather than a path derived
+from `brainPath` — this package still accepts any product-derived absolute path, and the vault is
+simply no longer one of them (`docs/architecture/vendor-invocation.md`, "The Codex working root").
 
 **This package does not write the file `outputSchemaPath` points at.** DOS-P6 closed the product
 obligation outside the adapter: `init` embeds and installs one managed schema per structured-result

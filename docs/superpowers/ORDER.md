@@ -13,7 +13,8 @@ notes are the archive.
 Roadmap Phase 1, ingest isolation, closed 2026-09-05 as `4fe131c..8e9381a` — nine tasks, each
 reviewed by an agent that did not write it, plus a fresh whole-range review that returned NOT READY
 on a Critical and READY after the fix wave. The plan was deleted at closure. NEW-58, NEW-47, NEW-44
-and NEW-72 are closed; NEW-74 and NEW-75 are the residuals it opened.
+and NEW-72 are closed; NEW-74 and NEW-75 were the residuals it opened, and NEW-74 closed
+2026-09-07 under decision D14.
 
 The next action is **roadmap Phase 2 — bootstrap performance and the first push (NEW-53, NEW-52)**
 (`docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md:109`). It now carries more
@@ -99,9 +100,9 @@ Startable without another product gate:
 
 Needs a human, a policy decision, or an external application:
 
-- NEW-74 — decide whether Codex keeps its `-C <contentRoot>` read scope now that Claude has none.
-- NEW-75 — decide whether ingest must own the `HOME` the vendor writes into, since an isolated run
-  still writes `.claude.json`, a backup snapshot and session files despite `--no-session-persistence`.
+- NEW-75 — supply each vendor's credential path separately, then prove it with one real
+  authenticated `ingest` per vendor. Narrowed 2026-09-07 by D15: admitting `HOME` is refused,
+  because the resolution that strews the files is the one that finds the credentials.
 - NEW-45 — observe whether a real Codex turn ever emits more than one `agent_message`, with one paid
   run. Narrowed 2026-09-05: NEW-47 is closed from source and corroborates the last-wins tie-break.
 - NEW-42 — observe capture inside both vendors' interactive sessions.
@@ -109,7 +110,8 @@ Needs a human, a policy decision, or an external application:
 - NEW-7 — verify percent-encoded local links in Obsidian.
 - Foundation watchdog — decide whether `SpawnLockfRunner` needs one around non-blocking `lockf`.
 
-The remaining open repository rows are NEW-20, NEW-24–NEW-29, NEW-31, NEW-32, and NEW-34–NEW-40.
+The remaining open repository rows are NEW-20, NEW-24–NEW-29, NEW-31, NEW-32, NEW-34–NEW-40, and
+NEW-76.
 They are not ordered ahead of A11 unless the touched subsystem makes one relevant.
 
 ## Delivery evidence still owed

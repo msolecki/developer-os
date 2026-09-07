@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
-import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, isAbsolute, join } from "node:path";
+import { getuid } from "node:process";
 
 import {
   containsPath,
@@ -742,6 +744,129 @@ interface AgentOutcome {
 }
 
 /**
+ * The `errno` name only. An `Error.message` from `node:fs` carries the path the
+ * call was given, and every path this process prints goes through `renderPath`
+ * first; splicing the raw message in would route one around that. The code is a
+ * fixed token, so it can be interpolated as-is.
+ */
+function errnoCode(error: unknown): string {
+  const code: unknown = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" && /^[A-Z][A-Z0-9_]*$/.test(code) ? code : "unknown";
+}
+
+/**
+ * The empty directory Codex is told to treat as its working root (NEW-74). It
+ * replaces the vault's own content root, which told the agent to work inside the
+ * user's notes while the Claude half of the same verb was given no read grant at
+ * all. The bounded index excerpt in the prompt already carries what the model
+ * needs, so nothing was lost by emptying it.
+ *
+ * **Deliberately outside the product home.** `resolveRuntimePaths` defines a
+ * closed set of product-owned paths, every one of them manifest-owned,
+ * drift-checked and drained by `uninstall`; an entry a third-party binary may
+ * write into would have to be admitted through all of that for a directory that
+ * holds no product state.
+ *
+ * **Not the vendor's `HOME`.** Both adapters still spawn with `env: {}`, so the
+ * vendor resolves its own home through `getpwuid_r` and keeps reading its
+ * credentials from there — `codex exec --help` says outright that
+ * `--ignore-user-config` leaves auth on `$CODEX_HOME`, which derives from
+ * `$HOME`. NEW-75 is the row for that; see `docs/architecture/vendor-invocation.md`.
+ */
+const AGENT_WORKSPACE_LEAF = "developer-os-agent-workspace";
+
+/**
+ * **The directory travels as a `path`, never inside the message.** `failureFrom`
+ * runs `message` through `redactDiagnostic`, and `redactText`'s high-entropy rule
+ * has `/` and `-` inside its character class, so a macOS tmpdir path is a single
+ * 40-character token: interpolated, the whole thing came out as
+ * `[REDACTED:high-entropy]` and the refusal named no directory at all. `paths` is
+ * forwarded unredacted and printed through `renderPath` by `main.ts`, which is
+ * both readable and the convention every other refusal in this file follows.
+ *
+ * **The recovery is not `RETRY_LATER`.** Every cause here is deterministic and
+ * persists until a human acts, so a rerun fails identically; the recovery says
+ * that rather than inviting one.
+ *
+ * It says "the directory this run names" and not "named above" because the two
+ * renderings order the parts differently: `main.ts` prints `paths` before
+ * `Recovery:`, while `reportLines` prints a capture's `paths` after its whole
+ * message. One phrasing has to be true of both.
+ */
+function workspaceRefusal(workspace: string, complaint: string): IngestRefusal {
+  return new IngestRefusal(
+    EXIT_CODES.operationalFailure,
+    `the scratch directory this run gives the agent ${complaint}`,
+    [workspace],
+    "remove the directory this run names or take ownership of it, or point TMPDIR at an absolute directory only this user can reach; running ingest again cannot change the outcome",
+  );
+}
+
+/**
+ * Refuses rather than repairs: a relative `$TMPDIR`, a leaf that is not a real
+ * directory, one this user does not own, and one any other user can reach.
+ *
+ * **Called on the Codex arm only**, because `invokeClaude` has no working-root
+ * field and a Claude run therefore never opens this directory. When it was called
+ * before the vendor branch instead, it refused the default vendor over a path that
+ * run does not use.
+ *
+ * `mkdir` with `recursive` reports success on an existing directory *and*
+ * follows a symlink at the leaf, and it does not re-apply `mode` to something
+ * already there — so it settles almost nothing on its own. The `lstat` after it
+ * is what decides, and it decides on the link rather than its target.
+ *
+ * **Ownership and mode are checked because the path is predictable.**
+ * `tmpdir()` reads `$TMPDIR` and falls back to `/tmp` when it is unset, which is
+ * what a launchd daemon, a cron entry or a container gives this process. On a
+ * shared `/tmp` another local user can pre-create this exact name; without these
+ * two checks `recursive: true` would swallow the `EEXIST` and hand the agent a
+ * directory somebody else controls.
+ *
+ * **Why a fixed name and not `mkdtemp`, now that nothing reuses this directory.**
+ * `mkdtemp` would be stronger on every axis this function defends: it creates
+ * `0o700` atomically, fails rather than adopting an existing path, and produces
+ * an unguessable name no other user can pre-create, which would retire the two
+ * checks above rather than merely satisfy them. It is not used because it is not
+ * on `CliFileSystem`, and widening that interface obliges every injected
+ * filesystem in the suite to grow a method — a Foundation-shaped change to buy a
+ * property two `lstat` fields already establish. Recorded so the next reader
+ * knows the trade was made and not missed.
+ *
+ * The `mkdir`→`lstat` window stays open, and it is the smaller of two: the one
+ * that matters is `lstat` → the vendor's own `open`, which no flag available to
+ * this process can close.
+ */
+export async function prepareAgentWorkspace(context: CliContext): Promise<string> {
+  const workspace = join(tmpdir(), AGENT_WORKSPACE_LEAF);
+
+  /**
+   * `tmpdir()` returns `$TMPDIR` verbatim, so a relative one makes this path
+   * relative too — and `mkdir` would then create the directory under this
+   * process's own cwd, which is the vault whenever the user runs `ingest` from
+   * inside it. `screenDerivedPathArgument` refuses only a leading `-`, so a
+   * relative `-C` value clears the adapter screen unremarked.
+   */
+  if (!isAbsolute(workspace)) {
+    throw workspaceRefusal(workspace, "is not an absolute path");
+  }
+
+  let stats;
+  try {
+    await context.fs.mkdir(workspace, { recursive: true, mode: 0o700 });
+    stats = await context.fs.lstat(workspace);
+  } catch (error) {
+    throw workspaceRefusal(workspace, `could not be prepared (${errnoCode(error)})`);
+  }
+
+  if (!stats.isDirectory() || stats.uid !== (getuid?.() ?? -1) || (stats.mode & 0o077) !== 0) {
+    throw workspaceRefusal(workspace, "is not a private directory this user owns");
+  }
+
+  return workspace;
+}
+
+/**
  * The bridge between one prompt and two vendors that share **neither an
  * invocation type nor a result type**.
  *
@@ -756,9 +881,12 @@ interface AgentOutcome {
  * `writeScopes.length === 0`; the Claude side now passes no tools at all
  * (`--tools ""`), rather than a read-only allow-list. Neither invocation type
  * has a *read* scope field, so the read side is each vendor's own vocabulary:
- * Codex gets the content root as its working root; Claude no longer has one.
- * The resolved `content/**` glob this workflow declares is what Developer OS
- * states it reads, not a string either CLI accepts.
+ * Codex gets an empty scratch directory as its working root and Claude has
+ * none at all, so neither is *told* to work in the vault. That is narrower than
+ * "cannot reach it": `invokeCodex` still spawns with `cwd: cwd()`, this
+ * process's own directory, which is the vault whenever the user runs `ingest`
+ * from inside it. The resolved `content/**` glob this workflow declares is what
+ * Developer OS states it reads, not a string either CLI accepts.
  *
  * **`outputSchemaPath` reaches Codex only.** `invokeClaude` has no
  * `--output-schema` flag, so on that vendor the schema is described in the
@@ -771,12 +899,19 @@ async function invokeVendor(
   context: CliContext,
   vendor: Vendor,
   prompt: string,
-  workingRoot: string,
   schemaPath: string,
 ): Promise<AgentOutcome> {
   const installation = { executable: vendor.executable, version: UNKNOWN_VERSION };
   const dependencies = { runner: context.runner };
 
+  /**
+   * **The scratch directory is prepared on the Codex arm only**, because
+   * `invokeClaude` has no working-root field to give it to. When it was prepared
+   * before the ternary instead, it refused the Claude path — the *first* vendor in
+   * `VENDOR_ORDER`, and so the default — over a directory that run never opens,
+   * which turned one `sudo developer-os ingest` leftover into a permanent block on
+   * ingest.
+   */
   const result =
     vendor.name === "claude"
       ? await invokeClaude(
@@ -792,7 +927,7 @@ async function invokeVendor(
           installation,
           {
             prompt,
-            workingRoot,
+            workingRoot: await prepareAgentWorkspace(context),
             writeScopes: [],
             outputSchemaPath: schemaPath,
             timeoutMs: INGEST_TIMEOUT_MS,
@@ -1276,7 +1411,6 @@ async function ingestOne(
       context,
       vendor,
       buildIngestPrompt(envelope, { config: brainConfig, indexExcerpt }),
-      environment.contentRoot,
       outputSchemaPath(paths.home, INGEST_VERB),
     );
 
@@ -1869,6 +2003,35 @@ export async function runIngest(
     const indexExcerpt = await readIndexExcerpt(context, paths, brainConfig, redact);
 
     const selection = await selectCaptures(context, quarantine, redact, limit);
+
+    /**
+     * Validated once per run, for its refusal rather than its value — the value
+     * `invokeVendor` uses comes from its own call, which is two idempotent
+     * syscalls by then.
+     *
+     * **The reason is classification, not cost.** An unusable scratch directory
+     * is a run-wide, deterministic environment failure: it persists, so every
+     * retry fails identically until a human removes it. Reached only from
+     * inside the capture loop it would surface as one identical
+     * `RefusedCaptureV1` per capture, each classified `untouched`. Those keep
+     * `workspaceRefusal`'s own recovery — `RefusedCaptureV1.recovery` carries
+     * it and `reportLines` prints it — so what the loop adds is not a wrong
+     * recovery but N copies of the same one, under `refusedRecovery`'s
+     * run-level "rerun, and reject captures to stop retrying", which is the
+     * useless half: neither fixes a directory owned by somebody else. One
+     * `sudo developer-os ingest` leaving a root-owned leaf is enough to reach
+     * that state. Raised here it is one refusal, correctly classified, with
+     * nothing telling the user to try again.
+     *
+     * Ordered after `selectCaptures`, and gated on the vendor, for the same
+     * reason in two axes: a run with nothing to ingest, and a run on Claude —
+     * which has no working-root field — are both runs that were never going to
+     * use this directory, and neither may be failed by it.
+     */
+    if (vendor.name === "codex" && selection.accepted.length > 0) {
+      await prepareAgentWorkspace(context);
+    }
+
     const environment: IngestEnvironment = {
       config,
       paths,

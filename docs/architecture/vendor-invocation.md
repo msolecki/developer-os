@@ -205,9 +205,27 @@ have missed.
 
 ## Task 6: the vendor child process environment (F2), decided 2026-09-05
 
+> **Re-examined 2026-09-07 (NEW-75) and left standing, against a finding that
+> changes what the row is asking for.** The founder first decided to admit `HOME`
+> so an isolated run would stop writing into the user's own home. Review found
+> that the two halves are one mechanism, and the evidence was already in this
+> document: the Codex table's row 1 records `--ignore-user-config` as "Do not
+> load `$CODEX_HOME/config.toml`; **auth still uses `CODEX_HOME`**", and
+> `CODEX_HOME` derives from `$HOME`. With `env: {}` the vendor has no `HOME`,
+> resolves the invoking user's real one through `getpwuid_r`, and reads its
+> credentials from there — which is why `ingest` works at all today. Pointing
+> `HOME` at a directory this product owns would move the credential lookup with
+> it, near-certainly breaking Codex outright and putting Claude's per-home
+> onboarding state in doubt. **The stray files this product leaves in
+> `~/.claude` are the cost of the vendor finding its own credentials**, and
+> separating them needs each vendor's credential layout supplied explicitly plus
+> one real authenticated run per vendor to prove it — neither of which this
+> product has. NEW-75 stays open and now names that as its closure condition.
+> The decision below is therefore unchanged.
+
 **Decision: the empty environment is retained. No variable is admitted.** Both
-adapters pass `env: {}` today (`packages/adapter-claude/src/invoke.ts:139`,
-`packages/adapter-codex/src/invoke.ts:324`), so both vendors start with **no
+adapters pass `env: {}` today (`packages/adapter-claude/src/invoke.ts:140`,
+`packages/adapter-codex/src/invoke.ts:323`), so both vendors start with **no
 environment at all** — not `HOME`, not a proxy variable, nothing inherited
 from the parent. Task 1 Step 6 recorded both binaries exiting `0` under
 `env -i … --help` (Claude row 13, Codex row 7 above), and no observation
@@ -261,7 +279,7 @@ user (a home directory, and through it whatever that directory's ownership
 or existence reveals) is not something `env: {}` closes off. Isolation from
 the user's own settings and hooks is bought by the flags Tasks 2 and 3 added
 — `--restricted`, `--safe-mode` and `--strict-mcp-config` for Claude
-(`packages/adapter-claude/src/invoke.ts:87-118`); `--ignore-user-config` and
+(`packages/adapter-claude/src/invoke.ts:124-126`); `--ignore-user-config` and
 `--ignore-rules` for Codex (`packages/adapter-codex/src/invoke.ts:289-297`)
 — not by the empty environment. A future change that relaxes any of those
 flags is not compensated for by `EXPECTED_VENDOR_ENVIRONMENT` staying `{}`.
@@ -284,11 +302,100 @@ on and supplying a fake key, so no model turn can complete.
   `HOME` of its own and resolves one through `getpwuid_r` (see the Task 6 section above) — which
   means the files above land in the *developer's real* `~/.claude` during a production ingest run,
   not in a sandbox. The test avoids this only because it sets `HOME` explicitly, which production
-  does not.
+  does not. **Do not "fix" this by setting `HOME`** without reading the Task 6 amendment first:
+  the same resolution is how each vendor finds its credentials, so moving it moves both.
 - **The run opens outbound HTTPS to an Anthropic-owned address even with the base URL overridden.**
   Observed during the un-isolated control run. It is not the model API — the override points
   elsewhere and the key is fake, so no billable request can complete — and it is most likely
   telemetry or an update check. Recorded so nobody reads "unreachable base URL" as "no network".
+
+## The Codex working root, decided 2026-09-07 (NEW-74)
+
+**Decision: Codex is no longer told to treat the vault as its working root.**
+`apps/cli/src/commands/ingest.ts` passed the vault's own `contentRoot` as
+`-C <DIR>`; it now passes an empty scratch directory, `prepareAgentWorkspace`'s
+`join(tmpdir(), "developer-os-agent-workspace")`. The asymmetry this closes was
+created by roadmap Phase 1, which left Claude with no read grant at all
+(`--tools ""`, an empty tool set) while Codex kept a directory argument pointing
+at the user's notes — one verb, two read scopes, depending on which binary
+answered. The bounded index excerpt in the prompt already carries what the model
+needs from the vault, which is what made the Claude side workable and is why
+removing this one costs nothing.
+
+**It is a scratch directory and not the vendor's home**, deliberately: the
+vendor's home holds its credentials (see the Task 6 amendment and NEW-75), and
+putting that directory inside the model's own working root would widen the very
+scope this section narrows.
+
+**Stated at the strength the evidence supports, because the flag names invite
+more.** Per the Codex table's row 1, taken verbatim from `codex exec --help` on
+0.151.0: `-C, --cd <DIR>` is "the specified directory as its working root", and
+`-s, --sandbox <SANDBOX_MODE>` is "the sandbox policy to use when executing
+**model-generated shell commands**". So `-C` decides what the agent is told to
+work in, and `read-only` bounds what a shell command the model writes may
+*change* — not what it may read. A model-generated `cat` of a path outside the
+working root is not prevented by either flag. **This is therefore a narrowing of
+what the agent is pointed at, not the equivalent of Claude's `--tools ""`**,
+which removes the tool surface entirely. Closing the remaining gap needs either a
+genuine read-scoping mechanism in Codex or the same tool-free invocation Claude
+gets; neither exists in 0.151.0 as observed here.
+
+**And `-C` is not the child's only relationship to the vault.**
+`packages/adapter-codex/src/invoke.ts:314` spawns with `cwd: cwd()` — this
+process's own working directory, which *is* the vault whenever the user runs
+`developer-os ingest` from inside it. What this decision changed is the directory
+the agent is *told* to treat as its root; the directory the child process
+actually starts in is unchanged, and this section does not claim it. Read
+"neither vendor is pointed at the vault" as "told to work in", never as "cannot
+reach".
+
+**Why the directory is checked and not merely created.** `tmpdir()` reads
+`$TMPDIR` and falls back to the shared `/tmp` when it, `TMP` and `TEMP` are all
+unset — the environment a launchd daemon, a cron entry or a container hands this
+process. On a shared `/tmp` a fixed name is pre-creatable by another local user,
+and `mkdir` with `recursive` swallows the `EEXIST` while silently *not* applying
+its `mode` to what is already there. `prepareAgentWorkspace` therefore decides on
+the `lstat` that follows: it refuses a leaf that is not a real directory, one
+this user does not own, and one any other user can reach. The mode test proves
+what the leaf grants and nothing about its ancestors — on `/tmp` what stops a
+non-owner replacing the directory outright is that directory's own sticky bit.
+Two windows stay open, and only the smaller one is closable from here: the gap
+between `mkdir` and `lstat` would need the manifest layer's `O_NOFOLLOW` reopen
+and inode re-check, disproportionate for a directory holding nothing; the gap
+between `lstat` and the vendor's own `open` cannot be closed by this process at
+all.
+
+**A relative `$TMPDIR` is refused before `mkdir`, not after.** `tmpdir()` returns
+the variable verbatim, so a relative value makes the joined path relative too and
+`mkdir` would create the directory under this process's own cwd — the vault,
+whenever the user runs `ingest` from inside it. `screenDerivedPathArgument`
+refuses only a leading `-`, so a relative `-C` value clears the adapter screen
+without remark; the absolute-path check in `prepareAgentWorkspace` is what stops
+it.
+
+**The refusal names the directory through `paths`, and its recovery is not
+"try again".** Both matter and both were wrong in the first cut. `failureFrom`
+redacts `message`, and `redactText`'s high-entropy rule has `/` and `-` inside its
+character class, so an interpolated macOS tmpdir path is one token and the whole
+refusal read `[REDACTED:high-entropy]` — the user was told a directory was wrong
+and not which. `paths` is forwarded unredacted and rendered by `main.ts` through
+`renderPath`, which is where a path belongs. And every cause here is
+deterministic: it persists until a human removes or re-owns the directory, so the
+recovery says that rather than `RETRY_LATER`. The run-wide check in `runIngest`
+is a related but weaker argument, and worth stating precisely because the
+obvious version of it is false: a per-capture refusal does **not** lose this
+recovery — `RefusedCaptureV1.recovery` carries it and `reportLines` prints it.
+What the capture loop adds is N identical copies of one environment failure,
+under `refusedRecovery`'s run-level "rerun, and reject captures to stop
+retrying". That line is the useless half, and raising the check once per run is
+what keeps it from being emitted.
+
+**The check runs on the Codex arm only.** `invokeClaude` has no working-root
+field, so a Claude run never opens this directory. Checking it unconditionally
+refused the *first* vendor in `VENDOR_ORDER` — the default — over a path that run
+does not use, which turned one `sudo developer-os ingest` leftover, or any
+pre-created leaf on a shared `/tmp`, into a permanent block on ingest. Found by
+fresh-context review before the change shipped.
 
 ## The Codex half of the hook harness was not built, and why
 

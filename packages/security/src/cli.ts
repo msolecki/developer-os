@@ -173,8 +173,17 @@ export function screenProseArgument(value: string, field: string): string | null
 /**
  * **The third screen, and the only one whose name states a provenance rather
  * than a shape.** A derived path is one *this product assembled* — the working
- * root, from the user's validated `brainPath`; the output schema path, from the
+ * root, since 2026-09-07 (NEW-74) from `tmpdir()` plus a fixed leaf rather than
+ * from the user's validated `brainPath`; the output schema path, from the
  * product state root plus a fixed `schemas/<verb>.schema.json` tail.
+ *
+ * **That change moved one half of the provenance outside this process**, so it
+ * is stated rather than left for a reader to notice: `$TMPDIR` is chosen by
+ * whoever starts the process, not by this product. The claim below survives it
+ * — the environment is not a workflow author or a model — but only because
+ * `prepareAgentWorkspace` refuses a `$TMPDIR` that is relative or that yields a
+ * directory this user does not privately own, which is where the strength of
+ * "derived" now actually comes from on that argument.
  *
  * **Careful about what "derived" claims, because the obvious stronger claim is
  * false.** These paths are full of text the user chose: their home directory
