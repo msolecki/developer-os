@@ -8,6 +8,22 @@ export default defineProject({
       "@developer-os/adapter-claude": fileURLToPath(
         new URL("../../packages/adapter-claude/src/index.ts", import.meta.url),
       ),
+      /**
+       * Removed on 2026-09-07 as "unnecessary" and restored the same day: it is
+       * the only thing that let `bootstrap-executor` run, because that job is
+       * the one CI job with no build step and `executor.test.ts` reaches
+       * `@developer-os/adapter-codex` through `commands/doctor.ts`. Without the
+       * alias the import resolves to `packages/adapter-codex/dist/index.js`,
+       * which does not exist there, and the job dies in 718 ms with
+       * `Failed to resolve entry for package "@developer-os/adapter-codex"`.
+       *
+       * It looks removable on any developer machine, because `npm run check`
+       * runs `tsc -b` before the tests and every `dist` is already present.
+       * Run 34119837698 is the evidence that it is not.
+       */
+      "@developer-os/adapter-codex": fileURLToPath(
+        new URL("../../packages/adapter-codex/src/index.ts", import.meta.url),
+      ),
       "@developer-os/brain": fileURLToPath(
         new URL("../../packages/brain/src/index.ts", import.meta.url),
       ),

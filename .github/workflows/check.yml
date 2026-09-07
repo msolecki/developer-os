@@ -131,6 +131,15 @@ jobs:
         run: corepack enable
       - name: Install
         run: pnpm install --frozen-lockfile
+      # Belt and braces with the `apps/cli` vitest aliases, which are what
+      # actually make this job independent of `dist`. Run 34119837698 failed
+      # here in 718ms because one workspace package was missing from that alias
+      # list and resolved to a `dist` no step had built. The alias is restored,
+      # but the list is something a person has to keep complete and a sixth
+      # package would break this again, on CI only. A one-minute build on a
+      # job budgeted for three hours removes that whole class of failure.
+      - name: Build
+        run: pnpm --pm-on-fail=ignore build
       - name: Bootstrap executor
         run: npm run test:bootstrap
 
