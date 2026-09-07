@@ -16,7 +16,38 @@ import {
 } from "@developer-os/core";
 
 const OSASCRIPT = "/usr/bin/osascript";
-const RENAME_FLAGS = 0x34;
+/**
+ * `RENAME_EXCL | RENAME_NOFOLLOW_ANY`, and nothing else.
+ *
+ * **This was `0x34` until 2026-09-07, and `0x34` is `0x14` plus an undefined
+ * bit.** `sys/stdio.h` defines `RENAME_SECLUDE` 0x01, `RENAME_SWAP` 0x02,
+ * `RENAME_EXCL` 0x04, `RENAME_RESERVED1` 0x08 and `RENAME_NOFOLLOW_ANY` 0x10.
+ * There is no 0x20. The literal carried no comment and no explanation anywhere
+ * in this repository, so the likeliest history is a typo for `0x14` that was
+ * never caught — because on the machine it was written on, it works.
+ *
+ * **It does not work on macOS 15, which this product supports**, and the
+ * failure is total rather than subtle: `renameatx_np` returns -1 and every
+ * retained rename refuses. `MacOsRetainedRename` is constructed on the real CLI
+ * path (`apps/cli/src/context.ts`'s `BOOTSTRAP_RETAINED_RENAME`), so this was
+ * not a test-only defect.
+ *
+ * Measured 2026-09-07, same three flag words on both kernels:
+ *
+ * | flags | Darwin 25.6.0 (dev laptop) | Darwin 24.6.0 (`macos-15` runner) |
+ * |---|---|---|
+ * | `0x34` | succeeds | **fails, `rc=-1`** |
+ * | `0x14` | succeeds | succeeds |
+ * | `0x04` | succeeds | succeeds |
+ *
+ * So a newer kernel silently ignores the stray bit and an older one rejects the
+ * whole call. Nothing local could have caught it, which is the point: this was
+ * found by the first CI run that ever executed these cases (`BACKLOG.md`
+ * NEW-77, run 34157357126). Do not add a bit here without a header definition
+ * for it, and note that the guard against a regression is CI on `macos-15` —
+ * a developer machine running a newer Darwin will not reproduce it.
+ */
+const RENAME_FLAGS = 0x14;
 const SOURCE_PARENT_FD = 3;
 const DESTINATION_PARENT_FD = 4;
 const MAX_ORDINAL = 999_999;
