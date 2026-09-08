@@ -153,11 +153,14 @@ closed.
 
 ### Phase 2 — Bootstrap performance and the first push (NEW-53, NEW-52) · M
 
-- [ ] One evidence inspection per `init`, passed down; memoized physical-path resolution; grouped inventory. Files: `apps/cli/src/bootstrap/executor.ts`, `apps/cli/src/bootstrap/report.ts`. Target: the retained-init e2e case under 60 s, the executor test file under 10 minutes.
-- [ ] Uninstall: exclude maximal retention roots rather than every retained path; read the manifest through the V2-aware store instead of a lexical fallback (NEW-59). File: `apps/cli/src/commands/uninstall.ts`.
-- [ ] NEW-51: one canonicalizer over a guarded no-follow reopen, one owner-admission predicate, shared by the executor, the report and uninstall. New file: `apps/cli/src/bootstrap/admission.ts`.
-- [ ] Push the accumulated commits to a probe branch, watch all four CI jobs, then push `development`.
-- [ ] **Two failures already on `development`, found 2026-09-05 by the first completed full gate in
+- [x] One evidence inspection per `init`, passed down; memoized physical-path resolution; grouped inventory. Files: `apps/cli/src/bootstrap/executor.ts`, `apps/cli/src/bootstrap/report.ts`. Target: the retained-init e2e case under 60 s, the executor test file under 10 minutes.
+- [x] Uninstall: exclude maximal retention roots rather than every retained path; read the manifest through the V2-aware store instead of a lexical fallback (NEW-59). File: `apps/cli/src/commands/uninstall.ts`.
+- [x] NEW-51: one canonicalizer over a guarded no-follow reopen, one owner-admission predicate, shared by the executor, the report and uninstall. New file: `apps/cli/src/bootstrap/admission.ts`.
+- [x] Push the accumulated commits. **Both halves of this line were superseded and are corrected
+  rather than silently ticked.** D12 chose a direct push over a probe branch, and there are five CI
+  jobs, not four — `vendor-ingest` was added by `74a5b02`. Done 2026-09-07: `d72287a..783160f`, 125
+  commits, the first push since 2026-08-28.
+- [x] **Two failures already on `development`, found 2026-09-05 by the first completed full gate in
   this program and proven to predate roadmap Phase 1.** Both must be settled before the push, since
   the push exists to get CI green. (a) `apps/cli/src/bootstrap/executor.test.ts`, "retains
   post-Foundation rollback targets and artifacts without invoking deletion authority", expects a
@@ -178,7 +181,35 @@ closed.
   full-suite run at any commit. That 95-115 s is the same slowness NEW-53 owns; NEW-29 owns the
   load sensitivity.
 
-Gate: CI green on `development`.
+**Closed 2026-09-07/08 as `632f220..446148b`.** Ten tasks; the plan that carried them is deleted at
+closure and its surviving constraints are in `docs/architecture/foundation.md` §4 (the shared
+admission module) and §9 (measured cost, and the corrected reason for it).
+
+**What the push actually cost, recorded because the plan assumed one CI run.** The gate went green
+locally on 2026-09-07 at 14:01 — `EXIT=0`, 4,723 tests, 2h56m — and CI then failed four times in a
+row, none of them on code the local gate could have judged:
+
+| Run | Verdict | Cause |
+|---|---|---|
+| 34119837698 | `bootstrap-executor` failed in 0.2 min | it was the one job with no `Build` step, and an `apps/cli` vitest alias had been removed as "unnecessary" on advice checked only where `dist` already existed |
+| 34121831849 | `suite` killed at 40.3 min | a 40-minute bound derived from the most favourable local measurement |
+| 34125923469 | `suite` killed at 75.4 min | 75 assumed the runner was 1.5x this laptop; it is ~1.9-2x, measured |
+| 34133320221 | `suite` failed with 6 of 4,599 | two miscomputed test budgets, and four real failures |
+| 34157609332 | **green, all five jobs** | lint 0.8, vendor-ingest 0.5, e2e 6.8, suite 66.8, bootstrap-executor 238.9 min |
+
+**The four real failures were one shipped defect.** `RENAME_FLAGS` was `0x34` —
+`RENAME_EXCL | RENAME_NOFOLLOW_ANY` plus `0x20`, a bit no macOS header defines. Darwin 25.6.0
+ignores it and Darwin 24.6.0 rejects the call, so every retained rename failed on macOS 15 through
+`BOOTSTRAP_RETAINED_RENAME` on the real CLI path. No local gate this program has ever run could
+have seen it, because the development machine runs the newer kernel. That is the phase's most
+valuable result and it was not on its task list.
+
+Two standing decisions were amended rather than contradicted, both dated and quoting what they
+replace: D13's "real fsync-backed transactions" clause, and §9's "no timeout changes". The first
+was measured false — ~99% of an `init` is canonical-JSON encoding against 0.8 s of disk — and the
+second was reasoned entirely from local numbers.
+
+Gate: CI green on `development`. Met by run 34157609332 on `446148b`.
 
 ### Phase 3 — Spec 2 Tasks 8–9: manifest V1→V2 migration and the V2 new-init handoff · L + L
 
@@ -272,7 +303,7 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 |---|---|
 | 0 | closed 2026-09-04; the plan it named was deleted at closure |
 | 1 | closed 2026-09-05; the plan it named was deleted at closure |
-| 2 | `plans/2026-09-05-developer-os-bootstrap-performance.md` — written 2026-09-05, awaiting founder approval |
+| 2 | closed 2026-09-07/08; the plan it named was deleted at closure |
 | 3 | Spec 2 §6.2/§6.3 amendment; baseline plan Tasks 8–9 |
 | 4 | Spec 1 amendment; `plans/<date>-developer-os-opt-in-surfaces-1a.md` |
 | 5 | `specs/<date>-developer-os-instruction-artifacts-design.md` and its plan |
