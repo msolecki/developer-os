@@ -863,3 +863,48 @@ describe("BootstrapJournalStore descriptor-bound advancement", () => {
     expect(await descriptorCount()).toBe(before);
   });
 });
+
+/**
+ * A literal copy of the per-byte closure NEW-53 replaced with `Buffer.compare`.
+ * `exactBytes` is module-private and exporting it to reach it here would widen
+ * this module's surface, so the substitution is proved as an identity over the
+ * byte patterns the store's own cases never construct — a byte above 0x7f that
+ * a signed comparison would misread, and a difference at the final index. The
+ * shipped binding is exercised by the byte-prefix and validator-substitution
+ * cases above.
+ */
+function referenceExactBytes(left: Uint8Array, right: Uint8Array): boolean {
+  return left.byteLength === right.byteLength && left.every((value, index) => value === right[index]);
+}
+
+describe("BootstrapJournalStore byte equality", () => {
+  it("catches a byte equality check that disagrees with the per-byte closure it replaced", () => {
+    const lastByteDiffers = new Uint8Array(512).fill(0x61);
+    lastByteDiffers[511] = 0x62;
+    const byteCorpus: readonly Uint8Array[] = [
+      new Uint8Array([]),
+      new Uint8Array([0x00]),
+      new Uint8Array([0x61]),
+      new Uint8Array([0x7f]),
+      new Uint8Array([0x80]),
+      new Uint8Array([0xff]),
+      new Uint8Array([0x61, 0x00]),
+      new Uint8Array([0x61, 0x61]),
+      new Uint8Array([0x61, 0x62]),
+      new Uint8Array([0x61, 0x80]),
+      new Uint8Array([0x61, 0xff]),
+      new Uint8Array([0xff, 0x00]),
+      new Uint8Array([0x00, 0xff]),
+      new Uint8Array(512).fill(0x61),
+      lastByteDiffers,
+      encoder.encode(encodeCanonicalJson({ a: 1 })),
+      encoder.encode(encodeCanonicalJson({ a: 2 })),
+    ];
+
+    for (const left of byteCorpus) {
+      for (const right of byteCorpus) {
+        expect(Buffer.compare(left, right) === 0).toBe(referenceExactBytes(left, right));
+      }
+    }
+  });
+});

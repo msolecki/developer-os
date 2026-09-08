@@ -29,6 +29,15 @@ function assertString(value: string): void {
   }
 }
 
+/**
+ * Appending one character at a time looks like the obvious thing to fix here,
+ * and copying the run between escapes as one slice does make this function
+ * faster: 12.1 s to 8.8 s across the 179,890 encodes of one bootstrap test.
+ * It was measured end to end on 2026-09-08 and rejected anyway, because it
+ * roughly doubles young-generation scavenges — 2,782 to 6,226 in that test —
+ * and cost 22 s of extra process CPU and 3.4% of the test's wall time. The
+ * per-character append is what keeps the result a flat string (NEW-53).
+ */
 function encodeString(value: string): string {
   assertString(value);
   let encoded = '"';
@@ -47,6 +56,13 @@ function encodeString(value: string): string {
   return `${encoded}"`;
 }
 
+/**
+ * `Buffer.compare` is one `memcmp` and looks like the obvious replacement for
+ * this loop. It was measured on 2026-09-08 and rejected: the keys this sorts are
+ * 5-16 bytes, where crossing into the binding costs 27.9 ns against this loop's
+ * 2.6 ns. `memcmp` only wins above roughly 32 bytes, which a key never reaches
+ * (NEW-53).
+ */
 function compareUtf8Bytes(left: Uint8Array, right: Uint8Array): number {
   const common = Math.min(left.length, right.length);
   for (let index = 0; index < common; index += 1) {

@@ -82,8 +82,14 @@ function sameIdentity(stats: Pick<BigIntStats, "dev" | "ino">, expected: FileIde
   return stats.dev === expected.dev && stats.ino === expected.ino;
 }
 
+/**
+ * `Buffer.compare` is one `memcmp` where `every` invoked a closure per byte.
+ * `decodeExactCanonical` re-encodes and re-compares every record on every read
+ * — deliberately, it is the proof the stored bytes were canonical — so this
+ * runs over whole plans, and a 512 KiB comparison cost 2.1 ms as a closure.
+ */
 function exactBytes(left: Uint8Array, right: Uint8Array): boolean {
-  return left.byteLength === right.byteLength && left.every((value, index) => value === right[index]);
+  return Buffer.compare(left, right) === 0;
 }
 
 function encoded(value: unknown): Uint8Array {

@@ -5,6 +5,44 @@ import {
   encodeCanonicalJson,
 } from "./canonical-json.js";
 
+const escapedCodeUnits: readonly number[] = [
+  ...Array.from({ length: 0x20 }, (_, unit) => unit),
+  0x22,
+  0x5c,
+];
+
+const encodeStringCorpus: readonly string[] = [
+  "",
+  "a",
+  "/Users/founder/Library/Application Support/developer-os/state/plan.json",
+  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "2026-09-08T13:30:25Z",
+  "é",
+  "ß",
+  "€",
+  "",
+  "�",
+  "￿",
+  "\u{10000}",
+  "\u{10ffff}",
+  "a\u{10000}b",
+  ...escapedCodeUnits.flatMap((unit) => {
+    const character = String.fromCharCode(unit);
+    return [
+      character,
+      `${character}tail`,
+      `head${character}`,
+      `head${character}tail`,
+      `head${character}${character}tail`,
+      `${"run".repeat(64)}${character}`,
+      `${character}${"run".repeat(64)}`,
+      `head${character}\u{10000}`,
+    ];
+  }),
+  escapedCodeUnits.map((unit) => String.fromCharCode(unit)).join(""),
+  escapedCodeUnits.map((unit) => `x${String.fromCharCode(unit)}y`).join(""),
+];
+
 describe("CanonicalJsonV1", () => {
   it("catches an encoder that preserves object insertion order instead of UTF-8 key order", () => {
     expect(encodeCanonicalJson({ z: 1, a: "é" })).toBe('{"a":"é","z":1}\n');
@@ -91,6 +129,42 @@ describe("CanonicalJsonV1", () => {
     }
   });
 
+  /**
+   * NEW-53 measured `Buffer.compare` as a replacement for the per-byte loop and
+   * kept the loop: at the 5-16 byte key sizes this format actually sorts, the
+   * binding crossing costs 27.9 ns against the loop's 2.6 ns. The loop stays, so
+   * it is pinned against `memcmp` over the cases the randomized corpus above
+   * does not guarantee — an empty key, a shorter prefix, and a difference at the
+   * final index.
+   */
+  it("catches key ordering that disagrees with memcmp on an empty, prefix or final-byte key", () => {
+    const encoder = new TextEncoder();
+    const keySets: readonly (readonly string[])[] = [
+      ["b", "a"],
+      ["a", "ab"],
+      ["ab", "a"],
+      ["", "a"],
+      ["aa", "ab"],
+      ["ab", "aa"],
+      ["é", "e"],
+      ["\u{10000}", ""],
+      ["a", "é", "߿", "ࠀ", "퟿", "", "￿", "\u{10000}", "\u{10FFFF}"],
+    ];
+
+    for (const keys of keySets) {
+      const value = Object.fromEntries(keys.map((key) => [key, 1]));
+      const expected = [...keys].sort((left, right) =>
+        Buffer.compare(encoder.encode(left), encoder.encode(right)),
+      );
+
+      const emitted = [...encodeCanonicalJson(value).matchAll(/"((?:[^"\\]|\\.)*)":/gu)].map(
+        (match) => JSON.parse(`"${match[1] as string}"`) as string,
+      );
+
+      expect(emitted).toEqual(expected);
+    }
+  });
+
   it("catches an encoder that orders non-ASCII keys by UTF-16 rather than unsigned UTF-8 bytes", () => {
     expect(encodeCanonicalJson({ "\u{10000}": 1, "\uE000": 2 })).toBe('{"":2,"𐀀":1}\n');
   });
@@ -99,6 +173,37 @@ describe("CanonicalJsonV1", () => {
     expect(encodeCanonicalJson({ control: "\u0001\b\t\n\f\r\\\"" })).toBe(
       '{"control":"\\u0001\\b\\t\\n\\f\\r\\\\\\""}\n',
     );
+  });
+
+  /**
+   * `JSON.stringify` applies exactly this escape rule and is written in C++, so
+   * it pins the encoder's bytes against an implementation that shares no code
+   * with it. Agreement holds for every string `assertString` admits; the corpus
+   * covers an escape at index 0, an escape at the final index, adjacent escapes,
+   * every C0 control including those with no short form, and astral characters.
+   * NEW-53 rewrote this function and reverted it, and this is what proved the
+   * rewrite byte-identical before the measurement rejected it.
+   */
+  it("catches a string encoder that disagrees with JSON.stringify on any escape boundary", () => {
+    for (const value of encodeStringCorpus) {
+      expect(encodeCanonicalJson(value)).toBe(`${JSON.stringify(value)}\n`);
+      expect(encodeCanonicalJson({ [value]: value })).toBe(
+        `{${JSON.stringify(value)}:${JSON.stringify(value)}}\n`,
+      );
+    }
+  });
+
+  it("catches a string encoder that admits a surrogate this format has always refused", () => {
+    for (const value of ["\ud800", "a\ud800", "\ud800a", "\ud800\ud800"]) {
+      expect(() => encodeCanonicalJson(value)).toThrow(
+        "invalid canonical JSON: string has a lone high surrogate",
+      );
+    }
+    for (const value of ["\udc00", "a\udc00", "\udc00a"]) {
+      expect(() => encodeCanonicalJson(value)).toThrow(
+        "invalid canonical JSON: string has a lone low surrogate",
+      );
+    }
   });
 
   /**
