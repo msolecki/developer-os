@@ -31,16 +31,29 @@ The corrected constant and the measurement that settled it are at
 **The next action is roadmap Phase 3 — Spec 2 Tasks 8–9, the `InstallationManifestV2` migration and
 the V2 new-init handoff** (`plans/2026-09-04-developer-os-completion-roadmap.md`). **It does not
 open with code.** Phase 3's own first line requires amending Spec 2 §6.2/§6.3 and the baseline plan
-text for NEW-68 — `admittedExternalShapeHash` for the migration plan, and the mode of the reserved
-lifecycle-activation path. An approved spec is not rewritten silently, so that amendment is a
-founder stop condition and comes before any task in `plans/2026-08-29-developer-os-release-update.md`.
+text for NEW-68. An approved spec is not rewritten silently, so that amendment is a founder stop
+condition and comes before any task in `plans/2026-08-29-developer-os-release-update.md`.
+
+**That amendment was written on 2026-09-08 and is the one thing this program is now waiting on.** It
+is at `specs/2026-09-08-spec-2-new-68-amendment.md`, and it turned out to be larger than the two
+items this entry previously named. NEW-68 carries eight defects, not two: five are corrections of
+specification text against a contract Spec 1 or the shipped code already settled, and three need a
+decision because they change an approved interface, an approved number, or the accepted-residual
+list. One of the eight is not in NEW-68's own row at all: the unreachable `symlink` arm is named only
+in the roadmap's Phase 8 line. And the row's claim that two verification gates are "arithmetically
+impossible" was carried for weeks without the arithmetic; it is now derived, and it holds.
 
 Spec 1 is approved and its plan exists at `plans/2026-08-28-developer-os-opt-in-surfaces.md`, with
 none of its 24 implementation tasks started. Spec 2's Tasks 1–7 are complete and Tasks 8–26 remain.
 
 Open sequence inside A11:
 
-1. Now: amend Spec 2 §6.2/§6.3 for NEW-68, then stop for founder approval.
+1. Now: **the amendment is drafted and awaiting founder approval** at
+   `specs/2026-09-08-spec-2-new-68-amendment.md`. It states all eight NEW-68 corrections with their
+   evidence; five record what Spec 1 or the shipped code already settled, and three — A1 (the
+   migration plan's admitted external shape), A6 (two verification gates that no admissible document
+   can satisfy) and A8 (the unreachable `symlink` arm) — need a founder decision. On approval the
+   items are marked "Amended 2026-09-08" in place, that file is deleted, and NEW-68 closes.
 2. Execute Spec 2 Tasks 8–9 — the complete `InstallationManifestV2` migration and the V2 new-init
    handoff (roadmap Phase 3).
 3. Execute the approved Spec 1 plan, split into 1a and 1b by NEW-67.
@@ -98,10 +111,10 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 - **The first push landed 2026-09-07: `d72287a..446148b`, closing a backlog of 125 unpushed commits
   and a CI gap since 2026-08-28.** Per decision D12 it went directly to `development` rather than
   through a probe branch.
-- **CI is green on all five jobs**, run 34157609332 on `446148b`: `lint` 0.8 min, `vendor-ingest`
-  0.5 min, `e2e` 6.8 min, `suite` 66.8 min (135 files, 4,587 passed), `bootstrap-executor` — the
-  job that had never once executed before this week, since `check.yml` had a single `check` job at
-  `d72287a`.
+- **CI is green on all five jobs, twice consecutively** — run 34157609332 on `446148b` and run
+  34172016048 on `88d56a2`. The first run's figures: `lint` 0.8 min, `vendor-ingest` 0.5 min, `e2e`
+  6.8 min, `suite` 66.8 min (135 files, 4,587 passed), `bootstrap-executor` — the job that had never
+  once executed before this week, since `check.yml` had a single `check` job at `d72287a`.
 - **The local `check` is green and takes about three hours**, measured 2026-09-07 at 11:05:48→14:01:54:
   `EXIT=0`, 4,723 tests. `test:bootstrap` 122.6 min, `test:suite` 46.3 min under load, `test:e2e`
   274.89 s, `test:vendor-ingest` 30.27 s.
@@ -128,7 +141,7 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 
 - Product sequence: 7 open entries, A11, A12, A12b, A13, A14, A15, A16.
 - Program plan: baseline Tasks 8–9 contain 10 unchecked steps.
-- Repository backlog: 41 open numbered rows, plus the Foundation watchdog decision.
+- Repository backlog: 40 open numbered rows, plus the Foundation watchdog decision.
 - Active implementation plans: none for the current phase. Roadmap Phase 3 opens with a **spec
   amendment** (Spec 2 §6.2/§6.3 for NEW-68), which is a founder stop, and only then Spec 2 baseline
   Tasks 8–26 (19 tasks) in `plans/2026-08-29-developer-os-release-update.md`. Spec 1 (24 tasks, to be

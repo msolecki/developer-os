@@ -42,7 +42,7 @@ concurrency:
 # **Sharded on 2026-09-04, because the suite stopped fitting one job.** A whole
 # `npm run check` was measured still inside its bootstrap-executor phase when it
 # was killed at 29 minutes, against a `timeout-minutes: 30` — so the gate was
-# not reporting a failure, it was reporting nothing at all. NEW-52 owns making
+# not reporting a failure, it was reporting nothing at all. NEW-53 owns making
 # the suite smaller; this makes the bound meaningful in the meantime.
 #
 # The split is the one `npm test` already used internally, now named in
@@ -115,9 +115,9 @@ jobs:
     # is generally slower than the machine it was measured on. Hence three hours.
     #
     # A three-hour CI job is not acceptable as a resting state; it is what makes
-    # the gate report something instead of being killed mid-phase. NEW-52 and
-    # NEW-53's remainder own bringing it down, and this bound should be lowered
-    # from the first green run's real figure.
+    # the gate report something instead of being killed mid-phase. NEW-53's
+    # remainder owns bringing it down, and this bound should be lowered from the
+    # first green run's real figure.
     #
     # **Raised 180 -> 330 on 2026-09-07, before it was ever observed failing.**
     # The 180 was derived from a local measurement and the note above already
