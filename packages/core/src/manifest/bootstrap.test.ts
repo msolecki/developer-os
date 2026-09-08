@@ -143,8 +143,21 @@ describe("bootstrap deterministic names and external-shape authority", () => {
 
   it("catches an external-shape hash that changes the domain, row order, or no-LF encoding", () => {
     const projection = validateBootstrapExternalShapeProjection(externalProjection());
-    expect(bootstrapExternalShapeHash(projection)).toBe(
+    expect(bootstrapExternalShapeHash(projection, "fresh_v2_init")).toBe(
       "e81597290bb9e5d971bc51d750795bdebc6b76a4fd9efdb74e6b39afb0a8ed38",
+    );
+  });
+
+  it("catches a shape digest that is reused across the two bootstrap operations", () => {
+    const projection = validateBootstrapExternalShapeProjection(externalProjection());
+    expect(bootstrapExternalShapeHash(projection, "v1_to_v2")).toBe(
+      createHash("sha256")
+        .update("developer-os/v1-migration-external-shape/v1\0")
+        .update(encodeCanonicalJson(projection as never).slice(0, -1))
+        .digest("hex"),
+    );
+    expect(bootstrapExternalShapeHash(projection, "v1_to_v2")).not.toBe(
+      bootstrapExternalShapeHash(projection, "fresh_v2_init"),
     );
   });
 
@@ -1102,8 +1115,10 @@ function migrationPlanFixture(): {
     plan: `/product/state/manifest-migration.${migrationId}.plan.json`,
     stagingRoot: `/product/staging/manifest-migration/${migrationId}`,
   };
-  delete candidate.admittedExternalShapeHash;
-  delete candidate.admittedPreexistingPaths;
+  candidate.admittedExternalShapeHash = bootstrapExternalShapeHash(
+    fresh.context.externalShape,
+    "v1_to_v2",
+  );
   delete candidate.planPath;
   delete candidate.stagingRoot;
 
@@ -1200,7 +1215,6 @@ function migrationPlanFixture(): {
     ...fresh.context,
     operation: "v1_to_v2" as const,
     id: migrationId,
-    externalShape: null,
     admitManifestParticipant: () => structuredClone(plan.manifest),
   } as unknown as ReturnType<typeof fullPlanFixture>["context"];
   return { plan, context };
@@ -1658,6 +1672,10 @@ describe("migration-only bootstrap grammar", () => {
       plan: "/product/state/manifest-migration.mm_123e4567-e89b-42d3-a456-426614174000.plan.json",
       stagingRoot: "/product/staging/manifest-migration/mm_123e4567-e89b-42d3-a456-426614174000",
     });
+    expect(fixture.plan.admittedExternalShapeHash).toBe(
+      bootstrapExternalShapeHash(fixture.context.externalShape as never, "v1_to_v2"),
+    );
+    expect(fixture.plan.admittedPreexistingPaths).toStrictEqual([]);
     expect(fixture.plan.payloads[3]?.source).toMatchObject({
       kind: "guarded_migration_preimage",
       authority: {
@@ -1676,7 +1694,7 @@ describe("migration-only bootstrap grammar", () => {
       createHash("sha256")
         .update(encodeCanonicalJson(fixture.plan as never))
         .digest("hex"),
-    ).toBe("8aefe00a8d47c0c732c2d86b57c3990b1d8a51a6767df52c2234ef7bfa7a91ec");
+    ).toBe("83cc3f85069a3a74a8b48e89899159d858c7226805e29a075d19eca7aab0e7b5");
   });
 
   it.each([
@@ -1722,9 +1740,65 @@ describe("migration-only bootstrap grammar", () => {
         return { plan: candidate, context: fixture.context };
       },
     },
+    {
+      name: "the migration arm carries a shape digest minted in the fresh domain",
+      arrange() {
+        const fixture = migrationPlanFixture();
+        const candidate = structuredClone(fixture.plan) as never as { admittedExternalShapeHash: string };
+        candidate.admittedExternalShapeHash = bootstrapExternalShapeHash(
+          fixture.context.externalShape,
+          "fresh_v2_init",
+        );
+        return { plan: candidate, context: fixture.context };
+      },
+    },
+    {
+      name: "the fresh arm carries a shape digest minted in the migration domain",
+      arrange() {
+        const fixture = fullPlanFixture();
+        const candidate = structuredClone(fixture.plan) as never as { admittedExternalShapeHash: string };
+        candidate.admittedExternalShapeHash = bootstrapExternalShapeHash(
+          fixture.context.externalShape,
+          "v1_to_v2",
+        );
+        return { plan: candidate, context: fixture.context };
+      },
+    },
+    {
+      name: "the migration arm publishes without the bootstrap-locked three-row projection",
+      arrange() {
+        const fixture = migrationPlanFixture();
+        return {
+          plan: structuredClone(fixture.plan),
+          context: { ...fixture.context, externalShape: null },
+        };
+      },
+    },
   ])("refuses when $name", (testCase) => {
     const { plan, context } = testCase.arrange();
     expect(() => validateBootstrapPlan(plan, context as never)).toThrow(BootstrapStateError);
+  });
+
+  it("admits a migration recovery shape commitment only through exact closure-bound authority", () => {
+    const fixture = migrationPlanFixture();
+    const recoveryContext = {
+      ...fixture.context,
+      externalShape: null,
+      admitFreshRecoveryExternalShape: (
+        hash: LowerHexSha256,
+        identity: ManifestMigrationPlanV1["bootstrapIdentity"],
+      ) =>
+        hash === fixture.plan.admittedExternalShapeHash &&
+        JSON.stringify(identity) === JSON.stringify(fixture.plan.bootstrapIdentity)
+          ? hash
+          : "refused",
+    };
+
+    expect(validateBootstrapPlan(fixture.plan, recoveryContext)).toStrictEqual(fixture.plan);
+    expect(() => validateBootstrapPlan(fixture.plan, {
+      ...recoveryContext,
+      admitFreshRecoveryExternalShape: () => "refused",
+    })).toThrow(BootstrapStateError);
   });
 });
 

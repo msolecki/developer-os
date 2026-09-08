@@ -303,6 +303,14 @@ export interface FoundationParticipantRefV2 {
 interface BootstrapPlanCommonV1 {
   readonly schemaVersion: 1;
   readonly id: FreshV2InitIdV1 | ManifestMigrationIdV1;
+  readonly admittedExternalShapeHash: LowerHexSha256;
+  /**
+   * Retained residue and reusable directories observed under the held lock
+   * before this plan was published. Persisted because a later process that
+   * resumes the plan has no memory of the preflight, and the post-plan shape
+   * check needs the exact set of names that may legally exist beside it.
+   */
+  readonly admittedPreexistingPaths: readonly CanonicalAbsolutePathV1[];
   readonly v2ManifestHash: LowerHexSha256;
   readonly bootstrapIdentity: PersistedBootstrapLockIdentityV1;
   readonly maximumPlanBytes: number;
@@ -328,14 +336,6 @@ interface PersistedBootstrapJournalSlotIdentityV1 {
 export interface FreshV2InitPlanV1 extends BootstrapPlanCommonV1 {
   readonly operation: "fresh_v2_init";
   readonly id: FreshV2InitIdV1;
-  readonly admittedExternalShapeHash: LowerHexSha256;
-  /**
-   * Retained residue and reusable directories observed under the held lock
-   * before this plan was published. Persisted because a later process that
-   * resumes the plan has no memory of the preflight, and the post-plan shape
-   * check needs the exact set of names that may legally exist beside it.
-   */
-  readonly admittedPreexistingPaths: readonly CanonicalAbsolutePathV1[];
   readonly planPath: ExactProductStatePathV1;
   readonly journalSlots: readonly [
     PersistedBootstrapJournalSlotIdentityV1,
@@ -424,8 +424,8 @@ export interface BootstrapPlanAdmissionContextV1 {
   readonly externalShape: BootstrapExternalShapeProjectionV1 | null;
   /**
    * Recovery-only authority issued after a bounded closure inventory proves the
-   * immutable plan's exact forward prefix. Initial planning must supply the
-   * complete observed projection instead.
+   * immutable plan's exact forward prefix, on either bootstrap arm. Initial
+   * planning must supply the complete observed projection instead.
    */
   readonly admitFreshRecoveryExternalShape?: (
     hash: LowerHexSha256,
@@ -670,11 +670,20 @@ export function validateBootstrapExternalShapeProjection(
   }
 }
 
+/**
+ * The operation is explicit and has no default. A default would silently mint
+ * the fresh domain for a migration, which is the substitution the disjoint
+ * domains exist to prevent (Spec 2 amendment, 2026-09-08).
+ */
 export function bootstrapExternalShapeHash(
   projection: BootstrapExternalShapeProjectionV1,
+  operation: "fresh_v2_init" | "v1_to_v2",
 ): LowerHexSha256 {
   const admitted = validateBootstrapExternalShapeProjection(projection);
-  return canonicalHash("developer-os/fresh-v2-external-shape/v1\0", admitted as unknown as CanonicalJsonValue);
+  const domain = operation === "fresh_v2_init"
+    ? "developer-os/fresh-v2-external-shape/v1\0"
+    : "developer-os/v1-migration-external-shape/v1\0";
+  return canonicalHash(domain, admitted as unknown as CanonicalJsonValue);
 }
 
 export function bootstrapPayloadSourceIdentityHash(source: BootstrapPayloadSourceV1): LowerHexSha256 {
@@ -1779,7 +1788,7 @@ export function validateBootstrapPlan(
     if (input.operation !== "fresh_v2_init" && input.operation !== "v1_to_v2") return refuse();
     const operation = input.operation;
     const freshKeys = ["admittedExternalShapeHash", "admittedPreexistingPaths", "bootstrapIdentity", "createdPaths", "foundationParticipants", "id", "journalSlots", "launchabilityPaths", "manifest", "maximumJournalBytes", "maximumPlanBytes", "maximumStagingEntries", "operation", "payloads", "planPath", "schemaVersion", "stagingRoot", "v2ManifestHash"];
-    const migrationKeys = ["bootstrapIdentity", "createdPaths", "foundationParticipants", "id", "journalSlots", "launchabilityPaths", "manifest", "maximumJournalBytes", "maximumPlanBytes", "maximumStagingEntries", "operation", "paths", "payloads", "schemaVersion", "v1ManifestHash", "v2ManifestHash"];
+    const migrationKeys = ["admittedExternalShapeHash", "admittedPreexistingPaths", "bootstrapIdentity", "createdPaths", "foundationParticipants", "id", "journalSlots", "launchabilityPaths", "manifest", "maximumJournalBytes", "maximumPlanBytes", "maximumStagingEntries", "operation", "paths", "payloads", "schemaVersion", "v1ManifestHash", "v2ManifestHash"];
     exact(input, operation === "fresh_v2_init" ? freshKeys : migrationKeys);
     if (input.schemaVersion !== 1 || context.operation !== operation) return refuse();
     const id = operationId(operation, input.id);
@@ -1788,27 +1797,26 @@ export function validateBootstrapPlan(
     const bootstrapIdentity = validateBootstrapIdentity(input.bootstrapIdentity, context);
     const paths = deriveBootstrapEnvelopePaths(context.productHome, operation, id);
     const journalSlots = validateJournalSlots(input.journalSlots, paths.journalSlots, context);
-    let admittedPreexistingPaths: readonly CanonicalAbsolutePathV1[] = [];
+    const admittedPreexistingPaths = boundedPaths(input.admittedPreexistingPaths, context);
+    if (context.externalShape === null) {
+      const hash = sha256(input.admittedExternalShapeHash);
+      if (
+        context.admitFreshRecoveryExternalShape?.(
+          hash,
+          retainedClone(bootstrapIdentity),
+        ) !== hash
+      ) return refuse();
+    } else {
+      const external = validateBootstrapExternalShapeProjection(context.externalShape);
+      const [home, state, lock] = external.entries;
+      if (home.pathHash !== rawHash(context.productHome) || state.pathHash !== rawHash(context.stateRoot) || lock.pathHash !== rawHash(bootstrapIdentity.path) || home.ownerUid !== bootstrapIdentity.ownerUid || state.ownerUid !== bootstrapIdentity.ownerUid || lock.ownerUid !== bootstrapIdentity.ownerUid || lock.dev !== bootstrapIdentity.dev || lock.ino !== bootstrapIdentity.ino || input.admittedExternalShapeHash !== bootstrapExternalShapeHash(external, operation)) return refuse();
+    }
     if (operation === "fresh_v2_init") {
       if (input.planPath !== paths.plan || input.stagingRoot !== paths.stagingRoot) return refuse();
-      admittedPreexistingPaths = boundedPaths(input.admittedPreexistingPaths, context);
-      if (context.externalShape === null) {
-        const hash = sha256(input.admittedExternalShapeHash);
-        if (
-          context.admitFreshRecoveryExternalShape?.(
-            hash,
-            retainedClone(bootstrapIdentity),
-          ) !== hash
-        ) return refuse();
-      } else {
-        const external = validateBootstrapExternalShapeProjection(context.externalShape);
-        const [home, state, lock] = external.entries;
-        if (home.pathHash !== rawHash(context.productHome) || state.pathHash !== rawHash(context.stateRoot) || lock.pathHash !== rawHash(bootstrapIdentity.path) || home.ownerUid !== bootstrapIdentity.ownerUid || state.ownerUid !== bootstrapIdentity.ownerUid || lock.ownerUid !== bootstrapIdentity.ownerUid || lock.dev !== bootstrapIdentity.dev || lock.ino !== bootstrapIdentity.ino || input.admittedExternalShapeHash !== bootstrapExternalShapeHash(external)) return refuse();
-      }
     } else {
       const migrationPaths = record(input.paths);
       exact(migrationPaths, ["plan", "stagingRoot"]);
-      if (migrationPaths.plan !== paths.plan || migrationPaths.stagingRoot !== paths.stagingRoot || context.externalShape !== null) return refuse();
+      if (migrationPaths.plan !== paths.plan || migrationPaths.stagingRoot !== paths.stagingRoot) return refuse();
     }
     if (input.maximumPlanBytes !== MAX_PLAN_BYTES || input.maximumJournalBytes !== MAX_JOURNAL_BYTES) return refuse();
     const v1ManifestHash = operation === "v1_to_v2" ? sha256(input.v1ManifestHash) : undefined;
@@ -1840,9 +1848,9 @@ export function validateBootstrapPlan(
     validateRefUseBijection(payloads, createdPaths, launchabilityPaths, foundationParticipants, manifest);
     const aggregate = stagingAggregate(payloads.length, createdPaths.length, launchabilityPaths.length, foundationParticipants.length);
     if (aggregate > MAX_STAGING_ENTRIES || input.maximumStagingEntries !== aggregate) return refuse();
-    const common = { schemaVersion: 1 as const, id, v2ManifestHash, bootstrapIdentity, maximumPlanBytes: MAX_PLAN_BYTES, maximumJournalBytes: MAX_JOURNAL_BYTES, maximumStagingEntries: aggregate, payloads, createdPaths, foundationParticipants, launchabilityPaths, manifest };
+    const common = { schemaVersion: 1 as const, id, admittedExternalShapeHash: sha256(input.admittedExternalShapeHash), admittedPreexistingPaths, v2ManifestHash, bootstrapIdentity, maximumPlanBytes: MAX_PLAN_BYTES, maximumJournalBytes: MAX_JOURNAL_BYTES, maximumStagingEntries: aggregate, payloads, createdPaths, foundationParticipants, launchabilityPaths, manifest };
     const plan: BootstrapExecutionPlanV1 = operation === "fresh_v2_init"
-      ? { ...common, operation, id: id as FreshV2InitIdV1, admittedExternalShapeHash: sha256(input.admittedExternalShapeHash), admittedPreexistingPaths, planPath: paths.plan, journalSlots, stagingRoot: paths.stagingRoot }
+      ? { ...common, operation, id: id as FreshV2InitIdV1, planPath: paths.plan, journalSlots, stagingRoot: paths.stagingRoot }
       : { ...common, operation, id: id as ManifestMigrationIdV1, v1ManifestHash: v1ManifestHash as LowerHexSha256, paths: { plan: paths.plan, stagingRoot: paths.stagingRoot }, journalSlots };
     if (encoder.encode(encodeCanonicalJson(plan as unknown as CanonicalJsonValue)).byteLength > MAX_PLAN_BYTES) return refuse();
     return structuredClone(plan);

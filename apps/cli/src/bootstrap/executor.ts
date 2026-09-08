@@ -1947,7 +1947,7 @@ export class BootstrapExecutor {
       schemaVersion: 1,
       operation: "fresh_v2_init",
       id: input.id,
-      admittedExternalShapeHash: bootstrapExternalShapeHash(input.externalShape),
+      admittedExternalShapeHash: bootstrapExternalShapeHash(input.externalShape, "fresh_v2_init"),
       admittedPreexistingPaths: [...new Set<string>([
         ...input.retainedPaths,
         ...input.preexistingDirectories.keys(),

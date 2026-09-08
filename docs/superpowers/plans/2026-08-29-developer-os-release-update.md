@@ -81,7 +81,7 @@ only after that plan's checkpoint passes.
 - Consumes: Tasks 1–7, strict migratable V1 bytes/artifacts/backups, packaged release source.
 - Produces: `mapManifestV1ToV2`, `planManifestMigration`, migration feasibility/admission, and the concrete bootstrap migration plan with exact old/new manifest hashes and launchability set.
 
-- [ ] **Step 1: Write failing mapping and preflight-order tests**
+- [x] **Step 1: Write failing mapping and preflight-order tests**
 
 ```ts
 it("maps config alone to schema and copies every historical field", () => {
@@ -103,13 +103,13 @@ Cover every mapping row, safe regular files/directories, restore evidence, confi
 - the migration arm admits its own external shape. `ManifestMigrationPlanV1` now carries `admittedExternalShapeHash` and `admittedPreexistingPaths`, so `migrationKeys` in `packages/core/src/manifest/bootstrap.ts` gains both, `bootstrapExternalShapeHash` takes the operation and selects the domain (`developer-os/fresh-v2-external-shape/v1\0` against `developer-os/v1-migration-external-shape/v1\0`), the three-role projection check runs on both arms, `admitFreshRecoveryExternalShape` stops being fresh-only, and the migration arm stops refusing outright whenever an external shape is supplied. Assert that a digest computed in one operation's domain refuses in the other's, and that the bootstrap-locked second inventory must contain exactly the three projection rows before plan publication on both arms.
 - the artifacts a migration adds carry the mode §6.2 now names: `state/lifecycle-install-nonce` regular-file `content`, `state/lifecycle-id-allocator.json` regular-file `schema` with `lifecycle-id-allocator-v1`, and never `state/lifecycle-activation.json`, which only Spec 1 lifecycle apply creates — an activation-path collision is a refusal, not an adoption.
 
-- [ ] **Step 2: Run migration planning tests and verify missing mapping fails**
+- [x] **Step 2: Run migration planning tests and verify missing mapping fails**
 
 Run: `npx vitest run --root packages/core src/manifest/migration.test.ts && npx vitest run --root apps/cli src/bootstrap/migration.test.ts`
 
 Expected: FAIL because mapping and migration planning are absent.
 
-- [ ] **Step 3: Implement pure mapping and guarded concrete planning**
+- [x] **Step 3: Implement pure mapping and guarded concrete planning**
 
 ```ts
 export function mapManifestV1ToV2(
@@ -124,13 +124,13 @@ export async function planManifestMigration(
 
 Complete all structural/collision checks before opening artifact bytes, then guarded-read and hash every current/backup authority, verify packaged release capacity, and derive the exact payload/use-once/created/Foundation/launchability/manifest partitions without mutation. Neither digest domain is ever accepted for the other operation.
 
-- [ ] **Step 4: Run migration planning tests**
+- [x] **Step 4: Run migration planning tests**
 
 Run: `npx vitest run --root packages/core src/manifest/migration.test.ts && npx vitest run --root apps/cli src/bootstrap/migration.test.ts`
 
 Expected: PASS with exact refusal ordering and mapping equality.
 
-- [ ] **Step 5: Commit Task 8**
+- [x] **Step 5: Commit Task 8**
 
 ```bash
 git add packages/core/src/manifest/migration.ts packages/core/src/manifest/migration.test.ts packages/core/src/manifest/index.ts packages/core/src/manifest/bootstrap.ts packages/core/src/manifest/bootstrap.test.ts apps/cli/src/bootstrap/migration.ts apps/cli/src/bootstrap/migration.test.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
