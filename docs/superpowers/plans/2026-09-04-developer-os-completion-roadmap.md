@@ -77,139 +77,39 @@ than to durability.
 
 Sizes are S/M/L complexity. "Gate" is what must be true before the next phase starts.
 
-### Phase 0 — Close replacement Task 6 · L
+### Phases 0-2 — closed
 
-- [x] Closed 2026-09-04 as `050fc0d..c5022a7`, six tasks: spec amendments, global-lock admission, single retention derivation, gate blockers, review residuals, checkpoint. The plan that carried them was deleted at closure; its constraints live in Spec 2 §6.1/§6.3/§6.4 as amended and in `docs/architecture/foundation.md` and `docs/architecture/threat-model.md`.
+Pruned to their outcomes on 2026-09-08; the detail is in git history and the surviving constraints
+are in the canonical documents named below. The founder decisions above are **not** history — D1-D15
+govern the open phases and stay.
 
-Gate: `npm run check` green; `ORDER.md` `NOW` = Phase 1; NEW-52, NEW-55, NEW-56, NEW-57 closed or rewritten. **Corrected 2026-09-04, twice.** This line read "`NOW` = Spec 2 Task 8", written before Phases 1 and 2 were inserted ahead of it; Spec 2 Tasks 8–9 are Phase 3. It also named NEW-54, the trailing lone-surrogate encoder defect, which this checkpoint never touched and which stays open. The full `npm run check` was still running when the checkpoint was committed; the document gates (citations, control bytes) and `lint` passed.
+- [x] **Phase 0 — replacement Task 6**, closed 2026-09-04 as `050fc0d..c5022a7`, six tasks. Its
+  constraints live in Spec 2 §6.1/§6.3/§6.4 as amended, `docs/architecture/foundation.md` and
+  `docs/architecture/threat-model.md`.
+- [x] **Phase 1 — ingest isolation (NEW-58)**, closed 2026-09-05 as `4fe131c..8e9381a`, nine tasks,
+  each reviewed by an agent that did not write it. Constraints in
+  `docs/architecture/vendor-invocation.md`, `codex-adapter.md` §2/§14, `claude-adapter.md` §11/§13
+  and `threat-model.md`. Three of its five original bullets were wrong when written and the
+  corrections are in those notes, not here. Closed NEW-58, NEW-47, NEW-44; opened NEW-74 (closed
+  2026-09-07 by D14) and NEW-75 (narrowed by D15).
+- [x] **Phase 2 — bootstrap performance and the first push**, closed 2026-09-07/08 as
+  `632f220..446148b`, ten tasks. Constraints in `docs/architecture/foundation.md` §4 (the shared
+  admission module) and §9 (measured cost and the corrected reason for it). Closed NEW-51, NEW-59,
+  NEW-52; rewrote NEW-53 to the encoder cost it actually leaves; narrowed NEW-29 rather than
+  closing it.
 
-### Phase 1 — Ingest isolation (NEW-58) · M
+  **Its most valuable result was not on its task list, and is recorded because it generalises.** The
+  local gate was green while CI failed four times, and only one of those was a test: `RENAME_FLAGS`
+  passed `0x20`, a bit no macOS header defines, so every retained rename failed on macOS 15 through
+  `BOOTSTRAP_RETAINED_RENAME` on the real CLI path. Darwin 25.6.0 ignores the bit and Darwin 24.6.0
+  rejects the call, so no gate on the development laptop could ever have seen it. The other three
+  were a CI job with no `Build` step and two budgets sized from the most favourable local
+  measurement against a runner since measured at ~1.9-2x. `BACKLOG.md` §5 carries the
+  generalisation: a single-machine gate cannot see a per-job CI environment or a kernel version,
+  and this product supports an OS nobody develops on.
 
-- [x] Closed 2026-09-05 as `4fe131c..8e9381a`, nine tasks, each reviewed by an agent that did not
-  write it. The plan that carried them was deleted at closure; what survives is
-  `docs/architecture/vendor-invocation.md` (every observation, and what stays unobserved),
-  `docs/architecture/codex-adapter.md` §2 and §14, `docs/architecture/claude-adapter.md` §11 and
-  §13, and `docs/architecture/threat-model.md`.
-
-**What was built, against what this phase originally asked for.** Each correction is dated
-2026-09-05 and states the evidence, because three of this phase's five bullets were wrong when
-written and the founder sequences from this document.
-
-- Claude now runs `-p <prompt> --output-format json --max-turns <n> --tools "" --strict-mcp-config
-  --restricted --safe-mode --no-session-persistence --permission-prompts none`. `--allowedTools` is
-  gone: it was a permission *grant*, not a restriction, which is what made NEW-58 a live defect.
-  **`--max-turns` was kept, not dropped.** It does not appear in `claude --help` for 2.1.261, but it
-  is registered and deliberately hidden: `claude --max-turns` with no value answers `error: option
-  '--max-turns <turns>' argument missing`, and the binary carries `.hideHelp()` on that option.
-  Settled without a model run, so decision F1 cost nothing. **Not used, each for a stated reason:**
-  `--setting-sources ""` (whether an empty value means "load none" is unobserved and the help does
-  not say), `--permission-mode` (its six values carry no ordering, so "the most restrictive" was not
-  determinable, and with no tools it decides nothing), `--json-schema` (registered, but the output
-  shape it produces under `--output-format json` is unobserved).
-- Codex now runs `exec --ephemeral --ignore-user-config --ignore-rules --json …`. **The
-  `last_agent_message` claim in this phase's original text is disproven, not merely unestablished.**
-  `codex-rs/exec/src/exec_events.rs` at tag `rust-v0.151.0`, commit `78c290807ce7…`, defines
-  `TurnCompletedEvent { pub usage: Usage }` — no final-message field, and the only final-message
-  channel is the separate `--output-last-message` file, never the `--json` stream. The shipped
-  `finalAgentMessage` selection is therefore correct and unchanged, and the field is still
-  snake-case `agent_message`. NEW-47 is closed from source; no paid run was needed, so decision F3
-  never became a founder stop. NEW-45 still owns the one empirical question source cannot answer:
-  whether a real turn ever emits more than one `agent_message`. The vendor's own
-  `final_message_from_turn_items` picks the last, which corroborates the tie-break from source.
-- The prompt carries a bounded index excerpt (path, title, summary) instead of a `content/**` read
-  scope. The cap is 32 Ki **graphemes**, matching this module's other caps rather than the "32 KiB"
-  written here; entries are dropped whole, never mid-entry, and the omitted count is inside the
-  budget. Every field is screened as untrusted data through the same `boundedProse`-then-`fenced`
-  path as the capture body, **and redacted** — the excerpt is on-disk, hand-editable vault text, so
-  it gets the treatment `packages/brain/src/capture/parse.ts` already gives a capture body on read.
-  `workflows/ingest/workflow.yaml` did not change: its declared scopes are validated against
-  scopes derived from the step vocabulary and never passed to a vendor, and no glob reaches the
-  generated plugin trees.
-- **No process-environment allowlist was added, and the one this phase asked for is refused.**
-  Both adapters already passed `env: {}`, so an allowlist would have been a widening, not a
-  hardening; nothing observed shows either vendor failing without a variable. The proxy and
-  certificate variables named here are refused outright: a test exists to prove a parent's proxy
-  never reaches the child, and admitting one would contradict it. Recorded limit, and it matters:
-  both binaries import `getpwuid_r`, so an empty environment does **not** stop a child resolving the
-  user's real home. Isolation is bought by the flags, not by `env: {}`.
-- NEW-44 closed: two matching detection rows now resolve to `unknown`, because a nested session is
-  not attributable to either vendor.
-
-**Two things this phase did not close, both recorded rather than left implicit.** Codex still
-receives `-C <contentRoot>` with `-s read-only`, so it keeps a de facto vault read scope that Claude
-no longer has — an asymmetry the founder should decide on. And an isolated Claude run still writes
-`.claude.json`, a backup snapshot and per-process session files into `HOME` despite
-`--no-session-persistence`; combined with the empty environment, that means a production ingest run
-writes into the user's real `~/.claude`. Both are in `docs/architecture/vendor-invocation.md`.
-
-Test: `tests/integration/ingest/no-user-hooks.test.ts` plants a `SessionStart` hook in a temporary
-`HOME` and proves it fires without the isolation flags and never fires with them, against the real
-binary and the argv derived from `invokeClaude` rather than hand-copied. No model credits were spent
-anywhere in this phase.
-
-Gate: fresh whole-range review returned NOT READY on a Critical — the excerpt reached the model
-unredacted — then READY after the fix wave and two scoped re-reviews. NEW-58, NEW-47 and NEW-44 are
-closed.
-
-### Phase 2 — Bootstrap performance and the first push (NEW-53, NEW-52) · M
-
-- [x] One evidence inspection per `init`, passed down; memoized physical-path resolution; grouped inventory. Files: `apps/cli/src/bootstrap/executor.ts`, `apps/cli/src/bootstrap/report.ts`. Target: the retained-init e2e case under 60 s, the executor test file under 10 minutes.
-- [x] Uninstall: exclude maximal retention roots rather than every retained path; read the manifest through the V2-aware store instead of a lexical fallback (NEW-59). File: `apps/cli/src/commands/uninstall.ts`.
-- [x] NEW-51: one canonicalizer over a guarded no-follow reopen, one owner-admission predicate, shared by the executor, the report and uninstall. New file: `apps/cli/src/bootstrap/admission.ts`.
-- [x] Push the accumulated commits. **Both halves of this line were superseded and are corrected
-  rather than silently ticked.** D12 chose a direct push over a probe branch, and there are five CI
-  jobs, not four — `vendor-ingest` was added by `74a5b02`. Done 2026-09-07: `d72287a..783160f`, 125
-  commits, the first push since 2026-08-28.
-- [x] **Two failures already on `development`, found 2026-09-05 by the first completed full gate in
-  this program and proven to predate roadmap Phase 1.** Both must be settled before the push, since
-  the push exists to get CI green. (a) `apps/cli/src/bootstrap/executor.test.ts`, "retains
-  post-Foundation rollback targets and artifacts without invoking deletion authority", expects a
-  resumed `init` after a rolled-back bootstrap to fail with `recoveryRequired` and it now succeeds;
-  reproduced identically at `06438e5` in a clean worktree, so it is not Phase 1's doing.
-  **Corrected 2026-09-05, second time:** this was first attributed to `95c2d7e`, and that
-  attribution is disproven — reverting only `apps/cli/src/bootstrap/executor.ts` to `95c2d7e~1`
-  (byte-identical to `c5022a7`) reproduces the failure unchanged. The gating that decides it is
-  `apps/cli/src/commands/init.ts:824-846`, where `evidence.blocksNewIntent` is consulted only inside
-  a branch requiring `resumableBootstrap || (fresh && bootstrapAvailable)`; on this resume both are
-  false, so a report that blocks a new intent is never read and the run completes as an ordinary V1
-  init. That pattern traces to `edc00bb`, 2026-08-30. Settle by analysis: a test pins the contract,
-  so establish whether the code is too permissive — a rolled-back bootstrap silently resumable is a
-  real defect — or whether amendment D1 replaced the contract and the test was never updated. (b) Eight retained-evidence cases
-  in `main`, `bootstrap/report`, `commands/doctor` and `commands/uninstall` time out at 300 s under
-  full-suite parallelism while each passes standalone in 95-115 s. They were introduced by the
-  Task 7 checkpoint (`3d686b4`, `4474885`, `a80cf34`) and have never passed in a completed
-  full-suite run at any commit. That 95-115 s is the same slowness NEW-53 owns; NEW-29 owns the
-  load sensitivity.
-
-**Closed 2026-09-07/08 as `632f220..446148b`.** Ten tasks; the plan that carried them is deleted at
-closure and its surviving constraints are in `docs/architecture/foundation.md` §4 (the shared
-admission module) and §9 (measured cost, and the corrected reason for it).
-
-**What the push actually cost, recorded because the plan assumed one CI run.** The gate went green
-locally on 2026-09-07 at 14:01 — `EXIT=0`, 4,723 tests, 2h56m — and CI then failed four times in a
-row, none of them on code the local gate could have judged:
-
-| Run | Verdict | Cause |
-|---|---|---|
-| 34119837698 | `bootstrap-executor` failed in 0.2 min | it was the one job with no `Build` step, and an `apps/cli` vitest alias had been removed as "unnecessary" on advice checked only where `dist` already existed |
-| 34121831849 | `suite` killed at 40.3 min | a 40-minute bound derived from the most favourable local measurement |
-| 34125923469 | `suite` killed at 75.4 min | 75 assumed the runner was 1.5x this laptop; it is ~1.9-2x, measured |
-| 34133320221 | `suite` failed with 6 of 4,599 | two miscomputed test budgets, and four real failures |
-| 34157609332 | **green, all five jobs** | lint 0.8, vendor-ingest 0.5, e2e 6.8, suite 66.8, bootstrap-executor 238.9 min |
-
-**The four real failures were one shipped defect.** `RENAME_FLAGS` was `0x34` —
-`RENAME_EXCL | RENAME_NOFOLLOW_ANY` plus `0x20`, a bit no macOS header defines. Darwin 25.6.0
-ignores it and Darwin 24.6.0 rejects the call, so every retained rename failed on macOS 15 through
-`BOOTSTRAP_RETAINED_RENAME` on the real CLI path. No local gate this program has ever run could
-have seen it, because the development machine runs the newer kernel. That is the phase's most
-valuable result and it was not on its task list.
-
-Two standing decisions were amended rather than contradicted, both dated and quoting what they
-replace: D13's "real fsync-backed transactions" clause, and §9's "no timeout changes". The first
-was measured false — ~99% of an `init` is canonical-JSON encoding against 0.8 s of disk — and the
-second was reasoned entirely from local numbers.
-
-Gate: CI green on `development`. Met by run 34157609332 on `446148b`.
+  CI is green on all five jobs, twice consecutively — runs 34157609332 (`446148b`) and 34172016048
+  (`88d56a2`).
 
 ### Phase 3 — Spec 2 Tasks 8–9: manifest V1→V2 migration and the V2 new-init handoff · L + L
 
