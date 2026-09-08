@@ -74,6 +74,8 @@ only after that plan's checkpoint passes.
 - Modify: `packages/core/src/manifest/index.ts`
 - Create: `apps/cli/src/bootstrap/migration.ts`
 - Create: `apps/cli/src/bootstrap/migration.test.ts`
+- Modify: `packages/core/src/manifest/bootstrap.ts`
+- Modify: `packages/core/src/manifest/bootstrap.test.ts`
 
 **Interfaces:**
 - Consumes: Tasks 1–7, strict migratable V1 bytes/artifacts/backups, packaged release source.
@@ -96,6 +98,11 @@ it.each(nonMigratableFixtures)("refuses $name before managed bytes", async fixtu
 
 Cover every mapping row, safe regular files/directories, restore evidence, config schema, V2-only path collisions on declared and canonical paths, incomplete Foundation state, V1 drift, missing/wrong backups, symlink/config-entry/shared-directory, capacity, and first violated validation before artifact/backup reads.
 
+**Spec 2 amendment of 2026-09-08 (A1, A2) — this task owns both.** Add failing cases before the implementation:
+
+- the migration arm admits its own external shape. `ManifestMigrationPlanV1` now carries `admittedExternalShapeHash` and `admittedPreexistingPaths`, so `migrationKeys` in `packages/core/src/manifest/bootstrap.ts` gains both, `bootstrapExternalShapeHash` takes the operation and selects the domain (`developer-os/fresh-v2-external-shape/v1\0` against `developer-os/v1-migration-external-shape/v1\0`), the three-role projection check runs on both arms, `admitFreshRecoveryExternalShape` stops being fresh-only, and the migration arm stops refusing outright whenever an external shape is supplied. Assert that a digest computed in one operation's domain refuses in the other's, and that the bootstrap-locked second inventory must contain exactly the three projection rows before plan publication on both arms.
+- the artifacts a migration adds carry the mode §6.2 now names: `state/lifecycle-install-nonce` regular-file `content`, `state/lifecycle-id-allocator.json` regular-file `schema` with `lifecycle-id-allocator-v1`, and never `state/lifecycle-activation.json`, which only Spec 1 lifecycle apply creates — an activation-path collision is a refusal, not an adoption.
+
 - [ ] **Step 2: Run migration planning tests and verify missing mapping fails**
 
 Run: `npx vitest run --root packages/core src/manifest/migration.test.ts && npx vitest run --root apps/cli src/bootstrap/migration.test.ts`
@@ -115,7 +122,7 @@ export async function planManifestMigration(
 ): Promise<ManifestMigrationPlanV1>;
 ```
 
-Complete all structural/collision checks before opening artifact bytes, then guarded-read and hash every current/backup authority, verify packaged release capacity, and derive the exact payload/use-once/created/Foundation/launchability/manifest partitions without mutation.
+Complete all structural/collision checks before opening artifact bytes, then guarded-read and hash every current/backup authority, verify packaged release capacity, and derive the exact payload/use-once/created/Foundation/launchability/manifest partitions without mutation. Neither digest domain is ever accepted for the other operation.
 
 - [ ] **Step 4: Run migration planning tests**
 
@@ -126,7 +133,7 @@ Expected: PASS with exact refusal ordering and mapping equality.
 - [ ] **Step 5: Commit Task 8**
 
 ```bash
-git add packages/core/src/manifest/migration.ts packages/core/src/manifest/migration.test.ts packages/core/src/manifest/index.ts apps/cli/src/bootstrap/migration.ts apps/cli/src/bootstrap/migration.test.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
+git add packages/core/src/manifest/migration.ts packages/core/src/manifest/migration.test.ts packages/core/src/manifest/index.ts packages/core/src/manifest/bootstrap.ts packages/core/src/manifest/bootstrap.test.ts apps/cli/src/bootstrap/migration.ts apps/cli/src/bootstrap/migration.test.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
 git commit -m "feat(core): plan manifest v1 migration"
 ```
 
@@ -139,6 +146,9 @@ git commit -m "feat(core): plan manifest v1 migration"
 - Modify: `apps/cli/src/bootstrap/migration.test.ts`
 - Modify: `apps/cli/src/commands/init.ts`
 - Modify: `apps/cli/src/commands/init.test.ts`
+- Modify: `apps/cli/src/bootstrap/report.ts`
+- Modify: `apps/cli/src/bootstrap/report.test.ts`
+- Modify: `apps/cli/src/bootstrap/context.ts`
 - Create: `tests/e2e/manifest-v2-bootstrap.test.ts`
 - Modify: `tests/security/network.test.ts`
 - Modify: `docs/architecture/foundation.md`
@@ -146,7 +156,7 @@ git commit -m "feat(core): plan manifest v1 migration"
 
 **Interfaces:**
 - Consumes: Tasks 1–8.
-- Produces: `init`-only migration resume/compensation/compaction, strict V2 handoff admission for later Spec 1 commands, and committed prerequisite evidence.
+- Produces: `init`-only migration resume/compensation/retention, strict V2 handoff admission for later Spec 1 commands, and committed prerequisite evidence.
 
 - [ ] **Step 1: Write failing end-to-end migration/recovery tests**
 
@@ -166,7 +176,9 @@ it.each(manifestMigrationDeathPoints)("recovers death at $name", async point => 
 });
 ```
 
-Include plan/journal temp/final, every payload source/write/evidence, every created path/evidence, Foundation participant, launchability publication, manifest preserve/publish, point of no return, verification/compaction, source change before/after payload cursor, orphan/third-state/two-ID cases, and explicit zero request/process assertions.
+Include the immutable plan and both journal final slots, every payload source/write/evidence, every created path/evidence, Foundation participant, launchability publication, manifest preserve/publish, point of no return, verification/retention, source change before/after payload cursor, orphan/third-state/two-ID cases, and explicit zero request/process assertions.
+
+**Spec 2 amendment of 2026-09-08 (A3) — this task owns it, and it needs its own failing test first.** Every bootstrap evidence, admission and namespace surface is parametric over `{ fresh_v2_init, v1_to_v2 }`. Today `FRESH_PLAN`/`FRESH_SLOT` and `idForPath` in `apps/cli/src/bootstrap/report.ts` match `fresh-v2-init.fi_…` only, `report.ts` passes the literal `"fresh_v2_init"` to `deriveBootstrapEnvelopePaths` and drops any id not starting with `fi_`, and `INITIAL_NAMESPACE`/`FRESH_STAGING_ID` in `apps/cli/src/bootstrap/context.ts` admit `mm_` in the retained-tombstone arm alone while gating the inventory itself. The failure is worse than an unreported row: the namespace rejects a `manifest-migration.mm_…` name *before* the inventory, so an interrupted migration's live residue reaches the general unexpected-child path rather than the exit-6 one Spec 2 names for migration residue. Assert that an interrupted migration envelope makes `init` exit 6 **and** appears in the evidence report; both fail today.
 
 - [ ] **Step 2: Run the prerequisite E2E/focused suite and verify incomplete migration behavior fails**
 
@@ -176,7 +188,7 @@ Expected: FAIL until migration execution, `init` routing, recovery closure, and 
 
 - [ ] **Step 3: Implement migration execution and close the V2 handoff**
 
-Route `init` by strict absent/V1/V2/bootstrap-closure state: fresh V2, V1 migration, resume the one recorded envelope, or ordinary V2 init behavior. Reuse Task 7's executor with the migration plan arm; preserve pre-plan skeletons; compensate to byte-identical V1 before manifest publication; force-forward after V2 publication; compact journal then plan last. Reject every non-`init` command over V1 or non-terminal bootstrap state.
+Route `init` by strict absent/V1/V2/bootstrap-closure state: fresh V2, V1 migration, resume the one recorded envelope, or ordinary V2 init behavior. Reuse Task 7's executor with the migration plan arm; preserve pre-plan skeletons; compensate to byte-identical V1 before manifest publication; force-forward after V2 publication; then advance the derived retention table to `retained`, with the immutable plan and both journal slots durable throughout. Reject every non-`init` command over V1 or non-terminal bootstrap state.
 
 - [ ] **Step 4: Run focused and full gates, then obtain fresh review**
 
@@ -191,7 +203,7 @@ Expected: PASS. Request a fresh reviewer verdict on Tasks 1–9. For every accep
 - [ ] **Step 5: Commit the prerequisite checkpoint and advance to Spec 1**
 
 ```bash
-git add apps/cli/src/bootstrap/executor.ts apps/cli/src/bootstrap/executor.test.ts apps/cli/src/bootstrap/migration.ts apps/cli/src/bootstrap/migration.test.ts apps/cli/src/commands/init.ts apps/cli/src/commands/init.test.ts tests/e2e/manifest-v2-bootstrap.test.ts tests/security/network.test.ts docs/architecture/foundation.md docs/architecture/threat-model.md docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
+git add apps/cli/src/bootstrap/executor.ts apps/cli/src/bootstrap/executor.test.ts apps/cli/src/bootstrap/migration.ts apps/cli/src/bootstrap/migration.test.ts apps/cli/src/commands/init.ts apps/cli/src/commands/init.test.ts apps/cli/src/bootstrap/report.ts apps/cli/src/bootstrap/report.test.ts apps/cli/src/bootstrap/context.ts tests/e2e/manifest-v2-bootstrap.test.ts tests/security/network.test.ts docs/architecture/foundation.md docs/architecture/threat-model.md docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
 git commit -m "feat: migrate installations to manifest v2"
 ```
 
@@ -923,6 +935,8 @@ Run: `npx vitest run --root packages/core src/update/rollback.test.ts && npx vit
 
 Expected: PASS across exact maximum and first-over payload/retirement bounds.
 
+**Spec 2 amendment of 2026-09-08 (A6).** "Exact maximum" means the exact maximum admissible under **both** the cardinality bound and the byte bound, and "first over" means the first row over **either**. The declared cardinalities exceed what the byte caps admit: `RollbackPayloadEntryV1` has a 153-byte canonical floor, so 1,000,000 entries encode to about 146.9 MiB against a 64-MiB inventory cap and roughly 435,771 are reachable. A test that constructs the declared cardinality will never go green. Derive the feasible maximum in the test rather than hard-coding a number.
+
 - [ ] **Step 5: Commit Task 20**
 
 ```bash
@@ -1330,6 +1344,11 @@ it("enumerates every release authority scope non-empty", () => {
 ```
 
 Map every Spec 2 §12 row and every unchanged Spec 1 §7 row to named evidence. Include V1 and fresh V2 start, both architectures, metadata replay/signature/origin/archive corpus, identical preview, no-apply mutation, apply/rollback death at every outer and nested cursor, owner completeness, migration chain, capacity exact/first-over, post-update edit refusal, rollback consumption/reapply, launcher active/fallback/bootstrap/executor routes, no credentials/private diagnostics, full uninstall preservation, and per-scope non-empty enumerators.
+
+**Spec 2 amendment of 2026-09-08 (A6, A8) — this task owns both closure gates.**
+
+- Every "exact maximum/first-over" row means the exact maximum admissible under **both** the cardinality and byte bounds and the first row over **either**. The retirement rows in particular: the 1,200,012 aggregate counts 1,000,000 inventory entries, which no 64-MiB inventory can hold, so the feasible maximum is derived by the test rather than declared.
+- Add the exact-set test asserting that **no** path in Spec 2 produces a `symlink` managed artifact. The arm is retained as accepted residual 9 so a later link-capable transaction operation needs no manifest schema bump; this test is what keeps it a checked invariant rather than dead code.
 
 - [ ] **Step 2: Run the focused integration/security/repository gates and verify uncovered rows fail**
 

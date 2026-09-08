@@ -113,7 +113,7 @@ govern the open phases and stay.
 
 ### Phase 3 — Spec 2 Tasks 8–9: manifest V1→V2 migration and the V2 new-init handoff · L + L
 
-Before starting, amend Spec 2 §6.2/§6.3 and the baseline plan text (NEW-68): `admittedExternalShapeHash` for the migration plan, the mode of artifacts a migration adds, the evidence layer for migration residue, and the obsolete "compact journal then plan last" steps. Then execute baseline Tasks 8–9 from `plans/2026-08-29-developer-os-release-update.md`.
+**The Spec 2 amendment is done.** All eight NEW-68 corrections were approved by the founder on 2026-09-08 and are marked "Amended 2026-09-08" in place; the proposal document is deleted and NEW-68 is closed. Three needed a decision and all three took the recommended resolution: the migration plan admits its own external shape over a disjoint digest domain, the two "exact maximum" gates are read against both the cardinality and byte bounds, and the unreachable `symlink` arm is retained as accepted residual 9 with an exact-set test. What remains here is baseline Tasks 8–9 from `plans/2026-08-29-developer-os-release-update.md`, whose steps now carry the amendment impact.
 
 Gate: `context.ts` no longer pins `bootstrap: unavailable_until_packaged_handoff`; a fresh `init` runs the V2 path in production.
 
@@ -165,7 +165,7 @@ Gate: every inventoried script is a verb or a recorded refusal.
 
 ### Phase 8 — Spec 2 Tasks 10–26: launcher, release trust, update, rollback · L
 
-After the corrections in NEW-68 (undefined `SafeReasonCodeV1`, conflicting limits, exact-maximum gates that are arithmetically impossible, unreachable `symlink` arm). Then execute the baseline plan.
+NEW-68's corrections landed on 2026-09-08 — `SafeReasonCodeV1` is bounded, the §5.3/§6.3 limit conflict is resolved, the exact-maximum gates are read against both bounds, and the `symlink` arm is accepted residual 9. Tasks 20 and 26 carry what that leaves them. Execute the baseline plan.
 
 Gate: `update` dry-run and apply, rollback, and the launcher proven on a disposable install.
 
@@ -210,7 +210,7 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 | 5b | `specs/<date>-developer-os-brain-workflows-design.md` and its plan |
 | 6 | `specs/<date>-developer-os-hooks-design.md` and its plan |
 | 7 | `specs/<date>-developer-os-tooling-verbs-design.md` and its plan |
-| 8 | baseline plan Tasks 10–26 after NEW-68 |
+| 8 | baseline plan Tasks 10–26 |
 | 9 | `plans/<date>-developer-os-opt-in-surfaces-1b.md` |
 | 10 | `docs/migration/founder-cutover.md` |
 | 11 | program plan Task 9 |

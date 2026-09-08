@@ -4,7 +4,11 @@
 and durable slot-identity addendum were approved after complete written-specification review; the
 2026-09-04 §6.1 global-lock admission rule, §6.1 `admittedPreexistingPaths` grammar and §6.4
 forward-content rule were approved by the founder in conversation and are marked "Amended
-2026-09-04" in place.** This
+2026-09-04" in place; the 2026-09-08 NEW-68 amendment — the migration arm's admitted external
+shape, the §6.2 artifact modes, operation-parametric evidence surfaces, the §5.3 plan-bound
+wording, `SafeReasonCodeV1`, the byte-cap reading of the two "exact maximum" gates, and the
+`symlink` arm as an accepted residual — was approved by the founder in conversation and is marked
+"Amended 2026-09-08" in place.** This
 is DOS-P7 Spec 2, the second half of `ORDER.md` entry A11 and program-plan Task 7. Spec 1 is the
 approved opt-in surfaces design at
 `docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md`.
@@ -153,6 +157,18 @@ spelling. Each use applies its narrower semantic bound after decoding: a planner
 rollback/source evidence ordinal is at most `999_999` and is lower than its enclosing exact-set
 count, while a fresh-init or manifest-migration Foundation ordinal is at most `255` and is lower than
 the enclosing forward-pair count.
+
+**Amended 2026-09-08 — `SafeReasonCodeV1`, and where the other shared brands are defined.**
+`SafeReasonCodeV1` is `1..64` ASCII bytes matching `[a-z][a-z0-9_]*`. It is the plan-id arm for
+every leaf kind with no allocated or derived identifier of its own, and it is never parsed to narrow
+a wider concrete ID. Its bound lies inside the 106-byte path-segment limit, so a derived plan path
+is safe by construction. The bound is stated because the only constraint this document previously
+placed on the type was the shared 106-byte path-segment sentence below, which is 42 bytes wider than
+the shipped parser and admits uppercase, hyphens and a leading digit that the parser refuses — a
+validation gap, since this type becomes a path segment. `LowerHexSha256`, `UInt64DecimalV1`,
+`CanonicalAbsolutePathV1`, `UtcTimestampV1`, `EffectiveUidV1`, `StableSemverV1` and `CanonicalJsonV1`
+are deliberately not defined here or in Spec 1: they are imported from shipped Core, and the block
+above scopes itself to the internal path brands.
 
 The target planner is trusted release code, not hostile third-party code and not an OS sandbox.
 Capability absence is enforced in the shipped graph: its public entrypoint imports only pure Core,
@@ -843,8 +859,12 @@ For a present `before`, `hash` binds the strict V1/V2 bytes still at the guarded
 a non-null `ManifestPayloadRefV1` whose construction evidence reopens to identical bytes, uses mode `0600`, remains at
 most 64 MiB, and parses as canonical V2. A lifecycle envelope requires `update_expected`; a
 fresh/migration envelope requires `bootstrap_expected` with the matching outer ID and a complete
-`BootstrapPayloadEvidenceV1` reached under that outer journal before the manifest cursor. Thus the immutable plan remains below 16 MiB even when a manifest approaches its 64-MiB
-payload bound. The sibling tombstone is exactly
+`BootstrapPayloadEvidenceV1` reached under that outer journal before the manifest cursor. **Amended
+2026-09-08:** thus the manifest participant's own plan stays below its 16 MiB `maximumPlanBytes`
+even when a manifest approaches its 64-MiB payload bound. The previous wording said "the immutable
+plan", which in §6.3's vocabulary is the bootstrap plan at 256 MiB, and contradicted it. No number
+changes; §5.3 was always describing `ManifestStatePlanV1`, which each bootstrap plan embeds as
+`manifest`. The sibling tombstone is exactly
 `.installation-manifest.<participant-id>.json.tombstone`, owner-owned `0600`, and same-device.
 Apply moves the guarded present preimage no-replace to the tombstone, syncs, then no-replace publishes
 and verifies a present postimage or durably records committed absence. Rollback uses no-replace moves.
@@ -1037,6 +1057,18 @@ the unchanged surviving rows plus only the plan/evidence-derived forward prefix.
 metadata/identity mismatch or any unprojected child refuses rather than treating this digest as a
 generic content hash.
 
+**Amended 2026-09-08 — both bootstrap arms admit their external shape, over disjoint digest
+domains.** `ManifestMigrationPlanV1` carries `admittedExternalShapeHash` and
+`admittedPreexistingPaths` with exactly the semantics of this section, and the bootstrap-locked
+second inventory must contain exactly the three projection rows before plan publication on both
+arms. The digest domain is per-operation and is never accepted for the other operation: the fresh
+arm hashes `developer-os/fresh-v2-external-shape/v1\0` and the migration arm
+`developer-os/v1-migration-external-shape/v1\0`, over the same
+`BootstrapExternalShapeProjectionV1`. That follows the naming already used throughout this
+subsystem — `fresh-v2-init` against `manifest-migration`, `tx_fi` against `tx_mm`, `fi_` against
+`mm_`. The §6.2 preflight below covers the V1 manifest, its backups and the V2-only path
+reservations; it never observes the lock inode, so it does not substitute for this rule.
+
 The exact final paths are `state/fresh-v2-init.<id>.plan.json`,
 `state/fresh-v2-init.<id>.journal.0.json`, `state/fresh-v2-init.<id>.journal.1.json`, and
 `staging/fresh-v2-init/<id>`. Their modes, byte bounds, plan-hash binding, two-slot journal rewrite
@@ -1149,10 +1181,32 @@ The V1 mapping is exact:
   timestamp is copied unchanged;
 - all new lifecycle/release artifacts use `existedBefore: false` and null restore fields.
 
+**Amended 2026-09-08 — the verification mode of each artifact a migration adds.** Every artifact a
+migration adds takes the mode §3.2 assigns to its path. The three Spec 1 control paths appear above
+only as collision refusals, so their modes and creators are stated here:
+
+| Path | V2 artifact mode | Created by |
+|---|---|---|
+| `state/lifecycle-install-nonce` | regular-file `content` | Spec 2 migration / new init |
+| `state/lifecycle-id-allocator.json` | regular-file `schema`, `lifecycle-id-allocator-v1` | Spec 2 migration / new init |
+| `state/lifecycle-activation.json` | regular-file `content` | **Spec 1 lifecycle apply only, never migration** |
+
+Migration creates the nonce and the allocator and never creates the activation record. That is what
+makes an activation-path collision a refusal rather than an adoption.
+
 Migration never turns found state into created state, adopts an existing V2 path, normalizes an
 unsafe restore combination, or reads artifact bytes after a collision is known.
 
 ### 6.3 Crash-resumable migration
+
+**Amended 2026-09-08 — every bootstrap evidence, admission and namespace surface is parametric over
+the operation set `{ fresh_v2_init, v1_to_v2 }`.** `manifest-migration.mm_…` plan, journal, staging
+and payload names are recognised exactly as their `fresh-v2-init.fi_…` counterparts, by the
+namespace admitted before the inventory as much as by the evidence report. A name inside the
+bootstrap namespace that no operation recognises is exit 6, not an unreported entry: a
+`manifest-migration` envelope left by an interrupted migration is live residue, and a surface that
+sees only fresh-init identifiers routes it to the general unexpected-child path instead of the
+exit-6 one this specification names for migration residue.
 
 After external preflight, migration acquires the transient bootstrap lock and repeats the complete
 inventory. Still holding only that lock, it publishes the immutable bootstrap plan and initial
@@ -1165,6 +1219,12 @@ interface ManifestMigrationPlanV1 {
   readonly schemaVersion: 1;
   readonly operation: "v1_to_v2";
   readonly id: ManifestMigrationIdV1;
+  /** Amended 2026-09-08. Semantics identical to §6.1, over the migration-scoped digest domain
+   *  below. Migration is the arm where product home and `state` always pre-exist populated, so it
+   *  is the arm most exposed to an unadmitted external inode, and it was the one arm carrying no
+   *  digest able to exclude one. */
+  readonly admittedExternalShapeHash: LowerHexSha256;
+  readonly admittedPreexistingPaths: readonly CanonicalAbsolutePathV1[0..4096];
   readonly v1ManifestHash: LowerHexSha256;
   readonly v2ManifestHash: LowerHexSha256;
   readonly bootstrapIdentity: PersistedBootstrapLockIdentityV1;
@@ -3863,6 +3923,18 @@ referenced plan. A generic safe-code parser is never used to narrow a wider conc
 `UpdateExecutionPlanV1` is itself the `update_execution` leaf, contains the complete non-duplicate
 leaf-ref set, and is at most 16 MiB. Cardinality types are additionally constrained by that byte cap;
 the first leaf that would make a plan exceed it refuses before allocation.
+**Amended 2026-09-08:** that rule governs every bounded collection in this specification, named
+explicitly for the retirement plans, `RollbackPayloadInventoryV1`, `BundlePublicationPlanV1` and
+`BundleSourceStagingPlanV1`, whose declared cardinalities exceed what their own byte caps admit. A
+gate that requires "the exact maximum" therefore means the exact maximum admissible under **both**
+the cardinality bound and the byte bound, and "the first over" means the first row over **either**.
+Byte-feasible maxima are illustrative rather than normative, so they need not be re-derived each
+time an entry gains a field: `RollbackPayloadEntryV1` has a 153-byte canonical floor — every field
+at its minimum, the shortest role, the derived `blobs/<ten-digit-ordinal>.bin` path — so 1,000,000
+entries encode to about 146.9 MiB against a 64-MiB inventory cap, and roughly 435,771 are reachable.
+A 200,000-entry bundle of directories encodes to 8.20 MiB and fits a 16-MiB plan; the same count of
+files needs about 24.03 MiB and does not, because `ReleaseBundleEntryV1.bytes` is a
+`UInt64DecimalV1` **string** and encodes as `"0"` rather than `0`. No declared number changes.
 The construction plan is the sole size/domain exception: its 512-MiB-plus-one refusal reader hashes
 `developer-os/update-construction/v1\0` plus its canonical JSON-plus-LF bytes and recomputes its
 file/count/byte maxima before trusting any row. Its journal alone uses a 64-MiB-plus-one reader so
@@ -4110,7 +4182,10 @@ inventory entries plus its root, `plans`, two plan-kind directories, `blobs`, `i
 and `inventory.json` = 1,000,007 leaves; a maximum bundle contributes 200,000 entries plus its root;
 the three metadata files and rollback record contribute four more, for the checked aggregate maximum
 1,200,012. Shared retained metadata directories are not leaves. `maximumLeaves` is recomputed and
-drives `retirementNext`; exact maximum succeeds and the first extra leaf refuses before intent. These rules close the
+drives `retirementNext`; the exact maximum admissible under both the cardinality and byte bounds
+succeeds and the first leaf over either bound refuses before intent — **amended 2026-09-08**, since
+the 1,200,012 aggregate above counts 1,000,000 inventory entries, which no 64-MiB inventory can
+hold. These rules close the
 plan/state/cursor tables rather than delegating recovery semantics to implementations.
 
 A `CanonicalStatePayloadPathV1` is exactly
@@ -4730,7 +4805,7 @@ Every enumerating gate asserts a non-empty set per scope before asserting proper
 | preview is deterministic and non-applying | two identical update and rollback previews are byte-identical; exact JSON path round-trip and distinct-control/render-collision vectors prove only human rendering is lossy; exclusive scratch-name creation covers collision/no-touch, retry 32, first-over-retry, and crash-before-plan cleanup; preview writes only attempt-owned scratch and leaves product, Brain, vendor, trust, active, manifest, allocator, and lifecycle roots byte-identical |
 | owners are complete | every installed owner has exactly one provider and non-empty current set; absent owner is not invoked/installed; missing/extra owner/artifact, directory/symlink create/replace/remove, create below a missing/non-retained/non-kept parent, a second owner effect or any non-Codex effect, unsupported external effect, or vendor preflight failure refuses the whole plan |
 | migrations are exact | contiguous unique chains, forward/inverse byte equality, folder-policy admission, product tokens require current schema artifacts plus matching owner keep, newly introduced/owner-mutated product targets refuse, before/after concurrent edit, per-blob/aggregate bounds, and failure at every Foundation phase; no private input reaches scratch/log/network/output |
-| update order recovers | death/failure at every bundle root/entry/metadata subcursor, owner file/effect, migration, payload structure/entry/metadata subcursor, transitional/terminal manifest, trust, rollback-record, active, target-verifier, retirement, executor-routing, and compaction cursor yields the specified direction; each subcursor covers zero, maximum and first-over-bound plus illegal phase combinations, both retirement sets cover exact full-tree maximum/first-over, and verifier postimage hashes reject every omitted/extra/reordered/mutated owner/effect/migration row; active is the last activation-bearing publication before the verifier, the verifier alone crosses the point of no return, and trust never reverses |
+| update order recovers | death/failure at every bundle root/entry/metadata subcursor, owner file/effect, migration, payload structure/entry/metadata subcursor, transitional/terminal manifest, trust, rollback-record, active, target-verifier, retirement, executor-routing, and compaction cursor yields the specified direction; each subcursor covers zero, maximum and first-over-bound plus illegal phase combinations, both retirement sets cover the exact full-tree maximum admissible under both the cardinality and byte bounds plus the first over either (amended 2026-09-08), and verifier postimage hashes reject every omitted/extra/reordered/mutated owner/effect/migration row; active is the last activation-bearing publication before the verifier, the verifier alone crosses the point of no return, and trust never reverses |
 | rollback is conservative | no network; current/postimage/previous-bundle/retained-metadata/inverse-plan/payload/manifest evidence required; exact rollback-step-list digest mutation/reorder/self-reference vectors; every post-update edit refuses before mutation; crash before/after fallback routing and each payload/blob retirement resumes; successful rollback restores exact bytes/state, consumes record/payload, removes only rejected inventory, and retains trust high watermarks |
 | capacity is aggregate | active + old rollback + target + scratch + staging + backups + inverse + journals + compaction headroom are jointly checked for bytes and entries before reservation; first-over-limit allocates nothing |
 | network remains explicit | repository classifier asserts every network entrypoint non-empty and total; only explicit update plan/apply is release transport; all other commands, rollback, migration-only init, and uninstall make zero update request |
@@ -4793,3 +4868,12 @@ Homebrew installation, SBOM, checksums, clean-account flows, and public metadata
 8. **Publication remains outside A11.** Real keys, signing ceremonies, GitHub Release creation,
    Homebrew formula, self-contained packaging, SBOM, and public release are A16 founder actions.
    A11 ships local mechanisms and synthetic evidence only.
+9. **The `symlink` artifact arm is validated but unreachable in v1.** Added 2026-09-08. No path in
+   this specification creates, migrates, or mutates a link: symlink `content` is legal only after a
+   safe link-specific transaction operation exists and this specification creates none, migration
+   refuses a V1 symlink artifact and excludes symlink rows from the migratable subset, and symlinks
+   are legal only as byte-identical `keep` rows — which can only preserve a row some arm created
+   earlier. The arm, its drift row, its planner draft arm and both state arms are retained so a
+   later link-capable transaction operation needs no manifest schema bump, and one exact-set test
+   asserts that no path in this specification produces a symlink artifact. **Owner: the first
+   link-capable transaction operation.**

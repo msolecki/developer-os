@@ -28,36 +28,44 @@ every retained rename failed on macOS 15, on the real CLI path. Nothing local co
 The corrected constant and the measurement that settled it are at
 `packages/platform-macos/src/retained-rename.ts:50`.
 
-**The next action is roadmap Phase 3 — Spec 2 Tasks 8–9, the `InstallationManifestV2` migration and
-the V2 new-init handoff** (`plans/2026-09-04-developer-os-completion-roadmap.md`). **It does not
-open with code.** Phase 3's own first line requires amending Spec 2 §6.2/§6.3 and the baseline plan
-text for NEW-68. An approved spec is not rewritten silently, so that amendment is a founder stop
-condition and comes before any task in `plans/2026-08-29-developer-os-release-update.md`.
+**Roadmap Phase 3's stop condition is cleared.** Phase 3 did not open with code: it required
+amending Spec 2 for NEW-68, and an approved spec is not rewritten silently. The founder approved all
+eight corrections on 2026-09-08, each is marked "Amended 2026-09-08" in place, the proposal document
+is deleted, and NEW-68 is closed. Five recorded what Spec 1 or the shipped code had already settled.
+Three changed an approved interface, an approved number, or the accepted-residual list, and all three
+took the recommended resolution:
 
-**That amendment was written on 2026-09-08 and is the one thing this program is now waiting on.** It
-is at `specs/2026-09-08-spec-2-new-68-amendment.md`, and it turned out to be larger than the two
-items this entry previously named. NEW-68 carries eight defects, not two: five are corrections of
-specification text against a contract Spec 1 or the shipped code already settled, and three need a
-decision because they change an approved interface, an approved number, or the accepted-residual
-list. One of the eight is not in NEW-68's own row at all: the unreachable `symlink` arm is named only
-in the roadmap's Phase 8 line. And the row's claim that two verification gates are "arithmetically
-impossible" was carried for weeks without the arithmetic; it is now derived, and it holds.
+- **A1** — `ManifestMigrationPlanV1` now carries `admittedExternalShapeHash` and
+  `admittedPreexistingPaths`, over the disjoint domain `developer-os/v1-migration-external-shape/v1`,
+  never accepted for the fresh arm. Migration was the one arm with no digest able to exclude an
+  unadmitted external inode, and it is the arm where product home and `state` always pre-exist
+  populated.
+- **A6** — the two "exact maximum succeeds" gates are read against **both** the cardinality bound and
+  the byte bound. The claim that they were arithmetically impossible was carried for weeks without
+  the arithmetic; it is now derived and it holds. `RollbackPayloadEntryV1` has a 153-byte canonical
+  floor, so the declared 1,000,000 entries encode to ~146.9 MiB against a 64-MiB cap and ~435,771 are
+  reachable. No declared number changed.
+- **A8** — the unreachable `symlink` arm is retained as §13.3 accepted residual 9, with an exact-set
+  test asserting no Spec 2 path produces one. It was named only in the roadmap's Phase 8 line, never
+  in NEW-68's own row.
+
+The amendment's shipped-code impact is written into the baseline plan where it will be executed: A1
+and A2 into Task 8, A3 into Task 9 with its own failing test, A6 into Tasks 20 and 26, A8 into Task
+26.
+
+**The next action is code: baseline Task 8** in `plans/2026-08-29-developer-os-release-update.md`.
 
 Spec 1 is approved and its plan exists at `plans/2026-08-28-developer-os-opt-in-surfaces.md`, with
 none of its 24 implementation tasks started. Spec 2's Tasks 1–7 are complete and Tasks 8–26 remain.
 
 Open sequence inside A11:
 
-1. Now: **the amendment is drafted and awaiting founder approval** at
-   `specs/2026-09-08-spec-2-new-68-amendment.md`. It states all eight NEW-68 corrections with their
-   evidence; five record what Spec 1 or the shipped code already settled, and three — A1 (the
-   migration plan's admitted external shape), A6 (two verification gates that no admissible document
-   can satisfy) and A8 (the unreachable `symlink` arm) — need a founder decision. On approval the
-   items are marked "Amended 2026-09-08" in place, that file is deleted, and NEW-68 closes.
-2. Execute Spec 2 Tasks 8–9 — the complete `InstallationManifestV2` migration and the V2 new-init
-   handoff (roadmap Phase 3).
-3. Execute the approved Spec 1 plan, split into 1a and 1b by NEW-67.
-4. Finish the remaining Spec 2 implementation and close the Task 7 checkpoint.
+1. Now: execute Spec 2 Tasks 8–9 — the complete `InstallationManifestV2` migration and the V2
+   new-init handoff (roadmap Phase 3). The Phase 3 gate is `apps/cli/src/context.ts:765` no longer
+   pinning `bootstrap: { state: "unavailable_until_packaged_handoff" }`, and a fresh `init` running
+   the V2 path in production.
+2. Execute the approved Spec 1 plan, split into 1a and 1b by NEW-67.
+3. Finish the remaining Spec 2 implementation and close the Task 7 checkpoint.
 
 Phase 3 onward is sequenced by `plans/2026-09-04-developer-os-completion-roadmap.md` (10 open phases,
 3 through 11 with a 5b, the founder decisions of 2026-09-04 and 2026-09-07, and the spec or plan each
@@ -141,9 +149,8 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 
 - Product sequence: 7 open entries, A11, A12, A12b, A13, A14, A15, A16.
 - Program plan: baseline Tasks 8–9 contain 10 unchecked steps.
-- Repository backlog: 40 open numbered rows, plus the Foundation watchdog decision.
-- Active implementation plans: none for the current phase. Roadmap Phase 3 opens with a **spec
-  amendment** (Spec 2 §6.2/§6.3 for NEW-68), which is a founder stop, and only then Spec 2 baseline
-  Tasks 8–26 (19 tasks) in `plans/2026-08-29-developer-os-release-update.md`. Spec 1 (24 tasks, to be
+- Repository backlog: 39 open numbered rows, plus the Foundation watchdog decision.
+- Active implementation plan: `plans/2026-08-29-developer-os-release-update.md`, Spec 2 baseline
+  Tasks 8–26 (19 tasks); Phase 3's spec-amendment stop is cleared. Spec 1 (24 tasks, to be
   split by NEW-67) follows. 43 untouched tasks across the two, behind the completion roadmap's 10
   open phases.
