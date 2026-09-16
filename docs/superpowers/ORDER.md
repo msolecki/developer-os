@@ -53,23 +53,29 @@ The amendment's shipped-code impact is written into the baseline plan where it w
 and A2 into Task 8, A3 into Task 9 with its own failing test, A6 into Tasks 20 and 26, A8 into Task
 26.
 
-**The next action is code: baseline Task 8** in `plans/2026-08-29-developer-os-release-update.md`.
+**Task 8 is committed** (`55a06de`; `e436581` then narrowed NEW-53). **The next action is code:
+baseline Task 9** in `plans/2026-08-29-developer-os-release-update.md`.
 
 Spec 1 is approved and its plan exists at `plans/2026-08-28-developer-os-opt-in-surfaces.md`, with
-none of its 24 implementation tasks started. Spec 2's Tasks 1–7 are complete and Tasks 8–26 remain.
+none of its 24 implementation tasks started. Spec 2's Tasks 1–8 are complete and Tasks 9–26 remain.
 
-Open sequence inside A11:
+Open sequence, reordered 2026-09-16 by decision D16 (daily use before completeness):
 
-1. Now: execute Spec 2 Tasks 8–9 — the complete `InstallationManifestV2` migration and the V2
-   new-init handoff (roadmap Phase 3). The Phase 3 gate is `apps/cli/src/context.ts:765` no longer
-   pinning `bootstrap: { state: "unavailable_until_packaged_handoff" }`, and a fresh `init` running
-   the V2 path in production.
-2. Execute the approved Spec 1 plan, split into 1a and 1b by NEW-67.
-3. Finish the remaining Spec 2 implementation and close the Task 7 checkpoint.
+1. Now: Spec 2 Task 9 — execute and recover the V1→V2 migration (roadmap Phase 3). Its gate is
+   corrected: Tasks 8–9 cannot unpin `apps/cli/src/context.ts:765`, because a production V2 `init`
+   needs the launcher's root-verified handoff. That gate moved to Phase 4b.
+2. Amend Spec 1 (NEW-67), write plan 1a, execute it (Phase 4).
+3. Spec 2 Tasks 10–11 plus the production wiring step — launcher and offline trust (Phase 4b).
+4. A12 → A12b → A13 → A14, then the founder cutover A15.
+5. After the cutover: A11b (Spec 2 Tasks 12–26, then Spec 1b), then A16.
 
-Phase 3 onward is sequenced by `plans/2026-09-04-developer-os-completion-roadmap.md` (10 open phases,
-3 through 11 with a 5b, the founder decisions of 2026-09-04 and 2026-09-07, and the spec or plan each
-phase requires). `docs/migration/instruction-inventory.md` is the scope of A12, A12b, A13 and A14.
+Per decision D17 an ordinary task commit runs its focused commands, `npm run lint` and fresh review,
+and is pushed so CI runs the full suite; `npm run check` runs locally at phase or plan close
+(`SESSION.md` §5).
+
+Phase 3 onward is sequenced by `plans/2026-09-04-developer-os-completion-roadmap.md` (11 open phases,
+3 through 11 with a 4b and a 5b, the founder decisions of 2026-09-04, 2026-09-07 and 2026-09-16, and
+the spec or plan each phase requires). `docs/migration/instruction-inventory.md` is the scope of A12, A12b, A13 and A14.
 
 ## Product path
 
@@ -77,13 +83,14 @@ Strict sequence; do not start a blocked row early.
 
 | # | Work | Needs | Done when | Status |
 |---|---|---|---|---|
-| A11 | DOS-P7 Git, automation, update, release | nothing | full local lifecycle is ready for cutover | now |
+| A11 | DOS-P7, pre-cutover part (D16): Spec 2 Task 9, Spec 1a, Spec 2 Tasks 10–11 | nothing | a fresh production `init` runs V2 through the launcher; `config get\|set`, coordinator recovery and drained uninstall ship | now |
 | A12 | DOS-P10 Managed instruction artifacts — spec, plan, implementation | A11 | every artifact in `docs/migration/instruction-inventory.md` §1–§3, §6 installs, drift-checks, and uninstalls on both vendors | blocked |
 | A12b | Brain workflows — spec, plan, implementation | A12 | every workflow and verb in the inventory §7 is proven on the synthetic vault | blocked |
 | A13 | DOS-P11 Hooks — spec, plan, implementation | A12b | every hook in the inventory §4 plus session-start injection is observed firing and names the installed binary | blocked |
 | A14 | DOS-P12 Repository tooling verbs — spec, plan, implementation | A13 | all 14 scripts in the inventory §5 are product verbs or documented refusals | blocked |
-| A15 | DOS-P8 Founder shadow migration — dedicated plan and execution | A14, L2 | rollback is exercised and one stable cycle completes | blocked |
-| A16 | DOS-P9 Public beta and v1 | A15, L1, L2 | `v1.0.0` is published and reproducible | blocked |
+| A15 | DOS-P8 Founder shadow migration — dedicated plan and execution | A14 | rollback to the legacy runtime is exercised and one stable cycle completes | blocked |
+| A11b | DOS-P7 remainder (D16): Spec 2 Tasks 12–26 (update, rollback), then Spec 1b (git, launchd) | A15 | `update`, `update rollback`, `git` and `automation` proven on a disposable install, then on the founder machine | blocked |
+| A16 | DOS-P9 Public beta and v1 | A11b, L1, L2 | `v1.0.0` is published and reproducible | blocked |
 
 ## Repository work not owned by the product sequence
 
@@ -143,14 +150,13 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 | # | Owner | Required action | Blocks |
 |---|---|---|---|
 | L1 | founder + qualified counsel | approve the exact OSI license text | A16 |
-| L2 | founder / environment with remote access | verify remote rules, PR flow, CI, and release permissions | A15, A16 |
+| L2 | founder / environment with remote access | verify remote rules, PR flow, CI, and release permissions | A16 |
 
 ## Count
 
-- Product sequence: 7 open entries, A11, A12, A12b, A13, A14, A15, A16.
-- Program plan: baseline Tasks 8–9 contain 10 unchecked steps.
+- Product sequence: 8 open entries, A11, A12, A12b, A13, A14, A15, A11b, A16.
+- Program plan: baseline Task 9 contains 5 unchecked steps.
 - Repository backlog: 39 open numbered rows, plus the Foundation watchdog decision.
-- Active implementation plan: `plans/2026-08-29-developer-os-release-update.md`, Spec 2 baseline
-  Tasks 8–26 (19 tasks); Phase 3's spec-amendment stop is cleared. Spec 1 (24 tasks, to be
-  split by NEW-67) follows. 43 untouched tasks across the two, behind the completion roadmap's 10
-  open phases.
+- Implementation plans: Spec 2 baseline Tasks 9–26 (18 tasks) and Spec 1 (24 tasks, split into
+  1a and 1b): 42 tasks. Before the cutover: Task 9, plan 1a (9 tasks), Tasks 10–11 — 12 tasks.
+  After it: Tasks 12–26 and plan 1b (15 tasks) — 30 tasks. Phases 5, 5b, 6 and 7 have no spec yet.

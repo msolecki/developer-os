@@ -25,7 +25,7 @@
 - Redact before truncating, hashing, logging, persisting, or publishing. Fixtures are synthetic and use temporary repositories, local bare remotes, injected launchd runners, and no real credentials or live user paths.
 - Exact limits from the spec are normative, including: 1-MiB Foundation/coordinator/launchd journals, 16-MiB immutable/Git-effect plans and journals, 1,000,000 aggregate lifecycle leaves, 200,001 Git objects, 512-MiB per-object inflation, 8-GiB aggregate inflation/delta work, depth 50, 10,000,000 delta instructions, 256-MiB RAM, 10-GiB temp, one inherited 600-second push phase, and the absent-manifest walk's 1,000,000-entry/128-component/4096-byte bounds.
 - The only supported launchd mutation row is the approved macOS 26.5.2 build `25F84` `/bin/launchctl` identity. Bootstrap inherits only FD 3 for an already-unlinked immutable private snapshot and never inherits the real plist descriptor.
-- A task is complete only after its focused tests pass, `npm run check` passes, a fresh reviewer who did not author the task returns `READY`, accepted findings receive a failing regression test first, and the task checkbox is updated with evidence.
+- A task is complete only after its focused tests pass, `npm run check` passes (amended 2026-09-16 by roadmap D17: `npm run lint` plus a pushed CI run per task, `npm run check` at checkpoint close), a fresh reviewer who did not author the task returns `READY`, accepted findings receive a failing regression test first, and the task checkbox is updated with evidence.
 
 ## File and Responsibility Map
 

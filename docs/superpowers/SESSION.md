@@ -65,8 +65,10 @@ One `ORDER.md` product entry per session.
 
 All of these are required:
 
-1. Run the focused commands named by the active task.
-2. Run `npm run check`.
+1. Run the focused commands named by the active task, then `npm run lint`.
+2. Run `npm run check` only when the commit closes a roadmap phase or an implementation plan
+   (decision D17, 2026-09-16). A plan step that names `npm run check` for an ordinary task commit is
+   satisfied by step 1 plus step 7.
 3. Obtain fresh-context review from an agent that did not author the code-producing task. For every
    accepted finding, add a failing regression test first, apply the smallest correction, rerun gates,
    and request another verdict.
@@ -74,7 +76,9 @@ All of these are required:
    finished plan only after its surviving constraints are in canonical architecture/program docs.
 5. Stage exact task-owned paths. Never use `git add -A`, `git add .`, or a wildcard.
 6. Confirm the commit contains only intended paths.
-7. Confirm CI is green on the exact commit before merge. Do not merge; the founder owns merging.
+7. Push the commit to `development` so CI runs all five jobs on it. Do not wait for green to start
+   the next task, but check the previous run before every new commit: a red run stops new commits
+   until it is fixed. Do not merge; the founder owns merging.
 
 ## 6. Report and stop
 
@@ -100,7 +104,8 @@ stop so the next entry begins with fresh context.
 ## Stop and ask
 
 - L1 license approval or any legal question.
-- Any live-machine change: agent config, launchd, a real Brain, or a real remote.
+- Any live-machine change: agent config, launchd, a real Brain, or a real remote. The one
+  exception is §5 step 7's push of a reviewed task commit to `development` (D17).
 - Spending model credits for observational evidence.
 - Spec approval.
 - Merge to the default branch.

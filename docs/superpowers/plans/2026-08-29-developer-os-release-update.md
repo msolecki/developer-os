@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Execute Tasks 1–9 first and commit their checkpoint. Then execute `docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md` completely. Resume this plan at Task 10 only after Spec 1's lifecycle coordinator, participant, compaction, Git, launchd, and uninstall contracts pass their checkpoint.
+- Execute Tasks 1–9 first and commit their checkpoint. Then execute `docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md` completely. Resume this plan at Task 10 only after Spec 1's lifecycle coordinator, participant, compaction, Git, launchd, and uninstall contracts pass their checkpoint. **Amended 2026-09-16 by roadmap decision D16:** Tasks 10–11 run after plan 1a (roadmap Phase 4b), provided they need nothing from Spec 1b, and Tasks 12–26 run after the founder cutover (roadmap Phase 8).
 - Tasks 1–9 may create shared files named by the Spec 1 plan (`packages/core/src/lifecycle/canonical-json.ts`, lifecycle ID codecs, and bootstrap allocator schemas). During Spec 1 execution those files are consumed/extended rather than redeclared; this is the approved split dependency, not a second implementation.
 - Package direction remains `core ← security ← platform-macos ← cli`, with the separate `apps/launcher` depending only on Core, Security, and platform-macos. Core imports no filesystem globals, HTTP, archive extraction, process, platform, adapter, or CLI implementation.
 - No command other than `developer-os update` makes an update network request. Rollback, init migration, fresh init, uninstall, config, Git, automation, Brain, adapter probes, and launcher selection make zero release-transport requests.
@@ -26,7 +26,7 @@
 - Every filesystem mutation follows `plan → backup → stage → validate → apply → verify → finalize`. Intent and an actual inode identity precede byte zero; recovery follows only persisted direction/cursors; third states preserve evidence as exit 6.
 - Trust high watermarks never roll back. Rollback never downloads, merges, forces, overwrites a post-update edit, lowers trust, or removes a path without exact manifest plus signed/retained inventory authority.
 - Tests use synthetic Ed25519 keys, release archives, homes, vaults, vendor state, and injected local transports. No test reads a live Brain, credential store, GitHub CLI config, release, vendor home, launcher installation, or founder data.
-- At each code-producing task commit, tick only that task's evidence-backed steps, update A11's exact progress sentence in `docs/superpowers/ORDER.md`, stage exact paths only, run the named focused command plus `npm run check`, and obtain a fresh reviewer verdict. Accepted findings receive a failing regression test before the smallest correction.
+- At each code-producing task commit, tick only that task's evidence-backed steps, update A11's exact progress sentence in `docs/superpowers/ORDER.md`, stage exact paths only, run the named focused command plus `npm run check`, and obtain a fresh reviewer verdict. **Amended 2026-09-16 by D17:** an ordinary task commit runs `npm run lint` instead of `npm run check` and is pushed for CI; `npm run check` runs at checkpoint close (`SESSION.md` §5). Accepted findings receive a failing regression test before the smallest correction.
 
 ## File and Responsibility Map
 
@@ -61,9 +61,8 @@ checkpoint landed as `050fc0d..c5022a7` and which roadmap Phase 0 closed on 2026
 Task 8 below is therefore no longer blocked by it. Closing the *checkpoint* as a whole is still open
 work and is tracked in `BACKLOG.md` §3 and `ORDER.md`, not here.
 
-Tasks 8 and 9 are roadmap Phase 3 and are the next work in this document. Per the global constraints
-above, they come before `plans/2026-08-28-developer-os-opt-in-surfaces.md`, and Tasks 10–26 resume
-only after that plan's checkpoint passes.
+Task 8 is complete (`55a06de`). Task 9 is roadmap Phase 3 and the next work in this document. It
+comes before plan 1a; Tasks 10–11 follow plan 1a and Tasks 12–26 follow the founder cutover (D16).
 
 
 ### Task 8: Map strict migratable V1 state into V2
@@ -207,9 +206,13 @@ git add apps/cli/src/bootstrap/executor.ts apps/cli/src/bootstrap/executor.test.
 git commit -m "feat: migrate installations to manifest v2"
 ```
 
-After this commit, execute `docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md` Tasks 1–24. Treat Task 1's shared canonical/lifecycle files as existing prerequisite outputs and extend/import them without changing the approved Spec 1 semantics. Do not start Task 10 below until the Spec 1 checkpoint is committed and green.
+After this commit, execute plan 1a (roadmap Phase 4: Spec 1 plan Tasks 1–7, 21 and 23, after the NEW-67 amendment). Treat Task 1's shared canonical/lifecycle files as existing prerequisite outputs and extend/import them without changing the approved Spec 1 semantics. Do not start Task 10 below until the plan 1a checkpoint is committed and green (D16, 2026-09-16).
 
 ## Checkpoint B — Release and update after Spec 1
+
+**Amended 2026-09-16 by D16:** Tasks 10–11 run as roadmap Phase 4b, after plan 1a and before A12,
+together with a new step that replaces the `unavailable_until_packaged_handoff` pin at
+`apps/cli/src/context.ts:765`. Tasks 12–26 run as roadmap Phase 8, after the founder cutover.
 
 ### Task 10: Add macOS launcher admission and the stable launcher application
 

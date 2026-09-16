@@ -14,15 +14,16 @@ its closure conditions.
 
 | Entry | Work still required | Blocked by |
 |---|---|---|
-| A11 · DOS-P7 | manifest/new-init handoff, Spec 1 implementation, remaining Spec 2 implementation | current |
+| A11 · DOS-P7 | Spec 2 Task 9, Spec 1a, Spec 2 Tasks 10–11 and the production V2 `init` wiring (D16) | current |
 | A12 · DOS-P10 | spec, plan, implementation for the instruction artifacts in `docs/migration/instruction-inventory.md` §1–§3 and §6 | A11 |
 | A12b · Brain workflows | spec, plan, implementation for the vault workflows in `docs/migration/instruction-inventory.md` §7 | A12 |
 | A13 · DOS-P11 | spec, plan, implementation for the 11 non-transcript hooks in `docs/migration/instruction-inventory.md` §4, plus session-start injection | A12b |
 | A14 · DOS-P12 | spec, plan, implementation for the 14 automation scripts in `docs/migration/instruction-inventory.md` §5 | A13 |
-| A15 · DOS-P8 | dedicated cutover plan and founder shadow migration | A14, L2 |
-| A16 · DOS-P9 | plan decision, beta, packaging, documentation, v1 publication | A15, L1, L2 |
+| A15 · DOS-P8 | dedicated cutover plan and founder shadow migration | A14 |
+| A11b · DOS-P7 remainder | Spec 2 Tasks 12–26 (update, rollback), then Spec 1b (git, launchd) (D16) | A15 |
+| A16 · DOS-P9 | plan decision, beta, packaging, documentation, v1 publication | A11b, L1, L2 |
 
-The phase order, the founder decisions of 2026-09-04 that fixed it, and the documents each phase
+The phase order, the founder decisions of 2026-09-04 and 2026-09-16 that fixed it, and the documents each phase
 expects are in `docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md`.
 
 ## 1. Open repository rows
@@ -241,14 +242,14 @@ Per code-producing commit:
 
 | Gate | Evidence |
 |---|---|
-| Repository validation | `npm run check` (`lint`, tests, build, `git diff --check`) |
+| Repository validation | `npm run lint` per commit; `npm run check` (`lint`, tests, build, `git diff --check`) at phase or plan close (D17) |
 | Focused verification | command named by the active plan step |
 | Fresh-context review | reviewer did not author the task |
 | Exact-path staging | explicit task-owned paths; never `git add -A`, `git add .`, or a wildcard |
 | Generated artifacts | clean regeneration diff for adapter/workflow changes |
 | Security | relevant sentinel, path, prompt-injection, transaction, and network suites |
 | Publication | triaged history scan, license, packaging, checksums, SBOM, clean-account install |
-| Remote delivery | CI green on the exact commit before merge |
+| Remote delivery | every task commit pushed to `development`; no new commit while its latest CI run is red (D17) |
 
 ## 8. Active contract index
 

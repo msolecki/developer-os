@@ -73,9 +73,19 @@ was standing in three places — `docs/architecture/foundation.md` §9,
 2026-09-07. NEW-53's residual is rewritten to the encoder cost and the headroom it implies rather
 than to durability.
 
+## Founder decisions of 2026-09-16
+
+| # | Decision | Amends |
+|---|---|---|
+| D16 | **Daily use before completeness.** The founder cuts over (Phase 10) as soon as the product replaces every legacy surface used daily; update, rollback, Git, launchd and the public release follow the cutover. Execution order: 3 → 4 → 4b → 5 → 5b → 6 → 7 → 10 → 8 → 9 → 11. Phases 4 and 4b stay ahead of the cutover because a production V2 `init` needs them (Phase 4b). Accepted costs: until Phase 8 a new build reaches the founder machine only by reinstalling; until Phase 9 the retired legacy scheduled jobs run by hand. | the phase order below; release plan global constraint on Task 10 and Task 9 Step 5; `ORDER.md` A11, A15, A16 and new A11b; L2 no longer blocks A15 |
+| D17 | **Per-commit gate: lint, focused tests, fresh review, push.** Every code-producing commit runs its focused commands and `npm run lint`, gets fresh-context review, and is pushed to `development` so CI runs all five jobs on it. A red run stops new commits until it is fixed; nobody waits for green to keep working. `npm run check` runs locally when a phase or plan closes. Reason: `npm test` alone takes ~2h50m locally, which capped the program at a few commits a day. The founder amended the matching global commit rule the same day. NEW-53 is not a lever here: `e436581` measured encoding at about a tenth of the bootstrap test's wall time. | `SESSION.md` §5, `BACKLOG.md` §7, both implementation plans' per-task `npm run check` clauses; D12's accepted trade (a red run visible on `development`) now applies per task |
+
 ## Phases
 
 Sizes are S/M/L complexity. "Gate" is what must be true before the next phase starts.
+
+**Execution order (D16):** 3 → 4 → 4b → 5 → 5b → 6 → 7 → 10 → 8 → 9 → 11. Phase numbers are
+identifiers, not positions.
 
 ### Phases 0-2 — closed
 
@@ -113,9 +123,9 @@ govern the open phases and stay.
 
 ### Phase 3 — Spec 2 Tasks 8–9: manifest V1→V2 migration and the V2 new-init handoff · L + L
 
-**The Spec 2 amendment is done.** All eight NEW-68 corrections were approved by the founder on 2026-09-08 and are marked "Amended 2026-09-08" in place; the proposal document is deleted and NEW-68 is closed. Three needed a decision and all three took the recommended resolution: the migration plan admits its own external shape over a disjoint digest domain, the two "exact maximum" gates are read against both the cardinality and byte bounds, and the unreachable `symlink` arm is retained as accepted residual 9 with an exact-set test. What remains here is baseline Tasks 8–9 from `plans/2026-08-29-developer-os-release-update.md`, whose steps now carry the amendment impact.
+**The Spec 2 amendment is done.** All eight NEW-68 corrections were approved by the founder on 2026-09-08 and are marked "Amended 2026-09-08" in place; the proposal document is deleted and NEW-68 is closed. Three needed a decision and all three took the recommended resolution: the migration plan admits its own external shape over a disjoint digest domain, the two "exact maximum" gates are read against both the cardinality and byte bounds, and the unreachable `symlink` arm is retained as accepted residual 9 with an exact-set test. Task 8 is committed (`55a06de`). What remains is baseline Task 9 from `plans/2026-08-29-developer-os-release-update.md`.
 
-Gate: `context.ts` no longer pins `bootstrap: unavailable_until_packaged_handoff`; a fresh `init` runs the V2 path in production.
+Gate, corrected 2026-09-16: `init` routes absent, V1, V2 and resumable state; V1→V2 migration and its recovery pass against an injected root-verified packaged release; every non-`init` command refuses V1 or non-terminal bootstrap state. The previous gate — `apps/cli/src/context.ts:765` unpinned and a fresh production `init` on V2 — cannot be met by Tasks 8–9. V2 `init` requires a root-verified packaged release (`apps/cli/src/commands/init.ts:855`), `admitRootVerifiedPackagedRelease` has no production caller, and the offline trust handoff that would supply one is Spec 2 Tasks 10–11. That gate moves to Phase 4b.
 
 ### Phase 4 — Spec 1a: configuration mutability and the lifecycle coordinator · L
 
@@ -124,6 +134,17 @@ Gate: `context.ts` no longer pins `bootstrap: unavailable_until_packaged_handoff
 - [ ] Execute plan 1a.
 
 Gate: `config get|set` shipped; coordinator recovery proven; uninstall drains leases.
+
+### Phase 4b — Spec 2 Tasks 10–11: launcher and offline trust, so V2 `init` runs in production · L
+
+Added by D16 and pulled forward from Phase 8: without the launcher's root-verified handoff there is no production V2 `init`, and Phases 5–7 install V2 artifacts.
+
+- [ ] Confirm from the plan text that Tasks 10–11 need nothing from Spec 1b; Task 10 consumes "Spec 1 lifecycle closure". If they do, stop and ask rather than pulling Spec 1b forward.
+- [ ] Add the missing plan step that replaces `bootstrap: { state: "unavailable_until_packaged_handoff" }` at `apps/cli/src/context.ts:765` with the admitted handoff. Spec 1 plan Task 21 modifies that file, but no step in either plan replaces the pin.
+- [ ] Stop and ask how the founder build is signed: which offline root key the launcher compiles in, and whether public releases reuse it.
+- [ ] Execute Tasks 10–11 and that step.
+
+Gate: on a disposable home, a fresh `init` and a V1→V2 migration both run the V2 path in production through the launcher.
 
 ### Phase 5 — A12: instruction artifacts · L
 
@@ -159,17 +180,21 @@ Scope: inventory §5, §6.
 
 - [ ] `developer-os import <path|dir>` (default inbox) → quarantine envelopes, source archived; `import --claude-memory`.
 - [ ] `project init|check|worktree`; `repo audit|bootstrap|secrets-scan` (opt-in, `gh`-authenticated, baseline as user data); `doctor` check `vendor-config`.
-- [ ] Automation job registry entries for Spec 1b: `import`, `ingest`, `brain reindex`, `brain lint`, `doctor`, `git sync`.
+- Automation job registry entries for `import`, `ingest`, `brain reindex`, `brain lint`, `doctor`, `git sync` — moved to Phase 9 by D16, because the registry is Spec 1b's.
 
 Gate: every inventoried script is a verb or a recorded refusal.
 
-### Phase 8 — Spec 2 Tasks 10–26: launcher, release trust, update, rollback · L
+### Phase 8 — Spec 2 Tasks 12–26: release transport, update, rollback · L
+
+Runs after Phase 10 (D16). Tasks 10–11 moved to Phase 4b.
 
 NEW-68's corrections landed on 2026-09-08 — `SafeReasonCodeV1` is bounded, the §5.3/§6.3 limit conflict is resolved, the exact-maximum gates are read against both bounds, and the `symlink` arm is accepted residual 9. Tasks 20 and 26 carry what that leaves them. Execute the baseline plan.
 
-Gate: `update` dry-run and apply, rollback, and the launcher proven on a disposable install.
+Gate: `update` dry-run and apply and rollback proven on a disposable install, then once on the founder machine.
 
 ### Phase 9 — Spec 1b: git and launchd · L
+
+Runs after Phase 8 (D16), and takes over the automation job registry bullet from Phase 7.
 
 Preconditions: a freshly measured `launchctl` row for the current macOS with a re-pinning rule (the pinned row no longer matches the development machine), the suite fits CI, Phase 7 jobs exist.
 
@@ -178,9 +203,10 @@ Gate: `git enable|sync|disable` and `automation enable|disable|status` proven; s
 ### Phase 10 — A15: founder cutover · L
 
 - [ ] Write `docs/migration/founder-cutover.md` from program plan Task 8, with these additions: the one-off vault migration on a copy using inventory §8, reviewed as a diff, then `brain lint` = 0 errors and `brain search` returning every note; `import` of the accumulated inbox in batches; installation over the live machine with the vault as Brain; product hooks replace the legacy guards (closes D3's accepted risk); legacy launchd jobs booted out, the legacy import block removed from the vendor instruction file, the legacy plugin removed from both vendors, dead symlinks and orphaned generated agents removed; rollback exercised once.
+- [ ] D16 additions: `update` does not exist yet, so prove that reinstalling a newer build preserves the Brain and every user-owned override; retire the legacy scheduled jobs and record how each is run by hand until Phase 9; leave Git and launchd disabled.
 - [ ] Execute it. Do not delete the legacy repositories; archive them after one stable cycle.
 
-Gate: one complete capture → review → ingest → search → update → uninstall cycle on the live machine; rollback exercised.
+Gate: one complete capture → review → ingest → search → reinstall → uninstall cycle on the live machine; rollback to the legacy runtime exercised.
 
 ### Phase 11 — A16: release · L
 
@@ -196,6 +222,9 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 | Legacy rules carry client references | D5 | redaction step in Phase 5 before defaults enter the repository |
 | Codex loads skills from its cache, not the hashed tree | Phase 5 | re-register on every update; assert loading, not listing |
 | Spec 1 as written contradicts approved retention and pins a stale `launchctl` row | Phase 4, 9 | NEW-67 amendment before any Spec 1 task |
+| Founder machine has no `update` or `update rollback` between cutover and Phase 8 | D16 | Phase 10 proves reinstall preserves the Brain and user overrides; cutover rollback restores the legacy runtime |
+| Legacy scheduled jobs retire at cutover; product automation arrives in Phase 9 | D16 | their verbs exist from Phase 7 and run by hand; revisit the order if manual runs lapse |
+| A regression reaches `development` before a full suite sees it | D17 | push every task commit; a red CI run stops new commits; full local `check` at every phase close |
 
 ## Documents this roadmap expects to exist
 
@@ -206,11 +235,12 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 | 2 | closed 2026-09-07/08; the plan it named was deleted at closure |
 | 3 | Spec 2 §6.2/§6.3 amendment; baseline plan Tasks 8–9 |
 | 4 | Spec 1 amendment; `plans/<date>-developer-os-opt-in-surfaces-1a.md` |
+| 4b | baseline plan Tasks 10–11 plus the production wiring step Phase 4b adds |
 | 5 | `specs/<date>-developer-os-instruction-artifacts-design.md` and its plan |
 | 5b | `specs/<date>-developer-os-brain-workflows-design.md` and its plan |
 | 6 | `specs/<date>-developer-os-hooks-design.md` and its plan |
 | 7 | `specs/<date>-developer-os-tooling-verbs-design.md` and its plan |
-| 8 | baseline plan Tasks 10–26 |
+| 8 | baseline plan Tasks 12–26 |
 | 9 | `plans/<date>-developer-os-opt-in-surfaces-1b.md` |
 | 10 | `docs/migration/founder-cutover.md` |
 | 11 | program plan Task 9 |
