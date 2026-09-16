@@ -249,7 +249,7 @@ Per code-producing commit:
 | Generated artifacts | clean regeneration diff for adapter/workflow changes |
 | Security | relevant sentinel, path, prompt-injection, transaction, and network suites |
 | Publication | triaged history scan, license, packaging, checksums, SBOM, clean-account install |
-| Remote delivery | every task commit pushed to `development`; no new commit while its latest CI run is red (D17) |
+| Remote delivery | every task commit pushed to `development` when no CI run is in progress there, otherwise with the next push; no new commit while the latest completed run is red (D17) |
 
 ## 8. Active contract index
 

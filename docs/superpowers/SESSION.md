@@ -76,9 +76,11 @@ All of these are required:
    finished plan only after its surviving constraints are in canonical architecture/program docs.
 5. Stage exact task-owned paths. Never use `git add -A`, `git add .`, or a wildcard.
 6. Confirm the commit contains only intended paths.
-7. Push the commit to `development` so CI runs all five jobs on it. Do not wait for green to start
-   the next task, but check the previous run before every new commit: a red run stops new commits
-   until it is fixed. Do not merge; the founder owns merging.
+7. Push the commit to `development` so CI runs all five jobs on it — but only when no run is in
+   progress there, because `check.yml` cancels a superseded run and a full run takes ~4 h. If one is
+   running, hold the commit and push it with the next once that run completes. Do not wait for
+   green to start the next task, but check the latest completed run before every new commit: a red
+   run stops new commits until it is fixed. Do not merge; the founder owns merging.
 
 ## 6. Report and stop
 
