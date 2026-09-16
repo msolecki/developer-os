@@ -189,6 +189,8 @@ Expected: FAIL until migration execution, `init` routing, recovery closure, and 
 
 Route `init` by strict absent/V1/V2/bootstrap-closure state: fresh V2, V1 migration, resume the one recorded envelope, or ordinary V2 init behavior. Reuse Task 7's executor with the migration plan arm; preserve pre-plan skeletons; compensate to byte-identical V1 before manifest publication; force-forward after V2 publication; then advance the derived retention table to `retained`, with the immutable plan and both journal slots durable throughout. Reject every non-`init` command over V1 or non-terminal bootstrap state.
 
+**Narrowed 2026-09-16 by founder decision.** The last sentence is read at the spec's scope. Every non-`init` command refuses while a non-terminal `fresh_v2_init` or `v1_to_v2` envelope exists (Spec 2 §3.1, §6.3), and this task ships the strict V2-handoff admission that Spec 1 commands will call, which refuses V1 (§6.4: "Spec 1 admission consumes that set and never migrates or repairs V1"). Existing Foundation commands keep working over a V1 manifest: until roadmap Phase 4b a production `init` can only create one (D16), so refusing V1 there would leave every production installation unusable.
+
 - [ ] **Step 4: Run focused and full gates, then obtain fresh review**
 
 Run: `npx vitest run --root apps/cli src/bootstrap/executor.test.ts src/bootstrap/migration.test.ts src/commands/init.test.ts`
