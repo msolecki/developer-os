@@ -198,6 +198,14 @@ class FreshBootstrapError extends Error {
   }
 }
 
+function resumableFreshPlan(evidence: BootstrapEvidenceAdmissionV1): FreshV2InitPlanV1 | null {
+  const plan = evidence.active?.plan ?? null;
+  if (plan?.operation === "v1_to_v2") {
+    throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "an interrupted manifest migration cannot be resumed by fresh V2 init");
+  }
+  return plan;
+}
+
 class FreshBootstrapInterruption extends FreshBootstrapError {
   constructor(point: FreshInitDeathPointV1) {
     super(EXIT_CODES.recoveryRequired, `synthetic bootstrap interruption at ${point}`);
@@ -625,7 +633,7 @@ export class BootstrapExecutor {
     request: FreshInitRequestV1,
     evidence: BootstrapEvidenceAdmissionV1,
   ): Promise<FreshInitPreviewV1> {
-    const existing = evidence.active?.plan ?? null;
+    const existing = resumableFreshPlan(evidence);
     if (existing !== null) {
         const source = existing.payloads
           .map((row) => row.source)
@@ -669,7 +677,7 @@ export class BootstrapExecutor {
     request: FreshInitRequestV1,
     evidence: BootstrapEvidenceAdmissionV1,
   ): Promise<FreshInitOutcomeV1> {
-    const existing = evidence.active?.plan ?? null;
+    const existing = resumableFreshPlan(evidence);
     if (existing !== null) return this.executeFreshInit(existing);
     const plan = await this.planFreshInit(request, evidence);
     return this.executeFreshInit(plan);

@@ -1,24 +1,51 @@
+import { createHash } from "node:crypto";
+import type { BigIntStats } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { deriveBootstrapRetentionLocations } from "@developer-os/core";
-import type { CanonicalAbsolutePathV1, UInt64DecimalV1 } from "@developer-os/core";
+import {
+  decodeCanonicalJson,
+  deriveBootstrapEnvelopePaths,
+  deriveBootstrapPayloadPath,
+  deriveBootstrapRetentionLocations,
+  encodeCanonicalJson,
+  EXIT_CODES,
+  validateBootstrapJournal,
+} from "@developer-os/core";
+import type {
+  BootstrapExecutionPlanV1,
+  BootstrapExternalShapeProjectionV1,
+  CanonicalAbsolutePathV1,
+  CanonicalJsonValue,
+  FreshV2InitIdV1,
+  LowerHexSha256,
+  ManifestMigrationIdV1,
+  SafeReasonCodeV1,
+  UInt64DecimalV1,
+  UtcTimestampV1,
+} from "@developer-os/core";
 
 import { runInit } from "../commands/init.js";
 import { runDoctorReport } from "../commands/doctor.js";
 import { createCommandFixture, firstRegularFile, inventoryDigest, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures, retainedTombstones } from "../commands/testing.js";
+import type { CommandFixture } from "../commands/testing.js";
+import { inspectPackagedRelease } from "../update/packaged-release.js";
 import {
   createBootstrapEvidenceInspectionRequest,
   NodeBootstrapEvidenceGuardedReader,
 } from "./context.js";
+import { planV1ToV2Migration } from "./migration.js";
 import type { BootstrapEvidenceGuardedEntryV1, BootstrapEvidenceGuardedReaderV1 } from "./report.js";
 import { inspectBootstrapEvidence, inspectBootstrapEvidenceAdmission } from "./report.js";
 import { projectBootstrapRetentionPostimage, projectRetainedDirectoryTreeOnce } from "./retention.js";
 
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
 const RETAINED_SECRET = "synthetic retained secret";
+const FRESH_ID = "fi_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as FreshV2InitIdV1;
+const MIGRATION_ID = "mm_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" as ManifestMigrationIdV1;
+const PLANNED_AT = "2026-09-08T00:00:00.000Z";
 
 afterEach(removeCommandFixtures);
 
@@ -361,4 +388,215 @@ describe("inspectBootstrapEvidence", () => {
 
     expect(largeArrayFindCalls).toBe(2);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
+function sha256(value: Uint8Array | string): LowerHexSha256 {
+  return createHash("sha256").update(value).digest("hex") as LowerHexSha256;
+}
+
+interface InterruptedEnvelope {
+  readonly fixture: CommandFixture;
+  readonly plan: BootstrapExecutionPlanV1;
+}
+
+async function freshInitInterruptedAfterInitialJournal(label: string): Promise<InterruptedEnvelope> {
+  const fixture = await createCommandFixture(label, {
+    bootstrapAvailable: true,
+    bootstrapInterruptAfter: "after_initial_state_sync",
+  });
+  await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+  expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+  const planName = (await nodeFs.readdir(fixture.paths.stateDir))
+    .find((name) => name.startsWith("fresh-v2-init.") && name.endsWith(".plan.json"));
+  if (planName === undefined) throw new Error("interrupted fresh init left no plan");
+  const bytes = await nodeFs.readFile(join(fixture.paths.stateDir, planName));
+  return { fixture, plan: decodeCanonicalJson(bytes, bytes.byteLength) as unknown as BootstrapExecutionPlanV1 };
+}
+
+function inodeOf(stats: BigIntStats): { readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1 } {
+  return { dev: String(stats.dev) as UInt64DecimalV1, ino: String(stats.ino) as UInt64DecimalV1 };
+}
+
+function externalShapeRow(role: string, path: string, stats: BigIntStats) {
+  return {
+    role,
+    pathHash: sha256(path),
+    kind: stats.isDirectory() ? "directory" : "regular_file",
+    ownerUid: Number(stats.uid),
+    mode: Number(stats.mode & 0o777n),
+    nlink: Number(stats.nlink),
+    size: String(stats.size),
+    ...inodeOf(stats),
+  };
+}
+
+async function migrationInterruptedAfterInitialJournal(label: string): Promise<InterruptedEnvelope> {
+  const fixture = await createCommandFixture(label, { bootstrapProductionLocks: true });
+  expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+  const released = await createCommandFixture(label, { root: fixture.root, bootstrapAvailable: true });
+  if (released.context.bootstrap?.state !== "available") throw new Error("packaged release fixture is unavailable");
+  const packaged = await inspectPackagedRelease(released.context.bootstrap.packagedRelease);
+  const { paths } = fixture;
+  const envelope = deriveBootstrapEnvelopePaths(paths.home as CanonicalAbsolutePathV1, "v1_to_v2", MIGRATION_ID);
+  const lockPath = join(paths.stateDir, ".lifecycle-bootstrap.lock") as CanonicalAbsolutePathV1;
+  for (const path of [lockPath, ...envelope.journalSlots]) {
+    await nodeFs.writeFile(path, "", { mode: 0o600, flag: "wx" });
+  }
+  const [home, state, lock, slot0, slot1] = await Promise.all(
+    [paths.home, paths.stateDir, lockPath, ...envelope.journalSlots].map((path) => nodeFs.lstat(path, { bigint: true })),
+  ) as [BigIntStats, BigIntStats, BigIntStats, BigIntStats, BigIntStats];
+  const plan = await planV1ToV2Migration({ paths, packaged, now: () => new Date(PLANNED_AT) }, {
+    id: MIGRATION_ID,
+    nonce: sha256("synthetic install nonce"),
+    bootstrapIdentity: {
+      path: lockPath,
+      ownerUid: Number(lock.uid),
+      mode: 0o600,
+      nlink: 1,
+      size: 0,
+      ...inodeOf(lock),
+    },
+    externalShape: {
+      entries: [
+        externalShapeRow("product_home", paths.home, home),
+        externalShapeRow("state_directory", paths.stateDir, state),
+        externalShapeRow("bootstrap_lock", lockPath, lock),
+      ],
+    } as unknown as BootstrapExternalShapeProjectionV1,
+    journalSlots: [inodeOf(slot0), inodeOf(slot1)],
+    admittedPreexistingPaths: [],
+  });
+  const planBytes = encodeCanonicalJson(plan as unknown as CanonicalJsonValue);
+  await nodeFs.writeFile(envelope.plan, planBytes, { mode: 0o600, flag: "wx" });
+  const journal = validateBootstrapJournal(plan, {
+    schemaVersion: 1,
+    id: plan.id,
+    planHash: sha256(planBytes),
+    slot: 0,
+    sequence: "0",
+    previousJournalHash: null,
+    phase: "planned",
+    direction: "forward",
+    nextPayload: 0,
+    payloadWriteState: { state: "idle" },
+    nextCreatedPath: 0,
+    nextFoundationParticipant: 0,
+    nextLaunchabilityPath: 0,
+    manifestCursor: 0,
+    compensationNext: null,
+    payloadRetentionPart: null,
+    terminalOutcome: null,
+    retentionNext: null,
+    createdAt: PLANNED_AT as UtcTimestampV1,
+    updatedAt: PLANNED_AT as UtcTimestampV1,
+  });
+  await nodeFs.writeFile(envelope.journalSlots[0], encodeCanonicalJson(journal as unknown as CanonicalJsonValue));
+  return { fixture, plan };
+}
+
+const BOOTSTRAP_OPERATIONS = [
+  { operation: "fresh_v2_init", id: FRESH_ID, interrupt: freshInitInterruptedAfterInitialJournal },
+  { operation: "v1_to_v2", id: MIGRATION_ID, interrupt: migrationInterruptedAfterInitialJournal },
+] as const;
+
+describe("bootstrap evidence over every bootstrap operation", () => {
+  it("enumerates both bootstrap operations", () => {
+    expect(BOOTSTRAP_OPERATIONS.map(({ operation }) => operation)).toStrictEqual(["fresh_v2_init", "v1_to_v2"]);
+  });
+
+  it.each(BOOTSTRAP_OPERATIONS)(
+    "admits an interrupted $operation envelope as active and attributes its staging and payload names to it",
+    async ({ operation, interrupt }) => {
+      const { fixture, plan } = await interrupt(`bootstrap-report-interrupted-${operation}`);
+      const stagingRoot = deriveBootstrapEnvelopePaths(fixture.paths.home as CanonicalAbsolutePathV1, plan.operation, plan.id).stagingRoot;
+      const stagedSource = join(stagingRoot, "staged-source");
+      const payload = plan.payloads[0]?.ref.path;
+      if (payload === undefined) throw new Error("plan stages no payload");
+      await nodeFs.mkdir(stagingRoot, { recursive: true, mode: 0o700 });
+      await nodeFs.writeFile(stagedSource, "synthetic staged bytes\n", { mode: 0o600 });
+      await nodeFs.writeFile(payload, "synthetic payload bytes\n", { mode: 0o600 });
+
+      const admission = await inspectBootstrapEvidenceAdmission(requestFor(fixture));
+
+      expect(admission.active?.plan).toMatchObject({ operation, id: plan.id });
+      expect(admission.report.ids).toStrictEqual([
+        expect.objectContaining({ id: plan.id, operation, status: "incomplete", terminalOutcome: null }),
+      ]);
+      expect(admission.retainedPaths).toEqual(expect.arrayContaining([payload, stagingRoot, stagedSource]));
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
+  const liveResidue = BOOTSTRAP_OPERATIONS.flatMap(({ operation, id }) => [
+    {
+      operation,
+      id,
+      residue: "staging subtree",
+      arrange: async (home: CanonicalAbsolutePathV1) => {
+        const stagingRoot = deriveBootstrapEnvelopePaths(home, operation, id).stagingRoot;
+        await nodeFs.mkdir(stagingRoot, { recursive: true, mode: 0o700 });
+        await nodeFs.writeFile(join(stagingRoot, "live-source"), "synthetic live residue\n", { mode: 0o600 });
+      },
+    },
+    {
+      operation,
+      id,
+      residue: "payload source",
+      arrange: async (home: CanonicalAbsolutePathV1) => {
+        const payload = deriveBootstrapPayloadPath(home, operation, id as unknown as SafeReasonCodeV1, 0);
+        await nodeFs.mkdir(dirname(payload), { recursive: true, mode: 0o700 });
+        await nodeFs.writeFile(payload, "synthetic live residue\n", { mode: 0o600 });
+      },
+    },
+  ]);
+
+  it("enumerates live residue for every bootstrap operation", () => {
+    for (const { operation } of BOOTSTRAP_OPERATIONS) {
+      expect(liveResidue.filter((candidate) => candidate.operation === operation).length).toBeGreaterThan(0);
+    }
+  });
+
+  it.each(liveResidue)("reports a $operation $residue without a plan as blocking unverified evidence", async ({ operation, id, arrange }) => {
+    const fixture = await createCommandFixture(`bootstrap-report-residue-${operation}`);
+    const home = fixture.paths.home as CanonicalAbsolutePathV1;
+    await arrange(home);
+
+    const admission = await inspectBootstrapEvidenceAdmission(requestFor(fixture));
+
+    expect(admission.report.ids).toStrictEqual([{
+      id,
+      status: "unverified",
+      operation,
+      terminalOutcome: null,
+      vaultPath: deriveBootstrapEnvelopePaths(home, operation, id).plan,
+      entryCount: expect.any(Number) as number,
+      regularFileBytes: expect.any(String) as string,
+    }]);
+    expect(admission.blocksNewIntent).toBe(true);
+  });
+
+  const unrecognisedNames = [
+    { scope: "state", name: "manifest-migration.not-a-bootstrap-id.plan.json" },
+    { scope: "state", name: `fresh-v2-init.${MIGRATION_ID}.plan.json` },
+    { scope: "state", name: `.manifest-migration.${FRESH_ID}.0000000000.payload` },
+    { scope: "staging", name: join("manifest-migration", FRESH_ID) },
+    { scope: "staging", name: join("fresh-v2-init", "not-a-bootstrap-id") },
+  ] as const;
+
+  it("enumerates unrecognised names in every bootstrap namespace scope", () => {
+    for (const scope of ["state", "staging"] as const) {
+      expect(unrecognisedNames.filter((candidate) => candidate.scope === scope).length).toBeGreaterThan(0);
+    }
+  });
+
+  it.each(unrecognisedNames)("refuses $name in the $scope namespace as recovery-required", async ({ scope, name }) => {
+    const fixture = await createCommandFixture("bootstrap-report-unrecognised");
+    const path = join(scope === "state" ? fixture.paths.stateDir : fixture.paths.stagingDir, name);
+    await nodeFs.mkdir(dirname(path), { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(path, "", { mode: 0o600 });
+
+    await expect(inspectBootstrapEvidenceAdmission(requestFor(fixture))).rejects.toMatchObject({
+      code: EXIT_CODES.recoveryRequired,
+    });
+  });
 });

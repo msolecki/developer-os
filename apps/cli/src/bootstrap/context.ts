@@ -1,6 +1,6 @@
 import { constants, type BigIntStats } from "node:fs";
 import * as nodeFs from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, join } from "node:path";
 
 import type { BootstrapRetentionPostimageV1, CanonicalAbsolutePathV1, UInt64DecimalV1 } from "@developer-os/core";
 
@@ -13,13 +13,13 @@ import type {
 } from "./report.js";
 import {
   admitBootstrapEvidencePlan,
+  bootstrapNamespaceFilter,
+  bootstrapStagingRoots,
+  isBootstrapNamespaceName,
   selectBootstrapEvidenceJournal,
 } from "./report.js";
 import { projectBootstrapRetentionPostimage } from "./retention.js";
 import type { PackagedReleaseSourceV1 } from "../update/packaged-release.js";
-
-const INITIAL_NAMESPACE = /^(?:fresh-v2-init\.fi_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:plan|journal\.[01])\.json|\.fresh-v2-init\.fi_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\..+|\.developer-os-retained\.(?:fi|mm)_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.[0-9]{10}\.tombstone|\.lifecycle-bootstrap\.lock)$/u;
-const FRESH_STAGING_ID = /^fi_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
 function currentUid(): bigint {
   const value = process.getuid?.();
@@ -89,7 +89,7 @@ export class NodeBootstrapEvidenceGuardedReader implements BootstrapEvidenceGuar
       if (!stats.isDirectory() || stats.isSymbolicLink()) {
         throw new Error("bootstrap evidence root changed shape");
       }
-      if (INITIAL_NAMESPACE.test(basename(root))) {
+      if (isBootstrapNamespaceName(basename(root))) {
         await this.inventoryTree(root, stats, found);
       } else {
         await this.inventoryDirectNamespaces(root, stats, found);
@@ -153,10 +153,8 @@ export class NodeBootstrapEvidenceGuardedReader implements BootstrapEvidenceGuar
     );
     try {
       const opened = await handle.stat({ bigint: true });
-      const isFreshStagingRoot = basename(root) === "fresh-v2-init" && basename(dirname(root)) === "staging";
-      const names = (await nodeFs.readdir(root)).filter((name) =>
-        isFreshStagingRoot ? FRESH_STAGING_ID.test(name) : INITIAL_NAMESPACE.test(name)
-      ).sort(compareUtf8);
+      const admitted = bootstrapNamespaceFilter(root);
+      const names = (await nodeFs.readdir(root)).filter(admitted).sort(compareUtf8);
       if (!sameIdentity(opened, expected)) throw new Error("bootstrap evidence root changed identity");
       for (const name of names) {
         const path = join(root, name);
@@ -169,9 +167,7 @@ export class NodeBootstrapEvidenceGuardedReader implements BootstrapEvidenceGuar
       }
       const linkedAfter = await nodeFs.lstat(root, { bigint: true });
       const descriptorAfter = await handle.stat({ bigint: true });
-      const namesAfter = (await nodeFs.readdir(root)).filter((name) =>
-        isFreshStagingRoot ? FRESH_STAGING_ID.test(name) : INITIAL_NAMESPACE.test(name)
-      ).sort(compareUtf8);
+      const namesAfter = (await nodeFs.readdir(root)).filter(admitted).sort(compareUtf8);
       if (
         !sameIdentity(linkedAfter, expected) || !sameIdentity(descriptorAfter, expected) ||
         names.length !== namesAfter.length || names.some((name, index) => name !== namesAfter[index])
@@ -231,7 +227,7 @@ export function createBootstrapEvidenceInspectionRequest(input: {
     stateDirectory: input.stateDirectory as CanonicalAbsolutePathV1,
     initialRoots: [...new Set([
       ...input.initialRoots,
-      join(input.productHome, "staging", "fresh-v2-init"),
+      ...bootstrapStagingRoots(input.productHome),
     ])].map((root) => root as CanonicalAbsolutePathV1),
     reader: input.reader ?? new NodeBootstrapEvidenceGuardedReader(),
     projectPostimage: input.projectPostimage ?? projectBootstrapRetentionPostimage,
@@ -247,10 +243,7 @@ export function createBootstrapEvidenceInspectionRequest(input: {
       });
     },
     validateSlots: (plan, slots) => {
-      const selected = selectBootstrapEvidenceJournal(
-        plan as Parameters<typeof selectBootstrapEvidenceJournal>[0],
-        slots,
-      );
+      const selected = selectBootstrapEvidenceJournal(plan, slots);
       if (selected === null) throw new Error("bootstrap journal slots are unbound");
       return selected;
     },

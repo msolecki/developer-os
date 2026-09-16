@@ -5,6 +5,7 @@ import {
   BOOTSTRAP_RETAINED_MAX_ENTRIES,
   BOOTSTRAP_RETAINED_MAX_IDS,
   BOOTSTRAP_RETAINED_MAX_REGULAR_BYTES,
+  BootstrapStateError,
   assertBootstrapRetentionCapacity,
   classifyBootstrapEvidence,
   decodeCanonicalJson,
@@ -53,12 +54,25 @@ const MAX_JOURNAL_BYTES = 1_048_576;
 const MAX_CREATED_PATHS = 1_000_000;
 const MAX_LAUNCHABILITY_PATHS = 200_006;
 const MAX_FOUNDATION_PARTICIPANTS = 512;
-const FRESH_ID = "fi_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
-const RETAINED_ID = "(?:fi|mm)_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
-const FRESH_PLAN = new RegExp(`^fresh-v2-init\\.(${FRESH_ID})\\.plan\\.json$`, "u");
-const FRESH_SLOT = new RegExp(`^fresh-v2-init\\.(${FRESH_ID})\\.journal\\.([01])\\.json$`, "u");
-const RETAINED = new RegExp(`^\\.developer-os-retained\\.(${RETAINED_ID})\\.([0-9]{10})\\.tombstone$`, "u");
+const BOOTSTRAP_ID = "(?:fi|mm)_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+const BOOTSTRAP_OPERATIONS = [
+  { operation: "fresh_v2_init", prefix: "fresh-v2-init" },
+  { operation: "v1_to_v2", prefix: "manifest-migration" },
+] as const;
+const OPERATION_PREFIX = `(${BOOTSTRAP_OPERATIONS.map(({ prefix }) => prefix).join("|")})`;
+const OPERATION_NAME = new RegExp(`^(\\.?)${OPERATION_PREFIX}\\.(${BOOTSTRAP_ID})\\..+$`, "u");
+const OPERATION_NAMESPACE = new RegExp(`^(?:\\.?${OPERATION_PREFIX}\\.|\\.lifecycle-bootstrap\\.lock$)`, "u");
+const RETAINED = new RegExp(`^\\.developer-os-retained\\.(${BOOTSTRAP_ID})\\.([0-9]{10})\\.tombstone$`, "u");
 const encoder = new TextEncoder();
+
+type BootstrapOperationV1 = BootstrapExecutionPlanV1["operation"];
+type BootstrapIdV1 = BootstrapExecutionPlanV1["id"];
+
+interface BootstrapNameV1 {
+  readonly operation: BootstrapOperationV1;
+  readonly id: BootstrapIdV1;
+  readonly role: "plan" | "journal_slot" | "attempt_file" | "staging_root" | "retained";
+}
 
 export interface BootstrapEvidenceReportV1 {
   readonly schemaVersion: 1;
@@ -110,7 +124,7 @@ export interface BootstrapEvidenceAdmissionV1 {
   readonly report: BootstrapEvidenceReportV1;
   /** Internal identity-bound authority. Public summary/status values never substitute for this. */
   readonly active: {
-    readonly plan: FreshV2InitPlanV1;
+    readonly plan: BootstrapExecutionPlanV1;
     /** Null when the plan is published but no journal slot has been written yet. */
     readonly journal: BootstrapJournalSelectionV1 | null;
   } | null;
@@ -139,10 +153,65 @@ export interface BootstrapEvidenceAdmissionV1 {
   readonly blocksNewIntent: boolean;
   /** Test-facing only: the exact retained-table derivation input/output per verified envelope. */
   readonly retainedEnvelopes: readonly {
-    readonly plan: FreshV2InitPlanV1;
+    readonly plan: BootstrapExecutionPlanV1;
     readonly terminalJournal: BootstrapJournalRecordV1;
     readonly evidence: BootstrapRetentionEvidenceProjectionV1;
   }[];
+}
+
+export function isBootstrapNamespaceName(name: string): boolean {
+  return OPERATION_NAMESPACE.test(name) || RETAINED.test(name);
+}
+
+export function bootstrapStagingRoots(productHome: string): readonly string[] {
+  return BOOTSTRAP_OPERATIONS.map(({ prefix }) => join(productHome, "staging", prefix));
+}
+
+export function bootstrapNamespaceFilter(directory: string): (name: string) => boolean {
+  if (!bootstrapStagingRoots(dirname(dirname(directory))).includes(directory)) return isBootstrapNamespaceName;
+  // Staging tombstones are reached through their plan's retention locations; admitting them here lists their descendants as retained roots.
+  return (name) => !RETAINED.test(name);
+}
+
+function bootstrapEnvelope(operation: BootstrapOperationV1, id: string, productHome = "/") {
+  try {
+    return deriveBootstrapEnvelopePaths(productHome as CanonicalAbsolutePathV1, operation, id as BootstrapIdV1);
+  } catch {
+    return null;
+  }
+}
+
+function operationOfId(id: string): BootstrapOperationV1 | null {
+  return BOOTSTRAP_OPERATIONS.find(({ operation }) => bootstrapEnvelope(operation, id) !== null)?.operation ?? null;
+}
+
+function operationOfPrefix(prefix: string | undefined): BootstrapOperationV1 | null {
+  return BOOTSTRAP_OPERATIONS.find((candidate) => candidate.prefix === prefix)?.operation ?? null;
+}
+
+function bootstrapNameOf(path: string): BootstrapNameV1 | null {
+  const name = basename(path);
+  const retainedId = RETAINED.exec(name)?.[1];
+  const retainedOperation = retainedId === undefined ? null : operationOfId(retainedId);
+  if (retainedOperation !== null) return { operation: retainedOperation, id: retainedId as BootstrapIdV1, role: "retained" };
+  const parent = dirname(path);
+  const stagingOperation = basename(dirname(parent)) === "staging" ? operationOfPrefix(basename(parent)) : null;
+  if (stagingOperation !== null) {
+    return bootstrapEnvelope(stagingOperation, name, dirname(dirname(parent)))?.stagingRoot === path
+      ? { operation: stagingOperation, id: name as BootstrapIdV1, role: "staging_root" }
+      : null;
+  }
+  const match = OPERATION_NAME.exec(name);
+  const operation = operationOfPrefix(match?.[2]);
+  const id = match?.[3];
+  const envelope = operation === null || id === undefined ? null : bootstrapEnvelope(operation, id);
+  if (operation === null || envelope === null) return null;
+  const role = match?.[1] === "."
+    ? "attempt_file"
+    : name === basename(envelope.plan)
+      ? "plan"
+      : envelope.journalSlots.some((slot) => name === basename(slot)) ? "journal_slot" : null;
+  return role === null ? null : { operation, id: id as BootstrapIdV1, role };
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -187,7 +256,7 @@ function memoizePostimageProjector(
 }
 
 function manifestPlanAdmission(
-  plan: FreshV2InitPlanV1,
+  plan: BootstrapExecutionPlanV1,
   productHome: CanonicalAbsolutePathV1,
 ): ManifestStatePlanAdmissionContextV1 {
   const forwardIds = plan.foundationParticipants
@@ -200,7 +269,8 @@ function manifestPlanAdmission(
     foundationTransactionIds: forwardIds,
     externalEffects: [],
     admitParticipant: (envelope, participantId) =>
-      envelope.kind === "fresh_v2_init" && envelope.id === plan.id && participantId === `mf_${plan.id}`
+      envelope.kind === (plan.operation === "fresh_v2_init" ? "fresh_v2_init" : "v1_migration") &&
+        envelope.id === plan.id && participantId === `mf_${plan.id}`
         ? participantId as ReturnType<ManifestStatePlanAdmissionContextV1["admitParticipant"]>
         : "mf_refused" as ReturnType<ManifestStatePlanAdmissionContextV1["admitParticipant"]>,
     admitExternalEffect: () => "refused",
@@ -212,7 +282,7 @@ function manifestPlanAdmission(
 }
 
 function planAdmission(
-  plan: FreshV2InitPlanV1,
+  plan: BootstrapExecutionPlanV1,
   productHome: CanonicalAbsolutePathV1,
   stateDirectory: CanonicalAbsolutePathV1,
 ): BootstrapPlanAdmissionContextV1 {
@@ -221,7 +291,7 @@ function planAdmission(
     productHome,
     stateRoot: stateDirectory,
     productStagingRoot: join(productHome, "staging") as CanonicalAbsolutePathV1,
-    operation: "fresh_v2_init",
+    operation: plan.operation,
     id: plan.id,
     bootstrapIdentity: plan.bootstrapIdentity,
     externalShape: null,
@@ -260,37 +330,52 @@ function planAdmission(
   };
 }
 
+interface BootstrapEvidencePlanInputV1<Id extends BootstrapIdV1> {
+  readonly productHome: CanonicalAbsolutePathV1;
+  readonly stateDirectory: CanonicalAbsolutePathV1;
+  readonly expectedId: Id;
+}
+
 /** The one structural/closure admission used by both reporting and executor recovery. */
 export function admitBootstrapEvidencePlan(
   value: unknown,
-  input: {
-    readonly productHome: CanonicalAbsolutePathV1;
-    readonly stateDirectory: CanonicalAbsolutePathV1;
-    readonly expectedId: FreshV2InitIdV1;
-  },
-): FreshV2InitPlanV1 {
+  input: BootstrapEvidencePlanInputV1<FreshV2InitIdV1>,
+): FreshV2InitPlanV1;
+export function admitBootstrapEvidencePlan(
+  value: unknown,
+  input: BootstrapEvidencePlanInputV1<BootstrapIdV1>,
+): BootstrapExecutionPlanV1;
+export function admitBootstrapEvidencePlan(
+  value: unknown,
+  input: BootstrapEvidencePlanInputV1<BootstrapIdV1>,
+): BootstrapExecutionPlanV1 {
   const candidate = record(value);
   const payloads = boundedArray(candidate?.payloads, 1, BOOTSTRAP_RETAINED_MAX_ENTRIES);
   const createdPaths = boundedArray(candidate?.createdPaths, 1, MAX_CREATED_PATHS);
   const participants = boundedArray(candidate?.foundationParticipants, 2, MAX_FOUNDATION_PARTICIPANTS);
   const launchabilityPaths = boundedArray(candidate?.launchabilityPaths, 7, MAX_LAUNCHABILITY_PATHS);
   const slots = boundedArray(candidate?.journalSlots, 2, 2);
-  const envelope = deriveBootstrapEnvelopePaths(input.productHome, "fresh_v2_init", input.expectedId);
+  const operation = operationOfId(input.expectedId);
+  if (operation === null) throw new Error("persisted bootstrap plan failed bounded structural admission");
+  const envelope = deriveBootstrapEnvelopePaths(input.productHome, operation, input.expectedId);
+  const declaredPaths = operation === "fresh_v2_init"
+    ? { plan: candidate?.planPath, stagingRoot: candidate?.stagingRoot }
+    : record(candidate?.paths);
   if (
-    candidate === null || candidate.schemaVersion !== 1 || candidate.operation !== "fresh_v2_init" ||
-    candidate.id !== input.expectedId || candidate.planPath !== envelope.plan ||
-    candidate.stagingRoot !== envelope.stagingRoot || candidate.maximumPlanBytes !== MAX_PLAN_BYTES ||
+    candidate === null || candidate.schemaVersion !== 1 || candidate.operation !== operation ||
+    candidate.id !== input.expectedId || declaredPaths?.plan !== envelope.plan ||
+    declaredPaths.stagingRoot !== envelope.stagingRoot || candidate.maximumPlanBytes !== MAX_PLAN_BYTES ||
     candidate.maximumJournalBytes !== MAX_JOURNAL_BYTES || payloads === null || createdPaths === null ||
     participants === null || launchabilityPaths === null || slots === null ||
     slots.some((slot, ordinal) => record(slot)?.path !== envelope.journalSlots[ordinal]) ||
     record(candidate.bootstrapIdentity)?.path !== join(input.stateDirectory, ".lifecycle-bootstrap.lock")
   ) throw new Error("persisted bootstrap plan failed bounded structural admission");
-  const freshCandidate = candidate as unknown as FreshV2InitPlanV1;
+  const planCandidate = candidate as unknown as BootstrapExecutionPlanV1;
   const admitted = validateBootstrapPlan(
-    freshCandidate,
-    planAdmission(freshCandidate, input.productHome, input.stateDirectory),
+    planCandidate,
+    planAdmission(planCandidate, input.productHome, input.stateDirectory),
   );
-  if (admitted.operation !== "fresh_v2_init") throw new Error("persisted bootstrap plan changed operation");
+  if (admitted.operation !== operation) throw new Error("persisted bootstrap plan changed operation");
   return admitted;
 }
 
@@ -316,7 +401,7 @@ function terminalJournal(current: BootstrapJournalRecordV1): BootstrapJournalRec
 }
 
 export function selectBootstrapEvidenceJournal(
-  plan: FreshV2InitPlanV1,
+  plan: BootstrapExecutionPlanV1,
   values: readonly [unknown, unknown],
 ): BootstrapJournalSelectionV1 | null {
   const admitted = values.flatMap((value) => {
@@ -366,7 +451,7 @@ async function guardedValue<T>(
 /** Complete retained-table projection shared by reporting and executor recovery. */
 export async function buildBootstrapRetentionEvidence(
   request: BootstrapEvidenceInspectionRequestV1,
-  plan: FreshV2InitPlanV1,
+  plan: BootstrapExecutionPlanV1,
   terminal: BootstrapJournalRecordV1,
 ): Promise<BootstrapRetentionEvidenceProjectionV1> {
   const locations = deriveBootstrapRetentionLocations(plan, terminal);
@@ -429,7 +514,7 @@ export async function buildBootstrapRetentionEvidence(
       const planned = plannedPaths[ordinal];
       if (planned === undefined) throw new Error("creation evidence cursor escaped plan");
       const evidencePath = deriveBootstrapCreationEvidencePaths(
-        request.productHome, "fresh_v2_init", plan.id, scope, ordinal,
+        request.productHome, plan.operation, plan.id, scope, ordinal,
         "00000000-0000-4000-8000-000000000000",
       ).evidence;
       createdPathEvidence.push(await guardedValue<CreatedPathEvidenceV1>(
@@ -534,14 +619,7 @@ function identityMatches(
 }
 
 function idForPath(path: string): string | null {
-  const stagingName = basename(path);
-  const stagingId = new RegExp(`^(${FRESH_ID})$`, "u").exec(stagingName)?.[1];
-  if (
-    stagingId !== undefined && basename(dirname(path)) === "fresh-v2-init" &&
-    basename(dirname(dirname(path))) === "staging"
-  ) return stagingId;
-  return FRESH_PLAN.exec(basename(path))?.[1] ?? FRESH_SLOT.exec(basename(path))?.[1] ?? RETAINED.exec(basename(path))?.[1] ??
-    new RegExp(`\\.fresh-v2-init\\.(${FRESH_ID})\\.`, "u").exec(basename(path))?.[1] ?? null;
+  return bootstrapNameOf(path)?.id ?? null;
 }
 
 function sumEntries(entries: Iterable<BootstrapEvidenceGuardedEntryV1>): { readonly entries: number; readonly bytes: bigint } {
@@ -572,7 +650,7 @@ function sumEntries(entries: Iterable<BootstrapEvidenceGuardedEntryV1>): { reado
  */
 async function exactV2Handoff(
   request: BootstrapEvidenceInspectionRequestV1,
-  plan: FreshV2InitPlanV1,
+  plan: BootstrapExecutionPlanV1,
 ): Promise<boolean> {
   const manifestPath = plan.manifest.manifestPath;
   try {
@@ -600,7 +678,7 @@ async function exactV2Handoff(
 
 async function exactReusableGlobalLock(
   request: BootstrapEvidenceInspectionRequestV1,
-  plan: FreshV2InitPlanV1,
+  plan: BootstrapExecutionPlanV1,
   selection: BootstrapJournalSelectionV1,
   evidence: BootstrapRetentionEvidenceProjectionV1 | null,
 ): Promise<BootstrapEvidenceAdmissionV1["reusableGlobalLock"]> {
@@ -624,7 +702,7 @@ async function exactReusableGlobalLock(
 
 async function exactRestoredBase(
   request: BootstrapEvidenceInspectionRequestV1,
-  plan: FreshV2InitPlanV1,
+  plan: BootstrapExecutionPlanV1,
   locations: ReturnType<typeof deriveBootstrapRetentionLocations>,
   retainedByPath: ReadonlyMap<CanonicalAbsolutePathV1, BootstrapEvidenceGuardedEntryV1>,
   confinedUnboundEntries: boolean,
@@ -702,20 +780,23 @@ async function inspectPlan(
   readonly blocksNewIntent: boolean;
   readonly verifiedEnvelope: BootstrapEvidenceAdmissionV1["retainedEnvelopes"][number] | null;
 }> {
-  const match = FRESH_PLAN.exec(basename(planEntry.path));
-  const id = match?.[1] as FreshV2InitIdV1 | undefined;
-  if (id === undefined) throw new Error("bootstrap evidence plan filename is malformed");
-  let plan: FreshV2InitPlanV1;
+  const planName = bootstrapNameOf(planEntry.path);
+  if (planName?.role !== "plan") throw new Error("bootstrap evidence plan filename is malformed");
+  const { id, operation } = planName;
+  let plan: BootstrapExecutionPlanV1;
   try {
     const value = decodeCanonicalJson(await request.reader.readRegularFile(planEntry, MAX_PLAN_BYTES), MAX_PLAN_BYTES);
-    plan = request.validatePlan(value) as FreshV2InitPlanV1;
-    if (plan.id !== id || plan.planPath !== planEntry.path) throw new Error("bootstrap plan identity is unbound");
+    plan = request.validatePlan(value);
+    if (
+      plan.id !== id || plan.operation !== operation ||
+      deriveBootstrapEnvelopePaths(request.productHome, operation, id).plan !== planEntry.path
+    ) throw new Error("bootstrap plan identity is unbound");
   } catch {
     return {
       summary: {
         id,
         status: "unverified",
-        operation: "fresh_v2_init",
+        operation,
         terminalOutcome: null,
         vaultPath: planEntry.path,
         entryCount: 1,
@@ -739,11 +820,11 @@ async function inspectPlan(
   }
   if (
     slotEntries.some((candidate) => candidate === null || candidate.kind !== "regular_file") ||
-    slotEntries.some((candidate, ordinal) => !identityMatches(candidate as BootstrapEvidenceGuardedEntryV1, plan.journalSlots[ordinal] as FreshV2InitPlanV1["journalSlots"][number]))
+    slotEntries.some((candidate, ordinal) => !identityMatches(candidate as BootstrapEvidenceGuardedEntryV1, plan.journalSlots[ordinal] as BootstrapExecutionPlanV1["journalSlots"][number]))
   ) {
     const counted = sumEntries([planEntry, ...initial]);
     return {
-      summary: { id, status: "unverified", operation: "fresh_v2_init", terminalOutcome: null, vaultPath: plan.planPath, entryCount: counted.entries, regularFileBytes: counted.bytes.toString() as UInt64DecimalV1 },
+      summary: { id, status: "unverified", operation, terminalOutcome: null, vaultPath: planEntry.path, entryCount: counted.entries, regularFileBytes: counted.bytes.toString() as UInt64DecimalV1 },
       active: null,
       retained: [planEntry, ...initial],
       roots: [planEntry.path, ...initial.map((entry) => entry.path)],
@@ -789,7 +870,7 @@ async function inspectPlan(
      */
     if (slotValues.every((candidate) => candidate === null)) {
       return {
-        summary: { id, status: "incomplete", operation: "fresh_v2_init", terminalOutcome: null, vaultPath: plan.planPath, entryCount: counted.entries, regularFileBytes: counted.bytes.toString() as UInt64DecimalV1 },
+        summary: { id, status: "incomplete", operation, terminalOutcome: null, vaultPath: planEntry.path, entryCount: counted.entries, regularFileBytes: counted.bytes.toString() as UInt64DecimalV1 },
         active: { plan, journal: null },
         retained: [planEntry, ...initial],
         roots: [planEntry.path, ...initial.map((entry) => entry.path)],
@@ -808,7 +889,7 @@ async function inspectPlan(
      * refusal named.
      */
     return {
-      summary: { id, status: "unverified", operation: "fresh_v2_init", terminalOutcome: null, vaultPath: plan.planPath, entryCount: counted.entries, regularFileBytes: counted.bytes.toString() as UInt64DecimalV1 },
+      summary: { id, status: "unverified", operation, terminalOutcome: null, vaultPath: planEntry.path, entryCount: counted.entries, regularFileBytes: counted.bytes.toString() as UInt64DecimalV1 },
       active: null,
       retained: [planEntry, ...initial],
       roots: [planEntry.path, ...initial.map((entry) => entry.path)],
@@ -843,7 +924,7 @@ async function inspectPlan(
     if (selection.current.phase !== "retained" && selection.current.phase !== "retaining") {
       const counted = sumEntries([planEntry, ...initial]);
       return {
-        summary: { id, status: "unverified", operation: "fresh_v2_init", terminalOutcome: null, vaultPath: plan.planPath, entryCount: counted.entries, regularFileBytes: counted.bytes.toString() as UInt64DecimalV1 },
+        summary: { id, status: "unverified", operation, terminalOutcome: null, vaultPath: planEntry.path, entryCount: counted.entries, regularFileBytes: counted.bytes.toString() as UInt64DecimalV1 },
         active: null,
         retained: [planEntry, ...initial],
         roots: [planEntry.path, ...initial.map((entry) => entry.path)],
@@ -935,7 +1016,7 @@ async function inspectPlan(
             ordinal,
             path: deriveBootstrapCreationEvidencePaths(
               request.productHome,
-              "fresh_v2_init",
+              plan.operation,
               plan.id,
               scope,
               ordinal,
@@ -975,7 +1056,7 @@ async function inspectPlan(
     altered = 1;
   }
   const exactPaths = new Set([
-    plan.planPath,
+    planEntry.path,
     ...plan.journalSlots.map((slot) => slot.path),
     ...locations.flatMap((location) => [location.sourcePath, location.tombstonePath]),
   ]);
@@ -994,8 +1075,8 @@ async function inspectPlan(
   const counted = sumEntries(retained);
   const summary = classifyBootstrapEvidence({
     id,
-    planPath: plan.planPath,
-    operation: "fresh_v2_init",
+    planPath: planEntry.path,
+    operation,
     journal: selection,
     terminalOutcome: selection.current.terminalOutcome,
     expectedRows: locations,
@@ -1070,7 +1151,12 @@ export async function inspectBootstrapEvidenceAdmission(
   };
   const initial = (await request.reader.inventoryExactNamespaces(request.initialRoots))
     .filter((candidate) => basename(candidate.path) !== ".lifecycle-bootstrap.lock");
-  const plans = initial.filter((candidate) => candidate.kind === "regular_file" && FRESH_PLAN.test(basename(candidate.path)));
+  const initialRoots = new Set<string>(request.initialRoots);
+  if (initial.some((candidate) => initialRoots.has(dirname(candidate.path)) && bootstrapNameOf(candidate.path) === null)) {
+    throw new BootstrapStateError("bootstrap namespace holds a name no bootstrap operation recognises");
+  }
+  const plans = initial.filter((candidate) =>
+    candidate.kind === "regular_file" && bootstrapNameOf(candidate.path)?.role === "plan");
   const ids = new Set(initial.map((candidate) => idForPath(candidate.path)).filter((id): id is string => id !== null));
   const initialEntriesForId = (rawId: string): readonly BootstrapEvidenceGuardedEntryV1[] => {
     const roots = initial.filter((candidate) => idForPath(candidate.path) === rawId);
@@ -1103,8 +1189,9 @@ export async function inspectBootstrapEvidenceAdmission(
     const entries = entriesForId(rawId);
     const confined = entries.every((candidate) => {
       const name = basename(candidate.path);
-      const isPlan = FRESH_PLAN.test(name);
-      const isSlot = FRESH_SLOT.test(name);
+      const role = bootstrapNameOf(candidate.path)?.role;
+      const isPlan = role === "plan";
+      const isSlot = role === "journal_slot";
       const isTombstone = RETAINED.test(name);
       const insideTombstone = entries.some((root) =>
         RETAINED.test(basename(root.path)) && candidate.path.startsWith(`${root.path}/`));
@@ -1121,18 +1208,16 @@ export async function inspectBootstrapEvidenceAdmission(
       return false;
     });
     if (!confined) unverifiedBlocked = true;
-    if (reportedIds.has(rawId as FreshV2InitIdV1)) continue;
+    if (reportedIds.has(rawId as BootstrapIdV1)) continue;
     const counted = sumEntries(entries);
-    const envelope = rawId.startsWith("fi_")
-      ? deriveBootstrapEnvelopePaths(request.productHome, "fresh_v2_init", rawId as FreshV2InitIdV1)
-      : null;
-    if (envelope !== null) {
+    const operation = operationOfId(rawId);
+    if (operation !== null) {
       summaries.push({
-        id: rawId as FreshV2InitIdV1,
+        id: rawId as BootstrapIdV1,
         status: "unverified",
-        operation: "fresh_v2_init",
+        operation,
         terminalOutcome: null,
-        vaultPath: envelope.plan,
+        vaultPath: deriveBootstrapEnvelopePaths(request.productHome, operation, rawId as BootstrapIdV1).plan,
         entryCount: counted.entries,
         regularFileBytes: counted.bytes.toString() as UInt64DecimalV1,
       });
