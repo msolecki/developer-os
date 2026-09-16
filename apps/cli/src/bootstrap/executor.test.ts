@@ -166,6 +166,49 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     ]);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("creates exactly the V2-only state and log paths in a fresh plan", async () => {
+    const fixture = await createCommandFixture("bootstrap-v2-only-paths", {
+      bootstrapAvailable: true,
+    });
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    if (!result.ok) throw new Error(JSON.stringify({ result, trace: fixture.bootstrapTrace.slice(-30) }));
+    const plan = (await persistedPlan(fixture)).value;
+    const created = [plan.createdPaths, plan.launchabilityPaths]
+      .flatMap((rows) => rows as Array<{ readonly path: string }>)
+      .map((row) => row.path);
+    const childrenOf = (root: string): readonly string[] =>
+      created.filter((path) => dirname(path) === root).toSorted();
+    const jobs = ["brain-reindex", "brain-lint", "doctor", "git-sync"];
+    const expectedState = [
+      ".lifecycle.lock",
+      "lifecycle-install-nonce",
+      "lifecycle-id-allocator.json",
+      "git-sync.json",
+      "uninstalling.json",
+      "update-rollback.json",
+      "update-executor.json",
+      "transactions",
+      "lifecycle-journals",
+      "git-effect-journals",
+      "launchd-effect-journals",
+      "rollback",
+      "active-release.json",
+      "release-trust.json",
+      ...jobs.flatMap((job) => [`automation-${job}.json`, `.automation-${job}.lock`]),
+    ].map((name) => join(fixture.paths.stateDir, name)).toSorted();
+    const expectedLogs = jobs
+      .flatMap((job) => ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"].map((slot) => `automation-${job}.${slot}.json`))
+      .map((name) => join(fixture.paths.logsDir, name))
+      .toSorted();
+
+    expect(expectedState.length).toBeGreaterThan(0);
+    expect(expectedLogs.length).toBeGreaterThan(0);
+    expect(childrenOf(fixture.paths.stateDir)).toStrictEqual(expectedState);
+    expect(childrenOf(fixture.paths.logsDir)).toStrictEqual(expectedLogs);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("inspects bootstrap evidence exactly three times for a fresh, uninterrupted init", async () => {
     const fixture = await createCommandFixture("bootstrap-evidence-inspection-count", {
       bootstrapAvailable: true,

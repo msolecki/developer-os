@@ -163,14 +163,18 @@ export interface ManifestMigrationRequestV1 {
   readonly manifestBytes: Uint8Array;
   readonly manifestIdentity: ManifestMigrationIdentityV1;
   readonly foundationState: "complete" | "incomplete";
-  /** V2-only product directories this migration creates when they are absent. */
+  /** V2-only product directories this migration always creates; reserved against every V1 claim. */
   readonly productDirectories: readonly CanonicalAbsolutePathV1[];
-  /** V2-only owner runtime reservations this migration creates as empty files. */
+  /** V2-only owner runtime reservations this migration creates as empty files; reserved alike. */
   readonly productReservations: readonly CanonicalAbsolutePathV1[];
+  /** Foundation product directories this migration creates only when absent; never reserved. */
+  readonly foundationDirectories: readonly CanonicalAbsolutePathV1[];
   readonly packaged: ManifestMigrationPackagedReleaseV1;
   readonly availableBytes: UInt64DecimalV1;
   readonly nonce: LowerHexSha256;
   readonly plannedAt: UtcTimestampV1;
+  /** A no-follow observation of one V2-only path; any entry at it is `present`. */
+  readonly observeReservedPath: (path: CanonicalAbsolutePathV1) => Promise<"absent" | "present">;
   readonly read: (input: ManifestMigrationReadRequestV1) => Promise<ManifestMigrationReadV1>;
 }
 
@@ -308,7 +312,8 @@ function migrationPaths(request: ManifestMigrationRequestV1): MigrationPathsV1 {
  * claim, compared under the folded spelling so a declared, NFC, or case-folded
  * V1 claim refuses alike. The activation record is here and in no created
  * partition: Spec 1 lifecycle apply is its only creator, so a V1 claim on it is
- * a refusal rather than an adoption.
+ * a refusal rather than an adoption. Foundation's `staging` and
+ * `state/transactions` are absent on purpose: every V1 install already has them.
  */
 function reservedV2Paths(
   request: ManifestMigrationRequestV1,
@@ -321,9 +326,7 @@ function reservedV2Paths(
     paths.activationRecord,
     paths.activeRelease,
     paths.releaseTrust,
-    paths.transactions,
     paths.releaseRoot,
-    paths.stagingRoot,
     ...request.productDirectories,
     ...request.productReservations,
   ];
@@ -346,7 +349,7 @@ function projectedBytes(request: ManifestMigrationRequestV1, artifacts: number):
   );
 }
 
-function admitMigration(request: ManifestMigrationRequestV1): AdmittedMigrationV1 {
+async function admitMigration(request: ManifestMigrationRequestV1): Promise<AdmittedMigrationV1> {
   const manifest = validateMigratableManifestV1(request.manifestBytes, request.manifestAdmission);
   if (request.foundationState !== "complete") refuse();
   const paths = migrationPaths(request);
@@ -354,10 +357,14 @@ function admitMigration(request: ManifestMigrationRequestV1): AdmittedMigrationV
     request.productDirectories.some((path) => path === paths.activationRecord) ||
     request.productReservations.some((path) => path === paths.activationRecord)
   ) refuse();
-  const reserved = reservedV2Paths(request, paths).map(fold);
+  const reservedPaths = reservedV2Paths(request, paths);
+  const reserved = reservedPaths.map(fold);
   for (const artifact of manifest.artifacts) {
     const claim = fold(artifact.path);
     if (reserved.some((path) => claim === path || claim.startsWith(`${path}/`))) refuse();
+  }
+  for (const path of reservedPaths) {
+    if (await request.observeReservedPath(path) !== "absent") refuse();
   }
   if (projectedBytes(request, manifest.artifacts.length) > BigInt(request.availableBytes)) refuse();
   return { manifest, v1ManifestHash: rawHash(request.manifestBytes), paths };
@@ -914,7 +921,7 @@ function admitAggregate(
 export async function planManifestMigration(
   request: ManifestMigrationRequestV1,
 ): Promise<ManifestMigrationPlanV1> {
-  const admitted = admitMigration(request);
+  const admitted = await admitMigration(request);
   const preimages = await readAuthorities(request, admitted);
   const paths = admitted.paths;
   const builder = new MigrationPlanBuilder(request, admitted);
@@ -940,8 +947,10 @@ export async function planManifestMigration(
     `${paths.stagingRoot}/transactions` as CanonicalAbsolutePathV1,
     ...foundation.stagingDirectories,
   ];
-  const directories = [...request.productDirectories, paths.transactions, ...stagingChain]
-    .filter((path) => !preexisting.has(path));
+  const directories = [
+    ...request.productDirectories,
+    ...[...request.foundationDirectories, paths.transactions, ...stagingChain].filter((path) => !preexisting.has(path)),
+  ];
   const ordinaryRows: readonly PlannedRowV1[] = ([
     ...new Map(directories.map((path): readonly [string, PlannedRowV1] => [path, { kind: "directory", path }])).values(),
     { kind: "file", path: paths.installNonce, payload: nonceRef },

@@ -7,6 +7,7 @@ import { join } from "node:path";
 import {
   EXIT_CODES,
   planManifestMigration,
+  validateJournal,
   validateManifestStatePlan,
 } from "@developer-os/core";
 import type {
@@ -30,12 +31,13 @@ import type {
 
 import type { AdmittedPackagedReleaseV1 } from "../update/packaged-release.js";
 import { createCanonicalPathEvidence, createOwnerPathAdmission } from "./admission.js";
+import { v2OnlyProductPaths } from "./reservations.js";
 
 const MAX_MANIFEST_BYTES = 67_108_864;
 const MAX_PREIMAGE_BYTES = 67_108_864;
-const AUTOMATION_JOBS = ["brain-reindex", "brain-lint", "doctor", "git-sync"] as const;
-const AUTOMATION_LOG_SLOTS = 10;
-const TERMINAL_TRANSACTION_PHASES = new Set(["finalized", "rolled_back"]);
+const MAX_FOUNDATION_JOURNAL_BYTES = 1_048_576;
+const FOUNDATION_JOURNAL_NAME = /^([A-Za-z0-9_-][A-Za-z0-9._-]*)\.json$/u;
+const FOUNDATION_LOCK_NAME = /^\.([A-Za-z0-9._-]+)\.lock$/u;
 
 class ManifestMigrationCompositionError extends Error {
   constructor(
@@ -60,39 +62,6 @@ export interface ManifestMigrationEnvelopeRequestV1 {
   readonly externalShape: BootstrapExternalShapeProjectionV1;
   readonly journalSlots: readonly [ManifestMigrationIdentityV1, ManifestMigrationIdentityV1];
   readonly admittedPreexistingPaths: readonly CanonicalAbsolutePathV1[];
-}
-
-/**
- * The product-owned paths a V2 installation reserves and a V1 installation may
- * not already claim. The Spec 1 activation record is deliberately absent: only
- * lifecycle apply creates it, so Core reserves it against collision and no
- * composition may schedule it for creation.
- */
-export function migrationReservedPaths(paths: RuntimePaths): {
-  readonly directories: readonly string[];
-  readonly reservations: readonly string[];
-} {
-  return {
-    directories: [
-      join(paths.stateDir, "lifecycle-journals"),
-      join(paths.stateDir, "git-effect-journals"),
-      join(paths.stateDir, "launchd-effect-journals"),
-      join(paths.stateDir, "rollback"),
-    ],
-    reservations: [
-      join(paths.stateDir, "git-sync.json"),
-      join(paths.stateDir, "uninstalling.json"),
-      join(paths.stateDir, "update-rollback.json"),
-      join(paths.stateDir, "update-executor.json"),
-      ...AUTOMATION_JOBS.flatMap((job) => [
-        join(paths.stateDir, `automation-${job}.json`),
-        join(paths.stateDir, `.automation-${job}.lock`),
-        ...Array.from({ length: AUTOMATION_LOG_SLOTS }, (_, ordinal) =>
-          join(paths.logsDir, `automation-${job}.${String(ordinal)}.json`),
-        ),
-      ]),
-    ],
-  };
 }
 
 function uid(): number {
@@ -149,6 +118,17 @@ async function guardReadOwnedFile(path: string, maximumBytes: number): Promise<{
   }
 }
 
+async function isTerminalFoundationJournal(path: string, id: string): Promise<boolean> {
+  const { bytes } = await guardReadOwnedFile(path, MAX_FOUNDATION_JOURNAL_BYTES);
+  try {
+    const journal = validateJournal(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as unknown);
+    return journal.id === id && (journal.phase === "finalized" || journal.phase === "rolled_back");
+  } catch {
+    return false;
+  }
+}
+
+/** `TransactionStore` leaves only `<id>.json` and `.<id>.lock`; any other name is an interrupted write. */
 async function foundationState(stateDir: string): Promise<"complete" | "incomplete"> {
   const root = join(stateDir, "transactions");
   let names: readonly string[];
@@ -158,15 +138,18 @@ async function foundationState(stateDir: string): Promise<"complete" | "incomple
     if (isMissing(error)) return "complete";
     throw error;
   }
+  const terminal = new Set<string>();
   for (const name of names) {
-    if (!name.endsWith(".json")) return "incomplete";
-    let phase: unknown;
-    try {
-      phase = (JSON.parse(await nodeFs.readFile(join(root, name), "utf8")) as { phase?: unknown }).phase;
-    } catch {
-      return "incomplete";
-    }
-    if (typeof phase !== "string" || !TERMINAL_TRANSACTION_PHASES.has(phase)) return "incomplete";
+    const id = FOUNDATION_JOURNAL_NAME.exec(name)?.[1];
+    if (id === undefined) continue;
+    if (!await isTerminalFoundationJournal(join(root, name), id)) return "incomplete";
+    terminal.add(id);
+  }
+  for (const name of names) {
+    if (FOUNDATION_JOURNAL_NAME.test(name)) continue;
+    const id = FOUNDATION_LOCK_NAME.exec(name)?.[1];
+    if (id === undefined || !terminal.has(id)) return "incomplete";
+    await guardReadOwnedFile(join(root, name), 0);
   }
   return "complete";
 }
@@ -239,7 +222,7 @@ export async function planV1ToV2Migration(
   request: ManifestMigrationEnvelopeRequestV1,
 ): Promise<ManifestMigrationPlanV1> {
   const { paths, packaged } = composition;
-  const reserved = migrationReservedPaths(paths);
+  const reserved = v2OnlyProductPaths(paths);
   const manifest = await guardReadOwnedFile(paths.manifestFile, MAX_MANIFEST_BYTES);
   const stagingRoot = paths.stagingDir;
   const parents = await observeDirectories([
@@ -252,9 +235,7 @@ export async function planV1ToV2Migration(
     join(stagingRoot, "transactions"),
     join(stagingRoot, "manifest-migration", request.id),
     join(paths.stateDir, "transactions"),
-    ...reserved.directories,
   ]);
-  const present = new Set(parents.map((parent) => parent.path as string));
   const plannedAt = composition.now().toISOString();
 
   return planManifestMigration({
@@ -312,11 +293,9 @@ export async function planV1ToV2Migration(
     manifestBytes: manifest.bytes,
     manifestIdentity: identityOf(manifest.stats),
     foundationState: await foundationState(paths.stateDir),
-    productDirectories: [
-      ...reserved.directories,
-      ...(present.has(paths.logsDir) ? [] : [paths.logsDir]),
-    ] as CanonicalAbsolutePathV1[],
+    productDirectories: reserved.directories as CanonicalAbsolutePathV1[],
     productReservations: reserved.reservations as CanonicalAbsolutePathV1[],
+    foundationDirectories: [paths.logsDir as CanonicalAbsolutePathV1],
     packaged: {
       packageRoot: packaged.packageRoot as CanonicalAbsolutePathV1,
       packageRootDev: packaged.packageRootDev as UInt64DecimalV1,
@@ -337,6 +316,7 @@ export async function planV1ToV2Migration(
     availableBytes: await availableBytes(paths.home),
     nonce: request.nonce,
     plannedAt: plannedAt as UtcTimestampV1,
+    observeReservedPath: async (path) => await lstatOptional(path) === null ? "absent" : "present",
     read: readAuthority,
   });
 }

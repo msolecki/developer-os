@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { ManifestMigrationNotFeasibleError } from "@developer-os/core";
+import { EXIT_CODES, ManifestMigrationNotFeasibleError } from "@developer-os/core";
 import type {
   BootstrapExternalShapeProjectionV1,
   CanonicalAbsolutePathV1,
@@ -16,9 +16,12 @@ import type {
   UInt64DecimalV1,
 } from "@developer-os/core";
 
+import { runInit } from "../commands/init.js";
+import { createCommandFixture, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../commands/testing.js";
 import { admitRootVerifiedPackagedRelease, inspectPackagedRelease } from "../update/packaged-release.js";
 import type { AdmittedPackagedReleaseV1 } from "../update/packaged-release.js";
-import { migrationReservedPaths, planV1ToV2Migration } from "./migration.js";
+import { planV1ToV2Migration } from "./migration.js";
+import { v2OnlyProductPaths } from "./reservations.js";
 
 const migrationId = "mm_123e4567-e89b-42d3-a456-426614174000" as ManifestMigrationIdV1;
 const encoder = new TextEncoder();
@@ -28,6 +31,7 @@ afterEach(async () => {
   for (const root of roots.splice(0)) {
     await nodeFs.rm(root, { recursive: true, force: true });
   }
+  await removeCommandFixtures();
 });
 
 function digest(bytes: Uint8Array | string): LowerHexSha256 {
@@ -174,7 +178,10 @@ async function createInstallation(
   await nodeFs.writeFile(join(paths.home, "schemas", "plan.schema.json"), schemaBytes, { mode: 0o600 });
   await nodeFs.writeFile(join(paths.backupsDir, "config.toml"), backupBytes, { mode: 0o600 });
   await nodeFs.writeFile(paths.manifestFile, manifest(paths), { mode: 0o600 });
+  return migrationEnvelope(root, paths);
+}
 
+async function migrationEnvelope(root: string, paths: RuntimePaths): Promise<Installation> {
   const lockPath = join(paths.stateDir, ".lifecycle-bootstrap.lock");
   await nodeFs.writeFile(lockPath, new Uint8Array(), { mode: 0o600 });
   const slotPaths = [0, 1].map((slot) =>
@@ -220,16 +227,142 @@ function planRequest(installation: Installation) {
   };
 }
 
+const PLANNED_AT = () => new Date("2026-09-08T00:00:00.000Z");
+
+function foundationJournal(id: string, phase: string): string {
+  return `${JSON.stringify({
+    schemaVersion: 1,
+    id,
+    kind: "init",
+    phase,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    mutations: [],
+  })}\n`;
+}
+
+async function writeTransactionEntries(
+  installation: Installation,
+  entries: Readonly<Record<string, string>>,
+): Promise<string> {
+  const root = join(installation.paths.stateDir, "transactions");
+  await nodeFs.mkdir(root, { recursive: true, mode: 0o700 });
+  for (const [name, content] of Object.entries(entries)) {
+    await nodeFs.writeFile(join(root, name), content, { mode: 0o600 });
+  }
+  return root;
+}
+
+function planInstallation(installation: Installation) {
+  return planV1ToV2Migration(
+    { paths: installation.paths, packaged: installation.packaged, now: PLANNED_AT },
+    planRequest(installation),
+  );
+}
+
+describe("V1 Foundation transaction admission", () => {
+  it("admits terminal Foundation journals beside the lock files their transactions leave", async () => {
+    const installation = await createInstallation("foundation-locks");
+    await writeTransactionEntries(installation, {
+      "tx_fixture_001.json": foundationJournal("tx_fixture_001", "finalized"),
+      ".tx_fixture_001.lock": "",
+      "tx_fixture_002.json": foundationJournal("tx_fixture_002", "rolled_back"),
+      ".tx_fixture_002.lock": "",
+    });
+
+    await expect(planInstallation(installation)).resolves.toMatchObject({ operation: "v1_to_v2" });
+  });
+
+  const refusedFoundationEntries = [
+    { name: "a journal stopped before a terminal phase", entries: { "tx_a.json": foundationJournal("tx_a", "applied"), ".tx_a.lock": "" } },
+    { name: "a malformed journal that carries a terminal phase", entries: { "tx_a.json": `${JSON.stringify({ phase: "finalized" })}\n` } },
+    { name: "a terminal journal whose id disagrees with its name", entries: { "tx_a.json": foundationJournal("tx_b", "finalized") } },
+    { name: "a lock file without its journal", entries: { "tx_a.json": foundationJournal("tx_a", "finalized"), ".tx_b.lock": "" } },
+    { name: "a temporary journal write left behind", entries: { "tx_a.json": foundationJournal("tx_a", "finalized"), ".tx_a.0f1e.json.tmp": "" } },
+    { name: "an unknown entry", entries: { "notes.txt": "" } },
+  ] as const;
+
+  it("enumerates a non-empty refused Foundation entry set", () => {
+    expect(refusedFoundationEntries.length).toBeGreaterThan(0);
+  });
+
+  it.each(refusedFoundationEntries)("refuses $name as an incomplete Foundation transaction", async ({ entries }) => {
+    const installation = await createInstallation("foundation-refused");
+    await writeTransactionEntries(installation, entries);
+
+    await expect(planInstallation(installation)).rejects.toThrow(ManifestMigrationNotFeasibleError);
+  });
+
+  it("refuses a symlinked Foundation journal through the guarded read", async () => {
+    const installation = await createInstallation("foundation-symlink");
+    const root = await writeTransactionEntries(installation, {});
+    const target = join(installation.paths.home, "elsewhere.json");
+    await nodeFs.writeFile(target, foundationJournal("tx_a", "finalized"), { mode: 0o600 });
+    await nodeFs.symlink(target, join(root, "tx_a.json"));
+
+    await expect(planInstallation(installation)).rejects.toMatchObject({ code: EXIT_CODES.securityRefusal });
+  });
+
+  it("refuses a Foundation journal above the journal byte bound before decoding it", async () => {
+    const installation = await createInstallation("foundation-oversize");
+    const journal = foundationJournal("tx_a", "finalized");
+    await writeTransactionEntries(installation, {
+      "tx_a.json": `${journal.slice(0, -1)}${" ".repeat(1_048_576)}\n`,
+    });
+
+    await expect(planInstallation(installation)).rejects.toMatchObject({ code: EXIT_CODES.securityRefusal });
+  });
+});
+
 describe("V1 to V2 migration composition over a real installation", () => {
-  it("reserves every V2-only product path the migration owns", async () => {
-    const installation = await createInstallation("reserved");
-    const reserved = migrationReservedPaths(installation.paths);
+  it("admits the installation the shipped V1 init leaves behind", async () => {
+    const fixture = await createCommandFixture("migration-shipped-v1", { bootstrapProductionLocks: true });
+    const initialized = await runInit(fixture.context, { dryRun: false, assumeYes: true });
+    expect(initialized.ok && initialized.data.schemaVersion).toBe(1);
+
+    const transactionEntries = await nodeFs.readdir(join(fixture.paths.stateDir, "transactions"));
+    expect(transactionEntries.filter((name) => /^\..+\.lock$/u.test(name)).length).toBeGreaterThan(0);
+    expect(transactionEntries.filter((name) => name.endsWith(".json")).length).toBeGreaterThan(0);
+    const v1 = JSON.parse(await nodeFs.readFile(fixture.paths.manifestFile, "utf8")) as {
+      readonly schemaVersion: number;
+      readonly artifacts: readonly { readonly path: string }[];
+    };
+    expect(v1.schemaVersion).toBe(1);
+    expect(v1.artifacts.map((artifact) => artifact.path)).toContain(fixture.paths.stagingDir);
+
+    const installation = await migrationEnvelope(fixture.root, fixture.paths);
+    const plan = await planV1ToV2Migration(
+      { paths: installation.paths, packaged: installation.packaged, now: PLANNED_AT },
+      planRequest(installation),
+    );
+
+    expect(plan.operation).toBe("v1_to_v2");
+    expect(plan.v1ManifestHash).toBe(digest(await nodeFs.readFile(fixture.paths.manifestFile)));
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("reserves exactly the V2-only product directories and runtime reservations", () => {
+    const paths = runtimePaths("/product", "/brain");
+    const reserved = v2OnlyProductPaths(paths);
 
     expect(reserved.directories.length).toBeGreaterThan(0);
     expect(reserved.reservations.length).toBeGreaterThan(0);
-    expect(reserved.reservations).toContain(join(installation.paths.stateDir, "update-executor.json"));
-    expect(reserved.reservations).not.toContain(join(installation.paths.stateDir, "lifecycle-activation.json"));
-    expect(reserved.directories).toContain(join(installation.paths.stateDir, "lifecycle-journals"));
+    expect(reserved.directories).toStrictEqual([
+      "/product/state/lifecycle-journals",
+      "/product/state/git-effect-journals",
+      "/product/state/launchd-effect-journals",
+      "/product/state/rollback",
+    ]);
+    expect(reserved.reservations).toStrictEqual([
+      "/product/state/git-sync.json",
+      "/product/state/uninstalling.json",
+      "/product/state/update-rollback.json",
+      "/product/state/update-executor.json",
+      ...["brain-reindex", "brain-lint", "doctor", "git-sync"].flatMap((job) => [
+        `/product/state/automation-${job}.json`,
+        `/product/state/.automation-${job}.lock`,
+        ...["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"].map((slot) => `/product/logs/automation-${job}.${slot}.json`),
+      ]),
+    ]);
   });
 
   it("derives a complete migration plan from the guarded V1 installation", async () => {
@@ -252,6 +385,39 @@ describe("V1 to V2 migration composition over a real installation", () => {
     ]);
     expect(plan.createdPaths.map((row) => row.path)).toContain(installation.paths.logsDir);
     expect(plan.payloads.filter((row) => row.source.kind === "guarded_migration_preimage")).toHaveLength(4);
+  });
+
+  const v2OnlyLeaves = [
+    {
+      name: "a file at the Spec 1 activation record",
+      arrange: (paths: RuntimePaths) => nodeFs.writeFile(join(paths.stateDir, "lifecycle-activation.json"), "{}\n", { mode: 0o600 }),
+    },
+    {
+      name: "an owner-only directory at the V2-only rollback root",
+      arrange: (paths: RuntimePaths) => nodeFs.mkdir(join(paths.stateDir, "rollback"), { mode: 0o700 }),
+    },
+    {
+      name: "a dangling symlink at the V2-only release root",
+      arrange: (paths: RuntimePaths) => nodeFs.symlink(join(paths.home, "missing"), join(paths.home, "releases")),
+    },
+    {
+      name: "an empty file at a V2-only automation log reservation",
+      arrange: async (paths: RuntimePaths) => {
+        await nodeFs.mkdir(paths.logsDir, { mode: 0o700 });
+        await nodeFs.writeFile(join(paths.logsDir, "automation-doctor.0.json"), "", { mode: 0o600 });
+      },
+    },
+  ] as const;
+
+  it("enumerates a non-empty V2-only leaf set", () => {
+    expect(v2OnlyLeaves.length).toBeGreaterThan(0);
+  });
+
+  it.each(v2OnlyLeaves)("refuses $name instead of adopting it", async ({ arrange }) => {
+    const installation = await createInstallation("v2-only-leaf");
+    await arrange(installation.paths);
+
+    await expect(planInstallation(installation)).rejects.toThrow(ManifestMigrationNotFeasibleError);
   });
 
   it("refuses a V1 installation that claims the Spec 1 activation record", async () => {

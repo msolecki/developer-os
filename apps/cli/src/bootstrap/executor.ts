@@ -59,6 +59,7 @@ import type { RenameNoReplace, RenameSameParentNoReplace } from "@developer-os/p
 
 import { createCanonicalPathEvidence, createOwnerPathAdmission } from "./admission.js";
 import { BootstrapJournalStore } from "./journal-store.js";
+import { v2OnlyProductPaths } from "./reservations.js";
 import {
   BootstrapRetainer,
   projectBootstrapRetentionPostimage,
@@ -1130,10 +1131,7 @@ export class BootstrapExecutor {
       join(paths.stagingDir, "fresh-v2-init"),
       join(paths.stagingDir, "transactions"),
       join(paths.stateDir, "transactions"),
-      join(paths.stateDir, "lifecycle-journals"),
-      join(paths.stateDir, "git-effect-journals"),
-      join(paths.stateDir, "launchd-effect-journals"),
-      join(paths.stateDir, "rollback"),
+      ...v2OnlyProductPaths(paths).directories,
     ];
   }
 
@@ -1544,23 +1542,12 @@ export class BootstrapExecutor {
   }
 
   private runtimeReservationPaths(): readonly string[] {
-    const { stateDir, logsDir } = this.#dependencies.paths;
-    const jobs = ["brain-reindex", "brain-lint", "doctor", "git-sync"] as const;
+    const paths = this.#dependencies.paths;
     return [
-      join(stateDir, ".lifecycle.lock"),
-      join(stateDir, "lifecycle-install-nonce"),
-      join(stateDir, "lifecycle-id-allocator.json"),
-      join(stateDir, "git-sync.json"),
-      join(stateDir, "uninstalling.json"),
-      join(stateDir, "update-rollback.json"),
-      join(stateDir, "update-executor.json"),
-      ...jobs.flatMap((job) => [
-        join(stateDir, `automation-${job}.json`),
-        join(stateDir, `.automation-${job}.lock`),
-        ...Array.from({ length: 10 }, (_, ordinal) =>
-          join(logsDir, `automation-${job}.${String(ordinal)}.json`),
-        ),
-      ]),
+      join(paths.stateDir, ".lifecycle.lock"),
+      join(paths.stateDir, "lifecycle-install-nonce"),
+      join(paths.stateDir, "lifecycle-id-allocator.json"),
+      ...v2OnlyProductPaths(paths).reservations,
     ];
   }
 
@@ -1822,10 +1809,7 @@ export class BootstrapExecutor {
       join(paths.stagingDir, "transactions"),
       join(paths.stagingDir, "transactions", forwardId),
       join(paths.stateDir, "transactions"),
-      join(paths.stateDir, "lifecycle-journals"),
-      join(paths.stateDir, "git-effect-journals"),
-      join(paths.stateDir, "launchd-effect-journals"),
-      join(paths.stateDir, "rollback"),
+      ...v2OnlyProductPaths(paths).directories,
       ...(input.brainStats === null
         ? [input.request.brainPath, ...BRAIN_TEMPLATE_DIRECTORIES.map((path) => join(input.request.brainPath, path))]
         : []),

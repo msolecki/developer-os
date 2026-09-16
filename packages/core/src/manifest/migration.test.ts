@@ -187,6 +187,7 @@ function packagedRelease(): ManifestMigrationPackagedReleaseV1 {
 interface Scenario {
   readonly request: ManifestMigrationRequestV1;
   readonly reads: () => number;
+  readonly events: readonly string[];
 }
 
 function scenario(
@@ -196,9 +197,12 @@ function scenario(
     foundationState: "complete" | "incomplete";
     productDirectories: CanonicalAbsolutePathV1[];
     productReservations: CanonicalAbsolutePathV1[];
+    foundationDirectories: CanonicalAbsolutePathV1[];
     availableBytes: UInt64DecimalV1;
     managed: Map<string, ManifestMigrationReadV1>;
     backups: Map<string, ManifestMigrationReadV1>;
+    preexistingParents: ManifestMigrationRequestV1["preexistingParents"][number][];
+    presentLeaves: Set<string>;
   }) => void = () => undefined,
 ): Scenario {
   const managed = new Map<string, ManifestMigrationReadV1>([
@@ -213,14 +217,21 @@ function scenario(
     artifacts: legacyArtifacts(),
     manifestBytes: null as Uint8Array | null,
     foundationState: "complete" as "complete" | "incomplete",
-    productDirectories: ["/product/logs", "/product/state/lifecycle-journals", "/product/state/rollback"] as CanonicalAbsolutePathV1[],
+    productDirectories: ["/product/state/lifecycle-journals", "/product/state/rollback"] as CanonicalAbsolutePathV1[],
     productReservations: ["/product/state/update-rollback.json", "/product/state/update-executor.json"] as CanonicalAbsolutePathV1[],
+    foundationDirectories: ["/product/logs"] as CanonicalAbsolutePathV1[],
     availableBytes: "1073741824" as UInt64DecimalV1,
     managed,
     backups,
+    preexistingParents: [
+      { path: productHome, dev: "1" as UInt64DecimalV1, ino: "2" as UInt64DecimalV1 },
+      { path: stateRoot, dev: "1" as UInt64DecimalV1, ino: "3" as UInt64DecimalV1 },
+    ],
+    presentLeaves: new Set<string>(),
   };
   override(draft);
   let reads = 0;
+  const events: string[] = [];
   const request: ManifestMigrationRequestV1 = {
     id: migrationId,
     admission: {
@@ -239,10 +250,7 @@ function scenario(
     bootstrapIdentity,
     externalShape: externalProjection(),
     admittedPreexistingPaths: [],
-    preexistingParents: [
-      { path: productHome, dev: "1" as UInt64DecimalV1, ino: "2" as UInt64DecimalV1 },
-      { path: stateRoot, dev: "1" as UInt64DecimalV1, ino: "3" as UInt64DecimalV1 },
-    ],
+    preexistingParents: draft.preexistingParents,
     journalSlots: [
       { dev: "1" as UInt64DecimalV1, ino: "11" as UInt64DecimalV1 },
       { dev: "1" as UInt64DecimalV1, ino: "12" as UInt64DecimalV1 },
@@ -253,17 +261,23 @@ function scenario(
     foundationState: draft.foundationState,
     productDirectories: draft.productDirectories,
     productReservations: draft.productReservations,
+    foundationDirectories: draft.foundationDirectories,
     packaged: packagedRelease(),
     availableBytes: draft.availableBytes,
     nonce: hash("install nonce"),
     plannedAt,
+    observeReservedPath: (path: CanonicalAbsolutePathV1) => {
+      events.push(`observe:${path}`);
+      return Promise.resolve(draft.presentLeaves.has(path) ? "present" : "absent");
+    },
     read: (input: ManifestMigrationReadRequestV1): Promise<ManifestMigrationReadV1> => {
       reads += 1;
+      events.push(`read:${input.path}`);
       const table = input.authority === "managed" ? draft.managed : draft.backups;
       return Promise.resolve(table.get(input.path) ?? { kind: "unavailable" });
     },
   };
-  return { request, reads: () => reads };
+  return { request, reads: () => reads, events };
 }
 
 function migratable(artifacts: readonly ManagedArtifactV1[] = legacyArtifacts()) {
@@ -473,6 +487,41 @@ describe("V1 migration admission refuses before any managed byte", () => {
       }),
     },
     {
+      name: "a leaf at the Spec 1 activation record",
+      error: ManifestMigrationNotFeasibleError,
+      arrange: () => scenario((draft) => {
+        draft.presentLeaves.add("/product/state/lifecycle-activation.json");
+      }),
+    },
+    {
+      name: "a pre-existing V2-only rollback directory",
+      error: ManifestMigrationNotFeasibleError,
+      arrange: () => scenario((draft) => {
+        draft.presentLeaves.add("/product/state/rollback");
+      }),
+    },
+    {
+      name: "a leaf at the permanent global lifecycle lock",
+      error: ManifestMigrationNotFeasibleError,
+      arrange: () => scenario((draft) => {
+        draft.presentLeaves.add("/product/state/.lifecycle.lock");
+      }),
+    },
+    {
+      name: "a leaf at the V2-only release root",
+      error: ManifestMigrationNotFeasibleError,
+      arrange: () => scenario((draft) => {
+        draft.presentLeaves.add("/product/releases");
+      }),
+    },
+    {
+      name: "a leaf at a V2-only runtime reservation",
+      error: ManifestMigrationNotFeasibleError,
+      arrange: () => scenario((draft) => {
+        draft.presentLeaves.add("/product/state/update-executor.json");
+      }),
+    },
+    {
       name: "insufficient aggregate product-home capacity",
       error: ManifestMigrationNotFeasibleError,
       arrange: () => scenario((draft) => {
@@ -489,6 +538,48 @@ describe("V1 migration admission refuses before any managed byte", () => {
     const { request, reads } = fixture.arrange();
     await expect(planManifestMigration(request)).rejects.toThrow(fixture.error);
     expect(reads()).toBe(0);
+  });
+
+  it("observes exactly every V2-only path on disk before the first managed read", async () => {
+    const { request, events } = scenario();
+    await planManifestMigration(request);
+
+    const observed = events.filter((event) => event.startsWith("observe:"));
+    expect(observed.map((event) => event.slice("observe:".length)).toSorted()).toStrictEqual([
+      "/product/releases",
+      "/product/state/.lifecycle.lock",
+      "/product/state/active-release.json",
+      "/product/state/lifecycle-activation.json",
+      "/product/state/lifecycle-id-allocator.json",
+      "/product/state/lifecycle-install-nonce",
+      "/product/state/lifecycle-journals",
+      "/product/state/release-trust.json",
+      "/product/state/rollback",
+      "/product/state/update-executor.json",
+      "/product/state/update-rollback.json",
+    ]);
+    expect(events.findIndex((event) => event.startsWith("read:"))).toBe(observed.length);
+  });
+});
+
+describe("V1 migration admission of the shipped V1 directory set", () => {
+  it("admits V1 claims on every product directory the shipped V1 init records", async () => {
+    const shippedDirectories = ["/product", "/product/state", "/product/staging", "/product/backups", "/product/logs"];
+    const { request, reads } = scenario((draft) => {
+      for (const [ordinal, path] of shippedDirectories.entries()) {
+        draft.artifacts.push({ ...required(draft.artifacts[1]), path });
+        const identity = { dev: "1" as UInt64DecimalV1, ino: String(40 + ordinal) as UInt64DecimalV1 };
+        draft.managed.set(path, { kind: "directory", ownerUid: uid, ...identity });
+        if (path !== productHome && path !== stateRoot) {
+          draft.preexistingParents.push({ path: path as CanonicalAbsolutePathV1, ...identity });
+        }
+      }
+    });
+
+    const plan = await planManifestMigration(request);
+
+    expect(plan.operation).toBe("v1_to_v2");
+    expect(reads()).toBeGreaterThan(0);
   });
 });
 
