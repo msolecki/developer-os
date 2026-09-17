@@ -16,9 +16,10 @@ strict V2 handoff admission exists. The V1→V2 migration was withdrawn (D18) an
 check` passed on `43c30e4`. The final review's findings are NEW-79 to NEW-83 and additions to NEW-67;
 founder decisions D19 and D20 settled the two that needed one.
 
-**The next action is roadmap Phase 4: the NEW-67 amendment to Spec 1,** drafted for founder approval
-as a proposal document under `specs/`, then plan 1a (Spec 1 plan Tasks 1–7, 21 and 23, with Task 2
-after Task 4), then its execution.
+**The next action is founder approval of the NEW-67 amendment to Spec 1**, drafted 2026-09-17 at
+`specs/2026-09-17-spec-1-new-67-amendment.md` (A1–A13; five items need a decision). After approval:
+apply it, then write plan 1a (Spec 1 plan Tasks 1–7, 21 and 23, with Task 2 after Task 4), then execute
+it.
 
 Spec 1 is approved and its plan exists at `plans/2026-08-28-developer-os-opt-in-surfaces.md`, with
 none of its 24 implementation tasks started. Spec 2's Tasks 1–7 and 9 are complete, Task 8 is
