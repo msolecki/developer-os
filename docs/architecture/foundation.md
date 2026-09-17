@@ -378,6 +378,54 @@ activation path; no V1 claim is adopted or retyped there. The active opt-in-surf
 freezes every retained sync/marker/status/lock/log path and record schema plus the three owned journal
 directories that spec 2 must reserve/create at migration.
 
+**V1 refusal, bootstrap recovery routing, and the V2 handoff admission — 2026-09-17 (decision D18).**
+The migration half of the amendment above is withdrawn: no V1 manifest is ever migrated, and only
+Spec 2's fresh V2 `init` creates V2 state. Three contracts take its place.
+
+- **`init` refuses a V1 manifest once the packaged bootstrap capability is available.** It exits 4
+  (`capabilityUnavailable`) with reason `manifest_v1_not_migratable`, names the manifest path, and
+  gives the recovery `developer-os uninstall, then developer-os init`. It refuses before the
+  bootstrap evidence inventory and before any plan, so a dry run and a real run mutate nothing.
+  Without the capability — production pins it unavailable until roadmap Phase 4b
+  (`apps/cli/src/context.ts`) — the V1 `init` path is unchanged. The refusal is
+  `ManifestV1RefusalError` in `apps/cli/src/bootstrap/report.ts`; its reason is typed from Core's
+  `ManifestV1NotMigratableError`, which is not thrown here because that class carries exit 6.
+  Evidence: `apps/cli/src/commands/init.test.ts` — `refuses a shipped V1 installation once the
+  packaged capability is available, and keeps the V1 path without it`.
+- **Every command except `init` refuses while a `fresh_v2_init` envelope is non-terminal.** Before
+  it runs any other command, dispatch (`apps/cli/src/main.ts`) reads the bounded bootstrap closure:
+  each `state/fresh-v2-init.<id>.plan.json` that admits, its two plan-bound journal slots, and the
+  selected journal. An envelope is non-terminal when its plan is published and no slot holds a
+  journal yet, or when the selected journal has no terminal outcome. The command then exits 6
+  (`recoveryRequired`) with reason `bootstrap_recovery_required` and recovery `developer-os init`,
+  having written nothing. A closure that cannot be read refuses the same way. A terminal envelope —
+  `finalized` or `rolled_back`, whether its retention is `retaining` or `retained` — is inert: the
+  reader opens no tombstone, so missing, added or altered retained evidence affects no command. A
+  plan that does not admit, or slots that no longer match their plan, are the `unverified` residue a
+  later `init` starts a new ID beside, and they block nothing either. Evidence:
+  `apps/cli/src/main.test.ts` — `refuses every non-init command while a fresh V2 envelope is
+  non-terminal, and none after init completes the handoff` and `keeps Foundation commands working
+  over a shipped V1 manifest while init refuses it`.
+- **`admitV2Handoff` admits exactly Spec 2 §6.4's handoff set, for Spec 1 commands to call.** It
+  refuses a V1 manifest with the same exit-4 refusal and every incomplete handoff with exit 6: a
+  non-terminal envelope; an absent manifest; anything but exactly one `finalized` envelope whose
+  published manifest bytes equal the current manifest (`exactV2Handoff`, the private check the
+  evidence report already uses); any V2 drift finding, with strict validators for the configuration,
+  allocator, active-release and trust schema arms; a missing nonce, allocator or global lock; an
+  allocator whose `installNonce` disagrees with the nonce file; a present
+  `state/lifecycle-activation.json`; a non-empty `update-rollback.json` or `update-executor.json`
+  reservation; and a missing or non-empty `lifecycle-journals`, `git-effect-journals`,
+  `launchd-effect-journals` or `rollback` directory. It mutates nothing and has no caller outside
+  its tests yet. Two members are recognized only in their pre-Spec-1 form — the lifecycle closure is
+  clear only as three empty ledgers, and the activation record must be absent — so Spec 1's
+  admission must widen both once its first lifecycle apply can legitimately change them. Evidence:
+  `apps/cli/src/bootstrap/report.test.ts` — `admits exactly the complete handoff and refuses a
+  non-terminal envelope and each missing member` and `refuses a manifest the shipped V1 init
+  produced`.
+
+None of these refusal paths spawns a process, which is the only way this product reaches a network:
+`tests/security/network.test.ts` — `the bootstrap refusal paths`.
+
 The manifest remains Foundation's durable direct-write exception, not a managed artifact and not a
 nested file transaction. DOS-P7 adds `ManifestStatePlanV1`, whose before/after arms are exact
 `present { bytes, hash }` or `absent`, plus exact sibling tombstones and present-inode identity. A
