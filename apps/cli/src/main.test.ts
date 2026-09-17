@@ -595,6 +595,43 @@ describe("dispatch around a bootstrap envelope", () => {
     installed.io.out.length = 0;
     await expectArchiveRefusalEverywhere(installed, "corrupted shipped V2 manifest", MALFORMED_V2_MANIFEST);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("does not refuse a valid V2 install as a malformed manifest when its configuration is unparseable or its Brain moved", async () => {
+    const seed = await createCommandFixture("main-v2-config-independent");
+    const customBrain = join(seed.userHome, "ElsewhereBrain");
+    const installer = await createCommandFixture("main-v2-config-independent-install", {
+      root: seed.root,
+      bootstrapAvailable: true,
+      env: { DEVELOPER_OS_BRAIN: customBrain },
+    });
+    expect(await run(["init", "--yes"], installer.io, () => installer.context)).toBe(0);
+    const ordinary = await createCommandFixture("main-v2-config-independent-ordinary", { root: seed.root });
+    const configFile = ordinary.paths.configFile;
+    const validConfig = await nodeFs.readFile(configFile, "utf8");
+    expect(validConfig).toContain(customBrain);
+    const states: readonly (readonly [string, string])[] = [
+      ["unparseable configuration", "schemaVersion = [ not toml\n"],
+      ["relocated Brain", serializeConfig({
+        schemaVersion: 1,
+        brainPath: join(seed.userHome, "MovedBrain"),
+        adapters: { claude: false, codex: false },
+        git: { enabled: false },
+        automation: { enabled: false },
+        telemetry: false,
+      })],
+    ];
+    expect(states.length).toBeGreaterThan(0);
+
+    for (const [label, config] of states) {
+      await nodeFs.writeFile(configFile, config, { mode: 0o600 });
+      for (const argv of [["doctor"], ["status"]]) {
+        await run([...argv, "--json"], ordinary.io, () => ordinary.context);
+        const published = lastJsonError(ordinary.io.out);
+        expect.soft(published.kind, `${label}: ${argv.join(" ")}`).not.toBe("bootstrap_recovery_required");
+        expect.soft(published.message, `${label}: ${argv.join(" ")}`).not.toBe(MALFORMED_V2_MANIFEST);
+      }
+    }
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 
 describe("capture dispatch", () => {

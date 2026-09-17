@@ -27,6 +27,7 @@ import {
   validateCreatedPathEvidence,
   validateJournal,
   validateActiveReleaseRecord,
+  validateManifestBytes,
   validateManifestStatePlan,
   validateManifestV2,
   validateReleaseTrustState,
@@ -1341,24 +1342,38 @@ async function readPlanEnvelopes(
   return envelopes;
 }
 
-async function manifestSchemaVersion(request: BootstrapEvidenceInspectionRequestV1): Promise<unknown> {
+async function readManifestBytes(request: BootstrapEvidenceInspectionRequestV1): Promise<Uint8Array | null> {
   try {
     const manifestFile = await guardedFile(request, join(request.productHome, "installation-manifest.json"));
-    return manifestFile === null
-      ? null
-      : declaredSchemaVersion(await request.reader.readRegularFile(manifestFile, MAX_MANIFEST_BYTES));
+    return manifestFile === null ? null : await request.reader.readRegularFile(manifestFile, MAX_MANIFEST_BYTES);
   } catch {
     return null;
   }
 }
 
+export function isStructurallyValidV2Manifest(bytes: Uint8Array, productHome: string): boolean {
+  const home = productHome as CanonicalAbsolutePathV1;
+  try {
+    return validateManifestBytes(bytes, {
+      evidence: createCanonicalPathEvidence(),
+      sourceRoot: home,
+      backupRoot: join(home, "backups") as CanonicalAbsolutePathV1,
+      admitOwnerPath: createOwnerPathAdmission({
+        kind: "unconfined",
+        reason: "routing only decides whether a structurally valid V2 manifest exists; configuration and Brain location belong to each command's own confined read",
+      }),
+    }).schemaVersion === 2;
+  } catch {
+    return false;
+  }
+}
+
 export async function assertOrdinaryCommandAdmitted(
   request: BootstrapEvidenceInspectionRequestV1,
-  readAdmittedManifest: () => Promise<{ readonly schemaVersion: number } | null>,
 ): Promise<void> {
-  if (await manifestSchemaVersion(request) === 2) {
-    const admitted = await readAdmittedManifest().catch(() => null);
-    if (admitted?.schemaVersion !== 2) {
+  const manifestBytes = await readManifestBytes(request);
+  if (manifestBytes !== null && declaredSchemaVersion(manifestBytes) === 2) {
+    if (!isStructurallyValidV2Manifest(manifestBytes, request.productHome)) {
       throw new BootstrapRecoveryRequiredError(
         MALFORMED_V2_MANIFEST,
         [join(request.productHome, "installation-manifest.json")],

@@ -594,16 +594,6 @@ function manifestAdmissionFor(
   };
 }
 
-export async function readAdmittedManifest(context: CliContext): Promise<InstallationManifest | null> {
-  let config = null;
-  try {
-    config = await readConfigFile(context, context.paths.configFile);
-  } catch {
-    config = null;
-  }
-  return context.manifests.readOptional(manifestAdmissionFor(runtimePathsFor(context, config ?? undefined), []));
-}
-
 /**
  * An `ephemeral` V2 artifact carries no hash at all — its content is expected
  * to vary after install, which is exactly why V2's own drift inspection

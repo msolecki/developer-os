@@ -28,6 +28,7 @@ import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.j
 import {
   BOOTSTRAP_MANUAL_ARCHIVE,
   inspectBootstrapEvidenceAdmission,
+  isStructurallyValidV2Manifest,
   MALFORMED_V2_MANIFEST,
   ManifestV1RefusalError,
 } from "../bootstrap/report.js";
@@ -65,7 +66,7 @@ import {
   runDoctorReport,
 } from "./doctor.js";
 import type { DoctorReportV1 } from "./doctor.js";
-import { readAdmittedManifest, removeManifestFile, revertArtifacts } from "./uninstall.js";
+import { removeManifestFile, revertArtifacts } from "./uninstall.js";
 
 const BRAIN_KEEP_FILE = ".gitkeep";
 const CONFIG_SOURCE = "generated/config.toml";
@@ -824,8 +825,11 @@ export async function runInit(
       const refusal = new ManifestV1RefusalError();
       return failureFrom({ guards }, refusal, [context.paths.manifestFile], refusal.recovery);
     }
-    if (manifest?.schemaVersion === 2 && (await readAdmittedManifest(context).catch(() => null))?.schemaVersion !== 2) {
-      throw new InitRefusal(EXIT_CODES.recoveryRequired, MALFORMED_V2_MANIFEST, [context.paths.manifestFile]);
+    if (manifest?.schemaVersion === 2) {
+      const bytes = await context.fs.readFile(context.paths.manifestFile).catch(() => null);
+      if (bytes === null || !isStructurallyValidV2Manifest(bytes, context.paths.home)) {
+        throw new InitRefusal(EXIT_CODES.recoveryRequired, MALFORMED_V2_MANIFEST, [context.paths.manifestFile]);
+      }
     }
     /**
      * Before the evidence inventory: `inventoryExactNamespaces` throws an
