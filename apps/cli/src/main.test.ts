@@ -374,6 +374,8 @@ const ORDINARY_COMMANDS_WITHOUT_REMOVAL = NON_INIT_COMMANDS.map((argv) =>
   argv[0] === "uninstall" ? ["uninstall", "--dry-run"] : argv,
 );
 const MANUAL_ARCHIVE = "retained bootstrap evidence requires manual archive before a new bootstrap intent";
+const MALFORMED_V2_MANIFEST =
+  "the V2 installation manifest failed validation; restore it or archive the product home manually before running init again";
 
 function lastJsonError(lines: string[]): {
   readonly code: number;
@@ -399,18 +401,22 @@ async function expectGateAdmits(
   }
 }
 
-async function expectArchiveRefusalEverywhere(fixture: CommandFixture, label: string): Promise<void> {
+async function expectArchiveRefusalEverywhere(
+  fixture: CommandFixture,
+  label: string,
+  message = MANUAL_ARCHIVE,
+): Promise<void> {
   const before = await inventoryDigest(fixture.root);
   for (const argv of NON_INIT_COMMANDS) {
     expect(await run([...argv, "--json"], fixture.io, () => fixture.context), `${label}: ${argv.join(" ")}`).toBe(6);
     expect(lastJsonError(fixture.io.out), `${label}: ${argv.join(" ")}`).toStrictEqual({
       code: 6,
       kind: "bootstrap_recovery_required",
-      message: MANUAL_ARCHIVE,
+      message,
     });
   }
   expect(await run(["init", "--yes", "--json"], fixture.io, () => fixture.rebuildContext()), `${label}: init`).toBe(6);
-  expect(lastJsonError(fixture.io.out), `${label}: init`).toMatchObject({ code: 6, message: MANUAL_ARCHIVE });
+  expect(lastJsonError(fixture.io.out), `${label}: init`).toMatchObject({ code: 6, message });
   expect(await inventoryDigest(fixture.root), label).toEqual(before);
 }
 
@@ -567,6 +573,27 @@ describe("dispatch around a bootstrap envelope", () => {
     await nodeFs.mkdir(staging, { recursive: true, mode: 0o700 });
     await nodeFs.writeFile(join(staging, "live-source"), "synthetic live residue\n", { mode: 0o600 });
     await expectArchiveRefusalEverywhere(shipped.fixture, "live staging residue");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses every command, and init, when a planted manifest declaring schema version 2 fails strict validation", async () => {
+    const planted = await createHarness("main-planted-v2-manifest");
+    expect(await planted.invoke(["init", "--yes"])).toBe(0);
+    await nodeFs.writeFile(planted.fixture.paths.manifestFile, `${JSON.stringify({ schemaVersion: 2 })}\n`);
+    planted.fixture.io.out.length = 0;
+    await expectArchiveRefusalEverywhere(planted.fixture, "planted V2 manifest", MALFORMED_V2_MANIFEST);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses every command, and init, when a shipped V2 manifest is altered into an invalid one", async () => {
+    const installed = await createCommandFixture("main-corrupted-v2-manifest", { bootstrapAvailable: true });
+    expect(await run(["init", "--yes"], installed.io, () => installed.context)).toBe(0);
+    const manifest = JSON.parse(await nodeFs.readFile(installed.paths.manifestFile, "utf8")) as Record<string, unknown>;
+    expect(manifest.schemaVersion).toBe(2);
+    await nodeFs.writeFile(
+      installed.paths.manifestFile,
+      `${JSON.stringify({ ...manifest, productVersion: "not a stable version" })}\n`,
+    );
+    installed.io.out.length = 0;
+    await expectArchiveRefusalEverywhere(installed, "corrupted shipped V2 manifest", MALFORMED_V2_MANIFEST);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 

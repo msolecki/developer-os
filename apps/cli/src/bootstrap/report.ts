@@ -158,6 +158,8 @@ export interface BootstrapEvidenceAdmissionV1 {
 }
 
 export const BOOTSTRAP_MANUAL_ARCHIVE = "retained bootstrap evidence requires manual archive before a new bootstrap intent";
+export const MALFORMED_V2_MANIFEST =
+  "the V2 installation manifest failed validation; restore it or archive the product home manually before running init again";
 
 export class BootstrapRecoveryRequiredError extends Error {
   readonly code = EXIT_CODES.recoveryRequired;
@@ -1352,8 +1354,16 @@ async function manifestSchemaVersion(request: BootstrapEvidenceInspectionRequest
 
 export async function assertOrdinaryCommandAdmitted(
   request: BootstrapEvidenceInspectionRequestV1,
+  readAdmittedManifest: () => Promise<{ readonly schemaVersion: number } | null>,
 ): Promise<void> {
   if (await manifestSchemaVersion(request) === 2) {
+    const admitted = await readAdmittedManifest().catch(() => null);
+    if (admitted?.schemaVersion !== 2) {
+      throw new BootstrapRecoveryRequiredError(
+        MALFORMED_V2_MANIFEST,
+        [join(request.productHome, "installation-manifest.json")],
+      );
+    }
     for (const envelope of await readPlanEnvelopes(request)) {
       if (readableNonTerminal(envelope) && await exactV2Handoff(request, envelope.plan) !== null) {
         throw resumeWithInit();

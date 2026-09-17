@@ -24,7 +24,7 @@ import { runReview } from "./commands/review.js";
 import type { ReviewResultV1 } from "./commands/review.js";
 import { runStatus } from "./commands/status.js";
 import type { StatusReportV1 } from "./commands/status.js";
-import { runUninstall } from "./commands/uninstall.js";
+import { readAdmittedManifest, runUninstall } from "./commands/uninstall.js";
 import type { UninstallResultV1 } from "./commands/uninstall.js";
 import { createBootstrapEvidenceInspectionRequest } from "./bootstrap/context.js";
 import { assertOrdinaryCommandAdmitted, BootstrapRecoveryRequiredError } from "./bootstrap/report.js";
@@ -517,7 +517,7 @@ async function dispatch(
         productHome: context.paths.home,
         stateDirectory: context.paths.stateDir,
         initialRoots: [context.paths.home, context.paths.stateDir, context.userHome],
-      }));
+      }), () => readAdmittedManifest(context));
     } catch (error) {
       const refusal = error instanceof BootstrapRecoveryRequiredError ? error : null;
       return emit(io, failureFrom(context, error, refusal?.paths ?? [], refusal?.recovery), json, () => []);

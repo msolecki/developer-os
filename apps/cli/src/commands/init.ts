@@ -28,6 +28,7 @@ import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.j
 import {
   BOOTSTRAP_MANUAL_ARCHIVE,
   inspectBootstrapEvidenceAdmission,
+  MALFORMED_V2_MANIFEST,
   ManifestV1RefusalError,
 } from "../bootstrap/report.js";
 import type { BootstrapEvidenceAdmissionV1 } from "../bootstrap/report.js";
@@ -64,7 +65,7 @@ import {
   runDoctorReport,
 } from "./doctor.js";
 import type { DoctorReportV1 } from "./doctor.js";
-import { removeManifestFile, revertArtifacts } from "./uninstall.js";
+import { readAdmittedManifest, removeManifestFile, revertArtifacts } from "./uninstall.js";
 
 const BRAIN_KEEP_FILE = ".gitkeep";
 const CONFIG_SOURCE = "generated/config.toml";
@@ -822,6 +823,9 @@ export async function runInit(
     if (bootstrapAvailable && manifest?.schemaVersion === 1) {
       const refusal = new ManifestV1RefusalError();
       return failureFrom({ guards }, refusal, [context.paths.manifestFile], refusal.recovery);
+    }
+    if (manifest?.schemaVersion === 2 && (await readAdmittedManifest(context).catch(() => null))?.schemaVersion !== 2) {
+      throw new InitRefusal(EXIT_CODES.recoveryRequired, MALFORMED_V2_MANIFEST, [context.paths.manifestFile]);
     }
     /**
      * Before the evidence inventory: `inventoryExactNamespaces` throws an
