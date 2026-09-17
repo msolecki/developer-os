@@ -25,6 +25,20 @@ The split has one hard implementation dependency. The V1→V2 migration and V2 n
 this specification resumes after Spec 1 has supplied the lifecycle coordinator and participant
 contracts this design consumes. Neither split changes the unchanged DOS-P7 checkpoint.
 
+**Amended 2026-09-17 — the V1→V2 migration arm is withdrawn (founder decision D18).** No V1
+installation exists outside tests and disposable development homes: nothing has been released, and
+the founder's machine runs the legacy runtime, which roadmap Phase 10 replaces with a fresh V2
+install. The dependency above is therefore the V2 new-init handoff alone. §6.2 and every
+migration-only clause of §6.3 and §6.4 are void, together with the migration halves of the
+2026-09-08 amendments A1, A2 and A3. A V1 manifest is never migrated: when the packaged bootstrap
+capability is available, `init` over a V1 manifest refuses with reason `manifest_v1_not_migratable`,
+exit 4, mutates nothing, and directs the user to `developer-os uninstall` followed by
+`developer-os init`; until that capability ships (roadmap Phase 4b) the existing V1 `init` path is
+unchanged. The machinery §6.3 and §6.4 describe for both operations — the immutable plan and
+two-slot journal, payload staging and evidence, `createdPaths` order, the point of no return,
+compensation, retention — remains normative for `fresh_v2_init`. The `v1_to_v2` arms already shipped
+in Core schemas are dead code tracked for deletion in `BACKLOG.md`.
+
 ---
 
 ## 1. Scope and invariants
@@ -949,6 +963,9 @@ permit 512 total refs while `nextFoundationParticipant` remains capped at 256.
 
 ## 6. V1 migration and V2 new init
 
+**Amended 2026-09-17:** the migration arm is withdrawn (D18, see the amendment above §1). §6.2 is
+void; §6.3 and §6.4 remain normative only for `fresh_v2_init`.
+
 ### 6.1 Fresh new init
 
 Fresh `init --dry-run` remains byte-inert and reports the complete V2 created/unchanged set. A real
@@ -1129,6 +1146,8 @@ durable, the lock is permanent and never becomes a retention row.
 
 ### 6.2 V1 admission and mapping
 
+**Withdrawn 2026-09-17 (D18).** Retained as the record of the approved design; not normative.
+
 A present V1 manifest is locally migratable only through `developer-os init`, never implicitly by a
 Spec 1 `config`, `git`, or `automation` command. Before mutation, migration requires:
 
@@ -1198,6 +1217,9 @@ Migration never turns found state into created state, adopts an existing V2 path
 unsafe restore combination, or reads artifact bytes after a collision is known.
 
 ### 6.3 Crash-resumable migration
+
+**Amended 2026-09-17 (D18):** every clause specific to V1 migration is void; the clauses describing
+bootstrap machinery shared with `fresh_v2_init` remain normative for it.
 
 **Amended 2026-09-08 — every bootstrap evidence, admission and namespace surface is parametric over
 the operation set `{ fresh_v2_init, v1_to_v2 }`.** `manifest-migration.mm_…` plan, journal, staging
@@ -4838,7 +4860,7 @@ Homebrew installation, SBOM, checksums, clean-account flows, and public metadata
 
 1. Approve this complete written specification.
 2. Write its implementation plan with explicit checkpoints around the split dependency.
-3. Implement and verify V2 schemas, V1 migration, V2 new init, current-bundle seed, and
+3. Implement and verify V2 schemas, V1 migration (withdrawn 2026-09-17, D18), V2 new init, current-bundle seed, and
    `ManifestStatePlanV1` handoff; commit that prerequisite.
 4. Execute the approved Spec 1 plan.
 5. Resume this plan for launcher, trust/transport/archive, target planner, update, migrations,

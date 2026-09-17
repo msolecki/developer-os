@@ -61,11 +61,15 @@ checkpoint landed as `050fc0d..c5022a7` and which roadmap Phase 0 closed on 2026
 Task 8 below is therefore no longer blocked by it. Closing the *checkpoint* as a whole is still open
 work and is tracked in `BACKLOG.md` §3 and `ORDER.md`, not here.
 
-Task 8 is complete (`55a06de`). Task 9 is roadmap Phase 3 and the next work in this document. It
-comes before plan 1a; Tasks 10–11 follow plan 1a and Tasks 12–26 follow the founder cutover (D16).
+Task 8 is withdrawn by roadmap decision D18 (2026-09-17) and its code is reverted in Task 9 Step 1.
+Task 9, rescoped by D18, is roadmap Phase 3 and the next work in this document. It comes before plan
+1a; Tasks 10–11 follow plan 1a and Tasks 12–26 follow the founder cutover (D16).
 
 
 ### Task 8: Map strict migratable V1 state into V2
+
+**Withdrawn 2026-09-17 by roadmap decision D18.** The V1→V2 migration arm is removed from Spec 2.
+The steps below record what `55a06de` and `df3e947` built; Task 9 Step 1 reverts that code.
 
 **Files:**
 - Create: `packages/core/src/manifest/migration.ts`
@@ -136,77 +140,64 @@ git add packages/core/src/manifest/migration.ts packages/core/src/manifest/migra
 git commit -m "feat(core): plan manifest v1 migration"
 ```
 
-### Task 9: Execute/recover V1 migration and prove the Spec 1 V2 handoff
+### Task 9: Refuse V1 installations and prove the Spec 1 V2 handoff
+
+**Rescoped 2026-09-17 by roadmap decision D18.** The V1→V2 migration arm is withdrawn from Spec 2
+(dated amendment above its §1). This task removes the migration code and ships what Phase 3 still
+needs from the V2 new-init handoff.
 
 **Files:**
-- Modify: `apps/cli/src/bootstrap/executor.ts`
-- Modify: `apps/cli/src/bootstrap/executor.test.ts`
-- Modify: `apps/cli/src/bootstrap/migration.ts`
-- Modify: `apps/cli/src/bootstrap/migration.test.ts`
-- Modify: `apps/cli/src/commands/init.ts`
-- Modify: `apps/cli/src/commands/init.test.ts`
-- Modify: `apps/cli/src/bootstrap/report.ts`
-- Modify: `apps/cli/src/bootstrap/report.test.ts`
-- Modify: `apps/cli/src/bootstrap/context.ts`
-- Create: `tests/e2e/manifest-v2-bootstrap.test.ts`
+- Revert: the code (not the documentation hunks) of `8db8eb0`, `df3e947` and `55a06de`
+- Modify: `apps/cli/src/commands/init.ts`, `apps/cli/src/commands/init.test.ts`
+- Modify: `apps/cli/src/bootstrap/report.ts`, `apps/cli/src/bootstrap/report.test.ts`
+- Modify, as the refusal requires: `apps/cli/src/main.ts`, `apps/cli/src/main.test.ts`
 - Modify: `tests/security/network.test.ts`
-- Modify: `docs/architecture/foundation.md`
-- Modify: `docs/architecture/threat-model.md`
+- Modify: `docs/architecture/foundation.md`, `docs/architecture/threat-model.md`
 
 **Interfaces:**
-- Consumes: Tasks 1–8.
-- Produces: `init`-only migration resume/compensation/retention, strict V2 handoff admission for later Spec 1 commands, and committed prerequisite evidence.
+- Consumes: Tasks 1–7.
+- Produces: the V1 refusal in `init`, the non-`init` refusal during non-terminal bootstrap state, and
+  the strict V2 handoff admission later Spec 1 commands call.
 
-- [ ] **Step 1: Write failing end-to-end migration/recovery tests**
+- [ ] **Step 1: Revert the migration code**
 
-```ts
-it("migrates an exact synthetic V1 installation and preserves every managed byte", async () => {
-  const before = await fixture.inventoryManagedBytes();
-  await fixture.run(["init"]);
-  expect(await fixture.inventoryHistoricalManagedBytes()).toEqual(before);
-  expect((await fixture.readManifest()).schemaVersion).toBe(2);
-  expect(await fixture.assertSpec1Handoff()).toBe(true);
-});
+Revert newest first, keeping documentation hunks out; `npm run lint` and the focused suites of every
+reverted file green; commit `revert: withdraw the v1 manifest migration code (D18)`.
 
-it.each(manifestMigrationDeathPoints)("recovers death at $name", async point => {
-  const interrupted = await fixture.interruptMigration(point);
-  await interrupted.run(["init"]);
-  expect(await interrupted.assertExpectedDirection()).toBe(true);
-});
-```
+- [ ] **Step 2: Write failing contract tests**
 
-Include the immutable plan and both journal final slots, every payload source/write/evidence, every created path/evidence, Foundation participant, launchability publication, manifest preserve/publish, point of no return, verification/retention, source change before/after payload cursor, orphan/third-state/two-ID cases, and explicit zero request/process assertions.
+1. With the packaged bootstrap capability available, `init` over a V1 manifest produced by the
+   shipped V1 `init` path refuses with `manifest_v1_not_migratable`, exit 4, mutates nothing, and
+   directs the user to `developer-os uninstall` then `developer-os init`. Without the capability
+   (production until roadmap Phase 4b) the V1 path is unchanged.
+2. Every non-`init` command exits 6 while a non-terminal `fresh_v2_init` envelope exists, leaving the
+   evidence untouched (Spec 2 §3.1, §6.3); after a complete V2 handoff, inert retained evidence
+   affects no command (§6.4 "Authority switch at V2 handoff"). Existing Foundation commands keep
+   working over a V1 manifest.
+3. The strict V2 handoff admission admits exactly the §6.4 handoff set and refuses a V1 manifest, a
+   non-terminal envelope, and each missing member; it reuses the existing private handoff check in
+   `report.ts`.
+4. The refusal paths make zero network requests and spawn zero processes.
 
-**Spec 2 amendment of 2026-09-08 (A3) — this task owns it, and it needs its own failing test first.** Every bootstrap evidence, admission and namespace surface is parametric over `{ fresh_v2_init, v1_to_v2 }`. Today `FRESH_PLAN`/`FRESH_SLOT` and `idForPath` in `apps/cli/src/bootstrap/report.ts` match `fresh-v2-init.fi_…` only, `report.ts` passes the literal `"fresh_v2_init"` to `deriveBootstrapEnvelopePaths` and drops any id not starting with `fi_`, and `INITIAL_NAMESPACE`/`FRESH_STAGING_ID` in `apps/cli/src/bootstrap/context.ts` admit `mm_` in the retained-tombstone arm alone while gating the inventory itself. The failure is worse than an unreported row: the namespace rejects a `manifest-migration.mm_…` name *before* the inventory, so an interrupted migration's live residue reaches the general unexpected-child path rather than the exit-6 one Spec 2 names for migration residue. Assert that an interrupted migration envelope makes `init` exit 6 **and** appears in the evidence report; both fail today.
+- [ ] **Step 3: Implement**
 
-- [ ] **Step 2: Run the prerequisite E2E/focused suite and verify incomplete migration behavior fails**
+The smallest change that passes Step 2 without changing fresh V2 init behavior.
 
-Run: `npx vitest run --root apps/cli src/bootstrap/executor.test.ts src/bootstrap/migration.test.ts src/commands/init.test.ts && npx vitest run --root tests e2e/manifest-v2-bootstrap.test.ts security/network.test.ts`
+- [ ] **Step 4: Run focused and phase-close gates, then obtain fresh review**
 
-Expected: FAIL until migration execution, `init` routing, recovery closure, and network classification are complete.
+Run: `npx vitest run --root apps/cli src/commands/init.test.ts src/bootstrap/report.test.ts src/main.test.ts`
 
-- [ ] **Step 3: Implement migration execution and close the V2 handoff**
+Run: `npx vitest run --root tests security/network.test.ts`
 
-Route `init` by strict absent/V1/V2/bootstrap-closure state: fresh V2, V1 migration, resume the one recorded envelope, or ordinary V2 init behavior. Reuse Task 7's executor with the migration plan arm; preserve pre-plan skeletons; compensate to byte-identical V1 before manifest publication; force-forward after V2 publication; then advance the derived retention table to `retained`, with the immutable plan and both journal slots durable throughout. Reject every non-`init` command over V1 or non-terminal bootstrap state.
+Run: `npm run check` — Task 9 closes roadmap Phase 3, so D17 requires the full gate here.
 
-**Narrowed 2026-09-16 by founder decision.** The last sentence is read at the spec's scope. Every non-`init` command refuses while a non-terminal `fresh_v2_init` or `v1_to_v2` envelope exists (Spec 2 §3.1, §6.3), and this task ships the strict V2-handoff admission that Spec 1 commands will call, which refuses V1 (§6.4: "Spec 1 admission consumes that set and never migrates or repairs V1"). Existing Foundation commands keep working over a V1 manifest: until roadmap Phase 4b a production `init` can only create one (D16), so refusing V1 there would leave every production installation unusable.
+Expected: PASS. Fresh review of Task 9's commits; accepted findings get a failing regression first.
 
-- [ ] **Step 4: Run focused and full gates, then obtain fresh review**
+- [ ] **Step 5: Document, commit and advance to plan 1a**
 
-Run: `npx vitest run --root apps/cli src/bootstrap/executor.test.ts src/bootstrap/migration.test.ts src/commands/init.test.ts`
-
-Run: `npx vitest run --root tests e2e/manifest-v2-bootstrap.test.ts security/network.test.ts`
-
-Run: `npm run check`
-
-Expected: PASS. Request a fresh reviewer verdict on Tasks 1–9. For every accepted finding, first add a focused failing regression, then make the smallest correction and rerun all three commands until the reviewer returns `READY`.
-
-- [ ] **Step 5: Commit the prerequisite checkpoint and advance to Spec 1**
-
-```bash
-git add apps/cli/src/bootstrap/executor.ts apps/cli/src/bootstrap/executor.test.ts apps/cli/src/bootstrap/migration.ts apps/cli/src/bootstrap/migration.test.ts apps/cli/src/commands/init.ts apps/cli/src/commands/init.test.ts apps/cli/src/bootstrap/report.ts apps/cli/src/bootstrap/report.test.ts apps/cli/src/bootstrap/context.ts tests/e2e/manifest-v2-bootstrap.test.ts tests/security/network.test.ts docs/architecture/foundation.md docs/architecture/threat-model.md docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
-git commit -m "feat: migrate installations to manifest v2"
-```
+Record the V1 refusal, the non-`init` refusal and the handoff admission in
+`docs/architecture/foundation.md` and `threat-model.md`; tick this task; advance `ORDER.md` to roadmap
+Phase 4. Stage exact paths.
 
 After this commit, execute plan 1a (roadmap Phase 4: Spec 1 plan Tasks 1–7, 21 and 23, after the NEW-67 amendment). Treat Task 1's shared canonical/lifecycle files as existing prerequisite outputs and extend/import them without changing the approved Spec 1 semantics. Do not start Task 10 below until the plan 1a checkpoint is committed and green (D16, 2026-09-16).
 
