@@ -388,40 +388,75 @@ Spec 2's fresh V2 `init` creates V2 state. Three contracts take its place.
   bootstrap evidence inventory and before any plan, so a dry run and a real run mutate nothing.
   Without the capability — production pins it unavailable until roadmap Phase 4b
   (`apps/cli/src/context.ts`) — the V1 `init` path is unchanged. The refusal is
-  `ManifestV1RefusalError` in `apps/cli/src/bootstrap/report.ts`; its reason is typed from Core's
-  `ManifestV1NotMigratableError`, which is not thrown here because that class carries exit 6.
-  Evidence: `apps/cli/src/commands/init.test.ts` — `refuses a shipped V1 installation once the
-  packaged capability is available, and keeps the V1 path without it`.
-- **Every command except `init` refuses while a `fresh_v2_init` envelope is non-terminal.** Before
-  it runs any other command, dispatch (`apps/cli/src/main.ts`) reads the bounded bootstrap closure:
-  each `state/fresh-v2-init.<id>.plan.json` that admits, its two plan-bound journal slots, and the
-  selected journal. An envelope is non-terminal when its plan is published and no slot holds a
-  journal yet, or when the selected journal has no terminal outcome. The command then exits 6
-  (`recoveryRequired`) with reason `bootstrap_recovery_required` and recovery `developer-os init`,
-  having written nothing. A closure that cannot be read refuses the same way. A terminal envelope —
-  `finalized` or `rolled_back`, whether its retention is `retaining` or `retained` — is inert: the
-  reader opens no tombstone, so missing, added or altered retained evidence affects no command. A
-  plan that does not admit, or slots that no longer match their plan, are the `unverified` residue a
-  later `init` starts a new ID beside, and they block nothing either. Evidence:
+  `ManifestV1RefusalError` in `apps/cli/src/bootstrap/report.ts`. Its reason is typed from Core's
+  `ManifestV1NotMigratableError`, and its `name` is spelled `ManifestV1NotMigratableError` so that
+  `failureFrom`, which publishes the kind derived from the name, publishes exactly that reason on
+  every path; Core's class itself is not thrown because it carries exit 6. Evidence:
+  `apps/cli/src/commands/init.test.ts` — `refuses a shipped V1 installation once the packaged
+  capability is available, and keeps the V1 path without it`; `apps/cli/src/bootstrap/report.test.ts`
+  — `refuses a manifest the shipped V1 init produced`, which publishes the rejection through
+  `failureFrom`.
+- **Every command except `init` is routed by the bootstrap state before it runs.** Dispatch
+  (`apps/cli/src/main.ts`) calls `assertOrdinaryCommandAdmitted` in
+  `apps/cli/src/bootstrap/report.ts`, which decides in two arms by the current installation
+  manifest:
+  - **A V2 manifest is present: the handoff arm.** Retained evidence is inert. The gate lists
+    `state/` and reads only names of the form `fresh-v2-init.<id>.plan.json`; it never stats a
+    tombstone, a payload or evidence name, or `.lifecycle-bootstrap.lock`. It refuses only when an
+    admitted plan's two plan-bound slots hold a valid selected journal with no terminal outcome
+    **and** that plan published the current manifest bytes (`exactV2Handoff`). That is the
+    envelope interrupted after the manifest point of no return and before verification finalized.
+    Any other plan, slot or tombstone state — missing, added, altered, a symlink, an oversized,
+    emptied or replaced slot — is skipped, so it blocks no command. Accepted limit: once the V2
+    manifest is published, only a readable non-terminal journal can route to `init`; a death
+    before verification combined with a later slot replacement is admitted as a handoff.
+  - **No V2 manifest (a V1 home, a home where bootstrap never ran, or one after `uninstall`): the
+    recovery arm.** The gate runs the same bounded evidence inspection `init` uses and returns the
+    same verdict `init` reaches. An active envelope whose journal is absent or has no terminal
+    outcome refuses with reason `bootstrap_recovery_required`, message `an interrupted bootstrap
+    must be resumed by init` and recovery `developer-os init`; `init` resumes it. Evidence that
+    blocks a new intent — live residue beside a plan that no longer admits or a slot whose inode
+    changed, or any unconfined bootstrap residue — refuses with `init`'s own message, `retained
+    bootstrap evidence requires manual archive before a new bootstrap intent`, and its retained
+    paths. An inspection that cannot read the namespace (for example a symlink named
+    `.lifecycle-bootstrap.lock`) refuses with that same message, and `init` refuses the same way
+    rather than failing with an unclassified error. Terminal retained envelopes and confined
+    `unverified` residue block nothing, because `init` itself starts beside them. A V1 or
+    never-bootstrapped home without bootstrap-namespace residue is admitted.
+
+  Every refusal exits 6 (`recoveryRequired`) and writes nothing. Evidence:
   `apps/cli/src/main.test.ts` — `refuses every non-init command while a fresh V2 envelope is
-  non-terminal, and none after init completes the handoff` and `keeps Foundation commands working
-  over a shipped V1 manifest while init refuses it`.
+  non-terminal, and none after init completes the handoff`; `admits every ordinary command when
+  retained evidence goes missing or is altered after a complete V2 handoff`; `refuses every non-init
+  command with init's own archive guidance when an interrupted envelope's plan or slot stops
+  matching`; `refuses only genuine bootstrap residue in a home where bootstrap never ran, with the
+  guidance init gives`; and `keeps Foundation commands working over a shipped V1 manifest while init
+  refuses it`.
 - **`admitV2Handoff` admits exactly Spec 2 §6.4's handoff set, for Spec 1 commands to call.** It
-  refuses a V1 manifest with the same exit-4 refusal and every incomplete handoff with exit 6: a
-  non-terminal envelope; an absent manifest; anything but exactly one `finalized` envelope whose
-  published manifest bytes equal the current manifest (`exactV2Handoff`, the private check the
-  evidence report already uses); any V2 drift finding, with strict validators for the configuration,
-  allocator, active-release and trust schema arms; a missing nonce, allocator or global lock; an
-  allocator whose `installNonce` disagrees with the nonce file; a present
-  `state/lifecycle-activation.json`; a non-empty `update-rollback.json` or `update-executor.json`
-  reservation; and a missing or non-empty `lifecycle-journals`, `git-effect-journals`,
-  `launchd-effect-journals` or `rollback` directory. It mutates nothing and has no caller outside
-  its tests yet. Two members are recognized only in their pre-Spec-1 form — the lifecycle closure is
-  clear only as three empty ledgers, and the activation record must be absent — so Spec 1's
-  admission must widen both once its first lifecycle apply can legitimately change them. Evidence:
+  reads the same plan-name-only listing as the handoff arm above. Refusals:
+  - a V1 manifest → the exit-4 refusal;
+  - managed drift in any other manifest artifact → exit 3 (`decisionRequired`), with the drifted
+    paths (Spec 2 §11);
+  - everything else → exit 6: an absent manifest; a readable non-terminal envelope; anything but
+    exactly one `finalized` envelope whose published manifest bytes equal the current manifest
+    (`exactV2Handoff`, the private check the evidence report already uses); a finding on the nonce,
+    allocator, active-release or trust record (Spec 1 §2.1 makes nonce and allocator absence
+    recovery-required; Spec 2 §3.1 makes incomplete active state exit 6); a missing global lock; an
+    allocator whose `installNonce` disagrees with the nonce file; a present
+    `state/lifecycle-activation.json`; a non-empty `update-rollback.json` or `update-executor.json`;
+    and a missing or non-empty `lifecycle-journals`, `git-effect-journals`,
+    `launchd-effect-journals` or `rollback` directory.
+
+  Drift uses strict validators for the configuration, allocator, active-release and trust schema
+  arms. A zero-byte `update-rollback.json` or `update-executor.json` is admitted: fresh `init`
+  creates both as `constant_empty` update-control reservations (Spec 2 §6.1 step 5, §6.3), so the
+  record they reserve is absent. The admission mutates nothing and has no caller outside its tests
+  yet. Two members are recognized only in their pre-Spec-1 form — the lifecycle closure is clear only
+  as three empty ledgers, and the activation record must be absent — so Spec 1's admission must widen
+  both once its first lifecycle apply can legitimately change them. Evidence:
   `apps/cli/src/bootstrap/report.test.ts` — `admits exactly the complete handoff and refuses a
-  non-terminal envelope and each missing member` and `refuses a manifest the shipped V1 init
-  produced`.
+  non-terminal envelope and each missing member`, which asserts each refusal's exit code, and
+  `refuses a manifest the shipped V1 init produced`.
 
 None of these refusal paths spawns a process, which is the only way this product reaches a network:
 `tests/security/network.test.ts` — `the bootstrap refusal paths`.
