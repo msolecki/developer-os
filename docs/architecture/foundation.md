@@ -398,21 +398,31 @@ Spec 2's fresh V2 `init` creates V2 state. Three contracts take its place.
   `failureFrom`.
 - **Every command except `init` is routed by the bootstrap state before it runs.** Dispatch
   (`apps/cli/src/main.ts`) calls `assertOrdinaryCommandAdmitted` in
-  `apps/cli/src/bootstrap/report.ts`, which decides in two arms by the current installation
-  manifest:
-  - **A V2 manifest is present: the handoff arm.** Retained evidence is inert. The gate lists
-    `state/` and reads only names of the form `fresh-v2-init.<id>.plan.json`; it never stats a
-    tombstone, a payload or evidence name, or `.lifecycle-bootstrap.lock`. It refuses only when an
-    admitted plan's two plan-bound slots hold a valid selected journal with no terminal outcome
-    **and** that plan published the current manifest bytes (`exactV2Handoff`). That is the
-    envelope interrupted after the manifest point of no return and before verification finalized.
-    Any other plan, slot or tombstone state — missing, added, altered, a symlink, an oversized,
-    emptied or replaced slot — is skipped, so it blocks no command. Accepted limit: once the V2
-    manifest is published, only a readable non-terminal journal can route to `init`; a death
-    before verification combined with a later slot replacement is admitted as a handoff.
-  - **No V2 manifest (a V1 home, a home where bootstrap never ran, or one after `uninstall`): the
-    recovery arm.** The gate runs the same bounded evidence inspection `init` uses and returns the
-    same verdict `init` reaches. An active envelope whose journal is absent or has no terminal
+  `apps/cli/src/bootstrap/report.ts`, which decides by the current installation manifest:
+  - **A manifest declaring `schemaVersion: 2` must first pass strict V2 validation.** It is re-read
+    through the manifest store with the same admission `uninstall` uses: `validateManifestBytes`
+    with owner paths confined to the product home and the configured Brain (`readAdmittedManifest`
+    in `apps/cli/src/commands/uninstall.ts`). A manifest that declares version 2 but fails — a
+    planted `{"schemaVersion":2}`, or a shipped manifest altered into an invalid one — is malformed
+    local manifest state (Spec 2 §11). Every command then exits 6 with message `the V2 installation
+    manifest failed validation; restore it or archive the product home manually before running
+    init again` and the manifest path, and `init` refuses with the same message before reading any
+    bootstrap evidence.
+  - **A valid V2 manifest: the handoff arm.** Retained evidence is inert. The gate lists `state/`
+    and reads only names of the form `fresh-v2-init.<id>.plan.json`; it never stats a tombstone, a
+    payload or evidence name, or `.lifecycle-bootstrap.lock`. It refuses only when an admitted
+    plan's two plan-bound slots hold a valid selected journal with no terminal outcome **and** that
+    plan published the current manifest bytes (`exactV2Handoff`): the envelope interrupted after the
+    manifest point of no return and before verification finalized, which `init` resumes. It admits
+    every other state, whether the plan, slot or tombstone is missing, added, altered, a symlink,
+    oversized, emptied or replaced. **Known limitation:** a crash after manifest publication and
+    before verification, followed by journal-slot corruption, is indistinguishable from a tampered
+    finalized install and is admitted. For the same reason, a plan that no longer admits, or a
+    still-valid manifest whose bytes no longer match the interrupted plan, is admitted rather than
+    routed to `init`.
+  - **No manifest declaring version 2 (a V1 home, a home where bootstrap never ran, or one after
+    `uninstall`): the recovery arm.** The gate runs the same bounded evidence inspection `init`
+    runs and refuses on that inspection's verdict. An active envelope whose journal is absent or has no terminal
     outcome refuses with reason `bootstrap_recovery_required`, message `an interrupted bootstrap
     must be resumed by init` and recovery `developer-os init`; `init` resumes it. Evidence that
     blocks a new intent — live residue beside a plan that no longer admits or a slot whose inode
@@ -422,7 +432,9 @@ Spec 2's fresh V2 `init` creates V2 state. Three contracts take its place.
     `.lifecycle-bootstrap.lock`) refuses with that same message, and `init` refuses the same way
     rather than failing with an unclassified error. Terminal retained envelopes and confined
     `unverified` residue block nothing, because `init` itself starts beside them. A V1 or
-    never-bootstrapped home without bootstrap-namespace residue is admitted.
+    never-bootstrapped home without bootstrap-namespace residue is admitted when its product home
+    and `state` are real directories; a symlinked root makes the inspection unreadable and refuses
+    as above.
 
   Every refusal exits 6 (`recoveryRequired`) and writes nothing. Evidence:
   `apps/cli/src/main.test.ts` — `refuses every non-init command while a fresh V2 envelope is
@@ -430,13 +442,17 @@ Spec 2's fresh V2 `init` creates V2 state. Three contracts take its place.
   retained evidence goes missing or is altered after a complete V2 handoff`; `refuses every non-init
   command with init's own archive guidance when an interrupted envelope's plan or slot stops
   matching`; `refuses only genuine bootstrap residue in a home where bootstrap never ran, with the
-  guidance init gives`; and `keeps Foundation commands working over a shipped V1 manifest while init
-  refuses it`.
+  guidance init gives`; `refuses every command, and init, when a planted manifest declaring schema
+  version 2 fails strict validation`; `refuses every command, and init, when a shipped V2 manifest is
+  altered into an invalid one`; and `keeps Foundation commands working over a shipped V1 manifest
+  while init refuses it`.
 - **`admitV2Handoff` admits exactly Spec 2 §6.4's handoff set, for Spec 1 commands to call.** It
   reads the same plan-name-only listing as the handoff arm above. Refusals:
   - a V1 manifest → the exit-4 refusal;
   - managed drift in any other manifest artifact → exit 3 (`decisionRequired`), with the drifted
-    paths (Spec 2 §11);
+    paths (Spec 2 §11). This includes a missing `lifecycle-journals`, `git-effect-journals`,
+    `launchd-effect-journals` or `rollback` directory, because drift runs before the emptiness
+    check;
   - everything else → exit 6: an absent manifest; a readable non-terminal envelope; anything but
     exactly one `finalized` envelope whose published manifest bytes equal the current manifest
     (`exactV2Handoff`, the private check the evidence report already uses); a finding on the nonce,
@@ -444,8 +460,8 @@ Spec 2's fresh V2 `init` creates V2 state. Three contracts take its place.
     recovery-required; Spec 2 §3.1 makes incomplete active state exit 6); a missing global lock; an
     allocator whose `installNonce` disagrees with the nonce file; a present
     `state/lifecycle-activation.json`; a non-empty `update-rollback.json` or `update-executor.json`;
-    and a missing or non-empty `lifecycle-journals`, `git-effect-journals`,
-    `launchd-effect-journals` or `rollback` directory.
+    and a non-empty `lifecycle-journals`, `git-effect-journals`, `launchd-effect-journals` or
+    `rollback` directory.
 
   Drift uses strict validators for the configuration, allocator, active-release and trust schema
   arms. A zero-byte `update-rollback.json` or `update-executor.json` is admitted: fresh `init`
