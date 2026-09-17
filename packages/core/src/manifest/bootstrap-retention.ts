@@ -1375,7 +1375,7 @@ const RETENTION_TERMINAL_PREFIX_KEYS = [
   "payloadRetentionPart",
 ] as const;
 
-function validateRetentionTerminalBinding(
+export function validateRetentionTerminalBinding(
   plan: BootstrapRetainedExecutionPlanV1,
   evidence: BootstrapRetentionEvidenceProjectionV1,
   journal: BootstrapJournalRecordV1,

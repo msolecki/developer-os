@@ -260,27 +260,40 @@ describe("inspectBootstrapEvidence", () => {
     expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
 
     const real = new NodeBootstrapEvidenceGuardedReader();
-    let walks = 0;
+    const arities: number[] = [];
     const countingReader: BootstrapEvidenceGuardedReaderV1 = {
       inventoryExactNamespaces: (roots) => {
-        walks += 1;
+        arities.push(roots.length);
         return real.inventoryExactNamespaces(roots);
       },
       readRegularFile: (entry, maximumBytes) => real.readRegularFile(entry, maximumBytes),
     };
 
     await inspectBootstrapEvidenceAdmission({ ...requestFor(fixture), reader: countingReader });
+    const walks = arities.length;
 
     /**
-     * Measured against this fixture's 156-location plan: the outer
-     * `initialRoots` walk (1), the plan's journal-slot walk (1), one walk per
-     * payload/created-path/foundation-participant evidence read, the
-     * manifest-handoff check (1) — and, until the roots/row-parents walks are
-     * grouped into one call, two more instead of one. 155 is that total with
-     * the group; it moves in lockstep with the fixture's shape, not a fixed
-     * constant, so a future change to the fixture is expected to move it too.
+     * The grouping is the contract, so it is asserted directly and not only
+     * through the total above: one call carries every retention root and row
+     * parent, and no second call carries a subset of them.
      */
-    expect(walks).toBe(155);
+    expect(arities.filter((arity) => arity > 2)).toStrictEqual([4, 322]);
+
+    /**
+     * Measured against this fixture's 159-location plan: the outer
+     * `initialRoots` walk (1), the plan's journal-slot walk (1), one walk per
+     * payload/created-path/foundation-participant evidence read (67 + 86 + 1),
+     * the manifest-handoff check (1) — and, until the roots/row-parents walks are
+     * grouped into one call, two more instead of one. 158 is that total with
+     * the group, whose one call carries 322 roots (159 sources, 159 tombstones,
+     * 4 row parents); it moves in lockstep with the fixture's shape, not a fixed
+     * constant, so a future change to the fixture is expected to move it too.
+     * It was 155 against a 156-location plan until plan 1a Task 1 (2026-09-17)
+     * moved D19's release layout under `state/release-metadata`: its three
+     * `<hash>.json` files are three more created paths, so three more
+     * creation-evidence reads and three more locations.
+     */
+    expect(walks).toBe(158);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("looks up retained rows by key instead of scanning them per location", async () => {

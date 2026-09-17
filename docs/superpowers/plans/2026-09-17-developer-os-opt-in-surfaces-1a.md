@@ -446,7 +446,7 @@ Source: NEW-83 (A3 settled the third place; §6.4's words decide the other two �
 - Consumes: `FreshV2InitPlanV1.bootstrapIdentity`; `BootstrapEvidenceGuardedReaderV1`.
 - Produces: `BootstrapEvidenceAdmissionV1.bootstrapLeaf: { readonly path: CanonicalAbsolutePathV1; readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1; readonly attributedTo: FreshV2InitIdV1 | null } | null`. Task 13 and Task 21 use `attributedTo` to project an unattributed leaf and refuse an attributed one.
 
-- [ ] **Step 1: Write the failing classification tests**
+- [x] **Step 1: Write the failing classification tests**
 
 ```ts
 it("projects an unattributed bootstrap leaf and blocks on one whose identity a retained envelope persisted", async () => {
@@ -483,20 +483,20 @@ it("routes a retaining rolled-back envelope to init before handoff", async () =>
 
 Cover also, after `init` then a V2 downcast `uninstall`: truncating both journal slots to zero bytes makes the envelope `unverified` with `blocksNewIntent: false`, and `assertOrdinaryCommandAdmitted` does not answer "resume with init"; truncating only the inactive slot keeps it `verified` and inert; truncating both slots while a planted non-retained file sits at a created path attributable to that ID blocks as manual archive (exit 6), never "resume with init"; a non-zero-byte or `0644` leaf is not a bootstrap leaf and blocks as unknown residue; the leaf is never filtered by name alone.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root apps/cli src/bootstrap/evidence-identity.v2.test.ts`
 
 Expected: FAIL — `bootstrapLeaf` is undefined; the retaining rolled-back envelope is admitted as inert; the both-slots-truncated classification does not match.
 
-- [ ] **Step 3: Implement identity attribution and the two §6.4 decisions**
+- [x] **Step 3: Implement identity attribution and the two §6.4 decisions**
 
 Rules:
 - Remove `.filter((candidate) => basename(candidate.path) !== ".lifecycle-bootstrap.lock")`. Take the entry at `<state>/.lifecycle-bootstrap.lock` out of the initial inventory as `bootstrapLeaf` when it is an exact owner `0600` zero-byte single-link regular file. `attributedTo` is the ID of the one plan whose `bootstrapIdentity.dev`/`.ino` equal it, else null. An attributed leaf is live residue of that envelope and sets `blocksNewIntent`. An unattributed exact leaf is coordination residue and affects nothing. Any other entry at that path stays in the inventory and blocks.
 - A `retaining` journal (terminal outcome set, phase not `retained`) is not inert, whatever its outcome: `inspectPlan` returns it as `active` (resumable) before handoff, and `assertOrdinaryCommandAdmitted` refuses with `resumeWithInit()`.
 - An envelope with no valid journal slot is `unverified` exactly when its residue is confined to its plan, two slots and retained names, and no attributable live residue exists (§6.4). It never becomes `active`. One valid terminal slot beside a partial slot is that terminal journal.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root apps/cli src/bootstrap/evidence-identity.v2.test.ts`
 
@@ -508,7 +508,7 @@ Run: `npm run build && npx vitest run --root tests e2e/fresh-v2-retained-bootstr
 
 Expected: PASS. Add `evidence-identity.v2.test.ts`'s duration to `lifecycle-v2`'s recorded local total and update its `timeout-minutes`.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Remove row NEW-83 from `BACKLOG.md` §1 and change "There are 45 numbered rows" to 44. In `ORDER.md` change "NEW-78, NEW-79 and NEW-81–NEW-85." to "NEW-78, NEW-79, NEW-81, NEW-82, NEW-84 and NEW-85.", "NEW-82 and NEW-83 by plan 1a" to "NEW-82 by plan 1a", and "45 open numbered rows" to "44 open numbered rows". Tick this task, update the progress sentence, run `npm run lint` and `npx vitest run --root tests repository/citations.test.ts`, obtain fresh-context review, then:
 

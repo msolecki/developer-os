@@ -38,6 +38,7 @@ export {
   deriveBootstrapRetentionTable,
   selectBootstrapJournal,
   validateBootstrapJournalSuccessor,
+  validateRetentionTerminalBinding,
 } from "./bootstrap-retention.js";
 export type {
   ArtifactKind,

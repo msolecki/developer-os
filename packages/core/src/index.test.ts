@@ -73,6 +73,8 @@ describe("the package's public door", () => {
         "validateManifestV1",
         "validateManifestV2",
         "validateMigratableManifestV1",
+        /** Two import paths on purpose: the CLI waives one component of `selectBootstrapJournal` — §6.4's lone-slot predecessor requirement — so it must re-establish this one positively rather than infer it from that guard's refusal. */
+        "validateRetentionTerminalBinding",
         "ChangePlanError",
         "validateChangePlan",
         "compareVersions",

@@ -81,6 +81,7 @@ export {
   validateManifestV1,
   validateManifestV2,
   validateMigratableManifestV1,
+  validateRetentionTerminalBinding,
 } from "./manifest/index.js";
 export type {
   ArtifactKind,

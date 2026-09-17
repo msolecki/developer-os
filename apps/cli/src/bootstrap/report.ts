@@ -32,6 +32,7 @@ import {
   validateManifestStatePlan,
   validateManifestV2,
   validateReleaseTrustState,
+  validateRetentionTerminalBinding,
 } from "@developer-os/core";
 import type {
   BootstrapEvidenceSummaryV1,
@@ -145,6 +146,17 @@ export interface BootstrapEvidenceAdmissionV1 {
   }[];
   readonly fingerprint: LowerHexSha256;
   readonly blocksNewIntent: boolean;
+  /**
+   * The exact coordination leaf at `<state>/.lifecycle-bootstrap.lock`, which
+   * Spec 1 §2.1 (A3) attributes to an envelope only through the identity that
+   * envelope's own plan persisted -- never through this pathname.
+   */
+  readonly bootstrapLeaf: {
+    readonly path: CanonicalAbsolutePathV1;
+    readonly dev: UInt64DecimalV1;
+    readonly ino: UInt64DecimalV1;
+    readonly attributedTo: FreshV2InitIdV1 | null;
+  } | null;
   /** Test-facing only: the exact retained-table derivation input/output per verified envelope. */
   readonly retainedEnvelopes: readonly {
     readonly plan: FreshV2InitPlanV1;
@@ -571,6 +583,43 @@ export async function buildBootstrapRetentionEvidence(
   };
 }
 
+/**
+ * §6.4: "A partial inactive-slot write never becomes authority: the other
+ * complete slot remains current." Core's selector refuses a lone `retained` or
+ * advanced `retaining` journal because a partial inactive slot cannot supply
+ * the adjacent predecessor it wants. Waiving exactly that requirement means
+ * re-establishing positively everything else the selector proves — the
+ * refusal itself cannot say which of its four grounds fired, and reading it as
+ * the predecessor one admitted a slot-number mismatch, an out-of-table
+ * retention cursor and an unbound terminal as a clean install (NEW-83 review,
+ * 2026-09-18).
+ */
+function loneSlotRemainsCurrent(
+  plan: FreshV2InitPlanV1,
+  evidence: BootstrapRetentionEvidenceProjectionV1,
+  selection: BootstrapJournalSelectionV1,
+  slotValues: readonly [unknown, unknown],
+  table: ReturnType<typeof deriveBootstrapRetentionTable> | null,
+): boolean {
+  const current = selection.current;
+  const predecessorRequired = current.phase === "retained" ||
+    (current.phase === "retaining" && current.retentionNext !== 0);
+  if (!predecessorRequired || table === null || current.retentionNext === null) return false;
+  if (slotValues[selection.inactiveSlot] !== null || slotValues[current.slot] === null) return false;
+  if (current.slot !== Number(BigInt(current.sequence) % 2n)) return false;
+  if (
+    current.phase === "retained"
+      ? current.retentionNext !== table.length
+      : current.retentionNext >= table.length
+  ) return false;
+  try {
+    validateRetentionTerminalBinding(plan, evidence, current);
+  } catch {
+    return false;
+  }
+  return true;
+}
+
 function identityMatches(
   entry: BootstrapEvidenceGuardedEntryV1,
   expected: { readonly ownerUid: number; readonly mode: number; readonly nlink: number; readonly dev: string; readonly ino: string },
@@ -663,7 +712,20 @@ async function exactRestoredBase(
       return false;
     }
   }
+  return restoredTargets(request, plan, terminalOutcome);
+}
 
+/**
+ * §6.4's "no live ... V1/V2 target, or other source path attributable to that
+ * ID" half, which an envelope with no journal at all needs on its own. A null
+ * outcome is that envelope: it proves nothing about the Brain, and the vault is
+ * the user's rather than residue this inspection could ask anyone to archive.
+ */
+async function restoredTargets(
+  request: BootstrapEvidenceInspectionRequestV1,
+  plan: FreshV2InitPlanV1,
+  terminalOutcome: "finalized" | "rolled_back" | null,
+): Promise<boolean> {
   let manifestRows: readonly BootstrapEvidenceGuardedEntryV1[];
   try {
     manifestRows = await request.reader.inventoryExactNamespaces([plan.manifest.manifestPath]);
@@ -688,7 +750,7 @@ async function exactRestoredBase(
   const configValue = config?.kind === "plan_derived" ? record(config.value) : null;
   const brainPath = typeof configValue?.brainPath === "string" ? configValue.brainPath : null;
   const mayRemainAsBrain = (path: string): boolean =>
-    terminalOutcome === "finalized" && brainPath !== null &&
+    terminalOutcome !== "rolled_back" && brainPath !== null &&
     (path === brainPath || path.startsWith(`${brainPath}/`));
   const attributableFiles = new Set<CanonicalAbsolutePathV1>();
   for (const planned of [...plan.createdPaths, ...plan.launchabilityPaths]) {
@@ -780,8 +842,11 @@ async function inspectPlan(
   request: BootstrapEvidenceInspectionRequestV1,
   planEntry: BootstrapEvidenceGuardedEntryV1,
   initialForId: readonly BootstrapEvidenceGuardedEntryV1[],
+  bootstrapLeaf: BootstrapEvidenceGuardedEntryV1 | null,
 ): Promise<{
   readonly summary: BootstrapEvidenceSummaryV1;
+  /** Null only when the plan bytes themselves failed admission, so no identity is bound. */
+  readonly plan: FreshV2InitPlanV1 | null;
   readonly active: BootstrapEvidenceAdmissionV1["active"];
   readonly retained: readonly BootstrapEvidenceGuardedEntryV1[];
   readonly roots: readonly CanonicalAbsolutePathV1[];
@@ -802,6 +867,7 @@ async function inspectPlan(
         entryCount: 1,
         regularFileBytes: planEntry.bytes,
       },
+      plan: null,
       active: null,
       retained: [planEntry],
       roots: [planEntry.path],
@@ -815,6 +881,7 @@ async function inspectPlan(
     const counted = sumEntries([planEntry, ...initial]);
     return {
       summary: { id, status: "unverified", operation: "fresh_v2_init", terminalOutcome: null, vaultPath: plan.planPath, entryCount: counted.entries, regularFileBytes: counted.bytes.toString() as UInt64DecimalV1 },
+      plan,
       active: null,
       retained: [planEntry, ...initial],
       roots: [planEntry.path, ...initial.map((entry) => entry.path)],
@@ -828,41 +895,38 @@ async function inspectPlan(
   if (selection === null) {
     const counted = sumEntries([planEntry, ...initial]);
     /**
-     * No slot is authority yet: either both are still empty — the `after_plan`
-     * interruption, where nothing was executed — or the first journal write died
-     * partway and left bytes that decode to nothing legal. Both are resumable
-     * through the plan-bound descriptors, and recovery rewrites the slot there.
-     * Classing them unverified made a later init start a second envelope beside
-     * this one instead of finishing it, which `during_initial_slot_write`
-     * catches as two durable plans.
+     * No slot is authority: both are still empty, or a journal write died
+     * partway and left bytes that decode to nothing legal. §6.4 classes such an
+     * envelope `unverified` rather than active only where no live residue is
+     * attributable to its ID, and a later init may then start a new ID beside
+     * it. The one residue a slotless envelope explains is the leaf it created
+     * before its first journal write, whose identity its plan persisted, so
+     * that leaf -- and nothing else at that path -- makes it resumable
+     * (NEW-83). Classing an empty-slot envelope unverified while its own leaf
+     * was live made a later init publish a second plan beside it instead of
+     * finishing it, which `during_initial_slot_write` catches as two durable
+     * plans; blocking on the bytes instead made the first interrupted init
+     * permanent, because retention never unlinks what the refusal named.
      */
-    if (slotValues.every((candidate) => candidate === null)) {
-      return {
-        summary: { id, status: "incomplete", operation: "fresh_v2_init", terminalOutcome: null, vaultPath: plan.planPath, entryCount: counted.entries, regularFileBytes: counted.bytes.toString() as UInt64DecimalV1 },
-        active: { plan, journal: null },
-        retained: [planEntry, ...initial],
-        roots: [planEntry.path, ...initial.map((entry) => entry.path)],
-        parentAuthorities: [],
-        verifiedEnvelope: null,
-        blocksNewIntent: false,
-      };
-    }
-    /**
-     * Confinement decides, not whether the journal parses. Residue held to the
-     * exact plan and two slots is `unverified`, and Spec 2 lets a later init
-     * start a new ID beside it; the two returns above already classify an
-     * unreadable envelope that way. Blocking here instead made the first
-     * interrupted init permanent, because retention never unlinks what the
-     * refusal named.
-     */
+    const resumable = slotValues.every((candidate) => candidate === null) &&
+      bootstrapLeaf !== null && identityMatches(bootstrapLeaf, plan.bootstrapIdentity);
     return {
-      summary: { id, status: "unverified", operation: "fresh_v2_init", terminalOutcome: null, vaultPath: plan.planPath, entryCount: counted.entries, regularFileBytes: counted.bytes.toString() as UInt64DecimalV1 },
-      active: null,
+      summary: {
+        id,
+        status: resumable ? "incomplete" : "unverified",
+        operation: "fresh_v2_init",
+        terminalOutcome: null,
+        vaultPath: plan.planPath,
+        entryCount: counted.entries,
+        regularFileBytes: counted.bytes.toString() as UInt64DecimalV1,
+      },
+      plan,
+      active: resumable ? { plan, journal: null } : null,
       retained: [planEntry, ...initial],
       roots: [planEntry.path, ...initial.map((entry) => entry.path)],
       parentAuthorities: [],
       verifiedEnvelope: null,
-      blocksNewIntent: false,
+      blocksNewIntent: !resumable && !await restoredTargets(request, plan, null),
     };
   }
   const terminal = terminalJournal(selection.current);
@@ -882,15 +946,20 @@ async function inspectPlan(
           rows: [],
         }
       : await buildBootstrapRetentionEvidence(request, plan, terminal);
-    selection = selectBootstrapJournal(plan, evidence, slotValues);
     if (terminal !== null) table = deriveBootstrapRetentionTable(plan, evidence);
     exactEvidence = evidence;
+    try {
+      selection = selectBootstrapJournal(plan, evidence, slotValues);
+    } catch (error) {
+      if (!loneSlotRemainsCurrent(plan, evidence, selection, slotValues, table)) throw error;
+    }
     exactSelection = true;
   } catch {
     if (selection.current.phase !== "retained" && selection.current.phase !== "retaining") {
       const counted = sumEntries([planEntry, ...initial]);
       return {
         summary: { id, status: "unverified", operation: "fresh_v2_init", terminalOutcome: null, vaultPath: plan.planPath, entryCount: counted.entries, regularFileBytes: counted.bytes.toString() as UInt64DecimalV1 },
+        plan,
         active: null,
         retained: [planEntry, ...initial],
         roots: [planEntry.path, ...initial.map((entry) => entry.path)],
@@ -1074,6 +1143,7 @@ async function inspectPlan(
   );
   return {
     summary,
+    plan,
     /**
      * A finalized envelope stays active so a second `init` resolves to the
      * installation it already completed. Without it the caller falls through to
@@ -1096,7 +1166,7 @@ async function inspectPlan(
       ? [...new Map(table.map((row) => [row.parent.path, row.parent] as const)).values()]
       : [],
     blocksNewIntent: terminalRetained ? !inert : !exactSelection,
-    verifiedEnvelope: summary.status === "verified" && terminal !== null && exactEvidence !== null
+    verifiedEnvelope: summary.status === "verified" && exactSelection && terminal !== null && exactEvidence !== null
       ? { plan, terminalJournal: terminal, evidence: exactEvidence }
       : null,
   };
@@ -1109,8 +1179,16 @@ export async function inspectBootstrapEvidenceAdmission(
     ...outerRequest,
     projectPostimage: memoizePostimageProjector(outerRequest.projectPostimage),
   };
-  const initial = (await request.reader.inventoryExactNamespaces(request.initialRoots))
-    .filter((candidate) => basename(candidate.path) !== ".lifecycle-bootstrap.lock");
+  const inventoried = await request.reader.inventoryExactNamespaces(request.initialRoots);
+  const leafPath = join(request.stateDirectory, ".lifecycle-bootstrap.lock") as CanonicalAbsolutePathV1;
+  const leafEntry = inventoried.find((candidate) => candidate.path === leafPath) ?? null;
+  const exactLeaf = leafEntry !== null && leafEntry.kind === "regular_file" && leafEntry.mode === 0o600 &&
+    leafEntry.nlink === 1 && leafEntry.bytes === "0"
+    ? leafEntry
+    : null;
+  const initial = exactLeaf === null
+    ? inventoried
+    : inventoried.filter((candidate) => candidate.path !== leafPath);
   const plans = initial.filter((candidate) => candidate.kind === "regular_file" && FRESH_PLAN.test(basename(candidate.path)));
   const ids = new Set(initial.map((candidate) => idForPath(candidate.path)).filter((id): id is string => id !== null));
   const initialEntriesForId = (rawId: string): readonly BootstrapEvidenceGuardedEntryV1[] => {
@@ -1125,6 +1203,7 @@ export async function inspectBootstrapEvidenceAdmission(
       request,
       plan,
       id === null ? [] : initialEntriesForId(id),
+      exactLeaf,
     );
   }));
   const summaries = results.map((result) => result.summary);
@@ -1209,6 +1288,23 @@ export async function inspectBootstrapEvidenceAdmission(
   }
   const orderedParentAuthorities = [...retainedParentAuthorities.values()]
     .sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)));
+  /**
+   * An attributed leaf is live residue of the envelope that persisted its
+   * identity, which for a retained one is the third state §6.4 refuses; an
+   * unattributed exact leaf is coordination residue a later init may start
+   * beside. Anything else at that path stayed in the inventory above and is
+   * unknown residue, so the name alone decides nothing either way (A3).
+   */
+  const attributedIds = results.flatMap((result) =>
+    exactLeaf !== null && result.plan !== null && identityMatches(exactLeaf, result.plan.bootstrapIdentity)
+      ? [result.plan.id]
+      : []);
+  const bootstrapLeaf = exactLeaf === null ? null : {
+    path: exactLeaf.path,
+    dev: exactLeaf.dev,
+    ino: exactLeaf.ino,
+    attributedTo: attributedIds.toSorted()[0] ?? null,
+  };
   const report: BootstrapEvidenceReportV1 = {
     schemaVersion: 1,
     ids: summaries,
@@ -1235,7 +1331,9 @@ export async function inspectBootstrapEvidenceAdmission(
     retainedParentAuthorities: orderedParentAuthorities,
     fingerprint,
     blocksNewIntent: active.length > 1 || conflictingParentAuthority || unverifiedBlocked ||
+      attributedIds.length > 0 || (leafEntry !== null && exactLeaf === null) ||
       results.some((result) => result.blocksNewIntent),
+    bootstrapLeaf,
     retainedEnvelopes,
   };
 }
@@ -1344,7 +1442,12 @@ export async function assertOrdinaryCommandAdmitted(
   } catch {
     throw new BootstrapRecoveryRequiredError(BOOTSTRAP_MANUAL_ARCHIVE);
   }
-  if (evidence.active !== null && (evidence.active.journal?.current.terminalOutcome ?? null) === null) {
+  const activeJournal = evidence.active?.journal?.current ?? null;
+  if (
+    evidence.active !== null &&
+    // §6.4: before handoff a `retaining` cursor is still recovery authority, whatever its outcome.
+    ((activeJournal?.terminalOutcome ?? null) === null || activeJournal?.phase === "retaining")
+  ) {
     throw resumeWithInit();
   }
   if (evidence.blocksNewIntent) throw new BootstrapRecoveryRequiredError(BOOTSTRAP_MANUAL_ARCHIVE, evidence.retainedPaths);

@@ -29,7 +29,7 @@ deferred to Phase 4b as NEW-85 (D26), §6 applied literally to V1 residue (D27),
 (D28), NEW-80 pulled into plan 1a Task 1 (D29), and the shape-admitted bookkeeping identity deferred to
 Phase 4b as NEW-86 (D30). **The next action is to execute plan 1a.**
 
-Plan 1a progress: Tasks 1–2 of 25 committed; next is Task 3 (Attribute bootstrap residue by identity and decide the two remaining §6.4 places).
+Plan 1a progress: Tasks 1–3 of 25 committed; next is Task 4 (Strict lifecycle configuration records).
 
 The 2026-08-28 Spec 1 plan (`plans/2026-08-28-developer-os-opt-in-surfaces.md`) stays as plan 1b's
 source. Spec 2's Tasks 1–7 and 9 are complete, Task 8 is withdrawn, and Tasks 10–26 remain.
@@ -89,8 +89,9 @@ Needs a human, a policy decision, or an external application:
 - Foundation watchdog — decide whether `SpawnLockfRunner` needs one around non-blocking `lockf`.
 
 The remaining open repository rows are NEW-20, NEW-24–NEW-29, NEW-31, NEW-32, NEW-34–NEW-40,
-NEW-76, NEW-78, NEW-79 and NEW-81–NEW-86.
-Owners: NEW-79, NEW-81, NEW-85 and NEW-86 are owned by Phase 4b; NEW-82 and NEW-83 by plan 1a; NEW-84 by Phase 9.
+NEW-76, NEW-78, NEW-79, NEW-81, NEW-82 and NEW-84–NEW-87.
+Owners: NEW-79, NEW-81, NEW-85 and NEW-86 are owned by Phase 4b; NEW-82 by plan 1a; NEW-84 by Phase 9;
+NEW-87 travels with whichever row each mis-aimed citation belongs to.
 They are not ordered ahead of A11 unless the touched subsystem makes one relevant.
 
 ## Delivery evidence still owed
