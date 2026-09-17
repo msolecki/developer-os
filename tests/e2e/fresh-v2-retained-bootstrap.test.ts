@@ -1,7 +1,9 @@
 import * as nodeFs from "node:fs/promises";
+import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { EXIT_CODES } from "@developer-os/core";
 import { runDoctorReport } from "@developer-os/cli/dist/commands/doctor.js";
 import { runBrain } from "@developer-os/cli/dist/commands/brain.js";
 import { runInit } from "@developer-os/cli/dist/commands/init.js";
@@ -20,7 +22,7 @@ const RETAINED_SECRET = "synthetic retained secret";
 afterEach(removeCommandFixtures);
 
 describe("fresh V2 retained bootstrap lifecycle", () => {
-  it("reports, preserves, uninstalls, and reinstalls beside retained evidence without external processes", async () => {
+  it("reports, preserves, uninstalls, and refuses reinstall over the downcast uninstall's Foundation residue", async () => {
     const fixture = await createCommandFixture("e2e-retained-bootstrap", {
       bootstrapAvailable: true,
     });
@@ -62,11 +64,38 @@ describe("fresh V2 retained bootstrap lifecycle", () => {
     expect(removed.data.retainedBootstrapEvidence).toHaveLength(1);
     expect(await fixture.bootstrapEvidenceIdentities()).toEqual(before);
 
+    /**
+     * Scope decision 11 of plan 1a: the shipped downcast uninstall leaves its
+     * own terminal Foundation journal, lock and staging behind, which Spec 1
+     * §2.1's A12 shape admission refuses. Task 22 replaces that uninstall with
+     * the coordinator, which leaves only the bookkeeping set, and restores the
+     * successful reinstall this case asserted until then.
+     */
     const reinstalled = await runInit(fixture.rebuildContext(), ACCEPTED);
-    if (!reinstalled.ok) throw new Error(reinstalled.error.message);
-    expect(reinstalled.ok).toBe(true);
+    expect(reinstalled.ok).toBe(false);
+    if (reinstalled.ok) return;
+    expect(reinstalled.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(reinstalled.error.message).toContain("bookkeeping residue of an unadmitted shape");
+    /**
+     * The refused path is asserted on disk rather than in the message: the
+     * diagnostic guard redacts every high-entropy segment, and this residue's
+     * own names carry the transaction IDs, so the published message names no
+     * readable path at all.
+     */
+    const residueRoots = [
+      join("state", "transactions"),
+      join("staging", "transactions"),
+      join("backups", "transactions"),
+    ];
+    const residue = (await Promise.all(residueRoots.map((relative) =>
+      nodeFs.readdir(join(fixture.paths.home, relative)).catch(() => [] as string[]),
+    ))).flat();
+    expect(residue).not.toStrictEqual([]);
+    expect(
+      residue.filter((name) => /^\.?tx_fixture_[0-9]+(\.json|\.lock)?$/u.test(name)),
+      residue.join(","),
+    ).not.toStrictEqual([]);
     const after = await fixture.bootstrapEvidenceIdentities();
-    expect(new Set(after.map((entry) => entry.id)).size).toBe(2);
     for (const entry of before) expect(after).toContainEqual(entry);
     expect(fixture.vendorProcesses).toStrictEqual([]);
   }, 600_000);

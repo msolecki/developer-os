@@ -50,6 +50,8 @@ describe("the package's public door", () => {
         "deriveBootstrapRetentionLocations",
         "deriveBootstrapRetentionTable",
         "inspectDrift",
+        "inspectLifecycleBookkeepingShape",
+        "lifecycleBookkeepingPaths",
         "hashBytes",
         "ManifestMissingError",
         "ManifestStateParticipant",

@@ -17,6 +17,8 @@ import {
   encodeCanonicalJson,
   EXIT_CODES,
   hashBytes,
+  inspectLifecycleBookkeepingShape,
+  lifecycleBookkeepingPaths,
   serializeConfig,
   selectBootstrapJournal,
   validateBootstrapExternalShapeProjection,
@@ -44,6 +46,8 @@ import type {
   FreshV2InitJournalV1,
   FreshV2InitPlanV1,
   InstallationManifestV2,
+  LifecycleBookkeepingObservationV1,
+  LifecycleBookkeepingResidueV1,
   LowerHexSha256,
   ManifestAdmissionContextV1,
   ManifestStatePlanAdmissionContextV1,
@@ -232,6 +236,62 @@ function sameValue(left: unknown, right: unknown): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Records the no-follow observation of every path A12's shape rule can inspect:
+ * each bookkeeping path, each of their children, and below a child only where
+ * the rule can still admit it — an ancestor of retained evidence, or a
+ * participant-ID directory under a transaction root. An unrecorded path reads
+ * back as `other`, so a missed descent refuses rather than widens.
+ */
+async function observeBookkeepingTree(
+  roots: ReadonlySet<string>,
+  retainedPaths: readonly string[],
+  participantRoots: readonly string[],
+): Promise<{
+  readonly observations: ReadonlyMap<string, LifecycleBookkeepingObservationV1>;
+  readonly present: ReadonlyMap<string, Stats>;
+}> {
+  const observations = new Map<string, LifecycleBookkeepingObservationV1>();
+  const present = new Map<string, Stats>();
+  const observe = async (path: string): Promise<LifecycleBookkeepingObservationV1 | null> => {
+    const retained = observations.get(path);
+    if (retained !== undefined) return retained;
+    const stats = await lstatOptional(path);
+    if (stats === null) return null;
+    present.set(path, stats);
+    const observation: LifecycleBookkeepingObservationV1 = stats.isSymbolicLink()
+      ? { kind: "other" }
+      : stats.isDirectory()
+        ? {
+            kind: "directory",
+            ownerUid: stats.uid,
+            mode: mode(stats),
+            childNames: (await nodeFs.readdir(path))
+              .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right))),
+          }
+        : stats.isFile()
+          ? { kind: "regular_file", ownerUid: stats.uid, mode: mode(stats), nlink: stats.nlink, size: BigInt(stats.size) }
+          : { kind: "other" };
+    observations.set(path, observation);
+    return observation;
+  };
+  const inspectsChildren = (path: string): boolean =>
+    participantRoots.includes(dirname(path)) ||
+    retainedPaths.some((retained) => retained.startsWith(`${path}/`));
+  const collect = async (path: string): Promise<void> => {
+    const observation = await observe(path);
+    if (observation?.kind !== "directory") return;
+    for (const name of observation.childNames) {
+      const child = join(path, name);
+      if (roots.has(child)) continue;
+      if (inspectsChildren(child)) await collect(child);
+      else await observe(child);
+    }
+  };
+  for (const root of roots) await collect(root);
+  return { observations, present };
 }
 
 function retainedChildNames(root: string, paths: readonly string[]): readonly string[] {
@@ -575,7 +635,8 @@ export class BootstrapExecutor {
     if (retained?.global !== null && retained?.global !== undefined) return;
     const planned = plan.createdPaths[0];
     if (planned?.kind !== "global_lock") {
-      throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "global lock is not ordinal zero");
+      await this.reacquireAdmittedGlobalLock(plan);
+      return;
     }
     const global = await this.acquireLifecycleLock(planned.path);
     const retainedEvidence = this.#retentionEvidence.get(plan.id)?.createdPathEvidence.find((candidate) =>
@@ -597,26 +658,33 @@ export class BootstrapExecutor {
     this.trace("lock:global");
   }
 
-  private async acquireTerminalGlobalLock(plan: FreshV2InitPlanV1): Promise<void> {
-    const retained = this.#heldLocks.get(plan.id);
-    if (retained?.global !== null && retained?.global !== undefined) return;
-    const planned = plan.createdPaths[0];
-    if (planned?.kind !== "global_lock") {
-      throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "terminal global lock is not ordinal zero");
+  /** A12: a plan that admitted a pre-existing lock has no ordinal-zero row and no creation evidence for one. */
+  private async reacquireAdmittedGlobalLock(plan: FreshV2InitPlanV1): Promise<void> {
+    const path = join(this.#dependencies.paths.stateDir, ".lifecycle.lock");
+    if (!plan.admittedPreexistingPaths.includes(path as CanonicalAbsolutePathV1)) {
+      throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "global lock is not ordinal zero");
     }
-    const stats = await nodeFs.lstat(planned.path);
+    const stats = await lstatOptional(path);
     if (
-      !stats.isFile() || stats.isSymbolicLink() || stats.uid !== uid() ||
+      stats === null || !stats.isFile() || stats.isSymbolicLink() || stats.uid !== uid() ||
       stats.nlink !== 1 || stats.size !== 0 || mode(stats) !== 0o600
     ) {
-      throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "terminal global lock changed shape");
+      throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "admitted global lock changed shape");
     }
-    const global = await this.acquireLifecycleLock(planned.path);
-    if (global.dev !== String(stats.dev) || global.ino !== String(stats.ino)) {
+    await this.acquireAdmittedGlobalLock(plan.id, stats);
+  }
+
+  private async acquireAdmittedGlobalLock(id: string, expected: Stats | undefined): Promise<void> {
+    if (expected === undefined) {
+      throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "the admitted global lock disappeared");
+    }
+    const global = await this.acquireLifecycleLock(join(this.#dependencies.paths.stateDir, ".lifecycle.lock"));
+    if (global.dev !== String(expected.dev) || global.ino !== String(expected.ino)) {
       await global.handle.release().catch(() => undefined);
-      throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "terminal global lock changed identity");
+      throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "admitted global lock changed identity");
     }
-    this.#heldLocks.set(plan.id, { bootstrap: retained?.bootstrap ?? null, global });
+    const retained = this.#heldLocks.get(id);
+    this.#heldLocks.set(id, { bootstrap: retained?.bootstrap ?? null, global });
     this.trace("lock:global");
   }
 
@@ -846,20 +914,7 @@ export class BootstrapExecutor {
     stateNames.sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
     const expectedHomeNames = [...new Set([basename(paths.stateDir), ...retainedHomeNames])]
       .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
-    const reusableGlobalLock = admitted.reusableGlobalLock;
-    const reusableGlobalStats = reusableGlobalLock === null
-      ? null
-      : await lstatOptional(reusableGlobalLock.path);
-    if (
-      reusableGlobalLock !== null &&
-      (reusableGlobalStats === null || !reusableGlobalStats.isFile() || reusableGlobalStats.isSymbolicLink() ||
-        reusableGlobalStats.uid !== uid() || mode(reusableGlobalStats) !== 0o600 ||
-        reusableGlobalStats.nlink !== 1 || reusableGlobalStats.size !== 0 ||
-        String(reusableGlobalStats.dev) !== reusableGlobalLock.dev ||
-        String(reusableGlobalStats.ino) !== reusableGlobalLock.ino)
-    ) throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "retained global lock authority changed before publication");
-    const reusableGlobalName = reusableGlobalLock === null ? [] : [basename(reusableGlobalLock.path)];
-    const expectedStateNames = [...new Set([basename(bootstrapLock), ...reusableGlobalName, ...retainedStateNames])]
+    const expectedStateNames = [...new Set([basename(bootstrapLock), ...retainedStateNames])]
       .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
     if (
       !homeStats.isDirectory() || homeStats.isSymbolicLink() || homeStats.uid !== uid() || mode(homeStats) !== 0o700 ||
@@ -966,6 +1021,7 @@ export class BootstrapExecutor {
     preview: FreshInitPreviewV1,
     brainStats: Stats | null,
     reusableDirectories: ReadonlyMap<string, Stats>,
+    admittedBookkeeping: ReadonlyMap<string, Stats>,
     retainedPaths: readonly CanonicalAbsolutePathV1[],
   ): Promise<BootstrapEvidenceReportV1["aggregate"]> {
     const maximumIdentity = "18446744073709551615";
@@ -1020,6 +1076,9 @@ export class BootstrapExecutor {
       brainStats: brainStats === null ? null : projectedIdentity,
       preexistingDirectories: new Map(
         [...reusableDirectories.keys()].map((path) => [path, projectedIdentity]),
+      ),
+      admittedBookkeeping: new Map(
+        [...admittedBookkeeping.keys()].map((path) => [path, projectedIdentity]),
       ),
       retainedPaths,
       nonce: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff" as LowerHexSha256,
@@ -1116,23 +1175,18 @@ export class BootstrapExecutor {
       preview,
       brainStats,
       reusableDirectories,
+      await this.inspectBookkeepingShapes(evidence),
       evidence.retainedPaths,
     );
   }
 
+  /** Every bookkeeping directory moved to `inspectBookkeepingShapes` with A12. */
   private reusableFreshDirectoryCandidates(): readonly string[] {
     const paths = this.#dependencies.paths;
     return [
-      paths.backupsDir,
       paths.logsDir,
       join(paths.home, "schemas"),
-      paths.stagingDir,
       join(paths.stagingDir, "fresh-v2-init"),
-      join(paths.stagingDir, "transactions"),
-      join(paths.stateDir, "transactions"),
-      join(paths.stateDir, "lifecycle-journals"),
-      join(paths.stateDir, "git-effect-journals"),
-      join(paths.stateDir, "launchd-effect-journals"),
       join(paths.home, "rollback"),
     ];
   }
@@ -1144,7 +1198,7 @@ export class BootstrapExecutor {
     for (const path of this.reusableFreshDirectoryCandidates()) {
       const stats = await lstatOptional(path);
       if (stats === null) continue;
-      const allowed = path === this.#dependencies.paths.backupsDir || admitted.retainedPaths.some((retained) =>
+      const allowed = admitted.retainedPaths.some((retained) =>
         retained.startsWith(`${path}/`),
       );
       if (
@@ -1159,6 +1213,47 @@ export class BootstrapExecutor {
       result.set(path, stats);
     }
     return result;
+  }
+
+  /**
+   * Spec 1 §2.1 and Spec 2 §6.1, both amended 2026-09-17 (A12): uninstall never
+   * removes the bookkeeping set, so a home with no manifest can legally carry
+   * it, and a fresh `init` admits each present member by its exact shape. Shape
+   * grants no authority — the lock's liveness is decided by acquiring it.
+   */
+  private async inspectBookkeepingShapes(
+    admitted: BootstrapEvidenceAdmissionV1,
+  ): Promise<ReadonlyMap<string, Stats>> {
+    const paths = this.#dependencies.paths;
+    const roots = lifecycleBookkeepingPaths(paths.home);
+    const residue: LifecycleBookkeepingResidueV1 = {
+      retainedPaths: new Set(admitted.retainedPaths),
+      bootstrapParticipantIds: new Set(admitted.retainedEnvelopes.flatMap((envelope) =>
+        envelope.plan.foundationParticipants.map((participant) => participant.id),
+      )),
+    };
+    const { observations, present } = await observeBookkeepingTree(
+      roots,
+      admitted.retainedPaths,
+      [join(paths.stagingDir, "transactions"), join(paths.backupsDir, "transactions")],
+    );
+    for (const path of roots) {
+      if (!present.has(path)) continue;
+      const result = inspectLifecycleBookkeepingShape(
+        paths.home,
+        path,
+        (candidate) => observations.get(candidate) ?? { kind: "other" },
+        uid(),
+        residue,
+      );
+      if (!result.admitted) {
+        throw new FreshBootstrapError(
+          EXIT_CODES.recoveryRequired,
+          `product home contains bookkeeping residue of an unadmitted shape: ${result.offendingPath}`,
+        );
+      }
+    }
+    return new Map([...present].filter(([path]) => roots.has(path)));
   }
 
   private sameReusableDirectoryObservation(
@@ -1186,12 +1281,14 @@ export class BootstrapExecutor {
       );
     }
     const reusableBefore = await this.inspectReusableFreshDirectories(evidenceBefore);
+    const bookkeepingBefore = await this.inspectBookkeepingShapes(evidenceBefore);
     const projectedEnvelope = await this.projectFreshInitEnvelope(
       request,
       packaged,
       preview,
       brainObservation,
       reusableBefore,
+      bookkeepingBefore,
       evidenceBefore.retainedPaths,
     );
     try {
@@ -1203,17 +1300,14 @@ export class BootstrapExecutor {
       );
     }
     const paths = this.#dependencies.paths;
-    const [preexistingBootstrapLock, preexistingGlobalLock] = await Promise.all([
-      lstatOptional(join(paths.stateDir, ".lifecycle-bootstrap.lock")),
-      lstatOptional(join(paths.stateDir, ".lifecycle.lock")),
-    ]);
-    const reusableGlobalLock = evidenceBefore.reusableGlobalLock;
-    const exactReusableGlobalLock = preexistingGlobalLock !== null && reusableGlobalLock !== null &&
-      preexistingGlobalLock.isFile() && !preexistingGlobalLock.isSymbolicLink() &&
-      preexistingGlobalLock.uid === uid() && mode(preexistingGlobalLock) === 0o600 &&
-      preexistingGlobalLock.nlink === 1 && preexistingGlobalLock.size === 0 &&
-      String(preexistingGlobalLock.dev) === reusableGlobalLock.dev &&
-      String(preexistingGlobalLock.ino) === reusableGlobalLock.ino;
+    const lifecycleLock = join(paths.stateDir, ".lifecycle.lock");
+    const preexistingBootstrapLock = await lstatOptional(join(paths.stateDir, ".lifecycle-bootstrap.lock"));
+    /**
+     * Shape already decided above: a lock of any other shape refused there, so
+     * a present lock here is the A12-admitted one and only its liveness is left
+     * to decide, by acquiring it under the held bootstrap lock below.
+     */
+    const admitsGlobalLock = bookkeepingBefore.has(lifecycleLock);
     /**
      * Shape, not presence. Retention never unlinks, so a well-formed bootstrap
      * lock outlives every envelope it belonged to; refusing on its existence
@@ -1224,10 +1318,7 @@ export class BootstrapExecutor {
       preexistingBootstrapLock.isFile() && !preexistingBootstrapLock.isSymbolicLink() &&
       preexistingBootstrapLock.uid === uid() && mode(preexistingBootstrapLock) === 0o600 &&
       preexistingBootstrapLock.nlink === 1 && preexistingBootstrapLock.size === 0;
-    if (
-      (preexistingBootstrapLock !== null && !exactReusableBootstrapLock) ||
-      (preexistingGlobalLock !== null && !exactReusableGlobalLock)
-    ) {
+    if (preexistingBootstrapLock !== null && !exactReusableBootstrapLock) {
       throw new FreshBootstrapError(
         EXIT_CODES.recoveryRequired,
         "live lifecycle lock residue requires recovery before a new bootstrap intent",
@@ -1245,14 +1336,13 @@ export class BootstrapExecutor {
       const entries = await nodeFs.readdir(paths.home);
       const stateBefore = await lstatOptional(paths.stateDir);
       const stateNames = stateBefore === null ? [] : await nodeFs.readdir(paths.stateDir);
-      const retainedHomeNames = retainedChildNames(paths.home, [
+      const admittedBeside = [
         ...evidenceBefore.retainedPaths,
         ...reusableBefore.keys(),
-      ]);
-      const retainedStateNames = retainedChildNames(paths.stateDir, [
-        ...evidenceBefore.retainedPaths,
-        ...reusableBefore.keys(),
-      ]);
+        ...bookkeepingBefore.keys(),
+      ];
+      const retainedHomeNames = retainedChildNames(paths.home, admittedBeside);
+      const retainedStateNames = retainedChildNames(paths.stateDir, admittedBeside);
       const resumableSkeleton =
         entries.every((name) => name === "state" || retainedHomeNames.includes(name)) &&
         stateBefore !== null &&
@@ -1261,14 +1351,12 @@ export class BootstrapExecutor {
         mode(stateBefore) === 0o700 &&
         stateNames.every((name) =>
           retainedStateNames.includes(name) ||
-          (exactReusableGlobalLock && name === ".lifecycle.lock") ||
           (exactReusableBootstrapLock && name === ".lifecycle-bootstrap.lock")
         );
       if (entries.length !== 0 && !resumableSkeleton) {
         const unboundHome = entries.filter((name) => name !== "state" && !retainedHomeNames.includes(name)).length;
         const unboundState = stateNames.filter((name) =>
           !retainedStateNames.includes(name) &&
-          !(exactReusableGlobalLock && name === ".lifecycle.lock") &&
           !(exactReusableBootstrapLock && name === ".lifecycle-bootstrap.lock")
         ).length;
         throw new FreshBootstrapError(
@@ -1294,7 +1382,7 @@ export class BootstrapExecutor {
         bootstrapLock,
         heldBootstrap,
         evidenceBefore,
-        [...reusableBefore.keys()],
+        [...reusableBefore.keys(), ...bookkeepingBefore.keys()],
       );
       const externalShape = validateBootstrapExternalShapeProjection({
         entries: [
@@ -1336,6 +1424,7 @@ export class BootstrapExecutor {
       }
       const brainStats = await lstatOptional(request.brainPath);
       const reusableAfter = await this.inspectReusableFreshDirectories(evidenceAfterLock);
+      const bookkeepingAfter = await this.inspectBookkeepingShapes(evidenceAfterLock);
       const sameBrain = (brainObservation === null) === (brainStats === null) && (
         brainObservation === null || brainStats === null ||
         (brainObservation.dev === brainStats.dev && brainObservation.ino === brainStats.ino)
@@ -1346,10 +1435,12 @@ export class BootstrapExecutor {
         preview,
         brainStats,
         reusableAfter,
+        bookkeepingAfter,
         evidenceAfterLock.retainedPaths,
       );
       if (
         !sameBrain || !this.sameReusableDirectoryObservation(reusableBefore, reusableAfter) ||
+        !this.sameReusableDirectoryObservation(bookkeepingBefore, bookkeepingAfter) ||
         !sameValue(projectedEnvelope, projectedAfterLock)
       ) {
         throw new FreshBootstrapError(
@@ -1365,6 +1456,9 @@ export class BootstrapExecutor {
           "retained bootstrap capacity changed; manual archive is required before retry",
         );
       }
+      if (admitsGlobalLock) {
+        await this.acquireAdmittedGlobalLock(id, bookkeepingAfter.get(lifecycleLock));
+      }
       const built = await this.buildPlan({
         id,
         request,
@@ -1376,6 +1470,7 @@ export class BootstrapExecutor {
         lockStats,
         brainStats,
         preexistingDirectories: reusableAfter,
+        admittedBookkeeping: bookkeepingAfter,
         retainedPaths: evidenceAfterLock.retainedPaths,
         nonce: Buffer.from((this.#dependencies.nonce ?? (() => randomBytes(32)))()).toString("hex") as LowerHexSha256,
       });
@@ -1437,7 +1532,9 @@ export class BootstrapExecutor {
         return await this.completedOutcome(plan);
       }
       await this.ensureBootstrapLock(plan, journal);
-      if (journal.nextCreatedPath > 0) await this.ensureGlobalLock(plan);
+      if (journal.nextCreatedPath > 0 || plan.createdPaths[0]?.kind !== "global_lock") {
+        await this.ensureGlobalLock(plan);
+      }
       if (journal.phase === "rolled_back" || journal.phase === "retaining") {
         await this.retainTerminal(plan, store, journal);
         if (journal.terminalOutcome === "rolled_back") {
@@ -1610,6 +1707,7 @@ export class BootstrapExecutor {
     readonly lockStats: PlanIdentityStats;
     readonly brainStats: PlanIdentityStats | null;
     readonly preexistingDirectories: ReadonlyMap<string, PlanIdentityStats>;
+    readonly admittedBookkeeping: ReadonlyMap<string, PlanIdentityStats>;
     readonly retainedPaths: readonly CanonicalAbsolutePathV1[];
     readonly nonce: LowerHexSha256;
   }): Promise<{ readonly plan: FreshV2InitPlanV1 }> {
@@ -1832,7 +1930,7 @@ export class BootstrapExecutor {
     ];
     const rowSpecs = [
       ...ordinaryDirectories
-        .filter((path) => !input.preexistingDirectories.has(path))
+        .filter((path) => !input.preexistingDirectories.has(path) && !input.admittedBookkeeping.has(path))
         .map((path) => ({ kind: "directory" as const, path })),
       ...[...fileRefs].map(([path, payload]) => ({ kind: "file" as const, path, payload })),
     ].sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)));
@@ -1841,9 +1939,14 @@ export class BootstrapExecutor {
       [paths.stateDir, input.stateStats],
       ...(input.brainStats === null ? [] : [[input.request.brainPath, input.brainStats] as const]),
       ...input.preexistingDirectories,
+      ...input.admittedBookkeeping,
       [this.#dependencies.userHome, await nodeFs.lstat(this.#dependencies.userHome)],
     ]);
-    const ordinaryPathOrdinal = new Map(rowSpecs.map((row, ordinal) => [row.path, ordinal + 1] as const));
+    const lifecycleLock = join(paths.stateDir, ".lifecycle.lock");
+    const admitsLock = input.admittedBookkeeping.has(lifecycleLock);
+    const ordinaryPathOrdinal = new Map(
+      rowSpecs.map((row, ordinal) => [row.path, admitsLock ? ordinal : ordinal + 1] as const),
+    );
     const parentFor = (path: string) => {
       const parentPath = dirname(path);
       const createdOrdinal = ordinaryPathOrdinal.get(parentPath);
@@ -1860,15 +1963,15 @@ export class BootstrapExecutor {
       };
     };
     const createdPaths: PlannedCreatedPathV1[] = [
-      {
-        kind: "global_lock",
-        path: join(paths.stateDir, ".lifecycle.lock") as CanonicalAbsolutePathV1,
-        expectedBefore: "absent",
+      ...(admitsLock ? [] : [{
+        kind: "global_lock" as const,
+        path: lifecycleLock as CanonicalAbsolutePathV1,
+        expectedBefore: "absent" as const,
         ownerUid: uid(),
-        mode: 0o600,
-        parent: parentFor(join(paths.stateDir, ".lifecycle.lock")),
-        cleanup: "remove_on_compensation",
-      },
+        mode: 0o600 as const,
+        parent: parentFor(lifecycleLock),
+        cleanup: "remove_on_compensation" as const,
+      }]),
       ...rowSpecs.map((row): PlannedCreatedPathV1 => row.kind === "directory"
         ? {
             kind: "directory",
@@ -1951,6 +2054,7 @@ export class BootstrapExecutor {
       admittedPreexistingPaths: [...new Set<string>([
         ...input.retainedPaths,
         ...input.preexistingDirectories.keys(),
+        ...input.admittedBookkeeping.keys(),
       ])]
         .filter((path) => path === paths.home || path.startsWith(`${paths.home}/`))
         .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)))
@@ -2155,6 +2259,7 @@ export class BootstrapExecutor {
     for (const mutation of foundation) {
       if (mutation.content != null) payloadForPath.set(mutation.targetPath, mutation.content);
     }
+    const bookkeeping = lifecycleBookkeepingPaths(paths.home);
     const includedPaths = [
       paths.home,
       paths.stateDir,
@@ -2163,7 +2268,7 @@ export class BootstrapExecutor {
         .map((planned) => planned.path),
       ...launchability.map((planned) => planned.path),
       ...foundation.map((mutation) => mutation.targetPath),
-    ];
+    ].filter((path) => !bookkeeping.has(path));
     const kindByPath = new Map<string, "directory" | "file">([
       [paths.home, "directory"],
       [paths.stateDir, "directory"],
@@ -2187,14 +2292,6 @@ export class BootstrapExecutor {
       };
       if (kind === "directory") {
         return { ...base, kind: "directory" as const, verification: { mode: "content" as const } };
-      }
-      if (path === join(paths.stateDir, ".lifecycle.lock")) {
-        return {
-          ...base,
-          source: "generated/global-lock",
-          kind: "file" as const,
-          verification: { mode: "ephemeral" as const },
-        };
       }
       const ref = payloadForPath.get(path);
       if (ref === undefined) throw new FreshBootstrapError(EXIT_CODES.securityRefusal, `manifest payload missing for ${path}`);
@@ -2904,20 +3001,10 @@ export class BootstrapExecutor {
           // untombstoned and made the next intent permanently unrunnable.
           const observed = await this.readCreationEvidence(plan, scope, ordinal);
           if (!matchesGlobalLockCreationEvidence(planned.path, observed, identity)) {
-            // Re-inspects rather than reusing the plan-time evidence: this is
-            // resuming a run whose global lock predates this call, so it must
-            // observe whatever the current admission considers reusable right
-            // now, not what an earlier read in this process saw.
-            const reusable = (await this.inspectEvidence()).reusableGlobalLock;
-            if (
-              reusable === null || reusable.path !== planned.path ||
-              reusable.dev !== identity.dev || reusable.ino !== identity.ino
-            ) {
-              throw new FreshBootstrapError(
-                EXIT_CODES.recoveryRequired,
-                "existing global lock escaped admitted rolled-back evidence",
-              );
-            }
+            throw new FreshBootstrapError(
+              EXIT_CODES.recoveryRequired,
+              "existing global lock escaped admitted rolled-back evidence",
+            );
           }
           await this.acquireIdentityCheckedGlobalLock(plan, planned, stats, retained.bootstrap);
         }
@@ -3165,6 +3252,34 @@ export class BootstrapExecutor {
     }
     const retained = evidenceAdmission.retainedParentAuthorities.find((candidate) => candidate.path === path);
     const stats = await lstatOptional(path);
+    /**
+     * A12: a bookkeeping directory this plan admitted by shape carries neither
+     * creation evidence nor a plan-recorded identity, because it pre-dates the
+     * plan, so its shape is the whole authority the specification grants — and
+     * only where retention recorded no authority for it, so that a retained row
+     * keeps deciding wherever one exists. Neither identity is durable: the
+     * retained row's parent is itself projected at inspection time, in
+     * `report.ts`'s `retentionRow`.
+     */
+    if (
+      retained === undefined &&
+      lifecycleBookkeepingPaths(this.#dependencies.paths.home).has(path) &&
+      plan.admittedPreexistingPaths.includes(path)
+    ) {
+      if (
+        stats === null || !stats.isDirectory() || stats.isSymbolicLink() ||
+        stats.uid !== uid() || mode(stats) !== 0o700
+      ) {
+        throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "Foundation publication parent escaped its admitted bookkeeping shape");
+      }
+      return {
+        path,
+        ownerUid: uid(),
+        mode: 0o700 as const,
+        dev: String(stats.dev) as UInt64DecimalV1,
+        ino: String(stats.ino) as UInt64DecimalV1,
+      };
+    }
     if (
       retained === undefined || stats === null || !stats.isDirectory() || stats.isSymbolicLink() ||
       stats.uid !== uid() || mode(stats) !== 0o700 ||

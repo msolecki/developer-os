@@ -204,10 +204,13 @@ jobs:
 
   lifecycle-v2:
     # Owns the real-V2-home `*.v2.test.ts` files, which `test:suite` excludes.
-    # Running local total of that set: 109 s (2026-09-17, one file); the budget
-    # below is that total x 2 for a hosted runner x 1.5 headroom, floored at 20.
+    # Running local total of that set: 724 s (2026-09-17). That is the whole-job
+    # wall clock of one `test:lifecycle` run, not the sum of the two per-file
+    # Vitest summaries, which is 612 s (124 s fresh-layout, 488 s bookkeeping);
+    # the wall clock is what this job pays and the conservative number, so the
+    # budget below is it x 2 for a hosted runner x 1.5 headroom, floored at 20.
     runs-on: macos-15
-    timeout-minutes: 20
+    timeout-minutes: 37
     steps:
       - uses: actions/checkout@v4
         with:

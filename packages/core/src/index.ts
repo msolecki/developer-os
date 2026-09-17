@@ -1,6 +1,15 @@
 export { parseAgentPromptArgs } from "./agent-prompt/index.js";
 export { decodeCanonicalJson, encodeCanonicalJson } from "./lifecycle/canonical-json.js";
 export type { CanonicalJsonV1, CanonicalJsonValue } from "./lifecycle/canonical-json.js";
+export {
+  inspectLifecycleBookkeepingShape,
+  lifecycleBookkeepingPaths,
+} from "./lifecycle/bookkeeping.js";
+export type {
+  LifecycleBookkeepingObservationV1,
+  LifecycleBookkeepingResidueV1,
+  LifecycleBookkeepingShapeResultV1,
+} from "./lifecycle/bookkeeping.js";
 export * from "./update/index.js";
 export type {
   AgentPromptArgs,

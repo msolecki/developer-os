@@ -509,9 +509,18 @@ export async function retainBootstrapEnvelope(
 ): Promise<BootstrapJournalRecordV1> {
   validateTable(table);
   let current = store.current();
-  const globalPlan = store.plan.createdPaths[0];
-  if (globalPlan?.kind !== "global_lock" || locks.bootstrap === null) return refuse();
-  const globalReached = current.nextCreatedPath > 0;
+  if (locks.bootstrap === null) return refuse();
+  /**
+   * Spec 1 §2.1 (A12): a plan that admitted a pre-existing lock has no
+   * ordinal-zero lock row, and the executor has held that lock since before
+   * publication, so "held once the cursor passed ordinal zero" is an invariant
+   * only of a plan that creates it.
+   */
+  const admitsGlobalLock = store.plan.operation === "fresh_v2_init" &&
+    store.plan.admittedPreexistingPaths.includes(
+      join(dirname(store.plan.bootstrapIdentity.path), ".lifecycle.lock") as CanonicalAbsolutePathV1,
+    );
+  const globalReached = admitsGlobalLock || current.nextCreatedPath > 0;
   if ((globalReached && locks.global === null) || (!globalReached && locks.global !== null)) {
     return refuse();
   }

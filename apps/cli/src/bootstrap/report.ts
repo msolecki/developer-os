@@ -17,6 +17,7 @@ import {
   encodeCanonicalJson,
   hashBytes,
   inspectDrift,
+  lifecycleBookkeepingPaths,
   loadConfig,
   parseLowerHexSha256,
   parseUInt64Decimal,
@@ -142,12 +143,6 @@ export interface BootstrapEvidenceAdmissionV1 {
     readonly dev: UInt64DecimalV1;
     readonly ino: UInt64DecimalV1;
   }[];
-  /** Exact live global-lock identity retained by a fully admitted rolled-back envelope. */
-  readonly reusableGlobalLock: {
-    readonly path: CanonicalAbsolutePathV1;
-    readonly dev: UInt64DecimalV1;
-    readonly ino: UInt64DecimalV1;
-  } | null;
   readonly fingerprint: LowerHexSha256;
   readonly blocksNewIntent: boolean;
   /** Test-facing only: the exact retained-table derivation input/output per verified envelope. */
@@ -648,30 +643,6 @@ async function exactV2Handoff(
   }
 }
 
-async function exactReusableGlobalLock(
-  request: BootstrapEvidenceInspectionRequestV1,
-  plan: FreshV2InitPlanV1,
-  selection: BootstrapJournalSelectionV1,
-  evidence: BootstrapRetentionEvidenceProjectionV1 | null,
-): Promise<BootstrapEvidenceAdmissionV1["reusableGlobalLock"]> {
-  if (
-    selection.current.phase !== "retained" ||
-    selection.current.terminalOutcome !== "rolled_back" ||
-    evidence === null
-  ) return null;
-  const ordinal = plan.createdPaths.findIndex((planned) => planned.kind === "global_lock");
-  const planned = plan.createdPaths[ordinal];
-  const created = evidence.createdPathEvidence[ordinal]?.value;
-  if (planned?.kind !== "global_lock" || created?.kind !== "global_lock") return null;
-  const current = await request.projectPostimage(planned.path);
-  if (
-    current?.kind !== "regular_file" || current.ownerUid !== planned.ownerUid ||
-    current.mode !== planned.mode || current.bytes !== "0" ||
-    current.dev !== created.dev || current.ino !== created.ino
-  ) return null;
-  return { path: planned.path, dev: created.dev, ino: created.ino };
-}
-
 async function exactRestoredBase(
   request: BootstrapEvidenceInspectionRequestV1,
   plan: FreshV2InitPlanV1,
@@ -679,7 +650,6 @@ async function exactRestoredBase(
   retainedByPath: ReadonlyMap<CanonicalAbsolutePathV1, BootstrapEvidenceGuardedEntryV1>,
   confinedUnboundEntries: boolean,
   terminalOutcome: "finalized" | "rolled_back",
-  reusableGlobalLock: BootstrapEvidenceAdmissionV1["reusableGlobalLock"],
 ): Promise<boolean> {
   if (!confinedUnboundEntries) return false;
   for (const location of locations) {
@@ -724,7 +694,10 @@ async function exactRestoredBase(
   for (const planned of [...plan.createdPaths, ...plan.launchabilityPaths]) {
     if (planned.kind !== "directory" && !mayRemainAsBrain(planned.path)) attributableFiles.add(planned.path);
   }
-  if (reusableGlobalLock !== null) attributableFiles.delete(reusableGlobalLock.path);
+  /** A12: the bookkeeping set outlives every envelope, so it never witnesses an unrestored base. */
+  for (const path of lifecycleBookkeepingPaths(request.productHome)) {
+    attributableFiles.delete(path as CanonicalAbsolutePathV1);
+  }
   for (const participant of plan.foundationParticipants) {
     for (const mutation of participant.mutations) {
       if (!mayRemainAsBrain(mutation.targetPath)) attributableFiles.add(mutation.targetPath);
@@ -813,7 +786,6 @@ async function inspectPlan(
   readonly retained: readonly BootstrapEvidenceGuardedEntryV1[];
   readonly roots: readonly CanonicalAbsolutePathV1[];
   readonly parentAuthorities: BootstrapEvidenceAdmissionV1["retainedParentAuthorities"];
-  readonly reusableGlobalLock: BootstrapEvidenceAdmissionV1["reusableGlobalLock"];
   readonly blocksNewIntent: boolean;
   readonly verifiedEnvelope: BootstrapEvidenceAdmissionV1["retainedEnvelopes"][number] | null;
 }> {
@@ -834,7 +806,6 @@ async function inspectPlan(
       retained: [planEntry],
       roots: [planEntry.path],
       parentAuthorities: [],
-      reusableGlobalLock: null,
       verifiedEnvelope: null,
       blocksNewIntent: false,
     };
@@ -848,7 +819,6 @@ async function inspectPlan(
       retained: [planEntry, ...initial],
       roots: [planEntry.path, ...initial.map((entry) => entry.path)],
       parentAuthorities: [],
-      reusableGlobalLock: null,
       verifiedEnvelope: null,
       blocksNewIntent: false,
     };
@@ -873,7 +843,6 @@ async function inspectPlan(
         retained: [planEntry, ...initial],
         roots: [planEntry.path, ...initial.map((entry) => entry.path)],
         parentAuthorities: [],
-        reusableGlobalLock: null,
         verifiedEnvelope: null,
         blocksNewIntent: false,
       };
@@ -892,7 +861,6 @@ async function inspectPlan(
       retained: [planEntry, ...initial],
       roots: [planEntry.path, ...initial.map((entry) => entry.path)],
       parentAuthorities: [],
-      reusableGlobalLock: null,
       verifiedEnvelope: null,
       blocksNewIntent: false,
     };
@@ -927,7 +895,6 @@ async function inspectPlan(
         retained: [planEntry, ...initial],
         roots: [planEntry.path, ...initial.map((entry) => entry.path)],
         parentAuthorities: [],
-        reusableGlobalLock: null,
         verifiedEnvelope: null,
         blocksNewIntent: true,
       };
@@ -1087,9 +1054,6 @@ async function inspectPlan(
   });
   const terminalRetained = selection.current.phase === "retained";
   const retainedOutcome = terminalRetained ? selection.current.terminalOutcome : null;
-  const reusableGlobalLock = exactSelection
-    ? await exactReusableGlobalLock(request, plan, selection, exactEvidence)
-    : null;
   /**
    * The installation this envelope produced is still present. Uninstall removes
    * the manifest while retention preserves the envelope, so a finalized plan
@@ -1106,7 +1070,6 @@ async function inspectPlan(
       retainedByPath,
       confinedUnboundEntries,
       retainedOutcome,
-      reusableGlobalLock,
     )
   );
   return {
@@ -1132,7 +1095,6 @@ async function inspectPlan(
     parentAuthorities: exactSelection && terminalRetained && table !== null
       ? [...new Map(table.map((row) => [row.parent.path, row.parent] as const)).values()]
       : [],
-    reusableGlobalLock,
     blocksNewIntent: terminalRetained ? !inert : !exactSelection,
     verifiedEnvelope: summary.status === "verified" && terminal !== null && exactEvidence !== null
       ? { plan, terminalJournal: terminal, evidence: exactEvidence }
@@ -1247,14 +1209,6 @@ export async function inspectBootstrapEvidenceAdmission(
   }
   const orderedParentAuthorities = [...retainedParentAuthorities.values()]
     .sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)));
-  const globalLockAuthorities = results.flatMap((result) =>
-    result.reusableGlobalLock === null ? [] : [result.reusableGlobalLock]
-  );
-  const reusableGlobalLock = globalLockAuthorities[0] ?? null;
-  const conflictingGlobalLockAuthority = reusableGlobalLock !== null && globalLockAuthorities.some((candidate) =>
-    candidate.path !== reusableGlobalLock.path || candidate.dev !== reusableGlobalLock.dev ||
-    candidate.ino !== reusableGlobalLock.ino
-  );
   const report: BootstrapEvidenceReportV1 = {
     schemaVersion: 1,
     ids: summaries,
@@ -1269,7 +1223,6 @@ export async function inspectBootstrapEvidenceAdmission(
     identities: [...allEntries.values()].map((candidate) => ({ path: candidate.path, dev: candidate.dev, ino: candidate.ino, bytes: candidate.bytes })),
     active: active.map((candidate) => ({ id: candidate.plan.id, sequence: candidate.journal === null ? null : candidate.journal.current.sequence })),
     retainedParentAuthorities: orderedParentAuthorities,
-    reusableGlobalLock,
   } as unknown as CanonicalJsonValue)));
   return {
     report,
@@ -1280,9 +1233,8 @@ export async function inspectBootstrapEvidenceAdmission(
       ...results.flatMap((result) => result.roots),
     ])].sort(),
     retainedParentAuthorities: orderedParentAuthorities,
-    reusableGlobalLock,
     fingerprint,
-    blocksNewIntent: active.length > 1 || conflictingParentAuthority || conflictingGlobalLockAuthority || unverifiedBlocked ||
+    blocksNewIntent: active.length > 1 || conflictingParentAuthority || unverifiedBlocked ||
       results.some((result) => result.blocksNewIntent),
     retainedEnvelopes,
   };

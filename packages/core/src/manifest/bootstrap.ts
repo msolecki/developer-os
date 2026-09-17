@@ -1825,9 +1825,17 @@ export function validateBootstrapPlan(
     if (new Set(payloads.map((row) => row.ref.path)).size !== payloads.length) return refuse();
     if (!Array.isArray(input.createdPaths) || input.createdPaths.length < 1 || input.createdPaths.length > MAX_CREATED_PATHS) return refuse();
     const createdPaths = input.createdPaths.map((candidate, ordinal) => validateCreatedPath(candidate, "ordinary", ordinal, context, id, operation));
-    if (createdPaths[0]?.kind !== "global_lock" || createdPaths[0].path !== `${context.stateRoot}/.lifecycle.lock`) return refuse();
     if (!Array.isArray(input.launchabilityPaths) || input.launchabilityPaths.length < 7 || input.launchabilityPaths.length > MAX_LAUNCHABILITY_PATHS) return refuse();
     const launchabilityPaths = input.launchabilityPaths.map((candidate, ordinal) => validateCreatedPath(candidate, "launchability", ordinal, context, id, operation));
+    /**
+     * Spec 2 §6.1 (Amended 2026-09-17): a lock the plan admitted through
+     * `admittedPreexistingPaths` is Spec 1 §2.1's bookkeeping residue, so the
+     * ordinal-zero global-lock transition applies only when it was absent.
+     */
+    const lockPath = `${context.stateRoot}/.lifecycle.lock`;
+    const admitsLock = operation === "fresh_v2_init" && admittedPreexistingPaths.includes(lockPath as CanonicalAbsolutePathV1);
+    const lockRows = [...createdPaths, ...launchabilityPaths].filter((row) => row.kind === "global_lock" || row.path === lockPath);
+    if (admitsLock ? lockRows.length !== 0 : createdPaths[0]?.kind !== "global_lock" || createdPaths[0].path !== lockPath || lockRows.length !== 1) return refuse();
     if (new Set([...createdPaths, ...launchabilityPaths].map((row) => row.path)).size !== createdPaths.length + launchabilityPaths.length) return refuse();
     validateParentOrder(createdPaths, launchabilityPaths);
     if (!Array.isArray(input.foundationParticipants)) return refuse();

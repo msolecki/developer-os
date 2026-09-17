@@ -762,15 +762,19 @@ describe("runUninstall", () => {
    * NEW-59: `readUninstallManifest` used to reach every `schemaVersion === 2`
    * manifest through a catch that re-parsed it with an identity
    * `admitOwnerPath` and downcast `ephemeral` artifacts to a fixed
-   * empty-content hash. `.lifecycle.lock` is recorded that way, and a real
+   * empty-content hash. A runtime reservation is recorded that way, and a real
    * fresh init leaves it at exactly zero bytes — matching the fixed
    * placeholder by coincidence. Writing real bytes into it afterwards, the
-   * way a lock residue legitimately can, exposes the bug: the fallback's
+   * way a runtime record legitimately does, exposes the bug: the fallback's
    * expected hash stays the hash of empty content, so `detectDrift` reports
    * `content_changed` and `planUninstall` refuses removal as if the artifact
    * had been edited since install. Reading through the store's V2-aware path
    * records the artifact's real, current hash instead, which keeps the
    * comparison a no-op and lets uninstall proceed.
+   *
+   * The reservation stands in for `.lifecycle.lock`, which carried this case
+   * until Spec 1 §2.1's A12 amendment took the bookkeeping set out of the
+   * manifest: it is no longer a row, so uninstall must leave it in place.
    */
   it("removes an ephemeral V2 artifact holding real content instead of refusing on a phantom edit", async () => {
     const fixture = await createCommandFixture("uninstall-v2-ephemeral-hash", {
@@ -779,16 +783,19 @@ describe("runUninstall", () => {
     const initialized = await runInit(fixture.context, ACCEPTED);
     expect(initialized.ok).toBe(true);
 
+    const statusFile = join(fixture.paths.stateDir, "git-sync.json");
     const lockFile = join(fixture.paths.stateDir, ".lifecycle.lock");
-    expect(await exists(lockFile)).toBe(true);
-    await nodeFs.writeFile(lockFile, "stale-lock-residue", { mode: 0o600 });
+    expect(await exists(statusFile)).toBe(true);
+    await nodeFs.writeFile(statusFile, "stale-status", { mode: 0o600 });
 
     const result = await runUninstall(fixture.context, ACCEPTED);
 
     if (!result.ok) throw new Error(result.error.message);
     expect(result.ok).toBe(true);
-    expect(result.data.removed).toContain(lockFile);
-    expect(await exists(lockFile)).toBe(false);
+    expect(result.data.removed).toContain(statusFile);
+    expect(await exists(statusFile)).toBe(false);
+    expect(result.data.removed).not.toContain(lockFile);
+    expect(await exists(lockFile)).toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   /**

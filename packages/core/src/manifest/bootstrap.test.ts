@@ -1648,6 +1648,45 @@ describe("admittedPreexistingPaths", () => {
       context,
     )).not.toThrow();
   });
+
+  it("requires createdPaths[0] to be the global lock exactly when the plan admits no pre-existing lock", () => {
+    const { plan, context } = admitted();
+    const lock = `${context.stateRoot}/.lifecycle.lock`;
+    const withoutLockRow = (): Record<string, unknown> => {
+      const candidate = structuredClone(plan) as unknown as {
+        createdPaths: readonly Record<string, unknown>[];
+        launchabilityPaths: readonly Record<string, unknown>[];
+        maximumStagingEntries: number;
+      };
+      const renumber = (rows: readonly Record<string, unknown>[]): Record<string, unknown>[] =>
+        rows.map((row) => {
+          const parent = row.parent as { readonly kind: string; readonly scope?: string; readonly ordinal?: number };
+          return parent.kind === "created_path" && parent.scope === "ordinary"
+            ? { ...row, parent: { ...parent, ordinal: required(parent.ordinal) - 1 } }
+            : row;
+        });
+      return {
+        ...candidate,
+        createdPaths: renumber(candidate.createdPaths.slice(1)),
+        launchabilityPaths: renumber(candidate.launchabilityPaths),
+        maximumStagingEntries: candidate.maximumStagingEntries - 3,
+      };
+    };
+    const freshPlan = (): unknown => structuredClone(plan);
+    const freshPlanAdmittingLock = (): unknown => ({ ...withoutLockRow(), admittedPreexistingPaths: [lock] });
+    const freshPlanAdmittingLockAndCreatingIt = (): unknown => ({
+      ...structuredClone(plan),
+      admittedPreexistingPaths: [lock],
+    });
+    const freshPlanWithoutLockRow = (): unknown => withoutLockRow();
+
+    expect(validateBootstrapPlan(freshPlan(), context).createdPaths[0])
+      .toMatchObject({ kind: "global_lock", path: lock });
+    expect((validateBootstrapPlan(freshPlanAdmittingLock(), context) as FreshV2InitPlanV1).admittedPreexistingPaths)
+      .toContain(lock);
+    expect(() => validateBootstrapPlan(freshPlanAdmittingLockAndCreatingIt(), context)).toThrow(BootstrapStateError);
+    expect(() => validateBootstrapPlan(freshPlanWithoutLockRow(), context)).toThrow(BootstrapStateError);
+  });
 });
 
 describe("migration-only bootstrap grammar", () => {

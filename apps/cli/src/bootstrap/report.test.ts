@@ -430,9 +430,14 @@ describe("admitV2Handoff", () => {
       [join(state, "lifecycle-install-nonce"), recoveryRequired],
       [join(state, "lifecycle-id-allocator.json"), recoveryRequired],
       [join(state, ".lifecycle.lock"), recoveryRequired],
-      [join(state, "lifecycle-journals"), decisionRequired],
-      [join(state, "git-effect-journals"), decisionRequired],
-      [join(state, "launchd-effect-journals"), decisionRequired],
+      /**
+       * Spec 1 §2.1 (A12): the four ledger roots are bookkeeping, so §2.4
+       * closure requires them and the manifest never names them. A missing one
+       * is an incomplete handoff rather than drift on a managed artifact.
+       */
+      [join(state, "lifecycle-journals"), recoveryRequired],
+      [join(state, "git-effect-journals"), recoveryRequired],
+      [join(state, "launchd-effect-journals"), recoveryRequired],
       [join(state, "active-release.json"), recoveryRequired],
       [join(state, "release-trust.json"), recoveryRequired],
       [join(state, "release-metadata", "indexes", `${identity.releaseIndexHash}.json`), decisionRequired],

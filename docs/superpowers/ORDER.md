@@ -26,9 +26,10 @@ roadmap Phase 4. Its blocking questions were answered by founder decisions D24�
 applied to Spec 1 as A14–A16: a closed `uninstall/present_manifest_without_launchd` variant (D24), empty
 directories removed before the manifest tombstone (D25), the uninstall capacity refusal with the decision
 deferred to Phase 4b as NEW-85 (D26), §6 applied literally to V1 residue (D27), the `mf` ID reserved last
-(D28), and NEW-80 pulled into plan 1a Task 1 (D29). **The next action is to execute plan 1a.**
+(D28), NEW-80 pulled into plan 1a Task 1 (D29), and the shape-admitted bookkeeping identity deferred to
+Phase 4b as NEW-86 (D30). **The next action is to execute plan 1a.**
 
-Plan 1a progress: Tasks 1–1 of 25 committed; next is Task 2 (Admit the bookkeeping set by shape and keep it out of the manifest).
+Plan 1a progress: Tasks 1–2 of 25 committed; next is Task 3 (Attribute bootstrap residue by identity and decide the two remaining §6.4 places).
 
 The 2026-08-28 Spec 1 plan (`plans/2026-08-28-developer-os-opt-in-surfaces.md`) stays as plan 1b's
 source. Spec 2's Tasks 1–7 and 9 are complete, Task 8 is withdrawn, and Tasks 10–26 remain.
@@ -88,8 +89,8 @@ Needs a human, a policy decision, or an external application:
 - Foundation watchdog — decide whether `SpawnLockfRunner` needs one around non-blocking `lockf`.
 
 The remaining open repository rows are NEW-20, NEW-24–NEW-29, NEW-31, NEW-32, NEW-34–NEW-40,
-NEW-76, NEW-78, NEW-79 and NEW-81–NEW-85.
-Owners: NEW-79, NEW-81 and NEW-85 are owned by Phase 4b; NEW-82 and NEW-83 by plan 1a; NEW-84 by Phase 9.
+NEW-76, NEW-78, NEW-79 and NEW-81–NEW-86.
+Owners: NEW-79, NEW-81, NEW-85 and NEW-86 are owned by Phase 4b; NEW-82 and NEW-83 by plan 1a; NEW-84 by Phase 9.
 They are not ordered ahead of A11 unless the touched subsystem makes one relevant.
 
 ## Delivery evidence still owed
@@ -131,7 +132,7 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 
 - Product sequence: 8 open entries, A11, A12, A12b, A13, A14, A15, A11b, A16.
 - Release plan: Tasks 10–26 open; Tasks 1–7 and 9 closed, Task 8 withdrawn.
-- Repository backlog: 45 open numbered rows, plus the Foundation watchdog decision.
+- Repository backlog: 46 open numbered rows, plus the Foundation watchdog decision.
 - Implementation plans: Spec 2 baseline Tasks 10–26 (17 tasks), plan 1a (25 tasks) and plan 1b (the
   2026-08-28 plan's remaining 15 tasks, not yet rewritten): 57 tasks. Before the cutover: plan 1a
   (25 tasks) and Tasks 10–11 — 27 tasks. After it: Tasks 12–26 and plan 1b (15 tasks) — 30 tasks. Phases 5, 5b, 6 and 7 have no spec yet.

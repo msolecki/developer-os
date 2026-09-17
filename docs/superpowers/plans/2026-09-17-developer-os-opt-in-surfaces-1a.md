@@ -312,7 +312,7 @@ Shape rules, exactly A12 plus the A13 correction: the lock is an owner `0600` ze
 
 `BootstrapEvidenceAdmissionV1` loses `reusableGlobalLock`. A fresh plan admits a pre-existing `state/.lifecycle.lock` through `admittedPreexistingPaths` and then has no `global_lock` created path.
 
-- [ ] **Step 1: Write the failing Core validator and shape tests**
+- [x] **Step 1: Write the failing Core validator and shape tests**
 
 ```ts
 it("requires createdPaths[0] to be the global lock exactly when the plan admits no pre-existing lock", () => {
@@ -338,7 +338,7 @@ it.each(LIFECYCLE_BOOKKEEPING_RELATIVE_PATHS)("admits %s by exact shape and refu
 
 The three plan helpers are test-local transformations of the file's existing `fullPlanFixture().plan`, each passed through `validateBootstrapPlan` with `fullPlanFixture().context`: `freshPlan()` is that plan unchanged; `freshPlanAdmittingLock()` removes `createdPaths[0]`, decrements every `{ kind: "created_path", scope: "ordinary" }` parent ordinal by one, and inserts `/product/state/.lifecycle.lock` into `admittedPreexistingPaths` in unsigned UTF-8 order; `freshPlanAdmittingLockAndCreatingIt()` keeps `createdPaths[0]` and inserts the same admitted path; `freshPlanWithoutLockRow()` removes `createdPaths[0]` and renumbers as above without admitting the lock. `observing(map)` is a test-local function returning `map[path] ?? { kind: "other" }`; `wrongShapesOf` returns the mode, size, link-count, owner and kind variants of its argument. Cover in `bookkeeping.test.ts`: the exported path tuple equals the A12 set exactly and is non-empty; lock with mode `0644`, size 1, `nlink` 2, foreign owner or `other` kind refuses; directory with mode `0755`, foreign owner, or an unknown child refuses; `backups` holding `transactions` admitted; `state/transactions` holding `.tx_fi_<uuid>_0000000000_f.lock` admitted only when that ID is in `bootstrapParticipantIds`, and holding a retained tombstone admitted only when its path is in `retainedPaths`; `staging/transactions/tx_fi_<uuid>_0000000000_f` (empty, or holding only retained tombstones) admitted, and the same holding `0.bin` refused; a legacy `tx_<uuid>.json` journal in `state/transactions` refused with `offendingPath` equal to that journal, not to `state/transactions` or `backups`; a refusal inside `backups/transactions/<id>/` names the deepest offending child; a path outside the set is never admitted.
 
-- [ ] **Step 2: Write the failing CLI round-trip and manifest tests**
+- [x] **Step 2: Write the failing CLI round-trip and manifest tests**
 
 ```ts
 it("keeps the bookkeeping set out of the V2 manifest", async () => {
@@ -377,7 +377,7 @@ The shipped downcast uninstall leaves its own terminal Foundation journal (`stat
 - In `apps/cli/src/commands/uninstall.test.ts`, "removes an ephemeral V2 artifact holding real content instead of refusing on a phantom edit" writes `"stale-status"` to `state/git-sync.json` (still an ephemeral manifest row) instead of `state/.lifecycle.lock`, and additionally asserts `state/.lifecycle.lock` is not in `removed` and still exists.
 - Run `rg -n "lifecycle\.lock|managedArtifacts" apps/cli/src tests --glob '*.test.ts'` and update any other assertion that pins a bookkeeping manifest row; name each changed file in Step 6's `git add`.
 
-- [ ] **Step 3: Run the new tests and verify each fails for its stated reason**
+- [x] **Step 3: Run the new tests and verify each fails for its stated reason**
 
 Run: `npx vitest run --root packages/core src/lifecycle/bookkeeping.test.ts src/manifest/bootstrap.test.ts`
 
@@ -387,7 +387,7 @@ Run: `npx vitest run --root apps/cli src/bootstrap/bookkeeping.v2.test.ts`
 
 Expected: FAIL — the manifest contains `state/.lifecycle.lock`, `state/transactions`, the three journal roots and `backups`; the reinstall refuses with "live lifecycle lock residue" or "unbound reusable directory".
 
-- [ ] **Step 4: Implement shape admission, the conditional validator rule and manifest exclusion**
+- [x] **Step 4: Implement shape admission, the conditional validator rule and manifest exclusion**
 
 In `validateBootstrapPlan`, replace the unconditional check with:
 
@@ -406,7 +406,7 @@ Executor rules:
 - `buildManifest` drops every path in `lifecycleBookkeepingPaths(paths.home)` from `includedPaths`.
 - In `report.ts`, `exactRestoredBase` deletes every bookkeeping path from `attributableFiles`. Deleting `reusableGlobalLock` also deletes the `createPlannedPath` fallback NEW-70 describes; Task 25 closes NEW-70 when `grep -n reusableGlobalLock apps/cli/src` is empty.
 
-- [ ] **Step 5: Run the focused tests**
+- [x] **Step 5: Run the focused tests**
 
 Run: `npx vitest run --root packages/core src/lifecycle/bookkeeping.test.ts src/manifest/bootstrap.test.ts src/index.test.ts`
 
@@ -422,7 +422,7 @@ Run: `npm run build && npx vitest run --root tests e2e/fresh-v2-retained-bootstr
 
 Expected: PASS, in well under an hour. Add `bookkeeping.v2.test.ts`'s duration to `lifecycle-v2`'s recorded local total and update its `timeout-minutes`.
 
-- [ ] **Step 6: Gate, commit, push**
+- [x] **Step 6: Gate, commit, push**
 
 Tick this task, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 
