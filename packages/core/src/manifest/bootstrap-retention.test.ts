@@ -325,7 +325,7 @@ function validatorAdmittedPlanFixture(): {
     schemaVersion: 1,
     operation: "fresh_v2_init",
     id: ID,
-    admittedExternalShapeHash: bootstrapExternalShapeHash(externalShape, "fresh_v2_init"),
+    admittedExternalShapeHash: bootstrapExternalShapeHash(externalShape),
     admittedPreexistingPaths: [],
     v2ManifestHash: manifestRef.hash,
     bootstrapIdentity: {

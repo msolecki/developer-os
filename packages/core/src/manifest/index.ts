@@ -12,17 +12,6 @@ export {
   validateManifest,
 } from "./store.js";
 export { ManifestV1NotMigratableError, validateManifestBytes, validateManifestV1, validateManifestV2, validateMigratableManifestV1 } from "./v2.js";
-export { ManifestMigrationNotFeasibleError, mapManifestV1ToV2, planManifestMigration } from "./migration.js";
-export type {
-  ManifestMigrationIdentityV1,
-  ManifestMigrationPackagedFileV1,
-  ManifestMigrationPackagedReleaseV1,
-  ManifestMigrationParentV1,
-  ManifestMigrationPlanAdmissionV1,
-  ManifestMigrationReadRequestV1,
-  ManifestMigrationReadV1,
-  ManifestMigrationRequestV1,
-} from "./migration.js";
 export { ManifestStateParticipant, ManifestStateParticipantError, validateManifestStatePlan } from "./manifest-state.js";
 export {
   BootstrapStateError,

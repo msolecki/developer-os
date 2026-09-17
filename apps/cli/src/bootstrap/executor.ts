@@ -59,7 +59,6 @@ import type { RenameNoReplace, RenameSameParentNoReplace } from "@developer-os/p
 
 import { createCanonicalPathEvidence, createOwnerPathAdmission } from "./admission.js";
 import { BootstrapJournalStore } from "./journal-store.js";
-import { v2OnlyProductPaths } from "./reservations.js";
 import {
   BootstrapRetainer,
   projectBootstrapRetentionPostimage,
@@ -196,14 +195,6 @@ class FreshBootstrapError extends Error {
     super(message);
     this.name = "FreshBootstrapError";
   }
-}
-
-function resumableFreshPlan(evidence: BootstrapEvidenceAdmissionV1): FreshV2InitPlanV1 | null {
-  const plan = evidence.active?.plan ?? null;
-  if (plan?.operation === "v1_to_v2") {
-    throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "an interrupted manifest migration cannot be resumed by fresh V2 init");
-  }
-  return plan;
 }
 
 class FreshBootstrapInterruption extends FreshBootstrapError {
@@ -633,7 +624,7 @@ export class BootstrapExecutor {
     request: FreshInitRequestV1,
     evidence: BootstrapEvidenceAdmissionV1,
   ): Promise<FreshInitPreviewV1> {
-    const existing = resumableFreshPlan(evidence);
+    const existing = evidence.active?.plan ?? null;
     if (existing !== null) {
         const source = existing.payloads
           .map((row) => row.source)
@@ -677,7 +668,7 @@ export class BootstrapExecutor {
     request: FreshInitRequestV1,
     evidence: BootstrapEvidenceAdmissionV1,
   ): Promise<FreshInitOutcomeV1> {
-    const existing = resumableFreshPlan(evidence);
+    const existing = evidence.active?.plan ?? null;
     if (existing !== null) return this.executeFreshInit(existing);
     const plan = await this.planFreshInit(request, evidence);
     return this.executeFreshInit(plan);
@@ -1139,7 +1130,10 @@ export class BootstrapExecutor {
       join(paths.stagingDir, "fresh-v2-init"),
       join(paths.stagingDir, "transactions"),
       join(paths.stateDir, "transactions"),
-      ...v2OnlyProductPaths(paths).directories,
+      join(paths.stateDir, "lifecycle-journals"),
+      join(paths.stateDir, "git-effect-journals"),
+      join(paths.stateDir, "launchd-effect-journals"),
+      join(paths.stateDir, "rollback"),
     ];
   }
 
@@ -1550,12 +1544,23 @@ export class BootstrapExecutor {
   }
 
   private runtimeReservationPaths(): readonly string[] {
-    const paths = this.#dependencies.paths;
+    const { stateDir, logsDir } = this.#dependencies.paths;
+    const jobs = ["brain-reindex", "brain-lint", "doctor", "git-sync"] as const;
     return [
-      join(paths.stateDir, ".lifecycle.lock"),
-      join(paths.stateDir, "lifecycle-install-nonce"),
-      join(paths.stateDir, "lifecycle-id-allocator.json"),
-      ...v2OnlyProductPaths(paths).reservations,
+      join(stateDir, ".lifecycle.lock"),
+      join(stateDir, "lifecycle-install-nonce"),
+      join(stateDir, "lifecycle-id-allocator.json"),
+      join(stateDir, "git-sync.json"),
+      join(stateDir, "uninstalling.json"),
+      join(stateDir, "update-rollback.json"),
+      join(stateDir, "update-executor.json"),
+      ...jobs.flatMap((job) => [
+        join(stateDir, `automation-${job}.json`),
+        join(stateDir, `.automation-${job}.lock`),
+        ...Array.from({ length: 10 }, (_, ordinal) =>
+          join(logsDir, `automation-${job}.${String(ordinal)}.json`),
+        ),
+      ]),
     ];
   }
 
@@ -1817,7 +1822,10 @@ export class BootstrapExecutor {
       join(paths.stagingDir, "transactions"),
       join(paths.stagingDir, "transactions", forwardId),
       join(paths.stateDir, "transactions"),
-      ...v2OnlyProductPaths(paths).directories,
+      join(paths.stateDir, "lifecycle-journals"),
+      join(paths.stateDir, "git-effect-journals"),
+      join(paths.stateDir, "launchd-effect-journals"),
+      join(paths.stateDir, "rollback"),
       ...(input.brainStats === null
         ? [input.request.brainPath, ...BRAIN_TEMPLATE_DIRECTORIES.map((path) => join(input.request.brainPath, path))]
         : []),
@@ -1939,7 +1947,7 @@ export class BootstrapExecutor {
       schemaVersion: 1,
       operation: "fresh_v2_init",
       id: input.id,
-      admittedExternalShapeHash: bootstrapExternalShapeHash(input.externalShape, "fresh_v2_init"),
+      admittedExternalShapeHash: bootstrapExternalShapeHash(input.externalShape),
       admittedPreexistingPaths: [...new Set<string>([
         ...input.retainedPaths,
         ...input.preexistingDirectories.keys(),
