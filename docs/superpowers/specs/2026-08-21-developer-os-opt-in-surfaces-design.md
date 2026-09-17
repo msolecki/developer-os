@@ -1,7 +1,8 @@
 # Developer OS — Opt-in Surfaces Design
 
 **Status: approved by the founder on 2026-08-28 after fresh-context `READY`, and amended on
-2026-09-17 by the founder-approved NEW-67 amendment (change record below).** Implementation plan:
+2026-09-17 by the founder-approved NEW-67 amendment and by the founder's answers to plan 1a's blocking
+questions (change record below).** Implementation plan:
 `docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md`, superseded for execution by plans
 1a and 1b written against this amended text. This is `ORDER.md` entry A11, program-plan Task 7, DOS-P7 —
 **the first of two specifications.** The second specification owns release metadata, dry-run update,
@@ -32,6 +33,7 @@ contents are quoted from those narratives; the sections column is derived from e
 | 2026-08-27 to 2026-08-28 | founder, subsequent fresh-review closure | stale real-descriptor summaries removed, linked snapshot-creation crash states closed, one bounded flat coordinator rewrite temp admitted | §5.3, §6 |
 | 2026-08-28 | founder, complete-spec approval after the final full `npm run check` and an independent `READY` | the complete written specification; opens the implementation-plan gate | all |
 | 2026-09-17 | founder, NEW-67 amendment with every recommended option | A1 D18 applied (V1 homes keep Foundation paths); A2 retention on the pre-product bootstrap paths only; A3 absent-manifest uninstall without a coordinator envelope; A4 reservation ownership; A5 types shipped by Spec 2 consumed; A6 migration collision codes withdrawn; A7 structural admission and a recovery-only uninstall arm; A8 counting-seam ceiling gates; A9 uninstall→init round-trip gates; A10 `launchctl` re-pin deferred to Spec 1b (no text change); A11 this table; A12 bookkeeping set kept by uninstall and admitted by shape; A13 closure admits retained bootstrap evidence. The 2026-08-27 flat pre-product recovery envelope, first-creation temp grammar and key-absent coordinator are superseded by A3. | header, §2.1, §2.3, §2.4, §6, §7, §8 |
+| 2026-09-17 | founder, plan 1a blocking questions | A14 (D24) closed variant `uninstall/present_manifest_without_launchd` for a present-manifest uninstall with no launchd evidence, derived and never chosen; A15 (D25) `M(finalize_tombstones)` removes the preimage manifest's empty directory rows before it deletes the manifest tombstone; A16 (D28) the allocated `mf` manifest participant ID is reserved last in a composite's ID block | §2.1, §2.2, §2.4, §5.3, §6, §7 |
 
 Each 2026-09-17 change is marked "Amended 2026-09-17" in place with its item number.
 
@@ -294,7 +296,7 @@ mutations require what §2.2 and §2.4 already require.
 A recovery-only arm admits an uninstall whose manifest is already moved. It requires the global lock and
 either:
 
-- exactly one valid `uninstall/present_manifest` journal whose cursor has reached `M(preserve_before)`,
+- exactly one valid present-manifest uninstall journal, of either variant (amended 2026-09-17, A14), whose cursor has reached `M(preserve_before)`,
   applied or completed. Before durable `M(commit_absence)` the arm admits only that coordinator's
   compensation, with the manifest absent, its tombstone present, and the key tombstone present exactly
   when the key's before-state was present. From durable `M(commit_absence)` onward it admits only
@@ -303,10 +305,16 @@ either:
   nonce and allocator in one of the three microstates §2.4 allows a compacting uninstall cursor, and the
   participant, effect and staging ledgers §2.4 closure validates for that coordinator up to its
   compaction cursor; or
-- the exact plan-plus-lock or plan-only `uninstall/present_manifest` envelope, with both control files
+- the exact plan-plus-lock or plan-only present-manifest uninstall envelope, of either variant (amended 2026-09-17, A14), with both control files
   absent, completed by §2.4's guarded orphan rule.
 
 Uninstall dispatch checks this arm before §6's absent-manifest shapes.
+
+**Amended 2026-09-17 (A14, A15).** Both present-manifest uninstall variants of §2.4
+(`uninstall/present_manifest` and `uninstall/present_manifest_without_launchd`) use this arm with the
+same rules. While the cursor is at `M(finalize_tombstones)`, the manifest tombstone is either present,
+with none, some or all of the preimage manifest's empty directory rows already removed (§6 step 4), or
+absent with all empty ones removed.
 
 ### 2.2 Configuration loads and writes
 
@@ -568,7 +576,7 @@ four-root ledger scan. Its exact result union is `clear`,
 `retry_only { transactionId: LifecycleCoordinatorIdV1, pushPlanHash: LowerHexSha256 }`,
 `uninstall_draining { transactionId: LifecycleCoordinatorIdV1 }`, or
 `lifecycle_recovery_required`. `uninstall_draining` is legal only for exactly one otherwise valid
-non-terminal `uninstall/present_manifest` coordinator, no other non-terminal or malformed ledger,
+non-terminal present-manifest uninstall coordinator of either §2.4 variant (amended 2026-09-17, A14), no other non-terminal or malformed ledger,
 and a verified `F(uninstall_artifacts)` state at or beyond removal of all four runner-lease paths;
 its manifest-removal state and transaction ID must match that coordinator. It grants only the silent
 runner-exit decision in §5.4 and ordinary recovery of that exact uninstall. Neither non-clear typed
@@ -1534,10 +1542,26 @@ work never changes the grammar.
 | `automation_reconcile/live_only` | `Q` |
 | `automation_disable` | `P · M(preserve_before) · F(plist_files) · F(activation) · M(publish_after) · F(config) · M(finalize_tombstones)` |
 | `uninstall/present_manifest` | `F(uninstall_marker) · P · R · F(uninstall_artifacts) · K(stage) · M(preserve_before) · M(commit_absence) · K(delete) · M(finalize_tombstones)` |
+| `uninstall/present_manifest_without_launchd` (amended 2026-09-17, A14) | `F(uninstall_marker) · R · F(uninstall_artifacts) · K(stage) · M(preserve_before) · M(commit_absence) · K(delete) · M(finalize_tombstones)` |
 
 **Amended 2026-09-17 (A3).** Absent-manifest uninstall is not a coordinator operation: its `key_absent`
 and `key_present` arms (§6) reserve no ID, construct no immutable plan, and have no
 `LifecycleCoordinatorStepV1`.
+
+**Amended 2026-09-17 (A14).** Present-manifest uninstall has two closed variants; "present-manifest
+uninstall" names both wherever this specification does not name one. Planning derives the variant from
+evidence before allocation, and the plan hash binds the resulting shape (null or non-null launchd arms,
+with or without `P`); validation of a persisted plan checks that bound shape against its row and accepts
+no separately stored choice. It is `uninstall/present_manifest_without_launchd` exactly when
+the manifest owns no plist artifact (§6's closed external-plist rows), the validated configuration has no
+`automation.lifecycle` record, and the activation record is absent or its `automation` arm is `inactive`;
+an activation path that is not a guarded regular file is recovery-required, never absent. Otherwise it is
+`uninstall/present_manifest`, exactly as written. With no plist artifact and no automation record no
+generated label is derivable, so there is nothing to query or unload (the reasoning of §6's absent-manifest
+paragraph). The without-launchd variant has null `participants.launchd`, `launchdBeforeFiles` and
+`launchdAfterFiles`, and empty `authority.plistPaths`; its point of no return, `R`, compensation (the
+reverse prefix without `P`), closure, recovery-only arm and terminal compaction are those of
+`uninstall/present_manifest`.
 
 The first durable point of no return is exact and operation-specific:
 
@@ -1551,6 +1575,7 @@ The first durable point of no return is exact and operation-specific:
 | `automation_enable`, `automation_reconcile/files`, `automation_disable` | successful terminal `F(config)` | finalize verified launchd effects and manifest tombstones |
 | `automation_reconcile/live_only` | `Q` reaches fully `verified` | finalize `Q`, then terminal compaction |
 | `uninstall/present_manifest` | durable `M(commit_absence)` | finalize prior effects, delete the staged key, and finalize tombstones |
+| `uninstall/present_manifest_without_launchd` | durable `M(commit_absence)` | delete the staged key and finalize tombstones (amended 2026-09-17, A14) |
 
 Before that boundary, a coordinator failure may compensate; at or after it, it may only force-forward.
 For an effect that is itself the boundary, the journal's durable `verified` state is the force-forward
@@ -1588,7 +1613,8 @@ configuration, activation, or manifest transition derives `files`; that variant 
 plist-file mutation and retains the complete publication grammar above. A loaded wrong generation in
 the closed evidence-derived candidate set is
 a third state and cannot be converted into `live_only`. `uninstall/present_manifest` uses `P` for the complete installed-label
-unload set and `R` for §6's release/drain/reacquire observation.
+unload set and `R` for §6's release/drain/reacquire observation; `uninstall/present_manifest_without_launchd`
+has no `P` and uses `R` the same way (amended 2026-09-17, A14).
 
 Participant cardinality is a bijection with that table. Each `F(slot)` has one distinct matching
 `role.kind: "forward"` reference. A forward `F` strictly before its variant's point of no return has
@@ -1599,7 +1625,8 @@ exactly one matching step and every such step has the same ID/hash/side or posit
 exists exactly when an `M` appears and exposes exactly the listed manifest transitions; a redaction-key
 arm exists exactly when `K` appears; and `push` is non-null exactly for `N(h)` or `D(h)`. No participant
 or step may be duplicated or unused. The full `launchd` plan is non-null exactly for the three
-automation operations and the present-manifest uninstall variant, and its coordinator/file/manifest/effect bindings recompute as
+automation operations and the `uninstall/present_manifest` variant, and null for
+`uninstall/present_manifest_without_launchd` (amended 2026-09-17, A14), and its coordinator/file/manifest/effect bindings recompute as
 specified in §5.3. Authority plist paths are unique/sorted by unsigned UTF-8 bytes;
 Foundation references are unique/sorted by ID, while forward and compensation execution order lives
 only in `steps` plus the reverse-prefix rule.
@@ -1707,7 +1734,9 @@ lock. It guarded-opens exact `state/lifecycle-install-nonce` and
 reserves one contiguous counter block for the complete operation. A standalone Foundation transaction
 reserves one `tx` ID. A composite reserves, in order, its `lc` ID, forward Foundation refs in step
 order with each paired compensation immediately after its forward, then source Git, destination Git,
-before-files launchd, and after-files launchd IDs when present. Prefix selection changes only the ID
+before-files launchd, and after-files launchd IDs when present. **Amended 2026-09-17 (A16):** a composite
+with a manifest arm then reserves its allocated `mf` manifest participant ID (Spec 2 §5.3's
+`AllocatedLifecycleIdV1<"mf">`) last in the same contiguous block. Prefix selection changes only the ID
 text; one shared counter makes every namespace globally non-reusing within the installation epoch.
 Foundation plans now admit 1..256 mutations, so the reservation and companion bounds have a finite
 worst case.
@@ -1788,7 +1817,7 @@ also gives that result, with two typed exceptions. Exactly one coordinator may b
 every other journal is terminal and its embedded `PersistedGitPushPlanV1` passes §4.4 and hashes to the
 journal-bound push-plan hash; that state returns
 `retry_only { transactionId: coordinator.id, pushPlanHash }`. Or exactly one otherwise valid
-`uninstall/present_manifest` coordinator may have reached `F(uninstall_artifacts)` and durably
+present-manifest uninstall coordinator of either variant (amended 2026-09-17, A14) may have reached `F(uninstall_artifacts)` and durably
 verified absence of all four plan-bound lease paths while every other journal is terminal; that state
 returns `uninstall_draining { transactionId: coordinator.id }`. The latter check reopens the exact
 Foundation participant and coordinator cursor and requires their plan hashes, lease removals, and
@@ -1954,8 +1983,9 @@ postimage to its recorded after-tombstone (or observes the original absent), res
 inode by no-replace rename or preserves prior absence, and deletes only an exact plan-owned
 after-tombstone after restoration verifies. It never overwrites or unlinks a third state. Finalize
 deletes the exact before-tombstone only after the postimage and every participant are terminal; the
-coordinator retains its journal, staged bytes, and backups until then, and product-directory cleanup
-is later.
+coordinator retains its journal, staged bytes, and backups until then. Product-directory cleanup is
+later, except that an uninstall removes the preimage manifest's empty directory rows inside
+`M(finalize_tombstones)`, before this tombstone deletion (§6 step 4; amended 2026-09-17, A15).
 
 `RedactionKeyStatePlanV1` is the coordinator's separate, secret-opaque participant for the one
 architecture-approved non-manifest key path. `sourcePath` is exactly
@@ -1997,7 +2027,8 @@ coordinator-specific forward order, not one universal compensation list:
 - uninstall rollback before manifest absence follows the literal reverse prefix: it first restores a
   staged redaction key by secret-opaque rename, then runs the paired inverse artifact transaction,
   reloads labels only after their restored plists verify, and finally runs the paired inverse
-  uninstall-marker transaction.
+  uninstall-marker transaction; `uninstall/present_manifest_without_launchd` has no labels to reload
+  (amended 2026-09-17, A14).
 
 Every launchd load/reload transition, forward or compensating, re-resolves the exact plist path and
 requires its guarded regular-file bytes to equal the plan-bound hash immediately before bootstrap. An
@@ -3802,7 +3833,8 @@ cross-bindings before any Foundation or launchd participant starts.
 
 Automation enable/reconcile entries equal the complete eligible registry (three entries, or four when
 Git sync is eligible); automation disable entries equal the complete installed automation set; and a
-present-manifest uninstall entry set equals its complete manifest-owned launchd set and may be empty.
+`uninstall/present_manifest` entry set equals its complete manifest-owned launchd set and may be empty;
+`uninstall/present_manifest_without_launchd` has no `LaunchdPlanV1` (amended 2026-09-17, A14).
 No operation may omit an affected job or add an unaffected one.
 
 Entries are sorted in closed job-registry order and contain, for every install, replace, keep, or
@@ -4030,6 +4062,10 @@ out-of-home artifact is preserved and reported. Live launchd labels are governed
 Uninstall uses a two-phase drain so it never waits for a runner while holding the global lock that the
 runner itself needs:
 
+**Amended 2026-09-17 (A14).** For `uninstall/present_manifest_without_launchd` (§2.4) step 1 unloads
+nothing, and step 2's closed-runner proof rests on the four lifetime leases alone: no generated label is
+derivable, so no product-owned label can be loaded.
+
 1. Take the global mutation lock. Create and verify manifest-owned `UninstallingMarkerV1` at exact
    `state/uninstalling.json` through
    the composite journal,
@@ -4077,12 +4113,20 @@ runner itself needs:
    or after committed manifest absence first requires the original manifest leaf still absent; a third
    state is preserved with exit 6. Otherwise recovery only
    force-forwards: guarded-unlink the identity-matching tombstone without reading it, sync its parent,
-   verify both key paths absent, finish remaining cleanup, guarded-unlink the exact preserved manifest
+   verify both key paths absent, finish remaining cleanup, remove the preimage manifest's empty
+   directory rows as the next paragraph states (amended 2026-09-17, A15), guarded-unlink the exact preserved manifest
    tombstone, sync its parent, and finalize the composite journal. Before
    manifest absence, both paths absent when the prior key was present is exit 6; after manifest absence,
    that same state is the planned terminal deletion. Both paths present, a restored source after the
-   point of no return, or any identity mismatch is always exit 6. Only after terminal finalize may empty
-   product directories and coordinator recovery material be removed.
+   point of no return, or any identity mismatch is always exit 6.
+   **Amended 2026-09-17 (A15).** Coordinator recovery material is removed only after terminal finalize,
+   by §2.4 terminal compaction. Empty product directories are removed earlier, inside
+   `M(finalize_tombstones)` and before it deletes the manifest tombstone: it reads the tombstone, whose
+   bytes must hash to `ManifestStatePlanV1.before.hash`, derives the preimage manifest's directory rows
+   inside the removable partition, excludes §2.1's bookkeeping set, and removes each empty one deepest
+   first by its kind-specific safe operation. A non-empty directory is preserved and reported. A death
+   before the tombstone deletion re-derives the same list from the still-present tombstone on recovery,
+   and an already-absent directory is complete. Only then is the tombstone deleted.
 
 **Amended 2026-09-17 (A12).** Uninstall never removes §2.1's bookkeeping set. The documented
 post-uninstall residue is that set, with every directory compaction has emptied, together with inert
@@ -4161,14 +4205,14 @@ only the global mutation-lock file retains the stable never-unlink contract.
 | config surface is closed | exhaustive fixtures enumerate every `ConfigReadableKeyV1` and `ConfigMutableKeyV1`, reject every undeclared/prefix/descendant key, extra argv value, TOML fragment, implicit string, wrong JSON type, incomplete whole section, child write under an absent optional parent, and `null` outside whole `brain`/`redaction`; successful get/set results are exact `CanonicalJsonV1`, immutable lifecycle/schema/telemetry fields never change, and whole/keyed redaction reads expose only `patternsCount`, never a pattern value in success or error output |
 | journal closure is fail-closed | exact-root tests cover nonce/allocator agreement, empty/partial/complete guarded-cleanable allocator temps and every identity third state, all four owner/type/mode gates, all three aggregate companion inventories, every allowed filename, allocated `0..255` and legacy `0..4294967294` mutation-index boundaries plus next-byte/noncanonical/sign/gap/partial-highest cases, planless Foundation remove gaps plus the three exact highest-index `writeStaged` partial states and journal-prefix temp, exact empty `launchd-process/{home,tmp}` pre-intent/process-boundary staging, the sole current-frontier linked snapshot-creation prefix, and every unknown/nonempty/identity third state, every allowed empty/partial/complete initial coordinator/participant/effect plan-or-journal temp before first intent and refusal after a target/live transition, conservative pre-ID and exact post-ID recomputation of every standalone/participant Foundation, coordinator, Git-effect, and launchd-effect journal maximum, over-limit plans/rewrite temps/finals, orphan plan/journal and independent stable-lock cases, unknown/temp leaves, strict schema/key/phase/ID/plan-domain hashes, missing/mismatched participants, zero/one/two `push_pending` candidates, each uninstall cursor before/within/after exact lease removal, mixed candidates, `compacting`, and malformed bytes with no readable participant envelope; only a fully valid terminal ledger is `clear`, while one valid bound push is `retry_only` and one exact verified lease-removal uninstall is `uninstall_draining`; inert retained bootstrap tombstones, the bootstrap participants' `.tx_fi_…_{f|c}.lock` stable locks, and bootstrap participant ID directories under `staging/transactions` and `backups/transactions` that are empty or hold only tombstones are projected away and counted toward the caps, never malformed (amended 2026-09-17, A13) |
 | terminal collection stays bounded | thousands of scheduled status/log transactions repeatedly compact to the exact 10,000/100,000/1,000,000 ceilings; allocator crash injection proves blocks advance before publication, gaps are legal, counters/nonces never rewind, and collected IDs never reappear; failure before/after every payload, journal, directory, held-lock, and plan-last unlink resumes from a terminal journal/cursor, plan-plus-lock, plan-only, or exact guarded orphan without admitting coordinator lock-only state; unknown children, identity swaps, and non-empty directories are preserved, reservation refuses before an ID block, and the global lifecycle lock is never removed. Amended 2026-09-17 (A8): a ceiling may be proven at its exact maximum and first-over case through the production counting path over an injected enumerator, provided one small physical fixture proves the injected and the real enumerator agree |
-| coordinator grammar is exact | strict tests expand every §2.4 operation variant, point of no return, and forward/inverse Foundation pair and reject every missing, duplicate, reordered, unused, wrong-side, wrong-position, wrong-hash, non-inverse, or late-compensation participant/step; `automation_reconcile/live_only` is exactly one `Q` participant with zero or more transitions and no Foundation/manifest arm, while `/files` requires its real plist mutations; plan/journal/filename IDs bind in both directions; `pushPlanHash` is null/equal in every variant and phase; a finalized current pre-boundary Foundation participant advances into its paired inverse while the boundary config participant force-forwards; every coordinator and effect phase/cursor/observation tuple is derived and terminal invariants require complete verified postimages, paired inverse postimages, preimages, or only exact source/destination `relinquished_created_object` and source `relinquished_created_git_tree` exceptions after control preimages verify |
+| coordinator grammar is exact | strict tests expand every §2.4 operation variant, point of no return, and forward/inverse Foundation pair (amended 2026-09-17: both present-manifest uninstall variants are derived from manifest plist rows, `automation.lifecycle` and the activation automation arm, a non-regular activation path is recovery-required, and a mismatched variant refuses, A14; the `mf` ID is reserved last, A16) and reject every missing, duplicate, reordered, unused, wrong-side, wrong-position, wrong-hash, non-inverse, or late-compensation participant/step; `automation_reconcile/live_only` is exactly one `Q` participant with zero or more transitions and no Foundation/manifest arm, while `/files` requires its real plist mutations; plan/journal/filename IDs bind in both directions; `pushPlanHash` is null/equal in every variant and phase; a finalized current pre-boundary Foundation participant advances into its paired inverse while the boundary config participant force-forwards; every coordinator and effect phase/cursor/observation tuple is derived and terminal invariants require complete verified postimages, paired inverse postimages, preimages, or only exact source/destination `relinquished_created_object` and source `relinquished_created_git_tree` exceptions after control preimages verify |
 | applied provenance is mandatory | exact-path tests prove only the planned lifecycle apply/recovery path creates or updates the content-owned `LifecycleActivationRecordV1`; absence means both inactive, one-arm transitions preserve the other, disable makes its arm inactive, config-only re-enable remains inert, pre-existing unowned files refuse, independent record/manifest edits are drift or missing ownership, and uninstall removes the exact artifact through its manifest evidence; every preflight also requires `LifecycleJournalClosureV1.clear`, apart from the exact `retry_only` path that can consume only its persisted push plan |
 | plan/apply identity | all four default plan commands, including `GitDisablePlan`, perform zero writes, allocations, staging creation, lock creation, or inode capture and emit only deterministic `LifecyclePlanPreviewV1`; `--apply` recomputes the same `previewHash` under lock before reserving IDs, then its `LifecycleExecutionPlanV1` may add only allocated IDs, concrete staging paths/identities, and derived journal maxima. Fixtures change every preview precondition, reject a widened operation, cross-bind normalized config, activation/plist/manifest hashes, Git/launchd preview members and template process-table hashes, and prove recovery consumes the persisted execution envelope; `git disable` without `--apply` is byte-identical |
 | V2 new init registers ownership | a fresh `init` registers the immutable lifecycle nonce, the schema allocator, and the exact sync/marker/status/lock/log reservations, and creates the bookkeeping paths it owns under §2.1's owner table, none of them a manifest row; a pre-existing leaf at a reserved path refuses unless Spec 2 §6.1 admits it; a V1 manifest reaches no Spec 1 mutation, and Foundation commands over it take no global lock (amended 2026-09-17, A1, A12) |
 | V2 admission is structural | a strictly valid V2 manifest, matching nonce/allocator, the exact global lock and the three journal roots admit; drift, non-clear closure and missing, emptied, replaced or altered retained evidence never refuse recovery, status, `doctor` or uninstall; mutations still require what §2.2 and §2.4 require, including §2.2's `retry_only` path; the recovery-only uninstall arm admits compensation before durable `M(commit_absence)` and force-forward after it, and nothing else (amended 2026-09-17, A7) |
 | runtime records are closed | exact-path tests expand four job IDs and ten log slots; strict round-trips cover `SyncRecordV1`, marker, both status arms, bounded redacted log JSON, timestamps, reason codes, path order/count/size, zero-byte locks, and refuse every unknown field, wrong outcome combination, symlink, kind, slot, or unreserved path |
 | V2 drift is exhaustive | non-empty fixtures cover every legal kind/mode pair, wrong type, file hash, link target, schema invalidity, optional absence, and illegal combinations |
-| composite state recovers | injected failure/process death around every Foundation participant, direct manifest rename, activation publication, source/destination Git transition, before/after-files launchd command-before-observation and reverse transition, success-record write, point-of-no-return crossing, and compensation either runs the exact preplanned inverse Foundation transaction/restores prior external state, finishes the force-forward suffix, or leaves an exit-6 resumable journal; replacement fixtures cover old unload, new bootstrap, compensating new unload, and compensating old bootstrap by observable generations; uninstall rollback proves key → inverse artifacts → verified prior labels → inverse marker; the first Foundation journal dies before/after no-replace publication and resumes from its coordinator-bound staged inode; source-effect fixtures bind distinct before/after projections and retry validates only `sourceAfter`; forged complete config and already-matching external state remain inert at every non-terminal phase, while exact `push_pending` alone reopens the domain-hashed `PersistedGitPushPlanV1` and may retry only its bound network step or not-yet-started destination effect |
+| composite state recovers | injected failure/process death around every Foundation participant, direct manifest rename, activation publication, source/destination Git transition, before/after-files launchd command-before-observation and reverse transition, success-record write, point-of-no-return crossing, and compensation either runs the exact preplanned inverse Foundation transaction/restores prior external state, finishes the force-forward suffix, or leaves an exit-6 resumable journal; replacement fixtures cover old unload, new bootstrap, compensating new unload, and compensating old bootstrap by observable generations; uninstall rollback proves key → inverse artifacts → verified prior labels → inverse marker, with no labels for `uninstall/present_manifest_without_launchd` (amended 2026-09-17, A14); the first Foundation journal dies before/after no-replace publication and resumes from its coordinator-bound staged inode; source-effect fixtures bind distinct before/after projections and retry validates only `sourceAfter`; forged complete config and already-matching external state remain inert at every non-terminal phase, while exact `push_pending` alone reopens the domain-hashed `PersistedGitPushPlanV1` and may retry only its bound network step or not-yet-started destination effect |
 | branch-history warning is explicit | Git enable plan states that scoped staging does not prevent earlier or manual branch commits from being pushed |
 | scoped staging | temporary repositories prove canonical notes, four index artifacts, and tracked deletions are included while every private/unrelated class is excluded |
 | scope changes reconcile | each in-repository scope key causes sync refusal; reconcile lists exact retirements and preserves local files; a `brainPath` change refuses as repository identity and cannot enter reconcile; declared/canonical root escape reports `scope_outside_repository` |
@@ -4203,7 +4247,7 @@ only the global mutation-lock file retains the stable never-unlink contract.
 | absent-manifest uninstall is evidence-bound | complete no-follow product-home walks cover absent root, empty root, exact empty `state`, and exact key-only `state` at every 1,000,000-entry/128-component/4096-byte boundary (the terminal-collection row's counting-seam rule applies); `key_absent` proves two identical walks and creates nothing; `key_present` proves bootstrap acquisition, the repeated inventory, the secret-opaque identity recheck, and a crash before and after the key unlink; the exact bootstrap leaf, inert retained evidence with its ancestor directories, and the bookkeeping set are projected away and left in place, including a rolled-back first `init`'s lock; no unlink or rmdir runs except the key; every other known/unknown file or directory, symlink, special/hard-linked leaf, owner/identity race, invalid name, first-over-limit entry, external plist, retained generated-label evidence, ledger residue outside the bookkeeping projection, or active/ambiguous bootstrap residue preserves everything as recovery-required; fixtures assert zero `launchctl` spawn and zero key-byte/hash read (amended 2026-09-17, A2, A3) |
 | uninstall respects ownership | the declared/canonical partition preserves every Brain and unknown/out-of-home artifact; only exact authorized plists, product-home artifacts, exact ephemeral paths, and redaction key disappear; `.git` survives |
 | manifest transitions are no-overwrite | concurrent replacement before/after every tombstone and publication boundary preserves every third state; present↔present, present→absent, absent→present, rollback, and recovery use only exact no-replace moves/publication |
-| uninstall removes its manifest recoverably | failure/death before and after no-replace move, preserved-inode verification, and durable committed-absence record proves exact compensation or force-forward completion, never overwrite/deletion of a concurrent manifest or a stale live manifest |
+| uninstall removes its manifest recoverably | failure/death before and after no-replace move, preserved-inode verification, and durable committed-absence record proves exact compensation or force-forward completion, never overwrite/deletion of a concurrent manifest or a stale live manifest; death after each empty-directory removal and before the manifest tombstone deletion re-derives the directory list from the tombstone and completes, and a non-empty directory is preserved and reported (amended 2026-09-17, A15) |
 | uninstall then init round-trips | on a synthetic home each sequence succeeds without manual action and retained bootstrap evidence stays inert: V2 `init` → present-manifest uninstall → `init`; V2 `init` → uninstall → uninstall again → `init`; absent-manifest key deletion → `init`; `key_absent` → `init`; present-manifest uninstall killed at `M(preserve_before)` before and after its cursor advance, `M(commit_absence)`, `K(delete)`, `M(finalize_tombstones)`, each control-file microstate, plan-plus-lock and plan-only → uninstall → `init`; V2 `init` rolled back → uninstall → `init`; two complete install/uninstall cycles → `init`; fresh V2 `init` → `config set` and `git enable` preview with closure `clear` beside retained evidence (amended 2026-09-17, A9) |
 | redaction-key deletion is secret-opaque | strict source/tombstone derivation plus present/absent, collision, wrong-type/owner/mode/size/link/device/inode, identity-swap, and every `K(stage)`/manifest-absence/`K(delete)` crash boundary prove no key byte or content hash enters memory/journal/log; rollback before manifest absence renames it back, while recovery after manifest absence only deletes the bound tombstone |
 

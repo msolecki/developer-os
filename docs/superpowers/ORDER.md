@@ -20,26 +20,32 @@ founder decisions D19 and D20 settled the two that needed one.
 founder decisions D21–D23), with a companion Spec 2 §6.1/§6.4 amendment. NEW-67 is closed; its
 `launchctl` clause moved to NEW-84.
 
-**The next action is to write plan 1a** with `superpowers:writing-plans`: Spec 1 plan Tasks 1–7, 21 and
-23, with Task 2 after Task 4, against the amended Spec 1 and carrying the code obligations listed under
-roadmap Phase 4. Then execute it.
+**Plan 1a is written:** `plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`, 25 tasks — Spec 1 plan
+Tasks 1–7, 21 and 23 rewritten against Spec 1 as amended, carrying the code obligations listed under
+roadmap Phase 4. Its blocking questions were answered by founder decisions D24–D29 (2026-09-17) and
+applied to Spec 1 as A14–A16: a closed `uninstall/present_manifest_without_launchd` variant (D24), empty
+directories removed before the manifest tombstone (D25), the uninstall capacity refusal with the decision
+deferred to Phase 4b as NEW-85 (D26), §6 applied literally to V1 residue (D27), the `mf` ID reserved last
+(D28), and NEW-80 pulled into plan 1a Task 1 (D29). **The next action is to execute plan 1a.**
 
-Spec 1 is approved and its plan exists at `plans/2026-08-28-developer-os-opt-in-surfaces.md`, with
-none of its 24 implementation tasks started. Spec 2's Tasks 1–7 and 9 are complete, Task 8 is
-withdrawn, and Tasks 10–26 remain.
+Plan 1a progress: no task committed; next is Task 1 (Pin the fresh V2 plan's created path set to D19 and the renamed status reservation).
+
+The 2026-08-28 Spec 1 plan (`plans/2026-08-28-developer-os-opt-in-surfaces.md`) stays as plan 1b's
+source. Spec 2's Tasks 1–7 and 9 are complete, Task 8 is withdrawn, and Tasks 10–26 remain.
 
 Open sequence (D16, daily use before completeness):
 
-1. Now: write plan 1a against the amended Spec 1, then execute it (Phase 4).
+1. Now: execute plan 1a (Phase 4).
 2. Spec 2 Tasks 10–11 plus the production wiring step that removes the bootstrap pin at
-   `apps/cli/src/context.ts:765` — launcher and offline trust — with NEW-79, NEW-80 and NEW-81
-   first (Phase 4b).
+   `apps/cli/src/context.ts:765` — launcher and offline trust — with NEW-79, NEW-81 and NEW-85
+   first (Phase 4b); NEW-80 moved into plan 1a Task 1 (D29).
 3. A12 → A12b → A13 → A14, then the founder cutover A15.
 4. After the cutover: A11b (Spec 2 Tasks 12–26, then Spec 1b), then A16.
 
 Per decision D17 an ordinary task commit runs its focused commands, `npm run lint` and fresh review,
 and is pushed when no CI run is in progress; `npm run check` runs locally at phase or plan close
-(`SESSION.md` §5).
+(`SESSION.md` §5). That rule is unchanged by plan 1a, which adds one CI job for its real-V2-home test
+files in its Task 1.
 
 Phase 4 onward is sequenced by `plans/2026-09-04-developer-os-completion-roadmap.md` (10 open phases,
 4 through 11 with a 4b and a 5b, the founder decisions of 2026-09-04, 2026-09-07, 2026-09-16 and
@@ -82,8 +88,8 @@ Needs a human, a policy decision, or an external application:
 - Foundation watchdog — decide whether `SpawnLockfRunner` needs one around non-blocking `lockf`.
 
 The remaining open repository rows are NEW-20, NEW-24–NEW-29, NEW-31, NEW-32, NEW-34–NEW-40,
-NEW-76, NEW-78 and NEW-79–NEW-84; NEW-79–NEW-81 are owned by Phase 4b, NEW-82 by plan 1a, and NEW-84
-by Phase 9.
+NEW-76, NEW-78 and NEW-79–NEW-85.
+Owners: NEW-79, NEW-81 and NEW-85 are owned by Phase 4b; NEW-80, NEW-82 and NEW-83 by plan 1a; NEW-84 by Phase 9.
 They are not ordered ahead of A11 unless the touched subsystem makes one relevant.
 
 ## Delivery evidence still owed
@@ -125,7 +131,7 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 
 - Product sequence: 8 open entries, A11, A12, A12b, A13, A14, A15, A11b, A16.
 - Release plan: Tasks 10–26 open; Tasks 1–7 and 9 closed, Task 8 withdrawn.
-- Repository backlog: 45 open numbered rows, plus the Foundation watchdog decision.
-- Implementation plans: Spec 2 baseline Tasks 10–26 (17 tasks) and Spec 1 (24 tasks, split into
-  1a and 1b): 41 tasks. Before the cutover: plan 1a (9 tasks), Tasks 10–11 — 11 tasks.
-  After it: Tasks 12–26 and plan 1b (15 tasks) — 30 tasks. Phases 5, 5b, 6 and 7 have no spec yet.
+- Repository backlog: 46 open numbered rows, plus the Foundation watchdog decision.
+- Implementation plans: Spec 2 baseline Tasks 10–26 (17 tasks), plan 1a (25 tasks) and plan 1b (the
+  2026-08-28 plan's remaining 15 tasks, not yet rewritten): 57 tasks. Before the cutover: plan 1a
+  (25 tasks) and Tasks 10–11 — 27 tasks. After it: Tasks 12–26 and plan 1b (15 tasks) — 30 tasks. Phases 5, 5b, 6 and 7 have no spec yet.
