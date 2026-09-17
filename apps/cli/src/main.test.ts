@@ -1,5 +1,5 @@
 import * as nodeFs from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { serializeConfig } from "@developer-os/core";
 
@@ -370,13 +370,48 @@ const NON_INIT_COMMANDS = [
   ["search", "synthetic"],
 ] as const;
 
-function lastJsonError(lines: string[]): { readonly code: number; readonly kind: string | null } {
+const ORDINARY_COMMANDS_WITHOUT_REMOVAL = NON_INIT_COMMANDS.map((argv) =>
+  argv[0] === "uninstall" ? ["uninstall", "--dry-run"] : argv,
+);
+const MANUAL_ARCHIVE = "retained bootstrap evidence requires manual archive before a new bootstrap intent";
+
+function lastJsonError(lines: string[]): {
+  readonly code: number;
+  readonly kind: string | null;
+  readonly message: string | null;
+} {
   const parsed = JSON.parse(lines.at(-1) ?? "null") as {
     readonly code: number;
-    readonly error?: { readonly kind: string };
+    readonly error?: { readonly kind: string; readonly message: string };
   };
   lines.length = 0;
-  return { code: parsed.code, kind: parsed.error?.kind ?? null };
+  return { code: parsed.code, kind: parsed.error?.kind ?? null, message: parsed.error?.message ?? null };
+}
+
+async function expectGateAdmits(
+  fixture: CommandFixture,
+  label: string,
+  context = fixture.context,
+): Promise<void> {
+  for (const argv of ORDINARY_COMMANDS_WITHOUT_REMOVAL) {
+    await run([...argv, "--json"], fixture.io, () => context);
+    expect(lastJsonError(fixture.io.out).kind, `${label}: ${argv.join(" ")}`).not.toBe("bootstrap_recovery_required");
+  }
+}
+
+async function expectArchiveRefusalEverywhere(fixture: CommandFixture, label: string): Promise<void> {
+  const before = await inventoryDigest(fixture.root);
+  for (const argv of NON_INIT_COMMANDS) {
+    expect(await run([...argv, "--json"], fixture.io, () => fixture.context), `${label}: ${argv.join(" ")}`).toBe(6);
+    expect(lastJsonError(fixture.io.out), `${label}: ${argv.join(" ")}`).toStrictEqual({
+      code: 6,
+      kind: "bootstrap_recovery_required",
+      message: MANUAL_ARCHIVE,
+    });
+  }
+  expect(await run(["init", "--yes", "--json"], fixture.io, () => fixture.rebuildContext()), `${label}: init`).toBe(6);
+  expect(lastJsonError(fixture.io.out), `${label}: init`).toMatchObject({ code: 6, message: MANUAL_ARCHIVE });
+  expect(await inventoryDigest(fixture.root), label).toEqual(before);
 }
 
 describe("dispatch around a bootstrap envelope", () => {
@@ -396,6 +431,7 @@ describe("dispatch around a bootstrap envelope", () => {
       expect(lastJsonError(fixture.io.out), argv.join(" ")).toStrictEqual({
         code: 6,
         kind: "bootstrap_recovery_required",
+        message: "an interrupted bootstrap must be resumed by init",
       });
     }
 
@@ -425,10 +461,112 @@ describe("dispatch around a bootstrap envelope", () => {
     const invoke = (argv: readonly string[]) => run(argv, available.io, () => available.context);
 
     expect(await invoke(["init", "--yes", "--json"])).toBe(4);
-    expect(lastJsonError(available.io.out)).toStrictEqual({ code: 4, kind: "manifest_v1_not_migratable" });
+    expect(lastJsonError(available.io.out)).toMatchObject({ code: 4, kind: "manifest_v1_not_migratable" });
     expect(await invoke(["status", "--json"])).toBe(0);
     expect(await invoke(["doctor", "--json"])).toBe(0);
     expect(await invoke(["uninstall", "--dry-run", "--json"])).toBe(0);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("admits every ordinary command when retained evidence goes missing or is altered after a complete V2 handoff", async () => {
+    const fixture = await createCommandFixture("main-bootstrap-inert-after-handoff", {
+      bootstrapAvailable: true,
+    });
+    expect(await run(["init", "--yes"], fixture.io, () => fixture.context)).toBe(0);
+    fixture.io.out.length = 0;
+    const state = fixture.paths.stateDir;
+    const tombstones = await retainedTombstones(fixture.root);
+    const stateFileTombstones: string[] = [];
+    const directoryTombstones: string[] = [];
+    for (const path of tombstones) {
+      const stats = await nodeFs.lstat(path);
+      if (stats.isDirectory()) directoryTombstones.push(path);
+      else if (dirname(path) === state) stateFileTombstones.push(path);
+    }
+    const [missingTombstone, linkedTombstone] = stateFileTombstones;
+    const [directoryTombstone] = directoryTombstones;
+    if (missingTombstone === undefined || linkedTombstone === undefined || directoryTombstone === undefined) {
+      throw new Error("fixture retained too few tombstones to alter");
+    }
+    const slots = (await nodeFs.readdir(state))
+      .filter((name) => /^fresh-v2-init\.fi_.+\.journal\.[01]\.json$/u.test(name))
+      .map((name) => join(state, name))
+      .sort();
+    const [slotZero, slotOne] = slots;
+    if (slotZero === undefined || slotOne === undefined) throw new Error("fixture retained no journal slots");
+    const alterations: readonly (readonly [string, () => Promise<void>])[] = [
+      ["missing tombstone", () => nodeFs.rm(missingTombstone)],
+      ["symlinked tombstone", async () => {
+        await nodeFs.rm(linkedTombstone);
+        await nodeFs.symlink("/nonexistent-retained-target", linkedTombstone);
+      }],
+      ["symlink inside a retained directory", () =>
+        nodeFs.symlink("/nonexistent-retained-target", join(directoryTombstone, "synthetic-link"))],
+      ["symlinked bootstrap lock", () =>
+        nodeFs.symlink("/nonexistent-retained-target", join(state, ".lifecycle-bootstrap.lock"))],
+      ["emptied journal slots", async () => {
+        await nodeFs.truncate(slotZero, 0);
+        await nodeFs.truncate(slotOne, 0);
+      }],
+      ["oversized journal slot", () => nodeFs.appendFile(slotOne, Buffer.alloc(2 * 1024 * 1024, 32))],
+      ["swapped journal slot", async () => {
+        await nodeFs.writeFile(`${slotZero}.replacement`, "{}\n", { mode: 0o600 });
+        await nodeFs.rename(`${slotZero}.replacement`, slotZero);
+      }],
+    ];
+    expect(alterations.length).toBeGreaterThan(0);
+
+    for (const [label, alter] of alterations) {
+      await alter();
+      await expectGateAdmits(fixture, label);
+    }
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses every non-init command with init's own archive guidance when an interrupted envelope's plan or slot stops matching", async () => {
+    const fixture = await createCommandFixture("main-bootstrap-malformed-active", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_first_payload",
+    });
+    expect(await run(["init", "--yes"], fixture.io, () => fixture.context)).not.toBe(0);
+    fixture.io.out.length = 0;
+    const bootstrap = fixture.context.bootstrap;
+    if (bootstrap?.state !== "available") throw new Error("bootstrap fixture is unavailable");
+    await bootstrap.executor.close();
+    fixture.disableBootstrapInterrupt();
+    const state = fixture.paths.stateDir;
+    const names = await nodeFs.readdir(state);
+    const plan = names.find((name) => /^fresh-v2-init\.fi_.+\.plan\.json$/u.test(name));
+    const slot = names.find((name) => /^fresh-v2-init\.fi_.+\.journal\.0\.json$/u.test(name));
+    if (plan === undefined || slot === undefined) throw new Error("interrupted init left no envelope");
+    const planPath = join(state, plan);
+    const planBytes = await nodeFs.readFile(planPath);
+
+    await nodeFs.writeFile(planPath, "{}\n");
+    await expectArchiveRefusalEverywhere(fixture, "plan no longer validates");
+    await nodeFs.writeFile(planPath, planBytes);
+
+    const slotPath = join(state, slot);
+    await nodeFs.copyFile(slotPath, `${slotPath}.replacement`);
+    await nodeFs.rename(`${slotPath}.replacement`, slotPath);
+    await expectArchiveRefusalEverywhere(fixture, "replaced slot inode");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses only genuine bootstrap residue in a home where bootstrap never ran, with the guidance init gives", async () => {
+    const shipped = await createHarness("main-v1-bootstrap-residue");
+    expect(await shipped.invoke(["init", "--yes"])).toBe(0);
+    const state = shipped.fixture.paths.stateDir;
+    await nodeFs.symlink("/nonexistent-user-target", join(state, "unrelated-user-link"));
+    shipped.fixture.io.out.length = 0;
+    await expectGateAdmits(shipped.fixture, "unrelated symlink");
+
+    const lock = join(state, ".lifecycle-bootstrap.lock");
+    await nodeFs.symlink("/nonexistent-bootstrap-target", lock);
+    await expectArchiveRefusalEverywhere(shipped.fixture, "symlinked bootstrap lock");
+    await nodeFs.rm(lock);
+
+    const staging = join(shipped.fixture.paths.stagingDir, "fresh-v2-init", "fi_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    await nodeFs.mkdir(staging, { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(join(staging, "live-source"), "synthetic live residue\n", { mode: 0o600 });
+    await expectArchiveRefusalEverywhere(shipped.fixture, "live staging residue");
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 

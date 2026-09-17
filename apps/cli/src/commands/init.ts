@@ -25,7 +25,12 @@ import {
 } from "@developer-os/security";
 
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
-import { inspectBootstrapEvidenceAdmission, ManifestV1RefusalError } from "../bootstrap/report.js";
+import {
+  BOOTSTRAP_MANUAL_ARCHIVE,
+  inspectBootstrapEvidenceAdmission,
+  ManifestV1RefusalError,
+} from "../bootstrap/report.js";
+import type { BootstrapEvidenceAdmissionV1 } from "../bootstrap/report.js";
 import {
   assertRootsAnchored,
   failureFrom,
@@ -816,12 +821,7 @@ export async function runInit(
     const bootstrapAvailable = bootstrap?.state === "available";
     if (bootstrapAvailable && manifest?.schemaVersion === 1) {
       const refusal = new ManifestV1RefusalError();
-      return failure(refusal.code, {
-        kind: refusal.reason,
-        message: refusal.message,
-        paths: [context.paths.manifestFile],
-        recovery: refusal.recovery,
-      });
+      return failureFrom({ guards }, refusal, [context.paths.manifestFile], refusal.recovery);
     }
     /**
      * Before the evidence inventory: `inventoryExactNamespaces` throws an
@@ -829,13 +829,18 @@ export async function runInit(
      * refusing it as invalid input.
      */
     await assertUsableDirectory(context, context.paths.home, "product home");
-    const evidence = bootstrapAvailable
-      ? await bootstrap.inspectEvidence()
-      : await inspectBootstrapEvidenceAdmission(createBootstrapEvidenceInspectionRequest({
-          productHome: context.paths.home,
-          stateDirectory: context.paths.stateDir,
-          initialRoots: [context.paths.home, context.paths.stateDir, context.userHome],
-        }));
+    let evidence: BootstrapEvidenceAdmissionV1;
+    try {
+      evidence = bootstrapAvailable
+        ? await bootstrap.inspectEvidence()
+        : await inspectBootstrapEvidenceAdmission(createBootstrapEvidenceInspectionRequest({
+            productHome: context.paths.home,
+            stateDirectory: context.paths.stateDir,
+            initialRoots: [context.paths.home, context.paths.stateDir, context.userHome],
+          }));
+    } catch {
+      throw new InitRefusal(EXIT_CODES.recoveryRequired, BOOTSTRAP_MANUAL_ARCHIVE, [context.paths.home]);
+    }
     const resumableBootstrap = evidence.active !== null;
     /**
      * `active` names a plan this call can resume; `blocksNewIntent` names
@@ -850,7 +855,7 @@ export async function runInit(
     if (evidence.blocksNewIntent && evidence.active === null) {
       throw new InitRefusal(
         EXIT_CODES.recoveryRequired,
-        "retained bootstrap evidence requires manual archive before a new bootstrap intent",
+        BOOTSTRAP_MANUAL_ARCHIVE,
         evidence.retainedPaths,
       );
     }

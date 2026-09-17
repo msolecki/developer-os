@@ -235,6 +235,7 @@ export function createBootstrapEvidenceInspectionRequest(input: {
     ])].map((root) => root as CanonicalAbsolutePathV1),
     reader: input.reader ?? new NodeBootstrapEvidenceGuardedReader(),
     projectPostimage: input.projectPostimage ?? projectBootstrapRetentionPostimage,
+    listNames: (directory) => nodeFs.readdir(directory),
     validatePlan: (value) => {
       const candidate = typeof value === "object" && value !== null && !Array.isArray(value)
         ? value as { readonly id?: unknown }

@@ -8,6 +8,7 @@ import type { CanonicalAbsolutePathV1, UInt64DecimalV1 } from "@developer-os/cor
 
 import { runInit } from "../commands/init.js";
 import { runDoctorReport } from "../commands/doctor.js";
+import { failureFrom } from "../context.js";
 import { createCommandFixture, firstRegularFile, inventoryDigest, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures, retainedTombstones } from "../commands/testing.js";
 import {
   createBootstrapEvidenceInspectionRequest,
@@ -375,10 +376,17 @@ describe("admitV2Handoff", () => {
     const fixture = await createCommandFixture("handoff-v1-manifest");
     expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
 
-    await expect(admit(fixture)).rejects.toMatchObject({
+    const refusal: unknown = await admit(fixture).then(() => null, (error: unknown) => error);
+
+    expect(refusal).toMatchObject({
       code: EXIT_CODES.capabilityUnavailable,
       reason: "manifest_v1_not_migratable",
     });
+    const published = failureFrom(fixture.context, refusal);
+    expect(published.ok).toBe(false);
+    if (published.ok) return;
+    expect(published.code).toBe(EXIT_CODES.capabilityUnavailable);
+    expect(published.error.kind).toBe("manifest_v1_not_migratable");
   });
 
   it("admits exactly the complete handoff and refuses a non-terminal envelope and each missing member", async () => {
@@ -400,29 +408,35 @@ describe("admitV2Handoff", () => {
 
     const state = fixture.paths.stateDir;
     const release = join(fixture.paths.home, "releases");
-    const refusesWhile = async (label: string, change: () => Promise<void>, restore: () => Promise<void>) => {
+    const { decisionRequired, recoveryRequired } = EXIT_CODES;
+    const refusesWhile = async (
+      label: string,
+      code: number,
+      change: () => Promise<void>,
+      restore: () => Promise<void>,
+    ) => {
       await change();
       try {
-        await expect(admit(fixture), label).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+        await expect(admit(fixture), label).rejects.toMatchObject({ code });
       } finally {
         await restore();
       }
     };
     const missing = [
-      fixture.paths.manifestFile,
-      join(fixture.paths.home, "schemas", "ingest.stage.schema.json"),
-      join(state, "lifecycle-install-nonce"),
-      join(state, "lifecycle-id-allocator.json"),
-      join(state, ".lifecycle.lock"),
-      join(state, "lifecycle-journals"),
-      join(state, "git-effect-journals"),
-      join(state, "launchd-effect-journals"),
-      join(state, "active-release.json"),
-      join(state, "release-trust.json"),
-      join(release, "metadata", "release-index.json"),
-      join(release, "1.0.0", "darwin-arm64", "bin", "developer-os"),
-      join(state, "rollback"),
-    ];
+      [fixture.paths.manifestFile, recoveryRequired],
+      [join(fixture.paths.home, "schemas", "ingest.stage.schema.json"), decisionRequired],
+      [join(state, "lifecycle-install-nonce"), recoveryRequired],
+      [join(state, "lifecycle-id-allocator.json"), recoveryRequired],
+      [join(state, ".lifecycle.lock"), recoveryRequired],
+      [join(state, "lifecycle-journals"), decisionRequired],
+      [join(state, "git-effect-journals"), decisionRequired],
+      [join(state, "launchd-effect-journals"), decisionRequired],
+      [join(state, "active-release.json"), recoveryRequired],
+      [join(state, "release-trust.json"), recoveryRequired],
+      [join(release, "metadata", "release-index.json"), decisionRequired],
+      [join(release, "1.0.0", "darwin-arm64", "bin", "developer-os"), decisionRequired],
+      [join(state, "rollback"), decisionRequired],
+    ] as const;
     const present = [
       join(state, "update-rollback.json"),
       join(state, "update-executor.json"),
@@ -432,10 +446,13 @@ describe("admitV2Handoff", () => {
     ];
     expect(missing.length).toBeGreaterThan(0);
     expect(present.length).toBeGreaterThan(0);
+    expect((await nodeFs.lstat(join(state, "update-rollback.json"))).size).toBe(0);
+    expect((await nodeFs.lstat(join(state, "update-executor.json"))).size).toBe(0);
 
-    for (const path of missing) {
+    for (const [path, code] of missing) {
       await refusesWhile(
         `missing ${path}`,
+        code,
         () => nodeFs.rename(path, `${path}.hidden`),
         () => nodeFs.rename(`${path}.hidden`, path),
       );
@@ -444,6 +461,7 @@ describe("admitV2Handoff", () => {
       const original = await nodeFs.readFile(path).catch(() => null);
       await refusesWhile(
         `record at ${path}`,
+        recoveryRequired,
         () => nodeFs.writeFile(path, "synthetic record\n", { mode: 0o600 }),
         () => original === null ? nodeFs.rm(path) : nodeFs.writeFile(path, original),
       );
@@ -452,6 +470,7 @@ describe("admitV2Handoff", () => {
     const bundleBytes = await nodeFs.readFile(bundleFile);
     await refusesWhile(
       "drifted bundle file",
+      decisionRequired,
       () => nodeFs.writeFile(bundleFile, Buffer.from(bundleBytes.toString("utf8").replace("exit 0", "exit 1"))),
       () => nodeFs.writeFile(bundleFile, bundleBytes),
     );
@@ -462,6 +481,7 @@ describe("admitV2Handoff", () => {
       `{"installNonce":"${installNonce}","nextCounter":"${nextCounter}","schemaVersion":1}\n`;
     await refusesWhile(
       "allocator bound to another install nonce",
+      recoveryRequired,
       () => nodeFs.writeFile(allocatorFile, allocatorWith("0".repeat(64), "0")),
       () => nodeFs.writeFile(allocatorFile, allocatorBytes),
     );
@@ -474,6 +494,7 @@ describe("admitV2Handoff", () => {
     expect(manifest.artifacts.some((artifact) => artifact.path === reservation)).toBe(true);
     await refusesWhile(
       "manifest without a runtime reservation",
+      recoveryRequired,
       () => nodeFs.writeFile(fixture.paths.manifestFile, `${JSON.stringify({
         ...manifest,
         artifacts: manifest.artifacts.filter((artifact) => artifact.path !== reservation),

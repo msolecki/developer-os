@@ -115,6 +115,7 @@ export interface BootstrapEvidenceInspectionRequestV1 {
   readonly projectPostimage: (
     path: CanonicalAbsolutePathV1,
   ) => Promise<BootstrapRetentionPostimageV1 | null>;
+  readonly listNames: (directory: CanonicalAbsolutePathV1) => Promise<readonly string[]>;
 }
 
 export interface BootstrapEvidenceAdmissionV1 {
@@ -156,12 +157,27 @@ export interface BootstrapEvidenceAdmissionV1 {
   }[];
 }
 
+export const BOOTSTRAP_MANUAL_ARCHIVE = "retained bootstrap evidence requires manual archive before a new bootstrap intent";
+
 export class BootstrapRecoveryRequiredError extends Error {
   readonly code = EXIT_CODES.recoveryRequired;
 
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly paths: readonly string[] = [],
+    readonly recovery?: string,
+  ) {
     super(message);
     this.name = "BootstrapRecoveryRequiredError";
+  }
+}
+
+export class ManagedDriftError extends Error {
+  readonly code = EXIT_CODES.decisionRequired;
+
+  constructor(readonly paths: readonly string[]) {
+    super("managed artifacts differ from their recorded state");
+    this.name = "ManagedDriftError";
   }
 }
 
@@ -172,7 +188,8 @@ export class ManifestV1RefusalError extends Error {
 
   constructor() {
     super("V1 installation manifest is not migratable");
-    this.name = "ManifestV1RefusalError";
+    // failureFrom publishes kindOf(name), so this spelling is what yields the reason code.
+    this.name = "ManifestV1NotMigratableError";
   }
 }
 
@@ -1290,28 +1307,70 @@ export function assertCombinedBootstrapCapacity(
   ) throw new Error("retained bootstrap aggregate capacity exceeded; archive retained bootstrap evidence manually");
 }
 
-function isNonTerminal(envelope: BootstrapEnvelopeReadV1): boolean {
-  if (envelope.state !== "slots_read") return false;
-  return envelope.selection === null
-    ? envelope.values.every((value) => value === null)
-    : envelope.selection.current.terminalOutcome === null;
+function readableNonTerminal(
+  envelope: BootstrapEnvelopeReadV1,
+): envelope is Extract<BootstrapEnvelopeReadV1, { readonly state: "slots_read" }> {
+  return envelope.state === "slots_read" && envelope.selection !== null &&
+    envelope.selection.current.terminalOutcome === null;
 }
 
-export async function assertBootstrapClosureTerminal(
+function resumeWithInit(): BootstrapRecoveryRequiredError {
+  return new BootstrapRecoveryRequiredError("an interrupted bootstrap must be resumed by init", [], "developer-os init");
+}
+
+async function readPlanEnvelopes(
   request: BootstrapEvidenceInspectionRequestV1,
 ): Promise<readonly BootstrapEnvelopeReadV1[]> {
-  let envelopes: readonly BootstrapEnvelopeReadV1[];
+  let names: readonly string[];
   try {
-    const plans = (await request.reader.inventoryExactNamespaces([request.stateDirectory]))
-      .filter((candidate) => candidate.kind === "regular_file" && FRESH_PLAN.test(basename(candidate.path)));
-    envelopes = await Promise.all(plans.map((plan) => readBootstrapEnvelope(request, plan)));
+    names = await request.listNames(request.stateDirectory);
   } catch {
-    throw new BootstrapRecoveryRequiredError("bootstrap evidence could not be read");
+    return [];
   }
-  if (envelopes.some(isNonTerminal)) {
-    throw new BootstrapRecoveryRequiredError("an interrupted bootstrap must be resumed by init");
+  const envelopes: BootstrapEnvelopeReadV1[] = [];
+  for (const name of names.filter((candidate) => FRESH_PLAN.test(candidate)).sort()) {
+    try {
+      const planEntry = await guardedFile(request, join(request.stateDirectory, name));
+      if (planEntry !== null) envelopes.push(await readBootstrapEnvelope(request, planEntry));
+    } catch {
+      continue;
+    }
   }
   return envelopes;
+}
+
+async function manifestSchemaVersion(request: BootstrapEvidenceInspectionRequestV1): Promise<unknown> {
+  try {
+    const manifestFile = await guardedFile(request, join(request.productHome, "installation-manifest.json"));
+    return manifestFile === null
+      ? null
+      : declaredSchemaVersion(await request.reader.readRegularFile(manifestFile, MAX_MANIFEST_BYTES));
+  } catch {
+    return null;
+  }
+}
+
+export async function assertOrdinaryCommandAdmitted(
+  request: BootstrapEvidenceInspectionRequestV1,
+): Promise<void> {
+  if (await manifestSchemaVersion(request) === 2) {
+    for (const envelope of await readPlanEnvelopes(request)) {
+      if (readableNonTerminal(envelope) && await exactV2Handoff(request, envelope.plan) !== null) {
+        throw resumeWithInit();
+      }
+    }
+    return;
+  }
+  let evidence: BootstrapEvidenceAdmissionV1;
+  try {
+    evidence = await inspectBootstrapEvidenceAdmission(request);
+  } catch {
+    throw new BootstrapRecoveryRequiredError(BOOTSTRAP_MANUAL_ARCHIVE);
+  }
+  if (evidence.active !== null && (evidence.active.journal?.current.terminalOutcome ?? null) === null) {
+    throw resumeWithInit();
+  }
+  if (evidence.blocksNewIntent) throw new BootstrapRecoveryRequiredError(BOOTSTRAP_MANUAL_ARCHIVE, evidence.retainedPaths);
 }
 
 const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;
@@ -1342,11 +1401,11 @@ const HANDOFF_SCHEMAS: ManagedArtifactSchemaRegistry = {
   },
 };
 
-function declaresSchemaVersion1(bytes: Uint8Array): boolean {
+function declaredSchemaVersion(bytes: Uint8Array): unknown {
   try {
-    return record(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)))?.schemaVersion === 1;
+    return record(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)))?.schemaVersion;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -1364,11 +1423,13 @@ async function admitExactV2Handoff(
 ): Promise<InstallationManifestV2> {
   const manifestFile = await guardedFile(request, join(request.productHome, "installation-manifest.json"));
   if (manifestFile === null) throw incompleteHandoff();
-  if (declaresSchemaVersion1(await request.reader.readRegularFile(manifestFile, MAX_MANIFEST_BYTES))) {
+  if (declaredSchemaVersion(await request.reader.readRegularFile(manifestFile, MAX_MANIFEST_BYTES)) === 1) {
     throw new ManifestV1RefusalError();
   }
+  const envelopes = await readPlanEnvelopes(request);
+  if (envelopes.some(readableNonTerminal)) throw resumeWithInit();
   const handoffs: { readonly plan: FreshV2InitPlanV1; readonly manifest: InstallationManifestV2 }[] = [];
-  for (const envelope of await assertBootstrapClosureTerminal(request)) {
+  for (const envelope of envelopes) {
     if (envelope.state !== "slots_read" || envelope.selection?.current.terminalOutcome !== "finalized") continue;
     const manifest = await exactV2Handoff(request, envelope.plan);
     if (manifest !== null) handoffs.push({ plan: envelope.plan, manifest });
@@ -1389,9 +1450,15 @@ async function admitExactV2Handoff(
       },
     },
   });
-  if (drifted.length > 0) throw incompleteHandoff();
-
   const state = request.stateDirectory;
+  if (drifted.length > 0) {
+    const records = new Set(
+      ["lifecycle-install-nonce", "lifecycle-id-allocator.json", "active-release.json", "release-trust.json"]
+        .map((name) => join(state, name)),
+    );
+    if (drifted.some((finding) => records.has(finding.path))) throw incompleteHandoff();
+    throw new ManagedDriftError(drifted.map((finding) => finding.path));
+  }
   const nonce = await guardedFile(request, join(state, "lifecycle-install-nonce"));
   const allocator = await guardedFile(request, join(state, "lifecycle-id-allocator.json"));
   if (nonce === null || allocator === null) throw incompleteHandoff();
@@ -1422,7 +1489,10 @@ export async function admitV2Handoff(
   try {
     return await admitExactV2Handoff(request, drift);
   } catch (error) {
-    if (error instanceof ManifestV1RefusalError || error instanceof BootstrapRecoveryRequiredError) throw error;
+    if (
+      error instanceof ManifestV1RefusalError || error instanceof BootstrapRecoveryRequiredError ||
+      error instanceof ManagedDriftError
+    ) throw error;
     throw incompleteHandoff();
   }
 }
