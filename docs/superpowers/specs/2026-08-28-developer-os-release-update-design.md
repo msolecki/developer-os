@@ -29,8 +29,9 @@ contracts this design consumes. Neither split changes the unchanged DOS-P7 check
 installation exists outside tests and disposable development homes: nothing has been released, and
 the founder's machine runs the legacy runtime, which roadmap Phase 10 replaces with a fresh V2
 install. The dependency above is therefore the V2 new-init handoff alone. §6.2 and every
-migration-only clause of §6.3 and §6.4 are void, together with the migration halves of the
-2026-09-08 amendments A1, A2 and A3. A V1 manifest is never migrated: when the packaged bootstrap
+migration-only clause in this document — including those in §1, §3.1, §6.3, §6.4, §12 and §13 — are
+void, together with the migration halves of the 2026-09-08 amendments A1, A2 and A3. A V1
+manifest is never migrated: when the packaged bootstrap
 capability is available, `init` over a V1 manifest refuses with reason `manifest_v1_not_migratable`,
 exit 4, mutates nothing, and directs the user to `developer-os uninstall` followed by
 `developer-os init`; until that capability ships (roadmap Phase 4b) the existing V1 `init` path is
@@ -38,6 +39,12 @@ unchanged. The machinery §6.3 and §6.4 describe for both operations — the im
 two-slot journal, payload staging and evidence, `createdPaths` order, the point of no return,
 compensation, retention — remains normative for `fresh_v2_init`. The `v1_to_v2` arms already shipped
 in Core schemas are dead code tracked for deletion in `BACKLOG.md`.
+
+**Amended 2026-09-17 — the V1 refusal's recovery (founder decision D20).** "`developer-os uninstall`
+followed by `developer-os init`" above does not recover a V1 home: V1 `uninstall` leaves Foundation
+residue (`staging`, `state/transactions`, `backups`) that §6.1 refuses as unbound, by design. The
+refusal directs the user to `developer-os uninstall`, then to archive the product home manually, then
+to `developer-os init`. §6.1's external shape is unchanged.
 
 ---
 

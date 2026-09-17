@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement the approved DOS-P7 Spec 2 stable launcher, signed release trust, `InstallationManifestV2`, crash-resumable V1 migration and V2 initialization, plan-first update, managed-artifact/schema upgrade, and conservative one-version rollback.
+**Goal:** Implement the approved DOS-P7 Spec 2 stable launcher, signed release trust, `InstallationManifestV2`, the V1 refusal and V2 initialization (the V1 migration was withdrawn by D18), plan-first update, managed-artifact/schema upgrade, and conservative one-version rollback.
 
-**Architecture:** Core owns canonical scalar/path codecs, manifest/update schemas, pure transition tables, target-plan validation, and migration-chain contracts; Security owns signatures, fixed-origin transport, bounded Zstandard/ustar admission, guarded scratch, and planner/verifier supervision; platform-macos owns launcher executable/platform admission; the launcher owns offline root trust and exact bundle selection; the adapters and Brain expose pure target planners; the CLI composes all concrete paths, owner providers, construction/source envelopes, lifecycle participants, update/rollback commands, and recovery. Tasks 1–9 deliver the V2 bootstrap handoff that unblocks the already-approved Spec 1 plan; after Spec 1 completes, Tasks 10–26 consume its lifecycle coordinator and finish Spec 2.
+**Architecture:** Core owns canonical scalar/path codecs, manifest/update schemas, pure transition tables, target-plan validation, and migration-chain contracts; Security owns signatures, fixed-origin transport, bounded Zstandard/ustar admission, guarded scratch, and planner/verifier supervision; platform-macos owns launcher executable/platform admission; the launcher owns offline root trust and exact bundle selection; the adapters and Brain expose pure target planners; the CLI composes all concrete paths, owner providers, construction/source envelopes, lifecycle participants, update/rollback commands, and recovery. Tasks 1–7 and 9 deliver the V2 bootstrap handoff that unblocks the already-approved Spec 1 plan (Task 8 is withdrawn); after Spec 1 completes, Tasks 10–26 consume its lifecycle coordinator and finish Spec 2.
 
 **Tech Stack:** TypeScript 5.9 strict ESM, Node.js 24 built-ins (`node:crypto`, `node:https`, `node:zlib`, `node:fs`), Zod 4 where existing package schemas use it, Vitest 4, existing Foundation transactions and injected filesystem/process/clock/lock ports.
 
@@ -15,7 +15,7 @@
 - Execute Tasks 1–9 first and commit their checkpoint. Then execute `docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md` completely. Resume this plan at Task 10 only after Spec 1's lifecycle coordinator, participant, compaction, Git, launchd, and uninstall contracts pass their checkpoint. **Amended 2026-09-16 by roadmap decision D16:** Tasks 10–11 run after plan 1a (roadmap Phase 4b), provided they need nothing from Spec 1b, and Tasks 12–26 run after the founder cutover (roadmap Phase 8).
 - Tasks 1–9 may create shared files named by the Spec 1 plan (`packages/core/src/lifecycle/canonical-json.ts`, lifecycle ID codecs, and bootstrap allocator schemas). During Spec 1 execution those files are consumed/extended rather than redeclared; this is the approved split dependency, not a second implementation.
 - Package direction remains `core ← security ← platform-macos ← cli`, with the separate `apps/launcher` depending only on Core, Security, and platform-macos. Core imports no filesystem globals, HTTP, archive extraction, process, platform, adapter, or CLI implementation.
-- No command other than `developer-os update` makes an update network request. Rollback, init migration, fresh init, uninstall, config, Git, automation, Brain, adapter probes, and launcher selection make zero release-transport requests.
+- No command other than `developer-os update` makes an update network request. Rollback, the V1 refusal, fresh init, uninstall, config, Git, automation, Brain, adapter probes, and launcher selection make zero release-transport requests.
 - `update` and `update rollback` are plan-only unless `--apply` is present. Planning may use only one bounded attempt-owned system-temporary scratch envelope and never mutates product, Brain, vendor, launcher, manifest, trust, active-release, or allocator state.
 - The updater accepts only stable SemVer, fixed launcher-provided metadata locators, root/delegated Ed25519 signatures, exact delegated HTTPS origins, one permitted redirect, and the exact signed architecture bundle. It never accepts a custom origin, channel, prerelease, build metadata, arbitrary downgrade, cookie, credential, client certificate, or ambient proxy.
 - Exact primary bounds are normative: delegation 64 KiB; release index 4 MiB; bundle manifest 16 MiB; archive 2 GiB; one expanded file 512 MiB; aggregate expansion 8 GiB; 200,000 bundle entries; 12 GiB scratch; 256 MiB archive streaming memory; V2 manifest 64 MiB/1,000,000 artifacts; immutable leaf plans 16 MiB; construction plan 512 MiB; construction journal 64 MiB; participant journals 1 MiB; planner request/result 256 MiB each; 1,000,000 blobs and 1 GiB blob payload per direction; 512 MiB planner RSS; 30-second idle/10-minute wall; rollback payload 1,000,000 entries/2 GiB.
@@ -33,173 +33,45 @@
 | Area | Files | Responsibility |
 |---|---|---|
 | Canonical/update scalars | `packages/core/src/lifecycle/canonical-json.ts`, `packages/core/src/update/{scalars,paths,release,index}.ts` | Canonical JSON, numeric/version/hash/time/path brands, release identity and pure selection schemas |
-| Manifest V2/bootstrap | `packages/core/src/manifest/{v2,drift,manifest-state,bootstrap,migration}.ts` | V1/V2 validation, V2 drift, manifest participant, fresh-init and V1 migration plans/state tables |
+| Manifest V2/bootstrap | `packages/core/src/manifest/{v2,drift,manifest-state,bootstrap}.ts` | V1/V2 validation, V2 drift, manifest participant, fresh-init plans/state tables |
 | Core update protocol | `packages/core/src/update/{preview,planner,owner,migrations,construction,participants,coordinator,rollback}.ts` | Preview/materialization, token wire schemas, owner/migration plans, construction/participant/coordinator/rollback state machines |
 | Release security | `packages/security/src/update/{signatures,transport,archive,scratch,planner-process,graph,index}.ts` | Ed25519 chain, fixed HTTPS transport, zstd-ustar admission, guarded scratch, counted planner/verifier supervision, capability graph gate |
 | Launcher platform | `packages/platform-macos/src/launcher/{types,admission,index}.ts` | Platform/architecture identity and guarded executable/bundle admission |
 | Stable launcher | `apps/launcher/src/{handoff,selection,environment,main}.ts`, `apps/launcher/assets/` | Offline root constants, recovery/bootstrap/active/fallback routing, FD 3 trust handoff, absolute exec |
 | Pure owner planners | `packages/adapter-claude/src/update/`, `packages/adapter-codex/src/update/`, `packages/brain/src/migrations/update/` | Root-free token-only desired state, Codex refresh draft, Brain migration planning |
-| CLI bootstrap/update | `apps/cli/src/bootstrap/`, `apps/cli/src/update/`, `apps/cli/src/commands/update/`, existing `init`, `main`, `context` | Packaged release admission, V2 init/migration, construction/source envelopes, participant composition, preview/apply/rollback/recovery |
+| CLI bootstrap/update | `apps/cli/src/bootstrap/`, `apps/cli/src/update/`, `apps/cli/src/commands/update/`, existing `init`, `main`, `context` | Packaged release admission, V2 init, construction/source envelopes, participant composition, preview/apply/rollback/recovery |
 | Gates | `tests/integration/update/`, `tests/e2e/release-update.test.ts`, `tests/security/`, `tests/repository/` | Synthetic full lifecycle, death injection, network/process/capability absence, exact enumerator coverage |
 
 ---
 
 ## Checkpoint A — Manifest V2 prerequisite before Spec 1
 
-**Tasks 1–7 are complete and their steps are pruned from this document.** They delivered the
-canonical JSON and path codecs, the release identity and signed-metadata schemas, `ManagedArtifactV2`
-and its validators, V2 drift with a guarded V1/V2 store, the recoverable manifest direct-write
-participant, and the bootstrap payload/plan/journal state machines. The contract they implement is
-`specs/2026-08-28-developer-os-release-update-design.md`; the implementation is in the tree and in
-git history, which is the archive.
+**Tasks 1–7 and 9 are complete and Task 8 is withdrawn; their steps are pruned from this document.**
+Tasks 1–7 delivered the canonical JSON and path codecs, the release identity and signed-metadata
+schemas, `ManagedArtifactV2` and its validators, V2 drift with a guarded V1/V2 store, the recoverable
+manifest direct-write participant, and the bootstrap payload/plan/journal state machines. The contract
+they implement is `specs/2026-08-28-developer-os-release-update-design.md`; the implementation is in
+the tree and in git history, which is the archive.
 
 **One thing about Task 7 does not survive as a contract and is recorded here because nothing else
 states it.** Task 7 was the fresh V2 initialization checkpoint, and the deletion-based
 implementation that reached `1557734` **was rejected by fresh review; no part of it survives.** It
 was superseded by the six-task retained-bootstrap-evidence plan approved 2026-08-31, whose Task 6
-checkpoint landed as `050fc0d..c5022a7` and which roadmap Phase 0 closed on 2026-09-04. Baseline
-Task 8 below is therefore no longer blocked by it. Closing the *checkpoint* as a whole is still open
-work and is tracked in `BACKLOG.md` §3 and `ORDER.md`, not here.
+checkpoint landed as `050fc0d..c5022a7` and which roadmap Phase 0 closed on 2026-09-04.
 
-Task 8 is withdrawn by roadmap decision D18 (2026-09-17) and its code is reverted in Task 9 Step 1.
-Task 9, rescoped by D18, is roadmap Phase 3 and the next work in this document. It comes before plan
-1a; Tasks 10–11 follow plan 1a and Tasks 12–26 follow the founder cutover (D16).
+**Task 8 (V1→V2 migration planning) was withdrawn by roadmap decision D18 on 2026-09-17.** Its code
+(`55a06de`, `df3e947`, `8db8eb0`) was reverted by `1a482a0`.
 
+**Task 9, rescoped by D18, closed roadmap Phase 3 on 2026-09-17** as `810d342..43c30e4`: the V1
+refusal in `init` (`manifest_v1_not_migratable`, exit 4, only with the packaged capability), the
+refusal of every non-`init` command while a non-terminal bootstrap envelope exists, and the strict V2
+handoff admission. Three review fix rounds and a final whole-change review preceded the close, and
+`npm run check` passed on `43c30e4`. The surviving contract is in `docs/architecture/foundation.md` and
+`docs/architecture/threat-model.md`; the review's open findings are `BACKLOG.md` NEW-79 to NEW-83 and
+additions to NEW-67.
 
-### Task 8: Map strict migratable V1 state into V2
-
-**Withdrawn 2026-09-17 by roadmap decision D18.** The V1→V2 migration arm is removed from Spec 2.
-The steps below record what `55a06de` and `df3e947` built; Task 9 Step 1 reverts that code.
-
-**Files:**
-- Create: `packages/core/src/manifest/migration.ts`
-- Create: `packages/core/src/manifest/migration.test.ts`
-- Modify: `packages/core/src/manifest/index.ts`
-- Create: `apps/cli/src/bootstrap/migration.ts`
-- Create: `apps/cli/src/bootstrap/migration.test.ts`
-- Modify: `packages/core/src/manifest/bootstrap.ts`
-- Modify: `packages/core/src/manifest/bootstrap.test.ts`
-
-**Interfaces:**
-- Consumes: Tasks 1–7, strict migratable V1 bytes/artifacts/backups, packaged release source.
-- Produces: `mapManifestV1ToV2`, `planManifestMigration`, migration feasibility/admission, and the concrete bootstrap migration plan with exact old/new manifest hashes and launchability set.
-
-- [x] **Step 1: Write failing mapping and preflight-order tests**
-
-```ts
-it("maps config alone to schema and copies every historical field", () => {
-  const mapped = mapManifestV1ToV2(v1Fixture);
-  expect(mapped.artifacts.find(a => a.path.endsWith("config.toml"))?.verification.mode).toBe("schema");
-  expect(projectHistoricalFields(mapped)).toEqual(projectHistoricalFields(v1Fixture));
-});
-
-it.each(nonMigratableFixtures)("refuses $name before managed bytes", async fixture => {
-  await expect(planManifestMigration(fixture.request)).rejects.toThrow();
-  expect(fixture.artifactReads).toBe(0);
-});
-```
-
-Cover every mapping row, safe regular files/directories, restore evidence, config schema, V2-only path collisions on declared and canonical paths, incomplete Foundation state, V1 drift, missing/wrong backups, symlink/config-entry/shared-directory, capacity, and first violated validation before artifact/backup reads.
-
-**Spec 2 amendment of 2026-09-08 (A1, A2) — this task owns both.** Add failing cases before the implementation:
-
-- the migration arm admits its own external shape. `ManifestMigrationPlanV1` now carries `admittedExternalShapeHash` and `admittedPreexistingPaths`, so `migrationKeys` in `packages/core/src/manifest/bootstrap.ts` gains both, `bootstrapExternalShapeHash` takes the operation and selects the domain (`developer-os/fresh-v2-external-shape/v1\0` against `developer-os/v1-migration-external-shape/v1\0`), the three-role projection check runs on both arms, `admitFreshRecoveryExternalShape` stops being fresh-only, and the migration arm stops refusing outright whenever an external shape is supplied. Assert that a digest computed in one operation's domain refuses in the other's, and that the bootstrap-locked second inventory must contain exactly the three projection rows before plan publication on both arms.
-- the artifacts a migration adds carry the mode §6.2 now names: `state/lifecycle-install-nonce` regular-file `content`, `state/lifecycle-id-allocator.json` regular-file `schema` with `lifecycle-id-allocator-v1`, and never `state/lifecycle-activation.json`, which only Spec 1 lifecycle apply creates — an activation-path collision is a refusal, not an adoption.
-
-- [x] **Step 2: Run migration planning tests and verify missing mapping fails**
-
-Run: `npx vitest run --root packages/core src/manifest/migration.test.ts && npx vitest run --root apps/cli src/bootstrap/migration.test.ts`
-
-Expected: FAIL because mapping and migration planning are absent.
-
-- [x] **Step 3: Implement pure mapping and guarded concrete planning**
-
-```ts
-export function mapManifestV1ToV2(
-  manifest: MigratableInstallationManifestV1,
-  additions: readonly ManagedArtifactV2[],
-): InstallationManifestV2;
-
-export async function planManifestMigration(
-  request: ManifestMigrationRequestV1,
-): Promise<ManifestMigrationPlanV1>;
-```
-
-Complete all structural/collision checks before opening artifact bytes, then guarded-read and hash every current/backup authority, verify packaged release capacity, and derive the exact payload/use-once/created/Foundation/launchability/manifest partitions without mutation. Neither digest domain is ever accepted for the other operation.
-
-- [x] **Step 4: Run migration planning tests**
-
-Run: `npx vitest run --root packages/core src/manifest/migration.test.ts && npx vitest run --root apps/cli src/bootstrap/migration.test.ts`
-
-Expected: PASS with exact refusal ordering and mapping equality.
-
-- [x] **Step 5: Commit Task 8**
-
-```bash
-git add packages/core/src/manifest/migration.ts packages/core/src/manifest/migration.test.ts packages/core/src/manifest/index.ts packages/core/src/manifest/bootstrap.ts packages/core/src/manifest/bootstrap.test.ts apps/cli/src/bootstrap/migration.ts apps/cli/src/bootstrap/migration.test.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
-git commit -m "feat(core): plan manifest v1 migration"
-```
-
-### Task 9: Refuse V1 installations and prove the Spec 1 V2 handoff
-
-**Rescoped 2026-09-17 by roadmap decision D18.** The V1→V2 migration arm is withdrawn from Spec 2
-(dated amendment above its §1). This task removes the migration code and ships what Phase 3 still
-needs from the V2 new-init handoff.
-
-**Files:**
-- Revert: the code (not the documentation hunks) of `8db8eb0`, `df3e947` and `55a06de`
-- Modify: `apps/cli/src/commands/init.ts`, `apps/cli/src/commands/init.test.ts`
-- Modify: `apps/cli/src/bootstrap/report.ts`, `apps/cli/src/bootstrap/report.test.ts`
-- Modify, as the refusal requires: `apps/cli/src/main.ts`, `apps/cli/src/main.test.ts`
-- Modify: `tests/security/network.test.ts`
-- Modify: `docs/architecture/foundation.md`, `docs/architecture/threat-model.md`
-
-**Interfaces:**
-- Consumes: Tasks 1–7.
-- Produces: the V1 refusal in `init`, the non-`init` refusal during non-terminal bootstrap state, and
-  the strict V2 handoff admission later Spec 1 commands call.
-
-- [ ] **Step 1: Revert the migration code**
-
-Revert newest first, keeping documentation hunks out; `npm run lint` and the focused suites of every
-reverted file green; commit `revert: withdraw the v1 manifest migration code (D18)`.
-
-- [ ] **Step 2: Write failing contract tests**
-
-1. With the packaged bootstrap capability available, `init` over a V1 manifest produced by the
-   shipped V1 `init` path refuses with `manifest_v1_not_migratable`, exit 4, mutates nothing, and
-   directs the user to `developer-os uninstall` then `developer-os init`. Without the capability
-   (production until roadmap Phase 4b) the V1 path is unchanged.
-2. Every non-`init` command exits 6 while a non-terminal `fresh_v2_init` envelope exists, leaving the
-   evidence untouched (Spec 2 §3.1, §6.3); after a complete V2 handoff, inert retained evidence
-   affects no command (§6.4 "Authority switch at V2 handoff"). Existing Foundation commands keep
-   working over a V1 manifest.
-3. The strict V2 handoff admission admits exactly the §6.4 handoff set and refuses a V1 manifest, a
-   non-terminal envelope, and each missing member; it reuses the existing private handoff check in
-   `report.ts`.
-4. The refusal paths make zero network requests and spawn zero processes.
-
-- [ ] **Step 3: Implement**
-
-The smallest change that passes Step 2 without changing fresh V2 init behavior.
-
-- [ ] **Step 4: Run focused and phase-close gates, then obtain fresh review**
-
-Run: `npx vitest run --root apps/cli src/commands/init.test.ts src/bootstrap/report.test.ts src/main.test.ts`
-
-Run: `npx vitest run --root tests security/network.test.ts`
-
-Run: `npm run check` — Task 9 closes roadmap Phase 3, so D17 requires the full gate here.
-
-Expected: PASS. Fresh review of Task 9's commits; accepted findings get a failing regression first.
-
-- [ ] **Step 5: Document, commit and advance to plan 1a**
-
-Record the V1 refusal, the non-`init` refusal and the handoff admission in
-`docs/architecture/foundation.md` and `threat-model.md`; tick this task; advance `ORDER.md` to roadmap
-Phase 4. Stage exact paths.
-
-After this commit, execute plan 1a (roadmap Phase 4: Spec 1 plan Tasks 1–7, 21 and 23, after the NEW-67 amendment). Treat Task 1's shared canonical/lifecycle files as existing prerequisite outputs and extend/import them without changing the approved Spec 1 semantics. Do not start Task 10 below until the plan 1a checkpoint is committed and green (D16, 2026-09-16).
+Next in this document is Task 10, after plan 1a (roadmap Phase 4) and together with the production
+wiring step of roadmap Phase 4b. Tasks 12–26 follow the founder cutover (D16).
 
 ## Checkpoint B — Release and update after Spec 1
 
@@ -1392,7 +1264,7 @@ Confirm CI is green on the exact commit before merge. Do not merge; the founder 
 | §3 stable launcher, installed layout, active/trust records | Tasks 2, 7, 10–11, 19, 22, 26 |
 | §4 signed metadata, selection, bundle archive, transport | Tasks 2, 11–13, 23, 26 |
 | §5 Manifest V2, drift, direct-write participant | Tasks 3–5, 9, 21, 26 |
-| §6 fresh V2 init, strict V1 mapping, crash-resumable migration | Tasks 6–9, 26 |
+| §6 fresh V2 init and the V1 refusal (migration withdrawn by D18) | Tasks 6–7, 9, 26 |
 | §7 strict update grammar, preview, guarded scratch, typed result | Tasks 13–14, 23, 26 |
 | §8 target planner, owner providers, schema migrations | Tasks 15–17, 21, 26 |
 | §9 construction, participants, coordinator order/failure direction | Tasks 18–24, 26 |

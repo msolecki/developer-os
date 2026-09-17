@@ -80,20 +80,22 @@ than to durability.
 | D16 | **Daily use before completeness.** The founder cuts over (Phase 10) as soon as the product replaces every legacy surface used daily; update, rollback, Git, launchd and the public release follow the cutover. Execution order: 3 → 4 → 4b → 5 → 5b → 6 → 7 → 10 → 8 → 9 → 11. Phases 4 and 4b stay ahead of the cutover because a production V2 `init` needs them (Phase 4b). Accepted costs: until Phase 8 a new build reaches the founder machine only by reinstalling; until Phase 9 the retired legacy scheduled jobs run by hand. | the phase order below; release plan global constraint on Task 10 and Task 9 Step 5; `ORDER.md` A11, A15, A16 and new A11b; L2 no longer blocks A15 |
 | D17 | **Per-commit gate: lint, focused tests, fresh review, push.** Every code-producing commit runs its focused commands and `npm run lint`, gets fresh-context review, and is pushed to `development` so CI runs all five jobs on it. A red run stops new commits until it is fixed; nobody waits for green to keep working. Because `check.yml` cancels a superseded run and a full run takes ~4 h, a commit made while a run is in progress is held and pushed with the next one (corrected the same day, after the first push under D17 cancelled the run before it). `npm run check` runs locally when a phase or plan closes. Reason: `npm test` alone takes ~2h50m locally, which capped the program at a few commits a day. The founder amended the matching global commit rule the same day. NEW-53 is not a lever here: `e436581` measured encoding at about a tenth of the bootstrap test's wall time. | `SESSION.md` §5, `BACKLOG.md` §7, both implementation plans' per-task `npm run check` clauses; D12's accepted trade (a red run visible on `development`) now applies per task |
 
-## Founder decision of 2026-09-17
+## Founder decisions of 2026-09-17
 
 | # | Decision | Amends |
 |---|---|---|
-| D18 | **The V1→V2 manifest migration is withdrawn.** No V1 installation exists outside tests and disposable development homes — nothing is released, and the founder machine runs the legacy runtime, which Phase 10 replaces with a fresh V2 install. Executing Task 8's plan had surfaced four spec gaps in one day, the last blocking: the approved spec never says where a replaced V1 file goes, and the 2026-09-08 "exactly three projection rows" rule refuses every real migration. `init` over a V1 manifest now refuses (`manifest_v1_not_migratable`, exit 4) once the packaged capability exists, and the code of `55a06de`, `df3e947` and `8db8eb0` is reverted. Cost accepted: a pre-release V1 home must uninstall and re-init. | Spec 2 (dated amendment above §1, §6, §6.2, §6.3, §13.2); release plan Tasks 8–9; Phases 3 and 4b below; `BACKLOG.md` gains the dead Core `v1_to_v2` arm |
+| D18 | **The V1→V2 manifest migration is withdrawn.** No V1 installation exists outside tests and disposable development homes — nothing is released, and the founder machine runs the legacy runtime, which Phase 10 replaces with a fresh V2 install. Executing Task 8's plan had surfaced four spec gaps in one day, the last blocking: the approved spec never says where a replaced V1 file goes, and the 2026-09-08 "exactly three projection rows" rule refuses every real migration. `init` over a V1 manifest now refuses (`manifest_v1_not_migratable`, exit 4) once the packaged capability exists, and the code of `55a06de`, `df3e947` and `8db8eb0` is reverted. Cost accepted: a pre-release V1 home must uninstall and re-init. | Spec 2 (dated amendment above §1, §6, §6.2, §6.3, §13.2); release plan Tasks 8–9; Phases 3 and 4b below; `BACKLOG.md` gains the dead Core `v1_to_v2` arm; Spec 1 and its plan through the NEW-67 amendment (added after the Phase 3 final review found D18 had not reached them) |
+| D19 | **The release layout follows Spec 2 §3.2, not the shipped executor.** Fresh `init` writes release metadata to `releases/metadata/<packaged name>` and the rollback root to `state/rollback`; §3.2 fixes hash-derived `state/release-metadata/{delegations,indexes,bundles}/<hash>.json` and product-home `rollback`. Packaged names cannot hold the active and rollback identities' metadata side by side, and the launcher (Task 10) validates hash-derived paths. Moving the code is free while no V2 installation exists and an on-disk migration after Phase 4b. | NEW-80, owned by Phase 4b; NEW-67 derives its reservation set from §3.2 |
+| D20 | **The V1 refusal's recovery becomes "developer-os uninstall, then archive the product home manually, then developer-os init".** The Phase 3 final review probed D18's "uninstall, then init" against the built CLI: V1 `uninstall` leaves `staging/`, `state/transactions` and `backups/`, and fresh V2 `init` refuses that residue with exit 6 and no next step. Admitting that residue in fresh `init` would change Spec 2 §6.1's external shape for a state D18 says no real installation is in. Corrects D18's accepted cost, which named only uninstall and re-init. | Spec 2 D18 amendment (dated sentence); NEW-79, owned by Phase 4b |
 
 ## Phases
 
 Sizes are S/M/L complexity. "Gate" is what must be true before the next phase starts.
 
-**Execution order (D16):** 3 → 4 → 4b → 5 → 5b → 6 → 7 → 10 → 8 → 9 → 11. Phase numbers are
-identifiers, not positions.
+**Execution order (D16):** 4 → 4b → 5 → 5b → 6 → 7 → 10 → 8 → 9 → 11, Phase 3 having closed.
+Phase numbers are identifiers, not positions.
 
-### Phases 0-2 — closed
+### Phases 0-3 — closed
 
 Pruned to their outcomes on 2026-09-08; the detail is in git history and the surviving constraints
 are in the canonical documents named below. The founder decisions above are **not** history — D1-D15
@@ -126,18 +128,24 @@ govern the open phases and stay.
 
   CI is green on all five jobs, twice consecutively — runs 34157609332 (`446148b`) and 34172016048
   (`88d56a2`).
+- [x] **Phase 3 — Spec 2 Task 9: V1 refusal and the V2 new-init handoff**, closed 2026-09-17 as
+  `810d342..43c30e4`. D18 withdrew the V1→V2 migration the same morning and its code was reverted.
+  What shipped: `init` over a V1 manifest refuses with `manifest_v1_not_migratable` (exit 4) once the
+  packaged capability exists; every non-`init` command refuses while a non-terminal bootstrap envelope
+  exists and treats retained evidence as inert after a valid handoff; and the strict V2 handoff
+  admission. Three review fix rounds preceded a final whole-change review with no Critical finding and
+  no code change required; `npm run check` passed on `43c30e4`. Constraints in
+  `docs/architecture/foundation.md` and `docs/architecture/threat-model.md`.
 
-### Phase 3 — Spec 2 Task 9: V1 refusal and the V2 new-init handoff · M
-
-**Rescoped 2026-09-17 by D18.** Task 8 (the migration planner) is withdrawn and its code reverted.
-
-**The Spec 2 amendment is done.** All eight NEW-68 corrections were approved by the founder on 2026-09-08 and are marked "Amended 2026-09-08" in place; the proposal document is deleted and NEW-68 is closed. Three needed a decision and all three took the recommended resolution: the migration plan admits its own external shape over a disjoint digest domain, the two "exact maximum" gates are read against both the cardinality and byte bounds, and the unreachable `symlink` arm is retained as accepted residual 9 with an exact-set test. Task 8 is committed (`55a06de`). What remains is baseline Task 9 from `plans/2026-08-29-developer-os-release-update.md`.
-
-Gate, corrected 2026-09-16 and 2026-09-17: the migration code is reverted; with the packaged capability available, `init` over a V1 manifest refuses and mutates nothing, and without it the V1 path is unchanged; every non-`init` command refuses while a non-terminal bootstrap envelope exists; the strict V2 handoff admission for Spec 1 commands exists and is tested. A fresh production `init` on V2 is Phase 4b's gate: V2 `init` requires a root-verified packaged release (`apps/cli/src/commands/init.ts:855`), which only the launcher's offline trust path (Spec 2 Tasks 10–11) supplies.
+  **What the final review found was documentation that had not followed a withdrawal.** D18 reached
+  Spec 2 and its plan but not Spec 1, whose Phase 4 precondition still required the withdrawn
+  migration, and the recovery D18 prescribed for V1 homes did not work when probed (D20). The rule it
+  generalises: when a decision withdraws a feature, grep every spec and plan that names it, not only
+  the one that owns it. Findings are NEW-79 to NEW-83 and additions to NEW-67.
 
 ### Phase 4 — Spec 1a: configuration mutability and the lifecycle coordinator · L
 
-- [ ] Amend Spec 1 (NEW-67): retention replaces every `unlink`/`rmdir`/plan-last clause in §§2.3, 2.4, 6; types already shipped by Spec 2 are imported, not re-produced; the automation status path and the closed reservation set include the Spec 2 paths; the three collision codes exist; property-based fixtures are allowed for the ledger, blob and object ceilings; a dated change table replaces the seven correction packages.
+- [ ] Amend Spec 1 (NEW-67): retention replaces every `unlink`/`rmdir`/plan-last clause in §§2.3, 2.4, 6; types already shipped by Spec 2 are imported, not re-produced; the automation status path and the closed reservation set include the Spec 2 paths; the three collision codes exist; property-based fixtures are allowed for the ledger, blob and object ceilings; a dated change table replaces the seven correction packages; D18 is applied (the migration precondition, §2.1 migration gate and mapping, the §7 migration gate and §8.2 step 3 go; Spec 1 consumes the fresh V2 handoff only).
 - [ ] Write plan 1a = Spec 1 plan Tasks 1–7, 21, 23, with Task 2 (`config set`) moved after Task 4 (global lock provider).
 - [ ] Execute plan 1a.
 
@@ -150,6 +158,7 @@ Added by D16 and pulled forward from Phase 8: without the launcher's root-verifi
 - [ ] Confirm from the plan text that Tasks 10–11 need nothing from Spec 1b; Task 10 consumes "Spec 1 lifecycle closure". If they do, stop and ask rather than pulling Spec 1b forward.
 - [ ] Add the missing plan step that replaces `bootstrap: { state: "unavailable_until_packaged_handoff" }` at `apps/cli/src/context.ts:765` with the admitted handoff. Spec 1 plan Task 21 modifies that file, but no step in either plan replaces the pin.
 - [ ] Stop and ask how the founder build is signed: which offline root key the launcher compiles in, and whether public releases reuse it.
+- [ ] Before the pin is removed: move the release layout to Spec 2 §3.2 (D19, NEW-80), correct the V1 refusal's recovery (D20, NEW-79), and harden the ordinary-command gate (NEW-81).
 - [ ] Execute Tasks 10–11 and that step.
 
 Gate: on a disposable home, a fresh `init` runs the V2 path in production through the launcher, and `init` over a V1 home refuses.
@@ -241,7 +250,7 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 | 0 | closed 2026-09-04; the plan it named was deleted at closure |
 | 1 | closed 2026-09-05; the plan it named was deleted at closure |
 | 2 | closed 2026-09-07/08; the plan it named was deleted at closure |
-| 3 | Spec 2 §6.2/§6.3 amendment and the D18 withdrawal; baseline plan Task 9 |
+| 3 | closed 2026-09-17; baseline plan Task 9 pruned to its outcome |
 | 4 | Spec 1 amendment; `plans/<date>-developer-os-opt-in-surfaces-1a.md` |
 | 4b | baseline plan Tasks 10–11 plus the production wiring step Phase 4b adds |
 | 5 | `specs/<date>-developer-os-instruction-artifacts-design.md` and its plan |
