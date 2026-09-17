@@ -399,15 +399,19 @@ Spec 2's fresh V2 `init` creates V2 state. Three contracts take its place.
 - **Every command except `init` is routed by the bootstrap state before it runs.** Dispatch
   (`apps/cli/src/main.ts`) calls `assertOrdinaryCommandAdmitted` in
   `apps/cli/src/bootstrap/report.ts`, which decides by the current installation manifest:
-  - **A manifest declaring `schemaVersion: 2` must first pass strict V2 validation.** It is re-read
-    through the manifest store with the same admission `uninstall` uses: `validateManifestBytes`
-    with owner paths confined to the product home and the configured Brain (`readAdmittedManifest`
-    in `apps/cli/src/commands/uninstall.ts`). A manifest that declares version 2 but fails — a
-    planted `{"schemaVersion":2}`, or a shipped manifest altered into an invalid one — is malformed
-    local manifest state (Spec 2 §11). Every command then exits 6 with message `the V2 installation
-    manifest failed validation; restore it or archive the product home manually before running
-    init again` and the manifest path, and `init` refuses with the same message before reading any
-    bootstrap evidence.
+  - **A manifest declaring `schemaVersion: 2` must first pass structural V2 validation.**
+    `isStructurallyValidV2Manifest` in `apps/cli/src/bootstrap/report.ts` runs Core's
+    `validateManifestBytes` over the guarded manifest bytes — canonical JSON, exact keys, stable
+    version, timestamps, artifact arms, restore evidence, sorted unique paths — with an
+    `unconfined` owner-path admission. It reads neither `config.toml` nor the Brain path, so an
+    unparseable configuration or a relocated Brain never makes a valid V2 manifest look malformed;
+    those remain `doctor`'s findings and the confined reads of the commands that act on them (for
+    example `uninstall`'s relocated-Brain refusal). A manifest that declares version 2 but fails —
+    a planted `{"schemaVersion":2}`, or a shipped manifest altered into an invalid one — is
+    malformed local manifest state (Spec 2 §11). Every command then exits 6 with message `the V2
+    installation manifest failed validation; restore it or archive the product home manually
+    before running init again` and the manifest path, and `init` refuses with the same message,
+    from the same check, before reading any bootstrap evidence.
   - **A valid V2 manifest: the handoff arm.** Retained evidence is inert. The gate lists `state/`
     and reads only names of the form `fresh-v2-init.<id>.plan.json`; it never stats a tombstone, a
     payload or evidence name, or `.lifecycle-bootstrap.lock`. It refuses only when an admitted
@@ -444,7 +448,8 @@ Spec 2's fresh V2 `init` creates V2 state. Three contracts take its place.
   matching`; `refuses only genuine bootstrap residue in a home where bootstrap never ran, with the
   guidance init gives`; `refuses every command, and init, when a planted manifest declaring schema
   version 2 fails strict validation`; `refuses every command, and init, when a shipped V2 manifest is
-  altered into an invalid one`; and `keeps Foundation commands working over a shipped V1 manifest
+  altered into an invalid one`; `does not refuse a valid V2 install as a malformed manifest when its
+  configuration is unparseable or its Brain moved`; and `keeps Foundation commands working over a shipped V1 manifest
   while init refuses it`.
 - **`admitV2Handoff` admits exactly Spec 2 §6.4's handoff set, for Spec 1 commands to call.** It
   reads the same plan-name-only listing as the handoff arm above. Refusals:
