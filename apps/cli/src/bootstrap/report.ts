@@ -1496,8 +1496,12 @@ async function admitExactV2Handoff(
     const reservation = await guardedFile(request, join(state, name));
     if (reservation !== null && reservation.bytes !== "0") throw incompleteHandoff();
   }
-  for (const name of ["lifecycle-journals", "git-effect-journals", "launchd-effect-journals", "rollback"]) {
-    const directory = await request.projectPostimage(join(state, name) as CanonicalAbsolutePathV1);
+  const emptyRoots = [
+    ...["lifecycle-journals", "git-effect-journals", "launchd-effect-journals"].map((name) => join(state, name)),
+    join(request.productHome, "rollback"),
+  ];
+  for (const path of emptyRoots) {
+    const directory = await request.projectPostimage(path as CanonicalAbsolutePathV1);
     if (directory?.kind !== "directory_tree" || directory.entryCount !== 0) throw incompleteHandoff();
   }
   return handoff.manifest;

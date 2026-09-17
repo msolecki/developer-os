@@ -9,6 +9,7 @@ import type { CanonicalAbsolutePathV1, UInt64DecimalV1 } from "@developer-os/cor
 import { runInit } from "../commands/init.js";
 import { runDoctorReport } from "../commands/doctor.js";
 import { failureFrom } from "../context.js";
+import { inspectPackagedRelease } from "../update/packaged-release.js";
 import { createCommandFixture, firstRegularFile, inventoryDigest, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures, retainedTombstones } from "../commands/testing.js";
 import {
   createBootstrapEvidenceInspectionRequest,
@@ -401,6 +402,7 @@ describe("admitV2Handoff", () => {
     });
     const bootstrap = fixture.context.bootstrap;
     if (bootstrap?.state !== "available") throw new Error("bootstrap fixture is unavailable");
+    const { identity } = await inspectPackagedRelease(bootstrap.packagedRelease);
     await bootstrap.executor.close();
     fixture.disableBootstrapInterrupt();
     expect((await runInit(fixture.rebuildContext(), ACCEPTED)).ok).toBe(true);
@@ -433,15 +435,15 @@ describe("admitV2Handoff", () => {
       [join(state, "launchd-effect-journals"), decisionRequired],
       [join(state, "active-release.json"), recoveryRequired],
       [join(state, "release-trust.json"), recoveryRequired],
-      [join(release, "metadata", "release-index.json"), decisionRequired],
+      [join(state, "release-metadata", "indexes", `${identity.releaseIndexHash}.json`), decisionRequired],
       [join(release, "1.0.0", "darwin-arm64", "bin", "developer-os"), decisionRequired],
-      [join(state, "rollback"), decisionRequired],
+      [join(fixture.paths.home, "rollback"), decisionRequired],
     ] as const;
     const present = [
       join(state, "update-rollback.json"),
       join(state, "update-executor.json"),
       join(state, "lifecycle-activation.json"),
-      join(state, "rollback", "synthetic-payload"),
+      join(fixture.paths.home, "rollback", "synthetic-payload"),
       join(state, "lifecycle-journals", "synthetic-journal.json"),
     ];
     expect(missing.length).toBeGreaterThan(0);

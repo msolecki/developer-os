@@ -50,15 +50,16 @@ concurrency:
 # preserves what the single `npm run check` step was protecting: CI cannot drift
 # from local, because neither side spells the vitest invocations itself.
 #
-# Both paths cover the same files, by different routes. Here: five parallel
+# Both paths cover the same files, by different routes. Here: six parallel
 # jobs — `lint` (`npm run lint`, the build, `git diff --check`),
 # `bootstrap-executor` (`npm run test:bootstrap`), `suite`
-# (`npm run test:suite`, which excludes the executor file, `e2e/**` and
-# `integration/ingest/no-user-hooks.test.ts`), `e2e` (`npm run test:e2e`), and
+# (`npm run test:suite`, which excludes the executor file, `e2e/**`,
+# `integration/ingest/no-user-hooks.test.ts` and `**/*.v2.test.ts`),
+# `lifecycle-v2` (`npm run test:lifecycle`), `e2e` (`npm run test:e2e`), and
 # `vendor-ingest` (`npm run test:vendor-ingest`). Locally: `npm run check` runs
-# `npm run lint`, then `npm test` (`test:bootstrap` and `test:suite`), then
-# `npm run test:e2e`, then `npm run test:vendor-ingest`, then the build, then
-# `git diff --check`. `test:e2e` and `test:vendor-ingest` are spelled out in
+# `npm run lint`, then `npm test` (`test:bootstrap`, `test:suite` and
+# `test:lifecycle`), then `npm run test:e2e`, then `npm run test:vendor-ingest`,
+# then the build, then `git diff --check`. `test:e2e` and `test:vendor-ingest` are spelled out in
 # `check` because `test:suite` excludes `e2e/**` and
 # `integration/ingest/no-user-hooks.test.ts` for the sharding above, so
 # `npm test` alone no longer reaches either.
@@ -158,7 +159,8 @@ jobs:
         run: npm run test:bootstrap
 
   suite:
-    # Every test file except the executor file and tests/e2e, which the jobs above and below own.
+    # Every test file except the executor file, tests/e2e and the real-V2-home
+    # `*.v2.test.ts` files, which the jobs above and below own.
     #
     # **Raised from 40 to 75 on 2026-09-07, because 40 was never a measured
     # bound.** Run 34121831849 killed this job at 40.3 minutes with no test
@@ -199,6 +201,28 @@ jobs:
         run: pnpm --pm-on-fail=ignore build
       - name: Suite
         run: npm run test:suite
+
+  lifecycle-v2:
+    # Owns the real-V2-home `*.v2.test.ts` files, which `test:suite` excludes.
+    # Running local total of that set: 109 s (2026-09-17, one file); the budget
+    # below is that total x 2 for a hosted runner x 1.5 headroom, floored at 20.
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Enable pnpm through corepack
+        run: corepack enable
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm --pm-on-fail=ignore build
+      - name: Lifecycle V2
+        run: npm run test:lifecycle
 
   e2e:
     # Separate here as it is locally: these spawn the compiled binary under a

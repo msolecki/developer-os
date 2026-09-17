@@ -102,17 +102,17 @@ apps/cli/src/context.ts               765   bootstrap: { state: "unavailable_unt
 packages/core/src/manifest/bootstrap.ts 72-83 LifecycleBootstrapLockV1 with three created-by-attempt fields
 packages/core/src/manifest/bootstrap.ts 1828 createdPaths[0] must be the global lock (unconditional)
 apps/cli/src/bootstrap/executor.ts    1123  reusableFreshDirectoryCandidates()
-apps/cli/src/bootstrap/executor.ts    1136  join(paths.stateDir, "rollback") candidate
+apps/cli/src/bootstrap/executor.ts    1136  join(paths.home, "rollback") candidate (Task 1)
 apps/cli/src/bootstrap/executor.ts    1147  backups exemption (NEW-69 cites 1146)
-apps/cli/src/bootstrap/executor.ts    1546  runtimeReservationPaths(): automation-<job>.json
-apps/cli/src/bootstrap/executor.ts    1828  ordinary directory join(paths.stateDir, "rollback")
+apps/cli/src/bootstrap/executor.ts    1546  runtimeReservationPaths(): automation-<job>.status.json (Task 1)
+apps/cli/src/bootstrap/executor.ts    1828  ordinary directory join(paths.home, "rollback") (Task 1)
 apps/cli/src/bootstrap/executor.ts    1951  admittedPreexistingPaths (NEW-69 cites 1944)
-apps/cli/src/bootstrap/executor.ts    2016  metadataRoot = join(releaseRoot, "metadata")
-apps/cli/src/bootstrap/executor.ts    2131  buildManifest(): bookkeeping directories and .lifecycle.lock become rows
+apps/cli/src/bootstrap/executor.ts    2033  metadataRoot = join(paths.stateDir, "release-metadata") (Task 1)
+apps/cli/src/bootstrap/executor.ts    2138  buildManifest(): bookkeeping directories and .lifecycle.lock become rows
 apps/cli/src/bootstrap/report.ts      1151  .lifecycle-bootstrap.lock filtered out by name
 apps/cli/src/bootstrap/report.ts      1437  guardedFile(): null for any non-regular entry
-apps/cli/src/bootstrap/report.ts      1499  handoff loop hard-codes state/rollback
-apps/cli/src/bootstrap/report.ts      1510  admitV2Handoff (no production caller)
+apps/cli/src/bootstrap/report.ts      1499  handoff empty-root loop: three journal roots plus product-home rollback (Task 1)
+apps/cli/src/bootstrap/report.ts      1514  admitV2Handoff (no production caller)
 apps/cli/src/bootstrap/context.ts     238   listNames wired to readdir
 ```
 
@@ -135,7 +135,7 @@ Source: roadmap Phase 4 "first test" (A4, D19); NEW-80, pulled forward by D29.
 - Consumes: `PackagedReleaseIdentityV1.delegationHash`, `.releaseIndexHash`, `.bundleManifestHash` and `inspectPackagedRelease` from `apps/cli/src/update/packaged-release.ts`; `persistedPlan(fixture)` in `executor.test.ts`.
 - Produces: the fresh V2 layout later tasks rely on — `state/release-metadata/{delegations,indexes,bundles}/<hash>.json`, product-home `rollback`, `state/automation-<job>.status.json`, `state/.automation-<job>.lock`, `logs/automation-<job>.<n>.json`.
 
-- [ ] **Step 1: Write the failing exact-set pin**
+- [x] **Step 1: Write the failing exact-set pin**
 
 Restored from `git show df3e947 -- apps/cli/src/bootstrap/executor.test.ts`, updated for D19 and A4, into the new `fresh-layout.v2.test.ts` so the first real-V2-home case of this plan starts in the `lifecycle-v2` job:
 
@@ -188,13 +188,13 @@ it("creates exactly the fresh plan path set Spec 2 §3.2 and Spec 1 §2.1 reserv
 
 Cover also: each retained metadata file's bytes hash to the identity hash in its name; product-home `rollback` exists after `init` as an empty owner-only `0700` directory with a manifest `directory`/`content` row; neither `state/rollback` nor any `automation-<job>.json` exists anywhere under the product home; in `report.test.ts`, the `missing` list names `join(fixture.paths.home, "rollback")` and `join(state, "release-metadata", "indexes", <hash>.json)` in place of the old paths, and the `present` list plants `join(fixture.paths.home, "rollback", "synthetic-payload")`.
 
-- [ ] **Step 2: Run the pin and verify it fails for the layout reason**
+- [x] **Step 2: Run the pin and verify it fails for the layout reason**
 
 Run: `npx vitest run --root apps/cli src/bootstrap/fresh-layout.v2.test.ts`
 
 Expected: FAIL — `childrenOf(state)` contains `rollback` and `automation-<job>.json` and lacks `release-metadata`; `childrenOf(home)` lacks `rollback`. A failure for any other reason is a stop condition.
 
-- [ ] **Step 3: Move the layout**
+- [x] **Step 3: Move the layout**
 
 Change only paths, never order rules:
 
@@ -213,7 +213,7 @@ private buildLaunchability(/* unchanged signature */): { readonly paths: readonl
 
 Rules: the file name hash comes only from `packaged.identity`, which `inspectPackagedRelease` already binds to each file's SHA-256; never from a URL, archive or packaged file name. Launchability order stays Spec 2 §6.3's: bundle root and inventory, then the metadata directories and the three retained files (delegation, index, bundle manifest), then trust, then active last. Parents precede children. In `report.ts` the handoff loop checks the three journal roots under `state` and `rollback` under the product home.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root apps/cli src/bootstrap/fresh-layout.v2.test.ts`
 
@@ -225,7 +225,7 @@ Run: `npm run build && npx vitest run --root tests e2e/fresh-v2-retained-bootstr
 
 Expected: PASS.
 
-- [ ] **Step 4b: Add the `lifecycle-v2` CI job**
+- [x] **Step 4b: Add the `lifecycle-v2` CI job**
 
 In `package.json`:
 - `"test:lifecycle": "vitest run .v2.test.ts"`. Vitest positional filters match any test path containing the string; `vitest list --filesOnly` confirms the set.
@@ -242,7 +242,7 @@ Run: `npm run test:lifecycle`
 
 Expected: PASS. Record its duration as the job comment's first local total, and set `timeout-minutes` to ceil(total in minutes × 2 × 1.5), minimum 20.
 
-- [ ] **Step 5: Close NEW-80 in the tracking documents, gate, commit, push**
+- [x] **Step 5: Close NEW-80 in the tracking documents, gate, commit, push**
 
 Remove row NEW-80 from `BACKLOG.md` §1 and change "There are 46 numbered rows" to 45. In `BACKLOG.md` §0 delete "; NEW-80 moved into plan 1a (D29)". In `ORDER.md`: delete "; NEW-80 moved into plan 1a Task 1 (D29)" from the open sequence; change "NEW-78 and NEW-79–NEW-85." to "NEW-78, NEW-79 and NEW-81–NEW-85."; change "NEW-80, NEW-82 and NEW-83 by plan 1a" to "NEW-82 and NEW-83 by plan 1a"; change "46 open numbered rows" to "45 open numbered rows". Tick this task and update the `Plan 1a progress:` sentence. Run `npm run lint`, obtain fresh-context review, then:
 

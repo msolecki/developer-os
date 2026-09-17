@@ -28,7 +28,7 @@ directories removed before the manifest tombstone (D25), the uninstall capacity 
 deferred to Phase 4b as NEW-85 (D26), §6 applied literally to V1 residue (D27), the `mf` ID reserved last
 (D28), and NEW-80 pulled into plan 1a Task 1 (D29). **The next action is to execute plan 1a.**
 
-Plan 1a progress: no task committed; next is Task 1 (Pin the fresh V2 plan's created path set to D19 and the renamed status reservation).
+Plan 1a progress: Tasks 1–1 of 25 committed; next is Task 2 (Admit the bookkeeping set by shape and keep it out of the manifest).
 
 The 2026-08-28 Spec 1 plan (`plans/2026-08-28-developer-os-opt-in-surfaces.md`) stays as plan 1b's
 source. Spec 2's Tasks 1–7 and 9 are complete, Task 8 is withdrawn, and Tasks 10–26 remain.
@@ -38,7 +38,7 @@ Open sequence (D16, daily use before completeness):
 1. Now: execute plan 1a (Phase 4).
 2. Spec 2 Tasks 10–11 plus the production wiring step that removes the bootstrap pin at
    `apps/cli/src/context.ts:765` — launcher and offline trust — with NEW-79, NEW-81 and NEW-85
-   first (Phase 4b); NEW-80 moved into plan 1a Task 1 (D29).
+   first (Phase 4b).
 3. A12 → A12b → A13 → A14, then the founder cutover A15.
 4. After the cutover: A11b (Spec 2 Tasks 12–26, then Spec 1b), then A16.
 
@@ -88,8 +88,8 @@ Needs a human, a policy decision, or an external application:
 - Foundation watchdog — decide whether `SpawnLockfRunner` needs one around non-blocking `lockf`.
 
 The remaining open repository rows are NEW-20, NEW-24–NEW-29, NEW-31, NEW-32, NEW-34–NEW-40,
-NEW-76, NEW-78 and NEW-79–NEW-85.
-Owners: NEW-79, NEW-81 and NEW-85 are owned by Phase 4b; NEW-80, NEW-82 and NEW-83 by plan 1a; NEW-84 by Phase 9.
+NEW-76, NEW-78, NEW-79 and NEW-81–NEW-85.
+Owners: NEW-79, NEW-81 and NEW-85 are owned by Phase 4b; NEW-82 and NEW-83 by plan 1a; NEW-84 by Phase 9.
 They are not ordered ahead of A11 unless the touched subsystem makes one relevant.
 
 ## Delivery evidence still owed
@@ -110,10 +110,10 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
   274.89 s, `test:vendor-ingest` 30.27 s.
 - **A green local `check` is not evidence about CI, and this is now recorded rather than learned
   again.** The local chain begins with `lint`, which is `tsc -b`, so every `dist` exists before any
-  test runs; CI splits into five jobs with no shared filesystem. And the development laptop runs a
+  test runs; CI splits into six jobs with no shared filesystem. And the development laptop runs a
   newer Darwin than the runner, which is how an undefined `renameatx_np` flag bit shipped. Both
   instances are in `BACKLOG.md` §5.
-- CI job budgets are 20/330/150/40/15 minutes and are sized from a **measured** ~1.9-2x hosted-runner
+- CI job budgets are 20/330/150/20/40/15 minutes and are sized from a **measured** ~1.9-2x hosted-runner
   ratio, not a guess; two of them were killed by bounds derived from the most favourable local
   number before that ratio was measured. They are bounds that let the gate report, not targets —
   NEW-53's residual owns making them unnecessary.
@@ -131,7 +131,7 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 
 - Product sequence: 8 open entries, A11, A12, A12b, A13, A14, A15, A11b, A16.
 - Release plan: Tasks 10–26 open; Tasks 1–7 and 9 closed, Task 8 withdrawn.
-- Repository backlog: 46 open numbered rows, plus the Foundation watchdog decision.
+- Repository backlog: 45 open numbered rows, plus the Foundation watchdog decision.
 - Implementation plans: Spec 2 baseline Tasks 10–26 (17 tasks), plan 1a (25 tasks) and plan 1b (the
   2026-08-28 plan's remaining 15 tasks, not yet rewritten): 57 tasks. Before the cutover: plan 1a
   (25 tasks) and Tasks 10–11 — 27 tasks. After it: Tasks 12–26 and plan 1b (15 tasks) — 30 tasks. Phases 5, 5b, 6 and 7 have no spec yet.

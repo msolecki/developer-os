@@ -1133,7 +1133,7 @@ export class BootstrapExecutor {
       join(paths.stateDir, "lifecycle-journals"),
       join(paths.stateDir, "git-effect-journals"),
       join(paths.stateDir, "launchd-effect-journals"),
-      join(paths.stateDir, "rollback"),
+      join(paths.home, "rollback"),
     ];
   }
 
@@ -1555,7 +1555,7 @@ export class BootstrapExecutor {
       join(stateDir, "update-rollback.json"),
       join(stateDir, "update-executor.json"),
       ...jobs.flatMap((job) => [
-        join(stateDir, `automation-${job}.json`),
+        join(stateDir, `automation-${job}.status.json`),
         join(stateDir, `.automation-${job}.lock`),
         ...Array.from({ length: 10 }, (_, ordinal) =>
           join(logsDir, `automation-${job}.${String(ordinal)}.json`),
@@ -1825,7 +1825,7 @@ export class BootstrapExecutor {
       join(paths.stateDir, "lifecycle-journals"),
       join(paths.stateDir, "git-effect-journals"),
       join(paths.stateDir, "launchd-effect-journals"),
-      join(paths.stateDir, "rollback"),
+      join(paths.home, "rollback"),
       ...(input.brainStats === null
         ? [input.request.brainPath, ...BRAIN_TEMPLATE_DIRECTORIES.map((path) => join(input.request.brainPath, path))]
         : []),
@@ -2013,13 +2013,11 @@ export class BootstrapExecutor {
         parent = dirname(parent);
       }
     }
-    const metadataRoot = join(releaseRoot, "metadata");
     const directoryPaths = [
       releaseRoot,
       versionRoot,
       bundleRoot,
       ...[...inferredDirectories].sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right))),
-      metadataRoot,
     ];
     const specs: Array<
       | { readonly kind: "directory"; readonly path: string }
@@ -2032,16 +2030,25 @@ export class BootstrapExecutor {
         payload: addPackage(file.relativePath),
       });
     }
-    const metadata = [
-      packaged.retainedMetadata.delegation,
-      packaged.retainedMetadata.releaseIndex,
-      packaged.retainedMetadata.bundleManifest,
-    ];
-    for (const relativePath of metadata) {
+    const metadataRoot = join(paths.stateDir, "release-metadata");
+    /**
+     * The name is the hash `inspectPackagedRelease` bound to those exact bytes,
+     * never the packaged file's own name: one name cannot hold the active and
+     * rollback identities' metadata side by side (Spec 2 §3.2, decision D19).
+     */
+    const retained = [
+      { store: "delegations", relativePath: packaged.retainedMetadata.delegation, hash: packaged.identity.delegationHash },
+      { store: "indexes", relativePath: packaged.retainedMetadata.releaseIndex, hash: packaged.identity.releaseIndexHash },
+      { store: "bundles", relativePath: packaged.retainedMetadata.bundleManifest, hash: packaged.identity.bundleManifestHash },
+    ] as const;
+    for (const path of [metadataRoot, ...retained.map((row) => join(metadataRoot, row.store))]) {
+      specs.push({ kind: "directory", path });
+    }
+    for (const row of retained) {
       specs.push({
         kind: "file",
-        path: join(metadataRoot, relativePath.split("/").at(-1) ?? relativePath),
-        payload: addPackage(relativePath),
+        path: join(metadataRoot, row.store, `${row.hash}.json`),
+        payload: addPackage(row.relativePath),
       });
     }
     const trustValue = {
