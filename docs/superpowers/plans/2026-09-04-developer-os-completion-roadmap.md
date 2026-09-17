@@ -87,6 +87,9 @@ than to durability.
 | D18 | **The V1→V2 manifest migration is withdrawn.** No V1 installation exists outside tests and disposable development homes — nothing is released, and the founder machine runs the legacy runtime, which Phase 10 replaces with a fresh V2 install. Executing Task 8's plan had surfaced four spec gaps in one day, the last blocking: the approved spec never says where a replaced V1 file goes, and the 2026-09-08 "exactly three projection rows" rule refuses every real migration. `init` over a V1 manifest now refuses (`manifest_v1_not_migratable`, exit 4) once the packaged capability exists, and the code of `55a06de`, `df3e947` and `8db8eb0` is reverted. Cost accepted: a pre-release V1 home must uninstall and re-init. | Spec 2 (dated amendment above §1, §6, §6.2, §6.3, §13.2); release plan Tasks 8–9; Phases 3 and 4b below; `BACKLOG.md` gains the dead Core `v1_to_v2` arm; Spec 1 and its plan through the NEW-67 amendment (added after the Phase 3 final review found D18 had not reached them) |
 | D19 | **The release layout follows Spec 2 §3.2, not the shipped executor.** Fresh `init` writes release metadata to `releases/metadata/<packaged name>` and the rollback root to `state/rollback`; §3.2 fixes hash-derived `state/release-metadata/{delegations,indexes,bundles}/<hash>.json` and product-home `rollback`. Packaged names cannot hold the active and rollback identities' metadata side by side, and the launcher (Task 10) validates hash-derived paths. Moving the code is free while no V2 installation exists and an on-disk migration after Phase 4b. | NEW-80, owned by Phase 4b; NEW-67 derives its reservation set from §3.2 |
 | D20 | **The V1 refusal's recovery becomes "developer-os uninstall, then archive the product home manually, then developer-os init".** The Phase 3 final review probed D18's "uninstall, then init" against the built CLI: V1 `uninstall` leaves `staging/`, `state/transactions` and `backups/`, and fresh V2 `init` refuses that residue with exit 6 and no next step. Admitting that residue in fresh `init` would change Spec 2 §6.1's external shape for a state D18 says no real installation is in. Corrects D18's accepted cost, which named only uninstall and re-init. | Spec 2 D18 amendment (dated sentence); NEW-79, owned by Phase 4b |
+| D21 | **Retention replaces unlink/rmdir on the pre-product bootstrap paths only** (Spec 1 NEW-67 A2). Post-handoff §2.4 terminal compaction keeps guarded deletion, which keeps each journal root under 10,000 leaves while scheduled jobs run. This narrows Phase 4's original "retention replaces every unlink/rmdir/plan-last clause in §§2.3, 2.4, 6". | Spec 1 §2.3, §2.4, §6 |
+| D22 | **Absent-manifest uninstall has no coordinator envelope** (Spec 1 NEW-67 A3). `key_absent` performs two identical read-only walks and creates nothing; `key_present` deletes the key under the bootstrap lock by rechecked identity. The recovery-only nonce/allocator epoch, flat plan/journal, creation temps and key-present coordinator row are withdrawn. | Spec 1 §2.1, §2.3, §2.4, §6, §7, §8 |
+| D23 | **Uninstall leaves the global lock and the bookkeeping directories; fresh `init` admits them by shape** (Spec 1 NEW-67 A12). The set is `state/.lifecycle.lock`, the three journal roots, `state/transactions`, `staging/lifecycle`, `staging/transactions`, `backups/transactions`, `staging` and `backups`. It is never a manifest row. Revised the same day twice: unlinking the lock last left an unjournaled crash window, and binding leftovers to creation evidence failed for paths `init` never creates. Shape admission mirrors how shipped `init` already treats a leftover bootstrap leaf. | Spec 1 §2.1, §2.3, §6, §8.3; Spec 2 §6.1, §6.4 (dated) |
 
 ## Phases
 
@@ -145,8 +148,20 @@ govern the open phases and stay.
 
 ### Phase 4 — Spec 1a: configuration mutability and the lifecycle coordinator · L
 
-- [ ] Amend Spec 1 (NEW-67): retention replaces every `unlink`/`rmdir`/plan-last clause in §§2.3, 2.4, 6; types already shipped by Spec 2 are imported, not re-produced; the automation status path and the closed reservation set include the Spec 2 paths; the three collision codes exist; property-based fixtures are allowed for the ledger, blob and object ceilings; a dated change table replaces the seven correction packages; D18 is applied (the migration precondition, §2.1 migration gate and mapping, the §7 migration gate and §8.2 step 3 go; Spec 1 consumes the fresh V2 handoff only).
-- [ ] Write plan 1a = Spec 1 plan Tasks 1–7, 21, 23, with Task 2 (`config set`) moved after Task 4 (global lock provider).
+- [x] Amend Spec 1 (NEW-67): approved and applied 2026-09-17 with every recommended option — A1–A13 in place in Spec 1, plus the companion Spec 2 §6.1/§6.4 amendment for A12 (D21–D23). The 2026-09-04 wording of this bullet ("retention replaces every unlink/rmdir/plan-last clause", "the three collision codes exist") was narrowed by D21 and withdrawn by A6.
+- [ ] Write plan 1a = Spec 1 plan Tasks 1–7, 21, 23, with Task 2 (`config set`) moved after Task 4 (global lock provider), against the amended Spec 1. It must also carry what the amendment assigned to code:
+  - global constraints: the V2 handoff admission tests in `apps/cli/src/bootstrap/report.test.ts` replace the withdrawn migration precondition (A1);
+  - first test: the exact-set pin over a fresh plan's `createdPaths` and launchability paths, restored from `git show df3e947 -- apps/cli/src/bootstrap/executor.test.ts` and updated for D19 and a bookkeeping set with no manifest rows (A4, A12);
+  - rename the shipped status reservation to `state/automation-<job>.status.json` (A4);
+  - Task 3 imports the types Spec 2 shipped and still produces their strict validators and the allocated-ID grammar; it drops `LifecycleBootstrapCreationTempV1` and the three created-by-attempt fields (A2, A3, A5);
+  - Task 4's absent-manifest inspection loses its recovery epoch and ID path; Task 23 drops the key-present coordinator, keeps the orphaned-key-after-failed-`init` case working, and implements the recovery-only uninstall arm (A3, A7);
+  - replace `admitV2Handoff` as Spec 1's gate with structural admission, with NEW-82 (A7);
+  - journal closure projects retained bootstrap evidence away (A13);
+  - `init` admits the bookkeeping set by shape and writes no bookkeeping manifest rows; the inertness check ignores the set; a bootstrap leaf is attributable only by identity (NEW-83); the `backups` exemption goes (NEW-69) (A12);
+  - the §7 round-trip gates of A9, with ceilings proven through a counting seam where needed (A8);
+  - a global-lock provider that never creates the lock outside fresh `init`, and the plan validator's `createdPaths[0]` global-lock check made conditional on the lock being absent (`packages/core/src/manifest/bootstrap.ts:1826-1828`) (A12);
+  - closure and init shape admission project the bootstrap participants' leftover `.tx_fi_…_{f|c}.lock` stable locks and empty or tombstone-only participant ID directories (A13 correction);
+  - update the architecture notes that still describe the withdrawn absent-manifest envelope: `docs/architecture/foundation.md`, `docs/architecture/foundation-constraints.md` and `docs/architecture/threat-model.md`.
 - [ ] Execute plan 1a.
 
 Gate: `config get|set` shipped; coordinator recovery proven; uninstall drains leases.
@@ -213,7 +228,7 @@ Gate: `update` dry-run and apply and rollback proven on a disposable install, th
 
 Runs after Phase 8 (D16), and takes over the automation job registry bullet from Phase 7.
 
-Preconditions: a freshly measured `launchctl` row for the current macOS with a re-pinning rule (the pinned row no longer matches the development machine), the suite fits CI, Phase 7 jobs exist.
+Preconditions (NEW-84): a freshly measured `launchctl` row for the current macOS with a re-pinning rule (the pinned row no longer matches the development machine), the suite fits CI, Phase 7 jobs exist.
 
 Gate: `git enable|sync|disable` and `automation enable|disable|status` proven; scheduled runs observed.
 
@@ -251,7 +266,7 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 | 1 | closed 2026-09-05; the plan it named was deleted at closure |
 | 2 | closed 2026-09-07/08; the plan it named was deleted at closure |
 | 3 | closed 2026-09-17; baseline plan Task 9 pruned to its outcome |
-| 4 | Spec 1 amendment; `plans/<date>-developer-os-opt-in-surfaces-1a.md` |
+| 4 | Spec 1 amendment (applied 2026-09-17); `plans/<date>-developer-os-opt-in-surfaces-1a.md` |
 | 4b | baseline plan Tasks 10–11 plus the production wiring step Phase 4b adds |
 | 5 | `specs/<date>-developer-os-instruction-artifacts-design.md` and its plan |
 | 5b | `specs/<date>-developer-os-brain-workflows-design.md` and its plan |

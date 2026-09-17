@@ -1,57 +1,39 @@
 # Developer OS — Opt-in Surfaces Design
 
-**Status: approved by the founder on 2026-08-28 after fresh-context `READY`; implementation plan
-written at `docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md`.** This is `ORDER.md`
-entry A11, program-plan Task 7, DOS-P7 — **the first of two specifications.** The plan must not be
-executed until Spec 2 implements the `InstallationManifestV2` dependency below. The
-second specification owns release metadata, dry-run update, managed-artifact upgrade, schema
-migration, and rollback; it gets its own plan. Program-plan Task 7 carries the ratified split, and the
-active DOS-P7 register in `BACKLOG.md` tracks both halves. The split changes neither Task 7's scope nor
-checkpoint.
+**Status: approved by the founder on 2026-08-28 after fresh-context `READY`, and amended on
+2026-09-17 by the founder-approved NEW-67 amendment (change record below).** Implementation plan:
+`docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md`, superseded for execution by plans
+1a and 1b written against this amended text. This is `ORDER.md` entry A11, program-plan Task 7, DOS-P7 —
+**the first of two specifications.** The second specification owns release metadata, dry-run update,
+managed-artifact upgrade, schema migration, and rollback; it gets its own plan. Program-plan Task 7
+carries the ratified split, and the active DOS-P7 register in `BACKLOG.md` tracks both halves. The split
+changes neither Task 7's scope nor checkpoint.
 
-The two halves share one dependency that fixes their implementation order. This specification
-requires `InstallationManifestV2`; the second specification owns its migration and must land that
-migration before the configuration, Git, or automation implementation described here. Document
-approval and plan writing may proceed in the order in `BACKLOG.md`; implementation may not cross
+The two halves share one dependency that fixes their implementation order. This specification requires
+the V2 new-init handoff that the second specification owns (its §6.1 and §6.4). **Amended 2026-09-17
+(A1):** the V1→V2 manifest migration this dependency once named was withdrawn by founder decision D18.
+Document approval and plan writing may proceed in the order in `BACKLOG.md`; implementation may not cross
 that dependency.
 
-**Founder amendments, ratified 2026-08-25.** Foundation transactions remain the file-mutation
-protocol for product-managed artifacts; the installation manifest retains its existing durable direct
-write exception. Exact `.git` internals and live `launchd` state use the specialized, journaled effect
-protocol in §2.4 because neither is a manifest-owned file tree. The founder also ratified the additive
-configuration lifecycle records, `InstallationManifestV2` verification/ownership contract, and typed
-present/absent manifest coordination required by this design. Foundation §§2 and 4 and `BACKLOG.md` §8
-carry both amendments.
+### Change record
 
-**Founder-approved review corrections, 2026-08-27.** The founder separately approved the narrow
-review-closure packages now embedded below, including bounded initial/rewrite journals, exact Git and
-launchd process tables, per-invocation push deadlines, publication-safe Git compensation, closed
-launchd-process staging, process-lifetime runner leases, evidence-bound absent-manifest uninstall,
-numeric Git metadata bounds, and the exact legacy mutation-index range. The latest post-package review
-also closes the remaining rollback wording, hash-bound launchd staging identities, process-free absent-
-manifest admission, runner lease-removal discrimination, and canonical redirect-proof Git shadow
-configuration. The subsequent fresh-review correction binds a custom product home into scheduled
-launchd argv, represents symbolic empty-bare `HEAD`, persists path-slot shadow-config template hashes
-for retry, and narrows the one Git alternate-object path so list syntax cannot widen authority. These
-corrections do not approve the complete written specification. A final founder-approved correction
-package separates byte-inert public previews from allocated execution envelopes, closes the
-`config get/set` key and result grammar, adds Git-config-safe paths, removes the unreachable new-repo
-sync arm, journals required reflogs, budgets the in-process pack reader, makes launchd bootstrap
-descriptor-backed, admits stale installed runners in two stages, and inventories the complete product
-home before absent-manifest key deletion. These approvals are corrections to the written artifact,
-not approval of the complete specification. The post-final-review correction closes the remaining
-runner wording, reflog postimage/bijection, pack-count, immutable launchd-byte/descriptor-lifetime,
-bootstrap-lock, flat pre-product recovery-envelope, and key-absent coordinator gaps. At that time the
-approval status remained unchanged. The founder-approved post-review closure preserves an indistinguishable exact
-empty product/state skeleton after a bootstrap crash instead of inventing durable deletion authority,
-and fixes the first-creation nonce/allocator temp grammar and partial-write recovery. The subsequent
-fresh-review closure removes stale real-descriptor summaries, closes linked snapshot-creation crash
-states, and admits one bounded flat coordinator rewrite temp beside its authoritative final journal.
+**Amended 2026-09-17 (A11):** this table replaces the header's successive correction narratives. Package
+contents are quoted from those narratives; the sections column is derived from each package's topics.
 
-**Complete-spec approval, 2026-08-28.** After the final full `npm run check` passed and a new
-independent reviewer returned `READY`, the founder approved this complete written specification. The
-approval opens only its implementation-plan gate; §8.2 still blocks implementation on Spec 2's
-manifest migration and V2 new-init handoff.
+| Date | Approval | Package | Sections |
+|---|---|---|---|
+| 2026-08-25 | founder ratification | Foundation transactions stay the file-mutation protocol and the manifest keeps its direct-write exception; exact `.git` internals and live `launchd` state use §2.4's journaled effect protocol; additive configuration lifecycle records, the `InstallationManifestV2` verification/ownership contract and typed present/absent manifest coordination (Foundation §§2 and 4 and `BACKLOG.md` §8 carry both amendments) | §1, §2.1, §2.2, §2.4 |
+| 2026-08-27 | founder, review-closure packages | bounded initial/rewrite journals, exact Git and launchd process tables, per-invocation push deadlines, publication-safe Git compensation, closed launchd-process staging, process-lifetime runner leases, evidence-bound absent-manifest uninstall, numeric Git metadata bounds, the exact legacy mutation-index range | §2.4, §4, §5, §6 |
+| 2026-08-27 to 2026-08-28 | founder, post-package review | rollback wording, hash-bound launchd staging identities, process-free absent-manifest admission, runner lease-removal discrimination, canonical redirect-proof Git shadow configuration | §2.4, §4.2, §5, §6 |
+| 2026-08-27 to 2026-08-28 | founder, fresh-review correction | custom product home bound into scheduled launchd argv, symbolic empty-bare `HEAD`, persisted path-slot shadow-config template hashes for retry, the one Git alternate-object path narrowed | §4, §5.3 |
+| 2026-08-27 to 2026-08-28 | founder, final correction package | byte-inert public previews separated from allocated execution envelopes, closed `config get/set` key and result grammar, Git-config-safe paths, unreachable new-repo sync arm removed, journaled required reflogs, budgeted in-process pack reader, descriptor-backed launchd bootstrap, two-stage stale-runner admission, complete product-home inventory before absent-manifest key deletion | §2.2, §2.4, §4, §5, §6 |
+| 2026-08-27 to 2026-08-28 | founder, post-final-review correction | runner wording, reflog postimage/bijection, pack count, immutable launchd bytes and descriptor lifetime, bootstrap lock, flat pre-product recovery envelope, key-absent coordinator | §2.3, §2.4, §4, §5, §6 |
+| 2026-08-27 to 2026-08-28 | founder, post-review closure | exact empty product/state skeleton preserved after a bootstrap crash; first-creation nonce/allocator temp grammar and partial-write recovery | §2.1, §2.3, §6 |
+| 2026-08-27 to 2026-08-28 | founder, subsequent fresh-review closure | stale real-descriptor summaries removed, linked snapshot-creation crash states closed, one bounded flat coordinator rewrite temp admitted | §5.3, §6 |
+| 2026-08-28 | founder, complete-spec approval after the final full `npm run check` and an independent `READY` | the complete written specification; opens the implementation-plan gate | all |
+| 2026-09-17 | founder, NEW-67 amendment with every recommended option | A1 D18 applied (V1 homes keep Foundation paths); A2 retention on the pre-product bootstrap paths only; A3 absent-manifest uninstall without a coordinator envelope; A4 reservation ownership; A5 types shipped by Spec 2 consumed; A6 migration collision codes withdrawn; A7 structural admission and a recovery-only uninstall arm; A8 counting-seam ceiling gates; A9 uninstall→init round-trip gates; A10 `launchctl` re-pin deferred to Spec 1b (no text change); A11 this table; A12 bookkeeping set kept by uninstall and admitted by shape; A13 closure admits retained bootstrap evidence. The 2026-08-27 flat pre-product recovery envelope, first-creation temp grammar and key-absent coordinator are superseded by A3. | header, §2.1, §2.3, §2.4, §6, §7, §8 |
+
+Each 2026-09-17 change is marked "Amended 2026-09-17" in place with its item number.
 
 ---
 
@@ -83,13 +65,16 @@ The subsystem preserves the standing product boundaries:
 
 ### 2.1 `InstallationManifestV2` verification modes
 
-The second DOS-P7 specification runs the V2 migration gate against every installation manifest before
-this subsystem mutates configuration: supported V1 states migrate and the unsafe states enumerated
-below refuse before mutation. `ManagedArtifactV2` is an artifact-kind/verification-mode tagged union,
-not a bag of optional hashes. Every arm retains V1's ownership and restore evidence unchanged:
-`owner`, exact `path`, `kind`, product version, `existedBefore`, `beforeHash`,
-`backupRelativePath`, `source`, merge strategy, and verification time. Migration never turns a path
-the product found into a path it created.
+**Amended 2026-09-17 (A1).** Every V2 manifest is created by Spec 2's fresh `init`; the V1→V2
+migration is withdrawn (D18). `config`, `git` and `automation` refuse a V1 manifest
+(`manifest_v1_not_migratable`) before any mutation, and `uninstall` over a V1 manifest runs the unchanged
+Foundation uninstall with D20's recovery guidance. Production `init` writes V1 manifests until roadmap
+Phase 4b, so V1 homes keep that way out. §2.3's global-lock requirement applies to V2 homes only: a V1
+home never has `state/.lifecycle.lock`, and Foundation commands over a V1 manifest keep their current
+path without it. `ManagedArtifactV2` is an artifact-kind/verification-mode tagged union, not a bag of
+optional hashes. Every arm carries `owner`, exact `path`, `kind`, product version, `existedBefore`,
+`beforeHash`, `backupRelativePath`, `source`, merge strategy, and verification time, and the product
+never turns a path it found into a path it created.
 
 The legal verification combinations are exhaustive:
 
@@ -102,36 +87,21 @@ The legal verification combinations are exhaustive:
 | symlink | `content` | required; link type and hash of the link target must match |
 
 `config-entry` remains illegal in a stored manifest until a later specification defines semantic
-drift; no legal V1 manifest can contain it, so migration does not guess. Wrong type is
+drift. Wrong type is
 `type_changed`; a wrong regular-file hash is `content_changed`; a wrong link target is
 `target_changed`; schema refusal is `schema_invalid`; absence is `missing` except for `ephemeral`.
 
-Before that mapping, migration derives the guarded exact
-`<product home>/state/lifecycle-activation.json`,
-`<product home>/state/lifecycle-install-nonce`, and
-`<product home>/state/lifecycle-id-allocator.json` paths. Any V1 artifact whose declared **or**
-canonical path equals one of them, and any filesystem leaf of any type already present there, refuses
-before hashing/copying artifact bytes or writing V2. The collision codes are respectively
-`activation_path_collision`, `lifecycle_nonce_path_collision`, and
-`lifecycle_allocator_path_collision`. None of the paths existed as a product interface in V1, so
-migration never legitimizes a V1 ownership claim. Only
-this specification's later lifecycle apply may first create the activation path as a `content`
-artifact. Spec 2 migration/new-init itself creates the allocator as the required regular-file
-`schema` artifact below; new-init planning applies both absent-leaf preconditions.
+**Amended 2026-09-17 (A1, A6).** The exact `<product home>/state/lifecycle-activation.json`,
+`<product home>/state/lifecycle-install-nonce`, and `<product home>/state/lifecycle-id-allocator.json`
+paths were never a V1 product interface. Only this specification's later lifecycle apply may first
+create the activation path as a `content` artifact. Spec 2's new init creates the allocator as the
+required regular-file `schema` artifact below; new-init planning applies both absent-leaf
+preconditions. The three migration collision codes are withdrawn with the migration: a pre-existing leaf
+at any of these paths is refused by Spec 2 §6.1's admission.
 
-Migratable V1 regular files and product-created directories map to the matching `content` arm without
-changing any restore field. `config.toml` alone maps to the regular-file `schema` arm with the strict
-Developer OS configuration validator. Its path stays product-owned, but an intentional content edit
-is no longer reported as drift. Missing, unreadable, wrong-type, or schema-invalid configuration is
-drift.
-
-That kind mapping does not make every validator-legal V1 restore combination safe. Before writing any
-V2 bytes, migration verifies every `existedBefore: true` regular-file backup as a guarded regular file
-whose bytes match `beforeHash`. It refuses recovery-required for a V1 directory with
-`existedBefore: true` and for every V1 symlink entry: the V1 validator admitted those shapes, but the
-Foundation executor can restore only regular-file backup bytes and its current symlink path handling
-cannot safely remove the link without following it. A later design may widen this migration allowlist
-only with ratified, tested transaction operations; migration never reinterprets such evidence.
+`config.toml` alone uses the regular-file `schema` arm with the strict Developer OS configuration
+validator. Its path stays product-owned, but an intentional content edit is not reported as drift.
+Missing, unreadable, wrong-type, or schema-invalid configuration is drift.
 
 The V2 validator makes the corresponding invariant explicit. `existedBefore: true` is legal only for
 a regular-file `content` or `schema` artifact with complete verified backup evidence. Directory,
@@ -139,8 +109,7 @@ symlink, and `ephemeral` arms require `existedBefore: false`, `beforeHash: null`
 `backupRelativePath: null`. V2 symlink entries therefore describe only safely created links after the
 required link-specific transaction operation exists; this specification creates none.
 
-`ephemeral` is an ownership reservation, not a wildcard. Every V2 manifest, whether migrated or
-created by a new `init`, enumerates the complete closed set of retained lifecycle files below by exact
+`ephemeral` is an ownership reservation, not a wildcard. Every V2 manifest enumerates the complete closed set of retained lifecycle files below by exact
 path. `<job>` expands independently to exactly `brain-reindex`, `brain-lint`, `doctor`, and
 `git-sync`; `<n>` expands to every decimal integer from `0` through `9`, where `0` is current and
 `1`–`9` are rotations:
@@ -165,26 +134,49 @@ hex as `LifecycleInstallNonceV1`, and creates both initial files with `nextCount
 the allocator's guarded atomic-rewrite protocol. Uninstall removes both only after no further
 transaction ID can be allocated.
 
+**Amended 2026-09-17 (A4).** The complete V2 reservation set is Spec 2 §3.2, in the layout decision D19
+fixed, plus the table above. Each path is owned by exactly one specification; this specification does not
+restate Spec 2's rows. The rows both specifications use have these owners:
+
+| Path | Created by | Mutated by | Removed by |
+|---|---|---|---|
+| `state/lifecycle-install-nonce` | Spec 2 new init | never | Spec 1 uninstall |
+| `state/lifecycle-id-allocator.json` | Spec 2 new init | Spec 1 §2.4 allocation | Spec 1 uninstall |
+| the bookkeeping set below | Spec 2 new init, or its first writer | Spec 1 §2.4 children only | never |
+| Spec 2 §3.2 rows | Spec 2 | Spec 2 update and rollback | Spec 1 uninstall, through the manifest |
+
 The stable global lock and journal/plan/lock leaves are bookkeeping exceptions, not retained runtime
 records: they use the exact direct state-store contracts in §§2.3–2.4 and are never inferred from an
 `ephemeral` wildcard. Foundation transaction bookkeeping keeps its pre-existing ownership boundary.
 
-The V2 migration/new-init gate also creates and records exactly three product-owned `content`
-directories with `existedBefore: false`: `state/lifecycle-journals`,
-`state/git-effect-journals`, and `state/launchd-effect-journals`. Any prior leaf at a declared or
-canonical path refuses; no existing directory is adopted. Their only legal durable children are the
-closed journal/plan/lock leaves defined in §2.4. Foundation's existing `state/transactions` directory
-keeps its current contract.
+**Amended 2026-09-17 (A1, A12).** Spec 2's new init also creates the three journal roots
+`state/lifecycle-journals`, `state/git-effect-journals`, and `state/launchd-effect-journals`. They
+belong to the closed **bookkeeping set**: `state/.lifecycle.lock`; the three journal roots;
+`state/transactions`, `staging/lifecycle`, `staging/transactions` and `backups/transactions`; and their
+parents `staging` and `backups`. The bookkeeping set is never a manifest row, in any installation cycle;
+§2.4 closure, not the manifest, requires the four ledger roots. Their only legal durable children are
+the closed journal/plan/lock leaves and companion-inventory entries defined in §2.4, plus the bootstrap
+residue §2.4 projects away and the ancestor directories that exist only to hold it. Uninstall never
+removes the bookkeeping set (§6). Where no manifest exists, Spec 2's fresh `init` and §6's
+absent-manifest uninstall admit each bookkeeping path by its exact shape: the lock as an owner-only `0600`
+zero-byte single-link regular file, and each directory as an owner-only `0700` directory whose only
+entries are other bookkeeping paths, that projected bootstrap residue, or ancestor directories of it.
+Shape grants no authority: the directories hold nothing live. Fresh `init` decides whether the lock is
+live by acquiring it; absent-manifest uninstall never acquires it and only leaves it in place. No directory is adopted beyond
+what Spec 2 §6.1 admits.
 
-Every reservation has `existedBefore: false` and null restore evidence. Migration or new `init`
-refuses before mutation if any reserved path already exists; a V1 entry at the same path is a
-duplicate ownership collision, not permission to reinterpret it. The product never claims or backs
+Every reservation has `existedBefore: false` and null restore evidence. New `init` refuses before
+mutation if any reserved path already exists, except what Spec 2 §6.1 admits. The product never claims or backs
 up an unknown runtime file. Later creation rechecks that the path is absent or is the same guarded
 regular file already owned by the reservation. Symlinks and kind changes refuse.
 
 The bytes at those paths are also closed. Every new DOS-P7 JSON record uses `CanonicalJsonV1` from
 §2.2 and one LF; unknown fields refuse at every depth. Foundation transaction journals are the sole
 serialization exception and use the unchanged `FoundationJournalJsonV1` contract below:
+
+**Amended 2026-09-17 (A2, A3):** `LifecycleBootstrapLockV1` carries no created-by-attempt field, and
+`LifecycleBootstrapCreationTempV1` is withdrawn with §6's absent-manifest recovery epoch.
+`BytePrefixOf<T>` remains for §5.3's launchd snapshot creation.
 
 ```text
 LifecycleInstallNonceV1 = exactly LowerHexSha256 plus one LF
@@ -220,38 +212,10 @@ LifecycleBootstrapLockV1 = {
   nlink: 1,
   size: 0,
   dev: UInt64DecimalV1,
-  ino: UInt64DecimalV1,
-  createdByAttempt: boolean,
-  productHomeCreatedByAttempt: boolean,
-  stateDirectoryCreatedByAttempt: boolean
+  ino: UInt64DecimalV1
 }
 
 BytePrefixOf<T> = a byte string, possibly empty, equal to the first n bytes of at least one valid T
-
-LifecycleBootstrapCreationTempV1 =
-  | {
-      kind: "install_nonce",
-      path: exact `<product home>/state/.lifecycle-install-nonce.<lowercase-v4-uuid>.tmp`,
-      ownerUid: EffectiveUidV1,
-      mode: 384,
-      nlink: 1,
-      size: Integer[0..65],
-      dev: UInt64DecimalV1,
-      ino: UInt64DecimalV1,
-      bytes: BytePrefixOf<LifecycleInstallNonceV1>
-    }
-  | {
-      kind: "id_allocator",
-      path: exact `<product home>/state/.lifecycle-id-allocator.<lowercase-v4-uuid>.json.tmp`,
-      ownerUid: EffectiveUidV1,
-      mode: 384,
-      nlink: 1,
-      size: Integer[0..1024],
-      dev: UInt64DecimalV1,
-      ino: UInt64DecimalV1,
-      bytes: BytePrefixOf<CanonicalJsonV1<LifecycleIdAllocatorV1 where
-        installNonce equals the guarded final nonce and nextCounter == "0">>
-    }
 
 AutomationStatusRecordV1 =
   | { schemaVersion: 1, job: JobIdV1,
@@ -286,7 +250,7 @@ per array/object, 64-KiB keys/string leaves, no lone surrogate, and total encode
 The marker is at most 1 KiB and a status record at most 64 KiB before parsing; a log's 1-MiB bound
 includes its complete encoded envelope and LF.
 `AutomationRunnerLeaseV1` is the guarded kernel lock over one such exact zero-byte path. The path is
-created only by migration/new init, is never created by a runner, and its opened descriptor is the
+created only by new init, is never created by a runner, and its opened descriptor is the
 same per-job lifetime lease and runtime-record serialization lock. A runner acquires it before any
 wait for the global mutation lock, rechecks its path identity and the uninstall marker after
 acquisition, and holds it until every exit. Lock contents are never interpreted. A status record
@@ -294,7 +258,7 @@ carries no handler data, and a log record is written only after its data has pas
 redactor. `success` requires reason code `ok`; each inert outcome requires
 the identical literal reason code; refusal/failure reason codes may not use `ok` or an inert outcome
 name; and `startedAt` must not follow `completedAt`. These types and paths are inputs to spec 2's
-reservation/collision gate, not details deferred to spec 1 implementation.
+new-init reservation admission, not details deferred to spec 1 implementation.
 
 There are no glob entries and uninstall performs no recursive delete. Runtime directories are not a
 license to remove unknown children. Automation plists are `content` artifacts while installed;
@@ -311,11 +275,38 @@ Restore/removal rules are always downstream of the operation's declared-and-cano
 partition. Init rollback uses Foundation's product-home-plus-newly-created-Brain universe and may undo
 the Brain skeleton it just created. Uninstall uses only product home with Brain excluded, plus §6's
 exact authorized plist paths and redaction-key exception; every Brain artifact is preserved without
-restore or removal regardless of `existedBefore`. Within the selected partition, every migratable
+restore or removal regardless of `existedBefore`. Within the selected partition, every
 `existedBefore: true` regular-file content or schema artifact is restored from unchanged, verified
 backup evidence, while an `existedBefore: false` artifact is removed through its kind-specific safe
 operation. Created directories are removed only when empty. Present ephemeral files are removed
 exactly; absence is already clean.
+
+#### Admission of an installed V2 home
+
+**Amended 2026-09-17 (A7).** Spec 1 commands admit a V2 home structurally: a strictly valid V2
+manifest, a matching nonce and allocator, the exact global lock, and the three journal roots. Admission
+binds to no bootstrap plan or manifest hash, and retained bootstrap evidence never refuses it. The Spec 2
+handoff set is the condition a fresh `init` must reach, not a condition every later command re-proves.
+`LifecycleJournalClosureV1` and drift are evaluated afterwards, per operation, under §2.2 and §2.4:
+recovery, status, `doctor` and uninstall are admitted at every closure state and every drift, and
+mutations require what §2.2 and §2.4 already require.
+
+A recovery-only arm admits an uninstall whose manifest is already moved. It requires the global lock and
+either:
+
+- exactly one valid `uninstall/present_manifest` journal whose cursor has reached `M(preserve_before)`,
+  applied or completed. Before durable `M(commit_absence)` the arm admits only that coordinator's
+  compensation, with the manifest absent, its tombstone present, and the key tombstone present exactly
+  when the key's before-state was present. From durable `M(commit_absence)` onward it admits only
+  force-forward, with the manifest tombstone present exactly while the cursor is before
+  `M(finalize_tombstones)`, the key tombstone present exactly while the cursor is before `K(delete)`, the
+  nonce and allocator in one of the three microstates §2.4 allows a compacting uninstall cursor, and the
+  participant, effect and staging ledgers §2.4 closure validates for that coordinator up to its
+  compaction cursor; or
+- the exact plan-plus-lock or plan-only `uninstall/present_manifest` envelope, with both control files
+  absent, completed by §2.4's guarded orphan rule.
+
+Uninstall dispatch checks this arm before §6's absent-manifest shapes.
 
 ### 2.2 Configuration loads and writes
 
@@ -603,47 +594,41 @@ already happens to match.
 
 ### 2.3 Bootstrap and global mutation locks
 
-Before an initial install has created the permanent global lock, `init` and fresh
-`uninstall/absent_manifest` serialize through `LifecycleBootstrapLockV1` at exact
+While no manifest exists, Spec 2's `init` and the
+`key_present` arm of absent-manifest uninstall (§6) serialize through `LifecycleBootstrapLockV1` at exact
 `<product home>/state/.lifecycle-bootstrap.lock`. They first perform the complete no-follow external
 inventory without writing and admit only the operation's closed pre-product shapes. An already
 present exact bootstrap-path leaf is provisionally recorded as a control-residue candidate and
 projected away only to classify that external remainder; it grants no mutation authority until it is
 guarded-opened, locked, identity-rechecked, and the full inventory repeats. They may then
-create the absent product-home and `state` directories with owner-only modes, recording exact
-`dev`/`ino` plus which directories this attempt created, and atomically create-or-guarded-open the
+create the absent product-home and `state` directories with owner-only modes, recording their exact
+`dev`/`ino`, and atomically create-or-guarded-open the
 owner-owned 0600 zero-byte bootstrap leaf. After acquiring its kernel lock, they recheck the lock path
 identity and repeat the complete inventory. That second projection may ignore only this exact locked
-leaf and the exact attempt-created directory identities; after subtracting them, the external shape
+leaf and the directories whose identities this attempt recorded when creating them; after subtracting
+them, the external shape
 must still equal the admitted preflight remainder. Any other child, identity, owner, mode, or shape change
 refuses before an ID or product mutation.
 
-An exact bootstrap leaf left by process death is coordination residue rather than install evidence:
-the next invocation may guarded-open and lock it only when its path, type, owner, mode, size, link
-count, and post-open identity are exact, then must run the same post-acquisition inventory. A busy
-bootstrap lock makes the interactive contender refuse. Cleanup rechecks and unlinks only the exact
-locked inode while its descriptor remains held, syncs its parent, and may then remove only attempt-
-created, identity-matching empty `state`/product-home directories. A waiter that later acquires the now-unlinked old inode must detect the absent/different
-path and restart from preflight rather than proceed. A newly arriving process may create the next
-bootstrap leaf only after the prior path unlink; failed empty-directory cleanup in that race preserves
-the winner's state. The unlink and those exact cleanup attempts are the only filesystem operations
-after the operation's terminal result. Thus crashes and concurrent init/uninstall linearize without
-adopting an empty skeleton as a product artifact or weakening the four external inventory shapes.
+An exact bootstrap leaf is coordination residue rather than install evidence: the next invocation may
+guarded-open and lock it only when its path, type, owner, mode, size, link count, and post-open identity
+are exact, then must run the same post-acquisition inventory. A busy bootstrap lock makes the
+interactive contender refuse.
 
-The three `createdByAttempt` fields are intentionally live-attempt authority, not durable cleanup
-claims in the zero-byte lock. A non-crashing attempt uses them to remove its exact empty directories.
-If it dies after creating product home or `state`, or after unlinking the bootstrap leaf but before an
-`rmdir`, the next preflight cannot distinguish those empty directories from an exact pre-existing
-empty shape and therefore preserves them. The only permitted post-crash residue is product home absent,
-an empty product home, or product home containing only an empty guarded `state`; no file, lock, temp,
-key tombstone, nonce, allocator, plan, journal, or other control residue may be reclassified this way.
-The accepted cost is an empty directory skeleton, never authority to delete a directory the current
-attempt did not identity-record as created.
+**Amended 2026-09-17 (A2).** The bootstrap leaf is never unlinked and no directory is removed on this
+path, because Spec 2 §6.4 forbids unlink and `rmdir` in bootstrap compensation, recovery, retention,
+uninstall and retry. The operation releases the descriptor and leaves the leaf. The leaf keeps its
+inode, so concurrent `init` and absent-manifest uninstall linearize on it without an unlink race and
+without adopting an empty skeleton as a product artifact. The admitted pre-product residue is product
+home absent, an empty product home, product home containing only an empty guarded `state`, or `state`
+also holding the exact bootstrap leaf, together with inert retained bootstrap evidence and §2.1's
+bookkeeping set. It is the ordinary terminal residue, not only a crash residue. No file, temp, key
+tombstone, nonce, allocator, plan, journal, or other control residue may be reclassified this way, and no
+cleanup authority is derived from which directories an attempt created.
 
-`init` holds the bootstrap lock until it has created and acquired the permanent global lock, so the
-one exceptional order is bootstrap → global → transaction-specific. Fresh absent-manifest uninstall
-uses bootstrap in place of the not-yet-existing global lock and never creates the permanent global
-lock. Every already-installed operation starts at the global lock and cannot acquire bootstrap.
+`init` holds the bootstrap lock until it has created, or admitted by shape, and acquired the permanent global lock, so the
+one exceptional order is bootstrap → global → transaction-specific. The `key_present` arm of
+absent-manifest uninstall uses bootstrap and never creates the permanent global lock. Every already-installed operation starts at the global lock and cannot acquire bootstrap.
 
 Transaction-ID locks prevent recovery collisions but do not serialize two different transactions.
 DOS-P7 therefore adds one stable, product-owned mutation lock above them. Apart from the explicitly
@@ -657,6 +642,12 @@ then global, then transaction-specific, and no caller may invert it. The global 
 kernel-managed stable-file contract at exact `<product home>/state/.lifecycle.lock`: an owner-only
 zero-byte regular file opened without following links. It is bookkeeping like Foundation's transaction
 locks rather than a manifest artifact and is never unlinked.
+
+**Amended 2026-09-17 (A1, A12).** The global-lock requirement applies to V2 homes; a V1 home has no
+global lock and its Foundation commands do not take one. Acquirers open `state/.lifecycle.lock` without
+`O_CREAT`, unlike Foundation's transaction-lock provider, which creates its per-ID locks: only Spec 2's
+fresh `init` creates the global lock, and on a V2 home an absent path refuses. `config`, `git`
+and `automation` over a home without a manifest take the lock, find no manifest, and refuse.
 
 An interactive command that finds the global lock busy refuses using the existing recovery-required
 exit class. A scheduled run waits with bounded backoff for at most ten minutes. At the deadline it
@@ -701,14 +692,9 @@ immutable plan are at most 16 MiB before parse/hash. The matching immutable effe
 exact tighter journal bound described below, so closure never selects a parser limit from untrusted
 journal bytes.
 
-The pre-product `uninstall/absent_manifest/key_present` bootstrap envelope defined in §6 is not a
-fifth ledger root: it uses the existing coordinator plan/journal schemas in their exact flat `state`
-placement, cannot coexist with an installed four-root ledger, and is enumerated only by that
-operation's complete bootstrap inventory. Throughout this section, a requirement to hold the global
-mutation lock or a statement that every mutator holds it has exactly that one substitution: this
-bootstrap envelope holds and identity-rechecks `LifecycleBootstrapLockV1` for its complete lifetime.
-It never creates or acquires `.lifecycle.lock`; every other coordinator and cleanup uses the permanent
-global lock as written.
+**Amended 2026-09-17 (A3).** Absent-manifest uninstall has no coordinator envelope (§6), so this
+section has no flat-placement exception: every coordinator and cleanup uses the permanent global lock as
+written.
 
 The leaf bound is a capacity invariant, not a lifetime limit that scheduled status writes eventually
 hit. Under the global mutation lock, every mutating command first resumes any valid terminal
@@ -722,6 +708,10 @@ before reserving an ID block if the current count plus the phase-specific maximu
 exceed any cap. A command never starts new work while terminal debris or a `compacting` coordinator is
 eligible for recovery. The read-only closure calculation enumerates and enforces every aggregate cap
 but does not delete; cleanup is the separate guarded protocol below.
+
+**Amended 2026-09-17 (A2).** Terminal compaction here keeps guarded deletion. It is what keeps each
+journal root under 10,000 leaves while scheduled jobs write a status and log transaction at every
+cadence, and Spec 2 §6.4's no-unlink rule governs bootstrap paths only.
 
 An upgrade may already exceed 10,000 Foundation leaves. Before any new DOS-P7 ID, the global-lock
 preflight may therefore enter overflow recovery: it streams, rather than materializes, at most
@@ -785,6 +775,20 @@ other filename or kind, are malformed. Allocated Foundation journal bytes use `F
 Foundation journal reads use its compatibility rule; every new-root journal and every immutable plan
 uses `CanonicalJsonV1`. An immutable plan must be byte-identical to re-encoding and match the
 journal's domain-separated hash.
+
+**Amended 2026-09-17 (A13).** Closure and the companion-inventory rules project away the residue a
+bootstrap leaves in the ledger roots, all bound to an inert retained envelope:
+
+- `.developer-os-retained.<bootstrap-id>.<ordinal>.tombstone` leaves;
+- **correction found in the application review, same day:** the exact owner-only `0600` zero-byte
+  single-link stable locks `.<participant-id>.lock` in `state/transactions` whose participant IDs
+  (`tx_fi_…_f`, `tx_fi_…_c`) the envelope's `foundationParticipants` name — Foundation's transaction-lock
+  provider creates them and never unlinks them, and no retention row covers them;
+- bootstrap Foundation participant ID directories under `staging/transactions` and
+  `backups/transactions` that are empty or hold only such tombstones.
+
+They are never ledger leaves, malformed names or compaction targets. They count toward the
+10,000-leaf and companion caps; Spec 2's bound of 256 bootstrap IDs keeps them far below those caps.
 
 ```text
 LifecycleCoordinatorJournalV1 = {
@@ -1530,12 +1534,10 @@ work never changes the grammar.
 | `automation_reconcile/live_only` | `Q` |
 | `automation_disable` | `P · M(preserve_before) · F(plist_files) · F(activation) · M(publish_after) · F(config) · M(finalize_tombstones)` |
 | `uninstall/present_manifest` | `F(uninstall_marker) · P · R · F(uninstall_artifacts) · K(stage) · M(preserve_before) · M(commit_absence) · K(delete) · M(finalize_tombstones)` |
-| `uninstall/absent_manifest/key_present` | `K(stage) · K(delete)` |
 
-`uninstall/absent_manifest/key_absent` is deliberately not a coordinator row: after the bootstrap-
-locked inventory proves that exact arm, the command returns clean before ID reservation, immutable
-plan construction, or any `LifecycleCoordinatorStepV1`. This preserves the coordinator schema's
-non-empty `steps` invariant.
+**Amended 2026-09-17 (A3).** Absent-manifest uninstall is not a coordinator operation: its `key_absent`
+and `key_present` arms (§6) reserve no ID, construct no immutable plan, and have no
+`LifecycleCoordinatorStepV1`.
 
 The first durable point of no return is exact and operation-specific:
 
@@ -1549,7 +1551,6 @@ The first durable point of no return is exact and operation-specific:
 | `automation_enable`, `automation_reconcile/files`, `automation_disable` | successful terminal `F(config)` | finalize verified launchd effects and manifest tombstones |
 | `automation_reconcile/live_only` | `Q` reaches fully `verified` | finalize `Q`, then terminal compaction |
 | `uninstall/present_manifest` | durable `M(commit_absence)` | finalize prior effects, delete the staged key, and finalize tombstones |
-| `uninstall/absent_manifest/key_present` | validated manifest absence and guarded key presence at entry, before `K(stage)` | force-forward key stage/delete, then terminal compaction |
 
 Before that boundary, a coordinator failure may compensate; at or after it, it may only force-forward.
 For an effect that is itself the boundary, the journal's durable `verified` state is the force-forward
@@ -1563,9 +1564,7 @@ after one participant finalized. Likewise, a current boundary `F(config)` journa
 
 The variant is not a stored free string: strict validation derives it from the operation, manifest
 arm, `GitSyncPlanV1.commit`, destination transport, last successful pushed OID, and exact transition
-sets. For absent-manifest uninstall, an absent guarded key returns before this derivation; only a
-present guarded key derives `key_present`, its non-null redaction-key participant, and exactly the two
-`K` steps. `new_*` requires a non-null source effect and a new candidate commit; `existing_*` requires a
+sets. `new_*` requires a non-null source effect and a new candidate commit; `existing_*` requires a
 null source effect and the already-published exact bound commit; `no_changes` requires null push and
 both Git effects null. Network variants require `N(h)` and a null destination effect. Local variants
 require `D(h)`, whose `side` is `destination`, and no `N`; its destination plan plus either staged
@@ -1589,9 +1588,7 @@ configuration, activation, or manifest transition derives `files`; that variant 
 plist-file mutation and retains the complete publication grammar above. A loaded wrong generation in
 the closed evidence-derived candidate set is
 a third state and cannot be converted into `live_only`. `uninstall/present_manifest` uses `P` for the complete installed-label
-unload set and `R` for §6's release/drain/reacquire observation. `absent_manifest` has no artifact,
-manifest, or launchd participant only after §6's exact key-only/no-install-evidence admission proof;
-missing or drifted automation evidence cannot select this variant.
+unload set and `R` for §6's release/drain/reacquire observation.
 
 Participant cardinality is a bijection with that table. Each `F(slot)` has one distinct matching
 `role.kind: "forward"` reference. A forward `F` strictly before its variant's point of no return has
@@ -1705,8 +1702,7 @@ consumed position is malformed.
 
 ID allocation is a separate bounded state transition performed before any plan/staging publication.
 Every command that can create a generic Foundation or DOS-P7 lifecycle ID takes the global mutation
-lock, except that exact `uninstall/absent_manifest/key_present` holds its identity-rechecked bootstrap
-lock instead. It guarded-opens exact `state/lifecycle-install-nonce` and
+lock. It guarded-opens exact `state/lifecycle-install-nonce` and
 `state/lifecycle-id-allocator.json`, requires the nonce content/hash/schema agreement from §2.1, and
 reserves one contiguous counter block for the complete operation. A standalone Foundation transaction
 reserves one `tx` ID. A composite reserves, in order, its `lc` ID, forward Foundation refs in step
@@ -1977,7 +1973,7 @@ source absent with that exact recorded inode at the tombstone after a no-replace
 sync; for an absent arm both paths stay absent. In the present-manifest variant, from completed
 `K(stage)` until `M(commit_absence)`, that staged state is reversible only by an exact no-replace
 rename back to an absent source. At and after committed manifest absence it is force-forward only.
-The absent-manifest variant is already force-forward at entry and never restores the key. At `K(delete)`, the
+At `K(delete)`, the
 only two legal present-arm states are the exact tombstone or its unlink-before-cursor absence, always
 with source absent; completion requires both paths absent. A pre-existing tombstone, extra link,
 wrong kind/owner/mode/size/device/inode, both paths present, or any third state is
@@ -2150,7 +2146,7 @@ the first sync of an adopted branch may push history that already exists on that
 later syncs also push manual commits made on the recorded branch.
 
 Apply prepares the exact config/activation-record/manifest postimages and every participant, then
-durably writes the composite coordinator before mutation. The V2 migration already reserves Git
+durably writes the composite coordinator before mutation. Spec 2's new init already reserves Git
 runtime records, while first activation creates the content-owned activation record and every later
 enable/reconcile updates its manifest hash; those manifest diffs follow §2.4's coordinator ordering.
 `GitEffectPlanV1` initializes `.git` only when absent or adds only the absent fixed remote and verifies
@@ -4056,7 +4052,7 @@ runner itself needs:
    recovery-required, not permission to remove live state.
 3. While holding all four leases, reacquire the global lock and revalidate the same marker, disabled
    labels, lease path identities, manifest, config, ownership partition, and every planned path.
-   Within the removable partition only, restore every migratable manifest artifact with
+   Within the removable partition only, restore every manifest artifact with
    `existedBefore: true`; remove exact product-created `content`/`schema` artifacts other than the
    lifecycle nonce/allocator retained for terminal coordinator compaction, plus present `ephemeral`
    paths including sync status, job status, and every enumerated log slot. The Foundation participant
@@ -4088,132 +4084,62 @@ runner itself needs:
    point of no return, or any identity mismatch is always exit 6. Only after terminal finalize may empty
    product directories and coordinator recovery material be removed.
 
+**Amended 2026-09-17 (A12).** Uninstall never removes §2.1's bookkeeping set. The documented
+post-uninstall residue is that set, with every directory compaction has emptied, together with inert
+retained bootstrap evidence and the bootstrap leaf. Spec 2's fresh `init` admits it by shape.
+
+**Amended 2026-09-17 (A3, A7, A12).** Uninstall dispatch checks §2.1's recovery-only arm first, then
+the absent-manifest shapes below. This replaces the flat bootstrap envelope, recovery-only
+nonce/allocator epoch, creation temps and key-present coordinator approved on 2026-08-27.
+
 `uninstall/absent_manifest` is admitted only by a complete bounded product-home inventory and exact
-key-only/no-install-evidence proof under §2.3's bootstrap lock; it does not create or acquire the
-permanent global lock. Starting from a guarded product-home parent, the preflight and post-lock
-no-follow walkers each visit at most 1,000,000 directory entries, 128 components, and 4096 UTF-8 path
-bytes; names must be valid UTF-8, unique, and free of NUL, slash, backslash, `.`/`..`, while every
-visited directory must be owned by the effective user. A symlink, hard-linked regular file, special
-entry, owner/identity change, invalid name, limit overrun, or entry appearing/disappearing during the
-walk is recovery-required before any regular-file content is read, ID is allocated, or path is
-renamed or deleted.
+key-only/no-install-evidence proof. It never creates or acquires the permanent global lock, reserves no
+ID, and publishes no plan or journal. Starting from a guarded product-home parent, each no-follow walker
+visits at most 1,000,000 directory entries, 128 components, and 4096 UTF-8 path bytes; names must be
+valid UTF-8, unique, and free of NUL, slash, backslash, `.`/`..`, while every visited directory must be
+owned by the effective user. A symlink, hard-linked regular file, special entry, owner/identity change,
+invalid name, limit overrun, or entry appearing/disappearing during the walk is recovery-required before
+any regular-file content is read or any path is deleted.
 
-Fresh preflight accepts exactly four external inventory shapes: product home absent; product home
-present with zero entries; product home containing only an empty guarded `state` directory; or
-product home containing only that `state` directory whose sole child is the guarded exact
-`state/redaction.key`. The key-only arm records only `SecretOpaqueFileStateV1`; it never reads or
-hashes key bytes. After bootstrap acquisition, the complete second inventory must reproduce that same
-shape after projecting away only the exact `LifecycleBootstrapLockV1` and exact attempt-created empty
-directory identities. A crash-retained exact bootstrap leaf may be locked and projected away under
-the same rule; it never excuses another child. Every other known or unknown file **or directory**,
-including `config.toml`, activation,
-sync/marker/status/log/lease state, lifecycle/Foundation recovery material, staging, backups, or an
-unrecognized empty directory, preserves the complete tree and returns recovery-required. The four
-closed external plist paths must independently be absent. This exhaustive root inventory, rather than
-a checklist of selected known paths, is the proof that deleting the non-manifest key cannot erase the
-last evidence of another product artifact.
+The admitted shapes are exactly: product home absent; product home present with zero entries; product
+home containing only an empty guarded `state` directory; or product home containing only that `state`
+directory whose sole child is the guarded exact `state/redaction.key`. Each shape may also hold, projected
+away and left in place:
 
-A resume candidate is separate from those four fresh shapes. Preflight may provisionally admit only
-one syntactically closed flat bootstrap envelope in a `state` directory with no unrelated entry: the
-exact bootstrap leaf; the nonce/allocator state described below, including at most one
-`LifecycleBootstrapCreationTempV1` during first creation, the §2.4 allocator-rewrite reservation
-state, or the control-file compaction microstate; at most one final-or-temp plan; and a journal state
-of absent, one initial temp with no final,
-one final with no temp, or one final plus one exact post-intent rewrite temp; and
-exactly the original key or its exact `.redaction.key.<coordinator-id>.tombstone` before deletion, or
-neither only at/after the journal's durable delete cursor. The existing
-`LifecycleCoordinatorPlanV1` and `LifecycleCoordinatorJournalV1` paths are respectively
-`state/.lifecycle-absent-uninstall.<coordinator-id>.plan.json` and
-`state/.lifecycle-absent-uninstall.<coordinator-id>.json`. Their exact publication/rewrite temps are
-`state/.<coordinator-id>.<lowercase-v4-uuid>.plan.json.tmp` and
-`state/.<coordinator-id>.<lowercase-v4-uuid>.json.tmp`, matching §2.4's hidden temp grammar. There is no coordinator staging directory or
-independent coordinator lock: the already-held bootstrap descriptor is this envelope's stable lock.
-After acquiring and identity-rechecking it, the second complete inventory must be byte-for-byte the
-same candidate shape before any bounded file is parsed. The nonce/allocator state derives the sole
-possible ID once reservation is durable; every final/temp name, plan authority, exact two-step
-variant, key/tombstone identity, phase,
-cursor, maximum, and canonical byte/hash relation must then validate in both directions. A
-plan-without-journal is legal only before first key intent or as the terminal plan-last compaction
-suffix; journal-without-plan, a second ID, any temp combination outside those exact arms, a normal
-four-root ledger, any other leaf, or any
-identity change is preserved recovery-required. Thus bootstrap recovery is closed without adopting a
-fifth ledger root or granting authority from filenames alone.
+- the exact bootstrap leaf;
+- inert retained bootstrap evidence, with the ancestor directories that exist only to hold it. "Inert" is
+  exactly as Spec 2's evidence inspection classifies it: terminal, or `unverified` under Spec 2 §6.4.
+  Active or ambiguous residue refuses as exit 6. A bootstrap leaf counts as attributable to an envelope
+  only when its device and inode equal that envelope's persisted bootstrap lock identity;
+- §2.1's bookkeeping set, admitted by shape, including the lock a rolled-back first `init` leaves.
 
-Once the flat final journal exists, every atomic cursor/phase rewrite may coexist after a crash with
-at most one exact journal rewrite temp above. The bootstrap descriptor substitutes for the ordinary
-stable coordinator lock. Recovery requires the guarded final journal to remain canonical, plan-hash-
-bound, within its exact `maximumJournalBytes`, and unchanged after proving no active writer. The temp
-must be an owner-owned 0600 single-link regular file with reopened device/inode identity and size
-`0..maximumJournalBytes` within the 1-MiB parser ceiling. Its bytes may be empty, partial, or complete:
-the still-valid final is authoritative until rename. Recovery guarded-unlinks only that exact temp,
-syncs `state`, rechecks final/plan/bootstrap identities, and recomputes the intended rewrite from the
-authoritative journal. Final-plus-two-journal-temps, final-plus-plan-temp, a rewrite temp without its
-required final, any journal temp without the final plan, wrong metadata/size/name, or any identity
-change is preserved recovery-required. This cleanup runs
-before interpreting or advancing the flat coordinator cursor, including every terminal compaction
-rewrite.
+The key-only arm records only `SecretOpaqueFileStateV1`; it never reads or hashes key bytes. Every other
+known or unknown file **or directory** — including `config.toml`, activation, sync/marker/status/log/lease
+state, a manifest or manifest tombstone, nonce, allocator, lifecycle or Foundation recovery material
+outside the projections above, or an unrecognized empty directory — preserves the complete tree and
+returns recovery-required. The four closed external plist paths must independently be absent. This
+exhaustive root inventory, rather than a checklist of selected known paths, is the proof that deleting
+the non-manifest key cannot erase the last evidence of another product artifact.
 
-Fresh admission is process-free: it reserves no ID, creates no launchd-process staging, and spawns no
-`launchctl` query. Base labels are never product-owned service instances; only a generated label
-derived from retained config/activation/plist/manifest/plan/journal evidence can be owned. With all
-such evidence absent there is no generated target to query or unload, while an arbitrary base or
+`key_absent` performs two consecutive complete read-only walks that must be identical, and returns. It
+creates no bootstrap leaf, directory, ID or file: under §2.3 a created path could never be removed, and
+two identical walks give the snapshot a single walk cannot.
+
+`key_present` creates or guarded-opens the exact bootstrap leaf in the existing `state`, acquires it,
+and repeats the complete inventory, which must reproduce the admitted shape after projecting away only
+that leaf. It then guarded-opens `state/redaction.key` without following links and without reading
+bytes, records `SecretOpaqueFileStateV1`, rechecks the path identity, unlinks the key, syncs `state`,
+verifies absence, and releases the lock, leaving the leaf. A crash leaves the key present, and the next
+run repeats the operation, or absent, and the next run is `key_absent`. A changed identity or any other
+child refuses and preserves everything.
+
+Absent-manifest admission is process-free: it creates no launchd-process staging and spawns no
+`launchctl` query. Base labels are never product-owned service instances; only a generated label derived
+from retained config/activation/plist/manifest/plan/journal evidence can be owned. With all such
+evidence absent there is no generated target to query or unload, while an arbitrary base or
 generation-prefix label remains unowned and is neither enumerated nor booted out. Any present/drifted
 evidence or a missing retained value needed to derive a previously installed generated label is
 recovery-required and preserved; it cannot be reclassified as unloaded or as this no-launchd variant.
-
-Under that proof, `key_absent` is an allocation-free clean no-op: while still holding bootstrap it
-unlinks the exact bootstrap inode, syncs the parent, removes only attempt-created identity-matching
-empty directories, releases the descriptor, and returns without an ID, permanent lock, coordinator,
-plan, or `K` step. A non-crashing attempt leaves no file or control residue; after a crash it may
-preserve only §2.3's exact empty directory skeleton. A guarded present key is the sole admitted
-non-control leaf and derives only
-`uninstall/absent_manifest/key_present`; its exact redaction-key participant force-forwards it to
-absent, and manifest absence is already that variant's point of no return. When the key is present but both nonce
-and allocator are absent, the same proof first establishes no recovery evidence, then creates one
-guarded recovery-only nonce/allocator epoch by the CSPRNG/schema protocol. Publication is ordered
-nonce then allocator. Each temp is atomically created with `O_CREAT | O_EXCL | O_NOFOLLOW` under the
-identity-rechecked `state` parent, is exactly one `LifecycleBootstrapCreationTempV1`, is streamed and
-synced, then is reopened without following links and rechecked by owner/mode/link/size/device/inode.
-Only complete bytes are no-replace-renamed to the final leaf and followed by a parent sync. A nonce
-temp's bytes are a 0..65-byte prefix of exactly 64 lowercase hex bytes plus LF. An allocator-creation
-temp's bytes are a 0..1024-byte prefix of the sole canonical `LifecycleIdAllocatorV1` whose
-`installNonce` equals the guarded final nonce and whose `nextCounter` is literal `"0"`; it is distinct
-from §2.4's later allocator-rewrite temp despite sharing that reserved basename grammar.
-
-Before reservation,
-the only resumable creation states are neither final with at most the current exact temp, exact
-schema-valid nonce alone with at most the allocator temp, or the exact pair with allocator
-`nextCounter == "0"`; allocator-without-nonce, a second temp, replacement identity, or any other
-counter refuses. Only after the second complete inventory may recovery bounded-read the temp. A
-complete valid temp may finish the same no-replace publication. An empty or proper partial prefix may
-be guarded-unlinked by its rechecked inode, followed by parent sync, and regenerated; a non-prefix,
-over-limit, final-plus-temp, or changed identity is preserved recovery-required. Recovery under
-bootstrap may then finish the next publication or restart from neither; it never touches the key. It
-then reserves the complete
-absent-manifest coordinator block, and publishes the flat plan then journal with no-replace plus parent
-sync before `K(stage)`. No key mutation can precede the final journal. A death after reservation but
-before plan publication leaves the exact pair plus the checked allocator reservation state and may
-also leave only the exact derived plan temp, with the source key still untouched; a
-death after plan publication but before journal publication may leave only the plan plus the one exact
-journal temp. Under the same bootstrap lock, recovery validates those closed pre-intent states,
-guarded-removes a partial temp, and either finishes publication or removes the untouched orphan plus
-the recovery-only epoch; an allocator gap is harmless because that epoch is then removed entirely.
-Those control files are not retroactive manifest ownership. If both files already exist, they are
-legal only inside the exact candidate envelope above, and recovery resumes or closes that envelope
-rather than re-admitting a fresh operation. Allocator-without-nonce, either missing control file after
-reservation or intent, any collision, or any other lifecycle evidence is recovery-required rather
-than permission to mint a competing epoch.
-
-Terminal compaction for this variant removes allocator then nonce, then journal, and the flat plan
-last, syncing `state` at every boundary while retaining the bootstrap descriptor. The only suffix
-microstates are the §2.4 uninstall control-file states followed by journal-plus-plan, plan-only, or no
-envelope leaf; the key and tombstone are already absent. A death after the plan unlink therefore
-leaves only the exact locked bootstrap residue in an otherwise admitted empty `state`; recovery may
-finish its unlink without guessing prior product ownership. It then performs the same exact bootstrap-
-lock unlink and attempt-created empty-directory cleanup as its final product mutation; a waiter on the
-old inode must restart from preflight. If the process dies after the lock unlink but before directory
-cleanup, the next run preserves the indistinguishable exact empty skeleton under §2.3 rather than
-inventing durable deletion authority.
 
 The operation leaves the vault, canonical notes, generated indexes, captures, `.git`, remotes,
 branches, commits, and all unknown files untouched.
@@ -4231,14 +4157,15 @@ only the global mutation-lock file retains the stable never-unlink contract.
 |---|---|
 | disabled Git is inert | tests assert no Git process and no network call for sync, status, scheduled stale sync, incomplete hand-edited state, and a complete forged config lifecycle with no matching active provenance even when an adopted repository, branch, and remote already match; repeat the forgery after every interrupted enable/disable/reconcile phase |
 | disabled automation is inert | injected filesystem/runner observes no plist write, load, process, schedule, status write, or Brain effect for non-terminal journals and no handler effect for disabled, incomplete, provenance-absent, inactive-arm, hash-mismatched, or manifest-drifted state |
-| lifecycle schemas are exhaustive | strict exact-set tests cover every field, bound, nested unknown key, illegal combination, `LifecyclePlanPreviewV1` versus `LifecycleExecutionPlanV1`, `LifecycleBootstrapLockV1`, `LifecycleBootstrapCreationTempV1`, `LaunchdBootstrapSnapshotCreationV1`, `LaunchdBootstrapSnapshotAttemptV1`, both config key unions/results, normalized schedule arm/order, exact idempotent local/HTTPS/SSH/scp normalization, every rejected URL ambiguity, `CanonicalJsonV1` escaping/key order/LF, the separate exact `FoundationJournalJsonV1` insertion order plus legacy compatibility read, Git branch/path/reflog rules, tagged absent/present source index, `GitMetadataBoundsV1`, `GitPackReaderBudgetV1`, `LegacyFoundationMutationIndexV1`, both relinquished observation arms, derived/plan-bound 1-MiB Foundation/coordinator/launchd journals, plan-bound Git journals through 16 MiB, 16-MiB Foundation payloads, canonical examples, scope fingerprint, and activation hash; absent remains byte-identical while present-and-undefined refuses |
+| lifecycle schemas are exhaustive | strict exact-set tests cover every field, bound, nested unknown key, illegal combination, `LifecyclePlanPreviewV1` versus `LifecycleExecutionPlanV1`, `LifecycleBootstrapLockV1`, `LaunchdBootstrapSnapshotCreationV1`, `LaunchdBootstrapSnapshotAttemptV1`, both config key unions/results, normalized schedule arm/order, exact idempotent local/HTTPS/SSH/scp normalization, every rejected URL ambiguity, `CanonicalJsonV1` escaping/key order/LF, the separate exact `FoundationJournalJsonV1` insertion order plus legacy compatibility read, Git branch/path/reflog rules, tagged absent/present source index, `GitMetadataBoundsV1`, `GitPackReaderBudgetV1`, `LegacyFoundationMutationIndexV1`, both relinquished observation arms, derived/plan-bound 1-MiB Foundation/coordinator/launchd journals, plan-bound Git journals through 16 MiB, 16-MiB Foundation payloads, canonical examples, scope fingerprint, and activation hash; absent remains byte-identical while present-and-undefined refuses |
 | config surface is closed | exhaustive fixtures enumerate every `ConfigReadableKeyV1` and `ConfigMutableKeyV1`, reject every undeclared/prefix/descendant key, extra argv value, TOML fragment, implicit string, wrong JSON type, incomplete whole section, child write under an absent optional parent, and `null` outside whole `brain`/`redaction`; successful get/set results are exact `CanonicalJsonV1`, immutable lifecycle/schema/telemetry fields never change, and whole/keyed redaction reads expose only `patternsCount`, never a pattern value in success or error output |
-| journal closure is fail-closed | exact-root tests cover nonce/allocator agreement, empty/partial/complete guarded-cleanable allocator temps and every identity third state, all four owner/type/mode gates, all three aggregate companion inventories, every allowed filename, allocated `0..255` and legacy `0..4294967294` mutation-index boundaries plus next-byte/noncanonical/sign/gap/partial-highest cases, planless Foundation remove gaps plus the three exact highest-index `writeStaged` partial states and journal-prefix temp, exact empty `launchd-process/{home,tmp}` pre-intent/process-boundary staging, the sole current-frontier linked snapshot-creation prefix, and every unknown/nonempty/identity third state, every allowed empty/partial/complete initial coordinator/participant/effect plan-or-journal temp before first intent and refusal after a target/live transition, conservative pre-ID and exact post-ID recomputation of every standalone/participant Foundation, coordinator, Git-effect, and launchd-effect journal maximum, over-limit plans/rewrite temps/finals, orphan plan/journal and independent stable-lock cases, unknown/temp leaves, strict schema/key/phase/ID/plan-domain hashes, missing/mismatched participants, zero/one/two `push_pending` candidates, each uninstall cursor before/within/after exact lease removal, mixed candidates, `compacting`, and malformed bytes with no readable participant envelope; only a fully valid terminal ledger is `clear`, while one valid bound push is `retry_only` and one exact verified lease-removal uninstall is `uninstall_draining` |
-| terminal collection stays bounded | thousands of scheduled status/log transactions repeatedly compact to the exact 10,000/100,000/1,000,000 ceilings; allocator crash injection proves blocks advance before publication, gaps are legal, counters/nonces never rewind, and collected IDs never reappear; failure before/after every payload, journal, directory, held-lock, and plan-last unlink resumes from a terminal journal/cursor, plan-plus-lock, plan-only, or exact guarded orphan without admitting coordinator lock-only state; unknown children, identity swaps, and non-empty directories are preserved, reservation refuses before an ID block, and the global lifecycle lock is never removed |
+| journal closure is fail-closed | exact-root tests cover nonce/allocator agreement, empty/partial/complete guarded-cleanable allocator temps and every identity third state, all four owner/type/mode gates, all three aggregate companion inventories, every allowed filename, allocated `0..255` and legacy `0..4294967294` mutation-index boundaries plus next-byte/noncanonical/sign/gap/partial-highest cases, planless Foundation remove gaps plus the three exact highest-index `writeStaged` partial states and journal-prefix temp, exact empty `launchd-process/{home,tmp}` pre-intent/process-boundary staging, the sole current-frontier linked snapshot-creation prefix, and every unknown/nonempty/identity third state, every allowed empty/partial/complete initial coordinator/participant/effect plan-or-journal temp before first intent and refusal after a target/live transition, conservative pre-ID and exact post-ID recomputation of every standalone/participant Foundation, coordinator, Git-effect, and launchd-effect journal maximum, over-limit plans/rewrite temps/finals, orphan plan/journal and independent stable-lock cases, unknown/temp leaves, strict schema/key/phase/ID/plan-domain hashes, missing/mismatched participants, zero/one/two `push_pending` candidates, each uninstall cursor before/within/after exact lease removal, mixed candidates, `compacting`, and malformed bytes with no readable participant envelope; only a fully valid terminal ledger is `clear`, while one valid bound push is `retry_only` and one exact verified lease-removal uninstall is `uninstall_draining`; inert retained bootstrap tombstones, the bootstrap participants' `.tx_fi_…_{f|c}.lock` stable locks, and bootstrap participant ID directories under `staging/transactions` and `backups/transactions` that are empty or hold only tombstones are projected away and counted toward the caps, never malformed (amended 2026-09-17, A13) |
+| terminal collection stays bounded | thousands of scheduled status/log transactions repeatedly compact to the exact 10,000/100,000/1,000,000 ceilings; allocator crash injection proves blocks advance before publication, gaps are legal, counters/nonces never rewind, and collected IDs never reappear; failure before/after every payload, journal, directory, held-lock, and plan-last unlink resumes from a terminal journal/cursor, plan-plus-lock, plan-only, or exact guarded orphan without admitting coordinator lock-only state; unknown children, identity swaps, and non-empty directories are preserved, reservation refuses before an ID block, and the global lifecycle lock is never removed. Amended 2026-09-17 (A8): a ceiling may be proven at its exact maximum and first-over case through the production counting path over an injected enumerator, provided one small physical fixture proves the injected and the real enumerator agree |
 | coordinator grammar is exact | strict tests expand every §2.4 operation variant, point of no return, and forward/inverse Foundation pair and reject every missing, duplicate, reordered, unused, wrong-side, wrong-position, wrong-hash, non-inverse, or late-compensation participant/step; `automation_reconcile/live_only` is exactly one `Q` participant with zero or more transitions and no Foundation/manifest arm, while `/files` requires its real plist mutations; plan/journal/filename IDs bind in both directions; `pushPlanHash` is null/equal in every variant and phase; a finalized current pre-boundary Foundation participant advances into its paired inverse while the boundary config participant force-forwards; every coordinator and effect phase/cursor/observation tuple is derived and terminal invariants require complete verified postimages, paired inverse postimages, preimages, or only exact source/destination `relinquished_created_object` and source `relinquished_created_git_tree` exceptions after control preimages verify |
 | applied provenance is mandatory | exact-path tests prove only the planned lifecycle apply/recovery path creates or updates the content-owned `LifecycleActivationRecordV1`; absence means both inactive, one-arm transitions preserve the other, disable makes its arm inactive, config-only re-enable remains inert, pre-existing unowned files refuse, independent record/manifest edits are drift or missing ownership, and uninstall removes the exact artifact through its manifest evidence; every preflight also requires `LifecycleJournalClosureV1.clear`, apart from the exact `retry_only` path that can consume only its persisted push plan |
 | plan/apply identity | all four default plan commands, including `GitDisablePlan`, perform zero writes, allocations, staging creation, lock creation, or inode capture and emit only deterministic `LifecyclePlanPreviewV1`; `--apply` recomputes the same `previewHash` under lock before reserving IDs, then its `LifecycleExecutionPlanV1` may add only allocated IDs, concrete staging paths/identities, and derived journal maxima. Fixtures change every preview precondition, reject a widened operation, cross-bind normalized config, activation/plist/manifest hashes, Git/launchd preview members and template process-table hashes, and prove recovery consumes the persisted execution envelope; `git disable` without `--apply` is byte-identical |
-| V2 migration preserves ownership | migratable V1 regular files and created directories retain every restore field; verified shared-file backups pass; the immutable lifecycle nonce, schema allocator, exact sync/marker/status/lock/log reservations, and three journal directories are registered; V1 symlinks, shared directories, invalid backup evidence, every exact runtime/directory collision, and any declared/canonical V1 claim or filesystem leaf at the activation/nonce/allocator paths refuse before mutation |
+| V2 new init registers ownership | a fresh `init` registers the immutable lifecycle nonce, the schema allocator, and the exact sync/marker/status/lock/log reservations, and creates the bookkeeping paths it owns under §2.1's owner table, none of them a manifest row; a pre-existing leaf at a reserved path refuses unless Spec 2 §6.1 admits it; a V1 manifest reaches no Spec 1 mutation, and Foundation commands over it take no global lock (amended 2026-09-17, A1, A12) |
+| V2 admission is structural | a strictly valid V2 manifest, matching nonce/allocator, the exact global lock and the three journal roots admit; drift, non-clear closure and missing, emptied, replaced or altered retained evidence never refuse recovery, status, `doctor` or uninstall; mutations still require what §2.2 and §2.4 require, including §2.2's `retry_only` path; the recovery-only uninstall arm admits compensation before durable `M(commit_absence)` and force-forward after it, and nothing else (amended 2026-09-17, A7) |
 | runtime records are closed | exact-path tests expand four job IDs and ten log slots; strict round-trips cover `SyncRecordV1`, marker, both status arms, bounded redacted log JSON, timestamps, reason codes, path order/count/size, zero-byte locks, and refuse every unknown field, wrong outcome combination, symlink, kind, slot, or unreserved path |
 | V2 drift is exhaustive | non-empty fixtures cover every legal kind/mode pair, wrong type, file hash, link target, schema invalidity, optional absence, and illegal combinations |
 | composite state recovers | injected failure/process death around every Foundation participant, direct manifest rename, activation publication, source/destination Git transition, before/after-files launchd command-before-observation and reverse transition, success-record write, point-of-no-return crossing, and compensation either runs the exact preplanned inverse Foundation transaction/restores prior external state, finishes the force-forward suffix, or leaves an exit-6 resumable journal; replacement fixtures cover old unload, new bootstrap, compensating new unload, and compensating old bootstrap by observable generations; uninstall rollback proves key → inverse artifacts → verified prior labels → inverse marker; the first Foundation journal dies before/after no-replace publication and resumes from its coordinator-bound staged inode; source-effect fixtures bind distinct before/after projections and retry validates only `sourceAfter`; forged complete config and already-matching external state remain inert at every non-terminal phase, while exact `push_pending` alone reopens the domain-hashed `PersistedGitPushPlanV1` and may retry only its bound network step or not-yet-started destination effect |
@@ -4273,10 +4200,11 @@ only the global mutation-lock file retains the stable never-unlink contract.
 | lock behavior is serialized | interactive contention refuses; a runner guarded-opens the pre-created lease, acquires it before any global-lock wait, rechecks marker/path identity, and holds it through exit; same-job contention exits silently, global contention waits no more than ten minutes, and a still-busy final nonblocking acquire exits silently, while a successful final acquire rechecks marker/closure/stage-1 evidence/current provenance under the global lock and serializes only `skipped_lock_timeout` for active state or `automation_disabled` for inactive state through the already-held lease, without handler effects. Absent/replaced lease fixtures exit silently only for a present marker, absent manifest, or the exact typed `uninstall_draining` coordinator after its verified lease removal; every still-installed state without that proof is recovery-required |
 | logs are bounded and safe | redaction precedes the Foundation file transaction; each exact slot stays at or below 1 MiB; the eleventh generation and transaction temp files are discarded; each terminal status/log transaction then compacts its exact journal, staging, backup metadata, and stable lock so cadence cannot exhaust the ledger |
 | uninstall drains without deadlock | pause a runner before lease acquisition, after lease acquisition/before global acquisition, and while queued on the global lock; marker publication plus global release makes each exit silently, uninstall acquires all four lifetime leases without the global lock, retains them while reacquiring/revalidating, removes their exact paths while descriptors remain held, and no runner/late opener writes handler status after `uninstalling` exists. Crash fixtures after each lease removal prove `LifecycleJournalClosureV1.uninstall_draining` is returned only for the one exact plan/cursor/manifest binding and cannot be synthesized by path absence |
-| absent-manifest uninstall is evidence-bound | complete preflight and bootstrap-locked no-follow product-home walks cover absent root, empty root, exact empty `state`, and exact key-only `state` at every 1,000,000-entry/128-component/4096-byte boundary; crash injection covers every product/state/bootstrap create, acquire, identity recheck, unlink-while-held, waiter restart, parent sync, and empty-directory cleanup boundary plus concurrent init/uninstall. A live attempt removes only its identity-recorded empty directories; after death, the indistinguishable exact empty-root or empty-state skeleton is preserved and no file/control residue is admitted. Only the exact locked coordination leaf and live attempt-created directory identities project away; the sole additional admitted recovery shape is the flat, bootstrap-locked key-present envelope with its derived nonce/allocator creation/reservation states, exact `LifecycleBootstrapCreationTempV1` path/owner/mode/link/size/prefix boundaries, plan-before-journal publication temps, final-journal-plus-one-rewrite-temp crashes at every post-intent cursor/phase update, key/tombstone arms, and allocator→nonce→journal→plan terminal suffix. Every other known/unknown file or directory, symlink, special/hard-linked leaf, owner/identity race, invalid name, first-over-limit entry, external plist, retained generated-label evidence, normal ledger/staging residue, illegal partial control state, missing/duplicate flat-envelope member, or missing derivation evidence preserves everything as recovery-required. Fresh admission is launchctl/process-free and occurs before any recovery epoch/ID because base labels and arbitrary generation-prefix labels are unowned while no evidence-derived generated label exists; key-absent returns without ID/coordinator/plan/K step and without file/control residue, while key-present alone derives the two-step coordinator; fixtures assert zero `launchctl` spawn and zero key-byte/hash read |
+| absent-manifest uninstall is evidence-bound | complete no-follow product-home walks cover absent root, empty root, exact empty `state`, and exact key-only `state` at every 1,000,000-entry/128-component/4096-byte boundary (the terminal-collection row's counting-seam rule applies); `key_absent` proves two identical walks and creates nothing; `key_present` proves bootstrap acquisition, the repeated inventory, the secret-opaque identity recheck, and a crash before and after the key unlink; the exact bootstrap leaf, inert retained evidence with its ancestor directories, and the bookkeeping set are projected away and left in place, including a rolled-back first `init`'s lock; no unlink or rmdir runs except the key; every other known/unknown file or directory, symlink, special/hard-linked leaf, owner/identity race, invalid name, first-over-limit entry, external plist, retained generated-label evidence, ledger residue outside the bookkeeping projection, or active/ambiguous bootstrap residue preserves everything as recovery-required; fixtures assert zero `launchctl` spawn and zero key-byte/hash read (amended 2026-09-17, A2, A3) |
 | uninstall respects ownership | the declared/canonical partition preserves every Brain and unknown/out-of-home artifact; only exact authorized plists, product-home artifacts, exact ephemeral paths, and redaction key disappear; `.git` survives |
 | manifest transitions are no-overwrite | concurrent replacement before/after every tombstone and publication boundary preserves every third state; present↔present, present→absent, absent→present, rollback, and recovery use only exact no-replace moves/publication |
 | uninstall removes its manifest recoverably | failure/death before and after no-replace move, preserved-inode verification, and durable committed-absence record proves exact compensation or force-forward completion, never overwrite/deletion of a concurrent manifest or a stale live manifest |
+| uninstall then init round-trips | on a synthetic home each sequence succeeds without manual action and retained bootstrap evidence stays inert: V2 `init` → present-manifest uninstall → `init`; V2 `init` → uninstall → uninstall again → `init`; absent-manifest key deletion → `init`; `key_absent` → `init`; present-manifest uninstall killed at `M(preserve_before)` before and after its cursor advance, `M(commit_absence)`, `K(delete)`, `M(finalize_tombstones)`, each control-file microstate, plan-plus-lock and plan-only → uninstall → `init`; V2 `init` rolled back → uninstall → `init`; two complete install/uninstall cycles → `init`; fresh V2 `init` → `config set` and `git enable` preview with closure `clear` beside retained evidence (amended 2026-09-17, A9) |
 | redaction-key deletion is secret-opaque | strict source/tombstone derivation plus present/absent, collision, wrong-type/owner/mode/size/link/device/inode, identity-swap, and every `K(stage)`/manifest-absence/`K(delete)` crash boundary prove no key byte or content hash enters memory/journal/log; rollback before manifest absence renames it back, while recovery after manifest absence only deletes the bound tombstone |
 
 Git integration uses only temporary repositories and local bare remotes with synthetic identity and
@@ -4290,9 +4218,10 @@ over them.
 
 | Interface | Owner |
 |---|---|
-| `ManagedArtifactV2`, `InstallationManifestV2`, `ManifestStatePlanV1` consumed here | DOS-P7 spec 2 migration/core manifest package |
+| `ManagedArtifactV2`, `InstallationManifestV2`, `ManifestStatePlanV1` consumed here | DOS-P7 Spec 2 Core manifest package, `packages/core/src/manifest/` (amended 2026-09-17, A1) |
+| consumed from Spec 2 (amended 2026-09-17, A5): `CanonicalJsonV1` and `CanonicalJsonValueV1` (shipped as `CanonicalJsonValue`), `CanonicalAbsolutePathV1`, `UtcTimestampV1`, `SafeReasonCodeV1` (Spec 2's bounded definition), `LowerHexSha256`, `UInt64DecimalV1`, `LifecycleInstallNonceV1`, `LifecycleIdAllocatorV1`, `LifecycleBootstrapLockV1`, `LifecycleCoordinatorIdV1`. §§2.1–2.2 remain their normative grammar; a divergence in the shipped validator is a code defect, and the implementation plan still produces their strict validators and the allocated-ID grammar | `packages/core/src/lifecycle/canonical-json.ts`, `packages/core/src/update/paths.ts`, `packages/core/src/update/scalars.ts`, `packages/core/src/manifest/bootstrap.ts`, `packages/core/src/manifest/manifest-state.ts` |
 | `GitSyncConfigV1`, `AutomationConfigV1`, `LifecycleActivationRecordV1`, `ConfigReadableKeyV1`, `ConfigMutableKeyV1`, `ConfigGetResultV1`, `ConfigSetResultV1`, publishable config projection, and canonical subsystem hash projections | `packages/core/src/config/` |
-| `LifecycleInstallNonceV1`, `LifecycleIdAllocatorV1`, `LifecycleLedgerBoundsV1`, `LifecycleBootstrapLockV1`, `LifecycleBootstrapCreationTempV1`, `LegacyFoundationMutationIndexV1`, `FoundationJournalJsonV1`, `FoundationJournalJsonPrefixV1`, `LifecycleCoordinatorJournalV1`, `LifecyclePlanPreviewV1`, `LifecycleExecutionPlanV1`/`LifecycleCoordinatorPlanV1`, `LifecycleJournalClosureV1`, `FoundationParticipantRefV1`, `FoundationTerminalCompactionV1`, `LifecycleTerminalCompactionV1`, and exact allocator/ledger/envelope/operation/point-of-no-return tables | lifecycle coordinator/recovery module selected by the implementation plan |
+| `LifecycleLedgerBoundsV1`, `LegacyFoundationMutationIndexV1`, `FoundationJournalJsonV1`, `FoundationJournalJsonPrefixV1`, `LifecycleCoordinatorJournalV1`, `LifecyclePlanPreviewV1`, `LifecycleExecutionPlanV1`/`LifecycleCoordinatorPlanV1`, `LifecycleJournalClosureV1`, `FoundationParticipantRefV1`, `FoundationTerminalCompactionV1`, `LifecycleTerminalCompactionV1`, and exact allocator/ledger/envelope/operation/point-of-no-return tables | lifecycle coordinator/recovery module selected by the implementation plan |
 | `GitSyncCardinalityV1`, `GitMetadataBoundsV1`, `GitPackReaderBudgetV1`, `GitIndexStateV1`, `GitHeadStateV1`, `GitReflogStateV1`, `GitReflogPlanV1`, `GitSourceStateV1`, `GitScopeSnapshotV1`, `GitPlanPreviewV1`, `GitEnablePlan`, `GitDisablePlan`, `GitSyncPlanV1`, `PersistedGitPushPlanV1`, side-tagged `GitEffectPlanV1`, `GitEffectJournalV1`, `GitEffectEvidenceV1`, `GuardedGitPathStateV1`, `PlannedGitPathStateV1`, `GitRelinquishedDirectoryRootV1`, and `GitTreeFingerprintV1` | Git command/domain module selected by the implementation plan |
 | `SupportedGitDistributionV1`, `SupportedGitExecutableV1`, `SupportedGitProcessTableV1`, `GitArgTokenV1`, `GitArgvGrammarV1`, `GitProcessNodeV1`, `GitProcessEdgeV1`, `GitProcessIoProfileV1`, `GitProcessPhaseBudgetV1`, `GitEnvironmentProfileV1`, `GitConfigQuotedPathV1`, `GitAlternateObjectDirectoryV1`, `GitExecGatewayV1`, `GitProcessSupervisorV1`, `SanitizedGitEnvironmentV1`, `SanitizedGitShadowConfigV1`, `SanitizedGitShadowConfigTemplateV1`, `SanitizedGitShadowConfigBytesV1`, `SanitizedGitShadowV1`, `SanitizedBareDestinationShadowV1`, `SanitizedSshBridgeV1`, `SanitizedLocalRemoteHelperV1`, guarded budgeted SHA-1 pack/ref reader, and closed transport/parser formats | security/process boundary selected by the implementation plan |
 | `LaunchdGuiDomainV1`, `LaunchdGenerationV1`, `LaunchdScheduledProductHomeV1`, `LaunchdGenerationProjectionV1`, `GeneratedLaunchdLabelV1`, `LaunchdObservedServiceTargetV1`, `LaunchdGeneratedServiceTargetV1`, `LaunchdCalendarIntervalV1`, `LaunchdPlistDictionaryV1`, `BoundedCanonicalPlistXmlV1`, `LaunchdProcessEnvironmentV1`, `LaunchdProcessDirectoryIdentityV1`, `LaunchdProcessIoProfileV1`, `LaunchdProcessArgvV1`, `LaunchdPreviewObservationProcessTableV1`, `SupportedLaunchdProcessTableTemplateV1`, `SupportedLaunchdProcessTableV1`, `LaunchdPlanPreviewV1`, `LaunchdBootstrapPlistIdentityV1`, `LaunchdBootstrapSnapshotCreationV1`, `LaunchdBootstrapSnapshotAttemptV1`, `LaunchdPlanV1`, `LifecycleFileBindingV1`, `LaunchdEffectPlanV1`, `LaunchdEffectJournalV1`, closed job registry, schedule parser, and bounded domain-targeted live-state query | `packages/platform-macos/src/launchd/` |
@@ -4309,9 +4238,11 @@ filesystem/process/clock dependencies rather than reaching global state directly
 1. **Completed 2026-08-28:** founder approved this written specification.
 2. **Completed 2026-08-28:** write
    `docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md`; do not execute it yet.
-3. Specify, approve, plan, and implement DOS-P7 spec 2 through the `InstallationManifestV2`
-   migration required by §2.1.
-4. Execute this specification's plan, then its full gates and fresh-context review.
+3. **Completed 2026-09-17:** DOS-P7 Spec 2 Tasks 1–7 and 9 implemented `InstallationManifestV2`, the V2
+   new-init handoff and its admission; the V1→V2 migration was withdrawn (D18).
+4. **Completed 2026-09-17:** founder approved the NEW-67 amendment with every recommended option.
+5. Write plan 1a (configuration, coordinator, uninstall) against this amended text, execute it, then run
+   its full gates and fresh-context review. Plan 1b (Git, launchd) follows roadmap Phase 9.
 
 ### 8.3 Accepted residuals
 
@@ -4329,9 +4260,10 @@ filesystem/process/clock dependencies rather than reaching global state directly
    DOS-P9 release documentation; widening requires a new reviewed design.**
 3. **Dirty-index recovery is outside the product.** Sync names the condition and refuses; the user
    must resolve staged work with Git. **Owner: DOS-P9 documentation.**
-4. **This implementation is blocked on the other half of DOS-P7.** The opt-in plan may be written,
-   but no mutable-config or runtime-state code lands against `InstallationManifestV1`. **Owner:
-   DOS-P7 spec 2 and its plan.**
+4. **Production depends on the other half of DOS-P7.** Spec 2 Task 9 admits the V2 handoff, but
+   production `init` writes V1 until roadmap Phase 4b supplies the launcher's root-verified handoff;
+   until then no mutable-config or runtime-state code acts on a V1 manifest. **Owner: DOS-P7 Spec 2
+   Tasks 10–11 (roadmap Phase 4b). Amended 2026-09-17 (A1).**
 5. **Scoped staging is not scoped history.** Existing and later manual commits on the adopted branch
    can contain out-of-scope paths and Git may push them. The enable plan makes that boundary explicit;
    the product does not inspect or rewrite branch history. **Owner: the user who adopts the branch,
@@ -4347,3 +4279,12 @@ filesystem/process/clock dependencies rather than reaching global state directly
    device; an external-volume Brain or bare remote is unsupported in version 1. **Owner: DOS-P9
    compatibility documentation; widening needs a different durable publication primitive and a new
    reviewed design.**
+8. **Absent-manifest key deletion has a check-then-unlink window.** Node has no descriptor-relative
+   unlink, so a same-uid process can swap `state/redaction.key` between the identity recheck and
+   `unlink`. The worst outcome is removal of a planted regular file at a product-reserved path inside the
+   product's own `state`. The withdrawn envelope design's tombstone unlink had the same window. **Owner:
+   the accepted local-write boundary. Added 2026-09-17 (A3).**
+9. **Bookkeeping paths are admitted by shape.** A planted empty directory or zero-byte file at a
+   bookkeeping path is admitted by fresh `init` and absent-manifest uninstall; neither grants anything a
+   same-uid process could not already do. **Owner: the accepted local-write boundary. Added 2026-09-17
+   (A12).**

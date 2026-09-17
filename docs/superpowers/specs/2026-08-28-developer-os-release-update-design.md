@@ -8,7 +8,9 @@ forward-content rule were approved by the founder in conversation and are marked
 shape, the §6.2 artifact modes, operation-parametric evidence surfaces, the §5.3 plan-bound
 wording, `SafeReasonCodeV1`, the byte-cap reading of the two "exact maximum" gates, and the
 `symlink` arm as an accepted residual — was approved by the founder in conversation and is marked
-"Amended 2026-09-08" in place.** This
+"Amended 2026-09-08" in place; the 2026-09-17 withdrawal of the V1→V2 migration (D18), the V1 refusal's
+recovery (D20) and the bookkeeping-set admission of Spec 1's NEW-67 amendment (A12) were approved by the
+founder and are marked "Amended 2026-09-17" in place.** This
 is DOS-P7 Spec 2, the second half of `ORDER.md` entry A11 and program-plan Task 7. Spec 1 is the
 approved opt-in surfaces design at
 `docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md`.
@@ -989,7 +991,8 @@ interface FreshV2InitPlanV1 {
   readonly id: FreshV2InitIdV1;
   readonly admittedExternalShapeHash: LowerHexSha256;
   /** Amended 2026-09-04. Names that may legally exist beside this plan: retained evidence and
-   *  reusable empty directories observed before publication. At most 4096, strictly ascending
+   *  reusable empty directories observed before publication. Amended 2026-09-17: also the bookkeeping
+   *  set and the bootstrap residue §6.1's bookkeeping-set amendment admits. At most 4096, strictly ascending
    *  in UTF-8 byte order, each equal to or below the product home. */
   readonly admittedPreexistingPaths: readonly CanonicalAbsolutePathV1[0..4096];
   readonly v2ManifestHash: LowerHexSha256;
@@ -1124,6 +1127,28 @@ file whose device/inode differ from the current inode, or a cursor past ordinal 
 evidence, exits 6 (`recoveryRequired`). **Correction, same day:** this amendment first said
 "remains exit 6" for every one of these states; the implemented shape check runs before the
 evidence check and refuses with exit 5, so only the two evidence-mismatch cases above exit 6.
+
+**Amended 2026-09-17 — the bookkeeping set a Spec 1 uninstall leaves (Spec 1 NEW-67 A12).** Spec 1
+uninstall never removes its closed bookkeeping set (Spec 1 §2.1): `state/.lifecycle.lock`; the three
+journal roots; `state/transactions`, `staging/lifecycle`, `staging/transactions` and
+`backups/transactions`; and their parents `staging` and `backups`. When no manifest exists, fresh `init`
+admits each bookkeeping path by exact shape and records it in `admittedPreexistingPaths`, whose grammar
+therefore covers the bookkeeping set, the lock file included:
+
+- the lock as an owner-only `0600` zero-byte single-link regular file, whose liveness is decided by
+  acquiring it;
+- each directory as an owner-only `0700` directory whose only entries are other bookkeeping paths, inert
+  retained evidence, ancestor directories of that evidence, or the residue Spec 1 §2.4 projects away for
+  an inert envelope: the bootstrap participants' exact owner-only `0600` zero-byte `.<participant-id>.lock`
+  stable locks in `state/transactions`, and bootstrap participant ID directories under
+  `staging/transactions` and `backups/transactions` that are empty or hold only retained evidence
+  (correction found in the application review, same day).
+
+A pre-existing lock enters the plan through `admittedPreexistingPaths` rather than as `createdPaths[0]`.
+The rule that `createdPaths[0]` is the exact permanent global-lock transition, and the plan validator's
+matching check, apply only when the lock is absent. `staging` and `backups` are named here explicitly, so
+neither needs an exemption from the rule that a reusable directory holds retained evidence. The
+bookkeeping set is never a manifest row.
 
 With that durable envelope present, fresh init:
 
@@ -1756,6 +1781,10 @@ finds its complete residue confined to the exact plan/two-slot/retained-name env
 live staging, bootstrap lock, temp, V1/V2 target, or other source path attributable to that ID. Any
 non-retained live residue is active or ambiguous and blocks a new bootstrap as exit 6. This permits
 reinstall beside old evidence without allowing a corrupted terminal file to bless live residue.
+
+**Amended 2026-09-17 (Spec 1 NEW-67 A12).** Spec 1's bookkeeping set (§6.1) is never a live target
+attributable to an envelope. A remaining global lock or bookkeeping directory neither keeps a
+`rolled_back` or `finalized` envelope from being inert nor rules out `unverified`.
 
 **Bounds and public behavior.** Before creating a bootstrap-owned product path, init performs a
 read-only aggregate preflight; after taking the bootstrap lock it repeats the projection before plan

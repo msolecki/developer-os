@@ -10,6 +10,13 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md`
 
+**Superseded for execution, 2026-09-17.** Spec 1 was amended by the founder-approved NEW-67 amendment
+(its change record and "Amended 2026-09-17" markers). Several constraints and task texts below predate
+it and contradict it: the V1→V2 migration precondition, `LifecycleBootstrapCreationTempV1`, the
+absent-manifest recovery epoch and key-present coordinator, and unlink/rmdir cleanup of the bootstrap lock
+and its directories. Execute plans 1a and 1b, written against the amended
+Spec 1 (roadmap Phases 4 and 9), not the tasks below as written.
+
 ## Global Constraints
 
 - Do not execute this plan until DOS-P7 Spec 2 has implemented and exported `ManagedArtifactV2`, `InstallationManifestV2`, `ManifestStatePlanV1`, its V1→V2 migration, initial lifecycle nonce/allocator creation, the three lifecycle journal-directory reservations, and every exact runtime-record/status/log/lease reservation required by Spec 1 §2.1.

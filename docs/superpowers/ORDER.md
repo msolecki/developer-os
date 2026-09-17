@@ -16,10 +16,13 @@ strict V2 handoff admission exists. The V1→V2 migration was withdrawn (D18) an
 check` passed on `43c30e4`. The final review's findings are NEW-79 to NEW-83 and additions to NEW-67;
 founder decisions D19 and D20 settled the two that needed one.
 
-**The next action is founder approval of the NEW-67 amendment to Spec 1**, drafted 2026-09-17 at
-`specs/2026-09-17-spec-1-new-67-amendment.md` (A1–A13; five items need a decision). After approval:
-apply it, then write plan 1a (Spec 1 plan Tasks 1–7, 21 and 23, with Task 2 after Task 4), then execute
-it.
+**The NEW-67 amendment to Spec 1 is approved and applied** (2026-09-17, every recommended option;
+founder decisions D21–D23), with a companion Spec 2 §6.1/§6.4 amendment. NEW-67 is closed; its
+`launchctl` clause moved to NEW-84.
+
+**The next action is to write plan 1a** with `superpowers:writing-plans`: Spec 1 plan Tasks 1–7, 21 and
+23, with Task 2 after Task 4, against the amended Spec 1 and carrying the code obligations listed under
+roadmap Phase 4. Then execute it.
 
 Spec 1 is approved and its plan exists at `plans/2026-08-28-developer-os-opt-in-surfaces.md`, with
 none of its 24 implementation tasks started. Spec 2's Tasks 1–7 and 9 are complete, Task 8 is
@@ -27,7 +30,7 @@ withdrawn, and Tasks 10–26 remain.
 
 Open sequence (D16, daily use before completeness):
 
-1. Now: amend Spec 1 (NEW-67), write plan 1a, execute it (Phase 4).
+1. Now: write plan 1a against the amended Spec 1, then execute it (Phase 4).
 2. Spec 2 Tasks 10–11 plus the production wiring step that removes the bootstrap pin at
    `apps/cli/src/context.ts:765` — launcher and offline trust — with NEW-79, NEW-80 and NEW-81
    first (Phase 4b).
@@ -79,7 +82,8 @@ Needs a human, a policy decision, or an external application:
 - Foundation watchdog — decide whether `SpawnLockfRunner` needs one around non-blocking `lockf`.
 
 The remaining open repository rows are NEW-20, NEW-24–NEW-29, NEW-31, NEW-32, NEW-34–NEW-40,
-NEW-76, NEW-78 and NEW-79–NEW-83; NEW-79–NEW-81 are owned by Phase 4b and NEW-82 by plan 1a.
+NEW-76, NEW-78 and NEW-79–NEW-84; NEW-79–NEW-81 are owned by Phase 4b, NEW-82 by plan 1a, and NEW-84
+by Phase 9.
 They are not ordered ahead of A11 unless the touched subsystem makes one relevant.
 
 ## Delivery evidence still owed
