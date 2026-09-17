@@ -25,7 +25,7 @@ import {
 } from "@developer-os/security";
 
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
-import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
+import { inspectBootstrapEvidenceAdmission, ManifestV1RefusalError } from "../bootstrap/report.js";
 import {
   assertRootsAnchored,
   failureFrom,
@@ -814,6 +814,15 @@ export async function runInit(
     const fresh = manifest === null && configMissing;
     const bootstrap = context.bootstrap;
     const bootstrapAvailable = bootstrap?.state === "available";
+    if (bootstrapAvailable && manifest?.schemaVersion === 1) {
+      const refusal = new ManifestV1RefusalError();
+      return failure(refusal.code, {
+        kind: refusal.reason,
+        message: refusal.message,
+        paths: [context.paths.manifestFile],
+        recovery: refusal.recovery,
+      });
+    }
     /**
      * Before the evidence inventory: `inventoryExactNamespaces` throws an
      * unclassified error the moment one of its roots is a symlink rather than

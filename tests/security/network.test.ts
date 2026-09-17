@@ -1,3 +1,5 @@
+import { join } from "node:path";
+
 import {
   assertSafeCommand,
   NodeProcessRunner,
@@ -10,6 +12,14 @@ import { runReview } from "@developer-os/cli/dist/commands/review.js";
 import { runStatus } from "@developer-os/cli/dist/commands/status.js";
 import { runInit } from "@developer-os/cli/dist/commands/init.js";
 import { runUninstall } from "@developer-os/cli/dist/commands/uninstall.js";
+import {
+  createCommandFixture,
+  removeCommandFixtures,
+} from "@developer-os/cli/dist/commands/testing.js";
+import type { CommandFixture } from "@developer-os/cli/dist/commands/testing.js";
+import type { CliContext } from "@developer-os/cli/dist/context.js";
+import { run } from "@developer-os/cli/dist/main.js";
+import { MacOsPlatformAdapter } from "@developer-os/platform-macos";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -351,6 +361,73 @@ describe("the one outbound call this product makes", () => {
     } finally {
       restore("HTTP_PROXY", before);
     }
+  });
+});
+
+/**
+ * The real platform adapter over the fixture's recording runner, so a discovery probe a
+ * refusal path reached would be a recorded spawn rather than a fake table lookup.
+ */
+function withRealPlatform(fixture: CommandFixture): CliContext {
+  return {
+    ...fixture.context,
+    platform: new MacOsPlatformAdapter({
+      runner: fixture.context.runner,
+      environment: {
+        platform: "darwin",
+        architecture: "arm64",
+        release: "25.5.0",
+        userHome: fixture.userHome,
+      },
+      searchPath: join(fixture.root, "bin"),
+      canonicalize: (path: string) => Promise.resolve(path),
+      stat: () => Promise.resolve({ uid: process.getuid?.() ?? 0, mode: 0o100755 }),
+    }),
+  };
+}
+
+describe("the bootstrap refusal paths", () => {
+  afterEach(removeCommandFixtures);
+
+  it("spawn nothing when init refuses a shipped V1 manifest", async () => {
+    const shipped = await createCommandFixture("network-v1-refusal-seed");
+    expect((await runInit(shipped.context, { dryRun: false, assumeYes: true })).ok).toBe(true);
+    const available = await createCommandFixture("network-v1-refusal", {
+      root: shipped.root,
+      bootstrapAvailable: true,
+    });
+    const context = withRealPlatform(available);
+
+    expect(await run(["init", "--yes", "--json"], available.io, () => context)).toBe(4);
+    expect(await run(["init", "--dry-run", "--json"], available.io, () => context)).toBe(4);
+    expect(available.vendorProcesses).toStrictEqual([]);
+
+    /** The positive control: the same wiring does record a command that probes. */
+    await run(["status", "--json"], available.io, () => context);
+    expect(available.vendorProcesses.length).toBeGreaterThan(0);
+  });
+
+  it("spawn nothing when every non-init command refuses a non-terminal envelope", async () => {
+    const fixture = await createCommandFixture("network-bootstrap-recovery", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_plan",
+    });
+    expect((await runInit(fixture.context, { dryRun: false, assumeYes: true })).ok).toBe(false);
+    const context = withRealPlatform(fixture);
+    const commands = [
+      ["status"],
+      ["doctor", "--probe"],
+      ["uninstall", "--yes"],
+      ["capture", "--text", "an observation during recovery"],
+      ["ingest", "--yes"],
+      ["brain", "status"],
+    ];
+    expect(commands.length).toBeGreaterThan(0);
+
+    for (const argv of commands) {
+      expect(await run([...argv, "--json"], fixture.io, () => context), argv.join(" ")).toBe(6);
+    }
+    expect(fixture.vendorProcesses).toStrictEqual([]);
   });
 });
 

@@ -26,7 +26,9 @@ import { runStatus } from "./commands/status.js";
 import type { StatusReportV1 } from "./commands/status.js";
 import { runUninstall } from "./commands/uninstall.js";
 import type { UninstallResultV1 } from "./commands/uninstall.js";
-import { exitCodeOf, PRODUCT_VERSION, renderPath } from "./context.js";
+import { createBootstrapEvidenceInspectionRequest } from "./bootstrap/context.js";
+import { assertBootstrapClosureTerminal } from "./bootstrap/report.js";
+import { exitCodeOf, failureFrom, PRODUCT_VERSION, renderPath } from "./context.js";
 import type { CliContext } from "./context.js";
 import type { CliIo } from "./io.js";
 
@@ -507,6 +509,18 @@ async function dispatch(
     context = createContext(io);
   } catch (error) {
     return emit(io, contextFailure(error), json, () => []);
+  }
+
+  if (invocation.command !== "init") {
+    try {
+      await assertBootstrapClosureTerminal(createBootstrapEvidenceInspectionRequest({
+        productHome: context.paths.home,
+        stateDirectory: context.paths.stateDir,
+        initialRoots: [],
+      }));
+    } catch (error) {
+      return emit(io, failureFrom(context, error, [], "developer-os init"), json, () => []);
+    }
   }
 
   switch (invocation.command) {

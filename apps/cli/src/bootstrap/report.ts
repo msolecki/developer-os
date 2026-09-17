@@ -5,6 +5,7 @@ import {
   BOOTSTRAP_RETAINED_MAX_ENTRIES,
   BOOTSTRAP_RETAINED_MAX_IDS,
   BOOTSTRAP_RETAINED_MAX_REGULAR_BYTES,
+  EXIT_CODES,
   assertBootstrapRetentionCapacity,
   classifyBootstrapEvidence,
   decodeCanonicalJson,
@@ -15,14 +16,20 @@ import {
   deriveBootstrapRetentionTable,
   encodeCanonicalJson,
   hashBytes,
+  inspectDrift,
+  loadConfig,
+  parseLowerHexSha256,
+  parseUInt64Decimal,
   selectBootstrapJournal,
   validateBootstrapJournal,
   validateBootstrapPayloadEvidence,
   validateBootstrapPlan,
   validateCreatedPathEvidence,
   validateJournal,
+  validateActiveReleaseRecord,
   validateManifestStatePlan,
   validateManifestV2,
+  validateReleaseTrustState,
 } from "@developer-os/core";
 import type {
   BootstrapEvidenceSummaryV1,
@@ -36,11 +43,15 @@ import type {
   CreatedPathEvidenceV1,
   CanonicalAbsolutePathV1,
   CanonicalJsonValue,
+  DriftRequestV2,
   FreshV2InitIdV1,
   FreshV2InitPlanV1,
   FoundationParticipantRefV2,
+  InstallationManifestV2,
   LowerHexSha256,
+  ManagedArtifactSchemaRegistry,
   ManifestStatePlanAdmissionContextV1,
+  ManifestV1NotMigratableError,
   PlannedCreatedPathV1,
   UInt64DecimalV1,
 } from "@developer-os/core";
@@ -143,6 +154,26 @@ export interface BootstrapEvidenceAdmissionV1 {
     readonly terminalJournal: BootstrapJournalRecordV1;
     readonly evidence: BootstrapRetentionEvidenceProjectionV1;
   }[];
+}
+
+export class BootstrapRecoveryRequiredError extends Error {
+  readonly code = EXIT_CODES.recoveryRequired;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "BootstrapRecoveryRequiredError";
+  }
+}
+
+export class ManifestV1RefusalError extends Error {
+  readonly code = EXIT_CODES.capabilityUnavailable;
+  readonly reason: ManifestV1NotMigratableError["reason"] = "manifest_v1_not_migratable";
+  readonly recovery = "developer-os uninstall, then developer-os init";
+
+  constructor() {
+    super("V1 installation manifest is not migratable");
+    this.name = "ManifestV1RefusalError";
+  }
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -573,15 +604,15 @@ function sumEntries(entries: Iterable<BootstrapEvidenceGuardedEntryV1>): { reado
 async function exactV2Handoff(
   request: BootstrapEvidenceInspectionRequestV1,
   plan: FreshV2InitPlanV1,
-): Promise<boolean> {
+): Promise<InstallationManifestV2 | null> {
   const manifestPath = plan.manifest.manifestPath;
   try {
     const rows = await request.reader.inventoryExactNamespaces([manifestPath]);
     const file = rows.find((row) => row.path === manifestPath && row.kind === "regular_file");
-    if (file === undefined || plan.manifest.after.state !== "present") return false;
+    if (file === undefined || plan.manifest.after.state !== "present") return null;
     const bytes = await request.reader.readRegularFile(file, plan.manifest.maximumPlanBytes);
-    if (hashBytes(bytes) !== plan.manifest.after.hash) return false;
-    validateManifestV2(decodeCanonicalJson(bytes, plan.manifest.maximumPlanBytes), {
+    if (hashBytes(bytes) !== plan.manifest.after.hash) return null;
+    return validateManifestV2(decodeCanonicalJson(bytes, plan.manifest.maximumPlanBytes), {
       evidence: createCanonicalPathEvidence(),
       sourceRoot: plan.payloads.find((row) => row.source.kind === "guarded_package_file")?.source.kind === "guarded_package_file"
         ? (plan.payloads.find((row) => row.source.kind === "guarded_package_file")?.source as { readonly packageRoot: CanonicalAbsolutePathV1 }).packageRoot
@@ -592,9 +623,8 @@ async function exactV2Handoff(
         reason: "retained manifest bytes are hash-pinned to plan.manifest.after.hash before this call; no live owner authority exists for a historical plan",
       }),
     });
-    return true;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -688,6 +718,71 @@ async function exactRestoredBase(
   }
 }
 
+type BootstrapEnvelopeReadV1 =
+  | { readonly state: "plan_unverified"; readonly id: FreshV2InitIdV1 }
+  | {
+      readonly state: "slots_unbound";
+      readonly id: FreshV2InitIdV1;
+      readonly plan: FreshV2InitPlanV1;
+      readonly slots: readonly BootstrapEvidenceGuardedEntryV1[];
+    }
+  | {
+      readonly state: "slots_read";
+      readonly id: FreshV2InitIdV1;
+      readonly plan: FreshV2InitPlanV1;
+      readonly slots: readonly BootstrapEvidenceGuardedEntryV1[];
+      readonly values: readonly [unknown, unknown];
+      readonly selection: BootstrapJournalSelectionV1 | null;
+    };
+
+async function readBootstrapEnvelope(
+  request: BootstrapEvidenceInspectionRequestV1,
+  planEntry: BootstrapEvidenceGuardedEntryV1,
+): Promise<BootstrapEnvelopeReadV1> {
+  const id = FRESH_PLAN.exec(basename(planEntry.path))?.[1] as FreshV2InitIdV1 | undefined;
+  if (id === undefined) throw new Error("bootstrap evidence plan filename is malformed");
+  let plan: FreshV2InitPlanV1;
+  try {
+    const value = decodeCanonicalJson(await request.reader.readRegularFile(planEntry, MAX_PLAN_BYTES), MAX_PLAN_BYTES);
+    plan = request.validatePlan(value) as FreshV2InitPlanV1;
+    if (plan.id !== id || plan.planPath !== planEntry.path) throw new Error("bootstrap plan identity is unbound");
+  } catch {
+    return { state: "plan_unverified", id };
+  }
+  const slots = await request.reader.inventoryExactNamespaces(plan.journalSlots.map((slot) => slot.path));
+  const slotEntries = plan.journalSlots.map((slot) => slots.find((candidate) => candidate.path === slot.path) ?? null);
+  if (
+    slotEntries.some((candidate) => candidate === null || candidate.kind !== "regular_file") ||
+    slotEntries.some((candidate, ordinal) => !identityMatches(candidate as BootstrapEvidenceGuardedEntryV1, plan.journalSlots[ordinal] as FreshV2InitPlanV1["journalSlots"][number]))
+  ) {
+    return { state: "slots_unbound", id, plan, slots };
+  }
+  const values = await Promise.all(slotEntries.map(async (candidate, ordinal) => {
+    const value = candidate as BootstrapEvidenceGuardedEntryV1;
+    if (value.bytes === "0") return null;
+    const bytes = await request.reader.readRegularFile(value, plan.journalSlots[ordinal]?.mode === 0o600 ? plan.maximumJournalBytes : 0);
+    /**
+     * A slot half-written by a death mid-advance is not authority; the other
+     * complete slot still is, and when neither is, the branch below resumes the
+     * envelope through its plan-bound descriptors. Letting `decodeCanonicalJson`
+     * throw out of here instead killed `init`, `doctor` and `uninstall` outright
+     * on the one crash window this envelope exists to survive.
+     */
+    try {
+      return decodeCanonicalJson(bytes, plan.maximumJournalBytes);
+    } catch {
+      return null;
+    }
+  })) as unknown as readonly [unknown, unknown];
+  let selection: BootstrapJournalSelectionV1 | null;
+  try {
+    selection = request.validateSlots(plan, values);
+  } catch {
+    selection = null;
+  }
+  return { state: "slots_read", id, plan, slots, values, selection };
+}
+
 async function inspectPlan(
   request: BootstrapEvidenceInspectionRequestV1,
   planEntry: BootstrapEvidenceGuardedEntryV1,
@@ -702,15 +797,9 @@ async function inspectPlan(
   readonly blocksNewIntent: boolean;
   readonly verifiedEnvelope: BootstrapEvidenceAdmissionV1["retainedEnvelopes"][number] | null;
 }> {
-  const match = FRESH_PLAN.exec(basename(planEntry.path));
-  const id = match?.[1] as FreshV2InitIdV1 | undefined;
-  if (id === undefined) throw new Error("bootstrap evidence plan filename is malformed");
-  let plan: FreshV2InitPlanV1;
-  try {
-    const value = decodeCanonicalJson(await request.reader.readRegularFile(planEntry, MAX_PLAN_BYTES), MAX_PLAN_BYTES);
-    plan = request.validatePlan(value) as FreshV2InitPlanV1;
-    if (plan.id !== id || plan.planPath !== planEntry.path) throw new Error("bootstrap plan identity is unbound");
-  } catch {
+  const envelope = await readBootstrapEnvelope(request, planEntry);
+  const { id } = envelope;
+  if (envelope.state === "plan_unverified") {
     return {
       summary: {
         id,
@@ -730,17 +819,8 @@ async function inspectPlan(
       blocksNewIntent: false,
     };
   }
-  const slotEntries = plan.journalSlots.map((slot) =>
-    (slot.path === planEntry.path ? planEntry : undefined) ?? null,
-  );
-  const initial = await request.reader.inventoryExactNamespaces(plan.journalSlots.map((slot) => slot.path));
-  for (const [ordinal, slot] of plan.journalSlots.entries()) {
-    slotEntries[ordinal] = initial.find((candidate) => candidate.path === slot.path) ?? null;
-  }
-  if (
-    slotEntries.some((candidate) => candidate === null || candidate.kind !== "regular_file") ||
-    slotEntries.some((candidate, ordinal) => !identityMatches(candidate as BootstrapEvidenceGuardedEntryV1, plan.journalSlots[ordinal] as FreshV2InitPlanV1["journalSlots"][number]))
-  ) {
+  const { plan, slots: initial } = envelope;
+  if (envelope.state === "slots_unbound") {
     const counted = sumEntries([planEntry, ...initial]);
     return {
       summary: { id, status: "unverified", operation: "fresh_v2_init", terminalOutcome: null, vaultPath: plan.planPath, entryCount: counted.entries, regularFileBytes: counted.bytes.toString() as UInt64DecimalV1 },
@@ -753,29 +833,8 @@ async function inspectPlan(
       blocksNewIntent: false,
     };
   }
-  const slotValues = await Promise.all(slotEntries.map(async (candidate, ordinal) => {
-    const value = candidate as BootstrapEvidenceGuardedEntryV1;
-    if (value.bytes === "0") return null;
-    const bytes = await request.reader.readRegularFile(value, plan.journalSlots[ordinal]?.mode === 0o600 ? plan.maximumJournalBytes : 0);
-    /**
-     * A slot half-written by a death mid-advance is not authority; the other
-     * complete slot still is, and when neither is, the branch below resumes the
-     * envelope through its plan-bound descriptors. Letting `decodeCanonicalJson`
-     * throw out of here instead killed `init`, `doctor` and `uninstall` outright
-     * on the one crash window this envelope exists to survive.
-     */
-    try {
-      return decodeCanonicalJson(bytes, plan.maximumJournalBytes);
-    } catch {
-      return null;
-    }
-  })) as unknown as readonly [unknown, unknown];
-  let selection: BootstrapJournalSelectionV1 | null;
-  try {
-    selection = request.validateSlots(plan, slotValues);
-  } catch {
-    selection = null;
-  }
+  const slotValues = envelope.values;
+  let selection = envelope.selection;
   if (selection === null) {
     const counted = sumEntries([planEntry, ...initial]);
     /**
@@ -1017,7 +1076,7 @@ async function inspectPlan(
    * outlives what it installed and must stop counting as the current install.
    */
   const handoffIntact = terminalRetained && retainedOutcome === "finalized" &&
-    await exactV2Handoff(request, plan);
+    await exactV2Handoff(request, plan) !== null;
   const inert = terminalRetained && retainedOutcome !== null && (
     handoffIntact ||
     await exactRestoredBase(
@@ -1229,4 +1288,141 @@ export function assertCombinedBootstrapCapacity(
     aggregate.entryCount + projected.entryCount > BOOTSTRAP_RETAINED_MAX_ENTRIES ||
     BigInt(aggregate.regularFileBytes) + BigInt(projected.regularFileBytes) > BOOTSTRAP_RETAINED_MAX_REGULAR_BYTES
   ) throw new Error("retained bootstrap aggregate capacity exceeded; archive retained bootstrap evidence manually");
+}
+
+function isNonTerminal(envelope: BootstrapEnvelopeReadV1): boolean {
+  if (envelope.state !== "slots_read") return false;
+  return envelope.selection === null
+    ? envelope.values.every((value) => value === null)
+    : envelope.selection.current.terminalOutcome === null;
+}
+
+export async function assertBootstrapClosureTerminal(
+  request: BootstrapEvidenceInspectionRequestV1,
+): Promise<readonly BootstrapEnvelopeReadV1[]> {
+  let envelopes: readonly BootstrapEnvelopeReadV1[];
+  try {
+    const plans = (await request.reader.inventoryExactNamespaces([request.stateDirectory]))
+      .filter((candidate) => candidate.kind === "regular_file" && FRESH_PLAN.test(basename(candidate.path)));
+    envelopes = await Promise.all(plans.map((plan) => readBootstrapEnvelope(request, plan)));
+  } catch {
+    throw new BootstrapRecoveryRequiredError("bootstrap evidence could not be read");
+  }
+  if (envelopes.some(isNonTerminal)) {
+    throw new BootstrapRecoveryRequiredError("an interrupted bootstrap must be resumed by init");
+  }
+  return envelopes;
+}
+
+const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;
+const MAX_ALLOCATOR_BYTES = 1024;
+const MAX_RELEASE_RECORD_BYTES = 16 * 1024;
+
+function lifecycleAllocatorNonce(bytes: Uint8Array): LowerHexSha256 {
+  const allocator = record(decodeCanonicalJson(bytes, MAX_ALLOCATOR_BYTES));
+  if (
+    allocator === null || allocator.schemaVersion !== 1 ||
+    Object.keys(allocator).sort().join() !== "installNonce,nextCounter,schemaVersion"
+  ) throw new Error("lifecycle allocator is malformed");
+  parseUInt64Decimal(allocator.nextCounter);
+  return parseLowerHexSha256(allocator.installNonce);
+}
+
+const HANDOFF_SCHEMAS: ManagedArtifactSchemaRegistry = {
+  validate: (schemaId, bytes) => {
+    if (schemaId === "developer-os-config-v1") {
+      loadConfig(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    } else if (schemaId === "lifecycle-id-allocator-v1") {
+      lifecycleAllocatorNonce(bytes);
+    } else if (schemaId === "active-release-record-v1") {
+      validateActiveReleaseRecord(decodeCanonicalJson(bytes, MAX_RELEASE_RECORD_BYTES), createCanonicalPathEvidence());
+    } else {
+      validateReleaseTrustState(decodeCanonicalJson(bytes, MAX_RELEASE_RECORD_BYTES));
+    }
+  },
+};
+
+function declaresSchemaVersion1(bytes: Uint8Array): boolean {
+  try {
+    return record(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)))?.schemaVersion === 1;
+  } catch {
+    return false;
+  }
+}
+
+async function guardedFile(
+  request: BootstrapEvidenceInspectionRequestV1,
+  path: string,
+): Promise<BootstrapEvidenceGuardedEntryV1 | null> {
+  const [entry] = await request.reader.inventoryExactNamespaces([path as CanonicalAbsolutePathV1]);
+  return entry?.path === path && entry.kind === "regular_file" ? entry : null;
+}
+
+async function admitExactV2Handoff(
+  request: BootstrapEvidenceInspectionRequestV1,
+  drift: Pick<DriftRequestV2, "fs" | "guards">,
+): Promise<InstallationManifestV2> {
+  const manifestFile = await guardedFile(request, join(request.productHome, "installation-manifest.json"));
+  if (manifestFile === null) throw incompleteHandoff();
+  if (declaresSchemaVersion1(await request.reader.readRegularFile(manifestFile, MAX_MANIFEST_BYTES))) {
+    throw new ManifestV1RefusalError();
+  }
+  const handoffs: { readonly plan: FreshV2InitPlanV1; readonly manifest: InstallationManifestV2 }[] = [];
+  for (const envelope of await assertBootstrapClosureTerminal(request)) {
+    if (envelope.state !== "slots_read" || envelope.selection?.current.terminalOutcome !== "finalized") continue;
+    const manifest = await exactV2Handoff(request, envelope.plan);
+    if (manifest !== null) handoffs.push({ plan: envelope.plan, manifest });
+  }
+  const [handoff] = handoffs;
+  if (handoff === undefined || handoffs.length !== 1) throw incompleteHandoff();
+
+  const ownerUid = handoff.plan.bootstrapIdentity.ownerUid;
+  const drifted = await inspectDrift({
+    ...drift,
+    manifest: handoff.manifest,
+    schemas: HANDOFF_SCHEMAS,
+    ephemerals: {
+      validate: (owner, observed) => {
+        if (owner !== "core" || observed.uid !== ownerUid || observed.mode !== 0o600 || observed.nlink !== 1) {
+          throw new Error("runtime reservation changed shape");
+        }
+      },
+    },
+  });
+  if (drifted.length > 0) throw incompleteHandoff();
+
+  const state = request.stateDirectory;
+  const nonce = await guardedFile(request, join(state, "lifecycle-install-nonce"));
+  const allocator = await guardedFile(request, join(state, "lifecycle-id-allocator.json"));
+  if (nonce === null || allocator === null) throw incompleteHandoff();
+  const nonceText = new TextDecoder().decode(await request.reader.readRegularFile(nonce, 65));
+  const allocatorNonce = lifecycleAllocatorNonce(await request.reader.readRegularFile(allocator, MAX_ALLOCATOR_BYTES));
+  if (nonceText !== `${allocatorNonce}\n`) throw incompleteHandoff();
+  if (await guardedFile(request, join(state, ".lifecycle.lock")) === null) throw incompleteHandoff();
+  if (await guardedFile(request, join(state, "lifecycle-activation.json")) !== null) throw incompleteHandoff();
+  for (const name of ["update-rollback.json", "update-executor.json"]) {
+    const reservation = await guardedFile(request, join(state, name));
+    if (reservation !== null && reservation.bytes !== "0") throw incompleteHandoff();
+  }
+  for (const name of ["lifecycle-journals", "git-effect-journals", "launchd-effect-journals", "rollback"]) {
+    const directory = await request.projectPostimage(join(state, name) as CanonicalAbsolutePathV1);
+    if (directory?.kind !== "directory_tree" || directory.entryCount !== 0) throw incompleteHandoff();
+  }
+  return handoff.manifest;
+}
+
+function incompleteHandoff(): BootstrapRecoveryRequiredError {
+  return new BootstrapRecoveryRequiredError("the installation is not a complete V2 handoff");
+}
+
+export async function admitV2Handoff(
+  request: BootstrapEvidenceInspectionRequestV1,
+  drift: Pick<DriftRequestV2, "fs" | "guards">,
+): Promise<InstallationManifestV2> {
+  try {
+    return await admitExactV2Handoff(request, drift);
+  } catch (error) {
+    if (error instanceof ManifestV1RefusalError || error instanceof BootstrapRecoveryRequiredError) throw error;
+    throw incompleteHandoff();
+  }
 }

@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   createCommandFixture,
   firstRegularFile,
+  inventoryDigest,
   REAL_FILESYSTEM_TIMEOUT_MS,
   removeCommandFixtures,
   retainedTombstones,
@@ -355,6 +356,80 @@ describe("run", () => {
 
     expect(code).toBe(2);
   });
+});
+
+const NON_INIT_COMMANDS = [
+  ["status"],
+  ["doctor"],
+  ["uninstall", "--yes"],
+  ["repair", "--resume", "tx_fixture_001"],
+  ["capture", "--text", "synthetic observation"],
+  ["review"],
+  ["ingest", "--yes"],
+  ["brain", "status"],
+  ["search", "synthetic"],
+] as const;
+
+function lastJsonError(lines: string[]): { readonly code: number; readonly kind: string | null } {
+  const parsed = JSON.parse(lines.at(-1) ?? "null") as {
+    readonly code: number;
+    readonly error?: { readonly kind: string };
+  };
+  lines.length = 0;
+  return { code: parsed.code, kind: parsed.error?.kind ?? null };
+}
+
+describe("dispatch around a bootstrap envelope", () => {
+  it("refuses every non-init command while a fresh V2 envelope is non-terminal, and none after init completes the handoff", async () => {
+    const fixture = await createCommandFixture("main-bootstrap-recovery", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_manifest_publish",
+    });
+    const invoke = (argv: readonly string[], context = fixture.context) =>
+      run(argv, fixture.io, () => context);
+    expect(await invoke(["init", "--yes"])).not.toBe(0);
+    fixture.io.out.length = 0;
+    const before = await inventoryDigest(fixture.root);
+
+    for (const argv of NON_INIT_COMMANDS) {
+      expect(await invoke([...argv, "--json"]), argv.join(" ")).toBe(6);
+      expect(lastJsonError(fixture.io.out), argv.join(" ")).toStrictEqual({
+        code: 6,
+        kind: "bootstrap_recovery_required",
+      });
+    }
+
+    expect(await inventoryDigest(fixture.root)).toEqual(before);
+    expect(fixture.vendorProcesses).toStrictEqual([]);
+    const bootstrap = fixture.context.bootstrap;
+    if (bootstrap?.state !== "available") throw new Error("bootstrap fixture is unavailable");
+    await bootstrap.executor.close();
+    fixture.disableBootstrapInterrupt();
+    const resumed = fixture.rebuildContext();
+    expect(await invoke(["init", "--yes", "--json"], resumed)).toBe(0);
+    fixture.io.out.length = 0;
+
+    for (const argv of NON_INIT_COMMANDS) {
+      await invoke([...argv, "--json"], resumed);
+      expect(lastJsonError(fixture.io.out).kind, argv.join(" ")).not.toBe("bootstrap_recovery_required");
+    }
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("keeps Foundation commands working over a shipped V1 manifest while init refuses it", async () => {
+    const shipped = await createHarness("main-v1-with-capability-seed");
+    expect(await shipped.invoke(["init", "--yes"])).toBe(0);
+    const available = await createCommandFixture("main-v1-with-capability", {
+      root: shipped.fixture.root,
+      bootstrapAvailable: true,
+    });
+    const invoke = (argv: readonly string[]) => run(argv, available.io, () => available.context);
+
+    expect(await invoke(["init", "--yes", "--json"])).toBe(4);
+    expect(lastJsonError(available.io.out)).toStrictEqual({ code: 4, kind: "manifest_v1_not_migratable" });
+    expect(await invoke(["status", "--json"])).toBe(0);
+    expect(await invoke(["doctor", "--json"])).toBe(0);
+    expect(await invoke(["uninstall", "--dry-run", "--json"])).toBe(0);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 
 describe("capture dispatch", () => {

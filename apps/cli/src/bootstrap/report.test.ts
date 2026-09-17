@@ -3,7 +3,7 @@ import { basename, dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { deriveBootstrapRetentionLocations } from "@developer-os/core";
+import { deriveBootstrapRetentionLocations, EXIT_CODES } from "@developer-os/core";
 import type { CanonicalAbsolutePathV1, UInt64DecimalV1 } from "@developer-os/core";
 
 import { runInit } from "../commands/init.js";
@@ -14,7 +14,7 @@ import {
   NodeBootstrapEvidenceGuardedReader,
 } from "./context.js";
 import type { BootstrapEvidenceGuardedEntryV1, BootstrapEvidenceGuardedReaderV1 } from "./report.js";
-import { inspectBootstrapEvidence, inspectBootstrapEvidenceAdmission } from "./report.js";
+import { admitV2Handoff, inspectBootstrapEvidence, inspectBootstrapEvidenceAdmission } from "./report.js";
 import { projectBootstrapRetentionPostimage, projectRetainedDirectoryTreeOnce } from "./retention.js";
 
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
@@ -360,5 +360,127 @@ describe("inspectBootstrapEvidence", () => {
     }
 
     expect(largeArrayFindCalls).toBe(2);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
+describe("admitV2Handoff", () => {
+  function admit(fixture: Awaited<ReturnType<typeof createCommandFixture>>) {
+    return admitV2Handoff(requestFor(fixture), {
+      fs: fixture.context.fs,
+      guards: fixture.context.guards.manifest,
+    });
+  }
+
+  it("refuses a manifest the shipped V1 init produced", async () => {
+    const fixture = await createCommandFixture("handoff-v1-manifest");
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+
+    await expect(admit(fixture)).rejects.toMatchObject({
+      code: EXIT_CODES.capabilityUnavailable,
+      reason: "manifest_v1_not_migratable",
+    });
+  });
+
+  it("admits exactly the complete handoff and refuses a non-terminal envelope and each missing member", async () => {
+    const fixture = await createCommandFixture("handoff-members", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_verify",
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
+    await expect(admit(fixture)).rejects.toMatchObject({
+      code: EXIT_CODES.recoveryRequired,
+      name: "BootstrapRecoveryRequiredError",
+    });
+    const bootstrap = fixture.context.bootstrap;
+    if (bootstrap?.state !== "available") throw new Error("bootstrap fixture is unavailable");
+    await bootstrap.executor.close();
+    fixture.disableBootstrapInterrupt();
+    expect((await runInit(fixture.rebuildContext(), ACCEPTED)).ok).toBe(true);
+    await expect(admit(fixture)).resolves.toMatchObject({ schemaVersion: 2 });
+
+    const state = fixture.paths.stateDir;
+    const release = join(fixture.paths.home, "releases");
+    const refusesWhile = async (label: string, change: () => Promise<void>, restore: () => Promise<void>) => {
+      await change();
+      try {
+        await expect(admit(fixture), label).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+      } finally {
+        await restore();
+      }
+    };
+    const missing = [
+      fixture.paths.manifestFile,
+      join(fixture.paths.home, "schemas", "ingest.stage.schema.json"),
+      join(state, "lifecycle-install-nonce"),
+      join(state, "lifecycle-id-allocator.json"),
+      join(state, ".lifecycle.lock"),
+      join(state, "lifecycle-journals"),
+      join(state, "git-effect-journals"),
+      join(state, "launchd-effect-journals"),
+      join(state, "active-release.json"),
+      join(state, "release-trust.json"),
+      join(release, "metadata", "release-index.json"),
+      join(release, "1.0.0", "darwin-arm64", "bin", "developer-os"),
+      join(state, "rollback"),
+    ];
+    const present = [
+      join(state, "update-rollback.json"),
+      join(state, "update-executor.json"),
+      join(state, "lifecycle-activation.json"),
+      join(state, "rollback", "synthetic-payload"),
+      join(state, "lifecycle-journals", "synthetic-journal.json"),
+    ];
+    expect(missing.length).toBeGreaterThan(0);
+    expect(present.length).toBeGreaterThan(0);
+
+    for (const path of missing) {
+      await refusesWhile(
+        `missing ${path}`,
+        () => nodeFs.rename(path, `${path}.hidden`),
+        () => nodeFs.rename(`${path}.hidden`, path),
+      );
+    }
+    for (const path of present) {
+      const original = await nodeFs.readFile(path).catch(() => null);
+      await refusesWhile(
+        `record at ${path}`,
+        () => nodeFs.writeFile(path, "synthetic record\n", { mode: 0o600 }),
+        () => original === null ? nodeFs.rm(path) : nodeFs.writeFile(path, original),
+      );
+    }
+    const bundleFile = join(release, "1.0.0", "darwin-arm64", "bin", "developer-os");
+    const bundleBytes = await nodeFs.readFile(bundleFile);
+    await refusesWhile(
+      "drifted bundle file",
+      () => nodeFs.writeFile(bundleFile, Buffer.from(bundleBytes.toString("utf8").replace("exit 0", "exit 1"))),
+      () => nodeFs.writeFile(bundleFile, bundleBytes),
+    );
+    const allocatorFile = join(state, "lifecycle-id-allocator.json");
+    const allocatorBytes = await nodeFs.readFile(allocatorFile);
+    const nonce = (await nodeFs.readFile(join(state, "lifecycle-install-nonce"), "utf8")).trim();
+    const allocatorWith = (installNonce: string, nextCounter: string) =>
+      `{"installNonce":"${installNonce}","nextCounter":"${nextCounter}","schemaVersion":1}\n`;
+    await refusesWhile(
+      "allocator bound to another install nonce",
+      () => nodeFs.writeFile(allocatorFile, allocatorWith("0".repeat(64), "0")),
+      () => nodeFs.writeFile(allocatorFile, allocatorBytes),
+    );
+    await nodeFs.writeFile(allocatorFile, allocatorWith(nonce, "7"));
+    await expect(admit(fixture), "allocator counter after zero").resolves.toMatchObject({ schemaVersion: 2 });
+    await nodeFs.writeFile(allocatorFile, allocatorBytes);
+    const manifestBytes = await nodeFs.readFile(fixture.paths.manifestFile);
+    const manifest = JSON.parse(manifestBytes.toString("utf8")) as { artifacts: { readonly path: string }[] };
+    const reservation = join(state, "git-sync.json");
+    expect(manifest.artifacts.some((artifact) => artifact.path === reservation)).toBe(true);
+    await refusesWhile(
+      "manifest without a runtime reservation",
+      () => nodeFs.writeFile(fixture.paths.manifestFile, `${JSON.stringify({
+        ...manifest,
+        artifacts: manifest.artifacts.filter((artifact) => artifact.path !== reservation),
+      })}\n`),
+      () => nodeFs.writeFile(fixture.paths.manifestFile, manifestBytes),
+    );
+
+    await expect(admit(fixture)).resolves.toMatchObject({ schemaVersion: 2 });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

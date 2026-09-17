@@ -263,6 +263,35 @@ describe("runInit", () => {
     expect(initialized.ok && initialized.data.schemaVersion).toBe(2);
   });
 
+  it("refuses a shipped V1 installation once the packaged capability is available, and keeps the V1 path without it", async () => {
+    const shipped = await createCommandFixture("init-v1-not-migratable-seed");
+    expect((await runInit(shipped.context, ACCEPTED)).ok).toBe(true);
+    const available = await createCommandFixture("init-v1-not-migratable", {
+      root: shipped.root,
+      bootstrapAvailable: true,
+    });
+    const before = await inventoryDigest(shipped.root);
+
+    for (const options of [{ dryRun: true, assumeYes: true }, ACCEPTED]) {
+      const refused = await runInit(available.context, options);
+
+      expect(refused.ok).toBe(false);
+      if (refused.ok) return;
+      expect(refused.code).toBe(EXIT_CODES.capabilityUnavailable);
+      expect(refused.error.kind).toBe("manifest_v1_not_migratable");
+      expect(refused.error.recovery).toBe("developer-os uninstall, then developer-os init");
+    }
+    expect(await inventoryDigest(shipped.root)).toEqual(before);
+    expect(available.bootstrapTrace).toStrictEqual([]);
+
+    const unchanged = await runInit(shipped.rebuildContext(), ACCEPTED);
+
+    expect(unchanged.ok).toBe(true);
+    if (!unchanged.ok) return;
+    expect(unchanged.data.schemaVersion).toBe(1);
+    expect(unchanged.data.created).toStrictEqual([]);
+  });
+
   it("starts a distinct durable bootstrap beside an untouched noncanonical pre-plan envelope", async () => {
     const fixture = await createCommandFixture("init-bootstrap-pre-plan-residue", {
       bootstrapAvailable: true,
