@@ -32,8 +32,16 @@ export type {
   RenameAtxRunResultV1,
   RenameSameParentNoReplace,
 } from "./retained-rename.js";
+export { MacOsStableLockProvider } from "./stable-lock.js";
+export type {
+  MacOsStableLockDependencies,
+  MacOsStableLockFileSystem,
+} from "./stable-lock.js";
 export {
+  EX_TEMPFAIL,
   MacOsTransactionLockOperationalError,
   MacOsTransactionLockProvider,
   MacOsTransactionLockUnavailableError,
+  SpawnLockfRunner,
 } from "./transaction-lock.js";
+export type { LockfResult, LockfRunner } from "./transaction-lock.js";

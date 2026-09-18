@@ -16,7 +16,7 @@ import type {
 
 const LOCKF_PATH = "/usr/bin/lockf";
 const CHILD_LOCK_FD = 3;
-const EX_TEMPFAIL = 75;
+export const EX_TEMPFAIL = 75;
 
 interface FileIdentity {
   readonly dev: number;

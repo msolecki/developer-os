@@ -1174,7 +1174,7 @@ export class MacOsStableLockProvider implements LifecycleStableLockProviderV1 {
 }
 ```
 
-- [ ] **Step 1: Write failing provider tests**
+- [x] **Step 1: Write failing provider tests**
 
 ```ts
 it("refuses an absent lock path without creating it or its parent", async () => {
@@ -1208,17 +1208,17 @@ it("drains in order under one absolute deadline and releases everything on timeo
 
 Cover: a symlink, directory, FIFO, mode `0644`, size 1, `nlink` 2, or a foreign owner at the path refuses `LifecycleLockShapeError` without running `lockf`; the open flags never include `O_CREAT` (assert through an injected `fs.open` that records flags); an identity swap between `lstat` and `open`, or after `lockf` returns, refuses shape and closes the descriptor; the parent's mode is never changed (compare before and after); `acquireExistingWithin([])` returns `[]`; paths are acquired in the given order and never re-sorted; a lease path removed mid-drain refuses `LifecycleLockMissingError` and releases what was held; the real `SpawnLockfRunner` proves busy detection between two providers in one process.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root packages/platform-macos src/stable-lock.test.ts`
 
 Expected: FAIL — `stable-lock.ts` and `locks.ts` do not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
-Rules: `lstat` first and require an owner `0600` zero-byte single-link regular file; `open(path, O_RDWR | O_NOFOLLOW)`; `fstat` identity equal to the `lstat`; `runner.acquire(handle.fd)`; `EX_TEMPFAIL` with no signal is busy; after acquisition recheck `lstat` and `fstat` identity; release closes the descriptor exactly once. No `mkdir`, no `chmod`. `acquireExistingWithin` retries only busy errors, sleeping `LIFECYCLE_LOCK_RETRY_MS` until `nowMs() >= deadlineMs`, then makes one final non-blocking attempt per remaining path before refusing.
+Rules: `lstat` first and require an owner `0600` zero-byte single-link regular file; `open(path, O_RDWR | O_NOFOLLOW)`; `fstat` identity equal to the `lstat`; `runner.acquire(handle.fd)`; `EX_TEMPFAIL` with no signal is busy; after acquisition recheck `lstat` and `fstat` identity; release closes the descriptor exactly once. No `mkdir`, no `chmod`. `acquireExistingWithin` retries only busy errors, sleeping `LIFECYCLE_LOCK_RETRY_MS` while `nowMs() < deadlineMs`; the attempt that straddles the deadline is the one final non-blocking attempt, and its refusal propagates. Corrected 2026-09-18 from "one final non-blocking attempt per remaining path": the walk stops at the first still-busy path and never skips ahead to a later lease, because §2.3 forbids inverting lock order.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root packages/platform-macos src/stable-lock.test.ts src/transaction-lock.test.ts`
 
@@ -1226,7 +1226,7 @@ Run: `npx vitest run --root packages/core src/index.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Tick, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 

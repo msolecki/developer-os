@@ -68,6 +68,19 @@ export type {
   LifecycleLedgerBoundsV1,
 } from "./ids.js";
 export {
+  LIFECYCLE_LEASE_DRAIN_MS,
+  LIFECYCLE_LOCK_RETRY_MS,
+  LifecycleLockBusyError,
+  LifecycleLockMissingError,
+  LifecycleLockShapeError,
+  LifecycleLockUnavailableError,
+} from "./locks.js";
+export type {
+  HeldLifecycleStableLockV1,
+  LifecycleLockDeadlineV1,
+  LifecycleStableLockProviderV1,
+} from "./locks.js";
+export {
   encodeLifecycleIdAllocator,
   encodeUninstallingMarker,
   parseLifecycleBootstrapLock,
