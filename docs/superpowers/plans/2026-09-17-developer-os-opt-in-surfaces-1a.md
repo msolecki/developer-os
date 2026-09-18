@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Tasks:** 26 tasks (1–25 plus 10b). Task 10b was inserted after Task 10 by founder decision D31 (2026-09-18) and numbered `10b` rather than `11` so that every later task number and every cross-reference in this plan stays exactly as written.
+
 **Goal:** Ship Spec 1a — `config get|set`, the lifecycle coordinator with proven recovery and bounded terminal collection, and a drained V2 uninstall — against the amended Spec 1, with no Git, launchd, or network effect.
 
 **Architecture:** Core owns strict lifecycle configuration records, allocated IDs, the four-root ledger closure, absent-manifest inspection, the Foundation participant bridge, and the generic coordinator/recovery engine, all parameterised by injected leaf codecs and one guarded filesystem port. `platform-macos` adds a stable lock provider that never creates a lock file. The CLI composes the concrete execution-plan codec (Git, launchd and push arms typed but refused until plan 1b), a mutation gate every Foundation mutator passes through on a V2 home, `config get|set`, and the uninstall arms. Production `init` still writes V1 until roadmap Phase 4b; every V2 behaviour here is proven through the packaged-capability fixture.
@@ -26,6 +28,7 @@ Recorded in the roadmap's 2026-09-17 table; A14–A16 are in Spec 1 in place.
 - **D27.** Absent-manifest uninstall applies §6 literally: after a V1 `uninstall`, leftover V1 Foundation residue refuses with exit 6 and D20's archive guidance. No spec change; the tests pinning a second successful uninstall are rewritten.
 - **D28 (Spec 1 A16).** The allocated `mf_` manifest participant ID is reserved last in a composite's contiguous ID block.
 - **D29.** NEW-80 (D19's release layout move) is in plan 1a Task 1, not Phase 4b.
+- **D31 (2026-09-18).** Every recorded filesystem identity is corrected to exact 64-bit stats inside this plan as new Task 10b, not deferred to Phase 4b. Number-valued `Stats.ino` rounds above 2^53 — up to 128 APFS inodes collapse onto one recorded identity — and Spec 1 §2.4 forbids that by name. Inserted as `10b` so no later task renumbers.
 
 ## Global Constraints
 
@@ -36,7 +39,7 @@ Recorded in the roadmap's 2026-09-17 table; A14–A16 are in Spec 1 in place.
 - **Push rule (D17).** Before each commit run `gh run list --branch development --limit 1 --json status,conclusion,headSha`: a completed run with conclusion `failure` stops new commits until fixed. After the commit, push to `development` only when no run is `queued` or `in_progress`; otherwise push it with the next commit. Never merge.
 - **Staging.** Stage exact paths only; never `git add -A`, `git add .`, or a wildcard. Confirm with `git diff --cached --name-only` before committing.
 - **`docs/superpowers/` is globally gitignored.** New files there need `git add -f`, and `git add` of those paths exits 1 even for tracked files. Put that `git add -f` on its own line; never chain it with `&&` into `git commit`.
-- **Per-task bookkeeping.** Each task's commit ticks that task's steps in this file and rewrites the one `ORDER.md` NOW sentence beginning `Plan 1a progress:` (added with this plan as "no task committed; next is Task 1 (…)") to `Plan 1a progress: Tasks 1–N of 25 committed; next is Task N+1 (<title>).`
+- **Per-task bookkeeping.** Each task's commit ticks that task's steps in this file and rewrites the one `ORDER.md` NOW sentence beginning `Plan 1a progress:` (added with this plan as "no task committed; next is Task 1 (…)") to `Plan 1a progress: Tasks 1–N of 26 committed; next is Task N+1 (<title>).` Task 10b takes the place of "Task 11" in that sequence for one commit (`Tasks 1–10b of 26`).
 - **Citations gate.** `tests/repository/citations.test.ts` checks every `path:line` citation in tracked documents. Cite a line outside a fenced block only when it exists and stays in range; otherwise name the symbol.
 - **Comments.** Add no code comment unless it records a non-obvious platform fact, a dated past bug, or a rejected alternative someone would otherwise restore. Do not strip existing comments.
 - **Package direction.** `core ← security ← platform-macos ← cli`. Core imports no CLI, platform, Security or Brain module; platform code receives filesystem, process, clock and lock dependencies.
@@ -1297,7 +1300,7 @@ export async function reserveLifecycleIdBlock(dependencies: {
 }, size: number): Promise<LifecycleIdBlockV1>;
 ```
 
-- [ ] **Step 1: Write failing allocator and port tests**
+- [x] **Step 1: Write failing allocator and port tests**
 
 ```ts
 it("advances the allocator durably before exposing any ID", async () => {
@@ -1320,23 +1323,23 @@ it.each(["temp_created", "temp_written", "temp_synced", "old_rechecked"] as cons
 
 Cover: the temp name is exactly `.lifecycle-id-allocator.<lowercase-v4-uuid>.json.tmp`; an empty, partial, or complete temp is cleanable only with a canonical old allocator, nonce agreement, unchanged `state` and final identities, and the temp an owner `0600` single-link file of 0..1,024 bytes; two temps, a wrong name, a 1,025-byte temp, a temp symlink, `nlink` 2, a nonce/allocator disagreement, a counter lower than an existing allocated ID the caller supplies, and a replaced final identity each throw `LifecycleRecoveryRequiredError` and delete nothing; `nextCounter` `18446744073709551615`, and a block whose addition overflows, refuse before any temp exists; `held.path` other than `<state>/.lifecycle.lock` refuses; a block of size 0 refuses. Port (real filesystem): `writeExclusive` refuses an existing path; `renameNoReplace` refuses an existing destination and leaves both; `unlinkExact` and `rmdirExactEmpty` refuse an identity that changed since `lstat`; `names` refuses a directory whose identity changes during iteration; `hashRegular` of a 20-MiB sparse file never holds more than one 1-MiB chunk (spy on the read buffer size). In-memory port (`testing.ts`): every method matches the Node port on a small physical tree (the A8 agreement fixture later tasks reuse).
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root packages/core src/lifecycle/allocator.test.ts src/lifecycle/guarded-fs.test.ts`
 
 Expected: FAIL — the modules do not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Reservation order: guarded-read nonce and allocator and require agreement; compute `next = old + size` in `bigint` and refuse overflow; `writeExclusive` the temp with the canonical postimage; sync; recheck the old allocator identity and hash; `renameOver`; `syncDirectory(state)`; return the block. The Node port implements `renameNoReplace` for regular files by computing the `regular_file` postimage and delegating to the injected `PublishBootstrapInitialJournalNoReplace` (the CLI injects `publishBootstrapInitialJournalNoReplace`); Core tests inject a `link`-then-`unlink` double that refuses `EEXIST`.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root packages/core src/lifecycle src/index.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Tick, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 
@@ -1347,6 +1350,110 @@ git diff --cached --name-only
 git commit -m "feat(core): reserve lifecycle ID blocks through a guarded allocator"
 ```
 
+### Task 10b: One exact encoding for every recorded filesystem identity · M
+
+Inserted by founder decision D31 (2026-09-18) after Task 10 shipped, so no later task number moves.
+
+Source: Task 10's fresh-context review. Spec 1 §2.4 requires that a guarded protocol keep "the same reopened device/inode/hash identity throughout recovery"; a recorded identity that cannot distinguish two inodes does not satisfy it.
+
+**Defect.** `lstat(path)` without `{ bigint: true }` returns `ino` as a JavaScript number. On APFS an inode exceeds 2^53: `/tmp` measured `1152921500312571551n`, and both `…551n` and `…552n` render `1152921500312571500` through `String(stats.ino)`. The ULP at that magnitude is 128, so up to 128 distinct inodes collapse onto one recorded identity — including the held global-lock identity at `apps/cli/src/bootstrap/executor.ts:536` and the journal-slot identities compared at `:826` and `:832`. Task 10's `packages/core/src/lifecycle/guarded-fs.ts` already records identities correctly (`entryOf`, `stats.ino.toString(10)`), and so do `apps/cli/src/bootstrap/{context,journal-store,retention}.ts`, `packages/platform-macos/src/retained-rename.ts` and `packages/security/src/protected-paths.ts`. This task removes the second encoding rather than adding a third.
+
+**This is a live bug, not a latent one, and it gates Task 12.** Confirmed 2026-09-18 by the Task 10 re-review: `apps/cli/src/bootstrap/journal-store.ts:342-343` renders slot identities from `BigIntStats` exactly, while `apps/cli/src/bootstrap/executor.ts:826` compares those same persisted `FreshV2InitPlanV1["journalSlots"][].dev/ino` values against a number-valued `lstat`. Above 2^53 the two renderings disagree on a slot that never changed, so the executor raises `securityRefusal` "bootstrap journal slot changed identity" and **V2 bootstrap recovery is wedged entirely on a large-inode filesystem**. It is environment-gated and fails closed, which is why no test caught it. The truncating pairs also fail the other way: two collided inodes compare equal, so a swapped inode can be falsely accepted. **Task 10b lands before Task 24, and before Task 12 consumes the guarded port.**
+
+**Files.** Enumerated 2026-09-18 by `grep -rn "String([A-Za-z_.]*\.\(ino\|dev\))" apps/cli/src packages --include="*.ts" | grep -v dist`, which counts **matching lines**: 177 for `ino` and `dev` together. The same grep with `-o` counts 225 **occurrences**, because a line like `dev: String(stats.dev), ino: String(stats.ino)` is one line and two sites. Neither figure covers an identity reference that uses no `String(...)`; 20 of those are enumerated separately below (17 in `executor.ts`, 3 in `report.ts`). **Do not trust any number or line citation in this list.** Three different counts were produced for this defect in one day by three different counting rules, and every line number here drifts as the conversion proceeds. Step 1's repository rule is the authoritative enumerator: re-derive the per-file figures from its own output and reconcile the list against it before starting, and again before the final gate.
+- Modify, Core: `packages/core/src/transactions/executor.ts` (24), `packages/core/src/manifest/manifest-state.ts` (2)
+- Modify, platform: `packages/platform-macos/src/stable-lock.ts` (2)
+- Modify, CLI: `apps/cli/src/bootstrap/executor.ts` (49), `apps/cli/src/update/packaged-release.ts` (10)
+- Modify, tests that build expectations the same lossy way: `packages/core/src/transactions/transactions.test.ts` (34), `apps/cli/src/bootstrap/retention.test.ts` (32), `apps/cli/src/bootstrap/executor.test.ts` (14), `apps/cli/src/bootstrap/journal-store.test.ts` (6), `packages/platform-macos/src/stable-lock.test.ts` (2), `packages/core/src/manifest/manifest-state.test.ts` (2)
+- Also audit, number-valued `dev`/`ino` compared without `String(...)`: `apps/cli/src/bootstrap/executor.ts` (`:345`, `:350`, `:366`, `:443`, `:602`, `:949`, `:1005`, `:1430`, `:2446`, `:2595`, `:2601`, `:2635`, `:2637`, `:3159`, `:3241`, `:3591`, `:3601`), `apps/cli/src/bootstrap/report.ts` (`:448`, `:628`, `:1282`), `packages/core/src/manifest/drift.ts`, `packages/platform-macos/src/transaction-lock.ts`. Re-locate each by symbol; the line numbers drift.
+- Modify first: `tests/repository/check.ts` (or `self-containment.ts` beside it, matching that file's rule shape) and `tests/repository/check.test.ts` — the banned-encoding rule; it compiles to `tests/dist/repository/check.js`, which `npm run lint` already runs
+- Create: `packages/core/src/lifecycle/identity-encoding.test.ts` — the encoding unit case
+- Modify: `docs/architecture/foundation-constraints.md` (the one-encoding rule), `docs/superpowers/plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`, `docs/superpowers/ORDER.md`
+
+**Interfaces:**
+- Consumes: `BigIntStats` from `node:fs`; Task 10's `entryOf` encoding in `packages/core/src/lifecycle/guarded-fs.ts` as the reference.
+- Produces: no new exported symbol. Every identity-recording site reads `{ bigint: true }` stats and renders `ino.toString(10)` / `dev.toString(10)`; every identity comparison compares `bigint` to `bigint` or the rendered decimal to the rendered decimal, never a number to a rendering.
+
+**Persisted fields whose encoding changes:** `FreshV2InitPlanV1["bootstrapIdentity"].dev/ino`; `FreshV2InitPlanV1["journalSlots"][].dev/ino`; `CreatedPathEvidenceV1.dev/ino` and `PlannedCreatedPathV1["parent"]` (`preexisting`) `.dev/ino`; `BootstrapPayloadEvidenceV1.dev/ino`; the retention table's `parent` and `postimage` identities (`BootstrapRetentionParentIdentityV1`, `BootstrapRetentionPostimageV1`); `ManifestStatePlanV1` identities; the Foundation journal identities in `packages/core/src/transactions/executor.ts`; `PersistedBootstrapLockIdentityV1`. All are `UInt64DecimalV1` already, so **no schema or codec changes and no on-disk migration**: below 2^53 the two renderings are identical, and no V2 installation exists (D18, D19 — the founder machine runs the legacy runtime and nothing is released), so no durable record can carry a rounded value. Step 1 must verify that claim against `git log` and the e2e fixtures before relying on it; **if any durable V2 or V1 record on a real machine carries a rounded identity, stop and report instead of migrating silently.**
+
+- [ ] **Step 1: Write the banned-encoding repository rule first, then the encoding tests**
+
+**The rule comes before every other test in this task, and it must be seen red on the unchanged tree before a single site is converted.** The reason is specific: the encoding tests below exercise this task's own new helpers, so they are red only because those helpers do not exist yet. They would go green with all 177 sites untouched — they pin the fix's *encoding* and say nothing about its *completeness* — and the one defect-driven case among them depends on the filesystem the test happens to run on. A repository rule is the opposite on both counts: machine-independent, and green only when the last site is converted.
+
+Add to `tests/repository/check.ts` a rule banning `String(<expr>.ino)` and `String(<expr>.dev)`, with the approved encoder's own file as the single allowed exception and no other allowlist entry. Match the shape of the rule already in `self-containment.ts`, including its use of `tests/helpers/typescript-lexer.ts` rather than a hand-rolled pattern, so a match inside a string literal or a comment is not reported. Its output must name every offending `path:line`, because that output — not this task's Files list — is the authoritative enumeration.
+
+Expected before any conversion: **red**, naming 177 lines across the files listed above. Seeing it green at this point is a stop condition: it means the rule does not match what the tree contains, and the rest of the task would then be unverifiable. Record the red output in the task notes so the final gate has something to compare against.
+
+Then pin the encoding, not an inode. Two cases, neither dependent on this machine's inode allocation:
+
+```ts
+it("records a real path's identity as the exact BigInt rendering", async () => {
+  const root = await nodeFs.mkdtemp(join(tmpdir(), "developer-os-identity-"));
+  const exact = await nodeFs.lstat(root, { bigint: true });
+  expect(recordedIdentity(await nodeFs.lstat(root, { bigint: true })))
+    .toStrictEqual({ dev: exact.dev.toString(10), ino: exact.ino.toString(10) });
+});
+
+it("distinguishes two inodes one apart above 2^53", () => {
+  const low = 2n ** 53n + 1n;
+  expect(renderIno(low)).not.toBe(renderIno(low + 1n));
+  expect(String(Number(low))).toBe(String(Number(low + 1n)));
+});
+```
+
+The second case is the one that fails on today's code for the stated reason and cannot pass by accident: it asserts that the number path collapses the two values and the rendered path does not. Add, in the same step, one case per affected subsystem that reads a real temporary path through the production recording function and compares against `{ bigint: true }` — for the held global lock, a journal slot, a created-path evidence row and a retention postimage.
+
+- [ ] **Step 2: Run the tests and verify they fail**
+
+Run, in this order:
+
+```bash
+npm run lint   # the banned-encoding rule, on the unchanged tree
+```
+
+Expected: FAIL in `tests/dist/repository/check.js` — the rule reports 177 offending lines and exits non-zero. This is the task's defining failure; a green run here is a stop condition.
+
+```bash
+npx vitest run --root packages/core src/lifecycle/identity-encoding.test.ts
+```
+
+Expected: FAIL — the module does not exist. Then, after the subsystem cases are added:
+
+Run: `npx vitest run --root apps/cli src/bootstrap/executor.test.ts -t 'identity'`
+
+Expected: FAIL — the recorded identity is the number rendering, not the BigInt rendering. A failure for any other reason is a stop condition.
+
+- [ ] **Step 3: Convert Core and platform**
+
+`packages/core/src/transactions/executor.ts`, `packages/core/src/manifest/manifest-state.ts`, `packages/core/src/manifest/drift.ts`, `packages/platform-macos/src/{stable-lock,transaction-lock}.ts`. Every `lstat`/`stat`/`handle.stat` that feeds an identity takes `{ bigint: true }`; comparisons stay within one encoding. Where an injected `TransactionFileSystem` supplies `lstat`, the port keeps its signature and the call site passes the option.
+
+Run: `npx vitest run --root packages/core && npx vitest run --root packages/platform-macos`
+
+Expected: PASS.
+
+- [ ] **Step 4: Convert `apps/cli/src/bootstrap` and `apps/cli/src/update`**
+
+`executor.ts`, `report.ts`, `packaged-release.ts`. Settle the `journal-store`/`executor` cross-encoding question from Step 1 here and record the answer in the step.
+
+Run: `npx vitest run --root apps/cli src/bootstrap src/update`
+
+Expected: PASS.
+
+- [ ] **Step 5: Move the tests to the same encoding**
+
+`executor.test.ts:65`, `:89`, `:414`, `:446`, `:600`, `:625` and the other enumerated test sites build their expectations with the same lossy call. They would pass while the product is wrong, so they move to the exact same encoding rather than to a hand-written literal.
+
+Run: `npm run test:bootstrap`
+
+Expected: PASS.
+
+- [ ] **Step 6: Gate, commit, push**
+
+`npm run lint` is now the completeness gate as well as the style gate: it passes only when the banned-encoding rule finds nothing, so run it last and treat its offender list — not this task's Files list — as the record of what was converted. Tick this task's steps, rewrite `ORDER.md`'s `Plan 1a progress:` sentence to `Tasks 1–10b of 26 committed; next is Task 11 (Closed Foundation ledger inventory).`, add the one-encoding rule to `docs/architecture/foundation-constraints.md`, run `npm run lint`, obtain fresh-context review, then stage exactly the paths above and commit as `fix(identity): record every filesystem identity through exact 64-bit stats`.
+
+**Reviewer must check:** that the banned-encoding rule was seen red on the unchanged tree before any site changed, and that it now passes with exactly one allowlist entry — the approved encoder's own file — and no second exception added to make a site pass. Then, because the rule cannot see them, read by hand every comparison of a number-valued `dev`/`ino` against a rendered decimal, starting from the 20 enumerated above and re-grepping rather than trusting that number. Also check that no test asserts a literal inode, and that the `journal-store`/`executor` disagreement above is closed in both directions — the false refusal and the false acceptance.
+
+---
 ### Task 11: Closed Foundation ledger inventory · L
 
 Source: old Task 4 (ledger inventory, Foundation half). Spec 1 §2.4 "Closed journal ledger", Foundation planless-orphan grammar, legacy compatibility, overflow recovery, A13; §7 "journal closure is fail-closed" (Foundation clauses) with A8's counting seam.

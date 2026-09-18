@@ -20,7 +20,8 @@ founder decisions D19 and D20 settled the two that needed one.
 founder decisions D21–D23), with a companion Spec 2 §6.1/§6.4 amendment. NEW-67 is closed; its
 `launchctl` clause moved to NEW-84.
 
-**Plan 1a is written:** `plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`, 25 tasks — Spec 1 plan
+**Plan 1a is written:** `plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`, 26 tasks (1–25 plus 10b, inserted by
+D31) — Spec 1 plan
 Tasks 1–7, 21 and 23 rewritten against Spec 1 as amended, carrying the code obligations listed under
 roadmap Phase 4. Its blocking questions were answered by founder decisions D24–D29 (2026-09-17) and
 applied to Spec 1 as A14–A16: a closed `uninstall/present_manifest_without_launchd` variant (D24), empty
@@ -29,8 +30,8 @@ deferred to Phase 4b as NEW-85 (D26), §6 applied literally to V1 residue (D27),
 (D28), NEW-80 pulled into plan 1a Task 1 (D29), and the shape-admitted bookkeeping identity deferred to
 Phase 4b as NEW-86 (D30). **The next action is to execute plan 1a.**
 
-Plan 1a progress: Tasks 1–9 of 25 committed; next is Task 10 (The guarded filesystem port and the
-install-scoped ID allocator).
+Plan 1a progress: Tasks 1–10 of 26 committed; next is Task 10b (One exact encoding for every
+recorded filesystem identity), inserted after Task 10 by founder decision D31 (2026-09-18).
 
 The 2026-08-28 Spec 1 plan (`plans/2026-08-28-developer-os-opt-in-surfaces.md`) stays as plan 1b's
 source. Spec 2's Tasks 1–7 and 9 are complete, Task 8 is withdrawn, and Tasks 10–26 remain.
@@ -135,6 +136,6 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 - Product sequence: 8 open entries, A11, A12, A12b, A13, A14, A15, A11b, A16.
 - Release plan: Tasks 10–26 open; Tasks 1–7 and 9 closed, Task 8 withdrawn.
 - Repository backlog: 46 open numbered rows, plus the Foundation watchdog decision.
-- Implementation plans: Spec 2 baseline Tasks 10–26 (17 tasks), plan 1a (25 tasks) and plan 1b (the
-  2026-08-28 plan's remaining 15 tasks, not yet rewritten): 57 tasks. Before the cutover: plan 1a
-  (25 tasks) and Tasks 10–11 — 27 tasks. After it: Tasks 12–26 and plan 1b (15 tasks) — 30 tasks. Phases 5, 5b, 6 and 7 have no spec yet.
+- Implementation plans: Spec 2 baseline Tasks 10–26 (17 tasks), plan 1a (26 tasks) and plan 1b (the
+  2026-08-28 plan's remaining 15 tasks, not yet rewritten): 58 tasks. Before the cutover: plan 1a
+  (26 tasks) and Tasks 10–11 — 28 tasks. After it: Tasks 12–26 and plan 1b (15 tasks) — 30 tasks. Phases 5, 5b, 6 and 7 have no spec yet.

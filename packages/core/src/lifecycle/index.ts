@@ -1,4 +1,14 @@
 export {
+  cleanLifecycleAllocatorTemp,
+  inspectLifecycleAllocator,
+  reserveLifecycleIdBlock,
+} from "./allocator.js";
+export type {
+  LifecycleAllocatorBoundaryV1,
+  LifecycleAllocatorStateV1,
+  LifecycleIdBlockV1,
+} from "./allocator.js";
+export {
   inspectLifecycleBookkeepingShape,
   LIFECYCLE_BOOKKEEPING_RELATIVE_PATHS,
   lifecycleBookkeepingPaths,
@@ -43,6 +53,15 @@ export type {
   LifecycleUninstallLaunchdEvidenceV1,
   LifecycleVariantFactsV1,
 } from "./grammar.js";
+export {
+  LifecycleRecoveryRequiredError,
+  createNodeLifecycleGuardedFileSystem,
+} from "./guarded-fs.js";
+export type {
+  LifecycleGuardedEntryV1,
+  LifecycleGuardedFileSystemV1,
+  LifecycleGuardedKindV1,
+} from "./guarded-fs.js";
 export {
   LIFECYCLE_LEDGER_BOUNDS,
   UINT64_MAX,
