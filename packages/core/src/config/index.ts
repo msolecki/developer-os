@@ -1,3 +1,25 @@
+export {
+  SCHEDULED_JOB_IDS,
+  encodeLifecycleActivationRecord,
+  gitScopeFingerprint,
+  lifecycleConfigHash,
+  parseLifecycleActivationRecord,
+  parseNormalizedRemoteUrl,
+  parseValidatedGitBranch,
+} from "./lifecycle.js";
+export type {
+  AutomationConfigV1,
+  GitRemoteTransportV1,
+  GitScopeSnapshotV1,
+  GitSyncConfigV1,
+  LifecycleActivationArmV1,
+  LifecycleActivationRecordV1,
+  NormalizedRemoteUrlV1,
+  NormalizedScheduleV1,
+  ScheduledJobIdV1,
+  ValidatedGitBranchV1,
+  VaultSegmentV1,
+} from "./lifecycle.js";
 export { loadConfig, serializeConfig } from "./loader.js";
 export { resolveRuntimePaths } from "./paths.js";
 export { pathSegmentViolation } from "./segment.js";

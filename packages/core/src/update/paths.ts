@@ -90,6 +90,19 @@ function parseBootstrapPayloadOperation(value: unknown): BootstrapPayloadOperati
   fail("BootstrapPayloadOperationV1");
 }
 
+/**
+ * The grammar half of `admitCanonicalAbsolutePath`, without the reopen. A path read out
+ * of `config.toml` is text a user may have hand-edited, and Spec 1 §2.2 validates it on
+ * every load — where no filesystem adapter has resolved anything yet. Resolving it is a
+ * later, separately authorized step, so this function deliberately grants no
+ * filesystem authority.
+ */
+export function parseCanonicalAbsolutePathText(value: unknown): CanonicalAbsolutePathV1 {
+  if (typeof value !== "string") fail("CanonicalAbsolutePathV1");
+  assertCanonicalAbsolutePath(value);
+  return value as CanonicalAbsolutePathV1;
+}
+
 export function admitCanonicalAbsolutePath(value: unknown, evidence: CanonicalPathEvidenceV1): CanonicalAbsolutePathV1 {
   if (typeof value !== "string") fail("CanonicalAbsolutePathV1");
   assertCanonicalAbsolutePath(value);

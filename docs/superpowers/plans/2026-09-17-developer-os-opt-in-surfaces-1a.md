@@ -585,7 +585,7 @@ export function parseLifecycleActivationRecord(bytes: Uint8Array): LifecycleActi
 export function encodeLifecycleActivationRecord(record: LifecycleActivationRecordV1): CanonicalJsonV1;
 ```
 
-- [ ] **Step 1: Write failing record, grammar and hash tests**
+- [x] **Step 1: Write failing record, grammar and hash tests**
 
 ```ts
 const SPEC_GIT_EXAMPLE = '{"branch":"main","remote":{"declaredUrl":"file:///Users/test/git/brain.git","effectivePushUrl":"file:///Users/test/git/brain.git","name":"developer-os","transport":"local"},"repositoryRoot":"/Users/test/DeveloperBrain","schemaVersion":1,"scope":{"brainPath":"/Users/test/DeveloperBrain","contentRoot":"content","fingerprint":"beb2e2591f459a3bc58969ec3b82171dcd3f37525e9149520a1a12851135d794","indexesDir":"_indexes","topicAliases":{"PROJEKTY":"PROJECTS"},"topicFolders":["DEV","PROJECTS"]}}\n';
@@ -613,13 +613,13 @@ If the fingerprint test fails with a correct implementation, the spec example is
 
 Cover: `ACCEPTED_URLS` includes `file:///Users/test/git/brain.git`, `https://example.com/org/repo.git`, `https://example.com:8443/`, `https://192.0.2.1/repo`, `ssh://git@example.com/org/repo.git`, `ssh://example.com:2222/repo`, `git@example.com:org/repo.git`, `example.com:/srv/repo.git`. `REFUSED_URLS` includes `FILE:///x`, `file://localhost/x`, `file:///a%2fb`, `file:///a%2Fb`, `https://Example.com/`, `https://example.com`, `https://example.com:443/`, `https://example.com:0/`, `https://example.com:08443/`, `https://user@example.com/`, `https://example.com/?q`, `https://example.com/#f`, `https://[::1]/`, `https://01.2.3.4/`, `https://example.com/a/./b`, `https://example.com/%41`, `https://exa_mple.com/`, a 254-byte DNS name, a 64-byte label, `ssh://-user@example.com/r`, `ssh://example.com:22/r`, 33 SSH path segments, `git@example.com:../x`, `Example.com:x`, a URL with a CR, LF or tab, a 4,097-byte URL, and every URL under the wrong `transport`. Branches: `main` and a 255-byte name pass; `-x`, `@`, `a/.b`, `a.lock`, `a..b`, `a@{b`, `a~b`, `a^b`, `a:b`, `a?b`, `a*b`, `a[b`, `a\b`, `a b`, `a.`, `a/`, `a//b`, and a 256-byte name refuse. Records: every nested unknown key at every depth refuses; `declaredUrl !== effectivePushUrl` refuses; 257 topic folders refuse; folders equal after NFC and case fold refuse; `__proto__` alias key refuses; an alias target that is not a folder, or an alias key that is also a folder, refuses; a `fingerprint` that does not recompute refuses; `schedules` missing any of the first three jobs, out of order, with `git-sync` anywhere but fourth, with a duplicate, with `minute: 60`, `hour: 24`, `day: "Mon"`, or an extra key refuses; `enabled: true` with no lifecycle record loads; a lifecycle record whose canonical JSON exceeds 1,048,576 bytes refuses before validation; a URL containing any configured `redaction.patterns` entry refuses at load; `hashCanonicalJson("d", { a: 1 })` equals SHA-256 of the bytes `d`, NUL, `{"a":1}`, LF; activation record arms other than exactly `inactive`/`active` refuse; a non-canonical activation byte string refuses; `lifecycleConfigHash("git", …)` equals SHA-256 of `developer-os:lifecycle:git:v1\0` plus the canonical bytes of `{ enabled: true, lifecycle }`.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root packages/core src/config/lifecycle.test.ts src/config/config.test.ts src/update/paths.test.ts src/lifecycle/canonical-json.test.ts`
 
 Expected: FAIL — `lifecycle.ts`, `parseCanonicalAbsolutePathText` and `hashCanonicalJson` do not exist; a config carrying `git.lifecycle` is refused by the strict `git` table.
 
-- [ ] **Step 3: Implement the records**
+- [x] **Step 3: Implement the records**
 
 Rules:
 - Zod `.strict()` at every object depth. Reuse `pathSegmentSchema` and the alias/fold refinements `brainSchema` already carries for `GitScopeSnapshotV1`. Bound `VaultSegmentV1` to 1..255 UTF-8 bytes.
@@ -629,13 +629,13 @@ Rules:
 - `serializeConfig` emits `lifecycle` only when present, keeps the existing field order, and produces the same bytes as before for absent records.
 - `lifecycleConfigHash` and `gitScopeFingerprint` call `hashCanonicalJson`, which every later domain-separated hash reuses; add no other SHA-256-over-canonical-JSON helper.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root packages/core src/config/lifecycle.test.ts src/config/config.test.ts src/config/segment.test.ts src/update/paths.test.ts src/lifecycle/canonical-json.test.ts src/index.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Tick, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 

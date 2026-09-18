@@ -17,6 +17,8 @@ export interface BrainConfigV1 {
   readonly staleness: { readonly reviewAfterDays: number };
 }
 
+import type { AutomationConfigV1, GitSyncConfigV1 } from "./lifecycle.js";
+
 export interface DeveloperOsConfigV1 {
   readonly schemaVersion: 1;
   readonly brainPath: string;
@@ -24,11 +26,20 @@ export interface DeveloperOsConfigV1 {
     readonly claude: boolean;
     readonly codex: boolean;
   };
+  /**
+   * `lifecycle` is optional and `schemaVersion` deliberately stays `1`: this is the
+   * additive frozen-interface amendment Spec 1 §2.2 ratifies, so a configuration written
+   * before the record existed must keep loading and serializing byte-identically.
+   * `enabled: true` without the record is schema-readable but operationally incomplete —
+   * it cannot trigger a Git, launchd or network effect.
+   */
   readonly git: {
     readonly enabled: boolean;
+    readonly lifecycle?: GitSyncConfigV1;
   };
   readonly automation: {
     readonly enabled: boolean;
+    readonly lifecycle?: AutomationConfigV1;
   };
   /**
    * Optional, and `schemaVersion` deliberately stays `1`. Every configuration

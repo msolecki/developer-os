@@ -1,8 +1,11 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import {
   decodeCanonicalJson,
   encodeCanonicalJson,
+  hashCanonicalJson,
 } from "./canonical-json.js";
 
 const escapedCodeUnits: readonly number[] = [
@@ -241,5 +244,35 @@ describe("CanonicalJsonV1", () => {
     oneAfterHole[1] = 1;
     expect(() => encodeCanonicalJson(oneAfterHole)).toThrow();
     expect(() => encodeCanonicalJson(new Array(1) as unknown as readonly number[])).toThrow();
+  });
+});
+
+/**
+ * The one SHA-256-over-canonical-JSON helper. Every domain-separated hash in Spec 1
+ * routes through it, so a second implementation would be the defect: the digest of a
+ * plan, a record or a fingerprint is compared across subsystems and versions.
+ */
+describe("hashCanonicalJson", () => {
+  it("hashes the ASCII domain, its trailing NUL, then the canonical bytes including the LF", () => {
+    const expected = createHash("sha256")
+      .update(Uint8Array.from([0x64, 0x00]))
+      .update(new TextEncoder().encode('{"a":1}\n'))
+      .digest("hex");
+    expect(hashCanonicalJson("d", { a: 1 })).toBe(expected);
+  });
+
+  it("separates two domains over the same value", () => {
+    expect(hashCanonicalJson("developer-os:lifecycle:git:v1", { a: 1 })).not.toBe(
+      hashCanonicalJson("developer-os:lifecycle:automation:v1", { a: 1 }),
+    );
+  });
+
+  /** A NUL or a multi-byte scalar in the domain would make two domains share a prefix. */
+  it.each(["", "d\u0000e", "d\u00e9", "d e", "d\n"])("refuses the domain %j", (domain) => {
+    expect(() => hashCanonicalJson(domain, { a: 1 })).toThrow();
+  });
+
+  it("refuses a value canonical JSON cannot encode", () => {
+    expect(() => hashCanonicalJson("d", { a: 1.5 })).toThrow();
   });
 });

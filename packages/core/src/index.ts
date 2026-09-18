@@ -1,5 +1,9 @@
 export { parseAgentPromptArgs } from "./agent-prompt/index.js";
-export { decodeCanonicalJson, encodeCanonicalJson } from "./lifecycle/canonical-json.js";
+export {
+  decodeCanonicalJson,
+  encodeCanonicalJson,
+  hashCanonicalJson,
+} from "./lifecycle/canonical-json.js";
 export type { CanonicalJsonV1, CanonicalJsonValue } from "./lifecycle/canonical-json.js";
 export {
   inspectLifecycleBookkeepingShape,
@@ -27,16 +31,34 @@ export {
 } from "./result.js";
 export type { CliError, CliResult, ExitCode, RedactedPayload } from "./result.js";
 export {
+  SCHEDULED_JOB_IDS,
+  encodeLifecycleActivationRecord,
+  gitScopeFingerprint,
+  lifecycleConfigHash,
   loadConfig,
+  parseLifecycleActivationRecord,
+  parseNormalizedRemoteUrl,
+  parseValidatedGitBranch,
   pathSegmentViolation,
   resolveRuntimePaths,
   serializeConfig,
 } from "./config/index.js";
 export type {
+  AutomationConfigV1,
   BrainConfigV1,
   DeveloperOsConfigV1,
+  GitRemoteTransportV1,
+  GitScopeSnapshotV1,
+  GitSyncConfigV1,
+  LifecycleActivationArmV1,
+  LifecycleActivationRecordV1,
+  NormalizedRemoteUrlV1,
+  NormalizedScheduleV1,
   PathEnvironment,
   RuntimePaths,
+  ScheduledJobIdV1,
+  ValidatedGitBranchV1,
+  VaultSegmentV1,
 } from "./config/index.js";
 export {
   BOOTSTRAP_RETAINED_MAX_ENTRIES,

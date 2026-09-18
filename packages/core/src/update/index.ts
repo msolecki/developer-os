@@ -10,6 +10,7 @@ export {
   deriveManifestPayloadPath,
   deriveUpdatePayloadPath,
   deriveUpdateRecoveryExecutorStagedPath,
+  parseCanonicalAbsolutePathText,
   parseCanonicalStatePayloadRole,
 } from "./paths.js";
 export type {

@@ -12,6 +12,7 @@ import {
   deriveManifestPayloadPath,
   deriveUpdatePayloadPath,
   deriveUpdateRecoveryExecutorStagedPath,
+  parseCanonicalAbsolutePathText,
   type CanonicalPathEvidenceV1,
 } from "./paths.js";
 import { parseSafeReasonCode } from "./scalars.js";
@@ -26,6 +27,35 @@ const productHome = admitCanonicalAbsolutePath("/synthetic/product", evidence);
 const backupRoot = admitCanonicalAbsolutePath("/synthetic/backup", evidence);
 
 describe("strict update paths", () => {
+  /**
+   * A configuration file is text a user hand-edited, not a path a filesystem adapter
+   * just reopened, so this grammar deliberately carries no `reopenCanonicalAbsolutePath`
+   * evidence — and must still refuse everything the grammar half of
+   * `admitCanonicalAbsolutePath` refuses.
+   */
+  it("admits the canonical absolute-path grammar without filesystem evidence", () => {
+    expect(parseCanonicalAbsolutePathText("/Users/test/DeveloperBrain")).toBe(
+      "/Users/test/DeveloperBrain",
+    );
+    for (const rejected of [
+      "Users/test",
+      "//Users",
+      "/Users/",
+      "/Users/test/..",
+      "/Users/./test",
+      "/Users//test",
+      "/Users\\test",
+      "/Users/e\u0301",
+      "/Users/\u0001",
+      "/Users/\u0000",
+      "",
+      `/${"a".repeat(4096)}`,
+    ]) {
+      expect(() => parseCanonicalAbsolutePathText(rejected)).toThrow();
+    }
+    expect(() => parseCanonicalAbsolutePathText(1)).toThrow();
+  });
+
   it("catches an absolute-path admission that accepts a noncanonical, control, or oversized spelling", () => {
     expect(admitCanonicalAbsolutePath("/synthetic/product/state", evidence)).toBe("/synthetic/product/state");
     expect(() => admitCanonicalAbsolutePath("/synthetic/e\u0301", evidence)).toThrow();

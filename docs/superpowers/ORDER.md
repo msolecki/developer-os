@@ -29,7 +29,7 @@ deferred to Phase 4b as NEW-85 (D26), §6 applied literally to V1 residue (D27),
 (D28), NEW-80 pulled into plan 1a Task 1 (D29), and the shape-admitted bookkeeping identity deferred to
 Phase 4b as NEW-86 (D30). **The next action is to execute plan 1a.**
 
-Plan 1a progress: Tasks 1–3 of 25 committed; next is Task 4 (Strict lifecycle configuration records).
+Plan 1a progress: Tasks 1–4 of 25 committed; next is Task 5 (Closed `config` key and value codecs).
 
 The 2026-08-28 Spec 1 plan (`plans/2026-08-28-developer-os-opt-in-surfaces.md`) stays as plan 1b's
 source. Spec 2's Tasks 1–7 and 9 are complete, Task 8 is withdrawn, and Tasks 10–26 remain.

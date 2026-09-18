@@ -342,6 +342,47 @@ describe("redaction configuration section", () => {
   });
 });
 
+/**
+ * The additive frozen-interface amendment Spec 1 §2.2 ratifies: the two lifecycle
+ * records join the existing tables, and a configuration written before they existed
+ * still loads and serializes byte-identically. `lifecycle.test.ts` owns the records'
+ * own grammar; these two cases own the boundary they were added at.
+ */
+describe("the optional lifecycle records beneath the existing tables", () => {
+  const gitLifecycleToml = `${validToml}
+[git.lifecycle]
+schemaVersion = 1
+repositoryRoot = "/Users/test/DeveloperBrain"
+branch = "main"
+
+[git.lifecycle.remote]
+name = "developer-os"
+transport = "local"
+declaredUrl = "file:///Users/test/git/brain.git"
+effectivePushUrl = "file:///Users/test/git/brain.git"
+
+[git.lifecycle.scope]
+brainPath = "/Users/test/DeveloperBrain"
+contentRoot = "content"
+topicFolders = ["DEV", "PROJECTS"]
+indexesDir = "_indexes"
+fingerprint = "beb2e2591f459a3bc58969ec3b82171dcd3f37525e9149520a1a12851135d794"
+
+[git.lifecycle.scope.topicAliases]
+PROJEKTY = "PROJECTS"
+`;
+
+  it("admits a git lifecycle record beneath the strict git table", () => {
+    expect(loadConfig(gitLifecycleToml).git.lifecycle?.branch).toBe("main");
+  });
+
+  it("leaves a configuration that predates both records untouched", () => {
+    expect(Object.hasOwn(loadConfig(validToml).git, "lifecycle")).toBe(false);
+    expect(Object.hasOwn(loadConfig(validToml).automation, "lifecycle")).toBe(false);
+    expect(serializeConfig(loadConfig(validToml))).toBe(validToml);
+  });
+});
+
 describe("serializeConfig", () => {
   it("emits canonical TOML bytes including the final newline", () => {
     expect(serializeConfig(loadConfig(validToml))).toBe(validToml);

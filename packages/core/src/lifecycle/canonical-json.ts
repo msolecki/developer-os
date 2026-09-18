@@ -1,3 +1,7 @@
+import { createHash } from "node:crypto";
+
+import type { LowerHexSha256 } from "../update/scalars.js";
+
 export type CanonicalJsonPrimitive = null | boolean | number | string;
 export type CanonicalJsonValue =
   | CanonicalJsonPrimitive
@@ -119,6 +123,22 @@ function encodeValue(value: CanonicalJsonValue, stack: Set<object>): string {
 
 export function encodeCanonicalJson(value: CanonicalJsonValue): CanonicalJsonV1 {
   return `${encodeValue(value, new Set<object>())}\n` as CanonicalJsonV1;
+}
+
+/**
+ * The one SHA-256-over-canonical-JSON helper, so every domain-separated digest in
+ * Spec 1 — plan, preview, effect-plan, lifecycle config, Git scope — is produced by the
+ * same bytes: the ASCII domain, its trailing NUL, then the canonical encoding including
+ * its single LF. A NUL or a multi-byte scalar in the domain would let two domains share
+ * a prefix, which is the whole point of separating them, so the domain is bounded to
+ * printable ASCII here rather than at each of the nine call sites.
+ */
+export function hashCanonicalJson(domain: string, value: CanonicalJsonValue): LowerHexSha256 {
+  if (!/^[\x21-\x7e]+$/.test(domain)) fail("hash domain is not printable ASCII");
+  return createHash("sha256")
+    .update(`${domain}\0`, "ascii")
+    .update(encodeCanonicalJson(value), "utf8")
+    .digest("hex") as LowerHexSha256;
 }
 
 class JsonParser {
