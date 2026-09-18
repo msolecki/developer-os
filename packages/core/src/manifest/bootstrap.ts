@@ -69,18 +69,7 @@ export interface LifecycleIdAllocatorV1 {
   readonly nextCounter: UInt64DecimalV1;
 }
 
-export interface LifecycleBootstrapLockV1 {
-  readonly path: CanonicalAbsolutePathV1;
-  readonly ownerUid: number;
-  readonly mode: 0o600;
-  readonly nlink: 1;
-  readonly size: 0;
-  readonly dev: UInt64DecimalV1;
-  readonly ino: UInt64DecimalV1;
-  readonly createdByAttempt: boolean;
-  readonly productHomeCreatedByAttempt: boolean;
-  readonly stateDirectoryCreatedByAttempt: boolean;
-}
+export type LifecycleBootstrapLockV1 = PersistedBootstrapLockIdentityV1;
 
 export interface PersistedBootstrapLockIdentityV1 {
   readonly path: CanonicalAbsolutePathV1;

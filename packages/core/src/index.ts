@@ -14,6 +14,37 @@ export type {
   LifecycleBookkeepingResidueV1,
   LifecycleBookkeepingShapeResultV1,
 } from "./lifecycle/bookkeeping.js";
+export {
+  LIFECYCLE_LEDGER_BOUNDS,
+  UINT64_MAX,
+  allocatedCounterOf,
+  encodeLifecycleIdAllocator,
+  encodeUninstallingMarker,
+  formatAllocatedLifecycleId,
+  parseAllocatedFoundationMutationIndex,
+  parseAllocatedLifecycleId,
+  parseEffectiveUid,
+  parseFoundationTransactionId,
+  parseLegacyFoundationMutationIndex,
+  parseLifecycleBootstrapLock,
+  parseLifecycleCoordinatorId,
+  parseLifecycleIdAllocator,
+  parseLifecycleInstallNonce,
+  parseManifestParticipantId,
+  parseUninstallingMarker,
+} from "./lifecycle/index.js";
+export type {
+  AllocatedLifecycleIdV1,
+  EffectiveUidV1,
+  FoundationTransactionIdV1,
+  GitEffectIdV1,
+  LaunchdEffectIdV1,
+  LegacyFoundationMutationIndexV1,
+  LegacyFoundationTransactionIdV1,
+  LifecycleIdPrefixV1,
+  LifecycleLedgerBoundsV1,
+  UninstallingMarkerV1,
+} from "./lifecycle/index.js";
 export * from "./update/index.js";
 export type {
   AgentPromptArgs,

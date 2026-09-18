@@ -166,7 +166,7 @@ govern the open phases and stay.
   - journal closure projects retained bootstrap evidence away (A13);
   - `init` admits the bookkeeping set by shape and writes no bookkeeping manifest rows; the inertness check ignores the set; a bootstrap leaf is attributable only by identity (NEW-83); the `backups` exemption goes (NEW-69) (A12);
   - the §7 round-trip gates of A9, with ceilings proven through a counting seam where needed (A8);
-  - a global-lock provider that never creates the lock outside fresh `init`, and the plan validator's `createdPaths[0]` global-lock check made conditional on the lock being absent (`packages/core/src/manifest/bootstrap.ts:1826-1828`) (A12);
+  - a global-lock provider that never creates the lock outside fresh `init`, and the plan validator's `createdPaths[0]` global-lock check made conditional on the lock being absent (`packages/core/src/manifest/bootstrap.ts:1824-1827`) (A12);
   - closure and init shape admission project the bootstrap participants' leftover `.tx_fi_…_{f|c}.lock` stable locks and empty or tombstone-only participant ID directories (A13 correction);
   - update the architecture notes that still describe the withdrawn absent-manifest envelope: `docs/architecture/foundation.md`, `docs/architecture/foundation-constraints.md` and `docs/architecture/threat-model.md`.
 - [ ] Execute plan 1a.

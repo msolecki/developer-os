@@ -653,7 +653,7 @@ function sumEntries(entries: Iterable<BootstrapEvidenceGuardedEntryV1>): { reado
  * No live request is in scope here — `plan` is a retained, possibly
  * historical plan this process did not create, and neither
  * `FreshV2InitPlanV1` nor `ManifestStatePlanV1` carries a declared Brain root
- * this inspection could confine against (`packages/core/src/manifest/bootstrap.ts:328`,
+ * this inspection could confine against (`packages/core/src/manifest/bootstrap.ts:317`,
  * `packages/core/src/manifest/manifest-state.ts:99`). Inventing one from the
  * *current* environment, the way `BootstrapExecutor.manifestAdmission` can,
  * would assert a live fact ("the Brain is still here") about a manifest that

@@ -791,14 +791,14 @@ export function parseLegacyFoundationMutationIndex(text: string): LegacyFoundati
 // records.ts
 export interface UninstallingMarkerV1 { readonly schemaVersion: 1; readonly coordinatorId: LifecycleCoordinatorIdV1; readonly createdAt: UtcTimestampV1 }
 export function parseLifecycleInstallNonce(bytes: Uint8Array): LifecycleInstallNonceV1;             // exactly 65 bytes
-export function parseLifecycleIdAllocator(bytes: Uint8Array): LifecycleIdAllocatorV1;               // ≤ 1,024 bytes, canonical
+export function parseLifecycleIdAllocator(bytes: Uint8Array, nonce: LifecycleInstallNonceV1): LifecycleIdAllocatorV1; // ≤ 1,024 bytes, canonical, §2.1 nonce agreement
 export function encodeLifecycleIdAllocator(value: LifecycleIdAllocatorV1): CanonicalJsonV1;
 export function parseLifecycleBootstrapLock(value: unknown, stateDirectory: CanonicalAbsolutePathV1, effectiveUid: number): LifecycleBootstrapLockV1;
 export function parseUninstallingMarker(bytes: Uint8Array, nonce: LifecycleInstallNonceV1): UninstallingMarkerV1; // ≤ 1,024 bytes
 export function encodeUninstallingMarker(value: UninstallingMarkerV1): CanonicalJsonV1;
 ```
 
-- [ ] **Step 1: Write failing grammar tests**
+- [x] **Step 1: Write failing grammar tests**
 
 ```ts
 it("formats and parses the allocated grammar and binds it to the installation nonce", () => {
@@ -820,23 +820,23 @@ it.each(["4294967295", "-1", "01", "+1", "1.0", "", " 1"])("refuses legacy mutat
 
 Cover: counters `0`, `1` and `18446744073709551615` format; `01`, `-1`, `18446744073709551616` and a non-decimal byte refuse; every prefix refuses every other prefix's ID; nonce with uppercase hex, 63 or 65 hex, or wrong length refuses; `tx_<lowercase-v4-uuid>` parses as legacy only through `parseFoundationTransactionId`, and `tx_fi_<uuid>_0000000000_f` refuses there (bootstrap arm); `parseManifestParticipantId` refuses the shipped `mf_fi_`/`mf_mm_` arms; allocated mutation index `256` refuses; `parseEffectiveUid` refuses a uid not equal to `expected`, a negative number, and 4294967296; `LIFECYCLE_LEDGER_BOUNDS` equals the Spec 1 literal; nonce bytes without LF, with CRLF, with two LFs, or in uppercase refuse; allocator with extra key, `nextCounter: 1` (number), non-canonical key order, 1,025 bytes, or `installNonce` unequal to the file nonce refuses; `LifecycleBootstrapLockV1` refuses `createdByAttempt`, `productHomeCreatedByAttempt` and `stateDirectoryCreatedByAttempt` as unknown keys, refuses a path other than `<state>/.lifecycle-bootstrap.lock`, and refuses `mode` 420, `nlink` 2 and `size` 1; marker refuses 1,025 bytes, an extra key, a coordinator ID under another nonce, and a non-round-tripping timestamp.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root packages/core src/lifecycle/ids.test.ts src/lifecycle/records.test.ts`
 
 Expected: FAIL — `ids.ts` and `records.ts` do not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `LifecycleBootstrapLockV1` becomes `export type LifecycleBootstrapLockV1 = PersistedBootstrapLockIdentityV1;` in `bootstrap.ts`, so the three created-by-attempt fields disappear with no second interface. Counter parsing and arithmetic use `bigint`. `lifecycle/index.ts` re-exports this task's modules, Task 2's `bookkeeping.ts`, and `hashCanonicalJson`.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root packages/core src/lifecycle src/config src/manifest/bootstrap.test.ts src/index.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Tick, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 
