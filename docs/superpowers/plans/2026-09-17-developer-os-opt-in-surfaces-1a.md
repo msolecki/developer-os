@@ -1067,7 +1067,7 @@ export type LifecycleReservationSlotV1 = { readonly prefix: "lc" | "tx" | "ge" |
 export function lifecycleReservationOrder(plan: LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown, unknown>): readonly LifecycleReservationSlotV1[];
 ```
 
-- [ ] **Step 1: Write failing table-driven grammar tests**
+- [x] **Step 1: Write failing table-driven grammar tests**
 
 ```ts
 const VARIANTS = Object.keys(LIFECYCLE_STEP_GRAMMAR) as LifecycleOperationVariantV1[];
@@ -1102,23 +1102,23 @@ it("derives the uninstall variant from launchd evidence and refuses a plan shape
 
 Cover: each `LIFECYCLE_STEP_GRAMMAR` row equals the Spec 1 §2.4 table literally (write the fourteen expected arrays out in the test, not derived from the implementation); each point of no return equals the Spec 1 table; forward Foundation refs strictly before the point of no return have a compensation ref, and refs at or after it have `compensationId: null`; `automation_reconcile/live_only` has exactly one `Q`, no Foundation or manifest arm, and zero or more transitions, while `/files` without a plist mutation refuses; `new_*` requires a source effect, `existing_*` forbids one, `no_changes` forbids push and both Git effects, network variants forbid `D`, local variants forbid `N`; `pushPlanHash` null exactly when `plan.push` is null, in every phase; a `push_pending` journal whose cursor is not at `N(h)`/`D(h)` refuses; derived phase at every cursor for every variant, including the `planned` → first-step rewrite; `finalized` legality requires `nextStep === steps.length` and both auxiliary cursors null; `rolled_back` requires `compensationNext === -1`; `compacting` requires `terminalOutcome` equal to the preceding phase; `deriveTerminalCompaction` orders Foundation refs by ID, then source Git, destination Git, before-files launchd, after-files launchd, then `coordinator_staging`, then `coordinator_envelope`, with 2..70 entries; the manifest participant `mf` ID is reserved last (D28); `uninstall/present_manifest_without_launchd` has null `launchd`, `launchdBeforeFiles` and `launchdAfterFiles`, empty `plistPaths`, the same point of no return as `uninstall/present_manifest`, and a compensation order without `P`; `uninstallLaunchdEvidence` is null exactly for non-uninstall operations.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root packages/core src/lifecycle/grammar.test.ts`
 
 Expected: FAIL — `grammar.ts` does not exist.
 
-- [ ] **Step 3: Implement the tables as data**
+- [x] **Step 3: Implement the tables as data**
 
 The variant is derived, never read from a stored string: from `operation`, the manifest arm, `facts`, and which effect arms are non-null. For `uninstall`, `facts.uninstallLaunchdEvidence` selects `uninstall/present_manifest` (true) or `uninstall/present_manifest_without_launchd` (false), and the plan must have that row's shape. `validateLifecyclePlanGrammar` expands the row's templates against the plan's participants and requires a bijection: every `F` template matches one forward ref of that slot, every non-null effect arm matches one step with the same ID and hash, a manifest arm exists exactly when an `M` appears, a redaction-key arm exactly when a `K` appears, and `launchd` is non-null exactly for the three automation operations and `uninstall/present_manifest`.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root packages/core src/lifecycle src/index.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Tick, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 
@@ -2796,7 +2796,7 @@ Expected: FAIL — `uninstall.ts` does not exist, and V2 uninstall still uses th
 
 Planning happens under the global lock and allocates nothing:
 1. Run `recover(global, { resumeUninstall: true })` and require closure `clear`.
-2. Derive the variant: `observeLifecycleActivationRecord`, the validated configuration's `automation.lifecycle`, and the manifest's plist rows. Any evidence throws `LifecycleUnsupportedLeafError`.
+2. Derive the variant **at planning time only**, through Task 8's `deriveUninstallLaunchdEvidence`, from `observeLifecycleActivationRecord`, the validated configuration's `automation.lifecycle`, and the manifest's plist rows. A14's three conditions are exact: it is `uninstall/present_manifest_without_launchd` exactly when the manifest owns no plist artifact (§6's closed external-plist rows), the validated configuration has no `automation.lifecycle` record, and the activation record is absent or its `automation` arm is `inactive`; an activation path that is not a guarded regular file is recovery-required, never absent. Any evidence throws `LifecycleUnsupportedLeafError`. Validation and recovery never re-derive it, because the evidence is gone by then: `F(uninstall_artifacts)` has removed `config.toml` and the activation record and `M(commit_absence)` has tombstoned the manifest, so a re-derivation at a later cursor would select the other row and refuse this coordinator's own plan-hash-bound plan. The plan hash binds the shape instead, and Task 8's `validateLifecyclePlanGrammar` checks that bound shape against its row. Passing `facts.uninstallLaunchdEvidence` is therefore this task's responsibility, and a boolean contradicting its own evidence is caught only by that shape check — call `deriveUninstallLaunchdEvidence`, never hand-compute the disjunction.
 3. Partition with the exported `resolveRoots`/`partitionArtifacts`/`planUninstall`, using owned roots `[home]` and excluded roots `[brain, ...evidence.retainedRoots, ...lifecycleBookkeepingPaths(home)]`.
 4. Derive forward mutations and their preimage bytes (each ≤ 16 MiB); refuse `UninstallCapacityError` when the artifact mutations exceed 256.
 5. Compute the marker bytes from the plan clock, and observe the key with `observeSecretOpaqueKey`.

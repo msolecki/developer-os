@@ -23,6 +23,27 @@ export type {
   LifecycleValueCodec,
 } from "./codecs.js";
 export {
+  LIFECYCLE_POINT_OF_NO_RETURN,
+  LIFECYCLE_STEP_GRAMMAR,
+  deriveLifecycleOperationVariant,
+  deriveTerminalCompaction,
+  deriveUninstallLaunchdEvidence,
+  derivedCoordinatorPhase,
+  lifecycleReservationOrder,
+  pointOfNoReturnStepIndex,
+  validateCoordinatorJournalForPlan,
+  validateLifecyclePlanGrammar,
+} from "./grammar.js";
+export type {
+  LifecycleOperationVariantV1,
+  LifecyclePointOfNoReturnV1,
+  LifecycleReservationSlotV1,
+  LifecycleRequiredRecoveryV1,
+  LifecycleStepTemplateV1,
+  LifecycleUninstallLaunchdEvidenceV1,
+  LifecycleVariantFactsV1,
+} from "./grammar.js";
+export {
   LIFECYCLE_LEDGER_BOUNDS,
   UINT64_MAX,
   allocatedCounterOf,

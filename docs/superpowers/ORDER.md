@@ -29,8 +29,8 @@ deferred to Phase 4b as NEW-85 (D26), §6 applied literally to V1 residue (D27),
 (D28), NEW-80 pulled into plan 1a Task 1 (D29), and the shape-admitted bookkeeping identity deferred to
 Phase 4b as NEW-86 (D30). **The next action is to execute plan 1a.**
 
-Plan 1a progress: Tasks 1–7 of 25 committed; next is Task 8 (Exact operation grammar, points of no
-return and derived journal legality).
+Plan 1a progress: Tasks 1–8 of 25 committed; next is Task 9 (A stable lock provider that never
+creates, with bounded lease acquisition).
 
 The 2026-08-28 Spec 1 plan (`plans/2026-08-28-developer-os-opt-in-surfaces.md`) stays as plan 1b's
 source. Spec 2's Tasks 1–7 and 9 are complete, Task 8 is withdrawn, and Tasks 10–26 remain.
