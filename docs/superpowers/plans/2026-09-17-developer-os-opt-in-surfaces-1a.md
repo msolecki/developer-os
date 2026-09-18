@@ -964,7 +964,7 @@ export function coordinatorPlanHash(plan: LifecycleCoordinatorPlanCoreV1<unknown
 export function lifecyclePreviewHash(preview: LifecyclePlanPreviewCoreV1<unknown, unknown, unknown>): LowerHexSha256;
 ```
 
-- [ ] **Step 1: Write failing codec tests with synthetic leaves**
+- [x] **Step 1: Write failing codec tests with synthetic leaves**
 
 ```ts
 const leaves = syntheticLeafCodecs(); // records every validate/encode call per leaf
@@ -991,23 +991,27 @@ it("hashes the preview without its previewHash member", () => {
 
 Cover: every top-level and nested unknown key refuses (enumerate the key paths from the type, assert non-empty); `steps` of length 0 and 257, Foundation refs of length 65, `plistPaths` of length 5 or unsorted or duplicated, a ref with 0 or 257 mutations, `maximumJournalBytes` 0 or 1,048,577 refuse; Foundation refs not sorted by ID or duplicated refuse; `stagedPath` other than `<home>/staging/transactions/<participant-id>/<index>.bin` refuses; `initialJournal.finalPath` other than `<home>/state/transactions/<participant-id>.json` or `stagedPath` other than `<home>/staging/lifecycle/<coordinator-id>/foundation/<participant-id>/journal.json` refuses; `stagedIdentity.mode` other than 384 or `size` 0 or 1,048,577 refuses; `planHash` not equal to `developer-os:foundation-participant-plan:v1` over `{ slot, role, mutations, maximumJournalBytes, initialJournal }` refuses; create/remove/replace mutation null rules; the inverse table (forward create → remove guarded by the forward content hash; forward remove → create of the preimage staged under the compensation ID; forward replace → replace guarded by the forward content hash with preimage content) and reverse order; reciprocal `compensationId`/`forwardId`; slot mismatch between pair halves; the coordinator journal's phase/cursor null rules from the Spec 1 text (`compactionNext` and `terminalOutcome` non-null exactly in `compacting`; `compensationNext` non-null exactly in `compensating`/`rolled_back`); preview Git/launchd null and table-hash equality combinations (a Git preview with a launchd hash, an automation preview with a Git hash, launchd hashes unequal to the nested preview's); allocated IDs under a foreign nonce refuse; every `dev`/`ino` is `UInt64DecimalV1`; an encoded plan over 16,777,216 bytes refuses.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root packages/core src/lifecycle/codecs.test.ts`
 
 Expected: FAIL — `types.ts` and `codecs.ts` do not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Core never imports a Git, launchd, CLI or Security type: leaves are admitted, cloned and encoded only through the injected codecs. The operation-to-steps grammar is Task 8's; this task validates only shape, cardinality, binding and hashing. Reuse `encodeCanonicalJson`/`decodeCanonicalJson` and `hashCanonicalJson`; add no second encoder.
 
-- [ ] **Step 4: Run the focused tests**
+**Open after Task 7 (2026-09-18, review finding).** Spec 1 §2.4 requires preview `files` "in canonical path/role order" but does not fix which of the two keys takes precedence. Task 7 therefore refuses a duplicate `(role, targetPath)` pair — which is what would otherwise make one operation produce two `previewHash` values — and leaves the sort precedence to the task that first builds a preview (plan 1b). Whoever settles it must pin it in the preview codec, not only in the builder.
+
+**Also open (same review).** `lifecyclePreviewHash` hashes the raw preview while the preview codec recomputes through the injected leaves, so a leaf whose `encode` is not `encodeCanonicalJson` of its raw value leaves a builder no public way to stamp a `previewHash` that `validate` accepts. It is fail-closed today — such a preview is refused, never admitted — so plan 1b owns the fix: expose a leaf-routed `hash` on the preview codec, as `executionPlan` now has.
+
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root packages/core src/lifecycle src/index.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Tick, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 
