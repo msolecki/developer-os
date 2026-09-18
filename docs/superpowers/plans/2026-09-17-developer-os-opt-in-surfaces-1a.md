@@ -688,7 +688,7 @@ export function readConfigValue(config: DeveloperOsConfigV1, key: ConfigReadable
 export function setConfigValue(config: DeveloperOsConfigV1, key: string, argvValue: string): ConfigMutationV1;
 ```
 
-- [ ] **Step 1: Write failing exhaustive key tests**
+- [x] **Step 1: Write failing exhaustive key tests**
 
 ```ts
 it("enumerates exactly the Spec 1 key unions", () => {
@@ -719,23 +719,23 @@ it.each([
 
 Cover: `readConfigValue(config, null)` returns every key in `DeveloperOsConfigV1` order with `redaction` replaced by `{ patternsCount }`; `redaction.patterns` returns the integer count; absent `brain`, `redaction`, `git.lifecycle` or `automation.lifecycle` and their children return `null`; every prefix or descendant key not in the union (`brain.retrieval.maxCandidates.x`, `git.enabled.value`, `adapter`, `""`) refuses `config_key_unknown`; values `" 30"`, `"30\n"`, `"1.0"`, `"-0"`, `'{"a" :1}'`, `"'x'"`, `"x"`, `"TRUE"` refuse `config_value_not_canonical_json`; a wrong JSON type for every mutable key refuses `config_value_invalid`; `null` for any key other than `brain` or `redaction` refuses; `brain.contentRoot` with `brain` absent refuses `config_parent_absent`; an incomplete whole `brain` refuses; `brainPath` refuses `config_brain_path_is_repository_identity` whenever `git.lifecycle` is present, even with `git.enabled: false`; a successful `set` never changes `schemaVersion`, `telemetry`, either `enabled`, either `lifecycle` record, or `brain.schemaVersion`; no refusal message contains the supplied value; `updated` versus `unchanged` is decided by comparing `serializeConfig` output.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root packages/core src/config/keys.test.ts`
 
 Expected: FAIL — `keys.ts` does not exist.
 
-- [ ] **Step 3: Implement the codecs**
+- [x] **Step 3: Implement the codecs**
 
 Rules: the value is `decodeCanonicalJson(encoder.encode(`${argvValue}\n`), 1_048_576)`, so byte-exact canonical form is required (Scope decision 11). Per-key grammars reuse the Task 4 and loader schemas; clone only the addressed path and validate the whole result through `serializeConfig`. `hasRetainedGitLifecycle` is `config.git.lifecycle !== undefined`, derived here rather than passed in. Error messages name the key and reason only.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root packages/core src/config/keys.test.ts src/config/lifecycle.test.ts src/config/config.test.ts src/index.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Tick, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 
