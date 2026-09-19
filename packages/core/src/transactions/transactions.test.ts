@@ -367,8 +367,8 @@ async function admitFoundationInitialJournal(
   const sourceParentPath = dirname(participant.initialJournal.staged.path);
   const destinationParentPath = dirname(participant.initialJournal.finalPath);
   const [sourceParentStats, destinationParentStats] = await Promise.all([
-    nodeFs.lstat(sourceParentPath),
-    nodeFs.lstat(destinationParentPath),
+    nodeFs.lstat(sourceParentPath, { bigint: true }),
+    nodeFs.lstat(destinationParentPath, { bigint: true }),
   ]);
   const initialJournal = validateJournal(JSON.parse(
     await nodeFs.readFile(participant.initialJournal.staged.path, 'utf8'),
@@ -382,9 +382,9 @@ async function admitFoundationInitialJournal(
           mutation.contentSize === null
         ) throw new Error('fixture bootstrap mutation is not an exact create');
         const [source, mutationSourceParent, mutationDestinationParent] = await Promise.all([
-          nodeFs.lstat(mutation.stagedPath),
-          nodeFs.lstat(dirname(mutation.stagedPath)),
-          nodeFs.lstat(dirname(mutation.targetPath)),
+          nodeFs.lstat(mutation.stagedPath, { bigint: true }),
+          nodeFs.lstat(dirname(mutation.stagedPath), { bigint: true }),
+          nodeFs.lstat(dirname(mutation.targetPath), { bigint: true }),
         ]);
         return {
           sourcePath: mutation.stagedPath,
@@ -393,15 +393,15 @@ async function admitFoundationInitialJournal(
             path: dirname(mutation.stagedPath) as never,
             ownerUid,
             mode: 0o700 as const,
-            dev: String(mutationSourceParent.dev) as never,
-            ino: String(mutationSourceParent.ino) as never,
+            dev: mutationSourceParent.dev.toString(10) as never,
+            ino: mutationSourceParent.ino.toString(10) as never,
           },
           destinationParent: {
             path: dirname(mutation.targetPath) as never,
             ownerUid,
             mode: 0o700 as const,
-            dev: String(mutationDestinationParent.dev) as never,
-            ino: String(mutationDestinationParent.ino) as never,
+            dev: mutationDestinationParent.dev.toString(10) as never,
+            ino: mutationDestinationParent.ino.toString(10) as never,
           },
           postimage: {
             kind: 'regular_file' as const,
@@ -410,8 +410,8 @@ async function admitFoundationInitialJournal(
             nlink: 1 as const,
             bytes: String(mutation.contentSize) as never,
             sha256: mutation.contentHash,
-            dev: String(source.dev) as never,
-            ino: String(source.ino) as never,
+            dev: source.dev.toString(10) as never,
+            ino: source.ino.toString(10) as never,
           },
         };
       }))
@@ -426,15 +426,15 @@ async function admitFoundationInitialJournal(
       path: sourceParentPath as never,
       ownerUid,
       mode: 0o700,
-      dev: String(sourceParentStats.dev) as never,
-      ino: String(sourceParentStats.ino) as never,
+      dev: sourceParentStats.dev.toString(10) as never,
+      ino: sourceParentStats.ino.toString(10) as never,
     },
     destinationParent: {
       path: destinationParentPath as never,
       ownerUid,
       mode: 0o700,
-      dev: String(destinationParentStats.dev) as never,
-      ino: String(destinationParentStats.ino) as never,
+      dev: destinationParentStats.dev.toString(10) as never,
+      ino: destinationParentStats.ino.toString(10) as never,
     },
     mutationPublications,
     initialJournal,
@@ -515,7 +515,7 @@ async function installBootstrapFoundationFixture(
     flag: 'wx',
     mode: 0o600,
   });
-  const stagedStats = await nodeFs.lstat(initialJournalPath);
+  const stagedStats = await nodeFs.lstat(initialJournalPath, { bigint: true });
 
   const staged = {
     kind: 'bootstrap_expected' as const,
@@ -602,8 +602,8 @@ async function installBootstrapFoundationFixture(
     bytes: initialJournalBytes.byteLength,
     sha256: initialJournalHash as never,
     mode: 0o600,
-    dev: String(stagedStats.dev) as never,
-    ino: String(stagedStats.ino) as never,
+    dev: stagedStats.dev.toString(10) as never,
+    ino: stagedStats.ino.toString(10) as never,
   };
 
   return {
@@ -612,7 +612,7 @@ async function installBootstrapFoundationFixture(
     admission: await admitFoundationInitialJournal(
       participant,
       evidence,
-      stagedStats.uid,
+      Number(stagedStats.uid),
     ),
     initialJournalPath,
     finalJournalPath,
@@ -651,9 +651,9 @@ function noReplacePublisher(
 > {
   return async (request): Promise<void> => {
     calls.push(`${request.sourcePath}->${request.destinationPath}`);
-    const source = await nodeFs.lstat(request.sourcePath);
-    expect(String(source.dev)).toBe(request.postimage.dev);
-    expect(String(source.ino)).toBe(request.postimage.ino);
+    const source = await nodeFs.lstat(request.sourcePath, { bigint: true });
+    expect(source.dev.toString(10)).toBe(request.postimage.dev);
+    expect(source.ino.toString(10)).toBe(request.postimage.ino);
     expect(request.sourceParent.path).toBe(dirname(request.sourcePath));
     expect(request.destinationParent.path).toBe(dirname(request.destinationPath));
     await expectMissing(request.destinationPath);
@@ -850,7 +850,7 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
     const fixture = await createFixture('bootstrap-foundation-numeric-proof');
     try {
       const bootstrap = await installBootstrapFoundationFixture(fixture);
-      const stagedStats = await nodeFs.lstat(bootstrap.initialJournalPath);
+      const stagedStats = await nodeFs.lstat(bootstrap.initialJournalPath, { bigint: true });
       expect(() =>
         admitBootstrapFoundationInitialJournal(
           bootstrap.participant,
@@ -945,11 +945,11 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
     const fixture = await createFixture('bootstrap-foundation-owner-admission');
     try {
       const bootstrap = await installBootstrapFoundationFixture(fixture);
-      const stagedStats = await nodeFs.lstat(bootstrap.initialJournalPath);
+      const stagedStats = await nodeFs.lstat(bootstrap.initialJournalPath, { bigint: true });
       const wrongOwnerAdmission = await admitFoundationInitialJournal(
         bootstrap.participant,
         bootstrap.evidence,
-        stagedStats.uid + 1,
+        Number(stagedStats.uid) + 1,
       );
       let publisherCalled = false;
 
@@ -975,9 +975,9 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
       const bootstrap = await installBootstrapFoundationFixture(fixture);
       const publicationCalls: string[] = [];
       const [sourceParent, destinationParent, source] = await Promise.all([
-        nodeFs.lstat(dirname(bootstrap.initialJournalPath)),
-        nodeFs.lstat(dirname(bootstrap.finalJournalPath)),
-        nodeFs.lstat(bootstrap.initialJournalPath),
+        nodeFs.lstat(dirname(bootstrap.initialJournalPath), { bigint: true }),
+        nodeFs.lstat(dirname(bootstrap.finalJournalPath), { bigint: true }),
+        nodeFs.lstat(bootstrap.initialJournalPath, { bigint: true }),
       ]);
 
       const result = await bootstrapFoundationExecutor(
@@ -989,18 +989,18 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
               sourcePath: bootstrap.initialJournalPath,
               destinationPath: bootstrap.finalJournalPath,
               sourceParent: {
-                path: dirname(bootstrap.initialJournalPath), ownerUid: sourceParent.uid,
-                mode: 0o700, dev: String(sourceParent.dev), ino: String(sourceParent.ino),
+                path: dirname(bootstrap.initialJournalPath), ownerUid: Number(sourceParent.uid),
+                mode: 0o700, dev: sourceParent.dev.toString(10), ino: sourceParent.ino.toString(10),
               },
               destinationParent: {
-                path: dirname(bootstrap.finalJournalPath), ownerUid: destinationParent.uid,
-                mode: 0o700, dev: String(destinationParent.dev), ino: String(destinationParent.ino),
+                path: dirname(bootstrap.finalJournalPath), ownerUid: Number(destinationParent.uid),
+                mode: 0o700, dev: destinationParent.dev.toString(10), ino: destinationParent.ino.toString(10),
               },
               postimage: {
-                kind: 'regular_file', ownerUid: source.uid, mode: 0o600, nlink: 1,
+                kind: 'regular_file', ownerUid: Number(source.uid), mode: 0o600, nlink: 1,
                 bytes: String(bootstrap.initialJournalBytes.byteLength),
                 sha256: createHash('sha256').update(bootstrap.initialJournalBytes).digest('hex'),
-                dev: String(source.dev), ino: String(source.ino),
+                dev: source.dev.toString(10), ino: source.ino.toString(10),
               },
             });
           } else {
@@ -1033,15 +1033,15 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
     const fixture = await createFixture('bootstrap-foundation-in-place-journal');
     try {
       const bootstrap = await installBootstrapFoundationFixture(fixture);
-      const initial = await nodeFs.lstat(bootstrap.initialJournalPath);
+      const initial = await nodeFs.lstat(bootstrap.initialJournalPath, { bigint: true });
 
       const result = await bootstrapFoundationExecutor(fixture, noReplacePublisher())
         .executeBootstrapFoundationParticipant(bootstrap.admission);
 
-      const final = await nodeFs.lstat(bootstrap.finalJournalPath);
+      const final = await nodeFs.lstat(bootstrap.finalJournalPath, { bigint: true });
       expect(result.phase).toBe('finalized');
-      expect([String(final.dev), String(final.ino)]).toStrictEqual([
-        String(initial.dev), String(initial.ino),
+      expect([final.dev.toString(10), final.ino.toString(10)]).toStrictEqual([
+        initial.dev.toString(10), initial.ino.toString(10),
       ]);
       expect(await nodeFs.readFile(bootstrap.finalJournalPath))
         .not.toStrictEqual(bootstrap.initialJournalBytes);
@@ -1062,7 +1062,7 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
       const fixture = await createFixture(`bootstrap-foundation-rewrite-${fault}`);
       try {
         const bootstrap = await installBootstrapFoundationFixture(fixture);
-        const origin = await nodeFs.lstat(bootstrap.initialJournalPath);
+        const origin = await nodeFs.lstat(bootstrap.initialJournalPath, { bigint: true });
         let armed = true;
         let truncated = false;
         let wrotePartial = false;
@@ -1159,17 +1159,17 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
             .executeBootstrapFoundationParticipant(bootstrap.admission),
         ).rejects.toBeInstanceOf(Error);
 
-        const interrupted = await nodeFs.lstat(bootstrap.finalJournalPath);
-        expect([String(interrupted.dev), String(interrupted.ino)]).toStrictEqual([
-          String(origin.dev), String(origin.ino),
+        const interrupted = await nodeFs.lstat(bootstrap.finalJournalPath, { bigint: true });
+        expect([interrupted.dev.toString(10), interrupted.ino.toString(10)]).toStrictEqual([
+          origin.dev.toString(10), origin.ino.toString(10),
         ]);
         const recovered = await bootstrapFoundationExecutor(fixture, noReplacePublisher())
           .executeBootstrapFoundationParticipant(bootstrap.admission);
-        const terminal = await nodeFs.lstat(bootstrap.finalJournalPath);
+        const terminal = await nodeFs.lstat(bootstrap.finalJournalPath, { bigint: true });
 
         expect(recovered.phase).toBe('finalized');
-        expect([String(terminal.dev), String(terminal.ino)]).toStrictEqual([
-          String(origin.dev), String(origin.ino),
+        expect([terminal.dev.toString(10), terminal.ino.toString(10)]).toStrictEqual([
+          origin.dev.toString(10), origin.ino.toString(10),
         ]);
         expect(validateJournal(JSON.parse(
           await nodeFs.readFile(bootstrap.finalJournalPath, 'utf8'),
@@ -1192,7 +1192,7 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
       ).executeBootstrapFoundationParticipant(bootstrap.admission)).resolves.toMatchObject({
         phase: 'finalized',
       });
-      const identity = await nodeFs.lstat(bootstrap.finalJournalPath);
+      const identity = await nodeFs.lstat(bootstrap.finalJournalPath, { bigint: true });
       const invalid = {
         ...JSON.parse(await nodeFs.readFile(bootstrap.finalJournalPath, 'utf8')) as TransactionJournalV1,
         phase: 'rolled_back' as const,
@@ -1204,9 +1204,9 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
         .executeBootstrapFoundationParticipant(bootstrap.admission)).rejects.toBeInstanceOf(Error);
 
       expect(await nodeFs.readFile(bootstrap.finalJournalPath, 'utf8')).toBe(invalidBytes);
-      const after = await nodeFs.lstat(bootstrap.finalJournalPath);
-      expect([String(after.dev), String(after.ino)]).toStrictEqual([
-        String(identity.dev), String(identity.ino),
+      const after = await nodeFs.lstat(bootstrap.finalJournalPath, { bigint: true });
+      expect([after.dev.toString(10), after.ino.toString(10)]).toStrictEqual([
+        identity.dev.toString(10), identity.ino.toString(10),
       ]);
       await expectBytes(bootstrap.targetPath, CREATED_BYTES);
     } finally {
@@ -1231,7 +1231,7 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
         .rejects.toBeInstanceOf(Error);
 
       expect(publisherCalled).toBe(false);
-      await expect(nodeFs.lstat(bootstrap.initialJournalPath)).resolves.toBeDefined();
+      await expect(nodeFs.lstat(bootstrap.initialJournalPath, { bigint: true })).resolves.toBeDefined();
       await expectMissing(bootstrap.finalJournalPath);
       await expectMissing(join(displacedParent, basename(bootstrap.finalJournalPath)));
       await expectMissing(bootstrap.targetPath);
@@ -1244,7 +1244,7 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
     const fixture = await createFixture('bootstrap-foundation-before-rename');
     try {
       const bootstrap = await installBootstrapFoundationFixture(fixture);
-      const before = await nodeFs.lstat(bootstrap.initialJournalPath);
+      const before = await nodeFs.lstat(bootstrap.initialJournalPath, { bigint: true });
       const executor = bootstrapFoundationExecutor(fixture, () =>
         Promise.reject(new Error('synthetic death before no-replace rename')),
       );
@@ -1253,10 +1253,10 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
         executor.executeBootstrapFoundationParticipant(bootstrap.admission),
       ).rejects.toBeInstanceOf(Error);
 
-      const after = await nodeFs.lstat(bootstrap.initialJournalPath);
-      expect([String(after.dev), String(after.ino)]).toStrictEqual([
-        String(before.dev),
-        String(before.ino),
+      const after = await nodeFs.lstat(bootstrap.initialJournalPath, { bigint: true });
+      expect([after.dev.toString(10), after.ino.toString(10)]).toStrictEqual([
+        before.dev.toString(10),
+        before.ino.toString(10),
       ]);
       await expectMissing(bootstrap.finalJournalPath);
       await expectMissing(bootstrap.targetPath);
@@ -1380,15 +1380,15 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
     const fixture = await createFixture('bootstrap-foundation-final-adoption');
     try {
       const bootstrap = await installBootstrapFoundationFixture(fixture);
-      const stagedIdentity = await nodeFs.lstat(bootstrap.initialJournalPath);
+      const stagedIdentity = await nodeFs.lstat(bootstrap.initialJournalPath, { bigint: true });
       await nodeFs.rename(
         bootstrap.initialJournalPath,
         bootstrap.finalJournalPath,
       );
-      const adoptedIdentity = await nodeFs.lstat(bootstrap.finalJournalPath);
-      expect([String(adoptedIdentity.dev), String(adoptedIdentity.ino)]).toStrictEqual([
-        String(stagedIdentity.dev),
-        String(stagedIdentity.ino),
+      const adoptedIdentity = await nodeFs.lstat(bootstrap.finalJournalPath, { bigint: true });
+      expect([adoptedIdentity.dev.toString(10), adoptedIdentity.ino.toString(10)]).toStrictEqual([
+        stagedIdentity.dev.toString(10),
+        stagedIdentity.ino.toString(10),
       ]);
 
       const result = await bootstrapFoundationExecutor(
@@ -1442,13 +1442,13 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
         }).executeBootstrapFoundationParticipant(bootstrap.admission),
       ).rejects.toBeInstanceOf(Error);
       const before = await Promise.all([
-        nodeFs.lstat(bootstrap.initialJournalPath),
-        nodeFs.lstat(bootstrap.finalJournalPath),
+        nodeFs.lstat(bootstrap.initialJournalPath, { bigint: true }),
+        nodeFs.lstat(bootstrap.finalJournalPath, { bigint: true }),
       ]);
-      expect(before.map((stats) => [String(stats.dev), String(stats.ino), stats.nlink]))
+      expect(before.map((stats) => [stats.dev.toString(10), stats.ino.toString(10), stats.nlink]))
         .toStrictEqual([
-          [String(before[0].dev), String(before[0].ino), 2],
-          [String(before[0].dev), String(before[0].ino), 2],
+          [before[0].dev.toString(10), before[0].ino.toString(10), 2n],
+          [before[0].dev.toString(10), before[0].ino.toString(10), 2n],
         ]);
       let publicationCalled = false;
       await expect(bootstrapFoundationExecutor(
@@ -1460,8 +1460,8 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
       ).executeBootstrapFoundationParticipant(bootstrap.admission)).rejects.toBeInstanceOf(Error);
 
       expect(publicationCalled).toBe(false);
-      await expect(nodeFs.lstat(bootstrap.initialJournalPath)).resolves.toBeDefined();
-      await expect(nodeFs.lstat(bootstrap.finalJournalPath)).resolves.toBeDefined();
+      await expect(nodeFs.lstat(bootstrap.initialJournalPath, { bigint: true })).resolves.toBeDefined();
+      await expect(nodeFs.lstat(bootstrap.finalJournalPath, { bigint: true })).resolves.toBeDefined();
       await expectMissing(bootstrap.targetPath);
     } finally {
       await removeFixture(fixture);
@@ -1501,7 +1501,7 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
         `${JSON.stringify(semantic, null, 2)}\n`,
       );
       await nodeFs.writeFile(bootstrap.initialJournalPath, reorderedBytes);
-      const stats = await nodeFs.lstat(bootstrap.initialJournalPath);
+      const stats = await nodeFs.lstat(bootstrap.initialJournalPath, { bigint: true });
       const alteredParticipant = structuredClone(bootstrap.participant) as {
         initialJournal: {
           staged: { hash: string; bytes: number };
@@ -1520,13 +1520,13 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
       alteredParticipant.initialJournal.plannedBytesHash = alteredHash;
       alteredEvidence.bytes = reorderedBytes.byteLength;
       alteredEvidence.sha256 = alteredHash;
-      alteredEvidence.dev = String(stats.dev);
-      alteredEvidence.ino = String(stats.ino);
+      alteredEvidence.dev = stats.dev.toString(10);
+      alteredEvidence.ino = stats.ino.toString(10);
       await expect(
         admitFoundationInitialJournal(
           alteredParticipant as unknown as FoundationParticipantRefV2,
           alteredEvidence as unknown as BootstrapPayloadEvidenceV1,
-          stats.uid,
+          Number(stats.uid),
         ),
       ).rejects.toBeInstanceOf(Error);
       await expect(nodeFs.stat(bootstrap.initialJournalPath)).resolves.toBeDefined();
@@ -1544,7 +1544,7 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
       if (mutationSourcePath === null || mutationSourcePath === undefined) {
         throw new Error('bootstrap mutation publication source is missing');
       }
-      const sourceBefore = await nodeFs.lstat(mutationSourcePath);
+      const sourceBefore = await nodeFs.lstat(mutationSourcePath, { bigint: true });
       const mutatedBytes = Uint8Array.from(CREATED_BYTES);
       mutatedBytes[0] = 0x20;
       await expect(
@@ -1557,7 +1557,7 @@ describe('coordinator-bound bootstrap Foundation initial-journal publication', (
       ).rejects.toBeInstanceOf(Error);
       await expectMissing(mutationSourcePath);
       await expectBytes(bootstrap.targetPath, mutatedBytes);
-      const targetAfter = await nodeFs.lstat(bootstrap.targetPath);
+      const targetAfter = await nodeFs.lstat(bootstrap.targetPath, { bigint: true });
       expect({ dev: targetAfter.dev, ino: targetAfter.ino }).toEqual({
         dev: sourceBefore.dev,
         ino: sourceBefore.ino,
@@ -1995,7 +1995,7 @@ describe('TransactionExecutor durable recovery', () => {
       await expect(
         createExecutor(fixture).resume(fixture.transactionId),
       ).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
-      expect((await nodeFs.lstat(stagedPath)).isSymbolicLink()).toBe(true);
+      expect((await nodeFs.lstat(stagedPath, { bigint: true })).isSymbolicLink()).toBe(true);
       await expectBytes(outsidePath, NEW_BYTES);
       await expectBytes(targetPath, ORIGINAL_BYTES);
       expect(await readMode(targetPath)).toBe(ORIGINAL_MODE);
@@ -2530,7 +2530,7 @@ describe('TransactionExecutor durable recovery', () => {
       await expect(
         createExecutor(fixture).rollback(fixture.transactionId),
       ).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
-      expect((await nodeFs.lstat(backupPath)).isSymbolicLink()).toBe(true);
+      expect((await nodeFs.lstat(backupPath, { bigint: true })).isSymbolicLink()).toBe(true);
       await expectBytes(outsidePath, ORIGINAL_BYTES);
       await expectBytes(targetPath, NEW_BYTES);
       expect(await readMode(targetPath)).toBe(ORIGINAL_MODE);
@@ -2564,7 +2564,7 @@ describe('TransactionExecutor durable recovery', () => {
       await expect(
         createExecutor(fixture).rollback(fixture.transactionId),
       ).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
-      expect((await nodeFs.lstat(metadataPath)).isSymbolicLink()).toBe(true);
+      expect((await nodeFs.lstat(metadataPath, { bigint: true })).isSymbolicLink()).toBe(true);
       await expectBytes(outsidePath, exactMetadata);
       await expectBytes(targetPath, NEW_BYTES);
       expect(await readMode(targetPath)).toBe(ORIGINAL_MODE);
@@ -2595,7 +2595,7 @@ describe('TransactionExecutor durable recovery', () => {
       await expect(
         createExecutor(fixture).resume(fixture.transactionId),
       ).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
-      expect((await nodeFs.lstat(stagedDirectory)).isSymbolicLink()).toBe(true);
+      expect((await nodeFs.lstat(stagedDirectory, { bigint: true })).isSymbolicLink()).toBe(true);
       await expectBytes(join(movedDirectory, '0.bin'), NEW_BYTES);
       await expectBytes(targetPath, ORIGINAL_BYTES);
       expect(await readMode(targetPath)).toBe(ORIGINAL_MODE);
@@ -2708,7 +2708,7 @@ describe('TransactionExecutor durable recovery', () => {
       await expect(
         createExecutor(fixture, { guards }).resume(fixture.transactionId),
       ).rejects.toMatchObject({ code: EXIT_CODES.securityRefusal });
-      expect((await nodeFs.lstat(targetPath)).isSymbolicLink()).toBe(true);
+      expect((await nodeFs.lstat(targetPath, { bigint: true })).isSymbolicLink()).toBe(true);
       expect(await nodeFs.readlink(targetPath)).toBe(outsidePath);
       await expectBytes(outsidePath, USER_BYTES);
     } finally {

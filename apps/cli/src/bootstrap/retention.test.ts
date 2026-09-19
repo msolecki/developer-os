@@ -757,21 +757,21 @@ describe("projectRetainedDirectoryTree", () => {
     const root = await nodeFs.mkdtemp(join(tmpdir(), "developer-os-retained-empty-third-state-"));
     roots.add(root);
     await nodeFs.chmod(root, 0o700);
-    const rootStats = await nodeFs.lstat(root);
+    const rootStats = await nodeFs.lstat(root, { bigint: true });
     const entries = [] as const;
     const expected = {
       kind: "directory_tree" as const,
-      ownerUid: rootStats.uid,
+      ownerUid: Number(rootStats.uid),
       mode: 0o700 as const,
-      nlink: rootStats.nlink,
+      nlink: Number(rootStats.nlink),
       treeHash: parseLowerHexSha256(createHash("sha256")
         .update("developer-os/bootstrap-retained-tree/v1\0")
         .update(encodeCanonicalJson(entries).slice(0, -1))
         .digest("hex")),
       entryCount: 0,
       regularFileBytes: parseUInt64Decimal("0"),
-      dev: parseUInt64Decimal(String(rootStats.dev)),
-      ino: parseUInt64Decimal(String(rootStats.ino)),
+      dev: parseUInt64Decimal(rootStats.dev.toString(10)),
+      ino: parseUInt64Decimal(rootStats.ino.toString(10)),
       entries,
     };
     const row = entry(0, "staging_subtree", path(root), expected);
@@ -806,38 +806,38 @@ describe("projectRetainedDirectoryTree", () => {
     await nodeFs.writeFile(first, "a", { mode: 0o600 });
     await nodeFs.writeFile(second, "bbb", { mode: 0o600 });
     const [rootStats, nestedStats, firstStats, secondStats] = await Promise.all([
-      nodeFs.lstat(root), nodeFs.lstat(nested), nodeFs.lstat(first), nodeFs.lstat(second),
+      nodeFs.lstat(root, { bigint: true }), nodeFs.lstat(nested, { bigint: true }), nodeFs.lstat(first, { bigint: true }), nodeFs.lstat(second, { bigint: true }),
     ]);
     const entries: readonly BootstrapRetentionDirectoryEntryV1[] = [
       {
-        relativePath: "a.bin", kind: "regular_file", ownerUid: firstStats.uid,
+        relativePath: "a.bin", kind: "regular_file", ownerUid: Number(firstStats.uid),
         mode: 0o600, nlink: 1, bytes: parseUInt64Decimal("1"), sha256: hash("a"),
-        dev: parseUInt64Decimal(String(firstStats.dev)), ino: parseUInt64Decimal(String(firstStats.ino)),
+        dev: parseUInt64Decimal(firstStats.dev.toString(10)), ino: parseUInt64Decimal(firstStats.ino.toString(10)),
       },
       {
-        relativePath: "nested", kind: "directory", ownerUid: nestedStats.uid,
-        mode: 0o700, nlink: nestedStats.nlink, bytes: parseUInt64Decimal("0"), sha256: null,
-        dev: parseUInt64Decimal(String(nestedStats.dev)), ino: parseUInt64Decimal(String(nestedStats.ino)),
+        relativePath: "nested", kind: "directory", ownerUid: Number(nestedStats.uid),
+        mode: 0o700, nlink: Number(nestedStats.nlink), bytes: parseUInt64Decimal("0"), sha256: null,
+        dev: parseUInt64Decimal(nestedStats.dev.toString(10)), ino: parseUInt64Decimal(nestedStats.ino.toString(10)),
       },
       {
-        relativePath: "nested/b.bin", kind: "regular_file", ownerUid: secondStats.uid,
+        relativePath: "nested/b.bin", kind: "regular_file", ownerUid: Number(secondStats.uid),
         mode: 0o600, nlink: 1, bytes: parseUInt64Decimal("3"), sha256: hash("bbb"),
-        dev: parseUInt64Decimal(String(secondStats.dev)), ino: parseUInt64Decimal(String(secondStats.ino)),
+        dev: parseUInt64Decimal(secondStats.dev.toString(10)), ino: parseUInt64Decimal(secondStats.ino.toString(10)),
       },
     ];
     const expected = {
       kind: "directory_tree" as const,
-      ownerUid: rootStats.uid,
+      ownerUid: Number(rootStats.uid),
       mode: 0o700 as const,
-      nlink: rootStats.nlink,
+      nlink: Number(rootStats.nlink),
       treeHash: parseLowerHexSha256(createHash("sha256")
         .update("developer-os/bootstrap-retained-tree/v1\0")
         .update(encodeCanonicalJson(entries).slice(0, -1))
         .digest("hex")),
       entryCount: 3,
       regularFileBytes: parseUInt64Decimal("4"),
-      dev: parseUInt64Decimal(String(rootStats.dev)),
-      ino: parseUInt64Decimal(String(rootStats.ino)),
+      dev: parseUInt64Decimal(rootStats.dev.toString(10)),
+      ino: parseUInt64Decimal(rootStats.ino.toString(10)),
       entries,
     };
 
@@ -850,25 +850,25 @@ describe("projectRetainedDirectoryTree", () => {
     await nodeFs.chmod(root, 0o700);
     const known = join(root, "known");
     await nodeFs.writeFile(known, "known", { mode: 0o600 });
-    const [rootStats, knownStats] = await Promise.all([nodeFs.lstat(root), nodeFs.lstat(known)]);
+    const [rootStats, knownStats] = await Promise.all([nodeFs.lstat(root, { bigint: true }), nodeFs.lstat(known, { bigint: true })]);
     const entries: readonly BootstrapRetentionDirectoryEntryV1[] = [{
-      relativePath: "known", kind: "regular_file", ownerUid: knownStats.uid,
+      relativePath: "known", kind: "regular_file", ownerUid: Number(knownStats.uid),
       mode: 0o600, nlink: 1, bytes: parseUInt64Decimal("5"), sha256: hash("known"),
-      dev: parseUInt64Decimal(String(knownStats.dev)), ino: parseUInt64Decimal(String(knownStats.ino)),
+      dev: parseUInt64Decimal(knownStats.dev.toString(10)), ino: parseUInt64Decimal(knownStats.ino.toString(10)),
     }];
     const expected = {
       kind: "directory_tree" as const,
-      ownerUid: rootStats.uid,
+      ownerUid: Number(rootStats.uid),
       mode: 0o700 as const,
-      nlink: rootStats.nlink,
+      nlink: Number(rootStats.nlink),
       treeHash: parseLowerHexSha256(createHash("sha256")
         .update("developer-os/bootstrap-retained-tree/v1\0")
         .update(encodeCanonicalJson(entries).slice(0, -1))
         .digest("hex")),
       entryCount: 1,
       regularFileBytes: parseUInt64Decimal("5"),
-      dev: parseUInt64Decimal(String(rootStats.dev)),
-      ino: parseUInt64Decimal(String(rootStats.ino)),
+      dev: parseUInt64Decimal(rootStats.dev.toString(10)),
+      ino: parseUInt64Decimal(rootStats.ino.toString(10)),
       entries,
     };
     let rootStatsSeen = 0;
@@ -892,25 +892,25 @@ describe("projectRetainedDirectoryTree", () => {
     await nodeFs.chmod(root, 0o700);
     const known = join(root, "known");
     await nodeFs.writeFile(known, "known", { mode: 0o600 });
-    const [rootStats, knownStats] = await Promise.all([nodeFs.lstat(root), nodeFs.lstat(known)]);
+    const [rootStats, knownStats] = await Promise.all([nodeFs.lstat(root, { bigint: true }), nodeFs.lstat(known, { bigint: true })]);
     const entries: readonly BootstrapRetentionDirectoryEntryV1[] = [{
-      relativePath: "known", kind: "regular_file", ownerUid: knownStats.uid,
+      relativePath: "known", kind: "regular_file", ownerUid: Number(knownStats.uid),
       mode: 0o600, nlink: 1, bytes: parseUInt64Decimal("5"), sha256: hash("known"),
-      dev: parseUInt64Decimal(String(knownStats.dev)), ino: parseUInt64Decimal(String(knownStats.ino)),
+      dev: parseUInt64Decimal(knownStats.dev.toString(10)), ino: parseUInt64Decimal(knownStats.ino.toString(10)),
     }];
     const expected = {
       kind: "directory_tree" as const,
-      ownerUid: rootStats.uid,
+      ownerUid: Number(rootStats.uid),
       mode: 0o700 as const,
-      nlink: rootStats.nlink,
+      nlink: Number(rootStats.nlink),
       treeHash: parseLowerHexSha256(createHash("sha256")
         .update("developer-os/bootstrap-retained-tree/v1\0")
         .update(encodeCanonicalJson(entries).slice(0, -1))
         .digest("hex")),
       entryCount: 1,
       regularFileBytes: parseUInt64Decimal("5"),
-      dev: parseUInt64Decimal(String(rootStats.dev)),
-      ino: parseUInt64Decimal(String(rootStats.ino)),
+      dev: parseUInt64Decimal(rootStats.dev.toString(10)),
+      ino: parseUInt64Decimal(rootStats.ino.toString(10)),
       entries,
     };
     fsRaceControl.failClosePath = root;
@@ -929,25 +929,25 @@ describe("projectRetainedDirectoryTree", () => {
     await nodeFs.chmod(root, 0o700);
     const known = join(root, "known");
     await nodeFs.writeFile(known, "known", { mode: 0o600 });
-    const [rootStats, knownStats] = await Promise.all([nodeFs.lstat(root), nodeFs.lstat(known)]);
+    const [rootStats, knownStats] = await Promise.all([nodeFs.lstat(root, { bigint: true }), nodeFs.lstat(known, { bigint: true })]);
     const entries: readonly BootstrapRetentionDirectoryEntryV1[] = [{
-      relativePath: "known", kind: "regular_file", ownerUid: knownStats.uid,
+      relativePath: "known", kind: "regular_file", ownerUid: Number(knownStats.uid),
       mode: 0o600, nlink: 1, bytes: parseUInt64Decimal("5"), sha256: hash("known"),
-      dev: parseUInt64Decimal(String(knownStats.dev)), ino: parseUInt64Decimal(String(knownStats.ino)),
+      dev: parseUInt64Decimal(knownStats.dev.toString(10)), ino: parseUInt64Decimal(knownStats.ino.toString(10)),
     }];
     const expected = {
       kind: "directory_tree" as const,
-      ownerUid: rootStats.uid,
+      ownerUid: Number(rootStats.uid),
       mode: 0o700 as const,
-      nlink: rootStats.nlink,
+      nlink: Number(rootStats.nlink),
       treeHash: parseLowerHexSha256(createHash("sha256")
         .update("developer-os/bootstrap-retained-tree/v1\0")
         .update(encodeCanonicalJson(entries).slice(0, -1))
         .digest("hex")),
       entryCount: 1,
       regularFileBytes: parseUInt64Decimal("5"),
-      dev: parseUInt64Decimal(String(rootStats.dev)),
-      ino: parseUInt64Decimal(String(rootStats.ino)),
+      dev: parseUInt64Decimal(rootStats.dev.toString(10)),
+      ino: parseUInt64Decimal(rootStats.ino.toString(10)),
       entries,
     };
     let rootStatsSeen = 0;
@@ -979,34 +979,34 @@ describe("projectRetainedDirectoryTree", () => {
     const replacementFile = join(replacement, "data");
     await nodeFs.writeFile(replacementFile, "data", { mode: 0o600 });
     const [rootStats, nestedStats, replacementFileStats] = await Promise.all([
-      nodeFs.lstat(root), nodeFs.lstat(nested), nodeFs.lstat(replacementFile),
+      nodeFs.lstat(root, { bigint: true }), nodeFs.lstat(nested, { bigint: true }), nodeFs.lstat(replacementFile, { bigint: true }),
     ]);
     const entries: readonly BootstrapRetentionDirectoryEntryV1[] = [
       {
-        relativePath: "nested", kind: "directory", ownerUid: nestedStats.uid,
-        mode: 0o700, nlink: nestedStats.nlink, bytes: parseUInt64Decimal("0"), sha256: null,
-        dev: parseUInt64Decimal(String(nestedStats.dev)), ino: parseUInt64Decimal(String(nestedStats.ino)),
+        relativePath: "nested", kind: "directory", ownerUid: Number(nestedStats.uid),
+        mode: 0o700, nlink: Number(nestedStats.nlink), bytes: parseUInt64Decimal("0"), sha256: null,
+        dev: parseUInt64Decimal(nestedStats.dev.toString(10)), ino: parseUInt64Decimal(nestedStats.ino.toString(10)),
       },
       {
-        relativePath: "nested/data", kind: "regular_file", ownerUid: replacementFileStats.uid,
+        relativePath: "nested/data", kind: "regular_file", ownerUid: Number(replacementFileStats.uid),
         mode: 0o600, nlink: 1, bytes: parseUInt64Decimal("4"), sha256: hash("data"),
-        dev: parseUInt64Decimal(String(replacementFileStats.dev)),
-        ino: parseUInt64Decimal(String(replacementFileStats.ino)),
+        dev: parseUInt64Decimal(replacementFileStats.dev.toString(10)),
+        ino: parseUInt64Decimal(replacementFileStats.ino.toString(10)),
       },
     ];
     const expected = {
       kind: "directory_tree" as const,
-      ownerUid: rootStats.uid,
+      ownerUid: Number(rootStats.uid),
       mode: 0o700 as const,
-      nlink: rootStats.nlink,
+      nlink: Number(rootStats.nlink),
       treeHash: parseLowerHexSha256(createHash("sha256")
         .update("developer-os/bootstrap-retained-tree/v1\0")
         .update(encodeCanonicalJson(entries).slice(0, -1))
         .digest("hex")),
       entryCount: 2,
       regularFileBytes: parseUInt64Decimal("4"),
-      dev: parseUInt64Decimal(String(rootStats.dev)),
-      ino: parseUInt64Decimal(String(rootStats.ino)),
+      dev: parseUInt64Decimal(rootStats.dev.toString(10)),
+      ino: parseUInt64Decimal(rootStats.ino.toString(10)),
       entries,
     };
     let swapped = false;
@@ -1035,25 +1035,25 @@ describe("projectRetainedDirectoryTree", () => {
     await nodeFs.mkdir(root, { mode: 0o700 });
     await nodeFs.writeFile(known, "known", { mode: 0o600 });
     await nodeFs.writeFile(replacement, "other", { mode: 0o600 });
-    const [rootStats, knownStats] = await Promise.all([nodeFs.lstat(root), nodeFs.lstat(known)]);
+    const [rootStats, knownStats] = await Promise.all([nodeFs.lstat(root, { bigint: true }), nodeFs.lstat(known, { bigint: true })]);
     const entries: readonly BootstrapRetentionDirectoryEntryV1[] = [{
-      relativePath: "known", kind: "regular_file", ownerUid: knownStats.uid,
+      relativePath: "known", kind: "regular_file", ownerUid: Number(knownStats.uid),
       mode: 0o600, nlink: 1, bytes: parseUInt64Decimal("5"), sha256: hash("known"),
-      dev: parseUInt64Decimal(String(knownStats.dev)), ino: parseUInt64Decimal(String(knownStats.ino)),
+      dev: parseUInt64Decimal(knownStats.dev.toString(10)), ino: parseUInt64Decimal(knownStats.ino.toString(10)),
     }];
     const expected = {
       kind: "directory_tree" as const,
-      ownerUid: rootStats.uid,
+      ownerUid: Number(rootStats.uid),
       mode: 0o700 as const,
-      nlink: rootStats.nlink,
+      nlink: Number(rootStats.nlink),
       treeHash: parseLowerHexSha256(createHash("sha256")
         .update("developer-os/bootstrap-retained-tree/v1\0")
         .update(encodeCanonicalJson(entries).slice(0, -1))
         .digest("hex")),
       entryCount: 1,
       regularFileBytes: parseUInt64Decimal("5"),
-      dev: parseUInt64Decimal(String(rootStats.dev)),
-      ino: parseUInt64Decimal(String(rootStats.ino)),
+      dev: parseUInt64Decimal(rootStats.dev.toString(10)),
+      ino: parseUInt64Decimal(rootStats.ino.toString(10)),
       entries,
     };
     const row = entry(0, "staging_subtree", path(root), expected);
@@ -1086,7 +1086,7 @@ describe("projectRetainedDirectoryTree", () => {
     }
     expect(renameCalls).toBe(0);
     expect(await nodeFs.readdir(root)).toEqual(["known"]);
-    await expect(nodeFs.lstat(row.tombstonePath)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(nodeFs.lstat(row.tombstonePath, { bigint: true })).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("refuses a same-name nested-directory replacement after recursion returns before rename", async () => {
@@ -1103,34 +1103,34 @@ describe("projectRetainedDirectoryTree", () => {
     await nodeFs.writeFile(nestedFile, "data", { mode: 0o600 });
     await nodeFs.writeFile(join(replacement, "data"), "evil", { mode: 0o600 });
     const [rootStats, nestedStats, nestedFileStats] = await Promise.all([
-      nodeFs.lstat(root), nodeFs.lstat(nested), nodeFs.lstat(nestedFile),
+      nodeFs.lstat(root, { bigint: true }), nodeFs.lstat(nested, { bigint: true }), nodeFs.lstat(nestedFile, { bigint: true }),
     ]);
     const entries: readonly BootstrapRetentionDirectoryEntryV1[] = [
       {
-        relativePath: "nested", kind: "directory", ownerUid: nestedStats.uid,
-        mode: 0o700, nlink: nestedStats.nlink, bytes: parseUInt64Decimal("0"), sha256: null,
-        dev: parseUInt64Decimal(String(nestedStats.dev)), ino: parseUInt64Decimal(String(nestedStats.ino)),
+        relativePath: "nested", kind: "directory", ownerUid: Number(nestedStats.uid),
+        mode: 0o700, nlink: Number(nestedStats.nlink), bytes: parseUInt64Decimal("0"), sha256: null,
+        dev: parseUInt64Decimal(nestedStats.dev.toString(10)), ino: parseUInt64Decimal(nestedStats.ino.toString(10)),
       },
       {
-        relativePath: "nested/data", kind: "regular_file", ownerUid: nestedFileStats.uid,
+        relativePath: "nested/data", kind: "regular_file", ownerUid: Number(nestedFileStats.uid),
         mode: 0o600, nlink: 1, bytes: parseUInt64Decimal("4"), sha256: hash("data"),
-        dev: parseUInt64Decimal(String(nestedFileStats.dev)),
-        ino: parseUInt64Decimal(String(nestedFileStats.ino)),
+        dev: parseUInt64Decimal(nestedFileStats.dev.toString(10)),
+        ino: parseUInt64Decimal(nestedFileStats.ino.toString(10)),
       },
     ];
     const expected = {
       kind: "directory_tree" as const,
-      ownerUid: rootStats.uid,
+      ownerUid: Number(rootStats.uid),
       mode: 0o700 as const,
-      nlink: rootStats.nlink,
+      nlink: Number(rootStats.nlink),
       treeHash: parseLowerHexSha256(createHash("sha256")
         .update("developer-os/bootstrap-retained-tree/v1\0")
         .update(encodeCanonicalJson(entries).slice(0, -1))
         .digest("hex")),
       entryCount: 2,
       regularFileBytes: parseUInt64Decimal("4"),
-      dev: parseUInt64Decimal(String(rootStats.dev)),
-      ino: parseUInt64Decimal(String(rootStats.ino)),
+      dev: parseUInt64Decimal(rootStats.dev.toString(10)),
+      ino: parseUInt64Decimal(rootStats.ino.toString(10)),
       entries,
     };
     const row = entry(0, "staging_subtree", path(root), expected);
@@ -1164,7 +1164,7 @@ describe("projectRetainedDirectoryTree", () => {
     expect(renameCalls).toBe(0);
     expect(await nodeFs.readdir(root)).toEqual(["nested"]);
     expect(await nodeFs.readdir(nested)).toEqual(["data"]);
-    await expect(nodeFs.lstat(row.tombstonePath)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(nodeFs.lstat(row.tombstonePath, { bigint: true })).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("refuses an extra descendant and preserves the complete directory", async () => {
@@ -1173,25 +1173,25 @@ describe("projectRetainedDirectoryTree", () => {
     await nodeFs.chmod(root, 0o700);
     const known = join(root, "known");
     await nodeFs.writeFile(known, "known", { mode: 0o600 });
-    const [rootStats, knownStats] = await Promise.all([nodeFs.lstat(root), nodeFs.lstat(known)]);
+    const [rootStats, knownStats] = await Promise.all([nodeFs.lstat(root, { bigint: true }), nodeFs.lstat(known, { bigint: true })]);
     const entries: readonly BootstrapRetentionDirectoryEntryV1[] = [{
-      relativePath: "known", kind: "regular_file", ownerUid: knownStats.uid,
+      relativePath: "known", kind: "regular_file", ownerUid: Number(knownStats.uid),
       mode: 0o600, nlink: 1, bytes: parseUInt64Decimal("5"), sha256: hash("known"),
-      dev: parseUInt64Decimal(String(knownStats.dev)), ino: parseUInt64Decimal(String(knownStats.ino)),
+      dev: parseUInt64Decimal(knownStats.dev.toString(10)), ino: parseUInt64Decimal(knownStats.ino.toString(10)),
     }];
     const expected = {
       kind: "directory_tree" as const,
-      ownerUid: rootStats.uid,
+      ownerUid: Number(rootStats.uid),
       mode: 0o700 as const,
-      nlink: rootStats.nlink,
+      nlink: Number(rootStats.nlink),
       treeHash: parseLowerHexSha256(createHash("sha256")
         .update("developer-os/bootstrap-retained-tree/v1\0")
         .update(encodeCanonicalJson(entries).slice(0, -1))
         .digest("hex")),
       entryCount: 1,
       regularFileBytes: parseUInt64Decimal("5"),
-      dev: parseUInt64Decimal(String(rootStats.dev)),
-      ino: parseUInt64Decimal(String(rootStats.ino)),
+      dev: parseUInt64Decimal(rootStats.dev.toString(10)),
+      ino: parseUInt64Decimal(rootStats.ino.toString(10)),
       entries,
     };
 

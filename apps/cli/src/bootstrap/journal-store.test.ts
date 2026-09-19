@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { constants, type Stats } from "node:fs";
+import { constants, type BigIntStats } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -123,23 +123,23 @@ interface Fixture {
 
 const roots = new Set<string>();
 
-function mode(stats: Stats): number {
-  return stats.mode & 0o777;
+function mode(stats: BigIntStats): number {
+  return Number(stats.mode) & 0o777;
 }
 
 function slotIdentity(
   slot: 0 | 1,
   path: ExactProductStatePathV1,
-  stats: Stats,
+  stats: BigIntStats,
 ): BootstrapJournalSlotIdentityV1 {
   return {
     slot,
     path,
-    ownerUid: stats.uid,
+    ownerUid: Number(stats.uid),
     mode: 0o600,
     nlink: 1,
-    dev: parseUInt64Decimal(String(stats.dev)),
-    ino: parseUInt64Decimal(String(stats.ino)),
+    dev: parseUInt64Decimal(stats.dev.toString(10)),
+    ino: parseUInt64Decimal(stats.ino.toString(10)),
   };
 }
 
@@ -309,11 +309,11 @@ async function inventory(fixture: Fixture): Promise<readonly unknown[]> {
   const names = (await nodeFs.readdir(fixture.stateDirectory)).sort();
   return Promise.all(names.map(async (name) => {
     const path = join(fixture.stateDirectory, name);
-    const stats = await nodeFs.lstat(path);
+    const stats = await nodeFs.lstat(path, { bigint: true });
     return {
       name,
-      dev: String(stats.dev),
-      ino: String(stats.ino),
+      dev: stats.dev.toString(10),
+      ino: stats.ino.toString(10),
       mode: mode(stats),
       bytes: Buffer.from(await nodeFs.readFile(path)).toString("base64"),
     };
@@ -351,7 +351,7 @@ async function prepareDurablePlan(
     );
     await handle.sync();
     await handle.close();
-    identities.push(slotIdentity(slot, fixture.slotPaths[slot], await nodeFs.lstat(fixture.slotPaths[slot])));
+    identities.push(slotIdentity(slot, fixture.slotPaths[slot], await nodeFs.lstat(fixture.slotPaths[slot], { bigint: true })));
   }
   const slots = identities as unknown as readonly [BootstrapJournalSlotIdentityV1, BootstrapJournalSlotIdentityV1];
   const plan = mutate(buildPlan(fixture, slots));
@@ -428,8 +428,8 @@ describe("BootstrapJournalStore creation and recovery", () => {
     })).rejects.toMatchObject({ point });
     const planBefore = await nodeFs.readFile(fixture.planPath);
     const identitiesBefore = await Promise.all(fixture.slotPaths.map(async (path) => {
-      const stats = await nodeFs.lstat(path);
-      return [String(stats.dev), String(stats.ino)] as const;
+      const stats = await nodeFs.lstat(path, { bigint: true });
+      return [stats.dev.toString(10), stats.ino.toString(10)] as const;
     }));
 
     const resumed = await BootstrapJournalStore.open(fixture.openRequest);
@@ -439,8 +439,8 @@ describe("BootstrapJournalStore creation and recovery", () => {
     );
     expect(await nodeFs.readFile(fixture.planPath)).toEqual(planBefore);
     expect(await Promise.all(fixture.slotPaths.map(async (path) => {
-      const stats = await nodeFs.lstat(path);
-      return [String(stats.dev), String(stats.ino)] as const;
+      const stats = await nodeFs.lstat(path, { bigint: true });
+      return [stats.dev.toString(10), stats.ino.toString(10)] as const;
     }))).toEqual(identitiesBefore);
     await resumed.close();
   });

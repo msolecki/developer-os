@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { constants } from "node:fs";
+import { constants, type BigIntStats } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 
 import type {
@@ -462,9 +462,9 @@ const BOOTSTRAP_FOUNDATION_ID_RE = new RegExp(
 async function optionalLstat(
   fs: TransactionFileSystem,
   path: CanonicalAbsolutePathV1,
-): Promise<Awaited<ReturnType<TransactionFileSystem["lstat"]>> | null> {
+): Promise<BigIntStats | null> {
   try {
-    return await fs.lstat(path);
+    return await fs.lstat(path, { bigint: true });
   } catch (error) {
     if (isMissing(error)) return null;
     throw new TransactionStateError();
@@ -472,7 +472,7 @@ async function optionalLstat(
 }
 
 function assertBootstrapJournalStats(
-  stats: Awaited<ReturnType<TransactionFileSystem["lstat"]>>,
+  stats: BigIntStats,
   evidence: BootstrapPayloadEvidenceV1,
   ownerUid: number,
   expectedNlink = 1,
@@ -480,12 +480,12 @@ function assertBootstrapJournalStats(
   if (
     stats.isSymbolicLink() ||
     !stats.isFile() ||
-    stats.uid !== ownerUid ||
+    Number(stats.uid) !== ownerUid ||
     (Number(stats.mode) & 0o7777) !== 0o600 ||
-    stats.nlink !== expectedNlink ||
-    stats.size !== evidence.bytes ||
-    String(stats.dev) !== evidence.dev ||
-    String(stats.ino) !== evidence.ino
+    Number(stats.nlink) !== expectedNlink ||
+    Number(stats.size) !== evidence.bytes ||
+    stats.dev.toString(10) !== evidence.dev ||
+    stats.ino.toString(10) !== evidence.ino
   ) {
     throw new TransactionStateError();
   }
@@ -499,18 +499,18 @@ async function readExactBootstrapJournal(
   expectedNlink = 1,
 ): Promise<{ readonly bytes: Uint8Array; readonly identity: BootstrapJournalIdentity }> {
   try {
-    const before = await fs.lstat(path);
+    const before = await fs.lstat(path, { bigint: true });
     assertBootstrapJournalStats(before, evidence, ownerUid, expectedNlink);
     const handle = await fs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     let bytes: Uint8Array;
     try {
-      const opened = await handle.stat();
+      const opened = await handle.stat({ bigint: true });
       assertBootstrapJournalStats(opened, evidence, ownerUid, expectedNlink);
       if (opened.dev !== before.dev || opened.ino !== before.ino) {
         throw new TransactionStateError();
       }
       bytes = await handle.readFile();
-      const afterRead = await handle.stat();
+      const afterRead = await handle.stat({ bigint: true });
       assertBootstrapJournalStats(afterRead, evidence, ownerUid, expectedNlink);
       if (afterRead.dev !== opened.dev || afterRead.ino !== opened.ino) {
         throw new TransactionStateError();
@@ -518,7 +518,7 @@ async function readExactBootstrapJournal(
     } finally {
       await handle.close();
     }
-    const after = await fs.lstat(path);
+    const after = await fs.lstat(path, { bigint: true });
     assertBootstrapJournalStats(after, evidence, ownerUid, expectedNlink);
     if (after.dev !== before.dev || after.ino !== before.ino) {
       throw new TransactionStateError();
@@ -532,8 +532,8 @@ async function readExactBootstrapJournal(
     return {
       bytes,
       identity: {
-        dev: String(after.dev) as UInt64DecimalV1,
-        ino: String(after.ino) as UInt64DecimalV1,
+        dev: after.dev.toString(10) as UInt64DecimalV1,
+        ino: after.ino.toString(10) as UInt64DecimalV1,
       },
     };
   } catch (error) {
@@ -553,30 +553,30 @@ async function readExactBootstrapJournalByIdentity(
   let result: TransactionJournalV1 | undefined;
   let failure: TransactionStateError | undefined;
   try {
-    const before = await fs.lstat(path);
+    const before = await fs.lstat(path, { bigint: true });
     if (
       before.isSymbolicLink() ||
       !before.isFile() ||
-      before.uid !== ownerUid ||
-      (before.mode & 0o7777) !== 0o600 ||
-      before.nlink !== 1 ||
-      before.size !== expectedBytes.byteLength ||
-      String(before.dev) !== identity.dev ||
-      String(before.ino) !== identity.ino
+      Number(before.uid) !== ownerUid ||
+      (Number(before.mode) & 0o7777) !== 0o600 ||
+      Number(before.nlink) !== 1 ||
+      Number(before.size) !== expectedBytes.byteLength ||
+      before.dev.toString(10) !== identity.dev ||
+      before.ino.toString(10) !== identity.ino
     ) throw new TransactionStateError();
     handle = await fs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-    const opened = await handle.stat();
+    const opened = await handle.stat({ bigint: true });
     if (
       opened.dev !== before.dev ||
       opened.ino !== before.ino ||
-      opened.size !== expectedBytes.byteLength
+      Number(opened.size) !== expectedBytes.byteLength
     ) throw new TransactionStateError();
     const bytes = await handle.readFile();
-    const afterRead = await handle.stat();
+    const afterRead = await handle.stat({ bigint: true });
     if (
       afterRead.dev !== opened.dev ||
       afterRead.ino !== opened.ino ||
-      afterRead.size !== expectedBytes.byteLength ||
+      Number(afterRead.size) !== expectedBytes.byteLength ||
       bytes.byteLength !== expectedBytes.byteLength ||
       hash(bytes) !== hash(expectedBytes)
     ) throw new TransactionStateError();
@@ -629,30 +629,30 @@ async function restoreBootstrapFoundationInitialJournalByIdentity(
   let rewritten = false;
   const expectedBytes = new TextEncoder().encode(encodeFoundationJournalJsonV1(expected));
   try {
-    const before = await fs.lstat(path);
+    const before = await fs.lstat(path, { bigint: true });
     if (
       before.isSymbolicLink() ||
       !before.isFile() ||
-      before.uid !== ownerUid ||
-      (before.mode & 0o7777) !== 0o600 ||
-      before.nlink !== 1 ||
+      Number(before.uid) !== ownerUid ||
+      (Number(before.mode) & 0o7777) !== 0o600 ||
+      Number(before.nlink) !== 1 ||
       before.size < 0 ||
       before.size > 1_048_576 ||
-      String(before.dev) !== identity.dev ||
-      String(before.ino) !== identity.ino
+      before.dev.toString(10) !== identity.dev ||
+      before.ino.toString(10) !== identity.ino
     ) throw new TransactionStateError();
     handle = await fs.open(path, constants.O_RDWR | constants.O_NOFOLLOW);
-    const opened = await handle.stat();
+    const opened = await handle.stat({ bigint: true });
     if (opened.dev !== before.dev || opened.ino !== before.ino || opened.size !== before.size) {
       throw new TransactionStateError();
     }
     const bytes = await handle.readFile();
-    const afterRead = await handle.stat();
-    const linkedAfter = await fs.lstat(path);
+    const afterRead = await handle.stat({ bigint: true });
+    const linkedAfter = await fs.lstat(path, { bigint: true });
     if (
       afterRead.dev !== opened.dev || afterRead.ino !== opened.ino ||
       linkedAfter.dev !== opened.dev || linkedAfter.ino !== opened.ino ||
-      afterRead.size !== bytes.byteLength || linkedAfter.size !== bytes.byteLength
+      Number(afterRead.size) !== bytes.byteLength || Number(linkedAfter.size) !== bytes.byteLength
     ) throw new TransactionStateError();
     let exactLegalBody = false;
     let crashResidue = bytes.byteLength === 0;
@@ -710,11 +710,11 @@ async function restoreBootstrapFoundationInitialJournalByIdentity(
       }
       await handle.truncate(expectedBytes.byteLength);
       await handle.sync();
-      const restored = await handle.stat();
+      const restored = await handle.stat({ bigint: true });
       if (
-        String(restored.dev) !== identity.dev ||
-        String(restored.ino) !== identity.ino ||
-        restored.size !== expectedBytes.byteLength
+        restored.dev.toString(10) !== identity.dev ||
+        restored.ino.toString(10) !== identity.ino ||
+        Number(restored.size) !== expectedBytes.byteLength
       ) throw new TransactionStateError();
       rewritten = true;
     }
@@ -745,13 +745,13 @@ async function syncReopenDirectory(
   path: string,
 ): Promise<void> {
   try {
-    const before = await fs.lstat(path);
+    const before = await fs.lstat(path, { bigint: true });
     if (before.isSymbolicLink() || !before.isDirectory()) {
       throw new TransactionStateError();
     }
     const first = await fs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
-      const opened = await first.stat();
+      const opened = await first.stat({ bigint: true });
       if (
         !opened.isDirectory() ||
         opened.dev !== before.dev ||
@@ -763,7 +763,7 @@ async function syncReopenDirectory(
     } finally {
       await first.close();
     }
-    const middle = await fs.lstat(path);
+    const middle = await fs.lstat(path, { bigint: true });
     if (
       middle.isSymbolicLink() ||
       !middle.isDirectory() ||
@@ -777,7 +777,7 @@ async function syncReopenDirectory(
       constants.O_RDONLY | constants.O_NOFOLLOW,
     );
     try {
-      const reopenedStats = await reopened.stat();
+      const reopenedStats = await reopened.stat({ bigint: true });
       if (
         !reopenedStats.isDirectory() ||
         reopenedStats.dev !== before.dev ||
@@ -788,7 +788,7 @@ async function syncReopenDirectory(
     } finally {
       await reopened.close();
     }
-    const after = await fs.lstat(path);
+    const after = await fs.lstat(path, { bigint: true });
     if (
       after.isSymbolicLink() ||
       !after.isDirectory() ||
@@ -815,12 +815,12 @@ async function exactPublicationParent(
   readonly ino: UInt64DecimalV1;
 }> {
   try {
-    const stats = await fs.lstat(path);
+    const stats = await fs.lstat(path, { bigint: true });
     if (
       stats.isSymbolicLink() ||
       !stats.isDirectory() ||
-      stats.uid !== expected.ownerUid ||
-      (stats.mode & 0o7777) !== 0o700
+      Number(stats.uid) !== expected.ownerUid ||
+      (Number(stats.mode) & 0o7777) !== 0o700
     ) {
       throw new TransactionStateError();
     }
@@ -828,8 +828,8 @@ async function exactPublicationParent(
       path,
       ownerUid: expected.ownerUid,
       mode: 0o700,
-      dev: String(stats.dev) as UInt64DecimalV1,
-      ino: String(stats.ino) as UInt64DecimalV1,
+      dev: stats.dev.toString(10) as UInt64DecimalV1,
+      ino: stats.ino.toString(10) as UInt64DecimalV1,
     } satisfies BootstrapInitialJournalPublicationV1["sourceParent"];
     if (
       observed.dev !== expected.dev ||
@@ -1257,8 +1257,8 @@ export class TransactionExecutor {
         expected,
       );
       const identity = {
-        dev: String(finalAfter.dev) as UInt64DecimalV1,
-        ino: String(finalAfter.ino) as UInt64DecimalV1,
+        dev: finalAfter.dev.toString(10) as UInt64DecimalV1,
+        ino: finalAfter.ino.toString(10) as UInt64DecimalV1,
       };
       if (identity.dev !== evidence.dev || identity.ino !== evidence.ino) {
         throw new TransactionStateError();
@@ -1289,19 +1289,19 @@ export class TransactionExecutor {
       before === null ||
       before.isSymbolicLink() ||
       !before.isFile() ||
-      before.uid !== expected.ownerUid ||
+      Number(before.uid) !== expected.ownerUid ||
       (Number(before.mode) & 0o7777) !== expected.mode ||
-      before.nlink !== expected.nlink ||
-      before.size !== Number(expected.bytes) ||
-      String(before.dev) !== expected.dev ||
-      String(before.ino) !== expected.ino
+      Number(before.nlink) !== expected.nlink ||
+      Number(before.size) !== Number(expected.bytes) ||
+      before.dev.toString(10) !== expected.dev ||
+      before.ino.toString(10) !== expected.ino
     ) throw new TransactionStateError();
     const bytes = await this.dependencies.fs.readFile(path);
     const after = await optionalLstat(this.dependencies.fs, path);
     if (
       after === null ||
-      String(after.dev) !== expected.dev ||
-      String(after.ino) !== expected.ino ||
+      after.dev.toString(10) !== expected.dev ||
+      after.ino.toString(10) !== expected.ino ||
       hash(bytes) !== expected.sha256
     ) throw new TransactionStateError();
   }
@@ -1605,6 +1605,12 @@ export class TransactionExecutor {
 
   private async snapshot(targetPath: string): Promise<ExistingSnapshot | null> {
     try {
+      /**
+       * identity-free stat: mode and times only, never `dev`/`ino`.
+       * `BigIntStats.atimeMs` and `.mtimeMs` are whole milliseconds, while
+       * `Stats` keeps the sub-millisecond fraction that this backup metadata is
+       * compared against on rollback (`verifyOriginal`).
+       */
       const stats = await this.dependencies.fs.stat(targetPath);
       if (!stats.isFile()) throw new TransactionConflictError();
       const bytes = await this.dependencies.fs.readFile(targetPath);
@@ -1624,7 +1630,7 @@ export class TransactionExecutor {
     for (const directory of [this.stageDirectory(id), this.backupDirectory(id)]) {
       await this.dependencies.fs.mkdir(directory, { recursive: true, mode: 0o700 });
       try {
-        const stats = await this.dependencies.fs.lstat(directory);
+        const stats = await this.dependencies.fs.lstat(directory, { bigint: true });
         if (stats.isSymbolicLink() || !stats.isDirectory()) {
           throw new TransactionStateError();
         }
@@ -2086,11 +2092,12 @@ export class TransactionExecutor {
     try {
       const directoryStats = await this.dependencies.fs.lstat(
         transactionDirectory,
+        { bigint: true },
       );
       if (directoryStats.isSymbolicLink() || !directoryStats.isDirectory()) {
         throw new TransactionStateError();
       }
-      const pathStats = await this.dependencies.fs.lstat(artifactPath);
+      const pathStats = await this.dependencies.fs.lstat(artifactPath, { bigint: true });
       if (pathStats.isSymbolicLink() || !pathStats.isFile()) {
         throw new TransactionStateError();
       }
@@ -2099,7 +2106,7 @@ export class TransactionExecutor {
         constants.O_RDONLY | constants.O_NOFOLLOW,
       );
       try {
-        const handleStats = await handle.stat();
+        const handleStats = await handle.stat({ bigint: true });
         if (
           !handleStats.isFile() ||
           handleStats.dev !== pathStats.dev ||
@@ -2149,7 +2156,7 @@ export class TransactionExecutor {
         constants.O_RDONLY | constants.O_NOFOLLOW,
       );
       try {
-        const stats = await handle.stat();
+        const stats = await handle.stat({ bigint: true });
         if (!stats.isFile()) throw new TransactionStateError();
         await handle.chmod(mode);
         await handle.utimes(atimeMs / 1000, mtimeMs / 1000);
@@ -2253,28 +2260,28 @@ export class TransactionExecutor {
     let handle: Awaited<ReturnType<TransactionFileSystem["open"]>> | undefined;
     let writeFailure: TransactionStateError | undefined;
     try {
-      const linkedBefore = await this.dependencies.fs.lstat(path);
+      const linkedBefore = await this.dependencies.fs.lstat(path, { bigint: true });
       if (
         linkedBefore.isSymbolicLink() ||
         !linkedBefore.isFile() ||
-        linkedBefore.uid !== ownerUid ||
-        (linkedBefore.mode & 0o7777) !== 0o600 ||
-        linkedBefore.nlink !== 1 ||
-        String(linkedBefore.dev) !== identity.dev ||
-        String(linkedBefore.ino) !== identity.ino
+        Number(linkedBefore.uid) !== ownerUid ||
+        (Number(linkedBefore.mode) & 0o7777) !== 0o600 ||
+        Number(linkedBefore.nlink) !== 1 ||
+        linkedBefore.dev.toString(10) !== identity.dev ||
+        linkedBefore.ino.toString(10) !== identity.ino
       ) throw new TransactionStateError();
       handle = await this.dependencies.fs.open(
         path,
         constants.O_RDWR | constants.O_NOFOLLOW,
       );
-      const opened = await handle.stat();
+      const opened = await handle.stat({ bigint: true });
       if (
         !opened.isFile() ||
-        opened.uid !== ownerUid ||
-        (opened.mode & 0o7777) !== 0o600 ||
-        opened.nlink !== 1 ||
-        String(opened.dev) !== identity.dev ||
-        String(opened.ino) !== identity.ino ||
+        Number(opened.uid) !== ownerUid ||
+        (Number(opened.mode) & 0o7777) !== 0o600 ||
+        Number(opened.nlink) !== 1 ||
+        opened.dev.toString(10) !== identity.dev ||
+        opened.ino.toString(10) !== identity.ino ||
         opened.size < 1 ||
         opened.size > 1_048_576
       ) throw new TransactionStateError();
@@ -2296,11 +2303,11 @@ export class TransactionExecutor {
       }
       await handle.truncate(nextBytes.byteLength);
       await handle.sync();
-      const descriptorAfter = await handle.stat();
+      const descriptorAfter = await handle.stat({ bigint: true });
       if (
-        String(descriptorAfter.dev) !== identity.dev ||
-        String(descriptorAfter.ino) !== identity.ino ||
-        descriptorAfter.size !== nextBytes.byteLength
+        descriptorAfter.dev.toString(10) !== identity.dev ||
+        descriptorAfter.ino.toString(10) !== identity.ino ||
+        Number(descriptorAfter.size) !== nextBytes.byteLength
       ) throw new TransactionStateError();
     } catch {
       writeFailure = new TransactionStateError();

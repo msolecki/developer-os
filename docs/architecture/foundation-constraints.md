@@ -484,3 +484,28 @@ rewrites `config.toml` and re-records its manifest hash serves all three. **Reco
 record, not a decision**: DOS-P2 ships `[brain]` written by `init` inside the existing
 transaction and not editable afterwards; DOS-P7 adds the general command. Settle it before
 DOS-P7 starts, not during.
+
+### Residual 10: a filesystem identity has exactly one encoding
+
+**Found 2026-09-18, by the fresh-context review of plan 1a Task 10; fixed by Task 10b under
+founder decision D31.**
+
+Every recorded or compared `dev`/`ino` is read from `{ bigint: true }` stats and rendered with
+`.toString(10)`. A `Stats.ino` is a JavaScript number, and an APFS inode exceeds 2^53 — `/tmp`
+measured 1152921500312571551 on the development machine, where the spacing between representable
+numbers is 128 — so `String(stats.ino)` collapses up to 128 distinct inodes onto one identity.
+Spec 1 §2.4 states the rule: JavaScript safe integers are not a filesystem-identity encoding.
+
+Both failure directions were live in shipped Foundation code, because the two encodings coexisted:
+the bootstrap journal store rendered slot identities exactly while the bootstrap executor compared
+them against a number-valued `lstat`, so above 2^53 an unchanged slot read as a changed identity
+and refused. The reverse — two colliding inodes comparing equal — silently accepted a swap, which
+is what the transaction-lock and drift guards exist to catch.
+
+`tests/repository/check.ts` bans the `String(<expr>.ino)` and `String(<expr>.dev)` spellings in
+TypeScript source, with the guarded filesystem port (`packages/core/src/lifecycle/guarded-fs.ts`)
+as the single exception. The spelling is banned rather than the lossy call because `String(x.ino)`
+reads identically whether `x` is `Stats` or `BigIntStats`. The rule cannot see a number-valued
+`dev`/`ino` compared *without* a rendering, so a new stat call that feeds an identity still has to
+pass `{ bigint: true }` deliberately — the numeric fields (`uid`, `mode`, `nlink`, `size`) then
+need an explicit `Number(...)` at their comparison, which is how the type checker enumerates them.

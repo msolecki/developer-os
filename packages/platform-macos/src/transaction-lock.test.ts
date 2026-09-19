@@ -364,8 +364,8 @@ describe.runIf(process.platform === "darwin")(
         const injectedFs: MacOsTransactionLockFileSystem = {
           mkdir: nodeFs.mkdir,
           chmod: nodeFs.chmod,
-          lstat: async (path) => {
-            const stats = await nodeFs.lstat(path);
+          lstat: async (path, options) => {
+            const stats = await nodeFs.lstat(path, options);
             if (path === fixture.lockPath && !substituted) {
               substituted = true;
               await nodeFs.rename(path, openedPath);
@@ -422,9 +422,9 @@ describe.runIf(process.platform === "darwin")(
             const originalChmod = handle.chmod.bind(handle);
             Object.defineProperties(handle, {
               stat: {
-                value: async () => {
+                value: async (options: { readonly bigint: true }) => {
                   events.push("stat");
-                  return originalStat();
+                  return originalStat(options);
                 },
               },
               chmod: {

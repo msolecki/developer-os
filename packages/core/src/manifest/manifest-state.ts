@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import type { Stats } from "node:fs";
+import type { BigIntStats } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
@@ -151,7 +151,10 @@ export interface ManifestFileIdentityV1 {
 
 export interface ManifestStateParticipantDependencies {
   readonly fs: {
-    readonly lstat: (path: string) => Promise<Stats>;
+    readonly lstat: (
+      path: string,
+      options: { readonly bigint: true },
+    ) => Promise<BigIntStats>;
     readonly open: (path: string, flags: number) => Promise<FileHandle>;
   };
   readonly guardedMoveNoReplace: (
@@ -571,7 +574,7 @@ function isMissingError(error: unknown): boolean {
   );
 }
 
-function sameDescriptor(left: Stats, right: Stats): boolean {
+function sameDescriptor(left: BigIntStats, right: BigIntStats): boolean {
   return left.dev === right.dev && left.ino === right.ino && left.size === right.size;
 }
 
@@ -808,9 +811,9 @@ export class ManifestStateParticipant {
     path: CanonicalAbsolutePathV1,
     candidates: readonly ExpectedFileState[],
   ): Promise<PhysicalPathState> {
-    let listed: Stats;
+    let listed: BigIntStats;
     try {
-      listed = await this.dependencies.fs.lstat(path);
+      listed = await this.dependencies.fs.lstat(path, { bigint: true });
     } catch (error) {
       return isMissingError(error) ? "missing" : "third";
     }
@@ -824,11 +827,11 @@ export class ManifestStateParticipant {
     }
 
     try {
-      const opened = await handle.stat();
+      const opened = await handle.stat({ bigint: true });
       if (!this.isGuardedRegularFile(opened) || !sameDescriptor(listed, opened)) return "third";
-      const bytes = await this.readBounded(handle, opened.size);
-      const closed = await handle.stat();
-      const fresh = await this.dependencies.fs.lstat(path);
+      const bytes = await this.readBounded(handle, Number(opened.size));
+      const closed = await handle.stat({ bigint: true });
+      const fresh = await this.dependencies.fs.lstat(path, { bigint: true });
       if (
         !this.isGuardedRegularFile(closed) ||
         !this.isGuardedRegularFile(fresh) ||
@@ -856,16 +859,15 @@ export class ManifestStateParticipant {
     }
   }
 
-  private isGuardedRegularFile(stat: Stats): boolean {
+  private isGuardedRegularFile(stat: BigIntStats): boolean {
     return (
       stat.isFile() &&
       !stat.isSymbolicLink() &&
-      stat.uid === this.dependencies.uid &&
-      (stat.mode & 0o777) === 0o600 &&
-      stat.nlink === 1 &&
-      Number.isSafeInteger(stat.size) &&
-      stat.size >= 0 &&
-      stat.size <= MAX_MANIFEST_BYTES
+      Number(stat.uid) === this.dependencies.uid &&
+      (Number(stat.mode) & 0o777) === 0o600 &&
+      Number(stat.nlink) === 1 &&
+      stat.size >= 0n &&
+      stat.size <= BigInt(MAX_MANIFEST_BYTES)
     );
   }
 
@@ -886,7 +888,7 @@ export class ManifestStateParticipant {
   private matchesExpectedFile(
     state: PresentManifestState,
     bytes: Uint8Array,
-    stat: Stats,
+    stat: BigIntStats,
   ): boolean {
     let identity: ManifestFileIdentityV1;
     try {
@@ -896,12 +898,12 @@ export class ManifestStateParticipant {
     }
     return (
       createHash("sha256").update(bytes).digest("hex") === identity.hash &&
-      stat.uid === identity.ownerUid &&
-      (stat.mode & 0o777) === identity.mode &&
-      stat.nlink === identity.nlink &&
-      String(stat.size) === identity.size &&
-      String(stat.dev) === identity.dev &&
-      String(stat.ino) === identity.ino
+      Number(stat.uid) === identity.ownerUid &&
+      (Number(stat.mode) & 0o777) === identity.mode &&
+      Number(stat.nlink) === identity.nlink &&
+      stat.size.toString(10) === identity.size &&
+      stat.dev.toString(10) === identity.dev &&
+      stat.ino.toString(10) === identity.ino
     );
   }
 
@@ -1033,9 +1035,9 @@ export class ManifestStateParticipant {
   private async syncAndReopenParent(path: string): Promise<void> {
     const canonical = admitCanonicalAbsolutePath(path, this.dependencies.admission.evidence);
     const syncHandle = await this.dependencies.fs.open(canonical, DIRECTORY_OPEN_FLAGS);
-    let synced: Stats;
+    let synced: BigIntStats;
     try {
-      synced = await syncHandle.stat();
+      synced = await syncHandle.stat({ bigint: true });
       if (!synced.isDirectory() || synced.isSymbolicLink()) return refuse();
       await syncHandle.sync();
     } finally {
@@ -1044,7 +1046,7 @@ export class ManifestStateParticipant {
 
     const reopenedHandle = await this.dependencies.fs.open(canonical, DIRECTORY_OPEN_FLAGS);
     try {
-      const reopened = await reopenedHandle.stat();
+      const reopened = await reopenedHandle.stat({ bigint: true });
       if (
         !reopened.isDirectory() ||
         reopened.isSymbolicLink() ||
@@ -1057,7 +1059,7 @@ export class ManifestStateParticipant {
       await reopenedHandle.close();
     }
 
-    const fresh = await this.dependencies.fs.lstat(canonical);
+    const fresh = await this.dependencies.fs.lstat(canonical, { bigint: true });
     if (
       !fresh.isDirectory() ||
       fresh.isSymbolicLink() ||

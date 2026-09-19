@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { constants, type Stats } from "node:fs";
+import { constants, type BigIntStats } from "node:fs";
 import {
   chmod,
   lstat,
@@ -19,8 +19,8 @@ const CHILD_LOCK_FD = 3;
 export const EX_TEMPFAIL = 75;
 
 interface FileIdentity {
-  readonly dev: number;
-  readonly ino: number;
+  readonly dev: bigint;
+  readonly ino: bigint;
 }
 
 export interface MacOsTransactionLockFileSystem {
@@ -29,7 +29,7 @@ export interface MacOsTransactionLockFileSystem {
     options: { recursive: true; mode: number },
   ): Promise<unknown>;
   chmod(path: string, mode: number): Promise<void>;
-  lstat(path: string): Promise<Stats>;
+  lstat(path: string, options: { readonly bigint: true }): Promise<BigIntStats>;
   open(path: string, flags: number, mode: number): Promise<FileHandle>;
 }
 
@@ -129,17 +129,17 @@ export class MacOsTransactionLockProvider
         constants.O_RDWR | constants.O_CREAT | constants.O_NOFOLLOW,
         0o600,
       );
-      const descriptorBefore = await handle.stat();
-      if (!descriptorBefore.isFile() || descriptorBefore.uid !== uid) {
+      const descriptorBefore = await handle.stat({ bigint: true });
+      if (!descriptorBefore.isFile() || descriptorBefore.uid !== BigInt(uid)) {
         throw new MacOsTransactionLockOperationalError();
       }
       await handle.chmod(0o600);
-      const descriptorStats = await handle.stat();
+      const descriptorStats = await handle.stat({ bigint: true });
       if (
         !descriptorStats.isFile() ||
         !this.hasIdentity(descriptorStats, descriptorBefore) ||
-        descriptorStats.uid !== uid ||
-        (descriptorStats.mode & 0o777) !== 0o600
+        descriptorStats.uid !== BigInt(uid) ||
+        (descriptorStats.mode & 0o777n) !== 0o600n
       ) {
         throw new MacOsTransactionLockOperationalError();
       }
@@ -199,23 +199,23 @@ export class MacOsTransactionLockProvider
         recursive: true,
         mode: 0o700,
       });
-      const before = await this.dependencies.fs.lstat(path);
+      const before = await this.dependencies.fs.lstat(path, { bigint: true });
       if (
         before.isSymbolicLink() ||
         !before.isDirectory() ||
-        before.uid !== uid
+        before.uid !== BigInt(uid)
       ) {
         throw new MacOsTransactionLockOperationalError();
       }
       await this.dependencies.fs.chmod(path, 0o700);
-      const after = await this.dependencies.fs.lstat(path);
+      const after = await this.dependencies.fs.lstat(path, { bigint: true });
       if (
         after.isSymbolicLink() ||
         !after.isDirectory() ||
         before.dev !== after.dev ||
         before.ino !== after.ino ||
-        after.uid !== uid ||
-        (after.mode & 0o777) !== 0o700
+        after.uid !== BigInt(uid) ||
+        (after.mode & 0o777n) !== 0o700n
       ) {
         throw new MacOsTransactionLockOperationalError();
       }
@@ -231,13 +231,13 @@ export class MacOsTransactionLockProvider
     identity: FileIdentity,
     uid: number,
   ): Promise<void> {
-    const stats = await this.dependencies.fs.lstat(path);
+    const stats = await this.dependencies.fs.lstat(path, { bigint: true });
     if (
       stats.isSymbolicLink() ||
       !stats.isDirectory() ||
       !this.hasIdentity(stats, identity) ||
-      stats.uid !== uid ||
-      (stats.mode & 0o777) !== 0o700
+      stats.uid !== BigInt(uid) ||
+      (stats.mode & 0o777n) !== 0o700n
     ) {
       throw new MacOsTransactionLockOperationalError();
     }
@@ -249,23 +249,23 @@ export class MacOsTransactionLockProvider
     identity: FileIdentity,
     uid: number,
   ): Promise<void> {
-    const descriptorStats = await handle.stat();
+    const descriptorStats = await handle.stat({ bigint: true });
     if (
       !descriptorStats.isFile() ||
       !this.hasIdentity(descriptorStats, identity) ||
-      descriptorStats.uid !== uid ||
-      (descriptorStats.mode & 0o777) !== 0o600
+      descriptorStats.uid !== BigInt(uid) ||
+      (descriptorStats.mode & 0o777n) !== 0o600n
     ) {
       throw new MacOsTransactionLockOperationalError();
     }
 
-    const pathStats = await this.dependencies.fs.lstat(path);
+    const pathStats = await this.dependencies.fs.lstat(path, { bigint: true });
     if (
       pathStats.isSymbolicLink() ||
       !pathStats.isFile() ||
       !this.hasIdentity(pathStats, identity) ||
-      pathStats.uid !== uid ||
-      (pathStats.mode & 0o777) !== 0o600
+      pathStats.uid !== BigInt(uid) ||
+      (pathStats.mode & 0o777n) !== 0o600n
     ) {
       throw new MacOsTransactionLockOperationalError();
     }

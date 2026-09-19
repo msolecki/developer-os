@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Stats } from "node:fs";
+import type { BigIntStats } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
@@ -31,7 +31,7 @@ import type { ManifestAdmissionContextV1 } from "./types.js";
 const encoder = new TextEncoder();
 const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;
 const UID = 501;
-const DEVICE = 17;
+const DEVICE = 17n;
 const PRODUCT_HOME = "/synthetic/product";
 const MANIFEST_PATH = `${PRODUCT_HOME}/state/installation-manifest.json`;
 const MANIFEST_PARENT = dirname(MANIFEST_PATH);
@@ -83,8 +83,8 @@ function foundationHash(ids: readonly string[]): string {
 
 interface MemoryEntry {
   readonly kind: "file" | "directory";
-  readonly dev: number;
-  readonly ino: number;
+  readonly dev: bigint;
+  readonly ino: bigint;
   readonly uid: number;
   readonly mode: number;
   readonly nlink: number;
@@ -99,7 +99,7 @@ interface Fault {
 interface AtomicUnlinkSwap {
   readonly path: string;
   readonly bytes: Uint8Array;
-  readonly ino: number;
+  readonly ino: bigint;
 }
 
 class SimulatedDeath extends Error {}
@@ -112,7 +112,7 @@ class MemoryFileSystem {
   private readonly awaitingReopen = new Set<string>();
   private fault: Fault | null = null;
   private atomicUnlinkSwap: AtomicUnlinkSwap | null = null;
-  private nextIno = 1_000;
+  private nextIno = 1_000n;
 
   constructor() {
     this.addDirectory(MANIFEST_PARENT);
@@ -133,7 +133,7 @@ class MemoryFileSystem {
   addFile(
     path: string,
     bytes: Uint8Array,
-    ino: number,
+    ino: bigint,
     options: Partial<Omit<MemoryEntry, "kind" | "bytes" | "ino">> = {},
   ): void {
     this.entries.set(path, {
@@ -168,7 +168,7 @@ class MemoryFileSystem {
     this.fault = { event, occurrence };
   }
 
-  armAtomicUnlinkSwap(path: string, bytes: Uint8Array, ino: number): void {
+  armAtomicUnlinkSwap(path: string, bytes: Uint8Array, ino: bigint): void {
     this.atomicUnlinkSwap = { path, bytes: Uint8Array.from(bytes), ino };
   }
 
@@ -207,7 +207,7 @@ class MemoryFileSystem {
     );
   }
 
-  lstat(path: string): Promise<Stats> {
+  lstat(path: string): Promise<BigIntStats> {
     const entry = this.entries.get(path);
     if (entry === undefined) return Promise.reject(missingError());
     return Promise.resolve(memoryStats(entry));
@@ -310,18 +310,18 @@ function missingError(): Error & { code: string } {
   return Object.assign(new Error("missing"), { code: "ENOENT" });
 }
 
-function memoryStats(entry: MemoryEntry): Stats {
+function memoryStats(entry: MemoryEntry): BigIntStats {
   return {
     dev: entry.dev,
     ino: entry.ino,
-    uid: entry.uid,
-    mode: entry.mode,
-    nlink: entry.nlink,
-    size: entry.bytes.byteLength,
+    uid: BigInt(entry.uid),
+    mode: BigInt(entry.mode),
+    nlink: BigInt(entry.nlink),
+    size: BigInt(entry.bytes.byteLength),
     isFile: () => entry.kind === "file",
     isDirectory: () => entry.kind === "directory",
     isSymbolicLink: () => false,
-  } as unknown as Stats;
+  } as unknown as BigIntStats;
 }
 
 function matchesIdentity(entry: MemoryEntry, expected: ManifestFileIdentityV1): boolean {
@@ -331,8 +331,8 @@ function matchesIdentity(entry: MemoryEntry, expected: ManifestFileIdentityV1): 
     entry.mode === expected.mode &&
     entry.nlink === expected.nlink &&
     String(entry.bytes.byteLength) === expected.size &&
-    String(entry.dev) === expected.dev &&
-    String(entry.ino) === expected.ino
+    entry.dev.toString(10) === expected.dev &&
+    entry.ino.toString(10) === expected.ino
   );
 }
 
@@ -428,12 +428,12 @@ function createFixture(options: FixtureOptions = {}): Fixture {
   const tombstonePath = join(MANIFEST_PARENT, `.installation-manifest.${participantId}.json.tombstone`);
   const fs = new MemoryFileSystem();
   if (dirname(payloadPath) !== MANIFEST_PARENT) fs.addDirectory(dirname(payloadPath));
-  if (beforePresence === "present") fs.addFile(MANIFEST_PATH, BEFORE_BYTES, 101);
-  if (afterPresence === "present") fs.addFile(payloadPath, AFTER_BYTES, 202);
+  if (beforePresence === "present") fs.addFile(MANIFEST_PATH, BEFORE_BYTES, 101n);
+  if (afterPresence === "present") fs.addFile(payloadPath, AFTER_BYTES, 202n);
 
   const envelope = { kind: envelopeKind, id: outerId };
   const before = beforePresence === "present"
-    ? presentState(BEFORE_BYTES, 101, null)
+    ? presentState(BEFORE_BYTES, 101n, null)
     : { state: "absent" as const };
   const payloadRef = envelopeKind === "lifecycle"
     ? {
@@ -455,7 +455,7 @@ function createFixture(options: FixtureOptions = {}): Fixture {
         mode: 0o600 as const,
       };
   const after = afterPresence === "present"
-    ? presentState(AFTER_BYTES, envelopeKind === "lifecycle" ? 202 : null, payloadRef)
+    ? presentState(AFTER_BYTES, envelopeKind === "lifecycle" ? 202n : null, payloadRef)
     : { state: "absent" as const };
   const plan: RawPlan = {
     schemaVersion: 1,
@@ -498,11 +498,11 @@ function createFixture(options: FixtureOptions = {}): Fixture {
     },
     bootstrapPayloadIdentity: (value: BootstrapExpectedPayloadRefV1) => {
       if (value.path !== payloadPath || value.bootstrapId !== outerId) throw new Error("bootstrap payload was not admitted");
-      return { dev: String(DEVICE) as never, ino: "202" as never };
+      return { dev: DEVICE.toString(10) as never, ino: "202" as never };
     },
     updatePayloadIdentity: (value: UpdateExpectedPayloadRefV1) => {
       if (value.path !== payloadPath || value.coordinatorId !== outerId) throw new Error("update payload was not admitted");
-      return { dev: String(DEVICE) as never, ino: "202" as never };
+      return { dev: DEVICE.toString(10) as never, ino: "202" as never };
     },
   };
   const manifestAdmission: ManifestAdmissionContextV1 = {
@@ -535,7 +535,7 @@ function createFixture(options: FixtureOptions = {}): Fixture {
   return fixture;
 }
 
-function presentState(bytes: Uint8Array, ino: number | null, payload: RawPayloadRef | null): RawPresentState {
+function presentState(bytes: Uint8Array, ino: bigint | null, payload: RawPayloadRef | null): RawPresentState {
   return {
     state: "present",
     hash: hash(bytes),
@@ -544,8 +544,8 @@ function presentState(bytes: Uint8Array, ino: number | null, payload: RawPayload
     mode: 0o600,
     nlink: 1,
     size: String(bytes.byteLength),
-    dev: ino === null ? null : String(DEVICE),
-    ino: ino === null ? null : String(ino),
+    dev: ino === null ? null : DEVICE.toString(10),
+    ino: ino === null ? null : ino.toString(10),
   };
 }
 
@@ -572,21 +572,21 @@ async function refusesAndPreserves(fixture: Fixture, action: () => Promise<unkno
 
 function expectBeforeInventory(fixture: Fixture, before: Presence, after: Presence): void {
   const snapshot = fixture.fs.snapshot(fixture.paths);
-  const manifest = snapshot[MANIFEST_PATH] as { ino: number } | null;
-  const tombstone = snapshot[fixture.tombstonePath] as { ino: number } | null;
-  const payload = snapshot[fixture.payloadPath] as { ino: number } | null;
-  expect(manifest?.ino ?? null).toBe(before === "present" ? 101 : null);
+  const manifest = snapshot[MANIFEST_PATH] as { ino: bigint } | null;
+  const tombstone = snapshot[fixture.tombstonePath] as { ino: bigint } | null;
+  const payload = snapshot[fixture.payloadPath] as { ino: bigint } | null;
+  expect(manifest?.ino ?? null).toBe(before === "present" ? 101n : null);
   expect(tombstone).toBeNull();
-  expect(payload?.ino ?? null).toBe(after === "present" ? 202 : null);
+  expect(payload?.ino ?? null).toBe(after === "present" ? 202n : null);
 }
 
 function expectAppliedInventory(fixture: Fixture, before: Presence, after: Presence): void {
   const snapshot = fixture.fs.snapshot(fixture.paths);
-  const manifest = snapshot[MANIFEST_PATH] as { ino: number } | null;
-  const tombstone = snapshot[fixture.tombstonePath] as { ino: number } | null;
-  const payload = snapshot[fixture.payloadPath] as { ino: number } | null;
-  expect(manifest?.ino ?? null).toBe(after === "present" ? 202 : null);
-  expect(tombstone?.ino ?? null).toBe(before === "present" ? 101 : null);
+  const manifest = snapshot[MANIFEST_PATH] as { ino: bigint } | null;
+  const tombstone = snapshot[fixture.tombstonePath] as { ino: bigint } | null;
+  const payload = snapshot[fixture.payloadPath] as { ino: bigint } | null;
+  expect(manifest?.ino ?? null).toBe(after === "present" ? 202n : null);
+  expect(tombstone?.ino ?? null).toBe(before === "present" ? 101n : null);
   expect(payload).toBeNull();
 }
 
@@ -792,7 +792,7 @@ describe("payload ordinal and binding tables", () => {
 
   it("requires a lifecycle absent-after derived payload slot to be absent", async () => {
     const fixture = createFixture({ before: "absent", after: "absent" });
-    fixture.fs.addFile(fixture.payloadPath, AFTER_BYTES, 202);
+    fixture.fs.addFile(fixture.payloadPath, AFTER_BYTES, 202n);
     await refusesAndPreserves(fixture, () => fixture.participant.apply(fixture.admit()));
   });
 
@@ -884,17 +884,17 @@ function refusedObservationRows(
 
 function arrangeObservation(fixture: Fixture, row: ObservationRow): void {
   const observations = [
-    { path: MANIFEST_PATH, state: row.manifest, thirdIno: 901 },
-    { path: fixture.tombstonePath, state: row.tombstone, thirdIno: 902 },
-    { path: fixture.payloadPath, state: row.payload, thirdIno: 903 },
+    { path: MANIFEST_PATH, state: row.manifest, thirdIno: 901n },
+    { path: fixture.tombstonePath, state: row.tombstone, thirdIno: 902n },
+    { path: fixture.payloadPath, state: row.payload, thirdIno: 903n },
   ] as const;
 
   for (const observation of observations) {
     fixture.fs.remove(observation.path);
     if (observation.state === "before") {
-      fixture.fs.addFile(observation.path, BEFORE_BYTES, 101);
+      fixture.fs.addFile(observation.path, BEFORE_BYTES, 101n);
     } else if (observation.state === "after") {
-      fixture.fs.addFile(observation.path, AFTER_BYTES, 202);
+      fixture.fs.addFile(observation.path, AFTER_BYTES, 202n);
     } else if (observation.state === "third") {
       fixture.fs.addFile(
         observation.path,
@@ -936,10 +936,10 @@ describe("complete apply/compensate/compact execution table", () => {
 describe("closed manifest/tombstone/payload inventory table", () => {
   it.each([
     { name: "missing payload", arrange: (fixture: Fixture) => { fixture.fs.remove(fixture.payloadPath); } },
-    { name: "changed payload inode", arrange: (fixture: Fixture) => { fixture.fs.addFile(fixture.payloadPath, AFTER_BYTES, 909); } },
-    { name: "changed manifest inode", arrange: (fixture: Fixture) => { fixture.fs.addFile(MANIFEST_PATH, BEFORE_BYTES, 909); } },
-    { name: "destination collision", arrange: (fixture: Fixture) => { fixture.fs.addFile(fixture.tombstonePath, encoder.encode("third"), 909); } },
-    { name: "unlisted two-preimage copy state", arrange: (fixture: Fixture) => { fixture.fs.cloneFile(MANIFEST_PATH, fixture.tombstonePath, 909); } },
+    { name: "changed payload inode", arrange: (fixture: Fixture) => { fixture.fs.addFile(fixture.payloadPath, AFTER_BYTES, 909n); } },
+    { name: "changed manifest inode", arrange: (fixture: Fixture) => { fixture.fs.addFile(MANIFEST_PATH, BEFORE_BYTES, 909n); } },
+    { name: "destination collision", arrange: (fixture: Fixture) => { fixture.fs.addFile(fixture.tombstonePath, encoder.encode("third"), 909n); } },
+    { name: "unlisted two-preimage copy state", arrange: (fixture: Fixture) => { fixture.fs.cloneFile(MANIFEST_PATH, fixture.tombstonePath, 909n); } },
   ])("refuses and preserves $name", async ({ arrange }) => {
     const fixture = createFixture();
     arrange(fixture);
@@ -950,13 +950,13 @@ describe("closed manifest/tombstone/payload inventory table", () => {
     const fixture = createFixture();
     const plan = fixture.admit();
     await fixture.participant.apply(plan);
-    fixture.fs.cloneFile(MANIFEST_PATH, fixture.payloadPath, 909);
+    fixture.fs.cloneFile(MANIFEST_PATH, fixture.payloadPath, 909n);
     await refusesAndPreserves(fixture, () => fixture.participant.observe(plan));
   });
 
   it("refuses an atomic move source swap and preserves the swapped inode", async () => {
     const fixture = createFixture();
-    fixture.fs.addFile(MANIFEST_PATH, encoder.encode("third-state"), 909);
+    fixture.fs.addFile(MANIFEST_PATH, encoder.encode("third-state"), 909n);
     await refusesAndPreserves(fixture, () => fixture.participant.apply(fixture.admit()));
   });
 
@@ -967,7 +967,7 @@ describe("closed manifest/tombstone/payload inventory table", () => {
     fixture.fs.clearFaultAndEvents();
     const unaffected = fixture.fs.snapshot([MANIFEST_PATH, fixture.payloadPath]);
     const swappedBytes = BEFORE_BYTES;
-    fixture.fs.armAtomicUnlinkSwap(fixture.tombstonePath, swappedBytes, 909);
+    fixture.fs.armAtomicUnlinkSwap(fixture.tombstonePath, swappedBytes, 909n);
 
     await expect(fixture.participant.compact(plan)).rejects.toMatchObject({
       code: EXIT_CODES.recoveryRequired,
@@ -975,7 +975,7 @@ describe("closed manifest/tombstone/payload inventory table", () => {
 
     expect(fixture.fs.snapshot([MANIFEST_PATH, fixture.payloadPath])).toEqual(unaffected);
     expect(fixture.fs.snapshot([fixture.tombstonePath])[fixture.tombstonePath]).toMatchObject({
-      ino: 909,
+      ino: 909n,
       bytes: Buffer.from(swappedBytes).toString("hex"),
     });
   });
@@ -983,7 +983,7 @@ describe("closed manifest/tombstone/payload inventory table", () => {
   it("refuses a wrong-device tombstone and preserves all evidence", async () => {
     const fixture = createFixture();
     fixture.fs.moveUnchecked(MANIFEST_PATH, fixture.tombstonePath);
-    fixture.fs.addFile(fixture.tombstonePath, BEFORE_BYTES, 101, { dev: DEVICE + 1 });
+    fixture.fs.addFile(fixture.tombstonePath, BEFORE_BYTES, 101n, { dev: DEVICE + 1n });
     await refusesAndPreserves(fixture, () => fixture.participant.compensate(fixture.admit()));
   });
 

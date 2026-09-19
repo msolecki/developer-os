@@ -1,4 +1,4 @@
-import { constants, type Stats } from "node:fs";
+import { constants, type BigIntStats } from "node:fs";
 import { lstat, open, type FileHandle } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
@@ -26,7 +26,7 @@ const OPEN_FLAGS = constants.O_RDWR | constants.O_NOFOLLOW;
 const LOCK_MODE = 0o600;
 
 export interface MacOsStableLockFileSystem {
-  lstat(path: string): Promise<Stats>;
+  lstat(path: string, options: { readonly bigint: true }): Promise<BigIntStats>;
   open(path: string, flags: number): Promise<FileHandle>;
 }
 
@@ -37,8 +37,8 @@ export interface MacOsStableLockDependencies {
 }
 
 interface FileIdentity {
-  readonly dev: number;
-  readonly ino: number;
+  readonly dev: bigint;
+  readonly ino: bigint;
 }
 
 const NODE_FILE_SYSTEM: MacOsStableLockFileSystem = { lstat, open };
@@ -97,12 +97,12 @@ export class MacOsStableLockProvider implements LifecycleStableLockProviderV1 {
       }
       const uid = this.dependencies.getUid();
       const identity = requireStableLockShape(
-        await this.dependencies.fs.lstat(path),
+        await this.dependencies.fs.lstat(path, { bigint: true }),
         path,
         uid,
       );
       handle = await this.dependencies.fs.open(path, OPEN_FLAGS);
-      requireStableLockShape(await handle.stat(), path, uid, identity);
+      requireStableLockShape(await handle.stat({ bigint: true }), path, uid, identity);
 
       const result = await this.dependencies.runner.acquire(handle.fd);
       if (result.exitCode === EX_TEMPFAIL && result.signal === null) {
@@ -112,9 +112,9 @@ export class MacOsStableLockProvider implements LifecycleStableLockProviderV1 {
         throw new LifecycleLockUnavailableError(path);
       }
 
-      requireStableLockShape(await handle.stat(), path, uid, identity);
+      requireStableLockShape(await handle.stat({ bigint: true }), path, uid, identity);
       requireStableLockShape(
-        await this.dependencies.fs.lstat(path),
+        await this.dependencies.fs.lstat(path, { bigint: true }),
         path,
         uid,
         identity,
@@ -125,8 +125,8 @@ export class MacOsStableLockProvider implements LifecycleStableLockProviderV1 {
       let released = false;
       return {
         path,
-        dev: parseUInt64Decimal(String(identity.dev)),
-        ino: parseUInt64Decimal(String(identity.ino)),
+        dev: parseUInt64Decimal(identity.dev.toString(10)),
+        ino: parseUInt64Decimal(identity.ino.toString(10)),
         release: async (): Promise<void> => {
           if (released) return;
           released = true;
@@ -176,7 +176,7 @@ export class MacOsStableLockProvider implements LifecycleStableLockProviderV1 {
 }
 
 function requireStableLockShape(
-  stats: Stats,
+  stats: BigIntStats,
   path: string,
   uid: number,
   expected?: FileIdentity,
@@ -184,10 +184,10 @@ function requireStableLockShape(
   if (
     stats.isSymbolicLink() ||
     !stats.isFile() ||
-    stats.uid !== uid ||
-    (stats.mode & 0o777) !== LOCK_MODE ||
-    stats.nlink !== 1 ||
-    stats.size !== 0
+    stats.uid !== BigInt(uid) ||
+    (stats.mode & 0o777n) !== BigInt(LOCK_MODE) ||
+    stats.nlink !== 1n ||
+    stats.size !== 0n
   ) {
     throw new LifecycleLockShapeError(path);
   }

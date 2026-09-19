@@ -111,7 +111,7 @@ class InProcessRenameAtxRunner implements RenameAtxRunner {
     }
     const destinationPath = join(destinationParent, destinationName);
     try {
-      await nodeFs.lstat(destinationPath);
+      await nodeFs.lstat(destinationPath, { bigint: true });
       return { exitCode: 1, signal: null };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -749,14 +749,14 @@ export async function retainedTombstones(root: string): Promise<readonly string[
 
 export async function firstRegularFile(paths: readonly string[]): Promise<string | null> {
   for (const path of paths) {
-    if ((await nodeFs.lstat(path)).isFile()) return path;
+    if ((await nodeFs.lstat(path, { bigint: true })).isFile()) return path;
   }
   return null;
 }
 
 export async function exists(path: string): Promise<boolean> {
   try {
-    await nodeFs.lstat(path);
+    await nodeFs.lstat(path, { bigint: true });
     return true;
   } catch {
     return false;

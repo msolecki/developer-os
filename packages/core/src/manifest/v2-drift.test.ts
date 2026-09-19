@@ -83,7 +83,7 @@ describe("V2 manifest drift", () => {
     try {
       await nodeFs.mkdir(canonicalParent); await nodeFs.writeFile(canonicalPath, "changed");
       const seen: string[] = [];
-      const fs = { ...nodeFs, lstat: (path: Parameters<typeof nodeFs.lstat>[0]) => { seen.push(String(path)); return nodeFs.lstat(path); } };
+      const fs = { ...nodeFs, lstat: (path: Parameters<typeof nodeFs.lstat>[0], options: { readonly bigint: true }) => { seen.push(String(path)); return nodeFs.lstat(path, options); } };
       const guarded = { assertReadable: (): Promise<string> => Promise.resolve(canonicalPath) };
       const content = await inspectDrift(request(artifact(canonicalPath), { guards: guarded, fs: fs as unknown as DriftRequestV2["fs"] }));
       expect(content).toStrictEqual([{ path: canonicalPath, owner: "core", kind: "content_changed", expectedHash: hash("installed"), actualHash: hash("changed") }]);

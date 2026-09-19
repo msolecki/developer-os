@@ -277,7 +277,7 @@ export class ManifestStore {
     }
     let before;
     try {
-      before = await this.fs.lstat(canonical);
+      before = await this.fs.lstat(canonical, { bigint: true });
     } catch (error) {
       if (isMissing(error)) return null;
       throw new ManifestStateError();
@@ -288,11 +288,11 @@ export class ManifestStore {
     try {
       const handle = await this.fs.open(canonical, constants.O_RDONLY | constants.O_NOFOLLOW);
       try {
-        const opened = await handle.stat();
-        if (!opened.isFile() || !Number.isSafeInteger(opened.size) || opened.size < 0 || opened.dev !== before.dev || opened.ino !== before.ino || opened.size !== before.size || opened.size > MAX_MANIFEST_BYTES) throw new ManifestStateError();
-        bytes = await readBounded(handle, opened.size);
-        const after = await handle.stat();
-        if (bytes.byteLength > MAX_MANIFEST_BYTES || !after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size || after.size !== bytes.byteLength) throw new ManifestStateError();
+        const opened = await handle.stat({ bigint: true });
+        if (!opened.isFile() || opened.size < 0n || opened.dev !== before.dev || opened.ino !== before.ino || opened.size !== before.size || opened.size > BigInt(MAX_MANIFEST_BYTES)) throw new ManifestStateError();
+        bytes = await readBounded(handle, Number(opened.size));
+        const after = await handle.stat({ bigint: true });
+        if (bytes.byteLength > MAX_MANIFEST_BYTES || !after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size || Number(after.size) !== bytes.byteLength) throw new ManifestStateError();
       } finally {
         await handle.close();
       }

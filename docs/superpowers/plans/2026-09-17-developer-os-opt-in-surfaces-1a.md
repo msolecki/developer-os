@@ -1376,13 +1376,15 @@ Source: Task 10's fresh-context review. Spec 1 §2.4 requires that a guarded pro
 
 **Persisted fields whose encoding changes:** `FreshV2InitPlanV1["bootstrapIdentity"].dev/ino`; `FreshV2InitPlanV1["journalSlots"][].dev/ino`; `CreatedPathEvidenceV1.dev/ino` and `PlannedCreatedPathV1["parent"]` (`preexisting`) `.dev/ino`; `BootstrapPayloadEvidenceV1.dev/ino`; the retention table's `parent` and `postimage` identities (`BootstrapRetentionParentIdentityV1`, `BootstrapRetentionPostimageV1`); `ManifestStatePlanV1` identities; the Foundation journal identities in `packages/core/src/transactions/executor.ts`; `PersistedBootstrapLockIdentityV1`. All are `UInt64DecimalV1` already, so **no schema or codec changes and no on-disk migration**: below 2^53 the two renderings are identical, and no V2 installation exists (D18, D19 — the founder machine runs the legacy runtime and nothing is released), so no durable record can carry a rounded value. Step 1 must verify that claim against `git log` and the e2e fixtures before relying on it; **if any durable V2 or V1 record on a real machine carries a rounded identity, stop and report instead of migrating silently.**
 
-- [ ] **Step 1: Write the banned-encoding repository rule first, then the encoding tests**
+- [x] **Step 1: Write the banned-encoding repository rule first, then the encoding tests**
 
 **The rule comes before every other test in this task, and it must be seen red on the unchanged tree before a single site is converted.** The reason is specific: the encoding tests below exercise this task's own new helpers, so they are red only because those helpers do not exist yet. They would go green with all 177 sites untouched — they pin the fix's *encoding* and say nothing about its *completeness* — and the one defect-driven case among them depends on the filesystem the test happens to run on. A repository rule is the opposite on both counts: machine-independent, and green only when the last site is converted.
 
 Add to `tests/repository/check.ts` a rule banning `String(<expr>.ino)` and `String(<expr>.dev)`, with the approved encoder's own file as the single allowed exception and no other allowlist entry. Match the shape of the rule already in `self-containment.ts`, including its use of `tests/helpers/typescript-lexer.ts` rather than a hand-rolled pattern, so a match inside a string literal or a comment is not reported. Its output must name every offending `path:line`, because that output — not this task's Files list — is the authoritative enumeration.
 
 Expected before any conversion: **red**, naming 177 lines across the files listed above. Seeing it green at this point is a stop condition: it means the rule does not match what the tree contains, and the rest of the task would then be unverifiable. Record the red output in the task notes so the final gate has something to compare against.
+
+**Observed on the unchanged tree (2026-09-18): red, `225` occurrences on `177` lines across the 11 files above, exit 1** — per-file line counts identical to the Files list, since the rule reports one line per occurrence and a line may hold two. `report.ts`, `drift.ts` and `transaction-lock.ts` are absent from that output by construction: they compare identities without rendering one, which is why the reviewer reads them by hand.
 
 Then pin the encoding, not an inode. Two cases, neither dependent on this machine's inode allocation:
 
@@ -1403,7 +1405,7 @@ it("distinguishes two inodes one apart above 2^53", () => {
 
 The second case is the one that fails on today's code for the stated reason and cannot pass by accident: it asserts that the number path collapses the two values and the rendered path does not. Add, in the same step, one case per affected subsystem that reads a real temporary path through the production recording function and compares against `{ bigint: true }` — for the held global lock, a journal slot, a created-path evidence row and a retention postimage.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run, in this order:
 
@@ -1423,7 +1425,7 @@ Run: `npx vitest run --root apps/cli src/bootstrap/executor.test.ts -t 'identity
 
 Expected: FAIL — the recorded identity is the number rendering, not the BigInt rendering. A failure for any other reason is a stop condition.
 
-- [ ] **Step 3: Convert Core and platform**
+- [x] **Step 3: Convert Core and platform**
 
 `packages/core/src/transactions/executor.ts`, `packages/core/src/manifest/manifest-state.ts`, `packages/core/src/manifest/drift.ts`, `packages/platform-macos/src/{stable-lock,transaction-lock}.ts`. Every `lstat`/`stat`/`handle.stat` that feeds an identity takes `{ bigint: true }`; comparisons stay within one encoding. Where an injected `TransactionFileSystem` supplies `lstat`, the port keeps its signature and the call site passes the option.
 
@@ -1431,15 +1433,17 @@ Run: `npx vitest run --root packages/core && npx vitest run --root packages/plat
 
 Expected: PASS.
 
-- [ ] **Step 4: Convert `apps/cli/src/bootstrap` and `apps/cli/src/update`**
+- [x] **Step 4: Convert `apps/cli/src/bootstrap` and `apps/cli/src/update`**
 
 `executor.ts`, `report.ts`, `packaged-release.ts`. Settle the `journal-store`/`executor` cross-encoding question from Step 1 here and record the answer in the step.
+
+**Answered: the executor moved to `journal-store`'s encoding, and nothing in `report.ts` had to move.** `journal-store.ts` and `context.ts` already read `{ bigint: true }` and rendered with `.toString()`, so the exact rendering was already the persisted one and no persisted byte changes. The executor's `lstat` calls now read `{ bigint: true }` and its slot comparisons render with `.toString(10)`, which closes the false refusal (an unchanged slot above 2^53 reading as changed) and the false acceptance (two inodes within one 128-wide bucket comparing equal) in one move. `report.ts` performs no `stat` at all: its `dev`/`ino` arrive as `UInt64DecimalV1` text from the guarded reader in `context.ts`, so its three identity comparisons are text-to-text and were already exact.
 
 Run: `npx vitest run --root apps/cli src/bootstrap src/update`
 
 Expected: PASS.
 
-- [ ] **Step 5: Move the tests to the same encoding**
+- [x] **Step 5: Move the tests to the same encoding**
 
 `executor.test.ts:65`, `:89`, `:414`, `:446`, `:600`, `:625` and the other enumerated test sites build their expectations with the same lossy call. They would pass while the product is wrong, so they move to the exact same encoding rather than to a hand-written literal.
 
@@ -1447,7 +1451,7 @@ Run: `npm run test:bootstrap`
 
 Expected: PASS.
 
-- [ ] **Step 6: Gate, commit, push**
+- [x] **Step 6: Gate, commit, push**
 
 `npm run lint` is now the completeness gate as well as the style gate: it passes only when the banned-encoding rule finds nothing, so run it last and treat its offender list — not this task's Files list — as the record of what was converted. Tick this task's steps, rewrite `ORDER.md`'s `Plan 1a progress:` sentence to `Tasks 1–10b of 26 committed; next is Task 11 (Closed Foundation ledger inventory).`, add the one-encoding rule to `docs/architecture/foundation-constraints.md`, run `npm run lint`, obtain fresh-context review, then stage exactly the paths above and commit as `fix(identity): record every filesystem identity through exact 64-bit stats`.
 

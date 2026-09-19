@@ -1,4 +1,4 @@
-import { constants } from "node:fs";
+import { constants, type BigIntStats } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 
 import {
@@ -68,7 +68,7 @@ async function readGuardedFile(
 
   let stats;
   try {
-    stats = await fs.lstat(canonical);
+    stats = await fs.lstat(canonical, { bigint: true });
   } catch (error) {
     if (isMissing(error)) return null;
     rethrowRedacted(error);
@@ -82,20 +82,19 @@ async function readGuardedFile(
       constants.O_RDONLY | constants.O_NOFOLLOW,
     );
     try {
-      const opened = await handle.stat();
+      const opened = await handle.stat({ bigint: true });
       if (
         !opened.isFile() ||
         opened.dev !== stats.dev ||
         opened.ino !== stats.ino ||
-        !Number.isSafeInteger(opened.size) ||
-        opened.size < 0 ||
-        opened.size > MAX_READ_BYTES
+        opened.size < 0n ||
+        opened.size > BigInt(MAX_READ_BYTES)
       ) {
         throw new ManifestStateError();
       }
-      const bytes = await readBounded(handle, opened.size);
-      const after = await handle.stat();
-      if (bytes.length > MAX_READ_BYTES || !after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size || after.size !== bytes.length) throw new ManifestStateError();
+      const bytes = await readBounded(handle, Number(opened.size));
+      const after = await handle.stat({ bigint: true });
+      if (bytes.length > MAX_READ_BYTES || !after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size || Number(after.size) !== bytes.length) throw new ManifestStateError();
       return bytes;
     } finally {
       await handle.close();
@@ -132,7 +131,7 @@ async function inspectArtifact(
 
   let stats;
   try {
-    stats = await fs.lstat(canonical);
+    stats = await fs.lstat(canonical, { bigint: true });
   } catch (error) {
     if (isMissing(error)) return finding(artifact, "missing", null);
     rethrowRedacted(error);
@@ -193,11 +192,11 @@ function v2Finding(
 async function guardedV2Path(
   artifact: ManagedArtifactV2,
   request: DriftRequestV2,
-): Promise<{ readonly canonical: string; readonly stats: Awaited<ReturnType<DriftRequestV2["fs"]["lstat"]>> } | null> {
+): Promise<{ readonly canonical: string; readonly stats: BigIntStats } | null> {
   let canonical: string;
   try { canonical = await request.guards.assertReadable(artifact.path); } catch { throw new ManifestStateError(); }
   if (canonical !== artifact.path) throw new ManifestStateError();
-  try { return { canonical: artifact.path, stats: await request.fs.lstat(artifact.path) }; }
+  try { return { canonical: artifact.path, stats: await request.fs.lstat(artifact.path, { bigint: true }) }; }
   catch (error) { if (isMissing(error)) return null; throw new ManifestStateError(); }
 }
 
@@ -205,18 +204,18 @@ async function readV2File(
   artifact: ManagedArtifactV2,
   request: DriftRequestV2,
   canonical: string,
-  before: Awaited<ReturnType<DriftRequestV2["fs"]["lstat"]>>,
+  before: BigIntStats,
 ): Promise<Uint8Array | null> {
   if (before.isSymbolicLink() || !before.isFile()) return null;
-  if (!Number.isSafeInteger(before.size) || before.size < 0 || before.size > MAX_READ_BYTES) throw new ManifestStateError();
+  if (before.size < 0n || before.size > BigInt(MAX_READ_BYTES)) throw new ManifestStateError();
   try {
     const handle = await request.fs.open(canonical, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
-      const opened = await handle.stat();
-      if (!opened.isFile() || !Number.isSafeInteger(opened.size) || opened.size < 0 || opened.dev !== before.dev || opened.ino !== before.ino || opened.size !== before.size || opened.size > MAX_READ_BYTES) throw new ManifestStateError();
-      const bytes = await readBounded(handle, opened.size);
-      const after = await handle.stat();
-      if (bytes.byteLength > MAX_READ_BYTES || !after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size || after.size !== bytes.byteLength) throw new ManifestStateError();
+      const opened = await handle.stat({ bigint: true });
+      if (!opened.isFile() || opened.size < 0n || opened.dev !== before.dev || opened.ino !== before.ino || opened.size !== before.size || opened.size > BigInt(MAX_READ_BYTES)) throw new ManifestStateError();
+      const bytes = await readBounded(handle, Number(opened.size));
+      const after = await handle.stat({ bigint: true });
+      if (bytes.byteLength > MAX_READ_BYTES || !after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size || Number(after.size) !== bytes.byteLength) throw new ManifestStateError();
       return bytes;
     } finally { await handle.close(); }
   } catch (error) { if (isMissing(error)) return null; if (error instanceof ManifestStateError) throw error; throw new ManifestStateError(); }
@@ -232,7 +231,7 @@ async function inspectV2Artifact(artifact: ManagedArtifactV2, request: DriftRequ
     let target: string;
     try { target = await request.fs.readlink(canonical); } catch { throw new ManifestStateError(); }
     let after;
-    try { after = await request.fs.lstat(canonical); } catch { throw new ManifestStateError(); }
+    try { after = await request.fs.lstat(canonical, { bigint: true }); } catch { throw new ManifestStateError(); }
     if (!after.isSymbolicLink() || after.dev !== stats.dev || after.ino !== stats.ino) throw new ManifestStateError();
     const targetBytes = new TextEncoder().encode(target);
     if (targetBytes.byteLength > MAX_LINK_TARGET_BYTES) throw new ManifestStateError();
@@ -242,12 +241,12 @@ async function inspectV2Artifact(artifact: ManagedArtifactV2, request: DriftRequ
   if (stats.isSymbolicLink() || !stats.isFile()) return v2Finding(artifact, "type_changed", null);
   if (artifact.verification.mode === "ephemeral") {
     try {
-      if (typeof stats.uid !== "number" || typeof stats.mode !== "number" || typeof stats.nlink !== "number") throw new ManifestStateError();
+      if (typeof stats.uid !== "bigint" || typeof stats.mode !== "bigint" || typeof stats.nlink !== "bigint") throw new ManifestStateError();
       request.ephemerals.validate(artifact.owner, {
         path: artifact.path,
-        uid: stats.uid,
-        mode: stats.mode & 0o777,
-        nlink: stats.nlink,
+        uid: Number(stats.uid),
+        mode: Number(stats.mode) & 0o777,
+        nlink: Number(stats.nlink),
       });
       return null;
     } catch { return v2Finding(artifact, "schema_invalid", null); }

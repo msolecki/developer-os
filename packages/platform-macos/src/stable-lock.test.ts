@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { constants, type Stats } from "node:fs";
+import { constants, type BigIntStats } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -123,7 +123,7 @@ interface RecordingHooks {
 function recordedHandle(handle: FileHandle, record: RecordedOpen): FileHandle {
   return {
     fd: handle.fd,
-    stat: (): Promise<Stats> => handle.stat(),
+    stat: (options: { readonly bigint: true }): Promise<BigIntStats> => handle.stat(options),
     close: async (): Promise<void> => {
       record.closed = true;
       await handle.close();
@@ -136,7 +136,7 @@ function recordingFileSystem(hooks: RecordingHooks = {}): RecordingFileSystem {
   return {
     opens,
     fs: {
-      lstat: (path) => nodeFs.lstat(path),
+      lstat: (path, options) => nodeFs.lstat(path, options),
       open: async (path, flags) => {
         await hooks.beforeOpen?.(path);
         const handle = await nodeFs.open(path, flags);
@@ -302,13 +302,13 @@ describe.runIf(process.platform === "darwin")("MacOsStableLockProvider", () => {
 
   it("reports the acquired path's own device and inode as decimal text", async () => {
     const fixture = await homeWithLock("identity");
-    const stats = await nodeFs.lstat(fixture.lockPath);
+    const stats = await nodeFs.lstat(fixture.lockPath, { bigint: true });
     const held = await new MacOsStableLockProvider().acquireExisting(fixture.lockPath);
 
     try {
       expect(held.path).toBe(fixture.lockPath);
-      expect(held.dev).toBe(String(stats.dev));
-      expect(held.ino).toBe(String(stats.ino));
+      expect(held.dev).toBe(stats.dev.toString(10));
+      expect(held.ino).toBe(stats.ino.toString(10));
     } finally {
       await held.release();
     }

@@ -61,8 +61,8 @@ async function slotJournals(plan: JsonRecord): Promise<readonly JsonRecord[]> {
     expect(slot.slot).toBe(expectedSlot);
     const path = String(slot.path);
     const stats = await nodeFs.lstat(path, { bigint: true });
-    expect(String(stats.dev)).toBe(slot.dev);
-    expect(String(stats.ino)).toBe(slot.ino);
+    expect(stats.dev.toString(10)).toBe(slot.dev);
+    expect(stats.ino.toString(10)).toBe(slot.ino);
     return JSON.parse(await nodeFs.readFile(path, "utf8")) as JsonRecord;
   }));
 }
@@ -78,6 +78,12 @@ async function currentJournal(plan: JsonRecord): Promise<JsonRecord> {
   return current;
 }
 
+/** A persisted identity is `UInt64DecimalV1` text; coercing whatever is there would hide a schema break. */
+function decimalText(value: unknown): string {
+  if (typeof value !== "string") throw new Error("persisted identity is not decimal text");
+  return value;
+}
+
 async function findIdentity(
   root: string,
   expectedDev: string,
@@ -86,7 +92,7 @@ async function findIdentity(
   for (const relativePath of await inventory(root)) {
     const path = join(root, relativePath);
     const stats = await nodeFs.lstat(path, { bigint: true });
-    if (String(stats.dev) === expectedDev && String(stats.ino) === expectedIno) return path;
+    if (stats.dev.toString(10) === expectedDev && stats.ino.toString(10) === expectedIno) return path;
   }
   return null;
 }
@@ -337,7 +343,7 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     const stagingRoot = String(plan.stagingRoot);
     const stagingParent = dirname(stagingRoot);
     const movedParent = `${stagingParent}.original`;
-    const rootIdentity = await nodeFs.lstat(stagingRoot);
+    const rootIdentity = await nodeFs.lstat(stagingRoot, { bigint: true });
     await nodeFs.rename(stagingParent, movedParent);
     await nodeFs.mkdir(stagingParent, { mode: 0o700 });
     await nodeFs.rename(join(movedParent, basename(stagingRoot)), stagingRoot);
@@ -350,12 +356,12 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     expect(refused.ok).toBe(false);
     expect(!refused.ok && refused.code).toBe(EXIT_CODES.recoveryRequired);
     expect(fixture.bootstrapRenameRequests).toHaveLength(renameCount);
-    const retainedRoot = await nodeFs.lstat(stagingRoot);
-    expect([String(retainedRoot.dev), String(retainedRoot.ino)]).toStrictEqual([
-      String(rootIdentity.dev),
-      String(rootIdentity.ino),
+    const retainedRoot = await nodeFs.lstat(stagingRoot, { bigint: true });
+    expect([retainedRoot.dev.toString(10), retainedRoot.ino.toString(10)]).toStrictEqual([
+      rootIdentity.dev.toString(10),
+      rootIdentity.ino.toString(10),
     ]);
-    expect((await nodeFs.lstat(movedParent)).isDirectory()).toBe(true);
+    expect((await nodeFs.lstat(movedParent, { bigint: true })).isDirectory()).toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it.each(freshInitFineGrainedDeathPoints)(
@@ -411,7 +417,7 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
         for (const path of authorityPaths) {
           if (!await exists(path)) continue;
           const stats = await nodeFs.lstat(path, { bigint: true });
-          retainedIdentities.push({ dev: String(stats.dev), ino: String(stats.ino) });
+          retainedIdentities.push({ dev: stats.dev.toString(10), ino: stats.ino.toString(10) });
         }
       }
 
@@ -443,7 +449,7 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
       const retainedIdentityKeys = new Set<string>();
       for (const relativePath of await inventory(fixture.root)) {
         const stats = await nodeFs.lstat(join(fixture.root, relativePath), { bigint: true });
-        retainedIdentityKeys.add(`${String(stats.dev)}:${String(stats.ino)}`);
+        retainedIdentityKeys.add(`${stats.dev.toString(10)}:${stats.ino.toString(10)}`);
       }
       for (const identity of retainedIdentities) {
         expect(retainedIdentityKeys.has(`${identity.dev}:${identity.ino}`)).toBe(true);
@@ -490,8 +496,8 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     expect((await runInit(retainingContext, ACCEPTED)).ok).toBe(false);
     expect(await exists(String(bootstrapIdentity.path))).toBe(false);
     const retainedLock = await nodeFs.lstat(lockLocation.tombstonePath, { bigint: true });
-    expect(String(retainedLock.dev)).toBe(bootstrapIdentity.dev);
-    expect(String(retainedLock.ino)).toBe(bootstrapIdentity.ino);
+    expect(retainedLock.dev.toString(10)).toBe(bootstrapIdentity.dev);
+    expect(retainedLock.ino.toString(10)).toBe(bootstrapIdentity.ino);
 
     fixture.disableBootstrapInterrupt();
     await closeBootstrapContext(retainingContext);
@@ -516,7 +522,7 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     await nodeFs.rename(path, original);
     await nodeFs.writeFile(path, bytes, { mode: 0o600 });
     const replacement = await nodeFs.lstat(path, { bigint: true });
-    expect(String(replacement.ino)).not.toBe(staged.ino);
+    expect(replacement.ino.toString(10)).not.toBe(staged.ino);
 
     fixture.disableBootstrapInterrupt();
     await closeBootstrapProcess(fixture);
@@ -560,7 +566,7 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
       .toMatchObject({ phase: "retained", terminalOutcome: "rolled_back" });
     const writing = journal.payloadWriteState as JsonRecord;
     expect(writing.state).toBe("writing");
-    const retainedPath = await findIdentity(fixture.root, String(writing.dev), String(writing.ino));
+    const retainedPath = await findIdentity(fixture.root, decimalText(writing.dev), decimalText(writing.ino));
     expect(retainedPath).not.toBeNull();
     expect(retainedPath).toContain(`.developer-os-retained.${String(plan.id)}.`);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
@@ -592,12 +598,12 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     const mutations = forward.mutations as JsonRecord[];
     const targetPaths = mutations.map((mutation) => String(mutation.targetPath));
     expect(targetPaths.length).toBeGreaterThan(0);
-    await Promise.all(targetPaths.map((path) => expect(nodeFs.lstat(path)).resolves.toBeDefined()));
+    await Promise.all(targetPaths.map((path) => expect(nodeFs.lstat(path, { bigint: true })).resolves.toBeDefined()));
 
     const locations = deriveBootstrapRetentionLocations(persisted.value as never, rolledBack);
     const exactIdentities = await Promise.all(locations.map(async (location) => {
       const stats = await nodeFs.lstat(location.sourcePath, { bigint: true });
-      return { location, dev: String(stats.dev), ino: String(stats.ino) };
+      return { location, dev: stats.dev.toString(10), ino: stats.ino.toString(10) };
     }));
 
     fixture.disableBootstrapFailure();
@@ -622,7 +628,7 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     expect(fixture.transactionUnlinkRequests).toStrictEqual([]);
     for (const retained of exactIdentities) {
       const stats = await nodeFs.lstat(retained.location.tombstonePath, { bigint: true });
-      expect([String(stats.dev), String(stats.ino)]).toStrictEqual([
+      expect([stats.dev.toString(10), stats.ino.toString(10)]).toStrictEqual([
         retained.dev,
         retained.ino,
       ]);

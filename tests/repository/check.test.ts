@@ -78,7 +78,7 @@ async function check(cwd: string): Promise<CheckOutcome> {
   }
 }
 
-describe("the self-containment gate", () => {
+describe("the repository check gate", () => {
   it("passes a repository that names nothing forbidden", async () => {
     const root = await sandbox({
       "src/fine.ts": 'export const brainPath = "DeveloperBrain";\n',
@@ -184,6 +184,91 @@ describe("the self-containment gate", () => {
     } finally {
       await run("chmod", ["644", join(root, "src/secret.ts")]);
     }
+  });
+
+  it("fails, and names file and line, on an identity rendered through a number", async () => {
+    const root = await sandbox({
+      "src/record.ts": `const stats = await lstat(path);\nconst ino = String(stats.ino);\n`,
+    });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("src/record.ts:2");
+  });
+
+  it("accepts the exact encoding, and the banned spelling in prose", async () => {
+    const root = await sandbox({
+      "src/record.ts":
+        `// String(stats.ino) rounds above 2^53.\n` +
+        `const message = "String(stats.dev)";\n` +
+        `const ino = stats.ino.toString(10);\n`,
+    });
+
+    expect(await check(root)).toStrictEqual({ exitCode: 0, stderr: "" });
+  });
+
+  /**
+   * The three shapes the rendering rule cannot see. Each is as lossy as the
+   * banned spelling and compiles clean, so the stat call itself is what has to
+   * fail.
+   */
+  it.each([
+    { name: "an exact-looking rendering of a number", body: "const ino = stats.ino.toString(10);" },
+    { name: "template interpolation", body: "const key = `${stats.dev}:${stats.ino}`;" },
+    { name: "destructuring", body: "const { dev, ino } = stats;" },
+  ])("fails on a number-valued stat behind $name", async ({ body }) => {
+    const root = await sandbox({
+      "src/record.ts": `const stats = await nodeFs.lstat(path);\n${body}\n`,
+    });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("src/record.ts:1");
+  });
+
+  it("accepts the same module once the stat asks for bigint fields", async () => {
+    const root = await sandbox({
+      "src/record.ts":
+        "const stats = await nodeFs.lstat(path, { bigint: true });\n" +
+        "const key = `${stats.dev}:${stats.ino}`;\n",
+    });
+
+    expect(await check(root)).toStrictEqual({ exitCode: 0, stderr: "" });
+  });
+
+  it("leaves a module that records no identity alone", async () => {
+    const root = await sandbox({
+      "src/read.ts": `const stats = await nodeFs.lstat(path);\nexport const big = stats.size > 10;\n`,
+    });
+
+    expect(await check(root)).toStrictEqual({ exitCode: 0, stderr: "" });
+  });
+
+  it("accepts a call that states why it must stay on number-valued stats", async () => {
+    const root = await sandbox({
+      "src/record.ts":
+        `// identity-free stat: mtimeMs's fraction, never dev/ino.\n` +
+        `const stats = await nodeFs.stat(path);\n` +
+        `export const when = stats.mtimeMs;\nexport const ino = other.ino;\n`,
+    });
+
+    expect(await check(root)).toStrictEqual({ exitCode: 0, stderr: "" });
+  });
+
+  /**
+   * The one path exemption the bigint rule needs, exercised so that removing it
+   * breaks a test rather than silently widening the rule: this port's `lstat`
+   * takes a path and nothing else.
+   */
+  it("exempts the lifecycle guarded port's own callers", async () => {
+    const root = await sandbox({
+      "packages/core/src/lifecycle/allocator.ts":
+        `const entry = await fs.lstat(path);\nexport const ino = entry.ino;\n`,
+    });
+
+    expect(await check(root)).toStrictEqual({ exitCode: 0, stderr: "" });
   });
 
   it("fails outside a git checkout instead of finding nothing", async () => {

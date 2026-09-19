@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import type { Stats } from "node:fs";
+import type { BigIntStats } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 
@@ -108,57 +108,56 @@ function canonicalRelativePath(value: string): string {
   return value;
 }
 
-function modeOf(stats: Stats): number {
-  return stats.mode & 0o777;
+function modeOf(stats: BigIntStats): number {
+  return Number(stats.mode) & 0o777;
 }
 
 function ownerUid(): number {
   return typeof process.getuid === "function" ? process.getuid() : 0;
 }
 
-function assertRoot(stats: Stats): void {
+function assertRoot(stats: BigIntStats): void {
   if (
     !stats.isDirectory() ||
     stats.isSymbolicLink() ||
-    stats.uid !== ownerUid() ||
+    Number(stats.uid) !== ownerUid() ||
     modeOf(stats) !== 0o700
   ) {
     securityRefusal("packaged release root is not an owner-only guarded directory");
   }
 }
 
-function assertDirectory(stats: Stats): void {
+function assertDirectory(stats: BigIntStats): void {
   if (
     !stats.isDirectory() ||
     stats.isSymbolicLink() ||
-    stats.uid !== ownerUid() ||
+    Number(stats.uid) !== ownerUid() ||
     modeOf(stats) !== 0o700
   ) {
     securityRefusal("packaged release directory changed identity or shape");
   }
 }
 
-function assertFile(stats: Stats): 0o600 | 0o700 {
+function assertFile(stats: BigIntStats): 0o600 | 0o700 {
   const mode = modeOf(stats);
   if (
     !stats.isFile() ||
     stats.isSymbolicLink() ||
-    stats.uid !== ownerUid() ||
-    stats.nlink !== 1 ||
+    Number(stats.uid) !== ownerUid() ||
+    Number(stats.nlink) !== 1 ||
     (mode !== 0o600 && mode !== 0o700) ||
-    !Number.isSafeInteger(stats.size) ||
-    stats.size < 0 ||
-    stats.size > MAX_FILE_BYTES
+    stats.size < 0n ||
+    stats.size > BigInt(MAX_FILE_BYTES)
   ) {
     return securityRefusal("packaged release file changed identity or shape");
   }
   return mode;
 }
 
-async function readGuardedFile(path: string, listed: Stats): Promise<Uint8Array> {
+async function readGuardedFile(path: string, listed: BigIntStats): Promise<Uint8Array> {
   const handle = await nodeFs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
-    const opened = await handle.stat();
+    const opened = await handle.stat({ bigint: true });
     const mode = assertFile(opened);
     if (
       opened.dev !== listed.dev ||
@@ -169,8 +168,8 @@ async function readGuardedFile(path: string, listed: Stats): Promise<Uint8Array>
       securityRefusal("packaged release file was swapped while being read");
     }
     const bytes = await handle.readFile();
-    const closed = await handle.stat();
-    const fresh = await nodeFs.lstat(path);
+    const closed = await handle.stat({ bigint: true });
+    const fresh = await nodeFs.lstat(path, { bigint: true });
     if (
       closed.dev !== opened.dev ||
       closed.ino !== opened.ino ||
@@ -178,7 +177,7 @@ async function readGuardedFile(path: string, listed: Stats): Promise<Uint8Array>
       fresh.dev !== opened.dev ||
       fresh.ino !== opened.ino ||
       fresh.size !== opened.size ||
-      bytes.byteLength !== opened.size
+      bytes.byteLength !== Number(opened.size)
     ) {
       securityRefusal("packaged release file changed during guarded read");
     }
@@ -202,7 +201,7 @@ async function inventory(packageRoot: string): Promise<{
   if (canonicalRoot !== packageRoot || (await nodeFs.realpath(packageRoot)) !== packageRoot) {
     securityRefusal("packaged release root must already be canonical");
   }
-  const rootStats = await nodeFs.lstat(packageRoot);
+  const rootStats = await nodeFs.lstat(packageRoot, { bigint: true });
   assertRoot(rootStats);
   const directories: DirectorySnapshot[] = [];
   const files: AdmittedPackagedReleaseFileV1[] = [];
@@ -218,14 +217,14 @@ async function inventory(packageRoot: string): Promise<{
       if (count > MAX_PACKAGE_ENTRIES) securityRefusal("packaged release inventory is too large");
       const path = join(directory, entry.name);
       const relativePath = canonicalRelativePath(relative(packageRoot, path).split(sep).join("/"));
-      const stats = await nodeFs.lstat(path);
+      const stats = await nodeFs.lstat(path, { bigint: true });
       if (entry.isDirectory()) {
         assertDirectory(stats);
         directories.push({
           relativePath,
           mode: 0o700,
-          dev: String(stats.dev),
-          ino: String(stats.ino),
+          dev: stats.dev.toString(10),
+          ino: stats.ino.toString(10),
         });
         pending.push(path);
         continue;
@@ -238,8 +237,8 @@ async function inventory(packageRoot: string): Promise<{
         bytes: bytes.byteLength,
         sha256: createHash("sha256").update(bytes).digest("hex") as LowerHexSha256,
         mode,
-        dev: String(stats.dev),
-        ino: String(stats.ino),
+        dev: stats.dev.toString(10),
+        ino: stats.ino.toString(10),
       });
     }
   }
@@ -250,7 +249,7 @@ async function inventory(packageRoot: string): Promise<{
     .update(encodeCanonicalJson({ directories, files } as never).slice(0, -1))
     .digest("hex") as LowerHexSha256;
   return {
-    root: { dev: String(rootStats.dev), ino: String(rootStats.ino) },
+    root: { dev: rootStats.dev.toString(10), ino: rootStats.ino.toString(10) },
     directories,
     files,
     hash,
@@ -328,27 +327,27 @@ async function assertSealedFileChain(
   snapshot: SealedPackagedRelease,
   expected: AdmittedPackagedReleaseFileV1,
   sealedDirectories: ReadonlyMap<string, DirectorySnapshot>,
-): Promise<Stats> {
+): Promise<BigIntStats> {
   const assertSealedDirectory = async (
     path: string,
     sealedIdentity: { readonly dev: string; readonly ino: string },
     root: boolean,
   ): Promise<void> => {
-    const before = await nodeFs.lstat(path);
+    const before = await nodeFs.lstat(path, { bigint: true });
     if (root) assertRoot(before);
     else assertDirectory(before);
-    if (String(before.dev) !== sealedIdentity.dev || String(before.ino) !== sealedIdentity.ino) {
+    if (before.dev.toString(10) !== sealedIdentity.dev || before.ino.toString(10) !== sealedIdentity.ino) {
       securityRefusal("packaged release directory changed before payload staging");
     }
     const handle = await nodeFs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
-      const opened = await handle.stat();
+      const opened = await handle.stat({ bigint: true });
       if (root) assertRoot(opened);
       else assertDirectory(opened);
-      const fresh = await nodeFs.lstat(path);
+      const fresh = await nodeFs.lstat(path, { bigint: true });
       if (
-        String(opened.dev) !== sealedIdentity.dev ||
-        String(opened.ino) !== sealedIdentity.ino ||
+        opened.dev.toString(10) !== sealedIdentity.dev ||
+        opened.ino.toString(10) !== sealedIdentity.ino ||
         fresh.dev !== opened.dev ||
         fresh.ino !== opened.ino
       ) {
@@ -378,12 +377,13 @@ async function assertSealedFileChain(
 
   const stats = await nodeFs.lstat(
     join(snapshot.handoff.packageRoot, expected.relativePath),
+    { bigint: true },
   );
   const observedMode = assertFile(stats);
   if (
-    String(stats.dev) !== expected.dev ||
-    String(stats.ino) !== expected.ino ||
-    stats.size !== expected.bytes ||
+    stats.dev.toString(10) !== expected.dev ||
+    stats.ino.toString(10) !== expected.ino ||
+    Number(stats.size) !== expected.bytes ||
     observedMode !== expected.mode
   ) {
     securityRefusal("packaged release file no longer matches its sealed row");
@@ -453,8 +453,8 @@ export async function inspectPackagedRelease(
       const bytes = await readGuardedFile(path, stats);
       const digest = createHash("sha256").update(bytes).digest("hex");
       if (
-        stats.dev.toString() !== expected.dev ||
-        stats.ino.toString() !== expected.ino ||
+        stats.dev.toString(10) !== expected.dev ||
+        stats.ino.toString(10) !== expected.ino ||
         bytes.byteLength !== expected.bytes ||
         digest !== expected.sha256 ||
         modeOf(stats) !== expected.mode

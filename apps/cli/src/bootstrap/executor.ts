@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import type { Stats } from "node:fs";
+import type { BigIntStats } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
@@ -251,10 +251,10 @@ async function observeBookkeepingTree(
   participantRoots: readonly string[],
 ): Promise<{
   readonly observations: ReadonlyMap<string, LifecycleBookkeepingObservationV1>;
-  readonly present: ReadonlyMap<string, Stats>;
+  readonly present: ReadonlyMap<string, BigIntStats>;
 }> {
   const observations = new Map<string, LifecycleBookkeepingObservationV1>();
-  const present = new Map<string, Stats>();
+  const present = new Map<string, BigIntStats>();
   const observe = async (path: string): Promise<LifecycleBookkeepingObservationV1 | null> => {
     const retained = observations.get(path);
     if (retained !== undefined) return retained;
@@ -266,13 +266,13 @@ async function observeBookkeepingTree(
       : stats.isDirectory()
         ? {
             kind: "directory",
-            ownerUid: stats.uid,
+            ownerUid: Number(stats.uid),
             mode: mode(stats),
             childNames: (await nodeFs.readdir(path))
               .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right))),
           }
         : stats.isFile()
-          ? { kind: "regular_file", ownerUid: stats.uid, mode: mode(stats), nlink: stats.nlink, size: BigInt(stats.size) }
+          ? { kind: "regular_file", ownerUid: Number(stats.uid), mode: mode(stats), nlink: Number(stats.nlink), size: stats.size }
           : { kind: "other" };
     observations.set(path, observation);
     return observation;
@@ -313,9 +313,9 @@ function isMissing(error: unknown): boolean {
   );
 }
 
-async function lstatOptional(path: string): Promise<Stats | null> {
+async function lstatOptional(path: string): Promise<BigIntStats | null> {
   try {
-    return await nodeFs.lstat(path);
+    return await nodeFs.lstat(path, { bigint: true });
   } catch (error) {
     if (isMissing(error)) return null;
     throw error;
@@ -326,8 +326,8 @@ function uid(): number {
   return typeof process.getuid === "function" ? process.getuid() : 0;
 }
 
-function mode(stats: Stats): number {
-  return stats.mode & 0o777;
+function mode(stats: BigIntStats): number {
+  return Number(stats.mode) & 0o777;
 }
 
 function pathHash(path: string): LowerHexSha256 {
@@ -335,18 +335,18 @@ function pathHash(path: string): LowerHexSha256 {
 }
 
 async function syncDirectory(path: string): Promise<void> {
-  const before = await nodeFs.lstat(path);
-  if (!before.isDirectory() || before.isSymbolicLink() || before.uid !== uid()) {
+  const before = await nodeFs.lstat(path, { bigint: true });
+  if (!before.isDirectory() || before.isSymbolicLink() || Number(before.uid) !== uid()) {
     throw new FreshBootstrapError(EXIT_CODES.securityRefusal, `bootstrap parent changed shape: ${path}`);
   }
   const handle = await nodeFs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
-    const opened = await handle.stat();
+    const opened = await handle.stat({ bigint: true });
     if (opened.dev !== before.dev || opened.ino !== before.ino) {
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, `bootstrap parent changed identity: ${path}`);
     }
     await handle.sync();
-    const fresh = await nodeFs.lstat(path);
+    const fresh = await nodeFs.lstat(path, { bigint: true });
     if (fresh.dev !== before.dev || fresh.ino !== before.ino) {
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, `bootstrap parent changed during sync: ${path}`);
     }
@@ -522,18 +522,18 @@ export class BootstrapExecutor {
       throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "a lifecycle bootstrap lock is unavailable");
     }
     try {
-      const stats = await nodeFs.lstat(path);
+      const stats = await nodeFs.lstat(path, { bigint: true });
       if (
         !stats.isFile() ||
         stats.isSymbolicLink() ||
-        stats.uid !== uid() ||
-        stats.nlink !== 1 ||
-        stats.size !== 0 ||
+        Number(stats.uid) !== uid() ||
+        Number(stats.nlink) !== 1 ||
+        Number(stats.size) !== 0 ||
         mode(stats) !== 0o600
       ) {
         throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "a held lifecycle lock changed shape");
       }
-      return { handle, dev: String(stats.dev), ino: String(stats.ino) };
+      return { handle, dev: stats.dev.toString(10), ino: stats.ino.toString(10) };
     } catch (error) {
       await handle.release().catch(() => undefined);
       throw error;
@@ -543,11 +543,11 @@ export class BootstrapExecutor {
   private async acquireIdentityCheckedGlobalLock(
     plan: FreshV2InitPlanV1,
     planned: PlannedCreatedPathV1,
-    stats: Stats,
+    stats: BigIntStats,
     bootstrap: NonNullable<HeldLifecycleLocks["bootstrap"]>,
   ): Promise<void> {
     const global = await this.acquireLifecycleLock(planned.path);
-    if (global.dev !== String(stats.dev) || global.ino !== String(stats.ino)) {
+    if (global.dev !== stats.dev.toString(10) || global.ino !== stats.ino.toString(10)) {
       await global.handle.release().catch(() => undefined);
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "global lock changed during recovery acquisition");
     }
@@ -666,20 +666,20 @@ export class BootstrapExecutor {
     }
     const stats = await lstatOptional(path);
     if (
-      stats === null || !stats.isFile() || stats.isSymbolicLink() || stats.uid !== uid() ||
-      stats.nlink !== 1 || stats.size !== 0 || mode(stats) !== 0o600
+      stats === null || !stats.isFile() || stats.isSymbolicLink() || Number(stats.uid) !== uid() ||
+      Number(stats.nlink) !== 1 || Number(stats.size) !== 0 || mode(stats) !== 0o600
     ) {
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "admitted global lock changed shape");
     }
     await this.acquireAdmittedGlobalLock(plan.id, stats);
   }
 
-  private async acquireAdmittedGlobalLock(id: string, expected: Stats | undefined): Promise<void> {
+  private async acquireAdmittedGlobalLock(id: string, expected: BigIntStats | undefined): Promise<void> {
     if (expected === undefined) {
       throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "the admitted global lock disappeared");
     }
     const global = await this.acquireLifecycleLock(join(this.#dependencies.paths.stateDir, ".lifecycle.lock"));
-    if (global.dev !== String(expected.dev) || global.ino !== String(expected.ino)) {
+    if (global.dev !== expected.dev.toString(10) || global.ino !== expected.ino.toString(10)) {
       await global.handle.release().catch(() => undefined);
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "admitted global lock changed identity");
     }
@@ -819,17 +819,17 @@ export class BootstrapExecutor {
   } | null> {
     const candidates: FreshV2InitJournalV1[] = [];
     for (const slot of plan.journalSlots) {
-      const before = await nodeFs.lstat(slot.path);
+      const before = await nodeFs.lstat(slot.path, { bigint: true });
       if (
-        !before.isFile() || before.isSymbolicLink() || before.uid !== uid() ||
-        before.nlink !== slot.nlink || mode(before) !== slot.mode ||
-        String(before.dev) !== slot.dev || String(before.ino) !== slot.ino
+        !before.isFile() || before.isSymbolicLink() || Number(before.uid) !== uid() ||
+        Number(before.nlink) !== slot.nlink || mode(before) !== slot.mode ||
+        before.dev.toString(10) !== slot.dev || before.ino.toString(10) !== slot.ino
       ) {
         throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "bootstrap journal slot changed identity");
       }
       const bytes = await this.guardReadOwnedFile(slot.path, plan.maximumJournalBytes, [slot.nlink]);
-      const after = await nodeFs.lstat(slot.path);
-      if (String(after.dev) !== slot.dev || String(after.ino) !== slot.ino) {
+      const after = await nodeFs.lstat(slot.path, { bigint: true });
+      if (after.dev.toString(10) !== slot.dev || after.ino.toString(10) !== slot.ino) {
         throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "bootstrap journal slot changed during preliminary read");
       }
       if (bytes.byteLength === 0) continue;
@@ -890,9 +890,9 @@ export class BootstrapExecutor {
     admitted: BootstrapEvidenceAdmissionV1,
     reusableDirectories: readonly string[],
   ): Promise<{
-    readonly homeStats: Stats;
-    readonly stateStats: Stats;
-    readonly lockStats: Stats;
+    readonly homeStats: BigIntStats;
+    readonly stateStats: BigIntStats;
+    readonly lockStats: BigIntStats;
   }> {
     const paths = this.#dependencies.paths;
     const retainedHomeNames = retainedChildNames(paths.home, [
@@ -904,9 +904,9 @@ export class BootstrapExecutor {
       ...reusableDirectories,
     ]);
     const [homeStats, stateStats, lockStats, homeNames, stateNames] = await Promise.all([
-      nodeFs.lstat(paths.home),
-      nodeFs.lstat(paths.stateDir),
-      nodeFs.lstat(bootstrapLock),
+      nodeFs.lstat(paths.home, { bigint: true }),
+      nodeFs.lstat(paths.stateDir, { bigint: true }),
+      nodeFs.lstat(bootstrapLock, { bigint: true }),
       nodeFs.readdir(paths.home),
       nodeFs.readdir(paths.stateDir),
     ]);
@@ -917,11 +917,11 @@ export class BootstrapExecutor {
     const expectedStateNames = [...new Set([basename(bootstrapLock), ...retainedStateNames])]
       .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
     if (
-      !homeStats.isDirectory() || homeStats.isSymbolicLink() || homeStats.uid !== uid() || mode(homeStats) !== 0o700 ||
-      !stateStats.isDirectory() || stateStats.isSymbolicLink() || stateStats.uid !== uid() || mode(stateStats) !== 0o700 ||
-      !lockStats.isFile() || lockStats.isSymbolicLink() || lockStats.uid !== uid() || mode(lockStats) !== 0o600 ||
-      lockStats.nlink !== 1 || lockStats.size !== 0 ||
-      String(lockStats.dev) !== held.dev || String(lockStats.ino) !== held.ino ||
+      !homeStats.isDirectory() || homeStats.isSymbolicLink() || Number(homeStats.uid) !== uid() || mode(homeStats) !== 0o700 ||
+      !stateStats.isDirectory() || stateStats.isSymbolicLink() || Number(stateStats.uid) !== uid() || mode(stateStats) !== 0o700 ||
+      !lockStats.isFile() || lockStats.isSymbolicLink() || Number(lockStats.uid) !== uid() || mode(lockStats) !== 0o600 ||
+      Number(lockStats.nlink) !== 1 || Number(lockStats.size) !== 0 ||
+      lockStats.dev.toString(10) !== held.dev || lockStats.ino.toString(10) !== held.ino ||
       !sameValue(homeNames, expectedHomeNames) ||
       !sameValue(stateNames, expectedStateNames)
     ) {
@@ -963,9 +963,9 @@ export class BootstrapExecutor {
     const retainedHomeNames = retainedChildNames(paths.home, plan.admittedPreexistingPaths);
     const retainedStateNames = retainedChildNames(paths.stateDir, plan.admittedPreexistingPaths);
     const [homeStats, stateStats, lockStats, homeNames, stateNames] = await Promise.all([
-      nodeFs.lstat(paths.home),
-      nodeFs.lstat(paths.stateDir),
-      nodeFs.lstat(plan.bootstrapIdentity.path),
+      nodeFs.lstat(paths.home, { bigint: true }),
+      nodeFs.lstat(paths.stateDir, { bigint: true }),
+      nodeFs.lstat(plan.bootstrapIdentity.path, { bigint: true }),
       nodeFs.readdir(paths.home),
       nodeFs.readdir(paths.stateDir),
     ]);
@@ -977,8 +977,8 @@ export class BootstrapExecutor {
     if (
       lifecycleLockStats !== null &&
       (!lifecycleLockStats.isFile() || lifecycleLockStats.isSymbolicLink() ||
-        lifecycleLockStats.uid !== uid() || mode(lifecycleLockStats) !== 0o600 ||
-        lifecycleLockStats.nlink !== 1 || lifecycleLockStats.size !== 0)
+        Number(lifecycleLockStats.uid) !== uid() || mode(lifecycleLockStats) !== 0o600 ||
+        Number(lifecycleLockStats.nlink) !== 1 || Number(lifecycleLockStats.size) !== 0)
     ) throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "lifecycle lock residue changed shape");
     const expectedStateNames = [...new Set([
       basename(plan.bootstrapIdentity.path),
@@ -992,16 +992,16 @@ export class BootstrapExecutor {
     if (
       held === null || held === undefined ||
       !homeStats.isDirectory() || homeStats.isSymbolicLink() ||
-      homeStats.uid !== uid() || mode(homeStats) !== 0o700 ||
-      String(homeStats.dev) !== expectedHome.dev || String(homeStats.ino) !== expectedHome.ino ||
+      Number(homeStats.uid) !== uid() || mode(homeStats) !== 0o700 ||
+      homeStats.dev.toString(10) !== expectedHome.dev || homeStats.ino.toString(10) !== expectedHome.ino ||
       !stateStats.isDirectory() || stateStats.isSymbolicLink() ||
-      stateStats.uid !== uid() || mode(stateStats) !== 0o700 ||
-      String(stateStats.dev) !== expectedState.dev || String(stateStats.ino) !== expectedState.ino ||
+      Number(stateStats.uid) !== uid() || mode(stateStats) !== 0o700 ||
+      stateStats.dev.toString(10) !== expectedState.dev || stateStats.ino.toString(10) !== expectedState.ino ||
       !lockStats.isFile() || lockStats.isSymbolicLink() ||
-      lockStats.uid !== uid() || mode(lockStats) !== 0o600 ||
-      lockStats.nlink !== 1 || lockStats.size !== 0 ||
-      String(lockStats.dev) !== plan.bootstrapIdentity.dev ||
-      String(lockStats.ino) !== plan.bootstrapIdentity.ino ||
+      Number(lockStats.uid) !== uid() || mode(lockStats) !== 0o600 ||
+      Number(lockStats.nlink) !== 1 || Number(lockStats.size) !== 0 ||
+      lockStats.dev.toString(10) !== plan.bootstrapIdentity.dev ||
+      lockStats.ino.toString(10) !== plan.bootstrapIdentity.ino ||
       held.dev !== plan.bootstrapIdentity.dev || held.ino !== plan.bootstrapIdentity.ino ||
       !sameValue(homeNames, expectedHomeNames) ||
       !sameValue(stateNames, expectedStateNames)
@@ -1019,9 +1019,9 @@ export class BootstrapExecutor {
     request: FreshInitRequestV1,
     packaged: AdmittedPackagedReleaseV1,
     preview: FreshInitPreviewV1,
-    brainStats: Stats | null,
-    reusableDirectories: ReadonlyMap<string, Stats>,
-    admittedBookkeeping: ReadonlyMap<string, Stats>,
+    brainStats: BigIntStats | null,
+    reusableDirectories: ReadonlyMap<string, BigIntStats>,
+    admittedBookkeeping: ReadonlyMap<string, BigIntStats>,
     retainedPaths: readonly CanonicalAbsolutePathV1[],
   ): Promise<BootstrapEvidenceReportV1["aggregate"]> {
     const maximumIdentity = "18446744073709551615";
@@ -1193,8 +1193,8 @@ export class BootstrapExecutor {
 
   private async inspectReusableFreshDirectories(
     admitted: BootstrapEvidenceAdmissionV1,
-  ): Promise<ReadonlyMap<string, Stats>> {
-    const result = new Map<string, Stats>();
+  ): Promise<ReadonlyMap<string, BigIntStats>> {
+    const result = new Map<string, BigIntStats>();
     for (const path of this.reusableFreshDirectoryCandidates()) {
       const stats = await lstatOptional(path);
       if (stats === null) continue;
@@ -1203,7 +1203,7 @@ export class BootstrapExecutor {
       );
       if (
         !allowed || !stats.isDirectory() || stats.isSymbolicLink() ||
-        stats.uid !== uid() || mode(stats) !== 0o700
+        Number(stats.uid) !== uid() || mode(stats) !== 0o700
       ) {
         throw new FreshBootstrapError(
           EXIT_CODES.recoveryRequired,
@@ -1223,7 +1223,7 @@ export class BootstrapExecutor {
    */
   private async inspectBookkeepingShapes(
     admitted: BootstrapEvidenceAdmissionV1,
-  ): Promise<ReadonlyMap<string, Stats>> {
+  ): Promise<ReadonlyMap<string, BigIntStats>> {
     const paths = this.#dependencies.paths;
     const roots = lifecycleBookkeepingPaths(paths.home);
     const residue: LifecycleBookkeepingResidueV1 = {
@@ -1257,12 +1257,12 @@ export class BootstrapExecutor {
   }
 
   private sameReusableDirectoryObservation(
-    before: ReadonlyMap<string, Stats>,
-    after: ReadonlyMap<string, Stats>,
+    before: ReadonlyMap<string, BigIntStats>,
+    after: ReadonlyMap<string, BigIntStats>,
   ): boolean {
     return sameValue(
-      [...before].map(([path, stats]) => ({ path, dev: String(stats.dev), ino: String(stats.ino) })),
-      [...after].map(([path, stats]) => ({ path, dev: String(stats.dev), ino: String(stats.ino) })),
+      [...before].map(([path, stats]) => ({ path, dev: stats.dev.toString(10), ino: stats.ino.toString(10) })),
+      [...after].map(([path, stats]) => ({ path, dev: stats.dev.toString(10), ino: stats.ino.toString(10) })),
     );
   }
 
@@ -1316,8 +1316,8 @@ export class BootstrapExecutor {
      */
     const exactReusableBootstrapLock = preexistingBootstrapLock !== null &&
       preexistingBootstrapLock.isFile() && !preexistingBootstrapLock.isSymbolicLink() &&
-      preexistingBootstrapLock.uid === uid() && mode(preexistingBootstrapLock) === 0o600 &&
-      preexistingBootstrapLock.nlink === 1 && preexistingBootstrapLock.size === 0;
+      Number(preexistingBootstrapLock.uid) === uid() && mode(preexistingBootstrapLock) === 0o600 &&
+      Number(preexistingBootstrapLock.nlink) === 1 && Number(preexistingBootstrapLock.size) === 0;
     if (preexistingBootstrapLock !== null && !exactReusableBootstrapLock) {
       throw new FreshBootstrapError(
         EXIT_CODES.recoveryRequired,
@@ -1664,13 +1664,13 @@ export class BootstrapExecutor {
   private externalShapeEntry(
     role: "product_home" | "state_directory" | "bootstrap_lock",
     path: string,
-    stats: Stats,
+    stats: BigIntStats,
   ) {
     const expectedDirectory = role !== "bootstrap_lock";
     if (
-      stats.uid !== uid() ||
+      Number(stats.uid) !== uid() ||
       stats.isSymbolicLink() ||
-      (expectedDirectory ? !stats.isDirectory() || mode(stats) !== 0o700 : !stats.isFile() || mode(stats) !== 0o600 || stats.nlink !== 1 || stats.size !== 0)
+      (expectedDirectory ? !stats.isDirectory() || mode(stats) !== 0o700 : !stats.isFile() || mode(stats) !== 0o600 || Number(stats.nlink) !== 1 || Number(stats.size) !== 0)
     ) {
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "fresh bootstrap prerequisite changed shape");
     }
@@ -1680,10 +1680,10 @@ export class BootstrapExecutor {
       kind: expectedDirectory ? "directory" as const : "regular_file" as const,
       ownerUid: uid(),
       mode: expectedDirectory ? 0o700 as const : 0o600 as const,
-      nlink: stats.nlink,
-      size: String(stats.size),
-      dev: String(stats.dev),
-      ino: String(stats.ino),
+      nlink: Number(stats.nlink),
+      size: stats.size.toString(10),
+      dev: stats.dev.toString(10),
+      ino: stats.ino.toString(10),
     };
   }
 
@@ -1940,7 +1940,7 @@ export class BootstrapExecutor {
       ...(input.brainStats === null ? [] : [[input.request.brainPath, input.brainStats] as const]),
       ...input.preexistingDirectories,
       ...input.admittedBookkeeping,
-      [this.#dependencies.userHome, await nodeFs.lstat(this.#dependencies.userHome)],
+      [this.#dependencies.userHome, await nodeFs.lstat(this.#dependencies.userHome, { bigint: true })],
     ]);
     const lifecycleLock = join(paths.stateDir, ".lifecycle.lock");
     const admitsLock = input.admittedBookkeeping.has(lifecycleLock);
@@ -1958,8 +1958,8 @@ export class BootstrapExecutor {
       return {
         kind: "preexisting" as const,
         path: parentPath as CanonicalAbsolutePathV1,
-        dev: String(stats.dev) as Extract<PlannedCreatedPathV1["parent"], { kind: "preexisting" }>["dev"],
-        ino: String(stats.ino) as Extract<PlannedCreatedPathV1["parent"], { kind: "preexisting" }>["ino"],
+        dev: stats.dev.toString(10) as Extract<PlannedCreatedPathV1["parent"], { kind: "preexisting" }>["dev"],
+        ino: stats.ino.toString(10) as Extract<PlannedCreatedPathV1["parent"], { kind: "preexisting" }>["ino"],
       };
     };
     const createdPaths: PlannedCreatedPathV1[] = [
@@ -2066,8 +2066,8 @@ export class BootstrapExecutor {
         mode: 0o600,
         nlink: 1,
         size: 0,
-        dev: String(input.lockStats.dev) as FreshV2InitPlanV1["bootstrapIdentity"]["dev"],
-        ino: String(input.lockStats.ino) as FreshV2InitPlanV1["bootstrapIdentity"]["ino"],
+        dev: input.lockStats.dev.toString(10) as FreshV2InitPlanV1["bootstrapIdentity"]["dev"],
+        ino: input.lockStats.ino.toString(10) as FreshV2InitPlanV1["bootstrapIdentity"]["ino"],
       },
       planPath: envelope.plan,
       journalSlots: [
@@ -2212,8 +2212,8 @@ export class BootstrapExecutor {
       return {
         kind: "preexisting" as const,
         path: parentPath as CanonicalAbsolutePathV1,
-        dev: String(stats.dev) as Extract<PlannedCreatedPathV1["parent"], { kind: "preexisting" }>["dev"],
-        ino: String(stats.ino) as Extract<PlannedCreatedPathV1["parent"], { kind: "preexisting" }>["ino"],
+        dev: stats.dev.toString(10) as Extract<PlannedCreatedPathV1["parent"], { kind: "preexisting" }>["dev"],
+        ino: stats.ino.toString(10) as Extract<PlannedCreatedPathV1["parent"], { kind: "preexisting" }>["ino"],
       };
     };
     return {
@@ -2577,10 +2577,10 @@ export class BootstrapExecutor {
     allowedLinks: readonly number[],
     point?: FreshInitDeathPointV1,
   ): Promise<Uint8Array> {
-    const before = await nodeFs.lstat(path);
-    const exactShape = (stats: Stats): boolean =>
-      stats.isFile() && !stats.isSymbolicLink() && stats.uid === uid() &&
-      mode(stats) === 0o600 && allowedLinks.includes(stats.nlink) &&
+    const before = await nodeFs.lstat(path, { bigint: true });
+    const exactShape = (stats: BigIntStats): boolean =>
+      stats.isFile() && !stats.isSymbolicLink() && Number(stats.uid) === uid() &&
+      mode(stats) === 0o600 && allowedLinks.includes(Number(stats.nlink)) &&
       stats.size >= 0 && stats.size <= maximumBytes;
     if (!exactShape(before)) {
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, `guarded bootstrap envelope changed shape: ${path}`);
@@ -2591,15 +2591,15 @@ export class BootstrapExecutor {
       constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
     );
     try {
-      const opened = await handle.stat();
+      const opened = await handle.stat({ bigint: true });
       if (!exactShape(opened) || opened.dev !== before.dev || opened.ino !== before.ino) {
         throw new FreshBootstrapError(EXIT_CODES.securityRefusal, `guarded bootstrap envelope changed during open: ${path}`);
       }
       const bytes = await handle.readFile();
-      const after = await nodeFs.lstat(path);
+      const after = await nodeFs.lstat(path, { bigint: true });
       if (
         !exactShape(after) || after.dev !== opened.dev || after.ino !== opened.ino ||
-        after.size !== bytes.byteLength
+        Number(after.size) !== bytes.byteLength
       ) {
         throw new FreshBootstrapError(EXIT_CODES.securityRefusal, `guarded bootstrap envelope changed during read: ${path}`);
       }
@@ -2613,23 +2613,23 @@ export class BootstrapExecutor {
     path: string,
     expected: { readonly hash: string; readonly bytes: number; readonly mode: number },
     expectedNlink = 1,
-  ): Promise<Stats> {
-    const stats = await nodeFs.lstat(path);
+  ): Promise<BigIntStats> {
+    const stats = await nodeFs.lstat(path, { bigint: true });
     if (
       !stats.isFile() ||
       stats.isSymbolicLink() ||
-      stats.uid !== uid() ||
-      stats.nlink !== expectedNlink ||
+      Number(stats.uid) !== uid() ||
+      Number(stats.nlink) !== expectedNlink ||
       mode(stats) !== expected.mode ||
-      stats.size !== expected.bytes
+      Number(stats.size) !== expected.bytes
     ) {
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, `bootstrap file changed shape: ${path}`);
     }
     const handle = await nodeFs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
-      const opened = await handle.stat();
+      const opened = await handle.stat({ bigint: true });
       const bytes = await handle.readFile();
-      const fresh = await nodeFs.lstat(path);
+      const fresh = await nodeFs.lstat(path, { bigint: true });
       if (
         opened.dev !== stats.dev ||
         opened.ino !== stats.ino ||
@@ -2649,7 +2649,7 @@ export class BootstrapExecutor {
   private async writePayloadEvidence(
     plan: FreshV2InitPlanV1,
     row: BootstrapPayloadPlanV1,
-    stats: Stats,
+    stats: BigIntStats,
   ): Promise<BootstrapPayloadEvidenceV1> {
     const evidence: BootstrapPayloadEvidenceV1 = {
       schemaVersion: 1,
@@ -2660,8 +2660,8 @@ export class BootstrapExecutor {
       bytes: row.ref.bytes,
       sha256: row.ref.hash,
       mode: row.ref.mode,
-      dev: String(stats.dev) as BootstrapPayloadEvidenceV1["dev"],
-      ino: String(stats.ino) as BootstrapPayloadEvidenceV1["ino"],
+      dev: stats.dev.toString(10) as BootstrapPayloadEvidenceV1["dev"],
+      ino: stats.ino.toString(10) as BootstrapPayloadEvidenceV1["ino"],
     };
     const paths = deriveBootstrapPayloadEvidencePaths(row.ref.path, randomUUID());
     const existing = await lstatOptional(paths.evidence);
@@ -2690,7 +2690,7 @@ export class BootstrapExecutor {
     plan: FreshV2InitPlanV1,
     row: BootstrapPayloadPlanV1,
     evidence: BootstrapPayloadEvidenceV1,
-    stats: Stats,
+    stats: BigIntStats,
   ): void {
     if (
       evidence.bootstrapId !== plan.id ||
@@ -2700,8 +2700,8 @@ export class BootstrapExecutor {
       evidence.bytes !== row.ref.bytes ||
       evidence.sha256 !== row.ref.hash ||
       evidence.mode !== row.ref.mode ||
-      evidence.dev !== String(stats.dev) ||
-      evidence.ino !== String(stats.ino)
+      evidence.dev !== stats.dev.toString(10) ||
+      evidence.ino !== stats.ino.toString(10)
     ) {
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "payload evidence changed identity");
     }
@@ -2713,15 +2713,15 @@ export class BootstrapExecutor {
   ): Promise<void> {
     const parent = planned.parent;
     const path = dirname(planned.path);
-    const stats = await nodeFs.lstat(path);
-    if (!stats.isDirectory() || stats.isSymbolicLink() || stats.uid !== uid() || mode(stats) !== 0o700) {
+    const stats = await nodeFs.lstat(path, { bigint: true });
+    if (!stats.isDirectory() || stats.isSymbolicLink() || Number(stats.uid) !== uid() || mode(stats) !== 0o700) {
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "planned parent changed shape");
     }
     if (parent.kind === "preexisting") {
       if (
         parent.path !== path ||
-        parent.dev !== String(stats.dev) ||
-        parent.ino !== String(stats.ino)
+        parent.dev !== stats.dev.toString(10) ||
+        parent.ino !== stats.ino.toString(10)
       ) {
         throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "preexisting parent changed identity");
       }
@@ -2735,8 +2735,8 @@ export class BootstrapExecutor {
     if (
       evidence.pathHash !== pathHash(path) ||
       evidence.kind !== "directory" ||
-      evidence.dev !== String(stats.dev) ||
-      evidence.ino !== String(stats.ino)
+      evidence.dev !== stats.dev.toString(10) ||
+      evidence.ino !== stats.ino.toString(10)
     ) {
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "created parent changed identity");
     }
@@ -2749,11 +2749,11 @@ export class BootstrapExecutor {
     readonly dev: UInt64DecimalV1;
     readonly ino: UInt64DecimalV1;
   }> {
-    const stats = await nodeFs.lstat(path);
+    const stats = await nodeFs.lstat(path, { bigint: true });
     if (
       !stats.isDirectory() ||
       stats.isSymbolicLink() ||
-      stats.uid !== uid() ||
+      Number(stats.uid) !== uid() ||
       mode(stats) !== 0o700
     ) {
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "publication parent changed shape");
@@ -2762,8 +2762,8 @@ export class BootstrapExecutor {
       path: path as CanonicalAbsolutePathV1,
       ownerUid: uid(),
       mode: 0o700,
-      dev: String(stats.dev) as UInt64DecimalV1,
-      ino: String(stats.ino) as UInt64DecimalV1,
+      dev: stats.dev.toString(10) as UInt64DecimalV1,
+      ino: stats.ino.toString(10) as UInt64DecimalV1,
     };
   }
 
@@ -2805,15 +2805,15 @@ export class BootstrapExecutor {
           );
           await empty.close();
           await syncDirectory(dirname(row.ref.path));
-          stats = await nodeFs.lstat(row.ref.path);
+          stats = await nodeFs.lstat(row.ref.path, { bigint: true });
           this.checkpoint("after_payload_empty_create");
         }
         if (
           !stats.isFile() ||
           stats.isSymbolicLink() ||
-          stats.uid !== uid() ||
-          stats.nlink !== 1 ||
-          stats.size !== 0 ||
+          Number(stats.uid) !== uid() ||
+          Number(stats.nlink) !== 1 ||
+          Number(stats.size) !== 0 ||
           mode(stats) !== row.ref.mode
         ) {
           throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "payload create intent found a nonempty or changed inode");
@@ -2822,8 +2822,8 @@ export class BootstrapExecutor {
           payloadWriteState: {
             state: "writing",
             ordinal: row.ref.ordinal,
-            dev: String(stats.dev) as Extract<FreshV2InitJournalV1["payloadWriteState"], { state: "writing" }>["dev"],
-            ino: String(stats.ino) as Extract<FreshV2InitJournalV1["payloadWriteState"], { state: "writing" }>["ino"],
+            dev: stats.dev.toString(10) as Extract<FreshV2InitJournalV1["payloadWriteState"], { state: "writing" }>["dev"],
+            ino: stats.ino.toString(10) as Extract<FreshV2InitJournalV1["payloadWriteState"], { state: "writing" }>["ino"],
           },
         });
         this.checkpoint("after_payload_writing_intent");
@@ -2831,11 +2831,11 @@ export class BootstrapExecutor {
       if (journal.payloadWriteState.state !== "writing") {
         throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "payload write state did not become writing");
       }
-      stats = await nodeFs.lstat(row.ref.path);
+      stats = await nodeFs.lstat(row.ref.path, { bigint: true });
       if (
         journal.payloadWriteState.ordinal !== row.ref.ordinal ||
-        journal.payloadWriteState.dev !== String(stats.dev) ||
-        journal.payloadWriteState.ino !== String(stats.ino)
+        journal.payloadWriteState.dev !== stats.dev.toString(10) ||
+        journal.payloadWriteState.ino !== stats.ino.toString(10)
       ) {
         throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "payload writing inode changed identity");
       }
@@ -2845,16 +2845,16 @@ export class BootstrapExecutor {
         const evidence = await this.readPayloadEvidence(row);
         this.assertPayloadEvidenceIdentity(plan, row, evidence, stats);
       } else {
-        if (stats.size !== 0) {
+        if (Number(stats.size) !== 0) {
           const partial = await nodeFs.open(
             row.ref.path,
             constants.O_WRONLY | constants.O_NOFOLLOW,
           );
           try {
-            const opened = await partial.stat();
+            const opened = await partial.stat({ bigint: true });
             if (
-              String(opened.dev) !== journal.payloadWriteState.dev ||
-              String(opened.ino) !== journal.payloadWriteState.ino
+              opened.dev.toString(10) !== journal.payloadWriteState.dev ||
+              opened.ino.toString(10) !== journal.payloadWriteState.ino
             ) {
               throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "partial payload identity changed before restart");
             }
@@ -2863,18 +2863,18 @@ export class BootstrapExecutor {
           } finally {
             await partial.close();
           }
-          stats = await nodeFs.lstat(row.ref.path);
+          stats = await nodeFs.lstat(row.ref.path, { bigint: true });
         }
         const handle = await nodeFs.open(
           row.ref.path,
           constants.O_WRONLY | constants.O_NOFOLLOW,
         );
         try {
-          const opened = await handle.stat();
+          const opened = await handle.stat({ bigint: true });
           if (
-            String(opened.dev) !== journal.payloadWriteState.dev ||
-            String(opened.ino) !== journal.payloadWriteState.ino ||
-            opened.size !== 0
+            opened.dev.toString(10) !== journal.payloadWriteState.dev ||
+            opened.ino.toString(10) !== journal.payloadWriteState.ino ||
+            Number(opened.size) !== 0
           ) {
             throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "payload inode changed before byte zero");
           }
@@ -2898,8 +2898,8 @@ export class BootstrapExecutor {
         this.checkpoint("after_payload_file_sync");
         stats = await this.assertExactFile(row.ref.path, row.ref);
         if (
-          journal.payloadWriteState.dev !== String(stats.dev) ||
-          journal.payloadWriteState.ino !== String(stats.ino)
+          journal.payloadWriteState.dev !== stats.dev.toString(10) ||
+          journal.payloadWriteState.ino !== stats.ino.toString(10)
         ) {
           throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "payload inode changed after sync");
         }
@@ -2968,11 +2968,11 @@ export class BootstrapExecutor {
         });
         this.checkpoint("after_forward_rename");
       }
-      stats = await nodeFs.lstat(planned.path);
+      stats = await nodeFs.lstat(planned.path, { bigint: true });
     } else if (planned.kind === "global_lock") {
       if (
-        !stats.isFile() || stats.isSymbolicLink() || stats.uid !== uid() ||
-        stats.nlink !== 1 || stats.size !== 0 || mode(stats) !== 0o600
+        !stats.isFile() || stats.isSymbolicLink() || Number(stats.uid) !== uid() ||
+        Number(stats.nlink) !== 1 || Number(stats.size) !== 0 || mode(stats) !== 0o600
       ) {
         throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "global lock recovery found a changed inode");
       }
@@ -2995,7 +2995,7 @@ export class BootstrapExecutor {
           // became durable, bootstrap lock held — admit and let the caller record evidence.
           await this.acquireIdentityCheckedGlobalLock(plan, planned, stats, retained.bootstrap);
         } else {
-          const identity = { dev: String(stats.dev), ino: String(stats.ino) };
+          const identity = { dev: stats.dev.toString(10), ino: stats.ino.toString(10) };
           // A death between the creation-evidence write and the journal advance leaves
           // matching evidence at cursor zero; refusing it stranded that evidence
           // untombstoned and made the next intent permanently unrunnable.
@@ -3008,7 +3008,7 @@ export class BootstrapExecutor {
           }
           await this.acquireIdentityCheckedGlobalLock(plan, planned, stats, retained.bootstrap);
         }
-      } else if (retained.global.dev !== String(stats.dev) || retained.global.ino !== String(stats.ino)) {
+      } else if (retained.global.dev !== stats.dev.toString(10) || retained.global.ino !== stats.ino.toString(10)) {
         throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "held global lock changed during recovery");
       }
     } else if (planned.kind === "file") {
@@ -3028,11 +3028,11 @@ export class BootstrapExecutor {
     }
     await this.assertPlannedParent(plan, planned);
     if (
-      stats.uid !== uid() ||
+      Number(stats.uid) !== uid() ||
       stats.isSymbolicLink() ||
       (planned.kind === "directory"
         ? !stats.isDirectory() || mode(stats) !== 0o700
-        : !stats.isFile() || stats.nlink !== 1 || mode(stats) !== (planned.kind === "global_lock" ? 0o600 : planned.payload.mode))
+        : !stats.isFile() || Number(stats.nlink) !== 1 || mode(stats) !== (planned.kind === "global_lock" ? 0o600 : planned.payload.mode))
     ) {
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "created bootstrap path changed identity");
     }
@@ -3044,8 +3044,8 @@ export class BootstrapExecutor {
       ordinal,
       pathHash: pathHash(planned.path),
       kind: planned.kind,
-      dev: String(stats.dev) as CreatedPathEvidenceV1["dev"],
-      ino: String(stats.ino) as CreatedPathEvidenceV1["ino"],
+      dev: stats.dev.toString(10) as CreatedPathEvidenceV1["dev"],
+      ino: stats.ino.toString(10) as CreatedPathEvidenceV1["ino"],
       postimageHash: planned.kind === "file" ? planned.payload.hash : planned.kind === "global_lock" ? EMPTY_HASH : null,
     };
     const evidencePath = deriveBootstrapCreationEvidencePaths(
@@ -3268,7 +3268,7 @@ export class BootstrapExecutor {
     ) {
       if (
         stats === null || !stats.isDirectory() || stats.isSymbolicLink() ||
-        stats.uid !== uid() || mode(stats) !== 0o700
+        Number(stats.uid) !== uid() || mode(stats) !== 0o700
       ) {
         throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "Foundation publication parent escaped its admitted bookkeeping shape");
       }
@@ -3276,14 +3276,14 @@ export class BootstrapExecutor {
         path,
         ownerUid: uid(),
         mode: 0o700 as const,
-        dev: String(stats.dev) as UInt64DecimalV1,
-        ino: String(stats.ino) as UInt64DecimalV1,
+        dev: stats.dev.toString(10) as UInt64DecimalV1,
+        ino: stats.ino.toString(10) as UInt64DecimalV1,
       };
     }
     if (
       retained === undefined || stats === null || !stats.isDirectory() || stats.isSymbolicLink() ||
-      stats.uid !== uid() || mode(stats) !== 0o700 ||
-      String(stats.dev) !== retained.dev || String(stats.ino) !== retained.ino
+      Number(stats.uid) !== uid() || mode(stats) !== 0o700 ||
+      stats.dev.toString(10) !== retained.dev || stats.ino.toString(10) !== retained.ino
     ) {
       throw new FreshBootstrapError(EXIT_CODES.recoveryRequired, "Foundation publication parent escaped admitted retained evidence");
     }
@@ -3364,10 +3364,10 @@ export class BootstrapExecutor {
       mode: expected.mode,
     });
     if (
-      stats.uid !== expected.ownerUid ||
-      stats.nlink !== expected.nlink ||
-      String(stats.dev) !== expected.dev ||
-      String(stats.ino) !== expected.ino ||
+      Number(stats.uid) !== expected.ownerUid ||
+      Number(stats.nlink) !== expected.nlink ||
+      stats.dev.toString(10) !== expected.dev ||
+      stats.ino.toString(10) !== expected.ino ||
       await lstatOptional(destination) !== null
     ) {
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "manifest move identity changed");
@@ -3468,8 +3468,8 @@ export class BootstrapExecutor {
     manifest: InstallationManifestV2,
   ): Promise<void> {
     for (const artifact of manifest.artifacts) {
-      const stats = await nodeFs.lstat(artifact.path);
-      if (stats.uid !== uid() || stats.isSymbolicLink()) {
+      const stats = await nodeFs.lstat(artifact.path, { bigint: true });
+      if (Number(stats.uid) !== uid() || stats.isSymbolicLink()) {
         throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "V2 artifact changed ownership or type");
       }
       if (artifact.kind === "directory") {
@@ -3481,7 +3481,7 @@ export class BootstrapExecutor {
       const planned = [...plan.createdPaths, ...plan.launchabilityPaths]
         .find((candidate) => candidate.path === artifact.path);
       const expectedMode = planned?.kind === "file" ? planned.payload.mode : 0o600;
-      if (!stats.isFile() || stats.nlink !== 1 || mode(stats) !== expectedMode) {
+      if (!stats.isFile() || Number(stats.nlink) !== 1 || mode(stats) !== expectedMode) {
         throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "V2 file handoff is incomplete");
       }
       if (
