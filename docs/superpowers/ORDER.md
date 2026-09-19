@@ -8,32 +8,14 @@ notes are the archive.
 
 ## NOW
 
-**A11 — DOS-P7 Git, automation, update, and release lifecycle.**
+**A11 — DOS-P7 Git, automation, update, and release lifecycle, pre-cutover part.** The next action is
+to execute plan 1a (`plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`, roadmap Phase 4) wave by
+wave, as `SESSION.md` §4.1 orchestrates it (D33).
 
-**Roadmap Phase 3 closed on 2026-09-17** (`810d342..43c30e4`): `init` refuses a V1 manifest once the
-packaged capability exists, ordinary commands refuse during non-terminal bootstrap state, and the
-strict V2 handoff admission exists. The V1→V2 migration was withdrawn (D18) and reverted. `npm run
-check` passed on `43c30e4`. The final review's findings are NEW-79 to NEW-83 and additions to NEW-67;
-founder decisions D19 and D20 settled the two that needed one.
+Plan 1a progress: committed 1–11; in flight none; ready next 12, 13, 15, 17 (wave 1).
 
-**The NEW-67 amendment to Spec 1 is approved and applied** (2026-09-17, every recommended option;
-founder decisions D21–D23), with a companion Spec 2 §6.1/§6.4 amendment. NEW-67 is closed; its
-`launchctl` clause moved to NEW-84.
-
-**Plan 1a is written:** `plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`, 26 tasks (1–25 plus 10b, inserted by
-D31) — Spec 1 plan
-Tasks 1–7, 21 and 23 rewritten against Spec 1 as amended, carrying the code obligations listed under
-roadmap Phase 4. Its blocking questions were answered by founder decisions D24–D29 (2026-09-17) and
-applied to Spec 1 as A14–A16: a closed `uninstall/present_manifest_without_launchd` variant (D24), empty
-directories removed before the manifest tombstone (D25), the uninstall capacity refusal with the decision
-deferred to Phase 4b as NEW-85 (D26), §6 applied literally to V1 residue (D27), the `mf` ID reserved last
-(D28), NEW-80 pulled into plan 1a Task 1 (D29), and the shape-admitted bookkeeping identity deferred to
-Phase 4b as NEW-86 (D30). **The next action is to execute plan 1a.**
-
-Plan 1a progress: Tasks 1–11 of 26 committed; next is Task 12 (Coordinator ledger and `LifecycleJournalClosureV1`).
-
-The 2026-08-28 Spec 1 plan (`plans/2026-08-28-developer-os-opt-in-surfaces.md`) stays as plan 1b's
-source. Spec 2's Tasks 1–7 and 9 are complete, Task 8 is withdrawn, and Tasks 10–26 remain.
+Spec 2 (`plans/2026-08-29-developer-os-release-update.md`): Tasks 1–7 and 9 complete, Task 8
+withdrawn (D18), Tasks 10–26 remain. The 2026-08-28 Spec 1 plan stays as plan 1b's source.
 
 Open sequence (D16, daily use before completeness):
 
@@ -44,13 +26,12 @@ Open sequence (D16, daily use before completeness):
 3. A12 → A12b → A13 → A14, then the founder cutover A15.
 4. After the cutover: A11b (Spec 2 Tasks 12–26, then Spec 1b), then A16.
 
-Per decisions D17 and D32 an ordinary task commit runs its fast commands, `npm run lint` and fresh
-review, and is pushed when no CI run is in progress; slow suites and `npm run check` run once, at plan
-close (`SESSION.md` §5). Plan 1a added one CI job for its real-V2-home test files in its Task 1.
+Per decisions D17, D32 and D33 a task commit runs its fast commands, `npm run lint` and fresh review;
+independent tasks run in parallel and one orchestrator integrates and pushes when no CI run is in
+progress; slow suites and `npm run check` run once, at plan close (`SESSION.md` §4.1, §5).
 
 Phase 4 onward is sequenced by `plans/2026-09-04-developer-os-completion-roadmap.md` (10 open phases,
-4 through 11 with a 4b and a 5b, the founder decisions of 2026-09-04, 2026-09-07, 2026-09-16 and
-2026-09-17, and the spec or plan each phase requires). `docs/migration/instruction-inventory.md` is the scope of A12, A12b, A13 and A14.
+4 through 11 with a 4b and a 5b, the founder decisions D1–D33, and the spec or plan each phase requires). `docs/migration/instruction-inventory.md` is the scope of A12, A12b, A13 and A14.
 
 ## Product path
 
@@ -88,39 +69,20 @@ Needs a human, a policy decision, or an external application:
 - NEW-7 — verify percent-encoded local links in Obsidian.
 - Foundation watchdog — decide whether `SpawnLockfRunner` needs one around non-blocking `lockf`.
 
-The remaining open repository rows are NEW-20, NEW-24–NEW-29, NEW-31, NEW-32, NEW-34–NEW-40,
-NEW-76, NEW-78, NEW-79, NEW-81, NEW-82 and NEW-84–NEW-87.
+`BACKLOG.md` §1 holds 46 open numbered rows.
 Owners: NEW-79, NEW-81, NEW-85 and NEW-86 are owned by Phase 4b; NEW-82 by plan 1a; NEW-84 by Phase 9;
 NEW-87 travels with whichever row each mis-aimed citation belongs to.
-They are not ordered ahead of A11 unless the touched subsystem makes one relevant.
+They are not ordered ahead of A11 unless the touched subsystem makes one relevant; D33 lets a
+startable row run beside a wave when its files overlap no task in flight.
 
 ## Delivery evidence still owed
 
-- L2 still owes release permissions. Everything else it covered is now evidenced: `gh auth status`,
-  `gh pr list` and `gh run list` succeed, and the `baseline` ruleset on `development` carries only
-  `deletion` and `non_fast_forward`, so neither a status check nor a pull request gates a direct
-  push. That was verified by pushing, not inferred.
-- **The first push landed 2026-09-07: `d72287a..446148b`, closing a backlog of 125 unpushed commits
-  and a CI gap since 2026-08-28.** Per decision D12 it went directly to `development` rather than
-  through a probe branch.
-- **CI is green on all five jobs, twice consecutively** — run 34157609332 on `446148b` and run
-  34172016048 on `88d56a2`. The first run's figures: `lint` 0.8 min, `vendor-ingest` 0.5 min, `e2e`
-  6.8 min, `suite` 66.8 min (135 files, 4,587 passed), `bootstrap-executor` — the job that had never
-  once executed before this week, since `check.yml` had a single `check` job at `d72287a`.
-- **The local `check` is green and takes about three hours**, measured 2026-09-07 at 11:05:48→14:01:54:
-  `EXIT=0`, 4,723 tests. `test:bootstrap` 122.6 min, `test:suite` 46.3 min under load, `test:e2e`
-  274.89 s, `test:vendor-ingest` 30.27 s.
-- **A green local `check` is not evidence about CI, and this is now recorded rather than learned
-  again.** The local chain begins with `lint`, which is `tsc -b`, so every `dist` exists before any
-  test runs; CI splits into six jobs with no shared filesystem. And the development laptop runs a
-  newer Darwin than the runner, which is how an undefined `renameatx_np` flag bit shipped. Both
-  instances are in `BACKLOG.md` §5.
-- CI job budgets are 20/330/150/20/40/15 minutes and are sized from a **measured** ~1.9-2x hosted-runner
-  ratio, not a guess; two of them were killed by bounds derived from the most favourable local
-  number before that ratio was measured. They are bounds that let the gate report, not targets —
-  NEW-53's residual owns making them unnecessary.
-- When a full-suite failure occurs, retain the complete log. NEW-29 owns the remaining elapsed-time
-  assertion class.
+- L2 still owes release permissions. Remote rules, `gh` access and direct pushes to `development` are
+  verified: the `baseline` ruleset carries only `deletion` and `non_fast_forward`.
+- Measured gate and CI costs, and why the CI budgets are what they are, live in
+  `docs/architecture/foundation.md` §9. That a green local `check` is not evidence about CI lives in
+  `BACKLOG.md` §5. Retain the complete log of any full-suite failure; NEW-29 owns the remaining
+  elapsed-time assertion class.
 
 ## Long-lead gates
 
@@ -132,8 +94,8 @@ They are not ordered ahead of A11 unless the touched subsystem makes one relevan
 ## Count
 
 - Product sequence: 8 open entries, A11, A12, A12b, A13, A14, A15, A11b, A16.
-- Release plan: Tasks 10–26 open; Tasks 1–7 and 9 closed, Task 8 withdrawn.
+- Implementation tasks: plan 1a 14 remaining (12–25), Spec 2 Tasks 10–26 (17), plan 1b 15 (the
+  2026-08-28 plan's remaining tasks, not yet rewritten): 46. Before the cutover: plan 1a and Spec 2
+  Tasks 10–11, 16 tasks. After it: Spec 2 Tasks 12–26 and plan 1b, 30 tasks.
+- Phases 5, 5b, 6 and 7 have no spec yet; A15 and A16 each still need their dedicated plan.
 - Repository backlog: 46 open numbered rows, plus the Foundation watchdog decision.
-- Implementation plans: Spec 2 baseline Tasks 10–26 (17 tasks), plan 1a (26 tasks) and plan 1b (the
-  2026-08-28 plan's remaining 15 tasks, not yet rewritten): 58 tasks. Before the cutover: plan 1a
-  (26 tasks) and Tasks 10–11 — 28 tasks. After it: Tasks 12–26 and plan 1b (15 tasks) — 30 tasks. Phases 5, 5b, 6 and 7 have no spec yet.

@@ -104,6 +104,7 @@ than to durability.
 | # | Decision | Amends |
 |---|---|---|
 | D32 | **Slow test commands run once, at plan close.** A task commit runs `npm run lint` and every fast command its steps name, unchanged. Deferred to the closing `npm run check`: any `npm run test…` or `npm run check` script, and any run of a slow file — `*.v2.test.ts`, `apps/cli/src/bootstrap/executor.test.ts`, and everything under `tests/e2e`, `tests/security` and `tests/integration`. The exception keeps the founder's global commit rule satisfied: the cases a task itself adds or changes in a slow file still run, red then green, filtered with `-t` to those cases (after `npm run build` for `tests/`). A deferred step is ticked "deferred to plan close (D32)", never with invented output. `npm run check` runs once per plan close, and at a phase close that closes no plan (Phase 4b); the founder may run it by hand, and the plan does not close until it is green. CI still runs every job on each push, and a red run still stops new commits. Reason, measured 2026-09-19: plan 1a Task 11's focused set is 533 tests in 1 s and `npm run lint` 13 s, while `test:bootstrap` is 122.6 min, Task 24's round-trip file about 31 min and `check` about 3 h. Accepted cost: a regression in a deferred suite surfaces on CI or at plan close, not in the task that caused it. | D17; `SESSION.md` §5; `BACKLOG.md` §7; the per-task gate clause of all three implementation plans |
+| D33 | **Plan tasks run in parallel where their declared inputs allow.** A task starts once every task on its `Consumes:` line is integrated on `development`; independent tasks run at the same time, each implemented by its own agent in a git worktree outside the repository — ESLint's flat config does not read `.gitignore`, so an in-repo worktree breaks `lint` — and reviewed by an agent that authored none of it. One orchestrating session owns integration: it cherry-picks each reviewed commit onto `development` in dependency order with no merge commit, takes the union of shared export lists, reruns `npm run lint` and the task's fast commands, ticks the plan, rewrites the `ORDER.md` progress line, and alone pushes under D17. Only the orchestrator edits `docs/superpowers/`. A backlog row `ORDER.md` lists as startable may run beside a wave when its files overlap no task in flight. Reason: the founder asked on 2026-09-19 to close the plans faster with several agents; plan 1a's remaining 14 tasks sit on a ten-wave critical path. | `SESSION.md` §4; plan 1a's per-task bookkeeping and wave table; D17's push, now single-writer |
 
 ## Phases
 
@@ -162,21 +163,8 @@ govern the open phases and stay.
 
 ### Phase 4 — Spec 1a: configuration mutability and the lifecycle coordinator · L
 
-- [x] Amend Spec 1 (NEW-67): approved and applied 2026-09-17 with every recommended option — A1–A13 in place in Spec 1, plus the companion Spec 2 §6.1/§6.4 amendment for A12 (D21–D23). The 2026-09-04 wording of this bullet ("retention replaces every unlink/rmdir/plan-last clause", "the three collision codes exist") was narrowed by D21 and withdrawn by A6.
-- [x] Write plan 1a = Spec 1 plan Tasks 1–7, 21, 23, with Task 2 (`config set`) moved after Task 4 (global lock provider), against the amended Spec 1. Written 2026-09-17 as `plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`, 25 tasks — 26 after D31 inserted Task 10b on 2026-09-18; its blocking questions were answered by D24–D29 and applied as Spec 1 A14–A16. It must also carry what the amendment assigned to code:
-  - global constraints: the V2 handoff admission tests in `apps/cli/src/bootstrap/report.test.ts` replace the withdrawn migration precondition (A1);
-  - first test: the exact-set pin over a fresh plan's `createdPaths` and launchability paths, restored from `git show df3e947 -- apps/cli/src/bootstrap/executor.test.ts` and updated for D19 and a bookkeeping set with no manifest rows (A4, A12);
-  - rename the shipped status reservation to `state/automation-<job>.status.json` (A4);
-  - Task 3 imports the types Spec 2 shipped and still produces their strict validators and the allocated-ID grammar; it drops `LifecycleBootstrapCreationTempV1` and the three created-by-attempt fields (A2, A3, A5);
-  - Task 4's absent-manifest inspection loses its recovery epoch and ID path; Task 23 drops the key-present coordinator, keeps the orphaned-key-after-failed-`init` case working, and implements the recovery-only uninstall arm (A3, A7);
-  - replace `admitV2Handoff` as Spec 1's gate with structural admission, with NEW-82 (A7);
-  - journal closure projects retained bootstrap evidence away (A13);
-  - `init` admits the bookkeeping set by shape and writes no bookkeeping manifest rows; the inertness check ignores the set; a bootstrap leaf is attributable only by identity (NEW-83); the `backups` exemption goes (NEW-69) (A12);
-  - the §7 round-trip gates of A9, with ceilings proven through a counting seam where needed (A8);
-  - a global-lock provider that never creates the lock outside fresh `init`, and the plan validator's `createdPaths[0]` global-lock check made conditional on the lock being absent (`packages/core/src/manifest/bootstrap.ts:1824-1827`) (A12);
-  - closure and init shape admission project the bootstrap participants' leftover `.tx_fi_…_{f|c}.lock` stable locks and empty or tombstone-only participant ID directories (A13 correction);
-  - update the architecture notes that still describe the withdrawn absent-manifest envelope: `docs/architecture/foundation.md`, `docs/architecture/foundation-constraints.md` and `docs/architecture/threat-model.md`.
-- [ ] Execute plan 1a.
+- [x] Spec 1 amended for NEW-67 (A1–A13, D21–D23) and plan 1a written on 2026-09-17 — 26 tasks after D31 inserted 10b, its blocking questions answered by D24–D30 as Spec 1 A14–A16. The code obligations the amendment assigned are carried by plan 1a's tasks and its Spec Coverage Index.
+- [ ] Execute plan 1a, wave by wave (D33). Tasks 1–11 are integrated (`43c6876..62ef4f1`).
 
 Gate: `config get|set` shipped; coordinator recovery proven; uninstall drains leases.
 

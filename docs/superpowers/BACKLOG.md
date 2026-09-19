@@ -92,27 +92,7 @@ There are 46 numbered rows. They are not automatically ordered ahead of A11.
 
 ### A11 · DOS-P7
 
-- [x] Roadmap Phase 1 closed 2026-09-05 as `4fe131c..8e9381a`: the ingest invocation is isolated on
-  both vendors (NEW-58), nested-session attribution resolved (NEW-44), and the Codex final-answer
-  selection settled from source (NEW-47). F1 and F3 were answered without spending model credits and
-  F2 was decided against widening, so none became a founder stop. The plan was deleted at closure;
-  its surviving constraints are in `docs/architecture/vendor-invocation.md` and the adapter and
-  threat-model notes. Two residuals opened: NEW-74, closed 2026-09-07 under decision D14, and
-  NEW-75, which D15 narrowed rather than closed.
-- [x] Bootstrap performance and the first push (roadmap Phase 2), closed 2026-09-07/08 as
-  `632f220..446148b`. Ten tasks. NEW-51, NEW-59 and NEW-52 closed; NEW-53 rewritten to the encoder
-  cost it actually leaves; NEW-29 narrowed rather than closed. The push landed
-  `d72287a..446148b` and CI is green on all five jobs for the first time in this program. The plan
-  is deleted at closure; its surviving constraints are in `docs/architecture/foundation.md` §4 and
-  §9. It also fixed a shipped defect no local gate could see — `RENAME_FLAGS` passed an undefined
-  bit to `renameatx_np`, breaking every retained rename on macOS 15.
-- [x] Roadmap Phase 3 closed 2026-09-17 as `810d342..43c30e4`: `ManagedArtifactV2`,
-  `InstallationManifestV2`, `ManifestStatePlanV1` and the V2 new-init handoff exist; the existing-install
-  migration was withdrawn by D18 and its code reverted; `init` refuses a V1 manifest once the packaged
-  capability exists; ordinary commands refuse during non-terminal bootstrap state; the strict handoff
-  admission exists. `npm run check` passed on `43c30e4`. Its review findings are NEW-79 to NEW-83 and
-  the 2026-09-17 additions to NEW-67.
-- [ ] Execute plan 1a (`plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`, roadmap Phase 4; Tasks 1–7, 21 and 23 of `plans/2026-08-28-developer-os-opt-in-surfaces.md` rewritten against Spec 1 as amended, founder decisions D24–D29). Plan 1b (Git, launchd) follows A15 from the rest of the 2026-08-28 plan.
+- [ ] Execute plan 1a (`plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`, roadmap Phase 4, wave by wave per D33; Tasks 1–11 integrated as `43c6876..62ef4f1`; Tasks 1–7, 21 and 23 of `plans/2026-08-28-developer-os-opt-in-surfaces.md` rewritten against Spec 1 as amended, founder decisions D24–D29). Plan 1b (Git, launchd) follows A15 from the rest of the 2026-08-28 plan.
 - [ ] Finish remaining update/release work and close the full Task 7 checkpoint.
 
 Required behavior:
@@ -203,12 +183,6 @@ Required behavior:
   other repositories only when that cross-repository cleanup is explicitly taken up.
 
 ## 5. Gate-integrity work
-
-- [x] ESLint 9 flat config does not read `.gitignore`. `dbfd875` git-ignored `.worktrees/` but did
-  not add it to the `ignores` list in `eslint.config.mjs`, so `npm run check` failed at lint
-  whenever a worktree existed — and because that script is an `&&` chain, every commit made in that
-  window ran zero tests. Fixed 2026-09-03. When excluding a path, update every tool that keeps its
-  own ignore list.
 
 - [ ] **A green local `npm run check` is not evidence about CI, and 2026-09-07 proved it costs a
   three-hour round trip to learn that.** The local gate is an `&&` chain beginning with `lint`,

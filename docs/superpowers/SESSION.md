@@ -3,7 +3,9 @@
 Use this prompt in a fresh session:
 
 ```text
-Continue Developer OS. Read docs/superpowers/SESSION.md and follow it exactly.
+Continue Developer OS. Read docs/superpowers/SESSION.md and follow it exactly. Act as the
+orchestrator of §4.1: dispatch every ready task of the NOW plan in parallel, integrate each reviewed
+commit, and keep going wave after wave until the NOW entry closes or a stop condition hits.
 ```
 
 ## 1. Orient
@@ -57,9 +59,37 @@ One `ORDER.md` product entry per session.
 
 - A step that asks for a failing test must first fail for the stated reason.
 - Tests pin the approved contract, not incidental current behavior.
-- Follow plan order; later tasks may consume interfaces established by earlier tasks.
+- Follow the plan's dependency order: a task starts only when every task on its `Consumes:` line is
+  integrated on `development` (D33).
 - A wrong or unsafe plan step is a stop condition. Report the contradiction and ask; do not silently
   substitute a different design.
+
+### 4.1 Parallel execution (D33)
+
+The session is the orchestrator. It writes no task code itself.
+
+- **Ready set.** From the plan's wave table and `Consumes:` lines, list every task whose inputs are
+  integrated. Start them together.
+- **Implementer.** One fresh agent per task, in its own worktree outside the repository
+  (`../developer-os.worktrees/<task>`, branch `task/<task>` from the current `development`). It
+  follows the task's steps with `superpowers:test-driven-development`, runs the fast commands and
+  `npm run lint` (D32), commits code and tests only, and reports the commit hash. It never edits
+  `docs/superpowers/`, never pushes, never merges.
+- **Reviewer.** A different fresh agent per task that authored none of it, given the task text, the
+  commit diff and review-only instructions. Accepted findings go back to the implementer as a
+  failing regression test first. Review of one task overlaps implementation of the next.
+- **Integration**, one task at a time, in dependency order: cherry-pick the reviewed commit onto
+  `development` (no merge commit); resolve a shared export list by taking the union; rerun
+  `npm run lint` and the task's fast commands on the integrated tree; tick the task's steps and
+  rewrite the `ORDER.md` progress line; amend them into the integrated commit with exact-path
+  staging; push per §5 step 7. Then remove the worktree and branch.
+- **One real `init` at a time.** Implementers whose own cases run a real fresh V2 `init`
+  (`*.v2.test.ts`, `executor.test.ts`, `tests/`) take turns: concurrent runs drove load to 47 and
+  112–120 s cases to 300 s timeouts (`docs/architecture/foundation.md` §9).
+- **Side tracks.** A row `ORDER.md` lists as startable without a product gate may run as an extra
+  implementer when its files overlap no task in flight.
+- **Stop the wave**, not only the task, when an integration conflict is more than a union of
+  additions, when a reviewer finds a Critical issue in a consumed interface, or when CI turns red.
 
 ## 5. Close the loop
 

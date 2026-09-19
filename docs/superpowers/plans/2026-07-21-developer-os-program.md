@@ -118,26 +118,15 @@ P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5
 
 **Complexity:** L
 
-**Ratified split (founder decision 2026-08-21; cross-referenced 2026-08-25):** Task 7 produces two
-approved design specifications and one implementation plan for each, not one lifecycle spec and one
-plan. Spec 1 is
-`docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md` and owns configuration
-mutability, Git, and automation. Spec 2 owns release/update, `InstallationManifestV2` migration,
-schema migration, and rollback. Both implementations remain required for this unchanged checkpoint;
-Spec 2's manifest migration must land before Spec 1 implementation.
-
-**Spec 1 document gate:** approved by the founder on 2026-08-28 after fresh-context `READY`; its
-implementation plan is `docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md`. That plan
-is written but must not execute before Spec 2's manifest migration/new-init handoff lands.
-
-**Spec 2 document gate:** written on 2026-08-28 after section-by-section founder approval at
-`docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md`; the complete written
-specification is awaiting founder review and approval before its implementation plan is written.
+**Ratified split (founder decision 2026-08-21):** Task 7 is delivered through two specifications
+and their plans. Spec 1, `docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md`,
+owns configuration mutability, Git and automation; Spec 2,
+`docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md`, owns release, update,
+schema migration and rollback. The V1→V2 manifest migration was withdrawn by D18. Sequencing, the
+plans and their progress live in `docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md`
+and `docs/superpowers/ORDER.md` (A11, A11b).
 
 **Files:**
-- Create: `docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md` (written;
-  awaiting founder approval).
-- Create: one implementation plan for Spec 2 after that specification is approved.
 - Create: `apps/launcher/`
 - Extend: `apps/cli/src/commands/git/`, `apps/cli/src/commands/automation/`,
   `apps/cli/src/commands/update/`, and `apps/cli/src/update/`
