@@ -889,8 +889,9 @@ per artifact and why every "not empty" assertion in these suites is written on t
 non-empty.
 
 **The standing gate this subsystem is measured against** (`BACKLOG.md` §7): sentinel, path, prompt
-injection, transaction and network suites, from DOS-P6 onward; `npm run lint` and focused tests on
-every commit, CI's full suite on every pushed commit, and `npm run check` at phase close (D17);
+injection, transaction and network suites, from DOS-P6 onward; `npm run lint` and fast focused tests on
+every commit, CI's full suite on every pushed commit, and `npm run check` — which also runs the slow
+suites D32 defers — at plan close (D17, D32);
 exact-path staging; and a **fresh-context review by an agent that is not the author** on every
 code-producing task.
 

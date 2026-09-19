@@ -253,12 +253,12 @@ Per code-producing commit:
 
 | Gate | Evidence |
 |---|---|
-| Repository validation | `npm run lint` per commit; `npm run check` (`lint`, tests, build, `git diff --check`) at phase or plan close (D17) |
-| Focused verification | command named by the active plan step |
+| Repository validation | `npm run lint` per commit; `npm run check` (`lint`, tests, build, `git diff --check`) at plan close, or at a phase close that closes no plan (D17, D32) |
+| Focused verification | fast commands named by the active plan step; slow suites deferred to plan close except the task's own cases, filtered with `-t` (D32) |
 | Fresh-context review | reviewer did not author the task |
 | Exact-path staging | explicit task-owned paths; never `git add -A`, `git add .`, or a wildcard |
 | Generated artifacts | clean regeneration diff for adapter/workflow changes |
-| Security | relevant sentinel, path, prompt-injection, transaction, and network suites |
+| Security | relevant sentinel, path, prompt-injection, transaction, and network suites, at plan close and on CI (D32) |
 | Publication | triaged history scan, license, packaging, checksums, SBOM, clean-account install |
 | Remote delivery | every task commit pushed to `development` when no CI run is in progress there, otherwise with the next push; no new commit while the latest completed run is red (D17) |
 

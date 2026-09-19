@@ -44,10 +44,9 @@ Open sequence (D16, daily use before completeness):
 3. A12 → A12b → A13 → A14, then the founder cutover A15.
 4. After the cutover: A11b (Spec 2 Tasks 12–26, then Spec 1b), then A16.
 
-Per decision D17 an ordinary task commit runs its focused commands, `npm run lint` and fresh review,
-and is pushed when no CI run is in progress; `npm run check` runs locally at phase or plan close
-(`SESSION.md` §5). That rule is unchanged by plan 1a, which adds one CI job for its real-V2-home test
-files in its Task 1.
+Per decisions D17 and D32 an ordinary task commit runs its fast commands, `npm run lint` and fresh
+review, and is pushed when no CI run is in progress; slow suites and `npm run check` run once, at plan
+close (`SESSION.md` §5). Plan 1a added one CI job for its real-V2-home test files in its Task 1.
 
 Phase 4 onward is sequenced by `plans/2026-09-04-developer-os-completion-roadmap.md` (10 open phases,
 4 through 11 with a 4b and a 5b, the founder decisions of 2026-09-04, 2026-09-07, 2026-09-16 and

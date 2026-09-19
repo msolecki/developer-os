@@ -65,9 +65,14 @@ One `ORDER.md` product entry per session.
 
 All of these are required:
 
-1. Run the focused commands named by the active task, then `npm run lint`.
-2. Run `npm run check` only when the commit closes a roadmap phase or an implementation plan
-   (decision D17, 2026-09-16). A plan step that names `npm run check` for an ordinary task commit is
+1. Run the fast commands named by the active task, then `npm run lint`. Slow commands are deferred
+   to plan close (decision D32, 2026-09-19): any `npm run test…` or `npm run check` script, and any
+   run of `*.v2.test.ts`, `apps/cli/src/bootstrap/executor.test.ts`, `tests/e2e`, `tests/security`
+   or `tests/integration`. The cases the task itself adds or changes in those files still run, red
+   then green, filtered with `-t`. Tick a deferred step "deferred to plan close (D32)".
+2. Run `npm run check` only when the commit closes an implementation plan, or a roadmap phase that
+   closes no plan (D17, narrowed by D32). The founder may run it by hand; the plan does not close
+   until it is green. A plan step that names `npm run check` for an ordinary task commit is
    satisfied by step 1 plus step 7.
 3. Obtain fresh-context review from an agent that did not author the code-producing task. For every
    accepted finding, add a failing regression test first, apply the smallest correction, rerun gates,
