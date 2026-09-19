@@ -1502,7 +1502,7 @@ export async function inspectFoundationLedger(dependencies: {
 }, roots: LifecycleLedgerRootsV1): Promise<FoundationLedgerV1>;
 ```
 
-- [ ] **Step 1: Write failing inventory tests, physical and counting**
+- [x] **Step 1: Write failing inventory tests, physical and counting**
 
 ```ts
 it("agrees with the in-memory port on a small physical tree (A8)", async () => {
@@ -1533,23 +1533,23 @@ it("refuses the millionth-and-first aggregate leaf without deleting anything", a
 
 Cover: allocated `tx_<nonce>_<counter>.json` and legacy `tx_<uuid>.json` accepted; a foreign-nonce allocated ID, `tx_fixture_001.json`, or `TX_…` is a finding; allocated journals over 1,048,576 bytes are a finding while a legacy journal uses the compatibility read; `.<id>.lock` alone is `lock_only`; A13 residue — `.developer-os-retained.<fi-id>.<ordinal>.tombstone` in `state/transactions` whose path is in `residue.retainedPaths`, `.tx_fi_<uuid>_<ordinal>_{f|c}.lock` whose ID is in `bootstrapParticipantIds`, and `staging/transactions/<fi-participant-id>/` and `backups/transactions/<fi-participant-id>/` that are empty or hold only retained paths — is projected away, never a finding, and still counted toward the caps; the same names without residue binding are findings; journal-derived staging `<i>.bin` and `<i>.bin.sha256` and backup `<index>.bin[.tmp]`, `<index>.json[.sha256][.tmp]` names accepted, any other name a finding; allocated indices `0..255` and legacy `0..4294967294`, with `4294967295`, a sign, a leading zero, a non-decimal byte or a duplicate canonical value a finding; the planless grammar exactly (final journal absent, backup ID directory empty, gaps legal, lower indices complete pairs, highest index complete or one of `<i>.bin.tmp`, `<i>.bin`, `<i>.bin` plus `<i>.bin.sha256.tmp`, digest 64 lowercase hex plus LF matching the streamed content hash, one `.<id>.<uuid>.json.tmp` whose bytes are a `FoundationJournalJsonPrefixV1` of a `planned` journal whose non-remove indices equal the complete pairs); a coordinator participant ID's staging without a journal is not planless; symlinks, directories where files belong, wrong owner, mode other than `0600`/`0700`, and `nlink` 2 are findings; every listed scope asserts non-empty.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root packages/core src/lifecycle/foundation-ledger.test.ts`
 
 Expected: FAIL — `foundation-ledger.ts` does not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Rules: read-only; enumerate each root once through `fs.names`, never recursively beyond the exact derived grammar; stop reading at the first leaf past 1,000,000 aggregate and record `ledger_capacity_exceeded`; never materialize a directory listing larger than the cap. Findings carry the path and a safe reason code, never file content.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root packages/core src/lifecycle src/index.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Tick, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 

@@ -32,6 +32,15 @@ export type {
   LifecycleLeafCodecsV1,
   LifecycleValueCodec,
 } from "./codecs.js";
+export { deriveLifecycleLedgerRoots, inspectFoundationLedger } from "./foundation-ledger.js";
+export type {
+  FoundationLedgerDependenciesV1,
+  FoundationLedgerFindingV1,
+  FoundationLedgerHeldJournalV1,
+  FoundationLedgerOrphanV1,
+  FoundationLedgerV1,
+  LifecycleLedgerRootsV1,
+} from "./foundation-ledger.js";
 export {
   LIFECYCLE_POINT_OF_NO_RETURN,
   LIFECYCLE_STEP_GRAMMAR,
