@@ -1,4 +1,13 @@
 export {
+  ABSENT_MANIFEST_WALK_BOUNDS,
+  inspectAbsentManifestProductHome,
+} from "./absent-manifest.js";
+export type {
+  AbsentManifestEvidenceV1,
+  AbsentManifestInspectionV1,
+  AbsentManifestShapeV1,
+} from "./absent-manifest.js";
+export {
   cleanLifecycleAllocatorTemp,
   inspectLifecycleAllocator,
   reserveLifecycleIdBlock,

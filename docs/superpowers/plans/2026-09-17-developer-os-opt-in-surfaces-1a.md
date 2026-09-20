@@ -283,7 +283,7 @@ export async function inspectAbsentManifestProductHome(dependencies: {
 }): Promise<AbsentManifestInspectionV1>;
 ```
 
-- [ ] **Step 1: Write failing walk and shape tests**
+- [x] **Step 1: Write failing walk and shape tests**
 
 ```ts
 it.each(["product_home_absent", "product_home_empty", "state_empty", "state_key_only"] as const)(
@@ -312,30 +312,30 @@ it.each([
 });
 ```
 
-For the bound cases, the admitted fixtures hold the extra entries inside inert retained evidence so they project away. Cover: the in-memory and Node ports agree on a small physical home (A8); every other known or unknown file or directory refuses and names its path — `config.toml`, `state/lifecycle-activation.json`, `state/git-sync.json`, `state/uninstalling.json`, a status, a log slot, a lease, `installation-manifest.json`, `.installation-manifest.<id>.json.tombstone`, `state/lifecycle-install-nonce`, `state/lifecycle-id-allocator.json`, a legacy `tx_<uuid>.json` in `state/transactions`, an unrecognized empty directory, `logs/`; any of the four `<userHome>/Library/LaunchAgents/com.developer-os.<job>.plist` paths present refuses; `activeOrAmbiguous: true` refuses; a symlink, hard-linked file, FIFO, foreign-owned directory, invalid UTF-8 name, or an entry appearing or disappearing between the two directory reads refuses before any content read; the key is recorded by `lstat` only, and a key that is a symlink, directory or `nlink` 2 file refuses; the lock `state/.lifecycle.lock` a rolled-back first `init` leaves is admitted; two walks of an unchanged home give equal `walkFingerprint`; the module performs no write and no process spawn (the port records none).
+For the bound cases, the admitted fixtures name every extra entry in `retainedPaths` so each projects on its own path; the over-limit case needs no evidence at all, because the walk refuses on the entry counter before any projection. Projection is indexed — an ancestor-prefix set and a parent→children index built once — so a populated home cannot spend minutes refusing (`apps/cli/src/commands/uninstall.test.ts:636-642` records the same mistake being paid for once already). Cover: the in-memory and Node ports agree on a small physical home (A8); every other known or unknown file or directory refuses and names its path — `config.toml`, `state/lifecycle-activation.json`, `state/git-sync.json`, `state/uninstalling.json`, a status, a log slot, a lease, `installation-manifest.json`, `.installation-manifest.<id>.json.tombstone`, `state/lifecycle-install-nonce`, `state/lifecycle-id-allocator.json`, a legacy `tx_<uuid>.json` in `state/transactions`, an unrecognized empty directory, `logs/`; any of the four `<userHome>/Library/LaunchAgents/com.developer-os.<job>.plist` paths present refuses; `activeOrAmbiguous: true` refuses; a symlink, hard-linked file, FIFO, foreign-owned directory, invalid UTF-8 name, or an entry appearing or disappearing between the two directory reads refuses before any content read; the key is recorded by `lstat` only, and a key that is a symlink, directory or `nlink` 2 file refuses; the lock `state/.lifecycle.lock` a rolled-back first `init` leaves is admitted; two walks of an unchanged home give equal `walkFingerprint`; the module performs no write and no process spawn (the port records none).
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root packages/core src/lifecycle/absent-manifest.test.ts`
 
 Expected: FAIL — `absent-manifest.ts` does not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
-Rules: one bounded no-follow walk from the product home's parent-guarded entry, counting every entry visited, including those it then projects away. Projection order: the exact bootstrap leaf at `state/.lifecycle-bootstrap.lock` (an owner `0600` zero-byte single-link file whose `dev`/`ino` equal no `bootstrapIdentities` entry); every path in `retainedPaths`, and directories that exist only to hold them; every bookkeeping path `inspectLifecycleBookkeepingShape` admits. The remainder must equal one of the four shapes exactly. `walkFingerprint` is `hashCanonicalJson("developer-os:absent-manifest-walk:v1", entries)` over every visited entry's relative path, kind, owner, mode, `nlink`, size, `dev` and `ino`, sorted by unsigned UTF-8 path bytes. No key byte is read.
+Rules: one bounded no-follow walk from the product home's parent-guarded entry, counting every entry visited, including those it then projects away. `retainedPaths` projects **path by path, never as a subtree mute**: the producer emits every descendant (`apps/cli/src/bootstrap/report.ts:1326`), a separate field carries the maximal roots, and prefix semantics would let an entry the evidence never named hide under a retained directory — which §6's “exhaustive root inventory, rather than a checklist of selected known paths” exists to prevent. `projectSubtree` therefore stops descending wherever `bookkeeping.ts` stopped. `state` is never projected by any rule, because the four shapes are distinguished by whether it exists. Projection order: the exact bootstrap leaf at `state/.lifecycle-bootstrap.lock` (an owner `0600` zero-byte single-link file whose `dev`/`ino` equal no `bootstrapIdentities` entry); every path in `retainedPaths`, and non-empty directories that exist only to hold them; every bookkeeping path `inspectLifecycleBookkeepingShape` admits. The remainder must equal one of the four shapes exactly. `walkFingerprint` is `hashCanonicalJson("developer-os:absent-manifest-walk:v1", entries)` over every visited entry's relative path, kind, owner, mode, `nlink`, size, `dev` and `ino`, sorted by unsigned UTF-8 path bytes. No key byte is read.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root packages/core src/lifecycle src/index.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Tick, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 
 ```bash
-git add packages/core/src/lifecycle/absent-manifest.ts packages/core/src/lifecycle/absent-manifest.test.ts packages/core/src/lifecycle/index.ts packages/core/src/index.ts packages/core/src/index.test.ts
+git add packages/core/src/lifecycle/absent-manifest.ts packages/core/src/lifecycle/absent-manifest.test.ts packages/core/src/lifecycle/index.ts packages/core/src/index.ts packages/core/src/index.test.ts tests/repository/check.ts
 git add -f docs/superpowers/plans/2026-09-17-developer-os-opt-in-surfaces-1a.md docs/superpowers/ORDER.md
 git diff --cached --name-only
 git commit -m "feat(core): inspect an absent-manifest product home against its closed shapes"

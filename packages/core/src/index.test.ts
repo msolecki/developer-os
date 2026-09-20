@@ -66,6 +66,8 @@ describe("the package's public door", () => {
         "inspectDrift",
         "inspectLifecycleBookkeepingShape",
         "lifecycleBookkeepingPaths",
+        "ABSENT_MANIFEST_WALK_BOUNDS",
+        "inspectAbsentManifestProductHome",
         "LIFECYCLE_LEASE_DRAIN_MS",
         "LIFECYCLE_LEDGER_BOUNDS",
         "LIFECYCLE_LOCK_RETRY_MS",

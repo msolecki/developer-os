@@ -15,6 +15,7 @@ export type {
   LifecycleBookkeepingShapeResultV1,
 } from "./lifecycle/bookkeeping.js";
 export {
+  ABSENT_MANIFEST_WALK_BOUNDS,
   LIFECYCLE_LEASE_DRAIN_MS,
   LIFECYCLE_LEDGER_BOUNDS,
   LIFECYCLE_LOCK_RETRY_MS,
@@ -39,6 +40,7 @@ export {
   encodeUninstallingMarker,
   formatAllocatedLifecycleId,
   foundationParticipantPlanHash,
+  inspectAbsentManifestProductHome,
   inspectFoundationLedger,
   inspectLifecycleAllocator,
   inspectLifecycleLedger,
@@ -63,6 +65,9 @@ export {
   validateLifecyclePlanGrammar,
 } from "./lifecycle/index.js";
 export type {
+  AbsentManifestEvidenceV1,
+  AbsentManifestInspectionV1,
+  AbsentManifestShapeV1,
   AllocatedLifecycleIdV1,
   EffectiveUidV1,
   FoundationLedgerDependenciesV1,

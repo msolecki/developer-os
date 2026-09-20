@@ -148,12 +148,13 @@ const FORWARDED_OPTIONS = /\b(?:options|parameters)\b/u;
 
 /**
  * The lifecycle guarded port's `lstat` takes a path and nothing else, and
- * returns an already-exact decimal identity, so these two callers cannot pass
+ * returns an already-exact decimal identity, so these callers cannot pass
  * the option and have nothing to gain from it.
  */
 const STAT_OPTION_EXEMPT: readonly string[] = [
   "packages/core/src/lifecycle/testing.ts",
   "packages/core/src/lifecycle/allocator.ts",
+  "packages/core/src/lifecycle/absent-manifest.ts",
 ];
 
 /**
