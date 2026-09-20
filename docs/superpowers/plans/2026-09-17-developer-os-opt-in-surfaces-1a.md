@@ -28,6 +28,7 @@ Recorded in the roadmap's 2026-09-17 table; A14–A16 are in Spec 1 in place.
 - **D27.** Absent-manifest uninstall applies §6 literally: after a V1 `uninstall`, leftover V1 Foundation residue refuses with exit 6 and D20's archive guidance. No spec change; the tests pinning a second successful uninstall are rewritten.
 - **D28 (Spec 1 A16).** The allocated `mf_` manifest participant ID is reserved last in a composite's contiguous ID block.
 - **D34 (2026-09-20).** Task 12's `Produces` block gains `manifestBeforeHash: (plan: TPlan) => LowerHexSha256 | null`, compared against `fs.hashRegular` of the manifest. Taken during Task 12's review, which proved a manifest present at the right cursor with different bytes yielded `uninstall_draining` and so opened a destructive uninstall by path state alone — what §7 forbids as synthesising the drain by path absence. Amended immediately because `inspectLifecycleLedger` still had no consumer.
+- **D36 (2026-09-20).** From Task 14 on, plan 1a runs **implementation-first**: each task runs its fast commands and `npm run lint`, is integrated immediately, and the next task starts. **No per-task fresh-context review and no per-task fix cycle.** One whole-plan review and one fix round happen at plan close, with `npm run check`. Commits are held locally and pushed **once**, at plan close, as a single run. Founder decision, taken after wave 1, which cost three review rounds per task. It knowingly suspends `security.md`'s rule that a fresh agent must review agent-generated code and `SESSION.md` §5 step 3 and step 7 for the remainder of this plan; the risk accepted is that a defect in a consumed interface is found only after its consumers bound to it, which is what D34 was taken to avoid. Wave 1's per-task reviews found two destructive-gate false positives, one fail-open closure and one over-broad deletion; the end-of-plan review must cover the same ground for Tasks 14–25.
 - **D35 (2026-09-20).** The effect-journal codec, its phase accessor and the `classify` change they require are **deferred to plan 1b**. Unlike D34 the gap is unreachable in 1a — the null plan codec makes every effect leaf a `lifecycle_effect_root_unsupported` finding before a journal codec could matter — `LifecycleLedgerDependenciesV1` has only two construction sites in the whole plan, both of which Task 18 and 1b touch anyway, and `LifecycleEffectPhaseV1` would have been a guess at 1b's schema with no implementation to check it against. Task 12's Cover list records the full 1b obligation.
 
 ## Global Constraints
@@ -770,7 +771,7 @@ export async function admitInstalledV2Home(input: {
 }): Promise<AdmittedV2HomeV1>;
 ```
 
-- [ ] **Step 1: Move and sharpen the handoff tests into structural admission tests**
+- [x] **Step 1: Move and sharpen the handoff tests into structural admission tests**
 
 ```ts
 it("admits a fresh V2 home and binds to no bootstrap plan, drift or retained evidence", async () => {
@@ -829,17 +830,17 @@ Cover also:
 - NEW-82: `createBootstrapEvidenceInspectionRequest({ …, listNames })` makes plan-envelope enumeration use the injected function; this case lives in `report.test.ts` and performs no `init`.
 - A7: `runStatus` and `runDoctorReport` succeed (`ok: true`) on the shared V2 home while it carries a drifted artifact and a planted lifecycle plan orphan that makes closure `lifecycle_recovery_required`.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root apps/cli src/lifecycle/admission.v2.test.ts src/bootstrap/report.test.ts -t 'admits|refuses|handoff set|programming error|listNames|status and doctor'`
 
 Expected: FAIL — `admission.ts` does not exist and `listNames` is not accepted.
 
-- [ ] **Step 3: Implement admission**
+- [x] **Step 3: Implement admission**
 
 Rules: `observeManifestSchema` reads the manifest through `fs.lstat`/`fs.readRegular` (64 MiB bound); a non-regular entry is `manifest_invalid`; declared `schemaVersion` 1 is `v1`, 2 is `v2`, anything else `manifest_invalid`. `admitInstalledV2Home` requires `validateManifestV2` to pass with the confined `manifestAdmission`, then `assertCompleteLifecycleReservations`, then an exact nonce (Task 6), a canonical allocator whose nonce agrees, an owner `0600` zero-byte single-link lock, and three owner `0700` journal-root directories. It reads no bootstrap plan, no drift, no activation record and no closure. Only `V2HomeAdmissionError` is thrown for a refusal; other errors propagate unchanged.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root apps/cli src/lifecycle/admission.v2.test.ts`
 
@@ -847,9 +848,9 @@ Run: `npx vitest run --root apps/cli src/bootstrap/report.test.ts -t 'listNames|
 
 Expected: PASS. Add `admission.v2.test.ts`'s duration to `lifecycle-v2`'s recorded local total and update its `timeout-minutes`.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
-Remove row NEW-82 from `BACKLOG.md` §1 and decrement N in "There are N numbered rows". In `ORDER.md` drop "NEW-82 by plan 1a" from the owners line and decrement N in "N open numbered rows". Tick, update the progress sentence, run `npm run lint` and `npx vitest run --root tests repository/citations.test.ts`, obtain fresh-context review, then:
+**NEW-82 stays open** — the original step said to remove it and that was wrong. Task 17 closes it in `apps/cli/src/lifecycle/admission.ts`, which reaches the filesystem through the guarded port, but **not** in `assertOrdinaryCommandAdmitted`, the only path a production command takes: `inventoryExactNamespaces` routes a directory at `installation-manifest.json` to its direct-namespace branch, which records children only, so the leaf still reports absent and an installed home refuses exit 6 with the archive guidance instead. The symlink half is closed. `apps/cli/src/bootstrap/report.test.ts` carries the open half as an `it.fails` expectation. The minimal fix is one line in `apps/cli/src/bootstrap/context.ts`, but it adds the root to every namespace caller's inventory and so changes shipped bootstrap-admission semantics under `executor.test.ts` and e2e — route it with those suites runnable. Tick, update the progress sentence, run `npm run lint` and `npx vitest run --root tests repository/citations.test.ts`, obtain fresh-context review, then:
 
 ```bash
 git add apps/cli/src/lifecycle/admission.ts apps/cli/src/lifecycle/admission.v2.test.ts apps/cli/src/bootstrap/report.ts apps/cli/src/bootstrap/report.test.ts apps/cli/src/bootstrap/context.ts apps/cli/src/commands/uninstall.ts .github/workflows/check.yml
@@ -1713,6 +1714,23 @@ git commit -m "test(cli): prove uninstall and init round-trip at every A9 point"
 ```
 
 ### Task 25: Plan 1a closure · M
+
+**Deferred fix list (D36).** Everything below was found by a review, accepted, and deliberately not
+fixed in its own task. Each needs a failing test first, then the smallest correction. This list is
+the whole-plan review's starting point, not its scope — Tasks 14–25 received no per-task review at
+all and must be covered from scratch.
+
+- Task 17, message drift: `nonRegularLeaf`'s refusal string in `apps/cli/src/bootstrap/report.ts` is
+  the module's only inline refusal literal; its two siblings are exported constants
+  (`BOOTSTRAP_MANUAL_ARCHIVE`, `MALFORMED_V2_MANIFEST`). Export it as `NON_REGULAR_BOOTSTRAP_LEAF`
+  and assert it by reference in the two `other` cases and the symlink case in `report.test.ts`. The
+  drift this prevents is already present: `apps/cli/src/main.test.ts` re-declares
+  `MALFORMED_V2_MANIFEST` as a local copy instead of importing it, so that assertion would survive a
+  change to the real constant.
+- Task 17, dead guard: under `it.fails`, the `lstat().isDirectory()` guard in the NEW-82 open-half
+  case can no longer protect — any throw in the body counts as the expected failure, so the guard can
+  only mask. Drop it; the assertion is now the whole contract.
+
 
 Source: `SESSION.md` §5 phase close; old Task 24 steps 4–7 narrowed to 1a; roadmap Phase 4.
 

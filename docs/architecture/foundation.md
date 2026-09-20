@@ -451,33 +451,39 @@ Spec 2's fresh V2 `init` creates V2 state. Three contracts take its place.
   altered into an invalid one`; `does not refuse a valid V2 install as a malformed manifest when its
   configuration is unparseable or its Brain moved`; and `keeps Foundation commands working over a shipped V1 manifest
   while init refuses it`.
-- **`admitV2Handoff` admits exactly Spec 2 §6.4's handoff set, for Spec 1 commands to call.** It
-  reads the same plan-name-only listing as the handoff arm above. Refusals:
-  - a V1 manifest → the exit-4 refusal;
-  - managed drift in any other manifest artifact → exit 3 (`decisionRequired`), with the drifted
-    paths (Spec 2 §11). This includes a missing `lifecycle-journals`, `git-effect-journals`,
-    `launchd-effect-journals` or `rollback` directory, because drift runs before the emptiness
-    check;
-  - everything else → exit 6: an absent manifest; a readable non-terminal envelope; anything but
-    exactly one `finalized` envelope whose published manifest bytes equal the current manifest
-    (`exactV2Handoff`, the private check the evidence report already uses); a finding on the nonce,
-    allocator, active-release or trust record (Spec 1 §2.1 makes nonce and allocator absence
-    recovery-required; Spec 2 §3.1 makes incomplete active state exit 6); a missing global lock; an
-    allocator whose `installNonce` disagrees with the nonce file; a present
-    `state/lifecycle-activation.json`; a non-empty `update-rollback.json` or `update-executor.json`;
-    and a non-empty `lifecycle-journals`, `git-effect-journals`, `launchd-effect-journals` or
-    `rollback` directory.
+- **`admitInstalledV2Home` admits an installed V2 home structurally, for Spec 1 commands to call.**
+  Plan 1a Task 17 deleted `admitV2Handoff`, which was a fresh-install snapshot: it pinned the current
+  manifest to exactly one `finalized` envelope and refused anything a legitimate later apply would
+  change. Structural admission replaces it (Spec 1 §2.1, "Admission of an installed V2 home"), and
+  binds to no bootstrap plan, no drift, no activation record and no closure. It requires
+  `validateManifestV2` to pass with the confined admission context, then every lifecycle reservation
+  row by exact path and mode, then an exact install nonce, a canonical allocator whose nonce agrees,
+  an owner `0600` zero-byte single-link global lock, and three owner `0700` journal-root directories.
+  Refusals carry their own reason: `manifest_absent` → exit 2; `manifest_v1_not_migratable` → exit 4;
+  `manifest_invalid`, `reservations_incomplete`, `nonce_invalid`, `allocator_invalid`,
+  `nonce_allocator_mismatch`, `global_lock_invalid` and `journal_root_invalid` → exit 6. No catch-all:
+  each missing member refuses as itself, and a programming error propagates unchanged rather than
+  being relabelled as a refusal.
 
-  Drift uses strict validators for the configuration, allocator, active-release and trust schema
-  arms. A zero-byte `update-rollback.json` or `update-executor.json` is admitted: fresh `init`
-  creates both as `constant_empty` update-control reservations (Spec 2 §6.1 step 5, §6.3), so the
-  record they reserve is absent. The admission mutates nothing and has no caller outside its tests
-  yet. Two members are recognized only in their pre-Spec-1 form — the lifecycle closure is clear only
-  as three empty ledgers, and the activation record must be absent — so Spec 1's admission must widen
-  both once its first lifecycle apply can legitimately change them. Evidence:
-  `apps/cli/src/bootstrap/report.test.ts` — `admits exactly the complete handoff and refuses a
-  non-terminal envelope and each missing member`, which asserts each refusal's exit code, and
-  `refuses a manifest the shipped V1 init produced`.
+  What it deliberately admits is the other half of the change. A missing schema file, a drifted
+  bundle file, a missing or altered retained tombstone, and a planted plan under
+  `state/lifecycle-journals` all still admit — drift and closure own those, not admission. So does an
+  allocator at a non-zero counter, which the handoff snapshot could not accept. Evidence:
+  `apps/cli/src/lifecycle/admission.v2.test.ts` — `admits a fresh V2 home and binds to no bootstrap
+  plan, drift or retained evidence`, `keeps the Spec 2 §6.4 handoff set as a fact of a fresh init`,
+  the per-member refusal table, `refuses a directory at %s as %s instead of treating it as absent
+  (NEW-82)`, and `lets a programming error escape instead of relabelling it (NEW-82)`.
+
+  **NEW-82 is closed here and still open one layer out.** `admission.ts` reaches the filesystem
+  through the guarded port, whose `lstat` refuses a directory or a symlink with the member's own
+  reason. `assertOrdinaryCommandAdmitted` does not: `inventoryExactNamespaces` routes a directory at
+  `installation-manifest.json` to its direct-namespace branch, which records children only, so no
+  entry matches the root and the leaf reports absent. The command then falls through to the
+  absent-manifest arm and, on an installed home, refuses exit 6 telling the user to archive bootstrap
+  evidence when the fault is a directory at their manifest path. A plan path is unaffected, because
+  its basename matches `INITIAL_NAMESPACE` and routes to `inventoryTree`, which records the root. The
+  open half is that one path; `apps/cli/src/bootstrap/report.test.ts` carries it as a failing
+  expectation.
 
 None of these refusal paths spawns a process, which is the only way this product reaches a network:
 `tests/security/network.test.ts` — `the bootstrap refusal paths`.

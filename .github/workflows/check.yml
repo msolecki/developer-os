@@ -204,16 +204,21 @@ jobs:
 
   lifecycle-v2:
     # Owns the real-V2-home `*.v2.test.ts` files, which `test:suite` excludes.
-    # Running local total of that set: 916 s (2026-09-17), the 724 s recorded
-    # for the first two files plus the 192 s Vitest summary of the third,
-    # `evidence-identity.v2.test.ts`. One whole-job `test:lifecycle` run over
-    # all three measured 699 s wall clock on the same machine and the three
-    # per-file summaries sum to 804 s (124 s fresh-layout, 488 s bookkeeping,
-    # 192 s evidence-identity), so 916 s is the conservative figure of the
-    # three and the one the budget uses: it x 2 for a hosted runner x 1.5
-    # headroom, floored at 20.
+    # Running local total of that set: 998.2 s (2026-09-20), the 916 s recorded
+    # on 2026-09-17 for the first three files plus 82.2 s for the fourth,
+    # `admission.v2.test.ts`. That 82.2 s is the maximum of seven observations
+    # spanning 54.6-82.2 s across two machines: an init-dominated file swings
+    # ~25 s run to run, so a single summary is not a safe input and the maximum
+    # is taken — the same rule that made 916 s the conservative figure of its
+    # own three measurements (724 s for the first two files plus the 192 s
+    # summary of `evidence-identity.v2.test.ts`, against a 699 s whole-job
+    # `test:lifecycle` wall clock and an 804 s sum of the three per-file
+    # summaries: 124 s fresh-layout, 488 s bookkeeping, 192 s
+    # evidence-identity). The budget is the running total x 2 for a hosted
+    # runner x 1.5 headroom, floored at 20. The margin is 1.8 s: a total above
+    # 1000 s tips this to 51, so the next `*.v2.test.ts` addition crosses it.
     runs-on: macos-15
-    timeout-minutes: 46
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
         with:

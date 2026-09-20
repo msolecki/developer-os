@@ -1,22 +1,21 @@
 import * as nodeFs from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { deriveBootstrapRetentionLocations, EXIT_CODES } from "@developer-os/core";
+import { deriveBootstrapRetentionLocations, encodeCanonicalJson, EXIT_CODES } from "@developer-os/core";
 import type { CanonicalAbsolutePathV1, UInt64DecimalV1 } from "@developer-os/core";
 
 import { runInit } from "../commands/init.js";
 import { runDoctorReport } from "../commands/doctor.js";
-import { failureFrom } from "../context.js";
-import { inspectPackagedRelease } from "../update/packaged-release.js";
 import { createCommandFixture, firstRegularFile, inventoryDigest, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures, retainedTombstones } from "../commands/testing.js";
 import {
   createBootstrapEvidenceInspectionRequest,
   NodeBootstrapEvidenceGuardedReader,
 } from "./context.js";
 import type { BootstrapEvidenceGuardedEntryV1, BootstrapEvidenceGuardedReaderV1 } from "./report.js";
-import { admitV2Handoff, inspectBootstrapEvidence, inspectBootstrapEvidenceAdmission } from "./report.js";
+import { assertOrdinaryCommandAdmitted, inspectBootstrapEvidence, inspectBootstrapEvidenceAdmission } from "./report.js";
 import { projectBootstrapRetentionPostimage, projectRetainedDirectoryTreeOnce } from "./retention.js";
 
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
@@ -378,150 +377,175 @@ describe("inspectBootstrapEvidence", () => {
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 
-describe("admitV2Handoff", () => {
-  function admit(fixture: Awaited<ReturnType<typeof createCommandFixture>>) {
-    return admitV2Handoff(requestFor(fixture), {
-      fs: fixture.context.fs,
-      guards: fixture.context.guards.manifest,
+describe("assertOrdinaryCommandAdmitted over the production reader", () => {
+  async function bareHome(body: (home: string) => Promise<void>): Promise<void> {
+    const home = await nodeFs.mkdtemp(join(tmpdir(), "developer-os-ordinary-admission-"));
+    try {
+      await nodeFs.mkdir(join(home, "state"), { recursive: true, mode: 0o700 });
+      await body(home);
+    } finally {
+      await nodeFs.rm(home, { recursive: true, force: true });
+    }
+  }
+
+  function requestForHome(home: string) {
+    return createBootstrapEvidenceInspectionRequest({
+      productHome: home,
+      stateDirectory: join(home, "state"),
+      initialRoots: [home, join(home, "state")],
     });
   }
 
-  it("refuses a manifest the shipped V1 init produced", async () => {
-    const fixture = await createCommandFixture("handoff-v1-manifest");
-    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+  it("refuses a symlink at the manifest path instead of reading past it (NEW-82)", async () => {
+    await bareHome(async (home) => {
+      const manifest = join(home, "installation-manifest.json");
+      await nodeFs.writeFile(join(home, "elsewhere.json"), "{}\n", { mode: 0o600 });
+      await nodeFs.symlink(join(home, "elsewhere.json"), manifest);
 
-    const refusal: unknown = await admit(fixture).then(() => null, (error: unknown) => error);
-
-    expect(refusal).toMatchObject({
-      code: EXIT_CODES.capabilityUnavailable,
-      reason: "manifest_v1_not_migratable",
+      await expect(assertOrdinaryCommandAdmitted(requestForHome(home))).rejects.toMatchObject({
+        code: EXIT_CODES.recoveryRequired,
+        name: "BootstrapRecoveryRequiredError",
+        paths: [manifest],
+      });
     });
-    const published = failureFrom(fixture.context, refusal);
-    expect(published.ok).toBe(false);
-    if (published.ok) return;
-    expect(published.code).toBe(EXIT_CODES.capabilityUnavailable);
-    expect(published.error.kind).toBe("manifest_v1_not_migratable");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * NEW-82, open half, so this states the contract and `it.fails` records that
+   * the product does not meet it yet: it goes red the moment it does.
+   * `inventoryExactNamespaces` inventories a directory root by its children,
+   * and a directory here has no child matching the bootstrap-evidence
+   * namespace, so the inventory comes back empty and the gate cannot tell it
+   * from an absent manifest. On a bare home that merely admits; on an installed
+   * home the absent-manifest arm finds the installed files as live residue and
+   * refuses exit 6 with `BOOTSTRAP_MANUAL_ARCHIVE`, telling the user to archive
+   * bootstrap evidence when the fault is a directory at their manifest path.
+   * Closing it means recording the root entry itself in the reader's
+   * direct-namespace branch, the way its tree branch already does, which
+   * changes what every other exact-namespace caller inventories.
+   */
+  it.fails("distinguishes a directory at the manifest path from an absent one (NEW-82, open)", async () => {
+    await bareHome(async (home) => {
+      const manifest = join(home, "installation-manifest.json");
+      await nodeFs.mkdir(manifest, { mode: 0o700 });
+      expect((await nodeFs.lstat(manifest)).isDirectory()).toBe(true);
+
+      await expect(assertOrdinaryCommandAdmitted(requestForHome(home))).rejects.toMatchObject({
+        code: EXIT_CODES.recoveryRequired,
+        paths: [manifest],
+      });
+    });
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
+describe("assertOrdinaryCommandAdmitted", () => {
+  const SYNTHETIC_HOME = "/developer-os-synthetic-admission";
+  const SYNTHETIC_STATE = `${SYNTHETIC_HOME}/state`;
+  const SYNTHETIC_MANIFEST = `${SYNTHETIC_HOME}/installation-manifest.json`;
+  const PLAN_NAME = "fresh-v2-init.fi_00000000-0000-4000-8000-000000000000.plan.json";
+  const SYNTHETIC_PLAN = `${SYNTHETIC_STATE}/${PLAN_NAME}`;
+
+  const manifestBytes = new TextEncoder().encode(encodeCanonicalJson({
+    schemaVersion: 2,
+    productVersion: "1.0.0",
+    installedAt: "2026-09-20T00:00:00.000Z",
+    artifacts: [{
+      owner: "core",
+      path: `${SYNTHETIC_HOME}/config.toml`,
+      productVersion: "1.0.0",
+      existedBefore: false,
+      beforeHash: null,
+      backupRelativePath: null,
+      source: "templates/config.toml",
+      mergeStrategy: "dedicated",
+      verifiedAt: "2026-09-20T00:00:00.000Z",
+      kind: "file",
+      verification: { mode: "content", installedHash: "a".repeat(64) },
+    }],
+  }));
+
+  function entryAt(
+    path: string,
+    kind: "regular_file" | "directory",
+  ): BootstrapEvidenceGuardedEntryV1 {
+    return {
+      path: path as CanonicalAbsolutePathV1,
+      kind,
+      ownerUid: 501,
+      mode: kind === "directory" ? 0o700 : 0o600,
+      nlink: 1,
+      bytes: String(kind === "directory" ? 0 : manifestBytes.byteLength) as UInt64DecimalV1,
+      dev: "1" as UInt64DecimalV1,
+      ino: "2" as UInt64DecimalV1,
+    };
+  }
+
+  function requestReporting(entries: readonly BootstrapEvidenceGuardedEntryV1[], names: readonly string[]) {
+    const asked: string[] = [];
+    const reader: BootstrapEvidenceGuardedReaderV1 = {
+      inventoryExactNamespaces: (roots) => {
+        asked.push(...roots);
+        return Promise.resolve(entries.filter((candidate) => roots.includes(candidate.path)));
+      },
+      readRegularFile: (expected) =>
+        expected.path === SYNTHETIC_MANIFEST
+          ? Promise.resolve(manifestBytes)
+          : Promise.reject(new Error("no synthetic bytes at that path")),
+    };
+    return {
+      asked,
+      request: createBootstrapEvidenceInspectionRequest({
+        productHome: SYNTHETIC_HOME,
+        stateDirectory: SYNTHETIC_STATE,
+        initialRoots: [],
+        reader,
+        listNames: () => Promise.resolve(names),
+      }),
+    };
+  }
+
+  it("enumerates plan envelopes through the injected listNames", async () => {
+    const { request, asked } = requestReporting(
+      [entryAt(SYNTHETIC_MANIFEST, "regular_file")],
+      [PLAN_NAME, "unrelated.json"],
+    );
+
+    await expect(assertOrdinaryCommandAdmitted(request)).resolves.toBeUndefined();
+
+    expect(new Set(asked)).toStrictEqual(new Set([SYNTHETIC_MANIFEST, SYNTHETIC_PLAN]));
   });
 
-  it("admits exactly the complete handoff and refuses a non-terminal envelope and each missing member", async () => {
-    const fixture = await createCommandFixture("handoff-members", {
-      bootstrapAvailable: true,
-      bootstrapInterruptAfter: "after_verify",
-    });
-    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(false);
-    await expect(admit(fixture)).rejects.toMatchObject({
+  it("lets a programming error in the reader escape instead of blaming the leaf (NEW-82)", async () => {
+    const { request } = requestReporting([entryAt(SYNTHETIC_MANIFEST, "regular_file")], [PLAN_NAME]);
+    const defective = {
+      ...request,
+      reader: {
+        ...request.reader,
+        inventoryExactNamespaces: () => {
+          throw new TypeError("synthetic");
+        },
+      },
+    };
+
+    await expect(assertOrdinaryCommandAdmitted(defective)).rejects.toBeInstanceOf(TypeError);
+  });
+
+  it("refuses a non-regular leaf the injected listNames and reader report", async () => {
+    const plan = requestReporting(
+      [entryAt(SYNTHETIC_MANIFEST, "regular_file"), entryAt(SYNTHETIC_PLAN, "directory")],
+      [PLAN_NAME],
+    );
+    await expect(assertOrdinaryCommandAdmitted(plan.request)).rejects.toMatchObject({
       code: EXIT_CODES.recoveryRequired,
       name: "BootstrapRecoveryRequiredError",
+      paths: [SYNTHETIC_PLAN],
     });
-    const bootstrap = fixture.context.bootstrap;
-    if (bootstrap?.state !== "available") throw new Error("bootstrap fixture is unavailable");
-    const { identity } = await inspectPackagedRelease(bootstrap.packagedRelease);
-    await bootstrap.executor.close();
-    fixture.disableBootstrapInterrupt();
-    expect((await runInit(fixture.rebuildContext(), ACCEPTED)).ok).toBe(true);
-    await expect(admit(fixture)).resolves.toMatchObject({ schemaVersion: 2 });
 
-    const state = fixture.paths.stateDir;
-    const release = join(fixture.paths.home, "releases");
-    const { decisionRequired, recoveryRequired } = EXIT_CODES;
-    const refusesWhile = async (
-      label: string,
-      code: number,
-      change: () => Promise<void>,
-      restore: () => Promise<void>,
-    ) => {
-      await change();
-      try {
-        await expect(admit(fixture), label).rejects.toMatchObject({ code });
-      } finally {
-        await restore();
-      }
-    };
-    const missing = [
-      [fixture.paths.manifestFile, recoveryRequired],
-      [join(fixture.paths.home, "schemas", "ingest.stage.schema.json"), decisionRequired],
-      [join(state, "lifecycle-install-nonce"), recoveryRequired],
-      [join(state, "lifecycle-id-allocator.json"), recoveryRequired],
-      [join(state, ".lifecycle.lock"), recoveryRequired],
-      /**
-       * Spec 1 §2.1 (A12): the four ledger roots are bookkeeping, so §2.4
-       * closure requires them and the manifest never names them. A missing one
-       * is an incomplete handoff rather than drift on a managed artifact.
-       */
-      [join(state, "lifecycle-journals"), recoveryRequired],
-      [join(state, "git-effect-journals"), recoveryRequired],
-      [join(state, "launchd-effect-journals"), recoveryRequired],
-      [join(state, "active-release.json"), recoveryRequired],
-      [join(state, "release-trust.json"), recoveryRequired],
-      [join(state, "release-metadata", "indexes", `${identity.releaseIndexHash}.json`), decisionRequired],
-      [join(release, "1.0.0", "darwin-arm64", "bin", "developer-os"), decisionRequired],
-      [join(fixture.paths.home, "rollback"), decisionRequired],
-    ] as const;
-    const present = [
-      join(state, "update-rollback.json"),
-      join(state, "update-executor.json"),
-      join(state, "lifecycle-activation.json"),
-      join(fixture.paths.home, "rollback", "synthetic-payload"),
-      join(state, "lifecycle-journals", "synthetic-journal.json"),
-    ];
-    expect(missing.length).toBeGreaterThan(0);
-    expect(present.length).toBeGreaterThan(0);
-    expect((await nodeFs.lstat(join(state, "update-rollback.json"))).size).toBe(0);
-    expect((await nodeFs.lstat(join(state, "update-executor.json"))).size).toBe(0);
-
-    for (const [path, code] of missing) {
-      await refusesWhile(
-        `missing ${path}`,
-        code,
-        () => nodeFs.rename(path, `${path}.hidden`),
-        () => nodeFs.rename(`${path}.hidden`, path),
-      );
-    }
-    for (const path of present) {
-      const original = await nodeFs.readFile(path).catch(() => null);
-      await refusesWhile(
-        `record at ${path}`,
-        recoveryRequired,
-        () => nodeFs.writeFile(path, "synthetic record\n", { mode: 0o600 }),
-        () => original === null ? nodeFs.rm(path) : nodeFs.writeFile(path, original),
-      );
-    }
-    const bundleFile = join(release, "1.0.0", "darwin-arm64", "bin", "developer-os");
-    const bundleBytes = await nodeFs.readFile(bundleFile);
-    await refusesWhile(
-      "drifted bundle file",
-      decisionRequired,
-      () => nodeFs.writeFile(bundleFile, Buffer.from(bundleBytes.toString("utf8").replace("exit 0", "exit 1"))),
-      () => nodeFs.writeFile(bundleFile, bundleBytes),
-    );
-    const allocatorFile = join(state, "lifecycle-id-allocator.json");
-    const allocatorBytes = await nodeFs.readFile(allocatorFile);
-    const nonce = (await nodeFs.readFile(join(state, "lifecycle-install-nonce"), "utf8")).trim();
-    const allocatorWith = (installNonce: string, nextCounter: string) =>
-      `{"installNonce":"${installNonce}","nextCounter":"${nextCounter}","schemaVersion":1}\n`;
-    await refusesWhile(
-      "allocator bound to another install nonce",
-      recoveryRequired,
-      () => nodeFs.writeFile(allocatorFile, allocatorWith("0".repeat(64), "0")),
-      () => nodeFs.writeFile(allocatorFile, allocatorBytes),
-    );
-    await nodeFs.writeFile(allocatorFile, allocatorWith(nonce, "7"));
-    await expect(admit(fixture), "allocator counter after zero").resolves.toMatchObject({ schemaVersion: 2 });
-    await nodeFs.writeFile(allocatorFile, allocatorBytes);
-    const manifestBytes = await nodeFs.readFile(fixture.paths.manifestFile);
-    const manifest = JSON.parse(manifestBytes.toString("utf8")) as { artifacts: { readonly path: string }[] };
-    const reservation = join(state, "git-sync.json");
-    expect(manifest.artifacts.some((artifact) => artifact.path === reservation)).toBe(true);
-    await refusesWhile(
-      "manifest without a runtime reservation",
-      recoveryRequired,
-      () => nodeFs.writeFile(fixture.paths.manifestFile, `${JSON.stringify({
-        ...manifest,
-        artifacts: manifest.artifacts.filter((artifact) => artifact.path !== reservation),
-      })}\n`),
-      () => nodeFs.writeFile(fixture.paths.manifestFile, manifestBytes),
-    );
-
-    await expect(admit(fixture)).resolves.toMatchObject({ schemaVersion: 2 });
-  }, REAL_FILESYSTEM_TIMEOUT_MS);
+    const manifest = requestReporting([entryAt(SYNTHETIC_MANIFEST, "directory")], [PLAN_NAME]);
+    await expect(assertOrdinaryCommandAdmitted(manifest.request)).rejects.toMatchObject({
+      code: EXIT_CODES.recoveryRequired,
+      name: "BootstrapRecoveryRequiredError",
+      paths: [SYNTHETIC_MANIFEST],
+    });
+  });
 });

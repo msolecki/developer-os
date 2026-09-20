@@ -12,7 +12,7 @@ notes are the archive.
 to execute plan 1a (`plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`, roadmap Phase 4) wave by
 wave, as `SESSION.md` §4.1 orchestrates it (D33).
 
-Plan 1a progress: committed 1–13, 15; in flight 17; ready next 14 (wave 2, after 12).
+Plan 1a progress: committed 1–13, 15, 17; in flight 14; ready next 16 (after 14). D36: implementation-first from Task 14 — no per-task review, one review and one push at plan close.
 
 Spec 2 (`plans/2026-08-29-developer-os-release-update.md`): Tasks 1–7 and 9 complete, Task 8
 withdrawn (D18), Tasks 10–26 remain. The 2026-08-28 Spec 1 plan stays as plan 1b's source.
@@ -26,9 +26,10 @@ Open sequence (D16, daily use before completeness):
 3. A12 → A12b → A13 → A14, then the founder cutover A15.
 4. After the cutover: A11b (Spec 2 Tasks 12–26, then Spec 1b), then A16.
 
-Per decisions D17, D32 and D33 a task commit runs its fast commands, `npm run lint` and fresh review;
-independent tasks run in parallel and one orchestrator integrates and pushes when no CI run is in
-progress; slow suites and `npm run check` run once, at plan close (`SESSION.md` §4.1, §5).
+Per D17, D32 and D33 a task commit runs its fast commands and `npm run lint`; independent tasks run
+in parallel and one orchestrator integrates. **D36 (2026-09-20) supersedes the per-task review and
+per-task push for the rest of plan 1a**: no fresh-context review per task, commits held locally, and
+one whole-plan review plus one push plus `npm run check` at plan close (`SESSION.md` §4.1, §5).
 
 Phase 4 onward is sequenced by `plans/2026-09-04-developer-os-completion-roadmap.md` (10 open phases,
 4 through 11 with a 4b and a 5b, the founder decisions D1–D33, and the spec or plan each phase requires). `docs/migration/instruction-inventory.md` is the scope of A12, A12b, A13 and A14.
@@ -94,8 +95,8 @@ startable row run beside a wave when its files overlap no task in flight.
 ## Count
 
 - Product sequence: 8 open entries, A11, A12, A12b, A13, A14, A15, A11b, A16.
-- Implementation tasks: plan 1a 11 remaining (14, 16–25), Spec 2 Tasks 10–26 (17), plan 1b 15 (the
+- Implementation tasks: plan 1a 10 remaining (14, 16, 18–25), Spec 2 Tasks 10–26 (17), plan 1b 15 (the
   2026-08-28 plan's remaining tasks, not yet rewritten): 46. Before the cutover: plan 1a and Spec 2
-  Tasks 10–11, 13 tasks. After it: Spec 2 Tasks 12–26 and plan 1b, 30 tasks.
+  Tasks 10–11, 12 tasks. After it: Spec 2 Tasks 12–26 and plan 1b, 30 tasks.
 - Phases 5, 5b, 6 and 7 have no spec yet; A15 and A16 each still need their dedicated plan.
 - Repository backlog: 51 open numbered rows, plus the Foundation watchdog decision.

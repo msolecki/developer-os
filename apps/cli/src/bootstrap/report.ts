@@ -16,22 +16,16 @@ import {
   deriveBootstrapRetentionTable,
   encodeCanonicalJson,
   hashBytes,
-  inspectDrift,
   lifecycleBookkeepingPaths,
-  loadConfig,
-  parseLowerHexSha256,
-  parseUInt64Decimal,
   selectBootstrapJournal,
   validateBootstrapJournal,
   validateBootstrapPayloadEvidence,
   validateBootstrapPlan,
   validateCreatedPathEvidence,
   validateJournal,
-  validateActiveReleaseRecord,
   validateManifestBytes,
   validateManifestStatePlan,
   validateManifestV2,
-  validateReleaseTrustState,
   validateRetentionTerminalBinding,
 } from "@developer-os/core";
 import type {
@@ -46,13 +40,11 @@ import type {
   CreatedPathEvidenceV1,
   CanonicalAbsolutePathV1,
   CanonicalJsonValue,
-  DriftRequestV2,
   FreshV2InitIdV1,
   FreshV2InitPlanV1,
   FoundationParticipantRefV2,
   InstallationManifestV2,
   LowerHexSha256,
-  ManagedArtifactSchemaRegistry,
   ManifestStatePlanAdmissionContextV1,
   ManifestV1NotMigratableError,
   PlannedCreatedPathV1,
@@ -1382,9 +1374,12 @@ async function readPlanEnvelopes(
   }
   const envelopes: BootstrapEnvelopeReadV1[] = [];
   for (const name of names.filter((candidate) => FRESH_PLAN.test(candidate)).sort()) {
+    const path = join(request.stateDirectory, name);
+    const planEntry = await guardedFile(request, path);
+    if (planEntry.kind === "other") throw nonRegularLeaf(path);
+    if (planEntry.kind === "absent") continue;
     try {
-      const planEntry = await guardedFile(request, join(request.stateDirectory, name));
-      if (planEntry !== null) envelopes.push(await readBootstrapEnvelope(request, planEntry));
+      envelopes.push(await readBootstrapEnvelope(request, planEntry.entry));
     } catch {
       continue;
     }
@@ -1393,9 +1388,12 @@ async function readPlanEnvelopes(
 }
 
 async function readManifestBytes(request: BootstrapEvidenceInspectionRequestV1): Promise<Uint8Array | null> {
+  const path = join(request.productHome, "installation-manifest.json");
+  const manifestFile = await guardedFile(request, path);
+  if (manifestFile.kind === "other") throw nonRegularLeaf(path);
+  if (manifestFile.kind === "absent") return null;
   try {
-    const manifestFile = await guardedFile(request, join(request.productHome, "installation-manifest.json"));
-    return manifestFile === null ? null : await request.reader.readRegularFile(manifestFile, MAX_MANIFEST_BYTES);
+    return await request.reader.readRegularFile(manifestFile.entry, MAX_MANIFEST_BYTES);
   } catch {
     return null;
   }
@@ -1454,32 +1452,6 @@ export async function assertOrdinaryCommandAdmitted(
 }
 
 const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;
-const MAX_ALLOCATOR_BYTES = 1024;
-const MAX_RELEASE_RECORD_BYTES = 16 * 1024;
-
-function lifecycleAllocatorNonce(bytes: Uint8Array): LowerHexSha256 {
-  const allocator = record(decodeCanonicalJson(bytes, MAX_ALLOCATOR_BYTES));
-  if (
-    allocator === null || allocator.schemaVersion !== 1 ||
-    Object.keys(allocator).sort().join() !== "installNonce,nextCounter,schemaVersion"
-  ) throw new Error("lifecycle allocator is malformed");
-  parseUInt64Decimal(allocator.nextCounter);
-  return parseLowerHexSha256(allocator.installNonce);
-}
-
-const HANDOFF_SCHEMAS: ManagedArtifactSchemaRegistry = {
-  validate: (schemaId, bytes) => {
-    if (schemaId === "developer-os-config-v1") {
-      loadConfig(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-    } else if (schemaId === "lifecycle-id-allocator-v1") {
-      lifecycleAllocatorNonce(bytes);
-    } else if (schemaId === "active-release-record-v1") {
-      validateActiveReleaseRecord(decodeCanonicalJson(bytes, MAX_RELEASE_RECORD_BYTES), createCanonicalPathEvidence());
-    } else {
-      validateReleaseTrustState(decodeCanonicalJson(bytes, MAX_RELEASE_RECORD_BYTES));
-    }
-  },
-};
 
 function declaredSchemaVersion(bytes: Uint8Array): unknown {
   try {
@@ -1489,94 +1461,40 @@ function declaredSchemaVersion(bytes: Uint8Array): unknown {
   }
 }
 
+/**
+ * Three-state, because a non-regular entry is neither the leaf nor its absence
+ * and NEW-82 recorded the cost of collapsing the two: a directory reported at
+ * an exact evidence path passed as an absent record.
+ */
+type GuardedFileObservationV1 =
+  | { readonly kind: "absent" }
+  | { readonly kind: "regular_file"; readonly entry: BootstrapEvidenceGuardedEntryV1 }
+  | { readonly kind: "other" };
+
 async function guardedFile(
   request: BootstrapEvidenceInspectionRequestV1,
   path: string,
-): Promise<BootstrapEvidenceGuardedEntryV1 | null> {
-  const [entry] = await request.reader.inventoryExactNamespaces([path as CanonicalAbsolutePathV1]);
-  return entry?.path === path && entry.kind === "regular_file" ? entry : null;
-}
-
-async function admitExactV2Handoff(
-  request: BootstrapEvidenceInspectionRequestV1,
-  drift: Pick<DriftRequestV2, "fs" | "guards">,
-): Promise<InstallationManifestV2> {
-  const manifestFile = await guardedFile(request, join(request.productHome, "installation-manifest.json"));
-  if (manifestFile === null) throw incompleteHandoff();
-  if (declaredSchemaVersion(await request.reader.readRegularFile(manifestFile, MAX_MANIFEST_BYTES)) === 1) {
-    throw new ManifestV1RefusalError();
-  }
-  const envelopes = await readPlanEnvelopes(request);
-  if (envelopes.some(readableNonTerminal)) throw resumeWithInit();
-  const handoffs: { readonly plan: FreshV2InitPlanV1; readonly manifest: InstallationManifestV2 }[] = [];
-  for (const envelope of envelopes) {
-    if (envelope.state !== "slots_read" || envelope.selection?.current.terminalOutcome !== "finalized") continue;
-    const manifest = await exactV2Handoff(request, envelope.plan);
-    if (manifest !== null) handoffs.push({ plan: envelope.plan, manifest });
-  }
-  const [handoff] = handoffs;
-  if (handoff === undefined || handoffs.length !== 1) throw incompleteHandoff();
-
-  const ownerUid = handoff.plan.bootstrapIdentity.ownerUid;
-  const drifted = await inspectDrift({
-    ...drift,
-    manifest: handoff.manifest,
-    schemas: HANDOFF_SCHEMAS,
-    ephemerals: {
-      validate: (owner, observed) => {
-        if (owner !== "core" || observed.uid !== ownerUid || observed.mode !== 0o600 || observed.nlink !== 1) {
-          throw new Error("runtime reservation changed shape");
-        }
-      },
-    },
-  });
-  const state = request.stateDirectory;
-  if (drifted.length > 0) {
-    const records = new Set(
-      ["lifecycle-install-nonce", "lifecycle-id-allocator.json", "active-release.json", "release-trust.json"]
-        .map((name) => join(state, name)),
-    );
-    if (drifted.some((finding) => records.has(finding.path))) throw incompleteHandoff();
-    throw new ManagedDriftError(drifted.map((finding) => finding.path));
-  }
-  const nonce = await guardedFile(request, join(state, "lifecycle-install-nonce"));
-  const allocator = await guardedFile(request, join(state, "lifecycle-id-allocator.json"));
-  if (nonce === null || allocator === null) throw incompleteHandoff();
-  const nonceText = new TextDecoder().decode(await request.reader.readRegularFile(nonce, 65));
-  const allocatorNonce = lifecycleAllocatorNonce(await request.reader.readRegularFile(allocator, MAX_ALLOCATOR_BYTES));
-  if (nonceText !== `${allocatorNonce}\n`) throw incompleteHandoff();
-  if (await guardedFile(request, join(state, ".lifecycle.lock")) === null) throw incompleteHandoff();
-  if (await guardedFile(request, join(state, "lifecycle-activation.json")) !== null) throw incompleteHandoff();
-  for (const name of ["update-rollback.json", "update-executor.json"]) {
-    const reservation = await guardedFile(request, join(state, name));
-    if (reservation !== null && reservation.bytes !== "0") throw incompleteHandoff();
-  }
-  const emptyRoots = [
-    ...["lifecycle-journals", "git-effect-journals", "launchd-effect-journals"].map((name) => join(state, name)),
-    join(request.productHome, "rollback"),
-  ];
-  for (const path of emptyRoots) {
-    const directory = await request.projectPostimage(path as CanonicalAbsolutePathV1);
-    if (directory?.kind !== "directory_tree" || directory.entryCount !== 0) throw incompleteHandoff();
-  }
-  return handoff.manifest;
-}
-
-function incompleteHandoff(): BootstrapRecoveryRequiredError {
-  return new BootstrapRecoveryRequiredError("the installation is not a complete V2 handoff");
-}
-
-export async function admitV2Handoff(
-  request: BootstrapEvidenceInspectionRequestV1,
-  drift: Pick<DriftRequestV2, "fs" | "guards">,
-): Promise<InstallationManifestV2> {
+): Promise<GuardedFileObservationV1> {
+  let inventoried: readonly BootstrapEvidenceGuardedEntryV1[];
   try {
-    return await admitExactV2Handoff(request, drift);
+    inventoried = await request.reader.inventoryExactNamespaces([path as CanonicalAbsolutePathV1]);
   } catch (error) {
-    if (
-      error instanceof ManifestV1RefusalError || error instanceof BootstrapRecoveryRequiredError ||
-      error instanceof ManagedDriftError
-    ) throw error;
-    throw incompleteHandoff();
+    // NEW-82: a defect in the reader is not a fact about the leaf.
+    if (error instanceof TypeError || error instanceof RangeError || error instanceof ReferenceError) throw error;
+    /**
+     * The reader refuses any root that is neither a regular file nor a
+     * directory, so a refusal at an exact leaf path is the third state and not
+     * absence. Reading it as absence is what let a symlink at the manifest path
+     * reach the absent-manifest arm and be told to archive bootstrap evidence
+     * (NEW-82).
+     */
+    return { kind: "other" };
   }
+  const [entry] = inventoried;
+  if (entry === undefined || entry.path !== path) return { kind: "absent" };
+  return entry.kind === "regular_file" ? { kind: "regular_file", entry } : { kind: "other" };
+}
+
+function nonRegularLeaf(path: string): BootstrapRecoveryRequiredError {
+  return new BootstrapRecoveryRequiredError("a bootstrap evidence leaf could not be admitted as a regular file", [path]);
 }

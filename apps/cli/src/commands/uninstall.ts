@@ -575,7 +575,7 @@ function describePlan(removable: readonly ResolvedArtifact[]): string {
  * `readOptional` reads this array *after* the rejection to recover that
  * distinction.
  */
-function manifestAdmissionFor(
+export function manifestAdmissionFor(
   paths: RuntimePaths,
   refusedOwnerPaths: string[],
 ): ManifestAdmissionContextV1 {

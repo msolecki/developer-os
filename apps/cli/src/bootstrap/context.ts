@@ -225,6 +225,7 @@ export function createBootstrapEvidenceInspectionRequest(input: {
   readonly projectPostimage?: (
     path: CanonicalAbsolutePathV1,
   ) => Promise<BootstrapRetentionPostimageV1 | null>;
+  readonly listNames?: BootstrapEvidenceInspectionRequestV1["listNames"];
 }): BootstrapEvidenceInspectionRequestV1 {
   return {
     productHome: input.productHome as CanonicalAbsolutePathV1,
@@ -235,7 +236,7 @@ export function createBootstrapEvidenceInspectionRequest(input: {
     ])].map((root) => root as CanonicalAbsolutePathV1),
     reader: input.reader ?? new NodeBootstrapEvidenceGuardedReader(),
     projectPostimage: input.projectPostimage ?? projectBootstrapRetentionPostimage,
-    listNames: (directory) => nodeFs.readdir(directory),
+    listNames: input.listNames ?? ((directory) => nodeFs.readdir(directory)),
     validatePlan: (value) => {
       const candidate = typeof value === "object" && value !== null && !Array.isArray(value)
         ? value as { readonly id?: unknown }
