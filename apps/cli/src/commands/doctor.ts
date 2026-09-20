@@ -301,7 +301,8 @@ async function surveyTransactions(
   const retained: RetainedBackup[] = [];
 
   for (const id of await listTransactionIds(context)) {
-    const journal = await context.transactions.read(id);
+    const journal = await readSurveyedJournal(context, id);
+    if (journal === null) continue;
     if (journal.phase !== "finalized" && journal.phase !== "rolled_back") {
       incomplete.push({ id, phase: journal.phase });
       continue;
@@ -312,6 +313,29 @@ async function surveyTransactions(
   }
 
   return { incomplete, retained };
+}
+
+/**
+ * Spec 1 §2.4's terminal Foundation compaction unlinks a journal under the global lock,
+ * while this read-only survey is still holding a name from a listing taken before it.
+ * `TransactionStore.read` reports a missing file and a malformed one through the same
+ * `TransactionStateError`, so the absence is re-proved here instead of being reported as a
+ * defect that no recovery command can resolve.
+ */
+async function readSurveyedJournal(
+  context: CliContext,
+  id: string,
+): Promise<TransactionJournalV1 | null> {
+  try {
+    return await context.transactions.read(id);
+  } catch (error) {
+    try {
+      await context.fs.stat(join(context.paths.stateDir, "transactions", `${id}.json`));
+    } catch (absence) {
+      if (isMissingEntry(absence)) return null;
+    }
+    throw error;
+  }
 }
 
 /**

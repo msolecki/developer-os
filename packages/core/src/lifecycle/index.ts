@@ -41,6 +41,12 @@ export type {
   LifecycleLeafCodecsV1,
   LifecycleValueCodec,
 } from "./codecs.js";
+export {
+  compactTerminalFoundationTransaction,
+  deriveFoundationTerminalCompaction,
+  removeFoundationOrphan,
+} from "./foundation-compaction.js";
+export type { FoundationCompactionDependenciesV1 } from "./foundation-compaction.js";
 export { deriveLifecycleLedgerRoots, inspectFoundationLedger } from "./foundation-ledger.js";
 export type {
   FoundationLedgerDependenciesV1,
@@ -50,6 +56,13 @@ export type {
   FoundationLedgerV1,
   LifecycleLedgerRootsV1,
 } from "./foundation-ledger.js";
+export { FoundationParticipantExecutor } from "./foundation-participant.js";
+export type {
+  FoundationParticipantDependenciesV1,
+  FoundationParticipantMutationInputV1,
+  FoundationParticipantStageInputV1,
+  FoundationParticipantStateV1,
+} from "./foundation-participant.js";
 export {
   LIFECYCLE_POINT_OF_NO_RETURN,
   LIFECYCLE_STEP_GRAMMAR,

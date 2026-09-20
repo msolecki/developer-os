@@ -6,6 +6,9 @@ import { basename, dirname, join, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { encodeCanonicalJson } from '../lifecycle/canonical-json.js';
+import { encodeFoundationJournalJsonV1 } from './store.js';
+import { foundationParticipantPlanHash } from '../lifecycle/codecs.js';
+import type { FoundationParticipantRefV1 } from '../lifecycle/types.js';
 import { EXIT_CODES } from '../result.js';
 import type {
   BootstrapPayloadEvidenceV1,
@@ -13,6 +16,7 @@ import type {
 } from '../manifest/bootstrap.js';
 import {
   admitBootstrapFoundationInitialJournal,
+  admitLifecycleFoundationInitialJournal,
   recoverTransaction,
   TransactionBackupRetentionError,
   TransactionExecutor,
@@ -22,6 +26,7 @@ import {
   validateJournal,
   type PlannedFileMutation,
   type AdmittedBootstrapFoundationInitialJournalV1,
+  type AdmittedLifecycleFoundationInitialJournalV1,
   type TransactionFileSystem,
   type TransactionGuards,
   type TransactionJournalV1,
@@ -3306,6 +3311,236 @@ describe('recoverTransaction', () => {
         removeFixture(resumeFixture),
         removeFixture(rollbackFixture),
       ]);
+    }
+  });
+});
+
+const LIFECYCLE_NONCE = 'b4'.repeat(32);
+const LIFECYCLE_COORDINATOR_ID = `lc_${LIFECYCLE_NONCE}_1`;
+const LIFECYCLE_PARTICIPANT_ID = `tx_${LIFECYCLE_NONCE}_2`;
+const LIFECYCLE_CREATED_AT = '2026-09-20T12:00:00.000Z';
+const LIFECYCLE_PHASES: readonly TransactionPhase[] = [
+  'planned',
+  'backed_up',
+  'staged',
+  'validated',
+  'applied',
+  'verified',
+  'finalized',
+  'rolled_back',
+];
+
+interface LifecycleFoundationFixture {
+  readonly ref: FoundationParticipantRefV1;
+  readonly admit: () => AdmittedLifecycleFoundationInitialJournalV1;
+  readonly stagedJournalPath: string;
+  readonly finalJournalPath: string;
+  readonly targetPath: string;
+}
+
+function widestLifecycleJournalBytes(journal: TransactionJournalV1): number {
+  return Math.max(
+    ...LIFECYCLE_PHASES.map(
+      (phase) =>
+        new TextEncoder().encode(
+          encodeFoundationJournalJsonV1({ ...journal, phase }),
+        ).byteLength,
+    ),
+  );
+}
+
+async function installLifecycleFoundationFixture(
+  fixture: Fixture,
+  options: { readonly stagedJournalBytes?: Uint8Array } = {},
+): Promise<LifecycleFoundationFixture> {
+  const targetPath = join(fixture.workspaceDir, 'uninstalling.json');
+  const stagingDirectory = join(
+    fixture.stagingDir,
+    'transactions',
+    LIFECYCLE_PARTICIPANT_ID,
+  );
+  const stagedContentPath = join(stagingDirectory, '0.bin');
+  const journalDirectory = join(
+    fixture.stagingDir,
+    'lifecycle',
+    LIFECYCLE_COORDINATOR_ID,
+    'foundation',
+    LIFECYCLE_PARTICIPANT_ID,
+  );
+  const stagedJournalPath = join(journalDirectory, 'journal.json');
+  const finalJournalPath = join(
+    fixture.stateDir,
+    'transactions',
+    `${LIFECYCLE_PARTICIPANT_ID}.json`,
+  );
+  const planned: TransactionJournalV1 = {
+    schemaVersion: 1,
+    id: LIFECYCLE_PARTICIPANT_ID,
+    kind: 'lifecycle.uninstall_marker',
+    phase: 'planned',
+    createdAt: LIFECYCLE_CREATED_AT,
+    updatedAt: LIFECYCLE_CREATED_AT,
+    mutations: [
+      {
+        targetPath,
+        operation: 'create',
+        expectedBeforeHash: null,
+        stagedRelativePath: '0.bin',
+      },
+    ],
+  };
+  const canonicalBytes = new TextEncoder().encode(encodeFoundationJournalJsonV1(planned));
+  const stagedJournalBytes = options.stagedJournalBytes ?? canonicalBytes;
+  const contentHash = createHash('sha256').update(CREATED_BYTES).digest('hex');
+
+  await nodeFs.mkdir(stagingDirectory, { recursive: true, mode: 0o700 });
+  await nodeFs.mkdir(journalDirectory, { recursive: true, mode: 0o700 });
+  await nodeFs.mkdir(dirname(finalJournalPath), { recursive: true, mode: 0o700 });
+  await nodeFs.writeFile(stagedContentPath, CREATED_BYTES, { flag: 'wx', mode: 0o600 });
+  await nodeFs.writeFile(`${stagedContentPath}.sha256`, `${contentHash}\n`, {
+    flag: 'wx',
+    mode: 0o600,
+  });
+  await nodeFs.writeFile(stagedJournalPath, stagedJournalBytes, { flag: 'wx', mode: 0o600 });
+  const stagedStats = await nodeFs.lstat(stagedJournalPath, { bigint: true });
+  const [sourceParentStats, destinationParentStats] = await Promise.all([
+    nodeFs.lstat(journalDirectory, { bigint: true }),
+    nodeFs.lstat(dirname(finalJournalPath), { bigint: true }),
+  ]);
+  const stagedHash = createHash('sha256').update(stagedJournalBytes).digest('hex');
+  const core = {
+    slot: 'uninstall_marker' as const,
+    role: { kind: 'forward' as const, compensationId: null },
+    mutations: [
+      {
+        targetPath: targetPath as never,
+        operation: 'create' as const,
+        expectedBeforeHash: null,
+        contentHash: contentHash as never,
+        contentSize: CREATED_BYTES.byteLength,
+        stagedPath: stagedContentPath as never,
+      },
+    ],
+    maximumJournalBytes: widestLifecycleJournalBytes(planned),
+    initialJournal: {
+      finalPath: finalJournalPath as never,
+      plannedBytesHash: stagedHash as never,
+      stagedPath: stagedJournalPath as never,
+      stagedIdentity: {
+        hash: stagedHash as never,
+        size: stagedJournalBytes.byteLength,
+        mode: 0o600 as const,
+        dev: stagedStats.dev.toString(10) as never,
+        ino: stagedStats.ino.toString(10) as never,
+      },
+    },
+  };
+  const ref: FoundationParticipantRefV1 = {
+    id: LIFECYCLE_PARTICIPANT_ID as never,
+    ...core,
+    planHash: foundationParticipantPlanHash(core),
+  };
+
+  return {
+    ref,
+    stagedJournalPath,
+    finalJournalPath,
+    targetPath,
+    admit: () =>
+      admitLifecycleFoundationInitialJournal({
+        ref,
+        ownerUid: Number(stagedStats.uid),
+        initialJournal: planned,
+        sourceParent: {
+          path: journalDirectory as never,
+          ownerUid: Number(stagedStats.uid),
+          mode: 0o700,
+          dev: sourceParentStats.dev.toString(10) as never,
+          ino: sourceParentStats.ino.toString(10) as never,
+        },
+        destinationParent: {
+          path: dirname(finalJournalPath) as never,
+          ownerUid: Number(stagedStats.uid),
+          mode: 0o700,
+          dev: destinationParentStats.dev.toString(10) as never,
+          ino: destinationParentStats.ino.toString(10) as never,
+        },
+      }),
+  };
+}
+
+describe('coordinator-bound lifecycle Foundation initial-journal publication', () => {
+  it('publishes the staged journal by no-replace rename and then runs the unchanged executor', async () => {
+    const fixture = await createFixture('lifecycle-foundation-publication');
+    try {
+      const lifecycle = await installLifecycleFoundationFixture(fixture);
+      const calls: string[] = [];
+      const journal = await bootstrapFoundationExecutor(
+        fixture,
+        noReplacePublisher(calls),
+      ).executeLifecycleFoundationParticipant(lifecycle.admit());
+
+      expect(journal.phase).toBe('finalized');
+      expect(calls).toStrictEqual([
+        `${lifecycle.stagedJournalPath}->${lifecycle.finalJournalPath}`,
+      ]);
+      await expectMissing(lifecycle.stagedJournalPath);
+      await expectBytes(lifecycle.targetPath, CREATED_BYTES);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  it('refuses a structural capability the lifecycle admission never issued', async () => {
+    const fixture = await createFixture('lifecycle-foundation-forged-capability');
+    try {
+      await installLifecycleFoundationFixture(fixture);
+      await expect(
+        bootstrapFoundationExecutor(
+          fixture,
+          noReplacePublisher(),
+        ).executeLifecycleFoundationParticipant(
+          {} as unknown as AdmittedLifecycleFoundationInitialJournalV1,
+        ),
+      ).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired });
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
+  it('refuses staged bytes that only hash-match a whitespace variant of the planned journal', async () => {
+    const fixture = await createFixture('lifecycle-foundation-inexact-bytes');
+    try {
+      const planned = {
+        schemaVersion: 1,
+        id: LIFECYCLE_PARTICIPANT_ID,
+        kind: 'lifecycle.uninstall_marker',
+        phase: 'planned',
+        createdAt: LIFECYCLE_CREATED_AT,
+        updatedAt: LIFECYCLE_CREATED_AT,
+        mutations: [
+          {
+            targetPath: join(fixture.workspaceDir, 'uninstalling.json'),
+            operation: 'create',
+            expectedBeforeHash: null,
+            stagedRelativePath: '0.bin',
+          },
+        ],
+      };
+      const lifecycle = await installLifecycleFoundationFixture(fixture, {
+        stagedJournalBytes: new TextEncoder().encode(`${JSON.stringify(planned)} \n`),
+      });
+
+      let refusal: unknown;
+      try {
+        lifecycle.admit();
+      } catch (error) {
+        refusal = error;
+      }
+      expect(refusal).toMatchObject({ code: EXIT_CODES.recoveryRequired });
+      await expectMissing(lifecycle.finalJournalPath);
+    } finally {
+      await removeFixture(fixture);
     }
   });
 });

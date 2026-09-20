@@ -498,7 +498,7 @@ export async function compactTerminalFoundationTransaction(dependencies: {
 export async function removeFoundationOrphan(dependencies: Parameters<typeof compactTerminalFoundationTransaction>[0], orphan: FoundationLedgerOrphanV1): Promise<void>;
 ```
 
-- [ ] **Step 1: Write failing participant and compaction tests**
+- [x] **Step 1: Write failing participant and compaction tests**
 
 ```ts
 it("resumes a first journal that died after publication from its pre-recorded staged inode", async () => {
@@ -529,7 +529,7 @@ it("compacts a terminal standalone transaction to nothing but refuses an unknown
 
 Cover: `stage` writes `staging/transactions/<id>/<i>.bin` and `<i>.bin.sha256` exactly as the unchanged `writeStaged` would, then the initial journal at `staging/lifecycle/<coordinator-id>/foundation/<id>/journal.json` in `FoundationJournalJsonV1` bytes; the returned ref's `planHash`, `plannedBytesHash`, `stagedIdentity` and exact `maximumJournalBytes` recompute; content over 16,777,216 bytes refuses before any write; a compensation input whose preimage bytes differ from the forward's `expectedBeforeHash` refuses; the forward may finalize and prune its backups while its inverse keeps independent preimage bytes; staged and final both absent, both present, or a mismatched identity at `apply` is exit 6; `discardUnstarted` removes only the still-staged initial journal and exact blobs after proving the final journal absent and every target at its preimage; `observe` distinguishes `future` (nothing staged), `staged`, and every journal phase; compaction enumerates only journal-derived names, treats a missing expected file as done, `rmdir`s only exact empty ID directories, unlinks the journal and then the held stable lock by exact inode, syncs each parent, and leaves `tx_fi_…` and `tx_mm_…` bootstrap residue untouched; death before and after every unlink resumes from the terminal journal, or from a removable lock-only orphan; `removeFoundationOrphan` removes a planless orphan only under the exact grammar Task 11 admitted, and never a backup member; 1,000 consecutive standalone transactions, each followed by compaction, leave `state/transactions` holding at most one stable lock between iterations (real filesystem); in `doctor.test.ts`, a journal removed between `listTransactionIds` and `transactions.read` is skipped rather than reported as an error.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root packages/core src/transactions/transactions.test.ts src/lifecycle/foundation-participant.test.ts src/lifecycle/foundation-compaction.test.ts`
 
@@ -537,11 +537,11 @@ Run: `npx vitest run --root apps/cli src/commands/doctor.test.ts`
 
 Expected: FAIL — the new functions and modules do not exist; `doctor` throws on a compacted journal.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Do not replace the Foundation serializer, the standalone `execute` path, or the manifest's direct-write exception. The lifecycle first-write bridge takes the participant's stable ID lock, then either re-verifies an existing final journal or `renameNoReplace`s the staged inode to `state/transactions/<id>.json`, syncs, reopens, requires the same inode and exact planned bytes, and only then calls the unchanged `resume`. No participant step ever unlinks a coordinator or participant plan. Compaction runs only under the held global lock.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root packages/core src/transactions/transactions.test.ts src/lifecycle src/index.test.ts`
 
@@ -549,18 +549,26 @@ Run: `npx vitest run --root apps/cli src/commands/doctor.test.ts src/commands/st
 
 Expected: PASS.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Tick, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 
 ```bash
-git add packages/core/src/transactions/executor.ts packages/core/src/transactions/index.ts packages/core/src/transactions/transactions.test.ts packages/core/src/lifecycle/foundation-participant.ts packages/core/src/lifecycle/foundation-participant.test.ts packages/core/src/lifecycle/foundation-compaction.ts packages/core/src/lifecycle/foundation-compaction.test.ts packages/core/src/lifecycle/index.ts packages/core/src/index.ts packages/core/src/index.test.ts apps/cli/src/commands/doctor.ts apps/cli/src/commands/doctor.test.ts
+git add tests/repository/check.ts packages/core/src/transactions/executor.ts packages/core/src/transactions/index.ts packages/core/src/transactions/transactions.test.ts packages/core/src/lifecycle/foundation-participant.ts packages/core/src/lifecycle/foundation-participant.test.ts packages/core/src/lifecycle/foundation-compaction.ts packages/core/src/lifecycle/foundation-compaction.test.ts packages/core/src/lifecycle/index.ts packages/core/src/index.ts packages/core/src/index.test.ts apps/cli/src/commands/doctor.ts apps/cli/src/commands/doctor.test.ts
 git add -f docs/superpowers/plans/2026-09-17-developer-os-opt-in-surfaces-1a.md docs/superpowers/ORDER.md
 git diff --cached --name-only
 git commit -m "feat(core): coordinate Foundation participants and compact terminal Foundation transactions"
 ```
 
 ### Task 16: Coordinator execution, compensation, recovery and terminal compaction · L
+
+Carried from Task 15's review — three preconditions §2.4 states that `packages/core` structurally cannot discharge at the interfaces this plan fixed, so Task 16 owns each as a caller obligation:
+
+1. `discardUnstarted(ref)` proves no lock; its Produces signature has no `global` member, so the coordinator must hold the global lock across every call.
+2. `deriveFoundationTerminalCompaction` receives only a journal, so it cannot check §2.4's "not referenced by a non-terminal coordinator".
+3. `removeFoundationOrphan`'s `rewrite_temp` arm cannot check the final journal's identity: the orphan is `{kind, id, temp}` and a re-scan under the lock returns the value under suspicion. The caller already holds `FoundationLedgerV1.journals.get(id).entry` from the scan that produced the orphan — after taking the stable lock and before calling, `lstat` the journal path and compare `dev`/`ino` against it. Do **not** widen `FoundationCompactionDependenciesV1`; the Produces block ties that type to `compactTerminalFoundationTransaction` through `Parameters<...>[0]`.
+
+Also from that review: `FoundationParticipantStateV1 = "future" | "staged" | TransactionPhase` makes `observe` returning `"staged"` **ambiguous** between "initial journal staged, nothing published" and "published, journal phase is `staged`". A coordinator must not branch on it alone; `fs.lstat(ref.initialJournal.finalPath)` disambiguates, and `discardUnstarted` re-proves the final journal absent regardless, so a wrong branch refuses rather than destroys.
 
 Source: old Task 7. Spec 1 §2.4 cursor/phase rules, point of no return, compensation reverse prefix, `push_pending`, orphan completion, `LifecycleTerminalCompactionV1` including the uninstall control-file suffix; §7 "composite state recovers" and "coordinator grammar is exact" (execution clauses). This task is the "coordinator recovery proven" half of the Phase 4 gate.
 

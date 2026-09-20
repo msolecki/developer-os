@@ -1,5 +1,6 @@
 export {
   admitBootstrapFoundationInitialJournal,
+  admitLifecycleFoundationInitialJournal,
   TransactionBackupRetentionError,
   TransactionConflictError,
   TransactionExecutor,
@@ -9,7 +10,9 @@ export {
 } from "./executor.js";
 export type {
   AdmittedBootstrapFoundationInitialJournalV1,
+  AdmittedLifecycleFoundationInitialJournalV1,
   BootstrapFoundationInitialJournalAdmissionContextV1,
+  LifecycleFoundationInitialJournalAdmissionContextV1,
 } from "./executor.js";
 export { recoverTransaction } from "./recovery.js";
 export {

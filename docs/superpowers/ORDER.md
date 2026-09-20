@@ -12,7 +12,7 @@ notes are the archive.
 to execute plan 1a (`plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`, roadmap Phase 4) wave by
 wave, as `SESSION.md` §4.1 orchestrates it (D33).
 
-Plan 1a progress: committed 1–13; in flight 15, 17; ready next 14 (wave 2, after 12).
+Plan 1a progress: committed 1–13, 15; in flight 17; ready next 14 (wave 2, after 12).
 
 Spec 2 (`plans/2026-08-29-developer-os-release-update.md`): Tasks 1–7 and 9 complete, Task 8
 withdrawn (D18), Tasks 10–26 remain. The 2026-08-28 Spec 1 plan stays as plan 1b's source.
@@ -69,9 +69,9 @@ Needs a human, a policy decision, or an external application:
 - NEW-7 — verify percent-encoded local links in Obsidian.
 - Foundation watchdog — decide whether `SpawnLockfRunner` needs one around non-blocking `lockf`.
 
-`BACKLOG.md` §1 holds 49 open numbered rows.
+`BACKLOG.md` §1 holds 51 open numbered rows.
 Owners: NEW-79, NEW-81, NEW-85 and NEW-86 are owned by Phase 4b; NEW-82 by plan 1a; NEW-84 by Phase 9;
-NEW-87 travels with whichever row each mis-aimed citation belongs to; NEW-88 and NEW-89 by plan 1a Tasks 16 and 22; NEW-90 by Phase 4b.
+NEW-87 travels with whichever row each mis-aimed citation belongs to; NEW-88 and NEW-89 by plan 1a Tasks 16 and 22; NEW-91 by plan 1a Task 16; NEW-90 and NEW-92 by Phase 4b.
 They are not ordered ahead of A11 unless the touched subsystem makes one relevant; D33 lets a
 startable row run beside a wave when its files overlap no task in flight.
 
@@ -94,8 +94,8 @@ startable row run beside a wave when its files overlap no task in flight.
 ## Count
 
 - Product sequence: 8 open entries, A11, A12, A12b, A13, A14, A15, A11b, A16.
-- Implementation tasks: plan 1a 12 remaining (14–25), Spec 2 Tasks 10–26 (17), plan 1b 15 (the
+- Implementation tasks: plan 1a 11 remaining (14, 16–25), Spec 2 Tasks 10–26 (17), plan 1b 15 (the
   2026-08-28 plan's remaining tasks, not yet rewritten): 46. Before the cutover: plan 1a and Spec 2
-  Tasks 10–11, 14 tasks. After it: Spec 2 Tasks 12–26 and plan 1b, 30 tasks.
+  Tasks 10–11, 13 tasks. After it: Spec 2 Tasks 12–26 and plan 1b, 30 tasks.
 - Phases 5, 5b, 6 and 7 have no spec yet; A15 and A16 each still need their dedicated plan.
-- Repository backlog: 49 open numbered rows, plus the Foundation watchdog decision.
+- Repository backlog: 51 open numbered rows, plus the Foundation watchdog decision.

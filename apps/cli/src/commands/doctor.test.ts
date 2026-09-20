@@ -16,7 +16,12 @@ import type {
 } from "@developer-os/platform-macos";
 import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 
-import { codexPluginRoot, runDoctor, runDoctorReport } from "./doctor.js";
+import {
+  codexPluginRoot,
+  listIncompleteTransactions,
+  runDoctor,
+  runDoctorReport,
+} from "./doctor.js";
 import type { DoctorReportV1 } from "./doctor.js";
 import { runInit } from "./init.js";
 import { runRepair } from "./repair.js";
@@ -1135,5 +1140,33 @@ describe("codexPluginRoot", () => {
       posix.dirname(manifestOperation.targetPath),
     );
     expect(codexPluginRoot(fixture.context)).toBe(targetedRoot);
+  });
+});
+
+describe("surveyTransactions racing terminal compaction", () => {
+  it("skips a journal removed between the listing and the read", async () => {
+    const fixture = await createCommandFixture("doctor-compacted-journal");
+    await seedIncompleteTransaction(fixture, "tx_fixture_008");
+    const journalDir = join(fixture.paths.stateDir, "transactions");
+    const journal = join(journalDir, "tx_fixture_008.json");
+
+    expect(await listIncompleteTransactions(fixture.context)).toStrictEqual([
+      { id: "tx_fixture_008", phase: "staged" },
+    ]);
+
+    const readdir = fixture.context.fs.readdir;
+    const compacting: typeof fixture.context = {
+      ...fixture.context,
+      fs: {
+        ...fixture.context.fs,
+        readdir: (async (path: Parameters<typeof readdir>[0]) => {
+          const entries = await readdir(path);
+          if (String(path) === journalDir) await nodeFs.rm(journal, { force: true });
+          return entries;
+        }) as typeof readdir,
+      },
+    };
+
+    expect(await listIncompleteTransactions(compacting)).toStrictEqual([]);
   });
 });
