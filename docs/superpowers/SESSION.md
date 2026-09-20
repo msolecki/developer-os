@@ -1,5 +1,16 @@
 # Session protocol
 
+> **D36 (2026-09-20) — implementation-first until plan 1a closes.** For the remainder of
+> `plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`, a task runs its fast commands and
+> `npm run lint`, is integrated immediately, and the next task starts. **No per-task fresh-context
+> review, no per-task fix cycle, and no per-task push.** Commits are held locally. At plan close the
+> founder runs the long checks by hand — `npm run check`, the deferred slow suites (D32), and one
+> push to `development` so CI runs every job once — and one whole-plan review plus one fix round
+> covers every task. This suspends §5 step 3 and §5 step 7 below, and `security.md`'s rule that a
+> fresh agent reviews agent-generated code. Accepted risk: a defect in a consumed interface is found
+> only after its consumers bound to it. Plan 1a's "Deferred fix list (D36)" under Task 25 collects
+> what is owed. **This block expires when plan 1a closes**; delete it then and §5 returns as written.
+
 Use this prompt in a fresh session:
 
 ```text
@@ -75,7 +86,8 @@ The session is the orchestrator. It writes no task code itself.
   follows the task's steps with `superpowers:test-driven-development`, runs the fast commands and
   `npm run lint` (D32), commits code and tests only, and reports the commit hash. It never edits
   `docs/superpowers/`, never pushes, never merges.
-- **Reviewer.** A different fresh agent per task that authored none of it, given the task text, the
+- **Reviewer.** Suspended by D36 for the rest of plan 1a; the whole-plan review at close replaces it.
+  Outside D36: a different fresh agent per task that authored none of it, given the task text, the
   commit diff and review-only instructions. Accepted findings go back to the implementer as a
   failing regression test first. Review of one task overlaps implementation of the next.
 - **Integration**, one task at a time, in dependency order: cherry-pick the reviewed commit onto
@@ -101,17 +113,22 @@ All of these are required:
    or `tests/integration`. The cases the task itself adds or changes in those files still run, red
    then green, filtered with `-t`. Tick a deferred step "deferred to plan close (D32)".
 2. Run `npm run check` only when the commit closes an implementation plan, or a roadmap phase that
-   closes no plan (D17, narrowed by D32). The founder may run it by hand; the plan does not close
-   until it is green. A plan step that names `npm run check` for an ordinary task commit is
+   closes no plan (D17, narrowed by D32). The founder runs it by hand at plan close, together with
+   the slow suites step 1 defers and the single push of step 7; the plan does not close until it is
+   green. Under D36 this is the **only** point at which they run. A plan step that names `npm run check` for an ordinary task commit is
    satisfied by step 1 plus step 7.
-3. Obtain fresh-context review from an agent that did not author the code-producing task. For every
-   accepted finding, add a failing regression test first, apply the smallest correction, rerun gates,
-   and request another verdict.
+3. **Suspended by D36 for the rest of plan 1a** — one whole-plan review at close replaces it, and
+   the deferred fix list under Task 25 collects what is owed. Outside D36: obtain fresh-context
+   review from an agent that did not author the code-producing task. For every accepted finding, add
+   a failing regression test first, apply the smallest correction, rerun gates, and request another
+   verdict.
 4. Make checkboxes match evidence. Remove completed rows from `ORDER.md` and `BACKLOG.md`; delete a
    finished plan only after its surviving constraints are in canonical architecture/program docs.
 5. Stage exact task-owned paths. Never use `git add -A`, `git add .`, or a wildcard.
 6. Confirm the commit contains only intended paths.
-7. Push the commit to `development` so CI runs every job on it — but only when no run is in
+7. **Under D36, do not push per task.** Hold every task commit locally and push once, at plan close,
+   as a single run the founder triggers by hand. The rule below is what applies outside D36, and
+   what returns when plan 1a closes. Push the commit to `development` so CI runs every job on it — but only when no run is in
    progress there, because `check.yml` cancels a superseded run and a full run takes ~4 h. If one is
    running, hold the commit and push it with the next once that run completes. Do not wait for
    green to start the next task, but check the latest completed run before every new commit: a red

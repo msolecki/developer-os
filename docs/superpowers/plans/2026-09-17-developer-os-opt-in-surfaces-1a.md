@@ -389,14 +389,14 @@ export class LifecycleCoordinatorStore<TPlan extends LifecycleCoordinatorPlanCor
 }
 ```
 
-- [ ] **Step 1: Write failing feasibility and publication tests**
+- [x] **Step 1: Write failing feasibility and publication tests**
 
 ```ts
 it("refuses an infeasible journal maximum before the allocator moves", async () => {
   const home = await memoryLifecycleHome();
   expect(() => assertLifecycleExecutionFeasible(oversizedSyntheticBuilder(), home.snapshot, CODEC))
     .toThrow(expect.objectContaining({ reason: "journal_too_large" }));
-  expect((await inspectLifecycleAllocator(home.fs, home.state, UID)).allocator.nextCounter).toBe("0");
+  expect((await inspectLifecycleAllocator(home.fs, home.state, UID, [])).allocator.nextCounter).toBe("0");
 });
 
 it("publishes the immutable plan before its lock and the lock before the planned journal", async () => {
@@ -412,23 +412,25 @@ it("publishes the immutable plan before its lock and the lock before the planned
 
 Cover: the conservative maximum uses `longestLegalAllocatedId` for every slot, every phase, both auxiliary cursors at their widest, a non-null push hash where the variant allows it, and fixed-width `UtcTimestampV1`; the exact maximum recomputed from real IDs equals `plan.maximumJournalBytes`, otherwise the plan refuses; a coordinator or Foundation maximum above 1,048,576 or a plan above 16,777,216 bytes refuses before reservation; `assertLifecycleCapacity` refuses when any current count plus reservation exceeds its `LIFECYCLE_LEDGER_BOUNDS` cap, and never when it equals it; `standaloneFoundationLeafReservation` counts journal, stable lock and rewrite temp in `state/transactions`, the ID directory plus `<i>.bin`, `<i>.bin.sha256` and one temp per non-remove mutation in staging, and the ID directory plus `<i>.bin`, `<i>.bin.tmp`, `<i>.json`, `<i>.json.sha256`, `<i>.json.tmp` per replace or remove mutation in backups; death at each `LifecycleStoreBoundaryV1` leaves a state Task 12 classifies as a legal non-clear orphan (plan temp only, plan only, plan plus lock, journal temp) and never a lock-only envelope; a no-replace collision at the plan or journal leaf preserves both and refuses; a rewrite temp larger than `plan.maximumJournalBytes` refuses before rename; `rewriteJournal` refuses when `current` differs from the bytes on disk; `ensureStagingDirectory` creates `staging/lifecycle` only if absent, owner `0700`, and refuses a mis-shaped existing one.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root packages/core src/lifecycle/store.test.ts`
 
 Expected: FAIL — `store.ts` does not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
+
+`lifecycleReservationOrder` derives prefixes from a plan while `LifecycleExecutionBuilderV1` exposes only `slotCount`, so the conservative pass cannot hand prefix-correct IDs to a builder that has not built yet. Resolved by contract: `assertLifecycleExecutionFeasible` calls `build` once with `slotCount` **distinct** placeholder IDs of the widest legal width, and that conservative plan is measured only — never validated, never published. Distinctness is load-bearing, because identical placeholders collapse `lifecycleReservationOrder`'s `byId` map and make it fail on the second Foundation step. **Task 18's `build(ids)` must bind by position, not re-derive a prefix**, and `assertLifecycleExecutionFeasible` refuses `reservation_slot_count` when `lifecycleReservationOrder(plan).length` disagrees with `builder.slotCount`.
 
 The coordinator lock `.<id>.lock` in `state/lifecycle-journals` is created with the injected `TransactionLockProvider` only after the plan is durable, so a lock-only coordinator envelope is unreachable. Plan temp `.<id>.<lowercase-v4-uuid>.plan.json.tmp`; journal temp `.<id>.<lowercase-v4-uuid>.json.tmp`; both `writeExclusive` then `renameNoReplace` (first publication) or `renameOver` (rewrite), then `syncDirectory`. The store never allocates: callers reserve the block with Task 10 only after `assertLifecycleExecutionFeasible` passes.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root packages/core src/lifecycle src/index.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Tick, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 
@@ -862,6 +864,11 @@ git commit -m "feat(cli): admit installed V2 homes structurally"
 ### Task 18: Concrete execution-plan codec and the lifecycle composition root · M
 
 Source: old Task 21 (codecs and context half). Spec 1 §8.1 CLI ownership rows; Scope decisions 1 and 2.
+
+Carried from Task 14 — two preconditions the store's fixed signature cannot discharge:
+
+1. **`publish` cannot check `validateLifecyclePlanGrammar`.** The store has no `variantFacts` accessor and `executionPlanCodec.encode` does not validate, so a grammar-invalid plan can become durable and the ledger then classifies it `lifecycle_coordinator_plan_grammar` permanently. Task 18 must validate the plan **before** calling `publish`.
+2. **`requireOwnedDirectory` checks kind and mode `0700` but not `ownerUid`**, because the store receives no `effectiveUid`. The guarded port still enforces ownership on every read, create and no-replace rename, and the ledger's `openRoot` catches a foreign-owned root; only a foreign-owned directory inside an already-0700 home is unchecked at this seam.
 
 Carried from Task 12's review: the first CLI wiring of D34's `manifestBeforeHash` must be pinned by a round-trip test that actually reaches `uninstall_draining`, not merely by the accessor compiling. `manifestAgreesWithCursor` returns `false` on a hash mismatch, so a domain-separated or canonical-JSON `before.hash` would not throw, would raise no finding and would name no path — the drain would simply become unreachable, with uninstall's runner-drain never engaging as the only symptom.
 
@@ -1720,6 +1727,14 @@ fixed in its own task. Each needs a failing test first, then the smallest correc
 the whole-plan review's starting point, not its scope — Tasks 14–25 received no per-task review at
 all and must be covered from scratch.
 
+- Task 14/15, duplicated computation that can drift into disagreement: `maximumFoundationJournalBytes`
+  in `packages/core/src/lifecycle/store.ts` and `widestJournalBytes` in
+  `packages/core/src/lifecycle/foundation-participant.ts` are the same 8-phase
+  `encodeFoundationJournalJsonV1` loop, written twice. Task 14 mirrored Task 15's `PHASES` literal
+  exactly. Have `foundation-participant.ts` import the exported one; if that would create an import
+  cycle, move the computation to a module both can consume. Left duplicated they drift, and
+  feasibility then disagrees with staging — a plan admitted as feasible whose participant journal
+  will not fit.
 - Task 17, message drift: `nonRegularLeaf`'s refusal string in `apps/cli/src/bootstrap/report.ts` is
   the module's only inline refusal literal; its two siblings are exported constants
   (`BOOTSTRAP_MANUAL_ARCHIVE`, `MALFORMED_V2_MANIFEST`). Export it as `NON_REGULAR_BOOTSTRAP_LEAF`

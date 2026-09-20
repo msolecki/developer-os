@@ -145,6 +145,22 @@ export {
   parseUninstallingMarker,
 } from "./records.js";
 export type { UninstallingMarkerV1 } from "./records.js";
+export {
+  LifecycleCoordinatorStore,
+  LifecycleInfeasiblePlanError,
+  assertLifecycleCapacity,
+  assertLifecycleExecutionFeasible,
+  longestLegalAllocatedId,
+  maximumCoordinatorJournalBytes,
+  maximumFoundationJournalBytes,
+  standaloneFoundationLeafReservation,
+} from "./store.js";
+export type {
+  LifecycleCoordinatorStoreDependenciesV1,
+  LifecycleExecutionBuilderV1,
+  LifecycleLeafReservationV1,
+  LifecycleStoreBoundaryV1,
+} from "./store.js";
 export type {
   FoundationParticipantRefV1,
   FoundationParticipantSlotV1,
