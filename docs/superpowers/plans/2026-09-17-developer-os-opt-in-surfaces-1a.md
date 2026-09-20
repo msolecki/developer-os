@@ -565,6 +565,15 @@ git commit -m "feat(core): coordinate Foundation participants and compact termin
 
 ### Task 16: Coordinator execution, compensation, recovery and terminal compaction · L
 
+Corrections this task's implementation forced, recorded against the steps below:
+
+- **The Cover list's `closure === "clear"` after a compacted uninstall is unreachable.** `coordinator_envelope` deliberately unlinks the allocator and the nonce, and `admitsControlFileAbsence` admits that absence only while the `compacting` envelope cursor is still on disk. Once the envelope is gone there is no coordinator, so `resolveAllocator` refuses `lifecycle_id_allocator_shape`. The tests assert the exact residue against the real `inspectLifecycleLedger` instead: `coordinators === []`, `coordinatorOrphans === []`, `foundation.journals.size === 0`, `findings === ["lifecycle_id_allocator_shape"]`, global lock present.
+- **Two forced `Produces` additions.** `LifecycleCoordinatorDependenciesV1` gains `readonly fs: LifecycleGuardedFileSystemV1`, because the global-lock re-check and the `"staged"` disambiguation both need a guarded `lstat` from inside the engine. `compactTerminalCoordinator`'s dependency intersection gains `readonly foundationStore: TransactionStore`, because `compactTerminalFoundationTransaction` takes the shipped `TransactionStore` for `withTransactionLock` and `LifecycleCoordinatorStore` is not that store.
+- **Two exports the `Produces` block does not name.** `LifecycleRecoveryRefusalError`, because `SafeReasonCodeV1` is `/^[a-z][a-z0-9_]*$/` and §2.4's recovery instructions cannot travel as a reason code; and `completeCoordinatorEnvelope`, because the envelope-suffix and pre-journal-orphan completions have no journal to carry a `compactionNext` cursor and so cannot go through `compactTerminalCoordinator`.
+- **§2.4's unstarted-participant rule cannot be met for a counterfactual inverse.** `discardUnstarted` proves every mutation target at that ref's recorded preimage, but the inverse of a forward that never ran describes a post-forward world that never existed. `compactTerminalCoordinator` classifies each participant `executed` / `unstarted` / `counterfactual_inverse` and, for the third, removes the staged leaves derived from the immutable ref after proving **both** final journals absent.
+- **`git_sync/existing_network`'s point of no return is unenforceable as the table words it.** "N(h) returns success" has no durable representation — a death between the push returning and the journal rewrite is byte-identical to a push that never ran. The implemented boundary is "the cursor advanced past `N`", and such a death rolls back and re-pushes. **Task 21 binds to this reading; it needs a founder decision at plan close.**
+- **A non-terminal current Foundation journal fails closed rather than rolling back**, against §2.4's wording. Unreachable from this task's injection surface — deaths are injected at `afterBoundary`, which the engine emits outside every participant call — but reachable from Task 15's. Deliberate narrowing, not an oversight.
+
 Carried from Task 15's review — three preconditions §2.4 states that `packages/core` structurally cannot discharge at the interfaces this plan fixed, so Task 16 owns each as a caller obligation:
 
 1. `discardUnstarted(ref)` proves no lock; its Produces signature has no `global` member, so the coordinator must hold the global lock across every call.
@@ -660,7 +669,7 @@ export async function compactTerminalCoordinator<TPlan extends LifecycleCoordina
 ): Promise<void>;
 ```
 
-- [ ] **Step 1: Write the failing exhaustive death-injection matrix**
+- [x] **Step 1: Write the failing exhaustive death-injection matrix**
 
 ```ts
 const ROWS = Object.keys(LIFECYCLE_STEP_GRAMMAR) as LifecycleOperationVariantV1[];
@@ -699,23 +708,23 @@ Also cover:
   - after each compaction, `reserveLifecycleIdBlock(1)` succeeds, standing in for the mutation that now proceeds;
   - the 1,000,001st aggregate leaf refuses exit 6, deletes nothing, and leaves `nextCounter` unchanged, as does a single non-terminal or malformed transaction inside an otherwise compactable overflow.
 
-- [ ] **Step 2: Run the matrix and verify it fails**
+- [x] **Step 2: Run the matrix and verify it fails**
 
 Run: `npx vitest run --root packages/core src/lifecycle/coordinator.test.ts src/lifecycle/recovery.test.ts src/lifecycle/coordinator-compaction.test.ts`
 
 Expected: FAIL — the modules do not exist.
 
-- [ ] **Step 3: Implement the table-driven engine**
+- [x] **Step 3: Implement the table-driven engine**
 
 Rules: drive only from the persisted plan and journal (never a preview); call `stepHooks.before` immediately before each forward participant call (first run or recovery) and `stepHooks.after` when it returns; persist the intended phase and cursor before each participant call and the participant's durable state before advancing, in one journal rewrite; decide direction only from `LIFECYCLE_POINT_OF_NO_RETURN` and the participant phases; dispatch only the closed step union through injected adapters. Core imports no Git, launchd, Security or CLI type.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root packages/core src/lifecycle src/transactions/transactions.test.ts src/index.test.ts`
 
 Expected: PASS, with a non-empty boundary list for each of the fourteen variants.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Tick, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 
@@ -1727,6 +1736,23 @@ fixed in its own task. Each needs a failing test first, then the smallest correc
 the whole-plan review's starting point, not its scope — Tasks 14–25 received no per-task review at
 all and must be covered from scratch.
 
+- Task 16, obligation 3 carries no test: `LifecycleRecoveryService.removeOrphan` compares the final
+  journal's identity against the producing scan's entry under the stable lock, but no fixture swaps
+  that inode under the lock, so the check rests on code reading alone. Build the fixture.
+- Task 16, `resumed` is safe only while `execute` is never re-entered concurrently. `planned` is the
+  unique on-disk marker for "not started", and the one ambiguous pair is unobservable within a single
+  process because the flag clears before the participant call and the global lock serialises callers.
+  **If Task 18 ever re-enters `execute` concurrently this becomes wrong** — check it when Task 18 wires
+  the composition root.
+- Task 16, unbuilt overflow rows: the backups 100,000/100,001 boundary is not implemented (only the
+  journal-root and staging rows are), and the 1,000,001-aggregate-leaf refusal is covered at
+  recovery level as "refuses on any ledger finding and deletes nothing" rather than literally — Task
+  11's `foundation-ledger.test.ts` pins the literal case against a streaming port.
+- Task 16, manifest compensation runs more than once on a reverse prefix holding several `M` steps,
+  plus once for the current unadvanced step. The adapter owns idempotency and the spec describes
+  manifest rollback as one logical restore; confirm that is intended rather than assumed.
+- Task 16, the synthetic-world scaffold is duplicated across the three new test files (~150 lines
+  each) because extracting it needed a tenth staged path. Extract it.
 - Task 14/15, duplicated computation that can drift into disagreement: `maximumFoundationJournalBytes`
   in `packages/core/src/lifecycle/store.ts` and `widestJournalBytes` in
   `packages/core/src/lifecycle/foundation-participant.ts` are the same 8-phase

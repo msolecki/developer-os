@@ -35,6 +35,25 @@ export {
   validateFoundationParticipantPair,
   validateFoundationParticipantRef,
 } from "./codecs.js";
+export { LifecycleCoordinator } from "./coordinator.js";
+export type {
+  LifecycleCoordinatorBoundaryV1,
+  LifecycleCoordinatorDependenciesV1,
+  LifecycleCoordinatorOutcomeV1,
+  LifecycleEffectAdapterV1,
+  LifecycleEffectStateV1,
+  LifecycleParticipantAdaptersV1,
+} from "./coordinator.js";
+export {
+  compactTerminalCoordinator,
+  completeCoordinatorEnvelope,
+} from "./coordinator-compaction.js";
+export type { LifecycleCoordinatorCompactionDependenciesV1 } from "./coordinator-compaction.js";
+export { LifecycleRecoveryRefusalError, LifecycleRecoveryService } from "./recovery.js";
+export type {
+  LifecycleRecoveryDependenciesV1,
+  LifecycleRecoveryPolicyV1,
+} from "./recovery.js";
 export type {
   LifecycleCodecContextV1,
   LifecycleHashedValueCodec,

@@ -157,6 +157,7 @@ const STAT_OPTION_EXEMPT: readonly string[] = [
   "packages/core/src/lifecycle/absent-manifest.ts",
   "packages/core/src/lifecycle/foundation-participant.ts",
   "packages/core/src/lifecycle/foundation-compaction.ts",
+  "packages/core/src/lifecycle/coordinator.ts",
 ];
 
 /**
