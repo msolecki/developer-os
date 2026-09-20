@@ -62,6 +62,8 @@ import type { CliIo } from "./io.js";
 import type { CliBootstrapContext } from "./bootstrap/context.js";
 import { createLifecycleContext } from "./lifecycle/context.js";
 import type { CliLifecycleContext } from "./lifecycle/context.js";
+import { createGatedTransactionExecutor } from "./lifecycle/mutation-gate.js";
+import type { CliTransactionExecutor } from "./lifecycle/mutation-gate.js";
 
 export const PRODUCT_VERSION = "0.0.0";
 
@@ -156,7 +158,12 @@ export interface CliContext {
   readonly transactions: TransactionStore;
   readonly manifests: ManifestStore;
   readonly fs: CliFileSystem;
-  readonly executor: TransactionExecutor;
+  /**
+   * The mutation gate, not the raw executor: on a V2 home every Foundation transaction runs
+   * under the global lock with an allocated `tx` ID, and on a V1 or manifest-absent home it
+   * is the legacy executor unchanged (`lifecycle/mutation-gate.ts`).
+   */
+  readonly executor: CliTransactionExecutor;
   readonly guards: CliGuards;
   readonly paths: RuntimePaths;
   readonly productVersion: string;
@@ -738,18 +745,21 @@ export function createProductionContext(
     redact: createRedactor(redactionKey),
   });
   const now = (): Date => new Date();
-  const transactionExecutor = new TransactionExecutor({
-    stateDir: paths.stateDir,
-    stagingDir: paths.stagingDir,
-    backupsDir: paths.backupsDir,
-    fs: NODE_FILE_SYSTEM,
-    clock: () => now().toISOString(),
-    generateId: () => `tx_${randomUUID()}`,
-    guards: guards.transaction,
-    lockProvider,
-    publishBootstrapInitialJournalNoReplace,
-  });
-  return {
+  const executorWith = (generateId: () => string): TransactionExecutor =>
+    new TransactionExecutor({
+      stateDir: paths.stateDir,
+      stagingDir: paths.stagingDir,
+      backupsDir: paths.backupsDir,
+      fs: NODE_FILE_SYSTEM,
+      clock: () => now().toISOString(),
+      generateId,
+      guards: guards.transaction,
+      lockProvider,
+      publishBootstrapInitialJournalNoReplace,
+    });
+  const lifecycle = productionLifecycleContext(paths, lockProvider, now);
+  const composed: { current: CliContext | null } = { current: null };
+  const context: CliContext = {
     io: options.io,
     env: options.env,
     userHome: options.userHome,
@@ -767,13 +777,42 @@ export function createProductionContext(
       guards: guards.manifest,
     }),
     fs: NODE_FILE_SYSTEM,
-    executor: transactionExecutor,
+    executor: createGatedTransactionExecutor({
+      context: () => composedContext(composed),
+      lifecycle,
+      legacy: executorWith(() => `tx_${randomUUID()}`),
+      allocated: (id) => executorWith(allocatedIdOnce(id)),
+    }),
     guards,
     paths,
     productVersion: PRODUCT_VERSION,
     runner,
     bootstrap: { state: "unavailable_until_packaged_handoff" },
-    lifecycle: productionLifecycleContext(paths, lockProvider, now),
+    lifecycle,
+  };
+  composed.current = context;
+  return context;
+}
+
+/**
+ * The gated executor is a member of the very context it classifies, so it receives the cell
+ * the composition root fills once the literal is complete rather than the context itself.
+ */
+export function composedContext(cell: { readonly current: CliContext | null }): CliContext {
+  if (cell.current === null) throw new Error("the CLI context is read before it is composed");
+  return cell.current;
+}
+
+/**
+ * §7: a collected allocated ID never reappears, so the executor the gate hands one to may
+ * issue it exactly once and refuses a second transaction rather than reusing the counter.
+ */
+export function allocatedIdOnce(id: string): () => string {
+  let issued = false;
+  return (): string => {
+    if (issued) throw new Error("an allocated lifecycle transaction ID is issued once");
+    issued = true;
+    return id;
   };
 }
 

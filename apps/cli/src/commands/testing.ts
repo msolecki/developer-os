@@ -46,6 +46,8 @@ import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.j
 import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
 import type { BootstrapEvidenceReportV1 } from "../bootstrap/report.js";
 import {
+  allocatedIdOnce,
+  composedContext,
   createGuards,
   NODE_FILE_SYSTEM,
   pathEnvironmentFor,
@@ -54,6 +56,7 @@ import {
 import type { CliContext } from "../context.js";
 import type { CliIo } from "../io.js";
 import { createLifecycleContext } from "../lifecycle/context.js";
+import { createGatedTransactionExecutor } from "../lifecycle/mutation-gate.js";
 import {
   admitRootVerifiedPackagedRelease,
   type PackagedReleaseIdentityV1,
@@ -582,33 +585,35 @@ export async function createCommandFixture(
         return NODE_FILE_SYSTEM.unlink(path);
       },
     };
-    const transactionExecutor = new TransactionExecutor({
-      stateDir: paths.stateDir,
-      stagingDir: paths.stagingDir,
-      backupsDir: paths.backupsDir,
-      fs: transactionFileSystem,
-      clock: () => now().toISOString(),
-      generateId: () => {
-        sequence += 1;
-        return `tx_fixture_${String(sequence).padStart(3, "0")}`;
-      },
-      guards: guards.transaction,
-      lockProvider,
-      publishBootstrapInitialJournalNoReplace:
-        retainedRename.renameNoReplace.bind(retainedRename),
-      afterPhase: (
-        phase: TransactionPhase,
-        journal: TransactionJournalV1,
-      ): void => {
-        if (phase !== options.interruptAfter) return;
-        if (
-          options.interruptKind !== undefined &&
-          journal.kind !== options.interruptKind
-        ) {
-          return;
-        }
-        throw new Error(`synthetic interruption after ${phase}`);
-      },
+    const executorWith = (generateId: () => string): TransactionExecutor =>
+      new TransactionExecutor({
+        stateDir: paths.stateDir,
+        stagingDir: paths.stagingDir,
+        backupsDir: paths.backupsDir,
+        fs: transactionFileSystem,
+        clock: () => now().toISOString(),
+        generateId,
+        guards: guards.transaction,
+        lockProvider,
+        publishBootstrapInitialJournalNoReplace:
+          retainedRename.renameNoReplace.bind(retainedRename),
+        afterPhase: (
+          phase: TransactionPhase,
+          journal: TransactionJournalV1,
+        ): void => {
+          if (phase !== options.interruptAfter) return;
+          if (
+            options.interruptKind !== undefined &&
+            journal.kind !== options.interruptKind
+          ) {
+            return;
+          }
+          throw new Error(`synthetic interruption after ${phase}`);
+        },
+      });
+    const transactionExecutor = executorWith(() => {
+      sequence += 1;
+      return `tx_fixture_${String(sequence).padStart(3, "0")}`;
     });
     const bootstrapExecutor = packagedRelease === null
       ? null
@@ -648,7 +653,16 @@ export async function createCommandFixture(
         });
     if (bootstrapExecutor !== null) fixtureBootstrapExecutors.push(bootstrapExecutor);
 
-    return {
+    const lifecycle = createLifecycleContext({
+      paths,
+      renameNoReplace: retainedRename.renameNoReplace.bind(retainedRename),
+      locks: new RecordingStableLockProvider(new MacOsStableLockProvider(), stableLockEvents),
+      transactionLocks: lockProvider,
+      effectiveUid: process.getuid?.() ?? -1,
+      now,
+    });
+    const composed: { current: CliContext | null } = { current: null };
+    const built: CliContext = {
       io,
       env,
       userHome,
@@ -683,7 +697,12 @@ export async function createCommandFixture(
         guards: guards.manifest,
       }),
       fs: NODE_FILE_SYSTEM,
-      executor: transactionExecutor,
+      executor: createGatedTransactionExecutor({
+        context: () => composedContext(composed),
+        lifecycle,
+        legacy: transactionExecutor,
+        allocated: (id) => executorWith(allocatedIdOnce(id)),
+      }),
       guards,
       paths,
       productVersion: PRODUCT_VERSION,
@@ -691,15 +710,10 @@ export async function createCommandFixture(
       bootstrap: bootstrapExecutor === null || packagedRelease === null
         ? { state: "unavailable_until_packaged_handoff" }
         : { state: "available", executor: bootstrapExecutor, packagedRelease, inspectEvidence },
-      lifecycle: createLifecycleContext({
-        paths,
-        renameNoReplace: retainedRename.renameNoReplace.bind(retainedRename),
-        locks: new RecordingStableLockProvider(new MacOsStableLockProvider(), stableLockEvents),
-        transactionLocks: lockProvider,
-        effectiveUid: process.getuid?.() ?? -1,
-        now,
-      }),
+      lifecycle,
     };
+    composed.current = built;
+    return built;
   };
   const context = buildContext();
 
