@@ -1299,6 +1299,53 @@ git commit -m "feat(cli): add config get and config set"
 
 ### Task 21: Absent-manifest uninstall without a coordinator envelope · M
 
+Corrections this task's implementation forced, recorded against the steps below:
+
+- **Step 1's `.v2` snippet contradicts this task's own Cover list, and the Cover list wins.** The
+  snippet builds the fixture with `bootstrapFailureAfter: "after_foundation"` and then expects the
+  key deleted and `runInit` to succeed. That is impossible: a rollback at that point retains
+  `config.toml`, an unprojected ordinary path, so §6 admits no shape and the arm refuses
+  `absent_manifest_residue` — which is exactly what the Cover list two paragraphs below demands.
+  The implemented fixture uses `after_global_lock`, probed to give shape `state_key_only`,
+  `blocksNewIntent: false` and `bootstrapLeaf: null`, with in-tree precedent in
+  `apps/cli/src/bootstrap/bookkeeping.v2.test.ts`. `after_payloads` and `after_created_paths` were
+  probed and would also serve.
+- **`removeRedactionKeyFile` is NOT deleted**, against the file list. It has two call sites and
+  only the `manifest === null` one is removed; the manifest-present site is required by three
+  tests the plan does not list for rewrite, one of which pins that the key is unlinked *before*
+  `revertArtifacts` so `rmdir(stateDir)` can succeed. Deleting it would reintroduce a state
+  directory holding one orphaned secret.
+- **`main.test.ts`'s `harness.err` does not change.** The plan says it "now equals the refusal's
+  lines rather than `[]`". `emit` in `apps/cli/src/main.ts` returns early for `--json` and writes
+  the whole envelope, success or failure, to stdout only — so `err` stays `[]` and the only change
+  is `0` → `6` on the second uninstall.
+- **Step 4's fourth command silently skips the citations gate.** `-t 'installs, reports, repeats'`
+  applies to every file in the invocation, so `repository/citations.test.ts` reports
+  `1 skipped` and never runs. It was run separately and passes 22/22. Tasks copying this command
+  shape must split it.
+- **Two test titles were renamed beyond the instruction**, because both old titles asserted the
+  opposite of what the test now proves: `"is idempotent"` and `"still reports and preserves
+  retained evidence when the manifest is absent"`. Both new titles keep the substring Step 4's
+  `-t` filter needs.
+- **A new import cycle**, named rather than hidden: `apps/cli/src/commands/uninstall.ts` imports
+  `runAbsentManifestUninstall` from `apps/cli/src/lifecycle/absent-manifest-uninstall.ts`, which
+  imports the runtime class `UninstallRefusal` back. Nothing is touched at module-evaluation time
+  and every gate is green; the alternatives were a duplicate refusal class or moving
+  `UninstallRefusal` outside the file list.
+- **`runUninstall` refuses exit 6 with D20's guidance when `context.lifecycle` is `undefined`**, an
+  arm the plan does not specify. Fail-closed, pinned by a test, and the same decision Task 19 took
+  for the mutation gate.
+- **`absentManifestEvidenceOf` forwards `envelope.plan.bootstrapIdentity` whole** rather than
+  rebuilding `{dev, ino}`: rebuilding made `tests/repository/check.js`'s identity-encoding rule
+  treat the module as identity-recording and fail three guarded-port `lstat` calls that cannot
+  take `{ bigint: true }`. The guarded port already returns exact decimal identities.
+- **The integrator, not the implementer, excised one further clause.** The plan said to stop before
+  `foundation-constraints.md`'s "Launchd never inherits" sentence and to leave every launchd
+  sentence in place, which left that sentence still asserting "the flat coordinator admits one
+  final journal plus one bounded rewrite temp" — false once A3 withdrew the envelope, and the exact
+  clause the plan told the implementer to excise from `foundation.md`'s parallel sentence. The
+  sentence now ends at "current effect frontier." Recorded here rather than done silently.
+
 Source: old Task 23 (absent-manifest half) without the key-present coordinator (A3, D22); D27. Spec 1 §6 `key_absent`/`key_present`; A12; §8.3 residuals 8 and 9; A9 round trips "absent-manifest key deletion → `init`", "`key_absent` → `init`", "V2 `init` rolled back → uninstall → `init`"; roadmap bullet on the architecture notes that still describe the withdrawn envelope.
 
 **Files:**
@@ -1330,7 +1377,7 @@ export async function runAbsentManifestUninstall(input: {
 }): Promise<UninstallResultV1 & { readonly arm: AbsentManifestUninstallArmV1 }>;
 ```
 
-- [ ] **Step 1: Write failing arm and round-trip tests**
+- [x] **Step 1: Write failing arm and round-trip tests**
 
 ```ts
 it("deletes an orphaned key after a rolled-back V2 init under the bootstrap leaf, then init succeeds", async () => {
@@ -1385,13 +1432,13 @@ Existing tests rewritten to D27's contract (verify each by name before editing):
 - `main.test.ts` "runs the whole lifecycle through argument dispatch" (V1): the second `["uninstall", "--yes", "--json"]` returns 6, and `harness.err` now equals the refusal's lines rather than `[]`.
 - `tests/e2e/foundation.test.ts`, the "uninstall again" block: expect `EXIT_CODES.recoveryRequired`, a failure result whose recovery names archiving the product home, and the same three empty inventory differences. Replace the comment above it with one sentence: D27 makes a second V1 uninstall refuse, and the inventory assertions prove the refusal changed nothing.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root apps/cli src/lifecycle/absent-manifest-uninstall.test.ts src/lifecycle/absent-manifest-uninstall.v2.test.ts`
 
 Expected: FAIL — the module does not exist, and the shipped branch unlinks the key over any residue.
 
-- [ ] **Step 3: Implement both arms and correct the architecture notes**
+- [x] **Step 3: Implement both arms and correct the architecture notes**
 
 `key_absent`: `inspectAbsentManifestProductHome` twice; the two `walkFingerprint`s must be equal, else exit 6; return. `key_present`: acquire the leaf `<state>/.lifecycle-bootstrap.lock` with the transaction lock provider, require the exact owner `0600` zero-byte single-link shape, repeat the inspection (the fresh leaf projects away as unattributed), require shape `state_key_only`, call `observeSecretOpaqueKey`, recheck by `lstat` that `dev`/`ino` are unchanged, `unlinkSecretOpaqueKey`, sync `state`, verify absence, release the leaf and leave it in place. Never unlink or `rmdir` anything else. A refusal over residue carries recovery "developer-os uninstall, then archive the product home manually, then developer-os init" (D20).
 
@@ -1402,7 +1449,7 @@ Documentation, replacing only these passages and leaving every launchd sentence 
 
 Each replacement states A2, A3 and A12 as they now hold: absent-manifest uninstall has no coordinator envelope; `key_absent` performs two identical read-only walks and creates nothing; `key_present` deletes the key under the bootstrap leaf by rechecked identity; the leaf and the bookkeeping set are never unlinked; §8.3 residuals 8 (check-then-unlink window) and 9 (shape admission) are accepted.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root apps/cli src/lifecycle/absent-manifest-uninstall.test.ts src/lifecycle/absent-manifest-uninstall.v2.test.ts`
 
@@ -1414,7 +1461,7 @@ Run: `npm run build && npx vitest run --root tests e2e/foundation.test.ts -t 'in
 
 Expected: PASS. Add `absent-manifest-uninstall.v2.test.ts`'s duration to `lifecycle-v2`'s recorded local total and update its `timeout-minutes`.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Tick, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 
@@ -1786,6 +1833,21 @@ fixed in its own task. Each needs a failing test first, then the smallest correc
 the whole-plan review's starting point, not its scope — Tasks 14–25 received no per-task review at
 all and must be covered from scratch.
 
+- Task 21 found NEW-93, which is outside plan 1a's file lists and must not be closed inside it:
+  `projectRegularEntry` reads and SHA-256s `state/redaction.key` whenever it sits in a retained
+  tree, against the Global Constraint that the key is never read, hashed or journaled. Whether the
+  digest is *persisted* is unestablished. Settle that before the plan closes, because it decides
+  whether this is a read or a journaling defect.
+- Task 21, the check-then-unlink window is pinned only at the unit level: `deleteOrphanedKey` has
+  no injectable seam between `observeSecretOpaqueKey` and `unlinkSecretOpaqueKey`, both of which
+  use raw `node:fs/promises` rather than the guarded port. The test proves the detected case
+  refuses and preserves everything; it cannot prove a closed window. §8.3 residual 8 stands.
+- Task 21, two residue cases are proven with a doctored `BootstrapEvidenceAdmissionV1` (an
+  `as unknown as` override of `retainedEnvelopes` / `active`) rather than real V2 evidence, to
+  avoid two more real inits in `lifecycle-v2`. The core-level attribution refusal is pinned in
+  `packages/core/src/lifecycle/absent-manifest.test.ts`; confirm the CLI seam is genuinely covered.
+- Task 21, the new `uninstall.ts` ↔ `absent-manifest-uninstall.ts` import cycle wants a verdict:
+  break it, or record that it is accepted.
 - Task 18, the refusal reason code disagrees with the spec text. Scope decision 1 and the "No
   external effects" constraint both say a Git, launchd or push leaf refuses
   `unsupported_until_plan_1b`, but `failureFrom`'s `kindOf` reads `error.name` and publishes

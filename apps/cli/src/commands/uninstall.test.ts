@@ -136,7 +136,12 @@ describe("runUninstall", () => {
     expect(await inventoryDigest(fixture.root)).toEqual(allBefore);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
-  it("still reports and preserves retained evidence when the manifest is absent", async () => {
+  /**
+   * Scope decision 11: the shipped downcast uninstall leaves its own Foundation journal
+   * under `state/transactions`, which §6 reads as residue, so D27 refuses the second run.
+   * Task 22's coordinator uninstall leaves only the bookkeeping set and restores success.
+   */
+  it("preserves every retained evidence inode when the manifest is absent (D27 refuses the second run)", async () => {
     const fixture = await createCommandFixture("uninstall-bootstrap-no-manifest", {
       bootstrapAvailable: true,
     });
@@ -147,10 +152,10 @@ describe("runUninstall", () => {
 
     const result = await runUninstall(fixture.rebuildContext(), ACCEPTED);
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.data.removed).toEqual([]);
-    expect(result.data.retainedBootstrapEvidence).toHaveLength(1);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(result.error.recovery).toContain("archive the product home");
     expect(await fixture.bootstrapEvidenceIdentities()).toEqual(before);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
@@ -463,7 +468,12 @@ describe("runUninstall", () => {
     expect(await inventory(fixture.root)).toEqual(before);
   });
 
-  it("is idempotent", async () => {
+  /**
+   * D27: §6 governs every home, so the Foundation journals and backups the first uninstall
+   * leaves behind are residue the second run refuses on rather than walking past. Idempotent
+   * in effect — the inventory is untouched — but no longer a success.
+   */
+  it("is idempotent in effect: a second uninstall refuses over V1 residue (D27)", async () => {
     const fixture = await createCommandFixture("uninstall-idempotent");
     await runInit(fixture.context, ACCEPTED);
     await runUninstall(fixture.context, { dryRun: false, assumeYes: true });
@@ -474,10 +484,10 @@ describe("runUninstall", () => {
       assumeYes: true,
     });
 
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.data.removed).toEqual([]);
-    expect(result.data.transactionId).toBeNull();
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(result.error.recovery).toContain("archive the product home");
     expect(await inventory(fixture.root)).toEqual(before);
   });
 
@@ -536,15 +546,13 @@ describe("runUninstall", () => {
   });
 
   /**
-   * The trap the first implementation left behind, and the reason removal moved
-   * above `runUninstall`'s early return. `uninstall` removed the key, the next
-   * command of any kind put it back — and from then on the key could never be
-   * removed again, because with the manifest already gone `runUninstall`
-   * returns before it reaches the removal. The same trap caught an `init` that
-   * failed and reverted: an orphaned secret nothing in the product would ever
-   * clean up.
+   * The documented orphaned-key trap, as D27 leaves it. `uninstall` removed the key, the
+   * next command of any kind put it back, and the manifest is gone — but the V1 Foundation
+   * residue beside it fits no §6 shape, so deleting the key would erase the last
+   * uninspected evidence. D20's guidance is the way out, and archiving the product home
+   * takes the key with it.
    */
-  it("removes the redaction key even when no manifest is left to read", async () => {
+  it("preserves an orphaned key beside V1 residue and names the archive recovery", async () => {
     const fixture = await createCommandFixture("uninstall-key-no-manifest");
     await runInit(fixture.context, ACCEPTED);
     await runUninstall(fixture.context, ACCEPTED);
@@ -555,8 +563,11 @@ describe("runUninstall", () => {
 
     const result = await runUninstall(fixture.context, ACCEPTED);
 
-    expect(result.ok).toBe(true);
-    expect(await exists(keyFile)).toBe(false);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(result.error.recovery).toContain("archive the product home");
+    expect(await exists(keyFile)).toBe(true);
   });
 
   it.each([true, false])(
@@ -577,7 +588,12 @@ describe("runUninstall", () => {
         assumeYes: true,
       });
 
-      expect(result.ok).toBe(true);
+      /** D27: with the manifest gone, the V1 Foundation residue refuses even a dry run. */
+      if (withManifest) {
+        expect(result.ok).toBe(true);
+      } else {
+        expect(result).toMatchObject({ ok: false, code: EXIT_CODES.recoveryRequired });
+      }
       expect(await exists(keyFile)).toBe(true);
     },
   );

@@ -563,8 +563,8 @@ created child is retained as recovery-required. The per-job zero-byte runtime lo
 process-lifetime lease acquired before any global-lock wait, so uninstall drains runners without
 guessing from service absence. A removed lease is silent only when a marker, absent manifest, or exact
 typed uninstall coordinator proves it. Fresh absent-manifest admission requires exact absence of
-config, activation, runtime, lease, plist, and lifecycle evidence but performs no service probe before
-the recovery epoch; without retained evidence no generated label is owned, and base/prefix labels grant
+config, activation, runtime, lease, plist, and lifecycle evidence and performs no service probe;
+without retained evidence no generated label is owned, and base/prefix labels grant
 no authority. Git metadata inputs have numeric pre-read limits, while canonical hash-bound source/
 destination shadow configs set `http.followRedirects=false` before spawn and prevent a redirect from
 creating a second destination request. Persisted retries bind a path-slot shadow-config template even
@@ -594,14 +594,18 @@ the verified real-plist inode to bootstrap: it copies exact bytes to a private l
 only FD 3, and returns every descriptor count to baseline, so rename, replacement, and in-place writes
 cannot change loaded bytes. A transient pre-product `LifecycleBootstrapLockV1` linearizes concurrent
 init/fresh uninstall and forces a second whole-home inventory; only its exact locked residue projects
-away. The absent-key arm allocates nothing, while the present-key arm alone creates recoverable key
-transitions in a closed flat bootstrap envelope, never by adopting or creating the installed ledger.
+away. The absent-key arm allocates nothing and creates nothing — two identical read-only walks and a
+return — while the present-key arm creates only that leaf and deletes the redaction key under it by
+rechecked `dev`/`ino` identity, never adopting or creating the installed ledger and never unlinking
+the leaf or A12's bookkeeping set.
 Directory-creation authority is deliberately not reconstructed after process death: an exact empty
-product/state skeleton may remain, while file/control residue never gains that exception. Initial
-nonce/allocator temps are admitted only through their exact bounded prefix grammars.
+product/state skeleton may remain, while file/control residue never gains that exception. §8.3's
+residual 8 stands accepted: macOS unlinks a regular file by pathname, so the recheck narrows the
+window between the observation and the unlink and cannot close it.
 The same closure applies at launchd's byte boundary: only a current-frontier linked planned-byte
-prefix may precede unlink, and the child inherits only the unlinked snapshot FD. A flat absent-manifest
-coordinator rewrite crash may retain only its authoritative final journal plus one bounded temp.
+prefix may precede unlink, and the child inherits only the unlinked snapshot FD. An absent-manifest
+uninstall crash leaves the key or no key and nothing else, because neither arm writes a journal;
+§8.3's residual 9, the shape admission that decides which arm runs, stands accepted with it.
 Runner installation authentication remains stage 1 and active provenance remains solely
 the locked stage-2 eligibility decision.
 The active opt-in-surfaces design §2.4 carries the crash-resumable protocol. This paragraph remains the

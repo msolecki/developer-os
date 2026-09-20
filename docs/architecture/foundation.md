@@ -337,15 +337,17 @@ The post-final correction makes the reflog postimage bound exactly 64 MiB plus i
 admitted-entry, and closed-OID counts are equal and capped at 200,001 before a child permit. Launchd
 bootstrap copies the verified planned plist into an already-unlinked private snapshot, inherits only
 FD 3, and closes every source/snapshot descriptor on every path, so an in-place write to the real plist
-cannot change loaded bytes. Before the permanent global lock exists, init and fresh absent-manifest
-uninstall use the exact transient `LifecycleBootstrapLockV1` protocol with a second complete
-inventory; key absence returns before ID/coordinator creation, while key presence alone derives the
-two redaction-key transitions in a flat bootstrap-locked recovery envelope rather than creating the
-installed four-root ledger. A live attempt removes only its identity-recorded empty directories; after
-crash, the indistinguishable exact empty product/state skeleton is preserved, and bounded prefix-typed
-creation temps make initial nonce/allocator recovery deterministic. Launchd inherits only the
-already-unlinked snapshot; its sole linked creation prefix is frontier-bound and recoverable, while
-the flat key-present coordinator admits one final journal plus one bounded rewrite temp. The active opt-in-surfaces design
+cannot change loaded bytes. Before the permanent global lock exists, init uses the exact transient
+`LifecycleBootstrapLockV1` protocol with a second complete inventory, and absent-manifest uninstall
+carries no coordinator envelope at all (A3): `key_absent` performs two identical read-only walks and
+creates nothing, while `key_present` acquires only the bootstrap leaf, repeats the inventory under it,
+and deletes the redaction key by rechecked `dev`/`ino` identity without reading a byte of it. A live
+attempt removes only its identity-recorded empty directories; after crash, the indistinguishable exact
+empty product/state skeleton is preserved, and neither uninstall arm unlinks or `rmdir`s the bootstrap
+leaf or any member of A12's bookkeeping set — §8.3's residual 8, the check-then-unlink window the
+identity recheck narrows but cannot close, and residual 9, shape admission, both stand accepted.
+Launchd inherits only the already-unlinked snapshot; its sole linked creation prefix is frontier-bound
+and recoverable. The active opt-in-surfaces design
 §§2.3–2.4, 4.4, 5.3–5.4, 6, and 7 is
 normative; implementation remains pending.
 

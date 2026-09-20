@@ -459,7 +459,7 @@ describe("Foundation temporary-HOME lifecycle", () => {
         ).toBe(true);
       }
 
-      // --- uninstall again: nothing owned remains -----------------------------
+      // --- uninstall again: D27 refuses over the first run's residue ----------
 
       const beforeSecondUninstall = await inventory(home.root);
       const again = await runJson<UninstallResultV1>(home, [
@@ -468,25 +468,12 @@ describe("Foundation temporary-HOME lifecycle", () => {
         "--json",
       ]);
 
-      expect(again.exitCode).toBe(EXIT_CODES.success);
-      expect(okData(again.result)).toStrictEqual({
-        schemaVersion: 1,
-        removed: [],
-        restored: [],
-        preserved: [],
-        retainedBootstrapEvidence: [],
-        transactionId: null,
-      });
+      expect(again.exitCode).toBe(EXIT_CODES.recoveryRequired);
+      expect(errorOf(again.result).recovery).toContain("archive the product home");
 
       /**
-       * A true no-op, in both directions, and it took the amendment to Task 1
-       * to make it one. Building a context for this invocation used to call
-       * `loadOrCreateRedactionKey`, so the very command that had just removed
-       * the key put it back — and could then never remove it again, because
-       * `runUninstall` returns early when the manifest is absent and the
-       * removal sat below that return. The composition root now *reads*, and
-       * the removal now sits above the return, so the second uninstall neither
-       * regenerates the secret nor leaves one orphaned.
+       * D27 makes a second V1 uninstall refuse, and the inventory assertions prove the
+       * refusal changed nothing.
        */
       const afterSecondUninstall = await inventory(home.root);
       expect(

@@ -34,6 +34,10 @@ import type { CliContext } from "../context.js";
 import { createCanonicalPathEvidence, createOwnerPathAdmission } from "../bootstrap/admission.js";
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
+import {
+  ABSENT_MANIFEST_ARCHIVE_RECOVERY,
+  runAbsentManifestUninstall,
+} from "../lifecycle/absent-manifest-uninstall.js";
 import { readConfigFile } from "./doctor.js";
 
 export interface UninstallResultV1 {
@@ -765,22 +769,23 @@ export async function runUninstall(
 
     const manifest = await readUninstallManifest(context, paths);
     if (manifest === null) {
-      /**
-       * **Above the early return, deliberately.** The key is not a managed
-       * artifact, so it is the one thing `uninstall` removes that an absent
-       * manifest says nothing about — and below this return it was
-       * unreachable: an `init` that failed and reverted, or a second
-       * `uninstall`, left an orphaned secret that nothing in the product would
-       * ever clean up again.
-       */
-      if (!options.dryRun) await removeRedactionKeyFile(context);
+      const lifecycle = context.lifecycle;
+      if (lifecycle === undefined) {
+        throw new UninstallRefusal(
+          EXIT_CODES.recoveryRequired,
+          "this product home cannot be inspected for removal without a manifest",
+          [context.paths.home],
+          ABSENT_MANIFEST_ARCHIVE_RECOVERY,
+        );
+      }
+      const outcome = await runAbsentManifestUninstall({ context, lifecycle, options, evidence });
       return success({
         schemaVersion: 1,
-        removed: [],
-        restored: [],
-        preserved: evidence.retainedPaths,
-        retainedBootstrapEvidence: evidence.report.ids,
-        transactionId: null,
+        removed: outcome.removed,
+        restored: outcome.restored,
+        preserved: outcome.preserved,
+        retainedBootstrapEvidence: outcome.retainedBootstrapEvidence,
+        transactionId: outcome.transactionId,
       });
     }
 

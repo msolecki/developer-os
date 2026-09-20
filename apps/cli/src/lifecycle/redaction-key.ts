@@ -3,7 +3,12 @@
  * hashed or journaled, so the plan binds only the leaf's observed identity and the tombstone
  * the coordinator will retain it under.
  */
+import { constants } from "node:fs";
+import type { BigIntStats } from "node:fs";
+import { lstat, open, unlink } from "node:fs/promises";
+
 import {
+  LifecycleRecoveryRequiredError,
   encodeCanonicalJson,
   hashCanonicalJson,
   parseCanonicalAbsolutePathText,
@@ -157,4 +162,92 @@ export function createRedactionKeyStatePlanCodec(
 
 export function redactionKeyStatePlanHash(plan: RedactionKeyStatePlanV1): LowerHexSha256 {
   return hashCanonicalJson(REDACTION_KEY_STATE_PLAN_HASH_DOMAIN, planJson(plan));
+}
+
+/**
+ * `O_NONBLOCK` because `open(O_RDONLY)` on a FIFO blocks until a writer appears and the
+ * regular-file guard is downstream of the open, so without it anyone who can write to
+ * `state` hangs the CLI forever. `bigint: true` because an APFS inode exceeds 2^53 and a
+ * rounded `ino` makes two distinct files compare equal.
+ */
+const SECRET_OPEN_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK;
+
+function refuseSecret(reason: string, path: CanonicalAbsolutePathV1): never {
+  throw new LifecycleRecoveryRequiredError(reason, [path]);
+}
+
+function isMissing(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("code" in error)) return false;
+  return error.code === "ENOENT" || error.code === "ENOTDIR";
+}
+
+function admitSecretShape(
+  path: CanonicalAbsolutePathV1,
+  stats: BigIntStats,
+  effectiveUid: number,
+): void {
+  if (stats.isSymbolicLink() || !stats.isFile()) refuseSecret("redaction_key_kind", path);
+  if (Number(stats.uid) !== effectiveUid) refuseSecret("redaction_key_owner", path);
+  if (Number(stats.mode & 0o777n) !== SECRET_MODE) refuseSecret("redaction_key_mode", path);
+  if (Number(stats.nlink) !== 1) refuseSecret("redaction_key_link", path);
+  if (stats.size < BigInt(MINIMUM_SECRET_BYTES) || stats.size > BigInt(MAXIMUM_SECRET_BYTES)) {
+    refuseSecret("redaction_key_size", path);
+  }
+}
+
+export async function observeSecretOpaqueKey(
+  path: CanonicalAbsolutePathV1,
+  effectiveUid: number,
+): Promise<SecretOpaqueFileStateV1> {
+  let handle;
+  try {
+    handle = await open(path, SECRET_OPEN_FLAGS);
+  } catch (error) {
+    if (isMissing(error)) return { state: "absent" };
+    return refuseSecret("redaction_key_open", path);
+  }
+  try {
+    const stats = await handle.stat({ bigint: true });
+    admitSecretShape(path, stats, effectiveUid);
+    return {
+      state: "present",
+      kind: "regular_file",
+      ownerUid: parseEffectiveUid(Number(stats.uid), effectiveUid),
+      mode: SECRET_MODE,
+      nlink: 1,
+      size: Number(stats.size),
+      dev: parseUInt64Decimal(stats.dev.toString(10)),
+      ino: parseUInt64Decimal(stats.ino.toString(10)),
+    };
+  } finally {
+    await handle.close();
+  }
+}
+
+/**
+ * The recheck the observation cannot carry: `observeSecretOpaqueKey` fstats a descriptor,
+ * this lstats the pathname, and `unlink` resolves it once more. macOS offers no unlink by
+ * descriptor for a regular file, so the last window stays open (§8.3 residual 8) and the
+ * comparison only narrows it.
+ */
+export async function unlinkSecretOpaqueKey(
+  path: CanonicalAbsolutePathV1,
+  expected: Extract<SecretOpaqueFileStateV1, { state: "present" }>,
+): Promise<void> {
+  let stats: BigIntStats;
+  try {
+    stats = await lstat(path, { bigint: true });
+  } catch (error) {
+    if (isMissing(error)) return refuseSecret("redaction_key_vanished", path);
+    throw error;
+  }
+  admitSecretShape(path, stats, expected.ownerUid);
+  if (
+    stats.dev.toString(10) !== expected.dev ||
+    stats.ino.toString(10) !== expected.ino ||
+    stats.size !== BigInt(expected.size)
+  ) {
+    refuseSecret("redaction_key_identity", path);
+  }
+  await unlink(path);
 }

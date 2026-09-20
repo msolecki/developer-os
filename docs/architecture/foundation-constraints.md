@@ -54,14 +54,16 @@ The approved post-final correction makes every reflog append transition/projecti
 represents the legal 64-MiB-plus-4-KiB postimage, aligns the pack process/header/reader/closure count
 at 200,001, and replaces the real-plist FD with an already-unlinked private snapshot whose descriptor
 ownership closes on every outcome. It also adds the transient pre-product
-`LifecycleBootstrapLockV1`: init and fresh absent-manifest uninstall re-inventory under that lock,
-project away only its exact control residue, and clean it by inode while held. An absent key returns
-before allocation; a present key alone creates the two-step coordinator in an exact flat `state`
-recovery envelope, without creating the installed ledger roots. Only a live attempt's recorded empty
-directories are removable; after crash the exact empty skeleton is preserved, and initial nonce/
-allocator temps have closed path/metadata/byte-prefix recovery grammars. Launchd never inherits the
-real source descriptor, its linked snapshot prefix is legal only at the current effect frontier, and
-the flat coordinator admits one final journal plus one bounded rewrite temp. Runner generation
+`LifecycleBootstrapLockV1`: init and absent-manifest uninstall re-inventory under that leaf and
+project away only its exact control residue. Absent-manifest uninstall has no coordinator envelope
+(A3) and allocates nothing — the absent-key arm walks the home twice read-only and creates nothing at
+all, the present-key arm creates only the leaf and deletes the redaction key under it by rechecked
+identity, and neither unlinks the leaf or any member of A12's bookkeeping set. Only a live init
+attempt's recorded empty directories are removable; after crash the exact empty skeleton is preserved,
+and §8.3's residuals 8 and 9 — the check-then-unlink window and shape admission — stand accepted.
+Launchd never inherits the
+real source descriptor, and its linked snapshot prefix is legal only at the current effect
+frontier. Runner generation
 authentication remains independent of current provenance until the locked eligibility decision.
 The founder approved the complete Spec 1 on 2026-08-28 and its implementation plan is written;
 implementation is still pending and blocked on Spec 2's `InstallationManifestV2` handoff.

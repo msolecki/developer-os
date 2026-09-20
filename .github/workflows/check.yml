@@ -204,21 +204,26 @@ jobs:
 
   lifecycle-v2:
     # Owns the real-V2-home `*.v2.test.ts` files, which `test:suite` excludes.
-    # Running local total of that set: 998.2 s (2026-09-20), the 916 s recorded
-    # on 2026-09-17 for the first three files plus 82.2 s for the fourth,
-    # `admission.v2.test.ts`. That 82.2 s is the maximum of seven observations
-    # spanning 54.6-82.2 s across two machines: an init-dominated file swings
-    # ~25 s run to run, so a single summary is not a safe input and the maximum
-    # is taken — the same rule that made 916 s the conservative figure of its
-    # own three measurements (724 s for the first two files plus the 192 s
-    # summary of `evidence-identity.v2.test.ts`, against a 699 s whole-job
-    # `test:lifecycle` wall clock and an 804 s sum of the three per-file
-    # summaries: 124 s fresh-layout, 488 s bookkeeping, 192 s
-    # evidence-identity). The budget is the running total x 2 for a hosted
-    # runner x 1.5 headroom, floored at 20. The margin is 1.8 s: a total above
-    # 1000 s tips this to 51, so the next `*.v2.test.ts` addition crosses it.
+    # Running local total of that set: 1619.8 s (2026-09-20). The first four
+    # files are 998.2 s: the 916 s recorded on 2026-09-17 for the first three
+    # plus 82.2 s for the fourth, `admission.v2.test.ts`. That 82.2 s is the
+    # maximum of seven observations spanning 54.6-82.2 s across two machines: an
+    # init-dominated file swings ~25 s run to run, so a single summary is not a
+    # safe input and the maximum is taken — the same rule that made 916 s the
+    # conservative figure of its own three measurements (724 s for the first two
+    # files plus the 192 s summary of `evidence-identity.v2.test.ts`, against a
+    # 699 s whole-job `test:lifecycle` wall clock and an 804 s sum of the three
+    # per-file summaries: 124 s fresh-layout, 488 s bookkeeping, 192 s
+    # evidence-identity). The fifth file,
+    # `absent-manifest-uninstall.v2.test.ts`, adds 621.6 s, its two-case summary
+    # measured while a second plan-1a worktree drove real inits on the same
+    # machine. Its one-case predecessor swung 218-312 s under the same
+    # contention, so the swing here is far wider than the fourth file's and the
+    # conservative figure is taken rather than a quieter re-measurement. The
+    # budget is the running total x 2 for a hosted runner x 1.5 headroom,
+    # floored at 20.
     runs-on: macos-15
-    timeout-minutes: 50
+    timeout-minutes: 81
     steps:
       - uses: actions/checkout@v4
         with:

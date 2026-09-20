@@ -166,11 +166,17 @@ describe("run", () => {
     expect(harness.out.join("\n")).not.toContain("Nothing owned by Developer OS remains.");
     expect(harness.out.join("\n")).not.toContain(RETAINED_SECRET);
 
+    /**
+     * D27 with scope decision 11: the downcast uninstall's own Foundation journal is
+     * residue, so the second run's single JSON line is the error envelope. Task 22
+     * restores 0 and the retained-evidence payload with it.
+     */
     fixture.io.out.length = 0;
-    expect(await harness.invoke(["uninstall", "--yes", "--json"])).toBe(0);
+    expect(await harness.invoke(["uninstall", "--yes", "--json"])).toBe(6);
     expect(harness.out).toHaveLength(1);
-    expect(harness.out[0]).toContain('"retainedBootstrapEvidence":[{');
-    expect(harness.out[0]).toContain('"operation":"fresh_v2_init"');
+    expect(harness.out[0]).toContain('"ok":false');
+    expect(harness.out[0]).toContain('"code":6');
+    expect(harness.out[0]).toContain("archive the product home");
     expect(harness.out[0]).not.toContain(RETAINED_SECRET);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
@@ -293,7 +299,8 @@ describe("run", () => {
     expect(await harness.invoke(["doctor", "--json"])).toBe(0);
     expect(await harness.invoke(["init", "--yes", "--json"])).toBe(0);
     expect(await harness.invoke(["uninstall", "--yes", "--json"])).toBe(0);
-    expect(await harness.invoke(["uninstall", "--yes", "--json"])).toBe(0);
+    /** D27: the first uninstall's own Foundation residue refuses the second one. */
+    expect(await harness.invoke(["uninstall", "--yes", "--json"])).toBe(6);
 
     expect(await exists(harness.fixture.paths.brain)).toBe(true);
     expect(await exists(harness.fixture.paths.configFile)).toBe(false);
