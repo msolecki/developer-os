@@ -134,6 +134,8 @@ export const LIFECYCLE_HASH_DOMAINS = {
   coordinatorPlan: "developer-os:lifecycle-coordinator-plan:v1",
   foundationParticipantPlan: "developer-os:foundation-participant-plan:v1",
   preview: "developer-os:lifecycle-preview:v1",
+  gitEffectPlan: "developer-os:git-effect-plan:v1",
+  launchdEffectPlan: "developer-os:launchd-effect-plan:v1",
 } as const;
 
 /** Spec 1 §2.4: a guarded 0600 regular file, which is the only staged-identity mode. */

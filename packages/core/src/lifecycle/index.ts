@@ -95,6 +95,12 @@ export type {
   LifecycleIdPrefixV1,
   LifecycleLedgerBoundsV1,
 } from "./ids.js";
+export { inspectLifecycleLedger } from "./ledger.js";
+export type {
+  LifecycleCoordinatorRecordV1,
+  LifecycleLedgerDependenciesV1,
+  LifecycleLedgerSnapshotV1,
+} from "./ledger.js";
 export {
   LIFECYCLE_LEASE_DRAIN_MS,
   LIFECYCLE_LOCK_RETRY_MS,

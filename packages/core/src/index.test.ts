@@ -92,6 +92,7 @@ describe("the package's public door", () => {
         "foundationParticipantPlanHash",
         "inspectFoundationLedger",
         "inspectLifecycleAllocator",
+        "inspectLifecycleLedger",
         "lifecyclePreviewHash",
         "lifecycleReservationOrder",
         "parseAllocatedFoundationMutationIndex",

@@ -27,6 +27,8 @@ Recorded in the roadmap's 2026-09-17 table; A14–A16 are in Spec 1 in place.
 - **D26.** The 256-mutation capacity of `F(uninstall_artifacts)` is decided at Phase 4b (NEW-85). Plan 1a ships only the pre-allocation refusal `uninstall_artifact_capacity_exceeded` (exit 4).
 - **D27.** Absent-manifest uninstall applies §6 literally: after a V1 `uninstall`, leftover V1 Foundation residue refuses with exit 6 and D20's archive guidance. No spec change; the tests pinning a second successful uninstall are rewritten.
 - **D28 (Spec 1 A16).** The allocated `mf_` manifest participant ID is reserved last in a composite's contiguous ID block.
+- **D34 (2026-09-20).** Task 12's `Produces` block gains `manifestBeforeHash: (plan: TPlan) => LowerHexSha256 | null`, compared against `fs.hashRegular` of the manifest. Taken during Task 12's review, which proved a manifest present at the right cursor with different bytes yielded `uninstall_draining` and so opened a destructive uninstall by path state alone — what §7 forbids as synthesising the drain by path absence. Amended immediately because `inspectLifecycleLedger` still had no consumer.
+- **D35 (2026-09-20).** The effect-journal codec, its phase accessor and the `classify` change they require are **deferred to plan 1b**. Unlike D34 the gap is unreachable in 1a — the null plan codec makes every effect leaf a `lifecycle_effect_root_unsupported` finding before a journal codec could matter — `LifecycleLedgerDependenciesV1` has only two construction sites in the whole plan, both of which Task 18 and 1b touch anyway, and `LifecycleEffectPhaseV1` would have been a guess at 1b's schema with no implementation to check it against. Task 12's Cover list records the full 1b obligation.
 
 ## Global Constraints
 
@@ -142,7 +144,7 @@ Derived from each task's `Consumes:` line. A task starts only when every task it
 | 9 | 24 | 23 |
 | 10 | 25 | 24 |
 
-Shared files. Tasks 12–16 all edit `packages/core/src/lifecycle/index.ts`, `packages/core/src/index.ts` and the exact export list in `packages/core/src/index.test.ts`: the integrator takes the union of the added exports and reruns `npx vitest run --root packages/core src/index.test.ts`. Tasks 17 and 19–24 each set `lifecycle-v2` `timeout-minutes` in `.github/workflows/check.yml`: the integrator keeps the running local total in the job comment and recomputes the budget from it.
+Shared files. Tasks 12–16 all edit `packages/core/src/lifecycle/index.ts`, `packages/core/src/index.ts` and the exact export list in `packages/core/src/index.test.ts`: the integrator takes the union of the added exports, keeps that list in case-insensitive order, and reruns `npx vitest run --root packages/core src/index.test.ts`. Two more shared files the task file lists do not name: `packages/core/src/lifecycle/types.ts`, whose `LIFECYCLE_HASH_DOMAINS` keys also merge as a union, and `tests/repository/check.ts`, whose `STAT_OPTION_EXEMPT` array every task adding a guarded-port caller appends to — Tasks 13 and 15 were verified to conflict there and in `packages/core/src/index.ts`, both resolving as a union of added lines. Tasks 17 and 19–24 each set `lifecycle-v2` `timeout-minutes` in `.github/workflows/check.yml`: the integrator keeps the running local total in the job comment and recomputes the budget from it.
 
 ### Task 12: Coordinator ledger and `LifecycleJournalClosureV1` · L
 
@@ -167,6 +169,8 @@ export interface LifecycleLedgerDependenciesV1<TPlan extends LifecycleCoordinato
   readonly gitEffectPlanCodec: LifecycleValueCodec<unknown> | null;
   readonly launchdEffectPlanCodec: LifecycleValueCodec<unknown> | null;
   readonly residue: LifecycleBookkeepingResidueV1;
+  /** D34: the plan's manifest before-state hash, compared against `fs.hashRegular`; null binds no preimage. */
+  readonly manifestBeforeHash: (plan: TPlan) => LowerHexSha256 | null;
   /** The four lease paths an uninstall plan binds, for the draining discriminator. */
   readonly leasePaths: (plan: TPlan) => readonly CanonicalAbsolutePathV1[];
 }
@@ -191,7 +195,7 @@ export async function inspectLifecycleLedger<TPlan extends LifecycleCoordinatorP
 ): Promise<LifecycleLedgerSnapshotV1<TPlan>>;
 ```
 
-- [ ] **Step 1: Write failing closure tests over synthetic plans**
+- [x] **Step 1: Write failing closure tests over synthetic plans**
 
 ```ts
 it("is clear only for a fully valid terminal ledger", async () => {
@@ -214,30 +218,30 @@ it("returns uninstall_draining only after the artifacts participant removed ever
 });
 ```
 
-Cover: zero, one and two `push_pending` candidates; one `push_pending` plus any other non-terminal journal; mixed `retry_only` and `uninstall_draining` candidates; lease paths absent while the artifacts journal is absent, or the manifest does not equal the plan's `before.hash`, never yield `uninstall_draining`; `compacting` at every `compactionNext` is `lifecycle_recovery_required`; plan-plus-lock and plan-only suffixes are legal only with every earlier compaction entry absent, and a lock-only coordinator envelope is a finding; the uninstall control-file microstates at the `coordinator_envelope` cursor (both present, allocator absent with nonce present, both absent) are legal and nonce-absent with allocator-present is a finding; a journal without its plan, an unreferenced effect journal, an ID/filename/plan-hash mismatch, a non-canonical plan, a plan over 16,777,216 bytes, and a journal over its plan's `maximumJournalBytes` are findings; an initial coordinator/participant journal temp or plan-publication temp (empty, partial, complete) is a non-clear `coordinatorOrphans` entry only in the states §2.4 admits, and a finding after any participant journal exists; a well-formed planless `staging/lifecycle/<id>` tree with both coordinator plan and journal absent is a `planless_staging` orphan; `foundation/<participant-id>/journal.json` with unknown siblings is a finding; with `gitEffectPlanCodec` and `launchdEffectPlanCodec` null (plan 1a), any leaf in either effect root and any `git/` or `launchd-process/` staging child is a finding; with synthetic effect codecs supplied, the same leaves validate against their plans (so plan 1b adds codecs, not closure logic); a non-terminal standalone Foundation journal makes closure `lifecycle_recovery_required`; the allocator temp from Task 10 makes closure non-clear without deletion; caps 10,000 per root and 1,000,000 aggregate and per coordinator counted through the in-memory port at the exact maximum and first-over; malformed bytes with no readable participant envelope still yield `lifecycle_recovery_required`.
+Cover: zero, one and two `push_pending` candidates; one `push_pending` plus any other non-terminal journal; mixed `retry_only` and `uninstall_draining` candidates; lease paths absent while the artifacts journal is absent, or the manifest's bytes do not hash to `manifestBeforeHash(plan)` while the cursor still places it at its preimage, never yield `uninstall_draining` (D34); past `M(commit_absence)` the manifest state is `absent`, which binds no bytes, so agreement there is presence-only; a consumed participant without a `finalized` journal, and a future participant holding a final journal in any phase, are findings; `compacting` at every `compactionNext` is `lifecycle_recovery_required`; plan-plus-lock and plan-only suffixes are legal only with every earlier compaction entry absent, and a lock-only coordinator envelope is a finding; the uninstall control-file microstates at the `coordinator_envelope` cursor (both present, allocator absent with nonce present, both absent) are legal and nonce-absent with allocator-present is a finding; a journal without its plan, an unreferenced effect journal, an ID/filename/plan-hash mismatch, a non-canonical plan, a plan over 16,777,216 bytes, and a journal over its plan's `maximumJournalBytes` are findings; an initial coordinator/participant journal temp or plan-publication temp (empty, partial, complete) is a non-clear `coordinatorOrphans` entry only in the states §2.4 admits, and a finding after any participant journal exists; a well-formed planless `staging/lifecycle/<id>` tree with both coordinator plan and journal absent is a `planless_staging` orphan; `foundation/<participant-id>/journal.json` with unknown siblings is a finding; with `gitEffectPlanCodec` and `launchdEffectPlanCodec` null (plan 1a), any leaf in either effect root and any `git/` or `launchd-process/` staging child is a finding; with synthetic effect codecs supplied, the same plan leaves validate against their plans, while effect journal leaves are checked for shape and size only (plan 1b additionally adds the effect staging grammar, the effect-root temporary-leaf states, an effect-journal codec paired with a phase accessor on `LifecycleLedgerDependenciesV1` — `{ codec, phase: (journal) => LifecycleEffectPhaseV1 } | null`, never a codec plus a boolean — the effect-journal identity binding to its filename, and the phase rule `verified` before the point of no return and `finalized` after that lets a terminal effect journal reach `clear`; bounding an effect journal by its own ref rather than the global parser ceiling additionally requires `maximumJournalBytes` on Task 7's `LifecycleEffectRefV1`); a non-terminal standalone Foundation journal makes closure `lifecycle_recovery_required`; the allocator temp from Task 10 makes closure non-clear without deletion; caps 10,000 per root and 1,000,000 aggregate and per coordinator counted through the in-memory port at the exact maximum and first-over; malformed bytes with no readable participant envelope still yield `lifecycle_recovery_required`.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root packages/core src/lifecycle/ledger.test.ts`
 
 Expected: FAIL — `ledger.ts` does not exist.
 
-- [ ] **Step 3: Implement the fail-closed classification**
+- [x] **Step 3: Implement the fail-closed classification**
 
-Order: allocator state (Task 10, read-only); Foundation ledger (Task 11), given every participant ID the valid coordinator plans name; coordinator root; effect roots; lifecycle staging; then classify exactly as Spec 1 §2.4's closure paragraph. Any finding makes closure `lifecycle_recovery_required` globally. A Foundation journal referenced by a non-terminal coordinator is not standalone. Validate every coordinator journal against its plan with Task 8's `validateCoordinatorJournalForPlan`.
+Order: coordinator root; allocator state (Task 10, read-only); Foundation ledger (Task 11), given every participant ID the valid coordinator plans name; effect roots; lifecycle staging; then classify exactly as Spec 1 §2.4's closure paragraph. The coordinator root runs first and the plan's original order cannot be executed: `admitsControlFileAbsence` reads the scanned coordinators to recognise §2.4's legal uninstall control-file microstates, so an allocator-first pass refuses `lifecycle_id_allocator_shape` on exactly the homes the spec admits, and `inspectFoundationLedger` needs both the nonce and the participant IDs the validated coordinator plans supply. Classification precedence is unaffected, because closure is fail-closed globally. Any finding makes closure `lifecycle_recovery_required` globally. A Foundation journal referenced by a non-terminal coordinator is not standalone, and each referenced participant is checked against the cursor: consumed requires a present `finalized` journal, future requires no final journal, and the current index is left to its own state table. Validate every coordinator journal against its plan with Task 8's `validateCoordinatorJournalForPlan`. The per-coordinator staging cap is unreachable by construction — every counted leaf first passes the aggregate check and both bounds are 1,000,000 — so it is covered by pinning the counter at its exact ceiling rather than by a discriminating case.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root packages/core src/lifecycle src/index.test.ts`
 
 Expected: PASS.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Tick, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 
 ```bash
-git add packages/core/src/lifecycle/ledger.ts packages/core/src/lifecycle/ledger.test.ts packages/core/src/lifecycle/index.ts packages/core/src/index.ts packages/core/src/index.test.ts
+git add packages/core/src/lifecycle/ledger.ts packages/core/src/lifecycle/ledger.test.ts packages/core/src/lifecycle/index.ts packages/core/src/index.ts packages/core/src/index.test.ts packages/core/src/lifecycle/types.ts
 git add -f docs/superpowers/plans/2026-09-17-developer-os-opt-in-surfaces-1a.md docs/superpowers/ORDER.md
 git diff --cached --name-only
 git commit -m "feat(core): classify lifecycle journal closure fail-closed"
@@ -849,6 +853,8 @@ git commit -m "feat(cli): admit installed V2 homes structurally"
 ### Task 18: Concrete execution-plan codec and the lifecycle composition root · M
 
 Source: old Task 21 (codecs and context half). Spec 1 §8.1 CLI ownership rows; Scope decisions 1 and 2.
+
+Carried from Task 12's review: the first CLI wiring of D34's `manifestBeforeHash` must be pinned by a round-trip test that actually reaches `uninstall_draining`, not merely by the accessor compiling. `manifestAgreesWithCursor` returns `false` on a hash mismatch, so a domain-separated or canonical-JSON `before.hash` would not throw, would raise no finding and would name no path — the drain would simply become unreachable, with uninstall's runner-drain never engaging as the only symptom.
 
 **Files:**
 - Create: `apps/cli/src/lifecycle/redaction-key.ts`
