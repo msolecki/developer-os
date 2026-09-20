@@ -435,6 +435,36 @@ describe("createProductionContext", () => {
     await expect(nodeFs.lstat(context.paths.home)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it("composes the lifecycle services beside the still-unavailable bootstrap projection", async () => {
+    const fixture = await createFixture("production-context-lifecycle");
+    const context = createProductionContext({ io: NULL_IO, env: {}, userHome: fixture.homeDir });
+    const lifecycle = context.lifecycle;
+
+    expect(context.bootstrap).toStrictEqual({ state: "unavailable_until_packaged_handoff" });
+    expect(lifecycle).toBeDefined();
+    expect(lifecycle?.roots.coordinatorJournals).toBe(
+      join(context.paths.stateDir, "lifecycle-journals"),
+    );
+    expect(lifecycle?.roots.foundationJournals).toBe(join(context.paths.stateDir, "transactions"));
+    expect(lifecycle?.effectiveUid).toBe(process.getuid?.() ?? -1);
+    await expect(nodeFs.lstat(context.paths.home)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("leaves the lifecycle capability absent, rather than failing, on a decomposed product home", async () => {
+    const fixture = await createFixture("production-context-nfd");
+    const decomposed = join(fixture.homeDir, "José");
+
+    const context = createProductionContext({
+      io: NULL_IO,
+      env: { DEVELOPER_OS_HOME: decomposed },
+      userHome: fixture.homeDir,
+    });
+
+    expect(context.paths.home).toBe(decomposed);
+    expect(context.lifecycle).toBeUndefined();
+    expect(context.bootstrap).toStrictEqual({ state: "unavailable_until_packaged_handoff" });
+  });
+
   /**
    * **The test this task exists for.** Everything else here checks the loader;
    * this checks the thing the loader was for. Revert the composition root's one

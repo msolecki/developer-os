@@ -11,6 +11,10 @@ import {
   TransactionStore,
 } from "@developer-os/core";
 import type {
+  CanonicalAbsolutePathV1,
+  HeldLifecycleStableLockV1,
+  LifecycleLockDeadlineV1,
+  LifecycleStableLockProviderV1,
   RuntimePaths,
   TransactionJournalV1,
   TransactionLockHandle,
@@ -26,7 +30,11 @@ import type {
   RenameAtxRunRequestV1,
   RenameAtxRunner,
 } from "@developer-os/platform-macos";
-import { MacOsRetainedRename, MacOsTransactionLockProvider } from "@developer-os/platform-macos";
+import {
+  MacOsRetainedRename,
+  MacOsStableLockProvider,
+  MacOsTransactionLockProvider,
+} from "@developer-os/platform-macos";
 import { ProtectedPathPolicy } from "@developer-os/security";
 import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 
@@ -45,6 +53,7 @@ import {
 } from "../context.js";
 import type { CliContext } from "../context.js";
 import type { CliIo } from "../io.js";
+import { createLifecycleContext } from "../lifecycle/context.js";
 import {
   admitRootVerifiedPackagedRelease,
   type PackagedReleaseIdentityV1,
@@ -80,6 +89,46 @@ class InProcessLockProvider implements TransactionLockProvider {
       release: (): Promise<void> => {
         this.#held.delete(path);
         return Promise.resolve();
+      },
+    };
+  }
+}
+
+/**
+ * The global mutation lock stays the real kernel-backed provider — a fixture that faked it
+ * could not observe the exclusion Spec 1 §2.3 relies on — so the recorder wraps it rather
+ * than replacing it, and an event is written only once the lock is actually held or released.
+ */
+class RecordingStableLockProvider implements LifecycleStableLockProviderV1 {
+  readonly #inner: LifecycleStableLockProviderV1;
+  readonly #events: string[];
+
+  constructor(inner: LifecycleStableLockProviderV1, events: string[]) {
+    this.#inner = inner;
+    this.#events = events;
+  }
+
+  async acquireExisting(path: CanonicalAbsolutePathV1): Promise<HeldLifecycleStableLockV1> {
+    return this.#record(await this.#inner.acquireExisting(path));
+  }
+
+  async acquireExistingWithin(
+    paths: readonly CanonicalAbsolutePathV1[],
+    deadline: LifecycleLockDeadlineV1,
+  ): Promise<readonly HeldLifecycleStableLockV1[]> {
+    const held = await this.#inner.acquireExistingWithin(paths, deadline);
+    return held.map((lock) => this.#record(lock));
+  }
+
+  #record(held: HeldLifecycleStableLockV1): HeldLifecycleStableLockV1 {
+    this.#events.push(`acquire ${held.path}`);
+    return {
+      path: held.path,
+      dev: held.dev,
+      ino: held.ino,
+      release: async (): Promise<void> => {
+        await held.release();
+        this.#events.push(`release ${held.path}`);
       },
     };
   }
@@ -289,6 +338,8 @@ export interface CommandFixture {
   readonly bootstrapRenameRequests: readonly RenameAtxRunRequestV1[];
   readonly transactionUnlinkRequests: readonly string[];
   readonly lifecycleLockEvents: string[];
+  /** `acquire <path>` / `release <path>` for the global mutation lock, in order. */
+  readonly stableLockEvents: string[];
   readonly vendorProcesses: string[];
   readonly disableBootstrapInterrupt: () => void;
   readonly setBootstrapInterrupt: (point: FreshInitDeathPointV1, occurrence?: number) => void;
@@ -450,6 +501,7 @@ export async function createCommandFixture(
     : null;
   const bootstrapTrace: string[] = [];
   const lifecycleLockEvents: string[] = [];
+  const stableLockEvents: string[] = [];
   const vendorProcesses: string[] = [];
   const transactionUnlinkRequests: string[] = [];
   let bootstrapInterruptEnabled = true;
@@ -639,6 +691,14 @@ export async function createCommandFixture(
       bootstrap: bootstrapExecutor === null || packagedRelease === null
         ? { state: "unavailable_until_packaged_handoff" }
         : { state: "available", executor: bootstrapExecutor, packagedRelease, inspectEvidence },
+      lifecycle: createLifecycleContext({
+        paths,
+        renameNoReplace: retainedRename.renameNoReplace.bind(retainedRename),
+        locks: new RecordingStableLockProvider(new MacOsStableLockProvider(), stableLockEvents),
+        transactionLocks: lockProvider,
+        effectiveUid: process.getuid?.() ?? -1,
+        now,
+      }),
     };
   };
   const context = buildContext();
@@ -679,6 +739,7 @@ export async function createCommandFixture(
     bootstrapRenameRequests: renameRunner.requests,
     transactionUnlinkRequests,
     lifecycleLockEvents,
+    stableLockEvents,
     vendorProcesses,
     disableBootstrapInterrupt: () => {
       bootstrapInterruptEnabled = false;

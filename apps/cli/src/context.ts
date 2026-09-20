@@ -23,6 +23,7 @@ import {
   EXIT_CODES,
   failure,
   ManifestStore,
+  parseCanonicalAbsolutePathText,
   redactPayload,
   resolveRuntimePaths,
   TransactionExecutor,
@@ -43,6 +44,7 @@ import type {
 import {
   MacOsPlatformAdapter,
   MacOsRetainedRename,
+  MacOsStableLockProvider,
   MacOsTransactionLockProvider,
 } from "@developer-os/platform-macos";
 import type { PlatformAdapter } from "@developer-os/platform-macos";
@@ -58,6 +60,8 @@ import type { ProcessRunner } from "@developer-os/security";
 
 import type { CliIo } from "./io.js";
 import type { CliBootstrapContext } from "./bootstrap/context.js";
+import { createLifecycleContext } from "./lifecycle/context.js";
+import type { CliLifecycleContext } from "./lifecycle/context.js";
 
 export const PRODUCT_VERSION = "0.0.0";
 
@@ -176,6 +180,12 @@ export interface CliContext {
    * fresh arm refuses when the composition root did not supply this capability.
    */
   readonly bootstrap?: CliBootstrapContext | undefined;
+  /**
+   * The lifecycle kernel's bound ports, optional for the same reason `bootstrap` is: older
+   * direct context literals stay source-compatible, and a caller that needs a V2 service
+   * refuses when the composition root did not supply one.
+   */
+  readonly lifecycle?: CliLifecycleContext | undefined;
 }
 
 export const NODE_FILE_SYSTEM: CliFileSystem = {
@@ -763,5 +773,33 @@ export function createProductionContext(
     productVersion: PRODUCT_VERSION,
     runner,
     bootstrap: { state: "unavailable_until_packaged_handoff" },
+    lifecycle: productionLifecycleContext(paths, lockProvider, now),
   };
+}
+
+/**
+ * A product home that is not a `CanonicalAbsolutePathV1` is a home no lifecycle service can
+ * address, and on macOS a decomposed (NFD) user name makes that the ordinary case rather than
+ * an exotic one. The capability is therefore absent — which every V2 caller already refuses on
+ * — instead of throwing out of the composition root and taking `doctor` and `status` with it.
+ */
+function productionLifecycleContext(
+  paths: RuntimePaths,
+  transactionLocks: MacOsTransactionLockProvider,
+  now: () => Date,
+): CliLifecycleContext | undefined {
+  try {
+    parseCanonicalAbsolutePathText(paths.home);
+  } catch {
+    return undefined;
+  }
+  return createLifecycleContext({
+    paths,
+    renameNoReplace: publishBootstrapInitialJournalNoReplace,
+    locks: new MacOsStableLockProvider(),
+    transactionLocks,
+    // No file is owned by uid -1, so a platform without `getuid` refuses every guarded read.
+    effectiveUid: process.getuid?.() ?? -1,
+    now,
+  });
 }

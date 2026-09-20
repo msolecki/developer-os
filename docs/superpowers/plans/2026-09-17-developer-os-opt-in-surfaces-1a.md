@@ -872,6 +872,56 @@ git commit -m "feat(cli): admit installed V2 homes structurally"
 
 ### Task 18: Concrete execution-plan codec and the lifecycle composition root · M
 
+Corrections this task's implementation forced, recorded against the steps below. Tasks 19–24 bind
+to these, not to the `Produces` block as written:
+
+- **Three exports the `Produces` block does not name.** `createLifecycleExecutionCodecs`, because
+  `codecs(key)` must return the coordinator-journal codec as well as the plan codec and both come
+  out of one `createLifecycleCodecs` call — `createLifecycleExecutionPlanCodec` is now a wrapper
+  over it at the plan's exact signature; `manifestBeforeHashOf`, D34's accessor, which the
+  `Produces` block gives no home although `inspectLedger` requires it; and
+  `REDACTION_KEY_STATE_PLAN_HASH_DOMAIN`, deliberately not a member of `LIFECYCLE_HASH_DOMAINS`.
+- **`residueFrom` takes a structural `LifecycleResidueEvidenceV1`**, not the whole
+  `BootstrapEvidenceAdmissionV1`. A real admission is assignable, pinned by a test that passes
+  `inspectBootstrapEvidenceAdmission`'s output straight in, so Task 19's step 4 still compiles. It
+  collects `retainedPaths`, the full descendant set, not the collapsed `retainedRoots`, because
+  `bookkeeping.ts` needs both exact membership and ancestor detection.
+- **`LifecycleUnsupportedLeafError` publishes the reason code `lifecycle_unsupported_leaf`, not
+  `unsupported_until_plan_1b`**, because `failureFrom`'s `kindOf` reads `error.name`. The intended
+  reason is on `.reason`, and the class carries an added `arm` naming which arm refused. Scope
+  decision 1 and the "No external effects" constraint both word the refusal as
+  `unsupported_until_plan_1b`; the deferred fix list under Task 25 owns the reconciliation.
+- **`lifecycleVariantFacts` derives `uninstallLaunchdEvidence` from the operation, not from
+  `plan.participants.launchd !== null`** as the `Produces` doc comment suggests: with
+  `TLaunchd = never` that field is typed `null` and `no-unnecessary-condition` rejects the
+  comparison. Same value — a non-null launchd leaf refuses in the leaf codec first.
+- **Task 14's precondition 1 is discharged on the store's own codec, not on the shared `validate`.**
+  In `validate` the ledger would report a grammar fault as `lifecycle_coordinator_plan_bytes` where
+  it must report `lifecycle_coordinator_plan_grammar`, because `ledger.ts` catches plan-codec
+  throws before its own grammar check. Knock-on, and a change of behaviour Task 19's preflight sits
+  on top of: `LifecycleCoordinatorStore.read` also calls `encode`, so a grammar-invalid *persisted*
+  plan now throws out of `read` instead of refusing `lifecycle_coordinator_plan_bytes`.
+- **`createProductionContext` builds `lifecycle` only when `paths.home` parses as a
+  `CanonicalAbsolutePathV1`**; otherwise the optional field stays `undefined`. Without the guard a
+  macOS home with a decomposed (NFD) user name throws out of the composition root and kills
+  `doctor`, `status` and every V1 command before any verb runs. **Task 19 owns the consequence**: a
+  home that looks V2 while `context.lifecycle` is `undefined` must refuse fail-closed.
+- **The Step 1 sketch's five-arm loop over one `SYNTHETIC_1B_LEAF` is not implementable.** Core's
+  `bindEffectArm` runs inside `validate`, so an effect arm planted without its matching step fails
+  as a malformed plan with a plain `Error`, and Git arms need `ge_…` IDs where launchd arms need
+  `le_…`. Split into the `launchd` and `push` leaves refused by the throwing leaf codecs, and the
+  Git/launchd effect arms refused by the CLI post-check as arm-plus-step pairs.
+- **`createLifecycleContext` builds its `TransactionStore` from `node:fs/promises` directly**, not
+  from `CliFileSystem`: the input signature the plan fixes carries no filesystem, and importing
+  `NODE_FILE_SYSTEM` would make the `context.ts` ↔ `lifecycle/context.ts` cycle real.
+- **The fixture's `stableLockEvents` recorder writes `acquire <path>` only after the lock is
+  actually held**, so Task 19's `toContain("acquire …")` asserts "was held", not "was attempted".
+- **D34's `manifestBeforeHash` round trip is pinned, not assumed.** `lifecycle/context.test.ts`
+  reaches `uninstall_draining` on a synthetic `uninstall/present_manifest_without_launchd` envelope
+  and proves the negative twice: drifted manifest bytes and one surviving lease each yield
+  `lifecycle_recovery_required`. A deliberately domain-separated `manifestBeforeHashOf` was shown
+  to turn case 1 red, which is the failure mode the carried note names.
+
 Source: old Task 21 (codecs and context half). Spec 1 §8.1 CLI ownership rows; Scope decisions 1 and 2.
 
 Carried from Task 14 — two preconditions the store's fixed signature cannot discharge:
@@ -951,7 +1001,7 @@ export function createLifecycleContext(input: {
 export function residueFrom(evidence: BootstrapEvidenceAdmissionV1): LifecycleBookkeepingResidueV1;
 ```
 
-- [ ] **Step 1: Write failing codec and composition tests**
+- [x] **Step 1: Write failing codec and composition tests**
 
 ```ts
 it("round-trips an uninstall execution plan and refuses every 1b arm as unsupported", () => {
@@ -979,17 +1029,17 @@ Cover the manifest-free key (in `context.test.ts`, on a temporary home with no `
 - With no `installation-manifest.json`, no `state/lifecycle-install-nonce` and no `state/lifecycle-id-allocator.json` — only the four ledger roots and a planted `lc_<nonce>_7.plan.json` — `codecs(key)` validates a synthetic uninstall plan under that nonce, and `inspectLedger(key, emptyResidue)` returns a snapshot with `allocator: null` instead of throwing. Its closure is `lifecycle_recovery_required`, because the planted plan is not a legal §2.4 envelope suffix; the legal microstates themselves are proven in Tasks 12 and 16.
 - `coordinatorNonceOf` returns that nonce, returns null for an empty root, and refuses two `lc_` leaves under different nonces.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root apps/cli src/lifecycle/codecs.test.ts src/lifecycle/context.test.ts src/context.test.ts`
 
 Expected: FAIL — the modules do not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Compose `createLifecycleCodecs` (Task 7) with the redaction-key codec, a manifest leaf that admits structure first and binds in the second pass, and refusing launchd and push leaves. Effect references (`sourceGitEffect`, `destinationGitEffect`, `launchdBeforeFiles`, `launchdAfterFiles`) are not leaf codecs in Task 7 — Core validates them as `{ id, planHash }` — so the CLI codec runs a post-check after Core validation: any non-null effect reference, and any `LifecycleCoordinatorStepV1` of kind `source_git_effect`, `destination_git_effect`, `launchd_before_files`, `launchd_after_files` or `network_push`, throws `LifecycleUnsupportedLeafError`. Construct the ledger, store and recovery services with `lifecycleVariantFacts`, `lifecyclePushPlanHash`, null Git/launchd effect codecs, and `uninstallLeasePaths`. Real dependencies are wired only in `createProductionContext` and the fixture.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root apps/cli src/lifecycle/codecs.test.ts src/lifecycle/context.test.ts src/context.test.ts`
 
@@ -997,7 +1047,7 @@ Run: `npx vitest run --root apps/cli src/main.test.ts -t 'reject|usage|option'`
 
 Expected: PASS.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Tick, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 
@@ -1736,6 +1786,31 @@ fixed in its own task. Each needs a failing test first, then the smallest correc
 the whole-plan review's starting point, not its scope — Tasks 14–25 received no per-task review at
 all and must be covered from scratch.
 
+- Task 18, the refusal reason code disagrees with the spec text. Scope decision 1 and the "No
+  external effects" constraint both say a Git, launchd or push leaf refuses
+  `unsupported_until_plan_1b`, but `failureFrom`'s `kindOf` reads `error.name` and publishes
+  `lifecycle_unsupported_leaf`; the intended code survives only on `.reason`. Decide which is the
+  contract and make one of the two match. Task 20 and Task 22 are the consumers.
+- Task 18, `LifecycleCoordinatorStore.read` now throws on a grammar-invalid persisted plan instead
+  of refusing `lifecycle_coordinator_plan_bytes`, because the grammar check moved to the store's
+  own codec. Confirm every caller of `read` handles the throw; Task 19's preflight is the first.
+- Task 18, Task 14's precondition 2 is **not** addressed: `requireOwnedDirectory` checks kind and
+  mode `0700` but not `ownerUid`, because the store receives no `effectiveUid`. A foreign-owned
+  directory inside an already-0700 home is unchecked at that one seam. Decide whether the guarded
+  port's per-operation ownership check plus the ledger's `openRoot` is sufficient, or close it.
+- Task 18, `lifecycleHomeKeyFromAdmission` carries no test: it needs an `AdmittedV2HomeV1`, which
+  needs a real fresh V2 `init`, which its test files must not perform. Cover it from a
+  `*.v2.test.ts` — Task 19's or Task 22's.
+- Task 18, the `destination_git_effect` and `network_push` entries of `UNSUPPORTED_STEP_KINDS` are
+  unreachable through `validate` and untested: both need `plan.push !== null` to clear core's
+  `bindSteps`, and the push leaf codec refuses first. The observable contract holds; the entries
+  stay for 1b. Confirm that is intended rather than dead code.
+- Task 18, the synthetic-plan builder is duplicated between `apps/cli/src/lifecycle/codecs.test.ts`
+  and `apps/cli/src/lifecycle/context.test.ts` because extracting it needed a ninth staged path.
+  Extract it, together with Task 16's three-way duplicate below.
+- Task 18, `CliLifecycleContext.recovery` is constructed and typed but never exercised: it needs
+  participant adapters and a live coordinator. Tasks 21 and 22 are the first real callers — check
+  the wiring there rather than trusting that it compiles.
 - Task 16, obligation 3 carries no test: `LifecycleRecoveryService.removeOrphan` compares the final
   journal's identity against the producing scan's entry under the stable lock, but no fixture swaps
   that inode under the lock, so the check rests on code reading alone. Build the fixture.
