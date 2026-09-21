@@ -136,12 +136,7 @@ describe("runUninstall", () => {
     expect(await inventoryDigest(fixture.root)).toEqual(allBefore);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
-  /**
-   * Scope decision 11: the shipped downcast uninstall leaves its own Foundation journal
-   * under `state/transactions`, which §6 reads as residue, so D27 refuses the second run.
-   * Task 22's coordinator uninstall leaves only the bookkeeping set and restores success.
-   */
-  it("preserves every retained evidence inode when the manifest is absent (D27 refuses the second run)", async () => {
+  it("still reports and preserves retained evidence when the manifest is absent", async () => {
     const fixture = await createCommandFixture("uninstall-bootstrap-no-manifest", {
       bootstrapAvailable: true,
     });
@@ -152,10 +147,10 @@ describe("runUninstall", () => {
 
     const result = await runUninstall(fixture.rebuildContext(), ACCEPTED);
 
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.code).toBe(EXIT_CODES.recoveryRequired);
-    expect(result.error.recovery).toContain("archive the product home");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data).toMatchObject({ removed: [], transactionId: null });
+    expect(result.data.retainedBootstrapEvidence).toHaveLength(1);
     expect(await fixture.bootstrapEvidenceIdentities()).toEqual(before);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 

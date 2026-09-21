@@ -1563,6 +1563,55 @@ git commit -m "feat(cli): uninstall an absent-manifest home without a coordinato
 
 Source: old Task 23 (present-manifest half). Spec 1 §6 steps 1–4 and the A14/A15 paragraphs; §2.4 both uninstall rows, the A16 reservation order, `RedactionKeyStatePlanV1`, manifest no-overwrite transitions; §5.4 lease rules as they bind uninstall; D24, D25, D26, D28; §7 "uninstall drains without deadlock" (lease half), "uninstall respects ownership", "manifest transitions are no-overwrite", "uninstall removes its manifest recoverably" (with A15), "redaction-key deletion is secret-opaque".
 
+Corrections this task's implementation forced, recorded against the steps below:
+
+- **Ten staged paths, not the eight the Files list names.** `apps/cli/src/lifecycle/context.ts`
+  gains one additive `readonly renameNoReplace` field plus its line of wiring:
+  `FoundationParticipantExecutor` cannot publish a participant's staged initial journal without
+  the bound retained rename, nothing else exposes it, and reconstructing the production singleton
+  where the coordinator runs would bypass every fixture's own rename.
+  `apps/cli/src/lifecycle/mutation-gate.v2.test.ts` is rewritten because its one uninstall case
+  pinned the downcast this task replaces — the `[acquire, release]` lock pair and the surviving
+  allocated `tx_` journal — so left alone it reds `lifecycle-v2`. The replacement is stronger: it
+  pins §5.4's rule that every lease is acquired only after the global lock is released and
+  released only once its path is gone.
+- **`state/uninstalling.json` is not an `F(uninstall_artifacts)` mutation.** §2.4 compaction proves
+  each reference's preimage against the post-run tree, and a target that one forward mutation
+  writes and a later forward mutation removes breaks that proof in both directions — observed
+  finalized and rolled back. The marker is collected at the `coordinator_envelope` compaction
+  entry instead. The end state on disk is identical.
+- **`snapshot.closure` is not `clear` after a completed uninstall, and Tasks 23 and 24 must not
+  assert it.** `admitsControlFileAbsence` needs the envelope that the same compaction entry
+  removes, so the state is unreachable by construction rather than by defect. What the D25 case
+  asserts instead is the D25 contract itself: the manifest tombstone gone, the empty `rollback`
+  directory row gone, a non-empty `logs` directory preserved, and the nonce gone.
+- **The re-drain is the next `uninstall`, not a resumed one.** §2.4 compensates every death before
+  the point of no return, so `F(uninstall_artifacts)` is never re-entered on recovery.
+- **`K(stage)` and `K(restore)` use link plus unlink, not rename.** The guarded `renameNoReplace`
+  hashes its source, which §6 forbids for `state/redaction.key`. Task 21's read spy caught it.
+- **A rolled-back uninstall loses its nonce and allocator, and the durable fix belongs in Core.**
+  `removeEnvelopeLeaves` calls `controlFiles` for every terminal uninstall with no outcome to
+  branch on; measured, that left a home §2.1 can no longer admit. This task's adapter guards on
+  the restored manifest, so the CLI contract holds and Task 24's kill matrix exercises the guarded
+  path; the Core row stays open for any other caller and is carried on Task 25's deferred fix list.
+- **Two architecture citations turned red and both were already mis-aimed.** Creating
+  `apps/cli/src/lifecycle/uninstall.ts` made two bare `uninstall.ts` citations — at lines 397 and
+  560 of the commands module — ambiguous, which is what the gate caught. But checked against
+  `HEAD~1`, neither line held its claim before this task either: 397 was a field of
+  `planUninstall`'s return type and 560 a comment about `sourceRoot`. **Never restate a bare
+  `name.ts:NN` citation in prose while repairing it**: this correction re-armed the same gate once,
+  because the gate reads the quoted token, not the sentence around it. `npm run lint` does not run `citations.test.ts`, so D32's deferral
+  is why this reached the integrated tree. `docs/architecture/foundation-constraints.md` now names
+  the symbol `planUninstall`, because the claim there is a behaviour; `docs/architecture/threat-model.md`
+  takes the verified `apps/cli/src/commands/uninstall.ts:842`, the `readConfigFile` call, because
+  that row's evidence is a line list. NEW-87 still owns the other entries of that row, which were
+  not audited here.
+- **Three Cover bullets are implemented but not directly asserted**, and are carried to Task 25's
+  deferred fix list rather than left silent: the lease `dev`/`ino` swap refusal, which needs a
+  mid-run path-swap hook and is a security guard covered only by inspection; `M(commit_absence)`'s
+  third-manifest exit 6, covered at Core level in `manifest-state.test.ts`; and "a missing artifact
+  is already clean", covered by construction.
+
 **Files:**
 - Create: `apps/cli/src/lifecycle/uninstall.ts`
 - Create: `apps/cli/src/lifecycle/uninstall.v2.test.ts`
@@ -1607,7 +1656,7 @@ export function createUninstallAdapters(input: {
 export class UninstallCapacityError extends Error { readonly code: typeof EXIT_CODES.capabilityUnavailable; readonly reason: "uninstall_artifact_capacity_exceeded" }
 ```
 
-- [ ] **Step 1: Write failing coordinator tests on real V2 homes**
+- [x] **Step 1: Write failing coordinator tests on real V2 homes**
 
 ```ts
 it("uninstalls through one without-launchd coordinator and leaves exactly the bookkeeping set and retained evidence", async () => {
@@ -1696,13 +1745,13 @@ Cover:
 - Key content is never read (Task 21's spy); no `launchctl`, `git` or vendor process runs.
 - The Task 21 interim rewrites return to success: `uninstall.test.ts` "still reports and preserves retained evidence when the manifest is absent" and `main.test.ts` "renders retained evidence after uninstall instead of claiming nothing remains" expect a successful second uninstall (`key_absent`, `removed: []`); `tests/e2e/fresh-v2-retained-bootstrap.test.ts` expects the reinstall to succeed with two bootstrap IDs, as it did before Task 2.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root apps/cli src/lifecycle/uninstall.v2.test.ts`
 
 Expected: FAIL — `uninstall.ts` does not exist, and V2 uninstall still uses the Foundation downcast.
 
-- [ ] **Step 3: Implement the planner and adapters**
+- [x] **Step 3: Implement the planner and adapters**
 
 Planning happens under the global lock and allocates nothing:
 1. Run `recover(global, { resumeUninstall: true })` and require closure `clear`.
@@ -1724,7 +1773,7 @@ Adapters:
 
 `LifecycleUninstaller` emits `afterBoundary` at every coordinator boundary plus `lease_path_removed` and `empty_directory_removed`.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root apps/cli src/lifecycle/uninstall.v2.test.ts`
 
@@ -1736,7 +1785,7 @@ Run: `npm run build && npx vitest run --root tests e2e/fresh-v2-retained-bootstr
 
 Expected: PASS. Add `uninstall.v2.test.ts`'s duration to `lifecycle-v2`'s recorded local total and update its `timeout-minutes`.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Tick, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 
@@ -2047,6 +2096,33 @@ all and must be covered from scratch.
   case can no longer protect — any throw in the body counts as the expected failure, so the guard can
   only mask. Drop it; the assertion is now the whole contract.
 
+- Task 22 opened NEW-97, a Core row it could not close inside its own file list: `removeEnvelopeLeaves`
+  calls the `controlFiles` adapter for every terminal uninstall with no outcome to branch on, so a
+  compensated run deletes the install nonce and the ID allocator of a home it has just restored —
+  measured, not inferred. The CLI adapter guards on the restored manifest, so every 1a path is
+  correct and Task 24's kill matrix exercises the guard; confirm the guard sits where a future
+  non-CLI caller cannot miss it, or move it into Core.
+- Task 22, three Cover bullets are implemented but not directly asserted. The one that matters is
+  the lease `dev`/`ino` swap refusal in `stepHooks.before` — a security guard argued by inspection,
+  needing a mid-run path-swap hook, in the same class as Task 19's two untested guards above. The
+  other two are `M(commit_absence)`'s third-manifest exit 6 (covered at Core level in
+  `manifest-state.test.ts`) and "a missing artifact is already clean" (covered by construction).
+- Task 22 supplies the per-case measurement the headroom bullet above asked for: the slowest single
+  case of `uninstall.v2.test.ts` is 185.1 s, swinging down to 148.2 s, which projects to ~280–370 s
+  on a hosted runner against the 900,000 ms `REAL_FILESYSTEM_TIMEOUT_MS` ceiling. That is the widest
+  per-case swing in the job. Task 24's kill matrix, which the plan estimates at ~14 real inits in one
+  case, is the one to measure next, and it carries its own `KILL_MATRIX_TIMEOUT_MS`.
+- Task 22 confirmed a pre-existing defect that its own change closes for the coordinator path only:
+  the shipped V2 downcast uninstall refuses exit 3 on any home whose allocator counter has advanced,
+  reading the V2 allocator row through the V1 drift comparison. It is documented in
+  `mutation-gate.v2.test.ts`'s own docblock. Confirm no remaining caller reaches the downcast.
+- **A `--root tests` run inside a linked worktree can measure a different checkout** (NEW-98).
+  `tests/vitest.config.ts` declares no source aliases by design, so those suites resolve through
+  `tests/node_modules/@developer-os/*`; sharing that directory with another checkout makes every
+  such link point away from the worktree. It produced one false e2e failure in Task 22 — the new
+  `lc_` transaction ID reported as `tx_`, which was the base branch's code — and, worse, it can
+  produce a false pass. Every `tests/**` gate in this plan must be rerun by the orchestrator on the
+  integrated tree in the main checkout; the ones run inside a worktree are not evidence.
 
 Source: `SESSION.md` §5 phase close; old Task 24 steps 4–7 narrowed to 1a; roadmap Phase 4.
 

@@ -34,10 +34,16 @@ import type { CliContext } from "../context.js";
 import { createCanonicalPathEvidence, createOwnerPathAdmission } from "../bootstrap/admission.js";
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
+import type { BootstrapEvidenceAdmissionV1 } from "../bootstrap/report.js";
 import {
   ABSENT_MANIFEST_ARCHIVE_RECOVERY,
   runAbsentManifestUninstall,
 } from "../lifecycle/absent-manifest-uninstall.js";
+import { admitInstalledV2Home, observeManifestSchema } from "../lifecycle/admission.js";
+import { lifecycleHomeKeyFromAdmission } from "../lifecycle/context.js";
+import type { CliLifecycleContext } from "../lifecycle/context.js";
+import { LifecycleUninstaller } from "../lifecycle/uninstall.js";
+import type { LifecycleUninstallRequestV1 } from "../lifecycle/uninstall.js";
 import { readConfigFile } from "./doctor.js";
 
 export interface UninstallResultV1 {
@@ -117,7 +123,7 @@ interface ResolvedRoots {
   readonly canonicalExcluded: readonly string[];
 }
 
-async function resolveRoots(
+export async function resolveRoots(
   context: CliContext,
   request: RevertRequest,
 ): Promise<ResolvedRoots> {
@@ -161,7 +167,7 @@ function isRemovableAt(
   return insideOwned && !insideExcluded;
 }
 
-async function partitionArtifacts(
+export async function partitionArtifacts(
   context: CliContext,
   request: RevertRequest,
   roots: ResolvedRoots,
@@ -275,7 +281,7 @@ interface PlannedRevert {
   readonly restored: readonly string[];
 }
 
-async function planRevert(
+export async function planRevert(
   context: CliContext,
   files: readonly ManagedArtifactV1[],
   drift: ReadonlyMap<string, DriftFinding>,
@@ -333,7 +339,7 @@ async function planRevert(
  * argument: a directory that still holds transaction backups, logs, or anything
  * a user put there refuses to go and is reported as preserved.
  */
-async function removeDirectories(
+export async function removeDirectories(
   context: CliContext,
   directories: readonly ResolvedArtifact[],
 ): Promise<{ readonly removed: readonly string[]; readonly preserved: readonly string[] }> {
@@ -534,10 +540,10 @@ export async function removeRedactionKeyFile(
   }
 }
 
-function describePlan(removable: readonly ResolvedArtifact[]): string {
+function describePlan(removable: readonly string[]): string {
   return [
     "Developer OS will remove the following managed artifacts:",
-    ...removable.map((entry) => `  ${renderPath(entry.artifact.path)}`),
+    ...removable.map((path) => `  ${renderPath(path)}`),
     "The Brain, backups, and unrelated files are preserved. Proceed?",
   ].join("\n");
 }
@@ -625,7 +631,7 @@ async function currentContentHash(
   }
 }
 
-async function downcastArtifactV2(
+export async function downcastArtifactV2(
   context: CliContext,
   artifact: ManagedArtifactV2,
 ): Promise<ManagedArtifactV1> {
@@ -736,6 +742,78 @@ async function assertHomeShape(context: CliContext): Promise<void> {
   }
 }
 
+/**
+ * Spec 1 §6 on an admitted V2 home: one lifecycle coordinator replaces the V1 revert, so the
+ * run leaves the A12 bookkeeping set and retained bootstrap evidence and nothing else. The
+ * relocated-Brain diagnosis stays here because admission is where a confined owner path is
+ * refused; the coordinator's own manifest arm is deliberately unconfined (I2).
+ */
+async function runCoordinatorUninstall(
+  context: CliContext,
+  lifecycle: CliLifecycleContext,
+  paths: RuntimePaths,
+  evidence: BootstrapEvidenceAdmissionV1,
+  options: UninstallOptions,
+): Promise<CliResult<UninstallResultV1>> {
+  const refusedOwnerPaths: string[] = [];
+  let admitted;
+  try {
+    admitted = await admitInstalledV2Home({
+      fs: lifecycle.fs,
+      paths,
+      manifestAdmission: manifestAdmissionFor(paths, refusedOwnerPaths),
+      effectiveUid: lifecycle.effectiveUid,
+    });
+  } catch (error) {
+    const recordedPath = refusedOwnerPaths[0];
+    if (recordedPath === undefined) throw error;
+    throw relocatedBrainRefusal(recordedPath, paths.brain);
+  }
+
+  const request: LifecycleUninstallRequestV1 = {
+    context,
+    lifecycle,
+    key: lifecycleHomeKeyFromAdmission(admitted, paths),
+    admitted,
+    evidence,
+    options,
+  };
+  const uninstaller = new LifecycleUninstaller();
+
+  /**
+   * `execute` plans again under its own lock, so the preview here is only what the two paths
+   * that never reach it need: the dry run's report and the confirmation prompt's list.
+   */
+  if (options.dryRun || !options.assumeYes) {
+    const lockPath = join(paths.stateDir, ".lifecycle.lock") as CanonicalAbsolutePathV1;
+    const held = await lifecycle.locks.acquireExisting(lockPath);
+    let preview;
+    try {
+      preview = await uninstaller.preview(request, held);
+    } finally {
+      await held.release();
+    }
+    if (options.dryRun) {
+      return success({
+        schemaVersion: 1,
+        removed: preview.removable,
+        restored: [],
+        preserved: preview.preserved,
+        retainedBootstrapEvidence: evidence.report.ids,
+        transactionId: null,
+      });
+    }
+    if (!(await context.io.confirm(describePlan(preview.removable)))) {
+      return failure(EXIT_CODES.decisionRequired, {
+        kind: "declined",
+        message: "uninstall was declined",
+        paths: [],
+      });
+    }
+  }
+  return success(await uninstaller.execute(request));
+}
+
 export async function runUninstall(
   context: CliContext,
   options: UninstallOptions,
@@ -767,9 +845,16 @@ export async function runUninstall(
     }
     const paths = runtimePathsFor(context, config ?? undefined);
 
+    const lifecycle = context.lifecycle;
+    if (lifecycle !== undefined) {
+      const observed = await observeManifestSchema(lifecycle.fs, paths);
+      if (observed.kind === "v2") {
+        return await runCoordinatorUninstall(context, lifecycle, paths, evidence, options);
+      }
+    }
+
     const manifest = await readUninstallManifest(context, paths);
     if (manifest === null) {
-      const lifecycle = context.lifecycle;
       if (lifecycle === undefined) {
         throw new UninstallRefusal(
           EXIT_CODES.recoveryRequired,
@@ -811,7 +896,9 @@ export async function runUninstall(
 
     if (
       !options.assumeYes &&
-      !(await context.io.confirm(describePlan(preview.removable)))
+      !(await context.io.confirm(
+        describePlan(preview.removable.map((entry) => entry.artifact.path)),
+      ))
     ) {
       return failure(EXIT_CODES.decisionRequired, {
         kind: "declined",

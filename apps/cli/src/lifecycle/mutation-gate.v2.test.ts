@@ -6,6 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import {
   EXIT_CODES,
+  SCHEDULED_JOB_IDS,
   encodeLifecycleIdAllocator,
   formatAllocatedLifecycleId,
   foundationParticipantPlanHash,
@@ -624,26 +625,37 @@ describe("the mutation gate on a real V2 home", () => {
 });
 
 /**
- * Its own pristine home: the shipped downcast reads the V2 allocator row back through the V1
- * drift comparison, so a home whose counter has already advanced refuses exit 3 before the
- * gate is reached.
+ * Its own pristine home: this case reads the whole stable-lock choreography of one uninstall, and
+ * a home another case has already mutated carries that case's lock events too.
  */
-describe("the V2 downcast uninstall", () => {
-  it("runs through the gate with an allocated journal ID and leaves the global lock behind", async () => {
+describe("the V2 coordinator uninstall", () => {
+  it("drains every runner lease outside its own global lock and leaves the lock file behind", async () => {
     const fixture = await initialisedV2Home("gate-uninstall", {});
-    const nonce = await nonceOf(fixture);
-    const before = await allocatorCounter(fixture);
 
     const removed = await runUninstall(fixture.rebuildContext(), ACCEPTED);
 
     expect(removed.ok, JSON.stringify(removed)).toBe(true);
-    expect(fixture.stableLockEvents).toStrictEqual([
-      `acquire ${globalLockPath(fixture)}`,
-      `release ${globalLockPath(fixture)}`,
-    ]);
+    if (!removed.ok) return;
+    expect(removed.data.transactionId).toMatch(/^lc_[0-9a-f]{64}_[0-9]+$/u);
+    const events = fixture.stableLockEvents;
+    const lock = globalLockPath(fixture);
+    expect(events[0]).toBe(`acquire ${lock}`);
+    expect(events.at(-1)).toBe(`release ${lock}`);
+    /** §5.4: uninstall acquires a lease only while it holds no global lock, and releases each
+     * one only once its path is gone. */
+    for (const job of SCHEDULED_JOB_IDS) {
+      const lease = join(fixture.paths.stateDir, `.automation-${job}.lock`);
+      expect(events.lastIndexOf(`acquire ${lease}`), events.join(" | ")).toBeGreaterThan(
+        events.indexOf(`release ${lock}`),
+      );
+      expect(events.lastIndexOf(`acquire ${lease}`)).toBeLessThan(
+        events.lastIndexOf(`release ${lease}`),
+      );
+      expect(await exists(lease)).toBe(false);
+    }
     expect(await exists(globalLockPath(fixture))).toBe(true);
     expect(await exists(fixture.paths.manifestFile)).toBe(false);
-    expect(await journalIds(fixture)).toContain(`tx_${nonce}_${String(before)}`);
+    expect(await journalIds(fixture)).toStrictEqual([]);
     expect(fixture.vendorProcesses).toStrictEqual([]);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

@@ -80,6 +80,14 @@ export interface LifecycleResidueEvidenceV1 {
 
 export interface CliLifecycleContext {
   readonly fs: LifecycleGuardedFileSystemV1;
+  /**
+   * The bound retained rename. `TransactionExecutor` needs it to publish a Foundation
+   * participant's staged initial journal into `state/transactions`, and the executor a
+   * coordinator builds is constructed where the coordinator runs, not at this root — so the
+   * capability travels with the rest of the bound ports rather than being reconstructed there
+   * from the production singleton, which would bypass a fixture's own rename.
+   */
+  readonly renameNoReplace: PublishBootstrapInitialJournalNoReplace;
   readonly locks: LifecycleStableLockProviderV1;
   readonly transactionLocks: TransactionLockProvider;
   readonly roots: LifecycleLedgerRootsV1;
@@ -254,6 +262,7 @@ export function createLifecycleContext(input: {
 
   return {
     fs,
+    renameNoReplace: input.renameNoReplace,
     locks: input.locks,
     transactionLocks: input.transactionLocks,
     roots,

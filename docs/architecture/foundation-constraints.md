@@ -471,7 +471,7 @@ the only way to change any setting is to edit the file by hand — which is drif
 
 The consequence is worse than inconvenient, and it is the shape of residual 1: `doctor` reports
 the drift and prints "uninstall, then initialize again" as its recovery, and `uninstall` refuses
-on that same drift (`uninstall.ts:397`). `init` refuses too. The user's only exit is deleting the
+on that same drift (`planUninstall` in `apps/cli/src/commands/uninstall.ts`). `init` refuses too. The user's only exit is deleting the
 product home by hand. `tests/e2e/foundation.test.ts:1271-1275` already states the mechanism in its own
 comment; what it does not say is that no supported path exists to reach the state legitimately.
 

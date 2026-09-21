@@ -5,7 +5,7 @@
  */
 import { constants } from "node:fs";
 import type { BigIntStats } from "node:fs";
-import { lstat, open, unlink } from "node:fs/promises";
+import { link, lstat, open, unlink } from "node:fs/promises";
 
 import {
   LifecycleRecoveryRequiredError,
@@ -22,6 +22,8 @@ import type {
   EffectiveUidV1,
   LifecycleCodecContextV1,
   LifecycleCoordinatorIdV1,
+  LifecycleGuardedEntryV1,
+  LifecycleGuardedFileSystemV1,
   LifecycleValueCodec,
   LowerHexSha256,
   UInt64DecimalV1,
@@ -250,4 +252,177 @@ export async function unlinkSecretOpaqueKey(
     refuseSecret("redaction_key_identity", path);
   }
   await unlink(path);
+}
+
+/**
+ * §6's `K` arm. Every transition moves or removes the leaf by its recorded identity and never
+ * opens it for content: `stage` puts the source under the coordinator's tombstone name,
+ * `delete` unlinks that exact inode, `restore` puts it back. No byte of the secret reaches
+ * this module.
+ */
+export type RedactionKeyStateV1 = "before" | "staged" | "deleted";
+
+const TOMBSTONE_PREFIX = ".redaction.key.";
+const TOMBSTONE_SUFFIX = ".tombstone";
+
+/** identity-free stat: the guarded port takes a path and nothing else, and returns an already-exact decimal identity. */
+function guardedEntry(
+  fs: LifecycleGuardedFileSystemV1,
+  path: CanonicalAbsolutePathV1,
+): Promise<LifecycleGuardedEntryV1 | null> {
+  return fs.lstat(path);
+}
+
+/**
+ * Identity without `nlink`: between the `link` and the `unlink` below the key is reachable
+ * under both names and its link count is two, which is the one legal moment where the settled
+ * shape does not hold.
+ */
+function sameSecretInode(
+  entry: LifecycleGuardedEntryV1,
+  before: Extract<SecretOpaqueFileStateV1, { state: "present" }>,
+): boolean {
+  return (
+    entry.kind === "regular_file" &&
+    entry.ownerUid === before.ownerUid &&
+    entry.mode === SECRET_MODE &&
+    entry.dev === before.dev &&
+    entry.ino === before.ino &&
+    BigInt(entry.size) === BigInt(before.size)
+  );
+}
+
+function sameSecretIdentity(
+  entry: LifecycleGuardedEntryV1,
+  before: Extract<SecretOpaqueFileStateV1, { state: "present" }>,
+): boolean {
+  return sameSecretInode(entry, before) && entry.nlink === 1;
+}
+
+function presentBefore(
+  plan: RedactionKeyStatePlanV1,
+): Extract<SecretOpaqueFileStateV1, { state: "present" }> | null {
+  return plan.before.state === "present" ? plan.before : null;
+}
+
+async function syncParent(
+  fs: LifecycleGuardedFileSystemV1,
+  path: CanonicalAbsolutePathV1,
+): Promise<void> {
+  const parent = await guardedEntry(
+    fs,
+    parseCanonicalAbsolutePathText(path.slice(0, path.lastIndexOf("/"))),
+  );
+  if (parent === null) refuseSecret("redaction_key_parent", path);
+  await fs.syncDirectory(parent);
+}
+
+/**
+ * `link` then `unlink`, never a rename: the guarded port's `renameNoReplace` hashes its source
+ * to bind the postimage, and §6 forbids ever reading, hashing or journaling this file. `link`
+ * is the only primitive here that refuses an existing destination (`EEXIST`) without opening
+ * either name for content. A death between the two leaves one inode under both names, which
+ * `observeRedactionKeyState` reads as `before` and this function finishes on the next pass.
+ */
+async function moveSecretByIdentity(
+  fs: LifecycleGuardedFileSystemV1,
+  source: CanonicalAbsolutePathV1,
+  destination: CanonicalAbsolutePathV1,
+  before: Extract<SecretOpaqueFileStateV1, { state: "present" }>,
+): Promise<void> {
+  const existing = await guardedEntry(fs, destination);
+  if (existing === null) {
+    const live = await guardedEntry(fs, source);
+    if (live === null || !sameSecretIdentity(live, before)) {
+      refuseSecret("redaction_key_identity", source);
+    }
+    await link(source, destination);
+  } else if (!sameSecretInode(existing, before)) {
+    refuseSecret("redaction_key_identity", destination);
+  }
+  const live = await guardedEntry(fs, source);
+  if (live !== null) {
+    if (!sameSecretInode(live, before)) refuseSecret("redaction_key_identity", source);
+    await unlink(source);
+  }
+  await syncParent(fs, source);
+  await syncParent(fs, destination);
+}
+
+export async function observeRedactionKeyState(
+  fs: LifecycleGuardedFileSystemV1,
+  plan: RedactionKeyStatePlanV1,
+): Promise<RedactionKeyStateV1> {
+  const before = presentBefore(plan);
+  const source = await guardedEntry(fs, plan.sourcePath);
+  const tombstone = await guardedEntry(fs, plan.tombstonePath);
+  if (before === null) {
+    if (source === null && tombstone === null) return "deleted";
+    return refuseSecret("redaction_key_state", plan.sourcePath);
+  }
+  if (source === null && tombstone === null) return "deleted";
+  if (source === null) {
+    if (tombstone !== null && sameSecretIdentity(tombstone, before)) return "staged";
+    return refuseSecret("redaction_key_state", plan.tombstonePath);
+  }
+  if (tombstone === null) {
+    if (sameSecretIdentity(source, before)) return "before";
+    return refuseSecret("redaction_key_state", plan.sourcePath);
+  }
+  if (sameSecretInode(source, before) && sameSecretInode(tombstone, before)) return "before";
+  return refuseSecret("redaction_key_state", plan.sourcePath);
+}
+
+export async function stageRedactionKey(
+  fs: LifecycleGuardedFileSystemV1,
+  plan: RedactionKeyStatePlanV1,
+): Promise<void> {
+  const before = presentBefore(plan);
+  if (before === null) return;
+  await moveSecretByIdentity(fs, plan.sourcePath, plan.tombstonePath, before);
+}
+
+export async function restoreRedactionKey(
+  fs: LifecycleGuardedFileSystemV1,
+  plan: RedactionKeyStatePlanV1,
+): Promise<void> {
+  const before = presentBefore(plan);
+  if (before === null) return;
+  if ((await guardedEntry(fs, plan.tombstonePath)) === null) return;
+  await moveSecretByIdentity(fs, plan.tombstonePath, plan.sourcePath, before);
+}
+
+export async function deleteRedactionKey(
+  fs: LifecycleGuardedFileSystemV1,
+  plan: RedactionKeyStatePlanV1,
+): Promise<void> {
+  const before = presentBefore(plan);
+  if (before === null) return;
+  const tombstone = await guardedEntry(fs, plan.tombstonePath);
+  if (tombstone === null) return;
+  if (!sameSecretIdentity(tombstone, before)) {
+    refuseSecret("redaction_key_identity", plan.tombstonePath);
+  }
+  await fs.unlinkExact(tombstone);
+  await syncParent(fs, plan.tombstonePath);
+}
+
+/**
+ * A tombstone under any coordinator's name is an unfinished key transition this run cannot
+ * authenticate — its inode belongs to a plan whose bytes are gone — so planning refuses rather
+ * than staging a second one beside it.
+ */
+export async function assertNoRedactionKeyTombstone(
+  fs: LifecycleGuardedFileSystemV1,
+  stateDirectory: CanonicalAbsolutePathV1,
+): Promise<void> {
+  const directory = await guardedEntry(fs, stateDirectory);
+  if (directory === null || directory.kind !== "directory") return;
+  for await (const name of fs.names(directory)) {
+    if (!name.startsWith(TOMBSTONE_PREFIX) || !name.endsWith(TOMBSTONE_SUFFIX)) continue;
+    refuseSecret(
+      "redaction_key_tombstone_present",
+      parseCanonicalAbsolutePathText(`${stateDirectory}/${name}`),
+    );
+  }
 }

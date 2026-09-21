@@ -204,7 +204,7 @@ jobs:
 
   lifecycle-v2:
     # Owns the real-V2-home `*.v2.test.ts` files, which `test:suite` excludes.
-    # Running local total of that set: 1878.6 s (2026-09-21). Seven files now.
+    # Running local total of that set: 2533.1 s (2026-09-21). Eight files now.
     # The first four are 998.2 s: the 916 s recorded on 2026-09-17 for the first
     # three plus 82.2 s for the fourth, `admission.v2.test.ts`. That 82.2 s is
     # the maximum of seven observations spanning 54.6-82.2 s across two
@@ -229,10 +229,20 @@ jobs:
     # Those last two files landed from parallel worktrees in one wave (D33), so
     # each measured its own delta against the 998.2 s base and neither saw the
     # other. The integrator summed both deltas rather than taking either task's
-    # figure: 998.2 + 621.6 + 199.9. The budget is the running total x 2 for a
-    # hosted runner x 1.5 headroom, floored at 20: ceil(1878.6 x 3 / 60) = 94.
+    # figure: 998.2 + 621.6 + 199.9. `uninstall.v2.test.ts` adds 654.5 s, the
+    # maximum of three green runs that day (632.8 s and 643.1 s in the task's
+    # own worktree, 654.5 s on the integrated tree); it
+    # drives eight real fresh V2 `init` runs plus one reinstall, and five of its
+    # cases kill a coordinator mid-run and recover it. Its slowest single case
+    # swung 148.2-185.1 s across those two runs — the widest per-case figure in
+    # this job, and the one to watch against `REAL_FILESYSTEM_TIMEOUT_MS`.
+    # `mutation-gate.v2.test.ts` was re-measured the same day at 161.7 s after
+    # its uninstall case moved onto the coordinator, below the 199.9 s already
+    # recorded, so that file's conservative figure stands unchanged.
+    # The budget is the running total x 2 for a hosted runner x 1.5 headroom,
+    # floored at 20: ceil(2533.1 x 3 / 60) = 127.
     runs-on: macos-15
-    timeout-minutes: 94
+    timeout-minutes: 127
     steps:
       - uses: actions/checkout@v4
         with:

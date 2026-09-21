@@ -176,16 +176,16 @@ describe("run", () => {
     await nodeFs.writeFile(target, RETAINED_SECRET, { mode: 0o600 });
 
     /**
-     * D27 with scope decision 11: the downcast uninstall's own Foundation journal is
-     * residue, so the second run's single JSON line is the error envelope. Task 22
-     * restores 0 and the retained-evidence payload with it.
+     * The coordinator uninstall leaves only the A12 bookkeeping set and the retained
+     * evidence, so the second run takes §6's `key_absent` arm: it succeeds, reports the
+     * retained evidence again, and still discloses none of its bytes.
      */
     fixture.io.out.length = 0;
-    expect(await harness.invoke(["uninstall", "--yes", "--json"])).toBe(6);
+    expect(await harness.invoke(["uninstall", "--yes", "--json"])).toBe(0);
     expect(harness.out).toHaveLength(1);
-    expect(harness.out[0]).toContain('"ok":false');
-    expect(harness.out[0]).toContain('"code":6');
-    expect(harness.out[0]).toContain("archive the product home");
+    expect(harness.out[0]).toContain('"ok":true');
+    expect(harness.out[0]).toContain('"removed":[]');
+    expect(harness.out[0]).toContain("fresh_v2_init");
     expect(harness.out[0]).not.toContain(RETAINED_SECRET);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
