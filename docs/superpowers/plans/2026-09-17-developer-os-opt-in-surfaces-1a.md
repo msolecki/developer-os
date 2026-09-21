@@ -29,6 +29,15 @@ Recorded in the roadmap's 2026-09-17 table; A14–A16 are in Spec 1 in place.
 - **D28 (Spec 1 A16).** The allocated `mf_` manifest participant ID is reserved last in a composite's contiguous ID block.
 - **D34 (2026-09-20).** Task 12's `Produces` block gains `manifestBeforeHash: (plan: TPlan) => LowerHexSha256 | null`, compared against `fs.hashRegular` of the manifest. Taken during Task 12's review, which proved a manifest present at the right cursor with different bytes yielded `uninstall_draining` and so opened a destructive uninstall by path state alone — what §7 forbids as synthesising the drain by path absence. Amended immediately because `inspectLifecycleLedger` still had no consumer.
 - **D36 (2026-09-20).** From Task 14 on, plan 1a runs **implementation-first**: each task runs its fast commands and `npm run lint`, is integrated immediately, and the next task starts. **No per-task fresh-context review and no per-task fix cycle.** One whole-plan review and one fix round happen at plan close, with `npm run check`. Commits are held locally and pushed **once**, at plan close, as a single run. Founder decision, taken after wave 1, which cost three review rounds per task. It knowingly suspends `security.md`'s rule that a fresh agent must review agent-generated code and `SESSION.md` §5 step 3 and step 7 for the remainder of this plan; the risk accepted is that a defect in a consumed interface is found only after its consumers bound to it, which is what D34 was taken to avoid. Wave 1's per-task reviews found two destructive-gate false positives, one fail-open closure and one over-broad deletion; the end-of-plan review must cover the same ground for Tasks 14–25.
+- **D37 (2026-09-21).** NEW-94's durable fix goes into `ordinaryDirectories`
+  (`apps/cli/src/bootstrap/executor.ts`): a fresh V2 `init` creates `staging/lifecycle` like every
+  other bookkeeping root, so an untouched installation stops failing its own ledger check. Founder
+  decision, taken over letting the ledger tolerate the absence, which would have weakened A12's
+  exact-shape admission to avoid a slow gate. **It does not run inside plan 1a**: that file's gate
+  is the 330-minute `bootstrap-executor` job D32 defers, and shipping an unrun change against D19's
+  layout assertions is what the decision refuses. It becomes its own task, gated properly, after
+  plan 1a closes. Task 19's `requireLifecycleStagingRoot` stays as the interim until then, and is
+  removed by that task.
 - **D35 (2026-09-20).** The effect-journal codec, its phase accessor and the `classify` change they require are **deferred to plan 1b**. Unlike D34 the gap is unreachable in 1a — the null plan codec makes every effect leaf a `lifecycle_effect_root_unsupported` finding before a journal codec could matter — `LifecycleLedgerDependenciesV1` has only two construction sites in the whole plan, both of which Task 18 and 1b touch anyway, and `LifecycleEffectPhaseV1` would have been a guess at 1b's schema with no implementation to check it against. Task 12's Cover list records the full 1b obligation.
 
 ## Global Constraints
@@ -1060,6 +1069,64 @@ git commit -m "feat(cli): compose the lifecycle execution codec and context"
 
 ### Task 19: The mutation gate every Foundation mutator passes through on a V2 home · L
 
+Corrections this task's implementation forced, recorded against the steps below. It found two
+pre-existing product defects that were unreachable until something consumed the ledger:
+
+- **NEW-94: a fresh V2 `init` never creates `staging/lifecycle`, which A12 requires and the ledger
+  refuses the absence of.** Before any fix, no mutation of any kind could pass the preflight on a
+  real fresh V2 home, and wiring the gate turned two previously-green `uninstall.test.ts` cases
+  red. The interim shipped here is `requireLifecycleStagingRoot`, which materialises the directory
+  owner-only 0700 under the held global lock before the ledger is inspected. The durable fix
+  belongs in `ordinaryDirectories` or in the ledger, and was **deliberately not taken inside this
+  plan**: that file's gate is the 330-minute `bootstrap-executor` job D32 defers, so the change
+  would ship unrun against D19's layout assertions. Founder decision, in NEW-94.
+- **NEW-95: `capture`, `ingest`, `review` and `reindex` cannot succeed on a V2 home at all**, and
+  this predates the gate: all four call `context.manifests.readOptional()`, whose zero-argument
+  overload refuses `schemaVersion: 2`. **Step 1's first case is therefore unreachable as written** —
+  `runCapture(…).ok === true` on a shared V2 home cannot happen today. The V2 contract is driven
+  through `context.executor.execute` instead, which is the interface this task actually produces,
+  with `runUninstall` and `runRepair` as the command-level proofs. Scope decision 5 is true of the
+  wiring and false of the runtime. **Checked and ruled out for Task 20:** `config` reaches V2
+  through `classifyMutationHome` and `readConfigFile`, neither of which touches
+  `context.manifests`.
+- **`context.lifecycle === undefined` on a V2 manifest refuses, decided fail-closed**, reason
+  `lifecycle_context_unavailable`, exit 4. Falling through would write an unallocated
+  `tx_<uuid>` journal into a V2 ledger outside the global lock and outside the allocator — the one
+  state `requireCounterCoversAllocatedIds` cannot reconcile. V1 and manifest-absent still take the
+  legacy path, so an NFD-named home can still run V1. Task 21 took the same decision for
+  `runUninstall`.
+- **`LifecycleCoordinator.execute` is unreachable from this gate in plan 1a**, which is why Task
+  16's `resumed` obligation is closed rather than merely unraced: the gate always calls `recover`
+  with `resumeUninstall: false`, `assertRecoverable` throws on any `active` coordinator before the
+  loop body, and the CLI execution-plan codec admits no operation but `uninstall`.
+- **Two signature widenings** against the `Produces` block, both required by the fail-closed
+  decision: `classifyMutationHome(context, lifecycle: CliLifecycleContext | undefined)` and the
+  same on `createGatedTransactionExecutor`'s input.
+- **Four exports beyond the `Produces` block:** `isGatedTransactionExecutor` (a `WeakSet` brand for
+  the wiring assertions), `composedContext` and `allocatedIdOnce` (the executor is a member of the
+  context it classifies, so both composition roots pass a one-slot cell; `allocatedIdOnce` makes
+  the allocated executor issue its ID once and throw on a second, per §7), and module-private
+  `requireLifecycleStagingRoot`.
+- **NEW-96: `manifestAdmissionFor` is duplicated** as a module-private `gateManifestAdmission`,
+  because importing it would make `context.ts → lifecycle/mutation-gate.ts →
+  commands/uninstall.ts → context.ts` a runtime cycle through the composition root. Two copies of
+  one admission policy.
+- **`controlFiles` adapters refuse rather than act** (`lifecycle_control_file_removal_unsupported`,
+  exit 4); completing an uninstall coordinator's control files is Task 22's, and no coordinator can
+  be executed in 1a.
+- **Three real V2 `init` runs in `mutation-gate.v2.test.ts`, not one.** The uninstall case needs a
+  pristine home: the shipped downcast reads the V2 allocator row through the V1 hash-based drift
+  comparison, so a home whose counter has advanced refuses exit 3 before the gate is reached —
+  another pre-existing V2-downcast gap, Task 22's territory. The repair case needs
+  `interruptAfter: "applied"`, a fixture-construction option.
+- **Cover-list items pinned differently than worded**, each for a stated reason: the
+  capability-less refusal is split into an `init` and a `capture` case, and for `init` "creates
+  nothing" is pinned as no journal, no manifest and no managed artifact, because `init` creates its
+  scaffold and the redaction key before it plans a transaction; the allocator temp is pinned as
+  surviving `status` untouched and gone after a mutation, because scope decision 15 leaves `status`
+  no field that could name it; `ingest`/`review`/`reindex` are pinned as wiring assertions plus a
+  per-command source assertion, because NEW-95 makes driving them on a V2 home impossible.
+
 Source: old Task 21 (recovery before mutation). Spec 1 §2.3 global lock for every mutating command; §2.4 compaction and reservation preflight, "A standalone Foundation transaction reserves one `tx` ID", overflow recovery; §2.2 closure prerequisite; Scope decisions 4–6.
 
 **Files:**
@@ -1105,7 +1172,7 @@ export class LifecycleMutationRefusal extends Error {
 }
 ```
 
-- [ ] **Step 1: Write failing gate tests, V2 cases on one shared home**
+- [x] **Step 1: Write failing gate tests, V2 cases on one shared home**
 
 ```ts
 it("runs a V2 capture under the global lock with one allocated transaction ID", async () => {
@@ -1160,13 +1227,13 @@ Cover also, in `mutation-gate.v2.test.ts`:
 - `ingest`, `review` and `reindex` each reach `createGatedTransactionExecutor`: one assertion per command that `context.executor` is the gated instance, with no extra real `init`.
 - The gate never spawns `git`, `launchctl` or a vendor: the fixture's `vendorProcesses` and runner requests stay empty.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root apps/cli src/lifecycle/mutation-gate.test.ts src/lifecycle/mutation-gate.v2.test.ts`
 
 Expected: FAIL — `mutation-gate.ts` does not exist and V2 captures still use legacy IDs.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `withLifecycleMutation` order, all under one held global lock:
 1. `classifyMutationHome`, requiring `v2`.
@@ -1181,7 +1248,7 @@ Expected: FAIL — `mutation-gate.ts` does not exist and V2 captures still use l
 
 `allocated(id)` constructs a `TransactionExecutor` with exactly `legacy`'s dependencies — including a fixture's `afterPhase` interruption hook — except `generateId`, which returns `id` once. `createGatedTransactionExecutor` classifies per call: `v2` enters the gate (`execute` allocates; `resume`/`rollback` pass `resolution`); `v1` and `manifest_absent` call `legacy`; `manifest_absent_with_global_lock` refuses exit 2. Map refusals to `LifecycleMutationRefusal` so `failureFrom` publishes `reason`, `paths` and `recovery`.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root apps/cli src/lifecycle/mutation-gate.test.ts src/lifecycle/mutation-gate.v2.test.ts src/commands/capture.test.ts src/commands/repair.test.ts src/commands/review.test.ts src/commands/reindex.test.ts src/commands/ingest.test.ts src/context.test.ts`
 
@@ -1195,7 +1262,7 @@ Run: `npm run build && npx vitest run --root tests security/interruption.test.ts
 
 Expected: PASS. Add `mutation-gate.v2.test.ts`'s duration to `lifecycle-v2`'s recorded local total and update its `timeout-minutes` per the CI budget rule.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Tick, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 
@@ -1833,6 +1900,57 @@ fixed in its own task. Each needs a failing test first, then the smallest correc
 the whole-plan review's starting point, not its scope — Tasks 14–25 received no per-task review at
 all and must be covered from scratch.
 
+- **Wave 5 produced the first integration failure D36 predicted, and the way it was found is the
+  lesson.** Tasks 19 and 21 were implemented in parallel worktrees that could not contain each
+  other, both reported green, and both were green in isolation. On the combined tree the first V2
+  `uninstall` in `main.test.ts` refused exit 6 where it must return 0. Root cause, measured:
+  `classifyBootstrapEvidence` requires `altered === 0`, so the one tampered byte the test plants in
+  a retained tombstone flips the envelope to `altered`, `retainedEnvelopes` empties, `residueFrom`
+  derives no `bootstrapParticipantIds`, and the ledger can no longer attribute that participant's
+  own `staging/transactions` tree — `lifecycle_foundation_staging_name`, then
+  `lifecycle_ledger_finding`, exit 6. **The test was wrong, not the gate**: the repository already
+  handles this exactly that way in `tests/e2e/fresh-v2-retained-bootstrap.test.ts`, which restores
+  the original bytes before its uninstall; `main.test.ts` was the lone outlier leaving a tamper in
+  place across a mutation. Fixed in `5408725`, tests only, with Task 21's D27 assertions untouched.
+  Nothing but the orchestrator's combined run could have caught it, which makes that run a hard
+  requirement of §4.1 and not a formality. **For the rest of the plan: no task is ticked before its
+  own gates run on the integrated tree, and a parallel wave reruns every participant's gates
+  together before any of them is ticked.**
+- **`tests/e2e/foundation.test.ts` cannot run under the agent harness's OS sandbox, and the failure
+  looks exactly like a product hang.** The case spawns the compiled CLI and installs fake
+  executables under `<repo>/.tmp-home`; under macOS Seatbelt it blocks and dies on the test's own
+  120,000 ms timeout, leaving a `.tmp-home/dos<6>` holding only `home` and no `bin`. Unsandboxed it
+  is ~3-6 s. This cost a false "Task 19 regressed the V1 path" call in the 2026-09-20/21 session:
+  the pre-change control had been run unsandboxed and the post-change runs sandboxed, so the
+  comparison measured the sandbox. **Run every `tests/e2e` command with the sandbox disabled, and
+  never compare two runs that did not share that setting.** A leftover `dos<6>` directory with no
+  `bin` is the signature.
+- Wave 5's per-test headroom is thinner than the job budget suggests, and the job budget hides it.
+  `REAL_FILESYSTEM_TIMEOUT_MS` is 900,000 ms per case. `absent-manifest-uninstall.v2.test.ts`
+  measured 621.6 s for two cases, ~310 s each locally; a hosted `macos-15` runner was measured at
+  ~1.9–2× local, which projects to ~590–620 s against that 900 s ceiling. The `lifecycle-v2`
+  `timeout-minutes` can be green while one case times out. Measure the slowest single case on CI
+  before the plan closes, and raise the per-case ceiling or split the case rather than discovering
+  it in a red run. NEW-53 owns the underlying `init` cost.
+- Task 19 found NEW-94 and NEW-95, both outside plan 1a's file lists. NEW-94 (fresh V2 `init` does
+  not create `staging/lifecycle`) ships with a gate-side repair as its interim and needs a founder
+  decision on where the durable fix goes, because it changes the fresh-install layout behind a
+  330-minute deferred gate. NEW-95 (four commands cannot read a V2 manifest) blocks no user before
+  Phase 4b but falsifies scope decision 5's runtime claim; the plan text now says so.
+- Task 19 found NEW-96: one confined owner-path admission policy now exists in two copies.
+- Task 19, two guards are argued by inspection and carry no test: the `live` flag that makes
+  `allocateStandaloneFoundationId` refuse after `withLifecycleMutation`'s `finally` has released
+  the lock (the floating-continuation hazard in the `AsyncLocalStorage` scope), and the
+  grammar-invalid persisted plan throwing out of `LifecycleCoordinatorStore.read`. Build both
+  fixtures. `controlFiles`' refusal is likewise untested, because no case drives a terminal
+  coordinator through compaction.
+- Task 19, `mutation-gate.v2.test.ts` has one order-dependent case: `refuses repair --resume of an
+  ID that is not the only non-terminal entry` leaves two non-terminal journals that no gated verb
+  can pass, so it is declared last on its home. Confirm that is robust rather than incidental.
+- Task 19, four guarded-port calls carry the `identity-free stat:` marker to satisfy the
+  repository lint's `identity-encoding` rule, which scopes in on any non-test module naming
+  `dev`/`ino`. The alternative — adding the module to `STAT_OPTION_EXEMPT` — was outside the task's
+  file list, and NEW-90 already owns that guard's granularity.
 - Task 21 found NEW-93, which is outside plan 1a's file lists and must not be closed inside it:
   `projectRegularEntry` reads and SHA-256s `state/redaction.key` whenever it sits in a retained
   tree, against the Global Constraint that the key is never read, hashed or journaled. Whether the
