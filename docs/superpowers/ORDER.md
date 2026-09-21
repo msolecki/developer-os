@@ -31,6 +31,10 @@ in parallel and one orchestrator integrates. **D36 (2026-09-20) supersedes the p
 per-task push for the rest of plan 1a**: no fresh-context review per task, commits held locally, and
 one whole-plan review plus one push plus `npm run check` at plan close (`SESSION.md` §4.1, §5).
 
+The parent document is `plans/2026-07-21-developer-os-program.md`, which is live rather than
+superseded: its 23 open items are DOS-P7's remainder (A11b and plan 1b), the DOS-P8 cutover (A15)
+and DOS-P9's release gates (A16, L1). It closes with A16 and with nothing earlier.
+
 Phase 4 onward is sequenced by `plans/2026-09-04-developer-os-completion-roadmap.md` (10 open phases,
 4 through 11 with a 4b and a 5b, the founder decisions D1–D37, and the spec or plan each phase requires). `docs/migration/instruction-inventory.md` is the scope of A12, A12b, A13 and A14.
 
