@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Tasks:** 26 (1–25 plus 10b, inserted by D31). Tasks 1–11 are done and listed under Completed; 12–25 remain and run in the waves below (D33).
+**Tasks:** 27 (1–25 plus 10b, inserted by D31, and 23b, inserted by D38). Tasks 1–11 are done and listed under Completed; 12–25 remain and run in the waves below (D33).
 
 **Goal:** Ship Spec 1a — `config get|set`, the lifecycle coordinator with proven recovery and bounded terminal collection, and a drained V2 uninstall — against the amended Spec 1, with no Git, launchd, or network effect.
 
@@ -38,6 +38,15 @@ Recorded in the roadmap's 2026-09-17 table; A14–A16 are in Spec 1 in place.
   layout assertions is what the decision refuses. It becomes its own task, gated properly, after
   plan 1a closes. Task 19's `requireLifecycleStagingRoot` stays as the interim until then, and is
   removed by that task.
+- **D38 (2026-09-21).** NEW-99 is fixed **inside plan 1a**, as new Task 23b, before Task 24. Founder
+  decision, taken when Task 23 proved that after one `uninstall` → `init` round trip every later
+  `uninstall` refuses exit 6, which makes Task 24's headline case unreachable. Unlike D37 this is not
+  an unrun change behind a deferred gate: `apps/cli/src/bootstrap/report.ts` is covered by
+  `apps/cli/src/bootstrap/report.test.ts`, which D32 does **not** defer, so the fix ships with its own
+  gate green. `apps/cli/src/bootstrap/executor.test.ts` stays deferred to plan close like every other
+  task's slow suite. Task 23b also restores Task 23's shared-home chain, returning A9 round-trip
+  coverage from one cycle to six — the shape that would have caught NEW-99 in the first place.
+
 - **D35 (2026-09-20).** The effect-journal codec, its phase accessor and the `classify` change they require are **deferred to plan 1b**. Unlike D34 the gap is unreachable in 1a — the null plan codec makes every effect leaf a `lifecycle_effect_root_unsupported` finding before a journal codec could matter — `LifecycleLedgerDependenciesV1` has only two construction sites in the whole plan, both of which Task 18 and 1b touch anyway, and `LifecycleEffectPhaseV1` would have been a guess at 1b's schema with no implementation to check it against. Task 12's Cover list records the full 1b obligation.
 
 ## Global Constraints
@@ -151,7 +160,8 @@ Derived from each task's `Consumes:` line. A task starts only when every task it
 | 6 | 20 | 19 |
 | 7 | 22 | 20, 21 |
 | 8 | 23 | 22 |
-| 9 | 24 | 23 |
+| 8b | 23b | 23 (D38) |
+| 9 | 24 | 23b |
 | 10 | 25 | 24 |
 
 Shared files. Tasks 12–16 all edit `packages/core/src/lifecycle/index.ts`, `packages/core/src/index.ts` and the exact export list in `packages/core/src/index.test.ts`: the integrator takes the union of the added exports, keeps that list in case-insensitive order, and reruns `npx vitest run --root packages/core src/index.test.ts`. Two more shared files the task file lists do not name: `packages/core/src/lifecycle/types.ts`, whose `LIFECYCLE_HASH_DOMAINS` keys also merge as a union, and `tests/repository/check.ts`, whose `STAT_OPTION_EXEMPT` array every task adding a guarded-port caller appends to — Tasks 13 and 15 were verified to conflict there and in `packages/core/src/index.ts`, both resolving as a union of added lines. Tasks 17 and 19–24 each set `lifecycle-v2` `timeout-minutes` in `.github/workflows/check.yml`: the integrator keeps the running local total in the job comment and recomputes the budget from it.
@@ -1918,6 +1928,97 @@ git add -f docs/superpowers/plans/2026-09-17-developer-os-opt-in-surfaces-1a.md 
 git diff --cached --name-only
 git commit -m "feat(cli): dispatch uninstall through its recovery-only arm"
 ```
+
+### Task 23b: Scope retained-envelope inventory to its own envelope (NEW-99) · M
+
+Inserted by D38. Spec 1 §7 "altered retained evidence never refuses `uninstall`"; A9's round trip;
+A13 closure admits retained bootstrap evidence. It unblocks Task 24, whose headline case is the first
+operation to reach the defect.
+
+**The defect, as measured.** After one `uninstall` → `init` round trip a home carries two retained
+bootstrap envelopes. `inspectBootstrapEvidenceAdmission` then reports the **same** `entryCount` and
+`regularFileBytes` for both, because each envelope's retention inventory is namespace-scoped rather
+than envelope-scoped: `inventoryExactNamespaces([...roots, ...rowParents])` in
+`apps/cli/src/bootstrap/report.ts` walks the manifest rows' parent directories exhaustively, and two
+installations share those parents, so every entry of the other envelope comes back as this
+envelope's. Both envelopes consequently leave `verified`; `retainedEnvelopes` keeps only entries
+whose `verifiedEnvelope` is non-null, which requires `summary.status === "verified"`, so it empties;
+`residueFrom`'s `bootstrapParticipantIds` empties with it; and the ledger reads both bootstrap
+Foundation staging trees as unattributable findings, refusing exit 6 `lifecycle_ledger_finding` on
+every later `uninstall` and every V2 mutation. Proven pre-existing by reverting
+`apps/cli/src/commands/uninstall.ts` to `cce9432` and observing the identical failure.
+
+**Files:**
+- Modify: `apps/cli/src/bootstrap/report.ts` — the retention inventory and whatever the fix shows is
+  downstream of it
+- Modify: `apps/cli/src/bootstrap/report.test.ts` — the failing regression case first (`suite` job,
+  **not** deferred by D32)
+- Modify: `apps/cli/src/lifecycle/uninstall-recovery.v2.test.ts` — restore Task 23's shared-home
+  chain (`lifecycle-v2` job)
+- Modify: `.github/workflows/check.yml` — `lifecycle-v2` `timeout-minutes` if the restored chain
+  changes the file's measured duration
+
+**Interfaces:** consumes Tasks 22 and 23. Produces no new export; it repairs an existing contract.
+
+- [ ] **Step 1: Write the failing regression case in `report.test.ts`**
+
+Two retained envelopes over the guarded reader, sharing their manifest rows' parent directories.
+Assert that each envelope's `entryCount` and `regularFileBytes` count **only its own** retained
+rows, that both keep `status: "verified"`, and that `retainedEnvelopes` has both. Assert the
+expected set is non-empty before asserting over it. This case must fail on the current tree for the
+stated reason, and it is the gate that makes this fix shippable rather than argued.
+
+- [ ] **Step 2: Run it and verify it fails**
+
+Run: `npx vitest run --root apps/cli src/bootstrap/report.test.ts -t '<the new case>'`
+
+Expected: FAIL — both envelopes report the union of the two.
+
+- [ ] **Step 3: Fix the scoping**
+
+Scope each envelope's retention inventory to the rows that envelope's own plan and terminal journal
+derive, rather than to the parent namespaces those rows happen to sit in. `deriveBootstrapRetentionLocations`
+already yields this envelope's exact `sourcePath`/`tombstonePath` pairs; `rowParents` is what widens
+it. Whatever `rowParents` was there to catch — an entry inside a row's parent that no location names
+— must keep being caught, but attributed to the envelope that owns it, never to both. If the honest
+fix needs a new seam in the reader, take it and say so; do not weaken the `altered === 0` rule or the
+`unboundEntries` confinement check to make the case pass, because those are the guards that make
+tampered evidence observable.
+
+- [ ] **Step 4: Restore Task 23's shared-home chain**
+
+Task 23 worked around this defect with one fresh home per kill point, dropping A9 round-trip coverage
+from six consecutive cycles to one. Restore the single chained home in
+`apps/cli/src/lifecycle/uninstall-recovery.v2.test.ts` and re-derive `CHAIN_TIMEOUT_MS` from a fresh
+measurement, citing it in its one-line comment. Six cycles is the shape that would have caught
+NEW-99; the restored chain is this task's proof that it is closed.
+
+- [ ] **Step 5: Run the gates**
+
+Run: `npx vitest run --root apps/cli src/bootstrap/report.test.ts` — in full, not filtered.
+
+Run: `npx vitest run --root apps/cli src/lifecycle/uninstall-recovery.v2.test.ts`
+
+Run: `npx vitest run --root apps/cli src/lifecycle/uninstall.v2.test.ts src/lifecycle/mutation-gate.v2.test.ts`
+
+Run: `npm run build && npx vitest run --root tests e2e/fresh-v2-retained-bootstrap.test.ts`
+
+Run: `npx vitest run --root tests repository/citations.test.ts`, then `npm run lint`.
+
+`apps/cli/src/bootstrap/executor.test.ts` stays deferred to plan close under D32, like every other
+task's slow suite; D38 turns on `report.test.ts` being fast and not deferred.
+
+- [ ] **Step 6: Gate and commit**
+
+Tick and update the progress sentence, then:
+
+```bash
+git add apps/cli/src/bootstrap/report.ts apps/cli/src/bootstrap/report.test.ts apps/cli/src/lifecycle/uninstall-recovery.v2.test.ts .github/workflows/check.yml
+git add -f docs/superpowers/plans/2026-09-17-developer-os-opt-in-surfaces-1a.md docs/superpowers/ORDER.md docs/superpowers/BACKLOG.md
+git diff --cached --name-only
+git commit -m "fix(cli): scope retained-envelope inventory to its own envelope"
+```
+
 
 ### Task 24: Uninstall → `init` round-trip gates · L
 
