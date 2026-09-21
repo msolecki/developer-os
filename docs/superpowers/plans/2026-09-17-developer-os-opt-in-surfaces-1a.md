@@ -1800,6 +1800,35 @@ git commit -m "feat(cli): uninstall a V2 home through a drained lifecycle coordi
 
 Source: old Task 23 (recovery half). A7 and A14/A15 recovery-only arm (Spec 1 §2.1); A3/A7/A12 dispatch order (§6); §7 "V2 admission is structural" (recovery-only clause).
 
+Corrections this task's implementation forced, recorded against the steps below:
+
+- **Step 1's chain cannot run on one shared home, and the reason is a product defect this task did
+  not cause — NEW-99.** After one `uninstall` → `init` round trip, every later `uninstall` and every
+  V2 mutation on that home refuses exit 6 `lifecycle_ledger_finding`. The chain therefore uses one
+  fresh home per kill point and asserts the round trip once. **A9 round-trip coverage drops from six
+  consecutive cycles to one, and six cycles is exactly the shape that would have caught NEW-99** —
+  restoring the shared-home chain is gated on the fix and must land in the same change. Proven
+  pre-existing by reverting `apps/cli/src/commands/uninstall.ts` to this task's base and observing
+  the identical failure.
+- **`CliLifecycleContext.recovery` forwards no `afterBoundary`,** so the last three kill points are
+  unreachable from a hook. They are reached instead by wrapping the product's own
+  `controlFiles.removeNonce` and performing `removeEnvelopeLeaves`' next two unlinks directly. A
+  fifth staged path for a test-only seam was declined here; **Task 24's kill matrix will want that
+  seam**, and taking it there is the cheaper place.
+- **The fixture's `InProcessLockProvider` creates no lock file, so the `plan plus lock` kill point
+  silently collapsed into `plan only` and passed.** It is now planted in the exact shape the ledger
+  admits. A kill point that degenerates into its neighbour is a test asserting nothing.
+- **`recoverUninstall` returns `CliResult<UninstallResultV1>`,** not the bare result, forced by the
+  declined-prompt arm. All three exports take an optional `evidence`, forced by Task 22's "exactly
+  one evidence inspection" rule plus the residue dependency. `selectUninstallCoordinator` is
+  exported because two uninstall journals and a non-uninstall coordinator are not constructible on
+  a real home in 1a.
+- **`runUninstall`'s catch now publishes `paths` and `recovery` from `LifecycleRecoveryRefusalError`
+  as well**, without which the standalone-journal arm refused exit 6 without naming `repair` — the
+  recovery string §2.3 requires.
+- **`pre_journal_orphan` refuses exit 6 by construction** and is unreachable with the manifest
+  absent, so that arm is reasoned rather than tested. Carried to Task 25's deferred list.
+
 **Files:**
 - Create: `apps/cli/src/lifecycle/uninstall-recovery.ts`
 - Create: `apps/cli/src/lifecycle/uninstall-recovery.v2.test.ts`
@@ -1821,7 +1850,7 @@ export async function admitRecoveryOnlyUninstall(context: CliContext, lifecycle:
 export async function recoverUninstall(context: CliContext, lifecycle: CliLifecycleContext, dispatch: Extract<UninstallDispatchV1, { kind: "recovery_only" | "v2_coordinator" }>, options: UninstallOptions): Promise<UninstallResultV1>;
 ```
 
-- [ ] **Step 1: Write failing dispatch tests over killed uninstalls, chained on one home**
+- [x] **Step 1: Write failing dispatch tests over killed uninstalls, chained on one home**
 
 ```ts
 it("admits the recovery-only arm at each kill point and resumes to an absent-manifest home", async () => {
@@ -1859,17 +1888,17 @@ Cover:
 
 Put the cheap cases (dispatch order over planted plans, refusals, dry run) in the same file on the one shared home.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root apps/cli src/lifecycle/uninstall-recovery.v2.test.ts`
 
 Expected: FAIL — the module does not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `runUninstall` becomes: `assertHomeShape` → evidence inspection → `dispatchUninstall` → the V1 path unchanged, `LifecycleUninstaller`/`recoverUninstall`, or `runAbsentManifestUninstall`. `admitRecoveryOnlyUninstall` runs only when the manifest is absent and `state/.lifecycle.lock` has its exact shape: it acquires the lock, builds the key from `coordinatorNonceOf` (never from admission, which refuses `manifest_absent`), inspects the ledger, and requires exactly one uninstall coordinator record of either variant whose state matches one bullet of §2.1's recovery-only arm, including A15's microstates at `M(finalize_tombstones)`. Recovery runs `LifecycleRecoveryService.recover(global, { resumeUninstall: true })`.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root apps/cli src/lifecycle/uninstall-recovery.v2.test.ts`
 
@@ -1879,7 +1908,7 @@ Run: `npx vitest run --root apps/cli src/lifecycle/absent-manifest-uninstall.tes
 
 Expected: PASS. Add `uninstall-recovery.v2.test.ts`'s duration to `lifecycle-v2`'s recorded local total and update its `timeout-minutes`.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Tick, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 
@@ -2116,6 +2145,28 @@ all and must be covered from scratch.
   the shipped V2 downcast uninstall refuses exit 3 on any home whose allocator counter has advanced,
   reading the V2 allocator row through the V1 drift comparison. It is documented in
   `mutation-gate.v2.test.ts`'s own docblock. Confirm no remaining caller reaches the downcast.
+- **Task 24 is blocked by NEW-99 and the founder owns the decision.** After one `uninstall` → `init`
+  round trip, the next `uninstall` refuses exit 6 `lifecycle_ledger_finding`, because two retained
+  bootstrap envelopes each count the other's rows, both drop to `altered`, `retainedEnvelopes`
+  empties and the ledger can attribute neither bootstrap staging tree. Task 24's headline case is
+  `uninstall` → `init` → `uninstall`, so it cannot pass on the current tree. Proven pre-existing by
+  reverting `apps/cli/src/commands/uninstall.ts` to Task 23's base. The fix is in
+  `apps/cli/src/bootstrap/report.ts`, whose gate is the 330-minute `bootstrap-executor` job D32
+  defers — the same shape D37 refused to ship unrun inside plan 1a. Restoring Task 23's shared-home
+  chain, and with it A9's six consecutive cycles, belongs in that same change.
+- Task 23, `pre_journal_orphan` refuses exit 6 by construction and is unreachable with the manifest
+  absent, so that arm is reasoned rather than tested — the same class as Task 19's two guards and
+  Task 22's lease `dev`/`ino` swap refusal above.
+- Task 23 declined a fifth staged path for the test-only seam that `CliLifecycleContext.recovery`
+  lacks: it forwards no `afterBoundary`, so the last three kill points are unreachable from a hook
+  and are reached by wrapping `controlFiles.removeNonce` and performing two unlinks directly. Task
+  24's kill matrix wants that seam; take it there rather than rediscovering the gap.
+- **The citations gate went red twice in this wave and `npm run lint` covers neither occasion.**
+  First when Task 22 added a second `uninstall.ts`, making two bare citations ambiguous; then again
+  when the orchestrator's own correction note restated those bare tokens while documenting the
+  repair. Both were caught only by running `tests/repository/citations.test.ts` by hand on the
+  integrated tree. It is deferred by D32 into `test:suite`, so **every task from here runs it
+  explicitly before its commit**, and no prose restates a bare `name.ts:NN` token.
 - **A `--root tests` run inside a linked worktree can measure a different checkout** (NEW-98).
   `tests/vitest.config.ts` declares no source aliases by design, so those suites resolve through
   `tests/node_modules/@developer-os/*`; sharing that directory with another checkout makes every

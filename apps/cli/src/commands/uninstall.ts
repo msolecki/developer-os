@@ -7,6 +7,7 @@ import {
   EXIT_CODES,
   failure,
   hashBytes,
+  LifecycleRecoveryRefusalError,
   success,
   validateChangePlan,
 } from "@developer-os/core";
@@ -39,11 +40,12 @@ import {
   ABSENT_MANIFEST_ARCHIVE_RECOVERY,
   runAbsentManifestUninstall,
 } from "../lifecycle/absent-manifest-uninstall.js";
-import { admitInstalledV2Home, observeManifestSchema } from "../lifecycle/admission.js";
+import type { AdmittedV2HomeV1 } from "../lifecycle/admission.js";
 import { lifecycleHomeKeyFromAdmission } from "../lifecycle/context.js";
 import type { CliLifecycleContext } from "../lifecycle/context.js";
 import { LifecycleUninstaller } from "../lifecycle/uninstall.js";
 import type { LifecycleUninstallRequestV1 } from "../lifecycle/uninstall.js";
+import { dispatchUninstall, recoverUninstall } from "../lifecycle/uninstall-recovery.js";
 import { readConfigFile } from "./doctor.js";
 
 export interface UninstallResultV1 {
@@ -670,7 +672,7 @@ export async function downcastArtifactV2(
  * path is that root plus a suffix): naming it, and the Brain the
  * configuration currently points at, is the whole diagnosis and the whole fix.
  */
-function relocatedBrainRefusal(
+export function relocatedBrainRefusal(
   recordedPath: string,
   configuredBrain: string,
 ): UninstallRefusal {
@@ -743,33 +745,34 @@ async function assertHomeShape(context: CliContext): Promise<void> {
 }
 
 /**
- * Spec 1 §6 on an admitted V2 home: one lifecycle coordinator replaces the V1 revert, so the
- * run leaves the A12 bookkeeping set and retained bootstrap evidence and nothing else. The
- * relocated-Brain diagnosis stays here because admission is where a confined owner path is
- * refused; the coordinator's own manifest arm is deliberately unconfined (I2).
+ * The configuration authority every arm of `uninstall` reads its paths under. A drifted or
+ * corrupted configuration must not block removal, and must not widen it either: `ownedRoots`
+ * stays the product home alone wherever this is used.
  */
-async function runCoordinatorUninstall(
+export async function uninstallRuntimePaths(context: CliContext): Promise<RuntimePaths> {
+  let config = null;
+  try {
+    config = await readConfigFile(context, context.paths.configFile);
+  } catch {
+    config = null;
+  }
+  return runtimePathsFor(context, config ?? undefined);
+}
+
+/**
+ * Spec 1 §6 on an admitted V2 home: one lifecycle coordinator replaces the V1 revert, so the
+ * run leaves the A12 bookkeeping set and retained bootstrap evidence and nothing else. The home
+ * is admitted by `dispatchUninstall`, which owns the relocated-Brain diagnosis; the
+ * coordinator's own manifest arm is deliberately unconfined (I2).
+ */
+export async function runCoordinatorUninstall(
   context: CliContext,
   lifecycle: CliLifecycleContext,
-  paths: RuntimePaths,
+  admitted: AdmittedV2HomeV1,
   evidence: BootstrapEvidenceAdmissionV1,
   options: UninstallOptions,
 ): Promise<CliResult<UninstallResultV1>> {
-  const refusedOwnerPaths: string[] = [];
-  let admitted;
-  try {
-    admitted = await admitInstalledV2Home({
-      fs: lifecycle.fs,
-      paths,
-      manifestAdmission: manifestAdmissionFor(paths, refusedOwnerPaths),
-      effectiveUid: lifecycle.effectiveUid,
-    });
-  } catch (error) {
-    const recordedPath = refusedOwnerPaths[0];
-    if (recordedPath === undefined) throw error;
-    throw relocatedBrainRefusal(recordedPath, paths.brain);
-  }
-
+  const paths = await uninstallRuntimePaths(context);
   const request: LifecycleUninstallRequestV1 = {
     context,
     lifecycle,
@@ -828,31 +831,31 @@ export async function runUninstall(
           initialRoots: [context.paths.home, context.paths.stateDir, context.userHome],
         }));
     /**
-     * Read before the manifest, not after. `readUninstallManifest`'s V2
-     * admission needs the same product-home-or-Brain authority `ownedRoots`
-     * and `excludedRoots` build below it, and that authority is
-     * config-dependent — a custom `brainPath` moves it. A drifted or
-     * corrupted configuration must not block removal, and must not widen it
-     * either: `ownedRoots` is the product home alone, so an artifact outside
-     * it is preserved whatever the Brain path turns out to be, and the
-     * manifest-null branch immediately below never consults `paths` at all.
+     * §6's dispatch order — V1 manifest, V2 manifest, §2.1's recovery-only arm, then the
+     * absent-manifest shapes. It reads the manifest under the same product-home-or-Brain
+     * authority `ownedRoots` and `excludedRoots` build below, which is config-dependent: a
+     * custom `brainPath` moves it.
      */
-    let config = null;
-    try {
-      config = await readConfigFile(context, context.paths.configFile);
-    } catch {
-      config = null;
-    }
-    const paths = runtimePathsFor(context, config ?? undefined);
-
     const lifecycle = context.lifecycle;
     if (lifecycle !== undefined) {
-      const observed = await observeManifestSchema(lifecycle.fs, paths);
-      if (observed.kind === "v2") {
-        return await runCoordinatorUninstall(context, lifecycle, paths, evidence, options);
+      const dispatch = await dispatchUninstall(context, lifecycle, evidence);
+      if (dispatch.kind === "v2_coordinator" || dispatch.kind === "recovery_only") {
+        return await recoverUninstall(context, lifecycle, dispatch, options, evidence);
+      }
+      if (dispatch.kind === "absent_manifest") {
+        const outcome = await runAbsentManifestUninstall({ context, lifecycle, options, evidence });
+        return success({
+          schemaVersion: 1,
+          removed: outcome.removed,
+          restored: outcome.restored,
+          preserved: outcome.preserved,
+          retainedBootstrapEvidence: outcome.retainedBootstrapEvidence,
+          transactionId: outcome.transactionId,
+        });
       }
     }
 
+    const paths = await uninstallRuntimePaths(context);
     const manifest = await readUninstallManifest(context, paths);
     if (manifest === null) {
       if (lifecycle === undefined) {
@@ -924,11 +927,15 @@ export async function runUninstall(
       retainedBootstrapEvidence: evidence.report.ids,
     });
   } catch (error) {
-    return failureFrom(
-      context,
-      error,
-      error instanceof UninstallRefusal ? error.paths : [],
-      error instanceof UninstallRefusal ? error.recovery : undefined,
-    );
+    /**
+     * `LifecycleRecoveryRefusalError` carries §2.4's way out as a literal command line, which a
+     * `SafeReasonCodeV1` cannot hold — a non-terminal standalone Foundation journal is resolved
+     * by `repair`, and dropping the field would leave the user the reason and no instruction.
+     */
+    const refusal =
+      error instanceof UninstallRefusal || error instanceof LifecycleRecoveryRefusalError
+        ? error
+        : null;
+    return failureFrom(context, error, refusal?.paths ?? [], refusal?.recovery);
   }
 }
