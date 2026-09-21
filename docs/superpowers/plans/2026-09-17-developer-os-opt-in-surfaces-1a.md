@@ -38,6 +38,43 @@ Recorded in the roadmap's 2026-09-17 table; A14–A16 are in Spec 1 in place.
   layout assertions is what the decision refuses. It becomes its own task, gated properly, after
   plan 1a closes. Task 19's `requireLifecycleStagingRoot` stays as the interim until then, and is
   removed by that task.
+- **D40 (2026-09-22).** **No test suite runs per task for the rest of plan 1a.** A task commit runs
+  `npm run lint` and nothing else. Every vitest run — the task's own new cases, the focused `-t`
+  filters D32 kept, the orchestrator's rerun on the integrated tree, `citations.test.ts` — is
+  deferred to plan close, where the full suite runs once against the finished tree. Founder decision,
+  taken on 2026-09-22 after the per-task gates had cost several hours of wall clock across wave 8b
+  alone: `report.test.ts` 608 s, the restored chain 1137 s, `uninstall.v2` + `mutation-gate.v2` a
+  further ~815 s, each rerun on the integrated tree after already running in the worktree.
+  `npm run lint` stays because it is the build and typecheck step — `tsc -b` then `eslint` then the
+  repository check — and it is what keeps this a per-commit lane rather than no validation at all;
+  it is **11 seconds**, measured on 2026-09-22, against the suites' tens of minutes. This supersedes D32's "fast commands named
+  by the task" and `SESSION.md` §5 step 1 for the remainder of plan 1a.
+  **What this buys and what it costs.** It buys wall clock, which is the whole point. It costs the
+  property that wave 5 established and that this plan has leaned on since: a defect that only appears
+  on the combined tree is now found at plan close, against every task at once, instead of against the
+  task that caused it. Wave 5's own integration defect, NEW-99, and the two citation regressions were
+  each caught by exactly the runs this decision removes. Plan close therefore absorbs a larger fix
+  round than the one D36 already scheduled, and the tasks land unproven until then.
+
+- **D39 (2026-09-22).** Task 24 **cuts coverage to stay under the 300-minute `lifecycle-v2` cap**,
+  rather than sharding the job into two runners or raising the cap toward GitHub's 360-minute hosted
+  maximum. Founder decision, taken on the projection that Task 24 would otherwise land the job at
+  ~304–364 minutes: after Task 23b the running total is 3680.3 s (185 minutes, 62% of the cap), and
+  Task 23b measured the chained shape at 2.3× its unchained cost, quadratic in cycle count because
+  cycle *k* inspects *k* retained envelopes.
+  **The cut is `A9_KILL_POINTS` 10 → 6 and nothing else.** The round-trip case stays exactly as
+  written: it already runs the minimum two cycles, and its third `uninstall` — the one that follows a
+  reinstall — is the single operation NEW-99 breaks on, so removing it would delete the regression
+  detector for the defect D38 was taken to fix. Six kill points is also precisely Task 23's chain
+  length, the shape that did surface NEW-99.
+  **Selection rule, not a count:** keep one kill point per distinct recovery arm *and* per distinct
+  control-file microstate the code branches on; drop only a point provably equivalent to a kept one
+  at both levels, and record which four were dropped and why each is equivalent. `plan plus lock`
+  and `plan only` are **not** equivalent — Task 23 found the fixture silently collapsing the first
+  into the second — so if only one survives it is `plan plus lock`.
+  Accepted risk: four A9 recovery microstates lose direct coverage inside plan 1a. NEW-100 carries
+  them, and restoring them is gated on the job being sharded.
+
 - **D38 (2026-09-21).** NEW-99 is fixed **inside plan 1a**, as new Task 23b, before Task 24. Founder
   decision, taken when Task 23 proved that after one `uninstall` → `init` round trip every later
   `uninstall` refuses exit 6, which makes Task 24's headline case unreachable. Unlike D37 this is not
@@ -342,7 +379,7 @@ Expected: FAIL — `absent-manifest.ts` does not exist.
 
 - [x] **Step 3: Implement**
 
-Rules: one bounded no-follow walk from the product home's parent-guarded entry, counting every entry visited, including those it then projects away. `retainedPaths` projects **path by path, never as a subtree mute**: the producer emits every descendant (`apps/cli/src/bootstrap/report.ts:1326`), a separate field carries the maximal roots, and prefix semantics would let an entry the evidence never named hide under a retained directory — which §6's “exhaustive root inventory, rather than a checklist of selected known paths” exists to prevent. `projectSubtree` therefore stops descending wherever `bookkeeping.ts` stopped. `state` is never projected by any rule, because the four shapes are distinguished by whether it exists. Projection order: the exact bootstrap leaf at `state/.lifecycle-bootstrap.lock` (an owner `0600` zero-byte single-link file whose `dev`/`ino` equal no `bootstrapIdentities` entry); every path in `retainedPaths`, and non-empty directories that exist only to hold them; every bookkeeping path `inspectLifecycleBookkeepingShape` admits. The remainder must equal one of the four shapes exactly. `walkFingerprint` is `hashCanonicalJson("developer-os:absent-manifest-walk:v1", entries)` over every visited entry's relative path, kind, owner, mode, `nlink`, size, `dev` and `ino`, sorted by unsigned UTF-8 path bytes. No key byte is read.
+Rules: one bounded no-follow walk from the product home's parent-guarded entry, counting every entry visited, including those it then projects away. `retainedPaths` projects **path by path, never as a subtree mute**: the producer emits every descendant (`apps/cli/src/bootstrap/report.ts:1342`), a separate field carries the maximal roots, and prefix semantics would let an entry the evidence never named hide under a retained directory — which §6's “exhaustive root inventory, rather than a checklist of selected known paths” exists to prevent. `projectSubtree` therefore stops descending wherever `bookkeeping.ts` stopped. `state` is never projected by any rule, because the four shapes are distinguished by whether it exists. Projection order: the exact bootstrap leaf at `state/.lifecycle-bootstrap.lock` (an owner `0600` zero-byte single-link file whose `dev`/`ino` equal no `bootstrapIdentities` entry); every path in `retainedPaths`, and non-empty directories that exist only to hold them; every bookkeeping path `inspectLifecycleBookkeepingShape` admits. The remainder must equal one of the four shapes exactly. `walkFingerprint` is `hashCanonicalJson("developer-os:absent-manifest-walk:v1", entries)` over every visited entry's relative path, kind, owner, mode, `nlink`, size, `dev` and `ino`, sorted by unsigned UTF-8 path bytes. No key byte is read.
 
 - [x] **Step 4: Run the focused tests**
 
@@ -1935,6 +1972,36 @@ Inserted by D38. Spec 1 §7 "altered retained evidence never refuses `uninstall`
 A13 closure admits retained bootstrap evidence. It unblocks Task 24, whose headline case is the first
 operation to reach the defect.
 
+Corrections this task's implementation forced, recorded against the steps below:
+
+- **The reader does not walk a shared directory exhaustively, and that is what makes the fix safe.**
+  The task text said `inventoryExactNamespaces` sweeps a root exhaustively; in fact `inventoryTree`
+  runs only for `INITIAL_NAMESPACE`-named roots, and other directories go through
+  `inventoryDirectNamespaces`, which filters children. That is the proof that id-attribution loses no
+  tamper detection: every name a shared parent can surface carries a bootstrap id except
+  `.lifecycle-bootstrap.lock`, which is already a retention location.
+- **The inventory call itself is unchanged.** Its `[4, 322]` / `walks === 158` grouping is a pinned
+  contract, so the fix narrows the three consumers — `retainedByPath`, `unboundEntries` and
+  `sumEntries` — to an id-attributed subset. The union still leaves `inspectPlan` as `retained`,
+  because the caller's aggregate and `retainedPaths` are home-wide and A2/D21 forbids unlinking a
+  retained tombstone this sweep is the only witness to. No guard was weakened: `altered === 0` and
+  the `unboundEntries` confinement check are untouched.
+- **One intended behaviour change beyond the counts.** With `confinedUnboundEntries` scoped, a
+  round-tripped home's retained envelopes can become `inert`, so `blocksNewIntent` can flip true →
+  false. Correct per §6.4 and exercised by cycles 2–6 of the restored chain, but a reviewer tracing
+  `blocksNewIntent` will find it and should not read it as a regression.
+- **The restored chain costs 2.3× the workaround it replaces**, and the shape is quadratic in cycle
+  count because cycle *k* inspects *k* retained envelopes. `uninstall-recovery.v2.test.ts` goes
+  527.3 s → 1147.2 s and `CHAIN_TIMEOUT_MS` 1,405,000 → 3,266,000 ms. This is what forced D39.
+- **`apps/cli/src/bootstrap/executor.test.ts` is argued unaffected, not run** (D32). It never calls
+  `runUninstall`; every case is one `init` with an optional interrupt or resume, and the one rollback
+  case that could start a second id asserts `resumed.ok === false`. On a single-envelope home the new
+  filter is the identity function. The argument is recorded here so plan close can check it rather
+  than rediscover it.
+- **`CHAIN_TIMEOUT_MS` rests on one per-case observation**, where every other figure in this job is a
+  maximum of two or more, because only the second run carried a verbose reporter. It was scaled by
+  the whole-file spread rather than taken raw, and its margin is 3×.
+
 **The defect, as measured.** After one `uninstall` → `init` round trip a home carries two retained
 bootstrap envelopes. `inspectBootstrapEvidenceAdmission` then reports the **same** `entryCount` and
 `regularFileBytes` for both, because each envelope's retention inventory is namespace-scoped rather
@@ -1960,7 +2027,7 @@ every later `uninstall` and every V2 mutation. Proven pre-existing by reverting
 
 **Interfaces:** consumes Tasks 22 and 23. Produces no new export; it repairs an existing contract.
 
-- [ ] **Step 1: Write the failing regression case in `report.test.ts`**
+- [x] **Step 1: Write the failing regression case in `report.test.ts`**
 
 Two retained envelopes over the guarded reader, sharing their manifest rows' parent directories.
 Assert that each envelope's `entryCount` and `regularFileBytes` count **only its own** retained
@@ -1968,13 +2035,13 @@ rows, that both keep `status: "verified"`, and that `retainedEnvelopes` has both
 expected set is non-empty before asserting over it. This case must fail on the current tree for the
 stated reason, and it is the gate that makes this fix shippable rather than argued.
 
-- [ ] **Step 2: Run it and verify it fails**
+- [x] **Step 2: Run it and verify it fails**
 
 Run: `npx vitest run --root apps/cli src/bootstrap/report.test.ts -t '<the new case>'`
 
 Expected: FAIL — both envelopes report the union of the two.
 
-- [ ] **Step 3: Fix the scoping**
+- [x] **Step 3: Fix the scoping**
 
 Scope each envelope's retention inventory to the rows that envelope's own plan and terminal journal
 derive, rather than to the parent namespaces those rows happen to sit in. `deriveBootstrapRetentionLocations`
@@ -1985,7 +2052,7 @@ fix needs a new seam in the reader, take it and say so; do not weaken the `alter
 `unboundEntries` confinement check to make the case pass, because those are the guards that make
 tampered evidence observable.
 
-- [ ] **Step 4: Restore Task 23's shared-home chain**
+- [x] **Step 4: Restore Task 23's shared-home chain**
 
 Task 23 worked around this defect with one fresh home per kill point, dropping A9 round-trip coverage
 from six consecutive cycles to one. Restore the single chained home in
@@ -1993,7 +2060,7 @@ from six consecutive cycles to one. Restore the single chained home in
 measurement, citing it in its one-line comment. Six cycles is the shape that would have caught
 NEW-99; the restored chain is this task's proof that it is closed.
 
-- [ ] **Step 5: Run the gates**
+- [x] **Step 5: Run the gates**
 
 Run: `npx vitest run --root apps/cli src/bootstrap/report.test.ts` — in full, not filtered.
 
@@ -2008,7 +2075,7 @@ Run: `npx vitest run --root tests repository/citations.test.ts`, then `npm run l
 `apps/cli/src/bootstrap/executor.test.ts` stays deferred to plan close under D32, like every other
 task's slow suite; D38 turns on `report.test.ts` being fast and not deferred.
 
-- [ ] **Step 6: Gate and commit**
+- [x] **Step 6: Gate and commit**
 
 Tick and update the progress sentence, then:
 
@@ -2046,7 +2113,7 @@ it("round-trips init → uninstall → uninstall → init → uninstall → init
   expect(new Set((await fixture.bootstrapEvidenceIdentities()).map((entry) => entry.id)).size).toBe(3);
 }, REAL_FILESYSTEM_TIMEOUT_MS);
 
-it("recovers an uninstall killed at every A9 point and then initialises, reusing one chained home", async () => {
+it("recovers an uninstall killed at each retained A9 point and then initialises, reusing one chained home", async () => {
   const fixture = await createCommandFixture("round-trip-kill-matrix", { bootstrapAvailable: true });
   expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
   expect(A9_KILL_POINTS.length).toBeGreaterThan(0);
@@ -2058,7 +2125,9 @@ it("recovers an uninstall killed at every A9 point and then initialises, reusing
 }, KILL_MATRIX_TIMEOUT_MS);
 ```
 
-`KILL_MATRIX_TIMEOUT_MS` is a file-local constant derived the same way as Task 23's: measure once with `4 * REAL_FILESYSTEM_TIMEOUT_MS`, then set ceil(measured × 2 × 1.5) with the measurement in a one-line comment. `A9_KILL_POINTS` is exactly:
+`KILL_MATRIX_TIMEOUT_MS` is a file-local constant derived the same way as Task 23's: measure once with `4 * REAL_FILESYSTEM_TIMEOUT_MS`, then set ceil(measured × 2 × 1.5) with the measurement in a one-line comment.
+
+**D39 cuts `A9_KILL_POINTS` from ten to six.** Apply D39's selection rule to the list below — one point per distinct recovery arm *and* per distinct control-file microstate the code branches on, `plan plus lock` surviving over `plan only` — and record the four dropped points and each one's equivalence argument in the report, so NEW-100 can restore them once the job is sharded. The full list D39 cuts from is:
 - `M(preserve_before)` before its cursor advance, and after it;
 - `M(commit_absence)`;
 - `K(delete)`;

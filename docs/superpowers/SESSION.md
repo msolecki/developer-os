@@ -11,6 +11,17 @@
 > only after its consumers bound to it. Plan 1a's "Deferred fix list (D36)" under Task 25 collects
 > what is owed. **This block expires when plan 1a closes**; delete it then and §5 returns as written.
 
+> **D40 (2026-09-22) — no test suite runs per task for the rest of plan 1a.** A task commit runs
+> `npm run lint` and nothing else. Every vitest run is deferred to plan close: the task's own new
+> cases, the focused `-t` filters, the orchestrator's rerun on the integrated tree, and
+> `citations.test.ts`. This supersedes §5 step 1 and D32's "fast commands named by the task" for the
+> remainder of `plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`. `npm run lint` stays because it
+> is the build and typecheck step, is what keeps this a per-commit lane rather than no validation,
+> and costs 11 seconds (measured 2026-09-22).
+> Accepted risk, stated plainly: a defect that only appears on the combined tree is now found at plan
+> close against every task at once. NEW-99 and both citation regressions were caught by exactly the
+> runs this removes. **This block expires when plan 1a closes**; delete it then.
+
 Use this prompt in a fresh session:
 
 ```text

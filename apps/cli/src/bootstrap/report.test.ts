@@ -9,6 +9,7 @@ import type { CanonicalAbsolutePathV1, UInt64DecimalV1 } from "@developer-os/cor
 
 import { runInit } from "../commands/init.js";
 import { runDoctorReport } from "../commands/doctor.js";
+import { runUninstall } from "../commands/uninstall.js";
 import { createCommandFixture, firstRegularFile, inventoryDigest, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures, retainedTombstones } from "../commands/testing.js";
 import {
   createBootstrapEvidenceInspectionRequest,
@@ -199,6 +200,42 @@ describe("inspectBootstrapEvidence", () => {
     const actual = envelope.evidence.rows.map((row) => [row.role, row.sourcePath]);
 
     expect(actual).toEqual(expected);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("scopes each retained envelope's inventory to its own entries after a round trip", async () => {
+    const fixture = await createCommandFixture("bootstrap-report-two-envelopes", {
+      bootstrapAvailable: true,
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    expect((await runUninstall(fixture.rebuildContext(), ACCEPTED)).ok).toBe(true);
+    expect((await runInit(fixture.rebuildContext(), ACCEPTED)).ok).toBe(true);
+
+    const admission = await inspectBootstrapEvidenceAdmission(requestFor(fixture));
+
+    expect(admission.report.ids).toHaveLength(2);
+    const counts = admission.report.ids.map((summary) => summary.entryCount);
+    const bytes = admission.report.ids.map((summary) => BigInt(summary.regularFileBytes));
+    expect(counts.every((count) => count > 0)).toBe(true);
+    expect(bytes.every((count) => count > 0n)).toBe(true);
+    /**
+     * Two envelopes that each reported the whole home would sum past the
+     * aggregate, which counts every entry once. That sum is the observable
+     * form of NEW-99's union.
+     */
+    expect(counts.reduce((total, count) => total + count, 0)).toBeLessThanOrEqual(
+      admission.report.aggregate.entryCount,
+    );
+    expect(bytes.reduce((total, count) => total + count, 0n)).toBeLessThanOrEqual(
+      BigInt(admission.report.aggregate.regularFileBytes),
+    );
+    expect(admission.report.ids.map((summary) => summary.status)).toStrictEqual([
+      "verified",
+      "verified",
+    ]);
+    expect(admission.retainedEnvelopes.map((envelope) => envelope.plan.id).toSorted()).toStrictEqual(
+      admission.report.ids.map((summary) => summary.id).toSorted(),
+    );
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("classifies a finalized envelope instead of throwing when the handoff manifest cannot be inventoried", async () => {

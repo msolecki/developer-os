@@ -51,11 +51,14 @@ const ACCEPTED = { dryRun: false, assumeYes: true } as const;
 const PREVIEW = { dryRun: true, assumeYes: true } as const;
 
 /**
- * The chained case measured 468.1 s (maximum of 468.1 s and 454.6 s, 2026-09-21), then
- * ceil(468.1 x 2 x 1.5) so a hosted runner at ~2x cannot trip it. It cannot take
- * `REAL_FILESYSTEM_TIMEOUT_MS`: 468.1 s doubled is already past that 900 s budget.
+ * The chained case measured 1080.9 s (2026-09-21) on the second of two green isolated runs,
+ * whose whole-file figures were 1147.2 s and 1139.3 s. Only that run carried per-case timing,
+ * so this is one observation where the rest of this job's figures are maxima of two or more;
+ * it is scaled by the 0.7% whole-file spread to 1088.4 s rather than taken as measured, and
+ * ceil(1088.4 x 2 x 1.5) leaves a hosted runner at ~2x unable to trip it. It cannot take
+ * `REAL_FILESYSTEM_TIMEOUT_MS`: 1080.9 s doubled is more than twice that 900 s budget.
  */
-const CHAIN_TIMEOUT_MS = 1_405_000;
+const CHAIN_TIMEOUT_MS = 3_266_000;
 
 const POINTS = [
   ["M(preserve_before) applied, cursor not advanced", "compensation"],
@@ -461,16 +464,16 @@ async function refusesAnAllocatorWithoutItsNonce(fixture: V2FixtureV1): Promise<
 describe("uninstall dispatch and the recovery-only arm", () => {
   it("admits the recovery-only arm at each kill point and resumes to an absent-manifest home", async () => {
     expect(POINTS.length).toBeGreaterThan(0);
-    for (const [index, [point, arm]] of POINTS.entries()) {
-      /**
-       * One home per kill point rather than the shared one the plan costed: on this tree a
-       * second `uninstall` after an `uninstall` -> `init` round trip refuses exit 6, because
-       * every retained bootstrap envelope drops to `altered` once a second one exists and the
-       * ledger then reads both envelopes' Foundation staging as findings. §7 requires altered
-       * retained evidence never to refuse uninstall, so the round trip below is asserted once
-       * and the defect is reported rather than worked around inside the arm.
-       */
-      const fixture = await initializedV2Fixture(`uninstall-recovery-${String(index)}`);
+    /**
+     * One home for all six kill points, each cycle ending in the re-init the next one needs.
+     * A9's round trip is therefore asserted six times over rather than once, and every arm's
+     * residue is proven collected by the install that follows it. NEW-99 made exactly this
+     * chain unreachable — each retained envelope reported the other's entries, so both dropped
+     * out of `retainedEnvelopes` and the second `uninstall` refused exit 6 over Foundation
+     * staging it could no longer attribute.
+     */
+    const fixture = await initializedV2Fixture("uninstall-recovery-chain");
+    for (const [point, arm] of POINTS) {
       await killUninstallAt(fixture, point);
       const dispatched = fixture.rebuildContext();
       expect(
@@ -501,12 +504,9 @@ describe("uninstall dispatch and the recovery-only arm", () => {
       expect(await dispatchUninstall(settled, lifecycleOf(settled)), point).toStrictEqual({
         kind: "absent_manifest",
       });
-      /** A9: every arm leaves the same fully collected residue, so one re-init proves them all. */
-      if (index === 0) {
-        expect((await runInit(fixture.rebuildContext(), ACCEPTED)).ok, `init after ${point}`).toBe(
-          true,
-        );
-      }
+      expect((await runInit(fixture.rebuildContext(), ACCEPTED)).ok, `init after ${point}`).toBe(
+        true,
+      );
     }
   }, CHAIN_TIMEOUT_MS);
 

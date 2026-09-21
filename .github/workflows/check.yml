@@ -204,7 +204,7 @@ jobs:
 
   lifecycle-v2:
     # Owns the real-V2-home `*.v2.test.ts` files, which `test:suite` excludes.
-    # Running local total of that set: 3060.4 s (2026-09-21). Nine files now.
+    # Running local total of that set: 3680.3 s (2026-09-21). Nine files now.
     # The first four are 998.2 s: the 916 s recorded on 2026-09-17 for the first
     # three plus 82.2 s for the fourth, `admission.v2.test.ts`. That 82.2 s is
     # the maximum of seven observations spanning 54.6-82.2 s across two
@@ -239,21 +239,29 @@ jobs:
     # `mutation-gate.v2.test.ts` was re-measured the same day at 161.7 s after
     # its uninstall case moved onto the coordinator, below the 199.9 s already
     # recorded, so that file's conservative figure stands unchanged.
-    # `uninstall-recovery.v2.test.ts` adds 527.3 s, the maximum of two green
-    # isolated runs that day (527.3 s and 513.3 s); it measures §6's uninstall
-    # dispatch and §2.1's recovery-only arm, and drives seven real fresh V2
-    # `init` runs — one per kill point plus one re-init proving the A9 round
-    # trip. Six of those homes are killed mid-uninstall and recovered. Almost
-    # all of it is one chained case, 468.1 s of the 527.3 s (454.6 s on the
-    # other run): that single case is now the widest per-case figure in this
-    # job, past `uninstall.v2.test.ts`'s 148.2-185.1 s, and it is the reason
-    # that case carries its own `CHAIN_TIMEOUT_MS` instead of
-    # `REAL_FILESYSTEM_TIMEOUT_MS` — 468.1 s at a hosted ~2x is already past
-    # that 900 s budget.
+    # `uninstall-recovery.v2.test.ts` adds 1147.2 s, the maximum of two green
+    # isolated runs that day (1147.2 s and 1139.3 s); it measures §6's uninstall
+    # dispatch and §2.1's recovery-only arm, and drives seven real V2 `init`
+    # runs. Almost all of it is one chained case, 1080.9 s of the 1139.3 s run:
+    # one home carried through all six kill points, each cycle killing an
+    # uninstall mid-run, recovering it and ending in the re-init the next kill
+    # point needs, so A9's round trip is asserted six times over.
+    #
+    # That case was 468.1 s while plan 1a Task 23 gave each kill point its own
+    # fresh home to work around NEW-99. Task 23b closed NEW-99 (2026-09-21) and
+    # restored the chain, and the same seven inits cost 2.3x more on one home:
+    # every `init` and `uninstall` inspects every retained bootstrap envelope
+    # the home has accumulated, so cycle k pays for k envelopes and the chain is
+    # quadratic in cycle count by construction — not a regression in any single
+    # operation, and the price of the coverage the fresh-home workaround gave
+    # up. It remains by far the widest per-case figure in this job, past
+    # `uninstall.v2.test.ts`'s 148.2-185.1 s, and it is the reason that case
+    # carries its own `CHAIN_TIMEOUT_MS` instead of `REAL_FILESYSTEM_TIMEOUT_MS`
+    # — 1080.9 s at a hosted ~2x is more than twice that 900 s budget.
     # The budget is the running total x 2 for a hosted runner x 1.5 headroom,
-    # floored at 20: ceil(3060.4 x 3 / 60) = 154.
+    # floored at 20: ceil(3680.3 x 3 / 60) = 185.
     runs-on: macos-15
-    timeout-minutes: 154
+    timeout-minutes: 185
     steps:
       - uses: actions/checkout@v4
         with:

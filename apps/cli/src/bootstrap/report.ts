@@ -631,6 +631,13 @@ function idForPath(path: string): string | null {
     new RegExp(`\\.fresh-v2-init\\.(${FRESH_ID})\\.`, "u").exec(basename(path))?.[1] ?? null;
 }
 
+function hasAncestorIn(path: string, roots: ReadonlySet<string>): boolean {
+  for (let current = path; ; current = dirname(current)) {
+    if (roots.has(current)) return true;
+    if (dirname(current) === current) return false;
+  }
+}
+
 function sumEntries(entries: Iterable<BootstrapEvidenceGuardedEntryV1>): { readonly entries: number; readonly bytes: bigint } {
   let count = 0;
   let bytes = 0n;
@@ -987,7 +994,24 @@ async function inspectPlan(
       retained = retained.filter((candidate) => candidate.path !== liveLock.path);
     }
   }
-  const retainedByPath = new Map(retained.map((candidate) => [candidate.path, candidate] as const));
+  /**
+   * NEW-99 (2026-09-21): `rowParents` are directories two installations share,
+   * so this envelope's inventory returns the other envelope's entries too. Every
+   * name that sweep can surface beyond this plan's own locations carries a
+   * bootstrap id, so attributing by id loses no tampered entry -- it charges it
+   * to the envelope that owns it instead of to both. Counting the union made
+   * both envelopes of an `uninstall` -> `init` round trip `altered`, which
+   * emptied `retainedEnvelopes` and left the ledger unable to attribute either
+   * bootstrap staging tree. The union still leaves here as `retained`, because
+   * the caller's aggregate and `retainedPaths` are home-wide and A2/D21 forbids
+   * unlinking a retained tombstone this sweep is the only witness to.
+   */
+  const ownedRoots = new Set<string>([
+    ...roots,
+    ...retained.flatMap((candidate) => idForPath(candidate.path) === plan.id ? [candidate.path] : []),
+  ]);
+  const owned = retained.filter((candidate) => hasAncestorIn(candidate.path, ownedRoots));
+  const retainedByPath = new Map(owned.map((candidate) => [candidate.path, candidate] as const));
   let matching = 0;
   let altered = 0;
   for (const location of locations) {
@@ -1088,7 +1112,7 @@ async function inspectPlan(
   ]);
   const descendantRoots = locations.filter((location) => location.collapsesDescendants)
     .flatMap((location) => [location.sourcePath, location.tombstonePath]);
-  const unboundEntries = retained.filter((candidate) =>
+  const unboundEntries = owned.filter((candidate) =>
     !exactPaths.has(candidate.path) &&
     !descendantRoots.some((root) => candidate.path.startsWith(`${root}/`)),
   );
@@ -1098,7 +1122,7 @@ async function inspectPlan(
       RETAINED.test(basename(root.path)) && candidate.path.startsWith(`${root.path}/`),
     ),
   );
-  const counted = sumEntries(retained);
+  const counted = sumEntries(owned);
   const summary = classifyBootstrapEvidence({
     id,
     planPath: plan.planPath,
