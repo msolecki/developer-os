@@ -650,6 +650,23 @@ describe("dispatch around a bootstrap envelope", () => {
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 
+describe("config dispatch", () => {
+  it("refuses an option config does not accept", async () => {
+    await refuses(["config", "get", "--dry-run"]);
+    await refuses(["config", "get", "--limit", "5"]);
+  });
+
+  it("refuses an operation config does not have", async () => {
+    await refuses(["config", "unset", "telemetry"]);
+    await refuses(["config", "toString"]);
+  });
+
+  it("refuses a set that names no value, and a get that names two keys", async () => {
+    await refuses(["config", "set", "telemetry"]);
+    await refuses(["config", "get", "telemetry", "adapters.claude"]);
+  });
+});
+
 describe("capture dispatch", () => {
   it("refuses an option capture does not accept", async () => {
     await refuses(["capture", "--limit", "5"]);

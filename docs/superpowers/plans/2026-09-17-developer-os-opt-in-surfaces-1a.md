@@ -1277,6 +1277,26 @@ git commit -m "feat(cli): gate every V2 Foundation mutation on the lifecycle led
 
 Source: old Task 2, moved after the lock provider (Task 9) and the gate (Task 19) as roadmap Phase 4 requires. Spec 1 §2.2, §3 `config` rows; A1; A9 round trip "fresh V2 `init` → `config set` … with closure `clear` beside retained evidence" (the `git enable` preview half is plan 1b).
 
+Corrections this task's implementation forced, recorded against the steps below:
+
+- **Step 1's headline snippet cannot pass with the key it names, and the shipped grammar wins.**
+  A fresh V2 home carries no `[brain]` table: `defaultConfig` in `apps/cli/src/commands/init.ts`
+  emits six keys, the fresh V2 path reuses it, and `brainSchema` is strict with no defaults. Task
+  5's `setConfigValue` therefore refuses `brain.staleness.reviewAfterDays` with
+  `config_parent_absent`, a designed member of `ConfigRefusalReasonV1` rather than a gap —
+  auto-creating the section from one leaf would mean synthesising every other field of a strict
+  schema. Spec 1 A9's §7 row names no key, only "fresh V2 `init` → `config set` … with closure
+  `clear` beside retained evidence", so the shipped round trip satisfies it: the case pins the
+  `config_parent_absent` refusal, creates the section with `config set brain <canonical JSON>`
+  (`brain` is a member of `CONFIG_MUTABLE_KEYS`), then runs the snippet's four assertions
+  verbatim. No spec change and no Task 5 change.
+- **The hand-edit case refuses `transaction_precondition`, not `transaction_conflict`.**
+  `TransactionPreconditionError extends TransactionConflictError` and is the plan-phase
+  precondition error the Cover list describes, so the test pins the more specific kind.
+- **The argv `it.each` also asserts the usage block.** Exit 2 alone proves nothing there: the
+  throwing context factory the case installs publishes exit 2 as well, so without the usage
+  assertion a context that was built would pass.
+
 **Files:**
 - Create: `apps/cli/src/commands/config.ts`
 - Create: `apps/cli/src/commands/config.test.ts` — argv, V1 and manifest-absent cases (`suite` job)
@@ -1299,7 +1319,7 @@ export async function runConfig(context: CliContext, request: ConfigCommandReque
 export function renderConfigResult(result: ConfigCommandResultV1): readonly string[];
 ```
 
-- [ ] **Step 1: Write failing command and dispatch tests**
+- [x] **Step 1: Write failing command and dispatch tests**
 
 ```ts
 it("sets a value on a fresh V2 home beside retained evidence with closure clear", async () => {
@@ -1333,17 +1353,17 @@ it("prints the exact canonical JSON of the result, with or without --json", asyn
 
 `sharedV2Home` is test-local: it initialises one V2 home per file in `beforeAll` and returns the fixture plus `retainedAtInit` (its `bootstrapEvidenceIdentities()` right after `init`) and `lifecycleSnapshot()` (structural admission, `residueFrom`, `lifecycle.inspectLedger`). The first and third cases live in `config.v2.test.ts`; the argv case lives in `config.test.ts`. Cover in `config.test.ts`: a V1 home refuses both `get` and `set` with kind `manifest_v1_not_migratable`, exit 4, before any lock (no `state/.lifecycle.lock` appears); a home with no manifest and no lock refuses exit 2 without creating one; a home with no manifest but a planted owner `0600` zero-byte `state/.lifecycle.lock` refuses exit 2 for both `get` and `set`, after acquiring and releasing that lock (`stableLockEvents`), leaving its inode unchanged; `USAGE` lists `config`; `--apply` is refused as an unknown option. Cover in `config.v2.test.ts`: `config get` with no key prints the publishable projection with `redaction` replaced by `{ "patternsCount": n }`; `config get redaction.patterns` prints only the integer; `config get` on V2 takes no lock; a refused set leaves `config.toml` bytes, the allocator counter and `state/transactions` unchanged; `unchanged` performs no transaction and allocates nothing; `updated` performs exactly one Foundation transaction with an allocated ID whose single mutation replaces `config.toml` guarded by the pre-read hash, and the re-read file strictly loads and serializes to the planned bytes; a hand edit between the read and the transaction refuses with the existing precondition error and leaves the hand edit; a busy global lock refuses exit 6; no refusal on stdout or stderr contains the supplied value (use a sentinel value); `git.enabled`, `schemaVersion`, `telemetry` and both lifecycle keys refuse read-only.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [x] **Step 2: Run the tests and verify they fail**
 
 Run: `npx vitest run --root apps/cli src/commands/config.test.ts src/commands/config.v2.test.ts`
 
 Expected: FAIL — `config` is not a registered command and `config.ts` does not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `main.ts`: `COMMAND_OPTIONS.config = ["json"]`; `COMMAND_POSITIONALS.config = { min: 1, max: 3 }`; after the generic arity check, `get` takes 0 or 1 further positionals and `set` exactly 2, anything else is `null`; dispatch emits `renderConfigResult` lines for success in both modes and the standing envelope for failure. `runConfig` (Scope decision 4): `classifyMutationHome` refuses `v1` (exit 4) and `manifest_absent` (exit 2); for `manifest_absent_with_global_lock`, both `get` and `set` acquire the existing lock with `acquireExisting` (never creating it), reclassify, release, and refuse exit 2 (a busy lock refuses exit 6). On V2, `get` takes no lock and reads through `readConfigFile` and `readConfigValue`. `set` runs inside `withLifecycleMutation`, reads the config bytes, calls `setConfigValue`, and for `updated` calls `context.executor.execute({ kind: "config-set", mutations: [{ targetPath, operation: "replace", content, expectedBeforeHash }] })`.
 
-- [ ] **Step 4: Run the focused tests**
+- [x] **Step 4: Run the focused tests**
 
 Run: `npx vitest run --root apps/cli src/commands/config.test.ts src/commands/config.v2.test.ts src/lifecycle/mutation-gate.test.ts`
 
@@ -1353,7 +1373,7 @@ Run: `npm run build && npx vitest run --root tests security/network.test.ts`
 
 Expected: PASS. Add `config.v2.test.ts`'s duration to `lifecycle-v2`'s recorded local total and update its `timeout-minutes` per the CI budget rule.
 
-- [ ] **Step 5: Gate, commit, push**
+- [x] **Step 5: Gate, commit, push**
 
 Tick, update the progress sentence, run `npm run lint`, obtain fresh-context review, then:
 

@@ -13,6 +13,8 @@ import { renderBrain, runBrain } from "./commands/brain.js";
 import type { BrainResultV1, BrainSubcommand } from "./commands/brain.js";
 import { runCapture } from "./commands/capture.js";
 import type { CaptureResultV1 } from "./commands/capture.js";
+import { renderConfigResult, runConfig } from "./commands/config.js";
+import type { ConfigCommandRequestV1 } from "./commands/config.js";
 import { runDoctor } from "./commands/doctor.js";
 import type { DoctorReportV1 } from "./commands/doctor.js";
 import { renderIngest, runIngest } from "./commands/ingest.js";
@@ -39,6 +41,7 @@ const USAGE = [
   "",
   "Commands:",
   "  init       install product state and a Brain skeleton",
+  "  config     get one configuration key, or set one",
   "  brain      reindex | lint | search <query> | status",
   "  search     alias for brain search <query>",
   "  capture    quarantine one observation, redacted before it is written",
@@ -110,6 +113,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly OptionName[]>> = {
   review: ["id", "decision", "status", "json"],
   ingest: ["limit", "json", "yes", "agent"],
   init: ["dry-run", "yes", "json"],
+  config: ["json"],
   status: ["json"],
   doctor: ["json", "probe"],
   repair: ["resume", "rollback", "json"],
@@ -133,6 +137,7 @@ const COMMAND_POSITIONALS: Readonly<
   doctor: { min: 0, max: 0 },
   repair: { min: 0, max: 0 },
   uninstall: { min: 0, max: 0 },
+  config: { min: 1, max: 3 },
   brain: { min: 1, max: 2 },
   search: { min: 1, max: 1 },
 };
@@ -248,6 +253,18 @@ function parse(argv: readonly string[]): Invocation | null {
     if (!suppliedOptions(values).every((o) => subcommand.options.includes(o))) {
       return null;
     }
+  }
+
+  /**
+   * `config get` names at most one key and `config set` names exactly one key and one
+   * value, so `config get a b` and `config set k` are refused at parse time rather than
+   * inside the command, where the refusal would be indistinguishable from a broken home.
+   */
+  if (positional === "config") {
+    const [operation] = rest;
+    const arity =
+      (operation === "get" && rest.length <= 2) || (operation === "set" && rest.length === 3);
+    if (!arity) return null;
   }
 
   const limit = parseLimit(optionString(values.limit));
@@ -582,6 +599,20 @@ async function dispatch(
         json,
         renderIngest,
       );
+    }
+    case "config": {
+      const [operation, key, value] = invocation.positionals;
+      const request: ConfigCommandRequestV1 =
+        operation === "set" && key !== undefined && value !== undefined
+          ? { operation: "set", key, value }
+          : { operation: "get", key: key ?? null };
+      /**
+       * Success prints the canonical JSON of the result in both modes, which is §2.2's
+       * `config` contract rather than the standing success envelope; a refusal keeps that
+       * envelope, so `--json` is honoured for the arm that carries an error.
+       */
+      const result = await runConfig(context, request);
+      return emit(io, result, !result.ok && json, renderConfigResult);
     }
     case "status":
       return emit(io, await runStatus(context), json, renderStatus);

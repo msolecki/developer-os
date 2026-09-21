@@ -204,7 +204,7 @@ jobs:
 
   lifecycle-v2:
     # Owns the real-V2-home `*.v2.test.ts` files, which `test:suite` excludes.
-    # Running local total of that set: 1819.7 s (2026-09-20). Six files now.
+    # Running local total of that set: 1878.6 s (2026-09-21). Seven files now.
     # The first four are 998.2 s: the 916 s recorded on 2026-09-17 for the first
     # three plus 82.2 s for the fourth, `admission.v2.test.ts`. That 82.2 s is
     # the maximum of seven observations spanning 54.6-82.2 s across two
@@ -222,15 +222,17 @@ jobs:
     # file's and the conservative figure is taken rather than a quieter
     # re-measurement. `mutation-gate.v2.test.ts` adds 199.9 s, the maximum of
     # two green isolated runs that day (170.4 s and 199.9 s); it drives three
-    # real fresh V2 `init` runs.
+    # real fresh V2 `init` runs. `config.v2.test.ts` adds 58.9 s, the maximum of
+    # three green isolated runs (54.1 s, 56.5 s and 58.9 s); it drives one real
+    # fresh V2 `init` and runs every other case against that one home.
     #
     # Those last two files landed from parallel worktrees in one wave (D33), so
     # each measured its own delta against the 998.2 s base and neither saw the
     # other. The integrator summed both deltas rather than taking either task's
     # figure: 998.2 + 621.6 + 199.9. The budget is the running total x 2 for a
-    # hosted runner x 1.5 headroom, floored at 20: ceil(1819.7 x 3 / 60) = 91.
+    # hosted runner x 1.5 headroom, floored at 20: ceil(1878.6 x 3 / 60) = 94.
     runs-on: macos-15
-    timeout-minutes: 91
+    timeout-minutes: 94
     steps:
       - uses: actions/checkout@v4
         with:

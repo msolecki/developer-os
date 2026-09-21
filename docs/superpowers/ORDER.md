@@ -12,7 +12,7 @@ notes are the archive.
 to execute plan 1a (`plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`, roadmap Phase 4) wave by
 wave, as `SESSION.md` §4.1 orchestrates it (D33).
 
-Plan 1a progress: committed 1–19, 21; in flight none; ready next 20 (wave 6, after 19). Wave 5 ran 19 and 21 in parallel; the combined-tree run found one real defect (a test, fixed in `5408725`) and one false alarm (an e2e case that cannot run under the agent sandbox — see the plan). D36: implementation-first — no per-task review, commits held locally, one review plus `npm run check` plus one push at plan close, run by hand.
+Plan 1a progress: committed 1–21; in flight none; ready next 22 (wave 7, after 20 and 21). D36: implementation-first — no per-task review, commits held locally, one review plus `npm run check` plus one push at plan close, run by hand.
 
 Spec 2 (`plans/2026-08-29-developer-os-release-update.md`): Tasks 1–7 and 9 complete, Task 8
 withdrawn (D18), Tasks 10–26 remain. The 2026-08-28 Spec 1 plan stays as plan 1b's source.
@@ -99,8 +99,8 @@ startable row run beside a wave when its files overlap no task in flight.
 ## Count
 
 - Product sequence: 8 open entries, A11, A12, A12b, A13, A14, A15, A11b, A16.
-- Implementation tasks: plan 1a 5 remaining (20, 22–25), Spec 2 Tasks 10–26 (17), plan 1b 15 (the
-  2026-08-28 plan's remaining tasks, not yet rewritten): 46. Before the cutover: plan 1a and Spec 2
-  Tasks 10–11, 7 tasks. After it: Spec 2 Tasks 12–26 and plan 1b, 30 tasks.
+- Implementation tasks: plan 1a 4 remaining (22–25), Spec 2 Tasks 10–26 (17), plan 1b 15 (the
+  2026-08-28 plan's remaining tasks, not yet rewritten): 36. Before the cutover: plan 1a and Spec 2
+  Tasks 10–11, 6 tasks. After it: Spec 2 Tasks 12–26 and plan 1b, 30 tasks.
 - Phases 5, 5b, 6 and 7 have no spec yet; A15 and A16 each still need their dedicated plan.
 - Repository backlog: 55 open numbered rows, plus the Foundation watchdog decision.
