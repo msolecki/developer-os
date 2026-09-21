@@ -154,17 +154,26 @@ describe("run", () => {
     };
     expect(await harness.invoke(["init", "--yes"])).toBe(0);
     fixture.io.out.length = 0;
-    const tombstones = await retainedTombstones(fixture.root);
-    const target = await firstRegularFile(tombstones);
-    if (target === null) throw new Error("fixture retained no regular-file tombstone");
-    await nodeFs.writeFile(target, RETAINED_SECRET, { mode: 0o600 });
 
     expect(await harness.invoke(["uninstall", "--yes"])).toBe(0);
 
     expect(harness.out.join("\n")).toContain("Retained bootstrap evidence:");
     expect(harness.out.join("\n")).toContain("fresh_v2_init");
     expect(harness.out.join("\n")).not.toContain("Nothing owned by Developer OS remains.");
-    expect(harness.out.join("\n")).not.toContain(RETAINED_SECRET);
+
+    /**
+     * The secret is planted after the run that renders the report rather than before it.
+     * Altering a retained file costs its envelope the `verified` status, which empties the
+     * residue's `bootstrapParticipantIds`, and the ledger then reports the retained
+     * participant staging tree as a finding — so under Task 19's gate a tampered home refuses
+     * instead of reporting, and one run can no longer assert both. The refusal itself is
+     * pinned in `lifecycle/mutation-gate.v2.test.ts`; what stays here is that no retained
+     * byte reaches the output.
+     */
+    const tombstones = await retainedTombstones(fixture.root);
+    const target = await firstRegularFile(tombstones);
+    if (target === null) throw new Error("fixture retained no regular-file tombstone");
+    await nodeFs.writeFile(target, RETAINED_SECRET, { mode: 0o600 });
 
     /**
      * D27 with scope decision 11: the downcast uninstall's own Foundation journal is

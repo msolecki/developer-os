@@ -43,9 +43,11 @@ import { manifestAdmissionFor, runUninstall } from "../commands/uninstall.js";
 import {
   createCommandFixture,
   exists,
+  firstRegularFile,
   inventoryDigest,
   REAL_FILESYSTEM_TIMEOUT_MS,
   removeCommandFixtures,
+  retainedTombstones,
 } from "../commands/testing.js";
 import type { CommandFixture } from "../commands/testing.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
@@ -576,6 +578,47 @@ describe("the mutation gate on a real V2 home", () => {
 
     expect(journal.id).toBe(`tx_${nonce}_${String(floor)}`);
     expect(await exists(planPath)).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * A retained file whose bytes changed costs its envelope the `verified` status, so
+   * `inspectBootstrapEvidenceAdmission` publishes no retained envelope, `residueFrom` derives
+   * no `bootstrapParticipantIds`, and the ledger can no longer attribute the retained
+   * participant's own staging tree. `bootstrap/executor.ts` derives that same set to admit a
+   * fresh `init`, so naming participants from an unverified envelope here would leave two
+   * writers of one derived fact disagreeing.
+   */
+  it("refuses a mutation once a retained bootstrap file no longer verifies, and writes nothing", async () => {
+    const fixture = await sharedV2Home();
+    /** The gate materialises `staging/lifecycle` on its first mutation; the digest is taken after that. */
+    await mutate(fixture, "retained-preparation");
+    const tombstones = await retainedTombstones(fixture.root);
+    expect(tombstones.length).toBeGreaterThan(0);
+    const target = await firstRegularFile(tombstones);
+    if (target === null) throw new Error("the fixture retained no regular-file tombstone");
+    const original = await nodeFs.readFile(target);
+    const altered = new Uint8Array(original.byteLength + 1);
+    altered.set(original);
+    altered[original.byteLength] = 0x21;
+
+    await restoring(
+      () => nodeFs.writeFile(target, altered),
+      () => nodeFs.writeFile(target, original),
+      async () => {
+        const before = await inventoryDigest(fixture.paths.home);
+
+        expect(await refusalOf(mutate(fixture, "retained-altered"))).toStrictEqual({
+          refused: true,
+          reason: "lifecycle_ledger_finding",
+          code: EXIT_CODES.recoveryRequired,
+          recovery: "developer-os doctor",
+        });
+
+        expect(await inventoryDigest(fixture.paths.home)).toStrictEqual(before);
+      },
+    );
+
+    expect(await refusalOf(mutate(fixture, "retained-restored"))).toMatchObject({ refused: false });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
 });
