@@ -32,6 +32,7 @@ import {
   type LifecycleGuardedFileSystemV1,
 } from "./guarded-fs.js";
 import { parseAllocatedLifecycleId, type FoundationTransactionIdV1 } from "./ids.js";
+import { maximumFoundationJournalBytes } from "./store.js";
 import {
   FOUNDATION_STAGED_JOURNAL_MODE,
   LIFECYCLE_PLAN_BOUNDS,
@@ -64,17 +65,6 @@ export interface FoundationParticipantDependenciesV1 {
   readonly effectiveUid: number;
   readonly afterBoundary?: ((boundary: string) => void | Promise<void>) | undefined;
 }
-
-const PHASES: readonly TransactionPhase[] = [
-  "planned",
-  "backed_up",
-  "staged",
-  "validated",
-  "applied",
-  "verified",
-  "finalized",
-  "rolled_back",
-];
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -110,14 +100,6 @@ function plannedJournalOf(
       stagedRelativePath: mutation.operation === "remove" ? null : `${String(index)}.bin`,
     })),
   });
-}
-
-function widestJournalBytes(planned: TransactionJournalV1): number {
-  return Math.max(
-    ...PHASES.map(
-      (phase) => encoder.encode(encodeFoundationJournalJsonV1({ ...planned, phase })).byteLength,
-    ),
-  );
 }
 
 function decodeJournal(bytes: Uint8Array, path: CanonicalAbsolutePathV1): TransactionJournalV1 {
@@ -158,7 +140,7 @@ export class FoundationParticipantExecutor {
     const kind = journalKindOf(input.slot, input.role);
     const planned = plannedJournalOf(id, kind, input.createdAt, mutations);
     const plannedBytes = encoder.encode(encodeFoundationJournalJsonV1(planned));
-    const maximumJournalBytes = widestJournalBytes(planned);
+    const maximumJournalBytes = maximumFoundationJournalBytes(planned);
     if (
       maximumJournalBytes < LIFECYCLE_PLAN_BOUNDS.journalBytes.minimum ||
       maximumJournalBytes > LIFECYCLE_PLAN_BOUNDS.journalBytes.maximum
