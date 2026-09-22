@@ -48,7 +48,10 @@ import type { AdmittedV2HomeV1 } from "../lifecycle/admission.js";
 import { lifecycleHomeKeyFromAdmission } from "../lifecycle/context.js";
 import type { CliLifecycleContext } from "../lifecycle/context.js";
 import { createManagedArtifactSchemaRegistry } from "../lifecycle/schema-registry.js";
-import { LifecycleUninstaller } from "../lifecycle/uninstall.js";
+import { CodexRegistrationFailedError } from "../instructions/codex-registration.js";
+import { InstructionRefusal } from "../instructions/detach.js";
+import { LifecycleMutationRefusal } from "../lifecycle/mutation-gate.js";
+import { detachVendorInstructions, LifecycleUninstaller, planUninstallDetach } from "../lifecycle/uninstall.js";
 import type { LifecycleUninstallRequestV1 } from "../lifecycle/uninstall.js";
 import { dispatchUninstall, recoverUninstall } from "../lifecycle/uninstall-recovery.js";
 import { readConfigFile } from "./doctor.js";
@@ -806,6 +809,10 @@ export async function uninstallRuntimePaths(context: CliContext): Promise<Runtim
  * run leaves the A12 bookkeeping set and retained bootstrap evidence and nothing else. The home
  * is admitted by `dispatchUninstall`, which owns the relocated-Brain diagnosis; the
  * coordinator's own manifest arm is deliberately unconfined (I2).
+ *
+ * A12 spec §6.3: vendor rows leave first, through the instruction detach, and the drained
+ * uninstall then runs unchanged over a home re-admitted after it. The dry run and the prompt
+ * preview the coordinator over the manifest the detach would leave, so neither detaches.
  */
 export async function runCoordinatorUninstall(
   context: CliContext,
@@ -815,14 +822,15 @@ export async function runCoordinatorUninstall(
   options: UninstallOptions,
 ): Promise<CliResult<UninstallResultV1>> {
   const paths = await uninstallRuntimePaths(context);
-  const request: LifecycleUninstallRequestV1 = {
+  const detach = await planUninstallDetach(context, lifecycle);
+  const request = (home: AdmittedV2HomeV1): LifecycleUninstallRequestV1 => ({
     context,
     lifecycle,
-    key: lifecycleHomeKeyFromAdmission(admitted, paths),
-    admitted,
+    key: lifecycleHomeKeyFromAdmission(home, paths),
+    admitted: home,
     evidence,
     options,
-  };
+  });
   const uninstaller = new LifecycleUninstaller();
 
   /**
@@ -830,25 +838,30 @@ export async function runCoordinatorUninstall(
    * that never reach it need: the dry run's report and the confirmation prompt's list.
    */
   if (options.dryRun || !options.assumeYes) {
+    const detached = detach?.plan.kind === "transaction" ? detach.plan : null;
     const lockPath = join(paths.stateDir, ".lifecycle.lock") as CanonicalAbsolutePathV1;
     const held = await lifecycle.locks.acquireExisting(lockPath);
     let preview;
     try {
-      preview = await uninstaller.preview(request, held);
+      preview = await uninstaller.preview(
+        request(detached === null ? admitted : { ...admitted, manifest: detached.manifest }),
+        held,
+      );
     } finally {
       await held.release();
     }
+    const removable = [...(detached?.removed ?? []), ...preview.removable];
     if (options.dryRun) {
       return success({
         schemaVersion: 1,
-        removed: preview.removable,
+        removed: removable,
         restored: [],
-        preserved: preview.preserved,
+        preserved: [...new Set([...(detached?.preserved ?? []), ...preview.preserved])],
         retainedBootstrapEvidence: evidence.report.ids,
         transactionId: null,
       });
     }
-    if (!(await context.io.confirm(describePlan(preview.removable)))) {
+    if (!(await context.io.confirm(describePlan(removable)))) {
       return failure(EXIT_CODES.decisionRequired, {
         kind: "declined",
         message: "uninstall was declined",
@@ -856,7 +869,27 @@ export async function runCoordinatorUninstall(
       });
     }
   }
-  return success(await uninstaller.execute(request));
+
+  if (detach === null) return success(await uninstaller.execute(request(admitted)));
+  const detached = await detachVendorInstructions(context, lifecycle);
+  const readmitted = await dispatchUninstall(context, lifecycle, evidence);
+  if (readmitted.kind !== "v2_coordinator") {
+    throw new UninstallRefusal(
+      EXIT_CODES.recoveryRequired,
+      "the installation manifest changed shape during the instruction detach",
+      [paths.manifestFile],
+      "developer-os doctor",
+    );
+  }
+  const outcome = await uninstaller.execute(request(readmitted.admitted));
+  return success(
+    {
+      ...outcome,
+      removed: [...detached.removed, ...outcome.removed],
+      preserved: [...new Set([...detached.preserved, ...outcome.preserved])],
+    },
+    detached.warnings,
+  );
 }
 
 export async function runUninstall(
@@ -975,9 +1008,14 @@ export async function runUninstall(
      * by `repair`, and dropping the field would leave the user the reason and no instruction.
      */
     const refusal =
-      error instanceof UninstallRefusal || error instanceof LifecycleRecoveryRefusalError
+      error instanceof UninstallRefusal ||
+      error instanceof LifecycleRecoveryRefusalError ||
+      error instanceof LifecycleMutationRefusal ||
+      error instanceof InstructionRefusal
         ? error
         : null;
-    return failureFrom(context, error, refusal?.paths ?? [], refusal?.recovery);
+    const paths = refusal?.paths ?? (error instanceof CodexRegistrationFailedError ? error.paths : []);
+    const evidence = error instanceof InstructionRefusal && error.evidence !== null ? { evidence: error.evidence } : undefined;
+    return failureFrom(context, error, paths, refusal?.recovery, evidence);
   }
 }

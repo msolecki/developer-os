@@ -7,7 +7,8 @@
  */
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
-import { lstat, open } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, open, readdir } from "node:fs/promises";
 
 import {
   EXIT_CODES,
@@ -27,6 +28,8 @@ import {
   encodeUninstallingMarker,
   formatAllocatedLifecycleId,
   foundationParticipantPlanHash,
+  hashBytes,
+  loadConfig,
   HOOK_FIRING_RECORDS_RELATIVE_PATH,
   inspectHookFiringRecordsShape,
   inspectLifecycleAllocator,
@@ -66,6 +69,7 @@ import type { BootstrapEvidenceAdmissionV1 } from "../bootstrap/report.js";
 import { readConfigFile } from "../commands/doctor.js";
 import {
   downcastArtifactV2,
+  manifestAdmissionFor,
   planUninstall,
   removeDirectories,
   UninstallRefusal,
@@ -77,7 +81,11 @@ import type {
 } from "../commands/uninstall.js";
 import { runtimePathsFor } from "../context.js";
 import type { CliContext } from "../context.js";
-import { observeLifecycleActivationRecord } from "./admission.js";
+import { unregisterCodexPlugin } from "../instructions/codex-registration.js";
+import { planInstructionDetach } from "../instructions/detach.js";
+import type { InstructionDetachInputV1, InstructionDetachPlanV1, InstructionFileSystemV1 } from "../instructions/detach.js";
+import { resolveVendorHomes } from "../instructions/vendor-homes.js";
+import { observeLifecycleActivationRecord, observeManifestSchema, V2HomeAdmissionError } from "./admission.js";
 import type { AdmittedV2HomeV1 } from "./admission.js";
 import {
   lifecyclePushPlanHash,
@@ -87,6 +95,7 @@ import {
 } from "./codecs.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
 import { residueFrom } from "./context.js";
+import { withLifecycleMutation } from "./mutation-gate.js";
 import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "./context.js";
 import {
   assertNoRedactionKeyTombstone,
@@ -1416,4 +1425,135 @@ async function cleanAllocatorTemp(
     allocatedIds,
   );
   await cleanLifecycleAllocatorTemp(lifecycle.fs, rechecked, held, allocatedIds);
+}
+
+function isMissingEntry(error: unknown): boolean {
+  const code = (error as { readonly code?: unknown } | null)?.code;
+  return code === "ENOENT" || code === "ENOTDIR";
+}
+
+/** The detach planner's no-follow reads over the real filesystem. */
+const nodeInstructionFs: InstructionFileSystemV1 = {
+  async lstat(path) {
+    try {
+      return await lstat(path, { bigint: true });
+    } catch (error) {
+      if (isMissingEntry(error)) return null;
+      throw error;
+    }
+  },
+  async readFile(path) {
+    let handle;
+    try {
+      handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    } catch (error) {
+      if (isMissingEntry(error)) return null;
+      throw error;
+    }
+    try {
+      return new Uint8Array(await handle.readFile());
+    } finally {
+      await handle.close();
+    }
+  },
+  async readdir(path) {
+    try {
+      return await readdir(path);
+    } catch (error) {
+      if (isMissingEntry(error)) return null;
+      throw error;
+    }
+  },
+};
+
+export interface UninstallDetachPlanV1 {
+  readonly input: InstructionDetachInputV1;
+  readonly plan: InstructionDetachPlanV1;
+}
+
+export interface UninstallDetachOutcomeV1 {
+  readonly removed: readonly string[];
+  readonly preserved: readonly string[];
+  readonly warnings: readonly string[];
+}
+
+/**
+ * Spec §6.3's detach, planned from one read of the manifest and one of the configuration: the
+ * transaction's `expectedBeforeHash` guards are the hashes of the very bytes planned from.
+ * `null` when no row is vendor-owned, so a home that never attached a vendor does not enter the
+ * mutation gate at all.
+ */
+export async function planUninstallDetach(context: CliContext, lifecycle: CliLifecycleContext): Promise<UninstallDetachPlanV1 | null> {
+  const paths = await planningPaths(context);
+  const observed = await observeManifestSchema(lifecycle.fs, paths);
+  if (observed.kind !== "v2") throw new V2HomeAdmissionError("manifest_absent", [paths.manifestFile]);
+  const homes = resolveVendorHomes(context.env, context.userHome, paths.home);
+  const manifest = validateManifestV2(decodeCanonicalJson(observed.bytes, MAX_MANIFEST_BYTES), manifestAdmissionFor(paths, [], homes));
+  if (!manifest.artifacts.some((artifact) => artifact.owner === "claude" || artifact.owner === "codex")) return null;
+
+  let configHash = "";
+  const text = await context.guards.readText(context.paths.configFile, async (handle) => {
+    const bytes = await handle.readFile();
+    configHash = hashBytes(bytes);
+    return bytes.toString("utf8");
+  });
+  const input: InstructionDetachInputV1 = {
+    vendors: ["claude", "codex"],
+    homes,
+    manifest,
+    manifestHash: hashBytes(observed.bytes) as LowerHexSha256,
+    config: loadConfig(text),
+    configHash: configHash as LowerHexSha256,
+    fs: nodeInstructionFs,
+  };
+  return { input, plan: await planInstructionDetach(input) };
+}
+
+async function codexExecutable(context: CliContext): Promise<string | null> {
+  const discovery = await context.platform.discoverExecutable("codex");
+  if (!discovery.installed || discovery.executablePath === null) return null;
+  await context.platform.assertTrustedExecutable(discovery.executablePath);
+  return discovery.executablePath;
+}
+
+/**
+ * Spec §6.3 steps 1–3 under the mutation gate, re-planned under its lock: a refusal fires before
+ * Codex is unregistered, and unregistration runs before any file changes. The executor writes
+ * files only, so the directories the plan empties are removed after the commit, through the same
+ * re-resolving `rmdir` the V1 revert uses.
+ */
+export async function detachVendorInstructions(context: CliContext, lifecycle: CliLifecycleContext): Promise<UninstallDetachOutcomeV1> {
+  return withLifecycleMutation(context, lifecycle, async () => {
+    const planned = await planUninstallDetach(context, lifecycle);
+    if (planned === null) return { removed: [], preserved: [], warnings: [] };
+    const { input, plan } = planned;
+    const warnings: string[] = [];
+    if (input.manifest.artifacts.some((artifact) => artifact.owner === "codex")) {
+      const { warning } = await unregisterCodexPlugin({
+        runner: context.runner,
+        codexExecutable: await codexExecutable(context),
+        codexHome: input.homes.codexHome,
+      });
+      if (warning !== null) warnings.push(warning);
+    }
+    if (plan.kind === "noop") return { removed: [], preserved: [], warnings };
+
+    await context.executor.execute({ kind: "instructions", mutations: plan.mutations });
+    const emptied = new Set(plan.directories);
+    const directories = await Promise.all(
+      input.manifest.artifacts
+        .filter((artifact) => emptied.has(artifact.path))
+        .map(async (artifact) => ({
+          artifact: await downcastArtifactV2(context, artifact),
+          canonicalPath: await context.guards.canonicalize(artifact.path),
+        })),
+    );
+    const outcome = await removeDirectories(context, directories);
+    const kept = new Set(outcome.preserved);
+    return {
+      removed: plan.removed.filter((path) => !kept.has(path)),
+      preserved: [...plan.preserved, ...outcome.preserved],
+      warnings,
+    };
+  });
 }
