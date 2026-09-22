@@ -3,6 +3,9 @@ import type { ProcessRunner } from "@developer-os/security";
 import type { CliContext } from "../context.js";
 import type { CliIo } from "../io.js";
 import type { HookVendor, HookVerb } from "./argv.js";
+import { guardCommand } from "./guards/command.js";
+import { guardCommit } from "./guards/commit.js";
+import { guardPath } from "./guards/path.js";
 import type { HookOutcome } from "./outcome.js";
 import type { HookPayloadV1 } from "./payload.js";
 
@@ -26,4 +29,8 @@ export interface HookRuntime {
 
 export type HookVerbHandler = (payload: HookPayloadV1, runtime: HookRuntime) => Promise<HookOutcome>;
 
-export const HOOK_HANDLERS: Partial<Record<HookVerb, HookVerbHandler>> = {};
+export const HOOK_HANDLERS: Partial<Record<HookVerb, HookVerbHandler>> = {
+  command: guardCommand,
+  commit: guardCommit,
+  path: guardPath,
+};
