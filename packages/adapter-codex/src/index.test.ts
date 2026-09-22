@@ -32,12 +32,14 @@ describe("the package's public door", () => {
   it("exports exactly what Codex architecture former §11 names, and nothing else", () => {
     expect(Object.keys(door).sort()).toEqual(
       [
+        "AGENT_TOML_KEYS",
         "CODEX_CAPABILITY_KEYS",
         "CODEX_MINIMUM_VERSION",
         "CODEX_NOT_USED_KEYS",
         "CODEX_ROOT_SEGMENT",
         "CodexAdapter",
         "CodexRenderer",
+        "InstructionBlockTooLargeError",
         "MARKETPLACE_NAME",
         "MARKETPLACE_RELATIVE_PATH",
         "PLUGIN_NAME",
@@ -51,8 +53,11 @@ describe("the package's public door", () => {
         "probeCodex",
         "proposeCodexInstall",
         "proposeCodexUninstall",
+        "renderAgentToml",
         "renderCodexInstallTree",
         "renderCodexPlugin",
+        "renderCodexVendorTree",
+        "renderInstructionTree",
         "renderMarketplace",
         "resolveCapabilities",
       ].sort(),

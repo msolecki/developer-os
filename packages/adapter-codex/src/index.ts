@@ -51,6 +51,17 @@ export {
 export type { MarketplaceRootArtifact, PluginRootArtifact } from "./plugin.js";
 export { MARKETPLACE_NAME, renderMarketplace } from "./marketplace.js";
 export type { MarketplaceContext } from "./marketplace.js";
+export { AGENT_TOML_KEYS, renderAgentToml } from "./agent-toml.js";
+export {
+  InstructionBlockTooLargeError,
+  renderCodexVendorTree,
+  renderInstructionTree,
+} from "./instructions.js";
+export type {
+  CodexInstructionRenderV1,
+  InstructionSourceSetV1Like,
+  InstructionSourceV1Like,
+} from "./instructions.js";
 export { proposeCodexInstall, proposeCodexUninstall } from "./install.js";
 export type {
   CodexCliStep,

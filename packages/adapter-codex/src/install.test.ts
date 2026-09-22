@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validateChangePlan } from "@developer-os/core";
-import type { InstallationManifestV1, ManagedArtifactV1 } from "@developer-os/core";
+import type { InstallationManifestV1, ManagedArtifactV1, ManagedArtifactV2 } from "@developer-os/core";
 import type { RenderedArtifact, WorkflowContractV1 } from "@developer-os/workflow-schema";
 import { renderCodexPlugin } from "./compose.js";
 import { MARKETPLACE_RELATIVE_PATH, PLUGIN_TREE_PREFIX } from "./plugin.js";
@@ -82,7 +82,7 @@ const sharedContract = contract({
 
 const contracts = [sharedContract, contract()];
 
-function artifact(path: string): ManagedArtifactV1 {
+function artifact(path: string, overrides: Record<string, unknown> = {}): ManagedArtifactV2 {
   return {
     owner: "codex",
     path,
@@ -91,19 +91,30 @@ function artifact(path: string): ManagedArtifactV1 {
     existedBefore: false,
     beforeHash: null,
     backupRelativePath: null,
-    installedHash: hash,
     source: "skills/developer-os-shared/SKILL.md",
     mergeStrategy: "dedicated",
     verifiedAt: "2026-08-11T00:00:00.000Z",
-  };
+    verification: { mode: "content", installedHash: hash },
+    ...overrides,
+  } as ManagedArtifactV2;
 }
 
-function manifest(artifacts: readonly ManagedArtifactV1[]): InstallationManifestV1 {
+/**
+ * `validateChangePlan` still reads a V1 manifest; a V2 content row is the same
+ * whole-file record with the hash one level down.
+ */
+function asV1(row: ManagedArtifactV2): ManagedArtifactV1 {
+  if (!("installedHash" in row.verification)) throw new Error("a V1 row needs an installed hash");
+  const { verification, ...common } = row;
+  return { ...common, kind: row.kind === "instruction" ? "file" : row.kind, installedHash: verification.installedHash };
+}
+
+function manifest(artifacts: readonly ManagedArtifactV2[]): InstallationManifestV1 {
   return {
     schemaVersion: 1,
     productVersion: "0.0.0",
     installedAt: "2026-08-11T00:00:00.000Z",
-    artifacts,
+    artifacts: artifacts.map(asV1),
   };
 }
 
@@ -203,6 +214,11 @@ describe("proposeCodexInstall", () => {
    * Claude adapter's `install.test.ts` documents for its own "replace"
    * branch.
    */
+  it("refuses to replace a managed row that pins no content hash", () => {
+    const ephemeral = artifact(`${pluginRoot}/.codex-plugin/plugin.json`, { verification: { mode: "ephemeral" } });
+    expect(() => proposeCodexInstall(tree, context, new Map([[ephemeral.path, ephemeral]]))).toThrow(/no content hash/u);
+  });
+
   it("produces a replace the real validator accepts against the prior manifest", async () => {
     const owned = artifact(`${pluginRoot}/.codex-plugin/plugin.json`);
     const proposal = proposeCodexInstall(tree, context, new Map([[owned.path, owned]]));
@@ -425,10 +441,7 @@ describe("proposeCodexUninstall", () => {
    * manifest entry.
    */
   it("refuses to propose removing a managed artifact this adapter does not own", () => {
-    const foreign: ManagedArtifactV1 = {
-      ...artifact(`${pluginRoot}/skills/foreign/SKILL.md`),
-      owner: "claude",
-    };
+    const foreign = artifact(`${pluginRoot}/skills/foreign/SKILL.md`, { owner: "claude" });
     const operations = proposeCodexUninstall(
       context,
       new Map([
@@ -437,5 +450,34 @@ describe("proposeCodexUninstall", () => {
       ]),
     ).operations;
     expect(operations.some((operation) => operation.targetPath === foreign.path)).toBe(false);
+  });
+
+  it("removes an instruction content row under the tree as a file, keyed off its V2 hash", async () => {
+    const skill = artifact(`${pluginRoot}/skills/review/SKILL.md`, {
+      kind: "instruction",
+      instruction: { category: "skill", id: "review", source: "default" },
+    });
+    const proposal = proposeCodexUninstall(context, new Map([[skill.path, skill]]));
+    expect(proposal.operations).toEqual([
+      expect.objectContaining({ targetPath: skill.path, kind: "file", expectedBeforeHash: hash }),
+    ]);
+    await expect(
+      validateChangePlan(
+        { schemaVersion: 1, productVersion: proposal.productVersion, operations: proposal.operations },
+        planContext(manifest([skill])),
+      ),
+    ).resolves.toMatchObject({ schemaVersion: 1 });
+  });
+
+  it("proposes no file removal for a row that pins no content hash", () => {
+    const directory = artifact(`${pluginRoot}/skills`, { kind: "directory", verification: { mode: "content" } });
+    const operations = proposeCodexUninstall(
+      context,
+      new Map([
+        [directory.path, directory],
+        [owned.path, owned],
+      ]),
+    ).operations;
+    expect(operations.map((operation) => operation.targetPath)).toEqual([owned.path]);
   });
 });

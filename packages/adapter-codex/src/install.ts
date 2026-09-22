@@ -3,7 +3,7 @@ import { posix } from "node:path";
 import { hashBytes } from "@developer-os/core";
 import type {
   ChangePlanOperationV1,
-  ManagedArtifactV1,
+  ManagedArtifactV2,
 } from "@developer-os/core";
 import { compareCodePoints } from "@developer-os/workflow-schema";
 import { MARKETPLACE_NAME } from "./marketplace.js";
@@ -136,7 +136,17 @@ function assertWithinPluginTree(relative: string): void {
  * The manifest's record of what this adapter already owns, keyed by target
  * path. Passed in rather than read here: `packages/core` owns the manifest.
  */
-export type ManagedByPath = ReadonlyMap<string, ManagedArtifactV1>;
+export type ManagedByPath = ReadonlyMap<string, ManagedArtifactV2>;
+
+/**
+ * The whole-file hash a V2 row pins, or `null` for a row with none (a
+ * directory, an ephemeral file, a marked block). A plugin-tree file is only
+ * ever a `content` row; a hashless row at one of its paths is not ours to
+ * replace or remove file-wise.
+ */
+function installedHashOf(artifact: ManagedArtifactV2): string | null {
+  return "installedHash" in artifact.verification ? artifact.verification.installedHash : null;
+}
 
 /**
  * Codex architecture former §4.1: registration is marketplace-add then plugin-add, in that order —
@@ -221,6 +231,10 @@ export function proposeCodexInstall(
       const targetPath = resolveWithin(root, artifact.path);
       assertWithinPluginTree(artifact.path);
       const existing = managed.get(targetPath);
+      const existingHash = existing === undefined ? null : installedHashOf(existing);
+      if (existing !== undefined && existingHash === null) {
+        throw new Error(`refusing to replace a managed artifact that pins no content hash: ${targetPath}`);
+      }
       // `create` for a target nobody owns, `replace` for one this adapter
       // already installed. `validateChangePlan` refuses a `create` over a
       // managed artifact with `already_owned`, so a second install could
@@ -230,7 +244,7 @@ export function proposeCodexInstall(
         operation: existing === undefined ? ("create" as const) : ("replace" as const),
         owner: "codex" as const,
         kind: "file" as const,
-        expectedBeforeHash: existing?.installedHash ?? null,
+        expectedBeforeHash: existingHash,
         source: artifact.path,
         // `dedicated` because this adapter owns whole files and never
         // three-way merges. Codex architecture former §4.1: the vendor's tool owns the vendor's
@@ -262,11 +276,12 @@ export function proposeCodexUninstall(
   // raw string-prefix test but normalizes outside `root`.
   const owned = [...managed.values()]
     .flatMap((artifact) => {
-      if (artifact.owner !== "codex") {
+      const installedHash = installedHashOf(artifact);
+      if (artifact.owner !== "codex" || installedHash === null) {
         return [];
       }
       const targetPath = containedWithin(root, artifact.path);
-      return targetPath === undefined ? [] : [{ artifact, targetPath }];
+      return targetPath === undefined ? [] : [{ artifact, installedHash, targetPath }];
     })
     .sort((left, right) => compareCodePoints(left.targetPath, right.targetPath));
 
@@ -278,15 +293,17 @@ export function proposeCodexUninstall(
     schemaVersion: 1,
     productVersion: context.productVersion,
     registrationPhase: "before-operations",
-    operations: owned.map(({ artifact, targetPath }) => ({
+    operations: owned.map(({ artifact, installedHash, targetPath }) => ({
       targetPath,
       operation: "remove" as const,
       owner: artifact.owner,
-      kind: artifact.kind,
+      // Drift treats an `instruction` content row as a regular file (spec
+      // §2.1), and `ChangePlanOperationV1` has no `instruction` kind.
+      kind: artifact.kind === "instruction" ? ("file" as const) : artifact.kind,
       // `validateChangePlan` requires a real prior hash for any non-`create`
       // operation, `source === ""` and `proposedHash === null` for a
       // `remove`, and a matching managed artifact.
-      expectedBeforeHash: artifact.installedHash,
+      expectedBeforeHash: installedHash,
       source: "",
       mergeStrategy: artifact.mergeStrategy,
       proposedHash: null,

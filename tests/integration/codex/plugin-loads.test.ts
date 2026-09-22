@@ -4,7 +4,7 @@ import { dirname, join, posix } from "node:path";
 import { env as processEnv } from "node:process";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { ManagedArtifactV1 } from "@developer-os/core";
+import type { ManagedArtifactV2 } from "@developer-os/core";
 import {
   CODEX_ROOT_SEGMENT,
   PLUGIN_NAME,
@@ -340,7 +340,7 @@ describe("the generated install tree against a real Codex installation", () => {
       const tree = renderCodexInstallTree(contracts, { home: productHome });
       const proposal = proposeCodexInstall(tree, { home: productHome, productVersion: "0.0.0" });
       const managed: ManagedByPath = new Map(
-        proposal.operations.map((operation): [string, ManagedArtifactV1] => [
+        proposal.operations.map((operation): [string, ManagedArtifactV2] => [
           operation.targetPath,
           {
             owner: "codex",
@@ -350,11 +350,11 @@ describe("the generated install tree against a real Codex installation", () => {
             existedBefore: false,
             beforeHash: null,
             backupRelativePath: null,
-            installedHash: operation.proposedHash ?? "",
             source: operation.source,
             mergeStrategy: operation.mergeStrategy,
             verifiedAt: new Date().toISOString(),
-          },
+            verification: { mode: "content", installedHash: operation.proposedHash ?? "" },
+          } as ManagedArtifactV2,
         ]),
       );
       const uninstall = proposeCodexUninstall(
