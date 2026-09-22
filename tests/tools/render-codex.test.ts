@@ -95,6 +95,9 @@ describe("regenerate", () => {
     expect(written).toBeGreaterThan(0);
     expect(await readdir(generated)).not.toContain("important.txt");
     await expect(readFile(kept, "utf8")).rejects.toThrow();
-    expect(await readdir(join(generated, "skills"))).toHaveLength(6);
+    const workflowSkills = (await readdir(join(generated, "skills"))).filter((name) =>
+      name.startsWith("developer-os-"),
+    );
+    expect(workflowSkills).toHaveLength(11);
   });
 });

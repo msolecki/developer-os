@@ -1,48 +1,48 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { renderCodexPlugin } from "@developer-os/adapter-codex";
-import { loadWorkflow } from "@developer-os/workflow-schema";
+import {
+  PLUGIN_TREE_PREFIX,
+  renderCodexPlugin,
+  renderInstructionTree,
+} from "@developer-os/adapter-codex";
+import { compareCodePoints } from "@developer-os/workflow-schema";
 import type { RenderedArtifact } from "@developer-os/workflow-schema";
+import {
+  loadDefaultInstructionSources,
+  loadRepositoryWorkflows,
+} from "../claude/render-all.js";
+import type { RenderOptions } from "../claude/render-all.js";
+
+export type { RenderOptions } from "../claude/render-all.js";
 
 export const REPOSITORY_ROOT = process.cwd();
 export const WORKFLOWS_ROOT = join(REPOSITORY_ROOT, "workflows");
 export const GENERATED_ROOT = join(REPOSITORY_ROOT, "plugins", "codex");
 
-export interface RenderOptions {
-  /**
-   * Reverse the directory listing before loading. Codex architecture former §7.3 owes DOS-P3 proof
-   * that the artifacts are byte-identical under a reversed reader, and the only
-   * way to prove it is to actually reverse one.
-   */
-  readonly reverseDirectoryOrder?: boolean;
-}
-
+/**
+ * The plugin root only: `renderCodexPlugin` plus the instruction skills, re-rooted
+ * from the marketplace root. Agent TOML and the `AGENTS.md` block live under the
+ * Codex home, not in the plugin, so neither is checked in.
+ */
 export async function renderAllForCodex(
   options: RenderOptions = {},
 ): Promise<readonly RenderedArtifact[]> {
-  const entries = await readdir(WORKFLOWS_ROOT, { withFileTypes: true });
-  const directories = entries
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .sort();
-  const ordered =
-    options.reverseDirectoryOrder === true
-      ? [...directories].reverse()
-      : directories;
-
-  const contracts = [];
-  for (const name of ordered) {
-    const file = join("workflows", name, "workflow.yaml");
-    const text = await readFile(join(WORKFLOWS_ROOT, name, "workflow.yaml"), "utf8");
-    const result = loadWorkflow({ file, text });
-    if (result.contract === null) {
-      throw new Error(
-        `${file} did not validate: ${result.findings.map((f) => f.message).join("; ")}`,
-      );
+  const workflows = await loadRepositoryWorkflows(options);
+  const { defaults, none } = await loadDefaultInstructionSources("codex", workflows, options);
+  const prefix = `${PLUGIN_TREE_PREFIX}/`;
+  const instructionFiles = renderInstructionTree(defaults, none).pluginFiles.map((artifact) => {
+    if (!artifact.path.startsWith(prefix)) {
+      throw new Error(`${artifact.path} is outside the plugin root ${PLUGIN_TREE_PREFIX}`);
     }
-    contracts.push(result.contract);
+    return { path: artifact.path.slice(prefix.length), contents: artifact.contents };
+  });
+  const tree = [...renderCodexPlugin(workflows), ...instructionFiles].sort((left, right) =>
+    compareCodePoints(left.path, right.path),
+  );
+  if (new Set(tree.map((artifact) => artifact.path)).size !== tree.length) {
+    throw new Error("refusing a Codex plugin tree in which two artifacts claim one path");
   }
-  return renderCodexPlugin(contracts);
+  return tree;
 }
 
 export async function readGeneratedTree(): Promise<Map<string, string>> {

@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { detectWorkflowDrift } from "@developer-os/workflow-schema";
-import { readGeneratedTree, renderAllForClaude } from "./render-all.js";
+import {
+  loadRepositoryInstructionDefaults,
+  loadRepositoryWorkflows,
+  readGeneratedTree,
+  renderAllForClaude,
+} from "./render-all.js";
+
+const isWorkflowSkill = (path: string): boolean =>
+  path.startsWith("skills/developer-os-") && path.endsWith("/SKILL.md");
+const isInstruction = (path: string): boolean =>
+  !path.startsWith(".claude-plugin/") && !path.startsWith("skills/developer-os-");
 
 /**
  * Product spec §10: generated artifacts are reproducible, CI regenerates them
@@ -37,13 +47,40 @@ describe("plugins/claude is a clean regeneration", () => {
     expect(onDisk.size).toBe(expected.length);
   });
 
-  it("renders one skill per canonical workflow, plus the manifest", async () => {
-    const expected = await renderAllForClaude();
-    const skills = expected.filter((artifact) =>
-      artifact.path.endsWith("SKILL.md"),
-    );
+  it("renders one skill per canonical workflow, plus the manifest and the instructions", async () => {
+    const paths = (await renderAllForClaude()).map((artifact) => artifact.path);
+    const skills = paths.filter(isWorkflowSkill);
     expect(skills).toHaveLength(11);
-    expect(expected).toHaveLength(skills.length + 1);
+    expect(paths).toHaveLength(skills.length + 1 + paths.filter(isInstruction).length);
+  });
+
+  /**
+   * Spec §3.1: the checked-in tree is the default render. Only skills, their thin
+   * commands and agents live in the plugin root; rules, scoped rules, output styles
+   * and the `CLAUDE.md` block are written under the user home instead.
+   */
+  it("carries every plugin-root instruction the catalog lists, and nothing else", async () => {
+    const catalog = await loadRepositoryInstructionDefaults(await loadRepositoryWorkflows());
+    const wanted = catalog.artifacts
+      .filter((row) => row.vendors.includes("claude"))
+      .flatMap((row) =>
+        row.category === "skill"
+          ? [`skills/${row.id}/SKILL.md`, ...(row.thinCommand ? [`commands/${row.id}.md`] : [])]
+          : row.category === "agent"
+            ? [`agents/${row.id}.md`]
+            : [],
+      );
+    const rendered = (await renderAllForClaude()).map((artifact) => artifact.path).filter(isInstruction);
+    expect(rendered.length > 0).toBe(wanted.length > 0);
+    for (const path of wanted) expect(rendered, path).toContain(path);
+    const onDisk = [...(await readGeneratedTree()).keys()].filter(isInstruction);
+    expect(onDisk.sort()).toEqual(rendered.sort());
+  });
+
+  it("is byte-identical under a reversed workflow and instruction reader", async () => {
+    expect(JSON.stringify(await renderAllForClaude({ reverseDirectoryOrder: true }))).toBe(
+      JSON.stringify(await renderAllForClaude()),
+    );
   });
 
   it("contains no absolute machine path", async () => {
@@ -62,8 +99,7 @@ describe("plugins/claude is a clean regeneration", () => {
   it("carries the shared preamble in every non-shared skill", async () => {
     const onDisk = await readGeneratedTree();
     const skills = [...onDisk.entries()].filter(
-      ([path]) =>
-        path.endsWith("SKILL.md") && !path.includes("developer-os-shared"),
+      ([path]) => isWorkflowSkill(path) && !path.includes("developer-os-shared"),
     );
     expect(skills).toHaveLength(10);
     for (const [path, contents] of skills) {
@@ -89,9 +125,9 @@ describe("plugins/claude is a clean regeneration", () => {
     }
   });
 
-  it("carries a source marker in every skill", async () => {
+  it("carries a source marker in every workflow skill", async () => {
     for (const [path, contents] of await readGeneratedTree()) {
-      if (!path.endsWith("SKILL.md")) continue;
+      if (!isWorkflowSkill(path)) continue;
       expect(contents, `${path} must be marked generated`).toContain(
         "Do not edit.",
       );

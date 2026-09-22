@@ -1,5 +1,6 @@
 /**
- * Regenerate `plugins/codex/` from `workflows/`.
+ * Regenerate `plugins/codex/` from `workflows/` and the default `instructions/`
+ * (never user overrides; spec §3.1).
  *
  * **Not a CLI command, and that is a correction to the plan.** The Claude
  * adapter's `render-claude.ts` records why: `plugins/codex/` exists only in a
@@ -56,7 +57,7 @@ export function assertRepositoryRoot(
 ): void {
   if (resolve(workingDirectory) !== resolve(repositoryRoot)) {
     throw new Error(
-      `refusing to regenerate: this tool reads workflows/ and replaces plugins/codex/ relative to the working directory, which is ${workingDirectory} rather than the checkout it belongs to, ${repositoryRoot}`,
+      `refusing to regenerate: this tool reads workflows/ and instructions/ and replaces plugins/codex/ relative to the working directory, which is ${workingDirectory} rather than the checkout it belongs to, ${repositoryRoot}`,
     );
   }
 }
