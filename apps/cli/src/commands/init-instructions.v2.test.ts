@@ -18,7 +18,8 @@ import type { ReleaseFileV1 } from "../update/local-release.js";
 import { runDoctorReport } from "./doctor.js";
 import { runInit } from "./init.js";
 import type { InitOptions } from "./init.js";
-import { createCommandFixture, inventory, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "./testing.js";
+import { runUninstall } from "./uninstall.js";
+import { createCommandFixture, inventory, inventoryDigest, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "./testing.js";
 import type { CommandFixture } from "./testing.js";
 
 afterAll(removeCommandFixtures);
@@ -290,5 +291,81 @@ describe("init without --adapters, then a failing attach (one chained home)", ()
     const report = await runDoctorReport(fixture.context);
     const manifestCheck = report.checks.find((check) => check.id === "manifest");
     expect(manifestCheck?.status).toBe("pass");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
+/** Every command string in a rendered Claude `hooks.json`. */
+function hookCommands(text: string): readonly string[] {
+  const parsed = JSON.parse(text) as {
+    readonly hooks: Readonly<Record<string, readonly { readonly hooks: readonly { readonly command: string }[] }[]>>;
+  };
+  return Object.values(parsed.hooks).flatMap((groups) => groups.flatMap((group) => group.hooks.map((hook) => hook.command)));
+}
+
+/** `~/.claude` apart from the plugin tree the attach owns (and the `skills` parent it creates for it). */
+async function claudeOutsidePlugin(claudeHome: string): Promise<readonly string[]> {
+  return (await inventoryDigest(claudeHome)).filter((row) => {
+    const path = row.split("\0")[0] ?? "";
+    return path !== "skills" && path !== "skills/developer-os" && !path.startsWith("skills/developer-os/");
+  });
+}
+
+describe("init --adapters claude installs Claude hooks naming the local-build entrypoint (A13 Task 14, one chained home)", () => {
+  let installed: Home;
+  let hooksFile: string;
+  let firstRender: string;
+  let outsideBefore: readonly string[];
+
+  it("installs hooks/hooks.json as a manifest row whose every command is <node> <entrypoint>", async () => {
+    installed = await home("init-claude-hooks");
+    const { fixture } = installed;
+    await nodeFs.mkdir(installed.claudeHome, { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(join(installed.claudeHome, "settings.json"), '{"theme":"dark"}\n', { mode: 0o600 });
+    outsideBefore = await claudeOutsidePlugin(installed.claudeHome);
+
+    const result = await runInit(fixture.context, options(["claude"]));
+
+    expect(result.ok).toBe(true);
+    hooksFile = join(installed.claudePlugin, "hooks", "hooks.json");
+    firstRender = await nodeFs.readFile(hooksFile, "utf8");
+    const commands = hookCommands(firstRender);
+    expect(commands.length).toBeGreaterThan(0);
+    const prefix = `${process.execPath} ${join(fixture.paths.home, "bin", "developer-os.mjs")} `;
+    for (const command of commands) expect(command.startsWith(prefix), command).toBe(true);
+    const row = (await manifestOf(fixture)).artifacts.find((artifact) => artifact.path === hooksFile);
+    expect(row).toMatchObject({ owner: "claude", kind: "file", verification: { mode: "content" } });
+    expect(await claudeOutsidePlugin(installed.claudeHome)).toStrictEqual(outsideBefore);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("renders a byte-identical hooks.json on a second install of the same build", async () => {
+    const result = await runInit(installed.fixture.context, options(["claude"]));
+
+    expect(result.ok).toBe(true);
+    expect(await nodeFs.readFile(hooksFile, "utf8")).toBe(firstRender);
+    expect(await claudeOutsidePlugin(installed.claudeHome)).toStrictEqual(outsideBefore);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("reports an edit to hooks.json as drift in doctor", async () => {
+    await nodeFs.writeFile(hooksFile, firstRender.replace("guard", "gaurd"));
+
+    const report = await runDoctorReport(installed.fixture.context);
+
+    const finding = report.checks.find((check) => check.id === "instructions");
+    expect(finding?.status).toBe("fail");
+    expect(finding?.paths).toContain(hooksFile);
+    await nodeFs.writeFile(hooksFile, firstRender);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("removes hooks.json on uninstall, and state/hooks with it, leaving ~/.claude as it was", async () => {
+    const { fixture } = installed;
+    const records = join(fixture.paths.stateDir, "hooks");
+    await nodeFs.mkdir(records, { mode: 0o700 });
+
+    const result = await runUninstall(fixture.context, { dryRun: false, assumeYes: true });
+
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    expect(existsSync(hooksFile)).toBe(false);
+    expect(existsSync(records)).toBe(false);
+    expect(await claudeOutsidePlugin(installed.claudeHome)).toStrictEqual(outsideBefore);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

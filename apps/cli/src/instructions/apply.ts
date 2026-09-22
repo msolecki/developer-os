@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { CLAUDE_MINIMUM_VERSION, discoverClaude } from "@developer-os/adapter-claude";
 import { CODEX_MINIMUM_VERSION, discoverCodex } from "@developer-os/adapter-codex";
 import {
+  assertHookExecutablePath,
+  assertHookNodePath,
   compareVersions,
   decodeCanonicalJson,
   encodeCanonicalJson,
@@ -15,6 +17,7 @@ import {
 import type {
   CanonicalJsonValue,
   DeveloperOsConfigV1,
+  HookCommandExecutable,
   InstallationManifestV2,
   LowerHexSha256,
   ManagedArtifactV2,
@@ -31,6 +34,7 @@ import { ConfigurationError, discoverEachAgent } from "../commands/doctor.js";
 import { LifecycleMutationRefusal, withLifecycleMutation } from "../lifecycle/mutation-gate.js";
 import type { LifecycleMutationAuthorityV1 } from "../lifecycle/mutation-gate.js";
 import type { CliLifecycleContext } from "../lifecycle/context.js";
+import { entrypointPath } from "../update/local-release.js";
 import type { AdmittedPackagedReleaseV1 } from "../update/packaged-release.js";
 import { compareManifestRows, InstructionRefusal, planInstructionAttach } from "./attach.js";
 import type { InstructionApplyReportV1 } from "./attach.js";
@@ -333,6 +337,16 @@ export async function applyInstructions(context: CliContext, input: {
     });
   }
 
+  /**
+   * A13 Task 14: the Claude hooks run `<this Node> <product-home>/bin/developer-os.mjs`. Checked
+   * once, before any transaction, so an unsafe home refuses with exit 2 and nothing written.
+   */
+  const hookExecutable: HookCommandExecutable = { node: process.execPath, entrypoint: entrypointPath(home) };
+  if (selection.includes("claude")) {
+    assertHookNodePath(hookExecutable.node);
+    assertHookExecutablePath(hookExecutable.entrypoint);
+  }
+
   const executables = await discoverExecutables(context);
   for (const vendor of selection) await assertAdapterAvailable(context, vendor, executables.get(vendor) ?? null);
   if (selection.length > 0) {
@@ -386,6 +400,7 @@ export async function applyInstructions(context: CliContext, input: {
       now: context.now().toISOString() as UtcTimestampV1,
       fs: PLANNER_FS,
       redactDiagnostic: (text) => context.guards.transaction.redactDiagnostic(text),
+      hookExecutable,
     });
     if (plan.kind === "noop") return EMPTY_REPORT;
     // The Foundation executor creates no directory; product-created ones are exactly 0700.

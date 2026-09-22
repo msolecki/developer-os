@@ -5,6 +5,7 @@ import {
   proposeClaudeInstall,
   renderClaudeVendorTree,
   renderInstructionTree as renderClaudeInstructions,
+  withClaudeHooks,
 } from "@developer-os/adapter-claude";
 import {
   PLUGIN_TREE_PREFIX,
@@ -31,6 +32,7 @@ import type {
   ConflictEvidenceRequest,
   DeveloperOsConfigV1,
   ExitCode,
+  HookCommandExecutable,
   InstallationManifestV2,
   InstructionBlockMemberV1,
   InstructionCategoryV1,
@@ -74,6 +76,11 @@ export interface InstructionAttachInputV1 {
   readonly redactDiagnostic: (text: string) => string;
   /** Defaults to `UNPROVEN_CLAUDE_CATEGORIES`. */
   readonly heldBackClaudeCategories?: ReadonlySet<InstructionCategoryV1>;
+  /**
+   * A13 Task 14: what the Claude plugin's `hooks/hooks.json` runs, `<node> <entrypoint>`. The
+   * entrypoint is D53's version-free `<product-home>/bin/developer-os.mjs`.
+   */
+  readonly hookExecutable: HookCommandExecutable;
 }
 
 export interface InstructionApplyReportV1 {
@@ -496,7 +503,7 @@ async function planClaude(planner: Planner, input: InstructionAttachInputV1, hel
   const byKey = new Map(kept.map((artifact) => [sourceKey(artifact.category, artifact.id), artifact]));
   const paths = claudeInstructionPaths(planner.homes);
   const render = renderClaudeInstructions(set, { vendor: "claude", artifacts: [], unsupported: [] }, planner.homes.productHome);
-  const tree = renderClaudeVendorTree(input.workflows, render);
+  const tree = withClaudeHooks(renderClaudeVendorTree(input.workflows, render), input.hookExecutable);
   const instructionPaths = new Set(render.pluginFiles.map((file) => file.path));
   const proposal = proposeClaudeInstall(tree, { home: planner.homes.userHome, productVersion: input.productVersion });
 

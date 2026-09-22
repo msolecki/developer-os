@@ -204,6 +204,8 @@ function freshState(): State {
   };
 }
 
+const HOOK_EXECUTABLE = { node: "/opt/synthetic/node/bin/node", entrypoint: `${P}/bin/developer-os.mjs` } as const;
+
 function input(state: State, overrides: Partial<InstructionAttachInputV1> = {}): InstructionAttachInputV1 {
   return {
     vendors: ["claude", "codex"],
@@ -219,6 +221,7 @@ function input(state: State, overrides: Partial<InstructionAttachInputV1> = {}):
     fs: state.fs.port,
     redactDiagnostic: (text) => text.replaceAll("synthetic-secret-token", "[REDACTED]"),
     heldBackClaudeCategories: NONE,
+    hookExecutable: HOOK_EXECUTABLE,
     ...overrides,
   };
 }
@@ -285,6 +288,15 @@ const PLUGIN = `${H}/.claude/skills/developer-os`;
 /* ------------------------------------------------------------------ tests */
 
 describe("planInstructionAttach: a fresh attach", () => {
+  it("adds the Claude hooks file to the plugin tree, naming the node and entrypoint it was given", async () => {
+    const plan = transaction(await planInstructionAttach(input(freshState())));
+    const write = mutationAt(plan, `${PLUGIN}/hooks/hooks.json`);
+    expect(write?.operation).toBe("create");
+    const text = decoder.decode(write?.content ?? new Uint8Array());
+    expect(text).toContain(`"${HOOK_EXECUTABLE.node} ${HOOK_EXECUTABLE.entrypoint} guard command --vendor claude"`);
+    expect(rowAt(plan.manifest, `${PLUGIN}/hooks/hooks.json`)).toMatchObject({ owner: "claude", kind: "file" });
+  });
+
   it("plans one transaction whose manifest admits under the closed vendor authorization", async () => {
     const plan = transaction(await planInstructionAttach(input(freshState())));
     expect(plan.mutations.length).toBeGreaterThan(0);
