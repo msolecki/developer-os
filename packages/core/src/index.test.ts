@@ -74,6 +74,7 @@ describe("the package's public door", () => {
         "lifecycleBookkeepingPaths",
         "ABSENT_MANIFEST_WALK_BOUNDS",
         "inspectAbsentManifestProductHome",
+        "USER_DATA_HOME_ENTRIES",
         "LIFECYCLE_LEASE_DRAIN_MS",
         "LIFECYCLE_LEDGER_BOUNDS",
         "LIFECYCLE_LOCK_RETRY_MS",

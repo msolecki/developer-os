@@ -54,6 +54,7 @@ export {
   formatAllocatedLifecycleId,
   foundationParticipantPlanHash,
   inspectAbsentManifestProductHome,
+  USER_DATA_HOME_ENTRIES,
   inspectFoundationLedger,
   inspectLifecycleAllocator,
   inspectLifecycleLedger,

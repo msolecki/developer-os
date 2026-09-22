@@ -20,6 +20,7 @@ import {
   inspectLifecycleBookkeepingShape,
   lifecycleBookkeepingPaths,
   serializeConfig,
+  USER_DATA_HOME_ENTRIES,
   selectBootstrapJournal,
   validateBootstrapExternalShapeProjection,
   validateBootstrapJournal,
@@ -1212,6 +1213,19 @@ export class BootstrapExecutor {
       }
       result.set(path, stats);
     }
+    /** A12 spec §3.2: the user's override tree is opaque user data a fresh `init` admits, never claims. */
+    for (const name of USER_DATA_HOME_ENTRIES) {
+      const path = join(this.#dependencies.paths.home, name);
+      const stats = await lstatOptional(path);
+      if (stats === null) continue;
+      if (!stats.isDirectory() || stats.isSymbolicLink() || Number(stats.uid) !== uid()) {
+        throw new FreshBootstrapError(
+          EXIT_CODES.recoveryRequired,
+          `product home user data is not an owned directory: ${path}`,
+        );
+      }
+      result.set(path, stats);
+    }
     return result;
   }
 
@@ -1333,7 +1347,8 @@ export class BootstrapExecutor {
       if (!homeBefore.isDirectory() || homeBefore.isSymbolicLink()) {
         throw new FreshBootstrapError(EXIT_CODES.invalidInput, "product home is not a directory");
       }
-      const entries = await nodeFs.readdir(paths.home);
+      const entries = (await nodeFs.readdir(paths.home))
+        .filter((name) => !(USER_DATA_HOME_ENTRIES as readonly string[]).includes(name));
       const stateBefore = await lstatOptional(paths.stateDir);
       const stateNames = stateBefore === null ? [] : await nodeFs.readdir(paths.stateDir);
       const admittedBeside = [

@@ -70,6 +70,13 @@ export interface AbsentManifestDependenciesV1 {
   readonly evidence: AbsentManifestEvidenceV1;
 }
 
+/**
+ * A12 spec §3.2 (Spec 1 §6 amendment): the user's instruction overrides are
+ * user data, never residue. The subtree is still walked with the same bounds
+ * and entry rules; only its classification changes.
+ */
+export const USER_DATA_HOME_ENTRIES: readonly ["instructions"] = ["instructions"];
+
 const WALK_DOMAIN = "developer-os:absent-manifest-walk:v1";
 const STATE_RELATIVE_PATH = "state";
 const KEY_RELATIVE_PATH = "state/redaction.key";
@@ -387,6 +394,13 @@ function projectionOf(
       refuseLifecycleRecovery("absent_manifest_bookkeeping", result.offendingPath);
     }
     projectSubtree(childIndex, path, evidence.retainedPaths, projected);
+  }
+  for (const name of USER_DATA_HOME_ENTRIES) {
+    const path = `${productHome}/${name}`;
+    const entry = tree.get(path);
+    if (entry === undefined) continue;
+    if (entry.kind !== "directory") refuseLifecycleRecovery("absent_manifest_user_data", path);
+    projectSubtree(childIndex, path, new Set(), projected);
   }
   const projection: ProjectionV1 = {
     tree,

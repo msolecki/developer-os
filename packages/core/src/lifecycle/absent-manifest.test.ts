@@ -10,6 +10,7 @@ import { parseUInt64Decimal } from "../update/scalars.js";
 import {
   ABSENT_MANIFEST_WALK_BOUNDS,
   inspectAbsentManifestProductHome,
+  USER_DATA_HOME_ENTRIES,
   type AbsentManifestEvidenceV1,
   type AbsentManifestInspectionV1,
   type AbsentManifestShapeV1,
@@ -491,6 +492,91 @@ describe("every other known or unknown entry", () => {
     });
 
     expect((await refusal(home)).paths).toStrictEqual([legacy]);
+  });
+});
+
+describe("the product home's instructions directory (A12 spec §3.2)", () => {
+  const INSTRUCTIONS = `${HOME}/instructions`;
+  const overrides = (): Map<string, PlantV1> =>
+    new Map<string, PlantV1>([
+      [INSTRUCTIONS, directory({ mode: 0o755 })],
+      [`${INSTRUCTIONS}/claude`, directory({ mode: 0o755 })],
+      [`${INSTRUCTIONS}/claude/rules`, directory({ mode: 0o755 })],
+      [`${INSTRUCTIONS}/claude/rules/x.md`, file({ mode: 0o644, size: 12 })],
+    ]);
+
+  it("names exactly one user-data entry", () => {
+    expect(USER_DATA_HOME_ENTRIES).toStrictEqual(["instructions"]);
+  });
+
+  it.each(["product_home_empty", "state_empty", "state_key_only"] as const)(
+    "classifies the override tree as user data, not residue, beside %s",
+    async (shape) => {
+      const home = memoryHome(shape, { projections: true, extra: overrides() });
+
+      const inspection = await inspectAbsentManifestProductHome(home.dependencies);
+
+      expect(inspection.shape).toBe(shape);
+      expect(inspection.visitedEntries).toBe(plantedUnderHome(home));
+      expect(home.fs.readsOfContent).toStrictEqual([]);
+      expect(home.fs.mutations).toStrictEqual([]);
+    },
+  );
+
+  it("still walks the subtree: its entries change the walk fingerprint", async () => {
+    const bare = await inspectAbsentManifestProductHome(memoryHome("state_empty").dependencies);
+    const withOverrides = await inspectAbsentManifestProductHome(
+      memoryHome("state_empty", { extra: overrides() }).dependencies,
+    );
+
+    expect(withOverrides.visitedEntries).toBe(bare.visitedEntries + overrides().size);
+    expect(withOverrides.walkFingerprint).not.toBe(bare.walkFingerprint);
+  });
+
+  it.each([
+    ["a symlink", `${INSTRUCTIONS}/claude/rules/link.md`, directory({ kind: "symlink", mode: 0o777 })],
+    ["a hard-linked file", `${INSTRUCTIONS}/claude/rules/twin.md`, file({ nlink: 2 })],
+    ["a foreign-owned file", `${INSTRUCTIONS}/claude/rules/foreign.md`, file({ ownerUid: UID + 1 })],
+  ] as const)("still refuses %s inside it", async (_label, offending, plant) => {
+    const extra = overrides();
+    extra.set(offending, plant);
+    const home = memoryHome("state_empty", { extra });
+
+    const error = await refusal(home);
+
+    expect(error.paths).toStrictEqual([offending]);
+    expect(home.fs.mutations).toStrictEqual([]);
+  });
+
+  it("still applies the walk's component bound inside it", async () => {
+    const extra = overrides();
+    let path = INSTRUCTIONS;
+    while (componentCount(path) <= ABSENT_MANIFEST_WALK_BOUNDS.components) {
+      path = `${path}/d`;
+      extra.set(path, directory());
+    }
+    const home = memoryHome("state_empty", { extra });
+
+    expect((await refusal(home)).reason).toBe("absent_manifest_bound");
+  });
+
+  it("refuses an instructions entry that is a file, not a directory", async () => {
+    const home = memoryHome("state_empty", {
+      extra: new Map([[INSTRUCTIONS, file({ size: 3 })]]),
+    });
+
+    const error = await refusal(home);
+
+    expect(error.paths).toStrictEqual([INSTRUCTIONS]);
+    expect(home.fs.mutations).toStrictEqual([]);
+  });
+
+  it("admits no other name as user data", async () => {
+    const home = memoryHome("state_empty", {
+      extra: new Map([[`${HOME}/instructions-old`, directory()]]),
+    });
+
+    expect((await refusal(home)).paths).toContain(`${HOME}/instructions-old`);
   });
 });
 

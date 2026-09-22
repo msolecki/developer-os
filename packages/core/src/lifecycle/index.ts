@@ -1,6 +1,7 @@
 export {
   ABSENT_MANIFEST_WALK_BOUNDS,
   inspectAbsentManifestProductHome,
+  USER_DATA_HOME_ENTRIES,
 } from "./absent-manifest.js";
 export type {
   AbsentManifestEvidenceV1,
