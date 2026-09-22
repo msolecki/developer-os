@@ -370,6 +370,25 @@ export type {
   SameParentRenameNoReplaceV1,
   UpdateExpectedPayloadRefV1,
 } from "./manifest/index.js";
+export {
+  INSTRUCTION_BOUNDS_V1,
+  InstructionCatalogInvalidError,
+  InstructionSourceInvalidError,
+  assertInstructionArtifactBounds,
+  assertInstructionRelativePath,
+  assertInstructionText,
+  assertInstructionVendorBounds,
+  assertNotWorkflowId,
+  parseInstructionId,
+  parseScopedRulePaths,
+  validateInstructionCatalog,
+} from "./instructions/index.js";
+export type {
+  InstructionCatalogRowV1,
+  InstructionCatalogV1,
+  InstructionCategoryV1,
+  InstructionIdV1,
+} from "./instructions/index.js";
 export { ChangePlanError, validateChangePlan } from "./plans/index.js";
 export type {
   ChangeOperationKind,
