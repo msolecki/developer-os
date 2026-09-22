@@ -12,6 +12,7 @@ import type * as SecurityModule from "@developer-os/security";
 import { runInit } from "./init.js";
 import type { InitDependencies } from "./init.js";
 import { createCommandFixture, exists, inventory, inventoryDigest, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "./testing.js";
+import { runUninstall } from "./uninstall.js";
 
 /**
  * Which key a redaction used is not observable from any value the CLI returns —
@@ -279,7 +280,9 @@ describe("runInit", () => {
       if (refused.ok) return;
       expect(refused.code).toBe(EXIT_CODES.capabilityUnavailable);
       expect(refused.error.kind).toBe("manifest_v1_not_migratable");
-      expect(refused.error.recovery).toBe("developer-os uninstall, then developer-os init");
+      expect(refused.error.recovery).toBe(
+        "developer-os uninstall, then archive the product home manually, then developer-os init",
+      );
     }
     expect(await inventoryDigest(shipped.root)).toEqual(before);
     expect(available.bootstrapTrace).toStrictEqual([]);
@@ -291,6 +294,30 @@ describe("runInit", () => {
     expect(unchanged.data.schemaVersion).toBe(1);
     expect(unchanged.data.created).toStrictEqual([]);
   });
+
+  it("recovers via the corrected instructions: uninstall, archive by hand, then a fresh V2 init succeeds", async () => {
+    const shipped = await createCommandFixture("init-v1-recovery-seed");
+    expect((await runInit(shipped.context, ACCEPTED)).ok).toBe(true);
+
+    const uninstalled = await runUninstall(shipped.rebuildContext(), ACCEPTED);
+    expect(uninstalled.ok).toBe(true);
+
+    /** "Archive the product home manually" — a user moving it aside by hand. */
+    const archived = `${shipped.paths.home}.archived`;
+    await nodeFs.rename(shipped.paths.home, archived);
+
+    const available = await createCommandFixture("init-v1-recovery-fresh", {
+      root: shipped.root,
+      bootstrapAvailable: true,
+    });
+    const fresh = await runInit(available.context, ACCEPTED);
+
+    expect(fresh.ok).toBe(true);
+    if (!fresh.ok) return;
+    expect(fresh.data.schemaVersion).toBe(2);
+
+    await nodeFs.rm(archived, { recursive: true, force: true });
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("starts a distinct durable bootstrap beside an untouched noncanonical pre-plan envelope", async () => {
     const fixture = await createCommandFixture("init-bootstrap-pre-plan-residue", {

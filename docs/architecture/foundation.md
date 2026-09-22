@@ -386,7 +386,10 @@ Spec 2's fresh V2 `init` creates V2 state. Three contracts take its place.
 
 - **`init` refuses a V1 manifest once the packaged bootstrap capability is available.** It exits 4
   (`capabilityUnavailable`) with reason `manifest_v1_not_migratable`, names the manifest path, and
-  gives the recovery `developer-os uninstall, then developer-os init`. It refuses before the
+  gives the recovery `developer-os uninstall, then archive the product home manually, then
+  developer-os init` (D20 — the shorter form does not work, because V1 `uninstall` leaves
+  `staging/`, `state/transactions` and `backups/` behind and a fresh V2 `init` then refuses that
+  residue). It refuses before the
   bootstrap evidence inventory and before any plan, so a dry run and a real run mutate nothing.
   Without the capability — production pins it unavailable until roadmap Phase 4b
   (`apps/cli/src/context.ts`) — the V1 `init` path is unchanged. The refusal is

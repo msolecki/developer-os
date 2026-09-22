@@ -17,10 +17,10 @@ kill-matrix coverage) was carved out to post-A16 hardening (D42); its full spec 
 file, tracked as `BACKLOG.md` NEW-100. The next action is Phase 4b: Spec 2
 (`plans/2026-08-29-developer-os-release-update.md`) Tasks 10–11, plus the production wiring step that
 removes the bootstrap pin at `apps/cli/src/context.ts:790` (Task 11b) — launcher and offline trust —
-with NEW-79, NEW-81 and NEW-85 settled first.
+with NEW-81 and NEW-85 settled first.
 
 Phase 4b progress: Task 10 (`1e214ce`) and Task 11 (`3f640b3`) committed; NEW-85 decided (D45, no code
-yet); NEW-79 in flight; ready next: NEW-81 (after NEW-79 closes, same file), Task 11b (blocked on the
+yet); NEW-79 closed (`e6f3a39`); ready next: NEW-81, Task 11b (blocked on the
 founder's signing-key answer only at the point the pin is actually removed).
 
 Spec 2: Tasks 1–7 and 9 complete, Task 8 withdrawn (D18), Tasks 10–26 remain. The 2026-08-28 Spec 1
@@ -28,7 +28,7 @@ plan stays as plan 1b's source; its Tasks 1–7, 21 and 23 were executed via pla
 
 Open sequence (D16, daily use before completeness):
 
-1. Now: Phase 4b — Spec 2 Tasks 10–11 plus Task 11b's pin removal, NEW-79/81/85 first.
+1. Now: Phase 4b — Spec 2 Tasks 10–11 plus Task 11b's pin removal, NEW-81/85 first.
 2. A12 → A12b → A13 → A14, then the founder cutover A15.
 3. After the cutover: A11b (Spec 2 Tasks 12–26, then Spec 1b), then A16.
 
@@ -80,8 +80,8 @@ Needs a human, a policy decision, or an external application:
 - NEW-7 — verify percent-encoded local links in Obsidian.
 - Foundation watchdog — decide whether `SpawnLockfRunner` needs one around non-blocking `lockf`.
 
-`BACKLOG.md` §1 holds 57 open numbered rows.
-Owners: NEW-79, NEW-81, NEW-85 and NEW-86 are owned by Phase 4b; NEW-82 by plan 1a; NEW-84 by Phase 9;
+`BACKLOG.md` §1 holds 56 open numbered rows.
+Owners: NEW-81, NEW-85 and NEW-86 are owned by Phase 4b; NEW-82 by plan 1a; NEW-84 by Phase 9;
 NEW-87 travels with whichever row each mis-aimed citation belongs to; NEW-88 and NEW-89 by plan 1a Tasks 16 and 22; NEW-91 by plan 1a Task 16; NEW-90 and NEW-92 by Phase 4b; NEW-97 by Phase 4b and NEW-98 by A14, both opened by plan 1a Task 22; NEW-99 is owned by plan 1a Task 23b (D38); NEW-100 by a later sharding of `test:lifecycle` (D39).
 They are not ordered ahead of A11 unless the touched subsystem makes one relevant; D33 lets a
 startable row run beside a wave when its files overlap no task in flight.
@@ -116,4 +116,4 @@ startable row run beside a wave when its files overlap no task in flight.
   Tasks 10–26 (17), plan 1b 15 (the 2026-08-28 plan's remaining tasks, not yet rewritten): 32. Before
   the cutover: Spec 2 Tasks 10–11, 2 tasks. After it: Spec 2 Tasks 12–26 and plan 1b, 30 tasks.
 - Phases 5, 5b, 6 and 7 have no spec yet; A15 and A16 each still need their dedicated plan.
-- Repository backlog: 57 open numbered rows, plus the Foundation watchdog decision.
+- Repository backlog: 56 open numbered rows, plus the Foundation watchdog decision.

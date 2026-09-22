@@ -187,7 +187,8 @@ export class ManagedDriftError extends Error {
 export class ManifestV1RefusalError extends Error {
   readonly code = EXIT_CODES.capabilityUnavailable;
   readonly reason: ManifestV1NotMigratableError["reason"] = "manifest_v1_not_migratable";
-  readonly recovery = "developer-os uninstall, then developer-os init";
+  readonly recovery =
+    "developer-os uninstall, then archive the product home manually, then developer-os init";
 
   constructor() {
     super("V1 installation manifest is not migratable");
