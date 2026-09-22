@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 /**
  * The stable launcher's composition root. It resolves platform identity and
- * the product home, admits a launcher candidate, and constructs the
- * shell-free process request `selection.ts` produces — then execs it.
+ * the product home, admits a launcher candidate, constructs the shell-free
+ * process request `selection.ts` produces, writes the FD 3 offline-trust
+ * handoff when one is configured, and execs it.
  *
- * `ponytail:` the FD 3 offline-trust pipe and the bootstrap-closure reader
- * are not wired for real here. Task 11 owns the FD 3 handoff
- * (`readOfflineReleaseTrustFd`/`renderOfflineReleaseTrustPipe`) and modifies
- * this file to write it; a real bootstrap-closure reader is Task 9's
+ * `ponytail:` the bootstrap-closure reader is not wired for real here — a
+ * real reader (walking the plan/journal/retention envelope) is Task 9's
  * territory, reused rather than reimplemented once its read-only reader is
  * exposed to this package. Until then this always reports `handoff_complete`,
  * which is safe (it only ever *widens* which candidate can route to normal
@@ -19,7 +18,7 @@ import type { BigIntStats } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { arch, platform as nodePlatform } from "node:os";
-import { execFileSync } from "node:child_process";
+import { spawn } from "node:child_process";
 
 import {
   admitLauncherPlatformIdentity,
@@ -30,14 +29,36 @@ import type {
   CanonicalAbsolutePathV1,
   LifecycleGuardedEntryV1,
   LowerHexSha256,
+  OfflineReleaseTrustV1,
+  OfflineRootKeyV1,
   UInt64DecimalV1,
 } from "@developer-os/core";
 
 import { buildLauncherEnvironment } from "./environment.js";
-import { buildLauncherProcessRequest, selectLauncherCandidate } from "./selection.js";
+import {
+  compileLauncherOfflineReleaseTrust,
+  createLauncherRetainedDocumentVerifier,
+  writeOfflineReleaseTrustHandoff,
+} from "./handoff.js";
+import { buildLauncherProcessRequest, selectLauncherCandidate, type LauncherProcessRequestV1 } from "./selection.js";
 
 const READ_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW;
 const DIRECTORY_FLAGS = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
+
+/**
+ * ponytail: the founder has not yet decided the production offline root key
+ * or its permitted metadata-redirect origins (that decision, and wiring
+ * real compiled constants here, is Task 11b's territory) — both empty
+ * rather than guessed or hardcoded in the meantime. Empty roots alone
+ * already makes `compileLauncherOfflineReleaseTrust` return `null`: no FD 3
+ * pipe is opened and `verifyRetainedDocument` refuses every retained
+ * document it is asked to check, which only ever routes a present active
+ * release into recovery (never past `LauncherBundleAdmission`'s guarded
+ * checks) — the same safe-widening invariant the bootstrap-closure stub
+ * above documents.
+ */
+const LAUNCHER_OFFLINE_RELEASE_ROOTS: readonly OfflineRootKeyV1[] = [];
+const LAUNCHER_METADATA_REDIRECT_ORIGINS: OfflineReleaseTrustV1["metadataRedirectOrigins"] = [];
 
 /**
  * A read-only guarded reader over the real filesystem: no-follow opens,
@@ -123,6 +144,47 @@ function createNodeLauncherReader(): LauncherGuardedReaderV1 {
   };
 }
 
+/**
+ * Execs the admitted release with a real anonymous pipe at FD 3 when trust
+ * is configured, or without one otherwise — Task 11b's documented "absent"
+ * fallback. `execFileSync` cannot hand a child a real pipe descriptor, so
+ * this uses `spawn`'s extra `stdio` slot: the launcher writes the rendered
+ * trust bytes into its own write end and ends the stream (closing it)
+ * before the child is expected to have read past EOF, then waits for the
+ * child's own exit and mirrors it exactly as this process's exit.
+ */
+async function execAdmittedRelease(request: LauncherProcessRequestV1, trust: OfflineReleaseTrustV1 | null): Promise<void> {
+  const child = spawn(request.executable, [...request.argv], {
+    env: { ...request.env },
+    stdio: trust === null ? ["inherit", "inherit", "inherit"] : ["inherit", "inherit", "inherit", "pipe"],
+  });
+
+  // Listeners attach immediately, before the FD 3 write below is ever
+  // awaited: an `error` event with no listener throws and crashes this
+  // process, and a child that exits early while the write is still pending
+  // (a full pipe buffer with nothing draining it) must still be observable
+  // rather than leaving the write's `await` stuck forever.
+  const exit = new Promise<{ readonly code: number | null; readonly signal: NodeJS.Signals | null }>(
+    (resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", (code, signal) => {
+        resolve({ code, signal });
+      });
+    },
+  );
+
+  if (trust !== null) {
+    const pipe = child.stdio[3];
+    if (pipe === null) {
+      throw new Error("developer-os-launcher: failed to open the offline-trust pipe");
+    }
+    await writeOfflineReleaseTrustHandoff(pipe as NodeJS.WritableStream, trust);
+  }
+
+  const outcome = await exit;
+  process.exitCode = outcome.code ?? (outcome.signal === null ? 1 : 128);
+}
+
 async function main(): Promise<void> {
   const platform = admitLauncherPlatformIdentity({ platform: nodePlatform(), architecture: arch() });
 
@@ -167,20 +229,16 @@ async function main(): Promise<void> {
     // bootstrap-closure reader is exposed to this package; see the module
     // docblock above.
     bootstrapClosure: { kind: "handoff_complete" },
-    // ponytail: Task 11 owns real Ed25519 verification; nothing here can
-    // check a signature, so this stub refuses nothing on its own.
-    verifyRetainedDocument: () => undefined,
+    verifyRetainedDocument: createLauncherRetainedDocumentVerifier(LAUNCHER_OFFLINE_RELEASE_ROOTS),
   });
 
   const request = buildLauncherProcessRequest(selection, env, process.argv.slice(2));
-
-  // ponytail: fd 3 is reserved but not yet opened/written — Task 11 owns the
-  // offline-trust pipe handoff. Until then this execs without it, which the
-  // CLI's own FD 3 admission (Task 11) will refuse rather than silently trust.
-  execFileSync(request.executable, request.argv, {
-    env: { ...request.env },
-    stdio: "inherit",
+  const trust = compileLauncherOfflineReleaseTrust({
+    acceptedRoots: LAUNCHER_OFFLINE_RELEASE_ROOTS,
+    metadataRedirectOrigins: LAUNCHER_METADATA_REDIRECT_ORIGINS,
   });
+
+  await execAdmittedRelease(request, trust);
 }
 
 function exitCodeOf(error: unknown): number {

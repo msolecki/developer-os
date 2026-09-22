@@ -169,6 +169,20 @@ git commit -m "feat(launcher): select guarded release bundles"
 
 ### Task 11: Verify the offline root handoff and signed metadata chain
 
+**Done 2026-09-22, `3f640b3`** (cherry-picked from worktree `task/11`; D44 lane, review deferred to
+phase close; full regressions rerun on the integrated tree: `packages/security` 232/232,
+`apps/launcher` 28/28). Also touched, outside the Files list but justified — `packages/security/src/index.test.ts`,
+the package's own exact-export-door test, updated for the four new exports it would otherwise have
+failed on. **Deviations/decisions to flag at that review:** `signatures.ts`/`handoff.ts` under
+`packages/security` were written together with their tests rather than confirmed red first (same class
+as Task 10's `admission.ts`), though the implementer caught it before commit and reran a genuine red
+check by temporarily removing the implementation files. `LAUNCHER_OFFLINE_RELEASE_ROOTS` in
+`apps/launcher/src/main.ts` is `[]` — no production offline root key exists yet (Task 11b's founder
+decision); the trust compiler returns `null` and the retained-document verifier fails closed, matching
+today's behavior. `execFileSync` → `spawn` in `main.ts` (needed to hand a real pipe descriptor to the
+child) also fixes child exit codes that previously collapsed to 1. The `"release-key-delegation"` /
+`"release-index"` kind literals are this task's own choice, unfixed elsewhere in the tree.
+
 **Files:**
 - Create: `packages/security/src/update/signatures.ts`
 - Create: `packages/security/src/update/signatures.test.ts`
@@ -184,7 +198,7 @@ git commit -m "feat(launcher): select guarded release bundles"
 - Consumes: Task 2 signed-document schemas and Task 10 launcher admission.
 - Produces: `verifySignedReleaseDocument`, `verifyReleaseMetadataChain`, `readOfflineReleaseTrustFd`, `renderOfflineReleaseTrustPipe`, launcher-owned compiled trust constants and exact FD 3 handoff.
 
-- [ ] **Step 1: Write failing signature/domain/descriptor tests**
+- [x] **Step 1: Write failing signature/domain/descriptor tests**
 
 ```ts
 it("verifies the exact domain-separated Ed25519 bytes", () => {
@@ -198,13 +212,13 @@ it.each(signatureMutations)("refuses $name", mutation => {
 
 Cover key-ID/raw-key equality, 32-byte public and 64-byte signature lengths, base64url without padding, one signature, document kind/domain/canonical bytes, current root online delegation, current/previous root retained metadata, one pipe, 64-KiB EOF, extra inherited descriptors, parent launcher identity, and close-before-context behavior.
 
-- [ ] **Step 2: Run signature/handoff tests and verify missing verifier fails**
+- [x] **Step 2: Run signature/handoff tests and verify missing verifier fails**
 
 Run: `npx vitest run --root packages/security src/update/signatures.test.ts src/update/handoff.test.ts && npx vitest run --root apps/launcher src/handoff.test.ts`
 
 Expected: FAIL because signature and descriptor handoff modules are absent.
 
-- [ ] **Step 3: Implement Ed25519 verification and exact pipe handoff**
+- [x] **Step 3: Implement Ed25519 verification and exact pipe handoff**
 
 ```ts
 export function verifySignedReleaseDocument<TKind extends string, TSigned>(
@@ -220,13 +234,13 @@ export async function readOfflineReleaseTrustFd(
 
 Use `node:crypto.verify(null, ...)` over the exact domain plus no-LF canonical `signed` bytes. The launcher writes canonical JSON plus LF to a fresh pipe, passes only read FD 3, and closes its write side; the CLI validates pipe type/EOF/size/parent/descriptor set and closes it before any descendant can inherit it.
 
-- [ ] **Step 4: Run signature/handoff tests**
+- [x] **Step 4: Run signature/handoff tests**
 
 Run: `npx vitest run --root packages/security src/update/signatures.test.ts src/update/handoff.test.ts && npx vitest run --root apps/launcher src/handoff.test.ts`
 
 Expected: PASS for current/retained root and all mutation vectors.
 
-- [ ] **Step 5: Commit Task 11**
+- [x] **Step 5: Commit Task 11**
 
 ```bash
 git add packages/security/src/update/signatures.ts packages/security/src/update/signatures.test.ts packages/security/src/update/handoff.ts packages/security/src/update/handoff.test.ts packages/security/src/update/index.ts packages/security/src/index.ts apps/launcher/src/handoff.ts apps/launcher/src/handoff.test.ts apps/launcher/src/main.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md

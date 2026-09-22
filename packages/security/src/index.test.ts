@@ -42,6 +42,10 @@ describe("the package's public door", () => {
         "boundedProse",
         "fenced",
         "screenParagraphs",
+        "readOfflineReleaseTrustFd",
+        "renderOfflineReleaseTrustPipe",
+        "verifyReleaseMetadataChain",
+        "verifySignedReleaseDocument",
       ].sort(),
     );
   });
