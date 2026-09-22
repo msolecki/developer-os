@@ -29,6 +29,7 @@ describe("the package's public door", () => {
         "REDACTION_CLASSES",
         "assertSafeCommand",
         "NodeProcessRunner",
+        "normalizeShellCommand",
         "discoverCli",
         "parseStructuredPayload",
         "screenDerivedPathArgument",

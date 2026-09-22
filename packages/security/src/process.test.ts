@@ -1,4 +1,4 @@
-import { access, mkdtemp, realpath, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { EXIT_CODES } from "@developer-os/core";
@@ -60,6 +60,12 @@ afterEach(async () => {
 });
 
 describe("assertSafeCommand", () => {
+  it("shares the one normalizer with guard command", async () => {
+    const source = await readFile(new URL("./process.ts", import.meta.url), "utf8");
+    expect(source).toContain('import { normalizeShellCommand } from "./shell-command.js"');
+    expect(source).not.toMatch(/replace\(\/\[\\r\\n\]/u);
+  });
+
   it("normalizes line breaks before rejecting a shell-pipeline bypass", () => {
     const request = createRequest({
       executable: "/usr/bin/curl",

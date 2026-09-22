@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { basename, isAbsolute } from "node:path";
 import type { RedactionResult } from "./redaction.js";
 import { SecurityRefusalError } from "./paths.js";
+import { normalizeShellCommand } from "./shell-command.js";
 
 const MAX_CAPTURE_BYTES = 1024 * 1024;
 
@@ -68,8 +69,11 @@ export function assertSafeCommand(request: ProcessRequest): void {
     return;
   }
 
-  const normalizedCommand = request.args.join(" ").replace(/[\r\n]+/gu, " ");
-  if (/\|\s*(?:ba|z)?sh(?:\s|$)/iu.test(normalizedCommand)) {
+  const normalized = normalizeShellCommand(request.args.join(" "));
+  if (!normalized.ok) {
+    throw new SecurityRefusalError("Process request contains a NUL byte");
+  }
+  if (/\|\s*(?:ba|z)?sh(?:\s|$)/iu.test(normalized.text)) {
     throw new SecurityRefusalError("Pipe-to-shell command is not allowed");
   }
 }

@@ -16,6 +16,8 @@ export type {
   Redactor,
 } from "./redaction.js";
 export { assertSafeCommand, NodeProcessRunner } from "./process.js";
+export { normalizeShellCommand } from "./shell-command.js";
+export type { NormalizedShellCommand } from "./shell-command.js";
 export type {
   CommandPolicy,
   ProcessRequest,
