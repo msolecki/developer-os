@@ -42,6 +42,12 @@ export interface CodexInvocation {
   readonly writeScopes: readonly string[];
   readonly outputSchemaPath: string;
   readonly timeoutMs: number;
+  /**
+   * D52 (BACKLOG NEW-102): the child's `CODEX_HOME`, and the only variable it is given. Absent,
+   * the child gets `env: {}` and Codex resolves the user's own home, loading its `AGENTS.md` and
+   * `agents/*.toml` even under `--ignore-user-config --ignore-rules`. `ingest` always supplies it.
+   */
+  readonly codexHome?: string;
 }
 
 export type CodexRunResult =
@@ -285,6 +291,9 @@ export async function invokeCodex(
   if (outputSchemaPathRefusal !== null) {
     return { ok: false, reason: "refused", detail: outputSchemaPathRefusal };
   }
+  if (invocation.codexHome !== undefined && !isAbsolute(invocation.codexHome)) {
+    return { ok: false, reason: "refused", detail: "the Codex home must be an absolute path" };
+  }
 
   const args = [
     "exec",
@@ -320,7 +329,7 @@ export async function invokeCodex(
       // vendor; Codex architecture former §14.1 carries the observation of 2026-08-15.
       stdin: "",
       timeoutMs: invocation.timeoutMs,
-      env: {},
+      env: invocation.codexHome === undefined ? {} : { CODEX_HOME: invocation.codexHome },
     });
   } catch {
     return { ok: false, reason: "spawn-failed" };

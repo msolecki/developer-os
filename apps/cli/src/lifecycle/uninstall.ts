@@ -30,7 +30,9 @@ import {
   foundationParticipantPlanHash,
   hashBytes,
   loadConfig,
+  CODEX_INGEST_HOME_RELATIVE_PATH,
   HOOK_FIRING_RECORDS_RELATIVE_PATH,
+  inspectCodexIngestHomeShape,
   inspectHookFiringRecordsShape,
   inspectLifecycleAllocator,
   lifecycleBookkeepingPaths,
@@ -738,6 +740,58 @@ export async function removeHookFiringRecords(
   return true;
 }
 
+export function codexIngestHomePath(productHome: CanonicalAbsolutePathV1): CanonicalAbsolutePathV1 {
+  return canonical(`${productHome}/${CODEX_INGEST_HOME_RELATIVE_PATH}`);
+}
+
+/** D52: `null` when absent, otherwise admitted by shape (a `0700` directory, at most an `auth.json` symlink) or refused. */
+async function admitCodexIngestHome(
+  fs: LifecycleGuardedFileSystemV1,
+  productHome: CanonicalAbsolutePathV1,
+  effectiveUid: number,
+): Promise<{ readonly directory: LifecycleGuardedEntryV1; readonly link: LifecycleGuardedEntryV1 | null } | null> {
+  const path = codexIngestHomePath(productHome);
+  const directory = await guardedEntry(fs, path);
+  if (directory === null) return null;
+  const names: string[] = [];
+  if (directory.kind === "directory") {
+    for await (const name of fs.names(directory)) {
+      names.push(name);
+      if (names.length > 1) break;
+    }
+  }
+  const link = names.includes("auth.json") ? await guardedEntry(fs, canonical(`${path}/auth.json`)) : null;
+  const shape = inspectCodexIngestHomeShape(directory, names, () => link, effectiveUid);
+  if (!shape.admitted) {
+    let offending = path;
+    try {
+      if (shape.offendingName !== null) offending = canonical(`${path}/${shape.offendingName}`);
+    } catch {
+      // An uncanonical name is refused on the directory itself.
+    }
+    refuse("codex_ingest_home_shape", offending);
+  }
+  return { directory, link };
+}
+
+/**
+ * D52: removed beside `state/hooks`, re-admitted by shape at removal time. The link is unlinked,
+ * never followed, so the user's own Codex credential is untouched. Absent is done.
+ */
+export async function removeCodexIngestHome(
+  fs: LifecycleGuardedFileSystemV1,
+  productHome: CanonicalAbsolutePathV1,
+  effectiveUid: number,
+): Promise<boolean> {
+  const admitted = await admitCodexIngestHome(fs, productHome, effectiveUid);
+  if (admitted === null) return false;
+  if (admitted.link !== null) await fs.unlinkExact(admitted.link);
+  await fs.syncDirectory(admitted.directory);
+  await fs.rmdirExactEmpty(admitted.directory);
+  await syncDirectoryAt(fs, canonical(`${productHome}/state`));
+  return true;
+}
+
 async function removeStateLeaf(
   fs: LifecycleGuardedFileSystemV1,
   productHome: CanonicalAbsolutePathV1,
@@ -900,6 +954,7 @@ export function createUninstallAdapters(input: {
         if (!(await uninstallCommitted(fs, plan))) return;
         /** Before the nonce: the nonce is what makes a death here resume through this hook again. */
         await removeHookFiringRecords(fs, productHome, request.lifecycle.effectiveUid);
+        await removeCodexIngestHome(fs, productHome, request.lifecycle.effectiveUid);
         await removeStateLeaf(fs, productHome, NONCE_LEAF);
       },
     },
@@ -1145,12 +1200,14 @@ export class LifecycleUninstaller {
 
     /** Refused here, before any ID is reserved, rather than only at compaction after the commit. */
     const hooks = await admitHookFiringRecords(lifecycle.fs, productHome, lifecycle.effectiveUid);
+    const codexIngestHome = await admitCodexIngestHome(lifecycle.fs, productHome, lifecycle.effectiveUid);
     return {
       variant,
       removable: [
         ...partitioned.removable.map((entry) => entry.artifact.path),
         ...reserved,
         ...(hooks === null ? [] : [hooks.directory.path]),
+        ...(codexIngestHome === null ? [] : [codexIngestHome.directory.path]),
       ].sort(),
       preserved: [...new Set([...partitioned.preserved, ...evidence.retainedPaths])],
       builder: uninstallBuilder(inputs),

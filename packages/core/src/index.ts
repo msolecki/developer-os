@@ -187,6 +187,12 @@ export {
   MAX_HOOK_FIRING_RECORD_CHILDREN,
 } from "./hooks/firing-records.js";
 export type { HookFiringRecordsShapeV1, HookFiringRecordV1 } from "./hooks/firing-records.js";
+export {
+  CODEX_INGEST_AUTH_LINK,
+  CODEX_INGEST_HOME_RELATIVE_PATH,
+  inspectCodexIngestHomeShape,
+} from "./lifecycle/codex-ingest-home.js";
+export type { CodexIngestHomeEntryV1, CodexIngestHomeShapeV1 } from "./lifecycle/codex-ingest-home.js";
 export { CAPABILITY_STATES, PROBE_OBSERVATIONS } from "./capabilities/index.js";
 export type { CapabilityState, ProbeObservation } from "./capabilities/index.js";
 export {

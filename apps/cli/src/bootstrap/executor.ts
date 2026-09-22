@@ -17,7 +17,10 @@ import {
   encodeCanonicalJson,
   EXIT_CODES,
   hashBytes,
+  CODEX_INGEST_AUTH_LINK,
+  CODEX_INGEST_HOME_RELATIVE_PATH,
   HOOK_FIRING_RECORDS_RELATIVE_PATH,
+  inspectCodexIngestHomeShape,
   inspectHookFiringRecordsShape,
   inspectLifecycleBookkeepingShape,
   lifecycleBookkeepingPaths,
@@ -1261,6 +1264,34 @@ export class BootstrapExecutor {
         );
       }
       result.set(hooks, hooksStats);
+    }
+    /** D52: a present `state/codex-ingest-home` is admitted by shape, never claimed; `ingest` creates it. */
+    const codexIngestHome = join(this.#dependencies.paths.home, CODEX_INGEST_HOME_RELATIVE_PATH);
+    const codexIngestStats = await lstatOptional(codexIngestHome);
+    if (codexIngestStats !== null) {
+      const entryOf = (stats: BigIntStats | null) =>
+        stats === null
+          ? null
+          : {
+              kind: stats.isSymbolicLink() ? "symlink" : stats.isDirectory() ? "directory" : "other",
+              ownerUid: Number(stats.uid),
+              mode: mode(stats),
+            };
+      const names = codexIngestStats.isDirectory() && !codexIngestStats.isSymbolicLink()
+        ? await nodeFs.readdir(codexIngestHome)
+        : [];
+      const link = names.includes(CODEX_INGEST_AUTH_LINK)
+        ? await lstatOptional(join(codexIngestHome, CODEX_INGEST_AUTH_LINK))
+        : null;
+      const shape = inspectCodexIngestHomeShape(entryOf(codexIngestStats), names, () => entryOf(link), uid());
+      if (!shape.admitted) {
+        throw new FreshBootstrapError(
+          EXIT_CODES.recoveryRequired,
+          `product home contains a Codex ingest home of an unadmitted shape (codex_ingest_home_shape): ${
+            shape.offendingName === null ? codexIngestHome : join(codexIngestHome, shape.offendingName)}`,
+        );
+      }
+      result.set(codexIngestHome, codexIngestStats);
     }
     return result;
   }

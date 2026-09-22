@@ -332,6 +332,23 @@ describe("invokeCodex argv", () => {
     expect(request?.env).toEqual({});
     expect(request?.timeoutMs).toBe(12_345);
   });
+
+  it("gives the child CODEX_HOME and nothing else when the invocation names an isolated home (D52)", async () => {
+    const { runner: capturingRunner, seen } = capturing();
+    await invokeCodex(installation, invocation({ codexHome: "/synthetic/home/.developer-os/state/codex-ingest-home" }), {
+      runner: capturingRunner,
+    });
+    expect(seen()?.env).toEqual({ CODEX_HOME: "/synthetic/home/.developer-os/state/codex-ingest-home" });
+  });
+
+  it("refuses a relative Codex home without spawning", async () => {
+    const { runner: capturingRunner, seen } = capturing();
+    const result = await invokeCodex(installation, invocation({ codexHome: "state/codex-ingest-home" }), {
+      runner: capturingRunner,
+    });
+    expect(result).toMatchObject({ ok: false, reason: "refused" });
+    expect(seen()).toBeNull();
+  });
 });
 
 describe("invokeCodex failure identity", () => {

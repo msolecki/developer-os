@@ -784,6 +784,50 @@ describe("V2 uninstall and the state/hooks reserved runtime path (Spec 1 §6, am
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 
+describe("V2 uninstall and D52's state/codex-ingest-home", () => {
+  /** What `ingest` leaves at rest: the directory and one link to a credential outside the product home. */
+  async function plantCodexIngestHome(fixture: CommandFixture, link: "symlink" | "regular"): Promise<{
+    readonly home: string;
+    readonly credential: string;
+  }> {
+    const credential = join(fixture.userHome, ".codex", "auth.json");
+    await nodeFs.mkdir(join(fixture.userHome, ".codex"), { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(credential, '{"synthetic":true}\n', { mode: 0o600 });
+    const home = join(fixture.paths.stateDir, "codex-ingest-home");
+    await nodeFs.mkdir(home, { mode: 0o700 });
+    await nodeFs.chmod(home, 0o700);
+    if (link === "symlink") await nodeFs.symlink(credential, join(home, "auth.json"));
+    else await nodeFs.writeFile(join(home, "auth.json"), "rotated\n", { mode: 0o600 });
+    return { home, credential };
+  }
+
+  it("removes the directory and its link, leaving the linked credential byte-identical", async () => {
+    const fixture = await initializedV2Fixture("uninstall-codex-ingest-home");
+    const { home, credential } = await plantCodexIngestHome(fixture, "symlink");
+
+    const result = await new LifecycleUninstaller().execute(await requestFor(fixture));
+
+    expect(result.removed).toContain(home);
+    expect(await exists(home)).toBe(false);
+    expect(await nodeFs.readFile(credential, "utf8")).toBe('{"synthetic":true}\n');
+    expect(await productHomeResidue(fixture)).toStrictEqual(await bookkeepingSetAndRetainedEvidence(fixture));
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses a regular auth.json in planning, before it allocates, and deletes nothing", async () => {
+    const fixture = await initializedV2Fixture("uninstall-codex-ingest-home-regular");
+    const { home } = await plantCodexIngestHome(fixture, "regular");
+    const before = await allocatorCounter(fixture);
+
+    await expect(new LifecycleUninstaller().execute(await requestFor(fixture))).rejects.toMatchObject({
+      reason: "codex_ingest_home_shape",
+      paths: [join(home, "auth.json")],
+    });
+
+    expect(await allocatorCounter(fixture)).toBe(before);
+    expect(await nodeFs.readFile(join(home, "auth.json"), "utf8")).toBe("rotated\n");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
 async function digestsOf(paths: readonly string[]): Promise<readonly string[]> {
   return Promise.all(
     paths.map(async (path) => {

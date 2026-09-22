@@ -788,3 +788,48 @@ describe("the installed-home gates beside a well-formed state/hooks", () => {
     expect(await exists(join(fixture.paths.stateDir, "hooks", "claude.PreToolUse.json"))).toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
+
+/** D52: `state/codex-ingest-home` holds a symlink, a kind `state/hooks` never does; every gate must tolerate it. */
+describe("the installed-home gates beside D52's state/codex-ingest-home", () => {
+  let codexHome: Promise<CommandFixture> | null = null;
+
+  function homeWithCodexIngestHome(): Promise<CommandFixture> {
+    codexHome ??= (async () => {
+      const fixture = await initialisedV2Home("gate-codex-ingest-home", {});
+      const home = join(fixture.paths.stateDir, "codex-ingest-home");
+      await nodeFs.mkdir(home, { mode: 0o700 });
+      await nodeFs.chmod(home, 0o700);
+      await nodeFs.symlink(join(fixture.userHome, ".codex", "auth.json"), join(home, "auth.json"));
+      return fixture;
+    })();
+    return codexHome;
+  }
+
+  it("admitInstalledV2Home admits the home", async () => {
+    await expect(admittedKeyOf(await homeWithCodexIngestHome())).resolves.toBeDefined();
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("assertOrdinaryCommandAdmitted resolves on the home", async () => {
+    const fixture = await homeWithCodexIngestHome();
+
+    await expect(
+      assertOrdinaryCommandAdmitted(
+        createBootstrapEvidenceInspectionRequest({
+          productHome: fixture.paths.home,
+          stateDirectory: fixture.paths.stateDir,
+          initialRoots: [fixture.paths.home, fixture.paths.stateDir, fixture.userHome],
+        }),
+      ),
+    ).resolves.toBeUndefined();
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("the mutation gate runs a V2 mutation on the home", async () => {
+    const fixture = await homeWithCodexIngestHome();
+
+    const journal = await mutate(fixture, "codex-ingest-home-tolerated");
+
+    expect(journal.phase).toBe("finalized");
+    expect((await nodeFs.lstat(join(fixture.paths.stateDir, "codex-ingest-home", "auth.json"))).isSymbolicLink()).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+

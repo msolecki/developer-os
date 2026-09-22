@@ -659,6 +659,36 @@ describe("the state/hooks reserved runtime path (Spec 1 §6, amended 2026-09-22)
   });
 });
 
+describe("the state/codex-ingest-home runtime path (D52)", () => {
+  const CODEX = `${STATE}/codex-ingest-home`;
+
+  it("projects the directory with its auth.json symlink away", async () => {
+    const home = memoryHome("state_empty", {
+      extra: new Map<string, PlantV1>([
+        [CODEX, directory()],
+        [`${CODEX}/auth.json`, directory({ kind: "symlink", mode: 0o777 })],
+      ]),
+    });
+
+    expect((await inspectAbsentManifestProductHome(home.dependencies)).shape).toBe("state_empty");
+    expect(home.fs.mutations).toStrictEqual([]);
+  });
+
+  it.each([
+    ["an AGENTS.md", `${CODEX}/AGENTS.md`, file({ size: 3 })],
+    ["a regular auth.json", `${CODEX}/auth.json`, file({ size: 3 })],
+  ] as const)("refuses %s inside it with codex_ingest_home_shape", async (_label, offending, plant) => {
+    const home = memoryHome("state_empty", {
+      extra: new Map<string, PlantV1>([[CODEX, directory()], [offending, plant]]),
+    });
+
+    const error = await refusal(home);
+
+    expect(error.reason).toBe("codex_ingest_home_shape");
+    expect(error.paths).toStrictEqual([offending]);
+  });
+});
+
 describe("the walk's identity and name rules", () => {
   it.each([
     ["a symlink", `${STATE}/link`, directory({ kind: "symlink", mode: 0o777 })],

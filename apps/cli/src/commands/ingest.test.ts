@@ -78,6 +78,7 @@ const LADDER = [
 interface VendorCall {
   readonly executable: string;
   readonly args: readonly string[];
+  readonly env: Readonly<Record<string, string>>;
 }
 
 /**
@@ -194,7 +195,7 @@ async function installedFixture(
 
   const runner: ProcessRunner = {
     run: async (request): Promise<ProcessResult> => {
-      const call = { executable: request.executable, args: [...request.args] };
+      const call = { executable: request.executable, args: [...request.args], env: { ...request.env } };
       calls.push(call);
       const hook = observe;
       if (hook !== null) await hook();
@@ -2849,5 +2850,119 @@ describe("runIngest, note captures applied verbatim (spec §3.4)", () => {
 
     expect(result.code).toBe(EXIT_CODES.capabilityUnavailable);
     expect(await fixture.statusOf(noteId)).toBe("accepted");
+  });
+});
+
+/**
+ * D52 (BACKLOG NEW-102): Codex resolves `CODEX_HOME` from the user's real home under `env: {}` and
+ * loads its `AGENTS.md` and `agents/*.toml` into the ingest request despite `--ignore-user-config
+ * --ignore-rules`. Ingest now hands it a product-owned home that holds only a credential link.
+ */
+describe("ingest's isolated Codex home (D52)", () => {
+  async function userCodexHome(fixture: CommandFixture, withAuth: boolean): Promise<string> {
+    const codexHome = join(fixture.userHome, ".codex");
+    await nodeFs.mkdir(join(codexHome, "agents"), { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(join(codexHome, "AGENTS.md"), "<!-- developer-os:begin v1 -->\nrule\n<!-- developer-os:end v1 -->\n");
+    await nodeFs.writeFile(join(codexHome, "agents", "developer-os-probe.toml"), 'name = "probe"\n');
+    if (withAuth) await nodeFs.writeFile(join(codexHome, "auth.json"), '{"synthetic":true}\n', { mode: 0o600 });
+    return codexHome;
+  }
+
+  const isolatedHome = (fixture: CommandFixture): string => join(fixture.paths.stateDir, "codex-ingest-home");
+
+  it("passes CODEX_HOME to a directory holding only a symlink to the user's credential", async () => {
+    const fixture = await installedFixture("ingest-codex-home-isolated");
+    const codexHome = await userCodexHome(fixture, true);
+    const home = isolatedHome(fixture);
+    const seeded = await fixture.seedAccepted("an observation for an isolated codex");
+    fixture.reply(() => oneNote(seeded.id));
+    let during: string[] = [];
+    fixture.duringCall(async () => {
+      during = (await nodeFs.readdir(home)).sort();
+      expect((await nodeFs.lstat(join(home, "auth.json"))).isSymbolicLink()).toBe(true);
+      expect(await nodeFs.readlink(join(home, "auth.json"))).toBe(join(codexHome, "auth.json"));
+      /** What a real run leaves behind (codex-adapter.md §15, D52 note), including a link out. */
+      await nodeFs.writeFile(join(home, "state_5.sqlite"), "");
+      await nodeFs.mkdir(join(home, "skills", ".system"), { recursive: true });
+      await nodeFs.mkdir(join(home, "tmp", "arg0"), { recursive: true });
+      await nodeFs.symlink(join(codexHome, "AGENTS.md"), join(home, "tmp", "arg0", "apply_patch"));
+    });
+
+    const result = await fixture.run({ agent: "codex" });
+
+    expect(result.ok, result.ok ? "" : result.error.message).toBe(true);
+    expect(fixture.calls.map((call) => call.env)).toStrictEqual([{ CODEX_HOME: home }]);
+    expect(during).toStrictEqual(["auth.json"]);
+    /** Swept after the run, never following the link out; no instruction surface was ever created. */
+    expect(await nodeFs.readdir(home)).toStrictEqual(["auth.json"]);
+    expect((await nodeFs.stat(home)).mode & 0o777).toBe(0o700);
+    expect(await nodeFs.readFile(join(codexHome, "AGENTS.md"), "utf8")).toContain("developer-os:begin");
+    expect(await nodeFs.readFile(join(codexHome, "auth.json"), "utf8")).toBe('{"synthetic":true}\n');
+  });
+
+  it("re-points a stale link to the resolved credential", async () => {
+    const fixture = await installedFixture("ingest-codex-home-repoint");
+    const codexHome = await userCodexHome(fixture, true);
+    const home = isolatedHome(fixture);
+    await nodeFs.mkdir(home, { mode: 0o700 });
+    await nodeFs.symlink(join(fixture.root, "old-codex", "auth.json"), join(home, "auth.json"));
+    const seeded = await fixture.seedAccepted("an observation after a moved codex home");
+    fixture.reply(() => oneNote(seeded.id));
+
+    const result = await fixture.run({ agent: "codex" });
+
+    expect(result.ok).toBe(true);
+    expect(await nodeFs.readlink(join(home, "auth.json"))).toBe(join(codexHome, "auth.json"));
+  });
+
+  it("runs with an empty isolated home when the user has no Codex credential, as before", async () => {
+    const fixture = await installedFixture("ingest-codex-home-no-auth");
+    await userCodexHome(fixture, false);
+    const home = isolatedHome(fixture);
+    await nodeFs.mkdir(home, { mode: 0o700 });
+    await nodeFs.symlink(join(fixture.userHome, ".codex", "auth.json"), join(home, "auth.json"));
+    const seeded = await fixture.seedAccepted("an observation without codex auth");
+    fixture.reply(() => oneNote(seeded.id));
+
+    await fixture.run({ agent: "codex" });
+
+    /** The vendor is still reached and refuses on missing auth itself, exactly as before D52. */
+    expect(fixture.calls.map((call) => call.env)).toStrictEqual([{ CODEX_HOME: home }]);
+    expect(await nodeFs.readdir(home)).toStrictEqual([]);
+  });
+
+  it("refuses without spawning when the isolated home holds anything but the link", async () => {
+    const fixture = await installedFixture("ingest-codex-home-foreign");
+    await userCodexHome(fixture, true);
+    const home = isolatedHome(fixture);
+    await nodeFs.mkdir(home, { mode: 0o700 });
+    await nodeFs.writeFile(join(home, "AGENTS.md"), "planted\n");
+    const seeded = await fixture.seedAccepted("an observation beside a planted file");
+    fixture.reply(() => oneNote(seeded.id));
+
+    const result = await fixture.run({ agent: "codex" });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.paths).toContain(join(home, "AGENTS.md"));
+    expect(fixture.calls).toStrictEqual([]);
+    expect(await nodeFs.readFile(join(home, "AGENTS.md"), "utf8")).toBe("planted\n");
+    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
+  });
+
+  it("refuses a regular auth.json rather than deleting what may be a refreshed credential", async () => {
+    const fixture = await installedFixture("ingest-codex-home-regular-auth");
+    await userCodexHome(fixture, true);
+    const home = isolatedHome(fixture);
+    await nodeFs.mkdir(home, { mode: 0o700 });
+    await nodeFs.writeFile(join(home, "auth.json"), "rotated\n", { mode: 0o600 });
+    const seeded = await fixture.seedAccepted("an observation beside a rotated credential");
+    fixture.reply(() => oneNote(seeded.id));
+
+    const result = await fixture.run({ agent: "codex" });
+
+    expect(result.ok).toBe(false);
+    expect(fixture.calls).toStrictEqual([]);
+    expect(await nodeFs.readFile(join(home, "auth.json"), "utf8")).toBe("rotated\n");
   });
 });

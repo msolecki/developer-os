@@ -15,6 +15,7 @@
  */
 import { SCHEDULED_JOB_IDS } from "../config/lifecycle.js";
 import { HOOK_FIRING_RECORDS_RELATIVE_PATH, inspectHookFiringRecordsShape } from "../hooks/firing-records.js";
+import { CODEX_INGEST_HOME_RELATIVE_PATH, inspectCodexIngestHomeShape } from "./codex-ingest-home.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
 import type { LowerHexSha256, UInt64DecimalV1 } from "../update/scalars.js";
 import {
@@ -410,6 +411,23 @@ function projectionOf(
       );
     }
     projectSubtree(childIndex, hooks, new Set(), projected);
+  }
+  /** D52: a present `state/codex-ingest-home` is admitted by shape, like `state/hooks`. */
+  const codexIngestHome = `${productHome}/${CODEX_INGEST_HOME_RELATIVE_PATH}`;
+  if (tree.has(codexIngestHome)) {
+    const result = inspectCodexIngestHomeShape(
+      tree.get(codexIngestHome) ?? null,
+      childNamesOf(codexIngestHome),
+      (name) => tree.get(`${codexIngestHome}/${name}`) ?? null,
+      dependencies.effectiveUid,
+    );
+    if (!result.admitted) {
+      refuseLifecycleRecovery(
+        "codex_ingest_home_shape",
+        result.offendingName === null ? codexIngestHome : `${codexIngestHome}/${result.offendingName}`,
+      );
+    }
+    projectSubtree(childIndex, codexIngestHome, new Set(), projected);
   }
   for (const name of USER_DATA_HOME_ENTRIES) {
     const path = `${productHome}/${name}`;

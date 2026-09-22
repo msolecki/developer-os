@@ -625,8 +625,52 @@ line and a §5.1 block with a `## probe-rule` section; `$C/agents/developer-os-p
 | `agent` loading | `prompt-input` with and without `$C/agents/*.toml`; *request* | 0; 142 | `prompt-input` text identical either way; the request's `spawn_agent` tool, parameter `agent_type`: `Available roles:\ndeveloper-os-probe: {\nPROBE-AGENT-DESC-0d4e\n}\ndefault: {…` | **proven** through the request only: Codex loads `C/agents/*.toml` as spawnable roles |
 | agent TOML key set | *request* with one variant of `$C/agents/developer-os-probe.toml` per run | 142 | listed: `name` + `description` + `developer_instructions`; the same plus any one of `model`, `model_reasoning_effort`, `sandbox_mode`; `name = "role-from-name"` lists `role-from-name:` (the file name is ignored). Not listed, and the run proceeds to the request regardless: `developer_instructions` missing, `name` missing, `tools = []` added, or an unknown key (`a12_unknown_probe_key`) added | required `name`, `description`, `developer_instructions`; optional `model`, `model_reasoning_effort`, `sandbox_mode` (no others tried). **Any unrecognised key drops the whole file** (whether a warning reaches stderr was not captured), so Task 13 must emit exactly these keys. `developer_instructions` is not in the parent request |
 | unregistration | `codex plugin remove developer-os@developer-os --json`; `codex plugin list --json`; `codex plugin marketplace remove developer-os`; `codex plugin marketplace list` | 0; 0; 0; 0 | `{"pluginId": "developer-os@developer-os", …}`; `installed` empty; `Removed marketplace \`developer-os\`.`; `No plugin marketplaces in scope.` | works; leaves an empty `$C/plugins/cache/developer-os/` directory and a 0-byte `$C/config.toml`, and does not touch the marketplace tree |
-| ingest isolation (D8, Task 21) | *request* with the ingest flags `--ephemeral --ignore-user-config --ignore-rules`, everything installed and registered | 142 | the request **contains** `<!-- developer-os:begin v1 -->…PROBE-CODEX-RULE-e71b…<!-- developer-os:end v1 -->` and the `developer-os-probe` role with its description; it contains no `developer-os:` plugin skill. Adding `-c project_doc_max_bytes=0` still includes the block | **fails**: the ingest flags keep plugin skills out but neither `C/AGENTS.md` nor `C/agents/*.toml`. Spec §10.2 makes this a plan stop (D8 outranks A12) pending a founder decision. The probe set `CODEX_HOME=$C`; the product's ingest runner passes `env: {}`, and reproducing that would resolve the live home, so it was not run |
+| ingest isolation (D8, Task 21) | *request* with the ingest flags `--ephemeral --ignore-user-config --ignore-rules`, everything installed and registered | 142 | the request **contains** `<!-- developer-os:begin v1 -->…PROBE-CODEX-RULE-e71b…<!-- developer-os:end v1 -->` and the `developer-os-probe` role with its description; it contains no `developer-os:` plugin skill. Adding `-c project_doc_max_bytes=0` still includes the block | **fails**: the ingest flags keep plugin skills out but neither `C/AGENTS.md` nor `C/agents/*.toml`. Spec §10.2 makes this a plan stop (D8 outranks A12) pending a founder decision. The probe set `CODEX_HOME=$C`; the product's ingest runner passes `env: {}`, and reproducing that would resolve the live home, so it was not run. **Superseded by D52** (see the D52 note below); needs a founder re-observation |
 
 - **Method for Task 21 and the NEW-65 test.** The *request* capture above: assert on the body after
   `POST to http://127.0.0.1:9/v1/responses: `, never on `prompt-input` alone, which shows neither
   agent roles nor the effect of `codex exec` flags.
+
+### D52 — ingest runs Codex with an isolated `CODEX_HOME` (2026-09-22, BACKLOG NEW-102)
+
+`ingest` no longer lets Codex resolve the user's Codex home. Before each Codex run it reconciles
+`<product-home>/state/codex-ingest-home/` (`0700`, product-owned) to hold nothing but a symlink
+`auth.json` → `<resolved user CODEX_HOME>/auth.json` (via `resolveVendorHomes`; the credential is
+`stat`ed, never read or copied), and `invokeCodex` spawns with `env: { CODEX_HOME: <that dir> }`
+instead of `env: {}`. Without a user credential the link is dropped and the run proceeds, so Codex
+refuses on missing auth as before. Any other entry, or an `auth.json` that is not a symlink, is
+refused and never deleted. After the run, in a `finally`, every child except `auth.json` is removed
+without following links, so the resting shape is the one fresh `init`, both uninstall arms and the
+absent-manifest walk admit (`inspectCodexIngestHomeShape`, reason `codex_ingest_home_shape`).
+Uninstall unlinks the link and removes the directory. The link is the only thing it removes; the
+user's credential is never touched. Workflow `agent.prompt` callers of `invokeCodex` pass no
+`codexHome` and still spawn with `env: {}`.
+
+**Observed 2026-09-22, Codex CLI 0.155.1, with the §15 *request* method** (disposable `T`; the
+user home `$T/home/.codex` held the §15 `AGENTS.md` block, `agents/developer-os-probe.toml` and a
+dummy `auth.json`; the isolated home held only the `auth.json` symlink; ingest flags
+`--ephemeral --ignore-user-config --ignore-rules`; both runs exit 142 by alarm):
+
+| Run | `CODEX_HOME` | Request bodies captured | `PROBE-CODEX-RULE-e71b` | `PROBE-AGENT-DESC-0d4e` | `developer-os` |
+|---|---|---|---|---|---|
+| control | `$T/home/.codex` | 15 | 15 | 15 | 15 |
+| isolated | `$T/state/codex-ingest-home` | 15 | 0 | 0 | 0 |
+
+- **Codex writes its own state into whatever `CODEX_HOME` it is given.** After one run the isolated
+  home held `goals_1`, `logs_2`, `memories_1`, `queue_1` and `state_5` sqlite databases (with
+  `-shm`/`-wal`), `installation_id`, `shell_snapshots/`, `skills/.system/` (six vendor system
+  skills), `tmp/arg0/…` (symlinks to the codex binary) and `.tmp/plugins.sync.lock`. It created no
+  `AGENTS.md`, `agents/`, `plugins/` or `config.toml`. This residue is why ingest sweeps the
+  directory after each run instead of refusing it.
+- **The vendor's own system skills (`skill-creator`, `imagegen`, `openai-docs`) reach the request in
+  both runs.** They are Codex built-ins, not product instructions, so D8 is not affected.
+- **The probe's environment differs from the product's.** The probe set `HOME`, `PATH`, `TMPDIR`
+  and `OPENAI_API_KEY` beside `CODEX_HOME`, and authenticated through a dead `model_providers` entry.
+  The product passes `CODEX_HOME` alone and relies on the linked `auth.json`. `HOME` had to stay
+  disposable, because an unset `HOME` resolves the real one.
+- **Founder re-observation needed (NEW-102, NEW-75).** Only a real authenticated `ingest --agent
+  codex` can show two things. First, that the product's exact environment keeps the block out.
+  Second, whether Codex refreshes a ChatGPT token by write-temp-then-rename. A rename would replace
+  the link with the rotated credential. The product would then refuse the next run and name the
+  file instead of deleting it.
+

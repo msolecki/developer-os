@@ -20,7 +20,12 @@ import { UninstallRefusal } from "../commands/uninstall.js";
 import type { UninstallOptions, UninstallResultV1 } from "../commands/uninstall.js";
 import { residueFrom } from "./context.js";
 import type { CliLifecycleContext } from "./context.js";
-import { hookFiringRecordsPath, removeHookFiringRecords } from "./uninstall.js";
+import {
+  codexIngestHomePath,
+  hookFiringRecordsPath,
+  removeCodexIngestHome,
+  removeHookFiringRecords,
+} from "./uninstall.js";
 import {
   observeSecretOpaqueKey,
   redactionKeySourcePath,
@@ -144,10 +149,19 @@ export async function runAbsentManifestUninstall(
     };
 
     const hooks = hookFiringRecordsPath(productHome);
-    /** Spec 1 §6 (amended 2026-09-22): the admitted `state/hooks` goes last, in either arm. */
+    const codexIngestHome = codexIngestHomePath(productHome);
+    /** Spec 1 §6 (amended 2026-09-22): the admitted `state/hooks` goes last, in either arm; D52's `state/codex-ingest-home` with it. */
     const removeHooks = async (): Promise<readonly string[]> => {
-      if (options.dryRun) return (await lifecycle.fs.lstat(hooks)) === null ? [] : [hooks];
-      return (await removeHookFiringRecords(lifecycle.fs, productHome, lifecycle.effectiveUid)) ? [hooks] : [];
+      if (options.dryRun) {
+        return [
+          ...((await lifecycle.fs.lstat(hooks)) === null ? [] : [hooks]),
+          ...((await lifecycle.fs.lstat(codexIngestHome)) === null ? [] : [codexIngestHome]),
+        ];
+      }
+      return [
+        ...((await removeHookFiringRecords(lifecycle.fs, productHome, lifecycle.effectiveUid)) ? [hooks] : []),
+        ...((await removeCodexIngestHome(lifecycle.fs, productHome, lifecycle.effectiveUid)) ? [codexIngestHome] : []),
+      ];
     };
 
     const first = await inspectAbsentManifestProductHome(dependencies);

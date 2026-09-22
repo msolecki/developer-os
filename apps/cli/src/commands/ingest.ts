@@ -1,11 +1,15 @@
 import { createHash } from "node:crypto";
+import { rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { getuid } from "node:process";
 
 import {
+  CODEX_INGEST_AUTH_LINK,
+  CODEX_INGEST_HOME_RELATIVE_PATH,
   containsPath,
   EXIT_CODES,
+  inspectCodexIngestHomeShape,
   success,
   TransactionConflictError,
   TransactionPlanError,
@@ -55,6 +59,7 @@ import {
   runtimePathsFor,
 } from "../context.js";
 import type { CliContext, CliGuards } from "../context.js";
+import { resolveVendorHomes } from "../instructions/vendor-homes.js";
 import { isDirectory, readConfigFile } from "./doctor.js";
 import { outputSchemaPath } from "./output-schemas.js";
 import { dependenciesFor, writeIndexArtifacts } from "./reindex.js";
@@ -816,9 +821,10 @@ function errnoCode(error: unknown): string {
  * write into would have to be admitted through all of that for a directory that
  * holds no product state.
  *
- * **Not the vendor's `HOME`.** Both adapters still spawn with `env: {}`, so the
- * vendor resolves its own home through `getpwuid_r` and keeps reading its
- * credentials from there — `codex exec --help` says outright that
+ * **Not the vendor's `HOME`.** Claude still spawns with `env: {}` and Codex with
+ * only `CODEX_HOME` (D52, `prepareCodexIngestHome`), so each vendor resolves its
+ * own home through `getpwuid_r`; Codex reaches its credentials through the link
+ * D52 places — `codex exec --help` says outright that
  * `--ignore-user-config` leaves auth on `$CODEX_HOME`, which derives from
  * `$HOME`. NEW-75 is the row for that; see `docs/architecture/vendor-invocation.md`.
  */
@@ -915,6 +921,103 @@ export async function prepareAgentWorkspace(context: CliContext): Promise<string
   return workspace;
 }
 
+function codexIngestHomeRefusal(path: string, complaint: string): IngestRefusal {
+  return new IngestRefusal(
+    EXIT_CODES.operationalFailure,
+    `the isolated Codex home this run gives the agent ${complaint}`,
+    [path],
+    "if the path this run names is a regular auth.json, Codex may have refreshed your credential there: move it over the auth.json in your own Codex home; otherwise remove the path this run names, and ingest recreates what it needs",
+  );
+}
+
+/**
+ * D52 (BACKLOG NEW-102): the `CODEX_HOME` an ingest run hands Codex, reconciled on every run.
+ * Given the user's own Codex home, Codex loads its `AGENTS.md` (the product's instruction block
+ * among it) and `agents/*.toml` roles into the request even under `--ignore-user-config
+ * --ignore-rules` (codex-adapter.md §15), which breaks D8. This directory holds, at rest, only a
+ * symlink `auth.json` to the user's resolved credential. The credential is never read or copied:
+ * its presence is a `stat`, and the link is the only thing written.
+ *
+ * - Anything besides that one symlink is refused, never repaired: `sweepCodexIngestHome` removes
+ *   Codex's own run residue after each run, so a leftover means a crashed run or a third party.
+ * - A link whose target changed (a new `CODEX_HOME`) is re-pointed. With no credential the link is
+ *   dropped and the run goes ahead, so Codex refuses on missing auth exactly as it did before.
+ * - `symlink` and `rm` come from `node:fs/promises` because `CliFileSystem` carries neither.
+ */
+export async function prepareCodexIngestHome(context: CliContext): Promise<string> {
+  const home = join(context.paths.home, CODEX_INGEST_HOME_RELATIVE_PATH);
+  const link = join(home, CODEX_INGEST_AUTH_LINK);
+  const credential = join(
+    resolveVendorHomes(context.env, context.userHome, context.paths.home).codexHome,
+    CODEX_INGEST_AUTH_LINK,
+  );
+
+  let names: string[];
+  let linkStats;
+  let directoryStats;
+  try {
+    await context.fs.mkdir(home, { mode: 0o700 }).catch((error: unknown) => {
+      if (errnoCode(error) !== "EEXIST") throw error;
+    });
+    directoryStats = await context.fs.lstat(home);
+    names = directoryStats.isDirectory() ? await context.fs.readdir(home) : [];
+    linkStats = names.includes(CODEX_INGEST_AUTH_LINK) ? await context.fs.lstat(link) : null;
+  } catch (error) {
+    throw codexIngestHomeRefusal(home, `could not be prepared (${errnoCode(error)})`);
+  }
+  const entry = (stats: typeof directoryStats | null) =>
+    stats === null
+      ? null
+      : {
+          kind: stats.isSymbolicLink() ? "symlink" : stats.isDirectory() ? "directory" : "other",
+          ownerUid: stats.uid,
+          mode: stats.mode & 0o777,
+        };
+  const shape = inspectCodexIngestHomeShape(entry(directoryStats), names, () => entry(linkStats), getuid?.() ?? -1);
+  if (!shape.admitted) {
+    throw codexIngestHomeRefusal(
+      shape.offendingName === null ? home : join(home, shape.offendingName),
+      shape.offendingName === null
+        ? "is not a private directory this user owns"
+        : "holds an entry it never keeps",
+    );
+  }
+
+  const present = await context.fs.stat(credential).then(
+    () => true,
+    () => false,
+  );
+  try {
+    const current = linkStats === null ? null : await context.fs.readlink(link);
+    const wanted = present ? credential : null;
+    if (current !== wanted) {
+      if (current !== null) await context.fs.unlink(link);
+      if (wanted !== null) await symlink(wanted, link);
+    }
+  } catch (error) {
+    throw codexIngestHomeRefusal(link, `could not link the Codex credential (${errnoCode(error)})`);
+  }
+  return home;
+}
+
+/**
+ * Removes what Codex wrote into the isolated home during the run (codex-adapter.md §15 D52 lists
+ * it: sqlite state, `installation_id`, `shell_snapshots/`, `skills/.system/`, `tmp/`, `.tmp/`), so
+ * the resting shape is again the one `prepareCodexIngestHome` and uninstall admit. `rm` unlinks a
+ * symlink rather than following it, and `auth.json` is never touched here — if Codex replaced the
+ * link with a file, that file may be a refreshed credential, and the next run refuses naming it
+ * rather than deleting it. A failed sweep is not fatal: the next run refuses on the residue.
+ */
+export async function sweepCodexIngestHome(context: CliContext, home: string): Promise<void> {
+  try {
+    for (const name of await context.fs.readdir(home)) {
+      if (name !== CODEX_INGEST_AUTH_LINK) await rm(join(home, name), { recursive: true, force: true });
+    }
+  } catch {
+    // ponytail: best effort; the next prepareCodexIngestHome names what is left.
+  }
+}
+
 /**
  * The bridge between one prompt and two vendors that share **neither an
  * invocation type nor a result type**.
@@ -944,6 +1047,21 @@ export async function prepareAgentWorkspace(context: CliContext): Promise<string
  * here because a reader will otherwise assume both calls are constrained the
  * same way.
  */
+/** D52: Codex runs with the isolated home as its `CODEX_HOME`, swept whatever the outcome. */
+async function invokeIsolatedCodex(
+  context: CliContext,
+  invocation: Omit<Parameters<typeof invokeCodex>[1], "codexHome">,
+  installation: Parameters<typeof invokeCodex>[0],
+  dependencies: Parameters<typeof invokeCodex>[2],
+): ReturnType<typeof invokeCodex> {
+  const codexHome = await prepareCodexIngestHome(context);
+  try {
+    return await invokeCodex(installation, { ...invocation, codexHome }, dependencies);
+  } finally {
+    await sweepCodexIngestHome(context, codexHome);
+  }
+}
+
 async function invokeVendor(
   context: CliContext,
   vendor: Vendor,
@@ -972,17 +1090,13 @@ async function invokeVendor(
           },
           dependencies,
         )
-      : await invokeCodex(
-          installation,
-          {
-            prompt,
-            workingRoot: await prepareAgentWorkspace(context),
-            writeScopes: [],
-            outputSchemaPath: schemaPath,
-            timeoutMs: INGEST_TIMEOUT_MS,
-          },
-          dependencies,
-        );
+      : await invokeIsolatedCodex(context, {
+          prompt,
+          workingRoot: await prepareAgentWorkspace(context),
+          writeScopes: [],
+          outputSchemaPath: schemaPath,
+          timeoutMs: INGEST_TIMEOUT_MS,
+        }, installation, dependencies);
 
   if (result.ok) return { payload: result.payload };
 
