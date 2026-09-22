@@ -31,6 +31,7 @@ import {
 } from "../commands/uninstall.js";
 import type { UninstallOptions, UninstallResultV1 } from "../commands/uninstall.js";
 import type { CliContext } from "../context.js";
+import { resolveVendorHomes } from "../instructions/vendor-homes.js";
 import { admitInstalledV2Home, observeManifestSchema } from "./admission.js";
 import type { AdmittedV2HomeV1 } from "./admission.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
@@ -101,6 +102,7 @@ function evidenceFor(context: CliContext): Promise<BootstrapEvidenceAdmissionV1>
  * only thing that tells them apart.
  */
 async function admitV2Home(
+  context: CliContext,
   lifecycle: CliLifecycleContext,
   paths: RuntimePaths,
 ): Promise<AdmittedV2HomeV1> {
@@ -109,7 +111,11 @@ async function admitV2Home(
     return await admitInstalledV2Home({
       fs: lifecycle.fs,
       paths,
-      manifestAdmission: manifestAdmissionFor(paths, refusedOwnerPaths),
+      manifestAdmission: manifestAdmissionFor(
+        paths,
+        refusedOwnerPaths,
+        resolveVendorHomes(context.env, context.userHome, paths.home),
+      ),
       effectiveUid: lifecycle.effectiveUid,
     });
   } catch (error) {
@@ -147,7 +153,7 @@ export async function dispatchUninstall(
   const observed = await observeManifestSchema(lifecycle.fs, paths);
   if (observed.kind === "v1") return { kind: "v1_foundation" };
   if (observed.kind === "v2") {
-    return { kind: "v2_coordinator", admitted: await admitV2Home(lifecycle, paths) };
+    return { kind: "v2_coordinator", admitted: await admitV2Home(context, lifecycle, paths) };
   }
   if (!(await hasExactGlobalLock(lifecycle, paths))) return { kind: "absent_manifest" };
 
