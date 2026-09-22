@@ -24,7 +24,11 @@ export interface CaptureBuildRequest {
   readonly text: string;
   readonly sourceAgent: string;
   readonly sourceAgentVersion: string;
-  readonly captureMethod: "agent-authored" | "manual";
+  readonly captureMethod:
+    | "agent-authored"
+    | "manual"
+    | "import"
+    | "import-claude-memory";
   readonly projectSlug: string;
   readonly workingDirectoryFingerprint: string;
   readonly createdAt: string;

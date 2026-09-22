@@ -8,6 +8,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { buildCapture, type CaptureBuildRequest } from "./build.js";
+import { parseCaptureFile } from "./parse.js";
 
 /**
  * Deterministic and synthetic. The fingerprint is an HMAC of the secret under
@@ -306,4 +307,16 @@ describe("buildCapture", () => {
     expect(built.contents).toContain(`captureId: ${built.envelope.captureId}`);
     expect(built.contents.endsWith("an observation worth keeping\n")).toBe(true);
   });
+
+  it.each(["import", "import-claude-memory"] as const)(
+    "renders captureMethod %s and parses it back unchanged",
+    (captureMethod) => {
+      const built = buildCapture({ ...request, captureMethod });
+      const outcome = parseCaptureFile(built.fileName, built.contents, redact);
+
+      expect(outcome.ok).toBe(true);
+      if (!outcome.ok) return;
+      expect(outcome.envelope.captureMethod).toBe(captureMethod);
+    },
+  );
 });

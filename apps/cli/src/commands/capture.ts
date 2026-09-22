@@ -1,18 +1,11 @@
-import { createHmac } from "node:crypto";
 import { basename, join } from "node:path";
 import { cwd as processCwd } from "node:process";
 
-import {
-  EXIT_CODES,
-  hashBytes,
-  success,
-  validateChangePlan,
-} from "@developer-os/core";
+import { EXIT_CODES, success } from "@developer-os/core";
 import type {
   CliResult,
   DeveloperOsConfigV1,
   ExitCode,
-  InstallationManifestV1,
   RuntimePaths,
 } from "@developer-os/core";
 import { discoverClaude } from "@developer-os/adapter-claude";
@@ -20,8 +13,6 @@ import { discoverCodex } from "@developer-os/adapter-codex";
 import {
   buildCapture,
   detectSourceAgent,
-  parseCaptureFile,
-  resolveBrainConfig,
 } from "@developer-os/brain";
 import type { CaptureStatus } from "@developer-os/brain";
 import type { AgentName } from "@developer-os/platform-macos";
@@ -35,11 +26,18 @@ import type {
 import {
   failureFrom,
   loadOrCreateRedactionKey,
-  resolveContainedRoot,
   runtimePathsFor,
 } from "../context.js";
 import type { CliContext, CliGuards } from "../context.js";
 import { isDirectory, readConfigFile } from "./doctor.js";
+import {
+  fingerprintDirectory,
+  readCaptureQuietly,
+  readExistingCapture,
+  resolveQuarantine,
+  writeQuarantineCapture,
+} from "./quarantine.js";
+import type { ExistingCapture } from "./quarantine.js";
 
 /**
  * What `--json` publishes, and it publishes a **count**: a consumer learns that
@@ -127,26 +125,11 @@ const UNKNOWN = "unknown";
  */
 const UNNAMED_PROJECT = "unnamed";
 
-/** Vault-relative, under the configured content root. Spec §3.4. */
-const QUARANTINE_SEGMENTS = ["_raw", "quarantine"] as const;
-
 /**
  * Long enough to stay human-readable, short enough that a pathological
  * directory name cannot dominate the frontmatter block a reviewer reads.
  */
 const MAX_PROJECT_SLUG_LENGTH = 64;
-
-/** The width every other 64-bit identifier in this subsystem already uses. */
-const FINGERPRINT_LENGTH = 16;
-
-const CAPTURE_SOURCE = "capture";
-
-const EMPTY_MANIFEST: InstallationManifestV1 = {
-  schemaVersion: 1,
-  productVersion: "0.0.0",
-  installedAt: "1970-01-01T00:00:00.000Z",
-  artifacts: [],
-};
 
 const NOT_INITIALIZED = "developer-os init";
 
@@ -162,15 +145,6 @@ class CaptureRefusal extends Error {
     super(message);
     this.name = "CaptureRefusal";
   }
-}
-
-function isMissingEntry(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error.code === "ENOENT" || error.code === "ENOTDIR")
-  );
 }
 
 /**
@@ -312,19 +286,6 @@ function slugify(value: string): string {
   return slug.length === 0 ? UNNAMED_PROJECT : slug;
 }
 
-/**
- * A fingerprint, never a path. The working directory can name a client, a
- * repository, and the user's own home; what a later reader needs is only
- * whether two captures came from the same place, which 64 bits of keyed hash
- * answers without disclosing where that place is.
- */
-function fingerprintDirectory(canonical: string, key: Uint8Array): string {
-  return createHmac("sha256", key)
-    .update(canonical, "utf8")
-    .digest("hex")
-    .slice(0, FINGERPRINT_LENGTH);
-}
-
 async function readConfiguration(
   context: CliContext,
 ): Promise<DeveloperOsConfigV1> {
@@ -422,220 +383,6 @@ function assertWritableContent(content: string): void {
       "a capture needs text, and nothing visible survived screening the observation",
     );
   }
-}
-
-interface ExistingCapture {
-  /**
-   * Whether the file read back as a capture *of this id*. `parseCaptureFile`
-   * is given the file name, and refuses a frontmatter `captureId` that does
-   * not match it, so `parsed` already carries the id comparison the recovery
-   * path in `runCapture` needs — it never has to re-derive one.
-   */
-  readonly parsed: boolean;
-  readonly status: CaptureStatus;
-  readonly warning: string | null;
-  /**
-   * The file's bytes, verbatim. The recovery path in `runCapture` compares
-   * them against what this run rendered, which is the one question that
-   * separates "another process wrote this" from "this process wrote it and
-   * then failed".
-   */
-  readonly contents: string;
-}
-
-/**
- * The capture already at this path, or `null` when there is none.
- *
- * **A duplicate exits 0 and names the existing capture, whatever its status**
- * (spec §5.2): re-capturing something already rejected does not resurrect it,
- * and re-capturing something already ingested writes nothing and says where it
- * went. That is why the file is parsed rather than merely counted — the status
- * is the answer the user needs.
- *
- * A file that is here and is not a capture reports `failed`, which is exactly
- * what that status means (spec §5.5): a capture whose own envelope is
- * unreadable — a truncated write, or a hand edit that broke the frontmatter.
- * That is a status like any other, so §5.2's "exit 0, whatever its status"
- * still governs; the reason travels as a warning, because a user who has a
- * broken file under this id needs to be told which file and why, and a second
- * copy of the same observation is not something this command can write.
- *
- * Read through the protected-path policy, never a bare `readFile`: this is a
- * user file in a user-writable tree, and `readText` is the channel that opens
- * with `O_NOFOLLOW` and re-checks `dev`/`ino` after open.
- */
-async function readExistingCapture(
-  context: CliContext,
-  target: string,
-  fileName: string,
-  redact: Redactor,
-): Promise<ExistingCapture | null> {
-  try {
-    await context.fs.lstat(target);
-  } catch (error) {
-    if (isMissingEntry(error)) return null;
-    throw error;
-  }
-
-  const text = await context.guards.readText(target);
-  const outcome = parseCaptureFile(fileName, text, redact);
-
-  return outcome.ok
-    ? { parsed: true, status: outcome.envelope.status, warning: null, contents: text }
-    : {
-        parsed: false,
-        status: "failed",
-        warning: `the capture already at this path could not be read (${outcome.reason})`,
-        contents: text,
-      };
-}
-
-/**
- * `readExistingCapture` on the recovery path, where a second failure must never
- * replace the first. A read that itself refuses — a symlink now at the target,
- * a vanished directory — answers "no capture here", which rethrows the original
- * error rather than this one.
- */
-async function readCaptureQuietly(
-  context: CliContext,
-  target: string,
-  fileName: string,
-  redact: Redactor,
-): Promise<ExistingCapture | null> {
-  try {
-    return await readExistingCapture(context, target, fileName, redact);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * One `create` mutation, through Foundation's `TransactionExecutor`. A capture
- * is not a special case that may append directly, which is what makes "atomic
- * quarantine writes" true rather than aspirational.
- *
- * **What this does and does not give you, because spec §5.2 asks for more than
- * a transaction-mediated create can provide.** §5.2 wants a duplicate to be an
- * `O_EXCL` create that fails. It is not one, and saying otherwise here would be
- * the more dangerous of the two mistakes:
- *
- * - `TransactionExecutor.execute` **snapshots** each target and refuses a
- *   `create` whose target exists (`executor.ts:199-204`). A snapshot is a
- *   `stat`, not an exclusive create.
- * - The transaction lock is taken on a per-execution `generateId()`
- *   (`store.ts:195-207`), so two concurrent captures hold two different locks
- *   and exclude each other from nothing.
- * - `writeDurableFile` ends in an unconditional `rename` (`executor.ts:113-135`),
- *   which replaces rather than refuses.
- *
- * A genuine `O_EXCL` create of the final target is not available from here: it
- * would make the target exist, which the executor's own `create` precondition
- * then refuses, and writing through that handle instead would bypass the
- * transaction model outright. A separate lock file in the vault is the second
- * mechanism the plan warned against, and lock lifecycle is Foundation's design
- * rather than this command's.
- *
- * **What is left is a narrow window, and it is tolerable here for a reason
- * specific to captures — but it is not free, and what it costs is worth saying
- * exactly.** The plan-time snapshot and the apply-time re-check (which raises
- * `TransactionConflictError` on any hash change) leave a window in which two
- * processes can both decide the target is absent.
- *
- * `captureId` is the first 16 hex of `sha256` over the *redacted, normalized
- * content* and nothing else (`build.ts:176,209`), so two captures can only ever
- * collide when their **observations** are byte-identical: the losing write
- * replaces a file holding the same text. That much is idempotent — no
- * observation is lost and no vault state is corrupted.
- *
- * **The provenance is not.** The id hashes content alone, so the two runs need
- * not agree on anything else: the same text captured from two working
- * directories, or under two agents, is one id. The loser forfeits its
- * `createdAt`, `projectSlug`, `workingDirectoryFingerprint`, `sourceAgent` and
- * `sourceAgentVersion` to the winner's, and nothing records that a second run
- * happened. That is the accepted cost, and it is bounded to metadata about a
- * duplicate observation.
- *
- * The same window would be unacceptable for `review` or `ingest`, which write
- * *different* content to a shared path, and it is acceptable for this one.
- *
- * `readExistingCapture` is how a duplicate is *reported* at exit 0, and
- * `runCapture` re-reads it if this call fails, so the loser of a race still
- * reports the duplicate rather than an error nobody can act on.
- *
- * **Nothing is recorded in `installation-manifest.json`.** A capture is the
- * user's own content, editable in Obsidian by design (spec §3.4) — recording it
- * as a managed artifact would report every legitimate edit as drift, and would
- * make the next capture of the same text a refused `create` over an artifact
- * the product claims to own.
- */
-async function writeCapture(
-  context: CliContext,
-  paths: RuntimePaths,
-  quarantine: string,
-  target: string,
-  contents: string,
-): Promise<void> {
-  /**
-   * The transaction stages beside its target, so the directory has to exist
-   * first — the same reason `init` and `brain reindex` create theirs before
-   * executing. It is normally there from `init`'s template; this is the path
-   * that matters when a user deleted it. Guarded first, because the vault root
-   * comes from a config-supplied `brainPath`.
-   */
-  await context.guards.transaction.assertTarget(quarantine);
-  await context.fs.mkdir(quarantine, { recursive: true, mode: 0o700 });
-
-  const content = new TextEncoder().encode(contents);
-  const manifest = (await context.manifests.readOptional()) ?? EMPTY_MANIFEST;
-  const validated = await validateChangePlan(
-    {
-      schemaVersion: 1,
-      productVersion: context.productVersion,
-      operations: [
-        {
-          targetPath: target,
-          operation: "create",
-          owner: "core",
-          kind: "file",
-          expectedBeforeHash: null,
-          source: CAPTURE_SOURCE,
-          mergeStrategy: "dedicated",
-          proposedHash: hashBytes(content),
-        },
-      ],
-    },
-    {
-      /**
-       * Quarantine alone, with the product home excluded as the other
-       * ownership universe: a symlink inside one resolving into the other is
-       * what the exclusion refuses.
-       */
-      manifest,
-      ownedRoots: [quarantine],
-      excludedRoots: [paths.home],
-      canonicalize: context.guards.canonicalize,
-    },
-  );
-
-  const operation = validated.operations[0];
-  if (operation === undefined) {
-    throw new CaptureRefusal(
-      EXIT_CODES.operationalFailure,
-      "the validated change plan lost its only operation",
-      [target],
-    );
-  }
-
-  await context.executor.execute({
-    kind: "capture",
-    mutations: [
-      {
-        targetPath: operation.canonicalTargetPath,
-        operation: "create",
-        content,
-      },
-    ],
-  });
 }
 
 /**
@@ -739,31 +486,10 @@ export async function runCapture(
      * break (`:186-188`). Which root is legitimate is this command's question,
      * not that validator's.
      */
-    const contentRoot = join(paths.brain, resolveBrainConfig(config).contentRoot);
-    const quarantine = join(contentRoot, ...QUARANTINE_SEGMENTS);
-    /**
-     * **The answer is the check, and the canonical form is deliberately
-     * discarded.** Every path this command goes on to use is the *declared* one,
-     * for two reasons that both bite:
-     *
-     * - `validateChangePlan` canonicalizes the owned root it is given, and
-     *   `assertUsableRoots` refuses a root that resolved to an **ancestor** of
-     *   what was declared (`packages/core/src/plans/validate.ts:200-205`). That
-     *   test compares the canonical form against the declared one, so handing it
-     *   a path already canonicalized makes it compare a string with itself and it
-     *   can never fire. `containsPath` here cannot stand in for it: it is
-     *   same-or-descendant (`packages/core/src/manifest/store.ts:113`), so a
-     *   quarantine pointing at the content root passes the containment question
-     *   and is caught only by the ownership one.
-     * - `CaptureResultV1.path` is a contract, printed and published in `--json`.
-     *   On a vault reached through a symlink the canonical form names a location
-     *   the user never configured.
-     */
-    await resolveContainedRoot(
+    const { quarantine } = await resolveQuarantine(
       context,
-      contentRoot,
-      quarantine,
-      "the quarantine directory resolves outside the content root",
+      config,
+      paths,
       (message, paths_) =>
         new CaptureRefusal(
           EXIT_CODES.securityRefusal,
@@ -797,10 +523,17 @@ export async function runCapture(
     if (existing !== null) return duplicate(existing);
 
     try {
-      await writeCapture(context, paths, quarantine, target, built.contents);
+      await writeQuarantineCapture(
+        context,
+        paths,
+        quarantine,
+        target,
+        built.contents,
+        "capture",
+      );
     } catch (error) {
       /**
-       * The loser of the race `writeCapture`'s docblock describes. The write
+       * The loser of the race `writeQuarantineCapture`'s docblock describes. The write
        * failed; if what is now at the target is a parseable capture of this id
        * that **another run wrote**, the observation is recorded and this run is
        * a duplicate like any other, so it says so at exit 0 rather than
@@ -817,7 +550,7 @@ export async function runCapture(
        * as `duplicate: true` at exit 0 — a command reporting success over a
        * transaction that did not finalize, hiding the very journal `repair`
        * exists for. A real winner rendered its own `createdAt` (and, per
-       * `writeCapture`'s docblock, possibly its own `projectSlug`, fingerprint
+       * `writeQuarantineCapture`'s docblock, possibly its own `projectSlug`, fingerprint
        * and agent), so its bytes differ from ours; ours, byte for byte, is
        * ours.
        *
