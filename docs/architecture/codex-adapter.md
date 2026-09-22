@@ -531,3 +531,52 @@ Measured in a disposable `CODEX_HOME` during the 2026-09-04 audit.
 - **Capability resolution has no `no` state**: `absent` and `unavailable` probe observations both
   resolve to `unknown` (`packages/core/src/capabilities/index.ts`), contrary to the docblocks in both
   adapters' `capabilities.ts`. Owner: NEW-62.
+
+## 15. Observed for A12 against Codex CLI 0.155.1 on 2026-09-22
+
+Recorded by A12 plan Task 2 (spec §10.1), re-pinned to the installed version by founder decision
+D48. Each row names the §4 row or §10.1 bullet of
+`docs/superpowers/specs/2026-09-22-developer-os-instruction-artifacts-design.md` it answers.
+
+**Isolation, for every row.** `T=$(realpath "$(mktemp -d "$TMPDIR/x.XXXX")")`, `C=$T/.codex`; every
+command ran as `env -i PATH="$PATH" TMPDIR="$TMPDIR" HOME="$T" CODEX_HOME="$C"
+XDG_CONFIG_HOME="$T/.config" codex …` from `$T/cwork`, inside the agent's network-denying sandbox.
+No command asked for a login or reported a sandbox violation.
+
+**Request capture (rows marked *request*).** `codex exec` cannot be observed through `prompt-input`,
+which renders only the input messages. Instead: `codex exec --ephemeral --json --skip-git-repo-check
+-s read-only -C $T/cwork -c model_provider=a12probe -c
+'model_providers.a12probe={name="a12probe",base_url="http://127.0.0.1:9/v1",wire_api="responses",env_key="OPENAI_API_KEY"}'
+probe` with `OPENAI_API_KEY=<dummy> RUST_LOG=codex_http_client=trace`, stdin `/dev/null`, killed by
+an alarm (exit 142) while it printed `Reconnecting... waiting for network (Connection failed: error
+sending request)`. The trace logs the full body as `POST to http://127.0.0.1:9/v1/responses:
+{"model":…}`, the exact request a model would receive, with nothing sent anywhere and nothing
+billed. This is the unbilled method for every Codex loading question `prompt-input` cannot answer.
+**It needs a network-denying sandbox:** at startup `codex exec` also tried `https://api.github.com/`,
+`https://github.com/openai/plugins.git/` and `https://chatgpt.com/backend-api/plugins/featured`
+(curated and featured plugin sync), which the sandbox refused (`Could not resolve host: github.com`,
+`failed to warm featured plugin ids cache`). The `codex plugin` and `codex debug prompt-input` rows
+ran without trace logging, so whether they attempt the same was not captured.
+
+**Hand-placed tree.** A marketplace root `$T/p/codex/` holding `renderMarketplace`'s document and
+the checked-in `plugins/codex/` plus `skills/probe-skill/SKILL.md`; `$C/AGENTS.md` holding one user
+line and a §5.1 block with a `## probe-rule` section; `$C/agents/developer-os-probe.toml`.
+
+| Row | Command | Exit | Proving fragment | Verdict |
+|---|---|---|---|---|
+| version | `codex --version` | 0 | `codex-cli 0.155.1` | pinned (D48) |
+| marketplace | `codex plugin marketplace add $T/p/codex`; `codex plugin marketplace list` | 0; 0 | `Added marketplace \`developer-os\` from $T/p/codex.`; `developer-os  $T/p/codex` | §4 sequence unchanged |
+| registration | `codex plugin add developer-os@developer-os --json`; `codex plugin list --json` | 0; 0 | `"installedPath": "$C/plugins/cache/developer-os/developer-os/0.0.0"`, `"authPolicy": "ON_INSTALL"`; `installed[0]`: `"enabled": true`, `"source": {"source": "local", "path": "$T/p/codex/plugins/developer-os"}` | the vendor writes `[marketplaces.developer-os]` and `[plugins."developer-os@developer-os"] enabled = true` into `$C/config.toml` |
+| `rule` / `vendor-file` (`C/AGENTS.md` block) | `codex debug prompt-input probe` | 0 | a user message `# AGENTS.md instructions\n\n<INSTRUCTIONS>\nUser AGENTS line.\n<!-- developer-os:begin v1 -->\n…\n## probe-rule\nPROBE-CODEX-RULE-e71b\n<!-- developer-os:end v1 -->\n</INSTRUCTIONS>` | **proven**: the whole file, user bytes and block, verbatim |
+| `scoped-rule` (emulated) | as above | 0 | a `## <id>` section inside the block is carried verbatim | **proven** by the same mechanism; the path restriction is prose only |
+| `AGENTS.md` size limit | `codex debug prompt-input probe` with a block carrying a start and an end marker, whole-file sizes 4 096, 32 768, 32 769, 65 536, 70 000, 262 144, 1 048 576 and 4 194 304 bytes | 0 | every size: both markers present and the `<INSTRUCTIONS>` body byte-length equal to the file size | **no limit observed** for `C/AGENTS.md` up to 4 MiB, no truncation; the 64 KiB block bound (`InstructionBoundsV1`) is not lowered. `-c project_doc_max_bytes=0` does not exclude it either (*request* row below) |
+| `skill` | `codex debug prompt-input probe` | 0 | `` `r1` = `$C/plugins/cache/developer-os/developer-os/0.0.0/skills` `` and `developer-os:probe-skill: A12 observation probe skill. Never use. (file: r1/probe-skill/SKILL.md)` | **proven** (name and description; the body is not in the prompt input). After registration `diff -r $T/p/codex/plugins/developer-os $C/plugins/cache/developer-os/developer-os/0.0.0` is empty |
+| `plugin add` over a registered plugin | edit the tree's `probe-skill/SKILL.md`; `prompt-input`; `codex plugin add developer-os@developer-os --json`; `prompt-input` | 0 | before: old description, cache SHA-256 `60a0737e…` ≠ tree `ceccf30b…`; after: `probe-skill: A12 probe skill EDITED-v2.`, cache `ceccf30b…` = tree | **proven**: re-running `plugin add` refreshes the cache (same `0.0.0` directory); without it an edit is invisible |
+| `agent` loading | `prompt-input` with and without `$C/agents/*.toml`; *request* | 0; 142 | `prompt-input` text identical either way; the request's `spawn_agent` tool, parameter `agent_type`: `Available roles:\ndeveloper-os-probe: {\nPROBE-AGENT-DESC-0d4e\n}\ndefault: {…` | **proven** through the request only: Codex loads `C/agents/*.toml` as spawnable roles |
+| agent TOML key set | *request* with one variant of `$C/agents/developer-os-probe.toml` per run | 142 | listed: `name` + `description` + `developer_instructions`; the same plus any one of `model`, `model_reasoning_effort`, `sandbox_mode`; `name = "role-from-name"` lists `role-from-name:` (the file name is ignored). Not listed, and the run proceeds to the request regardless: `developer_instructions` missing, `name` missing, `tools = []` added, or an unknown key (`a12_unknown_probe_key`) added | required `name`, `description`, `developer_instructions`; optional `model`, `model_reasoning_effort`, `sandbox_mode` (no others tried). **Any unrecognised key drops the whole file** (whether a warning reaches stderr was not captured), so Task 13 must emit exactly these keys. `developer_instructions` is not in the parent request |
+| unregistration | `codex plugin remove developer-os@developer-os --json`; `codex plugin list --json`; `codex plugin marketplace remove developer-os`; `codex plugin marketplace list` | 0; 0; 0; 0 | `{"pluginId": "developer-os@developer-os", …}`; `installed` empty; `Removed marketplace \`developer-os\`.`; `No plugin marketplaces in scope.` | works; leaves an empty `$C/plugins/cache/developer-os/` directory and a 0-byte `$C/config.toml`, and does not touch the marketplace tree |
+| ingest isolation (D8, Task 21) | *request* with the ingest flags `--ephemeral --ignore-user-config --ignore-rules`, everything installed and registered | 142 | the request **contains** `<!-- developer-os:begin v1 -->…PROBE-CODEX-RULE-e71b…<!-- developer-os:end v1 -->` and the `developer-os-probe` role with its description; it contains no `developer-os:` plugin skill. Adding `-c project_doc_max_bytes=0` still includes the block | **fails**: the ingest flags keep plugin skills out but neither `C/AGENTS.md` nor `C/agents/*.toml`. Spec §10.2 makes this a plan stop (D8 outranks A12) pending a founder decision. The probe set `CODEX_HOME=$C`; the product's ingest runner passes `env: {}`, and reproducing that would resolve the live home, so it was not run |
+
+- **Method for Task 21 and the NEW-65 test.** The *request* capture above: assert on the body after
+  `POST to http://127.0.0.1:9/v1/responses: `, never on `prompt-input` alone, which shows neither
+  agent roles nor the effect of `codex exec` flags.

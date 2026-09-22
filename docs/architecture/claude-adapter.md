@@ -368,3 +368,51 @@ Measured in a disposable `HOME` during the 2026-09-04 audit; each row names the 
   `session_start_injection` for A13.
 - **`proposeClaudeUninstall` filters by path prefix only**, without the `owner` check its Codex
   twin performs. Owner: roadmap Phase 5.
+
+## 14. Observed for A12 against Claude Code 2.1.280 on 2026-09-22
+
+Recorded by A12 plan Task 2 (spec §10.1), re-pinned to the installed version by founder decision
+D48. Each row names the §4 row or §10.1 bullet of
+`docs/superpowers/specs/2026-09-22-developer-os-instruction-artifacts-design.md` it answers.
+
+**Isolation, for every row.** `T=$(realpath "$(mktemp -d "$TMPDIR/x.XXXX")")`; every command ran as
+`env -i PATH="$PATH" TMPDIR="$TMPDIR" HOME="$T" CODEX_HOME="$T/.codex" XDG_CONFIG_HOME="$T/.config"
+claude …` inside the agent's network-denying sandbox, with no `CLAUDE_CONFIG_DIR`. Rows marked
+*session* also set `ANTHROPIC_BASE_URL=http://127.0.0.1:9 ANTHROPIC_API_KEY=<dummy>
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 DISABLE_AUTOUPDATER=1`, ran from
+`$T/work`, and were killed by an alarm (exit 142) while the CLI retried the refused loopback
+connection (`API error (attempt 1/11): undefined Connection error.`). No model was reached, nothing
+was billed, no sandbox violation was reported, and no login was requested. The hook probe is a
+disposable `$T/.claude/settings.json` registering `InstructionsLoaded` and `SessionStart` to a
+script that appends the hook's stdin JSON to a file under `$T`.
+
+**Hand-placed tree.** The checked-in `plugins/claude/` copied to `$T/.claude/skills/developer-os/`,
+plus `agents/probe-agent.md`, `skills/probe-skill/SKILL.md`, `commands/probe-skill.md` (same id as
+the skill) and `commands/probe-cmd-only.md`; `$T/.claude/CLAUDE.md` holding one user line and a §5.1
+block whose content is `@$T/p/claude/instructions/probe-rule.md`;
+`$T/.claude/rules/developer-os-plain.md` (no frontmatter); `$T/.claude/rules/developer-os-scoped.md`
+(`paths: ["**/*.probe"]`); `$T/.claude/output-styles/developer-os-probe.md` (`name: Probe Style`).
+
+| Row | Command | Exit | Proving fragment | Verdict |
+|---|---|---|---|---|
+| version | `claude --version` | 0 | `2.1.280 (Claude Code)` | pinned (D48) |
+| skills-dir plugin | `claude plugin list` | 0 | `developer-os@skills-dir` · `Path: ~/.claude/skills/developer-os` · `Status: ✔ loaded` | loads; §4 stands |
+| `agent` | `claude plugin details developer-os`; *session* with `--debug --debug-file` | 0; 142 | `Agents (1)  probe-agent`; `Loaded 1 agents from plugin developer-os default directory` | **proven**: a skills-directory plugin loads `agents/` |
+| `skill` | `claude plugin details developer-os`; *session* debug | 0; 142 | `Skills (9)  developer-os-brain-search, …, probe-skill, …`; `Loaded 7 skills from plugin developer-os default directory` | **proven** |
+| `command` | `claude plugin details developer-os`; *session* debug | 0; 142 | commands are listed **under `Skills`**: `probe-cmd-only` appears in `Skills (9)`; `Loaded 2 commands from plugin developer-os default directory` | **proven**: a skills-directory plugin loads `commands/`. A command whose id equals a skill id is listed twice (`probe-skill, probe-skill`), indistinguishable in `details`; open question for Task 12 |
+| `validate` is not loading | `claude plugin validate <plugin root>`; `… --json`; `claude plugin validate <plugin root>/commands` | 0 | `"contents": []` (manifest only, 3 warnings: `version`, `description`, `author`); `Validating components in: …/commands` · `✔ Validation passed` | validation only; never a loading proof (NEW-65) |
+| `rule` / `vendor-file` (the `CLAUDE.md` block and its `@` import) | *session* `claude -p probe --output-format json --max-turns 1 --tools ""` with the hook probe | 142 | `"hook_event_name":"InstructionsLoaded","file_path":"$T/.claude/CLAUDE.md","memory_type":"User","load_reason":"session_start"` and `"file_path":"$T/p/claude/instructions/probe-rule.md","memory_type":"User","load_reason":"include","parent_file_path":"$T/.claude/CLAUDE.md"` | **proven unbilled** that the block's import loads as user memory. An `@` path through a symlinked component (`/tmp/…`) also loads; the event reports the unresolved path |
+| `rules/*.md` without `paths:` | same *session* | 142 | `"file_path":"$T/.claude/rules/developer-os-plain.md","memory_type":"User","load_reason":"session_start"` | **proven unbilled**: loads at session start |
+| `scoped-rule` (`rules/*.md` with `paths:`) | same *session*; then `claude -p "read @a.probe" …` with `$T/work/a.probe` present | 142 | no event at session start; with the matching mention: `"file_path":"$T/.claude/rules/developer-os-scoped.md","load_reason":"path_glob_match","globs":["**/*.probe"],"trigger_file_path":"$T/work/a.probe"` | **proven unbilled**: loads lazily on the first matching file, `paths:` frontmatter honoured |
+| `output-style` discovery | *session* debug with `$T/.claude/output-styles/` removed | 142 | `Failed to stat directory $T/.claude/output-styles: ENOENT` | `H/.claude/output-styles/` is the scanned user directory |
+| `output-style` loading | *session* debug and hook probe, also with `"outputStyle": "Probe Style"` set in the disposable settings | 142 | no `InstructionsLoaded` event for any output style; only `Total plugin output styles loaded: 0` | **not provable unbilled**: falls to the billed real-agent row (§10.2), deferred to `BACKLOG.md` by D48 |
+| ingest isolation method (D8, Task 21) | *session* with the ingest argv (`--tools "" --strict-mcp-config --restricted --safe-mode --no-session-persistence --permission-prompts none`) plus `--settings <hook file>` and `--debug` | 142 | `Found 0 plugins (0 enabled, 0 disabled)` · `[reduced mode] Skipping skill dir discovery` · `getSkills returning: 0 skill dir commands, 0 plugin skills` · `Safe mode: installed plugins are disabled` · `Hooks: Found 0 total hooks in registry` | plugin skills, agents and commands are excluded. The hook probe cannot observe `CLAUDE.md` or `rules/` here, because the ingest argv disables hooks, and neither `--debug` nor `ANTHROPIC_LOG=debug` logs the request body (zero probe strings). **Pinned method:** point `ANTHROPIC_BASE_URL` at a loopback listener that records only the request body, and assert that neither block marker nor any managed file's text appears. The agent sandbox refused that listener (`listen EPERM`), so the Claude half of this gate has no observation yet |
+
+- **What the hook does and does not prove.** `InstructionsLoaded` shows the file was read into the
+  session's memory, not that its text reached the model. Whether that suffices to empty
+  `UNPROVEN_CLAUDE_CATEGORIES` for `rule` and `scoped-rule` is the founder's Task 29 decision (D48);
+  `output-style` has no unbilled proof at all.
+- **Paths outside `$T`.** Session debug output names the system managed-settings location under
+  `/Library/Application Support/ClaudeCode/` (not redirected by `HOME`) and the CLI's own version
+  directory; no row named a path under the live `~/.claude`.
+- **`validate` still mutates `HOME`** (`$T/.claude.json`, `$T/.claude/backups/`), as §13 recorded.
