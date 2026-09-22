@@ -2,30 +2,120 @@
 
 ## 1. Observation record
 
-Written by A13 plan Task 1, the observation spike. Each question gets one answer: an observed
-answer, `unsupported (<reason>)` for observed non-support, or `founder-deferred (<reason>)` when only
-a billed session or a manual trust grant can answer it.
+Written by A13 plan Task 1, the observation spike, on 2026-09-22 against Claude Code 2.1.280 and
+Codex CLI 0.155.1 (D48). Each question gets one answer: an observed answer, `unsupported (<reason>)`
+for observed non-support, or `founder-deferred (<reason>)` when only a billed model turn or a manual
+Codex trust grant can answer it. Nothing was billed, nothing logged in, and no trust was granted.
 
-1. Claude: does `~/.claude/skills/developer-os/hooks/hooks.json` fire from a skills-directory plugin
-   (Q4)? — *not yet recorded*
-2. Claude: exit and output semantics for exit 0 with stdout and exit 2 with stderr, on `PreToolUse`,
-   `PostToolUse`, `Stop`, `SessionStart` and `UserPromptSubmit` (§4.4); does stdout from
-   `SessionStart` and `UserPromptSubmit` reach the model? — *not yet recorded*
-3. Claude: payload field spellings for `cwd`, `tool_name`, `tool_input.command`,
-   `tool_input.file_path` (Edit, Write and MultiEdit) and `prompt`, and the stop-loop flag
-   `stop_hook_active`. — *not yet recorded*
-4. Codex: event names, matcher syntax, the shell tool name, whether a file edit fires
-   `pre_tool_use`/`post_tool_use`, and whether it carries a path or a patch body (§3). — *not yet
-   recorded*
-5. Codex: field spellings for each §4.3 row, and the stop-loop flag equivalent. — *not yet recorded*
-6. Codex: exit and output semantics per outcome (§4.4). — *not yet recorded*
-7. Codex: whether `"hooks"` in `.codex-plugin/plugin.json` is inline or a file reference, and its
-   exact schema. — *not yet recorded*
-8. Codex: whether the trust hash covers the command string (§4.1). — *not yet recorded*
-9. Isolated `ingest` on each vendor: does a planted plugin `SessionStart` hook fire (§6.3)? — *not
-   yet recorded*
-10. The Claude and Codex versions observed, which become the `DOCUMENTED_FLOORS` in Task 15. — *not
-    yet recorded*
+**Isolation.** Every vendor command ran as `env -i PATH="$PATH" TMPDIR="$TMPDIR" HOME="$T"
+CODEX_HOME="$T/.codex" XDG_CONFIG_HOME="$T/.config" …` with `T` a fresh `mktemp -d` under the agent's
+`TMPDIR`, no `CLAUDE_CONFIG_DIR`, inside the agent's network-denying sandbox. Claude *session* rows
+also set `ANTHROPIC_BASE_URL=http://127.0.0.1:9`, a dummy `ANTHROPIC_API_KEY`,
+`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 DISABLE_AUTOUPDATER=1`, ran
+`claude -p <prompt> --output-format json --debug-file …` from `$T/work`, and were killed by an alarm
+(exit 142) while the CLI retried the refused connection, unless noted.
+
+**Claude tree.** The checked-in `plugins/claude/` copied to `$T/.claude/skills/developer-os/`, plus
+`hooks/hooks.json` written by the product's own `renderClaudeHooks` (all eight `CLAUDE_HOOK_ROWS`,
+five events). Its executable path was a wrapper `$T/bin/dos` that appends its argv and stdin to a log
+under `$T`, then acts on a mode file: forward stdin to `node apps/cli/dist/bin.js "$@"` (default),
+print a marker on stdout and exit 0, print a marker on stderr and exit 2, or the same with exit 1.
+`$T/.claude/settings.json` did not exist, so every firing is plugin-sourced.
+
+**Codex tree.** A local marketplace at `$T/p/codex` (`renderMarketplace`'s document and the
+checked-in `plugins/codex/`) with a probe `hooks/hooks.json` in the plugin, registered with
+`codex plugin marketplace add` and `codex plugin add developer-os@developer-os --json`. Hooks were
+read back through the app-server's `hooks/list` request (`codex app-server` over stdio,
+`initialize`, then `hooks/list` with `cwds: [$T/cwork]`), whose schema comes from
+`codex app-server generate-json-schema`. Firing was checked with `codex exec --ephemeral --json
+--skip-git-repo-check -s read-only` against a custom provider at `http://127.0.0.1:9/v1` with a
+dummy key (the A12 *request* method), killed by an alarm.
+
+1. **Claude: a skills-directory plugin's `hooks/hooks.json` fires (Q4).** Observed firing.
+   `claude plugin details developer-os` lists `Hooks (5)  SessionStart, UserPromptSubmit,
+   PreToolUse, PostToolUse, Stop`. The session debug log shows `Read hooks.json for plugin
+   developer-os (enabled=true)` and `Registered 8 hooks from 1 plugins`, and the wrapper logged
+   `brain status --inject --vendor claude` on `SessionStart` (`source: "startup"`) and
+   `guard prompt --vendor claude` on `UserPromptSubmit`, both forwarded to the built entrypoint,
+   which ran and exited. The debug line `installed plugins' hooks modules not loaded: rollout flag
+   (tengu_plugin_hooks_modules) is off` concerns hook *modules*, not `hooks.json`; plugin
+   `hooks.json` fired regardless. Q4-A does not trigger. `PreToolUse`, `PostToolUse` and `Stop`
+   firing: founder-deferred (they need a model turn; with `CLAUDE_CODE_MAX_RETRIES=0` the turn
+   ended on the API error, `claude` exited 1, and `Stop` did not fire).
+2. **Claude: exit and output semantics (§4.4).**
+   - `SessionStart`, exit 0 with stdout: logged as `Hook SessionStart:startup (SessionStart)
+     success:` with the stdout text; `Hook output does not start with {, treating as plain text`
+     (output beginning with `{` is parsed as JSON). The session continued.
+   - `UserPromptSubmit`, exit 0 with stdout: `success:` with the stdout text, as above; the prompt
+     was sent.
+   - `SessionStart`, exit 2 with stderr: logged as `error:` with the stderr text; the session
+     continued to `UserPromptSubmit`. Non-blocking.
+   - `UserPromptSubmit`, exit 2 with stderr: **blocks.** `prompt.submit: dropped`, no API attempt
+     (`duration_api_ms: 0`, `num_turns: 0`), and `claude -p` exits **0** with `"subtype":
+     "success"`, `"is_error": false` and `result` = `UserPromptSubmit operation blocked by hook:\n[<command>]:
+     <stderr>\n\n\nOriginal prompt: <prompt>`.
+   - Exit 1 with stderr on both events: logged as `error:`, non-blocking; the prompt was sent.
+   - Whether `SessionStart` and `UserPromptSubmit` stdout reaches the model: founder-deferred (the
+     request body is not observable against a dead endpoint).
+   - `PreToolUse`, `PostToolUse` and `Stop`, exit 0 and exit 2: founder-deferred (need a model
+     turn).
+3. **Claude: payload field spellings.** Observed for two events (fixtures
+   `tests/fixtures/hooks/claude/SessionStart.json` and `UserPromptSubmit.json`, scrubbed):
+   `SessionStart` carries `session_id`, the transcript-path key, `cwd`, `hook_event_name`,
+   `source`; `UserPromptSubmit` carries `session_id`, the transcript-path key, `cwd`, `prompt_id`,
+   `permission_mode`, `hook_event_name`, `prompt`. `cwd` is the session working directory as an
+   absolute path. `tool_name`, `tool_input.command`, `tool_input.file_path` (Edit, Write,
+   MultiEdit) and `stop_hook_active`: founder-deferred (need a model turn).
+4. **Codex: event names, matcher, tool name, file edits (§3).** The plugin `hooks.json` uses the
+   Claude-shaped document `{"hooks": {"<Event>": [{"matcher": …, "hooks": [{"type": "command",
+   "command": …, "timeout": …}]}]}}` with **PascalCase** event keys: `PreToolUse`, `PostToolUse`,
+   `SessionStart`, `UserPromptSubmit`, `Stop` were all listed. A snake_case key (`session_start`)
+   was **silently ignored**: no hook, no error, no warning. `hooks/list` reports events in
+   camelCase (`preToolUse`) and keys in snake_case (`…:pre_tool_use:0:0`); the schema's full event
+   set is `preToolUse`, `permissionRequest`, `postToolUse`, `preCompact`, `postCompact`,
+   `sessionStart`, `sessionEnd`, `userPromptSubmit`, `subagentStart`, `subagentStop`, `stop`,
+   `interrupt`. The matcher is stored verbatim (`Bash`, `shell`, `Edit|Write|apply_patch` all
+   accepted without validation). The shell tool name, whether a file edit fires
+   `PreToolUse`/`PostToolUse`, and path versus patch body: founder-deferred (need a trusted hook and
+   a model turn).
+5. **Codex: field spellings and the stop-loop flag.** founder-deferred (no payload reaches an
+   untrusted hook, and a trusted one needs the founder's trust grant).
+6. **Codex: exit and output semantics.** founder-deferred (as 5). Observed only: an **untrusted hook
+   does not fire**. With the plugin hooks, and in a second run also a user
+   `$CODEX_HOME/hooks.json` with the same handlers, listed `trustStatus: "untrusted"`, `codex exec` ran into the refused
+   request and the wrapper logged nothing; neither `--json` stdout nor `RUST_LOG=trace` stderr
+   mentioned the skipped hooks.
+7. **Codex: manifest `"hooks"` shape.** All three forms load, each listed with `source: "plugin"`
+   and `pluginId: "developer-os@developer-os"`, from the cache copy
+   (`$C/plugins/cache/developer-os/developer-os/0.0.0/…`), never the marketplace tree:
+   - `"hooks": "./hooks/hooks.json"` (file reference): key `hooks/hooks.json:<event>:0:0`;
+   - no `"hooks"` key, with `hooks/hooks.json` present: loaded the same way, so that path is the
+     default;
+   - `"hooks": { "hooks": { … } }` inline, with no hooks directory: key
+     `plugin.json#hooks[0]:<event>:0:0`.
+
+   `codex plugin add --json` succeeded for each and reported nothing about hooks. `timeout` maps to
+   `timeoutSec`; without it the default is **600 s**. `errors` and `warnings` were empty throughout.
+8. **Codex: trust hash (§4.1).** Each hook carries `currentHash: "sha256:…"` and
+   `trustStatus` (`managed`, `untrusted`, `trusted`, `modified`). The hash **covers the command
+   string**: two otherwise identical `SessionStart` handlers differing only in command hashed
+   differently. It also covers the matcher (`Bash` → `shell` changed it) and the timeout (adding
+   `"timeout": 2` changed it). It does **not** cover the location: the same handler as a user hook
+   and as a plugin hook, and the same plugin handler moved from `hooks/hooks.json` to the inline
+   manifest form, kept the same hash. So any change to command bytes, matcher or timeout moves a
+   trusted hook to re-trust; whether that shows as `modified` or `untrusted` is founder-deferred
+   (needs a grant first).
+9. **Isolated `ingest` (§6.3).** Claude: a planted plugin `SessionStart` hook **does not fire**
+   under the ingest argv (`--tools "" --strict-mcp-config --restricted --safe-mode
+   --no-session-persistence --permission-prompts none`): the wrapper logged nothing, and the debug
+   log shows `Safe mode: installed plugins are disabled, none of their hooks or hooks modules load`,
+   `Registered 0 hooks from 0 plugins` and `Skipping plugin hooks - safe mode disables installed
+   plugins (managed settings-file hooks still run; built-in plugins load regardless)`. Residual:
+   managed-settings hooks still run under safe mode. Codex: founder-deferred (an untrusted hook never
+   fires, so only a trusted planted hook under `--ephemeral --ignore-user-config --ignore-rules`
+   answers it).
+10. **Versions observed.** `claude --version` → `2.1.280 (Claude Code)`; `codex --version` →
+    `codex-cli 0.155.1`.
 
 ## 2. Measurements
 
