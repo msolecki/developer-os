@@ -1097,6 +1097,23 @@ describe("the push arms", () => {
     expect(world.pushAttempts()).toBe(2);
   }, 120_000);
 
+  it("tolerates a coordinator still `push_pending` on a retried recover() call instead of refusing it", async () => {
+    const world = await syntheticWorld("git_sync/existing_network", { pushOutcome: "failed" });
+    await world.execute();
+
+    const snapshot = await world.recover();
+
+    expect(snapshot.closure).toStrictEqual({
+      kind: "retry_only",
+      transactionId: world.plan.id,
+      pushPlanHash: PUSH_PLAN_HASH,
+    });
+    const journal = await world.journal();
+    expect(journal?.phase).toBe("push_pending");
+    expect(journal?.nextStep).toBe(0);
+    expect(world.pushAttempts()).toBe(2);
+  }, 120_000);
+
   it("keeps a destination effect with no journal in `push_pending` and one with a journal in ordinary recovery", async () => {
     const pending = await syntheticWorld("git_sync/existing_local");
     const { outcome } = await pending.execute({ failAt: "D" });

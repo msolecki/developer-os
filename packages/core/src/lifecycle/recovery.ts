@@ -2,8 +2,8 @@
  * Spec 1 §2.4's recovery pass: under the global mutation lock it resumes or compensates every
  * non-terminal coordinator per its point of no return, completes the legal orphan states,
  * compacts terminal coordinators and standalone Foundation transactions, and recomputes the
- * snapshot. Every refusal fires before the first mutation, so a ledger this pass cannot recover
- * is left exactly as it was found.
+ * snapshot. `assertRecoverable` refuses on the opening snapshot before any phase mutates; each
+ * later phase re-verifies only its own specific object under the lock, not the ledger as a whole.
  */
 import { EXIT_CODES } from "../result.js";
 import type { CanonicalAbsolutePathV1 } from "../update/paths.js";
@@ -29,7 +29,7 @@ import {
 } from "./guarded-fs.js";
 import type { LifecycleCoordinatorRecordV1, LifecycleLedgerSnapshotV1 } from "./ledger.js";
 import type { HeldLifecycleStableLockV1 } from "./locks.js";
-import type { LifecycleCoordinatorPlanCoreV1 } from "./types.js";
+import type { LifecycleCoordinatorPlanCoreV1, LifecycleJournalClosureV1 } from "./types.js";
 
 type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown, unknown>;
 
@@ -99,8 +99,9 @@ export class LifecycleRecoveryService<TPlan extends CoordinatorPlan> {
       held = result.global;
     }
 
-    for (const record of (await inspect()).coordinators) {
-      await this.collectCoordinator(record, held);
+    const settledCoordinators = await inspect();
+    for (const record of settledCoordinators.coordinators) {
+      await this.collectCoordinator(record, settledCoordinators.closure, held);
     }
 
     await this.removeCoordinatorOrphans(await inspect(), held);
@@ -134,6 +135,7 @@ export class LifecycleRecoveryService<TPlan extends CoordinatorPlan> {
 
   private async collectCoordinator(
     record: LifecycleCoordinatorRecordV1<TPlan>,
+    closure: LifecycleJournalClosureV1,
     global: HeldLifecycleStableLockV1,
   ): Promise<void> {
     switch (record.state) {
@@ -147,6 +149,13 @@ export class LifecycleRecoveryService<TPlan extends CoordinatorPlan> {
         await completeCoordinatorEnvelope(this.dependencies, record, global);
         return;
       case "active":
+        /**
+         * `classify()` (ledger.ts) already treats this exact on-disk state — the sole
+         * non-terminal coordinator, stuck at `push_pending` on its own bound push — as the
+         * healthy, retryable closure `retry_only`, not a finding. Recovery must leave it alone
+         * rather than re-deriving the same condition and refusing it (Task 25 review, 2026-09-22).
+         */
+        if (closure.kind === "retry_only" && closure.transactionId === record.id) return;
         refuseLifecycleRecovery(
           "lifecycle_coordinator_not_terminal",
           record.plan.authority.productHome,
