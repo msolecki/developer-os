@@ -1,0 +1,68 @@
+schemaVersion: 1
+id: brain-answer
+version: 1.0.0
+description: Answer a question from the vault alone, naming a note path for every claim, and optionally file the answer back as a capture for review.
+triggers:
+  - manual
+inputs:
+  question:
+    type: string
+    required: true
+    description: The question to answer from the vault.
+  file-back:
+    type: boolean
+    required: false
+    description: When true, quarantine the answer as one capture for review. False when absent.
+output:
+  answer:
+    type: string
+    required: true
+    description: The answer, with a vault-relative source path for every claim.
+capabilities: []
+scopes:
+  read:
+    - content/**
+    - content/_indexes/**
+  write:
+    - content/_raw/quarantine/**
+refusals:
+  - when: vault-missing
+    exit: 1
+    message: No vault was found. Run developer-os init first.
+  - when: index-missing
+    exit: 2
+    message: The vault index has not been built. Run developer-os brain reindex first.
+  - when: input-invalid
+    exit: 2
+    message: A question is required and must not be empty.
+  - when: scope-violation
+    exit: 5
+    message: This workflow reads the vault and writes nothing but one capture, through developer-os capture.
+steps:
+  - id: load-index
+    do: brain.readIndex
+  - id: rank
+    do: brain.search
+    with:
+      query: $input.question
+  - id: read-notes
+    do: brain.readNote
+  - id: answer
+    prose: |
+      Answer only from the notes you read. Name the vault-relative source path
+      for every claim. Where the notes do not answer the question, say that the
+      vault does not say, and stop; never fill the gap from general knowledge.
+  - id: file-back-gate
+    prose: |
+      Run the next step only when file-back is true. Otherwise the workflow ends
+      here and writes nothing. When it runs, pass the answer with its source
+      paths on stdin through a quoted heredoc:
+      developer-os capture <<'CAPTURE' ... CAPTURE
+  - id: file-back
+    do: capture.write
+validators:
+  - every claim in the answer names a vault-relative source path
+  - nothing is written except at most one capture, through developer-os capture, and only when file-back is true
+recovery:
+  leaves: at most one quarantined capture
+  resume: developer-os review

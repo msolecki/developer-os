@@ -1,0 +1,70 @@
+schemaVersion: 1
+id: brain-report
+version: 1.0.0
+description: Write a report for a person on one subject from the vault and its lint state, citing a note path for every claim, and optionally file it back as a capture.
+triggers:
+  - manual
+inputs:
+  subject:
+    type: string
+    required: true
+    description: What the report is about - a query, a tag, or a topic folder.
+  file-back:
+    type: boolean
+    required: false
+    description: When true, quarantine the report as one capture for review. False when absent.
+output:
+  report:
+    type: string
+    required: true
+    description: The report, with a vault-relative source path for every claim.
+capabilities: []
+scopes:
+  read:
+    - content/**
+    - content/_indexes/**
+  write:
+    - content/_raw/quarantine/**
+refusals:
+  - when: vault-missing
+    exit: 1
+    message: No vault was found. Run developer-os init first.
+  - when: index-missing
+    exit: 2
+    message: The vault index has not been built. Run developer-os brain reindex first.
+  - when: input-invalid
+    exit: 2
+    message: A subject is required and must not be empty.
+  - when: scope-violation
+    exit: 5
+    message: This workflow reads the vault and writes nothing but one capture, through developer-os capture.
+steps:
+  - id: load-index
+    do: brain.readIndex
+  - id: lint
+    do: brain.lint
+  - id: rank
+    do: brain.search
+    with:
+      query: $input.subject
+  - id: read-notes
+    do: brain.readNote
+  - id: report
+    prose: |
+      Write the report in four sections: what the vault knows, with a source
+      path for every claim; open questions it does not answer; lint findings
+      on the notes you read; and notes worth revising, each named by path.
+      Never state what no note says.
+  - id: file-back-gate
+    prose: |
+      Run the next step only when file-back is true. Otherwise the workflow ends
+      here and writes nothing. When it runs, pass the report on stdin through
+      a quoted heredoc: developer-os capture <<'CAPTURE' ... CAPTURE
+  - id: file-back
+    do: capture.write
+validators:
+  - every claim in the report names a vault-relative source path
+  - nothing is written except at most one capture, through developer-os capture, and only when file-back is true
+recovery:
+  leaves: at most one quarantined capture
+  resume: developer-os review

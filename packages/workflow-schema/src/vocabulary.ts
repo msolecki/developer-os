@@ -88,6 +88,12 @@ export const EFFECT_VOCABULARY: Readonly<Record<string, EffectFootprint>> =
     /** DOS-P6 Task 9 shipped `developer-os capture`. */
     "capture.write": { read: [], write: QUARANTINE, staging: false, capability: null, owner: "DOS-P6", implemented: true, command: "developer-os capture" },
     /**
+     * A12b: a note capture reads its destination, so it cannot share
+     * `capture.write`'s `read: []` without under-declaring, and widening that
+     * verb would change the `capture` workflow's derived scopes.
+     */
+    "capture.writeNote": { read: ["content/**"], write: QUARANTINE, staging: false, capability: null, owner: "A12b", implemented: true, command: "developer-os capture --note" },
+    /**
      * The three `developer-os review` verbs, all shipped by DOS-P6 Task 10:
      * listing what is quarantined, moving a status, and the edit that re-reads
      * a hand-edited capture.

@@ -1,0 +1,66 @@
+schemaVersion: 1
+id: brain-enhance
+version: 1.0.0
+description: Propose a revision of one existing note as a note capture bound to the note's current bytes; the note changes only after review and ingest, and only if nobody edited it meanwhile.
+triggers:
+  - manual
+inputs:
+  note:
+    type: path
+    required: true
+    description: The note to revise, relative to the content root.
+output:
+  path:
+    type: path
+    required: true
+    description: The quarantine path of the note capture.
+capabilities: []
+scopes:
+  read:
+    - content/**
+    - content/_indexes/**
+  write:
+    - content/_raw/quarantine/**
+refusals:
+  - when: vault-missing
+    exit: 1
+    message: No vault was found. Run developer-os init first.
+  - when: index-missing
+    exit: 2
+    message: The vault index has not been built. Run developer-os brain reindex first.
+  - when: input-invalid
+    exit: 2
+    message: The note must be an existing canonical note, named relative to the content root.
+  - when: scope-violation
+    exit: 5
+    message: This workflow reads the vault and writes nothing but one capture, through developer-os capture.
+steps:
+  - id: read-target
+    do: brain.readNote
+  - id: load-index
+    do: brain.readIndex
+  - id: related
+    prose: |
+      Search once with the note's title and once with each of its tags, and
+      read the matches that are not the note itself.
+  - id: rank
+    do: brain.search
+  - id: read-related
+    do: brain.readNote
+  - id: draft
+    prose: |
+      Write the whole revised note, frontmatter and body. Keep every frontmatter
+      key you do not mean to change exactly as it is, created included, and set
+      updated to today's date. Improve the summary, tags, aliases and links to
+      the related notes you read; do not invent facts no note states. Then
+      pass the whole note to the next step, with --note naming the note being
+      revised, on stdin through a quoted heredoc:
+      developer-os capture --note <note> <<'NOTE' ... NOTE
+  - id: capture
+    do: capture.writeNote
+validators:
+  - the capture was written with --note naming the note being revised
+  - the revision keeps the note's created date
+recovery:
+  leaves: at most one quarantined note capture
+  resume: developer-os review

@@ -27,7 +27,7 @@ describe("plugins/claude is a clean regeneration", () => {
   /**
    * A gate that can pass by scanning nothing is not a gate, and this repository
    * has shipped two that could. Both sides are asserted non-empty, and the
-   * counts are asserted against the six canonical workflows rather than against
+   * counts are asserted against the eleven canonical workflows rather than against
    * whatever happens to be there.
    */
   it("scans a non-empty set on both sides", async () => {
@@ -42,7 +42,7 @@ describe("plugins/claude is a clean regeneration", () => {
     const skills = expected.filter((artifact) =>
       artifact.path.endsWith("SKILL.md"),
     );
-    expect(skills).toHaveLength(6);
+    expect(skills).toHaveLength(11);
     expect(expected).toHaveLength(skills.length + 1);
   });
 
@@ -65,7 +65,7 @@ describe("plugins/claude is a clean regeneration", () => {
       ([path]) =>
         path.endsWith("SKILL.md") && !path.includes("developer-os-shared"),
     );
-    expect(skills).toHaveLength(5);
+    expect(skills).toHaveLength(10);
     for (const [path, contents] of skills) {
       expect(contents, `${path} must carry the preamble`).toContain(
         "preamble from shared",

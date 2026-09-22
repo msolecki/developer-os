@@ -1,0 +1,65 @@
+schemaVersion: 1
+id: brain-garden
+version: 1.0.0
+description: Turn brain lint findings into proposals - note captures for content fixes, printed dry-run commands for structural ones - and never change the vault directly.
+triggers:
+  - manual
+inputs:
+  limit:
+    type: integer
+    required: false
+    description: The most captures to propose in one run. 5 when absent.
+output:
+  proposals:
+    type: string
+    required: true
+    description: Every capture path written and every command printed, one per line.
+capabilities: []
+scopes:
+  read:
+    - content/**
+    - content/_indexes/**
+  write:
+    - content/_raw/quarantine/**
+refusals:
+  - when: vault-missing
+    exit: 1
+    message: No vault was found. Run developer-os init first.
+  - when: index-missing
+    exit: 2
+    message: The vault index has not been built. Run developer-os brain reindex first.
+  - when: input-invalid
+    exit: 2
+    message: A limit must be a positive integer.
+  - when: scope-violation
+    exit: 5
+    message: This workflow writes nothing but captures, through developer-os capture.
+steps:
+  - id: lint
+    do: brain.lint
+  - id: load-index
+    do: brain.readIndex
+  - id: read-notes
+    do: brain.readNote
+  - id: triage
+    prose: |
+      Read the findings from developer-os brain lint --json. For a staleness,
+      provenance or isolated finding on one note, write the whole revised note:
+      keep every frontmatter key you do not mean to change, created included,
+      set updated to today, and add links to related notes you read. For a gap
+      finding, write one new note of type compiled-note on that tag, with
+      sources listing the notes it draws on, at a path no note occupies. Pass
+      each note to the next step with --note naming its path, on stdin through
+      a quoted heredoc: developer-os capture --note <path> <<'NOTE' ... NOTE.
+      Propose at most limit captures, and at most one per note. For a
+      duplicates finding, do not capture anything: print the developer-os brain
+      refactor --merge or brain retire command with --dry-run for the person
+      to run, and never run either without --dry-run.
+  - id: propose
+    do: capture.writeNote
+validators:
+  - no more captures than limit, and at most one per note
+  - every structural proposal is printed with --dry-run and never applied
+recovery:
+  leaves: up to limit quarantined note captures
+  resume: developer-os review

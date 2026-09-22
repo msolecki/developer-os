@@ -21,8 +21,8 @@ describe("plugins/codex is a clean regeneration", () => {
 
   it("renders one skill per canonical workflow, plus the manifest", async () => {
     const expected = await renderAllForCodex();
-    expect(expected.filter((a) => a.path.endsWith("SKILL.md"))).toHaveLength(6);
-    expect(expected).toHaveLength(7);
+    expect(expected.filter((a) => a.path.endsWith("SKILL.md"))).toHaveLength(11);
+    expect(expected).toHaveLength(12);
   });
 
   it("contains no absolute machine path", async () => {
@@ -37,7 +37,7 @@ describe("plugins/codex is a clean regeneration", () => {
     const skills = [...(await readGeneratedTree()).entries()].filter(
       ([path]) => path.endsWith("SKILL.md") && !path.includes("developer-os-shared"),
     );
-    expect(skills).toHaveLength(5);
+    expect(skills).toHaveLength(10);
     for (const [path, contents] of skills) {
       expect(contents, path).toContain("preamble from shared");
     }

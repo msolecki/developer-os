@@ -54,6 +54,7 @@ describe("EFFECT_VOCABULARY", () => {
       "brain.reindex": { read: notes, write: indexes, ...brain, command: "developer-os brain reindex" },
       "brain.lint": { read: notes, write: [], ...brain, command: "developer-os brain lint" },
       "capture.write": { read: [], write: quarantine, ...capture, command: "developer-os capture" },
+      "capture.writeNote": { read: notes, write: quarantine, ...capture, owner: "A12b", command: "developer-os capture --note" },
       "capture.list": { read: quarantine, write: [], ...capture, command: "developer-os review" },
       "capture.setStatus": { read: [], write: quarantine, ...capture, command: "developer-os review" },
       "capture.edit": { read: quarantine, write: quarantine, ...capture, command: "developer-os review" },
@@ -294,7 +295,7 @@ describe("resolveScopeGlob", () => {
       ...footprint.write,
     ]);
     /**
-     * Four of the fourteen entries have empty read *and* write arrays, so
+     * Four of the fifteen entries have empty read *and* write arrays, so
      * without this the loop below can quietly shrink toward a no-op that scans
      * nothing.
      */

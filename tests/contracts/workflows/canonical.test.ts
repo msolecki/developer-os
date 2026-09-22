@@ -11,6 +11,11 @@ const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const WORKFLOWS = join(ROOT, "workflows");
 
 const EXPECTED = [
+  "brain-answer",
+  "brain-compile",
+  "brain-enhance",
+  "brain-garden",
+  "brain-report",
   "brain-search",
   "capture",
   "doctor",
@@ -49,7 +54,7 @@ function canonicalContracts(): readonly WorkflowContractV1[] {
 }
 
 describe("canonical workflows", () => {
-  it("ships exactly the six named by Workflow architecture former §10", async () => {
+  it("ships exactly the eleven canonical workflows", async () => {
     expect(await directories()).toStrictEqual([...EXPECTED]);
   });
 
@@ -70,38 +75,37 @@ describe("canonical workflows", () => {
     }
   });
 
-  it("keeps every vault write inside capture, review and ingest, and expresses each in verbs only", async () => {
+  it("writes outside quarantine only through ingest, and expresses that in effect verbs only", async () => {
     /**
-     * The name says all three. It used to say "review and ingest" while the
-     * assertion allowed `capture` as well — the assertion is right, because
-     * `content/_raw/quarantine/**` is a vault path and capture is the workflow
-     * that writes it, but somebody auditing the gate by its title believed a
-     * stronger property was checked than is.
+     * Brain spec §4.4 replaced "keeps every vault write inside capture, review
+     * and ingest": a workflow whose writes are quarantine-only may carry prose,
+     * because prose writes nothing and its only write is a capture verb.
      */
     const names = await directories();
-    /** Per scope. A sweep over an empty set proves nothing, and a sibling test asserting the count is not this test's guard. */
     expect(names.length).toBe(EXPECTED.length);
-
+    const outsideWriters: string[] = [];
     for (const name of names) {
-      const text = await readFile(join(WORKFLOWS, name, "workflow.yaml"), "utf8");
-      const result = loadWorkflow({ file: name, text });
-      const contract = result.contract;
-      expect(contract).not.toBeNull();
-      if (contract === null) continue;
-
-      if (contract.scopes.write.length > 0) {
-        expect(["review", "ingest", "capture"]).toContain(name);
-        expect(
-          contract.steps.filter((step) => step.prose !== undefined),
-          `${name} writes and must be expressed in effect verbs only`,
-        ).toStrictEqual([]);
-      }
+      const contract = mustLoad(`workflows/${name}/workflow.yaml`);
+      const outside = contract.scopes.write.filter((glob) => glob !== "content/_raw/quarantine/**");
+      if (outside.length === 0) continue;
+      outsideWriters.push(name);
+      expect(
+        contract.steps.filter((step) => step.prose !== undefined),
+        `${name} writes outside quarantine`,
+      ).toStrictEqual([]);
     }
+    expect(outsideWriters).toStrictEqual(["ingest"]);
+  });
+
+  it("declares every brain-* workflow's writes as quarantine alone", () => {
+    const brain = canonicalContracts().filter((c) => c.id.startsWith("brain-") && c.id !== "brain-search");
+    expect(brain).toHaveLength(5);
+    for (const c of brain) expect(c.scopes.write, c.id).toStrictEqual(["content/_raw/quarantine/**"]);
   });
 
   it("declares no trigger nothing can fire", () => {
     const contracts = canonicalContracts();
-    expect(contracts).toHaveLength(6);
+    expect(contracts).toHaveLength(11);
     for (const contract of contracts) {
       expect(contract.triggers, contract.id).not.toContain("session_end");
       expect(contract.triggers, contract.id).not.toContain("session_start");
