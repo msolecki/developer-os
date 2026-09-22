@@ -2,12 +2,18 @@ import { lstatSync, realpathSync } from "node:fs";
 import type { Stats } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
+import { parseInstructionId } from "@developer-os/core";
 import type {
   ArtifactOwner,
   CanonicalAbsolutePathV1,
   CanonicalPathEvidenceV1,
+  InstructionCategoryV1,
   ManifestAdmissionContextV1,
+  OwnerPathArmV1,
 } from "@developer-os/core";
+
+import { claudeInstructionPaths, codexInstructionPaths } from "../instructions/vendor-homes.js";
+import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
 
 /**
  * Resolves every ancestor of `path` that currently exists on disk against the
@@ -72,8 +78,52 @@ export function createCanonicalPathEvidence(): CanonicalPathEvidenceV1 {
 const OUTSIDE_AUTHORITY_SUFFIX = "/outside-authority";
 
 export type OwnerPathConfinementV1 =
-  | { readonly kind: "confined"; readonly roots: readonly CanonicalAbsolutePathV1[] }
+  | { readonly kind: "confined"; readonly roots: readonly CanonicalAbsolutePathV1[]; readonly vendors: VendorHomesV1 | null }
   | { readonly kind: "unconfined"; readonly reason: string };
+
+function isContent(arm: OwnerPathArmV1, categories: readonly InstructionCategoryV1[]): boolean {
+  return arm.kind === "instruction" && arm.mode === "content" && categories.includes(arm.category);
+}
+
+function isBlock(arm: OwnerPathArmV1): boolean {
+  return arm.kind === "instruction" && arm.mode === "block" && arm.category === "vendor-file";
+}
+
+/** `<dir>/developer-os-<id><extension>` with `<id>` a valid `InstructionIdV1`. */
+function isPrefixedLeaf(dir: string, extension: string, path: string): boolean {
+  if (dirname(path) !== dir) return false;
+  const leaf = basename(path);
+  if (!leaf.startsWith("developer-os-") || !leaf.endsWith(extension)) return false;
+  try {
+    parseInstructionId(leaf.slice("developer-os-".length, -extension.length));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Spec §2.2's closed table: exact, owner-bound and arm-bound. Nothing here is a general root. */
+function isVendorAuthorized(vendors: VendorHomesV1, owner: ArtifactOwner, path: string, arm: OwnerPathArmV1): boolean {
+  if (path.split("/").slice(1).some((segment) => segment === "" || segment === "." || segment === "..")) return false;
+  if (owner === "claude") {
+    const claude = claudeInstructionPaths(vendors);
+    if (path.startsWith(`${claude.pluginRoot}/`)) {
+      return arm.kind === "file" || isContent(arm, ["agent", "skill", "command"]);
+    }
+    if (isPrefixedLeaf(claude.rulesDir, ".md", path)) return isContent(arm, ["scoped-rule"]);
+    if (isPrefixedLeaf(claude.outputStylesDir, ".md", path)) return isContent(arm, ["output-style"]);
+    if (path === claude.instructionFile) return isBlock(arm);
+    return arm.kind === "directory"
+      && [dirname(claude.rulesDir), dirname(claude.pluginRoot), claude.rulesDir, claude.outputStylesDir].includes(path);
+  }
+  if (owner === "codex") {
+    const codex = codexInstructionPaths(vendors);
+    if (isPrefixedLeaf(codex.agentsDir, ".toml", path)) return isContent(arm, ["agent"]);
+    if (path === codex.instructionFile) return isBlock(arm);
+    return arm.kind === "directory" && (path === vendors.codexHome || path === codex.agentsDir);
+  }
+  return false;
+}
 
 /**
  * There is exactly one factory. A call site with no live root to confine
@@ -82,6 +132,9 @@ export type OwnerPathConfinementV1 =
  * `reason` is not read by the predicate; it exists so an unconfined call site
  * cannot compile without a written justification, and readers see it right at
  * the call rather than trusting an absent argument.
+ *
+ * `vendors` adds spec §2.2's closed vendor authorization on top of `roots`;
+ * `null` confines to `roots` alone.
  *
  * A refused path is rewritten to a value that is guaranteed to differ from
  * its input, never thrown here: `ManifestAdmissionContextV1.admitOwnerPath`'s
@@ -95,9 +148,10 @@ export function createOwnerPathAdmission(
   if (confinement.kind === "unconfined") {
     return (_owner: ArtifactOwner, path: CanonicalAbsolutePathV1) => path;
   }
-  const { roots } = confinement;
-  return (_owner: ArtifactOwner, path: CanonicalAbsolutePathV1) =>
+  const { roots, vendors } = confinement;
+  return (owner: ArtifactOwner, path: CanonicalAbsolutePathV1, arm: OwnerPathArmV1) =>
     roots.some((root) => path === root || path.startsWith(`${root}/`))
+      || (vendors !== null && isVendorAuthorized(vendors, owner, path, arm))
       ? path
       : (`${path}${OUTSIDE_AUTHORITY_SUFFIX}` as CanonicalAbsolutePathV1);
 }

@@ -34,6 +34,8 @@ import {
 } from "../context.js";
 import type { CliContext } from "../context.js";
 import { createCanonicalPathEvidence, createOwnerPathAdmission } from "../bootstrap/admission.js";
+import { resolveVendorHomes } from "../instructions/vendor-homes.js";
+import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
 import type { BootstrapEvidenceAdmissionV1 } from "../bootstrap/report.js";
@@ -591,10 +593,11 @@ function describePlan(removable: readonly string[]): string {
 export function manifestAdmissionFor(
   paths: RuntimePaths,
   refusedOwnerPaths: string[],
+  vendors: VendorHomesV1 | null = null,
 ): ManifestAdmissionContextV1 {
   const productHome = paths.home as CanonicalAbsolutePathV1;
   const brainPath = paths.brain as CanonicalAbsolutePathV1;
-  const admitOwnerPath = createOwnerPathAdmission({ kind: "confined", roots: [productHome, brainPath] });
+  const admitOwnerPath = createOwnerPathAdmission({ kind: "confined", roots: [productHome, brainPath], vendors });
   return {
     evidence: createCanonicalPathEvidence(),
     sourceRoot: productHome,
@@ -707,7 +710,9 @@ async function readUninstallManifest(
   const refusedOwnerPaths: string[] = [];
   let manifest: InstallationManifest | null;
   try {
-    manifest = await context.manifests.readOptional(manifestAdmissionFor(paths, refusedOwnerPaths));
+    manifest = await context.manifests.readOptional(
+      manifestAdmissionFor(paths, refusedOwnerPaths, resolveVendorHomes(context.env, context.userHome, paths.home)),
+    );
   } catch (error) {
     const recordedPath = refusedOwnerPaths[0];
     if (recordedPath === undefined) throw error;

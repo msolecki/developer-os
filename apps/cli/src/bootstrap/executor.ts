@@ -2403,7 +2403,9 @@ export class BootstrapExecutor {
    * product home it is installing into and the Brain the request declares
    * (`FreshInitRequestV1.brainPath`). Confining against them here is real
    * confinement, not a placeholder — unlike `report.ts`'s `exactV2Handoff`,
-   * which inspects a retained plan with no live request in scope.
+   * which inspects a retained plan with no live request in scope. `vendors`
+   * is null: a fresh-init manifest never carries a vendor row, since attach
+   * runs later in its own gated transaction (spec §6.1).
    */
   private manifestAdmission(
     request: FreshInitRequestV1,
@@ -2417,6 +2419,7 @@ export class BootstrapExecutor {
       admitOwnerPath: createOwnerPathAdmission({
         kind: "confined",
         roots: [productHome, request.brainPath as CanonicalAbsolutePathV1],
+        vendors: null,
       }),
     };
   }

@@ -46,6 +46,7 @@ import { createCanonicalPathEvidence, createOwnerPathAdmission } from "../bootst
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
 import type { CliContext } from "../context.js";
+import { resolveVendorHomes } from "../instructions/vendor-homes.js";
 import { admitInstalledV2Home, observeManifestSchema } from "./admission.js";
 import type { AdmittedV2HomeV1 } from "./admission.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
@@ -122,7 +123,8 @@ function globalLockPath(paths: RuntimePaths): CanonicalAbsolutePathV1 {
  * `lifecycle/mutation-gate.ts` → `commands/uninstall.ts` → `context.ts` a runtime import
  * cycle through the composition root.
  */
-function gateManifestAdmission(paths: RuntimePaths): ManifestAdmissionContextV1 {
+function gateManifestAdmission(context: CliContext): ManifestAdmissionContextV1 {
+  const { paths } = context;
   const productHome = paths.home as CanonicalAbsolutePathV1;
   return {
     evidence: createCanonicalPathEvidence(),
@@ -131,6 +133,7 @@ function gateManifestAdmission(paths: RuntimePaths): ManifestAdmissionContextV1 
     admitOwnerPath: createOwnerPathAdmission({
       kind: "confined",
       roots: [productHome, paths.brain as CanonicalAbsolutePathV1],
+      vendors: resolveVendorHomes(context.env, context.userHome, paths.home),
     }),
   };
 }
@@ -181,7 +184,7 @@ export async function classifyMutationHome(
     admitted: await admitInstalledV2Home({
       fs,
       paths: context.paths,
-      manifestAdmission: gateManifestAdmission(context.paths),
+      manifestAdmission: gateManifestAdmission(context),
       effectiveUid,
     }),
   };
@@ -376,7 +379,7 @@ export async function withLifecycleMutation<T>(
     const admitted = await admitInstalledV2Home({
       fs: lifecycle.fs,
       paths: context.paths,
-      manifestAdmission: gateManifestAdmission(context.paths),
+      manifestAdmission: gateManifestAdmission(context),
       effectiveUid: lifecycle.effectiveUid,
     });
     if (admitted.globalLock.dev !== held.dev || admitted.globalLock.ino !== held.ino) {
