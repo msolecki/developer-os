@@ -1209,15 +1209,49 @@ describe("import and project dispatch", () => {
     [["import", "notes"]],
     [["import", "--claude-memory"]],
     [["import", "--dry-run", "--limit", "5", "--json"]],
+  ])("admits %j and reaches import, which refuses the uninitialized fixture, exit 1", async (argv) => {
+    const fixture = await createCommandFixture("dispatch-a14");
+    expect(await run(argv, fixture.io, () => fixture.context)).toBe(
+      EXIT_CODES.operationalFailure,
+    );
+    const output = [...fixture.io.out, ...fixture.io.err].join("\n");
+    expect(output).not.toContain("Usage: developer-os <command>");
+    expect(output).toContain("Developer OS is not initialized, so there is no vault to import into");
+  });
+
+  it("publishes import's uninitialized refusal as kind not_initialized", async () => {
+    const fixture = await createCommandFixture("dispatch-a14-kind");
+    await run(["import", "--dry-run", "--json"], fixture.io, () => fixture.context);
+    expect(lastJsonError(fixture.io.out)).toMatchObject({
+      code: EXIT_CODES.operationalFailure,
+      kind: "not_initialized",
+    });
+  });
+
+  /** `PROJECT_TEMPLATE` is still empty, so `project init` refuses before it reads anything. */
+  it.each([
     [["project", "init"]],
     [["project", "init", "some-dir", "--dry-run", "--json"]],
-    [["project", "check"]],
-    [["project", "check", "some-dir", "--json"]],
-  ])("admits %j and reaches the not-implemented stub, exit 4", async (argv) => {
+  ])("admits %j and reaches project init's empty-template refusal, exit 4", async (argv) => {
     const fixture = await createCommandFixture("dispatch-a14");
     expect(await run(argv, fixture.io, () => fixture.context)).toBe(
       EXIT_CODES.capabilityUnavailable,
     );
+  });
+
+  it("admits project check with a directory and reaches its missing-directory refusal", async () => {
+    const fixture = await createCommandFixture("dispatch-a14");
+    expect(
+      await run(["project", "check", "some-dir", "--json"], fixture.io, () => fixture.context),
+    ).toBe(EXIT_CODES.invalidInput);
+    expect(lastJsonError(fixture.io.out).kind).toBe("project_root_not_directory");
+  });
+
+  it("admits a bare project check", async () => {
+    /** It checks the process's working directory, so only admission is deterministic here. */
+    const fixture = await createCommandFixture("dispatch-a14");
+    await run(["project", "check"], fixture.io, () => fixture.context);
+    expect(fixture.io.err.join("\n")).not.toContain("Usage: developer-os <command>");
   });
 
   it("lists import and project in the usage text", async () => {
