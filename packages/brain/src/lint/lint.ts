@@ -1,7 +1,11 @@
 import type { BrainConfigV1 } from "@developer-os/core";
 import { isVisuallyBlank, perceptualKey } from "@developer-os/security";
 
-import { compareCanonical, PRIVATE_FOLDERS } from "../discovery/index.js";
+import {
+  compareCanonical,
+  compareRawBytes,
+  PRIVATE_FOLDERS,
+} from "../discovery/index.js";
 import { buildIndex, renderArtifacts } from "../indexes/index.js";
 import type {
   IndexBuildRequest,
@@ -17,7 +21,9 @@ export type LintClass =
   | "links"
   | "duplicates"
   | "staleness"
-  | "index-drift";
+  | "index-drift"
+  | "isolated"
+  | "gap";
 
 export type LintSeverity = "error" | "warn" | "info";
 
@@ -736,6 +742,51 @@ function stalenessFindings(
   return findings;
 }
 
+/* ------------------------------------------------------------ isolated, gap */
+
+function isolatedFindings(build: IndexBuildResult): readonly LintFinding[] {
+  const linked = new Set<string>();
+  for (const edge of build.graph.edges) {
+    if (edge.source === edge.target) continue;
+    linked.add(edge.source);
+    linked.add(edge.target);
+  }
+  return build.index.notes
+    .filter((note) => !linked.has(note.path))
+    .map((note) =>
+      finding("isolated", "info", note.path, null, "no link to or from this note"),
+    );
+}
+
+/** A constant, not configuration (spec §5.3). */
+const GAP_MIN_NOTES = 3;
+
+function gapFindings(build: IndexBuildResult): readonly LintFinding[] {
+  const compiled = new Set(
+    build.index.notes
+      .filter((note) => note.type === "compiled-note")
+      .map((note) => note.path),
+  );
+  const findings: LintFinding[] = [];
+  for (const { tag, paths } of build.index.tags) {
+    if (paths.length < GAP_MIN_NOTES) continue;
+    if (paths.some((path) => compiled.has(path))) continue;
+    const lowest = [...paths].sort(
+      (a, b) => compareCanonical(a, b) || compareRawBytes(a, b),
+    )[0] as string;
+    findings.push(
+      finding(
+        "gap",
+        "info",
+        lowest,
+        "tags",
+        `${String(paths.length)} notes share the tag ${renderValue(tag)} and no compiled note covers it`,
+      ),
+    );
+  }
+  return findings;
+}
+
 /* ---------------------------------------------------------------- index-drift */
 
 async function driftFindings(
@@ -820,6 +871,8 @@ export async function lintBuild(
     ...linkFindings(build, config),
     ...duplicateFindings(build),
     ...stalenessFindings(build, config, request.today),
+    ...isolatedFindings(build),
+    ...gapFindings(build),
     ...(await driftFindings(request, build)),
   ].sort(
     (a, b) =>

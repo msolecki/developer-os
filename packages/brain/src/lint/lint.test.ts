@@ -1517,3 +1517,143 @@ describe("the artifacts a human opens", () => {
     expect(writtenArtifacts(built)[PATHS.index] ?? "").toContain("\u202E");
   });
 });
+
+describe("isolated", () => {
+  it("flags a note that is neither source nor target of any edge, self-edges excluded", async () => {
+    const result = await lintMemory({
+      "content/DEV/a.md": note({ title: "A" }, "[[DEV/b]]\n"),
+      "content/DEV/b.md": note({ title: "B" }),
+      "content/DEV/c.md": note({ title: "C" }, "[[DEV/c]]\n"),
+    });
+    const found = of(result, "isolated");
+    expect(found.length).toBeGreaterThan(0);
+    expect(found).toStrictEqual([
+      {
+        class: "isolated",
+        severity: "info",
+        path: "content/DEV/c.md",
+        key: null,
+        message: "no link to or from this note",
+        line: null,
+      },
+    ]);
+  });
+});
+
+describe("gap", () => {
+  it("flags a tag on three notes when none of them is a compiled-note, at the lowest path", async () => {
+    const result = await lintMemory({
+      "content/DEV/z.md": note({ title: "Z", tags: "[timers]" }),
+      "content/DEV/a.md": note({ title: "A", tags: "[timers]" }),
+      "content/DEV/m.md": note({ title: "M", tags: "[timers]" }),
+    });
+    expect(of(result, "gap")).toStrictEqual([
+      {
+        class: "gap",
+        severity: "info",
+        path: "content/DEV/a.md",
+        key: "tags",
+        message: "3 notes share the tag timers and no compiled note covers it",
+        line: null,
+      },
+    ]);
+  });
+
+  it("is silent at two notes, and silent when one of three is a compiled-note", async () => {
+    const two = await lintMemory({
+      "content/DEV/a.md": note({ title: "A", tags: "[t]" }),
+      "content/DEV/b.md": note({ title: "B", tags: "[t]" }),
+    });
+    expect(of(two, "gap")).toStrictEqual([]);
+
+    const covered = await lintMemory({
+      "content/DEV/a.md": note({ title: "A", tags: "[t]" }),
+      "content/DEV/b.md": note({ title: "B", tags: "[t]" }),
+      "content/INFRA/c.md": note({ title: "C", tags: "[t]", type: "compiled-note" }),
+    });
+    expect(of(covered, "gap")).toStrictEqual([]);
+
+    /** Non-empty proof: the same shape without the compiled note does fire. */
+    const uncovered = await lintMemory({
+      "content/DEV/a.md": note({ title: "A", tags: "[t]" }),
+      "content/DEV/b.md": note({ title: "B", tags: "[t]" }),
+      "content/INFRA/c.md": note({ title: "C", tags: "[t]" }),
+    });
+    expect(of(uncovered, "gap")).toHaveLength(1);
+  });
+
+  it("screens a control character out of the tag and caps a long tag in the message", async () => {
+    const hostile = await lintMemory({
+      "content/DEV/a.md": note({ title: "A", tags: '["ti\\u001bme\\u202Ers"]' }),
+      "content/DEV/b.md": note({ title: "B", tags: '["ti\\u001bme\\u202Ers"]' }),
+      "content/DEV/c.md": note({ title: "C", tags: '["ti\\u001bme\\u202Ers"]' }),
+    });
+    const screened = of(hostile, "gap");
+    expect(screened).toHaveLength(1);
+    expect(screened[0]?.message).not.toMatch(/[\p{Cc}\p{Cf}]/u);
+    expect(screened[0]?.message).toContain("ti me");
+
+    const long = "t".repeat(200);
+    const capped = await lintMemory({
+      "content/DEV/a.md": note({ title: "A", tags: `[${long}]` }),
+      "content/DEV/b.md": note({ title: "B", tags: `[${long}]` }),
+      "content/DEV/c.md": note({ title: "C", tags: `[${long}]` }),
+    });
+    const message = of(capped, "gap")[0]?.message ?? "";
+    expect(message).not.toContain(long);
+    expect(message).toContain("…");
+    expect(message.length).toBeLessThan(140);
+  });
+});
+
+describe("isolated and gap together", () => {
+  /** Reviewed inside the staleness threshold, so no warn rides along. */
+  const fresh = { reviewed: "2026-08-01" };
+  const vault = {
+    "content/DEV/z.md": note({ ...fresh, title: "Z", tags: "[timers]" }, "[[DEV/y]]\n"),
+    "content/DEV/y.md": note({ ...fresh, title: "Y", tags: "[timers]" }),
+    "content/DEV/a.md": note({ ...fresh, title: "A", tags: "[timers]" }),
+    "content/INFRA/q.md": note({ ...fresh, title: "Q", tags: "[infra]" }),
+  };
+
+  it("raises neither errorCount nor warnCount", async () => {
+    const result = await lintMemory(vault);
+    const added = result.findings.filter(
+      (f) => f.class === "isolated" || f.class === "gap",
+    );
+    expect(added.length).toBeGreaterThan(0);
+    expect(added.every((f) => f.severity === "info")).toBe(true);
+    expect(result.errorCount).toBe(0);
+    expect(result.warnCount).toBe(0);
+    expect(result.infoCount).toBe(result.findings.filter((f) => f.severity === "info").length);
+  });
+
+  it("stays sorted by path, then class, then message", async () => {
+    const result = await lintMemory(vault);
+    const keys = result.findings.map((f) => `${f.path} ${f.class} ${f.message}`);
+    expect(keys.length).toBeGreaterThan(1);
+    expect(keys).toEqual([...keys].sort(compareCanonical));
+    expect(result.findings.map((f) => [f.path, f.class])).toStrictEqual([
+      ["content/DEV/a.md", "gap"],
+      ["content/DEV/a.md", "isolated"],
+      ["content/INFRA/q.md", "isolated"],
+    ]);
+  });
+
+  it("is identical under a reversed directory reader", async () => {
+    const forward = await lintMemory(vault);
+    const base = memoryBuild(vault);
+    const reversedBuild: IndexBuildRequest = {
+      ...base,
+      reader: {
+        readDir: async (path: string) => [...(await base.reader.readDir(path))].reverse(),
+      },
+    };
+    const built = await buildIndex(reversedBuild);
+    const backward = await lintVault(
+      lintRequestFor(writtenArtifacts(built), TODAY, reversedBuild),
+    );
+    expect(forward.findings.length).toBeGreaterThan(0);
+    expect(backward.findings).toStrictEqual(forward.findings);
+  });
+});
