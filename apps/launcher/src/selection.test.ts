@@ -314,7 +314,7 @@ describe("selectLauncherCandidate", () => {
 describe("buildLauncherProcessRequest", () => {
   it("builds a shell-free absolute execution request with one read-only FD 3 reservation", async () => {
     const result = await selectLauncherCandidate(absentActiveFixture());
-    const request = buildLauncherProcessRequest(result, { HOME: "/Users/test", DEVELOPER_OS_HOME: PRODUCT_HOME }, ["status"]);
+    const request = buildLauncherProcessRequest(result, { HOME: "/Users/test", DEVELOPER_OS_HOME: PRODUCT_HOME }, ["status"], true);
 
     expect(request.executable).toBe(result.bundle.runtimeEntrypoint);
     expect(request.executable.startsWith("/")).toBe(true);
@@ -324,13 +324,21 @@ describe("buildLauncherProcessRequest", () => {
     expect(request.extraDescriptors).toEqual([{ fd: 3, mode: "read_only_pipe" }]);
   });
 
+  it("omits the trust-fd flag and the FD 3 reservation when no trust pipe is handed over", async () => {
+    const result = await selectLauncherCandidate(absentActiveFixture());
+    const request = buildLauncherProcessRequest(result, { HOME: "/Users/test", DEVELOPER_OS_HOME: PRODUCT_HOME }, ["status"], false);
+
+    expect(request.argv).toEqual([result.bundle.entrypoint, "status"]);
+    expect(request.extraDescriptors).toEqual([]);
+  });
+
   it("forces bootstrap recovery argv to exactly init, ignoring the public argv", async () => {
     const request = { ...absentActiveFixture(), bootstrapClosure: { kind: "non_terminal" as const } };
     const result = await selectLauncherCandidate(request);
     const processRequest = buildLauncherProcessRequest(result, { HOME: "/Users/test", DEVELOPER_OS_HOME: PRODUCT_HOME }, [
       "update",
       "--apply",
-    ]);
+    ], true);
     expect(processRequest.argv.slice(2)).toEqual(["init"]);
   });
 });

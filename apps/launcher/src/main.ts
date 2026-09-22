@@ -232,11 +232,11 @@ async function main(): Promise<void> {
     verifyRetainedDocument: createLauncherRetainedDocumentVerifier(LAUNCHER_OFFLINE_RELEASE_ROOTS),
   });
 
-  const request = buildLauncherProcessRequest(selection, env, process.argv.slice(2));
   const trust = compileLauncherOfflineReleaseTrust({
     acceptedRoots: LAUNCHER_OFFLINE_RELEASE_ROOTS,
     metadataRedirectOrigins: LAUNCHER_METADATA_REDIRECT_ORIGINS,
   });
+  const request = buildLauncherProcessRequest(selection, env, process.argv.slice(2), trust !== null);
 
   await execAdmittedRelease(request, trust);
 }

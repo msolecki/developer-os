@@ -82,8 +82,11 @@ export interface LauncherProcessRequestV1 {
   readonly executable: CanonicalAbsolutePathV1;
   readonly argv: readonly string[];
   readonly env: LauncherEnvironmentV1;
-  /** The sole extra descriptor the launcher ever reserves: read-only, and exactly one. */
-  readonly extraDescriptors: readonly [{ readonly fd: 3; readonly mode: "read_only_pipe" }];
+  /**
+   * The sole extra descriptor the launcher ever reserves: read-only, and
+   * exactly one -- or none when no offline trust is configured.
+   */
+  readonly extraDescriptors: readonly [] | readonly [{ readonly fd: 3; readonly mode: "read_only_pipe" }];
 }
 
 const MAX_ACTIVE_BYTES = 16 * 1024;
@@ -373,17 +376,23 @@ export async function selectLauncherCandidate(
  * argument, then the original public CLI argv — or, under bootstrap
  * recovery, exactly `init` in its place (Spec 2 §3.1). The FD 3 descriptor
  * is reserved read-only here; Task 11 owns actually opening and writing it.
+ * Without a trust pipe both the flag and the reservation are omitted: the
+ * CLI's strict parser refuses an unknown option, so a flag naming a
+ * descriptor that was never handed over would fail every launch.
  */
 export function buildLauncherProcessRequest(
   selection: LauncherSelectionV1,
   env: LauncherEnvironmentV1,
   publicArgv: readonly string[],
+  trustPipe: boolean,
 ): LauncherProcessRequestV1 {
   const trailingArgv = selection.kind === "bootstrap_recovery" ? selection.argv : publicArgv;
   return {
     executable: selection.bundle.runtimeEntrypoint,
-    argv: [selection.bundle.entrypoint, "--offline-release-trust-fd=3", ...trailingArgv],
+    argv: trustPipe
+      ? [selection.bundle.entrypoint, "--offline-release-trust-fd=3", ...trailingArgv]
+      : [selection.bundle.entrypoint, ...trailingArgv],
     env,
-    extraDescriptors: [{ fd: 3, mode: "read_only_pipe" }],
+    extraDescriptors: trustPipe ? [{ fd: 3, mode: "read_only_pipe" }] : [],
   };
 }
