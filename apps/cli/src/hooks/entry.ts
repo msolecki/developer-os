@@ -1,10 +1,13 @@
 import { randomBytes } from "node:crypto";
 
+import { resolveRuntimePaths } from "@developer-os/core";
 import { assertSafeCommand, createRedactor, NodeProcessRunner } from "@developer-os/security";
 
+import { pathEnvironmentFor, PRODUCT_VERSION } from "../context.js";
 import type { CliIo } from "../io.js";
 import { HOOK_FAIL_MODE, parseHookArgv } from "./argv.js";
-import type { HookVendor } from "./argv.js";
+import type { HookVendor, HookVerb } from "./argv.js";
+import { recordHookFiring } from "./firing-records.js";
 import { writeHookOutcome } from "./outcome.js";
 import { decodeHookPayload, MAX_HOOK_PAYLOAD_BYTES } from "./payload.js";
 import { HOOK_HANDLERS } from "./registry.js";
@@ -15,6 +18,31 @@ export interface HookEnvironment {
   readonly userHome: string | null;
   readonly processCwd: () => string;
   readonly nodeExecutable: string;
+  /** Test seam; defaults to `recordHookFiring` under the resolved product home. */
+  readonly recordFiring?: (vendor: HookVendor, verb: HookVerb) => Promise<void>;
+}
+
+async function recordFiring(environment: HookEnvironment, vendor: HookVendor, verb: HookVerb): Promise<void> {
+  try {
+    if (environment.recordFiring !== undefined) {
+      await environment.recordFiring(vendor, verb);
+      return;
+    }
+    if (environment.userHome === null) return;
+    const paths = resolveRuntimePaths(pathEnvironmentFor({ userHome: environment.userHome, env: environment.env }));
+    await recordHookFiring({
+      productHome: paths.home,
+      stateDirectory: paths.stateDir,
+      userHome: environment.userHome,
+      vendor,
+      verb,
+      now: new Date(),
+      productVersion: PRODUCT_VERSION,
+      effectiveUid: process.getuid?.() ?? -1,
+    });
+  } catch {
+    // Any error is swallowed: the record is an observation, not part of the outcome.
+  }
 }
 
 /**
@@ -40,6 +68,7 @@ export async function runHookMode(
       io,
       redactText,
     );
+  let fired: HookVerb | null = null;
   try {
     if (environment?.env.DEVELOPER_OS_HOOK_ACTIVE === "1") return 0;
     if (!parsed.ok) return failed(parsed.failMode, parsed.vendor, "hook argv refused");
@@ -61,6 +90,7 @@ export async function runHookMode(
       io,
       createContext,
     };
+    fired = parsed.verb;
     const outcome = await handler(decoded.payload, runtime);
     return writeHookOutcome(outcome, parsed.vendor, io, redactText);
   } catch {
@@ -69,5 +99,7 @@ export async function runHookMode(
       parsed.ok ? parsed.vendor : "claude",
       "hook failed internally",
     );
+  } finally {
+    if (fired !== null && parsed.ok && environment !== undefined) await recordFiring(environment, parsed.vendor, fired);
   }
 }

@@ -4,7 +4,7 @@ import {
   probeClaude,
   resolveCapabilities,
 } from "@developer-os/adapter-claude";
-import type { ClaudeCapabilities } from "@developer-os/adapter-claude";
+import type { ClaudeCapabilities, ProbeObservation } from "@developer-os/adapter-claude";
 import { readdir } from "node:fs/promises";
 
 import type { ProcessRunner } from "@developer-os/security";
@@ -45,6 +45,12 @@ export interface ClaudeCapabilityRequest {
    */
   readonly probe?: boolean;
   /**
+   * `plugin_hooks` and `session_start_injection` as read from the firing
+   * records under `state/hooks/` (A13 §8.1). They are the only source for those
+   * two keys: a probe that lists or validates the tree saw it loaded, not firing.
+   */
+  readonly firingObservations?: ReadonlyMap<string, ProbeObservation>;
+  /**
    * Lists the plugin directory, so the probe can require the artifact it is
    * about to claim. Injected for tests; the default reads the real directory,
    * which is a read and not a mutation.
@@ -82,7 +88,7 @@ export interface ClaudeCapabilityReport {
  * to `resolveCapabilities` in both adapters and to `allUnknown` in the Codex
  * command beside this one; all four sites are the same gap.
  *
- * The six `not-used` keys stay `unknown` here on purpose. `not-used` is a claim
+ * The four `not-used` keys stay `unknown` here on purpose. `not-used` is a claim
  * about a resolved matrix; this one resolves nothing, and Claude architecture former §9.2's rule is
  * that a report about an install nobody examined says only that.
  */
@@ -99,6 +105,20 @@ function allUnknown(): ClaudeCapabilities {
     durable_project_guidance: "unknown",
   };
   return Object.freeze(resolved);
+}
+
+const FIRING_KEYS = ["plugin_hooks", "session_start_injection"] as const;
+
+/** NEW-65: listing is not firing, so only these two keys are taken from the records. */
+function firingOnly(
+  observations: ReadonlyMap<string, ProbeObservation> | undefined,
+): ReadonlyMap<string, ProbeObservation> {
+  const kept = new Map<string, ProbeObservation>();
+  for (const key of FIRING_KEYS) {
+    const observation = observations?.get(key);
+    if (observation !== undefined) kept.set(key, observation);
+  }
+  return kept;
 }
 
 function summarise(capabilities: ClaudeCapabilities): string {
@@ -179,8 +199,15 @@ export async function reportClaudeCapabilities(
   });
   if (installation === null) return unreadable();
 
+  const firing = firingOnly(request.firingObservations);
+
   if (request.probe !== true) {
-    const capabilities = allUnknown();
+    const fired = resolveCapabilities(installation.version, firing);
+    const capabilities: ClaudeCapabilities = Object.freeze({
+      ...allUnknown(),
+      plugin_hooks: fired.plugin_hooks,
+      session_start_injection: fired.session_start_injection,
+    });
     return {
       installed: true,
       version: installation.version,
@@ -197,7 +224,10 @@ export async function reportClaudeCapabilities(
       request.listPluginFiles ??
       (() => readdir(request.pluginDirectory, { recursive: true })),
   });
-  const capabilities = resolveCapabilities(installation.version, observations);
+  const merged = new Map(observations);
+  for (const key of FIRING_KEYS) merged.delete(key);
+  for (const [key, observation] of firing) merged.set(key, observation);
+  const capabilities = resolveCapabilities(installation.version, merged);
 
   return {
     installed: true,

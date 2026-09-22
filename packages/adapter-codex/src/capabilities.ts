@@ -13,19 +13,19 @@ export type CodexCapabilities = Readonly<Record<CodexCapabilityKey, CapabilitySt
  * surfaces the product uses is one product decision rather than two vendor
  * ones.
  *
- * `plugin_hooks` was already here under the name `UNSETTLED`: this subsystem
- * ships no hooks file (see the plan's opening decisions) and Codex architecture former §15.1 records
- * the plugin-bundled path as documented and unobserved. The other five join it
- * because knowledge-pipeline architecture note §2 declines both automatic capture paths —
- * no lifecycle hook fires, and no `developer-os run codex` wrapper is built.
+ * `plugin_hooks` and `session_start_injection` left this list with A13, in
+ * the same change as the Claude twin: the observation for both keys is a Codex
+ * firing record under `state/hooks/`, never a plugin listing (A13 §8.1), so
+ * until a trusted hook has fired both stay `unknown`. The two capture keys stay
+ * because knowledge-pipeline architecture note §2 declines both automatic
+ * capture paths — no capture hook fires, and no `developer-os run codex`
+ * wrapper is built.
  *
  * **Removing a key from this list requires, in the same change, the artifact it
  * describes and a test that observed it working.** That rule is why
  * `plugin_hooks` never resolved to `yes` over a file that does not exist.
  */
 export const CODEX_NOT_USED_KEYS: readonly CodexCapabilityKey[] = [
-  "plugin_hooks",
-  "session_start_injection",
   "session_end_capture",
   "pre_compact_backup",
   "subagents",

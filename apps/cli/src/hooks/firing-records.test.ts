@@ -1,0 +1,309 @@
+import { chmod, mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { encodeHookFiringRecord } from "@developer-os/core";
+import type { HookFiringRecordV1 } from "@developer-os/core";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import type { CliIo } from "../io.js";
+import type { HookVendor, HookVerb } from "./argv.js";
+import { runHookMode } from "./entry.js";
+import type { HookEnvironment } from "./entry.js";
+import {
+  FIRING_RECORD_REFRESH_MS,
+  HOOK_EVENT_OF,
+  readHookFiringObservations,
+  recordHookFiring,
+} from "./firing-records.js";
+import type { HookFiringRequest } from "./firing-records.js";
+import { HOOK_HANDLERS } from "./registry.js";
+import type { HookContextFactory, HookVerbHandler } from "./registry.js";
+
+const NOW = new Date("2026-09-22T12:00:00.000Z");
+const HOUR = 3_600_000;
+const uid = process.getuid?.() ?? -1;
+
+let root: string;
+let productHome: string;
+let stateDirectory: string;
+let hooks: string;
+
+beforeEach(async () => {
+  root = await realpath(await mkdtemp(join(tmpdir(), "dos-firing-")));
+  productHome = join(root, ".developer-os");
+  stateDirectory = join(productHome, "state");
+  hooks = join(stateDirectory, "hooks");
+  await mkdir(productHome, { mode: 0o700 });
+});
+
+afterEach(async () => {
+  await chmod(hooks, 0o700).catch(() => undefined);
+  await rm(root, { recursive: true, force: true });
+});
+
+async function createHooksDirectory(mode = 0o700): Promise<void> {
+  await mkdir(hooks, { recursive: true });
+  await chmod(hooks, mode);
+}
+
+function withoutGateSeam(): HookFiringRequest {
+  return {
+    productHome,
+    stateDirectory,
+    userHome: root,
+    vendor: "claude",
+    verb: "stop",
+    now: NOW,
+    productVersion: "0.0.0",
+    effectiveUid: uid,
+  };
+}
+
+function request(overrides: Partial<HookFiringRequest> = {}): HookFiringRequest {
+  return { ...withoutGateSeam(), admit: () => Promise.resolve(), ...overrides };
+}
+
+function record(event: string, firstSeen: Date, lastSeen: Date, vendor: HookVendor = "claude"): string {
+  const value: HookFiringRecordV1 = {
+    schemaVersion: 1,
+    vendor,
+    event,
+    productVersion: "0.0.0",
+    firstSeen: firstSeen.toISOString(),
+    lastSeen: lastSeen.toISOString(),
+  };
+  return encodeHookFiringRecord(value);
+}
+
+describe("HOOK_EVENT_OF", () => {
+  it("maps every Claude verb to its §3 event and leaves Codex unset until Task 15", () => {
+    expect(HOOK_EVENT_OF.claude).toStrictEqual({
+      inject: "SessionStart",
+      command: "PreToolUse",
+      commit: "PreToolUse",
+      path: "PreToolUse",
+      format: "PostToolUse",
+      edit: "PostToolUse",
+      stop: "Stop",
+      prompt: "UserPromptSubmit",
+    });
+    expect(HOOK_EVENT_OF.codex).toBeNull();
+  });
+});
+
+describe("recordHookFiring", () => {
+  it("writes nothing and creates nothing when the directory is absent", async () => {
+    await recordHookFiring(request());
+    expect(await readdir(productHome)).toStrictEqual([]);
+  });
+
+  it("writes nothing into a directory with mode 0755", async () => {
+    await createHooksDirectory(0o755);
+    await recordHookFiring(request());
+    expect(await readdir(hooks)).toStrictEqual([]);
+  });
+
+  it("writes nothing when the directory belongs to another uid", async () => {
+    await createHooksDirectory();
+    await recordHookFiring(request({ effectiveUid: uid + 1 }));
+    expect(await readdir(hooks)).toStrictEqual([]);
+  });
+
+  it("writes a fresh record with firstSeen equal to lastSeen equal to now", async () => {
+    await createHooksDirectory();
+    await recordHookFiring(request());
+    expect(await readFile(join(hooks, "claude.Stop.json"), "utf8")).toBe(record("Stop", NOW, NOW));
+  });
+
+  it("leaves no temp file behind after a successful write", async () => {
+    await createHooksDirectory();
+    await recordHookFiring(request({ verb: "inject" }));
+    expect(await readdir(hooks)).toStrictEqual(["claude.SessionStart.json"]);
+  });
+
+  it("leaves a record younger than 24 h byte-identical", async () => {
+    await createHooksDirectory();
+    const seen = new Date(NOW.getTime() - HOUR);
+    const bytes = record("Stop", new Date(NOW.getTime() - 100 * HOUR), seen);
+    await writeFile(join(hooks, "claude.Stop.json"), bytes, { mode: 0o600 });
+    let gateCalls = 0;
+    await recordHookFiring(request({
+      admit: () => {
+        gateCalls += 1;
+        return Promise.resolve();
+      },
+    }));
+    expect(await readFile(join(hooks, "claude.Stop.json"), "utf8")).toBe(bytes);
+    expect(gateCalls).toBe(0);
+  });
+
+  it("rewrites a record older than 24 h and keeps its firstSeen", async () => {
+    await createHooksDirectory();
+    const first = new Date(NOW.getTime() - 100 * HOUR);
+    const stale = new Date(NOW.getTime() - FIRING_RECORD_REFRESH_MS - 1);
+    await writeFile(join(hooks, "claude.Stop.json"), record("Stop", first, stale), { mode: 0o600 });
+    await recordHookFiring(request());
+    expect(await readFile(join(hooks, "claude.Stop.json"), "utf8")).toBe(record("Stop", first, NOW));
+  });
+
+  it("replaces a malformed record with a fresh one", async () => {
+    await createHooksDirectory();
+    await writeFile(join(hooks, "claude.Stop.json"), "{not json", { mode: 0o600 });
+    await recordHookFiring(request());
+    expect(await readFile(join(hooks, "claude.Stop.json"), "utf8")).toBe(record("Stop", NOW, NOW));
+  });
+
+  it("writes nothing when the gate refuses", async () => {
+    await createHooksDirectory();
+    await recordHookFiring(request({ admit: () => Promise.reject(new Error("synthetic refusal")) }));
+    expect(await readdir(hooks)).toStrictEqual([]);
+  });
+
+  it("writes nothing when the real ordinary-command gate refuses a malformed V2 manifest", async () => {
+    await createHooksDirectory();
+    await writeFile(join(productHome, "installation-manifest.json"), '{"schemaVersion":2}', { mode: 0o600 });
+    await recordHookFiring(withoutGateSeam());
+    expect(await readdir(hooks)).toStrictEqual([]);
+  });
+
+  it("writes nothing for Codex while its event map is unset", async () => {
+    await createHooksDirectory();
+    await recordHookFiring(request({ vendor: "codex" }));
+    expect(await readdir(hooks)).toStrictEqual([]);
+  });
+
+  it("resolves and removes its temp file when the rename fails", async () => {
+    await createHooksDirectory();
+    await mkdir(join(hooks, "claude.Stop.json"));
+    await expect(recordHookFiring(request())).resolves.toBeUndefined();
+    expect(await readdir(hooks)).toStrictEqual(["claude.Stop.json"]);
+  });
+
+  it("resolves when the state directory cannot be reached at all", async () => {
+    await writeFile(join(productHome, "state"), "not a directory");
+    await expect(recordHookFiring(request())).resolves.toBeUndefined();
+  });
+
+  it("resolves on a directory it cannot write into", async () => {
+    await createHooksDirectory(0o500);
+    await expect(recordHookFiring(request())).resolves.toBeUndefined();
+  });
+});
+
+describe("readHookFiringObservations", () => {
+  it("observes nothing when the directory is absent", async () => {
+    const read = await readHookFiringObservations(stateDirectory, "claude");
+    expect(read.observations.size).toBe(0);
+    expect(read.records).toStrictEqual([]);
+  });
+
+  it("observes plugin_hooks from any valid Claude record", async () => {
+    await createHooksDirectory();
+    await writeFile(join(hooks, "claude.Stop.json"), record("Stop", NOW, NOW));
+    const read = await readHookFiringObservations(stateDirectory, "claude");
+    expect([...read.observations]).toStrictEqual([["plugin_hooks", "observed"]]);
+    expect(read.records).toHaveLength(1);
+  });
+
+  it("also observes session_start_injection from the SessionStart record", async () => {
+    await createHooksDirectory();
+    await writeFile(join(hooks, "claude.SessionStart.json"), record("SessionStart", NOW, NOW));
+    const read = await readHookFiringObservations(stateDirectory, "claude");
+    expect(read.observations.get("plugin_hooks")).toBe("observed");
+    expect(read.observations.get("session_start_injection")).toBe("observed");
+  });
+
+  it("never lets a Codex record observe a Claude key", async () => {
+    await createHooksDirectory();
+    await writeFile(join(hooks, "codex.SessionStart.json"), record("SessionStart", NOW, NOW, "codex"));
+    const claude = await readHookFiringObservations(stateDirectory, "claude");
+    expect(claude.observations.size).toBe(0);
+    const codex = await readHookFiringObservations(stateDirectory, "codex");
+    expect(codex.observations.get("plugin_hooks")).toBe("observed");
+  });
+
+  it("ignores a malformed record and a record filed under another event's name", async () => {
+    await createHooksDirectory();
+    await writeFile(join(hooks, "claude.Stop.json"), "{not json");
+    await writeFile(join(hooks, "claude.PreToolUse.json"), record("SessionStart", NOW, NOW));
+    const read = await readHookFiringObservations(stateDirectory, "claude");
+    expect(read.observations.size).toBe(0);
+    expect(read.records).toStrictEqual([]);
+  });
+});
+
+describe("runHookMode and the firing record", () => {
+  const io: CliIo = {
+    stdout: () => undefined,
+    stderr: () => undefined,
+    confirm: () => Promise.resolve(false),
+    readStdin: () => Promise.resolve(null),
+    readStdinBytes: () =>
+      Promise.resolve(new TextEncoder().encode(JSON.stringify({ cwd: "/Users/synthetic/p", stop_hook_active: false }))),
+  };
+  const factory: HookContextFactory = () => {
+    throw new Error("a hook verb built a context");
+  };
+  let saved: HookVerbHandler | undefined;
+
+  beforeEach(() => {
+    saved = HOOK_HANDLERS.stop;
+  });
+
+  afterEach(() => {
+    if (saved === undefined) Reflect.deleteProperty(HOOK_HANDLERS, "stop");
+    else HOOK_HANDLERS.stop = saved;
+  });
+
+  const writers: readonly (readonly [string, () => Promise<void>])[] = [
+    ["succeeds", () => Promise.resolve()],
+    ["rejects", () => Promise.reject(new Error("synthetic write failure"))],
+    [
+      "throws",
+      () => {
+        throw new Error("synthetic synchronous failure");
+      },
+    ],
+  ];
+
+  it.each([
+    ["allow", { kind: "allow" } as const, 0],
+    ["block", { kind: "block", ruleId: "synthetic", detail: "synthetic" } as const, 2],
+  ])("returns the same exit code for a %s outcome however the write goes", async (_name, outcome, code) => {
+    expect(writers.length).toBeGreaterThan(0);
+    for (const [label, writer] of writers) {
+      const calls: (readonly [HookVendor, HookVerb])[] = [];
+      HOOK_HANDLERS.stop = () => Promise.resolve(outcome);
+      const environment: HookEnvironment = {
+        env: {},
+        userHome: root,
+        processCwd: () => root,
+        nodeExecutable: "/usr/local/bin/node",
+        recordFiring: (vendor, verb) => {
+          calls.push([vendor, verb]);
+          return writer();
+        },
+      };
+      expect(await runHookMode(["guard", "stop", "--vendor", "claude"], io, factory, environment), label).toBe(code);
+      expect(calls, label).toStrictEqual([["claude", "stop"]]);
+    }
+  });
+
+  it("does not record a firing when the recursion marker short-circuits the hook", async () => {
+    HOOK_HANDLERS.stop = () => Promise.resolve({ kind: "allow" });
+    let calls = 0;
+    const environment: HookEnvironment = {
+      env: { DEVELOPER_OS_HOOK_ACTIVE: "1" },
+      userHome: root,
+      processCwd: () => root,
+      nodeExecutable: "/usr/local/bin/node",
+      recordFiring: () => {
+        calls += 1;
+        return Promise.resolve();
+      },
+    };
+    expect(await runHookMode(["guard", "stop", "--vendor", "claude"], io, factory, environment)).toBe(0);
+    expect(calls).toBe(0);
+  });
+});

@@ -5,6 +5,7 @@ import type {
   ProcessRunner,
 } from "@developer-os/security";
 import { CODEX_CAPABILITY_KEYS } from "@developer-os/adapter-codex";
+import type { ProbeObservation } from "@developer-os/adapter-codex";
 import { reportCodexCapabilities } from "./codex-capabilities.js";
 
 function runner(
@@ -162,18 +163,18 @@ describe("reportCodexCapabilities", () => {
   });
 
   /**
-   * `plugin_hooks` is on the not-used list — no hooks file ships
-   * (knowledge-pipeline architecture note §2) — and must report that regardless of what
-   * the probe observed for anything else.
+   * A13 §8.1 and NEW-65: a plugin listing proves the tree is loaded, not that
+   * a hook fired, so without a firing record `plugin_hooks` stays `unknown`.
    */
-  it("reports plugin_hooks as not-used even when the probe observes our tree", async () => {
+  it("reports plugin_hooks as unknown when the probe observes our tree but nothing fired", async () => {
     const report = await reportCodexCapabilities({
       executablePath: "/opt/synthetic/bin/codex",
       runner: ourTreeAt("/synthetic/plugin"),
       pluginRoot: "/synthetic/plugin",
       probe: true,
     });
-    expect(report.capabilities.plugin_hooks).toBe("not-used");
+    expect(report.capabilities.plugin_hooks).toBe("unknown");
+    expect(report.capabilities.session_start_injection).toBe("unknown");
   });
 
   it("renders a matrix line naming every key", async () => {
@@ -255,6 +256,67 @@ describe("the hook-trust advice", () => {
       expect(JSON.stringify(report)).not.toContain("/hooks");
     },
   );
+});
+
+describe("the hook keys come from firing records", () => {
+  const fired = (
+    entries: readonly (readonly [string, ProbeObservation])[],
+  ): ReadonlyMap<string, ProbeObservation> => new Map(entries);
+
+  it("reports plugin_hooks=yes and every other key unknown on the non-probe branch", async () => {
+    const report = await reportCodexCapabilities({
+      executablePath: "/opt/synthetic/bin/codex",
+      runner: version("codex-cli 0.147.0"),
+      pluginRoot: "/synthetic/plugin",
+      firingObservations: fired([["plugin_hooks", "observed"]]),
+    });
+    expect(report.summary).toContain("not-probed");
+    expect(report.capabilities.plugin_hooks).toBe("yes");
+    const others = CODEX_CAPABILITY_KEYS.filter((key) => key !== "plugin_hooks");
+    expect(others.length).toBeGreaterThan(0);
+    for (const key of others) expect(report.capabilities[key], key).toBe("unknown");
+  });
+
+  it("does not grant yes below the minimum version, whatever fired", async () => {
+    const report = await reportCodexCapabilities({
+      executablePath: "/opt/synthetic/bin/codex",
+      runner: version("codex-cli 0.1.0"),
+      pluginRoot: "/synthetic/plugin",
+      firingObservations: fired([["plugin_hooks", "observed"]]),
+    });
+    expect(report.capabilities.plugin_hooks).toBe("unknown");
+  });
+
+  it("takes nothing but the two hook keys from the firing observations", async () => {
+    const report = await reportCodexCapabilities({
+      executablePath: "/opt/synthetic/bin/codex",
+      runner: ourTreeAt("/somewhere/else"),
+      pluginRoot: "/synthetic/plugin",
+      probe: true,
+      firingObservations: fired([
+        ["skills", "observed"],
+        ["session_end_capture", "observed"],
+      ]),
+    });
+    expect(report.capabilities.skills).toBe("unknown");
+    expect(report.capabilities.session_end_capture).toBe("not-used");
+  });
+
+  it("uses only the firing observations for the hook keys on the probe branch", async () => {
+    const report = await reportCodexCapabilities({
+      executablePath: "/opt/synthetic/bin/codex",
+      runner: ourTreeAt("/synthetic/plugin"),
+      pluginRoot: "/synthetic/plugin",
+      probe: true,
+      firingObservations: fired([
+        ["plugin_hooks", "observed"],
+        ["session_start_injection", "observed"],
+      ]),
+    });
+    expect(report.capabilities.skills).toBe("yes");
+    expect(report.capabilities.plugin_hooks).toBe("yes");
+    expect(report.capabilities.session_start_injection).toBe("yes");
+  });
 });
 
 describe("the probe is opt-in", () => {

@@ -30,6 +30,15 @@ describe("the two adapters' capability key lists", () => {
    * means two different things depending on which half you read.
    */
   it("agree on which surfaces this product does not use", () => {
+    expect(CLAUDE_NOT_USED_KEYS.length).toBeGreaterThan(0);
     expect([...CODEX_NOT_USED_KEYS]).toEqual([...CLAUDE_NOT_USED_KEYS]);
+  });
+
+  /** A13 §8.1: both hook keys left both lists in one commit. */
+  it("both resolve the hook keys from firing records rather than declining them", () => {
+    for (const key of ["plugin_hooks", "session_start_injection"] as const) {
+      expect(CLAUDE_NOT_USED_KEYS).not.toContain(key);
+      expect(CODEX_NOT_USED_KEYS).not.toContain(key);
+    }
   });
 });

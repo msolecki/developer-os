@@ -15,22 +15,21 @@ export type ClaudeCapabilities = Readonly<
  * surfaces the product uses is one product decision rather than two vendor
  * ones.
  *
- * `plugin_hooks` was already here under the name `UNSETTLED`, for this
- * adapter's missing hooks file (founder-ratified 2026-08-12 — see `plugin.ts`'s
- * docblock on `hooks/hooks.json`). The other five join it because
- * knowledge-pipeline architecture note §2 declines both automatic capture paths: no
- * lifecycle hook fires, and no `developer-os run claude` wrapper is built, so
- * the three lifecycle keys describe surfaces nothing will ever reach.
- * `subagents` and `durable_project_guidance` are reported for `doctor`'s matrix
- * and depended on by nothing (see `versions.ts`).
+ * `plugin_hooks` and `session_start_injection` left this list with A13: the
+ * observation for both keys is a firing record under `state/hooks/`, never a
+ * listing or a validate run (A13 §8.1). `plugin_hooks` is observed by any
+ * Claude firing record, `session_start_injection` by the `SessionStart` one.
+ * The two capture keys stay because knowledge-pipeline architecture note §2
+ * declines both automatic capture paths: no capture hook fires, and no
+ * `developer-os run claude` wrapper is built. `subagents` and
+ * `durable_project_guidance` are reported for `doctor`'s matrix and depended on
+ * by nothing (see `versions.ts`).
  *
  * **Removing a key from this list requires, in the same change, the artifact it
  * describes and a test that observed it working.** That rule is why
  * `plugin_hooks` never resolved to `yes` over a file that does not exist.
  */
 export const CLAUDE_NOT_USED_KEYS: readonly ClaudeCapabilityKey[] = [
-  "plugin_hooks",
-  "session_start_injection",
   "session_end_capture",
   "pre_compact_backup",
   "subagents",

@@ -4,7 +4,7 @@ import {
   probeCodex,
   resolveCapabilities,
 } from "@developer-os/adapter-codex";
-import type { CodexCapabilities } from "@developer-os/adapter-codex";
+import type { CodexCapabilities, ProbeObservation } from "@developer-os/adapter-codex";
 
 import type { ProcessRunner } from "@developer-os/security";
 
@@ -43,6 +43,12 @@ export interface CodexCapabilityRequest {
    * `doctor` should make once, explicitly, rather than on every run.
    */
   readonly probe?: boolean;
+  /**
+   * `plugin_hooks` and `session_start_injection` as read from the firing
+   * records under `state/hooks/` (A13 §8.1). They are the only source for those
+   * two keys: a probe that lists or validates the tree saw it loaded, not firing.
+   */
+  readonly firingObservations?: ReadonlyMap<string, ProbeObservation>;
 }
 
 export interface CodexCapabilityReport {
@@ -71,7 +77,7 @@ export interface CodexCapabilityReport {
  * fix is applied to `resolveCapabilities` in both adapters and to `allUnknown`
  * in the Claude command beside this one; all four sites are the same gap.
  *
- * The six `not-used` keys stay `unknown` here for the reason the Claude twin
+ * The four `not-used` keys stay `unknown` here for the reason the Claude twin
  * records: `not-used` is a claim about a resolved matrix, and this one resolves
  * nothing.
  */
@@ -88,6 +94,20 @@ function allUnknown(): CodexCapabilities {
     durable_project_guidance: "unknown",
   };
   return Object.freeze(resolved);
+}
+
+const FIRING_KEYS = ["plugin_hooks", "session_start_injection"] as const;
+
+/** NEW-65: listing is not firing, so only these two keys are taken from the records. */
+function firingOnly(
+  observations: ReadonlyMap<string, ProbeObservation> | undefined,
+): ReadonlyMap<string, ProbeObservation> {
+  const kept = new Map<string, ProbeObservation>();
+  for (const key of FIRING_KEYS) {
+    const observation = observations?.get(key);
+    if (observation !== undefined) kept.set(key, observation);
+  }
+  return kept;
 }
 
 function summarise(capabilities: CodexCapabilities): string {
@@ -150,8 +170,15 @@ export async function reportCodexCapabilities(
   });
   if (installation === null) return unreadable();
 
+  const firing = firingOnly(request.firingObservations);
+
   if (request.probe !== true) {
-    const capabilities = allUnknown();
+    const fired = resolveCapabilities(installation.version, firing);
+    const capabilities: CodexCapabilities = Object.freeze({
+      ...allUnknown(),
+      plugin_hooks: fired.plugin_hooks,
+      session_start_injection: fired.session_start_injection,
+    });
     return {
       installed: true,
       version: installation.version,
@@ -165,7 +192,10 @@ export async function reportCodexCapabilities(
     runner: request.runner,
     pluginRoot: request.pluginRoot,
   });
-  const capabilities = resolveCapabilities(installation.version, probed.observations);
+  const merged = new Map(probed.observations);
+  for (const key of FIRING_KEYS) merged.delete(key);
+  for (const [key, observation] of firing) merged.set(key, observation);
+  const capabilities = resolveCapabilities(installation.version, merged);
 
   return {
     installed: true,

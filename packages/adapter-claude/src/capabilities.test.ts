@@ -92,47 +92,65 @@ describe("resolveCapabilities", () => {
     expect(Object.values(resolved)).not.toContain("yes");
   });
 
-  /**
-   * Founder-ratified 2026-08-12: neither adapter ships a hooks file, and
-   * `plugin_hooks` reported `unknown` throughout — matching the list on the
-   * Codex adapter's own `capabilities.ts`. It is `not-used` now rather than
-   * `unknown`, because hooks were **declined** on 2026-08-12 rather than
-   * deferred: `unknown` is what the model does with a fact nobody has
-   * established, and this one is established.
-   */
-  it("reports plugin_hooks as not-used, matching the Codex adapter, because neither ships a hooks file", () => {
-    const resolved = resolveCapabilities(
-      "2.1.216",
-      observed([["skills", "observed"]]),
-    );
-    expect(resolved.plugin_hooks).toBe("not-used");
+});
+
+/**
+ * A13 §8.1: the two hook keys left the not-used list and follow the two-gate
+ * rule, with a firing record as the observation. Without one they are
+ * `unknown`, never `no`.
+ */
+describe("the hook keys", () => {
+  const HOOK_KEYS = ["plugin_hooks", "session_start_injection"] as const;
+
+  it("has both hook keys to check", () => {
+    expect(HOOK_KEYS.length).toBeGreaterThan(0);
   });
 
-  /**
-   * Precedence: the not-used list beats any observation. If a refactor moved
-   * the observation lookup above that check, a stray observation reporting
-   * `plugin_hooks` as "observed" would incorrectly become "yes".
-   */
-  it("returns not-used for plugin_hooks even if the probe reported observed", () => {
+  it.each(HOOK_KEYS)("reports %s as yes when the floor permits and a firing was observed", (key) => {
+    expect(resolveCapabilities("2.1.216", observed([[key, "observed"]]))[key]).toBe("yes");
+  });
+
+  it.each(HOOK_KEYS)("reports %s as unknown without a firing observation", (key) => {
+    expect(resolveCapabilities("2.1.216", observed([]))[key]).toBe("unknown");
+    expect(resolveCapabilities("2.1.216", observed([[key, "absent"]]))[key]).toBe("unknown");
+    expect(resolveCapabilities("2.1.216", observed([[key, "unavailable"]]))[key]).toBe("unknown");
+  });
+
+  it.each(HOOK_KEYS)("reports %s as unknown below the minimum version, whatever fired", (key) => {
+    expect(resolveCapabilities("1.0.0", observed([[key, "observed"]]))[key]).toBe("unknown");
+  });
+
+  it("never reports either hook key as no", () => {
+    for (const version of ["1.0.0", "2.1.216"]) {
+      for (const observation of ["observed", "absent", "unavailable"] as const) {
+        const resolved = resolveCapabilities(
+          version,
+          observed(HOOK_KEYS.map((key) => [key, observation] as const)),
+        );
+        for (const key of HOOK_KEYS) expect(resolved[key]).not.toBe("no");
+      }
+    }
+  });
+
+  it("keeps the two capture keys not-used when every hook key fired", () => {
     const resolved = resolveCapabilities(
       "2.1.216",
-      observed([["plugin_hooks", "observed"]]),
+      observed(HOOK_KEYS.map((key) => [key, "observed"] as const)),
     );
-    expect(resolved.plugin_hooks).toBe("not-used");
+    expect(resolved.session_end_capture).toBe("not-used");
+    expect(resolved.pre_compact_backup).toBe("not-used");
   });
 });
 
 /**
- * Six of the nine keys name surfaces this product decided not to touch
- * (knowledge-pipeline architecture note §2): no hooks file ships, and the
+ * Four of the nine keys name surfaces this product decided not to touch
+ * (knowledge-pipeline architecture note §2): no capture hook ships, and the
  * `developer-os run claude` wrapper the old word advised is not being built.
  * A state that advises a command which will not exist is a value that
  * validates while the property it names is false.
  */
 describe("the surfaces this product does not use", () => {
   const NOT_USED_KEYS = [
-    "plugin_hooks",
-    "session_start_injection",
     "session_end_capture",
     "pre_compact_backup",
     "subagents",

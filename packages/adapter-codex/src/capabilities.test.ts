@@ -22,14 +22,10 @@ describe("resolveCapabilities", () => {
     expect(resolveCapabilities("0.147.0", observed).non_interactive_run).toBe("unknown");
   });
 
-  /**
-   * Codex architecture former §15.1: the plugin-bundled hooks path is documented and unobserved, and
-   * this plan ships no hooks file at all. That was `unknown` while hooks were
-   * merely unobserved; knowledge-pipeline architecture note §2 **declines** them, which is
-   * a settled fact rather than a missing one.
-   */
-  it("reports plugin_hooks as not-used, because no hooks file ships", () => {
-    expect(resolveCapabilities("0.147.0", observed).plugin_hooks).toBe("not-used");
+  /** A13 §8.1: without a Codex firing record the hook keys are `unknown`, never `no`. */
+  it("reports the hook keys as unknown without a firing observation", () => {
+    expect(resolveCapabilities("0.147.0", observed).plugin_hooks).toBe("unknown");
+    expect(resolveCapabilities("0.147.0", observed).session_start_injection).toBe("unknown");
   });
 
   it("reports unknown, never no, for a probe that could not run", () => {
@@ -60,16 +56,27 @@ describe("resolveCapabilities", () => {
 
   /**
    * Precedence: the not-used list beats any observation. If a refactor moved
-   * the observation lookup above that check, a real signal reporting
-   * plugin_hooks as "observed" would incorrectly become "yes". This test pins
-   * that the not-used gate fires first.
+   * the observation lookup above that check, a stray signal reporting
+   * session_end_capture as "observed" would incorrectly become "yes".
    */
   it("returns not-used for those keys even if the probe reported observed", () => {
     expect(
-      resolveCapabilities("0.147.0", new Map<string, ProbeObservation>([["plugin_hooks", "observed"]]))
-        .plugin_hooks,
+      resolveCapabilities("0.147.0", new Map<string, ProbeObservation>([["session_end_capture", "observed"]]))
+        .session_end_capture,
     ).toBe("not-used");
   });
+
+  it.each(["plugin_hooks", "session_start_injection"] as const)(
+    "reports %s as yes only when the floor permits and a firing was observed, never no",
+    (key) => {
+      const fired = new Map<string, ProbeObservation>([[key, "observed"]]);
+      expect(resolveCapabilities("0.147.0", fired)[key]).toBe("yes");
+      expect(resolveCapabilities("0.1.0", fired)[key]).toBe("unknown");
+      expect(resolveCapabilities("0.147.0", new Map<string, ProbeObservation>([[key, "unavailable"]]))[key]).toBe("unknown");
+      expect(resolveCapabilities("0.147.0", fired).session_end_capture).toBe("not-used");
+      expect(resolveCapabilities("0.147.0", fired).pre_compact_backup).toBe("not-used");
+    },
+  );
 
   it("returns unknown for unavailable observations even on a below-floor version", () => {
     expect(
@@ -87,8 +94,6 @@ describe("resolveCapabilities", () => {
  */
 describe("the surfaces this product does not use", () => {
   const NOT_USED_KEYS = [
-    "plugin_hooks",
-    "session_start_injection",
     "session_end_capture",
     "pre_compact_backup",
     "subagents",

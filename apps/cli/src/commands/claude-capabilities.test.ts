@@ -5,6 +5,7 @@ import type {
   ProcessRunner,
 } from "@developer-os/security";
 import { CLAUDE_CAPABILITY_KEYS } from "@developer-os/adapter-claude";
+import type { ProbeObservation } from "@developer-os/adapter-claude";
 import { reportClaudeCapabilities } from "./claude-capabilities.js";
 
 function runner(
@@ -267,6 +268,98 @@ describe("reportClaudeCapabilities", () => {
     for (const key of CLAUDE_CAPABILITY_KEYS) {
       expect(report.summary, `${key} must appear`).toContain(key);
     }
+  });
+});
+
+/**
+ * A13 §8.1 and NEW-65: the observation for the two hook keys is a firing
+ * record, never what the probe saw. A validated or listed tree is loaded, not
+ * firing.
+ */
+describe("the hook keys come from firing records", () => {
+  const fired = (
+    entries: readonly (readonly [string, ProbeObservation])[],
+  ): ReadonlyMap<string, ProbeObservation> => new Map(entries);
+
+  it("reports plugin_hooks=yes and every other key unknown on the non-probe branch", async () => {
+    const report = await reportClaudeCapabilities({
+      executablePath: "/opt/synthetic/bin/claude",
+      runner: version("2.1.216"),
+      pluginDirectory: "/synthetic/plugin",
+      firingObservations: fired([["plugin_hooks", "observed"]]),
+    });
+    expect(report.summary).toContain("not-probed");
+    expect(report.capabilities.plugin_hooks).toBe("yes");
+    const others = CLAUDE_CAPABILITY_KEYS.filter((key) => key !== "plugin_hooks");
+    expect(others.length).toBeGreaterThan(0);
+    for (const key of others) expect(report.capabilities[key], key).toBe("unknown");
+  });
+
+  it("reports session_start_injection=yes from its own firing observation", async () => {
+    const report = await reportClaudeCapabilities({
+      executablePath: "/opt/synthetic/bin/claude",
+      runner: version("2.1.216"),
+      pluginDirectory: "/synthetic/plugin",
+      firingObservations: fired([
+        ["plugin_hooks", "observed"],
+        ["session_start_injection", "observed"],
+      ]),
+    });
+    expect(report.capabilities.session_start_injection).toBe("yes");
+  });
+
+  it("does not grant yes below the minimum version, whatever fired", async () => {
+    const report = await reportClaudeCapabilities({
+      executablePath: "/opt/synthetic/bin/claude",
+      runner: version("1.0.0"),
+      pluginDirectory: "/synthetic/plugin",
+      firingObservations: fired([["plugin_hooks", "observed"]]),
+    });
+    expect(report.capabilities.plugin_hooks).toBe("unknown");
+  });
+
+  it("takes nothing but the two hook keys from the firing observations", async () => {
+    const report = await reportClaudeCapabilities({
+      executablePath: "/opt/synthetic/bin/claude",
+      runner: version("2.1.216"),
+      pluginDirectory: "/synthetic/plugin",
+      probe: true,
+      listPluginFiles: () => Promise.resolve([".claude-plugin/plugin.json"]),
+      firingObservations: fired([
+        ["skills", "observed"],
+        ["session_end_capture", "observed"],
+      ]),
+    });
+    expect(report.capabilities.skills).toBe("unknown");
+    expect(report.capabilities.session_end_capture).toBe("not-used");
+  });
+
+  it("uses only the firing observations for the hook keys on the probe branch", async () => {
+    const without = await reportClaudeCapabilities({
+      executablePath: "/opt/synthetic/bin/claude",
+      runner: version("2.1.216"),
+      pluginDirectory: "/synthetic/plugin",
+      probe: true,
+      listPluginFiles: skillsPresent,
+    });
+    expect(without.capabilities.skills).toBe("yes");
+    expect(without.capabilities.plugin_hooks).toBe("unknown");
+    expect(without.capabilities.session_start_injection).toBe("unknown");
+
+    const withFiring = await reportClaudeCapabilities({
+      executablePath: "/opt/synthetic/bin/claude",
+      runner: version("2.1.216"),
+      pluginDirectory: "/synthetic/plugin",
+      probe: true,
+      listPluginFiles: skillsPresent,
+      firingObservations: fired([
+        ["plugin_hooks", "observed"],
+        ["session_start_injection", "observed"],
+      ]),
+    });
+    expect(withFiring.capabilities.skills).toBe("yes");
+    expect(withFiring.capabilities.plugin_hooks).toBe("yes");
+    expect(withFiring.capabilities.session_start_injection).toBe("yes");
   });
 });
 
