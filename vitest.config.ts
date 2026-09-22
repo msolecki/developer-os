@@ -11,6 +11,7 @@ export default defineConfig({
       "packages/adapter-claude/vitest.config.ts",
       "packages/adapter-codex/vitest.config.ts",
       "apps/cli/vitest.config.ts",
+      "apps/launcher/vitest.config.ts",
       "tests/vitest.config.ts",
     ],
   },

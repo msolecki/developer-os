@@ -19,6 +19,10 @@ file, tracked as `BACKLOG.md` NEW-100. The next action is Phase 4b: Spec 2
 removes the bootstrap pin at `apps/cli/src/context.ts:790` (Task 11b) — launcher and offline trust —
 with NEW-79, NEW-81 and NEW-85 settled first.
 
+Phase 4b progress: Task 10 committed (`3718969`); NEW-85 decided (D45, no code yet); ready next:
+NEW-79, then Task 11 (blocked on the founder's signing-key answer only at the point the pin is
+actually removed — its TDD implementation can proceed now on fixture keys).
+
 Spec 2: Tasks 1–7 and 9 complete, Task 8 withdrawn (D18), Tasks 10–26 remain. The 2026-08-28 Spec 1
 plan stays as plan 1b's source; its Tasks 1–7, 21 and 23 were executed via plan 1a.
 

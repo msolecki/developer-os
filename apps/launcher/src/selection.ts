@@ -1,0 +1,389 @@
+import {
+  admitReleaseAgainstTrust,
+  decodeCanonicalJson,
+  LifecycleRecoveryRequiredError,
+  parseCanonicalAbsolutePathText,
+  validateActiveReleaseRecord,
+  validateBundleManifest,
+  validateReleaseTrustState,
+} from "@developer-os/core";
+import type {
+  ActiveReleaseRecordV1,
+  CanonicalAbsolutePathV1,
+  CanonicalPathEvidenceV1,
+  LifecycleGuardedEntryV1,
+  LowerHexSha256,
+  ReleaseBundleManifestV1,
+} from "@developer-os/core";
+import {
+  admitLauncherPlatformIdentity,
+  LauncherBundleAdmission,
+} from "@developer-os/platform-macos";
+import type {
+  AdmittedReleaseBundleV1,
+  LauncherGuardedReaderV1,
+  LauncherPlatformIdentityV1,
+} from "@developer-os/platform-macos";
+
+import type { LauncherEnvironmentV1 } from "./environment.js";
+
+export type LauncherSelectionV1 =
+  | { readonly kind: "package_fallback"; readonly bundle: AdmittedReleaseBundleV1 }
+  | { readonly kind: "active_release"; readonly bundle: AdmittedReleaseBundleV1 }
+  | {
+      readonly kind: "bootstrap_recovery";
+      readonly bundle: AdmittedReleaseBundleV1;
+      readonly argv: readonly ["init"];
+    };
+
+/**
+ * The bounded outcome of Spec 2 §6's bootstrap-closure reader. A real reader
+ * (walking the plan/journal/retention envelope) is Task 9's territory and is
+ * not re-implemented here; the launcher only routes on its verdict, taken as
+ * an injected fact so this module stays a pure structural admission over
+ * whatever produced it.
+ */
+export type LauncherBootstrapClosureV1 =
+  | { readonly kind: "handoff_complete" }
+  | { readonly kind: "non_terminal" }
+  | { readonly kind: "malformed" };
+
+export interface LauncherPackagedFallbackV1 {
+  readonly bundleRoot: CanonicalAbsolutePathV1;
+  readonly manifestPath: CanonicalAbsolutePathV1;
+}
+
+/**
+ * The Task 11 signature port, consumed here through an injected interface
+ * rather than implemented: this module never verifies an Ed25519 signature
+ * itself. It calls this on every retained delegation/index document it
+ * reads, after confirming the document's content hash and structural
+ * envelope shape, so wiring the real verifier later is a drop-in.
+ */
+export type LauncherRetainedDocumentVerifierV1 = (document: {
+  readonly schemaVersion: 1;
+  readonly kind: string;
+  readonly signed: unknown;
+  readonly signatures: readonly unknown[];
+}) => void;
+
+export interface LauncherSelectionRequestV1 {
+  readonly productHome: CanonicalAbsolutePathV1;
+  readonly platform: LauncherPlatformIdentityV1;
+  readonly effectiveUid: number;
+  /** Read-only: this admission never mutates, so it only needs the guarded reader. */
+  readonly fs: LauncherGuardedReaderV1;
+  readonly packagedFallback: LauncherPackagedFallbackV1;
+  readonly bootstrapClosure: LauncherBootstrapClosureV1;
+  readonly verifyRetainedDocument: LauncherRetainedDocumentVerifierV1;
+}
+
+export interface LauncherProcessRequestV1 {
+  readonly executable: CanonicalAbsolutePathV1;
+  readonly argv: readonly string[];
+  readonly env: LauncherEnvironmentV1;
+  /** The sole extra descriptor the launcher ever reserves: read-only, and exactly one. */
+  readonly extraDescriptors: readonly [{ readonly fd: 3; readonly mode: "read_only_pipe" }];
+}
+
+const MAX_ACTIVE_BYTES = 16 * 1024;
+const MAX_TRUST_BYTES = 16 * 1024;
+const MAX_DELEGATION_BYTES = 65_536;
+const MAX_INDEX_BYTES = 4 * 1024 * 1024;
+const MAX_BUNDLE_MANIFEST_BYTES = 16 * 1024 * 1024;
+
+function recoveryRequired(reason: string, path: string): never {
+  throw new LifecycleRecoveryRequiredError(reason, [path]);
+}
+
+function derive(root: CanonicalAbsolutePathV1, relative: string): CanonicalAbsolutePathV1 {
+  return parseCanonicalAbsolutePathText(`${root}/${relative}`);
+}
+
+/**
+ * A minimal synchronous path-canonicalization evidence, independently
+ * implemented because `apps/launcher` may not import the CLI (Spec 2 §2).
+ * Every path this admission resolves is already a guarded no-follow read
+ * through `LauncherGuardedReaderV1`; this evidence only satisfies the
+ * `admitCanonicalAbsolutePath` grammar check inside `validateActiveReleaseRecord`.
+ */
+function createCanonicalPathEvidence(): CanonicalPathEvidenceV1 {
+  return {
+    reopenCanonicalAbsolutePath: (path) => path,
+    containsCanonicalPath: (root, candidate) => candidate === root || candidate.startsWith(`${root}/`),
+    hasFoldedAlias: () => false,
+  };
+}
+
+async function ownedRegular(
+  fs: LauncherGuardedReaderV1,
+  path: CanonicalAbsolutePathV1,
+  effectiveUid: number,
+  maximumBytes: number,
+  reason: string,
+): Promise<LifecycleGuardedEntryV1> {
+  const entry = await fs.lstat(path);
+  if (
+    entry === null ||
+    entry.kind !== "regular_file" ||
+    entry.ownerUid !== effectiveUid ||
+    BigInt(entry.size) > BigInt(maximumBytes)
+  ) {
+    recoveryRequired(reason, path);
+  }
+  return entry;
+}
+
+async function ownedDirectory(
+  fs: LauncherGuardedReaderV1,
+  path: CanonicalAbsolutePathV1,
+  effectiveUid: number,
+  reason: string,
+): Promise<LifecycleGuardedEntryV1> {
+  const entry = await fs.lstat(path);
+  if (entry === null || entry.kind !== "directory" || entry.ownerUid !== effectiveUid) {
+    recoveryRequired(reason, path);
+  }
+  return entry;
+}
+
+/** Non-empty, exact retained-metadata-store set equality (Spec 2 §3.1). */
+async function assertExactStoreSet(
+  fs: LauncherGuardedReaderV1,
+  directoryPath: CanonicalAbsolutePathV1,
+  expected: readonly string[],
+  effectiveUid: number,
+): Promise<void> {
+  const directory = await ownedDirectory(fs, directoryPath, effectiveUid, "launcher_retained_metadata_store_invalid");
+  const observed = new Set<string>();
+  for await (const name of fs.names(directory)) observed.add(name);
+  if (observed.size === 0 || observed.size !== expected.length || expected.some((name) => !observed.has(name))) {
+    recoveryRequired("launcher_retained_metadata_store_set_mismatch", directoryPath);
+  }
+}
+
+function parseActive(bytes: Uint8Array, path: CanonicalAbsolutePathV1): ActiveReleaseRecordV1 {
+  try {
+    return validateActiveReleaseRecord(decodeCanonicalJson(bytes, MAX_ACTIVE_BYTES), createCanonicalPathEvidence());
+  } catch {
+    recoveryRequired("launcher_active_release_record_invalid", path);
+  }
+}
+
+function parseTrust(bytes: Uint8Array, path: CanonicalAbsolutePathV1) {
+  try {
+    return validateReleaseTrustState(decodeCanonicalJson(bytes, MAX_TRUST_BYTES));
+  } catch {
+    recoveryRequired("launcher_release_trust_invalid", path);
+  }
+}
+
+function parseBundleManifest(bytes: Uint8Array, path: CanonicalAbsolutePathV1, maximumBytes: number): ReleaseBundleManifestV1 {
+  try {
+    return validateBundleManifest(decodeCanonicalJson(bytes, maximumBytes));
+  } catch {
+    recoveryRequired("launcher_bundle_manifest_invalid", path);
+  }
+}
+
+function parseRetainedDocumentEnvelope(
+  bytes: Uint8Array,
+  path: CanonicalAbsolutePathV1,
+  maximumBytes: number,
+): { readonly schemaVersion: 1; readonly kind: string; readonly signed: unknown; readonly signatures: readonly unknown[] } {
+  let value: unknown;
+  try {
+    value = decodeCanonicalJson(bytes, maximumBytes);
+  } catch {
+    return recoveryRequired("launcher_retained_document_invalid", path);
+  }
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    Array.isArray(value) ||
+    (value as { schemaVersion?: unknown }).schemaVersion !== 1 ||
+    typeof (value as { kind?: unknown }).kind !== "string" ||
+    !Array.isArray((value as { signatures?: unknown }).signatures)
+  ) {
+    recoveryRequired("launcher_retained_document_invalid", path);
+  }
+  const record = value as { schemaVersion: 1; kind: string; signed: unknown; signatures: readonly unknown[] };
+  return record;
+}
+
+async function admitRetainedDocument(
+  fs: LauncherGuardedReaderV1,
+  path: CanonicalAbsolutePathV1,
+  expectedHash: LowerHexSha256,
+  maximumBytes: number,
+  effectiveUid: number,
+  verify: LauncherRetainedDocumentVerifierV1,
+): Promise<void> {
+  const entry = await ownedRegular(fs, path, effectiveUid, maximumBytes, "launcher_retained_document_missing");
+  const hash = await fs.hashRegular(entry, BigInt(maximumBytes));
+  if (hash !== expectedHash) recoveryRequired("launcher_retained_document_hash_mismatch", path);
+  const bytes = await fs.readRegular(entry, maximumBytes);
+  const document = parseRetainedDocumentEnvelope(bytes, path, maximumBytes);
+  try {
+    verify(document);
+  } catch {
+    recoveryRequired("launcher_retained_document_unverified", path);
+  }
+}
+
+async function admitPackagedFallback(request: LauncherSelectionRequestV1): Promise<AdmittedReleaseBundleV1> {
+  const { fs, packagedFallback, platform, effectiveUid } = request;
+  const manifestEntry = await ownedRegular(
+    fs,
+    packagedFallback.manifestPath,
+    effectiveUid,
+    MAX_BUNDLE_MANIFEST_BYTES,
+    "launcher_packaged_fallback_manifest_missing",
+  );
+  const manifestBytes = await fs.readRegular(manifestEntry, MAX_BUNDLE_MANIFEST_BYTES);
+  const manifest = parseBundleManifest(manifestBytes, packagedFallback.manifestPath, MAX_BUNDLE_MANIFEST_BYTES);
+  return new LauncherBundleAdmission().admit({
+    platform,
+    bundleRoot: packagedFallback.bundleRoot,
+    manifest,
+    effectiveUid,
+    fs,
+  });
+}
+
+async function admitActiveRelease(
+  request: LauncherSelectionRequestV1,
+  activeEntry: LifecycleGuardedEntryV1,
+): Promise<AdmittedReleaseBundleV1> {
+  const { fs, productHome, effectiveUid, verifyRetainedDocument } = request;
+
+  const activeBytes = await fs.readRegular(activeEntry, MAX_ACTIVE_BYTES);
+  const active = parseActive(activeBytes, activeEntry.path);
+
+  const trustPath = derive(productHome, "state/release-trust.json");
+  const trustEntry = await ownedRegular(fs, trustPath, effectiveUid, MAX_TRUST_BYTES, "launcher_release_trust_missing");
+  const trust = parseTrust(await fs.readRegular(trustEntry, MAX_TRUST_BYTES), trustPath);
+  try {
+    admitReleaseAgainstTrust(trust, active, "guarded_active");
+  } catch {
+    recoveryRequired("launcher_active_release_not_dominated_by_trust", trustPath);
+  }
+
+  const delegationsRoot = derive(productHome, "state/release-metadata/delegations");
+  const indexesRoot = derive(productHome, "state/release-metadata/indexes");
+  const bundlesRoot = derive(productHome, "state/release-metadata/bundles");
+
+  await assertExactStoreSet(fs, delegationsRoot, [`${active.delegationHash}.json`], effectiveUid);
+  await assertExactStoreSet(fs, indexesRoot, [`${active.releaseIndexHash}.json`], effectiveUid);
+  await assertExactStoreSet(fs, bundlesRoot, [`${active.bundleManifestHash}.json`], effectiveUid);
+
+  await admitRetainedDocument(
+    fs,
+    derive(delegationsRoot, `${active.delegationHash}.json`),
+    active.delegationHash,
+    MAX_DELEGATION_BYTES,
+    effectiveUid,
+    verifyRetainedDocument,
+  );
+  await admitRetainedDocument(
+    fs,
+    derive(indexesRoot, `${active.releaseIndexHash}.json`),
+    active.releaseIndexHash,
+    MAX_INDEX_BYTES,
+    effectiveUid,
+    verifyRetainedDocument,
+  );
+
+  const bundleManifestPath = derive(bundlesRoot, `${active.bundleManifestHash}.json`);
+  const bundleManifestEntry = await ownedRegular(
+    fs,
+    bundleManifestPath,
+    effectiveUid,
+    MAX_BUNDLE_MANIFEST_BYTES,
+    "launcher_bundle_manifest_missing",
+  );
+  const bundleManifestHash = await fs.hashRegular(bundleManifestEntry, BigInt(MAX_BUNDLE_MANIFEST_BYTES));
+  if (bundleManifestHash !== active.bundleManifestHash) {
+    recoveryRequired("launcher_bundle_manifest_hash_mismatch", bundleManifestPath);
+  }
+  const manifestBytes = await fs.readRegular(bundleManifestEntry, MAX_BUNDLE_MANIFEST_BYTES);
+  const manifest = parseBundleManifest(manifestBytes, bundleManifestPath, MAX_BUNDLE_MANIFEST_BYTES);
+  if (
+    manifest.version !== active.version ||
+    manifest.releaseSequence !== active.releaseSequence ||
+    manifest.architecture !== active.architecture ||
+    manifest.launcherProtocol !== active.launcherProtocol ||
+    manifest.updateProtocol !== active.updateProtocol
+  ) {
+    recoveryRequired("launcher_bundle_manifest_identity_mismatch", bundleManifestPath);
+  }
+
+  return new LauncherBundleAdmission().admit({
+    platform: { platform: active.platform, architecture: active.architecture },
+    bundleRoot: active.bundleRoot,
+    manifest,
+    effectiveUid,
+    fs,
+  });
+}
+
+/**
+ * Guarded launcher selection (Spec 2 §3.1). Before normal active/fallback
+ * routing, a non-terminal bootstrap envelope is a recovery-routing arm
+ * restricted to `init`; once the V2 handoff is complete that envelope is
+ * inert and normal routing applies regardless of its later state. A present
+ * but invalid active record is never a silent fallback.
+ */
+export async function selectLauncherCandidate(
+  request: LauncherSelectionRequestV1,
+): Promise<LauncherSelectionV1> {
+  admitLauncherPlatformIdentity(request.platform);
+
+  if (request.bootstrapClosure.kind === "malformed") {
+    recoveryRequired("launcher_bootstrap_residue_malformed", request.productHome);
+  }
+
+  const activePath = derive(request.productHome, "state/active-release.json");
+  const activeEntry = await request.fs.lstat(activePath);
+
+  if (request.bootstrapClosure.kind === "non_terminal") {
+    if (activeEntry !== null) {
+      recoveryRequired("launcher_active_published_before_launchability_suffix", activePath);
+    }
+    const bundle = await admitPackagedFallback(request);
+    return { kind: "bootstrap_recovery", bundle, argv: ["init"] };
+  }
+
+  if (activeEntry === null) {
+    const bundle = await admitPackagedFallback(request);
+    return { kind: "package_fallback", bundle };
+  }
+  if (activeEntry.kind !== "regular_file") {
+    recoveryRequired("launcher_active_release_record_invalid", activePath);
+  }
+
+  const bundle = await admitActiveRelease(request, activeEntry);
+  return { kind: "active_release", bundle };
+}
+
+/**
+ * A shell-free absolute execution request: the runtime entrypoint by
+ * absolute path (never resolved through `PATH`), the bundle entrypoint as
+ * the first argv element, the fixed internal `--offline-release-trust-fd=3`
+ * argument, then the original public CLI argv — or, under bootstrap
+ * recovery, exactly `init` in its place (Spec 2 §3.1). The FD 3 descriptor
+ * is reserved read-only here; Task 11 owns actually opening and writing it.
+ */
+export function buildLauncherProcessRequest(
+  selection: LauncherSelectionV1,
+  env: LauncherEnvironmentV1,
+  publicArgv: readonly string[],
+): LauncherProcessRequestV1 {
+  const trailingArgv = selection.kind === "bootstrap_recovery" ? selection.argv : publicArgv;
+  return {
+    executable: selection.bundle.runtimeEntrypoint,
+    argv: [selection.bundle.entrypoint, "--offline-release-trust-fd=3", ...trailingArgv],
+    env,
+    extraDescriptors: [{ fd: 3, mode: "read_only_pipe" }],
+  };
+}

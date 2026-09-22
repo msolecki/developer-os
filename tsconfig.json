@@ -26,6 +26,9 @@
       "path": "./apps/cli"
     },
     {
+      "path": "./apps/launcher"
+    },
+    {
       "path": "./tests"
     }
   ]

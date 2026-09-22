@@ -1,0 +1,18 @@
+{
+  "name": "@developer-os/launcher",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "developer-os-launcher": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@developer-os/core": "workspace:*",
+    "@developer-os/platform-macos": "workspace:*",
+    "@developer-os/security": "workspace:*"
+  }
+}

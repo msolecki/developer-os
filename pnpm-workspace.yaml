@@ -1,5 +1,6 @@
 packages:
   - apps/cli
+  - apps/launcher
   - packages/core
   - packages/security
   - packages/platform-macos

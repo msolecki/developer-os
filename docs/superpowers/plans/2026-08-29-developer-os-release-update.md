@@ -81,6 +81,15 @@ together with a new step that replaces the `unavailable_until_packaged_handoff` 
 
 ### Task 10: Add macOS launcher admission and the stable launcher application
 
+**Done 2026-09-22, `3718969`** (cherry-picked from worktree `task/10`; D44 lane, review deferred to
+phase close). **Deviation to flag at that review:** `packages/platform-macos/src/launcher/admission.ts`
+and its 12 tests were written together rather than confirmed red first — `environment.ts`/`selection.ts`
+did follow genuine red-then-green TDD (18 tests). Also deferred to Task 11/A16 per the implementer's own
+report: signature verification is an injected port with no real Ed25519 math yet; the bootstrap-closure
+reader always supplies `handoff_complete` rather than reading Task 9's real plan/journal state; the
+release-index cross-check against the active record's `releaseIdentityHash()` is not built; `main.ts` is
+untested and its packaged-fallback location and FD 3 write are `ponytail:`-marked placeholders.
+
 **Files:**
 - Create: `packages/platform-macos/src/launcher/types.ts`
 - Create: `packages/platform-macos/src/launcher/admission.ts`
@@ -104,7 +113,7 @@ together with a new step that replaces the `unavailable_until_packaged_handoff` 
 - Consumes: Checkpoint A release/manifest/bootstrap records, Spec 1 lifecycle closure, Security guarded-path/signature ports through injected interfaces.
 - Produces: `LauncherPlatformIdentityV1`, `LauncherBundleAdmission`, `LauncherSelectionV1`, `LauncherEnvironmentV1`, normal active/fallback and strict bootstrap recovery routing, shell-free absolute execution request.
 
-- [ ] **Step 1: Write failing platform/environment/selection tests**
+- [x] **Step 1: Write failing platform/environment/selection tests**
 
 ```ts
 it("falls back only when active state is absent", async () => {
@@ -122,13 +131,13 @@ it("passes only the closed path context", () => {
 
 Cover Darwin arm64/x64 admission, unsupported platform/architecture, exact product-home grammar, optional Brain override grammar without opening it, recovery-required bootstrap routing restricted to `init`, valid launchability suffix, active record/trust/metadata/bundle/manifest set equality, present-invalid refusal, no PATH execution, and one read-only FD 3 reservation.
 
-- [ ] **Step 2: Run launcher tests and verify the app/modules are absent**
+- [x] **Step 2: Run launcher tests and verify the app/modules are absent**
 
 Run: `npx vitest run --root packages/platform-macos src/launcher/admission.test.ts && npx vitest run --root apps/launcher src/environment.test.ts src/selection.test.ts`
 
 Expected: FAIL because launcher packages and workspace configuration do not exist.
 
-- [ ] **Step 3: Implement guarded launcher selection and process request construction**
+- [x] **Step 3: Implement guarded launcher selection and process request construction**
 
 ```ts
 export type LauncherSelectionV1 =
@@ -143,7 +152,7 @@ export async function selectLauncherCandidate(
 
 Open every record/tree through no-follow owner/mode/link/size and before/after inode checks; enumerate non-empty exact inventory sets; validate retained metadata/trust/manifest equality before selecting. Build absolute runtime/entrypoint argv and an exact environment object; never inherit or merge process environment.
 
-- [ ] **Step 4: Run launcher tests and workspace build**
+- [x] **Step 4: Run launcher tests and workspace build**
 
 Run: `npx vitest run --root packages/platform-macos src/launcher/admission.test.ts && npx vitest run --root apps/launcher src/environment.test.ts src/selection.test.ts`
 
@@ -151,7 +160,7 @@ Run: `pnpm --pm-on-fail=ignore build`
 
 Expected: PASS with the launcher project included in the build graph.
 
-- [ ] **Step 5: Commit Task 10**
+- [x] **Step 5: Commit Task 10**
 
 ```bash
 git add packages/platform-macos/src/launcher/types.ts packages/platform-macos/src/launcher/admission.ts packages/platform-macos/src/launcher/admission.test.ts packages/platform-macos/src/launcher/index.ts packages/platform-macos/src/index.ts apps/launcher/package.json apps/launcher/tsconfig.json apps/launcher/vitest.config.ts apps/launcher/src/environment.ts apps/launcher/src/environment.test.ts apps/launcher/src/selection.ts apps/launcher/src/selection.test.ts apps/launcher/src/main.ts pnpm-workspace.yaml tsconfig.json vitest.config.ts pnpm-lock.yaml docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md

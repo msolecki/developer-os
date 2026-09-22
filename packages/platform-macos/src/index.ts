@@ -32,6 +32,18 @@ export type {
   RenameAtxRunResultV1,
   RenameSameParentNoReplace,
 } from "./retained-rename.js";
+export {
+  admitLauncherPlatformIdentity,
+  LauncherBundleAdmission,
+  LauncherBundleRecoveryRequiredError,
+  LauncherPlatformUnsupportedError,
+} from "./launcher/index.js";
+export type {
+  AdmittedReleaseBundleV1,
+  LauncherBundleAdmissionRequestV1,
+  LauncherGuardedReaderV1,
+  LauncherPlatformIdentityV1,
+} from "./launcher/index.js";
 export { MacOsStableLockProvider } from "./stable-lock.js";
 export type {
   MacOsStableLockDependencies,
