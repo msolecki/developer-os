@@ -113,6 +113,8 @@ export interface IngestValidationContext {
    * is enough to exercise the whole gate.
    */
   readonly brain: BrainServiceDependencies;
+  /** Content-root-relative path this proposal replaces (a note capture with beforeSha256 !== null); absent otherwise. */
+  readonly replaces?: string;
 }
 
 function finding(
@@ -362,12 +364,48 @@ function schemaAndFrontmatter(
   return findings;
 }
 
-function sourceAndProvenance(
+async function keepsCreatedDate(
   notes: readonly ProposedNote[],
-  captureId: string,
+  context: IngestValidationContext,
+): Promise<readonly IngestValidationFinding[]> {
+  const { replaces } = context;
+  if (replaces === undefined) return [];
+  const { vaultRoot, config } = context.brain;
+  const findings: IngestValidationFinding[] = [];
+  for (const note of notes.filter((entry) => entry.path === replaces)) {
+    let before: NoteParseResult;
+    try {
+      before = parseNote(
+        await context.brain.readFile(join(vaultRoot, config.contentRoot, replaces)),
+      );
+    } catch {
+      before = { ok: false, issues: [] };
+    }
+    const after = parseNote(note.contents);
+    if (
+      !before.ok ||
+      !after.ok ||
+      before.note.frontmatter.created !== after.note.frontmatter.created
+    ) {
+      findings.push(
+        finding(
+          "source-and-provenance",
+          note.path,
+          "a revision must keep the created date of the note it replaces",
+        ),
+      );
+    }
+  }
+  return findings;
+}
+
+async function sourceAndProvenance(
+  notes: readonly ProposedNote[],
+  context: IngestValidationContext,
   projection: Projection | null,
   proposedByVaultPath: ReadonlyMap<string, string>,
-): readonly IngestValidationFinding[] {
+): Promise<readonly IngestValidationFinding[]> {
+  const { captureId } = context;
   return [
     ...notes
       .filter((note) => note.sourceCaptureId !== captureId)
@@ -401,6 +439,7 @@ function sourceAndProvenance(
       (entry) => entry.class === "provenance" && entry.severity === "error",
       "the vault with this proposal applied could not be indexed, so its sources could not be resolved",
     ),
+    ...(await keepsCreatedDate(notes, context)),
   ];
 }
 
@@ -907,12 +946,12 @@ export async function validateProposal(
 
   const findings: IngestValidationFinding[] = [
     ...schemaAndFrontmatter(notes, parsed),
-    ...sourceAndProvenance(
+    ...(await sourceAndProvenance(
       notes,
-      context.captureId,
+      context,
       projection,
       proposedByVaultPath,
-    ),
+    )),
     ...linkAndGraph(projection, proposedByVaultPath),
     ...duplicateDetection(projection, proposedByVaultPath),
     ...confidenceAndLifecycle(notes, parsed),

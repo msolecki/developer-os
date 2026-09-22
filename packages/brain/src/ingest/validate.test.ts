@@ -171,13 +171,26 @@ function brainDeps(vaultRoot: string): BrainServiceDependencies {
   };
 }
 
-function contextFor(vaultRoot: string): IngestValidationContext {
+function contextFor(
+  vaultRoot: string,
+  options: { readonly replaces?: string } = {},
+): IngestValidationContext {
   return {
     captureId: CAPTURE_ID,
     ingestContract: DECLARED_WRITE_SCOPES,
     redact: (text: string) => redactText(text, KEY),
     brain: brainDeps(vaultRoot),
+    ...options,
   };
+}
+
+/** `makeVault` plus the given content-root-relative notes. */
+async function vaultWith(notes: Readonly<Record<string, string>>): Promise<string> {
+  const root = await makeVault();
+  for (const [path, text] of Object.entries(notes)) {
+    await writeFile(join(root, "content", path), text, "utf8");
+  }
+  return root;
 }
 
 function validators(result: IngestValidationResult): readonly string[] {
@@ -938,5 +951,72 @@ describe("write-scope", () => {
 
     const scope = result.findings.filter((f) => f.validator === "write-scope");
     expect(scope.map((f) => f.path)).toStrictEqual(["_raw/quarantine/evil.md"]);
+  });
+});
+
+describe("a replacing note capture (spec §§3.4, 5.1)", () => {
+  it("passes a replacing note capture that keeps created and collides only with its own old bytes", async () => {
+    const vault = await vaultWith({
+      "DEV/a.md": noteText({ title: "A", created: "2026-01-01" }, "See [[existing]].\n"),
+    });
+    const result = await validateProposal(
+      proposal(
+        note("DEV/a.md", { title: "A", created: "2026-01-01", summary: "Better." }, "See [[existing]].\n"),
+      ),
+      contextFor(vault, { replaces: "DEV/a.md" }),
+    );
+
+    expectClean(result);
+  });
+
+  it("refuses a replacement that changes created, under source-and-provenance", async () => {
+    const vault = await vaultWith({ "DEV/a.md": noteText({ title: "A", created: "2026-01-01" }) });
+    const result = await validateProposal(
+      proposal(note("DEV/a.md", { title: "A", created: "2026-09-22" })),
+      contextFor(vault, { replaces: "DEV/a.md" }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.findings).toContainEqual({
+      validator: "source-and-provenance",
+      path: "DEV/a.md",
+      message: "a revision must keep the created date of the note it replaces",
+    });
+  });
+
+  it("refuses a replacement whose original can no longer be read", async () => {
+    const result = await validateProposal(
+      proposal(note("DEV/gone.md", { title: "Gone" })),
+      contextFor(await makeVault(), { replaces: "DEV/gone.md" }),
+    );
+
+    expect(validators(result)).toContain("source-and-provenance");
+  });
+
+  it("still refuses a title collision with another note while replacing", async () => {
+    const vault = await vaultWith({
+      "DEV/a.md": noteText({ title: "A" }),
+      "DEV/b.md": noteText({ title: "B" }),
+    });
+    const result = await validateProposal(
+      proposal(note("DEV/a.md", { title: "B" })),
+      contextFor(vault, { replaces: "DEV/a.md" }),
+    );
+
+    expect(validators(result)).toContain("duplicate-detection");
+  });
+
+  it("passes all nine when the projection carries only isolated and gap findings (spec §5.1)", async () => {
+    // Three notes sharing tag "t", none compiled, none linked: isolated x3 and gap x1 in projection lint.
+    const vault = await vaultWith({
+      "DEV/a.md": noteText({ title: "A", tags: "[t]" }),
+      "DEV/b.md": noteText({ title: "B", tags: "[t]" }),
+    });
+    const result = await validateProposal(
+      proposal(note("DEV/c.md", { title: "C", tags: "[t]" })),
+      contextFor(vault),
+    );
+
+    expectClean(result);
   });
 });
