@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import type { ProcessRequest, ProcessResult } from "@developer-os/security";
 import { afterEach, describe, expect, it } from "vitest";
@@ -27,10 +27,23 @@ async function project(files: { tsconfig?: boolean; tsc?: boolean; check?: boole
   if (files.tsconfig ?? true) await writeFile(join(root, "tsconfig.json"), "{}\n");
   if (files.check ?? false) await writeFile(join(root, "tsconfig.check.json"), "{}\n");
   if (files.tsc ?? true) {
-    await mkdir(join(root, "node_modules", ".bin"), { recursive: true });
-    await writeFile(join(root, "node_modules", ".bin", "tsc"), "synthetic\n", { mode: 0o755 });
+    await pnpmTool(root, "tsc", "typescript", { tsc: "bin/tsc", tsserver: "bin/tsserver" }, "bin/tsc");
   }
   return root;
+}
+
+/** A pnpm-shaped install: `.bin/<tool>` is a sh shim node cannot run; the package's `bin` names the JS entry. */
+async function pnpmTool(root: string, tool: string, pkg: string, bin: unknown, entry: string): Promise<void> {
+  const store = join(root, "node_modules", ".pnpm", `${pkg.replace("/", "+")}@1.0.0`, "node_modules", pkg);
+  await mkdir(join(store, dirname(entry)), { recursive: true });
+  await writeFile(join(store, "package.json"), JSON.stringify({ name: pkg, bin }));
+  await writeFile(join(store, entry), "#!/usr/bin/env node\n", { mode: 0o755 });
+  await mkdir(dirname(join(root, "node_modules", pkg)), { recursive: true });
+  await symlink(store, join(root, "node_modules", pkg));
+  await mkdir(join(root, "node_modules", ".bin"), { recursive: true });
+  await writeFile(join(root, "node_modules", ".bin", tool), `#!/bin/sh\nexec node "${join(store, entry)}" "$@"\n`, {
+    mode: 0o755,
+  });
 }
 
 const OK: ProcessResult = { stdout: "", stderr: "", exitCode: 0, signal: null, timedOut: false };
@@ -93,7 +106,9 @@ describe("guardStop", () => {
     expect(requests).toHaveLength(1);
     const [request] = requests;
     expect(request?.executable).toBe("/synthetic/bin/node");
-    expect(request?.args[0]).toBe(join(root, "node_modules", ".bin", "tsc"));
+    expect(request?.args[0]).toBe(
+      join(root, "node_modules", ".pnpm", "typescript@1.0.0", "node_modules", "typescript", "bin", "tsc"),
+    );
     expect(request?.args.slice(1)).toStrictEqual(["--noEmit", "-p", join(root, "tsconfig.json")]);
     expect(request?.env).toStrictEqual({ DEVELOPER_OS_HOOK_ACTIVE: "1" });
     expect(request?.timeoutMs).toBe(120_000);
@@ -128,12 +143,45 @@ describe("guardStop", () => {
     expect(outcome.kind === "allow" ? outcome.note : undefined).toEqual(expect.any(String));
   });
 
-  it("does not run a tsc that resolves outside the project root", async () => {
+  it("does not run a typescript package that resolves outside the project root", async () => {
     const outside = await tempDir();
-    await writeFile(join(outside, "tsc"), "synthetic\n", { mode: 0o755 });
+    await pnpmTool(outside, "tsc", "typescript", { tsc: "bin/tsc" }, "bin/tsc");
     const root = await project({ tsc: false });
-    await mkdir(join(root, "node_modules", ".bin"), { recursive: true });
-    await symlink(join(outside, "tsc"), join(root, "node_modules", ".bin", "tsc"));
+    await mkdir(join(root, "node_modules"), { recursive: true });
+    await symlink(join(outside, "node_modules", "typescript"), join(root, "node_modules", "typescript"));
+    const { runtime, requests } = runtimeFor(root);
+    expect(await guardStop(payload(false), runtime)).toStrictEqual({ kind: "allow" });
+    expect(requests).toStrictEqual([]);
+  });
+
+  it("does not run a bin entry that escapes its package", async () => {
+    const root = await project({ tsc: false });
+    await writeFile(join(root, "evil.js"), "synthetic\n");
+    await pnpmTool(root, "tsc", "typescript", { tsc: "../../../../../evil.js" }, "bin/tsc");
+    const { runtime, requests } = runtimeFor(root);
+    expect(await guardStop(payload(false), runtime)).toStrictEqual({ kind: "allow" });
+    expect(requests).toStrictEqual([]);
+  });
+
+  it("does not read a package.json that links outside its package", async () => {
+    const outside = await tempDir();
+    await writeFile(join(outside, "package.json"), JSON.stringify({ name: "typescript", bin: { tsc: "bin/tsc" } }));
+    const root = await project();
+    const manifest = join(root, "node_modules", "typescript", "package.json");
+    await rm(manifest);
+    await symlink(join(outside, "package.json"), manifest);
+    const { runtime, requests } = runtimeFor(root);
+    expect(await guardStop(payload(false), runtime)).toStrictEqual({ kind: "allow" });
+    expect(requests).toStrictEqual([]);
+  });
+
+  it.each([
+    ["no bin field", undefined],
+    ["a string bin, which names the command typescript", "bin/tsc"],
+    ["a bin object without tsc", { tsserver: "bin/tsc" }],
+  ])("treats %s as an absent tsc even with a .bin shim", async (_name, bin) => {
+    const root = await project({ tsc: false });
+    await pnpmTool(root, "tsc", "typescript", bin, "bin/tsc");
     const { runtime, requests } = runtimeFor(root);
     expect(await guardStop(payload(false), runtime)).toStrictEqual({ kind: "allow" });
     expect(requests).toStrictEqual([]);

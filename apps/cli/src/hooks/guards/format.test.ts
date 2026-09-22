@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import type { ProcessRequest, ProcessResult } from "@developer-os/security";
 import { afterEach, describe, expect, it } from "vitest";
@@ -24,13 +24,25 @@ afterEach(async () => {
 async function project(configs: readonly string[]): Promise<string> {
   const root = await tempDir();
   await mkdir(join(root, ".git"));
-  await mkdir(join(root, "node_modules", ".bin"), { recursive: true });
-  for (const name of ["biome", "prettier"]) {
-    await writeFile(join(root, "node_modules", ".bin", name), "synthetic\n", { mode: 0o755 });
-  }
+  await pnpmTool(root, "biome", "@biomejs/biome", { biome: "bin/biome" }, "bin/biome");
+  await pnpmTool(root, "prettier", "prettier", "./bin/prettier.cjs", "bin/prettier.cjs");
   for (const config of configs) await writeFile(join(root, config), "{}\n");
   await writeFile(join(root, "a.ts"), "export {};\n");
   return root;
+}
+
+/** A pnpm-shaped install: `.bin/<tool>` is a sh shim node cannot run; the package's `bin` names the JS entry. */
+async function pnpmTool(root: string, tool: string, pkg: string, bin: unknown, entry: string): Promise<void> {
+  const store = join(root, "node_modules", ".pnpm", `${pkg.replace("/", "+")}@1.0.0`, "node_modules", pkg);
+  await mkdir(join(store, dirname(entry)), { recursive: true });
+  await writeFile(join(store, "package.json"), JSON.stringify({ name: pkg, bin }));
+  await writeFile(join(store, entry), "#!/usr/bin/env node\n", { mode: 0o755 });
+  await mkdir(dirname(join(root, "node_modules", pkg)), { recursive: true });
+  await symlink(store, join(root, "node_modules", pkg));
+  await mkdir(join(root, "node_modules", ".bin"), { recursive: true });
+  await writeFile(join(root, "node_modules", ".bin", tool), `#!/bin/sh\nexec node "${join(store, entry)}" "$@"\n`, {
+    mode: 0o755,
+  });
 }
 
 const OK: ProcessResult = { stdout: "", stderr: "", exitCode: 0, signal: null, timedOut: false };
@@ -75,7 +87,7 @@ describe("guardFormat", () => {
     expect(requests).toHaveLength(1);
     expect(requests[0]?.executable).toBe("/synthetic/bin/node");
     expect(requests[0]?.args).toStrictEqual([
-      join(root, "node_modules", ".bin", "biome"),
+      join(root, "node_modules", ".pnpm", "@biomejs+biome@1.0.0", "node_modules", "@biomejs", "biome", "bin", "biome"),
       "format",
       "--write",
       join(root, "a.ts"),
@@ -89,7 +101,11 @@ describe("guardFormat", () => {
     const { runtime, requests } = runtimeFor(root);
     await guardFormat(edited(join(root, "a.ts"), "Write"), runtime);
     expect(requests.map((request) => request.args)).toStrictEqual([
-      [join(root, "node_modules", ".bin", "prettier"), "--write", join(root, "a.ts")],
+      [
+        join(root, "node_modules", ".pnpm", "prettier@1.0.0", "node_modules", "prettier", "bin", "prettier.cjs"),
+        "--write",
+        join(root, "a.ts"),
+      ],
     ]);
   });
 
@@ -98,7 +114,7 @@ describe("guardFormat", () => {
     for (const config of PRETTIER_CONFIG_FILES) {
       const { runtime, requests } = runtimeFor(await project([config]));
       await guardFormat(edited("a.ts"), runtime);
-      expect(requests[0]?.args[0]).toMatch(/prettier$/u);
+      expect(requests[0]?.args[0]).toMatch(/prettier\.cjs$/u);
     }
   });
 
@@ -131,6 +147,18 @@ describe("guardFormat", () => {
     const outcome = await guardFormat(edited("a.ts"), runtime);
     expect(outcome.kind).toBe("advise");
     expect(outcome.kind === "advise" ? outcome.ruleId : undefined).toBe("format-failed");
+  });
+
+  it("runs nothing when only the .bin shim exists", async () => {
+    const root = await tempDir();
+    await mkdir(join(root, ".git"));
+    await mkdir(join(root, "node_modules", ".bin"), { recursive: true });
+    await writeFile(join(root, "node_modules", ".bin", "biome"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    await writeFile(join(root, "biome.json"), "{}\n");
+    await writeFile(join(root, "a.ts"), "export {};\n");
+    const { runtime, requests } = runtimeFor(root);
+    expect(await guardFormat(edited("a.ts"), runtime)).toStrictEqual({ kind: "allow" });
+    expect(requests).toStrictEqual([]);
   });
 
   it("ignores a Read tool", async () => {
