@@ -120,7 +120,21 @@ export type {
   ProposedNote,
   ValidatorId,
 } from "./ingest/index.js";
-export { rewriteWikilinks, withoutAnchor } from "./refactor/index.js";
+export {
+  MAX_REFACTOR_MUTATIONS,
+  planRefactor,
+  RefactorRefusal,
+  rewriteWikilinks,
+  withoutAnchor,
+} from "./refactor/index.js";
+export type {
+  RefactorInputV1,
+  RefactorModeV1,
+  RefactorMutationV1,
+  RefactorPlanV1,
+  RefactorRefusalCodeV1,
+  RefactorRequestV1,
+} from "./refactor/index.js";
 export { CAPTURE_STATUSES } from "./schema/capture.js";
 export type {
   CaptureEnvelopeV1,
