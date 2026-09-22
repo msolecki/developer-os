@@ -199,6 +199,26 @@ The cost is that `validateChangePlan`'s ownership check does not stand behind a 
 `resolveCapturePath` stands there instead, which is a narrower constraint rather than the same one
 — and §5.2 is what that narrowness costs.
 
+**`import` is a second entrance into quarantine (A14), and it goes through the same door.** It feeds
+each inbox, path or Claude memory file to `buildCapture` unchanged, so the redaction-first ordering
+above holds for it without a second implementation. What it adds is bounded and named:
+
+- **Bounded.** Every source file is read through `readUntrustedText` (no symlink follow, a
+  pre-read size bound, UTF-8 and NUL refusal). A walk stops at `IMPORT_MAX_ENTRIES_WALKED` entries
+  or `IMPORT_MAX_DEPTH` levels, a run writes at most `IMPORT_MAX_FILES_PER_RUN` captures, and an
+  over-bound input is refused and named, never truncated.
+- **Redacted before persistence.** The only staged payload is the redacted capture, written by one
+  Foundation `create` transaction per new capture through the mutation gate, with quarantine as
+  the owned root and the product home as the excluded one. `tests/security/sentinel.test.ts` walks
+  the product home and the vault after a finalized import and finds the sentinel nowhere but the
+  planted source.
+- **It does not archive (Q5 A).** A source is never moved, rewritten or removed, and
+  `_raw/processed/` is written by no verb. The capture id is the content hash, so a rerun reports
+  duplicates and writes nothing. Nothing hashes unredacted content.
+- **The path policy runs before any read.** A source inside the product home refuses exit 5, a
+  vault path outside the inbox refuses exit 2, and a protected root refuses exit 5
+  (`import_source_protected`).
+
 ### 5.2 The capture file's own containment
 
 | Boundary | Mechanism | Evidence |
@@ -828,6 +848,14 @@ look identical from outside and are not the same thing.
 | **Automatic capture** | nothing fires on session start, session end or compaction. Capture content is agent-authored, and `capture` refuses without `--text` or stdin rather than sourcing text itself (`apps/cli/src/commands/capture.ts:339-346`) — the `session_end` trigger could only supply that text by reading a transcript, which the row above refuses | `apps/cli/src/commands/capture.test.ts`; follows structurally from hooks being absent |
 | **Telemetry, a scheduler, and Git mutation** | `telemetry` is `z.literal(false)` in the configuration schema (`packages/core/src/config/loader.ts:209`) | `packages/core/src/config/config.test.ts` |
 | **Reading anything outside this repository** | `npm run lint` runs a git-driven enumerator over tracked *and untracked* files | `tests/repository/self-containment.ts` — a lint rule rather than a sandbox, and it says so: it refuses the obvious spellings so that crossing the boundary has to be deliberate and visible in a diff |
+| **Writing a vendor configuration file** | the `doctor` check `vendor-config` reads the Claude user settings file through `readUntrustedText` and examines only `permissions.deny`; `project init` writes no vendor settings file (A14 Q4); the Codex config file is neither read nor written (D7) | `apps/cli/src/commands/vendor-config.test.ts` — `is value-free: no allow, env or deny string reaches the check` and `warns instead of failing when the read throws`. It proves the check reports no value; that nothing writes the file rests on the module holding no write call, which is a review claim |
+
+**A14 left this table unchanged in substance.** `import`, `project init`, `project check` and
+`vendor-config` add no network capability and no spawn, so the classified set in
+`tests/security/network.test.ts` is the same set. `import --claude-memory` lists only the projects
+directory and each memory directory, never a project directory, so it opens no transcript, and the
+transcript gate stays green unmodified. The vendor-config row above is new as a written row, not as
+a capability: no verb ever wrote a vendor file.
 
 ---
 

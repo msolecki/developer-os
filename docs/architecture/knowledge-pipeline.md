@@ -23,6 +23,7 @@ produced it.
 | | Where |
 |---|---|
 | the three verbs | `apps/cli/src/commands/capture.ts`, `review.ts`, `ingest.ts` |
+| `import`, the second entrance beside `capture` (A14) | `apps/cli/src/commands/import.ts`, over the quarantine seam `capture` shares (`apps/cli/src/commands/quarantine.ts`). It turns inbox, path and Claude memory files into quarantined captures through `buildCapture` unchanged, and never reviews, ingests or reindexes. `review` and `ingest` treat an imported capture like any other |
 | the envelope, its statuses, and their transitions | `packages/brain/src/schema/capture.ts`, `packages/brain/src/capture/`, `packages/brain/src/review/` |
 | the proposal, the nine validators, and the apply | `packages/brain/src/ingest/` |
 | structured-result schemas | `packages/workflow-schema/src/vocabulary.ts`: every verb declaring `structured_result` gets one product-shipped JSON Schema; today that set is `ingest.stage` |
@@ -144,6 +145,18 @@ resolving into the other.
 run loses the race to write it (`:322`) and when the existing file cannot be parsed (`:290`). It is
 **not** an `O_EXCL` create, and cannot be: no transaction-mediated write can
 deliver that precondition. `ORDER.md` carries the Foundation change that would close it — §10.2 below.
+
+**`captureMethod` has four values** (`CaptureBuildRequest`): `agent-authored` and `manual` from
+`capture`, chosen by whether a detection row matched, and `import` and `import-claude-memory` from
+`import`, by source. `import` sets `sourceAgent` and `sourceAgentVersion` to `"unknown"`, because
+the source file's author was not observed. It fingerprints the source root, or the vendor's
+project-directory name for memory, and puts no path in the envelope.
+
+**Import captures are not manifest rows either.** `import` writes one Foundation `create`
+transaction per new capture with the same shape and roots as `capture`, and records nothing in
+`installation-manifest.json`, for the same reason. The source file is never moved or removed, so
+the capture id, a content hash, is the cursor: a rerun over an unchanged source is a duplicate at
+exit 0.
 
 ---
 

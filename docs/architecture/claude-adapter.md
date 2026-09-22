@@ -416,3 +416,34 @@ block whose content is `@$T/p/claude/instructions/probe-rule.md`;
   `/Library/Application Support/ClaudeCode/` (not redirected by `HOME`) and the CLI's own version
   directory; no row named a path under the live `~/.claude`.
 - **`validate` still mutates `HOME`** (`$T/.claude.json`, `$T/.claude/backups/`), as §13 recorded.
+
+## 15. Observation rows used by A14
+
+A14 (`import --claude-memory` and the `doctor` check `vendor-config`) depends on two vendor facts. Both
+are rows in `packages/adapter-claude/src/observations.ts`, and both are `null` until a founder
+observation on a disposable home records them (A14 plan Task 14). Neither is ever written from
+memory or documentation, the rule `AGENT_DETECTION_ROWS` set. `isValidClaudeObservation` checks each
+row's version, date and one-sentence provenance.
+
+- **`CLAUDE_MEMORY_LAYOUT`** names the projects directory, the per-project memory directory, the
+  extension and the index file to exclude, relative to `<user-home>/.claude`. While it is `null`,
+  `import --claude-memory` exits 4 with `claude_memory_layout_unobserved` and reads nothing.
+  `CLAUDE_CONFIG_DIR` is not honoured.
+- **`CLAUDE_DENY_RULES`** maps each product rule ID in `PROTECTED_PATH_RULES` (`packages/security`)
+  to the exact Claude deny-rule strings for it. The IDs are derived from the protected-path policy,
+  so there is no second list; only the vendor syntax lives here. While it is `null`, `vendor-config`
+  warns that the syntax has not been observed and compares nothing.
+
+**What `import --claude-memory` opens.** `enumerateClaudeMemory` lists the projects directory, then
+`lstat`s each entry's memory directory and lists that. **It never lists a project directory**,
+because a project directory holds session transcripts. It takes regular, non-symlink files with the
+recorded extension, other than the index file; a symlink is a per-file refusal. Nothing else under
+the vendor home is opened. A reported path is the keyed fingerprint of the vendor's project-directory
+name plus the file name, so no decoded project path reaches output or the envelope.
+
+**What `vendor-config` touches.** It **reads, never writes**, the Claude user settings file
+`<user-home>/.claude/settings.json`, through the bounded untrusted reader, and examines only
+`permissions.deny` when it is an array of strings. No other key is compared or reported, because
+allow and ask lists are personal choices and `env` routinely holds credentials. A rule counts only
+on an exact string match. The check reports missing **rule IDs**, never a user string, and never
+returns `fail`. Codex is not examined, and the message says so.
