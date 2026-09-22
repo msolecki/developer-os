@@ -795,6 +795,32 @@ Plan 1a shipped the gate every V2 Foundation mutation passes through and the loc
 | The redaction key is secret-opaque everywhere plan 1a's lifecycle code touches it | `observeSecretOpaqueKey` only `open`s (`O_NOFOLLOW \| O_NONBLOCK`) and `fstat`s the descriptor, then closes it — no `read` call in the function (`apps/cli/src/lifecycle/redaction-key.ts:200-227`); `unlinkSecretOpaqueKey` `lstat`s the pathname, compares `dev`/`ino`/`size` against the prior observation, and `unlink`s by that checked identity, again with no content read (`apps/cli/src/lifecycle/redaction-key.ts:235-255`); the uninstall `K` adapter moves the key by `link` then `unlink`, never `renameNoReplace`, specifically because the guarded rename hashes its source and §6 forbids that for this file (`apps/cli/src/lifecycle/redaction-key.ts:257-350`, the doc comment at `:257-262` states the rule the three functions implement) | `apps/cli/src/lifecycle/absent-manifest-uninstall.v2.test.ts` — `spyOnKeyContentReads` wraps `node:fs/promises` `readFile` and `FileHandle.read` and asserts zero calls across a full `key_present` deletion |
 | §8.3's residuals 8 and 9 — the check-then-unlink window and the shape admission that decides which uninstall arm runs — are accepted, not closed, and this file already says so in one place | see the paragraph above at "Directory-creation authority is deliberately not reconstructed" (`docs/architecture/threat-model.md:601-608`): the identity recheck narrows the window between observation and unlink but cannot close it, because macOS unlinks a regular file by pathname; the shape admission stands accepted alongside it. Plan 1a's own deferred-fix list records the same limit in the implementer's own words: the check-then-unlink window "is pinned only at the unit level … cannot prove a closed window" | `apps/cli/src/lifecycle/absent-manifest-uninstall.test.ts` proves the detected case (an identity change between observation and unlink) refuses and preserves everything; it does not prove the window closed |
 
+### 5.14 Instruction artifacts steer every agent session (A12)
+
+**Added 2026-09-22 (A12)**, from spec `2026-09-22-developer-os-instruction-artifacts-design.md`
+§11.4. Installed instructions (skills, agents, commands, rules, scoped rules, output styles and the
+marked blocks in `H/.claude/CLAUDE.md` and `C/AGENTS.md`) change what both vendors' agents do in
+every session on the machine. Their integrity therefore equals the integrity of their sources, and
+this entry defends the sources and the write paths, not the text.
+
+| Boundary | Mechanism | Evidence |
+|---|---|---|
+| Defaults are exactly as trustworthy as the admitted release, and under D47 that release is an **unsigned local build**: a recorded, reported downgrade, never a silent one | the trust state carries `trust: "unsigned-local"` (`packages/core/src/update/release.ts:185`); `advanceReleaseTrust` and `admitReleaseAgainstTrust` throw `ReleaseUnsignedLocalError` for it (`packages/core/src/update/release.ts:494,512`), so it is never an update source or rollback target; `doctor` warns on every run (`apps/cli/src/commands/doctor.ts:1110-1113`); only `init --local-release <dir>` admits one, never by fallback | `packages/core/src/update/release.test.ts` — `refuses an unsigned-local state as an update source or rollback target`; `apps/cli/src/commands/doctor.test.ts` — `warns on every run when the home was installed from an unsigned local build` |
+| User overrides under `<product-home>/instructions/<vendor>/` are trusted as the user's own text, but read only as owned, single-link regular files within bounds | `readUserFile` checks type, `nlink`, owner uid, opens `O_NOFOLLOW \| O_NONBLOCK` and re-checks identity after the read (`apps/cli/src/instructions/sources.ts:209-216`); sizes pass `assertInstructionArtifactBounds` (`apps/cli/src/instructions/sources.ts:104`) | `apps/cli/src/instructions/sources.test.ts` — `refuses a symlinked file`, `refuses a symlinked skill directory`, `refuses a symlinked category directory` |
+| Instructions are written only to the closed, owner-bound §2.2 paths, never to a general vendor root | `isVendorAuthorized` admits exact paths per owner and arm, refusing `.`/`..` segments (`apps/cli/src/bootstrap/admission.ts:106`) | `apps/cli/src/bootstrap/admission.test.ts` — the `spec §2.2 closed vendor authorization` table: `admits its owner and arm`, `refuses the other owner`, `refuses a wrong arm`, `is refused when vendors is null` |
+| A symlinked target (including a dotfiles-managed `CLAUDE.md` or `AGENTS.md`) is refused rather than written through | `instruction_target_symlinked`, exit 5 (`apps/cli/src/instructions/attach.ts:261`) | `apps/cli/src/instructions/attach.test.ts` — `refuses a symlink at any component of a target, including linked vendor files, with exit 5` |
+| Codex registration runs the vendor CLI with no inherited credentials and against the same Codex home the product writes | argv arrays only, `env: { CODEX_HOME: C }` (`apps/cli/src/instructions/codex-registration.ts:90`) | `apps/cli/src/instructions/codex-registration.test.ts` — `passes argv arrays only and env exactly { CODEX_HOME: C } to every call` |
+
+- **What the product cannot defend.** A process running with the user's privileges can rewrite the
+  local build or the overrides before the next `init`, and the product installs what it then reads.
+  This is §2's existing adversary 4 (a hostile process with write access), not a new boundary.
+- **Third-party skills are not vendored (D51, superseding the spec's "vendored skills" bullet).**
+  `react-best-practices`, `claudeception`, `excalidraw-diagram` and the `research*` family ship in no
+  default; `claude-adapter.md` §16 links their upstream originals. A user who installs one, or keeps
+  a modified copy as an override, brings prompt text from outside this repository under the override
+  row above: trusted as the user's own, never reviewed by the product. Every default that does ship
+  is reviewed as content at every change (`tests/repository/instruction-defaults.test.ts`).
+
 ---
 
 ## 6. Statuses, and the invariant under every failure

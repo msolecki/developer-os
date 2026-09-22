@@ -46,6 +46,14 @@ note says so rather than restating it as a coincidence.
    writing one would silently suppress the user's own instructions. It is the single most
    destructive thing this adapter could do to a configuration, and it is refused rather than merely
    omitted. `durable_project_guidance` is therefore reported and used by nothing (§11.5).
+   **Amended 2026-09-22 (A12):** the first half no longer holds as written. The product now writes
+   exactly one marked block (`<!-- developer-os:begin v1 -->` … `<!-- developer-os:end v1 -->`) in exactly `C/AGENTS.md`,
+   merged three-way with the user's text around it (spec
+   `2026-09-22-developer-os-instruction-artifacts-design.md` §5), plus `C/agents/developer-os-<id>.toml`
+   agents; both are rows of the closed §2.2 authorization. It still never writes
+   `AGENTS.override.md` at any scope (`packages/adapter-codex/src/instructions.ts`).
+   `durable_project_guidance` stays `not-used`: the block is user-scope guidance in the Codex home,
+   not project guidance.
 3. **It never reads or writes `~/.codex/config.toml`.** The vendor's CLI is the only writer of the
    vendor's config (§4). Verified by write-ordering against a real installation: no `config.toml`
    exists after this adapter writes its tree, and one appears only after `codex plugin marketplace
@@ -433,9 +441,10 @@ rather than performed; and the provisional JSONL reduction was replaced after a 
    returns the named capability object explicitly, so renaming or dropping a required key is a
    compile error rather than an unsound `Record<string, CapabilityState>` cast.
 8. **The floor `0.147.0` is one observed version, not a range** — §3. **Owner: DOS-P9.**
-9. **`buildConflictEvidence` still has no consumer.** DOS-P4 dissolved its half of the semantic
-   merge and DOS-P5 dissolves the other by delegating the config write. It was built for a design
-   both adapters declined. **Owner: the first subsystem with a real three-way merge.**
+9. **CLOSED 2026-09-22 by A12: `buildConflictEvidence` has its consumer.** The marked instruction
+   block in `C/AGENTS.md` (and `H/.claude/CLAUDE.md`) is the first real three-way merge; a block
+   conflict uses the new block arm of `ConflictEvidenceRequest`: three hashes plus a redacted
+   two-way diff (spec §5.3). **Amended 2026-09-22 (A12).**
 10. **Line-wrap drift across several files.** No formatter and no `max-len` rule is configured, so
     nothing enforces either convention and a hand pass would drift again by the next commit. This
     wants a repository lint decision, not a hand pass. **Owner: whoever configures repository
@@ -457,6 +466,13 @@ rather than performed; and the provisional JSONL reduction was replaced after a 
     post-install edit under the product home is invisible to the model until Codex resyncs its
     cache on some schedule this adapter has never observed. **Owner: DOS-P7**, whose update
     lifecycle is what re-renders the tree in place.
+    **CLOSED 2026-09-22 by A12 (amended in place):** spec §6.4's registration step runs
+    `codex plugin add developer-os@developer-os --json` on every install and on every reconcile whose
+    plugin-tree hash differs from the one recorded in `P/codex/registration.json`
+    (`codex-registration-v1`), which re-stages the cache copy, then checks `codex plugin list --json`.
+    `doctor` reports `stale` when the recorded hash no longer matches the tree, and `--probe` reports
+    `cache-stale` when prompt-input bytes differ; re-running `init` recovers both
+    (`apps/cli/src/instructions/codex-registration.ts`).
 
 ## 12. What DOS-P8 must know
 

@@ -37,9 +37,23 @@ archive for both.
 2. **It writes to exactly one directory** — `~/.claude/skills/developer-os/`. Both the renderer
    and the install proposal refuse a path that would escape it, at both ends, and the integration
    test asserts no byte lands outside a temporary `HOME`.
+   **Amended 2026-09-22 (A12):** instruction artifacts add writes outside
+   `H/.claude/skills/developer-os/`, and only to the rows of the closed, owner-bound authorization in
+   spec `2026-09-22-developer-os-instruction-artifacts-design.md` §2.2:
+   `H/.claude/rules/developer-os-<id>.md` (scoped rules), `H/.claude/output-styles/developer-os-<id>.md`
+   (output styles), one marked block in exactly `H/.claude/CLAUDE.md`, and the product-created parent
+   directories `H/.claude`, `H/.claude/skills`, `H/.claude/rules` and `H/.claude/output-styles`. The
+   table is enforced by `isVendorAuthorized` in `apps/cli/src/bootstrap/admission.ts`; it never
+   becomes a general root. A symlink at any component refuses the target with
+   `instruction_target_symlinked`, exit 5.
 3. **It writes no key into `~/.claude/settings.json`.** The install shape (§4) removes the
    question rather than answering it: there is no foreign config file to merge, so there is
    nothing to three-way merge and `buildConflictEvidence` stays unused.
+   **Amended 2026-09-22 (A12):** still true for `settings.json`: A12 writes no settings key and
+   selects no output style (an installed style is only available; the user picks it). The one file
+   A12 does share with the user, `H/.claude/CLAUDE.md`, is merged by the marked block's three-way
+   table (spec §5.2), and its conflict is reported through `buildConflictEvidence`'s block arm — §9
+   residual 8.
 4. **It never opens `transcript_path`**, on any code path. No hook payload is read at all,
    because no hook ships.
 5. **It executes no workflow verb.** A rendered skill is guidance; the effects it names are
@@ -240,9 +254,10 @@ capture cannot faithfully obtain agent-authored observation text without reading
    precedent to weigh against. `codex-adapter.md` §9 records the same fact from the other side.
 7. **CLOSED by DOS-P6: `durable_project_guidance` is used by nothing and reports `not-used`.**
    Relying on it would first require revisiting §6's concatenation decision.
-8. **`buildConflictEvidence` still has no consumer.** DOS-P4 dissolved its half of the semantic
-   merge (§2 above) and the Codex adapter dissolves the other. Owner: the first subsystem with a real
-   three-way merge.
+8. **CLOSED 2026-09-22 by A12: `buildConflictEvidence` has its consumer.** The marked instruction
+   block in `H/.claude/CLAUDE.md` and `C/AGENTS.md` is the first real three-way merge; a block
+   conflict calls the new block arm of `ConflictEvidenceRequest`, which reports three hashes and a
+   redacted two-way diff (spec §5.3). **Amended 2026-09-22 (A12).**
 9. **The integration test proves the tree does not anger `claude plugin validate`, not that the
    six skills load.** Its only substantive assertion is a clean exit and a clean stderr; a renderer
    gutted to emit only the manifest would still pass it. Proving discovery needs a real session —
@@ -447,3 +462,21 @@ name plus the file name, so no decoded project path reaches output or the envelo
 allow and ask lists are personal choices and `env` routinely holds credentials. A rule counts only
 on an exact string match. The check reports missing **rule IDs**, never a user string, and never
 returns `fail`. Codex is not examined, and the message says so.
+
+## 16. Recommended third-party skills
+
+**Added 2026-09-22 (A12, founder decision D51).** Third-party-derived skills are **not** vendored
+into `instructions/` or the generated plugin trees: the product cannot strip their attribution, and
+redistributing derived prompt text is not its call to make. Install them from their upstream
+originals instead:
+
+- `react-best-practices` — <https://github.com/vercel-labs/agent-skills>
+- `claudeception` — <https://github.com/blader/Claudeception>
+- `excalidraw-diagram` — <https://github.com/coleam00/excalidraw-diagram-skill>
+
+A skill you own, including a modified copy of one of these, lives under
+`<product-home>/instructions/<vendor>/skills/<id>/` as a **user override** (spec §3.2). `init`
+installs it beside the defaults, `doctor` reports it as `user`, and re-running `init` reconciles a
+change to it. It is trusted as your own text: the product reads it with no-follow guards and bounds
+and never reviews its content.
+
