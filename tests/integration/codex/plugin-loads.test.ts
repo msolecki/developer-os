@@ -47,7 +47,7 @@ async function findCodex(): Promise<string | null> {
 const codex: string | null = await findCodex();
 
 /**
- * The six canonical workflow contracts, loaded the same way
+ * The canonical workflow contracts, loaded the same way
  * `tests/contracts/adapters/codex/render-all.ts` does — this file needs the
  * contracts themselves, not `renderCodexPlugin`'s plugin-root-relative output,
  * because `renderCodexInstallTree` re-roots and adds the marketplace
@@ -250,11 +250,11 @@ describe("the generated install tree against a real Codex installation", () => {
    * only way found to verify skill discoverability without an exec run.
    */
   it.skipIf(codex === null)(
-    "surfaces all six skills, prefixed with the plugin name, in the model-visible skill list",
+    "surfaces every workflow skill, prefixed with the plugin name, in the model-visible skill list",
     async () => {
       const contracts = await loadContracts();
       const { stdout } = await runCodex(["debug", "prompt-input"]);
-      expect(contracts.length).toBe(6);
+      expect(contracts.length).toBeGreaterThan(0);
       for (const contract of contracts) {
         expect(stdout, `missing skill for ${contract.id}`).toContain(
           `${PLUGIN_NAME}:developer-os-${contract.id}`,

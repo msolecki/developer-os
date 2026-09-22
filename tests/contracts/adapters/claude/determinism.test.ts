@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { renderAllForClaude } from "./render-all.js";
+import { loadRepositoryWorkflows, renderAllForClaude } from "./render-all.js";
+
+const isWorkflowSkill = (path: string): boolean =>
+  path.startsWith("skills/developer-os-") && path.endsWith("/SKILL.md");
 
 /**
  * `docs/architecture/workflow-schema.md` §6 records that DOS-P3 could prove only
  * that a renderer's *inputs* are byte-identical, because it ships no renderer,
  * and names DOS-P4 and DOS-P5 as owing the byte-identity of real vendor
- * artifacts. This is DOS-P4 paying that debt — over the six real workflows and
+ * artifacts. This is DOS-P4 paying that debt — over the real workflows and
  * the real renderer, not a stub.
  */
 describe("Claude artifacts are byte-identical", () => {
@@ -32,10 +35,10 @@ describe("Claude artifacts are byte-identical", () => {
     expect(JSON.stringify(reversed)).toBe(JSON.stringify(forward));
   });
 
-  it("renders all six workflows, so byte-identity is not over an empty set", async () => {
-    const skills = (await renderAllForClaude()).filter((artifact) =>
-      artifact.path.endsWith("SKILL.md"),
-    );
-    expect(skills).toHaveLength(6);
+  it("renders every workflow, so byte-identity is not over an empty set", async () => {
+    const workflows = await loadRepositoryWorkflows();
+    const skills = (await renderAllForClaude()).filter(({ path }) => isWorkflowSkill(path));
+    expect(workflows.length).toBeGreaterThan(0);
+    expect(skills).toHaveLength(workflows.length);
   });
 });
