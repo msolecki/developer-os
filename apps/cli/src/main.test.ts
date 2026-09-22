@@ -1,13 +1,14 @@
 import * as nodeFs from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { serializeConfig } from "@developer-os/core";
+import { EXIT_CODES, serializeConfig } from "@developer-os/core";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
   createCommandFixture,
   firstRegularFile,
+  RecordingIo,
   inventoryDigest,
   REAL_FILESYSTEM_TIMEOUT_MS,
   removeCommandFixtures,
@@ -1119,5 +1120,58 @@ describe("brain dispatch", () => {
     await fixture.invoke(["search", "zzzznotpresent", "--json"]);
     expect(fixture.out[2]).not.toBe(aliasLine);
     expect(fixture.out[2]).toContain('"matches":[]');
+  });
+});
+
+describe("import and project dispatch", () => {
+  it.each([
+    [["import", "a", "b"]],
+    [["import", "notes", "--claude-memory"]], // import_path_conflict → usage, exit 2
+    [["import", "--yes"]],
+    [["import", "--text", "x"]],
+    [["import", "--limit", "0"]],
+    [["project"]],
+    [["project", "worktree"]], // refused verb, no dispatch entry
+    [["project", "init", "a", "b"]],
+    [["project", "check", "--dry-run"]],
+    [["project", "init", "--limit", "3"]],
+    [["project", "toString"]],
+    [["repo", "audit"]],
+    [["repo", "secrets-scan"]],
+  ])("refuses the argv %j before building a context", async (argv) => {
+    const io = new RecordingIo();
+    expect(
+      await run(argv, io, () => {
+        throw new Error("context must not be built");
+      }),
+    ).toBe(EXIT_CODES.invalidInput);
+    expect(io.err.join("\n")).toContain("Usage: developer-os <command> [options]");
+  });
+
+  it.each([
+    [["import"]],
+    [["import", "notes"]],
+    [["import", "--claude-memory"]],
+    [["import", "--dry-run", "--limit", "5", "--json"]],
+    [["project", "init"]],
+    [["project", "init", "some-dir", "--dry-run", "--json"]],
+    [["project", "check"]],
+    [["project", "check", "some-dir", "--json"]],
+  ])("admits %j and reaches the not-implemented stub, exit 4", async (argv) => {
+    const fixture = await createCommandFixture("dispatch-a14");
+    expect(await run(argv, fixture.io, () => fixture.context)).toBe(
+      EXIT_CODES.capabilityUnavailable,
+    );
+  });
+
+  it("lists import and project in the usage text", async () => {
+    const io = new RecordingIo();
+    await run(["--nope"], io, () => {
+      throw new Error("unused");
+    });
+    const usage = io.err.join("\n");
+    expect(usage).toContain("  import     ");
+    expect(usage).toContain("  project    ");
+    expect(usage).toContain("--claude-memory");
   });
 });

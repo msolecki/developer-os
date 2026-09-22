@@ -17,9 +17,12 @@ import { renderConfigResult, runConfig } from "./commands/config.js";
 import type { ConfigCommandRequestV1 } from "./commands/config.js";
 import { runDoctor } from "./commands/doctor.js";
 import type { DoctorReportV1 } from "./commands/doctor.js";
+import { renderImport, runImport } from "./commands/import.js";
 import { renderIngest, runIngest } from "./commands/ingest.js";
 import { runInit } from "./commands/init.js";
 import type { InitResultV1 } from "./commands/init.js";
+import { renderProjectCheck, runProjectCheck } from "./commands/project-check.js";
+import { renderProjectInit, runProjectInit } from "./commands/project-init.js";
 import { runRepair } from "./commands/repair.js";
 import type { RepairResultV1 } from "./commands/repair.js";
 import { runReview } from "./commands/review.js";
@@ -47,20 +50,23 @@ const USAGE = [
   "  capture    quarantine one observation, redacted before it is written",
   "  review     list quarantined captures, or decide on one",
   "  ingest     turn accepted captures into notes, one agent call each",
+  "  import     turn inbox files, a path, or Claude memory into quarantined captures",
+  "  project    init | check [<dir>]: write or check project instruction files",
   "  status     report the current installation without changing it",
   "  doctor     run every health check without repairing anything",
   "  repair     resume or roll back one incomplete transaction",
   "  uninstall  remove manifest-owned artifacts",
   "",
   "Options:",
-  "  --dry-run        show the plan without changing anything (init, uninstall)",
+  "  --dry-run        show the plan without changing anything (init, uninstall, import, project init)",
   "  --yes            accept ordinary confirmations (init, uninstall; ingest never asks)",
   "  --json           emit one machine-readable line",
-  "  --limit <n>      most matches to return (brain search), or captures to process (ingest)",
+  "  --limit <n>      most matches to return (brain search), or captures to process (ingest, import)",
   "  --text <text>    the observation to capture; stdin when absent (capture)",
   "  --id <id>        the capture to decide on (review)",
   "  --decision <d>   accept, reject or edit (review)",
   "  --status <s>     which status to list; quarantined by default (review)",
+  "  --claude-memory  import Claude Code auto-memory instead of a path (import)",
   "  --agent <name>   claude or codex; the first installed one by default (ingest)",
   "  --probe          probe each agent CLI; Claude's probe writes ~/.claude.json (doctor)",
   "  --resume <id>    finish an incomplete transaction (repair)",
@@ -70,6 +76,7 @@ const USAGE = [
 
 const OPTIONS = {
   "dry-run": { type: "boolean" },
+  "claude-memory": { type: "boolean" },
   agent: { type: "string" },
   decision: { type: "string" },
   status: { type: "string" },
@@ -118,6 +125,8 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly OptionName[]>> = {
   doctor: ["json", "probe"],
   repair: ["resume", "rollback", "json"],
   uninstall: ["dry-run", "yes", "json"],
+  import: ["claude-memory", "limit", "dry-run", "json"],
+  project: ["dry-run", "json"],
 };
 
 /**
@@ -140,6 +149,8 @@ const COMMAND_POSITIONALS: Readonly<
   config: { min: 1, max: 3 },
   brain: { min: 1, max: 2 },
   search: { min: 1, max: 1 },
+  import: { min: 0, max: 1 },
+  project: { min: 1, max: 2 },
 };
 
 const BRAIN_SUBCOMMANDS: Readonly<
@@ -149,6 +160,11 @@ const BRAIN_SUBCOMMANDS: Readonly<
   lint: { options: ["json"], query: false },
   search: { options: ["json", "limit"], query: true },
   status: { options: ["json"], query: false },
+};
+
+const PROJECT_SUBCOMMANDS: Readonly<Record<string, readonly OptionName[]>> = {
+  init: ["dry-run", "json"],
+  check: ["json"],
 };
 
 export type CliContextFactory = (io: CliIo) => CliContext;
@@ -266,6 +282,18 @@ function parse(argv: readonly string[]): Invocation | null {
       (operation === "get" && rest.length <= 2) || (operation === "set" && rest.length === 3);
     if (!arity) return null;
   }
+
+  if (positional === "project") {
+    const [name] = rest;
+    if (name === undefined || !Object.hasOwn(PROJECT_SUBCOMMANDS, name)) return null;
+    const allowedHere = PROJECT_SUBCOMMANDS[name];
+    if (allowedHere === undefined || !suppliedOptions(values).every((o) => allowedHere.includes(o))) {
+      return null;
+    }
+  }
+
+  // `import_path_conflict` is a usage failure, like every other argv error.
+  if (positional === "import" && values["claude-memory"] === true && rest.length > 0) return null;
 
   const limit = parseLimit(optionString(values.limit));
   if (limit === "invalid") return null;
@@ -610,6 +638,26 @@ async function dispatch(
         json,
         renderIngest,
       );
+    }
+    case "import": {
+      const [path] = invocation.positionals;
+      return emit(
+        io,
+        await runImport(context, {
+          path: path ?? null,
+          claudeMemory: invocation.values["claude-memory"] === true,
+          limit: invocation.limit,
+          dryRun,
+        }),
+        json,
+        renderImport,
+      );
+    }
+    case "project": {
+      const [subcommand, dir] = invocation.positionals;
+      return subcommand === "init"
+        ? emit(io, await runProjectInit(context, { dir: dir ?? null, dryRun }), json, renderProjectInit)
+        : emit(io, await runProjectCheck(context, { dir: dir ?? null }), json, renderProjectCheck);
     }
     case "config": {
       const [operation, key, value] = invocation.positionals;
