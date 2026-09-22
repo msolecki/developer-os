@@ -19,6 +19,7 @@
     "test:vendor-ingest": "vitest run tests/integration/ingest/no-user-hooks.test.ts",
     "render:claude": "tsc -b && node tests/dist/tools/render-claude.js",
     "render:codex": "tsc -b && node tests/dist/tools/render-codex.js",
+    "link:tests": "tsc -b && node tests/dist/tools/link-workspace-packages.js",
     "check": "npm run lint && npm test && npm run test:e2e && npm run test:vendor-ingest && pnpm --pm-on-fail=ignore build && git diff --check"
   },
   "devDependencies": {
