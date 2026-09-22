@@ -18,6 +18,7 @@ import type { CommandFixture } from "./commands/testing.js";
 import type { CliIo } from "./io.js";
 import { renderReview, run } from "./main.js";
 import type { CliContextFactory } from "./main.js";
+import type { HookEnvironment } from "./hooks/entry.js";
 import { PRODUCT_VERSION } from "./context.js";
 import { admitUnsignedLocalPackagedRelease } from "./update/packaged-release.js";
 import type { ReviewResultV1 } from "./commands/review.js";
@@ -1320,5 +1321,40 @@ describe("init --local-release dispatch", () => {
 
     expect(code).toBe(EXIT_CODES.securityRefusal);
     expect(lines.join("\n")).toContain("packaged release root must already be canonical");
+  });
+});
+
+describe("hook-mode routing", () => {
+  const hookEnvironment: HookEnvironment = {
+    env: {},
+    userHome: "/Users/synthetic",
+    processCwd: () => "/Users/synthetic/p",
+    nodeExecutable: "/usr/local/bin/node",
+  };
+
+  it("routes guard prompt --vendor bogus to allow, never to usage exit 2", async () => {
+    const io = new RecordingIo();
+    expect(await run(["guard", "prompt", "--vendor", "bogus"], io, neverCreatesContext, hookEnvironment)).toBe(0);
+    expect(io.out).toStrictEqual([]);
+    expect(io.err).toHaveLength(1);
+    expect(io.err.join("\n")).not.toContain("Usage: developer-os");
+  });
+
+  it("routes guard command with a parse failure to block", async () => {
+    const io = new RecordingIo();
+    expect(await run(["guard", "command"], io, neverCreatesContext, hookEnvironment)).toBe(2);
+    expect(io.out).toStrictEqual([]);
+    expect(io.err.join("\n")).toContain("hook-failed-closed");
+    expect(io.err.join("\n")).not.toContain("Usage: developer-os");
+  });
+
+  it("routes --inject with --json to allow without a usage block", async () => {
+    const io = new RecordingIo();
+    expect(await run(["brain", "status", "--inject", "--json", "--vendor", "claude"], io, neverCreatesContext, hookEnvironment)).toBe(0);
+    expect(io.out).toStrictEqual([]);
+  });
+
+  it("leaves ordinary dispatch unchanged", async () => {
+    await refuses(["nonsense"]);
   });
 });

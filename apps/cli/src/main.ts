@@ -36,6 +36,9 @@ import { assertOrdinaryCommandAdmitted, BootstrapRecoveryRequiredError, Bootstra
 import { exitCodeOf, failureFrom, PRODUCT_VERSION, renderPath } from "./context.js";
 import type { CliContext } from "./context.js";
 import type { CliIo } from "./io.js";
+import { isHookInvocation } from "./hooks/argv.js";
+import { runHookMode } from "./hooks/entry.js";
+import type { HookEnvironment } from "./hooks/entry.js";
 
 export type { CliIo } from "./io.js";
 
@@ -742,7 +745,9 @@ export async function run(
   argv: readonly string[],
   io: CliIo,
   createContext: CliContextFactory,
-): Promise<ExitCode> {
+  hookEnvironment?: HookEnvironment,
+): Promise<number> {
+  if (isHookInvocation(argv)) return runHookMode(argv, io, createContext, hookEnvironment);
   const invocation = parse(argv);
   if (invocation === null) {
     return emit(io, usageFailure(), argv.includes("--json"), () => []);

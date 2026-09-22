@@ -5,6 +5,8 @@ import { createInterface } from "node:readline/promises";
 
 import { MAX_CAPTURE_INPUT_BYTES } from "./commands/capture.js";
 import { createProductionContext, PRODUCT_VERSION } from "./context.js";
+import { hookLastResortExit, isHookInvocation } from "./hooks/argv.js";
+import type { HookEnvironment } from "./hooks/entry.js";
 import type { CliIo } from "./io.js";
 import { run } from "./main.js";
 import { admitUnsignedLocalPackagedRelease } from "./update/packaged-release.js";
@@ -94,16 +96,48 @@ const io: CliIo = {
     }
     return chunks.length === 0 ? null : Buffer.concat(chunks).toString("utf8");
   },
+  readStdinBytes: async (limit: number): Promise<Uint8Array | null> => {
+    if (process.stdin.isTTY) return null;
+
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of process.stdin as AsyncIterable<unknown>) {
+      const bytes = asBytes(chunk);
+      chunks.push(bytes);
+      size += bytes.byteLength;
+      if (size > limit) break;
+    }
+    return chunks.length === 0 ? null : Buffer.concat(chunks).subarray(0, limit + 1);
+  },
 };
 
 const home = process.env.HOME;
+const argv = process.argv.slice(2);
+const hookMode = isHookInvocation(argv);
+const hookEnvironment = (userHome: string | null): HookEnvironment => ({
+  env: process.env,
+  userHome,
+  processCwd: () => process.cwd(),
+  nodeExecutable: process.execPath,
+});
 
 if (home === undefined || home.length === 0) {
-  process.stderr.write("HOME is not set; Developer OS cannot resolve paths\n");
-  process.exitCode = 2;
+  if (hookMode) {
+    try {
+      process.exitCode = await run(argv, io, () => {
+        throw new Error("HOME is not set");
+      }, hookEnvironment(null));
+    } catch (error) {
+      io.stderr(error instanceof Error ? `developer-os failed: ${error.name}` : "developer-os failed unexpectedly");
+      process.exitCode = hookLastResortExit(argv);
+    }
+  } else {
+    process.stderr.write("HOME is not set; Developer OS cannot resolve paths\n");
+    process.exitCode = 2;
+  }
 } else {
   try {
-    process.exitCode = await run(process.argv.slice(2), io, async (commandIo, request) =>
+    process.exitCode = await run(argv, io, async (commandIo, request) =>
       createProductionContext({
         io: commandIo,
         env: process.env,
@@ -112,7 +146,7 @@ if (home === undefined || home.length === 0) {
           ? null
           : await admitUnsignedLocalPackagedRelease(request.localRelease, PRODUCT_VERSION),
       }),
-    );
+    hookMode ? hookEnvironment(home) : undefined);
   } catch (error) {
     /**
      * Last resort. An escaping rejection here would otherwise surface as an
@@ -124,6 +158,6 @@ if (home === undefined || home.length === 0) {
         ? `developer-os failed: ${error.name}`
         : "developer-os failed unexpectedly",
     );
-    process.exitCode = 1;
+    process.exitCode = hookMode ? hookLastResortExit(argv) : 1;
   }
 }

@@ -16,4 +16,11 @@ export interface CliIo {
    * command never consumes is the honest reading of that sentence.
    */
   readonly readStdin: () => Promise<string | null>;
+  /**
+   * The hook payload as raw bytes: at most `limit + 1` of them, so the caller
+   * can see a stream over the bound, and `null` for a terminal or an empty
+   * stream. It never decodes; the hook decoder owns UTF-8 validity. Optional so
+   * fixtures that never run a hook still satisfy the interface.
+   */
+  readonly readStdinBytes?: (limit: number) => Promise<Uint8Array | null>;
 }
