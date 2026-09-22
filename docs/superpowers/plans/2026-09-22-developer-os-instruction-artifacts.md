@@ -69,8 +69,8 @@ each as `default` or `user`. Backlog rows owned: A12, NEW-60, NEW-61, NEW-65.
   real Brain is **not an agent step**. It is marked **FOUNDER STOP** below and the task halts there
   and reports. Vendor CLIs may be run by an agent only with `HOME`, `CODEX_HOME` and
   `XDG_CONFIG_HOME` pointing into a fresh `mktemp -d` directory and `CLAUDE_CONFIG_DIR` unset.
-- **Clean room (spec §3.3, `docs/migration/exclusion-policy.md`).** No agent reads `~/claude-shared`,
-  `~/brain`, `~/.claude`, any `DEVELOPER_OS_SOURCE_*` path or the legacy runtime. The founder supplies
+- **Clean room (spec §3.3, `docs/migration/exclusion-policy.md`).** No agent reads the legacy shared-rules directory,
+  the legacy vault, `~/.claude`, any frozen-source environment path (prefix in `tests/repository/self-containment.ts`) or the legacy runtime. The founder supplies
   each legacy artifact's text through an owner-controlled process. This repository is public.
 - **Production reachability (D47 Q1).** `createProductionContext` keeps
   `bootstrap: { state: "unavailable_until_packaged_handoff" }` as its default. The bootstrap becomes
@@ -447,7 +447,7 @@ it("reports path and line only, never the matched text", () => {
 
 Rules: the security secret scanner; absolute home paths (`/Users/`, `/home/`); `~/` except
 `~/.claude`, `~/.codex`, `~/.developer-os`; e-mail addresses; URLs whose host is not in
-`instruction-hosts.json`; `DEVELOPER_OS_SOURCE_`; `docs/superpowers/plans/legacy-runtime/`. Each rule
+`instruction-hosts.json`; the frozen-source environment prefix (as in `tests/repository/self-containment.ts`); `docs/superpowers/plans/legacy-runtime/`. Each rule
 has a positive and a negative case; an injected e-mail, home path and legacy-runtime path each fail.
 
 - [ ] **Step 2: Write `instruction-defaults.test.ts` and `instruction-coverage.test.ts`**

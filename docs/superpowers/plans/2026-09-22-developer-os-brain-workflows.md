@@ -1368,7 +1368,7 @@ it("answers from the vault, files the answer back as one plain capture, and inge
   await installCannedCodex(home, okData(captured.result).captureId);
   const ingested = await acceptAndIngest(home, okData(captured.result).captureId);
   expect(ingested.exitCode).toBe(EXIT_CODES.success);
-  const lint = await runJson<BrainLintResultV1>(home, ["brain", "lint", "--json"]);
+  const lint = await runJson<BrainLintResultV1>(productHome, ["brain", "lint", "--json"]);
   expect(okData(lint.result).errorCount).toBe(0);
 });
 it("writes nothing when file-back is false", async () => { /* run only the read steps; inventory unchanged */ });

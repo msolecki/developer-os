@@ -340,7 +340,7 @@ candidate, then staged by exact path.
   - `~/` outside `~/.claude`, `~/.codex` and `~/.developer-os`
   - e-mail addresses
   - URLs outside a checked-in host allowlist
-  - `DEVELOPER_OS_SOURCE_`
+  - the frozen-source environment prefix named in `tests/repository/self-containment.ts`
   - any reference to `docs/superpowers/plans/legacy-runtime/`
 
   Findings report path and line only.
