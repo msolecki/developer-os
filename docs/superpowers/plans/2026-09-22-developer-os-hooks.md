@@ -83,6 +83,13 @@ Task 3 writes each of these into the spec as a dated amendment, before any code 
   script.** Today's `apps/cli/src/bin.ts` is one. Task 14 therefore stops and asks the founder unless
   A12's installed entrypoint is either a single executable that does not resolve its interpreter
   through `PATH`, or A12 records an absolute interpreter the entrypoint names.
+  **Resolved 2026-09-22 (D47, spec amendment).** The hook command is two tokens,
+  `<node-executable> <entrypoint>`: the absolute path of the Node executable, then the absolute path
+  of the installed `bin.js`. No `PATH` lookup, no `env`, and the shebang is never executed, so
+  invariant 1 holds. The entrypoint token passes `assertHookExecutablePath` in full. The Node token
+  passes only the shell-safe charset and absolute/segment rules, not the version-or-hash rule, so a
+  package-manager cellar Node path is accepted. A Node upgrade that moves the executable changes the
+  command bytes (Codex re-trust). Task 14 Step 1 widens Task 6's single-path render to this form.
 - **G2 — Children run under the hook's own Node.** `node_modules/.bin/tsc`, `biome` and `prettier`
   are `#!/usr/bin/env node` scripts. A child that gets only the hook marker has no `PATH`, so the
   shebang fails. The verbs therefore run `process.execPath` with the child script's canonical real
@@ -227,7 +234,7 @@ run in parallel, each in its own worktree created with `automation/worktree.sh`.
 | 2 | 7, 8, 9, 10 | 7: 3; 8: 4, 5; 9: 5; 10: 5 | 8, 9 and 10 each add one import line to `apps/cli/src/hooks/registry.ts`, merged as a union |
 | 3 | 11, 12, 16 | 11: 7; 12: 5, 7; 16: 6, 8, 9, 10 | 11 edits `executor.ts` `ordinaryDirectories`, which **D37's pending task also edits**; whichever lands second rebases onto the first |
 | 4 | 13, 14, 17 | 13: 6, 12; 14: 6, 11, A12 install; 17: 8–13 | **Task 14 stops before starting unless Task 1 recorded Claude firing (Q4-A)** |
-| 5 | 15 | 1, 5, 6, 12, 13 | Codex half; fills every *observe* cell from Task 1 |
+| 5 | 15 | 1, 5, 6, 12, 13, and Task 14 Step 1 unless Task 14 is stopped by Q4-A | Codex half; fills every *observe* cell from Task 1 |
 | F | 18 | 14, 15, 16 | **founder**: the real-agent matrix |
 | 6 | 19 | everything | phase close: full suite, fresh review, fix round |
 
@@ -343,9 +350,9 @@ extra fixture pair and table row in Task 8 or Task 9, or as a follow-up task aft
 - Consumes: nothing.
 - Produces: the normative text that Tasks 7 and 11 implement, plus G1–G10.
 
-- [ ] **Step 1: Write the A13 amendment block,** dated 2026-09-22 and citing D47, with G1–G10 exactly
+- [x] **Step 1: Write the A13 amendment block,** dated 2026-09-22 and citing D47, with G1–G10 exactly
   as listed under "Spec gaps this plan closes".
-- [ ] **Step 2: Write the Spec 1 amendment (Q3-A).** `state/hooks` is a **reserved runtime path**.
+- [x] **Step 2: Write the Spec 1 amendment (Q3-A).** `state/hooks` is a **reserved runtime path**.
   It is not in the bookkeeping set, because the bookkeeping set is never removed and this path is.
   - **Owner:** fresh `init` creates `state/hooks` as a directory with mode 0700, owned by the
     effective uid. It is never a manifest row.
@@ -359,7 +366,7 @@ extra fixture pair and table row in Task 8 or Task 9, or as a follow-up task aft
   - **Uninstall:** the V2 uninstall and the absent-manifest uninstall remove `state/hooks` **after**
     both plugin trees are removed, never before. The absent-manifest walks and fresh `init` admit it
     by the shape above.
-- [ ] **Step 3: Commit.**
+- [x] **Step 3: Commit.**
 
 ```bash
 git add -f docs/superpowers/specs/2026-09-22-developer-os-hooks-design.md docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md
@@ -2027,40 +2034,71 @@ Spec §7.1 and G1. **Stop before Step 1 unless both of these hold:**
 1. Task 1 recorded Claude skills-directory hooks firing (Q4-A).
 2. A12's local-build install is integrated.
 
-Also stop and ask the founder if A12's installed entrypoint fails G1. It fails G1 when it is a
-`#!/usr/bin/env node` script, when its path fails `assertHookExecutablePath`, or when it changes
-between two installs of the same build.
+Also stop and ask the founder if A12's installed entrypoint fails G1 as resolved (two-token
+command). It fails G1 when its path fails `assertHookExecutablePath`, or when it changes between two
+installs of the same build. Its `#!/usr/bin/env node` line is not a failure: the command names Node
+explicitly, so the shebang never runs.
 
 **Files:**
+- Modify: `packages/core/src/hooks/contract.ts` (+ `contract.test.ts`), `packages/core/src/index.ts`
+  (+ `index.test.ts` export list), `packages/adapter-claude/src/hooks.ts` (+ `hooks.test.ts`) — Step 1
+  only.
 - Modify: the A12 module that composes `proposeClaudeInstall` for `init`. Re-locate it by the
   symbol `proposeClaudeInstall` under `apps/cli/src/`. Also modify its test.
 - Modify: `apps/cli/src/lifecycle/uninstall.ts`, only if Task 7's removal order must move after
   A12's plugin-tree step.
 
 **Interfaces:**
-- Consumes: Task 6 (`withClaudeHooks`, `assertHookExecutablePath`) and Task 11 (`state/hooks`
-  creation). From A12, it consumes the installed entrypoint's absolute path and the Claude
-  install-proposal call site.
+- Consumes: Task 6 (`withClaudeHooks`, `assertHookExecutablePath`, integrated with single-path
+  signatures) and Task 11 (`state/hooks` creation). From A12, it consumes the installed entrypoint's
+  absolute path and the Claude install-proposal call site. The Node token is `process.execPath` of
+  the `init` process.
+- Produces (Step 1): the two-token render. `HookCommandExecutable = { readonly node: string; readonly
+  entrypoint: string }`; `assertHookNodePath(path)` (charset and absolute/segment rules only);
+  `renderHookCommand(executable: HookCommandExecutable, verb, vendor)`;
+  `renderClaudeHooks(executable: HookCommandExecutable)`;
+  `withClaudeHooks(tree, executable: HookCommandExecutable)`.
 - Produces: an installed `~/.claude/skills/developer-os/hooks/hooks.json` that is a manifest row
   like every other file in the tree. User edits show up as drift, and uninstall removes it with the
   tree.
 
-- [ ] **Step 1: Write the tests** at A12's install test seam, using the synthetic packaged release
+- [ ] **Step 1: Widen Task 6's render to the two-token command (G1 as resolved).** Task 6 is
+  integrated with single-path signatures; do not rewrite its history. In
+  `packages/core/src/hooks/contract.ts`, add `HookCommandExecutable` and `assertHookNodePath`, which
+  applies the shell-safe charset rule and the absolute, no empty, `.` or `..` segment rule, and
+  **not** the version-or-hash rule. `renderHookCommand` takes a `HookCommandExecutable`, checks
+  `node` with `assertHookNodePath` and `entrypoint` with `assertHookExecutablePath`, and returns
+  `[node, entrypoint, ...hookCommandTail(verb, vendor)].join(" ")`. In
+  `packages/adapter-claude/src/hooks.ts`, `renderClaudeHooks` and `withClaudeHooks` take a
+  `HookCommandExecutable` instead of a string. Update the export list in
+  `packages/core/src/index.test.ts`. Tests: a cellar-style Node path with a version segment is
+  accepted; a Node path with a space, a relative path or a `..` segment is refused; an entrypoint
+  with a version or hash segment is still refused; the rendered command is exactly
+  `<node> <entrypoint> guard <kind> --vendor claude`; two renders are byte-identical. Gate:
+  `npm run lint`. Commit:
+
+```bash
+git diff --cached --name-only
+git commit -m "feat(hooks): render the two-token hook command (node plus entrypoint)"
+```
+
+- [ ] **Step 2: Write the tests** at A12's install test seam, using the synthetic packaged release
   and a temporary home:
-  - the Claude install proposal contains `hooks/hooks.json` whose commands begin with the installed
-    entrypoint path;
+  - the Claude install proposal contains `hooks/hooks.json` whose commands begin with the Node
+    executable path followed by the installed entrypoint path;
   - two installs of the same build produce byte-identical `hooks.json`;
   - editing `hooks.json` after install is reported as drift by `doctor`;
   - uninstall removes it, and removes `state/hooks` only afterwards;
   - no file under `~/.claude/` other than the plugin tree changes, which means `settings.json` is
     untouched. Snapshot `~/.claude/` before and after, excluding the plugin tree.
-- [ ] **Step 2: Run the tests.** Deferred to phase close (D47).
-- [ ] **Step 3: Implement.** At A12's call site, pass
-  `withClaudeHooks(tree, installedEntrypointPath)` instead of `tree`, where the path has been checked
-  once with `assertHookExecutablePath`. A `HookExecutablePathError` refuses the `init` with exit 2
-  before any mutation.
-- [ ] **Step 4: Gate.** `npm run lint` must pass.
-- [ ] **Step 5: Commit.** Stage the exact A12 files edited. Then:
+- [ ] **Step 3: Run the tests.** Deferred to phase close (D47).
+- [ ] **Step 4: Implement.** At A12's call site, pass
+  `withClaudeHooks(tree, { node: process.execPath, entrypoint: installedEntrypointPath })` instead of
+  `tree`, where the entrypoint has been checked once with `assertHookExecutablePath` and the Node
+  path with `assertHookNodePath`. A `HookExecutablePathError` refuses the `init` with exit 2 before
+  any mutation.
+- [ ] **Step 5: Gate.** `npm run lint` must pass.
+- [ ] **Step 6: Commit.** Stage the exact A12 files edited. Then:
 
 ```bash
 git diff --cached --name-only
@@ -2084,10 +2122,12 @@ renders nothing and is listed for founder acceptance.
   (`codex=not-rendered` becomes the real check)
 
 **Interfaces:**
-- Consumes: Task 1 (the observations and fixtures), Task 5, Task 6 (`renderHookCommand`), Task 12
-  and Task 13.
-- Produces: `CODEX_HOOK_ROWS`, `renderCodexHooks(executablePath)` (in the manifest shape Task 1
-  observed) and `withCodexHooks(tree, executablePath)`, plus the Codex field, matcher, outcome and
+- Consumes: Task 1 (the observations and fixtures), Task 5, Task 6 and Task 14 Step 1
+  (`renderHookCommand` and `HookCommandExecutable`, two-token form), Task 12 and Task 13. If Task 14
+  did not start (Q4-A: Claude hooks unsupported), Task 15 performs Task 14 Step 1's core widening
+  first, in its own commit, before Step 1 below.
+- Produces: `CODEX_HOOK_ROWS`, `renderCodexHooks(executable: HookCommandExecutable)` (in the manifest
+  shape Task 1 observed) and `withCodexHooks(tree, executable: HookCommandExecutable)`, plus the Codex field, matcher, outcome and
   event maps.
 
 - [ ] **Step 1: Write the tests.**

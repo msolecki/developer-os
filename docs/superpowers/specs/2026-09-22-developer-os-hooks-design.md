@@ -43,14 +43,15 @@ places on disk".
     `<node-executable> <entrypoint>`: the absolute path of the Node executable, then the absolute
     path of the installed `bin.js`. There is no `PATH` lookup and no `env`. Because Node is named
     explicitly, the entrypoint's `#!/usr/bin/env node` line is never executed, so invariant 1 holds.
-    `assertHookExecutablePath` applies in full to both tokens: the charset rule, the segment rule and
-    the version-or-hash rule. Two consequences follow, and this amendment names them:
-    - a Node executable whose absolute path carries a version segment (for example a package-manager
-      cellar path of the form `.../node/24.16.0/bin/node`) is refused at `init` with exit 2, before any
-      mutation;
-    - a Node upgrade that moves the Node executable changes the command bytes. Under §4.1 that is a
-      change the user pays for by trusting every Codex hook again, if Task 1 observes that the trust
-      hash covers the command string.
+    The entrypoint token is subject to `assertHookExecutablePath` in full: the charset rule, the
+    segment rule and the version-or-hash rule. The Node token is subject only to the shell-safe rules:
+    the charset rule and the absolute, no empty, `.` or `..` segment rule. It is **not** subject to the
+    version-or-hash rule, so a package-manager cellar path of the form `.../node/24.16.0/bin/node` is
+    accepted. A failure of either token refuses `init` with exit 2, before any mutation. This narrows
+    §4.1's byte stability for the Node token, and the amendment names the cost: a Node upgrade that
+    moves the Node executable changes the command bytes. Under §4.1 that is a change the user pays for
+    by trusting every Codex hook again, if Task 1 observes that the trust hash covers the command
+    string.
 - **G2 — Children run under the hook's own Node.** `node_modules/.bin/tsc`, `biome` and `prettier`
   are `#!/usr/bin/env node` scripts. A child that gets only the hook marker has no `PATH`, so the
   shebang fails. The verbs therefore run `process.execPath` with the child script's canonical real
