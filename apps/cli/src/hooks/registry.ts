@@ -8,6 +8,10 @@ import { guardCommit } from "./guards/commit.js";
 import { guardPath } from "./guards/path.js";
 import type { HookOutcome } from "./outcome.js";
 import type { HookPayloadV1 } from "./payload.js";
+import { guardEdit } from "./guards/edit.js";
+import { guardFormat } from "./guards/format.js";
+import { guardPrompt } from "./guards/prompt.js";
+import { guardStop } from "./guards/stop.js";
 
 /** Structurally `main.ts`'s `CliContextFactory`; importing it would pull the whole command graph in. */
 export type HookContextFactory = (
@@ -33,4 +37,8 @@ export const HOOK_HANDLERS: Partial<Record<HookVerb, HookVerbHandler>> = {
   command: guardCommand,
   commit: guardCommit,
   path: guardPath,
+  stop: guardStop,
+  format: guardFormat,
+  prompt: guardPrompt,
+  edit: guardEdit,
 };
