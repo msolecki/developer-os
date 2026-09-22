@@ -1,8 +1,10 @@
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { formatJsonResult } from "@developer-os/core";
-import type { TransactionJournalV1 } from "@developer-os/core";
+import type { CliResult, TransactionJournalV1 } from "@developer-os/core";
+import { runImport } from "@developer-os/cli/dist/commands/import.js";
+import type { ImportResultV1 } from "@developer-os/cli/dist/commands/import.js";
 import { runIngest } from "@developer-os/cli/dist/commands/ingest.js";
 import { run } from "@developer-os/cli/dist/main.js";
 
@@ -288,5 +290,111 @@ describe("a planted sentinel, per artifact", () => {
    */
   it("collected a backup payload, not only its metadata", () => {
     expect(payloadsSeen).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * **`import` reads a source it never rewrites** (spec Q5 A), so the planted inbox file is
+ * the one place the sentinel may stay, and the walk skips exactly that path (plan Scope
+ * decision 12). The skip is proven to hit a real file, and the file is proven unchanged.
+ *
+ * The backup floor is metadata only: an import is a create-only transaction, so `backUp`
+ * writes no payload for it. The staging floor is made real by the redaction marker, because
+ * `init`'s own staged files would satisfy a bare non-empty guard.
+ */
+describe("a planted sentinel, through import", () => {
+  const PLANTED_TEXT = `an inbox note whose token is ${SENTINEL}\n`;
+  const marker = "[REDACTED:provider-token]";
+
+  let importFixture: InstalledFixture;
+  let planted = "";
+  let imported: CliResult<ImportResultV1>;
+  let swept: readonly string[] = [];
+  let sweptBeforeExclusion: readonly string[] = [];
+  const staging: string[] = [];
+  const backups: string[] = [];
+  let jsonOutput: readonly string[] = [];
+
+  beforeAll(async () => {
+    let watching = false;
+    importFixture = await installSecurityFixture("sentinel-import", {
+      afterPhase: async (_phase, journal): Promise<void> => {
+        if (!watching || journal.kind !== "import") return;
+        staging.push(...(await readFilesUnder(importFixture.paths.stagingDir)));
+        backups.push(...(await readFilesUnder(importFixture.paths.backupsDir)));
+      },
+    });
+    planted = join(importFixture.content, "_raw", "inbox", "leak.md");
+    await writeFile(planted, PLANTED_TEXT, { flag: "wx", mode: 0o600 });
+
+    watching = true;
+    imported = await runImport(importFixture.context, {
+      path: null,
+      claudeMemory: false,
+      limit: null,
+      dryRun: false,
+    });
+    watching = false;
+
+    const { io } = importFixture;
+    const outBefore = io.out.length;
+    const errBefore = io.err.length;
+    await run(["import", "--json"], io, () => importFixture.context);
+    jsonOutput = [
+      ...io.out.slice(outBefore),
+      ...io.err.slice(errBefore),
+      formatJsonResult(imported),
+    ];
+
+    staging.push(...(await readFilesUnder(importFixture.paths.stagingDir)));
+    backups.push(...(await readFilesUnder(importFixture.paths.backupsDir)));
+
+    // A set: the vault may sit under the product home.
+    sweptBeforeExclusion = [
+      ...new Set([
+        ...(await filesUnder(importFixture.paths.home)),
+        ...(await filesUnder(importFixture.paths.brain)),
+      ]),
+    ];
+    swept = await Promise.all(
+      sweptBeforeExclusion
+        .filter((path) => path !== planted)
+        .map((path) => readFile(path, "latin1")),
+    );
+  }, 120_000);
+
+  it("imported the planted note", () => {
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    expect(imported.data.files.map((file) => file.outcome)).toStrictEqual(["imported"]);
+  });
+
+  it.each([
+    ["the product home and the vault", () => swept],
+    ["the staging directory", () => staging],
+    ["the backup directory", () => backups],
+    ["the --json output", () => jsonOutput],
+  ] as const)("keeps the sentinel out of %s", (artifact, contentsOf) => {
+    const contents = contentsOf();
+    expect(contents.length, `${artifact} produced nothing to scan`).toBeGreaterThan(0);
+    for (const [index, content] of contents.entries()) {
+      expect(content, `${artifact}, entry ${String(index)}`).not.toContain(SENTINEL);
+    }
+  });
+
+  it("excluded exactly the planted source, which is byte-identical", async () => {
+    expect(sweptBeforeExclusion.filter((path) => path === planted)).toHaveLength(1);
+    expect(
+      (await readFile(planted)).equals(Buffer.from(PLANTED_TEXT, "utf8")),
+    ).toBe(true);
+  });
+
+  it("swept the import's own capture, carrying the redaction marker", async () => {
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    const captureId = imported.data.files[0]?.captureId ?? "";
+    expect(captureId).not.toBe("");
+    expect(await importFixture.captureText(captureId)).toContain(marker);
+    expect(staging.join("\n")).toContain(marker);
   });
 });

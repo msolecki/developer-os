@@ -1,9 +1,11 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { EXIT_CODES } from "@developer-os/core";
 import type { TransactionPhase } from "@developer-os/core";
 import { runCapture } from "@developer-os/cli/dist/commands/capture.js";
+import { runImport } from "@developer-os/cli/dist/commands/import.js";
+import { runRepair } from "@developer-os/cli/dist/commands/repair.js";
 import {
   listIncompleteTransactions,
   listRetainedBackups,
@@ -24,7 +26,7 @@ import type { InstalledFixture } from "./helpers.js";
 
 /**
  * **Interruption after each of the seven forward phases, for every forward
- * transaction this subsystem writes — thirty-five cases.**
+ * transaction this subsystem writes — forty-two cases.**
  *
  * **It is an in-process `afterPhase` throw, not a real signal.** `afterPhase`
  * raises at a phase boundary, which simulates the process dying there without
@@ -39,7 +41,7 @@ import type { InstalledFixture } from "./helpers.js";
  *
  * **`finalized` is the one phase that leaves no incomplete *journal*** — the throw
  * lands after the transition has been written, so the journal is complete.
- * Branching on it is what keeps the other thirty cases honest: a suite that
+ * Branching on it is what keeps the other thirty-six cases honest: a suite that
  * asserted exit 6 everywhere would have to be made green by weakening the
  * assertion.
  *
@@ -50,7 +52,7 @@ import type { InstalledFixture } from "./helpers.js";
  * when the claim was written; nothing could see the state, so the claim held by
  * the product's blindness rather than by the state being clean. `doctor` reports
  * it now, and the branch at `assertDoctorReports` splits on whether this
- * transaction had a payload to strand — two of the five targets do.
+ * transaction had a payload to strand — two of the six targets do.
  */
 
 const PHASES: readonly TransactionPhase[] = [
@@ -84,6 +86,7 @@ const TARGETS = {
   "the ingest apply": "ingest-apply",
   "the ingest reindex": "ingest-reindex",
   "the ingest ingested write": "ingest-ingested",
+  "the import write": "import",
 } as const;
 
 type Target = keyof typeof TARGETS;
@@ -134,9 +137,10 @@ const CASES: readonly (readonly [Target, TransactionPhase])[] = (
 function interruptAfter(
   phase: TransactionPhase,
   kind: string,
+  armed: { value: boolean } = { value: true },
 ): (seen: TransactionPhase, journal: { readonly kind: string }) => void {
   return (seen, journal): void => {
-    if (seen !== phase || journal.kind !== kind) return;
+    if (!armed.value || seen !== phase || journal.kind !== kind) return;
     throw new Error(`synthetic interruption after ${seen}`);
   };
 }
@@ -220,6 +224,39 @@ async function assertDoctorReports(
 
 afterEach(removeSecurityFixtures);
 
+const IMPORT_INBOX = {
+  path: null,
+  claudeMemory: false,
+  limit: null,
+  dryRun: false,
+} as const;
+
+/**
+ * **After its own repair, the interrupted file imports or is a duplicate; it is never
+ * refused.** Rollback, because `--resume` would drive the journal forward through the
+ * same phases; a `finalized` interruption leaves no journal, and `--rollback` is refused
+ * there anyway. The caller disarms the hook first: recovery runs through the same executor.
+ */
+async function assertImportRecovers(fixture: InstalledFixture): Promise<void> {
+  const incomplete = await listIncompleteTransactions(fixture.context);
+  expect(incomplete.length).toBeLessThanOrEqual(1);
+  const [journal] = incomplete;
+  if (journal !== undefined) {
+    const repaired = await runRepair(fixture.context, {
+      resume: null,
+      rollback: journal.id,
+    });
+    expect(repaired.ok, "the interrupted import must roll back").toBe(true);
+  }
+
+  const rerun = await runImport(fixture.context, IMPORT_INBOX);
+  expect(rerun.ok, "the rerun must succeed").toBe(true);
+  if (!rerun.ok) return;
+  expect(rerun.data.files.filter((file) => file.outcome === "refused")).toStrictEqual([]);
+  const imported = rerun.data.files.filter((file) => file.outcome === "imported").length;
+  expect(imported + rerun.data.duplicateCount).toBe(1);
+}
+
 /**
  * **What the cases below actually drove**, recorded as each one runs.
  *
@@ -238,6 +275,7 @@ const EXPECTED_COVERAGE: readonly string[] = [
   "the ingest apply",
   "the ingest reindex",
   "the ingest ingested write",
+  "the import write",
 ].flatMap((target) =>
   [
     "planned",
@@ -255,12 +293,21 @@ describe("an interruption at every forward phase", () => {
     "leaves %s recoverable when it is killed at %s",
     async (target, phase) => {
       const kind = TARGETS[target];
+      const armed = { value: true };
       const fixture = await installSecurityFixture(
         `interrupt-${kind}-${phase}`,
-        { afterPhase: interruptAfter(phase, kind) },
+        { afterPhase: interruptAfter(phase, kind, armed) },
       );
 
-      if (target === "the capture write") {
+      if (target === "the import write") {
+        await writeFile(
+          join(fixture.content, "_raw", "inbox", "interrupted.md"),
+          `an inbox note interrupted at ${phase}\n`,
+          { flag: "wx", mode: 0o600 },
+        );
+        const result = await runImport(fixture.context, IMPORT_INBOX);
+        expect(result.ok, "the interruption must reach the caller").toBe(false);
+      } else if (target === "the capture write") {
         const result = await runCapture(
           fixture.context,
           { text: `an observation interrupted at ${phase}` },
@@ -318,6 +365,10 @@ describe("an interruption at every forward phase", () => {
       }
 
       await assertDoctorReports(fixture, phase);
+      if (target === "the import write") {
+        armed.value = false;
+        await assertImportRecovers(fixture);
+      }
       drove.add(`${target}|${phase}`);
     },
   );
@@ -359,7 +410,7 @@ describe("what this suite drove", () => {
    * **The `finalized` branch splits, so both halves have to be real.** If no interruption
    * ever stranded a payload, the half that asserts `doctor` reports one would never run and
    * the split would be decoration — the shape this file's own coverage case exists to
-   * refuse. Two of the five targets replace an existing file and therefore write a payload.
+   * refuse. Two of the six targets replace an existing file and therefore write a payload.
    */
   it("stranded a backup payload in at least one finalized interruption", () => {
     expect(strandedAtFinalized).toBeGreaterThan(0);
