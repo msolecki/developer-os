@@ -300,4 +300,74 @@ describe("the closed lifecycle bookkeeping set", () => {
       ).toStrictEqual({ admitted: false, offendingPath: path });
     }
   });
+
+  describe("an instruction backup left by uninstall (A12 spec §6.3)", () => {
+    const backups = join(HOME, "backups");
+    const transactions = join(backups, "transactions");
+    const HEX = "0123456789abcdef".repeat(4);
+    const NAME = `instruction-claude-${HEX}`;
+    const backupFile = (
+      overrides: Partial<Extract<LifecycleBookkeepingObservationV1, { kind: "regular_file" }>> = {},
+    ): LifecycleBookkeepingObservationV1 => ({
+      kind: "regular_file",
+      ownerUid: UID,
+      mode: 0o600,
+      nlink: 1,
+      size: 42n,
+      ...overrides,
+    });
+    const inspect = (name: string, shape: LifecycleBookkeepingObservationV1) =>
+      inspectLifecycleBookkeepingShape(
+        HOME,
+        backups,
+        observing({
+          [backups]: directory(["transactions", name]),
+          [transactions]: directory(),
+          [join(backups, name)]: shape,
+        }),
+        UID,
+        NO_RESIDUE,
+      );
+
+    it.each(["claude", "codex"])("admits an exact %s backup file", (owner) => {
+      expect(inspect(`instruction-${owner}-${HEX}`, backupFile())).toStrictEqual({ admitted: true });
+    });
+
+    it.each([
+      `instruction-gemini-${HEX}`,
+      `instruction-claude-${HEX.toUpperCase()}`,
+      `instruction-claude-${HEX.slice(1)}`,
+      `instruction-claude-${HEX}0`,
+      `instruction-claude-${HEX}.tmp`,
+    ])("refuses the wrong name %s, naming it", (name) => {
+      expect(inspect(name, backupFile())).toStrictEqual({ admitted: false, offendingPath: join(backups, name) });
+    });
+
+    it.each([
+      ["a symlink", { kind: "other" } as const],
+      ["mode 0644", backupFile({ mode: 0o644 })],
+      ["a hard link", backupFile({ nlink: 2 })],
+      ["a foreign owner", backupFile({ ownerUid: FOREIGN_UID })],
+      ["a directory", directory()],
+    ])("refuses %s, naming it", (_label, shape) => {
+      expect(inspect(NAME, shape)).toStrictEqual({ admitted: false, offendingPath: join(backups, NAME) });
+    });
+
+    it("refuses the same name under backups/transactions", () => {
+      const nested = join(transactions, NAME);
+      expect(
+        inspectLifecycleBookkeepingShape(
+          HOME,
+          backups,
+          observing({
+            [backups]: directory(["transactions"]),
+            [transactions]: directory([NAME]),
+            [nested]: backupFile(),
+          }),
+          UID,
+          NO_RESIDUE,
+        ),
+      ).toStrictEqual({ admitted: false, offendingPath: nested });
+    });
+  });
 });

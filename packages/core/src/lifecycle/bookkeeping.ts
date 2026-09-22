@@ -48,6 +48,8 @@ export type LifecycleBookkeepingShapeResultV1 =
 const LOCK_RELATIVE_PATH = "state/.lifecycle.lock";
 const STATE_TRANSACTIONS_RELATIVE_PATH = "state/transactions";
 const PARTICIPANT_DIRECTORY_RELATIVE_PATHS = ["staging/transactions", "backups/transactions"];
+/** A12 spec §6.3: attach's whole-file backup (`attach.ts` `#backup`), kept after uninstall as evidence. */
+const INSTRUCTION_BACKUP_NAME = /^instruction-(?:claude|codex)-[0-9a-f]{64}$/u;
 
 const ADMITTED: LifecycleBookkeepingShapeResultV1 = { admitted: true };
 
@@ -146,6 +148,13 @@ function admitChild(
     residue.bootstrapParticipantIds.has(name)
   ) {
     return admitParticipantDirectory(child, observe, effectiveUid, residue);
+  }
+  if (parent === `${productHome}/backups` && INSTRUCTION_BACKUP_NAME.test(name)) {
+    const observation = observe(child);
+    return observation.kind === "regular_file" && observation.ownerUid === effectiveUid &&
+      observation.mode === 0o600 && observation.nlink === 1
+      ? ADMITTED
+      : refuse(child);
   }
   return refuse(child);
 }
