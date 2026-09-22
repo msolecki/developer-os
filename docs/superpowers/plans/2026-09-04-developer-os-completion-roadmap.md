@@ -249,6 +249,11 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   `CODEX_HOME` under product state that holds no `AGENTS.md`, no `agents/` and no plugins — only the
   credential entry needed to authenticate, linked from the user's resolved Codex home (never read or
   copied by the product). Credential handling is shared with NEW-75.
+- **D53 (2026-09-22).** The local release is launchable: `pack:local-release` packs the compiled CLI,
+  the workspace packages' runtime `dist` and their third-party runtime dependencies into the bundle,
+  and `init` writes one product-owned, version-free entrypoint `<product-home>/bin/developer-os.mjs`
+  that loads the active release. Hooks (A13 G1) run `<node> <product-home>/bin/developer-os.mjs`; the
+  founder runs the same file. Found by A13 Task 14: the bundle held only a refusing stub.
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 
