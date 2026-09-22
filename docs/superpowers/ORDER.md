@@ -26,6 +26,10 @@ release signing keys are dropped for now, so Task 11b is parked — the FD 3 han
 Production V2 `init` still has no install source; the A12–A14 spec drafts carry that as their first
 open question. Focused suites for every Phase 4b commit are owed at phase close (D44 amendment).
 
+Phase 7 progress: committed none; in flight wave 1 (Tasks 1–6 of
+`plans/2026-09-22-developer-os-tooling-verbs.md`); ready next wave 2 (Tasks 7–10) once wave 1 is
+integrated.
+
 Spec 2: Tasks 1–7 and 9 complete, Task 8 withdrawn (D18), Tasks 10–26 remain. The 2026-08-28 Spec 1
 plan stays as plan 1b's source; its Tasks 1–7, 21 and 23 were executed via plan 1a.
 
@@ -57,7 +61,7 @@ Strict sequence; do not start a blocked row early.
 | A12 | DOS-P10 Managed instruction artifacts — spec, plan, implementation | A11 | every artifact in `docs/migration/instruction-inventory.md` §1–§3, §6 installs, drift-checks, and uninstalls on both vendors | blocked |
 | A12b | Brain workflows — spec, plan, implementation | A12 | every workflow and verb in the inventory §7 is proven on the synthetic vault | blocked |
 | A13 | DOS-P11 Hooks — spec, plan, implementation | A12b | every hook in the inventory §4 plus session-start injection is observed firing and names the installed binary | blocked |
-| A14 | DOS-P12 Repository tooling verbs — spec, plan, implementation | A13 | all 14 scripts in the inventory §5 are product verbs or documented refusals | blocked |
+| A14 | DOS-P12 Repository tooling verbs — spec, plan, implementation | A13 | inventory §5 and §6: every row is a shipped verb or a recorded refusal (D47) | blocked |
 | A15 | DOS-P8 Founder shadow migration — dedicated plan and execution | A14 | rollback to the legacy runtime is exercised and one stable cycle completes | blocked |
 | A11b | DOS-P7 remainder (D16): Spec 2 Tasks 12–26 (update, rollback), then Spec 1b (git, launchd) | A15 | `update`, `update rollback`, `git` and `automation` proven on a disposable install, then on the founder machine | blocked |
 | A16 | DOS-P9 Public beta and v1 | A11b, L1, L2 | `v1.0.0` is published and reproducible | blocked |
@@ -84,7 +88,7 @@ Needs a human, a policy decision, or an external application:
 
 `BACKLOG.md` §1 holds 55 open numbered rows.
 Owners: NEW-85 and NEW-86 are owned by Phase 4b; NEW-82 by plan 1a; NEW-84 by Phase 9;
-NEW-87 travels with whichever row each mis-aimed citation belongs to; NEW-88 and NEW-89 by plan 1a Tasks 16 and 22; NEW-91 by plan 1a Task 16; NEW-90 and NEW-92 by Phase 4b; NEW-97 by Phase 4b and NEW-98 by A14, both opened by plan 1a Task 22; NEW-99 is owned by plan 1a Task 23b (D38); NEW-100 by a later sharding of `test:lifecycle` (D39).
+NEW-87 travels with whichever row each mis-aimed citation belongs to; NEW-88 and NEW-89 by plan 1a Tasks 16 and 22; NEW-91 by plan 1a Task 16; NEW-90 and NEW-92 by Phase 4b; NEW-97 by Phase 4b and NEW-98 by A14 Task 6 (repository tooling, D47), both opened by plan 1a Task 22; NEW-99 is owned by plan 1a Task 23b (D38); NEW-100 by a later sharding of `test:lifecycle` (D39).
 They are not ordered ahead of A11 unless the touched subsystem makes one relevant; D33 lets a
 startable row run beside a wave when its files overlap no task in flight.
 

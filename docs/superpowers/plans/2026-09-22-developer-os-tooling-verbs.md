@@ -271,7 +271,7 @@ Docs only. The orchestrator does it because it edits `docs/superpowers/`.
 - Consumes: nothing.
 - Produces: nothing code-facing.
 
-- [ ] **Step 1: Rewrite inventory §5 and §6 from spec §2.** Keep every row and replace each status
+- [x] **Step 1: Rewrite inventory §5 and §6 from spec §2.** Keep every row and replace each status
   and target with the spec §2 disposition. Then:
   - `brain-weekly` target: the decomposition list from §2. Replace "the Spec 1 automation job
     registry: `import`, `ingest`, …" with "run by hand: `import --claude-memory`, `ingest`,
@@ -283,17 +283,17 @@ Docs only. The orchestrator does it because it edits `docs/superpowers/`.
   - `distill-memory` → `import --claude-memory`. `check-config-drift` → `doctor` check
     `vendor-config`. `check-templates` → `project check`. The §6 project instruction file and
     signpost → `project init`. Each is marked `planned A14 (Phase 7)`; Task 16 flips it to shipped.
-- [ ] **Step 2: BACKLOG.**
+- [x] **Step 2: BACKLOG.**
   - The A14 section lists exactly the §3 surfaces and names the four refusals.
   - The NEW-98 row's last sentence becomes: "Re-owned by D47 (A14 Q3 A) to repository tooling:
     `npm run link:tests` (`tests/tools/link-workspace-packages.ts`), pinned by
     `tests/repository/workspace-links.test.ts`; closes with plan
     `2026-09-22-developer-os-tooling-verbs.md` Task 6."
-- [ ] **Step 3: ORDER.md.** Set the A14 row's completion text to "inventory §5 and §6: every row is
+- [x] **Step 3: ORDER.md.** Set the A14 row's completion text to "inventory §5 and §6: every row is
   a shipped verb or a recorded refusal (D47)". In the routing sentence, replace "NEW-98 by A14" with
   "NEW-98 by A14 Task 6 (repository tooling, D47)". Add `Phase 7 progress: committed none; in flight
   <wave 1>; ready next <…>.`
-- [ ] **Step 4: Roadmap.**
+- [x] **Step 4: Roadmap.**
   - Phase 7's first two bullets become: "`import [<path>] | --claude-memory` → quarantine captures;
     sources are not archived (D47, Q5 A)" and "`project init|check`; `doctor` check
     `vendor-config`; `repo audit|bootstrap|secrets-scan` and `project worktree` refused (D47)".
@@ -301,9 +301,9 @@ Docs only. The orchestrator does it because it edits `docs/superpowers/`.
     that `import` and `ingest` stay manual (D47, Spec 1 §1).
   - The risk row "Legacy scheduled jobs retire at cutover" gets the mitigation "their verbs exist
     from Phase 7 and run by hand; `import` and `ingest` stay manual permanently (D47)".
-- [ ] **Step 5: Spec §1 note.** Under "Automation is out of scope (D16)" add one line: "**Resolved
+- [x] **Step 5: Spec §1 note.** Under "Automation is out of scope (D16)" add one line: "**Resolved
   by D47 (2026-09-22):** Spec 1 §1 holds; `import` and `ingest` are not registry entries."
-- [ ] **Step 6: Verify and commit.**
+- [x] **Step 6: Verify and commit.**
 
 ```bash
 grep -nE 'repo (audit|bootstrap|secrets-scan)|project worktree|git-history-secrets|repo-audit|repo-bootstrap|repo-baseline' \

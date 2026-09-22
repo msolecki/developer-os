@@ -80,16 +80,16 @@ session-end event, so `sessionEndCapture` parity is impossible on that vendor.
 
 | Script | Legacy purpose | Product target | Status |
 |---|---|---|---|
-| `brain-weekly` | weekly launchd job: distill → ingest → reindex → lint → proposals → drift → tests → commit → push → health sentinel | the Spec 1 automation job registry: `import`, `ingest`, `brain reindex`, `brain lint`, `doctor`, `git sync` | planned A11 (Spec 1b) + A14 |
-| `distill-memory` | Claude Code auto-memory files → inbox | `developer-os import --claude-memory` (content hash as cursor) | planned A14 |
+| `brain-weekly` | weekly launchd job: distill → ingest → reindex → lint → proposals → drift → tests → commit → push → health sentinel | run by hand: `import --claude-memory`, `ingest`, `brain reindex`, `brain lint`, `doctor` (including `vendor-config`); `git sync` in Phase 9. `import` and `ingest` stay manual (Spec 1 §1, D47). Proposals → A12b workflows; tests retire with the legacy repository | planned A14 (Phase 7); `git sync` Phase 9 |
+| `distill-memory` | Claude Code auto-memory files → inbox | `developer-os import --claude-memory` (the capture ID is the content-hash cursor) | planned A14 (Phase 7) |
 | `distill-transcripts` | transcript backups → inbox | transcript-dependent | declined |
-| `check-config-drift` | template ↔ live vendor settings drift report | `doctor` check `vendor-config` (structural, value-free) | planned A14 |
+| `check-config-drift` | template ↔ live vendor settings drift report | `doctor` check `vendor-config` (structural, value-free) | planned A14 (Phase 7) |
 | `check-plugin-version` | manifest version consistency | Spec 2 release metadata | planned A11 |
-| `check-templates` | project instruction-file hygiene across the user's repositories | `developer-os project check` | planned A14 |
-| `worktree` | worktree plus ignored-env copy plus install | `developer-os project worktree` | planned A14 |
+| `check-templates` | project instruction-file hygiene across the user's repositories | `developer-os project check` | planned A14 (Phase 7) |
+| `worktree` | worktree plus ignored-env copy plus install | none. The env-file copy is refused by the protected-path policy, and the install needs network access and runs arbitrary scripts. What remains is `git worktree add`. NEW-98 moves to repository tooling. (Q3) | refused (D47) |
 | `check_english` | repository language gate | repository gate, not a product verb | refused |
-| `git-history-secrets` | historical secret scan across the user's repositories | `developer-os repo secrets-scan` (opt-in, reports path and line only) | planned A14 |
-| `repo-audit`, `repo-audit-weekly`, `repo-bootstrap`, `lib/repo-baseline` | GitHub repository-settings baseline through `gh` | `developer-os repo audit\|bootstrap` (opt-in, requires an authenticated `gh`); the baseline itself is user data in the product home | planned A14 |
+| `git-history-secrets` | historical secret scan across the user's repositories | none. Running `git` over untrusted repositories needs Spec 1b's Git process safety, and dedicated history scanners already exist. (Q2) | refused (D47) |
+| `repo-audit`, `repo-audit-weekly`, `repo-bootstrap`, `lib/repo-baseline` | GitHub repository-settings baseline through `gh` | none. GitHub settings governance through `gh` needs network access and a second outbound spawn that the product proves it does not have. The bootstrap half is a remote mutation outside the transaction model. The user runs `gh` directly. (Q1) | refused (D47) |
 | `bootstrap`, `shared-sync` | machine bootstrap and daily sync of the legacy repository | replaced by `init` and `update` | shipped / planned A11 |
 | `lib/redact` | secret redaction | `packages/security/src/redaction.ts` | shipped |
 
@@ -98,8 +98,9 @@ session-end event, so `sessionEndCapture` parity is impossible on that vendor.
 | Template | Product target | Status |
 |---|---|---|
 | global instruction file (5 import lines) | A12 vendor instruction block | planned A12 |
-| project instruction file, project context signpost, project settings | `developer-os project init` | planned A14 |
-| global vendor settings (permissions allow/deny/ask, sandbox credential denies, environment) | not managed: the product never writes the vendor settings file; `doctor` warns when the deny list or guards from the product's reference template are absent | refused (reporting only) |
+| project instruction file, project context signpost | `developer-os project init` (content from A12) | planned A14 (Phase 7) |
+| project settings | none. The product writes no vendor settings file. (Q4) | refused (D47) |
+| global vendor settings (permissions allow/deny/ask, sandbox credential denies, environment) | not managed: the product never writes the vendor settings file; `doctor` check `vendor-config` reports, structurally and value-free, when the deny list from the product's reference is absent | refused (reporting only) |
 | `dev-docs` set (4) | retired planning system | refused |
 | headless loop and fan-out scripts, GitHub workflow templates, feature-list template (6) | outside product scope | refused |
 | Ralph pilot documents (2) | outside product scope | refused |

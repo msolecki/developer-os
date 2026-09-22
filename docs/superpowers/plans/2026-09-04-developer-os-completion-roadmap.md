@@ -258,9 +258,9 @@ Gate: every supported hook observed firing on Claude; on Codex after manual trus
 
 Scope: inventory §5, §6.
 
-- [ ] `developer-os import <path|dir>` (default inbox) → quarantine envelopes, source archived; `import --claude-memory`.
-- [ ] `project init|check|worktree`; `repo audit|bootstrap|secrets-scan` (opt-in, `gh`-authenticated, baseline as user data); `doctor` check `vendor-config`.
-- Automation job registry entries for `import`, `ingest`, `brain reindex`, `brain lint`, `doctor`, `git sync` — moved to Phase 9 by D16, because the registry is Spec 1b's.
+- [ ] `import [<path>] | --claude-memory` → quarantine captures; sources are not archived (D47, Q5 A).
+- [ ] `project init|check`; `doctor` check `vendor-config`; `repo audit|bootstrap|secrets-scan` and `project worktree` refused (D47).
+- The automation job registry is Spec 1b's and belongs to Phase 9 (D16). It is Spec 1 §5.1's four jobs: `brain-reindex`, `brain-lint`, `doctor` and `git-sync`. `import` and `ingest` stay manual and are not registry entries (D47, Spec 1 §1).
 
 Gate: every inventoried script is a verb or a recorded refusal.
 
@@ -274,7 +274,7 @@ Gate: `update` dry-run and apply and rollback proven on a disposable install, th
 
 ### Phase 9 — Spec 1b: git and launchd · L
 
-Runs after Phase 8 (D16), and takes over the automation job registry bullet from Phase 7.
+Runs after Phase 8 (D16), and takes over the automation job registry bullet from Phase 7. The registry is Spec 1 §5.1's four jobs (`brain-reindex`, `brain-lint`, `doctor`, `git-sync`); `import` and `ingest` stay manual (D47, Spec 1 §1).
 
 Preconditions (NEW-84): a freshly measured `launchctl` row for the current macOS with a re-pinning rule (the pinned row no longer matches the development machine), the suite fits CI, Phase 7 jobs exist.
 
@@ -303,7 +303,7 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 | Codex loads skills from its cache, not the hashed tree | Phase 5 | re-register on every update; assert loading, not listing |
 | Spec 1 as written contradicts approved retention and pins a stale `launchctl` row | Phase 4, 9 | NEW-67 amendment before any Spec 1 task |
 | Founder machine has no `update` or `update rollback` between cutover and Phase 8 | D16 | Phase 10 proves reinstall preserves the Brain and user overrides; cutover rollback restores the legacy runtime |
-| Legacy scheduled jobs retire at cutover; product automation arrives in Phase 9 | D16 | their verbs exist from Phase 7 and run by hand; revisit the order if manual runs lapse |
+| Legacy scheduled jobs retire at cutover; product automation arrives in Phase 9 | D16 | their verbs exist from Phase 7 and run by hand; `import` and `ingest` stay manual permanently (D47); revisit the order if manual runs lapse |
 | A regression reaches `development` before a full suite sees it | D17, D32 | push every task commit; a red CI run stops new commits; full local `check` at every plan close; D32's deferred slow suites are seen first by CI, hours after the task that broke them |
 
 ## Documents this roadmap expects to exist

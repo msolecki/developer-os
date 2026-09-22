@@ -205,6 +205,8 @@ for that phase, neither resolved here:
 
 Until Phase 9, the verbs run by hand (D16 risk register).
 
+**Resolved by D47 (2026-09-22):** Spec 1 §1 holds; `import` and `ingest` are not registry entries.
+
 ---
 
 ## 2. Inventory disposition — the Phase 7 gate
