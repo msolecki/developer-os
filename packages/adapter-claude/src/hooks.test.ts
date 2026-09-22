@@ -22,12 +22,20 @@ describe("renderClaudeHooks", () => {
     expect(renderClaudeHooks(EXE).contents).toBe(renderClaudeHooks(EXE).contents);
   });
 
-  it("omits timeout when the row's timeout is null and emits it otherwise", () => {
+  it("emits each row's timeout on its rendered entry", () => {
     const doc = JSON.parse(renderClaudeHooks(EXE).contents) as RenderedHooks;
+    const timeouts = Object.values(doc.hooks).flat().flatMap((group) => group.hooks.map((h) => h.timeout));
+    expect(timeouts.length).toBeGreaterThan(0);
+    expect(timeouts).toStrictEqual(CLAUDE_HOOK_ROWS.map((row) => row.timeoutSeconds));
     expect(doc.hooks.Stop?.[0]?.hooks[0]?.timeout).toBe(125);
     expect(doc.hooks.PostToolUse?.[0]?.hooks[0]?.timeout).toBe(35);
-    expect(doc.hooks.PostToolUse?.[1]?.hooks[0]).not.toHaveProperty("timeout");
-    expect(doc.hooks.PreToolUse?.[0]?.hooks[0]).not.toHaveProperty("timeout");
+  });
+
+  it("declares a timeout on every row, stop and format above their child caps by 5 s", () => {
+    expect(CLAUDE_HOOK_ROWS.length).toBeGreaterThan(0);
+    for (const row of CLAUDE_HOOK_ROWS) expect(row.timeoutSeconds).not.toBeNull();
+    expect(CLAUDE_HOOK_ROWS.find((r) => r.verb === "stop")?.timeoutSeconds).toBe(125);
+    expect(CLAUDE_HOOK_ROWS.find((r) => r.verb === "format")?.timeoutSeconds).toBe(35);
   });
 
   it("refuses an unsafe executable path", () => {

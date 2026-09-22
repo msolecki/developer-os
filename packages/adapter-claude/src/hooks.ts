@@ -17,13 +17,13 @@ const EVENT_ORDER: readonly ClaudeHookEvent[] = ["SessionStart", "UserPromptSubm
 const FILE_TOOLS = "Edit|Write|MultiEdit";
 
 export const CLAUDE_HOOK_ROWS: readonly ClaudeHookRow[] = Object.freeze([
-  { verb: "inject", event: "SessionStart", matcher: null, timeoutSeconds: null },
-  { verb: "prompt", event: "UserPromptSubmit", matcher: null, timeoutSeconds: null },
-  { verb: "command", event: "PreToolUse", matcher: "Bash", timeoutSeconds: null },
-  { verb: "commit", event: "PreToolUse", matcher: "Bash", timeoutSeconds: null },
-  { verb: "path", event: "PreToolUse", matcher: FILE_TOOLS, timeoutSeconds: null },
+  { verb: "inject", event: "SessionStart", matcher: null, timeoutSeconds: 2 },
+  { verb: "prompt", event: "UserPromptSubmit", matcher: null, timeoutSeconds: 2 },
+  { verb: "command", event: "PreToolUse", matcher: "Bash", timeoutSeconds: 2 },
+  { verb: "commit", event: "PreToolUse", matcher: "Bash", timeoutSeconds: 2 },
+  { verb: "path", event: "PreToolUse", matcher: FILE_TOOLS, timeoutSeconds: 2 },
   { verb: "format", event: "PostToolUse", matcher: FILE_TOOLS, timeoutSeconds: 35 },
-  { verb: "edit", event: "PostToolUse", matcher: FILE_TOOLS, timeoutSeconds: null },
+  { verb: "edit", event: "PostToolUse", matcher: FILE_TOOLS, timeoutSeconds: 2 },
   { verb: "stop", event: "Stop", matcher: null, timeoutSeconds: 125 },
 ]);
 
