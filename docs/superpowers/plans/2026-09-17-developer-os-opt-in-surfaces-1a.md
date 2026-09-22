@@ -84,6 +84,19 @@ Recorded in the roadmap's 2026-09-17 table; A14–A16 are in Spec 1 in place.
   task's slow suite. Task 23b also restores Task 23's shared-home chain, returning A9 round-trip
   coverage from one cycle to six — the shape that would have caught NEW-99 in the first place.
 
+- **D41 (2026-09-22).** **Task 24 is exempt from D40.** D40 supersedes "the task's own new cases" for
+  every remaining task, but Task 24's Step 2 is not an ordinary verification gate: it measures the
+  real wall-clock duration of `uninstall-round-trip.v2.test.ts` to compute `lifecycle-v2`'s
+  `timeout-minutes` under D39's 300-minute cap, and Task 24's own text requires stopping before commit
+  if the computed budget exceeds it. Deferring that run to plan close would mean committing a CI
+  timeout value nobody has measured, which is the unsafe outcome D34 and D39 already spent effort
+  avoiding for this same job. Founder decision, taken when the orchestrator surfaced the contradiction
+  before dispatching Task 24: the implementer runs
+  `npx vitest run --root apps/cli src/lifecycle/uninstall-round-trip.v2.test.ts` for real, exactly as
+  Task 24 Step 2 specifies, applies the 300-minute stop-and-ask gate before committing, and reports the
+  measured duration. D40 stands unchanged for every other remaining task and for Task 25's closure
+  suites.
+
 - **D35 (2026-09-20).** The effect-journal codec, its phase accessor and the `classify` change they require are **deferred to plan 1b**. Unlike D34 the gap is unreachable in 1a — the null plan codec makes every effect leaf a `lifecycle_effect_root_unsupported` finding before a journal codec could matter — `LifecycleLedgerDependenciesV1` has only two construction sites in the whole plan, both of which Task 18 and 1b touch anyway, and `LifecycleEffectPhaseV1` would have been a guess at 1b's schema with no implementation to check it against. Task 12's Cover list records the full 1b obligation.
 
 ## Global Constraints

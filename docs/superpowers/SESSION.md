@@ -21,6 +21,12 @@
 > Accepted risk, stated plainly: a defect that only appears on the combined tree is now found at plan
 > close against every task at once. NEW-99 and both citation regressions were caught by exactly the
 > runs this removes. **This block expires when plan 1a closes**; delete it then.
+>
+> **D41 (2026-09-22) — Task 24 is exempt from D40.** Task 24's Step 2 measures the real duration of
+> `uninstall-round-trip.v2.test.ts` to set `lifecycle-v2`'s `timeout-minutes` under D39's 300-minute
+> cap and stops before commit if that budget is exceeded; deferring the run would mean committing an
+> unmeasured CI timeout. See the plan's Founder decisions for the full rationale. Every other
+> remaining task and Task 25's closure suites stay under D40 as written.
 
 Use this prompt in a fresh session:
 
