@@ -86,7 +86,7 @@ Needs a human, a policy decision, or an external application:
 - NEW-7 — verify percent-encoded local links in Obsidian.
 - Foundation watchdog — decide whether `SpawnLockfRunner` needs one around non-blocking `lockf`.
 
-`BACKLOG.md` §1 holds 55 open numbered rows.
+`BACKLOG.md` §1 holds 58 open numbered rows (NEW-101..103 added 2026-09-22).
 Owners: NEW-85 and NEW-86 are owned by Phase 4b; NEW-82 by plan 1a; NEW-84 by Phase 9;
 NEW-87 travels with whichever row each mis-aimed citation belongs to; NEW-88 and NEW-89 by plan 1a Tasks 16 and 22; NEW-91 by plan 1a Task 16; NEW-90 and NEW-92 by Phase 4b; NEW-97 by Phase 4b and NEW-98 by A14 Task 6 (repository tooling, D47), both opened by plan 1a Task 22; NEW-99 is owned by plan 1a Task 23b (D38); NEW-100 by a later sharding of `test:lifecycle` (D39).
 They are not ordered ahead of A11 unless the touched subsystem makes one relevant; D33 lets a
