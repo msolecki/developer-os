@@ -125,6 +125,7 @@ export {
   planRefactor,
   RefactorRefusal,
   rewriteWikilinks,
+  splitSlug,
   withoutAnchor,
 } from "./refactor/index.js";
 export type {

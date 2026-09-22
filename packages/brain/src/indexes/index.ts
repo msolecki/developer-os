@@ -6,6 +6,7 @@ export {
   extractLinks,
   findWikilinks,
   frontmatterExceeds,
+  maskCode,
   MAX_FRONTMATTER_CHARS,
   TOP_TAGS_PER_FOLDER,
 } from "./build.js";

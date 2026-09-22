@@ -1,4 +1,5 @@
 export { rewriteWikilinks, withoutAnchor } from "./links.js";
+export { planMerge } from "./merge.js";
 export {
   MAX_REFACTOR_MUTATIONS,
   planRefactor,
@@ -15,4 +16,5 @@ export type {
   RefactorRefusalCodeV1,
   RefactorRequestV1,
 } from "./plan.js";
+export { planSplit, splitSlug } from "./split.js";
 export { overlayBuildRequest } from "./vault.js";

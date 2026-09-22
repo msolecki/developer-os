@@ -8,6 +8,8 @@ import { lintBuild } from "../lint/index.js";
 import type { LintFinding } from "../lint/index.js";
 import { parseNote } from "../schema/note.js";
 import { rewriteWikilinks, withoutAnchor } from "./links.js";
+import { planMerge } from "./merge.js";
+import { planSplit } from "./split.js";
 import { overlayBuildRequest } from "./vault.js";
 
 export type RefactorModeV1 = "retire" | "rename" | "move" | "merge" | "split";
@@ -80,20 +82,25 @@ export interface ModePlanV1 {
   readonly changes: readonly RefactorMutationV1[];
   /** Split's parent→child, content-root-relative. */
   readonly extraEdges: readonly (readonly [string, string])[];
+  /**
+   * Split only: edges that may appear or vanish because link occurrences moved
+   * between notes (the section's own links, and anchored referrer links).
+   */
+  readonly edgeSlack?: readonly (readonly [string, string])[];
   readonly rewrittenLinks: number;
 }
 
-const GRAVEYARD = "_graveyard";
+export const GRAVEYARD = "_graveyard";
 
-function byPath(a: string, b: string): number {
+export function byPath(a: string, b: string): number {
   return compareCanonical(a, b) || compareRawBytes(a, b);
 }
 
-function inVault(state: PreStateV1, path: string): string {
+export function inVault(state: PreStateV1, path: string): string {
   return `${state.contentRoot}/${path}`;
 }
 
-function fromVault(state: PreStateV1, vaultPath: string): string {
+export function fromVault(state: PreStateV1, vaultPath: string): string {
   const prefix = `${state.contentRoot}/`;
   return vaultPath.startsWith(prefix) ? vaultPath.slice(prefix.length) : vaultPath;
 }
@@ -102,20 +109,20 @@ function absoluteOf(input: RefactorInputV1, path: string): string {
   return join(input.build.vaultRoot, input.build.config.contentRoot, path);
 }
 
-function dirname(path: string): string {
+export function dirname(path: string): string {
   const slash = path.lastIndexOf("/");
   return slash === -1 ? "" : path.slice(0, slash);
 }
 
-function basename(path: string): string {
+export function basename(path: string): string {
   return path.slice(path.lastIndexOf("/") + 1);
 }
 
-function withoutMd(path: string): string {
+export function withoutMd(path: string): string {
   return path.endsWith(".md") ? path.slice(0, -".md".length) : path;
 }
 
-function invalid(message: string, paths: readonly string[] = []): RefactorRefusal {
+export function invalid(message: string, paths: readonly string[] = []): RefactorRefusal {
   return new RefactorRefusal("brain_refactor_input_invalid", message, paths);
 }
 
@@ -138,13 +145,13 @@ function noteAt(state: PreStateV1, path: string): IndexedNote | undefined {
   return state.build.index.notes.find((note) => note.path === vaultPath);
 }
 
-function bytesOf(state: PreStateV1, path: string): string {
+export function bytesOf(state: PreStateV1, path: string): string {
   const text = state.files.get(inVault(state, path));
   if (text === undefined) throw invalid(`${path} was not read`, [path]);
   return text;
 }
 
-function requireNote(state: PreStateV1, path: string): IndexedNote {
+export function requireNote(state: PreStateV1, path: string): IndexedNote {
   const note = noteAt(state, path);
   if (note === undefined) throw invalid(`${path} is not a canonical note`, [path]);
   return note;
@@ -303,9 +310,10 @@ function modePlan(state: PreStateV1, request: RefactorRequestV1): ModePlanV1 {
       if (request.source === request.target) {
         throw invalid("a note cannot be merged into itself", [request.source]);
       }
-      throw invalid("not implemented");
+      return planMerge(state, request.source, request.target);
     case "split":
-      throw invalid("not implemented");
+      requireNote(state, request.note);
+      return planSplit(state, request.note, request.heading);
   }
 }
 
@@ -398,8 +406,13 @@ async function checkPostconditions(
     .map((edge) => edgeKey(edge.source, edge.target));
   const pre = new Set(preEdges);
   const post = new Set(postEdges);
+  const slack = new Set(
+    (plan.edgeSlack ?? []).map(([source, target]) =>
+      edgeKey(inVault(state, source), inVault(state, target)),
+    ),
+  );
   for (const key of [...new Set([...pre, ...post])].sort(byPath)) {
-    if (pre.has(key) === post.has(key)) continue;
+    if (pre.has(key) === post.has(key) || slack.has(key)) continue;
     const [source, target] = (JSON.parse(key) as [string, string]).map((p) => fromVault(state, p)) as [
       string,
       string,

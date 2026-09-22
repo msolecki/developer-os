@@ -1,78 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { DirectoryEntry } from "../discovery/index.js";
-import { DEFAULT_BRAIN_CONFIG } from "../schema/config.js";
 import { MAX_REFACTOR_MUTATIONS, planRefactor } from "./plan.js";
-import type { RefactorInputV1, RefactorRequestV1 } from "./plan.js";
-
-/**
- * A `RefactorInputV1` over an in-memory vault, keyed by content-root-relative
- * path — the same shape `validate.ts`'s `projectionOf` overlays.
- */
-function memoryInput(
-  notes: Record<string, string>,
-  options: { readonly reversed?: boolean } = {},
-): RefactorInputV1 {
-  const files = new Map(
-    Object.entries(notes).map(([path, text]) => [`/vault/content/${path}`, text]),
-  );
-  const tree = new Map<string, DirectoryEntry[]>();
-  for (const absolute of files.keys()) {
-    const segments = absolute.slice("/vault/".length).split("/");
-    for (let i = 0; i < segments.length; i += 1) {
-      const parent = ["/vault", ...segments.slice(0, i)].join("/");
-      const name = segments[i] as string;
-      const isFile = i === segments.length - 1;
-      const siblings = tree.get(parent) ?? [];
-      if (!siblings.some((entry) => entry.name === name)) {
-        siblings.push({ name, isDirectory: !isFile, isFile, isSymbolicLink: false });
-      }
-      tree.set(parent, siblings);
-    }
-  }
-  return {
-    build: {
-      vaultRoot: "/vault",
-      config: DEFAULT_BRAIN_CONFIG,
-      reader: {
-        readDir: (path: string) => {
-          const entries = tree.get(path) ?? [];
-          return Promise.resolve(options.reversed === true ? [...entries].reverse() : entries);
-        },
-      },
-      readFile: (path: string) => {
-        const text = files.get(path);
-        return text === undefined
-          ? Promise.reject(Object.assign(new Error(`ENOENT: ${path}`), { code: "ENOENT" }))
-          : Promise.resolve(text);
-      },
-      assertReadable: () => Promise.resolve(),
-      canonicalize: (path: string) => Promise.resolve(path),
-      now: () => "2026-09-22T00:00:00.000Z",
-    },
-    today: "2026-09-22",
-  };
-}
-
-function noteText(fields: {
-  readonly title: string;
-  readonly body?: string;
-  readonly sources?: readonly string[];
-}): string {
-  const lines = [
-    "schemaVersion: 1",
-    `title: ${fields.title}`,
-    "type: knowledge-note",
-    "created: 2026-01-01",
-    "tags: [dev]",
-    `summary: About ${fields.title}.`,
-    "stage: established",
-    "author: human",
-    "reviewed: 2026-09-01",
-    ...(fields.sources === undefined ? [] : [`sources: [${fields.sources.join(", ")}]`]),
-  ];
-  return `---\n${lines.join("\n")}\n---\n\n${fields.body ?? "Body."}\n`;
-}
+import type { RefactorRequestV1 } from "./plan.js";
+import { memoryInput, noteText } from "./testing.js";
 
 const DONE = noteText({ title: "Done" });
 const OTHER = noteText({ title: "Other" });
@@ -190,16 +120,14 @@ describe("planRefactor", () => {
     expect(reversed).toStrictEqual(forward);
   });
 
-  it("refuses merge and split as not implemented until their planners land", async () => {
-    const input = memoryInput({ "DEV/b.md": noteText({ title: "Bee" }), "DEV/c.md": OTHER });
-    for (const request of [
-      { mode: "merge", source: "DEV/b.md", target: "DEV/c.md" },
-      { mode: "split", note: "DEV/b.md", heading: "H" },
-    ] as const) {
-      await expect(planRefactor(request, input)).rejects.toMatchObject({
-        reason: "brain_refactor_input_invalid",
-        message: "not implemented",
-      });
-    }
+  it("dispatches merge and split to their planners", async () => {
+    const input = memoryInput({
+      "DEV/b.md": noteText({ title: "Bee", body: "## H\n\nh" }),
+      "DEV/c.md": OTHER,
+    });
+    const merge = await planRefactor({ mode: "merge", source: "DEV/b.md", target: "DEV/c.md" }, input);
+    const split = await planRefactor({ mode: "split", note: "DEV/b.md", heading: "H" }, input);
+    expect(merge.mode).toBe("merge");
+    expect(split.mutations.some((m) => m.operation === "create" && m.path === "DEV/h.md")).toBe(true);
   });
 });

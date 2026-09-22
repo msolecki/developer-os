@@ -255,6 +255,11 @@ function blank(span: string): string {
   return span.replace(/[^\n]/g, " ");
 }
 
+/** Fenced blocks and inline spans blanked to spaces; offsets and newlines survive. */
+export function maskCode(body: string): string {
+  return body.replace(FENCED_CODE, blank).replace(INLINE_CODE, blank);
+}
+
 /**
  * The occurrences `extractLinks` counts, with offsets into the original body.
  *
@@ -264,7 +269,7 @@ function blank(span: string): string {
  * cases. Upgrade path: one shared tokenizer for both functions.
  */
 export function findWikilinks(body: string): readonly WikilinkOccurrence[] {
-  const masked = body.replace(FENCED_CODE, blank).replace(INLINE_CODE, blank);
+  const masked = maskCode(body);
   const occurrences: WikilinkOccurrence[] = [];
   for (const match of masked.matchAll(WIKILINK_OCCURRENCE)) {
     const text = match[1] ?? "";
