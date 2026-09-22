@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Tasks:** 27 (1–25 plus 10b, inserted by D31, and 23b, inserted by D38). Tasks 1–11 are done and listed under Completed; 12–25 remain and run in the waves below (D33).
+**Tasks:** 27 (1–25 plus 10b, inserted by D31, and 23b, inserted by D38). Tasks 1–11 are done and listed under Completed; 12–23b run in the waves below (D33); **Task 24 is deferred out of this plan (D42)**; Task 25 closes the plan directly after Task 23b.
 
 **Goal:** Ship Spec 1a — `config get|set`, the lifecycle coordinator with proven recovery and bounded terminal collection, and a drained V2 uninstall — against the amended Spec 1, with no Git, launchd, or network effect.
 
@@ -96,6 +96,27 @@ Recorded in the roadmap's 2026-09-17 table; A14–A16 are in Spec 1 in place.
   Task 24 Step 2 specifies, applies the 300-minute stop-and-ask gate before committing, and reports the
   measured duration. D40 stands unchanged for every other remaining task and for Task 25's closure
   suites.
+
+- **D42 (2026-09-22).** **Task 24 is carved out of plan 1a and deferred to post-A16 hardening.**
+  Supersedes D41 (moot: Task 24 no longer runs inside this plan, so its D40 exemption has nothing to
+  apply to) and D39 (moot: nothing is cut from `A9_KILL_POINTS` inside plan 1a, because Task 24's file
+  is never created here). Founder decision, taken after the orchestrator had already dispatched an
+  implementer for Task 24 and it was still running a real fresh-V2 round-trip past the file's own
+  ~31-minute estimate: the founder judged this class of heavy real-filesystem e2e proof not worth the
+  wall clock right now, against shipping the rest of the roadmap's plans first. **Wave 10 (Task 25)
+  now waits on Task 23b directly, not on Task 24.** Task 25 closes plan 1a's own goal — `config
+  get|set`, proven coordinator recovery, drained V2 uninstall — without Task 24's additional
+  round-trip and kill-matrix coverage. Task 24's full spec (unchanged, below) stays owed; it is
+  tracked as `BACKLOG.md` NEW-100, owned by "post-A16 hardening, before it is relied on as a release
+  gate", to run once, together with the codebase's other heavy e2e suites, after A11b and A12–A16
+  close rather than inside this plan. **Accepted risk, stated plainly:** beyond what Tasks 20–23b's
+  own suites already exercise (one reinstall cycle, and the NEW-99 regression Task 23's own chain
+  already covers), the `uninstall` → `init` round trip is not proven end-to-end, and 4 of the 10 A9
+  recovery microstates D39 would have selectively cut are instead entirely unproven, until Task 24
+  actually runs. `docs/superpowers/plans/2026-09-17-developer-os-opt-in-surfaces-1a.md` (this file)
+  is **not** deleted when plan 1a otherwise closes, because Task 24's contract has not yet moved to a
+  canonical document in full; it stays until Task 24 runs or its complete spec is copied into a
+  successor document.
 
 - **D35 (2026-09-20).** The effect-journal codec, its phase accessor and the `classify` change they require are **deferred to plan 1b**. Unlike D34 the gap is unreachable in 1a — the null plan codec makes every effect leaf a `lifecycle_effect_root_unsupported` finding before a journal codec could matter — `LifecycleLedgerDependenciesV1` has only two construction sites in the whole plan, both of which Task 18 and 1b touch anyway, and `LifecycleEffectPhaseV1` would have been a guess at 1b's schema with no implementation to check it against. Task 12's Cover list records the full 1b obligation.
 
@@ -211,8 +232,8 @@ Derived from each task's `Consumes:` line. A task starts only when every task it
 | 7 | 22 | 20, 21 |
 | 8 | 23 | 22 |
 | 8b | 23b | 23 (D38) |
-| 9 | 24 | 23b |
-| 10 | 25 | 24 |
+| 9 | 24 | **deferred — carved out of plan 1a, D42; see Task 24 below** |
+| 10 | 25 | 23b (D42: no longer 24) |
 
 Shared files. Tasks 12–16 all edit `packages/core/src/lifecycle/index.ts`, `packages/core/src/index.ts` and the exact export list in `packages/core/src/index.test.ts`: the integrator takes the union of the added exports, keeps that list in case-insensitive order, and reruns `npx vitest run --root packages/core src/index.test.ts`. Two more shared files the task file lists do not name: `packages/core/src/lifecycle/types.ts`, whose `LIFECYCLE_HASH_DOMAINS` keys also merge as a union, and `tests/repository/check.ts`, whose `STAT_OPTION_EXEMPT` array every task adding a guarded-port caller appends to — Tasks 13 and 15 were verified to conflict there and in `packages/core/src/index.ts`, both resolving as a union of added lines. Tasks 17 and 19–24 each set `lifecycle-v2` `timeout-minutes` in `.github/workflows/check.yml`: the integrator keeps the running local total in the job comment and recomputes the budget from it.
 
@@ -2101,6 +2122,10 @@ git commit -m "fix(cli): scope retained-envelope inventory to its own envelope"
 
 
 ### Task 24: Uninstall → `init` round-trip gates · L
+
+**DEFERRED (D42, 2026-09-22): not executed inside plan 1a.** Carved out to post-A16 hardening,
+tracked as `BACKLOG.md` NEW-100. Wave 10 (Task 25) no longer waits on this task. The spec below is
+unchanged and still the one to follow when it is eventually run.
 
 Source: A9; Spec 1 §7 "uninstall then init round-trips" (every sequence except plan 1b's `git enable` preview half and the three Task 21 sequences), "uninstall respects ownership", "uninstall removes its manifest recoverably" (A15).
 

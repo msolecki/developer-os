@@ -12,7 +12,7 @@ notes are the archive.
 to execute plan 1a (`plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`, roadmap Phase 4) wave by
 wave, as `SESSION.md` §4.1 orchestrates it (D33).
 
-Plan 1a progress: committed 1–23 and 23b; in flight none; ready next 24 (wave 9). **D38 (2026-09-21): NEW-99 fixed inside plan 1a as Task 23b** — two retained bootstrap envelopes each counted the other's rows, so the second `uninstall` after a reinstall refused exit 6. **D39 (2026-09-22): Task 24 cuts `A9_KILL_POINTS` 10 → 6** to stay under the 300-minute `lifecycle-v2` cap, which stands at 185 after Task 23b; the round-trip case is left whole because its post-reinstall `uninstall` is NEW-99's regression detector. NEW-100 carries the four dropped microstates and is gated on sharding the job. D36: implementation-first — no per-task review, commits held locally, one review plus `npm run check` plus one push at plan close.
+Plan 1a progress: committed 1–23 and 23b; in flight none; ready next 25 (wave 10, closure). **D42 (2026-09-22): Task 24 (uninstall → `init` round-trip gates) is carved out of plan 1a and deferred to post-A16 hardening** — the founder judged this real-filesystem e2e proof not worth the wall clock now (an implementer had already run it past its ~31-minute estimate), against shipping the rest of the roadmap first. Wave 10 (Task 25) now waits on 23b directly, not on 24. Task 24's full spec stays in the plan file (not deleted at plan close) and is tracked as NEW-100, to run once — with D39's ten→six kill-point selection rule applied then — alongside the codebase's other heavy e2e suites, after A11b and A12–A16 close. Accepted risk: the `uninstall` → `init` round trip beyond one reinstall cycle stays unproven until then. **D38 (2026-09-21): NEW-99 fixed inside plan 1a as Task 23b** — two retained bootstrap envelopes each counted the other's rows, so the second `uninstall` after a reinstall refused exit 6. D36: implementation-first — no per-task review, commits held locally, one review plus `npm run check` plus one push at plan close.
 
 Spec 2 (`plans/2026-08-29-developer-os-release-update.md`): Tasks 1–7 and 9 complete, Task 8
 withdrawn (D18), Tasks 10–26 remain. The 2026-08-28 Spec 1 plan stays as plan 1b's source.
@@ -99,8 +99,9 @@ startable row run beside a wave when its files overlap no task in flight.
 ## Count
 
 - Product sequence: 8 open entries, A11, A12, A12b, A13, A14, A15, A11b, A16.
-- Implementation tasks: plan 1a 2 remaining (24, 25), Spec 2 Tasks 10–26 (17), plan 1b 15 (the
-  2026-08-28 plan's remaining tasks, not yet rewritten): 34. Before the cutover: plan 1a and Spec 2
-  Tasks 10–11, 4 tasks. After it: Spec 2 Tasks 12–26 and plan 1b, 30 tasks.
+- Implementation tasks: plan 1a 1 remaining (25; Task 24 deferred to post-A16, NEW-100), Spec 2
+  Tasks 10–26 (17), plan 1b 15 (the 2026-08-28 plan's remaining tasks, not yet rewritten): 33. Before
+  the cutover: plan 1a and Spec 2 Tasks 10–11, 3 tasks. After it: Spec 2 Tasks 12–26 and plan 1b, 30
+  tasks.
 - Phases 5, 5b, 6 and 7 have no spec yet; A15 and A16 each still need their dedicated plan.
 - Repository backlog: 59 open numbered rows, plus the Foundation watchdog decision.
