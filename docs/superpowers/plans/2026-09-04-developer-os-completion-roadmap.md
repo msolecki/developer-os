@@ -180,9 +180,23 @@ Gate: `config get|set` shipped; coordinator recovery proven; uninstall drains le
 
 Added by D16 and pulled forward from Phase 8: without the launcher's root-verified handoff there is no production V2 `init`, and Phases 5–7 install V2 artifacts.
 
+- **D44 (2026-09-22).** **Phase 4b's per-task lane: lint only, review deferred, one PR at phase
+  close.** D36's implementation-first exemption expired with plan 1a and does not carry over, but two
+  facts changed what §5/D17's restored per-task rule means in practice here. First, `development`'s
+  ruleset gained a mandatory `pull_request` rule before 2026-09-22 (found pushing plan 1a's closure,
+  `GH013`); a bare `git push origin development` is refused, so CI now runs per PR, not per local
+  commit — `ORDER.md`'s "Delivery evidence still owed" records the finding. Second, the founder
+  instructed twice in this session to skip `npm run check` and the deferred vitest suites, to run them
+  manually at phase close — D36's own pattern, applied to a new phase. Lane: each task commit runs its
+  fast/focused commands and `npm run lint` (build+typecheck, ~11s, kept per `security.md`'s fail-closed
+  rule), is held locally without a push, and fresh-context review is owed but deferred to one
+  whole-phase review at phase close alongside `npm run check` and the deferred slow suites. At close,
+  commits are pushed to one branch and opened as one PR (as plan 1a's closure did, `#14`), not pushed
+  directly. Accepted risk: D36's — a defect in a consumed interface surfaces only after its consumers
+  bind to it. **This decision expires when Phase 4b closes**; a later phase gets its own.
 - [x] Confirm from the plan text that Tasks 10–11 need nothing from Spec 1b. Confirmed 2026-09-17: release plan Task 10 consumes only "Spec 1 lifecycle closure", which plan 1a ships; Task 11 consumes only Task 2's signed-document schemas and Task 10's launcher admission; neither names Git or launchd.
 - [ ] Add the missing plan step that replaces `bootstrap: { state: "unavailable_until_packaged_handoff" }` at `apps/cli/src/context.ts:765` with the admitted handoff. Spec 1 plan Task 21 modifies that file, but no step in either plan replaces the pin.
-- [ ] Stop and ask how the founder build is signed: which offline root key the launcher compiles in, and whether public releases reuse it.
+- [ ] Stop and ask how the founder build is signed: which offline root key the launcher compiles in, and whether public releases reuse it. **Scoped 2026-09-22: this blocks the actual pin removal, not Tasks 10–11's TDD implementation** — `verifySignedReleaseDocument(document, key)` takes the key as a parameter and Task 11's own tests are written against a fixture (`vector.currentRoot`), so both tasks proceed now on test keys; ask before compiling a real launcher for the founder machine.
 - [ ] Before the pin is removed: correct the V1 refusal's recovery (D20, NEW-79) and harden the ordinary-command gate (NEW-81). The release layout move (D19, NEW-80) moved into plan 1a Task 1 (D29).
 - [ ] Before the real release bundle is fixed: settle the capacity of `F(uninstall_artifacts)` (D26, NEW-85) — repeat the step, cap the bundle's file count in Spec 2, or both. Plan 1a ships only the pre-allocation refusal.
 - [ ] Execute Tasks 10–11 and that step.
