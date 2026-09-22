@@ -231,6 +231,11 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   macOS's default 0750) when it is a real directory owned by the effective uid with no group/other write
   bit (`mode & 0o022 === 0`). Directories the product creates stay exactly 0700. Found by A12 Task 4:
   `assertPlannedParent` refused the founder's 0750 home.
+- **D50 (2026-09-22).** The founder decided to ship `react-best-practices` as a redacted default with
+  its upstream license file and attribution vendored beside it; the L1 redistribution question for this
+  one artifact is accepted by the founder without a separate license review. Legacy instruction text
+  reaches agents only through a founder-made copy in a session staging directory outside the
+  repository (spec §3.3 clean room); no agent opens a legacy path.
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 
