@@ -55,6 +55,14 @@ export function renderCaptureFile(envelope: CaptureEnvelopeV1): string {
         class: finding.class,
         fingerprint: finding.fingerprint,
       })),
+      ...(envelope.note === null
+        ? {}
+        : {
+            note: {
+              path: envelope.note.path,
+              beforeSha256: envelope.note.beforeSha256,
+            },
+          }),
     },
     FRONTMATTER_STRINGIFY_OPTIONS,
   );

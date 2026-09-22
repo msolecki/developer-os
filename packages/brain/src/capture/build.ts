@@ -5,6 +5,7 @@ import type { RedactionResult } from "@developer-os/security";
 
 import type {
   CaptureEnvelopeV1,
+  CaptureNoteTargetV1,
   CaptureRedactionFinding,
 } from "../schema/capture.js";
 import { renderCaptureFile } from "./render.js";
@@ -33,6 +34,8 @@ export interface CaptureBuildRequest {
   readonly workingDirectoryFingerprint: string;
   readonly createdAt: string;
   readonly redact: (text: string) => RedactionResult;
+  /** Absent for a plain capture. Not part of the deduplication hash (spec R3). */
+  readonly note?: CaptureNoteTargetV1;
 }
 
 export interface CaptureBuildResult {
@@ -227,6 +230,7 @@ export function buildCapture(request: CaptureBuildRequest): CaptureBuildResult {
     deduplicationHash,
     status: "quarantined",
     redaction,
+    note: request.note ?? null,
   };
 
   return {

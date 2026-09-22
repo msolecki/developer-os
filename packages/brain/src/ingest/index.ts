@@ -98,6 +98,7 @@ export type { ApplyResult, PlannedNoteWriteV1 } from "./apply.js";
 export {
   MAX_PROPOSED_NOTE_CHARS,
   MAX_PROPOSED_NOTES,
+  isUnsafeProposedNotePath,
   MAX_PROPOSED_PATH_CHARS,
   parseIngestProposal,
 } from "./proposal.js";

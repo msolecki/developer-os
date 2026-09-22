@@ -234,6 +234,16 @@ describe("buildCapture", () => {
     expect(built.envelope.createdAt).toBe("2026-08-13T09:00:00.000Z");
   });
 
+  it("keeps the deduplication hash content-only, so a note target does not change the id", () => {
+    const plain = buildCapture(request);
+    const noted = buildCapture({ ...request, note: { path: "DEV/a.md", beforeSha256: null } });
+
+    expect(plain.envelope.note).toBeNull();
+    expect(noted.envelope.captureId).toBe(plain.envelope.captureId);
+    expect(noted.envelope.deduplicationHash).toBe(plain.envelope.deduplicationHash);
+    expect(noted.envelope.note).toStrictEqual({ path: "DEV/a.md", beforeSha256: null });
+  });
+
   it("records no session id, because neither adapter exposes one stably", () => {
     expect(buildCapture(request).envelope.sourceSessionId).toBeNull();
   });

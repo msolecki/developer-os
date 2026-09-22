@@ -127,7 +127,7 @@ function unknownKey(value: object, allowed: ReadonlySet<string>): boolean {
  * check needs a real vault and belongs to the validators; nothing here may be
  * read as having discharged it.
  */
-function pathViolation(path: string): boolean {
+export function isUnsafeProposedNotePath(path: string): boolean {
   if (path.length === 0 || path.length > MAX_PROPOSED_PATH_CHARS) return true;
   if (!path.endsWith(NOTE_EXTENSION) || path === NOTE_EXTENSION) return true;
   if (path.includes("\\") || PATH_CONTROL.test(path)) return true;
@@ -158,7 +158,7 @@ function parseNote(value: unknown): ProposedNote | IngestProposalRefusal {
   }
 
   if (sourceCaptureId.length === 0) return "missing-provenance";
-  if (pathViolation(path)) return "unsafe-path";
+  if (isUnsafeProposedNotePath(path)) return "unsafe-path";
   if (contents.length === 0 || contents.length > MAX_PROPOSED_NOTE_CHARS) {
     return "oversized";
   }

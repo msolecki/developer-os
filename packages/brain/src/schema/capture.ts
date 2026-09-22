@@ -49,6 +49,14 @@ export interface CaptureRedactionFinding {
   readonly fingerprint: string;
 }
 
+/** The note a note capture replaces or creates, recorded at capture time. */
+export interface CaptureNoteTargetV1 {
+  /** Content-root-relative, POSIX, byte-exact; passes `isUnsafeProposedNotePath` as `false`. */
+  readonly path: string;
+  /** SHA-256 lowercase hex of the destination's bytes at capture time; `null` when it did not exist. */
+  readonly beforeSha256: string | null;
+}
+
 export interface CaptureEnvelopeV1 {
   readonly schemaVersion: 1;
   readonly captureId: string;
@@ -67,4 +75,6 @@ export interface CaptureEnvelopeV1 {
   readonly deduplicationHash: string;
   readonly status: CaptureStatus;
   readonly redaction: readonly CaptureRedactionFinding[];
+  /** `null` for a plain capture; preserved, never recomputed, like `captureId`. */
+  readonly note: CaptureNoteTargetV1 | null;
 }

@@ -86,6 +86,47 @@ describe("parseCaptureFile", () => {
     expect(parsed.ok && parsed.envelope).toEqual(built.envelope);
   });
 
+  it("round-trips a note target and preserves it rather than recomputing it", () => {
+    const note = { path: "DEV/a.md", beforeSha256: "a".repeat(64) };
+    const noted = buildCapture({ ...request, note });
+    const parsed = parseCaptureFile(noted.fileName, noted.contents, redact);
+
+    expect(parsed.ok && parsed.envelope.note).toStrictEqual(note);
+    expect(parsed.ok && parsed.envelope).toEqual(noted.envelope);
+  });
+
+  it("reads an absent note key as null", () => {
+    expect(accepted(parseCaptureFile(`${SAMPLE_ID}.md`, BASE_FILE, redact)).note).toBeNull();
+  });
+
+  it.each([
+    ["explicit null", "note: null"],
+    ["a scalar", "note: DEV/a.md"],
+    ["a sequence", "note:\n  - DEV/a.md"],
+    ["an extra key", "note:\n  path: DEV/a.md\n  beforeSha256: null\n  extra: 1"],
+    ["a missing key", "note:\n  path: DEV/a.md"],
+    ["an unsafe path", "note:\n  path: ../a.md\n  beforeSha256: null"],
+    ["a non-.md path", "note:\n  path: DEV/a.txt\n  beforeSha256: null"],
+    ["a non-string path", "note:\n  path: 42\n  beforeSha256: null"],
+    ["an uppercase hash", `note:\n  path: DEV/a.md\n  beforeSha256: ${"A".repeat(64)}`],
+    ["a short hash", "note:\n  path: DEV/a.md\n  beforeSha256: abc"],
+  ])("refuses %s as unparseable", (_label, block) => {
+    expect(parseCaptureFile(`${SAMPLE_ID}.md`, fileWith(block), redact)).toStrictEqual({
+      ok: false,
+      reason: "unparseable",
+    });
+  });
+
+  it("accepts a note target that records a hash", () => {
+    const hash = "0".repeat(64);
+    const block = `note:\n  path: DEV/a.md\n  beforeSha256: "${hash}"`;
+
+    expect(accepted(parseCaptureFile(`${SAMPLE_ID}.md`, fileWith(block), redact)).note).toStrictEqual({
+      path: "DEV/a.md",
+      beforeSha256: hash,
+    });
+  });
+
   it("accepts a content edit and keeps the id, which is assigned once and never recomputed", () => {
     const edited = built.contents.replace("observation", "different observation");
     const parsed = parseCaptureFile(built.fileName, edited, redact);

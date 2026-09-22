@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isUnsafeProposedNotePath,
   MAX_PROPOSED_NOTE_CHARS,
   MAX_PROPOSED_NOTES,
   parseIngestProposal,
@@ -211,5 +212,37 @@ describe("parseIngestProposal", () => {
       if (outcome.ok) continue;
       expect(outcome.reason, reason).toBe(reason);
     }
+  });
+});
+
+describe("isUnsafeProposedNotePath", () => {
+  const PATHS: readonly string[] = [
+    NOTE.path,
+    COMPOSED_PATH,
+    DECOMPOSED_PATH,
+    "/etc/passwd",
+    "DEV/../../etc/passwd.md",
+    "DEV/./a.md",
+    "DEV//a.md",
+    "DEV\\a.md",
+    "DEV/a\u0000.md",
+    "DEV/a\u202e.md",
+    "DEV/a.txt",
+    "",
+    ".md",
+  ];
+
+  it("agrees with parseIngestProposal's unsafe-path refusal on every path case", () => {
+    expect(PATHS.length).toBeGreaterThan(0);
+    for (const path of PATHS) {
+      const outcome = parseIngestProposal(proposal({ ...NOTE, path }));
+      const refusedAsUnsafe = !outcome.ok && outcome.reason === "unsafe-path";
+      expect(isUnsafeProposedNotePath(path), JSON.stringify(path)).toBe(refusedAsUnsafe);
+    }
+  });
+
+  it("accepts a safe note path and refuses a traversal", () => {
+    expect(isUnsafeProposedNotePath("DEV/a.md")).toBe(false);
+    expect(isUnsafeProposedNotePath("../a.md")).toBe(true);
   });
 });

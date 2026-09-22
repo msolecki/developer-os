@@ -43,6 +43,7 @@ function envelopeWhoseContentIs(content: string): CaptureEnvelopeV1 {
     deduplicationHash: UNREAD_FIELD_MARKER,
     status: "accepted",
     redaction: [{ class: UNREAD_FIELD_MARKER, fingerprint: UNREAD_FIELD_MARKER }],
+    note: null,
   };
 }
 

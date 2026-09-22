@@ -84,6 +84,7 @@ export type {
   CaptureBuildResult,
   CaptureFileOutcome,
   CaptureFileRefusal,
+  CaptureNoteTargetV1,
 } from "./capture/index.js";
 export {
   applyReviewDecision,
@@ -94,6 +95,7 @@ export {
 export type { ReviewDecision, ReviewOutcome } from "./review/index.js";
 export {
   buildIngestPrompt,
+  isUnsafeProposedNotePath,
   MAX_PROMPT_CONTENT_GRAPHEMES,
   MAX_PROMPT_INDEX_GRAPHEMES,
   MAX_PROPOSED_NOTE_CHARS,

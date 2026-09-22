@@ -3,7 +3,12 @@ import { parseAllDocuments } from "yaml";
 import type { RedactionResult } from "@developer-os/security";
 
 import { CAPTURE_STATUSES } from "../schema/capture.js";
-import type { CaptureEnvelopeV1, CaptureStatus } from "../schema/capture.js";
+import type {
+  CaptureEnvelopeV1,
+  CaptureNoteTargetV1,
+  CaptureStatus,
+} from "../schema/capture.js";
+import { isUnsafeProposedNotePath } from "../ingest/proposal.js";
 import { FRONTMATTER, FRONTMATTER_PARSE_OPTIONS } from "../schema/note.js";
 import { redactAndNormalize, screenEnvelopeScalar } from "./build.js";
 
@@ -112,6 +117,41 @@ function readSessionId(
   return typeof value === "string" ? screenEnvelopeScalar(value) : undefined;
 }
 
+const SHA256_HEX = /^[0-9a-f]{64}$/u;
+
+/**
+ * An absent key is a plain capture. Present, it is exactly `path` and
+ * `beforeSha256`; `undefined` means anything else, which is a refusal.
+ */
+function readNote(
+  fields: Record<string, unknown>,
+): CaptureNoteTargetV1 | null | undefined {
+  if (!Object.hasOwn(fields, "note")) return null;
+  const value = fields.note;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const keys = Object.keys(value).sort();
+  if (keys.length !== 2 || keys[0] !== "beforeSha256" || keys[1] !== "path") {
+    return undefined;
+  }
+  const { path, beforeSha256 } = value as Record<string, unknown>;
+  if (
+    typeof path !== "string" ||
+    isUnsafeProposedNotePath(path) ||
+    screenEnvelopeScalar(path) !== path
+  ) {
+    return undefined;
+  }
+  if (
+    beforeSha256 !== null &&
+    (typeof beforeSha256 !== "string" || !SHA256_HEX.test(beforeSha256))
+  ) {
+    return undefined;
+  }
+  return { path, beforeSha256 };
+}
+
 /**
  * Reads a capture file back into an envelope, re-redacting its body on the way.
  *
@@ -169,9 +209,11 @@ export function parseCaptureFile(
    * stably (spec §5.3).
    */
   const sourceSessionId = readSessionId(fields);
+  const note = readNote(fields);
 
   if (
     sourceSessionId === undefined ||
+    note === undefined ||
     sourceAgent === null ||
     sourceAgentVersion === null ||
     captureMethod === null ||
@@ -218,6 +260,7 @@ export function parseCaptureFile(
       deduplicationHash,
       status,
       redaction,
+      note,
     },
   };
 }

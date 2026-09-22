@@ -26,7 +26,29 @@ const envelope: CaptureEnvelopeV1 = {
   deduplicationHash: `0123456789012345${"0".repeat(48)}`,
   status: "quarantined",
   redaction: [],
+  note: null,
 };
+
+/** The exact bytes this envelope rendered to before `note` existed (spec §3.2). */
+const PRE_NOTE_FIXTURE_TEXT = [
+  "---",
+  "schemaVersion: 1",
+  'captureId: "0123456789012345"',
+  "sourceAgent: unknown",
+  "sourceAgentVersion: unknown",
+  "captureMethod: agent-authored",
+  "sourceSessionId: null",
+  "projectSlug: synthetic-project",
+  "workingDirectoryFingerprint: 0f1e2d3c4b5a6978",
+  "createdAt: 2026-08-13T09:00:00.000Z",
+  `deduplicationHash: "0123456789012345${"0".repeat(48)}"`,
+  "status: quarantined",
+  "redaction: []",
+  "---",
+  "",
+  "an observation worth keeping",
+  "",
+].join("\n");
 
 /**
  * The same block `parseCaptureFile` reads, applied here so the render tests
@@ -43,6 +65,21 @@ function split(text: string): { frontmatter: string; body: string } {
 }
 
 describe("renderCaptureFile", () => {
+  it("renders a plain envelope byte-identically to before the note field existed", () => {
+    expect(renderCaptureFile({ ...envelope, note: null })).toBe(PRE_NOTE_FIXTURE_TEXT);
+  });
+
+  it("emits a note mapping after redaction only when note is non-null", () => {
+    const text = renderCaptureFile({
+      ...envelope,
+      note: { path: "DEV/a.md", beforeSha256: null },
+    });
+
+    expect(text).toContain(
+      "redaction: []\nnote:\n  path: DEV/a.md\n  beforeSha256: null\n---\n",
+    );
+  });
+
   it("puts the envelope in frontmatter and the content in the body", () => {
     const { frontmatter, body } = split(renderCaptureFile(envelope));
 
