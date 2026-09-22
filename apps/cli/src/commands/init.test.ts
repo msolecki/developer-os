@@ -876,6 +876,7 @@ describe("runInit", () => {
         Promise.resolve({
           schemaVersion: 1,
           retainedBootstrapEvidence: [],
+          instructions: [],
           checks: [
             {
               id: "manifest",
@@ -902,6 +903,7 @@ describe("runInit", () => {
         Promise.resolve({
           schemaVersion: 1,
           retainedBootstrapEvidence: [],
+          instructions: [],
           checks: [
             {
               id: "agents",
@@ -929,6 +931,7 @@ describe("runInit", () => {
         Promise.resolve({
           schemaVersion: 1,
           retainedBootstrapEvidence: [],
+          instructions: [],
           checks: [
             {
               id: "agents",

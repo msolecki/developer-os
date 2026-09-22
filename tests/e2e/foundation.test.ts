@@ -79,6 +79,8 @@ const DOCTOR_CHECKS = [
   "claude-capabilities",
   "codex-capabilities",
   "vendor-config",
+  "instructions",
+  "codex-registration",
 ] as const;
 
 /**
@@ -318,6 +320,8 @@ describe("Foundation temporary-HOME lifecycle", () => {
         "claude-capabilities",
         "codex-capabilities",
         "vendor-config",
+        "instructions",
+        "codex-registration",
       ]);
       /** `vendor-config` warns while `CLAUDE_DENY_RULES` is unobserved (plan A14 Task 10). */
       expect(

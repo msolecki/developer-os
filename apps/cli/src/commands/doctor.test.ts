@@ -17,7 +17,10 @@ import type {
 import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 
 import {
+  advisoryWarnings,
   codexPluginRoot,
+  describeInstructions,
+  hasBlockingFailure,
   listIncompleteTransactions,
   runDoctor,
   runDoctorReport,
@@ -212,7 +215,10 @@ describe("runDoctor", () => {
       "claude-capabilities",
       "codex-capabilities",
       "vendor-config",
+      "instructions",
+      "codex-registration",
     ]);
+    expect(result.data.instructions).toStrictEqual([]);
     /**
      * No Codex is installed in this fixture, and no `recovery=` is printed for
      * one that is either: the advice named `/hooks`, the command that grants
@@ -1223,5 +1229,64 @@ describe("release-trust", () => {
 
   it("fails a state with a trust value other than unsigned-local", async () => {
     expect((await trustCheck("doctor-trust-invalid", { ...SIGNED_TRUST, trust: "signed" }))?.status).toBe("fail");
+  });
+});
+
+describe("instruction checks", () => {
+  it("renders one human line per artifact as `<owner> <category>/<id>: <source>, <state>`", () => {
+    const report: DoctorReportV1 = {
+      schemaVersion: 1,
+      checks: [],
+      retainedBootstrapEvidence: [],
+      instructions: [
+        { owner: "claude", category: "rule", id: "careful" as never, source: "default", state: "installed", paths: ["/p/a"] },
+        { owner: "codex", category: "output-style", id: "terse" as never, source: "user", state: "unsupported-vendor", paths: [] },
+      ],
+    };
+    expect(describeInstructions(report)).toStrictEqual([
+      "claude rule/careful: default, installed",
+      "codex output-style/terse: user, unsupported-vendor",
+    ]);
+  });
+
+  it("owns neither new check for init, so a failing one never reverts an install", () => {
+    const report: DoctorReportV1 = {
+      schemaVersion: 1,
+      checks: [
+        { id: "instructions", status: "fail", message: "1 instruction artifacts are drifted or missing", paths: [] },
+        { id: "codex-registration", status: "fail", message: "unregistered", paths: [] },
+      ],
+      retainedBootstrapEvidence: [],
+      instructions: [],
+    };
+    expect(hasBlockingFailure(report)).toBe(false);
+    expect(advisoryWarnings(report)).toStrictEqual([
+      "instructions: 1 instruction artifacts are drifted or missing",
+      "codex-registration: unregistered",
+    ]);
+  });
+
+  it("passes both checks and lists nothing on a V1 installation", async () => {
+    const fixture = await createCommandFixture("doctor-instructions-v1");
+    await runInit(fixture.context, ACCEPTED);
+
+    const report = await runDoctorReport(fixture.context);
+
+    expect(report.instructions).toStrictEqual([]);
+    expect(report.checks.find((check) => check.id === "instructions")?.status).toBe("pass");
+    expect(report.checks.find((check) => check.id === "codex-registration")?.status).toBe("pass");
+  });
+
+  it("warns when CLAUDE_CONFIG_DIR is set, because the managed files are then not the ones Claude reads", async () => {
+    const fixture = await createCommandFixture("doctor-claude-config-dir", {
+      env: { CLAUDE_CONFIG_DIR: "/synthetic/claude-config" },
+    });
+    await runInit(fixture.context, ACCEPTED);
+
+    const check = (await runDoctorReport(fixture.context)).checks.find((candidate) => candidate.id === "instructions");
+
+    expect(check?.status).toBe("warn");
+    expect(check?.message).toContain("CLAUDE_CONFIG_DIR");
+    expect(check?.message).not.toContain("/synthetic/claude-config");
   });
 });

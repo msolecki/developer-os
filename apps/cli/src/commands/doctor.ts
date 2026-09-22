@@ -8,25 +8,41 @@ import {
   detectDrift,
   EXIT_CODES,
   failure,
+  hashBytes,
+  inspectDrift,
   isUnsignedLocalTrust,
   ManifestStateError,
+  parseLifecycleInstallNonce,
   success,
+  validateActiveReleaseRecord,
+  validateInstructionCatalog,
   validateReleaseTrustState,
 } from "@developer-os/core";
 import type {
   BootstrapEvidenceSummaryV1,
+  CanonicalAbsolutePathV1,
   CliResult,
   DeveloperOsConfigV1,
   DriftFinding,
   ExitCode,
+  InstallationManifest,
   InstallationManifestV1,
+  InstallationManifestV2,
+  InstructionCatalogRowV1,
+  InstructionCategoryV1,
+  InstructionIdV1,
+  LifecycleInstallNonceV1,
+  LowerHexSha256,
+  ManagedArtifactV2,
+  ManifestAdmissionContextV1,
   RuntimePaths,
   TransactionJournalV1,
 } from "@developer-os/core";
 import { PLUGIN_INSTALL_SEGMENTS } from "@developer-os/adapter-claude";
-import { PLUGIN_TREE_SEGMENTS } from "@developer-os/adapter-codex";
+import { MARKETPLACE_NAME, PLUGIN_NAME, PLUGIN_TREE_SEGMENTS } from "@developer-os/adapter-codex";
 import { MacOsPlatformDiscoveryError } from "@developer-os/platform-macos";
 import type { AgentDiscovery, AgentName } from "@developer-os/platform-macos";
+import { compareCodePoints } from "@developer-os/workflow-schema";
 
 import { reportClaudeCapabilities } from "./claude-capabilities.js";
 import { reportCodexCapabilities } from "./codex-capabilities.js";
@@ -38,9 +54,23 @@ import {
   runtimePathsFor,
 } from "../context.js";
 import type { CliContext } from "../context.js";
+import { createCanonicalPathEvidence, createOwnerPathAdmission } from "../bootstrap/admission.js";
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
 import { isMissingEntry, readConfigFile } from "../config-file.js";
+import {
+  codexPluginTreeHash,
+  inspectCodexRegistration,
+  validateCodexRegistrationRecord,
+} from "../instructions/codex-registration.js";
+import type { CodexRegistrationRecordV1 } from "../instructions/codex-registration.js";
+import { loadInstructionOverrides } from "../instructions/sources.js";
+import { claudeInstructionPaths, codexInstructionPaths, resolveVendorHomes } from "../instructions/vendor-homes.js";
+import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
+import {
+  createManagedArtifactEphemeralRegistry,
+  createManagedArtifactSchemaRegistry,
+} from "../lifecycle/schema-registry.js";
 
 export { ConfigurationError, readConfigFile } from "../config-file.js";
 
@@ -55,10 +85,21 @@ export interface DoctorCheck {
   readonly recovery?: string;
 }
 
+export interface InstructionStatusV1 {
+  readonly owner: "claude" | "codex";
+  readonly category: InstructionCategoryV1;
+  readonly id: InstructionIdV1;
+  readonly source: "default" | "user";
+  readonly state: "installed" | "drifted" | "missing" | "emulated" | "unsupported-vendor";
+  readonly paths: readonly string[];
+}
+
 export interface DoctorReportV1 {
   readonly schemaVersion: 1;
   readonly checks: readonly DoctorCheck[];
   readonly retainedBootstrapEvidence: readonly BootstrapEvidenceSummaryV1[];
+  /** Sorted by `(owner, category, id)`; empty unless a V2 home selects a vendor. */
+  readonly instructions: readonly InstructionStatusV1[];
 }
 
 export interface IncompleteTransaction {
@@ -668,12 +709,31 @@ async function checkConfiguration(
   }
 }
 
+/**
+ * The authority `init` built the manifest with: the product home, the Brain and spec §2.2's vendor
+ * paths. Built here rather than imported from `commands/uninstall.ts`, which imports this module.
+ */
+function manifestAdmission(paths: RuntimePaths, homes: VendorHomesV1): ManifestAdmissionContextV1 {
+  const productHome = paths.home as CanonicalAbsolutePathV1;
+  return {
+    evidence: createCanonicalPathEvidence(),
+    sourceRoot: productHome,
+    backupRoot: paths.backupsDir as CanonicalAbsolutePathV1,
+    admitOwnerPath: createOwnerPathAdmission({
+      kind: "confined",
+      roots: [productHome, paths.brain as CanonicalAbsolutePathV1],
+      vendors: homes,
+    }),
+  };
+}
+
 async function checkManifest(
   context: CliContext,
   paths: RuntimePaths,
-): Promise<{ readonly finding: Finding; readonly manifest: InstallationManifestV1 | null }> {
+  homes: VendorHomesV1,
+): Promise<{ readonly finding: Finding; readonly manifest: InstallationManifest | null }> {
   try {
-    const manifest = await context.manifests.readOptional();
+    const manifest = await context.manifests.readOptional(manifestAdmission(paths, homes));
     if (manifest === null) {
       return {
         finding: fail(
@@ -751,15 +811,10 @@ async function checkTransactions(context: CliContext): Promise<Finding> {
   return pass("transactions", "no incomplete transactions", []);
 }
 
-async function checkDrift(
-  context: CliContext,
-  manifest: InstallationManifestV1 | null,
+function reportDrift(
+  findings: readonly DriftFinding[],
   paths: RuntimePaths,
-): Promise<Finding> {
-  if (manifest === null) {
-    return pass("drift", "no manifest to compare against", []);
-  }
-  const findings = await detectManagedDrift(context, manifest);
+): Finding {
   if (findings.length === 0) {
     return pass("drift", "every managed artifact matches its record", []);
   }
@@ -904,27 +959,377 @@ export const UNSIGNED_LOCAL_TRUST_WARNING =
 /** Reports the D47 trust downgrade on every run; not init-owned, so it never undoes an install. */
 async function checkReleaseTrust(paths: RuntimePaths): Promise<Finding> {
   const file = join(paths.stateDir, "release-trust.json");
-  let handle;
-  try {
-    handle = await nodeFs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
-  } catch (error) {
-    if (isMissingEntry(error)) return pass("release-trust", "no release trust state is recorded", []);
-    throw error;
-  }
-  let bytes: Uint8Array;
-  try {
-    const stats = await handle.stat();
-    if (!stats.isFile() || stats.size > MAX_RELEASE_TRUST_BYTES) {
-      throw new Error("the release trust state is not a bounded regular file");
-    }
-    bytes = await handle.readFile();
-  } finally {
-    await handle.close();
-  }
+  const bytes = await readBoundedFile(file, MAX_RELEASE_TRUST_BYTES, "the release trust state");
+  if (bytes === null) return pass("release-trust", "no release trust state is recorded", []);
   const state = validateReleaseTrustState(decodeCanonicalJson(bytes, MAX_RELEASE_TRUST_BYTES));
   return isUnsignedLocalTrust(state)
     ? warn("release-trust", UNSIGNED_LOCAL_TRUST_WARNING, [file])
     : pass("release-trust", "signed release trust", [file]);
+}
+
+/** No-follow and bounded; `null` when the file is absent. */
+async function readBoundedFile(path: string, maxBytes: number, label: string): Promise<Uint8Array | null> {
+  let handle;
+  try {
+    handle = await nodeFs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (error) {
+    if (isMissingEntry(error)) return null;
+    throw error;
+  }
+  try {
+    const stats = await handle.stat();
+    if (!stats.isFile() || stats.size > maxBytes) {
+      throw new Error(`${label} is not a bounded regular file`);
+    }
+    return new Uint8Array(await handle.readFile());
+  } finally {
+    await handle.close();
+  }
+}
+
+type Vendor = "claude" | "codex";
+type InstructionState = InstructionStatusV1["state"];
+type InstructionRow = Extract<ManagedArtifactV2, { readonly kind: "instruction" }>;
+type BlockRow = Extract<InstructionRow, { readonly verification: { readonly mode: "block" } }>;
+
+const VENDORS: readonly Vendor[] = ["claude", "codex"];
+const MAX_CATALOG_BYTES = 256 * 1024;
+const MAX_ACTIVE_RELEASE_BYTES = 16 * 1024;
+const MAX_REGISTRATION_BYTES = 8 * 1024;
+const MAX_TREE_FILE_BYTES = 16 * 1024 * 1024;
+/** The block's id when no block row records one; the rows' own ids win (`v2-drift.test.ts`). */
+const VENDOR_FILE_ID: Readonly<Record<Vendor, InstructionIdV1>> = {
+  claude: "claude-md" as InstructionIdV1,
+  codex: "agents-md" as InstructionIdV1,
+};
+const INSTRUCTION_RECOVERY =
+  "re-run developer-os init; for an edited file or block, first move the edits into <product-home>/instructions/<vendor>/ and delete the whole block, both markers included";
+const REGISTRATION_RECOVERY = "developer-os init";
+
+function isVendor(owner: string): owner is Vendor {
+  return owner === "claude" || owner === "codex";
+}
+
+function effectiveUid(): number {
+  // No file is owned by uid -1, so a platform without `getuid` refuses every override read.
+  return process.getuid?.() ?? -1;
+}
+
+async function readInstallNonce(paths: RuntimePaths): Promise<LifecycleInstallNonceV1 | null> {
+  try {
+    const bytes = await readBoundedFile(join(paths.stateDir, "lifecycle-install-nonce"), 65, "the lifecycle install nonce");
+    return bytes === null ? null : parseLifecycleInstallNonce(bytes);
+  } catch {
+    return null;
+  }
+}
+
+async function inspectV2Drift(
+  context: CliContext,
+  manifest: InstallationManifestV2,
+  paths: RuntimePaths,
+): Promise<readonly DriftFinding[]> {
+  return inspectDrift({
+    manifest,
+    fs: context.fs,
+    guards: context.guards.manifest,
+    schemas: createManagedArtifactSchemaRegistry(await readInstallNonce(paths)),
+    ephemerals: createManagedArtifactEphemeralRegistry(effectiveUid()),
+  });
+}
+
+interface InstalledCatalog {
+  readonly rows: readonly InstructionCatalogRowV1[];
+  readonly workflowIds: ReadonlySet<string>;
+}
+
+/**
+ * The catalog the active release installed, trusted only when its bytes hash to the manifest's
+ * record for that exact path. A release without `instructions/` has no catalog row and no rows.
+ */
+async function readInstalledCatalog(
+  paths: RuntimePaths,
+  manifest: InstallationManifestV2,
+): Promise<InstalledCatalog> {
+  const activeBytes = await readBoundedFile(join(paths.stateDir, "active-release.json"), MAX_ACTIVE_RELEASE_BYTES, "the active release record");
+  if (activeBytes === null) return { rows: [], workflowIds: new Set() };
+  const { bundleRoot } = validateActiveReleaseRecord(
+    decodeCanonicalJson(activeBytes, MAX_ACTIVE_RELEASE_BYTES),
+    createCanonicalPathEvidence(),
+  );
+  const workflowPrefix = `${bundleRoot}/workflows/`;
+  const workflowIds = new Set(
+    manifest.artifacts
+      .filter((artifact) => artifact.path.startsWith(workflowPrefix) && artifact.path.endsWith("/workflow.yaml"))
+      .map((artifact) => artifact.path.slice(workflowPrefix.length, -"/workflow.yaml".length))
+      .filter((id) => !id.includes("/")),
+  );
+  const catalogPath = join(bundleRoot, "instructions", "catalog.json");
+  const row = manifest.artifacts.find((artifact) => artifact.path === catalogPath);
+  if (row === undefined) return { rows: [], workflowIds };
+  const bytes = await readBoundedFile(catalogPath, MAX_CATALOG_BYTES, "the installed instruction catalog");
+  if (row.kind !== "file" || row.verification.mode !== "content" || bytes === null || hashBytes(bytes) !== row.verification.installedHash) {
+    throw new Error("the installed instruction catalog does not match its manifest record");
+  }
+  const catalog = validateInstructionCatalog(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)), workflowIds);
+  return { rows: catalog.artifacts, workflowIds };
+}
+
+function key(category: InstructionCategoryV1, id: string): string {
+  return `${category}/${id}`;
+}
+
+/** Any drifted row makes the artifact drifted; a missing piece makes it missing (spec §7). */
+function stateOf(findings: readonly (DriftFinding | undefined)[], absent: boolean, installed: InstructionState): InstructionState {
+  const present = findings.filter((finding): finding is DriftFinding => finding !== undefined);
+  if (present.some((finding) => finding.kind !== "missing")) return "drifted";
+  return absent || present.length > 0 ? "missing" : installed;
+}
+
+async function vendorInstructionStatuses(
+  paths: RuntimePaths,
+  vendor: Vendor,
+  manifest: InstallationManifestV2,
+  catalog: InstalledCatalog,
+  findingAt: ReadonlyMap<string, DriftFinding>,
+  homes: VendorHomesV1,
+): Promise<readonly InstructionStatusV1[]> {
+  const expected = new Map<string, { readonly category: InstructionCategoryV1; readonly id: InstructionIdV1; readonly source: "default" | "user" }>();
+  for (const row of catalog.rows) {
+    if (!row.vendors.includes(vendor)) continue;
+    expected.set(key(row.category, row.id), { category: row.category, id: row.id, source: "default" });
+  }
+  const overrides = await loadInstructionOverrides({
+    productHome: paths.home,
+    vendor,
+    effectiveUid: effectiveUid(),
+    workflowIds: catalog.workflowIds,
+  });
+  for (const override of overrides) {
+    expected.set(key(override.category, override.id), { category: override.category, id: override.id, source: "user" });
+  }
+  if (vendor === "claude") {
+    for (const row of catalog.rows) {
+      if (!row.thinCommand || !row.vendors.includes(vendor)) continue;
+      const skill = expected.get(key("skill", row.id));
+      expected.set(key("command", row.id), { category: "command", id: row.id, source: skill?.source ?? "default" });
+    }
+  }
+
+  const rows = manifest.artifacts.filter(
+    (artifact): artifact is InstructionRow => artifact.kind === "instruction" && artifact.owner === vendor,
+  );
+  const block = rows.find((artifact): artifact is BlockRow => artifact.verification.mode === "block");
+  const contentRows = new Map<string, InstructionRow[]>();
+  for (const row of rows) {
+    if (row.verification.mode === "block") continue;
+    const rowKey = key(row.instruction.category, row.instruction.id);
+    contentRows.set(rowKey, [...(contentRows.get(rowKey) ?? []), row]);
+  }
+  const members = new Map((block?.instruction.members ?? []).map((member) => [key(member.category, member.id), member]));
+
+  const keys = new Set([...expected.keys(), ...contentRows.keys(), ...members.keys()]);
+  const statuses: InstructionStatusV1[] = [];
+  const blockFinding = block === undefined ? undefined : findingAt.get(block.path);
+  let membersExpected = false;
+  for (const artifactKey of keys) {
+    const want = expected.get(artifactKey);
+    const recorded = contentRows.get(artifactKey) ?? [];
+    const member = members.get(artifactKey);
+    const identity = want ?? recorded[0]?.instruction ?? member;
+    if (identity === undefined) continue;
+    const { category, id } = identity;
+    const source = recorded[0]?.instruction.source ?? member?.source ?? want?.source ?? "default";
+    if (vendor === "codex" && category === "output-style") {
+      statuses.push({ owner: vendor, category, id, source, state: "unsupported-vendor", paths: [] });
+      continue;
+    }
+    const inBlock = category === "rule" || (vendor === "codex" && category === "scoped-rule");
+    const hasFiles = !(vendor === "codex" && inBlock);
+    membersExpected ||= inBlock;
+    const absent = (hasFiles && recorded.length === 0) || (inBlock && member === undefined);
+    const findings = [
+      ...recorded.map((row) => findingAt.get(row.path)),
+      ...(inBlock && member !== undefined ? [blockFinding] : []),
+    ];
+    const installed = vendor === "codex" && category === "scoped-rule" ? "emulated" : "installed";
+    statuses.push({
+      owner: vendor,
+      category,
+      id,
+      source,
+      state: stateOf(findings, absent, installed),
+      paths: [...recorded.map((row) => row.path), ...(inBlock && block !== undefined ? [block.path] : [])],
+    });
+  }
+  if (block !== undefined) {
+    statuses.push({
+      owner: vendor,
+      category: "vendor-file",
+      id: block.instruction.id,
+      source: "default",
+      state: stateOf([blockFinding], false, "installed"),
+      paths: [block.path],
+    });
+  } else if (membersExpected) {
+    const file = (vendor === "claude" ? claudeInstructionPaths(homes) : codexInstructionPaths(homes)).instructionFile;
+    statuses.push({ owner: vendor, category: "vendor-file", id: VENDOR_FILE_ID[vendor], source: "default", state: "missing", paths: [file] });
+  }
+  return statuses;
+}
+
+function compareStatuses(left: InstructionStatusV1, right: InstructionStatusV1): number {
+  return compareCodePoints(left.owner, right.owner)
+    || compareCodePoints(left.category, right.category)
+    || compareCodePoints(left.id, right.id);
+}
+
+function selectedVendors(config: DeveloperOsConfigV1 | null): readonly Vendor[] {
+  return config === null ? [] : VENDORS.filter((vendor) => config.adapters[vendor]);
+}
+
+async function inspectInstructions(
+  context: CliContext,
+  paths: RuntimePaths,
+  manifest: InstallationManifestV2,
+  config: DeveloperOsConfigV1 | null,
+  vendorFindings: readonly DriftFinding[],
+  homes: VendorHomesV1,
+): Promise<{ readonly finding: Finding; readonly statuses: readonly InstructionStatusV1[] }> {
+  const vendors = selectedVendors(config);
+  const catalog = vendors.length === 0 ? { rows: [], workflowIds: new Set<string>() } : await readInstalledCatalog(paths, manifest);
+  const findingAt = new Map(vendorFindings.map((finding) => [finding.path, finding]));
+  const statuses: InstructionStatusV1[] = [];
+  for (const vendor of vendors) {
+    statuses.push(...(await vendorInstructionStatuses(paths, vendor, manifest, catalog, findingAt, homes)));
+  }
+  statuses.sort(compareStatuses);
+
+  const bad = statuses.filter((status) => status.state === "drifted" || status.state === "missing");
+  // The registration record's drift reads as `stale` under `codex-registration`.
+  const listed = new Set([...statuses.flatMap((status) => status.paths), codexInstructionPaths(homes).registrationFile]);
+  // Vendor rows outside any artifact, e.g. the workflow skills in the Claude plugin tree.
+  const unlisted = vendorFindings.filter((finding) => !listed.has(finding.path));
+  if (bad.length > 0 || unlisted.length > 0) {
+    const malformed = vendorFindings.some((finding) => finding.kind === "block_malformed");
+    return {
+      statuses,
+      finding: fail(
+        "instructions",
+        [
+          `${String(bad.length + unlisted.length)} instruction artifacts are drifted or missing`,
+          ...(malformed ? ["block_malformed: a vendor instruction block has malformed markers"] : []),
+        ].join("; "),
+        [...new Set([...bad.flatMap((status) => status.paths), ...unlisted.map((finding) => finding.path)])],
+        EXIT_CODES.decisionRequired,
+        INSTRUCTION_RECOVERY,
+      ),
+    };
+  }
+  return { statuses, finding: instructionAdvisories(context, statuses, `${String(statuses.length)} instruction artifacts match their record`) };
+}
+
+/** Spec §2.2: a set `CLAUDE_CONFIG_DIR` is not followed, so the managed files are not what Claude reads. */
+function instructionAdvisories(context: CliContext, statuses: readonly InstructionStatusV1[], passMessage: string): Finding {
+  const unsupported = statuses.filter((status) => status.state === "unsupported-vendor");
+  const warnings = [
+    ...(unsupported.length > 0
+      ? [`${String(unsupported.length)} instruction artifacts are unsupported by their vendor: ${unsupported.map((status) => `${status.owner} ${status.category}/${status.id}`).join(", ")}`]
+      : []),
+    ...(context.env.CLAUDE_CONFIG_DIR !== undefined && context.env.CLAUDE_CONFIG_DIR !== ""
+      ? ["CLAUDE_CONFIG_DIR is set and not followed; Claude does not read the managed instruction files"]
+      : []),
+  ];
+  return warnings.length > 0 ? warn("instructions", warnings.join("; "), []) : pass("instructions", passMessage, []);
+}
+
+function codexTreeFiles(manifest: InstallationManifestV2, pluginRoot: string): readonly { readonly path: string; readonly sha256: LowerHexSha256 }[] {
+  return manifest.artifacts.flatMap((artifact) =>
+    artifact.path.startsWith(`${pluginRoot}/`) && artifact.verification.mode === "content" && artifact.kind !== "directory"
+      ? [{ path: artifact.path.slice(pluginRoot.length + 1), sha256: artifact.verification.installedHash }]
+      : [],
+  );
+}
+
+async function readRegistrationRecord(path: string): Promise<CodexRegistrationRecordV1 | null> {
+  try {
+    const bytes = await readBoundedFile(path, MAX_REGISTRATION_BYTES, "the codex registration record");
+    return bytes === null ? null : validateCodexRegistrationRecord(bytes);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `--probe` only. Codex loads skills from its cache copy, which `codex debug prompt-input` names
+ * (`codex-adapter.md` §15); every tree file must hash equal under that root.
+ */
+async function isCacheStale(
+  context: CliContext,
+  codexExecutable: string,
+  codexHome: string,
+  files: readonly { readonly path: string; readonly sha256: string }[],
+): Promise<boolean> {
+  const result = await context.runner.run({
+    executable: codexExecutable,
+    args: ["debug", "prompt-input", "probe"],
+    cwd: process.cwd(),
+    stdin: "",
+    timeoutMs: 60_000,
+    env: { CODEX_HOME: codexHome },
+  });
+  if (result.timedOut || result.exitCode !== 0) throw new Error("codex debug prompt-input failed");
+  const cachePrefix = `${join(codexHome, "plugins", "cache", MARKETPLACE_NAME, PLUGIN_NAME)}/`;
+  const at = result.stdout.indexOf(cachePrefix);
+  if (at < 0) return true;
+  const version = result.stdout.slice(at + cachePrefix.length).split("/")[0] ?? "";
+  if (!/^[A-Za-z0-9._-]+$/u.test(version) || version === "." || version === "..") return true;
+  const cacheRoot = join(cachePrefix, version);
+  for (const file of files) {
+    const bytes = await readBoundedFile(join(cacheRoot, file.path), MAX_TREE_FILE_BYTES, "a codex cache file");
+    if (bytes === null || hashBytes(bytes) !== file.sha256) return true;
+  }
+  return false;
+}
+
+async function checkCodexRegistration(
+  context: CliContext,
+  manifest: InstallationManifest | null,
+  config: DeveloperOsConfigV1 | null,
+  homes: VendorHomesV1,
+  probe: boolean,
+): Promise<Finding> {
+  if (manifest?.schemaVersion !== 2 || !selectedVendors(config).includes("codex")) {
+    return pass("codex-registration", "codex is not selected", []);
+  }
+  const { pluginRoot, registrationFile } = codexInstructionPaths(homes);
+  const files = codexTreeFiles(manifest, pluginRoot);
+  if (files.length === 0) {
+    return fail("codex-registration", "unregistered: no Codex plugin tree is installed", [pluginRoot], EXIT_CODES.operationalFailure, REGISTRATION_RECOVERY);
+  }
+  const outcome = (await discoverEachAgent(context)).find((candidate) => candidate.name === "codex");
+  const executable = outcome?.discovery?.installed === true ? outcome.discovery.executablePath : null;
+  if (executable === null) {
+    return warn("codex-registration", "codex CLI absent; the registration was not inspected", []);
+  }
+  const state = await inspectCodexRegistration({
+    runner: context.runner,
+    codexExecutable: executable,
+    codexHome: homes.codexHome,
+    pluginRoot,
+    record: await readRegistrationRecord(registrationFile),
+    treeHash: codexPluginTreeHash(files),
+  });
+  if (state === "unregistered") {
+    return fail("codex-registration", "unregistered: codex plugin list does not show the plugin enabled at its tree", [pluginRoot], EXIT_CODES.operationalFailure, REGISTRATION_RECOVERY);
+  }
+  if (state === "stale") {
+    return fail("codex-registration", "stale: the plugin tree changed since its last registration", [registrationFile], EXIT_CODES.operationalFailure, REGISTRATION_RECOVERY);
+  }
+  if (probe && (await isCacheStale(context, executable, homes.codexHome, files))) {
+    return fail("codex-registration", "cache-stale: Codex's cached copy differs from the plugin tree", [pluginRoot], EXIT_CODES.operationalFailure, REGISTRATION_RECOVERY);
+  }
+  return pass("codex-registration", "registered", [pluginRoot]);
 }
 
 /**
@@ -1012,6 +1417,7 @@ async function collectFindings(
 ): Promise<{
   readonly findings: readonly Finding[];
   readonly retainedBootstrapEvidence: readonly BootstrapEvidenceSummaryV1[];
+  readonly instructions: readonly InstructionStatusV1[];
 }> {
   /**
    * Emitted here, before the first check, and unconditionally on the flag
@@ -1032,19 +1438,20 @@ async function collectFindings(
     config = null;
   }
   const paths = runtimePathsFor(context, config ?? undefined);
+  const homes = resolveVendorHomes(context.env, context.userHome, paths.home);
 
   /**
    * One read, threaded through. Reading the manifest a second time for the drift
    * check would let a manifest deleted between the two reads produce a passing
    * manifest check beside a drift check that had nothing to compare against.
    */
-  let inspected: InstallationManifestV1 | null = null;
+  let inspected: InstallationManifest | null = null;
   const manifest = await guarded(
     context,
     "manifest",
     [paths.manifestFile],
     async () => {
-      const checked = await checkManifest(context, paths);
+      const checked = await checkManifest(context, paths, homes);
       inspected = checked.manifest;
       return checked.finding;
     },
@@ -1081,6 +1488,8 @@ async function collectFindings(
       exitCodeOf(error),
     );
   }
+  let vendorDrift: readonly DriftFinding[] | null = null;
+  let instructions: readonly InstructionStatusV1[] = [];
   const evidenceFindings = evidenceFailure !== null ? [evidenceFailure] : evidenceIds.map((summary) => warn(
     `bootstrap-evidence:${summary.id}`,
     `${summary.operation} ${summary.status}; ${String(summary.entryCount)} entries; ${summary.regularFileBytes} regular-file bytes retained at ${summary.vaultPath}`,
@@ -1099,9 +1508,15 @@ async function collectFindings(
     await guarded(context, "transactions", [], () =>
       checkTransactions(context),
     ),
-    await guarded(context, "drift", [], () =>
-      checkDrift(context, inspected, paths),
-    ),
+    await guarded(context, "drift", [], async () => {
+      const current = inspected;
+      if (current === null) return pass("drift", "no manifest to compare against", []);
+      if (current.schemaVersion === 1) return reportDrift(await detectManagedDrift(context, current), paths);
+      const findings = await inspectV2Drift(context, current, paths);
+      /** Vendor rows are reported by `instructions`, which is not init-owned: an edited block never reverts Foundation. */
+      vendorDrift = findings.filter((finding) => isVendor(finding.owner));
+      return reportDrift(findings.filter((finding) => !isVendor(finding.owner)), paths);
+    }),
     await guarded(context, "brain", [paths.brain], () =>
       checkBrain(context, paths),
     ),
@@ -1118,8 +1533,26 @@ async function collectFindings(
     ),
     // Not through `guarded`: it turns a throw into "fail", which spec §8 forbids.
     { check: await checkVendorConfig(context), code: EXIT_CODES.success },
+    await guarded(context, "instructions", [], async () => {
+      const current = inspected;
+      if (current?.schemaVersion !== 2) return instructionAdvisories(context, [], "no V2 installation to inspect");
+      if (vendorDrift === null) throw new Error("managed drift could not be inspected");
+      const inspection = await inspectInstructions(context, paths, current, config, vendorDrift, homes);
+      instructions = inspection.statuses;
+      return inspection.finding;
+    }),
+    await guarded(context, "codex-registration", [], () =>
+      checkCodexRegistration(context, inspected, config, homes, options.probe),
+    ),
     ...evidenceFindings,
-  ], retainedBootstrapEvidence: evidenceIds };
+  ], retainedBootstrapEvidence: evidenceIds, instructions };
+}
+
+/** Human output: one line per artifact (spec §7). */
+export function describeInstructions(report: DoctorReportV1): readonly string[] {
+  return report.instructions.map(
+    (status) => `${status.owner} ${status.category}/${status.id}: ${status.source}, ${status.state}`,
+  );
 }
 
 export function doctorExitCode(findings: readonly Finding[]): ExitCode {
@@ -1139,11 +1572,12 @@ export async function runDoctorReport(
   context: CliContext,
   options: DoctorOptions = NO_PROBE,
 ): Promise<DoctorReportV1> {
-  const { findings, retainedBootstrapEvidence } = await collectFindings(context, options);
+  const { findings, retainedBootstrapEvidence, instructions } = await collectFindings(context, options);
   return {
     schemaVersion: 1,
     checks: findings.map((finding) => finding.check),
     retainedBootstrapEvidence,
+    instructions,
   };
 }
 
@@ -1199,11 +1633,12 @@ export async function runDoctor(
   context: CliContext,
   options: DoctorOptions = NO_PROBE,
 ): Promise<CliResult<DoctorReportV1>> {
-  const { findings, retainedBootstrapEvidence } = await collectFindings(context, options);
+  const { findings, retainedBootstrapEvidence, instructions } = await collectFindings(context, options);
   const report: DoctorReportV1 = {
     schemaVersion: 1,
     checks: findings.map((finding) => finding.check),
     retainedBootstrapEvidence,
+    instructions,
   };
   const code = doctorExitCode(findings);
 
