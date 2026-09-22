@@ -21,6 +21,7 @@ import type {
   ManagedArtifactV1,
   ManagedArtifactV2,
   ManifestAdmissionContextV1,
+  ManagedArtifactSchemaIdV1,
   InstallationManifestV1,
   PlannedFileMutation,
   RuntimePaths,
@@ -46,6 +47,7 @@ import {
 import type { AdmittedV2HomeV1 } from "../lifecycle/admission.js";
 import { lifecycleHomeKeyFromAdmission } from "../lifecycle/context.js";
 import type { CliLifecycleContext } from "../lifecycle/context.js";
+import { createManagedArtifactSchemaRegistry } from "../lifecycle/schema-registry.js";
 import { LifecycleUninstaller } from "../lifecycle/uninstall.js";
 import type { LifecycleUninstallRequestV1 } from "../lifecycle/uninstall.js";
 import { dispatchUninstall, recoverUninstall } from "../lifecycle/uninstall-recovery.js";
@@ -623,17 +625,47 @@ export function manifestAdmissionFor(
  * file holds *right now* keeps the V1 comparison a no-op, which is what V2
  * already decided for this artifact.
  */
+async function currentContent(
+  context: CliContext,
+  path: string,
+): Promise<Uint8Array | null> {
+  try {
+    const canonical = await context.guards.manifest.assertReadable(path);
+    const stats = await context.fs.lstat(canonical);
+    if (stats.isSymbolicLink() || !stats.isFile()) return null;
+    return await context.fs.readFile(canonical);
+  } catch {
+    return null;
+  }
+}
+
 async function currentContentHash(
   context: CliContext,
   path: string,
 ): Promise<string> {
+  return hashBytes((await currentContent(context, path)) ?? new Uint8Array());
+}
+
+/**
+ * A `schema` row is the same case one step removed: V2 validates it against its schema and
+ * never compares its hash, because `config set` and the instruction attach and detach rewrite
+ * `config.toml` in place. The recorded hash made every uninstall after such a write refuse
+ * exit 3. A record that still validates takes its current hash; one that no longer does keeps
+ * the recorded hash, so it refuses exactly as V2 drift reports `schema_invalid`.
+ */
+async function schemaRowHash(
+  context: CliContext,
+  path: string,
+  schemaId: ManagedArtifactSchemaIdV1,
+  installedHash: string,
+): Promise<string> {
+  const bytes = await currentContent(context, path);
+  if (bytes === null) return installedHash;
   try {
-    const canonical = await context.guards.manifest.assertReadable(path);
-    const stats = await context.fs.lstat(canonical);
-    if (stats.isSymbolicLink() || !stats.isFile()) return hashBytes(new Uint8Array());
-    return hashBytes(await context.fs.readFile(canonical));
+    createManagedArtifactSchemaRegistry(null).validate(schemaId, bytes);
+    return hashBytes(bytes);
   } catch {
-    return hashBytes(new Uint8Array());
+    return installedHash;
   }
 }
 
@@ -647,7 +679,9 @@ export async function downcastArtifactV2(
     ? hashBytes(new Uint8Array())
     : artifact.verification.mode === "ephemeral"
       ? await currentContentHash(context, artifact.path)
-      : artifact.verification.installedHash;
+      : artifact.verification.mode === "schema"
+        ? await schemaRowHash(context, artifact.path, artifact.verification.schemaId, artifact.verification.installedHash)
+        : artifact.verification.installedHash;
   return {
     owner: artifact.owner,
     path: artifact.path,
