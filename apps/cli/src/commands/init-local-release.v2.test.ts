@@ -1,16 +1,20 @@
+import { spawnSync } from "node:child_process";
 import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { EXIT_CODES } from "@developer-os/core";
+import { decodeCanonicalJson, encodeCanonicalJson, EXIT_CODES, hashBytes } from "@developer-os/core";
+import type { CanonicalJsonValue, InstallationManifestV2 } from "@developer-os/core";
 
 import { createProductionContext, PRODUCT_VERSION } from "../context.js";
 import type { CliContext } from "../context.js";
 import { run } from "../main.js";
 import type { CliContextFactory } from "../main.js";
-import { LOCAL_BUNDLE_BIN, writeUnsignedLocalRelease } from "../update/local-release.js";
+import { withLifecycleMutation } from "../lifecycle/mutation-gate.js";
+import { entrypointPath, LOCAL_BUNDLE_CLI_ENTRY, writeUnsignedLocalRelease } from "../update/local-release.js";
 import { admitUnsignedLocalPackagedRelease } from "../update/packaged-release.js";
 import { RecordingIo, REAL_FILESYSTEM_TIMEOUT_MS } from "./testing.js";
 
@@ -79,7 +83,6 @@ describe("init --local-release", () => {
       outDir: join(root, "pkg"),
       version: PRODUCT_VERSION,
       bundleFiles: [
-        LOCAL_BUNDLE_BIN,
         {
           relativePath: "instructions/catalog.json",
           bytes: new TextEncoder().encode('{"artifacts":[],"schemaVersion":1}\n'),
@@ -108,5 +111,131 @@ describe("init --local-release", () => {
     await expect(
       nodeFs.lstat(join(home, ".developer-os", "state", "release-trust.json")),
     ).rejects.toMatchObject({ code: "ENOENT" });
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
+const encoder = new TextEncoder();
+
+/** A launchable bundle in miniature: the CLI entry is a stub that says it ran. */
+async function launchableRelease(root: string): Promise<string> {
+  return writeUnsignedLocalRelease({
+    outDir: join(root, "pkg"),
+    version: PRODUCT_VERSION,
+    bundleFiles: [
+      { relativePath: LOCAL_BUNDLE_CLI_ENTRY, bytes: encoder.encode('process.stdout.write("launched\\n");\n'), mode: 0o600 },
+      { relativePath: "instructions/catalog.json", bytes: encoder.encode('{"artifacts":[],"schemaVersion":1}\n'), mode: 0o600 },
+    ],
+  });
+}
+
+async function readManifest(home: string): Promise<{ readonly bytes: Uint8Array; readonly manifest: InstallationManifestV2 }> {
+  const bytes = new Uint8Array(await nodeFs.readFile(join(home, ".developer-os", "installation-manifest.json")));
+  return { bytes, manifest: decodeCanonicalJson(bytes, 64 * 1024 * 1024) as unknown as InstallationManifestV2 };
+}
+
+async function bundleRoot(home: string): Promise<string> {
+  const active = JSON.parse(
+    await nodeFs.readFile(join(home, ".developer-os", "state", "active-release.json"), "utf8"),
+  ) as { readonly bundleRoot: string };
+  return active.bundleRoot;
+}
+
+describe("init --local-release writes the version-free entrypoint (D53)", () => {
+  it("writes bin/developer-os.mjs as a 0600 manifest row that loads the active release, and it launches", async () => {
+    const { root, home } = await temporaryHome("init-entrypoint");
+    const dir = await launchableRelease(root);
+    const io = new RecordingIo();
+
+    const code = await run(["init", "--yes", "--local-release", dir], io, productionFactory(home));
+
+    expect(code, io.err.join("\n")).toBe(EXIT_CODES.success);
+    const productHome = join(home, ".developer-os");
+    const entrypoint = entrypointPath(productHome);
+    const target = join(await bundleRoot(home), LOCAL_BUNDLE_CLI_ENTRY);
+    expect(await nodeFs.readFile(entrypoint, "utf8")).toContain(`import ${JSON.stringify(pathToFileURL(target).href)};`);
+    expect((await nodeFs.stat(entrypoint)).mode & 0o777).toBe(0o600);
+    expect((await nodeFs.stat(join(productHome, "bin"))).mode & 0o777).toBe(0o700);
+    const { manifest } = await readManifest(home);
+    const row = manifest.artifacts.find((artifact) => artifact.path === entrypoint);
+    expect(row).toMatchObject({
+      owner: "core",
+      kind: "file",
+      verification: { mode: "content", installedHash: hashBytes(await nodeFs.readFile(entrypoint)) },
+    });
+    expect(manifest.artifacts.find((artifact) => artifact.path === join(productHome, "bin"))).toMatchObject({
+      owner: "core",
+      kind: "directory",
+    });
+
+    const launched = spawnSync(process.execPath, [entrypoint], { cwd: "/", encoding: "utf8" });
+    expect(launched.status).toBe(0);
+    expect(launched.stdout).toBe("launched\n");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("leaves a current entrypoint alone and rewrites one naming another release", async () => {
+    const { root, home } = await temporaryHome("init-entrypoint-rewrite");
+    const dir = await launchableRelease(root);
+    expect(await run(["init", "--yes", "--local-release", dir], new RecordingIo(), productionFactory(home))).toBe(EXIT_CODES.success);
+    const entrypoint = entrypointPath(join(home, ".developer-os"));
+    const current = await nodeFs.readFile(entrypoint);
+
+    const again = new RecordingIo();
+    expect(await run(["init", "--yes", "--local-release", dir], again, productionFactory(home)), again.err.join("\n")).toBe(EXIT_CODES.success);
+    expect(await nodeFs.readFile(entrypoint)).toStrictEqual(current);
+
+    // An entrypoint an earlier release wrote, recorded as installed: the next init must move it.
+    const stale = encoder.encode('import "file:///nowhere/releases/0.0.0-old/node_modules/@developer-os/cli/dist/bin.js";\n');
+    const { bytes, manifest } = await readManifest(home);
+    const artifacts = manifest.artifacts.map((artifact) =>
+      artifact.path === entrypoint ? { ...artifact, verification: { mode: "content" as const, installedHash: hashBytes(stale) } } : artifact);
+    const context = createProductionContext({ io: new RecordingIo(), env: {}, userHome: home, localRelease: null });
+    contexts.push(context);
+    const lifecycle = context.lifecycle;
+    if (lifecycle === undefined) throw new Error("the production context composed no lifecycle context");
+    await withLifecycleMutation(context, lifecycle, () => context.executor.execute({
+      kind: "entrypoint",
+      mutations: [
+        { targetPath: entrypoint, operation: "replace", content: stale, expectedBeforeHash: hashBytes(current) },
+        {
+          targetPath: context.paths.manifestFile,
+          operation: "replace",
+          content: encoder.encode(encodeCanonicalJson({ ...manifest, artifacts } as unknown as CanonicalJsonValue)),
+          expectedBeforeHash: hashBytes(bytes),
+        },
+      ],
+    }));
+
+    const rewrite = new RecordingIo();
+    expect(await run(["init", "--yes", "--local-release", dir], rewrite, productionFactory(home)), rewrite.err.join("\n")).toBe(EXIT_CODES.success);
+    expect(await nodeFs.readFile(entrypoint)).toStrictEqual(current);
+    const after = (await readManifest(home)).manifest.artifacts.find((artifact) => artifact.path === entrypoint);
+    expect(after?.verification).toStrictEqual({ mode: "content", installedHash: hashBytes(current) });
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("is removed by uninstall with its bin directory", async () => {
+    const { root, home } = await temporaryHome("init-entrypoint-uninstall");
+    const dir = await launchableRelease(root);
+    expect(await run(["init", "--yes", "--local-release", dir], new RecordingIo(), productionFactory(home))).toBe(EXIT_CODES.success);
+
+    const io = new RecordingIo();
+    expect(await run(["uninstall", "--yes"], io, productionFactory(home)), io.err.join("\n")).toBe(EXIT_CODES.success);
+
+    await expect(nodeFs.lstat(join(home, ".developer-os", "bin"))).rejects.toMatchObject({ code: "ENOENT" });
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("doctor names the command and suggests an alias without writing a shell file", async () => {
+    const { root, home } = await temporaryHome("init-entrypoint-doctor");
+    const dir = await launchableRelease(root);
+    expect(await run(["init", "--yes", "--local-release", dir], new RecordingIo(), productionFactory(home))).toBe(EXIT_CODES.success);
+    const before = await nodeFs.readdir(home);
+
+    const io = new RecordingIo();
+    await run(["doctor"], io, productionFactory(home));
+
+    const entrypoint = entrypointPath(join(home, ".developer-os"));
+    const line = io.out.find((candidate) => candidate.startsWith("[pass] entrypoint:"));
+    expect(line).toContain(`node ${entrypoint}`);
+    expect(line).toContain(`alias developer-os='node ${entrypoint}'`);
+    expect(await nodeFs.readdir(home)).toStrictEqual(before);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

@@ -70,6 +70,7 @@ import type { CodexRegistrationRecordV1 } from "../instructions/codex-registrati
 import { loadInstructionOverrides } from "../instructions/sources.js";
 import { claudeInstructionPaths, codexInstructionPaths, resolveVendorHomes } from "../instructions/vendor-homes.js";
 import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
+import { entrypointPath } from "../update/local-release.js";
 import {
   createManagedArtifactEphemeralRegistry,
   createManagedArtifactSchemaRegistry,
@@ -808,6 +809,27 @@ async function checkPlatform(context: CliContext): Promise<Finding> {
       EXIT_CODES.capabilityUnavailable,
     );
   }
+}
+
+/**
+ * D53: how to run the product. Informational only; drift of the file itself is the `drift`
+ * check's, and the product never writes shell startup files, so the alias is a suggestion.
+ */
+async function checkEntrypoint(context: CliContext, paths: RuntimePaths): Promise<Finding> {
+  const path = entrypointPath(paths.home);
+  let present = false;
+  try {
+    present = (await context.fs.lstat(path)).isFile();
+  } catch {
+    present = false;
+  }
+  return present
+    ? pass(
+        "entrypoint",
+        `run Developer OS with: node ${path}; to shorten it, add alias developer-os='node ${path}' to your shell startup file yourself (Developer OS never edits it)`,
+        [path],
+      )
+    : pass("entrypoint", "no entrypoint is installed; init --local-release <dir> writes one from a launchable local build", [path]);
 }
 
 async function checkProductHome(
@@ -1677,6 +1699,8 @@ async function collectFindings(
       checkRedactionKey(context, paths),
     ),
     await guarded(context, "release-trust", [], () => checkReleaseTrust(paths)),
+    // Not through `guarded`: an informational line, never a failure.
+    await checkEntrypoint(context, paths),
     await guarded(context, "agents", [], () => checkAgents(context)),
     await guarded(context, "claude-capabilities", [], () =>
       checkClaudeCapabilities(context, options.probe),

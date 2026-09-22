@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import * as nodeFs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +8,8 @@ import { EXIT_CODES } from "@developer-os/core";
 
 import { PRODUCT_VERSION } from "../context.js";
 import {
-  LOCAL_BUNDLE_BIN,
+  entrypointPath,
+  LOCAL_BUNDLE_CLI_ENTRY,
   releaseTemplateFiles,
   writeUnsignedLocalRelease,
 } from "./local-release.js";
@@ -21,7 +21,7 @@ import {
 
 const CATALOG = new TextEncoder().encode('{"artifacts":[],"schemaVersion":1}\n');
 const BUNDLE: readonly ReleaseFileV1[] = [
-  LOCAL_BUNDLE_BIN,
+  { relativePath: "bin/tool", bytes: new TextEncoder().encode("#!/bin/sh\n"), mode: 0o700 },
   { relativePath: "instructions/catalog.json", bytes: CATALOG, mode: 0o600 },
   { relativePath: "workflows/capture/workflow.yaml", bytes: new TextEncoder().encode("id: capture\n"), mode: 0o600 },
 ];
@@ -55,11 +55,11 @@ describe("writeUnsignedLocalRelease", () => {
     expect(release.trust).toBe("unsigned-local");
     const paths = release.files.map((file) => file.relativePath);
     expect(paths).toContain("bundle/instructions/catalog.json");
-    expect(paths).toContain("bundle/bin/developer-os");
+    expect(paths).toContain("bundle/bin/tool");
     const templates = releaseTemplateFiles();
     expect(templates.length).toBeGreaterThan(0);
     for (const template of templates) expect(paths).toContain(template.relativePath);
-    expect(release.files.find((file) => file.relativePath === "bundle/bin/developer-os")?.mode).toBe(0o700);
+    expect(release.files.find((file) => file.relativePath === "bundle/bin/tool")?.mode).toBe(0o700);
     expect(new TextDecoder().decode(await release.readFile("bundle/instructions/catalog.json"))).toBe(
       new TextDecoder().decode(CATALOG),
     );
@@ -118,11 +118,9 @@ describe("writeUnsignedLocalRelease", () => {
   });
 });
 
-describe("LOCAL_BUNDLE_BIN", () => {
-  it("exits 4 and names the checkout's CLI", () => {
-    const result = spawnSync("/bin/sh", ["-s"], { input: LOCAL_BUNDLE_BIN.bytes, encoding: "utf8" });
-    expect(result.status).toBe(4);
-    expect(result.stderr).toContain("node apps/cli/dist/bin.js");
-    expect(result.stdout).toBe("");
+describe("D53 entrypoint locations", () => {
+  it("names the packed CLI inside the bundle and a version-free product file", () => {
+    expect(LOCAL_BUNDLE_CLI_ENTRY).toBe("node_modules/@developer-os/cli/dist/bin.js");
+    expect(entrypointPath("/Users/someone/.developer-os")).toBe("/Users/someone/.developer-os/bin/developer-os.mjs");
   });
 });

@@ -41,18 +41,25 @@ export function releaseTemplateFiles(): readonly ReleaseFileV1[] {
 }
 
 /**
- * The installed bundle is not launchable in local mode (D47 Q1): the launcher refuses an
- * unsigned-local trust state, so the stub says where the runnable CLI is instead.
+ * D53: the CLI's entry inside a launchable bundle, relative to the bundle root. The packer puts
+ * it there and `init` points `<product-home>/bin/developer-os.mjs` at it.
  */
-export const LOCAL_BUNDLE_BIN: ReleaseFileV1 = Object.freeze({
-  relativePath: "bin/developer-os",
-  bytes: encoder.encode(
-    "#!/bin/sh\n" +
-      "echo 'developer-os: this bundle was installed from an unsigned local build and cannot be launched; run node apps/cli/dist/bin.js from the checkout instead' >&2\n" +
-      "exit 4\n",
-  ),
-  mode: 0o700,
-});
+export const LOCAL_BUNDLE_CLI_ENTRY = "node_modules/@developer-os/cli/dist/bin.js";
+
+/**
+ * D53: the one version-free file the founder and every hook run, `node <product-home>/bin/developer-os.mjs`
+ * (`update/entrypoint.ts` writes it). A product-owned manifest row like any other: written through
+ * the Foundation transaction, so it is `0600`, the only mode that executor creates, and `node`
+ * never needs the execute bit; drift-checked by `doctor`; removed by `uninstall`'s ordinary drain.
+ * Its `bin/` parent is a `directory` row created `0700`, as the instruction planner creates its
+ * parents. With no manifest, `bin/` is residue like every other manifest-owned path, so the
+ * absent-manifest admission deliberately has no rule for it.
+ */
+export const ENTRYPOINT_DIRECTORY = "bin";
+
+export function entrypointPath(productHome: string): string {
+  return join(productHome, ENTRYPOINT_DIRECTORY, "developer-os.mjs");
+}
 
 function refuse(message: string): never {
   throw new LocalReleaseError(EXIT_CODES.invalidInput, message);

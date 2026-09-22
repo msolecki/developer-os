@@ -73,6 +73,7 @@ import {
   instructionRefusalDetails,
 } from "../instructions/apply.js";
 import type { AdapterSelectionV1 } from "../instructions/apply.js";
+import { installEntrypoint } from "../update/entrypoint.js";
 import { inspectPackagedRelease } from "../update/packaged-release.js";
 
 const BRAIN_KEEP_FILE = ".gitkeep";
@@ -324,6 +325,8 @@ async function settleExistingV2(
   let warnings: readonly string[] = [];
   if (!options.dryRun) {
     loadOrCreateRedactionKey(context.paths.stateDir);
+    // D53: before the instructions, whose Claude hooks name it.
+    await installEntrypoint(context);
     const bootstrap = context.bootstrap;
     warnings = (await applyInstructions(context, {
       selection: options.adapters ?? null,
@@ -946,6 +949,8 @@ export async function runInit(
       }
       const outcome = await bootstrap.executor.initializeFresh(request, evidence);
       loadOrCreateRedactionKey(context.paths.stateDir);
+      // D53: before the instructions, whose Claude hooks name it.
+      await installEntrypoint(context);
       /**
        * After the handoff, never inside it (spec §6.1): an instruction failure leaves a complete
        * V2 home, and `init` exits with the instruction step's code.

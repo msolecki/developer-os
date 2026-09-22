@@ -14,7 +14,7 @@ import {
 
 import { createCommandFixture, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../commands/testing.js";
 import { PRODUCT_VERSION } from "../context.js";
-import { LOCAL_BUNDLE_BIN, writeUnsignedLocalRelease } from "../update/local-release.js";
+import { writeUnsignedLocalRelease } from "../update/local-release.js";
 import {
   admitUnsignedLocalPackagedRelease,
   inspectPackagedRelease,
@@ -70,7 +70,6 @@ async function release(
     outDir: join(tmp, "pkg"),
     version: PRODUCT_VERSION,
     bundleFiles: [
-      LOCAL_BUNDLE_BIN,
       { relativePath: "instructions/catalog.json", bytes: encoder.encode(`${JSON.stringify(catalog)}\n`), mode: 0o600 },
       ...Object.entries(instructions).map(([path, text]) => ({
         relativePath: `instructions/${path}`,
@@ -151,7 +150,7 @@ describe("loadInstructionDefaults", () => {
     const out = await writeUnsignedLocalRelease({
       outDir: join(tmp, "pkg"),
       version: PRODUCT_VERSION,
-      bundleFiles: [LOCAL_BUNDLE_BIN, { relativePath: "instructions/catalog.json", bytes: encoder.encode("{\n"), mode: 0o600 }],
+      bundleFiles: [{ relativePath: "instructions/catalog.json", bytes: encoder.encode("{\n"), mode: 0o600 }],
     });
     const admitted = await inspectPackagedRelease(await admitUnsignedLocalPackagedRelease(out, PRODUCT_VERSION));
     await expect(loadInstructionDefaults(admitted, WORKFLOW_IDS)).rejects.toBeInstanceOf(InstructionCatalogInvalidError);

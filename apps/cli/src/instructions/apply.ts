@@ -103,7 +103,7 @@ export function instructionRefusalDetails(error: unknown): {
 }
 
 /** No-follow reads for the planners; `null` means absent. */
-async function readNoFollow(path: string): Promise<Uint8Array | null> {
+export async function readNoFollow(path: string): Promise<Uint8Array | null> {
   let handle;
   try {
     handle = await nodeFs.open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
@@ -197,7 +197,7 @@ interface GatedState {
 }
 
 /** Read under the held lock; each hash is of the bytes on disk, never of a re-encoding. */
-async function gatedState(context: CliContext, authority: LifecycleMutationAuthorityV1): Promise<GatedState> {
+export async function gatedState(context: CliContext, authority: LifecycleMutationAuthorityV1): Promise<GatedState> {
   const bytes = await readNoFollow(context.paths.manifestFile);
   if (bytes === null) throw new Error("the installation manifest vanished under the lifecycle lock");
   const { config, beforeHash } = await readConfigRecord(context);
@@ -209,7 +209,7 @@ async function gatedState(context: CliContext, authority: LifecycleMutationAutho
   };
 }
 
-function manifestMutation(context: CliContext, manifest: InstallationManifestV2, expectedBeforeHash: LowerHexSha256): PlannedFileMutation {
+export function manifestMutation(context: CliContext, manifest: InstallationManifestV2, expectedBeforeHash: LowerHexSha256): PlannedFileMutation {
   return {
     targetPath: context.paths.manifestFile,
     operation: "replace",

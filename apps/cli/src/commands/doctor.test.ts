@@ -213,6 +213,7 @@ describe("runDoctor", () => {
       "brain",
       "redaction-key",
       "release-trust",
+      "entrypoint",
       "agents",
       "claude-capabilities",
       "codex-capabilities",
