@@ -166,6 +166,15 @@ export type {
   AgentPromptArgs,
   AgentPromptOutcome,
 } from "./agent-prompt/index.js";
+export {
+  assertHookExecutablePath,
+  HOOK_GUARD_KINDS,
+  HOOK_VENDORS,
+  hookCommandTail,
+  HookExecutablePathError,
+  renderHookCommand,
+} from "./hooks/contract.js";
+export type { HookGuardKind, HookVendor, HookVerb } from "./hooks/contract.js";
 export { CAPABILITY_STATES, PROBE_OBSERVATIONS } from "./capabilities/index.js";
 export type { CapabilityState, ProbeObservation } from "./capabilities/index.js";
 export {

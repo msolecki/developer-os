@@ -46,6 +46,13 @@ export {
   PLUGIN_INSTALL_SEGMENTS,
   PLUGIN_NAME,
 } from "./plugin.js";
+export {
+  CLAUDE_HOOK_ROWS,
+  CLAUDE_HOOKS_PATH,
+  renderClaudeHooks,
+  withClaudeHooks,
+} from "./hooks.js";
+export type { ClaudeHookEvent, ClaudeHookRow } from "./hooks.js";
 export { proposeClaudeInstall, proposeClaudeUninstall } from "./install.js";
 export type {
   ClaudeInstallProposal,

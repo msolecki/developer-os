@@ -33,10 +33,16 @@ function manifest(): RenderedArtifact {
 }
 
 /**
- * **`hooks/hooks.json` is deliberately not emitted.** The first version named
- * three commands under a `bin/` directory that did not exist; removing those
- * dangling claims was ratified on 2026-08-12 and DOS-P6 later declined the two
- * capture hooks. `BACKLOG.md` §8 carries the decision for both adapters.
+ * **`buildPluginTree` emits no `hooks/hooks.json`; hooks exist only in the
+ * install tree.** A13 renders the eleven non-capture hooks through
+ * `withClaudeHooks`, which adds `hooks/hooks.json` to the tree the local-build
+ * install writes, with commands naming that install's absolute entrypoint. The
+ * checked-in tree stays hook-free and machine-path-free.
+ *
+ * History: the first version named three commands under a `bin/` directory that
+ * did not exist; removing those dangling claims was ratified on 2026-08-12 and
+ * DOS-P6 later declined the two capture hooks. `BACKLOG.md` §8 carries the
+ * decision for both adapters.
  *
  * The first version emitted hooks whose commands were
  * `${CLAUDE_PLUGIN_ROOT}/bin/session-start` and two siblings. A fresh-context
@@ -48,10 +54,10 @@ function manifest(): RenderedArtifact {
  * An executable bit is not the blocker: a `type: "command"` handler may name
  * the installed `developer-os` binary directly. The two capture events remain
  * declined because neither can supply faithful agent-authored observation text
- * without reading the vendor transcript field, which this product refuses. DOS-P11 may
- * reintroduce only the eleven non-capture hooks from the legacy runtime. Any
- * such change must name installed product verbs, observe the hook firing, and
- * cover drift and uninstall in the same change.
+ * without reading the vendor transcript field, which this product refuses. DOS-P11
+ * reintroduces only the eleven non-capture hooks from the legacy runtime, and
+ * each must name installed product verbs, be observed firing, and be covered by
+ * drift and uninstall.
  */
 
 /**

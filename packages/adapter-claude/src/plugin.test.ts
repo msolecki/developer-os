@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { compareCodePoints } from "@developer-os/workflow-schema";
 import type { RenderedArtifact } from "@developer-os/workflow-schema";
+import { CLAUDE_HOOKS_PATH, withClaudeHooks } from "./hooks.js";
 import { buildPluginTree, PLUGIN_NAME } from "./plugin.js";
+
+const EXE = "/Users/synthetic/.developer-os/bin/developer-os";
 
 const skills: readonly RenderedArtifact[] = [
   { path: "skills/developer-os-capture/SKILL.md", contents: "# capture\n" },
@@ -41,13 +45,16 @@ describe("buildPluginTree", () => {
    * Capture hooks remain declined because a hook cannot supply faithful
    * agent-authored observation text without reading the vendor transcript field. An
    * executable bit is not required when a command hook names the installed
-   * binary. DOS-P11 owns only the eleven non-capture hooks and must observe any
-   * restored hook firing. This assertion makes restoration deliberate.
+   * binary. DOS-P11 owns only the eleven non-capture hooks, and A13 renders them
+   * into the install tree only, naming the installed entrypoint's absolute path.
    */
-  it("emits no hooks while capture hooks stay declined and DOS-P11 is unimplemented", () => {
-    const paths = buildPluginTree(skills).map((artifact) => artifact.path);
-    expect(paths).not.toContain("hooks/hooks.json");
-    expect(paths.some((path) => path.startsWith("bin/"))).toBe(false);
+  it("keeps hooks out of the checked-in tree and puts them only in the install tree", () => {
+    const checkedIn = buildPluginTree(skills);
+    expect(checkedIn.map((a) => a.path)).not.toContain(CLAUDE_HOOKS_PATH);
+    const install = withClaudeHooks(checkedIn, EXE);
+    expect(install.map((a) => a.path)).toContain(CLAUDE_HOOKS_PATH);
+    expect(install.map((a) => a.path)).toStrictEqual([...install.map((a) => a.path)].sort(compareCodePoints));
+    expect(() => withClaudeHooks(install, EXE)).toThrow(/already/u);
   });
 
   it("emits no absolute machine path anywhere in the tree", () => {

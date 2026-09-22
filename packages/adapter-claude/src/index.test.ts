@@ -37,6 +37,8 @@ describe("the public door", () => {
   it("exports exactly the intended surface", () => {
     expect(Object.keys(pkg).sort()).toEqual([
       "CLAUDE_CAPABILITY_KEYS",
+      "CLAUDE_HOOKS_PATH",
+      "CLAUDE_HOOK_ROWS",
       "CLAUDE_MINIMUM_VERSION",
       "CLAUDE_NOT_USED_KEYS",
       "ClaudeRenderer",
@@ -50,8 +52,10 @@ describe("the public door", () => {
       "probeClaude",
       "proposeClaudeInstall",
       "proposeClaudeUninstall",
+      "renderClaudeHooks",
       "renderClaudePlugin",
       "resolveCapabilities",
+      "withClaudeHooks",
     ]);
   });
 
