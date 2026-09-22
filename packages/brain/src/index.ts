@@ -14,7 +14,9 @@ export type {
 export {
   artifactPaths,
   buildIndex,
+  createLinkResolver,
   extractLinks,
+  findWikilinks,
   renderArtifacts,
   frontmatterExceeds,
   MAX_FRONTMATTER_CHARS,
@@ -41,6 +43,7 @@ export type {
   IndexedTerm,
   NoteIssues,
   UnresolvedLink,
+  WikilinkOccurrence,
 } from "./indexes/index.js";
 export {
   canonicalizeArtifact,
@@ -115,6 +118,7 @@ export type {
   ProposedNote,
   ValidatorId,
 } from "./ingest/index.js";
+export { rewriteWikilinks, withoutAnchor } from "./refactor/index.js";
 export { CAPTURE_STATUSES } from "./schema/capture.js";
 export type {
   CaptureEnvelopeV1,

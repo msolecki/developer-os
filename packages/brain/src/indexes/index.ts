@@ -2,7 +2,9 @@ export { artifactPaths, renderArtifacts } from "./artifacts.js";
 export type { ArtifactPaths } from "./artifacts.js";
 export {
   buildIndex,
+  createLinkResolver,
   extractLinks,
+  findWikilinks,
   frontmatterExceeds,
   MAX_FRONTMATTER_CHARS,
   TOP_TAGS_PER_FOLDER,
@@ -22,6 +24,7 @@ export type {
   IndexedTerm,
   NoteIssues,
   UnresolvedLink,
+  WikilinkOccurrence,
 } from "./build.js";
 export {
   RECENT_CHANGES_LIMIT,

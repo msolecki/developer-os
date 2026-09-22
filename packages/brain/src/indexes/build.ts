@@ -232,6 +232,53 @@ export function extractLinks(body: string): readonly string[] {
     .filter((text) => text.length > 0);
 }
 
+export interface WikilinkOccurrence {
+  /** Offset of `[[` in the original body. */
+  readonly index: number;
+  /** Through the closing `]]`. */
+  readonly length: number;
+  /** Group 1 exactly as written, untrimmed. */
+  readonly text: string;
+  /** Everything after `text` and before `]]`: `#anchor`, `|display`, or "". */
+  readonly tail: string;
+}
+
+/** `WIKILINK` with the tail captured. */
+const WIKILINK_OCCURRENCE = /\[\[([^\]|#[]+)([^\]]*)\]\]/gu;
+
+/**
+ * Code-unit replacement, deliberately without the `u` flag: one space per UTF-16
+ * unit keeps every offset aligned with the original body, which a per-code-point
+ * replacement would shift after any astral character.
+ */
+function blank(span: string): string {
+  return span.replace(/[^\n]/g, " ");
+}
+
+/**
+ * The occurrences `extractLinks` counts, with offsets into the original body.
+ *
+ * ponytail: code is masked with spaces rather than removed, so offsets survive.
+ * That matches removal except when an inline span would have joined across a
+ * removed fence; the equality test against `extractLinks` pins the common
+ * cases. Upgrade path: one shared tokenizer for both functions.
+ */
+export function findWikilinks(body: string): readonly WikilinkOccurrence[] {
+  const masked = body.replace(FENCED_CODE, blank).replace(INLINE_CODE, blank);
+  const occurrences: WikilinkOccurrence[] = [];
+  for (const match of masked.matchAll(WIKILINK_OCCURRENCE)) {
+    const text = match[1] ?? "";
+    if (text.trim().length === 0) continue;
+    occurrences.push({
+      index: match.index,
+      length: match[0].length,
+      text,
+      tail: match[2] ?? "",
+    });
+  }
+  return occurrences;
+}
+
 interface ParsedEntry {
   readonly note: IndexedNote;
   /**
@@ -424,6 +471,18 @@ function resolveLink(text: string, lookups: Lookups): Resolution | null {
   }
 
   return null;
+}
+
+/**
+ * The same tiers and lowest-path choice `buildIndex` uses. Returns the resolved
+ * note's vault-relative path, or null when the text resolves to nothing.
+ */
+export function createLinkResolver(
+  notes: readonly IndexedNote[],
+  contentRoot: string,
+): (text: string) => string | null {
+  const lookups = buildLookups(notes, contentRoot);
+  return (text) => resolveLink(text, lookups)?.note.path ?? null;
 }
 
 type EntryResult =
