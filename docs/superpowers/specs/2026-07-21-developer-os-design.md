@@ -256,7 +256,7 @@ or both paths resolve to the same directory.
 ## 8. CLI contract
 
 > **Amended since approval — read this before treating the block below as the contract.**
-> The command list and the flag list are the 2026-07-21 approved design; three things have
+> The command list and the flag list are the 2026-07-21 approved design; four things have
 > changed and the index of all of them is `BACKLOG.md` §8.
 >
 > 1. **A `brain` group is added** — `brain reindex|lint|search|status` — and `search`
@@ -268,6 +268,13 @@ or both paths resolve to the same directory.
 > 3. **`repair` is a mutating command that takes neither `--dry-run` nor `--yes`**; it takes
 >    an explicit `--resume` or `--rollback` against a named transaction id instead. The
 >    "every mutating command" sentence below describes the plan-producing commands.
+>
+> 4. **`import`, `project init` and `project check` are added** (A14, approved 2026-09-22 as
+>    D47). `import [<path>] | --claude-memory` writes quarantined captures only; `project init
+>    [<dir>]` writes the project instruction templates create-only; `project check [<dir>]` is a
+>    read-only hygiene report. `docs/superpowers/specs/2026-09-22-developer-os-tooling-verbs-design.md`
+>    §3 is the contract; `repo audit|bootstrap|secrets-scan` and `project worktree` are recorded
+>    refusals and have no dispatch entry.
 
 ```text
 developer-os init
@@ -453,6 +460,9 @@ DeveloperBrain/
 │   └── templates/
 └── .obsidian/
 ```
+
+`_raw/processed/` is created by `init` and written by no product verb (A14 Q5 A). `import`
+leaves its sources in place, and the capture id is the deduplication cursor.
 
 Legacy folder names such as `PROJEKTY` and `NARZEDZIA` are supported through
 configured topic aliases. Migration never renames existing folders automatically.
