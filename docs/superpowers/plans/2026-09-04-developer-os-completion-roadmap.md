@@ -245,6 +245,10 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   is not an option. Also decided: the three lazy rules added after the inventory froze (`comments`,
   `testing`, `lessons-code`) ship as scoped-rule defaults, and the four artifacts disabled in the
   legacy runtime (`release`, `rev-eng`, `wrap-up`, `brain-search`) are refused.
+- **D52 (2026-09-22).** NEW-102 (Codex ingest isolation, D8): `ingest` runs Codex with its own
+  `CODEX_HOME` under product state that holds no `AGENTS.md`, no `agents/` and no plugins — only the
+  credential entry needed to authenticate, linked from the user's resolved Codex home (never read or
+  copied by the product). Credential handling is shared with NEW-75.
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 
