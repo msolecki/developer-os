@@ -1296,7 +1296,8 @@ describe("instruction checks", () => {
 });
 
 describe("hooks and external-hooks", () => {
-  const EXECUTABLE = "/synthetic/bin/developer-os";
+  const HOOK_EXECUTABLE = { node: "/synthetic/bin/node", entrypoint: "/synthetic/bin/developer-os" };
+  const EXECUTABLE = `${HOOK_EXECUTABLE.node} ${HOOK_EXECUTABLE.entrypoint}`;
   const NOW = new Date("2026-09-22T12:00:00.000Z");
   const CODEX_EXTERNAL = "codex=unknown (config.toml is not read (codex-adapter.md §2.3))";
 
@@ -1318,7 +1319,7 @@ describe("hooks and external-hooks", () => {
   }
 
   async function plantHooks(fixture: CommandFixture, drop?: string): Promise<void> {
-    const rendered = JSON.parse(renderClaudeHooks(EXECUTABLE).contents) as {
+    const rendered = JSON.parse(renderClaudeHooks(HOOK_EXECUTABLE).contents) as {
       hooks: Record<string, { hooks: { command: string }[] }[]>;
     };
     if (drop !== undefined) {

@@ -4,7 +4,7 @@ import type { RenderedArtifact } from "@developer-os/workflow-schema";
 import { CLAUDE_HOOKS_PATH, withClaudeHooks } from "./hooks.js";
 import { buildPluginTree, PLUGIN_NAME } from "./plugin.js";
 
-const EXE = "/Users/synthetic/.developer-os/bin/developer-os";
+const EXE = { node: "/usr/local/bin/node", entrypoint: "/Users/synthetic/.developer-os/bin/developer-os" };
 
 const skills: readonly RenderedArtifact[] = [
   { path: "skills/developer-os-capture/SKILL.md", contents: "# capture\n" },

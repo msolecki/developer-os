@@ -1,5 +1,5 @@
 import { renderHookCommand } from "@developer-os/core";
-import type { HookVerb } from "@developer-os/core";
+import type { HookCommandExecutable, HookVerb } from "@developer-os/core";
 import { compareCodePoints } from "@developer-os/workflow-schema";
 import type { RenderedArtifact } from "@developer-os/workflow-schema";
 
@@ -27,14 +27,14 @@ export const CLAUDE_HOOK_ROWS: readonly ClaudeHookRow[] = Object.freeze([
   { verb: "stop", event: "Stop", matcher: null, timeoutSeconds: 125 },
 ]);
 
-export function renderClaudeHooks(executablePath: string): RenderedArtifact {
+export function renderClaudeHooks(executable: HookCommandExecutable): RenderedArtifact {
   const hooks: Record<string, unknown[]> = {};
   for (const event of EVENT_ORDER) {
     const groups = CLAUDE_HOOK_ROWS.filter((row) => row.event === event).map((row) => ({
       ...(row.matcher === null ? {} : { matcher: row.matcher }),
       hooks: [{
         type: "command",
-        command: renderHookCommand(executablePath, row.verb, "claude"),
+        command: renderHookCommand(executable, row.verb, "claude"),
         ...(row.timeoutSeconds === null ? {} : { timeout: row.timeoutSeconds }),
       }],
     }));
@@ -43,9 +43,9 @@ export function renderClaudeHooks(executablePath: string): RenderedArtifact {
   return { path: CLAUDE_HOOKS_PATH, contents: `${JSON.stringify({ hooks }, null, 2)}\n` };
 }
 
-export function withClaudeHooks(tree: readonly RenderedArtifact[], executablePath: string): readonly RenderedArtifact[] {
+export function withClaudeHooks(tree: readonly RenderedArtifact[], executable: HookCommandExecutable): readonly RenderedArtifact[] {
   if (tree.some((artifact) => artifact.path === CLAUDE_HOOKS_PATH)) {
     throw new Error("refusing to add hooks to a tree that already carries them");
   }
-  return [...tree, renderClaudeHooks(executablePath)].sort((a, b) => compareCodePoints(a.path, b.path));
+  return [...tree, renderClaudeHooks(executable)].sort((a, b) => compareCodePoints(a.path, b.path));
 }

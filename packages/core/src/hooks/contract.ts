@@ -25,18 +25,35 @@ const SAFE = /^\/[A-Za-z0-9._+/-]+$/u;
 const VERSION_SEGMENT = /^\d+\.\d+\.\d+/u;
 const HASH_SEGMENT = /^[0-9a-f]{16,}$/u;
 
-export function assertHookExecutablePath(path: string): void {
-  if (!SAFE.test(path)) throw new HookExecutablePathError("hook executable path must be absolute and shell-safe");
+/** The command names Node explicitly (G1 as resolved), so the entrypoint's `env node` shebang never runs. */
+export interface HookCommandExecutable {
+  readonly node: string;
+  readonly entrypoint: string;
+}
+
+function assertShellSafeAbsolutePath(path: string, label: string): readonly string[] {
+  if (!SAFE.test(path)) throw new HookExecutablePathError(`${label} must be absolute and shell-safe`);
   const segments = path.slice(1).split("/");
   if (segments.some((s) => s === "" || s === "." || s === "..")) {
-    throw new HookExecutablePathError("hook executable path must be normalized");
+    throw new HookExecutablePathError(`${label} must be normalized`);
   }
+  return segments;
+}
+
+/** No version-or-hash rule: a package-manager cellar Node path names its version. */
+export function assertHookNodePath(path: string): void {
+  assertShellSafeAbsolutePath(path, "hook node path");
+}
+
+export function assertHookExecutablePath(path: string): void {
+  const segments = assertShellSafeAbsolutePath(path, "hook executable path");
   if (segments.some((s) => VERSION_SEGMENT.test(s) || HASH_SEGMENT.test(s))) {
     throw new HookExecutablePathError("hook executable path must not name a version or a hash");
   }
 }
 
-export function renderHookCommand(executablePath: string, verb: HookVerb, vendor: HookVendor): string {
-  assertHookExecutablePath(executablePath);
-  return [executablePath, ...hookCommandTail(verb, vendor)].join(" ");
+export function renderHookCommand(executable: HookCommandExecutable, verb: HookVerb, vendor: HookVendor): string {
+  assertHookNodePath(executable.node);
+  assertHookExecutablePath(executable.entrypoint);
+  return [executable.node, executable.entrypoint, ...hookCommandTail(verb, vendor)].join(" ");
 }

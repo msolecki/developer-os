@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { HookExecutablePathError, renderHookCommand } from "@developer-os/core";
 import { CLAUDE_HOOK_ROWS, renderClaudeHooks } from "./hooks.js";
 
-const EXE = "/Users/synthetic/.developer-os/bin/developer-os";
+const EXE = { node: "/usr/local/bin/node", entrypoint: "/Users/synthetic/.developer-os/bin/developer-os" };
 
 interface RenderedHooks {
   hooks: Record<string, Array<{ matcher?: string; hooks: Array<{ type: string; command: string; timeout?: number }> }>>;
@@ -16,6 +16,7 @@ describe("renderClaudeHooks", () => {
     expect(commands).toStrictEqual(CLAUDE_HOOK_ROWS.map((row) => renderHookCommand(EXE, row.verb, "claude")));
     expect(doc.hooks.PreToolUse?.map((g) => g.matcher)).toStrictEqual(["Bash", "Bash", "Edit|Write|MultiEdit"]);
     expect(doc.hooks.Stop?.[0]).not.toHaveProperty("matcher");
+    expect(doc.hooks.Stop?.[0]?.hooks[0]?.command).toBe(`${EXE.node} ${EXE.entrypoint} guard stop --vendor claude`);
   });
 
   it("renders identical bytes twice", () => {
@@ -39,6 +40,7 @@ describe("renderClaudeHooks", () => {
   });
 
   it("refuses an unsafe executable path", () => {
-    expect(() => renderClaudeHooks("/a b/x")).toThrow(HookExecutablePathError);
+    expect(() => renderClaudeHooks({ ...EXE, entrypoint: "/a b/x" })).toThrow(HookExecutablePathError);
+    expect(() => renderClaudeHooks({ ...EXE, node: "node" })).toThrow(HookExecutablePathError);
   });
 });

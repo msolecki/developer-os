@@ -23,6 +23,7 @@ describe("the package's public door", () => {
         "CAPABILITY_STATES",
         "PROBE_OBSERVATIONS",
         "assertHookExecutablePath",
+        "assertHookNodePath",
         "HOOK_GUARD_KINDS",
         "HOOK_VENDORS",
         "hookCommandTail",

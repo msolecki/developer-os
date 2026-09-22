@@ -169,13 +169,14 @@ export type {
 } from "./agent-prompt/index.js";
 export {
   assertHookExecutablePath,
+  assertHookNodePath,
   HOOK_GUARD_KINDS,
   HOOK_VENDORS,
   hookCommandTail,
   HookExecutablePathError,
   renderHookCommand,
 } from "./hooks/contract.js";
-export type { HookGuardKind, HookVendor, HookVerb } from "./hooks/contract.js";
+export type { HookCommandExecutable, HookGuardKind, HookVendor, HookVerb } from "./hooks/contract.js";
 export {
   decodeHookFiringRecord,
   encodeHookFiringRecord,
