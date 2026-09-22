@@ -14,5 +14,5 @@ export { renderCaptureFile } from "./render.js";
 export { parseCaptureFile } from "./parse.js";
 export type { CaptureFileOutcome, CaptureFileRefusal } from "./parse.js";
 export type { CaptureNoteTargetV1 } from "../schema/capture.js";
-export { AGENT_DETECTION_ROWS, detectSourceAgent } from "./agent.js";
+export { AGENT_DETECTION_ROWS, anyAgentMarker, detectSourceAgent } from "./agent.js";
 export type { AgentDetectionRow } from "./agent.js";

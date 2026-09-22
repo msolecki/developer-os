@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   AGENT_DETECTION_ROWS,
+  anyAgentMarker,
   detectSourceAgent,
   matchObservedAgent,
   type AgentDetectionRow,
@@ -160,5 +161,18 @@ describe("matchObservedAgent", () => {
       "unknown",
     );
     expect(matchObservedAgent([], { SYNTHETIC_AGENT: "1" })).toBe("unknown");
+  });
+});
+
+describe("anyAgentMarker", () => {
+  it.each([
+    [{}, false],
+    [{ CLAUDECODE: "1" }, true],
+    [{ CLAUDECODE: "0" }, false],
+    [{ CODEX_THREAD_ID: "0199-synthetic-thread" }, true],
+    [{ CLAUDECODE: "1", CODEX_THREAD_ID: "0199-synthetic-thread" }, true],
+    [{ CLAUDECODE: "", CODEX_THREAD_ID: "" }, false],
+  ] as const)("reads %j as %s", (env, expected) => {
+    expect(anyAgentMarker(env)).toBe(expected);
   });
 });

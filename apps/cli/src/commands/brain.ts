@@ -11,11 +11,13 @@ import type {
   ExitCode,
 } from "@developer-os/core";
 import { BrainService, resolveBrainConfig } from "@developer-os/brain";
-import type { LintFinding, RetrievalMatch } from "@developer-os/brain";
+import type { LintFinding, RefactorRequestV1, RetrievalMatch } from "@developer-os/brain";
 
 import { failureFrom, renderPath, runtimePathsFor } from "../context.js";
 import type { CliContext } from "../context.js";
 import { ConfigurationError, readConfigFile } from "./doctor.js";
+import { runRefactor } from "./refactor.js";
+import type { BrainRefactorResultV1 } from "./refactor.js";
 import { dependenciesFor, writeIndexArtifacts } from "./reindex.js";
 
 export interface BrainReindexResultV1 {
@@ -66,15 +68,18 @@ export type BrainResultV1 =
   | BrainReindexResultV1
   | BrainLintResultV1
   | BrainSearchResultV1
-  | BrainStatusResultV1;
+  | BrainStatusResultV1
+  | BrainRefactorResultV1;
 
-export type BrainSubcommand = "reindex" | "lint" | "search" | "status";
+export type BrainSubcommand = "reindex" | "lint" | "search" | "status" | "retire" | "refactor";
 
 export interface BrainOptions {
   readonly subcommand: BrainSubcommand;
   readonly query: string | null;
   readonly limit: number | null;
   readonly dryRun: boolean;
+  /** Set for `retire` and `refactor`, and only for them. */
+  readonly refactor?: RefactorRequestV1;
 }
 
 /** Enough to act on; a hundred-line failure is a wall nobody reads. */
@@ -104,7 +109,7 @@ class BrainRefusal extends Error {
  * function's own `notInitialized` refusal uses, so `failureFrom` renders it
  * correctly with no extra handling here.
  */
-async function readConfig(context: CliContext): Promise<DeveloperOsConfigV1> {
+export async function readConfig(context: CliContext): Promise<DeveloperOsConfigV1> {
   const notInitialized = new BrainRefusal(
     EXIT_CODES.invalidInput,
     "Developer OS is not initialized, so there is no Brain to work with",
@@ -318,6 +323,17 @@ export async function runBrain(
   context: CliContext,
   options: BrainOptions,
 ): Promise<CliResult<BrainResultV1>> {
+  /** Before `readConfig`: the agent-session refusal comes before any read (spec §6.7). */
+  if (
+    (options.subcommand === "retire" || options.subcommand === "refactor") &&
+    options.refactor !== undefined
+  ) {
+    return runRefactor(context, {
+      subcommand: options.subcommand,
+      request: options.refactor,
+      dryRun: options.dryRun,
+    });
+  }
   try {
     const config = await readConfig(context);
     const paths = runtimePathsFor(context, config);
@@ -346,6 +362,12 @@ export async function runBrain(
         );
       case "status":
         return await runStatus(service);
+      case "retire":
+      case "refactor":
+        throw new BrainRefusal(
+          EXIT_CODES.invalidInput,
+          `brain ${options.subcommand} needs its note arguments`,
+        );
     }
   } catch (error) {
     if (error instanceof BrainRefusal) {
@@ -410,6 +432,15 @@ export function renderBrain(result: BrainResultV1): readonly string[] {
         `unclassified        ${result.unclassifiedFolders.map(renderPath).join(" ") || "none"}`,
         `index               ${result.indexPresent ? "present" : "not built"}`,
         `would change        ${String(result.wouldChange.length)}`,
+      ];
+    case "retire":
+    case "refactor":
+      return [
+        `${result.subcommand} (${result.mode})${result.transactionId === null ? " — dry run, nothing written" : ""}`,
+        ...result.mutations.map(
+          (mutation) => `  ${mutation.operation} ${renderPath(mutation.path)}`,
+        ),
+        `rewrote ${String(result.rewrittenLinks)} links`,
       ];
   }
 }

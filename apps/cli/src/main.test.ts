@@ -1154,6 +1154,61 @@ describe("brain dispatch", () => {
     }
   });
 
+  it.each([
+    [["brain", "retire", "DEV/a.md"], true],
+    [["brain", "retire", "DEV/a.md", "--dry-run", "--json"], true],
+    [["brain", "refactor", "--rename", "DEV/a.md", "b.md"], true],
+    [["brain", "refactor", "--move", "DEV/a.md", "TOOLS"], true],
+    [["brain", "refactor", "--merge", "DEV/a.md", "DEV/b.md", "--dry-run"], true],
+    [["brain", "refactor", "--split", "DEV/a.md", "Deep Dive"], true],
+    [["brain", "refactor", "DEV/a.md", "b.md"], false], // zero mode flags
+    [["brain", "refactor", "--rename", "--move", "DEV/a.md", "b.md"], false], // two
+    [["brain", "refactor", "--rename", "DEV/a.md"], false], // one positional
+    [["brain", "retire"], false],
+    [["brain", "retire", "a", "b"], false],
+    [["brain", "retire", "DEV/a.md", "--yes"], false],
+    [["brain", "lint", "--rename"], false],
+  ] as const)("parses %j → %s", async (argv, accepted) => {
+    if (!accepted) {
+      await refuses(argv);
+      return;
+    }
+    /**
+     * Accepted cases reach the command, which refuses because the fixture has
+     * no configuration: exit 2 either way, so the stderr text is what tells
+     * parse from command. `env` is `{}`, so no agent-session refusal intervenes.
+     */
+    const fixture = await createCommandFixture(`refactor-parse-${argv.join("-").replace(/[^A-Za-z0-9-]/gu, "_")}`);
+    const lines: string[] = [];
+    await run(argv, collectingIo(lines), () => fixture.context);
+    expect(lines.join("\n"), argv.join(" ")).toContain("Developer OS is not initialized");
+  });
+
+  it("admits both verbs through assertOrdinaryCommandAdmitted like every non-init command", async () => {
+    /**
+     * `bootstrapEvidenceInspections` counts the context's `inspectEvidence`, which the gate
+     * does not call, so the gate is observed by what it refuses: a non-terminal V2 envelope
+     * refuses every non-init command as exit 6 before the command runs.
+     */
+    const fixture = await createCommandFixture("main-refactor-admission", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_manifest_publish",
+    });
+    const invoke = (argv: readonly string[]) => run(argv, fixture.io, () => fixture.context);
+    expect(await invoke(["init", "--yes"])).not.toBe(0);
+    fixture.io.out.length = 0;
+    const before = await inventoryDigest(fixture.root);
+
+    for (const argv of [
+      ["brain", "retire", "DEV/a.md"],
+      ["brain", "refactor", "--rename", "DEV/a.md", "b.md"],
+    ]) {
+      expect(await invoke([...argv, "--json"]), argv.join(" ")).toBe(6);
+      expect(lastJsonError(fixture.io.out).kind, argv.join(" ")).toBe("bootstrap_recovery_required");
+    }
+    expect(await inventoryDigest(fixture.root)).toEqual(before);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("treats developer-os search as an alias for brain search", async () => {
     /**
      * On an *installed* fixture with a real index. On an uninitialized one both

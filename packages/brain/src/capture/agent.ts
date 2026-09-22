@@ -113,3 +113,17 @@ export function detectSourceAgent(
 ): string {
   return matchObservedAgent(AGENT_DETECTION_ROWS, env);
 }
+
+/** Any row matches (not matchObservedAgent's single-match rule): a nested session counts. */
+export function anyAgentMarker(
+  env: Readonly<Record<string, string | undefined>>,
+): boolean {
+  return AGENT_DETECTION_ROWS.some((row) => {
+    const observed = env[row.variable];
+    return (
+      observed !== undefined &&
+      observed.length > 0 &&
+      (row.value === null || row.value === observed)
+    );
+  });
+}

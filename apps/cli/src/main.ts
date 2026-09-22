@@ -8,9 +8,10 @@ import {
 } from "@developer-os/core";
 import type { CliResult, ExitCode } from "@developer-os/core";
 import { CAPTURE_STATUSES } from "@developer-os/brain";
+import type { RefactorRequestV1 } from "@developer-os/brain";
 
 import { renderBrain, runBrain } from "./commands/brain.js";
-import type { BrainResultV1, BrainSubcommand } from "./commands/brain.js";
+import type { BrainOptions, BrainResultV1, BrainSubcommand } from "./commands/brain.js";
 import { runCapture } from "./commands/capture.js";
 import type { CaptureResultV1 } from "./commands/capture.js";
 import { renderConfigResult, runConfig } from "./commands/config.js";
@@ -48,7 +49,7 @@ const USAGE = [
   "Commands:",
   "  init       install product state and a Brain skeleton",
   "  config     get one configuration key, or set one",
-  "  brain      reindex | lint | search <query> | status",
+  "  brain      reindex | lint | search <query> | status | retire <note> | refactor --rename|--move|--merge|--split <a> <b>",
   "  search     alias for brain search <query>",
   "  capture    quarantine one observation, redacted before it is written",
   "  review     list quarantined captures, or decide on one",
@@ -61,7 +62,7 @@ const USAGE = [
   "  uninstall  remove manifest-owned artifacts",
   "",
   "Options:",
-  "  --dry-run        show the plan without changing anything (init, uninstall, import, project init)",
+  "  --dry-run        show the plan without changing anything (init, uninstall, import, project init, brain retire, brain refactor)",
   "  --yes            accept ordinary confirmations (init, uninstall; ingest never asks)",
   "  --local-release <dir>  install from a package pack:local-release wrote; unsigned (init)",
   "  --json           emit one machine-readable line",
@@ -76,6 +77,10 @@ const USAGE = [
   "  --probe          probe each agent CLI; Claude's probe writes ~/.claude.json (doctor)",
   "  --resume <id>    finish an incomplete transaction (repair)",
   "  --rollback <id>  undo an incomplete transaction (repair)",
+  "  --rename         rename <note> to <new-name> in its folder (brain refactor)",
+  "  --move           move <note> into <topic-folder> (brain refactor)",
+  "  --merge          fold <source> into <target> and retire <source> (brain refactor)",
+  "  --split          move the section under <heading> of <note> into a new note (brain refactor)",
   "  --version        print the product version",
 ].join("\n");
 
@@ -96,6 +101,10 @@ const OPTIONS = {
   note: { type: "string" },
   version: { type: "boolean" },
   "local-release": { type: "string" },
+  rename: { type: "boolean" },
+  move: { type: "boolean" },
+  merge: { type: "boolean" },
+  split: { type: "boolean" },
 } as const;
 
 type OptionName = keyof typeof OPTIONS;
@@ -121,7 +130,7 @@ type OptionName = keyof typeof OPTIONS;
 const OPTION_NAMES = Object.keys(OPTIONS) as readonly OptionName[];
 
 const COMMAND_OPTIONS: Readonly<Record<string, readonly OptionName[]>> = {
-  brain: ["dry-run", "json", "limit"],
+  brain: ["dry-run", "json", "limit", "rename", "move", "merge", "split"],
   search: ["json", "limit"],
   capture: ["text", "json", "note"],
   review: ["id", "decision", "status", "json"],
@@ -154,20 +163,24 @@ const COMMAND_POSITIONALS: Readonly<
   repair: { min: 0, max: 0 },
   uninstall: { min: 0, max: 0 },
   config: { min: 1, max: 3 },
-  brain: { min: 1, max: 2 },
+  brain: { min: 1, max: 3 },
   search: { min: 1, max: 1 },
   import: { min: 0, max: 1 },
   project: { min: 1, max: 2 },
 };
 
 const BRAIN_SUBCOMMANDS: Readonly<
-  Record<string, { readonly options: readonly OptionName[]; readonly query: boolean }>
+  Record<string, { readonly options: readonly OptionName[]; readonly positionals: number }>
 > = {
-  reindex: { options: ["dry-run", "json"], query: false },
-  lint: { options: ["json"], query: false },
-  search: { options: ["json", "limit"], query: true },
-  status: { options: ["json"], query: false },
+  reindex: { options: ["dry-run", "json"], positionals: 0 },
+  lint: { options: ["json"], positionals: 0 },
+  search: { options: ["json", "limit"], positionals: 1 },
+  status: { options: ["json"], positionals: 0 },
+  retire: { options: ["dry-run", "json"], positionals: 1 },
+  refactor: { options: ["dry-run", "json", "rename", "move", "merge", "split"], positionals: 2 },
 };
+
+const REFACTOR_MODES = ["rename", "move", "merge", "split"] as const;
 
 const PROJECT_SUBCOMMANDS: Readonly<Record<string, readonly OptionName[]>> = {
   init: ["dry-run", "json"],
@@ -269,14 +282,17 @@ function parse(argv: readonly string[]): Invocation | null {
    * otherwise resolve to a function.
    */
   if (positional === "brain") {
-    const [name, query] = rest;
+    const [name] = rest;
     if (name === undefined || !Object.hasOwn(BRAIN_SUBCOMMANDS, name)) {
       return null;
     }
     const subcommand = BRAIN_SUBCOMMANDS[name];
     if (subcommand === undefined) return null;
-    if (subcommand.query !== (query !== undefined)) return null;
+    if (rest.length - 1 !== subcommand.positionals) return null;
     if (!suppliedOptions(values).every((o) => subcommand.options.includes(o))) {
+      return null;
+    }
+    if (name === "refactor" && REFACTOR_MODES.filter((mode) => values[mode] === true).length !== 1) {
       return null;
     }
   }
@@ -533,15 +549,33 @@ function optionString(value: boolean | string | undefined): string | null {
 function brainOptionsFor(
   invocation: Invocation,
   limit: number | null,
-): { subcommand: BrainSubcommand; query: string | null; limit: number | null; dryRun: boolean } {
-  const [first, second] = invocation.positionals;
+): BrainOptions {
+  const [first, second, third] = invocation.positionals;
   const alias = invocation.command === "search";
+  const subcommand = alias ? "search" : ((first ?? "status") as BrainSubcommand);
+  const refactor = refactorRequestFor(invocation.values, subcommand, second ?? "", third ?? "");
   return {
-    subcommand: alias ? "search" : ((first ?? "status") as BrainSubcommand),
-    query: alias ? (first ?? null) : (second ?? null),
+    subcommand,
+    query: alias ? (first ?? null) : subcommand === "search" ? (second ?? null) : null,
     limit,
     dryRun: invocation.values["dry-run"] === true,
+    ...(refactor === null ? {} : { refactor }),
   };
+}
+
+/** `parse` has already required exactly one mode flag for `refactor`. */
+function refactorRequestFor(
+  values: OptionValues,
+  subcommand: BrainSubcommand,
+  a: string,
+  b: string,
+): RefactorRequestV1 | null {
+  if (subcommand === "retire") return { mode: "retire", note: a };
+  if (subcommand !== "refactor") return null;
+  if (values.rename === true) return { mode: "rename", note: a, newName: b };
+  if (values.move === true) return { mode: "move", note: a, folder: b };
+  if (values.merge === true) return { mode: "merge", source: a, target: b };
+  return { mode: "split", note: a, heading: b };
 }
 
 async function dispatch(

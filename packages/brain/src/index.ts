@@ -73,6 +73,7 @@ export { BRAIN_MIGRATIONS } from "./migrations/index.js";
 export type { BrainMigration, VaultSnapshot } from "./migrations/index.js";
 export {
   AGENT_DETECTION_ROWS,
+  anyAgentMarker,
   buildCapture,
   detectSourceAgent,
   parseCaptureFile,
