@@ -2,7 +2,30 @@
 
 ## 1. Observation record
 
-Written by plan Task 1, the founder's observation spike. Not yet recorded.
+Written by A13 plan Task 1, the observation spike. Each question gets one answer: an observed
+answer, `unsupported (<reason>)` for observed non-support, or `founder-deferred (<reason>)` when only
+a billed session or a manual trust grant can answer it.
+
+1. Claude: does `~/.claude/skills/developer-os/hooks/hooks.json` fire from a skills-directory plugin
+   (Q4)? — *not yet recorded*
+2. Claude: exit and output semantics for exit 0 with stdout and exit 2 with stderr, on `PreToolUse`,
+   `PostToolUse`, `Stop`, `SessionStart` and `UserPromptSubmit` (§4.4); does stdout from
+   `SessionStart` and `UserPromptSubmit` reach the model? — *not yet recorded*
+3. Claude: payload field spellings for `cwd`, `tool_name`, `tool_input.command`,
+   `tool_input.file_path` (Edit, Write and MultiEdit) and `prompt`, and the stop-loop flag
+   `stop_hook_active`. — *not yet recorded*
+4. Codex: event names, matcher syntax, the shell tool name, whether a file edit fires
+   `pre_tool_use`/`post_tool_use`, and whether it carries a path or a patch body (§3). — *not yet
+   recorded*
+5. Codex: field spellings for each §4.3 row, and the stop-loop flag equivalent. — *not yet recorded*
+6. Codex: exit and output semantics per outcome (§4.4). — *not yet recorded*
+7. Codex: whether `"hooks"` in `.codex-plugin/plugin.json` is inline or a file reference, and its
+   exact schema. — *not yet recorded*
+8. Codex: whether the trust hash covers the command string (§4.1). — *not yet recorded*
+9. Isolated `ingest` on each vendor: does a planted plugin `SessionStart` hook fire (§6.3)? — *not
+   yet recorded*
+10. The Claude and Codex versions observed, which become the `DOCUMENTED_FLOORS` in Task 15. — *not
+    yet recorded*
 
 ## 2. Measurements
 
