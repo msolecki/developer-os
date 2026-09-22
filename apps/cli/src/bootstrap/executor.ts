@@ -2164,6 +2164,7 @@ export class BootstrapExecutor {
       releaseIndexHash: packaged.identity.releaseIndexHash,
       highestAcceptedReleaseSequence: packaged.identity.releaseSequence,
       releaseIdentityHash: packaged.identity.releaseIdentityHash,
+      ...(packaged.trust === "unsigned-local" ? { trust: "unsigned-local" } : {}),
     } as const;
     const activeValue = {
       schemaVersion: 1,

@@ -231,7 +231,7 @@ function activeFixture() {
   fs.setDirectory(`${PRODUCT_HOME}/state/release-metadata/bundles`, [`${bundleManifestHash}.json`]);
   fs.setFile(`${PRODUCT_HOME}/state/release-metadata/bundles/${bundleManifestHash}.json`, bundleManifestBytes);
 
-  return { fs, active, bundleRoot };
+  return { fs, active, bundleRoot, trust };
 }
 
 function malformedActiveFixture(): LauncherSelectionRequestV1 {
@@ -275,6 +275,15 @@ describe("selectLauncherCandidate", () => {
     };
     fs.setFile(trustPath, canonicalBytes(tampered));
     await expect(selectLauncherCandidate(baseRequest(fs))).rejects.toMatchObject({ code: 6 });
+  });
+
+  it("never launches a home whose trust state is unsigned-local", async () => {
+    const { fs, trust } = activeFixture();
+    fs.setFile(`${PRODUCT_HOME}/state/release-trust.json`, canonicalBytes({ ...trust, trust: "unsigned-local" }));
+    await expect(selectLauncherCandidate(baseRequest(fs))).rejects.toMatchObject({
+      code: 6,
+      reason: "launcher_retained_document_unverified",
+    });
   });
 
   it("refuses when the retained delegation store holds an extra file", async () => {

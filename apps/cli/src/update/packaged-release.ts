@@ -4,7 +4,12 @@ import type { BigIntStats } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 
-import { encodeCanonicalJson, EXIT_CODES } from "@developer-os/core";
+import {
+  decodeCanonicalJson,
+  encodeCanonicalJson,
+  EXIT_CODES,
+  UNSIGNED_LOCAL_RELEASE_KEY_ID,
+} from "@developer-os/core";
 import type { LowerHexSha256 } from "@developer-os/core";
 
 const encoder = new TextEncoder();
@@ -51,7 +56,17 @@ export interface AdmittedPackagedReleaseFileV1 {
   readonly ino: string;
 }
 
+export type PackagedReleaseTrustV1 = "root-verified" | "unsigned-local";
+
+export const UNSIGNED_LOCAL_LAYOUT = Object.freeze({
+  delegation: "metadata/release-key-delegation.json",
+  releaseIndex: "metadata/release-index.json",
+  bundleManifest: "metadata/bundle-manifest.json",
+  bundleRoot: "bundle",
+} as const);
+
 export interface AdmittedPackagedReleaseV1 {
+  readonly trust: PackagedReleaseTrustV1;
   readonly packageRoot: string;
   readonly packageRootDev: string;
   readonly packageRootIno: string;
@@ -81,6 +96,7 @@ interface DirectorySnapshot {
 }
 
 interface SealedPackagedRelease {
+  readonly trust: PackagedReleaseTrustV1;
   readonly handoff: RootVerifiedPackagedReleaseV1;
   readonly root: { readonly dev: string; readonly ino: string };
   readonly directories: readonly DirectorySnapshot[];
@@ -391,13 +407,14 @@ async function assertSealedFileChain(
   return stats;
 }
 
-export async function admitRootVerifiedPackagedRelease(
+function seal(
+  trust: PackagedReleaseTrustV1,
   handoff: RootVerifiedPackagedReleaseV1,
-): Promise<PackagedReleaseSourceV1> {
-  const observed = await inventory(handoff.packageRoot);
-  validateSemanticBindings(handoff, observed.files, observed.directories);
+  observed: Awaited<ReturnType<typeof inventory>>,
+): PackagedReleaseSourceV1 {
   const source: PackagedReleaseSourceV1 = Object.freeze({ kind: "packaged_release_source_v1" });
   sealed.set(source, {
+    trust,
     handoff: structuredClone(handoff),
     root: observed.root,
     directories: structuredClone(observed.directories),
@@ -405,6 +422,130 @@ export async function admitRootVerifiedPackagedRelease(
     inventoryHash: observed.hash,
   });
   return source;
+}
+
+export async function admitRootVerifiedPackagedRelease(
+  handoff: RootVerifiedPackagedReleaseV1,
+): Promise<PackagedReleaseSourceV1> {
+  const observed = await inventory(handoff.packageRoot);
+  validateSemanticBindings(handoff, observed.files, observed.directories);
+  return seal("root-verified", handoff, observed);
+}
+
+type UnsignedDocument = Record<string, unknown>;
+
+function unsignedDocument(bytes: Uint8Array, keys: readonly string[]): UnsignedDocument {
+  let value: unknown;
+  try {
+    value = decodeCanonicalJson(bytes, 16 * 1024 * 1024);
+  } catch {
+    return securityRefusal("unsigned local release document is not canonical JSON");
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return securityRefusal("unsigned local release document is not an object");
+  }
+  const document = value as UnsignedDocument;
+  const actual = Object.keys(document);
+  if (
+    actual.length !== keys.length ||
+    actual.some((key) => !keys.includes(key)) ||
+    document.schemaVersion !== 1 ||
+    document.trust !== "unsigned-local"
+  ) {
+    return securityRefusal("unsigned local release document has an unexpected shape");
+  }
+  return document;
+}
+
+async function readListed(packageRoot: string, relativePath: string): Promise<Uint8Array> {
+  const path = join(packageRoot, relativePath);
+  return readGuardedFile(path, await nodeFs.lstat(path, { bigint: true }));
+}
+
+function sha256Hex(bytes: Uint8Array | string): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+export async function admitUnsignedLocalPackagedRelease(
+  packageRoot: string,
+  productVersion: string,
+): Promise<PackagedReleaseSourceV1> {
+  const observed = await inventory(packageRoot);
+  const layout = UNSIGNED_LOCAL_LAYOUT;
+  requiredFile(observed.files, layout.delegation);
+  requiredFile(observed.files, layout.releaseIndex);
+  requiredFile(observed.files, layout.bundleManifest);
+  const delegationBytes = await readListed(packageRoot, layout.delegation);
+  const indexBytes = await readListed(packageRoot, layout.releaseIndex);
+  const manifestBytes = await readListed(packageRoot, layout.bundleManifest);
+  unsignedDocument(delegationBytes, ["schemaVersion", "trust"]);
+  const index = unsignedDocument(indexBytes, ["releaseSequence", "schemaVersion", "trust", "version"]);
+  const manifest = unsignedDocument(manifestBytes, ["files", "schemaVersion", "trust"]);
+  if (typeof index.version !== "string" || typeof index.releaseSequence !== "string") {
+    securityRefusal("unsigned local release index is malformed");
+  }
+
+  const bundlePrefix = `${layout.bundleRoot}/`;
+  const expectedRows = observed.files
+    .filter((file) => file.relativePath.startsWith(bundlePrefix))
+    .map((file) => ({ bytes: file.bytes, path: file.relativePath.slice(bundlePrefix.length), sha256: file.sha256 }));
+  if (
+    !Array.isArray(manifest.files) ||
+    manifest.files.length !== expectedRows.length ||
+    manifest.files.some((row: unknown, position) => {
+      const expected = expectedRows[position];
+      if (expected === undefined || typeof row !== "object" || row === null || Array.isArray(row)) return true;
+      const candidate = row as Record<string, unknown>;
+      return (
+        Object.keys(candidate).length !== 3 ||
+        candidate.bytes !== expected.bytes ||
+        candidate.path !== expected.path ||
+        candidate.sha256 !== expected.sha256
+      );
+    })
+  ) {
+    securityRefusal("unsigned local bundle manifest does not match the bundle inventory");
+  }
+
+  const architecture = process.arch;
+  if (architecture !== "arm64" && architecture !== "x64") {
+    throw new PackagedReleaseError(
+      EXIT_CODES.capabilityUnavailable,
+      "unsigned local release supports only darwin arm64 or x64",
+    );
+  }
+  const handoff: RootVerifiedPackagedReleaseV1 = {
+    packageRoot,
+    retainedMetadata: {
+      delegation: layout.delegation,
+      releaseIndex: layout.releaseIndex,
+      bundleManifest: layout.bundleManifest,
+    },
+    bundleRoot: layout.bundleRoot,
+    identity: {
+      version: index.version,
+      releaseSequence: index.releaseSequence,
+      releaseIdentityHash: createHash("sha256")
+        .update("developer-os:unsigned-local-release-identity:v1\0")
+        .update(manifestBytes)
+        .digest("hex"),
+      delegationSequence: "1",
+      delegationHash: sha256Hex(delegationBytes),
+      delegatedReleaseKeyId: UNSIGNED_LOCAL_RELEASE_KEY_ID,
+      releaseIndexSequence: "1",
+      releaseIndexHash: sha256Hex(indexBytes),
+      bundleManifestHash: sha256Hex(manifestBytes),
+      platform: "darwin",
+      architecture,
+      launcherProtocol: 1,
+      updateProtocol: 1,
+    },
+  };
+  validateSemanticBindings(handoff, observed.files, observed.directories);
+  if (index.version !== productVersion) {
+    throw new PackagedReleaseError(EXIT_CODES.capabilityUnavailable, "release_mismatch");
+  }
+  return seal("unsigned-local", handoff, observed);
 }
 
 export function unavailablePackagedReleaseSource(): PackagedReleaseSourceV1 {
@@ -435,6 +576,7 @@ export async function inspectPackagedRelease(
     snapshot.directories.map((directory) => [directory.relativePath, directory] as const),
   );
   const admitted: AdmittedPackagedReleaseV1 = {
+    trust: snapshot.trust,
     packageRoot: snapshot.handoff.packageRoot,
     packageRootDev: snapshot.root.dev,
     packageRootIno: snapshot.root.ino,

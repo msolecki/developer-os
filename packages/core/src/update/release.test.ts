@@ -5,7 +5,10 @@ import {
   admitReleaseAgainstTrust,
   admitReleaseIdentity,
   advanceReleaseTrust,
+  isUnsignedLocalTrust,
   releaseIdentityHash,
+  ReleaseUnsignedLocalError,
+  UNSIGNED_LOCAL_RELEASE_KEY_ID,
   selectRelease,
   validateBundleManifest,
   validateOfflineReleaseTrust,
@@ -528,6 +531,41 @@ describe("release schemas", () => {
     ["identity root", () => validateReleaseIdentity({ ...identityFixture(), extra: true }, evidence)],
   ])("refuses nested persisted schema extra key: %s", (_name, validate) => {
     expect(validate).toThrow();
+  });
+});
+
+describe("unsigned-local release trust", () => {
+  const SIGNED_TRUST = { schemaVersion: 1, highestDelegationSequence: "1", delegationHash: hash, delegatedReleaseKeyId: key, highestReleaseIndexSequence: "1", releaseIndexHash: hash, highestAcceptedReleaseSequence: "1", releaseIdentityHash: hash };
+  const RELEASE = { releaseSequence: "1", releaseIdentityHash: hash } as never;
+  const ACCEPTED = acceptedFixture() as never;
+
+  it("admits the unsigned-local arm with exactly one extra key", () => {
+    const state = { ...SIGNED_TRUST, trust: "unsigned-local" };
+    expect(validateReleaseTrustState(state)).toStrictEqual(state);
+    expect(isUnsignedLocalTrust(validateReleaseTrustState(state))).toBe(true);
+    expect(isUnsignedLocalTrust(validateReleaseTrustState(SIGNED_TRUST))).toBe(false);
+    expect(() => validateReleaseTrustState({ ...state, trust: "signed" })).toThrow();
+    expect(() => validateReleaseTrustState({ ...state, extra: 1 })).toThrow();
+  });
+
+  it("keeps the signed arm's exact key set", () => {
+    expect(validateReleaseTrustState(SIGNED_TRUST)).toStrictEqual(SIGNED_TRUST);
+    expect(() => validateReleaseTrustState({ ...SIGNED_TRUST, trust: undefined })).toThrow();
+  });
+
+  it("refuses an unsigned-local state as an update source or rollback target", () => {
+    const state = validateReleaseTrustState({ ...SIGNED_TRUST, trust: "unsigned-local" });
+    for (const role of ["online_target", "guarded_retained_rollback"] as const) {
+      expect(() => { admitReleaseAgainstTrust(state, RELEASE, role); }).toThrow(ReleaseUnsignedLocalError);
+    }
+    expect(() => { admitReleaseAgainstTrust(state, RELEASE, "guarded_active"); }).not.toThrow();
+    expect(() => advanceReleaseTrust(state, ACCEPTED)).toThrow(ReleaseUnsignedLocalError);
+    expect(advanceReleaseTrust(validateReleaseTrustState(SIGNED_TRUST), ACCEPTED)).toBeDefined();
+  });
+
+  it("derives the unsigned-local key id from its ASCII domain", () => {
+    expect(UNSIGNED_LOCAL_RELEASE_KEY_ID).toBe(hex("developer-os:unsigned-local-release-key:v1"));
+    expect(new ReleaseUnsignedLocalError()).toMatchObject({ reason: "release_unsigned_local", code: 4 });
   });
 });
 

@@ -1,6 +1,7 @@
 import {
   admitReleaseAgainstTrust,
   decodeCanonicalJson,
+  isUnsignedLocalTrust,
   LifecycleRecoveryRequiredError,
   parseCanonicalAbsolutePathText,
   validateActiveReleaseRecord,
@@ -266,6 +267,7 @@ async function admitActiveRelease(
   const trustPath = derive(productHome, "state/release-trust.json");
   const trustEntry = await ownedRegular(fs, trustPath, effectiveUid, MAX_TRUST_BYTES, "launcher_release_trust_missing");
   const trust = parseTrust(await fs.readRegular(trustEntry, MAX_TRUST_BYTES), trustPath);
+  if (isUnsignedLocalTrust(trust)) recoveryRequired("launcher_retained_document_unverified", trustPath);
   try {
     admitReleaseAgainstTrust(trust, active, "guarded_active");
   } catch {

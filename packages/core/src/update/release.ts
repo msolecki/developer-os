@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { EXIT_CODES } from "../result.js";
 import { admitCanonicalAbsolutePath, type CanonicalAbsolutePathV1, type CanonicalPathEvidenceV1 } from "./paths.js";
 import {
   parseLowerHexSha256,
@@ -171,7 +172,7 @@ export interface ActiveReleaseRecordV1 extends ReleaseIdentityV1 {
   readonly activatedAt: UtcTimestampV1;
 }
 
-export interface ReleaseTrustStateV1 {
+export interface SignedReleaseTrustStateV1 {
   readonly schemaVersion: 1;
   readonly highestDelegationSequence: UInt64DecimalV1;
   readonly delegationHash: LowerHexSha256;
@@ -180,6 +181,23 @@ export interface ReleaseTrustStateV1 {
   readonly releaseIndexHash: LowerHexSha256;
   readonly highestAcceptedReleaseSequence: UInt64DecimalV1;
   readonly releaseIdentityHash: LowerHexSha256;
+}
+export type UnsignedLocalReleaseTrustStateV1 = SignedReleaseTrustStateV1 & { readonly trust: "unsigned-local" };
+export type ReleaseTrustStateV1 = SignedReleaseTrustStateV1 | UnsignedLocalReleaseTrustStateV1;
+
+export const UNSIGNED_LOCAL_RELEASE_KEY_ID = createHash("sha256").update("developer-os:unsigned-local-release-key:v1", "ascii").digest("hex") as LowerHexSha256;
+
+export class ReleaseUnsignedLocalError extends Error {
+  readonly code = EXIT_CODES.capabilityUnavailable;
+  readonly reason = "release_unsigned_local" as const;
+  constructor() {
+    super("release_unsigned_local: an unsigned local build is never an update source or rollback target");
+    this.name = "ReleaseUnsignedLocalError";
+  }
+}
+
+export function isUnsignedLocalTrust(state: ReleaseTrustStateV1): state is UnsignedLocalReleaseTrustStateV1 {
+  return "trust" in state;
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -454,10 +472,13 @@ export function validateActiveReleaseRecord(value: unknown, evidence: CanonicalP
   assertCanonicalSize(active, 16 * 1024, "ActiveReleaseRecordV1 bytes");
   return active;
 }
+const signedTrustKeys = ["schemaVersion", "highestDelegationSequence", "delegationHash", "delegatedReleaseKeyId", "highestReleaseIndexSequence", "releaseIndexHash", "highestAcceptedReleaseSequence", "releaseIdentityHash"] as const;
 export function validateReleaseTrustState(value: unknown): ReleaseTrustStateV1 {
-  const input = exact(value, "ReleaseTrustStateV1", ["schemaVersion", "highestDelegationSequence", "delegationHash", "delegatedReleaseKeyId", "highestReleaseIndexSequence", "releaseIndexHash", "highestAcceptedReleaseSequence", "releaseIdentityHash"]);
-  if (input.schemaVersion !== 1) invalid("ReleaseTrustStateV1");
-  const trust = { schemaVersion: 1 as const, highestDelegationSequence: parseUInt64Decimal(input.highestDelegationSequence), delegationHash: parseLowerHexSha256(input.delegationHash), delegatedReleaseKeyId: parseLowerHexSha256(input.delegatedReleaseKeyId), highestReleaseIndexSequence: parseUInt64Decimal(input.highestReleaseIndexSequence), releaseIndexHash: parseLowerHexSha256(input.releaseIndexHash), highestAcceptedReleaseSequence: parseUInt64Decimal(input.highestAcceptedReleaseSequence), releaseIdentityHash: parseLowerHexSha256(input.releaseIdentityHash) };
+  const unsignedLocal = Object.hasOwn(record(value, "ReleaseTrustStateV1"), "trust");
+  const input = exact(value, "ReleaseTrustStateV1", unsignedLocal ? [...signedTrustKeys, "trust"] : signedTrustKeys);
+  if (input.schemaVersion !== 1 || (unsignedLocal && input.trust !== "unsigned-local")) invalid("ReleaseTrustStateV1");
+  const signed = { schemaVersion: 1 as const, highestDelegationSequence: parseUInt64Decimal(input.highestDelegationSequence), delegationHash: parseLowerHexSha256(input.delegationHash), delegatedReleaseKeyId: parseLowerHexSha256(input.delegatedReleaseKeyId), highestReleaseIndexSequence: parseUInt64Decimal(input.highestReleaseIndexSequence), releaseIndexHash: parseLowerHexSha256(input.releaseIndexHash), highestAcceptedReleaseSequence: parseUInt64Decimal(input.highestAcceptedReleaseSequence), releaseIdentityHash: parseLowerHexSha256(input.releaseIdentityHash) };
+  const trust: ReleaseTrustStateV1 = unsignedLocal ? { ...signed, trust: "unsigned-local" } : signed;
   assertCanonicalSize(trust, 16 * 1024, "ReleaseTrustStateV1 bytes");
   return trust;
 }
@@ -470,6 +491,7 @@ function advance(sequence: UInt64DecimalV1, oldHash: LowerHexSha256, nextSequenc
 }
 export function advanceReleaseTrust(current: ReleaseTrustStateV1, accepted: ReleaseMetadataIdentityV1 & Pick<ReleaseIdentityV1, "releaseSequence" | "releaseIdentityHash">): ReleaseTrustStateV1 {
   const trust = validateReleaseTrustState(current);
+  if (isUnsignedLocalTrust(trust)) throw new ReleaseUnsignedLocalError();
   const acceptedInput = exact(accepted, "accepted release observation", ["delegationSequence", "delegationHash", "delegatedReleaseKeyId", "releaseIndexSequence", "releaseIndexHash", "releaseSequence", "releaseIdentityHash"]);
   const metadata = validateReleaseMetadataIdentity({
     delegationSequence: acceptedInput.delegationSequence,
@@ -486,7 +508,9 @@ export function advanceReleaseTrust(current: ReleaseTrustStateV1, accepted: Rele
   return { schemaVersion: 1, highestDelegationSequence, delegationHash, delegatedReleaseKeyId: metadata.delegatedReleaseKeyId, highestReleaseIndexSequence, releaseIndexHash, highestAcceptedReleaseSequence, releaseIdentityHash: nextReleaseIdentityHash };
 }
 export function admitReleaseAgainstTrust(trust: ReleaseTrustStateV1, release: Pick<ReleaseIdentityV1, "releaseSequence" | "releaseIdentityHash">, role: "online_target" | "guarded_active" | "guarded_retained_rollback"): void {
-  const state = validateReleaseTrustState(trust); const sequence = parseUInt64Decimal(release.releaseSequence); const hash = parseLowerHexSha256(release.releaseIdentityHash); const comparison = compareUInt64(sequence, state.highestAcceptedReleaseSequence);
+  const state = validateReleaseTrustState(trust);
+  if (isUnsignedLocalTrust(state) && role !== "guarded_active") throw new ReleaseUnsignedLocalError();
+  const sequence = parseUInt64Decimal(release.releaseSequence); const hash = parseLowerHexSha256(release.releaseIdentityHash); const comparison = compareUInt64(sequence, state.highestAcceptedReleaseSequence);
   if (comparison === 0 && hash !== state.releaseIdentityHash) invalid("ReleaseTrustStateV1 release replay");
   if (comparison < 0 && role === "online_target") invalid("ReleaseTrustStateV1 online downgrade");
   if (comparison > 0 && role !== "online_target") invalid("ReleaseTrustStateV1 guarded advance");
