@@ -17,6 +17,7 @@ import type { CommandFixture } from "./commands/testing.js";
 import type { CliIo } from "./io.js";
 import { renderReview, run } from "./main.js";
 import type { ReviewResultV1 } from "./commands/review.js";
+import { MALFORMED_V2_MANIFEST } from "./bootstrap/report.js";
 
 afterEach(removeCommandFixtures);
 
@@ -390,8 +391,6 @@ const ORDINARY_COMMANDS_WITHOUT_REMOVAL = NON_INIT_COMMANDS.map((argv) =>
   argv[0] === "uninstall" ? ["uninstall", "--dry-run"] : argv,
 );
 const MANUAL_ARCHIVE = "retained bootstrap evidence requires manual archive before a new bootstrap intent";
-const MALFORMED_V2_MANIFEST =
-  "the V2 installation manifest failed validation; restore it or archive the product home manually before running init again";
 
 function lastJsonError(lines: string[]): {
   readonly code: number;

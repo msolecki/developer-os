@@ -16,7 +16,12 @@ import {
   NodeBootstrapEvidenceGuardedReader,
 } from "./context.js";
 import type { BootstrapEvidenceGuardedEntryV1, BootstrapEvidenceGuardedReaderV1 } from "./report.js";
-import { assertOrdinaryCommandAdmitted, inspectBootstrapEvidence, inspectBootstrapEvidenceAdmission } from "./report.js";
+import {
+  assertOrdinaryCommandAdmitted,
+  inspectBootstrapEvidence,
+  inspectBootstrapEvidenceAdmission,
+  NON_REGULAR_BOOTSTRAP_LEAF,
+} from "./report.js";
 import { projectBootstrapRetentionPostimage, projectRetainedDirectoryTreeOnce } from "./retention.js";
 
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
@@ -442,6 +447,7 @@ describe("assertOrdinaryCommandAdmitted over the production reader", () => {
       await expect(assertOrdinaryCommandAdmitted(requestForHome(home))).rejects.toMatchObject({
         code: EXIT_CODES.recoveryRequired,
         name: "BootstrapRecoveryRequiredError",
+        message: NON_REGULAR_BOOTSTRAP_LEAF,
         paths: [manifest],
       });
     });
@@ -465,7 +471,6 @@ describe("assertOrdinaryCommandAdmitted over the production reader", () => {
     await bareHome(async (home) => {
       const manifest = join(home, "installation-manifest.json");
       await nodeFs.mkdir(manifest, { mode: 0o700 });
-      expect((await nodeFs.lstat(manifest)).isDirectory()).toBe(true);
 
       await expect(assertOrdinaryCommandAdmitted(requestForHome(home))).rejects.toMatchObject({
         code: EXIT_CODES.recoveryRequired,
@@ -575,6 +580,7 @@ describe("assertOrdinaryCommandAdmitted", () => {
     await expect(assertOrdinaryCommandAdmitted(plan.request)).rejects.toMatchObject({
       code: EXIT_CODES.recoveryRequired,
       name: "BootstrapRecoveryRequiredError",
+      message: NON_REGULAR_BOOTSTRAP_LEAF,
       paths: [SYNTHETIC_PLAN],
     });
 
@@ -582,6 +588,7 @@ describe("assertOrdinaryCommandAdmitted", () => {
     await expect(assertOrdinaryCommandAdmitted(manifest.request)).rejects.toMatchObject({
       code: EXIT_CODES.recoveryRequired,
       name: "BootstrapRecoveryRequiredError",
+      message: NON_REGULAR_BOOTSTRAP_LEAF,
       paths: [SYNTHETIC_MANIFEST],
     });
   });

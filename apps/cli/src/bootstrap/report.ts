@@ -160,6 +160,7 @@ export interface BootstrapEvidenceAdmissionV1 {
 export const BOOTSTRAP_MANUAL_ARCHIVE = "retained bootstrap evidence requires manual archive before a new bootstrap intent";
 export const MALFORMED_V2_MANIFEST =
   "the V2 installation manifest failed validation; restore it or archive the product home manually before running init again";
+export const NON_REGULAR_BOOTSTRAP_LEAF = "a bootstrap evidence leaf could not be admitted as a regular file";
 
 export class BootstrapRecoveryRequiredError extends Error {
   readonly code = EXIT_CODES.recoveryRequired;
@@ -1520,5 +1521,5 @@ async function guardedFile(
 }
 
 function nonRegularLeaf(path: string): BootstrapRecoveryRequiredError {
-  return new BootstrapRecoveryRequiredError("a bootstrap evidence leaf could not be admitted as a regular file", [path]);
+  return new BootstrapRecoveryRequiredError(NON_REGULAR_BOOTSTRAP_LEAF, [path]);
 }
