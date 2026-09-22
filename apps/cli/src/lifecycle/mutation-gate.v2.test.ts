@@ -498,6 +498,28 @@ describe("the mutation gate on a real V2 home", () => {
     ]);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("refuses allocateStandaloneFoundationId through a stale authority once the lock is released", async () => {
+    const fixture = await sharedV2Home();
+    const before = await allocatorCounter(fixture);
+    const events = fixture.stableLockEvents.length;
+
+    const authority = await withLifecycleMutation(fixture.context, lifecycleOf(fixture), (held) =>
+      Promise.resolve(held),
+    );
+
+    expect(fixture.stableLockEvents.slice(events)).toStrictEqual([
+      `acquire ${globalLockPath(fixture)}`,
+      `release ${globalLockPath(fixture)}`,
+    ]);
+    await expect(
+      authority.allocateStandaloneFoundationId(probePlan(fixture, "stale-authority").mutations),
+    ).rejects.toMatchObject({
+      reason: "lifecycle_mutation_authority_released",
+      code: EXIT_CODES.recoveryRequired,
+    });
+    expect(await allocatorCounter(fixture)).toBe(before);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("refuses a malformed leaf in state/lifecycle-journals with exit 6 and writes nothing", async () => {
     const fixture = await sharedV2Home();
     const planted = join(fixture.paths.stateDir, "lifecycle-journals", "synthetic-orphan.json");

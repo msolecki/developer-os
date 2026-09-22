@@ -17,7 +17,7 @@ import type { CommandFixture } from "./commands/testing.js";
 import type { CliIo } from "./io.js";
 import { renderReview, run } from "./main.js";
 import type { ReviewResultV1 } from "./commands/review.js";
-import { MALFORMED_V2_MANIFEST } from "./bootstrap/report.js";
+import { BOOTSTRAP_MANUAL_ARCHIVE, MALFORMED_V2_MANIFEST } from "./bootstrap/report.js";
 
 afterEach(removeCommandFixtures);
 
@@ -390,7 +390,6 @@ const NON_INIT_COMMANDS = [
 const ORDINARY_COMMANDS_WITHOUT_REMOVAL = NON_INIT_COMMANDS.map((argv) =>
   argv[0] === "uninstall" ? ["uninstall", "--dry-run"] : argv,
 );
-const MANUAL_ARCHIVE = "retained bootstrap evidence requires manual archive before a new bootstrap intent";
 
 function lastJsonError(lines: string[]): {
   readonly code: number;
@@ -419,7 +418,7 @@ async function expectGateAdmits(
 async function expectArchiveRefusalEverywhere(
   fixture: CommandFixture,
   label: string,
-  message = MANUAL_ARCHIVE,
+  message = BOOTSTRAP_MANUAL_ARCHIVE,
 ): Promise<void> {
   const before = await inventoryDigest(fixture.root);
   for (const argv of NON_INIT_COMMANDS) {
