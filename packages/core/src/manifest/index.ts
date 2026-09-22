@@ -11,6 +11,17 @@ export {
   ManifestUnsupportedArtifactError,
   validateManifest,
 } from "./store.js";
+export {
+  decideInstructionBlockMerge,
+  extractInstructionBlock,
+  insertInstructionBlock,
+  INSTRUCTION_BLOCK_BEGIN,
+  INSTRUCTION_BLOCK_END,
+  renderInstructionBlock,
+  replaceInstructionBlock,
+  stripInstructionBlock,
+} from "./instruction-block.js";
+export type { InstructionBlockExtractionV1, InstructionBlockMergeV1 } from "./instruction-block.js";
 export { ManifestV1NotMigratableError, validateManifestBytes, validateManifestV1, validateManifestV2, validateMigratableManifestV1 } from "./v2.js";
 export { ManifestStateParticipant, ManifestStateParticipantError, validateManifestStatePlan } from "./manifest-state.js";
 export {
