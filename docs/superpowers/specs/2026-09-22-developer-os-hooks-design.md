@@ -1,5 +1,11 @@
 # Developer OS — Hooks Design
 
+**Approved 2026-09-22 by the founder (D47).** Every open question is answered with its recommended
+option, except A12 Q1: there is no production for now — the product runs from a local, unsigned build
+on the founder's machine only; no release, signing or public install path is built until the founder
+reopens it. Wherever this spec names the launcher or a packaged release as the install source, read
+"the local build" (A12 Q1 option A, `trust: "unsigned-local"`, local only).
+
 **Status: draft for founder approval, 2026-09-22.** This is `ORDER.md` entry A13 (DOS-P11) and roadmap
 Phase 6. Scope: `docs/migration/instruction-inventory.md` §4. **Depends on:** A12 (Phase 5,
 `specs/<date>-developer-os-instruction-artifacts-design.md`, drafted in parallel), which wires the

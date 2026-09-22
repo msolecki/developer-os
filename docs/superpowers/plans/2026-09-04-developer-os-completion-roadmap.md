@@ -218,6 +218,12 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
 
 ### Phase 5 — A12: instruction artifacts · L
 
+- **D47 (2026-09-22).** Specs A12, A12b, A13 and A14 (`specs/2026-09-22-developer-os-{instruction-artifacts,brain-workflows,hooks,tooling-verbs}-design.md`)
+  approved with every recommended answer, except A12 Q1: no production for now — local unsigned build
+  only, no release path. Also decided: Spec 1 §1 holds — `import` and `ingest` stay manual and leave
+  Phase 9's job registry. The D44 lane (lint per commit, tests and review at phase close, no push)
+  applies to Phases 5–7 as well, on the founder's instruction to skip tests for now.
+
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 
 - [ ] Spec: managed artifact kind `instruction` with `source: default | user`; default content from the repository, user content from `<product-home>/instructions/<vendor>/`; both hashed, drift-checked, uninstalled. One product-owned import block in the user's global Claude instruction file and a generated Codex `AGENTS.md`, merged three-way (first real consumer of `buildConflictEvidence`). Path-scoped rules emulated on Codex. Output styles `unsupported` on Codex. Command/skill pairs collapsed. Redaction of client references before the defaults enter the repository.

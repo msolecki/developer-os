@@ -1,5 +1,11 @@
 # Developer OS — Brain Workflows Design (A12b)
 
+**Approved 2026-09-22 by the founder (D47).** Every open question is answered with its recommended
+option, except A12 Q1: there is no production for now — the product runs from a local, unsigned build
+on the founder's machine only; no release, signing or public install path is built until the founder
+reopens it. Wherever this spec names the launcher or a packaged release as the install source, read
+"the local build" (A12 Q1 option A, `trust: "unsigned-local"`, local only).
+
 **Status: draft, 2026-09-22, awaiting founder approval.** Roadmap Phase 5b (`ORDER.md` A12b), scope
 `docs/migration/instruction-inventory.md` §7, founder decision D11. Installation of the rendered
 skills depends on the A12 spec (draft); nothing here assumes more of it than the roadmap's Phase 5

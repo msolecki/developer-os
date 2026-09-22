@@ -1,5 +1,11 @@
 # Developer OS — Tooling Verbs Design
 
+**Approved 2026-09-22 by the founder (D47).** Every open question is answered with its recommended
+option, except A12 Q1: there is no production for now — the product runs from a local, unsigned build
+on the founder's machine only; no release, signing or public install path is built until the founder
+reopens it. Wherever this spec names the launcher or a packaged release as the install source, read
+"the local build" (A12 Q1 option A, `trust: "unsigned-local"`, local only).
+
 **Status: draft, 2026-09-22, awaiting founder answers to §0 and approval.** This is `ORDER.md` entry
 A14 (DOS-P12), roadmap Phase 7
 (`docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md`). Its scope is
