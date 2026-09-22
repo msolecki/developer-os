@@ -189,9 +189,15 @@ describe("runDoctor", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.code).toBe(EXIT_CODES.success);
+    /** `vendor-config` warns while `CLAUDE_DENY_RULES` is unobserved (plan A14 Task 10). */
     expect(
-      result.data.checks.filter((check) => check.status !== "pass"),
+      result.data.checks.filter(
+        (check) => check.status !== "pass" && check.id !== "vendor-config",
+      ),
     ).toEqual([]);
+    expect(
+      result.data.checks.find((check) => check.id === "vendor-config")?.status,
+    ).toBe("warn");
     expect(result.data.checks.map((check) => check.id)).toEqual([
       "platform",
       "product-home",
@@ -205,6 +211,7 @@ describe("runDoctor", () => {
       "agents",
       "claude-capabilities",
       "codex-capabilities",
+      "vendor-config",
     ]);
     /**
      * No Codex is installed in this fixture, and no `recovery=` is printed for

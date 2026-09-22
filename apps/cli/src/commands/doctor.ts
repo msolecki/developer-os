@@ -31,6 +31,7 @@ import type { AgentDiscovery, AgentName } from "@developer-os/platform-macos";
 
 import { reportClaudeCapabilities } from "./claude-capabilities.js";
 import { reportCodexCapabilities } from "./codex-capabilities.js";
+import { checkVendorConfig } from "./vendor-config.js";
 import {
   exitCodeOf,
   REDACTION_KEY_BYTES,
@@ -1168,6 +1169,8 @@ async function collectFindings(
     await guarded(context, "codex-capabilities", [], () =>
       checkCodexCapabilities(context, options.probe),
     ),
+    // Not through `guarded`: it turns a throw into "fail", which spec §8 forbids.
+    { check: await checkVendorConfig(context), code: EXIT_CODES.success },
     ...evidenceFindings,
   ], retainedBootstrapEvidence: evidenceIds };
 }

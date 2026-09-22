@@ -78,6 +78,7 @@ const DOCTOR_CHECKS = [
   "agents",
   "claude-capabilities",
   "codex-capabilities",
+  "vendor-config",
 ] as const;
 
 /**
@@ -316,9 +317,13 @@ describe("Foundation temporary-HOME lifecycle", () => {
         "agents",
         "claude-capabilities",
         "codex-capabilities",
+        "vendor-config",
       ]);
+      /** `vendor-config` warns while `CLAUDE_DENY_RULES` is unobserved (plan A14 Task 10). */
       expect(
-        checks.checks.filter((check) => check.status !== "pass"),
+        checks.checks.filter(
+          (check) => check.status !== "pass" && check.id !== "vendor-config",
+        ),
       ).toStrictEqual([]);
 
       /**
@@ -1169,7 +1174,9 @@ describe.each(INTERRUPTION_PHASES)(
         expect(
           okData(
             (await runJson<DoctorReportV1>(home, ["doctor", "--json"])).result,
-          ).checks.filter((check) => check.status !== "pass"),
+          ).checks.filter(
+            (check) => check.status !== "pass" && check.id !== "vendor-config",
+          ),
         ).toStrictEqual([]);
       });
     });
