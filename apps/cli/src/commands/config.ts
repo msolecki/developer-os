@@ -99,7 +99,7 @@ async function admitV2Home(context: CliContext): Promise<CliLifecycleContext> {
  * and the precondition from the second, so a hand edit between them would be overwritten by
  * a transaction whose guard had already accepted it.
  */
-async function readConfigRecord(
+export async function readConfigRecord(
   context: CliContext,
 ): Promise<{ readonly config: DeveloperOsConfigV1; readonly beforeHash: string }> {
   let beforeHash = "";

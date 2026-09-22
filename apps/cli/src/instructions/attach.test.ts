@@ -449,6 +449,8 @@ describe("planInstructionAttach: target refusals", () => {
       state.fs.file(path, "someone else's file\n");
       const refused = await refusal(planInstructionAttach(input(state)), "instruction_target_occupied", EXIT_CODES.decisionRequired);
       expect(refused.paths).toStrictEqual([path]);
+      // failureFrom publishes kindOf(name): the name must spell the reason code.
+      expect(refused.name).toBe("InstructionTargetOccupiedError");
       expect(refused.message).not.toContain("someone else's file");
     }
   });

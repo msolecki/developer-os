@@ -122,7 +122,8 @@ export class InstructionRefusal extends Error {
     readonly recovery: string;
   }) {
     super(`${input.reason}: ${input.paths.join(", ")}`);
-    this.name = "InstructionRefusal";
+    // failureFrom publishes kindOf(name), so this spelling is what yields the reason code.
+    this.name = `${input.reason.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join("")}Error`;
     this.reason = input.reason;
     this.code = input.code;
     this.paths = input.paths;
@@ -161,7 +162,7 @@ function compareBytes(left: string, right: string): number {
 }
 
 /** `validateManifestV2`'s inventory order. */
-function compareRows(left: ManagedArtifactV2, right: ManagedArtifactV2): number {
+export function compareManifestRows(left: ManagedArtifactV2, right: ManagedArtifactV2): number {
   return compareBytes(left.path, right.path)
     || compareBytes(left.owner, right.owner)
     || compareBytes(left.kind, right.kind)
@@ -447,7 +448,7 @@ class Planner {
     }
     const manifest: InstallationManifestV2 = {
       ...this.#input.manifest,
-      artifacts: [...this.#rows.values()].sort(compareRows),
+      artifacts: [...this.#rows.values()].sort(compareManifestRows),
     };
     const mutations = [...this.#mutations].sort((left, right) => compareBytes(left.targetPath, right.targetPath));
     if (configMutation !== null) mutations.push(configMutation);
