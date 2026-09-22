@@ -1,28 +1,14 @@
-import { createHash } from "node:crypto";
 import * as nodeFs from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { EXIT_CODES } from "../result.js";
 import { TransactionExecutor } from "../transactions/executor.js";
 import { TransactionStore } from "../transactions/store.js";
-import type { TransactionLockHandle, TransactionLockProvider } from "../transactions/types.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
-import {
-  parseLowerHexSha256,
-  parseUInt64Decimal,
-  parseUtcTimestamp,
-  type LowerHexSha256,
-} from "../update/scalars.js";
-import type { LifecycleBookkeepingResidueV1 } from "./bookkeeping.js";
-import { encodeCanonicalJson, type CanonicalJsonValue } from "./canonical-json.js";
-import {
-  createLifecycleCodecs,
-  type LifecycleLeafCodecsV1,
-  type LifecycleValueCodec,
-} from "./codecs.js";
+import { parseLowerHexSha256, parseUInt64Decimal } from "../update/scalars.js";
+import { createLifecycleCodecs } from "./codecs.js";
 import {
   LifecycleCoordinator,
   type LifecycleCoordinatorBoundaryV1,
@@ -32,7 +18,7 @@ import {
 import { compactTerminalCoordinator } from "./coordinator-compaction.js";
 import { deriveLifecycleLedgerRoots, type LifecycleLedgerRootsV1 } from "./foundation-ledger.js";
 import { FoundationParticipantExecutor } from "./foundation-participant.js";
-import { deriveTerminalCompaction, type LifecycleVariantFactsV1 } from "./grammar.js";
+import { deriveTerminalCompaction } from "./grammar.js";
 import {
   createNodeLifecycleGuardedFileSystem,
   LifecycleRecoveryRequiredError,
@@ -52,123 +38,31 @@ import {
 import type { HeldLifecycleStableLockV1 } from "./locks.js";
 import { encodeLifecycleIdAllocator } from "./records.js";
 import { LifecycleCoordinatorStore, maximumCoordinatorJournalBytes } from "./store.js";
-import { createLinkUnlinkRenameNoReplace } from "./testing.js";
+import {
+  CLOCK,
+  CREATED_AT,
+  createLinkUnlinkRenameNoReplace,
+  digest,
+  encoder,
+  FixtureLockProvider,
+  LEAVES,
+  NO_RESIDUE,
+  PLAN_BYTE_CEILING,
+  SyntheticDeath,
+  type SyntheticPlan,
+  UID,
+  UNINSTALL_FACTS,
+  useSyntheticLifecycleHomes,
+} from "./testing.js";
 import type {
   FoundationParticipantRefV1,
   LifecycleCoordinatorJournalV1,
-  LifecycleCoordinatorPlanCoreV1,
   LifecycleCoordinatorStepV1,
 } from "./types.js";
 
-const UID = process.getuid?.() ?? 0;
 const NONCE = parseLowerHexSha256("5e".repeat(32));
-const CREATED_AT = parseUtcTimestamp("2026-09-20T12:00:00.000Z");
-const CLOCK = parseUtcTimestamp("2026-09-20T12:00:01.000Z");
-const PLAN_BYTE_CEILING = 16_777_216;
-const encoder = new TextEncoder();
 
-const NO_RESIDUE: LifecycleBookkeepingResidueV1 = {
-  retainedPaths: new Set(),
-  bootstrapParticipantIds: new Set(),
-};
-
-const HOME_DIRECTORIES = [
-  "state",
-  "state/transactions",
-  "state/lifecycle-journals",
-  "state/git-effect-journals",
-  "state/launchd-effect-journals",
-  "staging",
-  "staging/transactions",
-  "staging/lifecycle",
-  "backups",
-  "backups/transactions",
-  "targets",
-] as const;
-
-class SyntheticDeath extends Error {
-  constructor(boundary: string) {
-    super(`synthetic death at ${boundary}`);
-    this.name = "SyntheticDeath";
-  }
-}
-
-class FixtureLockProvider implements TransactionLockProvider {
-  async acquire(path: string): Promise<TransactionLockHandle> {
-    await nodeFs.mkdir(dirname(path), { recursive: true, mode: 0o700 });
-    await nodeFs.writeFile(path, "", { mode: 0o600, flag: "a" });
-    return { release: (): Promise<void> => Promise.resolve() };
-  }
-}
-
-const homes: string[] = [];
-
-afterEach(async () => {
-  for (const home of homes.splice(0)) {
-    await nodeFs.rm(home, { recursive: true, force: true });
-  }
-});
-
-function digest(bytes: Uint8Array): LowerHexSha256 {
-  return parseLowerHexSha256(createHash("sha256").update(bytes).digest("hex"));
-}
-
-interface SyntheticLeaf {
-  readonly marker: string;
-}
-interface SyntheticPush extends SyntheticLeaf {
-  readonly planHash: LowerHexSha256;
-}
-type SyntheticPlan = LifecycleCoordinatorPlanCoreV1<
-  SyntheticLeaf,
-  SyntheticLeaf,
-  SyntheticLeaf,
-  SyntheticPush
->;
-
-function leafCodec<T extends SyntheticLeaf>(label: string): LifecycleValueCodec<T> {
-  return {
-    validate(value: unknown): T {
-      if (typeof value !== "object" || value === null || !("marker" in value)) {
-        throw new Error(`invalid synthetic ${label} leaf`);
-      }
-      return value as T;
-    },
-    encode: (value) => encodeCanonicalJson(value as unknown as CanonicalJsonValue),
-  };
-}
-
-const LEAVES: LifecycleLeafCodecsV1<
-  SyntheticLeaf,
-  SyntheticLeaf,
-  SyntheticLeaf,
-  SyntheticPush,
-  SyntheticLeaf,
-  SyntheticLeaf,
-  SyntheticLeaf & {
-    readonly tableHashes: {
-      readonly observation: LowerHexSha256;
-      readonly mutationTemplate: LowerHexSha256;
-    };
-  }
-> = {
-  manifest: leafCodec("manifest"),
-  launchd: leafCodec("launchd"),
-  redactionKey: leafCodec("redactionKey"),
-  push: leafCodec<SyntheticPush>("push"),
-  pushPlanHash: (push) => push.planHash,
-  projection: leafCodec("projection"),
-  gitPreview: leafCodec("gitPreview"),
-  launchdPreview: leafCodec("launchdPreview"),
-  projectionSubsystem: () => "git",
-  launchdPreviewTableHashes: (preview) => preview.tableHashes,
-};
-
-const UNINSTALL_FACTS: LifecycleVariantFactsV1 = {
-  gitSync: null,
-  automationReconcile: null,
-  uninstallLaunchdEvidence: false,
-};
+const createSyntheticLifecycleHome = useSyntheticLifecycleHomes();
 
 type Dependencies = LifecycleCoordinatorDependenciesV1<SyntheticPlan> & {
   readonly fs: LifecycleGuardedFileSystemV1;
@@ -192,14 +86,7 @@ interface UninstallWorldV1 {
 
 /** `uninstall/present_manifest_without_launchd`: the one variant whose compaction carries the control-file suffix. */
 async function uninstallWorld(label: string): Promise<UninstallWorldV1> {
-  const created = await nodeFs.mkdtemp(join(tmpdir(), `developer-os-${label}-`));
-  homes.push(created);
-  await nodeFs.chmod(created, 0o700);
-  for (const relative of HOME_DIRECTORIES) {
-    await nodeFs.mkdir(join(created, relative));
-    await nodeFs.chmod(join(created, relative), 0o700);
-  }
-  const home = parseCanonicalAbsolutePathText(created);
+  const { created, home } = await createSyntheticLifecycleHome(label);
   const roots = deriveLifecycleLedgerRoots(home);
   const publisher = createLinkUnlinkRenameNoReplace();
   const fs = createNodeLifecycleGuardedFileSystem({

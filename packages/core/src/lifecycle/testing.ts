@@ -7,13 +7,28 @@
  */
 import { createHash } from "node:crypto";
 import * as nodeFs from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+
+import { afterEach } from "vitest";
 
 import type {
   BootstrapInitialJournalPublicationV1,
   PublishBootstrapInitialJournalNoReplace,
+  TransactionLockHandle,
+  TransactionLockProvider,
 } from "../transactions/types.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
-import { parseLowerHexSha256, parseUInt64Decimal, type LowerHexSha256 } from "../update/scalars.js";
+import {
+  parseLowerHexSha256,
+  parseUInt64Decimal,
+  parseUtcTimestamp,
+  type LowerHexSha256,
+} from "../update/scalars.js";
+import type { LifecycleBookkeepingResidueV1 } from "./bookkeeping.js";
+import { encodeCanonicalJson, type CanonicalJsonValue } from "./canonical-json.js";
+import type { LifecycleLeafCodecsV1, LifecycleValueCodec } from "./codecs.js";
+import type { LifecycleVariantFactsV1 } from "./grammar.js";
 import {
   LifecycleRecoveryRequiredError,
   lifecycleParentPath,
@@ -23,8 +38,142 @@ import {
   type LifecycleGuardedFileSystemV1,
   type LifecycleGuardedKindV1,
 } from "./guarded-fs.js";
+import type { LifecycleCoordinatorPlanCoreV1 } from "./types.js";
 
-const encoder = new TextEncoder();
+export const encoder = new TextEncoder();
+
+/**
+ * Shared by the coordinator, coordinator-compaction and recovery synthetic-world builders
+ * (Task 16's ~150-line duplicated scaffold, extracted per plan closure Task 25 finding 1).
+ */
+export const UID = process.getuid?.() ?? 0;
+export const CREATED_AT = parseUtcTimestamp("2026-09-20T12:00:00.000Z");
+export const CLOCK = parseUtcTimestamp("2026-09-20T12:00:01.000Z");
+export const PLAN_BYTE_CEILING = 16_777_216;
+
+export const NO_RESIDUE: LifecycleBookkeepingResidueV1 = {
+  retainedPaths: new Set(),
+  bootstrapParticipantIds: new Set(),
+};
+
+export const UNINSTALL_FACTS: LifecycleVariantFactsV1 = {
+  gitSync: null,
+  automationReconcile: null,
+  uninstallLaunchdEvidence: false,
+};
+
+export const LIFECYCLE_HOME_DIRECTORIES = [
+  "state",
+  "state/transactions",
+  "state/lifecycle-journals",
+  "state/git-effect-journals",
+  "state/launchd-effect-journals",
+  "staging",
+  "staging/transactions",
+  "staging/lifecycle",
+  "backups",
+  "backups/transactions",
+  "targets",
+] as const;
+
+export class SyntheticDeath extends Error {
+  constructor(boundary: string) {
+    super(`synthetic death at ${boundary}`);
+    this.name = "SyntheticDeath";
+  }
+}
+
+export class FixtureLockProvider implements TransactionLockProvider {
+  async acquire(path: string): Promise<TransactionLockHandle> {
+    await nodeFs.mkdir(dirname(path), { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(path, "", { mode: 0o600, flag: "a" });
+    return { release: (): Promise<void> => Promise.resolve() };
+  }
+}
+
+export function digest(bytes: Uint8Array): LowerHexSha256 {
+  return parseLowerHexSha256(createHash("sha256").update(bytes).digest("hex"));
+}
+
+export interface SyntheticLeaf {
+  readonly marker: string;
+}
+export interface SyntheticPush extends SyntheticLeaf {
+  readonly planHash: LowerHexSha256;
+}
+
+export type SyntheticPlan = LifecycleCoordinatorPlanCoreV1<
+  SyntheticLeaf,
+  SyntheticLeaf,
+  SyntheticLeaf,
+  SyntheticPush
+>;
+
+export function leafCodec<T extends SyntheticLeaf>(label: string): LifecycleValueCodec<T> {
+  return {
+    validate(value: unknown): T {
+      if (typeof value !== "object" || value === null || !("marker" in value)) {
+        throw new Error(`invalid synthetic ${label} leaf`);
+      }
+      return value as T;
+    },
+    encode: (value) => encodeCanonicalJson(value as unknown as CanonicalJsonValue),
+  };
+}
+
+export const LEAVES: LifecycleLeafCodecsV1<
+  SyntheticLeaf,
+  SyntheticLeaf,
+  SyntheticLeaf,
+  SyntheticPush,
+  SyntheticLeaf,
+  SyntheticLeaf,
+  SyntheticLeaf & {
+    readonly tableHashes: {
+      readonly observation: LowerHexSha256;
+      readonly mutationTemplate: LowerHexSha256;
+    };
+  }
+> = {
+  manifest: leafCodec("manifest"),
+  launchd: leafCodec("launchd"),
+  redactionKey: leafCodec("redactionKey"),
+  push: leafCodec<SyntheticPush>("push"),
+  pushPlanHash: (push) => push.planHash,
+  projection: leafCodec("projection"),
+  gitPreview: leafCodec("gitPreview"),
+  launchdPreview: leafCodec("launchdPreview"),
+  projectionSubsystem: () => "git",
+  launchdPreviewTableHashes: (preview) => preview.tableHashes,
+};
+
+export interface SyntheticLifecycleHomeV1 {
+  readonly created: string;
+  readonly home: CanonicalAbsolutePathV1;
+}
+
+/**
+ * Returns a per-file `createHome(label)` that mkdtemps a fresh `0700` home with the lifecycle
+ * subdirectories, registering its own `afterEach` cleanup the first time it is called.
+ */
+export function useSyntheticLifecycleHomes(): (label: string) => Promise<SyntheticLifecycleHomeV1> {
+  const homes: string[] = [];
+  afterEach(async () => {
+    for (const home of homes.splice(0)) {
+      await nodeFs.rm(home, { recursive: true, force: true });
+    }
+  });
+  return async (label: string): Promise<SyntheticLifecycleHomeV1> => {
+    const created = await nodeFs.mkdtemp(join(tmpdir(), `developer-os-${label}-`));
+    homes.push(created);
+    await nodeFs.chmod(created, 0o700);
+    for (const relative of LIFECYCLE_HOME_DIRECTORIES) {
+      await nodeFs.mkdir(join(created, relative));
+      await nodeFs.chmod(join(created, relative), 0o700);
+    }
+    return { created, home: parseCanonicalAbsolutePathText(created) };
+  };
+}
 
 export interface LifecycleRenameNoReplaceDoubleV1 {
   readonly publish: PublishBootstrapInitialJournalNoReplace;

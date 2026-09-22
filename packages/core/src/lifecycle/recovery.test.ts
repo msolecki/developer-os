@@ -1,33 +1,17 @@
-import { createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import * as nodeFs from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { EXIT_CODES } from "../result.js";
 import { TransactionExecutor } from "../transactions/executor.js";
 import { TransactionStore, encodeFoundationJournalJsonV1 } from "../transactions/store.js";
-import type {
-  TransactionJournalV1,
-  TransactionLockHandle,
-  TransactionLockProvider,
-} from "../transactions/types.js";
+import type { TransactionJournalV1 } from "../transactions/types.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
-import {
-  parseLowerHexSha256,
-  parseUInt64Decimal,
-  parseUtcTimestamp,
-  type LowerHexSha256,
-} from "../update/scalars.js";
+import { parseLowerHexSha256, parseUInt64Decimal } from "../update/scalars.js";
 import { reserveLifecycleIdBlock } from "./allocator.js";
-import type { LifecycleBookkeepingResidueV1 } from "./bookkeeping.js";
-import { encodeCanonicalJson, type CanonicalJsonValue } from "./canonical-json.js";
-import {
-  createLifecycleCodecs,
-  type LifecycleLeafCodecsV1,
-  type LifecycleValueCodec,
-} from "./codecs.js";
+import { createLifecycleCodecs } from "./codecs.js";
 import {
   LifecycleCoordinator,
   type LifecycleCoordinatorDependenciesV1,
@@ -35,7 +19,6 @@ import {
 } from "./coordinator.js";
 import { deriveLifecycleLedgerRoots, type LifecycleLedgerRootsV1 } from "./foundation-ledger.js";
 import { FoundationParticipantExecutor } from "./foundation-participant.js";
-import type { LifecycleVariantFactsV1 } from "./grammar.js";
 import {
   createNodeLifecycleGuardedFileSystem,
   type LifecycleGuardedFileSystemV1,
@@ -52,116 +35,28 @@ import { LifecycleRecoveryRefusalError, LifecycleRecoveryService } from "./recov
 import { encodeLifecycleIdAllocator } from "./records.js";
 import { LifecycleCoordinatorStore, maximumCoordinatorJournalBytes } from "./store.js";
 import {
+  CLOCK,
+  CREATED_AT,
   createInMemoryLifecycleGuardedFileSystem,
   createLinkUnlinkRenameNoReplace,
+  digest,
+  encoder,
+  FixtureLockProvider,
+  LEAVES,
+  NO_RESIDUE,
+  type SyntheticPlan,
+  UID,
+  UNINSTALL_FACTS,
+  useSyntheticLifecycleHomes,
 } from "./testing.js";
 import type {
   FoundationParticipantRefV1,
-  LifecycleCoordinatorPlanCoreV1,
   LifecycleCoordinatorStepV1,
 } from "./types.js";
 
-const UID = process.getuid?.() ?? 0;
 const NONCE = parseLowerHexSha256("6f".repeat(32));
-const CREATED_AT = parseUtcTimestamp("2026-09-20T12:00:00.000Z");
-const CLOCK = parseUtcTimestamp("2026-09-20T12:00:01.000Z");
-const encoder = new TextEncoder();
 
-const NO_RESIDUE: LifecycleBookkeepingResidueV1 = {
-  retainedPaths: new Set(),
-  bootstrapParticipantIds: new Set(),
-};
-
-const HOME_DIRECTORIES = [
-  "state",
-  "state/transactions",
-  "state/lifecycle-journals",
-  "state/git-effect-journals",
-  "state/launchd-effect-journals",
-  "staging",
-  "staging/transactions",
-  "staging/lifecycle",
-  "backups",
-  "backups/transactions",
-  "targets",
-] as const;
-
-class FixtureLockProvider implements TransactionLockProvider {
-  async acquire(path: string): Promise<TransactionLockHandle> {
-    await nodeFs.mkdir(dirname(path), { recursive: true, mode: 0o700 });
-    await nodeFs.writeFile(path, "", { mode: 0o600, flag: "a" });
-    return { release: (): Promise<void> => Promise.resolve() };
-  }
-}
-
-const homes: string[] = [];
-
-afterEach(async () => {
-  for (const home of homes.splice(0)) {
-    await nodeFs.rm(home, { recursive: true, force: true });
-  }
-});
-
-function digest(bytes: Uint8Array): LowerHexSha256 {
-  return parseLowerHexSha256(createHash("sha256").update(bytes).digest("hex"));
-}
-
-interface SyntheticLeaf {
-  readonly marker: string;
-}
-interface SyntheticPush extends SyntheticLeaf {
-  readonly planHash: LowerHexSha256;
-}
-type SyntheticPlan = LifecycleCoordinatorPlanCoreV1<
-  SyntheticLeaf,
-  SyntheticLeaf,
-  SyntheticLeaf,
-  SyntheticPush
->;
-
-function leafCodec<T extends SyntheticLeaf>(label: string): LifecycleValueCodec<T> {
-  return {
-    validate(value: unknown): T {
-      if (typeof value !== "object" || value === null || !("marker" in value)) {
-        throw new Error(`invalid synthetic ${label} leaf`);
-      }
-      return value as T;
-    },
-    encode: (value) => encodeCanonicalJson(value as unknown as CanonicalJsonValue),
-  };
-}
-
-const LEAVES: LifecycleLeafCodecsV1<
-  SyntheticLeaf,
-  SyntheticLeaf,
-  SyntheticLeaf,
-  SyntheticPush,
-  SyntheticLeaf,
-  SyntheticLeaf,
-  SyntheticLeaf & {
-    readonly tableHashes: {
-      readonly observation: LowerHexSha256;
-      readonly mutationTemplate: LowerHexSha256;
-    };
-  }
-> = {
-  manifest: leafCodec("manifest"),
-  launchd: leafCodec("launchd"),
-  redactionKey: leafCodec("redactionKey"),
-  push: leafCodec<SyntheticPush>("push"),
-  pushPlanHash: (push) => push.planHash,
-  projection: leafCodec("projection"),
-  gitPreview: leafCodec("gitPreview"),
-  launchdPreview: leafCodec("launchdPreview"),
-  projectionSubsystem: () => "git",
-  launchdPreviewTableHashes: (preview) => preview.tableHashes,
-};
-
-const UNINSTALL_FACTS: LifecycleVariantFactsV1 = {
-  gitSync: null,
-  automationReconcile: null,
-  uninstallLaunchdEvidence: false,
-};
+const createSyntheticLifecycleHome = useSyntheticLifecycleHomes();
 
 type Dependencies = LifecycleCoordinatorDependenciesV1<SyntheticPlan> & {
   readonly fs: LifecycleGuardedFileSystemV1;
@@ -192,14 +87,7 @@ async function recoveryWorld(
   label: string,
   options: { readonly publish?: boolean } = {},
 ): Promise<RecoveryWorldV1> {
-  const created = await nodeFs.mkdtemp(join(tmpdir(), `developer-os-${label}-`));
-  homes.push(created);
-  await nodeFs.chmod(created, 0o700);
-  for (const relative of HOME_DIRECTORIES) {
-    await nodeFs.mkdir(join(created, relative));
-    await nodeFs.chmod(join(created, relative), 0o700);
-  }
-  const home = parseCanonicalAbsolutePathText(created);
+  const { created, home } = await createSyntheticLifecycleHome(label);
   const roots = deriveLifecycleLedgerRoots(home);
   const publisher = createLinkUnlinkRenameNoReplace();
   const fs = createNodeLifecycleGuardedFileSystem({
@@ -665,6 +553,77 @@ describe("coordinator orphans", () => {
     );
     expect(await world.exists("state/lifecycle-journals/unknown.txt")).toBe(true);
     expect(await world.allocatorCounter()).toBe("1000");
+  }, 120_000);
+});
+
+describe("Foundation rewrite-temp orphans", () => {
+  /**
+   * §2.4 admits `rewrite_temp` removal only under the stable lock, once the final journal's
+   * identity still matches the scan that produced the orphan (Task 16 obligation 3). The
+   * fixture pins the scan's snapshot, then swaps the final journal's inode by unlinking and
+   * rewriting it at the same path before `removeOrphan`'s own lock-held `lstat`, so the
+   * comparison runs against a real TOCTOU inode swap rather than the code alone.
+   */
+  it("refuses to remove a rewrite-temp orphan once its final journal's inode changes under the lock", async () => {
+    const world = await recoveryWorld("recovery-rewrite-temp-swap", { publish: false });
+    const transactionId = parseAllocatedLifecycleId(
+      "tx",
+      formatAllocatedLifecycleId("tx", NONCE, 777n),
+      NONCE,
+    );
+    const journal: TransactionJournalV1 = {
+      schemaVersion: 1,
+      id: transactionId,
+      kind: "config_set",
+      phase: "finalized",
+      createdAt: CREATED_AT,
+      updatedAt: CLOCK,
+      mutations: [
+        {
+          targetPath: join(world.home, "targets", "rewrite-temp-swap.json"),
+          operation: "create",
+          expectedBeforeHash: null,
+          stagedRelativePath: "0.bin",
+        },
+      ],
+    };
+    const journalBytes = encodeFoundationJournalJsonV1(journal);
+    const journalPath = join(world.home, "state", "transactions", `${transactionId}.json`);
+    await nodeFs.writeFile(journalPath, journalBytes, { mode: 0o600 });
+    await nodeFs.writeFile(
+      join(world.home, "state", "transactions", `.${transactionId}.${randomUUID()}.json.tmp`),
+      journalBytes.slice(0, 20),
+      { mode: 0o600 },
+    );
+
+    const stale = await world.inspect();
+    expect(
+      stale.foundation.orphans.some(
+        (orphan) => orphan.kind === "rewrite_temp" && orphan.id === transactionId,
+      ),
+    ).toBe(true);
+
+    await nodeFs.rm(journalPath);
+    await nodeFs.writeFile(journalPath, journalBytes, { mode: 0o600 });
+
+    const service = new LifecycleRecoveryService<SyntheticPlan>({
+      ...world.dependencies(),
+      inspect: () => Promise.resolve(stale),
+    });
+
+    /**
+     * The pinned snapshot also carries other, unrelated Foundation orphans it legitimately
+     * removes on the way to this one, so a second `recover()` off the same stale snapshot
+     * would no longer find them — one call, one combined assertion.
+     */
+    await expect(
+      service.recover(world.global, { resumeUninstall: false }),
+    ).rejects.toMatchObject({
+      name: "LifecycleRecoveryRequiredError",
+      reason: "lifecycle_foundation_journal_identity",
+      code: EXIT_CODES.recoveryRequired,
+      paths: [journalPath],
+    });
   }, 120_000);
 });
 
