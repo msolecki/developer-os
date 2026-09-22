@@ -149,6 +149,7 @@ export type {
   BrainIndexUnavailable,
   BrainSearchOutcome,
   BrainServiceDependencies,
+  BrainSessionContextV1,
   BrainStatusReportV1,
 } from "./service.js";
 export {

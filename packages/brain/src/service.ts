@@ -40,6 +40,12 @@ export interface BrainServiceDependencies {
   readonly now: () => Date;
 }
 
+/** What a session-start hook injects: the vault map and the one project note, each possibly absent. */
+export interface BrainSessionContextV1 {
+  readonly vaultMap: string | null;
+  readonly projectNote: { readonly title: string; readonly text: string } | null;
+}
+
 export interface BrainStatusReportV1 {
   readonly schemaVersion: 1;
   readonly vaultRoot: string;
@@ -266,6 +272,34 @@ export class BrainService {
     }
 
     return search(index, query);
+  }
+
+  /**
+   * Index-first like `search`: without a readable index nothing is injected,
+   * not even a stale vault map. The only note opened is the one `project-note`
+   * whose title or alias equals the slug. Two matches are ambiguous and yield
+   * none. Writes nothing.
+   */
+  async sessionContext(projectSlug: string): Promise<BrainSessionContextV1> {
+    const paths = artifactPaths(this.deps.config);
+    const indexText = await this.readArtifact(paths.index);
+    const index = indexText === null ? null : parseIndexDocument(indexText);
+    if (index === null) return { vaultMap: null, projectNote: null };
+    const vaultMap = await this.readArtifact(paths.vaultMap);
+    const matches = index.notes.filter(
+      (note) =>
+        note.type === "project-note" &&
+        (note.title === projectSlug || note.aliases.includes(projectSlug)),
+    );
+    const match = matches.length === 1 ? matches[0] : undefined;
+    if (match === undefined) return { vaultMap, projectNote: null };
+
+    const path = join(this.deps.vaultRoot, match.path);
+    await this.deps.assertReadable(path);
+    return {
+      vaultMap,
+      projectNote: { title: match.title, text: await this.deps.readFile(path) },
+    };
   }
 
   /** Discovery counts plus the adoption findings, changing nothing. */

@@ -207,6 +207,17 @@ describe("runHookMode", () => {
     expect(io.err).toStrictEqual([]);
   });
 
+  it("applies the handler's redactor to a context outcome instead of the ephemeral one", async () => {
+    stash("inject");
+    register(
+      "inject",
+      returning({ kind: "context", text: "synthetic context", redact: (text) => text.replace("synthetic", "[handler]") }),
+    );
+    const io = memoryIo(PAYLOADS.inject);
+    expect(await runHookMode(argvFor("inject"), io, throwingFactory, environment)).toBe(0);
+    expect(io.out).toStrictEqual(["[handler] context"]);
+  });
+
   it.each([
     [["guard", "command", "--vendor", "bogus"], 2],
     [["guard", "prompt", "--vendor", "bogus"], 0],

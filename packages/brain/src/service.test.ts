@@ -388,3 +388,58 @@ describe("BrainService.status", () => {
     expect(report.indexPresent).toBe(true);
   });
 });
+
+describe("BrainService.sessionContext", () => {
+  const PROJECT_VAULT = {
+    ...VAULT,
+    "content/PROJECTS/os.md": note(
+      { title: "developer-os", type: "project-note", tags: "[project]", aliases: "[dos]" },
+      "Project body.\n",
+    ),
+  };
+
+  async function seeded(files: Record<string, string>): Promise<Harness> {
+    const fresh = await new BrainService(harness(files).deps).reindex();
+    return harness({ ...files, ...fresh.files });
+  }
+
+  it("returns the vault map bytes and the one project note whose title is the slug", async () => {
+    const vault = await seeded(PROJECT_VAULT);
+    const fresh = await new BrainService(harness(PROJECT_VAULT).deps).reindex();
+    const context = await new BrainService(vault.deps).sessionContext("developer-os");
+    expect(context.vaultMap).toBe(fresh.files[PATHS.vaultMap]);
+    expect(context.projectNote).toStrictEqual({
+      title: "developer-os",
+      text: PROJECT_VAULT["content/PROJECTS/os.md"],
+    });
+  });
+
+  it("matches a project note by alias", async () => {
+    const vault = await seeded(PROJECT_VAULT);
+    const context = await new BrainService(vault.deps).sessionContext("dos");
+    expect(context.projectNote?.title).toBe("developer-os");
+  });
+
+  it("injects no note when two project notes match", async () => {
+    const vault = await seeded({
+      ...PROJECT_VAULT,
+      "content/PROJECTS/other.md": note(
+        { title: "Other", type: "project-note", tags: "[project]", aliases: "[developer-os]" },
+        "Other body.\n",
+      ),
+    });
+    const context = await new BrainService(vault.deps).sessionContext("developer-os");
+    expect(context.vaultMap).not.toBeNull();
+    expect(context.projectNote).toBeNull();
+  });
+
+  it("returns a null vault map and no note when the index is missing", async () => {
+    const fresh = await new BrainService(harness(PROJECT_VAULT).deps).reindex();
+    const mapOnly = fresh.files[PATHS.vaultMap];
+    expect(mapOnly).toBeDefined();
+    const { deps, reads } = harness({ ...PROJECT_VAULT, [PATHS.vaultMap]: mapOnly ?? "" });
+    const context = await new BrainService(deps).sessionContext("developer-os");
+    expect(context).toStrictEqual({ vaultMap: null, projectNote: null });
+    expect(reads.filter((path) => path.endsWith("os.md"))).toStrictEqual([]);
+  });
+});

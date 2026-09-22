@@ -6,6 +6,7 @@ import type { HookVendor, HookVerb } from "./argv.js";
 import { guardCommand } from "./guards/command.js";
 import { guardCommit } from "./guards/commit.js";
 import { guardPath } from "./guards/path.js";
+import { injectBrainContext } from "./inject.js";
 import type { HookOutcome } from "./outcome.js";
 import type { HookPayloadV1 } from "./payload.js";
 import { guardEdit } from "./guards/edit.js";
@@ -41,4 +42,5 @@ export const HOOK_HANDLERS: Partial<Record<HookVerb, HookVerbHandler>> = {
   format: guardFormat,
   prompt: guardPrompt,
   edit: guardEdit,
+  inject: injectBrainContext,
 };

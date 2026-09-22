@@ -5,7 +5,7 @@ import type { HookVendor } from "./argv.js";
 
 export type HookOutcome =
   | { readonly kind: "allow"; readonly note?: string }
-  | { readonly kind: "context"; readonly text: string }
+  | { readonly kind: "context"; readonly text: string; readonly redact?: (text: string) => string }
   | { readonly kind: "block"; readonly ruleId: string; readonly detail: string }
   | { readonly kind: "advise"; readonly ruleId: string; readonly detail: string };
 
@@ -64,7 +64,7 @@ export function writeHookOutcome(
       if (outcome.note !== undefined) io.stderr(line(`developer-os: ${outcome.note}`, redact, MAX_HOOK_REASON_BYTES));
       return 0;
     case "context":
-      io.stdout(block(outcome.text, redact, MAX_CONTEXT_BYTES));
+      io.stdout(block(outcome.text, outcome.redact ?? redact, MAX_CONTEXT_BYTES));
       return 0;
     case "block":
     case "advise":

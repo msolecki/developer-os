@@ -8,7 +8,6 @@ import {
   detectDrift,
   EXIT_CODES,
   failure,
-  loadConfig,
   isUnsignedLocalTrust,
   ManifestStateError,
   success,
@@ -41,6 +40,9 @@ import {
 import type { CliContext } from "../context.js";
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
+import { isMissingEntry, readConfigFile } from "../config-file.js";
+
+export { ConfigurationError, readConfigFile } from "../config-file.js";
 
 const AGENT_NAMES: readonly AgentName[] = ["claude", "codex"];
 const JOURNAL_ID = /^[A-Za-z0-9._-]+$/;
@@ -137,15 +139,6 @@ const EXIT_PRECEDENCE: readonly ExitCode[] = [
  */
 const REDACTION_KEY_RECOVERY = "developer-os init";
 
-function isMissingEntry(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error.code === "ENOENT" || error.code === "ENOTDIR")
-  );
-}
-
 function pass(id: string, message: string, paths: readonly string[]): Finding {
   return {
     check: { id, status: "pass", message, paths },
@@ -199,52 +192,6 @@ export async function isDirectory(
   } catch (error) {
     if (isMissingEntry(error)) return null;
     throw error;
-  }
-}
-
-export class ConfigurationError extends Error {
-  readonly code = EXIT_CODES.invalidInput;
-
-  constructor() {
-    super("the configuration file is not valid Developer OS configuration");
-    this.name = "ConfigurationError";
-  }
-}
-
-/**
- * Reads configuration through the protected-path policy rather than a bare
- * `readFile`. The policy canonicalizes first and opens the canonical path with
- * `O_NOFOLLOW` plus a `dev`/`ino` re-check, so what refuses a `config.toml`
- * symlinked at `~/.aws/credentials` is the protected-path denylist, not
- * `O_NOFOLLOW` — a symlink at an unprotected file is still followed and read.
- *
- * The parser's own message never escapes: `smol-toml` embeds three raw source
- * lines in `TomlError.message`, so propagating it would print the contents of
- * whatever file was read into `status`, `doctor`, and their JSON output.
- * Redaction is a heuristic and must not be the only thing standing there.
- */
-export async function readConfigFile(
-  context: CliContext,
-  configFile: string,
-): Promise<DeveloperOsConfigV1 | null> {
-  /**
-   * Absence is checked here rather than by catching: the guarded reader reports
-   * a missing file as a security refusal, which is the right answer for a read
-   * but the wrong one for "this machine has never been initialized".
-   */
-  try {
-    await context.fs.lstat(configFile);
-  } catch (error) {
-    if (isMissingEntry(error)) return null;
-    throw error;
-  }
-
-  const serialized = await context.guards.readText(configFile);
-
-  try {
-    return loadConfig(serialized);
-  } catch {
-    throw new ConfigurationError();
   }
 }
 
