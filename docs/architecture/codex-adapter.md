@@ -6,14 +6,16 @@ about Codex leaks into any other package.
 
 This note absorbed the surviving design record on 2026-08-24, when the completed subsystem spec
 was deleted. It includes the four amendments forced by first contact with a real binary (§7) and
-the DOS-P6 correction: capture is agent-authored, hooks and the `developer-os run codex` wrapper
-are declined, and the six unused capability keys resolve to `not-used`. The implementation plan
-was deleted when its last step closed; git history is the archive for both.
+the DOS-P6 correction: capture is agent-authored, and automatic capture and the
+`developer-os run codex` wrapper are declined. A13 (2026-09-22) shipped the eleven non-capture
+hooks for Claude and designed the Codex half, which is still pending (§5, `hooks.md` §3). Four
+capability keys, not six, resolve to `not-used`. The implementation plan was deleted when its last
+step closed; git history is the archive for both.
 
 **Read `docs/architecture/claude-adapter.md` beside this.** The two adapters are peers with one
 consumer, and half of what is true here is true there for the same reason. Where a decision now
-covers both — no hooks, `plugin_hooks` is `not-used`, one skill body, one capability vocabulary — this
-note says so rather than restating it as a coincidence.
+covers both — capture hooks declined, hooks observed only through firing records, one skill body,
+one capability vocabulary — this note says so rather than restating it as a coincidence.
 
 ## 1. What it is
 
@@ -39,8 +41,12 @@ note says so rather than restating it as a coincidence.
 
 ## 2. What it cannot do, on purpose
 
-1. **It ships no hooks.** `hooks/hooks.json` is not emitted. §5 carries why, and the decision now
-   covers both adapters rather than either alone.
+1. **It ships no hooks yet, and it will never ship a capture hook or write hook trust.** The
+   A13 design renders the manifest's `"hooks"` into the install tree only, never into the
+   checked-in `plugins/codex/` tree, once plan Task 15 fills the Codex rows from plan Task 1's
+   observations. Until then `buildPluginTree` emits no hooks file and the plugin test still asserts
+   "ships no hooks file, no AGENTS.md, and no absolute path". Trust stays manual (D7, item 6), and
+   the capture hooks stay declined in both adapters (§5).
 2. **It never writes `AGENTS.md`, and never `AGENTS.override.md` at any scope.** The second is the
    important one: in the global scope Codex reads `AGENTS.override.md` *instead of* `AGENTS.md`, so
    writing one would silently suppress the user's own instructions. It is the single most
@@ -86,24 +92,31 @@ note says so rather than restating it as a coincidence.
 ## 3. The capability model — two gates, three values, and one observable key
 
 `yes` requires a documented version floor to permit the capability **and** a probe to observe it.
-A probe that could not run yields `unknown`. DOS-P6 removed `wrapper-required`: `plugin_hooks`,
-`session_start_injection`, `session_end_capture`, `pre_compact_backup`, `subagents` and
-`durable_project_guidance` are unused by this product and resolve to `not-used` before either gate.
-Both adapters share this vocabulary and their key lists are asserted equal.
+A probe that could not run yields `unknown`. DOS-P6 removed `wrapper-required`:
+`session_end_capture`, `pre_compact_backup`, `subagents` and `durable_project_guidance` are unused
+by this product and resolve to `not-used` before either gate (`CODEX_NOT_USED_KEYS`). Both adapters
+share this vocabulary and their key lists are asserted equal.
 
 **The probe is genuinely better here.** `codex plugin list --json` settles three questions in one
 structured call — installed, enabled, and whether the resolved path is the tree we own — where
 Claude needed a separate settings read to distinguish presence from enablement.
 
-**Only `skills` is observable.** No probe reaches a lifecycle event, and the six unused keys short
-circuit to `not-used`. DOS-P6 connected both probes to `developer-os doctor --probe`, so the
+**Only `skills` is observable by the probe.** No probe reaches a lifecycle event, and the four
+unused keys short circuit to `not-used`. DOS-P6 connected both probes to `developer-os doctor --probe`, so the
 two-gate machinery now has a production caller; without `--probe`, doctor reports the bounded
 unprobed state rather than pretending to have observed a vendor capability.
 
-**`plugin_hooks` is `not-used` in both adapters.** Neither adapter ships a hooks file, and DOS-P6
-declined automatic capture after proving a session-end hook cannot supply the required agent-authored
-text without reading `transcript_path`. Removing a key from either `NOT_USED` list requires, in the
-same change, the artifact or behaviour it describes and a test that observed it working.
+**`plugin_hooks` and `session_start_injection` are observed through firing records, in both
+adapters.** A13 moved both keys out of both `NOT_USED` lists in one commit. A hook that fires
+best-effort refreshes a record under `<product-home>/state/hooks/`, and `doctor` resolves
+`plugin_hooks` from any Codex record and `session_start_injection` from the Codex session-start
+record. On Codex a record is also the only evidence that the user granted trust, because the product
+never reads the trust store (§2.3). No Codex hook is rendered yet, and `HOOK_EVENT_OF.codex` is
+`null`, so both keys stay `unknown` until Task 15 lands and a trusted hook fires. A user who never
+grants trust keeps `unknown` forever, which is correct. The two capture keys stay `not-used`: DOS-P6
+proved a session-end hook cannot supply the required agent-authored text without reading
+`transcript_path`. Removing a key from either `NOT_USED` list still requires, in the same change,
+the artifact or behaviour it describes and a test that observes it working.
 
 **The two key lists must stay identical, and a test now says so.** `CODEX_CAPABILITY_KEYS` and
 `CLAUDE_CAPABILITY_KEYS` are spelled out separately because the two packages may never import one
@@ -181,20 +194,41 @@ plugin-root tree a compile-time error at `proposeCodexInstall`, while the runtim
 refuses a brand erased or forged across a JavaScript boundary. The façade binds
 `renderInstallTree`, not `renderPlugin`. This closes `BACKLOG.md` NEW-13.
 
-## 5. `hooks/hooks.json` is not shipped — one decision covering both adapters
+## 5. Hooks — non-capture hooks designed for both adapters, capture hooks declined in both
 
-The first no-hooks decision was ratified on 2026-08-12. DOS-P6 then settled the product decision on
-2026-08-13: **hooks are declined, not deferred**, in both adapters.
+**The A13 design (2026-09-22, D47).** The same eight verbs the Claude adapter ships
+(`claude-adapter.md` §5) run on Codex from the manifest's `"hooks"`, rendered into the install tree
+only, with commands built by core's `renderHookCommand` so both vendors carry the same bytes. The
+fail modes are the same `HOOK_FAIL_MODE` table (Q1-A): `guard command`, `guard path` and
+`guard commit` fail closed, and the other five fail open. The full contract is `hooks.md` §3.
 
-The blocker was not an executable bit; a `"type": "command"` hook accepts a command string. The
-capture workflow requires agent-authored observation text, while a session-end hook can supply no
-such text without opening `transcript_path`, which this product refuses on every code path. A hook
-would therefore have nothing faithful to capture. `developer-os run codex` was declined with it.
+**None of it is on Codex yet.** Plan Task 15 fills the Codex rows, the manifest's `"hooks"` and the
+Codex outcome map from plan Task 1's observations. Until then:
 
-Tests assert that no hooks ship and that the affected capability keys resolve to `not-used`.
-Codex's managed-hook trust bypass remains refused; if a future design reintroduces hooks, the founder
-must grant trust manually. That future work requires an explicit amendment and an observed test; it
-is not outstanding DOS-P6 work.
+- the Codex outcome map is `null`, and a `--vendor codex` hook invocation exits 0 with one stderr
+  line;
+- `doctor`'s `hooks` check reports `codex=not-rendered`;
+- the plugin test still asserts that no hooks file ships.
+
+Task 1 still has to observe the Codex event matchers, whether a file edit arrives as a path or a
+patch body (spec §3), the exit semantics, and whether the trust hash covers the command string. Any
+cell it cannot fill becomes `unsupported (<reason>)`.
+
+**Trust is manual, and the product never touches it (D7).** The product never writes the trust
+store or `config.toml`, and the managed-hook trust bypass stays refused (§2.6). Once Codex hooks are
+rendered, `init` and `doctor` must print the fixed manual step: approve each `developer-os` hook in
+Codex. That line does not exist yet. A firing record is the only evidence that trust was granted
+(§3). Uninstall's existing order, unregister and then delete the tree (§4), removes the hooks; trust
+entries left in the user's config file are the user's to remove. `external-hooks` reports
+`codex=unknown`, because this adapter never reads `config.toml` (§2.3, Q2-A).
+
+**What stays declined in both adapters.** The first no-hooks decision was ratified on 2026-08-12,
+and DOS-P6 declined hooks on 2026-08-13. That reason still holds for the capture hooks. The
+capture workflow requires agent-authored observation text, and a session-end hook can supply no such
+text without opening `transcript_path`, which this product refuses on every code path. A capture
+hook would therefore have nothing faithful to capture. `session_end_capture` and
+`pre_compact_backup` stay `not-used`, Codex `pre_compact` stays unused, and `developer-os run codex`
+stays declined.
 
 ## 6. Rendering — the skill body is shared
 
@@ -376,14 +410,14 @@ The completed design's table, updated with the implemented DOS-P6 outcome.
 | discovery | in-place skills-directory plugin | local marketplace, `codex plugin add` |
 | who writes vendor config | nobody | Codex's own CLI, delegated |
 | install root | `~/.claude/skills/developer-os/` | `<product-home>/codex/`, distinct plugin-root and marketplace-root artifact types (§4) |
-| hooks shipped | **no — neither adapter ships one (§5)** | **no** |
-| hooks active on install | n/a — none ship | n/a — none ship; a trust gate would apply if they did |
+| hooks shipped | install tree only; render built, install binding pending (plan Task 14) | not yet (plan Task 15) |
+| hooks active on install | not yet observed (plan Task 1) | only after the user grants trust manually |
 | enablement source | settings read | `codex plugin list --json`, `installed[].enabled` |
 | scope enforcement | `--tools ""` — an empty tool set, not a grant list (since 349511e) | `-s <sandbox>` plus `--add-dir` |
 | structured result | `--output-format json` | `--json` (JSONL, reduced — §7) plus `--output-schema` |
 | probe cost | **mutating** — writes `~/.claude.json` and a backup | read-only structured query |
 | probe settles | `skills` only | `skills` only |
-| `plugin_hooks` | `not-used` | `not-used` |
+| `plugin_hooks` | from firing records; `unknown` until one exists | from firing records; `unknown` until one exists |
 | manifest | `{ name }` | `name`, `version`, `description`, `skills` |
 | skill body | `renderSkillBody`, shared | `renderSkillBody`, shared |
 | direct invocation `maxTurns` | bounded and enforced | no field; the shared `agent.prompt` parser refuses the key (§7) |

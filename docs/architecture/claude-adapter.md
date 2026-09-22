@@ -5,10 +5,11 @@
 leaks into any other package.
 
 This note absorbed the surviving design record on 2026-08-24, when the completed subsystem spec
-was deleted. It also carries the DOS-P6 correction: capture is agent-authored, hooks and the
-`developer-os run claude` wrapper are declined, and the six unused capability keys resolve to
-`not-used`. The implementation plan was deleted when its last step closed; git history is the
-archive for both.
+was deleted. It also carries the DOS-P6 correction: capture is agent-authored, and automatic
+capture and the `developer-os run claude` wrapper are declined. A13 (2026-09-22) reversed one part
+of that correction: the eleven non-capture hooks ship as calls to the installed `developer-os`
+entrypoint (§5, `hooks.md` §3), and four capability keys, not six, resolve to `not-used`. The
+implementation plan was deleted when its last step closed; git history is the archive for both.
 
 ## 1. What it is
 
@@ -32,8 +33,13 @@ archive for both.
 
 ## 2. What it cannot do, on purpose
 
-1. **It ships no hooks.** `hooks/hooks.json` is not emitted; §5 of this note and `BACKLOG.md` §8
-   carry why, and the founder ratified the amendment on 2026-08-11.
+1. **Its hooks exist only in the install tree, and none captures.** `buildPluginTree` emits no
+   `hooks/hooks.json`, so the checked-in `plugins/claude/` tree stays hook-free and machine-path-free.
+   `withClaudeHooks` adds the file to the tree the local-build install writes, one entry per
+   `CLAUDE_HOOK_ROWS` row, each command naming that install's absolute entrypoint. The hooks never
+   capture: the session-end and pre-compact hooks stay declined (§5). Binding the render into A12's
+   install is plan Task 14 and has not landed, and Claude firing from a skills-directory plugin is
+   not yet observed (`hooks.md` §1).
 2. **It writes to exactly one directory** — `~/.claude/skills/developer-os/`. Both the renderer
    and the install proposal refuse a path that would escape it, at both ends, and the integration
    test asserts no byte lands outside a temporary `HOME`.
@@ -54,8 +60,9 @@ archive for both.
    A12 does share with the user, `H/.claude/CLAUDE.md`, is merged by the marked block's three-way
    table (spec §5.2), and its conflict is reported through `buildConflictEvidence`'s block arm — §9
    residual 8.
-4. **It never opens `transcript_path`**, on any code path. No hook payload is read at all,
-   because no hook ships.
+4. **It never opens `transcript_path`**, on any code path. The hook verbs read their payload
+   through `decodeHookPayload`, an allow-list of named fields that never iterates the payload, and
+   `tests/repository/transcript-path.test.ts` stays the gate.
 5. **It executes no workflow verb.** A rendered skill is guidance; the effects it names are
    `developer-os` commands. DOS-P6 shipped the capture, ingest, review and Brain commands; only
    `agent.prompt` still lacks a step executor — see §8.
@@ -66,9 +73,17 @@ archive for both.
 ## 3. The capability model — two gates, three values
 
 `yes` requires a documented version floor to permit the capability **and** a probe to observe it.
-A probe that could not run yields `unknown`. DOS-P6 removed `wrapper-required`: `plugin_hooks`,
-`session_start_injection`, `session_end_capture`, `pre_compact_backup`, `subagents` and
-`durable_project_guidance` are unused by this product and resolve to `not-used` before either gate.
+A probe that could not run yields `unknown`. DOS-P6 removed `wrapper-required`:
+`session_end_capture`, `pre_compact_backup`, `subagents` and `durable_project_guidance` are unused
+by this product and resolve to `not-used` before either gate (`CLAUDE_NOT_USED_KEYS`).
+
+**`plugin_hooks` and `session_start_injection` left that list with A13, and a firing record is
+their only observation.** `plugin_hooks` is observed by any Claude record under
+`<product-home>/state/hooks/`, and `session_start_injection` by the `SessionStart` record. Both
+`doctor` and `doctor --probe` read those records, so the two keys can be `yes` without a probe run.
+Neither `claude plugin validate` nor a listing counts: those prove the hooks were loaded, not that
+they fired (NEW-65). Without a record both keys stay `unknown`, never `no`. Their documented floors
+stay `null` until Task 1 observes a version (`hooks.md` §3.6).
 
 **The probe settles exactly one key, and that is the second correction the model needed.**
 `claude plugin validate` used to settle `skills`, `plugin_hooks` and `subagents` on the strength
@@ -120,20 +135,42 @@ Uninstall is removing the directory. There is no marketplace registration to und
 refuses if any file under it has drifted, because a drifted file is a user edit and Foundation
 never overwrites one.
 
-## 5. `hooks/hooks.json` is not shipped, and the reason is not the obvious one
+## 5. `hooks/hooks.json` ships in the install tree only; capture hooks stay declined
 
-The tree once declared three hooks whose commands pointed at missing scripts. Removing those
-dangling claims was ratified on 2026-08-11. DOS-P6 then settled the product decision on 2026-08-13:
-**hooks are declined, not deferred**.
+**What ships (A13, 2026-09-22, D47).** Eight verbs cover the eleven non-transcript legacy hooks:
+`brain status --inject` on `SessionStart`, `guard prompt` on `UserPromptSubmit`, `guard command`,
+`guard commit` and `guard path` on `PreToolUse`, `guard format` and `guard edit` on `PostToolUse`,
+and `guard stop` on `Stop`. `CLAUDE_HOOK_ROWS` is the one table of events, matchers and declared
+timeouts, and `renderClaudeHooks` turns it into `hooks/hooks.json` through core's
+`renderHookCommand`. The file exists only in the install tree, as a manifest row like every other
+file there. A user edit is drift, and uninstall removes it with the directory (§4). The product
+never writes `~/.claude/settings.json` (Q4-A).
 
-The blocker was not an executable bit; a `type: "command"` hook accepts a command string. The
-capture workflow requires agent-authored observation text, while a session-end hook can supply no
-such text without opening `transcript_path`, which this product refuses on every code path. A hook
-would therefore have nothing faithful to capture. `developer-os run claude` was declined with it.
+- **Fail modes (Q1-A).** `guard command`, `guard path` and `guard commit` fail closed: a malformed
+  or oversized payload, an internal error or a refused argv blocks the call. The other five fail
+  open, with `allow` and one stderr line. `HOOK_FAIL_MODE` is the table.
+- **Firing records (Q3-A).** After its outcome is written, a hook best-effort refreshes one record
+  under `<product-home>/state/hooks/`. §3 reads those records.
+- **`doctor`.** `hooks` reports the installed verbs and each one's last firing age. `external-hooks`
+  reports the user's own Claude hook entries as `event → count`, never as a command string.
 
-Tests assert that no hooks ship and that the affected capability keys resolve to `not-used`.
-Reopening the decision requires a new source of capture content, an explicit amendment, and a test
-that observes the new mechanism working; it is not outstanding DOS-P6 work.
+**Not yet true.** The render has no production caller until plan Task 14 binds it into A12's
+local-build install. Nobody has observed a skills-directory plugin's `hooks/hooks.json` firing (plan
+Task 1). If Task 1 does not observe it, Q4-A applies: Claude hooks become `unsupported` and the
+founder decides. The full contract, the residuals and the pending items are in `hooks.md` §3.
+
+**What stays declined, and why.** The tree once declared three hooks whose commands pointed at
+missing scripts. Removing those dangling claims was ratified on 2026-08-11, and DOS-P6 declined
+hooks on 2026-08-13. That reason still holds for the two capture hooks. The capture workflow requires
+agent-authored observation text, and a session-end or pre-compact hook can supply no such text
+without opening `transcript_path`, which this product refuses on every code path. A capture hook
+would therefore have nothing faithful to capture. `session_end_capture` and `pre_compact_backup`
+stay `not-used`, no hook verb writes to quarantine, the vault or a transaction, and
+`developer-os run claude` stays declined. Reopening capture still requires a new source of capture
+content, an explicit amendment, and a test that observes the new mechanism working.
+
+`plugin.test.ts` pins the split: "keeps hooks out of the checked-in tree and puts them only in the
+install tree".
 
 ## 6. Rendering
 
@@ -225,7 +262,8 @@ capture cannot faithfully obtain agent-authored observation text without reading
 
 ## 9. Known residuals, each with an owner
 
-1. **CLOSED by DOS-P6: hooks are declined** — §5. Their absence is the v1 contract, not a residual.
+1. **CLOSED by DOS-P6: capture hooks are declined** — §5. A13 later shipped the eleven
+   non-capture hooks; their pending items and residuals live in `hooks.md` §3.
 2. **CLOSED by DOS-P6: `developer-os run claude` is declined.** The affected capabilities report
    `not-used`, not recovery advice for a wrapper that does not exist.
 3. **CLOSED by DOS-P6: the capture and ingest handlers ship.** `agent.prompt` remains the one
