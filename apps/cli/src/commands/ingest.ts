@@ -34,6 +34,7 @@ import {
 import type {
   BrainConfigV1,
   CaptureEnvelopeV1,
+  CaptureNoteTargetV1,
   CaptureStatus,
   IndexExcerptEntryV1,
   IngestValidationFinding,
@@ -144,6 +145,8 @@ interface RefusedCaptureV1 {
    * says `staging` while the bytes on disk say `ingested`.
    */
   readonly leftAt: CaptureLeftAt;
+  /** `"note_changed_since_capture"` for a note capture whose destination moved on; `null` otherwise. */
+  readonly reason: NoteChangedReason | null;
 }
 
 type CaptureOutcome =
@@ -155,8 +158,10 @@ export interface IngestResultV1 {
   /**
    * The vendor that produced every proposal in this run, so a run is
    * attributable without re-deriving which agent was installed at the time.
+   * `null` when no plain capture was selected: a note capture is applied
+   * verbatim, so no vendor was resolved.
    */
-  readonly agent: AgentName;
+  readonly agent: AgentName | null;
   /** The captures this invocation selected, in `captureId` order. */
   readonly order: readonly string[];
   /**
@@ -292,6 +297,14 @@ const RETRY_LATER =
 const UNTOUCHED_RECOVERY =
   "a capture reported as refused wrote nothing and its status is unchanged, so the next run tries it again while it is accepted; to stop retrying one, developer-os review --id <id> --decision reject";
 
+/**
+ * A note capture refused as `note_changed_since_capture` is also left untouched, but
+ * `UNTOUCHED_RECOVERY`'s "the next run tries it again" is false for it: the bound hash never
+ * changes, so every rerun refuses the same way (spec §3.4).
+ */
+const NOTE_CHANGED_RECOVERY =
+  "a capture refused as note_changed_since_capture was written against a note that has changed since, and running ingest again refuses it the same way: developer-os review --id <id> --decision reject, then run the workflow again against the current note";
+
 const PARTLY_APPLIED_RECOVERY =
   "a capture reported as partly applied is at staging with the notes named on its line already in the vault, and ingest never selects staging: read those notes, then set the status by hand — ingested if they are what you wanted, or accepted after removing them to try the capture again";
 
@@ -338,8 +351,11 @@ const INCOMPLETE_TRANSACTION_RECOVERY =
  */
 function refusedRecovery(refused: readonly RefusedCaptureV1[]): string {
   const lines: string[] = [];
-  if (refused.some((refusal) => refusal.leftAt === "untouched")) {
+  if (refused.some((refusal) => refusal.leftAt === "untouched" && refusal.reason === null)) {
     lines.push(UNTOUCHED_RECOVERY);
+  }
+  if (refused.some((refusal) => refusal.reason !== null)) {
+    lines.push(NOTE_CHANGED_RECOVERY);
   }
   /**
    * `leftAt` as well as the notes, because a capture whose notes landed **and**
@@ -411,6 +427,33 @@ class IngestPreconditionRefusal extends IngestRefusal {
   ) {
     super(code, message, paths, recovery);
     this.name = "IngestPreconditionRefusal";
+  }
+}
+
+type NoteChangedReason = "note_changed_since_capture";
+
+/**
+ * A note capture whose destination no longer matches what `capture --note` bound.
+ *
+ * **Not an `IngestPreconditionRefusal`**, although it is a precondition: that class skips
+ * the rollback, and this one is also raised at apply time, after the staging write, where
+ * skipping the rollback would strand the capture at `staging`. Raised before staging, the
+ * rollback is a no-op because `staged` is still null.
+ *
+ * The recovery never offers "run ingest again": the bound hash cannot change, so a rerun
+ * fails identically forever.
+ */
+class NoteChangedSinceCaptureRefusal extends IngestRefusal {
+  readonly reason: NoteChangedReason = "note_changed_since_capture";
+
+  constructor(captureId: string, notePath: string) {
+    super(
+      EXIT_CODES.decisionRequired,
+      "the note this capture was written against changed after the capture was taken, so it was not applied",
+      [notePath],
+      `developer-os review --id ${captureId} --decision reject, then run the workflow again against the current note`,
+    );
+    this.name = "NoteChangedSinceCaptureRefusal";
   }
 }
 
@@ -562,9 +605,15 @@ async function captureFileNames(
   }
 }
 
+interface SelectedCapture {
+  readonly fileName: string;
+  /** `false` for a note capture, which is applied verbatim and needs no vendor. */
+  readonly plain: boolean;
+}
+
 interface Selection {
-  /** File names, in `captureId` order, bounded by `--limit`. */
-  readonly accepted: readonly string[];
+  /** In `captureId` order, bounded by `--limit`. */
+  readonly accepted: readonly SelectedCapture[];
   /** Captures whose own envelope could not be read, reported and not processed. */
   readonly unreadable: readonly IngestedCaptureV1[];
   readonly warnings: readonly string[];
@@ -590,7 +639,7 @@ async function selectCaptures(
   redact: Redactor,
   limit: number | null,
 ): Promise<Selection> {
-  const accepted: string[] = [];
+  const accepted: SelectedCapture[] = [];
   const unreadable: IngestedCaptureV1[] = [];
   const warnings: string[] = [];
 
@@ -607,7 +656,7 @@ async function selectCaptures(
     }
     if (outcome.envelope.status !== "accepted") continue;
     if (limit !== null && accepted.length >= limit) continue;
-    accepted.push(fileName);
+    accepted.push({ fileName, plain: outcome.envelope.note === null });
   }
 
   return { accepted, unreadable, warnings };
@@ -1101,6 +1150,10 @@ async function exists(context: CliContext, path: string): Promise<boolean> {
  * existing notes. The refusal is raised before the transaction so the user meets
  * a sentence about their own vault rather than a `TransactionPlanError`.
  *
+ * **The one exception is a note capture (spec §3.4)**, where a person reviewed the exact
+ * bytes: its bound destination is a `replace` carrying the capture-time hash as
+ * `expectedBeforeHash`, or a `create` that refuses as `note_changed_since_capture`.
+ *
  * **No `validateChangePlan`**, for the reason a capture skips it: a note is the
  * user's own content, edited in Obsidian by design, so recording one as a
  * managed artifact would report every legitimate edit as drift and would make a
@@ -1114,6 +1167,11 @@ async function applyNotes(
   context: CliContext,
   contentRoot: string,
   writes: readonly PlannedNoteWriteV1[],
+  /**
+   * The note a note capture is bound to, with that capture's id for the refusal; `null` for a
+   * plain capture, whose writes stay create-only.
+   */
+  noteTarget: { readonly note: CaptureNoteTargetV1; readonly captureId: string } | null,
 ): Promise<ApplyOutcome> {
   const mutations: PlannedFileMutation[] = [];
   /** Each mutation's canonical target and desired digest beside its note name. */
@@ -1142,7 +1200,24 @@ async function applyNotes(
     await context.fs.mkdir(dirname(target), { recursive: true, mode: 0o700 });
 
     const canonical = await context.guards.canonicalize(target);
+    const bound = noteTarget !== null && write.path === noteTarget.note.path ? noteTarget : null;
+    const beforeSha256 = bound?.note.beforeSha256 ?? null;
+    if (bound !== null && beforeSha256 !== null) {
+      mutations.push({
+        targetPath: canonical,
+        operation: "replace",
+        content: write.bytes,
+        expectedBeforeHash: beforeSha256,
+      });
+      planned.push({
+        path: write.path,
+        target: canonical,
+        expectedHash: createHash("sha256").update(write.bytes).digest("hex"),
+      });
+      continue;
+    }
     if (await exists(context, canonical)) {
+      if (bound !== null) throw new NoteChangedSinceCaptureRefusal(bound.captureId, write.path);
       throw new IngestRefusal(
         EXIT_CODES.operationalFailure,
         "the proposal names a path that already holds a file; ingest creates notes and never replaces one",
@@ -1192,6 +1267,17 @@ async function applyNotes(
       mutations,
     });
   } catch (error) {
+    /**
+     * A note capture's bound hash (or its absent destination) failed the executor's own
+     * precondition: the note moved on between `assertNoteUnchanged` and here. Both errors are
+     * raised before any mutation lands, so `applied` stays null and the capture rolls back.
+     */
+    if (
+      noteTarget !== null &&
+      (error instanceof TransactionPreconditionError || error instanceof TransactionPlanError)
+    ) {
+      throw new NoteChangedSinceCaptureRefusal(noteTarget.captureId, noteTarget.note.path);
+    }
     if (error instanceof TransactionPlanError) throw error;
     const landed: string[] = [];
     for (const entry of planned) {
@@ -1282,6 +1368,33 @@ async function leftAtOf(
 
 /* ------------------------------------------------------------ one capture */
 
+/**
+ * Spec §3.4's precondition, checked before the capture is staged: the destination still
+ * holds the bytes `capture --note` hashed, or is still absent for a create. Any mismatch,
+ * including a replaced note that is now gone, is `note_changed_since_capture`.
+ */
+async function assertNoteUnchanged(
+  context: CliContext,
+  contentRoot: string,
+  note: CaptureNoteTargetV1,
+  captureId: string,
+): Promise<void> {
+  const abs = join(contentRoot, note.path);
+  if (note.beforeSha256 === null) {
+    if (await exists(context, abs)) throw new NoteChangedSinceCaptureRefusal(captureId, note.path);
+    return;
+  }
+  let current: string;
+  try {
+    current = await context.guards.readText(abs, async (handle) =>
+      createHash("sha256").update(await handle.readFile()).digest("hex"),
+    );
+  } catch {
+    throw new NoteChangedSinceCaptureRefusal(captureId, note.path);
+  }
+  if (current !== note.beforeSha256) throw new NoteChangedSinceCaptureRefusal(captureId, note.path);
+}
+
 interface IngestEnvironment {
   readonly config: DeveloperOsConfigV1;
   readonly paths: RuntimePaths;
@@ -1294,7 +1407,8 @@ interface IngestEnvironment {
   readonly redact: Redactor;
   readonly quarantine: string;
   readonly contentRoot: string;
-  readonly vendor: Vendor;
+  /** `null` when no plain capture was selected, so no vendor was resolved. */
+  readonly vendor: Vendor | null;
   readonly ingestContract: readonly string[];
   /**
    * Read once here, from the vault's own index, rather than once per capture
@@ -1395,6 +1509,11 @@ async function ingestOne(
         "set the file's status back to accepted by hand if it should be ingested again",
       );
     }
+    const { note } = envelope;
+    if (note !== null) {
+      /** Before staging: `staged` is still null, so a refusal here leaves the capture accepted. */
+      await assertNoteUnchanged(context, environment.contentRoot, note, envelope.captureId);
+    }
     staged = envelope;
 
     /** Transaction 1. Durable before the apply, or a crash is indistinguishable
@@ -1407,20 +1526,44 @@ async function ingestOne(
       asRead,
     );
 
-    const outcome = await invokeVendor(
-      context,
-      vendor,
-      buildIngestPrompt(envelope, { config: brainConfig, indexExcerpt }),
-      outputSchemaPath(paths.home, INGEST_VERB),
-    );
+    /** A note capture makes no vendor call: its proposal is the reviewed content, verbatim. */
+    let payload: unknown;
+    if (note === null) {
+      if (vendor === null) {
+        throw new Error("a plain capture reached the vendor call with no vendor resolved");
+      }
+      payload = (
+        await invokeVendor(
+          context,
+          vendor,
+          buildIngestPrompt(envelope, { config: brainConfig, indexExcerpt }),
+          outputSchemaPath(paths.home, INGEST_VERB),
+        )
+      ).payload;
+    } else {
+      payload = {
+        schemaVersion: 1,
+        notes: [
+          {
+            path: note.path,
+            contents: `${envelope.content}\n`,
+            sourceCaptureId: envelope.captureId,
+          },
+        ],
+      };
+    }
 
-    const proposal = parseIngestProposal(outcome.payload);
+    const proposal = parseIngestProposal(payload);
     if (!proposal.ok) {
       throw new IngestRefusal(
         EXIT_CODES.operationalFailure,
-        `the ${vendor.name} agent returned a proposal this product refuses (${proposal.reason})`,
+        note === null
+          ? `the ${vendor?.name ?? "unknown"} agent returned a proposal this product refuses (${proposal.reason})`
+          : `the note capture ${envelope.captureId} does not form a proposal this product accepts (${proposal.reason})`,
         [],
-        RETRY_LATER,
+        note === null
+          ? RETRY_LATER
+          : `developer-os review --id ${envelope.captureId} --decision reject; running ingest again cannot change the outcome`,
       );
     }
 
@@ -1429,6 +1572,7 @@ async function ingestOne(
       ingestContract: environment.ingestContract,
       redact,
       brain: dependenciesFor(context, paths.brain, environment.config),
+      ...(note === null || note.beforeSha256 === null ? {} : { replaces: note.path }),
     });
     if (!validation.ok) throw refusalFrom(validation.findings, envelope.captureId);
 
@@ -1452,7 +1596,12 @@ async function ingestOne(
        * disk. The capture then went back to `accepted` beside its own output,
        * and every later run refused it.
        */
-      const outcome = await applyNotes(context, environment.contentRoot, plan.writes);
+      const outcome = await applyNotes(
+        context,
+        environment.contentRoot,
+        plan.writes,
+        note === null ? null : { note, captureId: envelope.captureId },
+      );
       if (!outcome.ok) {
         /** Empty is still non-null: attribution failed after planning began. */
         applied = outcome.notes;
@@ -1529,6 +1678,7 @@ async function ingestOne(
         recovery:
           error instanceof IngestRefusal ? (error.recovery ?? null) : null,
         appliedNotes: applied ?? [],
+        reason: error instanceof NoteChangedSinceCaptureRefusal ? error.reason : null,
         leftAt: await leftAtOf(context, redact, fileName, capturePath, {
           /**
        * `untouched` here for the same reason the rollback takes it: a plan-phase refusal
@@ -1726,7 +1876,7 @@ function screenNotes(notes: readonly string[]): string {
  */
 export interface RunReportV1 {
   readonly schemaVersion: 1;
-  readonly agent: AgentName;
+  readonly agent: AgentName | null;
   readonly order: readonly string[];
   readonly ingested: readonly IngestedCaptureV1[];
   readonly refused: readonly {
@@ -1736,6 +1886,7 @@ export interface RunReportV1 {
     readonly message: string;
     readonly recovery: string | null;
     readonly appliedNotes: readonly string[];
+    readonly reason: NoteChangedReason | null;
   }[];
   readonly unreadable: readonly IngestedCaptureV1[];
 }
@@ -1796,7 +1947,7 @@ export interface RunReportV1 {
  */
 function reportFields(
   report: RunReport,
-  agent: AgentName,
+  agent: AgentName | null,
   unreadable: readonly IngestedCaptureV1[],
 ): RunReportV1 {
   return {
@@ -1811,6 +1962,7 @@ function reportFields(
       message: refusal.message,
       recovery: refusal.recovery,
       appliedNotes: [...refusal.appliedNotes],
+      reason: refusal.reason,
     })),
     unreadable: [...unreadable],
   };
@@ -1959,12 +2111,6 @@ export async function runIngest(
     const paths = runtimePathsFor(context, config);
     await assertVaultPresent(context, paths);
 
-    /**
-     * Before the key is loaded, so a machine with no agent CLI writes no
-     * secret merely by being asked to ingest.
-     */
-    const vendor = await selectVendor(context, requested);
-
     const brainConfig = resolveBrainConfig(config);
     const contentRoot = join(paths.brain, brainConfig.contentRoot);
     const quarantine = await resolveContainedRoot(
@@ -2005,6 +2151,14 @@ export async function runIngest(
     const selection = await selectCaptures(context, quarantine, redact, limit);
 
     /**
+     * After selection, because only a plain capture needs a vendor (spec §3.4): a batch of
+     * note captures is applied verbatim, so neither resolution nor its exit-4 refusal
+     * applies to it. The key is loaded before this now; selection needs it to parse.
+     */
+    const anyPlain = selection.accepted.some((capture) => capture.plain);
+    const vendor = anyPlain ? await selectVendor(context, requested) : null;
+
+    /**
      * Validated once per run, for its refusal rather than its value — the value
      * `invokeVendor` uses comes from its own call, which is two idempotent
      * syscalls by then.
@@ -2028,7 +2182,7 @@ export async function runIngest(
      * which has no working-root field — are both runs that were never going to
      * use this directory, and neither may be failed by it.
      */
-    if (vendor.name === "codex" && selection.accepted.length > 0) {
+    if (vendor?.name === "codex" && anyPlain) {
       await prepareAgentWorkspace(context);
     }
 
@@ -2072,7 +2226,7 @@ export async function runIngest(
     const refused: RefusedCaptureV1[] = [];
     const order: string[] = [];
 
-    for (const fileName of selection.accepted) {
+    for (const { fileName } of selection.accepted) {
       order.push(fileName.slice(0, -CAPTURE_FILE_SUFFIX.length));
       const outcome = await ingestOne(context, environment, fileName);
       if (outcome.ok) ingested.push(outcome.capture);
@@ -2097,14 +2251,14 @@ export async function runIngest(
         reportLines(report).join("\n"),
         [...new Set(refused.flatMap((refusal) => refusal.paths))],
         refusedRecovery(refused),
-        reportFields(report, vendor.name, selection.unreadable),
+        reportFields(report, vendor?.name ?? null, selection.unreadable),
       );
     }
 
     return success(
       {
         schemaVersion: 1,
-        agent: vendor.name,
+        agent: vendor?.name ?? null,
         order,
         captures,
         applied: captures.filter((capture) => capture.status === "ingested"),
@@ -2133,7 +2287,7 @@ export function renderIngest(result: IngestResultV1): readonly string[] {
   }
 
   return [
-    `Ingested ${String(result.applied.length)} capture${result.applied.length === 1 ? "" : "s"} through ${result.agent}:`,
+    `Ingested ${String(result.applied.length)} capture${result.applied.length === 1 ? "" : "s"} ${result.agent === null ? "verbatim, with no agent" : `through ${result.agent}`}:`,
     ...result.captures.map(
       (capture) =>
         /**

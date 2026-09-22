@@ -1123,6 +1123,7 @@ describe("runIngest, a batch that is not uniform", () => {
           captureId: refusing.id,
           code: EXIT_CODES.securityRefusal,
           leftAt: "untouched",
+          reason: null,
         },
       ],
       /**
@@ -2616,5 +2617,237 @@ describe("runIngest, before there is anything to ingest", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.recovery).toContain("developer-os init");
+  });
+});
+
+/** A complete note a `capture --note` accepts: `emerging`, so no validator asks for a review date. */
+function noteText(title: string, body: string): string {
+  return [
+    "---",
+    "schemaVersion: 1",
+    `title: ${title}`,
+    "type: knowledge-note",
+    "created: 2026-08-10",
+    "tags: [dev]",
+    "summary: A synthetic note for a note capture.",
+    "stage: emerging",
+    "author: agent",
+    "reviewed: null",
+    "---",
+    "",
+    body,
+  ].join("\n");
+}
+
+const NEW_NOTE = noteText("A new synthetic note", "A synthetic note body.");
+/** Keeps the template note's title and `created`, as a replacement must. */
+const REVISED = noteText("Write the note you wanted to find", "A revised body.");
+const EXAMPLE_NOTE = "DEV/example-knowledge-note.md";
+
+/** `capture --note`, then `review --decision accept`: the real path a note capture takes. */
+async function seedNote(
+  fixture: IngestFixture,
+  note: string,
+  text: string,
+): Promise<string> {
+  const captured = await runCapture(
+    fixture.context,
+    { text, note },
+    { cwd: () => join(fixture.root, PROJECT_DIRECTORY), detect: detectSourceAgent },
+  );
+  expect(captured.ok, captured.ok ? "" : captured.error.message).toBe(true);
+  if (!captured.ok) throw new Error("the fixture could not seed a note capture");
+  const accepted = await runReview(fixture.context, {
+    id: captured.data.captureId,
+    decision: "accept",
+  });
+  expect(accepted.ok, "the fixture must accept the note capture").toBe(true);
+  return captured.data.captureId;
+}
+
+interface NoteRefusalReport {
+  readonly refused: readonly {
+    readonly captureId: string;
+    readonly code: number;
+    readonly leftAt: string;
+    readonly recovery: string | null;
+    readonly reason: string | null;
+  }[];
+}
+
+function refusedOf(result: IngestOutcome): NoteRefusalReport["refused"] {
+  expect(result.ok).toBe(false);
+  if (result.ok) throw new Error("the run did not refuse");
+  return (result.error.data as unknown as NoteRefusalReport).refused;
+}
+
+const NO_VENDOR = { claude: false, codex: false } as const;
+
+describe("runIngest, note captures applied verbatim (spec §3.4)", () => {
+  it("applies a create note capture verbatim without resolving or invoking a vendor", async () => {
+    const fixture = await installedFixture("verbatim-create", NO_VENDOR);
+    const id = await seedNote(fixture, "DEV/new-note.md", NEW_NOTE);
+
+    const result = await fixture.run();
+
+    expect(dataOf(result).agent).toBeNull();
+    expect(fixture.calls).toStrictEqual([]);
+    expect(
+      await nodeFs.readFile(join(fixture.content, "DEV", "new-note.md"), "utf8"),
+    ).toBe(`${NEW_NOTE}\n`);
+    expect(await fixture.statusOf(id)).toBe("ingested");
+    expect(await ladderOf(fixture)).toStrictEqual([...LADDER]);
+    expect(renderIngest(dataOf(result))[0]).toContain("verbatim");
+  });
+
+  it("replaces an existing note bound to its capture-time hash", async () => {
+    const fixture = await installedFixture("verbatim-replace", NO_VENDOR);
+    const id = await seedNote(fixture, EXAMPLE_NOTE, REVISED);
+
+    const result = await fixture.run();
+
+    expect(dataOf(result).agent).toBeNull();
+    expect(dataOf(result).applied.map((capture) => capture.notes)).toStrictEqual([
+      [EXAMPLE_NOTE],
+    ]);
+    expect(fixture.calls).toStrictEqual([]);
+    expect(await nodeFs.readFile(join(fixture.content, EXAMPLE_NOTE), "utf8")).toBe(
+      `${REVISED}\n`,
+    );
+    expect(await fixture.statusOf(id)).toBe("ingested");
+  });
+
+  it("refuses exit 3 note_changed_since_capture when the note changed after capture, keeps the note and leaves the capture accepted", async () => {
+    const fixture = await installedFixture("verbatim-changed", NO_VENDOR);
+    const target = join(fixture.content, EXAMPLE_NOTE);
+    const id = await seedNote(fixture, EXAMPLE_NOTE, REVISED);
+    await nodeFs.appendFile(target, "\nhand edit\n");
+    const edited = await nodeFs.readFile(target);
+
+    const result = await fixture.run();
+
+    expect(result.code).toBe(EXIT_CODES.decisionRequired);
+    const refused = refusedOf(result);
+    expect(refused).toHaveLength(1);
+    expect(refused[0]).toMatchObject({
+      captureId: id,
+      code: EXIT_CODES.decisionRequired,
+      leftAt: "untouched",
+      reason: "note_changed_since_capture",
+    });
+    expect(refused[0]?.recovery).toContain(`developer-os review --id ${id} --decision reject`);
+    expect(refused[0]?.recovery).not.toContain("ingest again");
+    if (result.ok) return;
+    expect(result.error.recovery).toContain("note_changed_since_capture");
+    expect(result.error.recovery).not.toContain("the next run tries it again");
+    expect(await nodeFs.readFile(target)).toStrictEqual(edited);
+    expect(await fixture.statusOf(id)).toBe("accepted");
+    expect(await ladderOf(fixture)).toStrictEqual([]);
+  });
+
+  it("refuses note_changed_since_capture when a replaced note is gone", async () => {
+    const fixture = await installedFixture("verbatim-gone", NO_VENDOR);
+    const id = await seedNote(fixture, EXAMPLE_NOTE, REVISED);
+    await nodeFs.rm(join(fixture.content, EXAMPLE_NOTE));
+
+    const result = await fixture.run();
+
+    expect(result.code).toBe(EXIT_CODES.decisionRequired);
+    expect(refusedOf(result)[0]?.reason).toBe("note_changed_since_capture");
+    expect(await exists(join(fixture.content, EXAMPLE_NOTE))).toBe(false);
+    expect(await fixture.statusOf(id)).toBe("accepted");
+  });
+
+  it("refuses note_changed_since_capture for a create whose destination became occupied", async () => {
+    const fixture = await installedFixture("verbatim-occupied", NO_VENDOR);
+    const target = join(fixture.content, "DEV", "new-note.md");
+    const id = await seedNote(fixture, "DEV/new-note.md", NEW_NOTE);
+    await nodeFs.writeFile(target, "someone else's note\n", { mode: 0o600 });
+
+    const result = await fixture.run();
+
+    expect(result.code).toBe(EXIT_CODES.decisionRequired);
+    expect(refusedOf(result)[0]?.reason).toBe("note_changed_since_capture");
+    expect(await nodeFs.readFile(target, "utf8")).toBe("someone else's note\n");
+    expect(await fixture.statusOf(id)).toBe("accepted");
+  });
+
+  it("maps an apply-time precondition failure to the same refusal and rolls the capture back to accepted", async () => {
+    const fixture = await installedFixture("verbatim-apply-race", NO_VENDOR);
+    const target = join(fixture.content, EXAMPLE_NOTE);
+    const id = await seedNote(fixture, EXAMPLE_NOTE, REVISED);
+    const inner = fixture.context.executor;
+    let raced = false;
+    /** The hand edit lands after `assertNoteUnchanged` passed and before the apply executes. */
+    const context: CliContext = {
+      ...fixture.context,
+      executor: {
+        execute: async (plan) => {
+          if (plan.kind === "ingest-apply") {
+            raced = true;
+            await nodeFs.appendFile(target, "\nhand edit mid-run\n");
+          }
+          return inner.execute(plan);
+        },
+        resume: (transactionId) => inner.resume(transactionId),
+        rollback: (transactionId) => inner.rollback(transactionId),
+      },
+    };
+    const result = await runIngest(context, {});
+
+    expect(raced, "the race must reach the apply transaction").toBe(true);
+    expect(result.code).toBe(EXIT_CODES.decisionRequired);
+    expect(refusedOf(result)[0]).toMatchObject({
+      captureId: id,
+      leftAt: "untouched",
+      reason: "note_changed_since_capture",
+    });
+    expect(await nodeFs.readFile(target, "utf8")).toContain("hand edit mid-run");
+    expect(await fixture.statusOf(id)).toBe("accepted");
+  });
+
+  it("still refuses a plain proposal that names an occupied path with the unchanged create-only message", async () => {
+    const fixture = await installedFixture("verbatim-plain-occupied");
+    const seeded = await fixture.seedAccepted("an observation that names an existing note");
+    fixture.reply(() =>
+      oneNote(seeded.id, EXAMPLE_NOTE, "Write the note you wanted to find", "Replaced."),
+    );
+
+    const result = await fixture.run();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain("ingest creates notes and never replaces one");
+    expect(refusedOf(result)[0]?.reason).toBeNull();
+    expect(await fixture.statusOf(seeded.id)).toBe("accepted");
+  });
+
+  it("resolves a vendor when a batch mixes plain and note captures, and ingests both", async () => {
+    const fixture = await installedFixture("verbatim-mixed");
+    const noteId = await seedNote(fixture, "DEV/new-note.md", NEW_NOTE);
+    const plain = await fixture.seedAccepted("a plain observation beside a note capture");
+    fixture.reply(() => oneNote(plain.id));
+
+    const result = await fixture.run();
+
+    const data = dataOf(result);
+    expect(data.agent).toBe("claude");
+    expect(fixture.calls.map((call) => call.executable)).toStrictEqual([CLAUDE]);
+    expect(data.applied.map((capture) => capture.captureId).sort()).toStrictEqual(
+      [noteId, plain.id].sort(),
+    );
+    expect(await fixture.statusOf(noteId)).toBe("ingested");
+    expect(await fixture.statusOf(plain.id)).toBe("ingested");
+  });
+
+  it("refuses a mixed batch at exit 4 when no vendor is installed, leaving the note capture accepted", async () => {
+    const fixture = await installedFixture("verbatim-mixed-no-vendor", NO_VENDOR);
+    const noteId = await seedNote(fixture, "DEV/new-note.md", NEW_NOTE);
+    await fixture.seedAccepted("a plain observation with no agent");
+
+    const result = await fixture.run();
+
+    expect(result.code).toBe(EXIT_CODES.capabilityUnavailable);
+    expect(await fixture.statusOf(noteId)).toBe("accepted");
   });
 });
