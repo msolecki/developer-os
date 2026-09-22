@@ -227,6 +227,10 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   0.155.1 (A12 Task 2 found them instead of the pinned 2.1.260 / 0.151.0). The billed real-agent row is
   deferred to `BACKLOG.md`; until it passes, the Claude categories held in `UNPROVEN_CLAUDE_CATEGORIES`
   stay unproven.
+- **D49 (2026-09-22).** A fresh `init` admits a *preexisting* planned parent (e.g. the user's home at
+  macOS's default 0750) when it is a real directory owned by the effective uid with no group/other write
+  bit (`mode & 0o022 === 0`). Directories the product creates stay exactly 0700. Found by A12 Task 4:
+  `assertPlannedParent` refused the founder's 0750 home.
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 
