@@ -47,7 +47,7 @@ const COMMIT_VALUE_LONG = new Set(["--message", "--file", "--author", "--date", 
 const PUSH_VALUE_LONG = new Set(["--repo", "--push-option", "--receive-pack", "--exec"]);
 
 function gitCalls(normalized: string): readonly { readonly name: string; readonly rest: readonly string[] }[] {
-  return shellSegments(normalized).flatMap((tokens) => gitSubcommand(tokens) ?? []);
+  return (shellSegments(normalized) ?? []).flatMap((tokens) => gitSubcommand(tokens) ?? []);
 }
 
 export const COMMIT_RULES: readonly ShellRule<"hook-bypass" | "force-push">[] = [

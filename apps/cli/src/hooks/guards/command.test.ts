@@ -52,6 +52,7 @@ const BLOCKS: readonly (readonly [string, string])[] = [
   ["recursive-delete-root", "cd x && rm -fr ${HOME}"],
   ["recursive-delete-root", "/bin/rm -Rf ~/"],
   ["recursive-delete-root", 'rm -rf "$HOME"'],
+  ["unterminated-quote", "echo 'x; rm -rf /"],
 ];
 
 const ALLOWS: readonly (readonly [string, string])[] = [
@@ -61,6 +62,7 @@ const ALLOWS: readonly (readonly [string, string])[] = [
   ["recursive-delete-root", "rm -rf ./build"],
   ["recursive-delete-root", "rm -f /tmp/x"],
   ["recursive-delete-root", "rm -rf ~/project/build"],
+  ["recursive-delete-root", "echo 'a; rm -rf /'"],
 ];
 
 describe("guard command", () => {
@@ -107,10 +109,26 @@ describe("shellSegments", () => {
     expect(shellSegments(`a 'b' ; c && "d e" || f | g & h`)).toStrictEqual([
       ["a", "b"],
       ["c"],
-      ['"d', 'e"'],
+      ["d e"],
       ["f"],
       ["g"],
       ["h"],
     ]);
+  });
+
+  it("keeps control operators inside quotes and after a backslash literal", () => {
+    expect(shellSegments(`git commit -m "a; b && c | d & e" -n`)).toStrictEqual([
+      ["git", "commit", "-m", "a; b && c | d & e", "-n"],
+    ]);
+    expect(shellSegments(`echo 'x;"y' "q\\"r" s\\;t\\ u`)).toStrictEqual([["echo", 'x;"y', 'q"r', "s;t u"]]);
+  });
+
+  it("keeps an empty quoted token so an option value is not shifted", () => {
+    expect(shellSegments(`git commit -m "" -n`)).toStrictEqual([["git", "commit", "-m", "", "-n"]]);
+  });
+
+  it("returns null for an unterminated quote", () => {
+    expect(shellSegments(`git commit -m "a; b`)).toBeNull();
+    expect(shellSegments(`echo 'a`)).toBeNull();
   });
 });

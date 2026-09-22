@@ -14,7 +14,7 @@ export const COMMAND_RULES: readonly ShellRule<"pipe-to-shell" | "recursive-dele
   {
     id: "recursive-delete-root",
     matches: (n) =>
-      shellSegments(n).some(
+      (shellSegments(n) ?? []).some(
         (tokens) =>
           basename(tokens[0] ?? "") === "rm" && tokens.slice(1).some(recursiveFlag) && tokens.slice(1).some(rootOperand),
       ),
