@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import { basename, extname, join, resolve } from "node:path";
 import { cwd as processCwd } from "node:process";
 
+import { CLAUDE_MEMORY_LAYOUT } from "@developer-os/adapter-claude";
+import type { ClaudeMemoryLayoutV1 } from "@developer-os/adapter-claude";
 import { containsPath, EXIT_CODES, success } from "@developer-os/core";
 import type { CliResult, ExitCode, RuntimePaths } from "@developer-os/core";
 import { buildCapture } from "@developer-os/brain";
@@ -62,9 +64,13 @@ export interface ImportOptions {
 
 export interface ImportDependencies {
   readonly cwd: () => string;
+  readonly memoryLayout: ClaudeMemoryLayoutV1 | null;
 }
 
-const DEFAULT_DEPENDENCIES: ImportDependencies = { cwd: () => processCwd() };
+const DEFAULT_DEPENDENCIES: ImportDependencies = {
+  cwd: () => processCwd(),
+  memoryLayout: CLAUDE_MEMORY_LAYOUT,
+};
 
 /** One accepted file, before it is read. `relative` is NFC, POSIX-separated. */
 export interface ImportCandidate {
@@ -226,6 +232,76 @@ async function walk(context: CliContext, root: string): Promise<Walked> {
   walked.candidates.sort((left, right) => compareRelative(left.relative, right.relative));
   walked.presets.sort((left, right) => compareRelative(left.path, right.path));
   return walked;
+}
+
+const enumerationLimit = (root: string): ImportRunRefusal =>
+  new ImportRunRefusal(
+    "import_enumeration_limit",
+    EXIT_CODES.invalidInput,
+    `an import walks at most ${String(IMPORT_MAX_ENTRIES_WALKED)} entries and ${String(IMPORT_MAX_MEMORY_PROJECTS)} memory project directories; this source is larger and nothing was imported`,
+    [root],
+  );
+
+/**
+ * Spec §5.5: list `<vendor-home>/projects` and each project's memory
+ * directory, nothing else. A project directory holds session transcripts,
+ * so it is never listed itself.
+ */
+export async function enumerateClaudeMemory(
+  context: CliContext,
+  layout: ClaudeMemoryLayoutV1,
+  key: Uint8Array,
+): Promise<{ readonly candidates: ImportCandidate[]; readonly preset: ImportFileResultV1[] }> {
+  const vendorHome = await context.guards.canonicalize(join(context.userHome, ".claude"));
+  const projects = join(vendorHome, layout.projectsDirectory);
+  const notFound = (): ImportRunRefusal =>
+    new ImportRunRefusal(
+      "import_source_not_found",
+      EXIT_CODES.invalidInput,
+      "the Claude Code projects directory does not exist",
+      [projects],
+    );
+  try {
+    if (!(await context.fs.lstat(projects, { bigint: true })).isDirectory()) throw notFound();
+  } catch (error) {
+    if (isMissingEntry(error)) throw notFound();
+    throw error;
+  }
+
+  const names = await context.fs.readdir(projects);
+  if (names.length > IMPORT_MAX_MEMORY_PROJECTS) throw enumerationLimit(projects);
+  let seen = names.length;
+
+  const candidates: ImportCandidate[] = [];
+  const preset: ImportFileResultV1[] = [];
+  for (const name of names) {
+    const memory = join(projects, name, layout.memoryDirectory);
+    let stats;
+    try {
+      stats = await context.fs.lstat(memory, { bigint: true });
+    } catch (error) {
+      if (isMissingEntry(error)) continue;
+      throw error;
+    }
+    if (!stats.isDirectory()) continue;
+
+    const files = await context.fs.readdir(memory);
+    seen += files.length;
+    if (seen > IMPORT_MAX_ENTRIES_WALKED) throw enumerationLimit(projects);
+    const project = fingerprintDirectory(name, key);
+    for (const file of files) {
+      if (!file.endsWith(layout.extension) || file === layout.indexFileName) continue;
+      const absolute = join(memory, file);
+      const relative = `${project}/${file.normalize("NFC")}`;
+      const entry = await context.fs.lstat(absolute, { bigint: true });
+      if (entry.isSymbolicLink()) preset.push(row(relative, "refused", "import_source_symlink"));
+      else if (entry.isFile()) candidates.push({ relative, absolute, fingerprintSource: name });
+    }
+  }
+
+  candidates.sort((left, right) => compareRelative(left.relative, right.relative));
+  preset.sort((left, right) => compareRelative(left.path, right.path));
+  return { candidates, preset };
 }
 
 type Prepared =
@@ -409,6 +485,15 @@ export async function runImport(
   let guards = context.guards;
 
   try {
+    // Before any filesystem call: an unobserved vendor layout reads nothing at all.
+    const layout = dependencies.memoryLayout;
+    if (options.claudeMemory && layout === null) {
+      throw new ImportRunRefusal(
+        "claude_memory_layout_unobserved",
+        EXIT_CODES.capabilityUnavailable,
+        "the Claude Code memory layout has not been observed for this product; nothing was read",
+      );
+    }
     const config = await readConfigFile(context, context.paths.configFile);
     if (config === null) {
       throw new ImportRunRefusal(
@@ -439,15 +524,6 @@ export async function runImport(
       );
     }
 
-    // Task 12 replaces this refusal.
-    if (options.claudeMemory) {
-      throw new ImportRunRefusal(
-        "claude_memory_layout_unobserved",
-        EXIT_CODES.capabilityUnavailable,
-        "the Claude Code memory layout has not been observed for this product; nothing was read",
-      );
-    }
-
     const notContained = (message: string, refused: readonly string[]): Error =>
       new ImportRunRefusal(
         "import_root_not_contained",
@@ -469,6 +545,40 @@ export async function runImport(
       "the inbox directory resolves outside the content root",
       notContained,
     );
+
+    const existingKey = options.dryRun ? readRedactionKey(paths.stateDir) : null;
+    const loadKey = (): Uint8Array =>
+      options.dryRun ? (existingKey ?? randomBytes(32)) : loadOrCreateRedactionKey(paths.stateDir);
+    const bind = (key: Uint8Array): Redactor => {
+      const redact = createRedactor(key, { userPatterns: config.redaction?.patterns ?? [] });
+      guards = { ...context.guards, redactDiagnostic: (text: string) => redact(text).text };
+      return redact;
+    };
+    const common = {
+      quarantine,
+      paths,
+      keyDurable: !options.dryRun || existingKey !== null,
+      cap: Math.min(options.limit ?? IMPORT_MAX_FILES_PER_RUN, IMPORT_MAX_FILES_PER_RUN),
+      dryRun: options.dryRun,
+    };
+
+    if (options.claudeMemory && layout !== null) {
+      // The key comes first here: every candidate's path is keyed by its project directory.
+      const key = loadKey();
+      const redact = bind(key);
+      const { candidates, preset } = await enumerateClaudeMemory(context, layout, key);
+      return await processCandidates({
+        ...common,
+        context: { ...context, guards },
+        candidates,
+        preset,
+        captureMethod: "import-claude-memory",
+        projectSlug: "claude-memory",
+        source: "claude-memory",
+        key,
+        redact,
+      });
+    }
 
     let root = inbox;
     let source: ImportResultV1["source"] = "inbox";
@@ -528,27 +638,19 @@ export async function runImport(
     }
     const walked = await walk(context, root);
 
-    const existingKey = options.dryRun ? readRedactionKey(paths.stateDir) : null;
-    const key = options.dryRun
-      ? (existingKey ?? randomBytes(32))
-      : loadOrCreateRedactionKey(paths.stateDir);
-    const redact = createRedactor(key, { userPatterns: config.redaction?.patterns ?? [] });
-    guards = { ...context.guards, redactDiagnostic: (text: string) => redact(text).text };
+    const key = loadKey();
+    const redact = bind(key);
 
     return await processCandidates({
+      ...common,
       context: { ...context, guards },
       candidates: walked.candidates,
       preset: walked.presets,
       captureMethod: "import",
       projectSlug,
       source,
-      quarantine,
-      paths,
       key,
-      keyDurable: !options.dryRun || existingKey !== null,
       redact,
-      cap: Math.min(options.limit ?? IMPORT_MAX_FILES_PER_RUN, IMPORT_MAX_FILES_PER_RUN),
-      dryRun: options.dryRun,
     });
   } catch (error) {
     return failureFrom(

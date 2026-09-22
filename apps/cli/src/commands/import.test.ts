@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import * as nodeFs from "node:fs/promises";
 import { dirname, join } from "node:path";
 
+import type { ClaudeMemoryLayoutV1 } from "@developer-os/adapter-claude";
 import { EXIT_CODES } from "@developer-os/core";
 import type { CliResult } from "@developer-os/core";
 import { parseCaptureFile } from "@developer-os/brain";
@@ -18,9 +19,11 @@ import {
   IMPORT_MAX_DEPTH,
   IMPORT_MAX_ENTRIES_WALKED,
   IMPORT_MAX_FILES_PER_RUN,
+  IMPORT_MAX_MEMORY_PROJECTS,
+  renderImport,
   runImport,
 } from "./import.js";
-import type { ImportOptions, ImportResultV1 } from "./import.js";
+import type { ImportDependencies, ImportOptions, ImportResultV1 } from "./import.js";
 import { runInit } from "./init.js";
 import { fingerprintDirectory } from "./quarantine.js";
 import {
@@ -69,11 +72,12 @@ function importWith(
   fixture: CommandFixture,
   options: Partial<ImportOptions> = {},
   context: CliContext = fixture.context,
+  dependencies: Partial<ImportDependencies> = {},
 ): ReturnType<typeof runImport> {
   return runImport(
     context,
     { path: null, claudeMemory: false, limit: null, dryRun: false, ...options },
-    { cwd: () => workOf(fixture) },
+    { cwd: () => workOf(fixture), memoryLayout: null, ...dependencies },
   );
 }
 
@@ -124,24 +128,31 @@ async function captureFiles(fixture: CommandFixture): Promise<readonly string[]>
   return (await nodeFs.readdir(quarantineOf(fixture))).filter((name) => !name.startsWith("."));
 }
 
-/** Every call to `guards.readText` and `fs.readdir`, by path. */
+/** Every call to `guards.readText`, `fs.readdir` and `fs.lstat`, by path. */
 function spied(context: CliContext): {
   readonly context: CliContext;
   readonly reads: string[];
   readonly listings: string[];
+  readonly stats: string[];
 } {
   const reads: string[] = [];
   const listings: string[] = [];
+  const stats: string[] = [];
   const readdir = ((path: string, ...rest: unknown[]) => {
     listings.push(path);
     return (context.fs.readdir as (...args: unknown[]) => unknown)(path, ...rest);
   }) as CliContext["fs"]["readdir"];
+  const lstat = ((path: string, ...rest: unknown[]) => {
+    stats.push(path);
+    return (context.fs.lstat as (...args: unknown[]) => unknown)(path, ...rest);
+  }) as CliContext["fs"]["lstat"];
   return {
     reads,
     listings,
+    stats,
     context: {
       ...context,
-      fs: { ...context.fs, readdir },
+      fs: { ...context.fs, readdir, lstat },
       guards: {
         ...context.guards,
         readText: (path, reader) => {
@@ -582,17 +593,173 @@ describe("run-level stops", () => {
     expect(await importJournals(fixture)).toEqual(["finalized"]);
     expect(probe.reads).not.toContain(join(inboxOf(fixture), "c.md"));
   });
+});
 
-  it("refuses --claude-memory before Task 12 and reads nothing", async () => {
-    const fixture = await installed("import-claude-memory");
-    const vendor = join(fixture.userHome, ".claude");
-    await plant(join(vendor, "projects", "sample", "memory"), { "MEMORY.md": "a memory" });
+/** Synthetic: never the observed vendor row, which Task 14 records. */
+const LAYOUT: ClaudeMemoryLayoutV1 = {
+  claudeVersion: "0.0.0",
+  observedOn: "2026-01-01",
+  observedIn: "synthetic test layout",
+  projectsDirectory: "projects",
+  memoryDirectory: "memory",
+  extension: ".md",
+  indexFileName: "INDEX.md",
+};
+
+const vendorOf = (fixture: CommandFixture): string => join(fixture.userHome, ".claude");
+const projectsOf = (fixture: CommandFixture): string => join(vendorOf(fixture), "projects");
+
+function importMemory(
+  fixture: CommandFixture,
+  context: CliContext = fixture.context,
+  layout: ClaudeMemoryLayoutV1 | null = LAYOUT,
+): ReturnType<typeof runImport> {
+  return importWith(fixture, { claudeMemory: true }, context, { memoryLayout: layout });
+}
+
+async function plantMemoryTree(fixture: CommandFixture): Promise<void> {
+  const projects = projectsOf(fixture);
+  await plant(projects, {
+    "-synthetic-alpha/memory/one.md": "alpha memory one",
+    "-synthetic-alpha/memory/two.md": "alpha memory two",
+    "-synthetic-alpha/memory/INDEX.md": "- one\n- two",
+    "-synthetic-alpha/memory/notes.txt": "not a memory file",
+    "-synthetic-alpha/session-0001.jsonl": '{"type":"user","text":"a session line"}\n',
+    "-synthetic-beta/memory/three.md": "beta memory three",
+  });
+  await nodeFs.mkdir(join(projects, "-synthetic-gamma"), { mode: 0o700 });
+  await plant(fixture.root, { "memory-link-target.md": "never read" });
+  await nodeFs.mkdir(join(projects, "-synthetic-delta", "memory"), { recursive: true, mode: 0o700 });
+  await nodeFs.symlink(
+    join(fixture.root, "memory-link-target.md"),
+    join(projects, "-synthetic-delta", "memory", "link.md"),
+  );
+}
+
+describe("import --claude-memory", () => {
+  it("refuses while the layout is unobserved and touches nothing under the vendor home", async () => {
+    const fixture = await installed("import-memory-unobserved");
+    await plantMemoryTree(fixture);
     const probe = spied(fixture.context);
 
-    const result = await importWith(fixture, { claudeMemory: true }, probe.context);
+    const result = await importMemory(fixture, probe.context, null);
 
     expect(result.code).toBe(EXIT_CODES.capabilityUnavailable);
     expect(kindOf(result)).toBe("claude_memory_layout_unobserved");
-    expect([...probe.listings, ...probe.reads].filter((path) => path.startsWith(vendor))).toEqual([]);
+    const touched = [...probe.listings, ...probe.stats, ...probe.reads];
+    expect(touched.filter((path) => path.startsWith(vendorOf(fixture)))).toEqual([]);
+  });
+
+  it("imports memory files, never lists a project directory, and names no vendor path", async () => {
+    const fixture = await installed("import-memory");
+    await plantMemoryTree(fixture);
+    const probe = spied(fixture.context);
+
+    const result = await importMemory(fixture, probe.context);
+
+    expect(result.code).toBe(EXIT_CODES.securityRefusal);
+    const data = failureDataOf(result);
+    expect(data.source).toBe("claude-memory");
+    const byName = new Map(data.files.map((file) => [file.path.split("/").pop(), file]));
+    expect([...byName.keys()].sort()).toEqual(["link.md", "one.md", "three.md", "two.md"]);
+    for (const file of data.files) expect(file.path).toMatch(/^[0-9a-f]{16}\/[a-z]+\.md$/u);
+    expect(byName.get("link.md")).toMatchObject({
+      outcome: "refused",
+      reason: "import_source_symlink",
+    });
+
+    const imported = data.files.filter((file) => file.outcome === "imported");
+    expect(imported).toHaveLength(3);
+    for (const file of imported) {
+      const envelope = await envelopeOf(fixture, file.captureId ?? "");
+      expect(envelope).toMatchObject({
+        captureMethod: "import-claude-memory",
+        projectSlug: "claude-memory",
+        sourceAgent: "unknown",
+        status: "quarantined",
+      });
+      expect(JSON.stringify(envelope)).not.toContain("synthetic");
+    }
+    expect(JSON.stringify(result)).not.toContain("synthetic");
+    expect(renderImport(data).join("\n")).not.toContain("synthetic");
+
+    // Transcripts untouched: only the projects directory and each memory directory are listed.
+    const projects = projectsOf(fixture);
+    const listed = new Set(probe.listings.filter((path) => path.startsWith(vendorOf(fixture))));
+    const expected = new Set([
+      projects,
+      join(projects, "-synthetic-alpha", "memory"),
+      join(projects, "-synthetic-beta", "memory"),
+      join(projects, "-synthetic-delta", "memory"),
+    ]);
+    expect(expected.size).toBeGreaterThan(0);
+    expect(listed).toEqual(expected);
+    const touched = [...probe.listings, ...probe.stats, ...probe.reads];
+    expect(touched.length).toBeGreaterThan(0);
+    expect(touched.filter((path) => path.includes("session-0001.jsonl"))).toEqual([]);
+    expect(probe.reads).not.toContain(join(fixture.root, "memory-link-target.md"));
+  });
+
+  it("uses the content hash as its cursor", async () => {
+    const fixture = await installed("import-memory-cursor");
+    await plant(projectsOf(fixture), {
+      "-synthetic-alpha/memory/one.md": "alpha memory one",
+      "-synthetic-alpha/memory/two.md": "alpha memory two",
+      "-synthetic-beta/memory/three.md": "beta memory three",
+    });
+    expect(dataOf(await importMemory(fixture)).files).toHaveLength(3);
+    const journals = await importJournals(fixture);
+    expect(journals).toHaveLength(3);
+
+    const rerun = await importMemory(fixture);
+
+    expect(rerun.code).toBe(EXIT_CODES.success);
+    expect(dataOf(rerun)).toMatchObject({ files: [], duplicateCount: 3, remaining: 0 });
+    expect(await importJournals(fixture)).toEqual(journals);
+
+    await nodeFs.writeFile(join(projectsOf(fixture), "-synthetic-alpha", "memory", "two.md"), "alpha memory two, edited");
+    const edited = dataOf(await importMemory(fixture));
+    expect(edited.files.map((file) => [file.path.split("/").pop(), file.outcome])).toEqual([
+      ["two.md", "imported"],
+    ]);
+    expect(edited.duplicateCount).toBe(2);
+  });
+
+  it.each([
+    [IMPORT_MAX_MEMORY_PROJECTS, true],
+    [IMPORT_MAX_MEMORY_PROJECTS + 1, false],
+  ] as const)(
+    "enumerates %i project directories: admitted %s",
+    async (count, admitted) => {
+      const fixture = await installed(`import-memory-bound-${String(count)}`);
+      const projects = projectsOf(fixture);
+      await plant(projects, { "-p0000/memory/kept.md": "a kept memory" });
+      const names = Array.from({ length: count - 1 }, (_, index) => `-p${String(index + 1).padStart(4, "0")}`);
+      expect(names.length).toBe(count - 1);
+      await Promise.all(names.map((name) => nodeFs.mkdir(join(projects, name), { mode: 0o700 })));
+      const probe = spied(fixture.context);
+
+      const result = await importMemory(fixture, probe.context);
+
+      if (admitted) {
+        expect(dataOf(result).files.map((file) => file.outcome)).toEqual(["imported"]);
+      } else {
+        expect(result.code).toBe(EXIT_CODES.invalidInput);
+        expect(kindOf(result)).toBe("import_enumeration_limit");
+        expect(probe.reads.filter((path) => path.startsWith(vendorOf(fixture)))).toEqual([]);
+        expect(await captureFiles(fixture)).toEqual([]);
+      }
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
+  it("refuses a vendor home without a projects directory", async () => {
+    const fixture = await installed("import-memory-no-projects");
+    await nodeFs.mkdir(vendorOf(fixture), { mode: 0o700 });
+
+    const result = await importMemory(fixture);
+
+    expect(result.code).toBe(EXIT_CODES.invalidInput);
+    expect(kindOf(result)).toBe("import_source_not_found");
   });
 });
