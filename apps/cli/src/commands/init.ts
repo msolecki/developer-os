@@ -67,6 +67,13 @@ import {
 } from "./doctor.js";
 import type { DoctorReportV1 } from "./doctor.js";
 import { removeManifestFile, revertArtifacts } from "./uninstall.js";
+import {
+  ADAPTERS_NEXT_STEP,
+  applyInstructions,
+  instructionRefusalDetails,
+} from "../instructions/apply.js";
+import type { AdapterSelectionV1 } from "../instructions/apply.js";
+import { inspectPackagedRelease } from "../update/packaged-release.js";
 
 const BRAIN_KEEP_FILE = ".gitkeep";
 const CONFIG_SOURCE = "generated/config.toml";
@@ -104,6 +111,8 @@ export type InitResult = InitResultV1;
 export interface InitOptions {
   readonly dryRun: boolean;
   readonly assumeYes: boolean;
+  /** `--adapters`; absent or `null` keeps the stored selection (`none` on a fresh home). */
+  readonly adapters?: AdapterSelectionV1 | null;
 }
 
 export interface InitDependencies {
@@ -257,6 +266,7 @@ async function assertV2Undrifted(
     if (typeof candidate !== "object" || candidate === null) continue;
     const artifact = candidate as {
       readonly path?: unknown;
+      readonly owner?: unknown;
       readonly kind?: unknown;
       readonly verification?: {
         readonly mode?: unknown;
@@ -266,6 +276,8 @@ async function assertV2Undrifted(
     if (typeof artifact.path !== "string") continue;
     unchanged.push(artifact.path);
     if (artifact.verification?.mode === "ephemeral") continue;
+    // Vendor rows are resolved by the instruction planners (spec §6.2), not refused here.
+    if (artifact.owner === "claude" || artifact.owner === "codex") continue;
     try {
       const stats = await context.fs.lstat(artifact.path);
       if (artifact.kind === "directory") {
@@ -276,6 +288,11 @@ async function assertV2Undrifted(
         drifted.push(artifact.path);
         continue;
       }
+      /**
+       * A schema row is verified by its schema, never its hash: every gated transaction rewrites
+       * the allocator and `config set` rewrites the configuration, each leaving its row as is.
+       */
+      if (artifact.verification?.mode === "schema") continue;
       const expected = artifact.verification?.installedHash;
       if (
         typeof expected !== "string" ||
@@ -301,17 +318,28 @@ async function settleExistingV2(
   context: CliContext,
   manifest: Record<string, unknown>,
   options: InitOptions,
-): Promise<InitResultV2> {
+): Promise<{ readonly result: InitResultV2; readonly warnings: readonly string[] }> {
   const unchanged = await assertV2Undrifted(context, manifest);
   const config = await readConfigFile(context, context.paths.configFile);
-  if (!options.dryRun) loadOrCreateRedactionKey(context.paths.stateDir);
+  let warnings: readonly string[] = [];
+  if (!options.dryRun) {
+    loadOrCreateRedactionKey(context.paths.stateDir);
+    const bootstrap = context.bootstrap;
+    warnings = (await applyInstructions(context, {
+      selection: options.adapters ?? null,
+      release: bootstrap?.state === "available" ? await inspectPackagedRelease(bootstrap.packagedRelease) : null,
+    })).warnings;
+  }
   return {
-    schemaVersion: 2,
-    productHome: context.paths.home,
-    brainPath: config?.brainPath ?? context.paths.brain,
-    created: [],
-    unchanged,
-    transactionId: null,
+    result: {
+      schemaVersion: 2,
+      productHome: context.paths.home,
+      brainPath: config?.brainPath ?? context.paths.brain,
+      created: [],
+      unchanged,
+      transactionId: null,
+    },
+    warnings,
   };
 }
 
@@ -918,11 +946,22 @@ export async function runInit(
       }
       const outcome = await bootstrap.executor.initializeFresh(request, evidence);
       loadOrCreateRedactionKey(context.paths.stateDir);
-      return success(outcomeResult(outcome));
+      /**
+       * After the handoff, never inside it (spec §6.1): an instruction failure leaves a complete
+       * V2 home, and `init` exits with the instruction step's code.
+       */
+      const selection = options.adapters ?? null;
+      if (selection === null) return success(outcomeResult(outcome), [ADAPTERS_NEXT_STEP]);
+      const applied = await applyInstructions(context, {
+        selection,
+        release: await inspectPackagedRelease(bootstrap.packagedRelease),
+      });
+      return success(outcomeResult(outcome), applied.warnings);
     }
 
     if (manifest?.schemaVersion === 2) {
-      return success(await settleExistingV2(context, manifest, options));
+      const settled = await settleExistingV2(context, manifest, options);
+      return success(settled.result, settled.warnings);
     }
 
     await assertNoDrift(context);
@@ -1050,6 +1089,10 @@ export async function runInit(
 
     return success({ ...settled, transactionId: journal.id }, advisories);
   } catch (error) {
+    const instruction = instructionRefusalDetails(error);
+    if (instruction !== null) {
+      return failureFrom({ guards }, error, instruction.paths, instruction.recovery, instruction.data);
+    }
     return failureFrom(
       { guards },
       error,

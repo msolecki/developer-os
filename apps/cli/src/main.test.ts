@@ -1379,6 +1379,44 @@ describe("init --local-release dispatch", () => {
   });
 });
 
+describe("init --adapters parsing", () => {
+  it("accepts the four documented values on init only", async () => {
+    const CONTEXT_REFUSED = Object.assign(new Error("context refused on purpose"), {
+      code: EXIT_CODES.capabilityUnavailable,
+    });
+    const refusing: CliContextFactory = () => {
+      throw CONTEXT_REFUSED;
+    };
+    for (const value of ["claude,codex", "claude", "codex", "none"]) {
+      const lines: string[] = [];
+      expect(await run(["init", "--yes", "--adapters", value], collectingIo(lines), refusing), value).toBe(
+        EXIT_CODES.capabilityUnavailable,
+      );
+      expect(lines.join("\n")).not.toContain("Usage: developer-os <command>");
+    }
+  });
+
+  it("refuses any other value at parse time", async () => {
+    const values = ["", "codex,claude", "all", "claude,claude", "Claude"];
+    expect(values.length).toBeGreaterThan(0);
+    for (const value of values) await refuses(["init", `--adapters=${value}`]);
+  });
+
+  it("refuses --adapters on every other command at parse time", async () => {
+    const others: readonly (readonly string[])[] = [["status"], ["doctor"], ["uninstall"], ["config", "get"]];
+    expect(others.length).toBeGreaterThan(0);
+    for (const argv of others) await refuses([...argv, "--adapters", "claude"]);
+  });
+
+  it("names the option in the usage text", async () => {
+    const io = new RecordingIo();
+    await run(["--nope"], io, () => {
+      throw new Error("unused");
+    });
+    expect(io.err.join("\n")).toContain("--adapters <a>");
+  });
+});
+
 describe("hook-mode routing", () => {
   const hookEnvironment: HookEnvironment = {
     env: {},

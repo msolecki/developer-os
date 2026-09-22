@@ -22,6 +22,7 @@ import { renderImport, runImport } from "./commands/import.js";
 import { renderIngest, runIngest } from "./commands/ingest.js";
 import { runInit } from "./commands/init.js";
 import type { InitResultV1 } from "./commands/init.js";
+import { parseAdaptersFlag } from "./instructions/apply.js";
 import { renderProjectCheck, runProjectCheck } from "./commands/project-check.js";
 import { renderProjectInit, runProjectInit } from "./commands/project-init.js";
 import { runRepair } from "./commands/repair.js";
@@ -65,6 +66,7 @@ const USAGE = [
   "  --dry-run        show the plan without changing anything (init, uninstall, import, project init, brain retire, brain refactor)",
   "  --yes            accept ordinary confirmations (init, uninstall; ingest never asks)",
   "  --local-release <dir>  install from a package pack:local-release wrote; unsigned (init)",
+  "  --adapters <a>   claude,codex, claude, codex or none: the vendors to install instructions for (init)",
   "  --json           emit one machine-readable line",
   "  --limit <n>      most matches to return (brain search), or captures to process (ingest, import)",
   "  --text <text>    the observation to capture; stdin when absent (capture)",
@@ -101,6 +103,7 @@ const OPTIONS = {
   note: { type: "string" },
   version: { type: "boolean" },
   "local-release": { type: "string" },
+  adapters: { type: "string" },
   rename: { type: "boolean" },
   move: { type: "boolean" },
   merge: { type: "boolean" },
@@ -135,7 +138,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly OptionName[]>> = {
   capture: ["text", "json", "note"],
   review: ["id", "decision", "status", "json"],
   ingest: ["limit", "json", "yes", "agent"],
-  init: ["dry-run", "yes", "json", "local-release"],
+  init: ["dry-run", "yes", "json", "local-release", "adapters"],
   config: ["json"],
   status: ["json"],
   doctor: ["json", "probe"],
@@ -322,6 +325,13 @@ function parse(argv: readonly string[]): Invocation | null {
   if (positional === "import" && values["claude-memory"] === true && rest.length > 0) return null;
 
   if (values["local-release"] === "") return null;
+  if (typeof values.adapters === "string") {
+    try {
+      parseAdaptersFlag(values.adapters);
+    } catch {
+      return null;
+    }
+  }
 
   const limit = parseLimit(optionString(values.limit));
   if (limit === "invalid") return null;
@@ -636,7 +646,13 @@ async function dispatch(
     case "init":
       return emit(
         io,
-        await runInit(context, { dryRun, assumeYes }),
+        await runInit(context, {
+          dryRun,
+          assumeYes,
+          adapters: typeof invocation.values.adapters === "string"
+            ? parseAdaptersFlag(invocation.values.adapters)
+            : null,
+        }),
         json,
         renderInit,
       );
