@@ -1284,14 +1284,14 @@ describe("import and project dispatch", () => {
     });
   });
 
-  /** `PROJECT_TEMPLATE` is still empty, so `project init` refuses before it reads anything. */
+  /** The fixture is not initialized, so `project init` refuses before it touches a target. */
   it.each([
     [["project", "init"]],
     [["project", "init", "some-dir", "--dry-run", "--json"]],
-  ])("admits %j and reaches project init's empty-template refusal, exit 4", async (argv) => {
+  ])("admits %j and reaches project init's not-initialized refusal, exit 1", async (argv) => {
     const fixture = await createCommandFixture("dispatch-a14");
     expect(await run(argv, fixture.io, () => fixture.context)).toBe(
-      EXIT_CODES.capabilityUnavailable,
+      EXIT_CODES.operationalFailure,
     );
   });
 

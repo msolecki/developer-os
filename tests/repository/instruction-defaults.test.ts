@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  INSTRUCTION_SCAN_ROOTS,
   listInstructionFiles,
   scanInstructionDefaults,
 } from "../tools/scan-instruction-defaults.js";
@@ -23,7 +24,14 @@ describe("default instructions are redacted (spec §3.3)", () => {
     }
   });
 
-  it("finds nothing under instructions/", () => {
-    expect(scanInstructionDefaults(INSTRUCTIONS, [])).toStrictEqual([]);
+  it("scans instructions/ and templates/project/, each non-empty", () => {
+    expect(INSTRUCTION_SCAN_ROOTS).toStrictEqual(["instructions", "templates/project"]);
+    for (const root of INSTRUCTION_SCAN_ROOTS) {
+      expect(listInstructionFiles(join(ROOT, root)).length, root).toBeGreaterThan(0);
+    }
+  });
+
+  it.each(INSTRUCTION_SCAN_ROOTS)("finds nothing under %s/", (root) => {
+    expect(scanInstructionDefaults(join(ROOT, root), [])).toStrictEqual([]);
   });
 });

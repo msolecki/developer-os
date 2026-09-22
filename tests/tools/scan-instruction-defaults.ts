@@ -3,7 +3,7 @@
  * line and a rule name only, never the matched text, so the report is safe to paste.
  *
  * `node tests/dist/tools/scan-instruction-defaults.js [--patterns <file>]` scans the
- * checkout's `instructions/`. The patterns file holds one regular expression per
+ * checkout's `instructions/` and `templates/project/`, and prints paths relative to the checkout. The patterns file holds one regular expression per
  * non-empty line and lives outside the repository; its findings are named by line
  * number (`extra:<n>`) so the report never echoes a private pattern.
  */
@@ -31,6 +31,8 @@ export interface InstructionFinding {
 
 const FILE_CAP_BYTES = 256 * 1024;
 const HOSTS_FILE = join("tests", "repository", "instruction-hosts.json");
+/** Every repository directory whose files ship as default instructions. */
+export const INSTRUCTION_SCAN_ROOTS: readonly string[] = ["instructions", "templates/project"];
 const SOURCE_PREFIX = ["DEVELOPER", "OS", "SOURCE", ""].join("_");
 
 const LINE_RULES: readonly { readonly rule: string; readonly expression: RegExp }[] = [
@@ -209,7 +211,12 @@ if (isEntryPoint(argv[1])) {
   }
   const extra =
     patternFile === undefined ? [] : parsePatternFile(readFileSync(resolve(patternFile), "utf8"));
-  const findings = scanInstructionDefaults(join(repositoryRoot(), "instructions"), extra);
+  const findings = INSTRUCTION_SCAN_ROOTS.flatMap((root) =>
+    scanInstructionDefaults(join(repositoryRoot(), root), extra).map((finding) => ({
+      ...finding,
+      path: `${root}/${finding.path}`,
+    })),
+  );
   for (const finding of findings) {
     stdout.write(`${finding.path}:${String(finding.line)} ${finding.rule}\n`);
   }

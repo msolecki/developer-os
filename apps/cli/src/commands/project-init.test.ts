@@ -8,7 +8,7 @@ import { redactionKeyPath } from "../context.js";
 import { runInit } from "./init.js";
 import { runProjectInit } from "./project-init.js";
 import type { ProjectInitDependencies } from "./project-init.js";
-import { PROJECT_TEMPLATE_MAX_BYTES } from "./project-template.js";
+import { PROJECT_TEMPLATE, PROJECT_TEMPLATE_MAX_BYTES } from "./project-template.js";
 import type { ProjectTemplateFile } from "./project-template.js";
 import {
   createCommandFixture,
@@ -101,16 +101,17 @@ describe("runProjectInit", () => {
     expect(await inventoryDigest(fixture.root)).toEqual(before);
   });
 
-  it("refuses exit 4 with the production default set today", async () => {
+  it("admits the production default set: a dry run lists every template name", async () => {
     const fixture = await installedFixture("project-init-default-set");
     const before = await inventoryDigest(fixture.root);
 
-    const result = await runProjectInit(fixture.context, { dir: fixture.project, dryRun: false });
+    const result = await runProjectInit(fixture.context, { dir: fixture.project, dryRun: true });
 
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.code).toBe(EXIT_CODES.capabilityUnavailable);
-    expect(result.error.kind).toBe("project_templates_unavailable");
+    expect(PROJECT_TEMPLATE.length).toBeGreaterThan(0);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.created).toEqual(PROJECT_TEMPLATE.map((file) => file.name));
+    expect(result.data.transactionId).toBeNull();
     expect(await inventoryDigest(fixture.root)).toEqual(before);
   });
 
