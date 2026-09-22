@@ -34,8 +34,10 @@ contents are quoted from those narratives; the sections column is derived from e
 | 2026-08-28 | founder, complete-spec approval after the final full `npm run check` and an independent `READY` | the complete written specification; opens the implementation-plan gate | all |
 | 2026-09-17 | founder, NEW-67 amendment with every recommended option | A1 D18 applied (V1 homes keep Foundation paths); A2 retention on the pre-product bootstrap paths only; A3 absent-manifest uninstall without a coordinator envelope; A4 reservation ownership; A5 types shipped by Spec 2 consumed; A6 migration collision codes withdrawn; A7 structural admission and a recovery-only uninstall arm; A8 counting-seam ceiling gates; A9 uninstall→init round-trip gates; A10 `launchctl` re-pin deferred to Spec 1b (no text change); A11 this table; A12 bookkeeping set kept by uninstall and admitted by shape; A13 closure admits retained bootstrap evidence. The 2026-08-27 flat pre-product recovery envelope, first-creation temp grammar and key-absent coordinator are superseded by A3. | header, §2.1, §2.3, §2.4, §6, §7, §8 |
 | 2026-09-17 | founder, plan 1a blocking questions | A14 (D24) closed variant `uninstall/present_manifest_without_launchd` for a present-manifest uninstall with no launchd evidence, derived and never chosen; A15 (D25) `M(finalize_tombstones)` removes the preimage manifest's empty directory rows before it deletes the manifest tombstone; A16 (D28) the allocated `mf` manifest participant ID is reserved last in a composite's ID block | §2.1, §2.2, §2.4, §5.3, §6, §7 |
+| 2026-09-22 | founder, A13 Q3-A (D47) | `state/hooks` reserved runtime path for hook firing records: owner, admitted shape, best-effort write exception, uninstall order | §2.1, §6 |
 
-Each 2026-09-17 change is marked "Amended 2026-09-17" in place with its item number.
+Each 2026-09-17 change is marked "Amended 2026-09-17" in place with its item number. The 2026-09-22
+change is marked "Amended 2026-09-22 (A13 Q3-A)".
 
 ---
 
@@ -146,6 +148,23 @@ restate Spec 2's rows. The rows both specifications use have these owners:
 | `state/lifecycle-id-allocator.json` | Spec 2 new init | Spec 1 §2.4 allocation | Spec 1 uninstall |
 | the bookkeeping set below | Spec 2 new init, or its first writer | Spec 1 §2.4 children only | never |
 | Spec 2 §3.2 rows | Spec 2 | Spec 2 update and rollback | Spec 1 uninstall, through the manifest |
+| `state/hooks` (amended 2026-09-22, A13 Q3-A) | fresh `init` | hook firing-record writes only | Spec 1 uninstall, after both plugin trees |
+
+**Amended 2026-09-22 (A13 Q3-A, D47).** `state/hooks` is a **reserved runtime path** for the hook
+firing records of `specs/2026-09-22-developer-os-hooks-design.md` §7.3. It is not in the bookkeeping
+set, because the bookkeeping set is never removed and this path is.
+
+- **Owner:** fresh `init` creates `state/hooks` as a directory with mode 0700, owned by the effective
+  uid. It is never a manifest row.
+- **Admitted shape:** each child is either a regular file of ≤ 512 bytes named
+  `^(claude|codex)\.[A-Za-z_]{1,64}\.json$`, or a leftover temp named
+  `^(claude|codex)\.[A-Za-z_]{1,64}\.json\.tmp-[0-9a-f]{16}$` of any size ≤ 512. There are at most
+  32 children. Anything else refuses with `hook_records_shape`.
+- **Write exception:** hooks write records outside any transaction, as a best-effort write by
+  same-directory temp file and rename. This is the same class of exception as this specification's
+  bounded runtime records.
+- **Uninstall:** §6 removes it after both plugin trees, never before. The absent-manifest walks and
+  fresh `init` admit it by the shape above.
 
 The stable global lock and journal/plan/lock leaves are bookkeeping exceptions, not retained runtime
 records: they use the exact direct state-store contracts in §§2.3–2.4 and are never inferred from an
@@ -4132,6 +4151,10 @@ derivable, so no product-owned label can be loaded.
 post-uninstall residue is that set, with every directory compaction has emptied, together with inert
 retained bootstrap evidence and the bootstrap leaf. Spec 2's fresh `init` admits it by shape.
 
+**Amended 2026-09-22 (A13 Q3-A, D47).** The V2 uninstall and the absent-manifest uninstall remove
+§2.1's reserved runtime path `state/hooks` **after** both plugin trees are removed, never before. It is not
+bookkeeping and is not part of the post-uninstall residue.
+
 **Amended 2026-09-17 (A3, A7, A12).** Uninstall dispatch checks §2.1's recovery-only arm first, then
 the absent-manifest shapes below. This replaces the flat bootstrap envelope, recovery-only
 nonce/allocator epoch, creation temps and key-present coordinator approved on 2026-08-27.
@@ -4156,6 +4179,14 @@ away and left in place:
   Active or ambiguous residue refuses as exit 6. A bootstrap leaf counts as attributable to an envelope
   only when its device and inode equal that envelope's persisted bootstrap lock identity;
 - §2.1's bookkeeping set, admitted by shape, including the lock a rolled-back first `init` leaves.
+
+**Amended 2026-09-22 (A13 Q3-A, D47).** The absent-manifest walks also admit §2.1's reserved runtime
+path `state/hooks` by its shape: an owner-only `0700` directory owned by the effective user
+in which each child is either a regular file of ≤ 512 bytes named
+`^(claude|codex)\.[A-Za-z_]{1,64}\.json$`, or a leftover temp named
+`^(claude|codex)\.[A-Za-z_]{1,64}\.json\.tmp-[0-9a-f]{16}$` of any size ≤ 512. There are at most
+32 children. Anything else refuses with `hook_records_shape`. The absent-manifest
+uninstall removes it after both plugin trees are removed, never before.
 
 The key-only arm records only `SecretOpaqueFileStateV1`; it never reads or hashes key bytes. Every other
 known or unknown file **or directory** — including `config.toml`, activation, sync/marker/status/log/lease

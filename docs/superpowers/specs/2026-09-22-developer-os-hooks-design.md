@@ -19,6 +19,77 @@ Governing founder decisions: **D3** (the legacy guards return through product ho
 returns), **D7** (Codex hooks are trusted manually; the product never writes the Codex config file),
 **D8** (isolated vendor invocations load no user hooks), **D16** (this phase precedes the cutover).
 
+**Amended 2026-09-22 (D47, A13 plan Task 3).** The implementation plan
+`docs/superpowers/plans/2026-09-22-developer-os-hooks.md` closes the gaps below. Each item is
+normative and takes precedence over the section it names. D47 applies throughout: there is no
+launcher and no packaged release, and "launcher" reads as "the entrypoint A12's local-build install
+places on disk".
+
+- **G1 — Executable path, replacing the launcher.** `<launcher>` in §4.1 becomes
+  `<hook-executable>`: the absolute path of the entrypoint A12's local-build install writes. Core's
+  `assertHookExecutablePath` refuses a path unless it meets all of these conditions:
+  - it matches `^/[A-Za-z0-9._+/-]+$`;
+  - it has no empty, `.` or `..` segment;
+  - no segment looks like a version (`^\d+\.\d+\.\d+`) or a hash (`^[0-9a-f]{16,}$`).
+
+  The charset rule exists because vendors run the command string through a shell. The product refuses
+  unsafe paths rather than quoting them. The version and hash rule enforces §4.1's byte stability.
+  **Invariant 1 ("no PATH lookup, no interpreter line") cannot hold for a `#!/usr/bin/env node`
+  script.** Today's `apps/cli/src/bin.ts` is one. Task 14 therefore stops and asks the founder unless
+  A12's installed entrypoint is either a single executable that does not resolve its interpreter
+  through `PATH`, or A12 records an absolute interpreter the entrypoint names.
+  - **Resolution, amended 2026-09-22 (D47).** In the local build the hook command names the
+    interpreter explicitly. `<hook-executable>` in §4.1 becomes two tokens,
+    `<node-executable> <entrypoint>`: the absolute path of the Node executable, then the absolute
+    path of the installed `bin.js`. There is no `PATH` lookup and no `env`. Because Node is named
+    explicitly, the entrypoint's `#!/usr/bin/env node` line is never executed, so invariant 1 holds.
+    `assertHookExecutablePath` applies in full to both tokens: the charset rule, the segment rule and
+    the version-or-hash rule. Two consequences follow, and this amendment names them:
+    - a Node executable whose absolute path carries a version segment (for example a package-manager
+      cellar path of the form `.../node/24.16.0/bin/node`) is refused at `init` with exit 2, before any
+      mutation;
+    - a Node upgrade that moves the Node executable changes the command bytes. Under §4.1 that is a
+      change the user pays for by trusting every Codex hook again, if Task 1 observes that the trust
+      hash covers the command string.
+- **G2 — Children run under the hook's own Node.** `node_modules/.bin/tsc`, `biome` and `prettier`
+  are `#!/usr/bin/env node` scripts. A child that gets only the hook marker has no `PATH`, so the
+  shebang fails. The verbs therefore run `process.execPath` with the child script's canonical real
+  path as the first argument. The executable stays absolute and nothing resolves through `PATH`.
+  "No network access" means that the child receives no proxy or credential environment, and that
+  nothing is installed. The product has no network sandbox to enforce more than that.
+- **G3 — Redaction key.** The redactor needs a key, but guards read no product-home state (Q1-A). The
+  guard verbs therefore redact with an ephemeral 32-byte key. `createProductionContext` already
+  does the same when no durable key exists. `brain status --inject` builds a context, so it uses the
+  context's key.
+- **G4 — `--vendor` refused or unobserved.** When argv carries no valid vendor, the Claude outcome
+  map applies. The Codex map is `null` until Task 15 fills it from Task 1's observations. While it is
+  `null`, a `--vendor codex` invocation exits 0 with one stderr line. No Codex hook is rendered before
+  Task 15, so no installed hook reaches that path.
+- **G5 — Latency order.** Spec §11 Task 1 includes the latency baseline, but the verbs it measures do
+  not exist until Tasks 8–10. Task 16 measures latency instead, through the local-build entrypoint in
+  a disposable `HOME`. The CI half of the measurement is deferred to phase close. Until Task 16 sets
+  the timeouts, each row's `timeoutSeconds` is `null`, which means the rendered entry omits the key.
+  `stop` (125 s) and `format` (35 s) are exceptions, because §5.4 derives them from the child caps.
+- **G6 — Hook-mode environment.** `run(argv, io, createContext)` has no environment without building
+  a context. The plan adds an optional fourth parameter, `hookEnvironment`, which `bin.ts` supplies.
+  `bin.ts`'s `HOME`-unset exit 2 and its catch-all exit 1 are also routed through the fail mode when
+  argv is in hook mode.
+- **G7 — Relative payload paths.** `ProtectedPathPolicy` resolves a relative path against the **user
+  home**, not the payload `cwd`. `guard path`, `format` and `edit` therefore resolve a relative path
+  against the canonical project root before any policy call.
+- **G8 — Stop-loop flag absent.** A Claude `Stop` payload without a boolean `stop_hook_active` is
+  malformed. `stop` fails open, so the result is `allow`.
+- **G9 — Hook argv routes around `parse()`.** §4.2 says strict dispatch is "extended rather than
+  bypassed". Instead, `run()` sends every hook-mode argv (`argv[0] === "guard"`, or any `--inject`)
+  to `parseHookArgv` **before** `parse()`. That parser accepts exactly the two rendered token
+  sequences, so it is at least as strict as `parse()`. It exists because routing any failure through
+  `parse()`'s `usageFailure()` would exit 2, which the vendor reads as block. The spec text is amended
+  to say so, so that the phase-close review does not flag this routing as a violation.
+- **G10 — The hook path loads the whole CLI module graph.** `bin.ts` imports `main.ts`, which
+  imports every command, including `ingest.ts` → `invoke.ts`. The module is *loaded*, but it is
+  never *called*. The isolation test scopes §6.1 to the graph of `hooks/entry.ts`. If Task 16's p95
+  is too high, the fix is a `bin.ts` pre-route that dynamic-imports only `hooks/entry.ts`.
+
 ## 0. Open questions for founder approval
 
 Four. Each blocks a named section; everything else in this document is decided.
