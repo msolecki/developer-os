@@ -16,15 +16,15 @@ uninstall shipped; constraints recorded in `docs/architecture/foundation.md` §1
 kill-matrix coverage) was carved out to post-A16 hardening (D42); its full spec stays in the plan
 file, tracked as `BACKLOG.md` NEW-100. The next action is Phase 4b: Spec 2
 (`plans/2026-08-29-developer-os-release-update.md`) Tasks 10–11, plus the production wiring step that
-removes the bootstrap pin at `apps/cli/src/context.ts:765` — launcher and offline trust — with
-NEW-79, NEW-81 and NEW-85 settled first.
+removes the bootstrap pin at `apps/cli/src/context.ts:790` (Task 11b) — launcher and offline trust —
+with NEW-79, NEW-81 and NEW-85 settled first.
 
 Spec 2: Tasks 1–7 and 9 complete, Task 8 withdrawn (D18), Tasks 10–26 remain. The 2026-08-28 Spec 1
 plan stays as plan 1b's source; its Tasks 1–7, 21 and 23 were executed via plan 1a.
 
 Open sequence (D16, daily use before completeness):
 
-1. Now: Phase 4b — Spec 2 Tasks 10–11 plus the `context.ts:765` pin removal, NEW-79/81/85 first.
+1. Now: Phase 4b — Spec 2 Tasks 10–11 plus Task 11b's pin removal, NEW-79/81/85 first.
 2. A12 → A12b → A13 → A14, then the founder cutover A15.
 3. After the cutover: A11b (Spec 2 Tasks 12–26, then Spec 1b), then A16.
 

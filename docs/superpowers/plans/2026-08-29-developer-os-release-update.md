@@ -224,6 +224,50 @@ git add packages/security/src/update/signatures.ts packages/security/src/update/
 git commit -m "feat(security): verify release metadata trust"
 ```
 
+### Task 11b: Replace the production bootstrap pin with the launcher's admitted, verified release
+
+**Added 2026-09-22 (Phase 4b, `docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md`).**
+`apps/cli/src/context.ts:790` hardcodes `bootstrap: { state: "unavailable_until_packaged_handoff" }`
+in `createProductionContext` — no production code path ever reaches the `"available"` arm of
+`CliBootstrapContext` (`apps/cli/src/bootstrap/context.ts:263-272`), so V2 `init` cannot run outside
+tests. `apps/cli/src/update/packaged-release.ts` already has the admission machinery
+(`admitRootVerifiedPackagedRelease(handoff: RootVerifiedPackagedReleaseV1): Promise<PackagedReleaseSourceV1>`,
+`unavailablePackagedReleaseSource()`) and it is called only from the test fixture
+(`apps/cli/src/commands/testing.ts:502-504`, `createSyntheticPackagedRelease`) — this task is the
+first production caller. Neither Spec 1's plan nor this plan replaces the pin; that is the gap Phase
+4b's checklist named.
+
+**Files:**
+- Modify: `apps/cli/src/bin.ts` — read the launcher's FD 3 handoff (Task 11's `readOfflineReleaseTrustFd`) when present; on success, derive a `RootVerifiedPackagedReleaseV1` from Task 10's admitted bundle (`AdmittedReleaseBundleV1`) and Task 11's verified metadata chain, and pass it into `createProductionContext`. When FD 3 is absent or closed (no launcher, direct CLI invocation), pass nothing — today's pin behavior is the fallback, not a regression.
+- Modify: `apps/cli/src/context.ts` — `ProductionContextOptions` gains an optional `readonly packagedRelease?: RootVerifiedPackagedReleaseV1;`. When present, `createProductionContext` calls `admitRootVerifiedPackagedRelease` and sets `bootstrap: { state: "available", executor: new BootstrapExecutor({ paths, userHome: options.userHome, packagedRelease: admitted, transactionExecutor, lockProvider, renameNoReplace, renameSameParentNoReplace, now, uuid }), packagedRelease: admitted, inspectEvidence }` (mirror the wiring in `apps/cli/src/commands/testing.ts:618-630`, production dependencies not fixture ones). When absent, keep the current `{ state: "unavailable_until_packaged_handoff" }`.
+- Create: `apps/cli/src/bin.test.ts` or extend the existing bin-level test, plus `apps/cli/src/context.test.ts` cases for both branches.
+
+**Interfaces:**
+- Consumes: Task 10's `LauncherSelectionV1`/`AdmittedReleaseBundleV1` (the launcher already admitted and root-verified the bundle before spawning the CLI), Task 11's `verifyReleaseMetadataChain`/`readOfflineReleaseTrustFd`, and the existing `admitRootVerifiedPackagedRelease`/`PackagedReleaseSourceV1` (`apps/cli/src/update/packaged-release.ts`, unmodified).
+- Produces: production `init`/`repair`/`doctor` etc. see `bootstrap.state === "available"` when launched through the launcher; unchanged `"unavailable_until_packaged_handoff"` when launched directly (dev shell, tests, or a launcher `package_fallback` selection with nothing admitted).
+
+- [ ] **Step 1: Write failing tests for both branches**
+
+Cover: FD 3 present and verifying → `bootstrap.state === "available"` with a real `BootstrapExecutor` wired to the admitted release; FD 3 absent (closed stdin descriptor 3, the common case) → unchanged pinned behavior; FD 3 present but failing verification → the CLI refuses rather than silently falling back to "unavailable" (a downgrade-by-corruption must be loud, not silent — Global Constraint "trust high watermarks never roll back" applies here even though this is bootstrap admission, not update/rollback).
+
+- [ ] **Step 2: Run the tests and verify they fail**
+
+Run: `npx vitest run --root apps/cli src/bin.test.ts src/context.test.ts`
+Expected: FAIL — the wiring does not exist yet.
+
+- [ ] **Step 3: Implement**
+
+Wire `bin.ts` and `context.ts` as described in Files above. Do not touch `packaged-release.ts`'s admission logic — it is already guarded (owner-only, no-follow, identity-rechecked); this task is composition-root wiring only.
+
+- [ ] **Step 4: Run the focused tests**
+
+Run: `npx vitest run --root apps/cli src/bin.test.ts src/context.test.ts`
+Expected: PASS.
+
+- [ ] **Step 5: Gate, commit**
+
+Tick, update the progress sentence, run `npm run lint` (Phase 4b's D44 lane — see roadmap), then commit code and tests only.
+
 ### Task 12: Implement fixed-origin bounded HTTPS transport
 
 **Files:**
