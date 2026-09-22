@@ -223,6 +223,10 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   only, no release path. Also decided: Spec 1 §1 holds — `import` and `ingest` stay manual and leave
   Phase 9's job registry. The D44 lane (lint per commit, tests and review at phase close, no push)
   applies to Phases 5–7 as well, on the founder's instruction to skip tests for now.
+- **D48 (2026-09-22).** Vendor observations re-pin to the installed Claude Code 2.1.280 and Codex CLI
+  0.155.1 (A12 Task 2 found them instead of the pinned 2.1.260 / 0.151.0). The billed real-agent row is
+  deferred to `BACKLOG.md`; until it passes, the Claude categories held in `UNPROVEN_CLAUDE_CATEGORIES`
+  stay unproven.
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 

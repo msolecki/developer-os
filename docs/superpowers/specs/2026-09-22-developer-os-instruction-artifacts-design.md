@@ -668,7 +668,7 @@ becomes 44 under Q3 option A.
 
 ### 10.1 Plan Task 1: vendor observations (a precondition for every other task)
 
-Task 1 runs against the pinned Claude Code 2.1.260 and Codex CLI 0.151.0, in disposable homes, and
+Task 1 runs against the pinned Claude Code 2.1.280 and Codex CLI 0.155.1, in disposable homes, and
 records each result as a dated section in the adapter notes. If any row fails, the plan stops for a
 founder decision. For every row of §4, it pins:
 - the exact loading-proof command and the output fragment that proves the row

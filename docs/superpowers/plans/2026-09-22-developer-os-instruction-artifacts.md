@@ -364,8 +364,8 @@ re-derives the payload from `identity`, it must read `packaged.trust` too.)
 The precondition for every task that encodes a vendor fact. It writes no product code.
 
 **Files:**
-- Modify: `docs/architecture/claude-adapter.md` (new section "Observed for A12 against Claude Code 2.1.260 on <date>")
-- Modify: `docs/architecture/codex-adapter.md` (new section "Observed for A12 against Codex CLI 0.151.0 on <date>")
+- Modify: `docs/architecture/claude-adapter.md` (new section "Observed for A12 against Claude Code 2.1.280 on <date>")
+- Modify: `docs/architecture/codex-adapter.md` (new section "Observed for A12 against Codex CLI 0.155.1 on <date>")
 
 **Interfaces:**
 - Consumes: nothing.
@@ -384,7 +384,7 @@ T=$(mktemp -d); env -u CLAUDE_CONFIG_DIR HOME="$T" CODEX_HOME="$T/.codex" XDG_CO
 env -u CLAUDE_CONFIG_DIR HOME="$T" CODEX_HOME="$T/.codex" XDG_CONFIG_HOME="$T/.config" codex --version
 ```
 
-Expected: `2.1.260` and `0.151.0`. A different version is a **FOUNDER STOP** (the adapter notes pin
+Expected: `2.1.280` and `0.155.1`. A different version is a **FOUNDER STOP** (the adapter notes pin
 these; re-pinning is a founder decision).
 
 - [ ] **Step 2: Run the unbilled rows in the isolated home**
