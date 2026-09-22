@@ -192,11 +192,17 @@ Added by D16 and pulled forward from Phase 8: without the launcher's root-verifi
   rule), is held locally without a push, and fresh-context review is owed but deferred to one
   whole-phase review at phase close alongside `npm run check` and the deferred slow suites. At close,
   commits are pushed to one branch and opened as one PR (as plan 1a's closure did, `#14`), not pushed
-  directly. Accepted risk: D36's — a defect in a consumed interface surfaces only after its consumers
+  directly. **Amended 2026-09-22 by the founder:** the focused/filtered test runs are skipped too —
+  every Phase 4b commit (`d2cc737`, `c7bc459`, and the side track `6254586`) carries written but
+  unrun tests; all of them run at phase close. Accepted risk: D36's — a defect in a consumed interface surfaces only after its consumers
   bind to it. **This decision expires when Phase 4b closes**; a later phase gets its own.
 - [x] Confirm from the plan text that Tasks 10–11 need nothing from Spec 1b. Confirmed 2026-09-17: release plan Task 10 consumes only "Spec 1 lifecycle closure", which plan 1a ships; Task 11 consumes only Task 2's signed-document schemas and Task 10's launcher admission; neither names Git or launchd.
 - [x] Add the missing plan step that replaces `bootstrap: { state: "unavailable_until_packaged_handoff" }` at `apps/cli/src/context.ts:790` with the admitted handoff. Added 2026-09-22 as Task 11b in `plans/2026-08-29-developer-os-release-update.md`, wiring `apps/cli/src/update/packaged-release.ts`'s existing `admitRootVerifiedPackagedRelease` (already used by the test fixture, never by production) into `bin.ts`/`context.ts` via the launcher's FD 3 handoff.
-- [ ] Stop and ask how the founder build is signed: which offline root key the launcher compiles in, and whether public releases reuse it. **Scoped 2026-09-22: this blocks the actual pin removal, not Tasks 10–11's TDD implementation** — `verifySignedReleaseDocument(document, key)` takes the key as a parameter and Task 11's own tests are written against a fixture (`vector.currentRoot`), so both tasks proceed now on test keys; ask before compiling a real launcher for the founder machine.
+- [x] **D46 (2026-09-22): the founder dropped release signing keys for now ("we don't need this
+  functionality").** `LAUNCHER_OFFLINE_RELEASE_ROOTS` stays `[]`; Task 11b is parked because the FD 3
+  payload carries only trust roots, not a packaged-release identity, and no production packaged-release
+  layout exists. A12's spec settles the production install source. Original question:
+  Stop and ask how the founder build is signed: which offline root key the launcher compiles in, and whether public releases reuse it. **Scoped 2026-09-22: this blocks the actual pin removal, not Tasks 10–11's TDD implementation** — `verifySignedReleaseDocument(document, key)` takes the key as a parameter and Task 11's own tests are written against a fixture (`vector.currentRoot`), so both tasks proceed now on test keys; ask before compiling a real launcher for the founder machine.
 - [ ] Before the pin is removed: correct the V1 refusal's recovery (D20, NEW-79) and harden the ordinary-command gate (NEW-81). The release layout move (D19, NEW-80) moved into plan 1a Task 1 (D29).
 - [x] **D45 (2026-09-22).** Settled the capacity of `F(uninstall_artifacts)` (D26, NEW-85):
   **repeat the step, up to 31 forward/compensation pairs — not a Spec 2 §4.4 file-count cap.**

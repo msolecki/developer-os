@@ -19,9 +19,12 @@ file, tracked as `BACKLOG.md` NEW-100. The next action is Phase 4b: Spec 2
 removes the bootstrap pin at `apps/cli/src/context.ts:790` (Task 11b) — launcher and offline trust —
 with NEW-85 settled first.
 
-Phase 4b progress: Task 10 (`1e214ce`) and Task 11 (`3f640b3`) committed; NEW-85 decided (D45, no code
-yet); NEW-79 and NEW-81 closed (`e6f3a39`, `e65a09d`); ready next: NEW-85's implementation, then
-Task 11b (blocked on the founder's signing-key answer only at the point the pin is actually removed).
+Phase 4b progress: Task 10 (`1e214ce`) and Task 11 (`3f640b3`) committed; NEW-79/NEW-81 closed;
+NEW-85 implemented (`d2cc737`); launcher trust-fd flag defect fixed (`c7bc459`). **D46 (2026-09-22):**
+release signing keys are dropped for now, so Task 11b is parked — the FD 3 handoff cannot carry a
+`RootVerifiedPackagedReleaseV1` anyway (no packaged-release layout exists outside the test fixture).
+Production V2 `init` still has no install source; the A12–A14 spec drafts carry that as their first
+open question. Focused suites for every Phase 4b commit are owed at phase close (D44 amendment).
 
 Spec 2: Tasks 1–7 and 9 complete, Task 8 withdrawn (D18), Tasks 10–26 remain. The 2026-08-28 Spec 1
 plan stays as plan 1b's source; its Tasks 1–7, 21 and 23 were executed via plan 1a.
@@ -65,7 +68,6 @@ The full closure conditions are in `BACKLOG.md` §1.
 
 Startable without another product gate:
 
-- NEW-49 — expose decided captures through the agent-facing review workflow.
 - NEW-46 — close the same-uid `PATH` spawn surface or design persisted executable identity.
 
 Needs a human, a policy decision, or an external application:
