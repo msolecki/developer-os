@@ -241,7 +241,7 @@ describe("the knowledge pipeline, against the compiled binary", () => {
       expect(reviewed.exitCode).toBe(EXIT_CODES.success);
       expect(reviewed.result.code).toBe(EXIT_CODES.success);
       expect(dataOf(reviewed).captures).toStrictEqual([
-        { captureId, status: "accepted" },
+        { captureId, status: "accepted", note: null, redactionCount: 0 },
       ]);
 
       /** 4. One agent call, nine validators, four transactions, a reindex. */

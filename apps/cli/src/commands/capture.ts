@@ -1,7 +1,8 @@
+import { createHash } from "node:crypto";
 import { basename, join } from "node:path";
 import { cwd as processCwd } from "node:process";
 
-import { EXIT_CODES, success } from "@developer-os/core";
+import { containsPath, EXIT_CODES, success } from "@developer-os/core";
 import type {
   CliResult,
   DeveloperOsConfigV1,
@@ -11,10 +12,16 @@ import type {
 import { discoverClaude } from "@developer-os/adapter-claude";
 import { discoverCodex } from "@developer-os/adapter-codex";
 import {
+  BrainService,
   buildCapture,
   detectSourceAgent,
+  isUnsafeProposedNotePath,
+  MAX_PROPOSED_NOTE_CHARS,
+  parseNote,
+  PRIVATE_FOLDERS,
+  resolveBrainConfig,
 } from "@developer-os/brain";
-import type { CaptureStatus } from "@developer-os/brain";
+import type { CaptureNoteTargetV1, CaptureStatus } from "@developer-os/brain";
 import type { AgentName } from "@developer-os/platform-macos";
 import { createRedactor } from "@developer-os/security";
 import type { Redactor } from "@developer-os/security";
@@ -38,6 +45,7 @@ import {
   writeQuarantineCapture,
 } from "./quarantine.js";
 import type { ExistingCapture } from "./quarantine.js";
+import { dependenciesFor } from "./reindex.js";
 
 /**
  * What `--json` publishes, and it publishes a **count**: a consumer learns that
@@ -53,6 +61,8 @@ export interface CaptureResultV1 {
   readonly duplicate: boolean;
   readonly status: CaptureStatus;
   readonly redactionCount: number;
+  /** The note a `--note` capture proposes; `null` for a plain capture. */
+  readonly note: CaptureNoteTargetV1 | null;
 }
 
 export interface CaptureOptions {
@@ -63,6 +73,8 @@ export interface CaptureOptions {
    * through to a pipe.
    */
   readonly text?: string;
+  /** `--note <path>`, content-root-relative: the note this capture creates or replaces. */
+  readonly note?: string;
 }
 
 export interface CaptureDependencies {
@@ -144,6 +156,22 @@ class CaptureRefusal extends Error {
   ) {
     super(message);
     this.name = "CaptureRefusal";
+  }
+}
+
+/** Published as `capture_note_invalid` through `failureFrom`'s class-name kind. */
+class CaptureNoteInvalidError extends CaptureRefusal {
+  constructor(message: string, paths: readonly string[] = []) {
+    super(EXIT_CODES.invalidInput, message, paths);
+    this.name = "CaptureNoteInvalidError";
+  }
+}
+
+/** Published as `capture_note_path_refused`. */
+class CaptureNotePathRefusedError extends CaptureRefusal {
+  constructor(message: string, paths: readonly string[] = []) {
+    super(EXIT_CODES.securityRefusal, message, paths);
+    this.name = "CaptureNotePathRefusedError";
   }
 }
 
@@ -385,6 +413,137 @@ function assertWritableContent(content: string): void {
   }
 }
 
+function isMissingEntry(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "ENOENT"
+  );
+}
+
+/**
+ * `--note <path>`, spec §3.1 steps 1 and 3: the destination proven inside a
+ * topic folder, and bound to the SHA-256 of its bytes when it exists. Runs
+ * before the redaction key is loaded, so a refused path writes nothing at all.
+ *
+ * **The symlink walk starts at the topic folder, not at the content root**: a
+ * content root reached through a link is a supported install (NEW-22), and
+ * refusing it here would refuse every note capture on such a vault.
+ */
+async function resolveNoteTarget(
+  context: CliContext,
+  config: DeveloperOsConfigV1,
+  paths: RuntimePaths,
+  notePath: string,
+): Promise<CaptureNoteTargetV1> {
+  if (isUnsafeProposedNotePath(notePath)) {
+    throw new CaptureNoteInvalidError(
+      "--note must be a content-root-relative .md path with no empty, . or .. segment, no backslash and no control character",
+    );
+  }
+
+  const brainConfig = resolveBrainConfig(config);
+  const segments = notePath.split("/");
+  const [topicFolder] = segments;
+  const forbidden = new Set(
+    [...PRIVATE_FOLDERS, brainConfig.indexesDir].map((name) =>
+      name.normalize("NFC").toLowerCase(),
+    ),
+  );
+  if (
+    topicFolder === undefined ||
+    segments.length < 2 ||
+    !brainConfig.topicFolders.includes(topicFolder) ||
+    segments.some(
+      (segment) =>
+        segment.startsWith(".") ||
+        forbidden.has(segment.normalize("NFC").toLowerCase()),
+    )
+  ) {
+    throw new CaptureNotePathRefusedError(
+      `--note must name a note inside a configured topic folder (${brainConfig.topicFolders.join(", ")}), outside every private folder and the indexes directory`,
+    );
+  }
+
+  const topicRoot = join(paths.brain, brainConfig.contentRoot, topicFolder);
+  const destination = join(topicRoot, ...segments.slice(1));
+
+  let current = topicRoot;
+  let leaf: Awaited<ReturnType<CliContext["fs"]["lstat"]>> | null = null;
+  for (const [index, segment] of ["", ...segments.slice(1)].entries()) {
+    if (index > 0) current = join(current, segment);
+    let stats: Awaited<ReturnType<CliContext["fs"]["lstat"]>>;
+    try {
+      stats = await context.fs.lstat(current);
+    } catch (error) {
+      if (isMissingEntry(error)) break;
+      throw error;
+    }
+    if (stats.isSymbolicLink()) {
+      throw new CaptureNotePathRefusedError(
+        "--note reaches its destination through a symbolic link",
+        [current],
+      );
+    }
+    if (current === destination) {
+      leaf = stats;
+    } else if (!stats.isDirectory()) {
+      throw new CaptureNoteInvalidError(
+        "--note names a path under something that is not a directory",
+        [current],
+      );
+    }
+  }
+
+  const canonicalTopic = await context.guards.canonicalize(topicRoot);
+  if (!containsPath(canonicalTopic, await context.guards.canonicalize(destination))) {
+    throw new CaptureNotePathRefusedError(
+      "--note resolves outside its topic folder",
+      [destination],
+    );
+  }
+
+  if (leaf === null) return { path: notePath, beforeSha256: null };
+
+  const vaultPath = `${brainConfig.contentRoot}/${notePath}`.normalize("NFC");
+  const indexed =
+    leaf.isFile() &&
+    (
+      await new BrainService(
+        dependenciesFor(context, paths.brain, config),
+      ).reindex()
+    ).build.index.notes.some((note) => note.path === vaultPath);
+  if (!indexed) {
+    throw new CaptureNoteInvalidError(
+      "--note names an existing file that is not a canonical note",
+      [destination],
+    );
+  }
+
+  /** Hashed from the bytes, not the decoded text: the executor's precondition hashes bytes. */
+  const beforeSha256 = await context.guards.readText(destination, async (handle) =>
+    createHash("sha256").update(await handle.readFile()).digest("hex"),
+  );
+  return { path: notePath, beforeSha256 };
+}
+
+/** Spec §3.1 step 2 and its bound: the normalized capture must be a whole, parseable note. */
+function assertNoteContent(content: string): void {
+  const note = `${content}\n`;
+  if (note.length > MAX_PROPOSED_NOTE_CHARS) {
+    throw new CaptureNoteInvalidError(
+      `a note capture is at most ${String(MAX_PROPOSED_NOTE_CHARS)} characters; this one is longer`,
+    );
+  }
+  const parsed = parseNote(note);
+  if (!parsed.ok || parsed.issues.some((issue) => issue.severity === "error")) {
+    throw new CaptureNoteInvalidError(
+      "a note capture must be a complete note whose frontmatter parses with no error",
+    );
+  }
+}
+
 /**
  * Diagnostics redacted with the key this command loaded, not with whatever the
  * context closed over. `init` records the rule this follows: redact with the
@@ -427,6 +586,10 @@ export async function runCapture(
 
     /** Before the key is loaded: an invalid invocation writes no secret. */
     const text = await resolveText(context, options);
+    const note =
+      options.note === undefined
+        ? undefined
+        : await resolveNoteTarget(context, config, paths, options.note);
 
     const key = loadOrCreateRedactionKey(paths.stateDir);
     /**
@@ -466,8 +629,10 @@ export async function runCapture(
       workingDirectoryFingerprint: fingerprintDirectory(workingDirectory, key),
       createdAt: context.now().toISOString(),
       redact,
+      ...(note === undefined ? {} : { note }),
     });
     assertWritableContent(built.envelope.content);
+    if (note !== undefined) assertNoteContent(built.envelope.content);
 
     /**
      * **Before the directory is created, read, or written**, because every one
@@ -510,6 +675,7 @@ export async function runCapture(
           duplicate: true,
           status: found.status,
           redactionCount,
+          note: built.envelope.note,
         },
         found.warning === null ? [] : [found.warning],
       );
@@ -574,6 +740,7 @@ export async function runCapture(
       duplicate: false,
       status: built.envelope.status,
       redactionCount,
+      note: built.envelope.note,
     });
   } catch (error) {
     return failureFrom(

@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto";
 import * as nodeFs from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join, relative } from "node:path";
 
-import { detectSourceAgent } from "@developer-os/brain";
+import { EXIT_CODES } from "@developer-os/core";
+import { detectSourceAgent, parseCaptureFile } from "@developer-os/brain";
 import type {
   AgentDiscovery,
   AgentName,
@@ -13,6 +15,7 @@ import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { discoverSourceAgent, runCapture } from "./capture.js";
+import type { CaptureOptions } from "./capture.js";
 import { runInit } from "./init.js";
 import { createCommandFixture, removeCommandFixtures } from "./testing.js";
 import type { CommandFixture } from "./testing.js";
@@ -33,7 +36,7 @@ interface CaptureFixture extends CommandFixture {
   readonly project: string;
   run(
     context: CliContext,
-    options: { readonly text?: string },
+    options: CaptureOptions,
     /** Overrides the real detection table, for a vendor that has no row in it. */
     detect?: (env: Readonly<Record<string, string | undefined>>) => string,
   ): ReturnType<typeof runCapture>;
@@ -657,6 +660,7 @@ describe("runCapture", () => {
     expect(Object.keys(result.data).sort()).toStrictEqual([
       "captureId",
       "duplicate",
+      "note",
       "path",
       "redactionCount",
       "schemaVersion",
@@ -936,6 +940,214 @@ describe("runCapture", () => {
     expect(written).toContain("sourceAgent: codex");
     expect(written).toContain("sourceAgentVersion: 0.147.0");
     expect(spawned).toEqual(["/synthetic/bin/codex"]);
+  });
+});
+
+/** A complete, parseable note: `capture --note` refuses anything less (spec §3.1 step 2). */
+function noteText(title: string, body = "A synthetic note body."): string {
+  return [
+    "---",
+    "schemaVersion: 1",
+    `title: ${title}`,
+    "type: knowledge-note",
+    "created: 2026-08-10",
+    "tags: [dev]",
+    "summary: A synthetic note for a note capture.",
+    "stage: established",
+    "author: agent",
+    "reviewed: null",
+    "---",
+    "",
+    body,
+  ].join("\n");
+}
+
+const NEW_NOTE = noteText("A new synthetic note");
+const REVISED_EXAMPLE = noteText("Write the note you wanted to find", "A revised body.");
+
+/** Every file under `root`, relative, sorted: what "writes nothing else" is measured against. */
+async function inventory(root: string): Promise<readonly string[]> {
+  const entries = await nodeFs.readdir(root, { recursive: true, withFileTypes: true });
+  return entries
+    .filter((entry) => !entry.isDirectory())
+    .map((entry) => relative(root, join(entry.parentPath, entry.name)))
+    .sort();
+}
+
+describe("runCapture --note", () => {
+  it("quarantines a new-note capture with beforeSha256 null and writes nothing else", async () => {
+    const fixture = await installedFixture("note-create");
+    const before = await inventory(fixture.paths.brain);
+
+    const result = await fixture.run(fixture.context, { text: NEW_NOTE, note: "DEV/new-note.md" });
+
+    expect(result.ok && result.data.note).toStrictEqual({ path: "DEV/new-note.md", beforeSha256: null });
+    const added = (await inventory(fixture.paths.brain)).filter((p) => !before.includes(p));
+    expect(added.length).toBeGreaterThan(0);
+    expect(added.every((p) => p.includes("/_raw/quarantine/"))).toBe(true);
+  });
+
+  it("binds the SHA-256 of an existing canonical note's bytes", async () => {
+    const fixture = await installedFixture("note-replace");
+    const target = join(fixture.paths.brain, "content", "DEV", "example-knowledge-note.md");
+    const expected = createHash("sha256").update(await nodeFs.readFile(target)).digest("hex");
+
+    const result = await fixture.run(fixture.context, {
+      text: REVISED_EXAMPLE,
+      note: "DEV/example-knowledge-note.md",
+    });
+
+    expect(result.ok && result.data.note?.beforeSha256).toBe(expected);
+    /** The binding is persisted in the envelope, not only reported. */
+    expect(result.ok && (await nodeFs.readFile(result.data.path, "utf8"))).toContain(expected);
+  });
+
+  it.each([
+    ["../escape.md", EXIT_CODES.invalidInput, "capture_note_invalid"],
+    ["DEV/a.txt", EXIT_CODES.invalidInput, "capture_note_invalid"],
+    ["_raw/x.md", EXIT_CODES.securityRefusal, "capture_note_path_refused"],
+    ["_RAW/x.md", EXIT_CODES.securityRefusal, "capture_note_path_refused"],
+    ["_indexes/x.md", EXIT_CODES.securityRefusal, "capture_note_path_refused"],
+    ["templates/x.md", EXIT_CODES.securityRefusal, "capture_note_path_refused"],
+    ["NOTATOPIC/x.md", EXIT_CODES.securityRefusal, "capture_note_path_refused"],
+    ["DEV/.hidden/x.md", EXIT_CODES.securityRefusal, "capture_note_path_refused"],
+    ["DEV/_raw/x.md", EXIT_CODES.securityRefusal, "capture_note_path_refused"],
+  ] as const)("refuses --note %s with exit %i (%s) and writes nothing", async (path, code, kind) => {
+    const fixture = await installedFixture(`note-refuse-${String(code)}`);
+    const before = await inventory(fixture.paths.brain);
+
+    const result = await fixture.run(fixture.context, { text: NEW_NOTE, note: path });
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && [result.code, result.error.kind]).toStrictEqual([code, kind]);
+    expect(await inventory(fixture.paths.brain)).toStrictEqual(before);
+  });
+
+  it("refuses a destination under a symlinked subdirectory of a topic folder, at exit 5", async () => {
+    const fixture = await installedFixture("note-symlink-dir");
+    const dev = join(fixture.paths.brain, "content", "DEV");
+    const elsewhere = join(fixture.root, "elsewhere");
+    await nodeFs.mkdir(elsewhere, { recursive: true });
+    await nodeFs.symlink(elsewhere, join(dev, "linked"));
+    const before = await inventory(fixture.paths.brain);
+
+    const result = await fixture.run(fixture.context, { text: NEW_NOTE, note: "DEV/linked/x.md" });
+
+    expect(!result.ok && [result.code, result.error.kind]).toStrictEqual([
+      EXIT_CODES.securityRefusal,
+      "capture_note_path_refused",
+    ]);
+    expect(await inventory(fixture.paths.brain)).toStrictEqual(before);
+    expect(await nodeFs.readdir(elsewhere)).toStrictEqual([]);
+  });
+
+  it("refuses a symlinked destination file, at exit 5", async () => {
+    const fixture = await installedFixture("note-symlink-file");
+    const dev = join(fixture.paths.brain, "content", "DEV");
+    await nodeFs.symlink(join(dev, "example-knowledge-note.md"), join(dev, "linked.md"));
+    const before = await inventory(fixture.paths.brain);
+
+    const result = await fixture.run(fixture.context, { text: REVISED_EXAMPLE, note: "DEV/linked.md" });
+
+    expect(!result.ok && [result.code, result.error.kind]).toStrictEqual([
+      EXIT_CODES.securityRefusal,
+      "capture_note_path_refused",
+    ]);
+    expect(await inventory(fixture.paths.brain)).toStrictEqual(before);
+  });
+
+  it.each([
+    ["no frontmatter", "just a body, no frontmatter at all"],
+    ["a missing title", NEW_NOTE.replace("title: A new synthetic note\n", "")],
+    ["a duplicate key", NEW_NOTE.replace("stage: established\n", "stage: established\nstage: draft\n")],
+  ])("refuses note text with %s at exit 2 and writes nothing", async (_label, text) => {
+    expect(text).not.toBe(NEW_NOTE);
+    const fixture = await installedFixture("note-unparseable");
+    const before = await inventory(fixture.paths.brain);
+
+    const result = await fixture.run(fixture.context, { text, note: "DEV/new-note.md" });
+
+    expect(!result.ok && [result.code, result.error.kind]).toStrictEqual([
+      EXIT_CODES.invalidInput,
+      "capture_note_invalid",
+    ]);
+    expect(await inventory(fixture.paths.brain)).toStrictEqual(before);
+  });
+
+  it("refuses an existing destination that is not a canonical note, at exit 2", async () => {
+    const fixture = await installedFixture("note-not-a-note");
+    await nodeFs.writeFile(
+      join(fixture.paths.brain, "content", "DEV", "readme.md"),
+      "a readme with no frontmatter\n",
+    );
+    const before = await inventory(fixture.paths.brain);
+
+    const result = await fixture.run(fixture.context, { text: NEW_NOTE, note: "DEV/readme.md" });
+
+    expect(!result.ok && [result.code, result.error.kind]).toStrictEqual([
+      EXIT_CODES.invalidInput,
+      "capture_note_invalid",
+    ]);
+    expect(await inventory(fixture.paths.brain)).toStrictEqual(before);
+  });
+
+  it("refuses a note one character past MAX_PROPOSED_NOTE_CHARS once its newline is added", async () => {
+    const fixture = await installedFixture("note-oversized");
+    const head = noteText("An oversized synthetic note", "");
+    /** Exactly the input bound, ASCII, so `resolveText` admits it and the note bound refuses it. */
+    const text = head + "x".repeat(64 * 1024 - head.length);
+    expect(new TextEncoder().encode(text).byteLength).toBe(64 * 1024);
+    const before = await inventory(fixture.paths.brain);
+
+    const result = await fixture.run(fixture.context, { text, note: "DEV/new-note.md" });
+
+    expect(!result.ok && [result.code, result.error.kind]).toStrictEqual([
+      EXIT_CODES.invalidInput,
+      "capture_note_invalid",
+    ]);
+    expect(await inventory(fixture.paths.brain)).toStrictEqual(before);
+  });
+
+  it("reads the note from stdin when --text is absent", async () => {
+    const fixture = await installedFixture("note-stdin");
+    const piped = stdinIo(fixture, () => Promise.resolve(NEW_NOTE));
+
+    const result = await fixture.run(piped, { note: "DEV/new-note.md" });
+
+    expect(result.ok && result.data.note).toStrictEqual({ path: "DEV/new-note.md", beforeSha256: null });
+  });
+
+  it("leaves a plain capture unchanged: note null, and no note key on disk", async () => {
+    const fixture = await installedFixture("note-plain");
+
+    const result = await fixture.run(fixture.context, { text: OBSERVATION });
+
+    expect(result.ok && result.data.note).toBeNull();
+    const written = result.ok ? await nodeFs.readFile(result.data.path, "utf8") : "";
+    expect(written).toContain(`captureId: ${result.ok ? result.data.captureId : ""}`);
+    expect(written).not.toMatch(/^note:/mu);
+  });
+
+  it("reports a note capture of an existing plain capture's text as that duplicate, keeping its envelope", async () => {
+    /** Spec R3: the deduplication hash is content-only. Task 16 reports this as a gap. */
+    const fixture = await installedFixture("note-duplicate");
+    const plain = await fixture.run(fixture.context, { text: NEW_NOTE });
+    expect(plain.ok).toBe(true);
+    if (!plain.ok) return;
+
+    const result = await fixture.run(fixture.context, { text: NEW_NOTE, note: "DEV/new-note.md" });
+
+    expect(result.ok && [result.data.duplicate, result.data.captureId]).toStrictEqual([
+      true,
+      plain.data.captureId,
+    ]);
+    const key = loadOrCreateRedactionKey(fixture.paths.stateDir);
+    const stored = parseCaptureFile(
+      basename(plain.data.path),
+      await nodeFs.readFile(plain.data.path, "utf8"),
+      (text) => redactText(text, key),
+    );
+    expect(stored.ok && stored.envelope.note).toBeNull();
   });
 });
 

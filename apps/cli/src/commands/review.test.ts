@@ -99,6 +99,37 @@ async function installedFixture(
   };
 }
 
+/** A note capture through the real `capture --note`, of a complete synthetic note. */
+async function seedNote(
+  fixture: ReviewFixture,
+  title: string,
+  note: string,
+): Promise<SeededCapture> {
+  const text = [
+    "---",
+    "schemaVersion: 1",
+    `title: ${title}`,
+    "type: knowledge-note",
+    "created: 2026-08-10",
+    "tags: [dev]",
+    "summary: A synthetic note for a note capture.",
+    "stage: established",
+    "author: agent",
+    "reviewed: null",
+    "---",
+    "",
+    "A synthetic note body.",
+  ].join("\n");
+  const captured = await runCapture(
+    fixture.context,
+    { text, note },
+    { cwd: () => fixture.root, detect: detectSourceAgent },
+  );
+  expect(captured.ok, `the fixture must capture a note for ${note}`).toBe(true);
+  if (!captured.ok) throw new Error("the fixture could not seed a note capture");
+  return { path: captured.data.path, id: captured.data.captureId };
+}
+
 /** Three captures, one per decision, so a sweep has something to sweep. */
 async function seedThree(fixture: ReviewFixture): Promise<readonly SeededCapture[]> {
   const seeded = [
@@ -278,6 +309,8 @@ describe("runReview", () => {
     expect(result.data.captures[0]).toStrictEqual({
       captureId: quarantined.id,
       status: "quarantined",
+      note: null,
+      redactionCount: 0,
     });
     expect(result.data.reviewed).toBe(0);
   });
@@ -306,12 +339,62 @@ describe("runReview", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.data.captures).toStrictEqual([
-      { captureId: accepted.id, status: "accepted" },
+      { captureId: accepted.id, status: "accepted", note: null, redactionCount: 0 },
     ]);
     expect(
       result.data.captures.map((capture) => capture.captureId),
       "the quarantined one must not appear under an explicit status",
     ).not.toContain(quarantined.id);
+  });
+
+  it("carries each note capture's destination and redaction count on its listing row", async () => {
+    const fixture = await installedFixture("review-note-rows");
+    const plain = await fixture.seed(OBSERVATION);
+    const created = await seedNote(fixture, "A new synthetic note", "DEV/new-note.md");
+    const replaced = await seedNote(
+      fixture,
+      "Write the note you wanted to find",
+      "DEV/example-knowledge-note.md",
+    );
+
+    const result = await fixture.run(fixture.context, {});
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const rows = new Map(result.data.captures.map((row) => [row.captureId, row]));
+    expect(rows.size).toBe(3);
+    expect(rows.get(plain.id)).toStrictEqual({
+      captureId: plain.id,
+      status: "quarantined",
+      note: null,
+      redactionCount: 0,
+    });
+    expect(rows.get(created.id)).toStrictEqual({
+      captureId: created.id,
+      status: "quarantined",
+      note: { path: "DEV/new-note.md", replaces: false },
+      redactionCount: 0,
+    });
+    expect(rows.get(replaced.id)?.note).toStrictEqual({
+      path: "DEV/example-knowledge-note.md",
+      replaces: true,
+    });
+  });
+
+  it("preserves a note capture's target through an edit decision", async () => {
+    const fixture = await installedFixture("review-note-edit");
+    const seeded = await seedNote(fixture, "A new synthetic note", "DEV/new-note.md");
+    const before = await envelopeOf(fixture, seeded.path);
+    expect(before.note).toStrictEqual({ path: "DEV/new-note.md", beforeSha256: null });
+
+    const result = await fixture.run(fixture.context, { id: seeded.id, decision: "edit" });
+
+    expect(result.code).toBe(EXIT_CODES.success);
+    expect(result.ok && result.data.captures[0]?.note).toStrictEqual({
+      path: "DEV/new-note.md",
+      replaces: false,
+    });
+    expect((await envelopeOf(fixture, seeded.path)).note).toStrictEqual(before.note);
   });
 
   it("refuses a status that is not a capture status", async () => {

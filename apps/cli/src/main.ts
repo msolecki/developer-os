@@ -64,6 +64,7 @@ const USAGE = [
   "  --json           emit one machine-readable line",
   "  --limit <n>      most matches to return (brain search), or captures to process (ingest, import)",
   "  --text <text>    the observation to capture; stdin when absent (capture)",
+  "  --note <path>    the note a capture proposes to create or replace (capture)",
   "  --id <id>        the capture to decide on (review)",
   "  --decision <d>   accept, reject or edit (review)",
   "  --status <s>     which status to list; quarantined by default (review)",
@@ -89,6 +90,7 @@ const OPTIONS = {
   resume: { type: "string" },
   rollback: { type: "string" },
   text: { type: "string" },
+  note: { type: "string" },
   version: { type: "boolean" },
   "local-release": { type: "string" },
 } as const;
@@ -118,7 +120,7 @@ const OPTION_NAMES = Object.keys(OPTIONS) as readonly OptionName[];
 const COMMAND_OPTIONS: Readonly<Record<string, readonly OptionName[]>> = {
   brain: ["dry-run", "json", "limit"],
   search: ["json", "limit"],
-  capture: ["text", "json"],
+  capture: ["text", "json", "note"],
   review: ["id", "decision", "status", "json"],
   ingest: ["limit", "json", "yes", "agent"],
   init: ["dry-run", "yes", "json", "local-release"],
@@ -380,7 +382,11 @@ export function renderReview(
   }
   return [
     listed === null ? "Quarantined captures:" : `Captures at ${listed}:`,
-    ...result.captures.map((capture) => `  ${capture.captureId}`),
+    ...result.captures.map((capture) =>
+      capture.note === null
+        ? `  ${capture.captureId}`
+        : `  ${capture.captureId}  ${capture.note.replaces ? "replaces" : "creates"} ${renderPath(capture.note.path)} (${String(capture.redactionCount)} redactions)`,
+    ),
   ];
 }
 
@@ -603,9 +609,13 @@ async function dispatch(
        * distinguishes the two, and `runCapture` reads *absent* as "read stdin".
        */
       const text = optionString(invocation.values.text);
+      const note = optionString(invocation.values.note);
       return emit(
         io,
-        await runCapture(context, text === null ? {} : { text }),
+        await runCapture(context, {
+          ...(text === null ? {} : { text }),
+          ...(note === null ? {} : { note }),
+        }),
         json,
         renderCapture,
       );

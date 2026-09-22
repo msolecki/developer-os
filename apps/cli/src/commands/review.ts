@@ -24,7 +24,11 @@ import {
   resolveBrainConfig,
   REVIEW_DECISIONS,
 } from "@developer-os/brain";
-import type { CaptureStatus, ReviewDecision } from "@developer-os/brain";
+import type {
+  CaptureEnvelopeV1,
+  CaptureStatus,
+  ReviewDecision,
+} from "@developer-os/brain";
 import { createRedactor } from "@developer-os/security";
 import type { Redactor } from "@developer-os/security";
 
@@ -48,6 +52,21 @@ import { isDirectory, readConfigFile } from "./doctor.js";
 export interface ReviewedCaptureV1 {
   readonly captureId: string;
   readonly status: CaptureStatus;
+  /** The note a note capture creates or replaces (spec §3.3); `null` for a plain capture. */
+  readonly note: { readonly path: string; readonly replaces: boolean } | null;
+  readonly redactionCount: number;
+}
+
+function reviewedRow(envelope: CaptureEnvelopeV1): ReviewedCaptureV1 {
+  return {
+    captureId: envelope.captureId,
+    status: envelope.status,
+    note:
+      envelope.note === null
+        ? null
+        : { path: envelope.note.path, replaces: envelope.note.beforeSha256 !== null },
+    redactionCount: envelope.redaction.length,
+  };
 }
 
 export interface ReviewResultV1 {
@@ -321,10 +340,7 @@ async function listByStatus(
       continue;
     }
     if (outcome.envelope.status !== status) continue;
-    captures.push({
-      captureId: outcome.envelope.captureId,
-      status: outcome.envelope.status,
-    });
+    captures.push(reviewedRow(outcome.envelope));
   }
 
   return { captures, warnings };
@@ -640,10 +656,7 @@ async function decideOne(
     renderCaptureFile(outcome.envelope),
     asRead,
   );
-  return {
-    captureId: outcome.envelope.captureId,
-    status: outcome.envelope.status,
-  };
+  return reviewedRow(outcome.envelope);
 }
 
 /**

@@ -786,6 +786,27 @@ describe("capture dispatch", () => {
   it("refuses a positional, because capture takes none", async () => {
     await refuses(["capture", "an observation"]);
   });
+
+  it("refuses --note without a value, and --note on a command that does not take it", async () => {
+    await refuses(["capture", "--note"]);
+    await refuses(["review", "--note", "DEV/a.md"]);
+  });
+
+  it("parses --note with --text and hands both to capture", async () => {
+    const fixture = await createCommandFixture("main-capture-note");
+    expect(await run(["init", "--yes"], fixture.io, () => fixture.context)).toBe(0);
+    fixture.io.out.length = 0;
+
+    /** `x` is not a note, so capture itself refuses it: proof `--note` got past the parser. */
+    const code = await run(
+      ["capture", "--note", "DEV/a.md", "--text", "x", "--json"],
+      fixture.io,
+      () => fixture.context,
+    );
+
+    expect(code).toBe(EXIT_CODES.invalidInput);
+    expect(lastJsonError(fixture.io.out).kind).toBe("capture_note_invalid");
+  });
 });
 
 describe("review dispatch", () => {
@@ -882,9 +903,18 @@ describe("review validates --status before it touches anything", () => {
  */
 describe("renderReview", () => {
   const listing = (
-    captures: readonly { captureId: string; status: string }[],
+    captures: readonly {
+      captureId: string;
+      status: string;
+      note?: { path: string; replaces: boolean } | null;
+      redactionCount?: number;
+    }[],
   ): ReviewResultV1 =>
-    ({ schemaVersion: 1, captures, reviewed: 0 }) as unknown as ReviewResultV1;
+    ({
+      schemaVersion: 1,
+      captures: captures.map((capture) => ({ note: null, redactionCount: 0, ...capture })),
+      reviewed: 0,
+    }) as unknown as ReviewResultV1;
 
   it("names the quarantine queue when no status was asked for", () => {
     expect(renderReview(listing([{ captureId: "aa00bb11cc22dd33", status: "quarantined" }]), null))
@@ -894,6 +924,29 @@ describe("renderReview", () => {
   it("names the status that was asked for", () => {
     expect(renderReview(listing([{ captureId: "aa00bb11cc22dd33", status: "accepted" }]), "accepted"))
       .toStrictEqual(["Captures at accepted:", "  aa00bb11cc22dd33"]);
+  });
+
+  it("names the note a note capture creates or replaces, with its redaction count", () => {
+    expect(
+      renderReview(
+        listing([
+          { captureId: "aa00bb11cc22dd33", status: "quarantined", note: { path: "DEV/a.md", replaces: false } },
+          {
+            captureId: "bb00bb11cc22dd33",
+            status: "quarantined",
+            note: { path: "DEV/a.md", replaces: true },
+            redactionCount: 2,
+          },
+          { captureId: "cc00bb11cc22dd33", status: "quarantined" },
+        ]),
+        null,
+      ),
+    ).toStrictEqual([
+      "Quarantined captures:",
+      "  aa00bb11cc22dd33  creates DEV/a.md (0 redactions)",
+      "  bb00bb11cc22dd33  replaces DEV/a.md (2 redactions)",
+      "  cc00bb11cc22dd33",
+    ]);
   });
 
   it("keeps the original empty line on the default path", () => {
