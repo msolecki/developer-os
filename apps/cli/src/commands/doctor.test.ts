@@ -3,9 +3,9 @@ import { join, posix } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { encodeCanonicalJson, EXIT_CODES } from "@developer-os/core";
+import { encodeCanonicalJson, encodeHookFiringRecord, EXIT_CODES, hookFiringRecordName } from "@developer-os/core";
 import type { CliResult } from "@developer-os/core";
-import { PLUGIN_INSTALL_SEGMENTS } from "@developer-os/adapter-claude";
+import { CLAUDE_HOOK_ROWS, CLAUDE_HOOKS_PATH, PLUGIN_INSTALL_SEGMENTS, renderClaudeHooks } from "@developer-os/adapter-claude";
 import { PLUGIN_TREE_PREFIX, proposeCodexInstall } from "@developer-os/adapter-codex";
 import type { MarketplaceRootArtifact } from "@developer-os/adapter-codex";
 import { MacOsPlatformDiscoveryError } from "@developer-os/platform-macos";
@@ -18,10 +18,12 @@ import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 
 import {
   advisoryWarnings,
+  checkHooks,
   codexPluginRoot,
   describeInstructions,
   hasBlockingFailure,
   listIncompleteTransactions,
+  MAX_CLAUDE_SETTINGS_BYTES,
   runDoctor,
   runDoctorReport,
   UNSIGNED_LOCAL_TRUST_WARNING,
@@ -214,6 +216,8 @@ describe("runDoctor", () => {
       "agents",
       "claude-capabilities",
       "codex-capabilities",
+      "hooks",
+      "external-hooks",
       "vendor-config",
       "instructions",
       "codex-registration",
@@ -1288,5 +1292,209 @@ describe("instruction checks", () => {
     expect(check?.status).toBe("warn");
     expect(check?.message).toContain("CLAUDE_CONFIG_DIR");
     expect(check?.message).not.toContain("/synthetic/claude-config");
+  });
+});
+
+describe("hooks and external-hooks", () => {
+  const EXECUTABLE = "/synthetic/bin/developer-os";
+  const NOW = new Date("2026-09-22T12:00:00.000Z");
+  const CODEX_EXTERNAL = "codex=unknown (config.toml is not read (codex-adapter.md §2.3))";
+
+  async function hooksFixture(name: string): Promise<CommandFixture> {
+    return createCommandFixture(name, { now: () => NOW });
+  }
+
+  function hooksFile(fixture: CommandFixture): string {
+    return join(fixture.userHome, ...PLUGIN_INSTALL_SEGMENTS, CLAUDE_HOOKS_PATH);
+  }
+
+  function settingsFile(fixture: CommandFixture): string {
+    return join(fixture.userHome, ".claude", "settings.json");
+  }
+
+  async function plant(path: string, contents: string): Promise<void> {
+    await nodeFs.mkdir(join(path, ".."), { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(path, contents, { mode: 0o600 });
+  }
+
+  async function plantHooks(fixture: CommandFixture, drop?: string): Promise<void> {
+    const rendered = JSON.parse(renderClaudeHooks(EXECUTABLE).contents) as {
+      hooks: Record<string, { hooks: { command: string }[] }[]>;
+    };
+    if (drop !== undefined) {
+      for (const [event, groups] of Object.entries(rendered.hooks)) {
+        rendered.hooks[event] = groups.filter(
+          (group) => !group.hooks.some((hook) => hook.command.endsWith(` guard ${drop} --vendor claude`)),
+        );
+      }
+    }
+    await plant(hooksFile(fixture), `${JSON.stringify(rendered, null, 2)}\n`);
+  }
+
+  async function plantRecord(fixture: CommandFixture, event: string, lastSeen: string): Promise<void> {
+    const directory = join(fixture.paths.stateDir, "hooks");
+    await nodeFs.mkdir(directory, { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(
+      join(directory, hookFiringRecordName("claude", event)),
+      encodeHookFiringRecord({
+        schemaVersion: 1,
+        vendor: "claude",
+        event,
+        productVersion: "0.0.0-test",
+        firstSeen: lastSeen,
+        lastSeen,
+      }),
+      { mode: 0o600 },
+    );
+  }
+
+  async function checksOf(fixture: CommandFixture): Promise<{
+    readonly hooks: DoctorReportV1["checks"][number];
+    readonly external: DoctorReportV1["checks"][number];
+  }> {
+    const checks = await checkHooks(fixture.context, fixture.paths.stateDir);
+    const hooks = checks.find((check) => check.id === "hooks");
+    const external = checks.find((check) => check.id === "external-hooks");
+    if (hooks === undefined || external === undefined) throw new Error("hook checks are missing");
+    expect(checks.every((check) => check.status !== "fail")).toBe(true);
+    return { hooks, external };
+  }
+
+  it("reports claude=not-installed and codex=not-rendered without a hooks file", async () => {
+    const fixture = await hooksFixture("doctor-hooks-absent");
+
+    const { hooks } = await checksOf(fixture);
+
+    expect(hooks.status).toBe("pass");
+    expect(hooks.message).toBe("claude=not-installed; codex=not-rendered");
+  });
+
+  it("passes with every row installed and names each row's firing age in whole hours", async () => {
+    const fixture = await hooksFixture("doctor-hooks-installed");
+    expect(CLAUDE_HOOK_ROWS).toHaveLength(8);
+    await plantHooks(fixture);
+    await plantRecord(fixture, "SessionStart", "2026-09-22T09:00:00.000Z");
+    await plantRecord(fixture, "PreToolUse", "2026-09-21T11:30:00.000Z");
+
+    const { hooks } = await checksOf(fixture);
+
+    expect(hooks.status).toBe("pass");
+    expect(hooks.message).toContain("claude=installed");
+    expect(hooks.message).toContain("inject=3h");
+    expect(hooks.message).toContain("command=24h");
+    expect(hooks.message).toContain("commit=24h");
+    expect(hooks.message).toContain("path=24h");
+    expect(hooks.message).toContain("stop=never");
+    for (const row of CLAUDE_HOOK_ROWS) expect(hooks.message).toContain(`${row.verb}=`);
+    expect(hooks.message).not.toContain("missing=");
+    expect(hooks.message.endsWith("; codex=not-rendered")).toBe(true);
+  });
+
+  it("warns and names the one missing row, matched per row rather than per event", async () => {
+    const fixture = await hooksFixture("doctor-hooks-missing");
+    await plantHooks(fixture, "commit");
+
+    const { hooks } = await checksOf(fixture);
+
+    expect(hooks.status).toBe("warn");
+    expect(hooks.message).toContain("missing=commit");
+    expect(hooks.message).toContain("command=never");
+  });
+
+  it("counts external Claude hooks by event without disclosing a command string", async () => {
+    const fixture = await hooksFixture("doctor-external-hooks");
+    await plantHooks(fixture);
+    await plant(settingsFile(fixture), JSON.stringify({
+      hooks: {
+        PreToolUse: [{
+          matcher: "Bash",
+          hooks: [
+            { type: "command", command: "/synthetic/SENTINEL-guard" },
+            { type: "command", command: `${EXECUTABLE} guard command --vendor claude` },
+          ],
+        }],
+      },
+    }));
+
+    const { external } = await checksOf(fixture);
+
+    expect(external.status).toBe("warn");
+    expect(external.message).toBe(`claude: PreToolUse → 1; ${CODEX_EXTERNAL}`);
+    expect(JSON.stringify(external)).not.toContain("SENTINEL");
+  });
+
+  it("counts every command when no installed executable is known", async () => {
+    const fixture = await hooksFixture("doctor-external-hooks-unbound");
+    await plant(settingsFile(fixture), JSON.stringify({
+      hooks: { Stop: [{ hooks: [{ type: "command", command: `${EXECUTABLE} guard stop --vendor claude` }] }] },
+    }));
+
+    const { external } = await checksOf(fixture);
+
+    expect(external.status).toBe("warn");
+    expect(external.message).toBe(`claude: Stop → 1; ${CODEX_EXTERNAL}`);
+  });
+
+  it("never follows a symlinked settings file", async () => {
+    const fixture = await hooksFixture("doctor-external-hooks-symlink");
+    const target = join(fixture.root, "elsewhere.json");
+    await nodeFs.writeFile(target, JSON.stringify({
+      hooks: { Stop: [{ hooks: [{ type: "command", command: "/synthetic/SENTINEL-guard" }] }] },
+    }));
+    await nodeFs.mkdir(join(fixture.userHome, ".claude"), { recursive: true, mode: 0o700 });
+    await nodeFs.symlink(target, settingsFile(fixture));
+
+    const { external } = await checksOf(fixture);
+
+    expect(external.status).toBe("warn");
+    expect(external.message).toBe(`claude=unknown; ${CODEX_EXTERNAL}`);
+    expect(JSON.stringify(external)).not.toContain("SENTINEL");
+  });
+
+  it("reports claude=unknown past the 1 MiB bound", async () => {
+    const fixture = await hooksFixture("doctor-external-hooks-bound");
+    const body = JSON.stringify({ hooks: {} });
+    await plant(settingsFile(fixture), body.padEnd(MAX_CLAUDE_SETTINGS_BYTES + 1, " "));
+
+    const { external } = await checksOf(fixture);
+
+    expect(external.message).toBe(`claude=unknown; ${CODEX_EXTERNAL}`);
+  });
+
+  it("reports claude=unknown for invalid JSON", async () => {
+    const fixture = await hooksFixture("doctor-external-hooks-invalid");
+    await plant(settingsFile(fixture), "{ /synthetic/SENTINEL-guard");
+
+    const { external } = await checksOf(fixture);
+
+    expect(external.message).toBe(`claude=unknown; ${CODEX_EXTERNAL}`);
+    expect(JSON.stringify(external)).not.toContain("SENTINEL");
+  });
+
+  it("passes with claude=0 when settings carry no hooks key", async () => {
+    const fixture = await hooksFixture("doctor-external-hooks-none");
+    await plant(settingsFile(fixture), JSON.stringify({ permissions: { deny: [] } }));
+
+    const { external } = await checksOf(fixture);
+
+    expect(external.status).toBe("pass");
+    expect(external.message).toBe(`claude=0; ${CODEX_EXTERNAL}`);
+  });
+
+  it("is wired into the report and never blocks", async () => {
+    const fixture = await hooksFixture("doctor-hooks-wired");
+    await runInit(fixture.context, ACCEPTED);
+    await plant(settingsFile(fixture), JSON.stringify({
+      hooks: { PreToolUse: [{ hooks: [{ type: "command", command: "/synthetic/SENTINEL-guard" }] }] },
+    }));
+
+    const report = await runDoctorReport(fixture.context);
+
+    const ids = report.checks.map((check) => check.id);
+    expect(ids).toContain("hooks");
+    expect(ids).toContain("external-hooks");
+    expect(report.checks.find((check) => check.id === "external-hooks")?.status).toBe("warn");
+    expect(hasBlockingFailure(report)).toBe(false);
+    expect(JSON.stringify(report)).not.toContain("SENTINEL");
   });
 });

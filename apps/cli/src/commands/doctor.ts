@@ -9,6 +9,7 @@ import {
   EXIT_CODES,
   failure,
   hashBytes,
+  hookCommandTail,
   inspectDrift,
   isUnsignedLocalTrust,
   ManifestStateError,
@@ -38,7 +39,7 @@ import type {
   RuntimePaths,
   TransactionJournalV1,
 } from "@developer-os/core";
-import { PLUGIN_INSTALL_SEGMENTS } from "@developer-os/adapter-claude";
+import { CLAUDE_HOOK_ROWS, CLAUDE_HOOKS_PATH, PLUGIN_INSTALL_SEGMENTS } from "@developer-os/adapter-claude";
 import { MARKETPLACE_NAME, PLUGIN_NAME, PLUGIN_TREE_SEGMENTS } from "@developer-os/adapter-codex";
 import { MacOsPlatformDiscoveryError } from "@developer-os/platform-macos";
 import type { AgentDiscovery, AgentName } from "@developer-os/platform-macos";
@@ -46,6 +47,7 @@ import { compareCodePoints } from "@developer-os/workflow-schema";
 
 import { reportClaudeCapabilities } from "./claude-capabilities.js";
 import { reportCodexCapabilities } from "./codex-capabilities.js";
+import { readUntrustedText, UntrustedFileRefusal } from "./untrusted-file.js";
 import { checkVendorConfig } from "./vendor-config.js";
 import {
   exitCodeOf,
@@ -58,6 +60,7 @@ import { createCanonicalPathEvidence, createOwnerPathAdmission } from "../bootst
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
 import { isMissingEntry, readConfigFile } from "../config-file.js";
+import { readHookFiringObservations } from "../hooks/firing-records.js";
 import {
   codexPluginTreeHash,
   inspectCodexRegistration,
@@ -635,6 +638,156 @@ async function checkCodexCapabilities(
     `${report.summary} capture-via=${report.captureVia}`,
     [],
   );
+}
+
+export const CODEX_UNTRUSTED_HOOK_MESSAGE = "installed; not observed firing — approve it in Codex if you have not";
+export const MAX_CLAUDE_SETTINGS_BYTES = 1_048_576;
+const CODEX_EXTERNAL_HOOKS = "codex=unknown (config.toml is not read (codex-adapter.md §2.3))";
+const HOUR_MS = 3_600_000;
+/** Event names are keys of a user file; anything else is counted under `other` rather than echoed. */
+const EVENT_NAME = /^[A-Za-z]{1,64}$/u;
+
+interface InstalledClaudeHooks {
+  readonly state: "not-installed" | "unknown" | "installed";
+  readonly path: string | null;
+  readonly missing: readonly string[];
+  readonly conflicting: boolean;
+  /** The prefix every product entry shares; `null` unless exactly one was found. */
+  readonly executable: string | null;
+}
+
+function field(value: unknown, key: string): unknown {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && Object.hasOwn(value, key)
+    ? (value as Record<string, unknown>)[key]
+    : undefined;
+}
+
+function list(value: unknown): readonly unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function commandsOf(group: unknown): readonly string[] {
+  return list(field(group, "hooks"))
+    .map((hook) => field(hook, "command"))
+    .filter((command): command is string => typeof command === "string");
+}
+
+async function readInstalledClaudeHooks(context: CliContext): Promise<InstalledClaudeHooks> {
+  let path: string | null = null;
+  try {
+    path = join(await context.guards.canonicalize(context.userHome), ...PLUGIN_INSTALL_SEGMENTS, CLAUDE_HOOKS_PATH);
+    let text: string;
+    try {
+      text = await readUntrustedText(context, path, MAX_CLAUDE_SETTINGS_BYTES);
+    } catch (error) {
+      if (error instanceof UntrustedFileRefusal && error.reason === "not_found") {
+        return { state: "not-installed", path, missing: [], conflicting: false, executable: null };
+      }
+      throw error;
+    }
+    const hooks = field(JSON.parse(text) as unknown, "hooks");
+    const missing: string[] = [];
+    const prefixes = new Set<string>();
+    for (const row of CLAUDE_HOOK_ROWS) {
+      const suffix = ` ${hookCommandTail(row.verb, "claude").join(" ")}`;
+      const commands = list(field(hooks, row.event))
+        .filter((group) => (field(group, "matcher") ?? null) === row.matcher)
+        .flatMap(commandsOf)
+        .filter((command) => command.length > suffix.length && command.endsWith(suffix));
+      if (commands.length === 0) missing.push(row.verb);
+      for (const command of commands) prefixes.add(command.slice(0, -suffix.length));
+    }
+    const [executable] = prefixes;
+    return {
+      state: "installed",
+      path,
+      missing,
+      conflicting: prefixes.size > 1,
+      executable: prefixes.size === 1 && executable !== undefined ? executable : null,
+    };
+  } catch {
+    return { state: "unknown", path, missing: [], conflicting: false, executable: null };
+  }
+}
+
+async function checkProductHooks(
+  context: CliContext,
+  stateDirectory: string,
+  installed: InstalledClaudeHooks,
+): Promise<Finding> {
+  const paths = installed.path === null ? [] : [installed.path];
+  const codex = "codex=not-rendered";
+  if (installed.state !== "installed") {
+    return (installed.state === "unknown" ? warn : pass)("hooks", `claude=${installed.state}; ${codex}`, paths);
+  }
+  const lastSeen = new Map<string, number>();
+  for (const record of (await readHookFiringObservations(stateDirectory, "claude")).records) {
+    lastSeen.set(record.event, Date.parse(record.lastSeen));
+  }
+  const now = context.now().getTime();
+  const ages = CLAUDE_HOOK_ROWS.filter((row) => !installed.missing.includes(row.verb)).map((row) => {
+    const seen = lastSeen.get(row.event);
+    return `${row.verb}=${seen === undefined ? "never" : `${String(Math.max(0, Math.floor((now - seen) / HOUR_MS)))}h`}`;
+  });
+  const parts = [
+    "claude=installed",
+    ...ages,
+    ...(installed.missing.length === 0 ? [] : [`missing=${installed.missing.join(",")}`]),
+    ...(installed.conflicting ? ["executable=inconsistent"] : []),
+  ];
+  const healthy = installed.missing.length === 0 && !installed.conflicting;
+  return (healthy ? pass : warn)("hooks", `${parts.join(" ")}; ${codex}`, paths);
+}
+
+/** Spec §8.2 (Q2-A): structural only; no command string ever reaches the message. */
+async function checkExternalHooks(context: CliContext, installed: InstalledClaudeHooks): Promise<Finding> {
+  const id = "external-hooks";
+  let path: string | null = null;
+  try {
+    path = join(await context.guards.canonicalize(context.userHome), ".claude", "settings.json");
+    let text: string;
+    try {
+      text = await readUntrustedText(context, path, MAX_CLAUDE_SETTINGS_BYTES);
+    } catch (error) {
+      if (error instanceof UntrustedFileRefusal && error.reason === "not_found") {
+        return pass(id, `claude=0; ${CODEX_EXTERNAL_HOOKS}`, [path]);
+      }
+      throw error;
+    }
+    const hooks = field(JSON.parse(text) as unknown, "hooks");
+    const counts = new Map<string, number>();
+    if (typeof hooks === "object" && hooks !== null && !Array.isArray(hooks)) {
+      for (const event of Object.keys(hooks)) {
+        const external = list(field(hooks, event))
+          .flatMap(commandsOf)
+          .filter((command) => installed.executable === null || !command.startsWith(`${installed.executable} `)).length;
+        if (external === 0) continue;
+        const name = EVENT_NAME.test(event) ? event : "other";
+        counts.set(name, (counts.get(name) ?? 0) + external);
+      }
+    }
+    if (counts.size === 0) return pass(id, `claude=0; ${CODEX_EXTERNAL_HOOKS}`, [path]);
+    const report = [...counts]
+      .sort(([left], [right]) => compareCodePoints(left, right))
+      .map(([event, count]) => `${event} → ${String(count)}`)
+      .join(", ");
+    return warn(id, `claude: ${report}; ${CODEX_EXTERNAL_HOOKS}`, [path]);
+  } catch {
+    return warn(id, `claude=unknown; ${CODEX_EXTERNAL_HOOKS}`, path === null ? [] : [path]);
+  }
+}
+
+async function hookFindings(context: CliContext, stateDirectory: string): Promise<readonly Finding[]> {
+  const installed = await readInstalledClaudeHooks(context);
+  return [
+    await checkProductHooks(context, stateDirectory, installed),
+    await checkExternalHooks(context, installed),
+  ];
+}
+
+/** `hooks` and `external-hooks`, never `fail` and never init-owned (spec §8.2). */
+export async function checkHooks(context: CliContext, stateDirectory: string): Promise<readonly DoctorCheck[]> {
+  return (await hookFindings(context, stateDirectory)).map((finding) => finding.check);
 }
 
 async function checkPlatform(context: CliContext): Promise<Finding> {
@@ -1531,6 +1684,8 @@ async function collectFindings(
     await guarded(context, "codex-capabilities", [], () =>
       checkCodexCapabilities(context, options.probe),
     ),
+    // Not through `guarded`: both checks catch everything and never return "fail" (spec §8.2).
+    ...await hookFindings(context, paths.stateDir),
     // Not through `guarded`: it turns a throw into "fail", which spec §8 forbids.
     { check: await checkVendorConfig(context), code: EXIT_CODES.success },
     await guarded(context, "instructions", [], async () => {

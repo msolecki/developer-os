@@ -319,6 +319,8 @@ describe("Foundation temporary-HOME lifecycle", () => {
         "agents",
         "claude-capabilities",
         "codex-capabilities",
+        "hooks",
+        "external-hooks",
         "vendor-config",
         "instructions",
         "codex-registration",
