@@ -24,6 +24,7 @@ describe("the package's public door", () => {
         "resolveOwnedPath",
         "SecurityRefusalError",
         "ProtectedPathPolicy",
+        "PROTECTED_PATH_RULES",
         "redactText",
         "createRedactor",
         "REDACTION_CLASSES",

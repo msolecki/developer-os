@@ -7,7 +7,15 @@ export {
   resolveOwnedPath,
   SecurityRefusalError,
 } from "./paths.js";
-export { ProtectedPathPolicy } from "./protected-paths.js";
+export {
+  PROTECTED_PATH_RULES,
+  ProtectedPathPolicy,
+} from "./protected-paths.js";
+export type {
+  ProtectedPathMatchV1,
+  ProtectedPathRuleId,
+  ProtectedPathRuleV1,
+} from "./protected-paths.js";
 export { createRedactor, REDACTION_CLASSES, redactText } from "./redaction.js";
 export type {
   RedactionFinding,

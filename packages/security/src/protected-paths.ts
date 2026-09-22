@@ -6,16 +6,56 @@ import {
   SecurityRefusalError,
 } from "./paths.js";
 
-const protectedDirectoryNames = new Set([".ssh", ".aws", ".gnupg"]);
+export type ProtectedPathRuleId =
+  | "read-env"
+  | "read-env-variants"
+  | "read-ssh"
+  | "read-aws"
+  | "read-gnupg"
+  | "read-gh-hosts"
+  | "read-codex-auth"
+  | "read-claude-credentials";
 
-function hasProtectedEnvironmentName(segments: readonly string[]): boolean {
-  return segments.some(
-    (segment) => segment === ".env" || segment.startsWith(".env."),
-  );
+export type ProtectedPathMatchV1 =
+  /** Any path segment equal to `name`. */
+  | { readonly kind: "segment"; readonly name: string }
+  /** Any path segment starting with `prefix`. */
+  | { readonly kind: "segment-prefix"; readonly prefix: string }
+  /** Exactly `<home>/<relativePath>`. */
+  | { readonly kind: "home-exact"; readonly relativePath: string };
+
+export interface ProtectedPathRuleV1 {
+  readonly id: ProtectedPathRuleId;
+  readonly match: ProtectedPathMatchV1;
 }
 
-function hasProtectedDirectory(segments: readonly string[]): boolean {
-  return segments.some((segment) => protectedDirectoryNames.has(segment));
+/** The single source every `ProtectedPathPolicy` refusal is derived from. */
+export const PROTECTED_PATH_RULES: readonly ProtectedPathRuleV1[] = Object.freeze([
+  { id: "read-env", match: { kind: "segment", name: ".env" } },
+  { id: "read-env-variants", match: { kind: "segment-prefix", prefix: ".env." } },
+  { id: "read-ssh", match: { kind: "segment", name: ".ssh" } },
+  { id: "read-aws", match: { kind: "segment", name: ".aws" } },
+  { id: "read-gnupg", match: { kind: "segment", name: ".gnupg" } },
+  { id: "read-gh-hosts", match: { kind: "home-exact", relativePath: ".config/gh/hosts.yml" } },
+  { id: "read-codex-auth", match: { kind: "home-exact", relativePath: ".codex/auth.json" } },
+  {
+    id: "read-claude-credentials",
+    match: { kind: "home-exact", relativePath: ".claude/.credentials.json" },
+  },
+]);
+
+function matchesSegmentRule(
+  match: ProtectedPathMatchV1,
+  segments: readonly string[],
+): boolean {
+  switch (match.kind) {
+    case "segment":
+      return segments.includes(match.name);
+    case "segment-prefix":
+      return segments.some((segment) => segment.startsWith(match.prefix));
+    case "home-exact":
+      return false;
+  }
 }
 
 function splitLexicalSegments(path: string): readonly string[] {
@@ -60,7 +100,9 @@ export class ProtectedPathPolicy {
     try {
       handle = await open(
         canonicalPath,
-        constants.O_RDONLY | constants.O_NOFOLLOW,
+        // O_NONBLOCK: a FIFO with no writer would otherwise block open() forever,
+        // before any caller could see that the entry is not a regular file.
+        constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
       );
     } catch {
       throw new SecurityRefusalError("Unable to open verified readable file");
@@ -108,8 +150,9 @@ export class ProtectedPathPolicy {
 
     const rawSegments = splitLexicalSegments(path);
     if (
-      hasProtectedEnvironmentName(rawSegments) ||
-      hasProtectedDirectory(rawSegments)
+      PROTECTED_PATH_RULES.some((rule) =>
+        matchesSegmentRule(rule.match, rawSegments),
+      )
     ) {
       throw new SecurityRefusalError("Path is protected");
     }
@@ -126,13 +169,12 @@ export class ProtectedPathPolicy {
       return;
     }
 
-    const protectedExactPaths = [
-      resolve(policyHome, ".config/gh/hosts.yml"),
-      resolve(policyHome, ".codex/auth.json"),
-      resolve(policyHome, ".claude/.credentials.json"),
-    ];
-
-    if (protectedExactPaths.includes(absolutePath)) {
+    const isProtectedExactPath = PROTECTED_PATH_RULES.some(
+      (rule) =>
+        rule.match.kind === "home-exact" &&
+        resolve(policyHome, rule.match.relativePath) === absolutePath,
+    );
+    if (isProtectedExactPath) {
       throw new SecurityRefusalError("Path is protected");
     }
   }

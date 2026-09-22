@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import {
   mkdtemp,
   mkdir,
@@ -11,7 +12,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EXIT_CODES } from "@developer-os/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ProtectedPathPolicy } from "./protected-paths.js";
+import { SecurityRefusalError } from "./paths.js";
+import {
+  PROTECTED_PATH_RULES,
+  ProtectedPathPolicy,
+} from "./protected-paths.js";
 
 const syntheticHome = "/Users/test";
 const temporaryDirectories = new Set<string>();
@@ -192,4 +197,45 @@ describe("ProtectedPathPolicy", () => {
     }
     await expect(receivedHandle.stat()).rejects.toMatchObject({ code: "EBADF" });
   });
+
+  it("derives every refusal from PROTECTED_PATH_RULES, and the table is the eight known rules", async () => {
+    expect(PROTECTED_PATH_RULES.map((rule) => rule.id)).toStrictEqual([
+      "read-env",
+      "read-env-variants",
+      "read-ssh",
+      "read-aws",
+      "read-gnupg",
+      "read-gh-hosts",
+      "read-codex-auth",
+      "read-claude-credentials",
+    ]);
+    const home = syntheticHome;
+    const policy = new ProtectedPathPolicy(home);
+    for (const rule of PROTECTED_PATH_RULES) {
+      const probe =
+        rule.match.kind === "segment"
+          ? join(home, "project", rule.match.name, "x")
+          : rule.match.kind === "segment-prefix"
+            ? join(home, "project", `${rule.match.prefix}local`)
+            : join(home, rule.match.relativePath);
+      await expect(policy.assertReadable(probe), rule.id).rejects.toBeInstanceOf(
+        SecurityRefusalError,
+      );
+    }
+  });
+
+  it("opens a FIFO without blocking, so the reader can refuse it", async () => {
+    const temporaryDirectory = await makeTemporaryDirectory();
+    const home = join(temporaryDirectory, "synthetic-home");
+    await mkdir(join(home, "project"), { recursive: true });
+    const fifo = join(home, "project", "pipe.md");
+    execFileSync("/usr/bin/mkfifo", [fifo]); // test-only spawn; the product spawns nothing here
+    const policy = new ProtectedPathPolicy(home);
+
+    await expect(
+      policy.readText(fifo, async (handle) =>
+        (await handle.stat()).isFIFO() ? "fifo" : "file",
+      ),
+    ).resolves.toBe("fifo");
+  }, 5_000);
 });
