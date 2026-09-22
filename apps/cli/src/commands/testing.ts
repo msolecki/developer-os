@@ -2,7 +2,8 @@ import * as nodeFs from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   ManifestStore,
@@ -62,6 +63,7 @@ import {
   type PackagedReleaseIdentityV1,
 } from "../update/packaged-release.js";
 import { releaseTemplateFiles } from "../update/local-release.js";
+import type { ReleaseFileV1 } from "../update/local-release.js";
 
 const REDACTION_KEY = new Uint8Array(32).fill(11);
 const PRODUCT_STATE_DIRECTORY = ".developer-os";
@@ -389,6 +391,12 @@ export interface FixtureOptions {
   readonly bootstrapFailureHook?: (point: FreshInitDeathPointV1) => void;
   /** Opts this fixture into the synthetic admitted fresh-V2 package handoff. */
   readonly bootstrapAvailable?: boolean;
+  /**
+   * With `bootstrapAvailable`, the synthetic release also carries these files under
+   * `bundle/instructions/` (paths relative to it) and the repository's `workflows/**` under
+   * `bundle/workflows/`. Absent, it carries neither.
+   */
+  readonly instructions?: readonly ReleaseFileV1[];
   /** Uses the real kernel-backed lifecycle lock provider for exclusion tests. */
   readonly bootstrapProductionLocks?: boolean;
   /** Inserts an adversarial namespace race immediately before lifecycle lock acquisition. */
@@ -408,7 +416,27 @@ function digest(bytes: Uint8Array | string): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-async function createSyntheticPackagedRelease(root: string) {
+const REPOSITORY_WORKFLOWS = new URL("../../../../workflows/", import.meta.url);
+
+async function repositoryWorkflowFiles(): Promise<readonly ReleaseFileV1[]> {
+  const base = fileURLToPath(REPOSITORY_WORKFLOWS);
+  const files: ReleaseFileV1[] = [];
+  for (const entry of await nodeFs.readdir(base, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    const path = join(entry.parentPath, entry.name);
+    files.push({
+      relativePath: `bundle/workflows/${relative(base, path).split(sep).join("/")}`,
+      bytes: await nodeFs.readFile(path),
+      mode: 0o600,
+    });
+  }
+  return files;
+}
+
+async function createSyntheticPackagedRelease(
+  root: string,
+  instructions: readonly ReleaseFileV1[] | undefined,
+) {
   const packageRoot = join(root, "packaged-release");
   const retained = {
     delegation: "metadata/release-key-delegation.json",
@@ -432,6 +460,12 @@ async function createSyntheticPackagedRelease(root: string) {
       mode: 0o700,
     },
     ...releaseTemplateFiles(),
+    ...(instructions === undefined
+      ? []
+      : [
+          ...(await repositoryWorkflowFiles()),
+          ...instructions.map((file) => ({ ...file, relativePath: `bundle/instructions/${file.relativePath}` })),
+        ]),
   ];
 
   await nodeFs.mkdir(packageRoot, { recursive: true, mode: 0o700 });
@@ -489,7 +523,7 @@ export async function createCommandFixture(
   const guards = createGuards(policy, REDACTION_KEY);
   const paths = resolveRuntimePaths(pathEnvironmentFor({ userHome, env }));
   const packagedRelease = options.bootstrapAvailable === true
-    ? await createSyntheticPackagedRelease(root)
+    ? await createSyntheticPackagedRelease(root, options.instructions)
     : null;
   const bootstrapTrace: string[] = [];
   const lifecycleLockEvents: string[] = [];
