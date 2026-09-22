@@ -225,6 +225,27 @@ describe("loadInstructionOverrides", () => {
     expect(error.line).toBe(line);
   });
 
+  it("ignores a regular .DS_Store at the vendor root and inside a skill directory", async () => {
+    await write(join(vendorRoot(), ".DS_Store"), SENTINEL);
+    await write(join(vendorRoot(), "skills", "mine", "SKILL.md"), "Skill.\n");
+    await write(join(vendorRoot(), "skills", "mine", ".DS_Store"), SENTINEL);
+    await write(join(vendorRoot(), "skills", "mine", "a", ".DS_Store"), SENTINEL);
+    const loaded = await overrides();
+    expect(loaded.map((source) => [source.id, source.files.map((file) => file.relativePath)])).toStrictEqual([["mine", ["SKILL.md"]]]);
+  });
+
+  it("refuses a symlink named .DS_Store", async () => {
+    await write(join(tmp, "elsewhere"), `${SENTINEL}\n`);
+    await write(join(vendorRoot(), "skills", "mine", "SKILL.md"), "Skill.\n");
+    await nodeFs.symlink(join(tmp, "elsewhere"), join(vendorRoot(), "skills", "mine", ".DS_Store"));
+    expect((await refusal(overrides())).path).toBe(join(vendorRoot(), "skills", "mine", ".DS_Store"));
+  });
+
+  it.each(["._foo", ".DS_Store2"])("refuses a %s file", async (name) => {
+    await write(join(vendorRoot(), name), `${SENTINEL}\n`);
+    expect((await refusal(overrides())).path).toBe(join(vendorRoot(), name));
+  });
+
   it("refuses an unknown category directory", async () => {
     await write(join(vendorRoot(), "hooks", "x.md"), `${SENTINEL}\n`);
     expect((await refusal(overrides())).path).toBe(join(vendorRoot(), "hooks"));

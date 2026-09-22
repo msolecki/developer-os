@@ -196,10 +196,14 @@ function sameIdentity(left: BigIntStats, right: BigIntStats): boolean {
 async function listDirectory(path: string, effectiveUid: number): Promise<readonly string[]> {
   const before = await lstatOrNull(path);
   if (before === null || !before.isDirectory() || before.uid !== BigInt(effectiveUid)) refuse(path);
-  const names = await nodeFs.readdir(path);
+  const entries = await nodeFs.readdir(path, { withFileTypes: true });
   const after = await lstatOrNull(path);
   if (after === null || !sameIdentity(before, after)) refuse(path);
-  return names.sort(compareUtf8);
+  // Finder writes .DS_Store into any folder it opens; a regular one is never an artifact, so skip it.
+  return entries
+    .filter((entry) => !(entry.name === ".DS_Store" && entry.isFile()))
+    .map((entry) => entry.name)
+    .sort(compareUtf8);
 }
 
 /** No-follow open; the identity is checked before and after the read, and the size before it. */
