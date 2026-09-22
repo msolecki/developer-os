@@ -13,6 +13,7 @@ import type {
 } from "./report.js";
 import {
   admitBootstrapEvidencePlan,
+  BootstrapRootInvalidError,
   selectBootstrapEvidenceJournal,
 } from "./report.js";
 import { projectBootstrapRetentionPostimage } from "./retention.js";
@@ -87,7 +88,7 @@ export class NodeBootstrapEvidenceGuardedReader implements BootstrapEvidenceGuar
         continue;
       }
       if (!stats.isDirectory() || stats.isSymbolicLink()) {
-        throw new Error("bootstrap evidence root changed shape");
+        throw new BootstrapRootInvalidError([root]);
       }
       if (INITIAL_NAMESPACE.test(basename(root))) {
         await this.inventoryTree(root, stats, found);

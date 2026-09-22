@@ -175,6 +175,25 @@ export class BootstrapRecoveryRequiredError extends Error {
   }
 }
 
+/**
+ * A gate root — the product home, its state directory, or `$HOME` — that is a
+ * symlink or otherwise not a plain directory/file is invalid input naming the
+ * offending root, exactly as `init`'s own `assertUsableDirectory` already
+ * refuses the same condition for the product home
+ * (`apps/cli/src/commands/init.ts:331-345`). Before NEW-81 the gate's catch-all
+ * folded this into `BootstrapRecoveryRequiredError` (exit 6, "archive
+ * manually"), which sent the user chasing retained bootstrap evidence that was
+ * never the problem.
+ */
+export class BootstrapRootInvalidError extends Error {
+  readonly code = EXIT_CODES.invalidInput;
+
+  constructor(readonly paths: readonly string[]) {
+    super("a bootstrap evidence root is not a usable directory or file");
+    this.name = "BootstrapRootInvalidError";
+  }
+}
+
 export class ManagedDriftError extends Error {
   readonly code = EXIT_CODES.decisionRequired;
 
@@ -1463,8 +1482,27 @@ export async function assertOrdinaryCommandAdmitted(
   let evidence: BootstrapEvidenceAdmissionV1;
   try {
     evidence = await inspectBootstrapEvidenceAdmission(request);
-  } catch {
-    throw new BootstrapRecoveryRequiredError(BOOTSTRAP_MANUAL_ARCHIVE);
+  } catch (error) {
+    /**
+     * A root that is a symlink or otherwise not a plain directory/file is
+     * invalid input, not unresolved bootstrap residue — `error` already
+     * carries the offending root and the right exit code, so it is rethrown
+     * as-is rather than folded into the archive-manually refusal below.
+     */
+    if (error instanceof BootstrapRootInvalidError) throw error;
+    /**
+     * Every other inspection failure used to collapse into the same
+     * archive-manually text regardless of cause, which told a `status` run
+     * during a concurrent `init` to go archive evidence when the real fault
+     * was an unrelated bug in the inspector. The error's constructor name is
+     * published — never its message, which may quote a path or file content —
+     * matching this codebase's existing convention of reporting a finding's
+     * class and never its value (see `secretScan` in `docs/architecture/threat-model.md`).
+     */
+    throw new BootstrapRecoveryRequiredError(
+      `${BOOTSTRAP_MANUAL_ARCHIVE} (inspection failed: ${inspectionFailureClass(error)})`,
+      request.initialRoots,
+    );
   }
   const activeJournal = evidence.active?.journal?.current ?? null;
   if (
@@ -1474,7 +1512,24 @@ export async function assertOrdinaryCommandAdmitted(
   ) {
     throw resumeWithInit();
   }
-  if (evidence.blocksNewIntent) throw new BootstrapRecoveryRequiredError(BOOTSTRAP_MANUAL_ARCHIVE, evidence.retainedPaths);
+  /**
+   * `retainedRoots`, not `retainedPaths`: the latter can carry up to
+   * `MAX_CREATED_PATHS` (1,000,000) individual leaves, which is not a refusal
+   * a terminal can usefully print on every ordinary command. `retainedRoots`
+   * is the same collapsed top-level set `retainedPaths` already documents
+   * itself as collapsing to (this file, `BootstrapEvidenceAdmissionV1.retainedRoots`
+   * doc comment above).
+   */
+  if (evidence.blocksNewIntent) throw new BootstrapRecoveryRequiredError(BOOTSTRAP_MANUAL_ARCHIVE, evidence.retainedRoots);
+}
+
+/**
+ * The error's class only, never its message: a message may quote a path or
+ * file content, and this string reaches the user on every command this catch
+ * fires for.
+ */
+function inspectionFailureClass(error: unknown): string {
+  return error instanceof Error ? error.constructor.name : typeof error;
 }
 
 const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;

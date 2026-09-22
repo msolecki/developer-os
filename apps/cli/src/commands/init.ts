@@ -861,10 +861,17 @@ export async function runInit(
      * could start work, not only the resumable/fresh-V2 one below.
      */
     if (evidence.blocksNewIntent && evidence.active === null) {
+      /**
+       * `retainedRoots`, not `retainedPaths`: the collapsed top-level set
+       * rather than every retained leaf, which can number in the hundreds of
+       * thousands for a large retained tree (NEW-81 §4; matches the same
+       * substitution in the ordinary-command gate,
+       * `apps/cli/src/bootstrap/report.ts`, `assertOrdinaryCommandAdmitted`).
+       */
       throw new InitRefusal(
         EXIT_CODES.recoveryRequired,
         BOOTSTRAP_MANUAL_ARCHIVE,
-        evidence.retainedPaths,
+        evidence.retainedRoots,
       );
     }
     if (resumableBootstrap && !bootstrapAvailable) {

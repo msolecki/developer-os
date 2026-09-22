@@ -373,6 +373,45 @@ describe("run", () => {
 
     expect(code).toBe(2);
   });
+
+  /**
+   * NEW-81 §1: the "admits every ordinary command" alteration loop below
+   * exercises `uninstall` only as `--dry-run` (`ORDINARY_COMMANDS_WITHOUT_REMOVAL`),
+   * so it never asserts what the gate does to a command dispatched *after* a
+   * real `uninstall --yes` actually ran. This is a direct, standalone case for
+   * exactly that: `uninstall --yes`'s own exit code, then a distinct ordinary
+   * command's exit code, both asserted rather than exercised incidentally.
+   */
+  it("routes an ordinary command through the gate correctly right after uninstall --yes", async () => {
+    const harness = await createHarness("main-post-uninstall-routing");
+
+    expect(await harness.invoke(["init", "--yes"])).toBe(0);
+
+    const uninstallCode = await harness.invoke(["uninstall", "--yes"]);
+    expect(uninstallCode).toBe(0);
+
+    const statusCode = await harness.invoke(["status"]);
+    expect(statusCode).toBe(0);
+  });
+
+  /**
+   * NEW-81 §3: a symlinked product home used to refuse every ordinary command
+   * as exit 6 ("archive bootstrap evidence manually") through the gate's
+   * catch-all, while `init`'s own `assertUsableDirectory` already refuses the
+   * identical condition as exit 2, invalid input
+   * (`apps/cli/src/commands/init.ts:331-345`). Both now agree.
+   */
+  it("refuses a symlinked product home as invalid input, matching init's own refusal for the same condition", async () => {
+    const fixture = await createCommandFixture("main-symlinked-home");
+    await nodeFs.symlink(fixture.userHome, fixture.paths.home);
+    const invoke = (argv: readonly string[]) => run(argv, fixture.io, () => fixture.context);
+
+    expect(await invoke(["init", "--yes", "--json"])).toBe(2);
+    fixture.io.out.length = 0;
+
+    expect(await invoke(["status", "--json"])).toBe(2);
+    expect(lastJsonError(fixture.io.out)).toMatchObject({ code: 2 });
+  });
 });
 
 const NON_INIT_COMMANDS = [
@@ -415,10 +454,19 @@ async function expectGateAdmits(
   }
 }
 
+/**
+ * `gateMessage` and `initMessage` diverge for exactly one case (`§5` below):
+ * a deep evidence-namespace shape failure that is not one of the gate's own
+ * top-level roots. NEW-81 §5 scopes the redacted-class fix to the gate's own
+ * catches in `apps/cli/src/bootstrap/report.ts`; `init`'s own catch-all in
+ * `apps/cli/src/commands/init.ts` is untouched (out of scope for that row),
+ * so it keeps publishing the bare constant for the same underlying failure.
+ */
 async function expectArchiveRefusalEverywhere(
   fixture: CommandFixture,
   label: string,
-  message = BOOTSTRAP_MANUAL_ARCHIVE,
+  gateMessage = BOOTSTRAP_MANUAL_ARCHIVE,
+  initMessage = gateMessage,
 ): Promise<void> {
   const before = await inventoryDigest(fixture.root);
   for (const argv of NON_INIT_COMMANDS) {
@@ -426,11 +474,11 @@ async function expectArchiveRefusalEverywhere(
     expect(lastJsonError(fixture.io.out), `${label}: ${argv.join(" ")}`).toStrictEqual({
       code: 6,
       kind: "bootstrap_recovery_required",
-      message,
+      message: gateMessage,
     });
   }
   expect(await run(["init", "--yes", "--json"], fixture.io, () => fixture.rebuildContext()), `${label}: init`).toBe(6);
-  expect(lastJsonError(fixture.io.out), `${label}: init`).toMatchObject({ code: 6, message });
+  expect(lastJsonError(fixture.io.out), `${label}: init`).toMatchObject({ code: 6, message: initMessage });
   expect(await inventoryDigest(fixture.root), label).toEqual(before);
 }
 
@@ -580,7 +628,20 @@ describe("dispatch around a bootstrap envelope", () => {
 
     const lock = join(state, ".lifecycle-bootstrap.lock");
     await nodeFs.symlink("/nonexistent-bootstrap-target", lock);
-    await expectArchiveRefusalEverywhere(shipped.fixture, "symlinked bootstrap lock");
+    /**
+     * A symlinked lock is a deep evidence-namespace shape failure, not one of
+     * the gate's own top-level roots (`productHome`/`stateDirectory`/`$HOME`),
+     * so it is not `BootstrapRootInvalidError` (NEW-81 §3) — it still reaches
+     * the gate's catch-all, which now publishes the failure's redacted class
+     * alongside the archive-manually text (NEW-81 §5). `init`'s own separate
+     * catch-all is untouched (out of scope for §5) and keeps the bare message.
+     */
+    await expectArchiveRefusalEverywhere(
+      shipped.fixture,
+      "symlinked bootstrap lock",
+      `${BOOTSTRAP_MANUAL_ARCHIVE} (inspection failed: Error)`,
+      BOOTSTRAP_MANUAL_ARCHIVE,
+    );
     await nodeFs.rm(lock);
 
     const staging = join(shipped.fixture.paths.stagingDir, "fresh-v2-init", "fi_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
@@ -645,6 +706,43 @@ describe("dispatch around a bootstrap envelope", () => {
         expect.soft(published.message, `${label}: ${argv.join(" ")}`).not.toBe(MALFORMED_V2_MANIFEST);
       }
     }
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * NEW-81 §6: the pre-publication resume branch — an `after_plan` envelope
+   * whose plan is durable but has not written its first journal slot — was
+   * pinned only by its exit code everywhere it was exercised. This fixture's
+   * `bootstrapAvailable` flag already exercises real fresh-V2 bootstrap ahead
+   * of the production launcher wiring (every test in this describe block
+   * does), so the branch is reachable here, not a stub; this pins `kind`,
+   * `message` and `recovery` too.
+   */
+  it("names the pre-publication resume branch's kind, message and recovery, not only its exit code", async () => {
+    const fixture = await createCommandFixture("main-bootstrap-after-plan-resume", {
+      bootstrapAvailable: true,
+      bootstrapInterruptAfter: "after_plan",
+    });
+    const invoke = (argv: readonly string[]) => run(argv, fixture.io, () => fixture.context);
+    expect(await invoke(["init", "--yes"])).not.toBe(0);
+    fixture.io.out.length = 0;
+
+    const code = await invoke(["status", "--json"]);
+    expect(code).toBe(6);
+    const published = JSON.parse(fixture.io.out.at(-1) ?? "null") as {
+      readonly code: number;
+      readonly error?: { readonly kind: string; readonly message: string; readonly recovery?: string };
+    };
+    expect(published).toMatchObject({
+      code: 6,
+      error: {
+        kind: "bootstrap_recovery_required",
+        message: "an interrupted bootstrap must be resumed by init",
+        recovery: "developer-os init",
+      },
+    });
+
+    const bootstrap = fixture.context.bootstrap;
+    if (bootstrap?.state === "available") await bootstrap.executor.close();
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 

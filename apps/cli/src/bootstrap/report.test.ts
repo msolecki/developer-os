@@ -4,7 +4,12 @@ import { basename, dirname, join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { deriveBootstrapRetentionLocations, encodeCanonicalJson, EXIT_CODES } from "@developer-os/core";
+import {
+  BOOTSTRAP_RETAINED_MAX_IDS,
+  deriveBootstrapRetentionLocations,
+  encodeCanonicalJson,
+  EXIT_CODES,
+} from "@developer-os/core";
 import type { CanonicalAbsolutePathV1, UInt64DecimalV1 } from "@developer-os/core";
 
 import { runInit } from "../commands/init.js";
@@ -18,6 +23,7 @@ import {
 import type { BootstrapEvidenceGuardedEntryV1, BootstrapEvidenceGuardedReaderV1 } from "./report.js";
 import {
   assertOrdinaryCommandAdmitted,
+  BootstrapRootInvalidError,
   inspectBootstrapEvidence,
   inspectBootstrapEvidenceAdmission,
   NON_REGULAR_BOOTSTRAP_LEAF,
@@ -592,4 +598,134 @@ describe("assertOrdinaryCommandAdmitted", () => {
       paths: [SYNTHETIC_MANIFEST],
     });
   });
+
+  /**
+   * NEW-81 §3: a root the reader refuses as not a usable directory/file (a
+   * symlinked product home, `$HOME`, or state directory) is invalid input
+   * naming the offending root, not the gate's generic archive-manually
+   * refusal — `BootstrapRootInvalidError` already carries both, so it is
+   * rethrown unwrapped rather than folded into `BootstrapRecoveryRequiredError`.
+   */
+  it("rethrows a root-shape refusal from the reader as invalid input, unwrapped", async () => {
+    const request = createBootstrapEvidenceInspectionRequest({
+      productHome: SYNTHETIC_HOME,
+      stateDirectory: SYNTHETIC_STATE,
+      initialRoots: [SYNTHETIC_HOME, SYNTHETIC_STATE],
+      reader: {
+        inventoryExactNamespaces: (queried) =>
+          queried.length > 1
+            ? Promise.reject(new BootstrapRootInvalidError([SYNTHETIC_HOME]))
+            : Promise.resolve([]),
+        readRegularFile: () => Promise.reject(new Error("no synthetic bytes at that path")),
+      },
+      listNames: () => Promise.resolve([]),
+    });
+
+    await expect(assertOrdinaryCommandAdmitted(request)).rejects.toMatchObject({
+      code: EXIT_CODES.invalidInput,
+      name: "BootstrapRootInvalidError",
+      paths: [SYNTHETIC_HOME],
+    });
+  });
+
+  /**
+   * NEW-81 §5: every other inspection failure used to collapse into the same
+   * archive-manually text regardless of cause, which told a `status` run
+   * during a concurrent `init` to go archive evidence when the real fault was
+   * an unrelated bug in the inspector. Only the failure's constructor name is
+   * published — never its message, which may quote a path or file content.
+   */
+  it("publishes the inspection failure's redacted class and the gate's roots, never its message", async () => {
+    class SyntheticInspectionFailure extends Error {}
+    const secretMessage = "synthetic secret detail that must never reach the user";
+    const request = createBootstrapEvidenceInspectionRequest({
+      productHome: SYNTHETIC_HOME,
+      stateDirectory: SYNTHETIC_STATE,
+      initialRoots: [SYNTHETIC_HOME, SYNTHETIC_STATE],
+      reader: {
+        inventoryExactNamespaces: (queried) =>
+          queried.length > 1
+            ? Promise.reject(new SyntheticInspectionFailure(secretMessage))
+            : Promise.resolve([]),
+        readRegularFile: () => Promise.reject(new Error("no synthetic bytes at that path")),
+      },
+      listNames: () => Promise.resolve([]),
+    });
+
+    let caught: unknown;
+    try {
+      await assertOrdinaryCommandAdmitted(request);
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({
+      code: EXIT_CODES.recoveryRequired,
+      name: "BootstrapRecoveryRequiredError",
+    });
+    const message = caught instanceof Error ? caught.message : "";
+    expect(message).toContain("SyntheticInspectionFailure");
+    expect(message).not.toContain(secretMessage);
+    expect((caught as { readonly paths?: readonly string[] }).paths).toEqual(request.initialRoots);
+  });
+});
+
+/**
+ * NEW-81 §2: the gate does a full plan admission attempt per retained envelope
+ * ID, up to `BOOTSTRAP_RETAINED_MAX_IDS` (256) — the product's own enforced
+ * cap on how many bootstrap envelopes an install can ever retain
+ * (`packages/core/src/manifest/bootstrap-retention.ts:26`). This measures a
+ * command's gate check at that cap with the cheapest-to-construct realistic
+ * shape: `BOOTSTRAP_RETAINED_MAX_IDS` durable-but-never-attributed plan files
+ * (each fails its own structural admission immediately, the same shape a
+ * crashed pre-write `init` leaves behind and the same fixture this suite
+ * already uses for that at `apps/cli/src/main.test.ts`'s "plan no longer
+ * validates" case). A verified/retained envelope costs strictly more per ID
+ * (it also builds a full retention-evidence table), so this undercounts the
+ * worst case per envelope, but the growth this row asks about is *with
+ * envelope count*, and every ID here pays the one cost every ID pays
+ * regardless of status: a bounded read plus one admission attempt.
+ */
+describe("gate cost with many retained envelope ids (NEW-81 §2)", () => {
+  it("measures assertOrdinaryCommandAdmitted's cost against the cap on retained envelope ids", async () => {
+    const root = await nodeFs.mkdtemp(join(tmpdir(), "developer-os-gate-cost-"));
+    const home = join(root, "product-home");
+    const state = join(home, "state");
+    try {
+      await nodeFs.mkdir(state, { recursive: true, mode: 0o700 });
+      for (let index = 0; index < BOOTSTRAP_RETAINED_MAX_IDS; index += 1) {
+        const hex = index.toString(16).padStart(8, "0");
+        const id = `fi_${hex}-0000-4000-8000-000000000000`;
+        await nodeFs.writeFile(
+          join(state, `fresh-v2-init.${id}.plan.json`),
+          "{}\n",
+          { mode: 0o600 },
+        );
+      }
+      const request = createBootstrapEvidenceInspectionRequest({
+        productHome: home,
+        stateDirectory: state,
+        initialRoots: [home, state, root],
+      });
+
+      const started = performance.now();
+      await assertOrdinaryCommandAdmitted(request).catch(() => undefined);
+      const elapsedMs = performance.now() - started;
+
+      /**
+       * No bound or short-circuit is added for this row: measured below
+       * `MEASURED_TOLERANCE_MS`, an ordinary command's gate check at the
+       * product's own hard cap on retained envelopes is not something a CLI
+       * user would notice, let alone find unusable — evidence against
+       * building unneeded complexity for a problem this measurement does not
+       * show.
+       */
+      const MEASURED_TOLERANCE_MS = 3000;
+      console.log(
+        `NEW-81 §2 measured: ${elapsedMs.toFixed(1)}ms for ${String(BOOTSTRAP_RETAINED_MAX_IDS)} retained envelope ids (tolerance ${String(MEASURED_TOLERANCE_MS)}ms)`,
+      );
+      expect(elapsedMs).toBeLessThan(MEASURED_TOLERANCE_MS);
+    } finally {
+      await nodeFs.rm(root, { recursive: true, force: true });
+    }
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

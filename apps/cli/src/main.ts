@@ -29,7 +29,7 @@ import type { StatusReportV1 } from "./commands/status.js";
 import { runUninstall } from "./commands/uninstall.js";
 import type { UninstallResultV1 } from "./commands/uninstall.js";
 import { createBootstrapEvidenceInspectionRequest } from "./bootstrap/context.js";
-import { assertOrdinaryCommandAdmitted, BootstrapRecoveryRequiredError } from "./bootstrap/report.js";
+import { assertOrdinaryCommandAdmitted, BootstrapRecoveryRequiredError, BootstrapRootInvalidError } from "./bootstrap/report.js";
 import { exitCodeOf, failureFrom, PRODUCT_VERSION, renderPath } from "./context.js";
 import type { CliContext } from "./context.js";
 import type { CliIo } from "./io.js";
@@ -536,8 +536,19 @@ async function dispatch(
         initialRoots: [context.paths.home, context.paths.stateDir, context.userHome],
       }));
     } catch (error) {
-      const refusal = error instanceof BootstrapRecoveryRequiredError ? error : null;
-      return emit(io, failureFrom(context, error, refusal?.paths ?? [], refusal?.recovery), json, () => []);
+      /**
+       * `BootstrapRootInvalidError` carries `paths` the same shape
+       * `BootstrapRecoveryRequiredError` does, but no `recovery` — invalid
+       * input names what is wrong rather than prescribing a fixed next
+       * command, the way `init`'s own `InitRefusal` for the same condition
+       * does not carry one either.
+       */
+      const paths =
+        error instanceof BootstrapRecoveryRequiredError || error instanceof BootstrapRootInvalidError
+          ? error.paths
+          : [];
+      const recovery = error instanceof BootstrapRecoveryRequiredError ? error.recovery : undefined;
+      return emit(io, failureFrom(context, error, paths, recovery), json, () => []);
     }
   }
 
