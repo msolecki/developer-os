@@ -36,7 +36,7 @@ import type {
 import { MacOsStableLockProvider } from "@developer-os/platform-macos";
 
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
-import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
+import { assertOrdinaryCommandAdmitted, inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
 import { runInit } from "../commands/init.js";
 import { runRepair } from "../commands/repair.js";
 import { runStatus } from "../commands/status.js";
@@ -735,5 +735,56 @@ describe("the mutation gate around a non-terminal standalone Foundation journal"
     const refused = await runRepair(fixture.rebuildContext(), { resume: first ?? "", rollback: null });
 
     expect(refused).toMatchObject({ ok: false, code: EXIT_CODES.recoveryRequired });
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
+/**
+ * Spec 1 §2.1 (amended 2026-09-22, A13 Q3-A): `state/hooks` is a reserved runtime path, never a
+ * manifest or reservation row, so every installed-home gate must tolerate it. A gate that refused
+ * it would turn every V2 command into exit 6 the first time a hook fired.
+ */
+describe("the installed-home gates beside a well-formed state/hooks", () => {
+  let hooksHome: Promise<CommandFixture> | null = null;
+
+  function homeWithHooks(): Promise<CommandFixture> {
+    hooksHome ??= (async () => {
+      const fixture = await initialisedV2Home("gate-hooks", {});
+      const hooks = join(fixture.paths.stateDir, "hooks");
+      await nodeFs.mkdir(hooks, { mode: 0o700 });
+      await nodeFs.chmod(hooks, 0o700);
+      await nodeFs.writeFile(join(hooks, "claude.PreToolUse.json"), "{}\n", { mode: 0o600 });
+      await nodeFs.writeFile(join(hooks, "codex.Stop.json.tmp-0123456789abcdef"), "{}\n", { mode: 0o600 });
+      return fixture;
+    })();
+    return hooksHome;
+  }
+
+  it("admitInstalledV2Home admits the home", async () => {
+    const fixture = await homeWithHooks();
+
+    await expect(admittedKeyOf(fixture)).resolves.toBeDefined();
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("assertOrdinaryCommandAdmitted resolves on the home", async () => {
+    const fixture = await homeWithHooks();
+
+    await expect(
+      assertOrdinaryCommandAdmitted(
+        createBootstrapEvidenceInspectionRequest({
+          productHome: fixture.paths.home,
+          stateDirectory: fixture.paths.stateDir,
+          initialRoots: [fixture.paths.home, fixture.paths.stateDir, fixture.userHome],
+        }),
+      ),
+    ).resolves.toBeUndefined();
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("the mutation gate runs a V2 mutation on the home", async () => {
+    const fixture = await homeWithHooks();
+
+    const journal = await mutate(fixture, "hooks-tolerated");
+
+    expect(journal.phase).toBe("finalized");
+    expect(await exists(join(fixture.paths.stateDir, "hooks", "claude.PreToolUse.json"))).toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

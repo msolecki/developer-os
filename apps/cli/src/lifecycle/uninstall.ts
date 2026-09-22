@@ -27,8 +27,11 @@ import {
   encodeUninstallingMarker,
   formatAllocatedLifecycleId,
   foundationParticipantPlanHash,
+  HOOK_FIRING_RECORDS_RELATIVE_PATH,
+  inspectHookFiringRecordsShape,
   inspectLifecycleAllocator,
   lifecycleBookkeepingPaths,
+  MAX_HOOK_FIRING_RECORD_CHILDREN,
   maximumCoordinatorJournalBytes,
   parseCanonicalAbsolutePathText,
   parseLifecycleCoordinatorId,
@@ -43,6 +46,7 @@ import type {
   InstallationManifestV2,
   LifecycleCoordinatorBoundaryV1,
   LifecycleCoordinatorIdV1,
+  LifecycleBookkeepingObservationV1,
   LifecycleExecutionBuilderV1,
   LifecycleGuardedEntryV1,
   LifecycleGuardedFileSystemV1,
@@ -644,6 +648,87 @@ async function uninstallCommitted(
   return (await guardedEntry(fs, plan.authority.manifestPath)) === null;
 }
 
+function observationOf(
+  entry: LifecycleGuardedEntryV1 | null | undefined,
+  childNames: readonly string[],
+): LifecycleBookkeepingObservationV1 {
+  if (entry?.kind === "directory") {
+    return { kind: "directory", ownerUid: entry.ownerUid, mode: entry.mode, childNames };
+  }
+  if (entry?.kind === "regular_file") {
+    return { kind: "regular_file", ownerUid: entry.ownerUid, mode: entry.mode, nlink: entry.nlink, size: BigInt(entry.size) };
+  }
+  return { kind: "other" };
+}
+
+export function hookFiringRecordsPath(productHome: CanonicalAbsolutePathV1): CanonicalAbsolutePathV1 {
+  return canonical(`${productHome}/${HOOK_FIRING_RECORDS_RELATIVE_PATH}`);
+}
+
+interface AdmittedHookFiringRecordsV1 {
+  readonly directory: LifecycleGuardedEntryV1;
+  readonly children: ReadonlyMap<string, LifecycleGuardedEntryV1 | null>;
+}
+
+/** Spec 1 §2.1 (amended 2026-09-22, A13 Q3-A): `null` when absent, otherwise admitted by shape or refused. */
+async function admitHookFiringRecords(
+  fs: LifecycleGuardedFileSystemV1,
+  productHome: CanonicalAbsolutePathV1,
+  effectiveUid: number,
+): Promise<AdmittedHookFiringRecordsV1 | null> {
+  const path = hookFiringRecordsPath(productHome);
+  const directory = await guardedEntry(fs, path);
+  if (directory === null) return null;
+  const names: string[] = [];
+  if (directory.kind === "directory") {
+    for await (const name of fs.names(directory)) {
+      names.push(name);
+      if (names.length > MAX_HOOK_FIRING_RECORD_CHILDREN) refuse("hook_records_shape", path);
+    }
+  }
+  const children = new Map<string, LifecycleGuardedEntryV1 | null>();
+  for (const name of names) {
+    let child: CanonicalAbsolutePathV1;
+    try {
+      child = canonical(`${path}/${name}`);
+    } catch {
+      return refuse("hook_records_shape", path);
+    }
+    children.set(name, await guardedEntry(fs, child));
+  }
+  const shape = inspectHookFiringRecordsShape(
+    observationOf(directory, names),
+    (name) => observationOf(children.get(name), []),
+    effectiveUid,
+  );
+  if (!shape.admitted) {
+    refuse("hook_records_shape", shape.offendingName === null ? path : canonical(`${path}/${shape.offendingName}`));
+  }
+  return { directory, children };
+}
+
+/**
+ * Spec 1 §6 (amended 2026-09-22, A13 Q3-A): `state/hooks` goes after every plugin-tree and
+ * artifact removal, re-admitted by shape at removal time and deleted by exact identity, the
+ * directory last. Absent is done, so a resumed uninstall may call this again.
+ */
+export async function removeHookFiringRecords(
+  fs: LifecycleGuardedFileSystemV1,
+  productHome: CanonicalAbsolutePathV1,
+  effectiveUid: number,
+): Promise<boolean> {
+  const admitted = await admitHookFiringRecords(fs, productHome, effectiveUid);
+  if (admitted === null) return false;
+  const { directory, children } = admitted;
+  for (const child of children.values()) {
+    if (child !== null) await fs.unlinkExact(child);
+  }
+  await fs.syncDirectory(directory);
+  await fs.rmdirExactEmpty(directory);
+  await syncDirectoryAt(fs, canonical(`${productHome}/state`));
+  return true;
+}
+
 async function removeStateLeaf(
   fs: LifecycleGuardedFileSystemV1,
   productHome: CanonicalAbsolutePathV1,
@@ -804,6 +889,8 @@ export function createUninstallAdapters(input: {
       },
       removeNonce: async (plan) => {
         if (!(await uninstallCommitted(fs, plan))) return;
+        /** Before the nonce: the nonce is what makes a death here resume through this hook again. */
+        await removeHookFiringRecords(fs, productHome, request.lifecycle.effectiveUid);
         await removeStateLeaf(fs, productHome, NONCE_LEAF);
       },
     },
@@ -1047,11 +1134,14 @@ export class LifecycleUninstaller {
       refs: null,
     };
 
+    /** Refused here, before any ID is reserved, rather than only at compaction after the commit. */
+    const hooks = await admitHookFiringRecords(lifecycle.fs, productHome, lifecycle.effectiveUid);
     return {
       variant,
       removable: [
         ...partitioned.removable.map((entry) => entry.artifact.path),
         ...reserved,
+        ...(hooks === null ? [] : [hooks.directory.path]),
       ].sort(),
       preserved: [...new Set([...partitioned.preserved, ...evidence.retainedPaths])],
       builder: uninstallBuilder(inputs),

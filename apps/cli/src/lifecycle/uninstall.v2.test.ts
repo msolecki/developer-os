@@ -652,6 +652,138 @@ describe("V2 uninstall through the lifecycle coordinator", () => {
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 
+describe("V2 uninstall and the state/hooks reserved runtime path (Spec 1 §6, amended 2026-09-22)", () => {
+  const RECORDS = ["claude.PreToolUse.json", "codex.session_start.json", "claude.Stop.json.tmp-0123456789abcdef"];
+
+  /** Task 11 has fresh `init` create it; until then the fixture plants what a hook would have written. */
+  async function plantHooks(fixture: CommandFixture): Promise<string> {
+    const hooks = join(fixture.paths.stateDir, "hooks");
+    await nodeFs.mkdir(hooks, { mode: 0o700 });
+    await nodeFs.chmod(hooks, 0o700);
+    for (const name of RECORDS) await nodeFs.writeFile(join(hooks, name), "{}\n", { mode: 0o600 });
+    return hooks;
+  }
+
+  /** One log for the guarded port's removals and the coordinator's boundaries, so their order is observable. */
+  function recordingRequest(
+    request: LifecycleUninstallRequestV1,
+    log: string[],
+  ): LifecycleUninstallRequestV1 {
+    const fs = request.lifecycle.fs;
+    return {
+      ...request,
+      lifecycle: {
+        ...request.lifecycle,
+        fs: {
+          ...fs,
+          unlinkExact: async (entry) => {
+            log.push(`unlink ${entry.path}`);
+            await fs.unlinkExact(entry);
+          },
+          rmdirExactEmpty: async (entry) => {
+            log.push(`rmdir ${entry.path}`);
+            await fs.rmdirExactEmpty(entry);
+          },
+        },
+      },
+    };
+  }
+
+  it("removes state/hooks after every artifact removal and before the nonce", async () => {
+    const fixture = await initializedV2Fixture("uninstall-hooks-order");
+    const hooks = await plantHooks(fixture);
+    const log: string[] = [];
+    const uninstaller = new LifecycleUninstaller({
+      afterBoundary: (boundary) => {
+        log.push(`boundary ${boundary.kind}`);
+      },
+    });
+
+    const result = await uninstaller.execute(recordingRequest(await requestFor(fixture), log));
+
+    expect(result.removed).toContain(hooks);
+    expect(await exists(hooks)).toBe(false);
+    const hookEntries = log
+      .map((line, index) => ({ line, index }))
+      .filter(({ line }) => line.endsWith(` ${hooks}`) || line.includes(` ${hooks}/`));
+    expect(hookEntries.map(({ line }) => line).sort()).toStrictEqual(
+      [...RECORDS.map((name) => `unlink ${join(hooks, name)}`), `rmdir ${hooks}`].sort(),
+    );
+    expect(hookEntries.at(-1)?.line).toBe(`rmdir ${hooks}`);
+    const firstHook = hookEntries[0]?.index ?? -1;
+    const leases = log.flatMap((line, index) => (line === "boundary lease_path_removed" ? [index] : []));
+    expect(leases.length).toBeGreaterThan(0);
+    expect(Math.max(...leases)).toBeLessThan(firstHook);
+    const tombstone = log.indexOf(`unlink ${manifestTombstoneOf(fixture)}`);
+    expect(tombstone).toBeGreaterThanOrEqual(0);
+    expect(tombstone).toBeLessThan(firstHook);
+    const nonce = log.indexOf(`unlink ${join(fixture.paths.stateDir, "lifecycle-install-nonce")}`);
+    expect(nonce).toBeGreaterThan(hookEntries.at(-1)?.index ?? Number.MAX_SAFE_INTEGER);
+    expect(await productHomeResidue(fixture)).toStrictEqual(await bookkeepingSetAndRetainedEvidence(fixture));
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("finishes removing state/hooks on the resumed run after a death partway through it", async () => {
+    const fixture = await initializedV2Fixture("uninstall-hooks-resume");
+    const hooks = await plantHooks(fixture);
+    const request = await requestFor(fixture);
+    const fs = request.lifecycle.fs;
+    let fired = false;
+    const dying: LifecycleUninstallRequestV1 = {
+      ...request,
+      lifecycle: {
+        ...request.lifecycle,
+        fs: {
+          ...fs,
+          unlinkExact: async (entry) => {
+            await fs.unlinkExact(entry);
+            if (fired || !entry.path.startsWith(`${hooks}/`)) return;
+            fired = true;
+            throw new SyntheticDeath("hook record unlink");
+          },
+        },
+      },
+    };
+
+    await expect(new LifecycleUninstaller().execute(dying)).rejects.toThrow(/synthetic death/u);
+    expect(fired).toBe(true);
+    expect(await exists(hooks)).toBe(true);
+    await recoverUninstall(fixture);
+
+    expect(await exists(hooks)).toBe(false);
+    expect(await exists(join(fixture.paths.stateDir, "lifecycle-install-nonce"))).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses a malformed state/hooks in planning, before it allocates", async () => {
+    const fixture = await initializedV2Fixture("uninstall-hooks-malformed");
+    const hooks = await plantHooks(fixture);
+    await nodeFs.writeFile(join(hooks, "notes.txt"), "foreign\n", { mode: 0o600 });
+    const before = await allocatorCounter(fixture);
+
+    await expect(new LifecycleUninstaller().execute(await requestFor(fixture))).rejects.toMatchObject({
+      reason: "hook_records_shape",
+      paths: [join(hooks, "notes.txt")],
+    });
+
+    expect(await allocatorCounter(fixture)).toBe(before);
+    expect(await exists(fixture.paths.manifestFile)).toBe(true);
+    expect(await exists(join(hooks, "notes.txt"))).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("leaves state/hooks in place when the uninstall compensates", async () => {
+    const fixture = await initializedV2Fixture("uninstall-hooks-compensated");
+    const hooks = await plantHooks(fixture);
+    const uninstaller = new LifecycleUninstaller({
+      afterBoundary: dieAfterJournalRewriteAt("manifest", () => fixture.publishedPlans),
+    });
+
+    await expect(uninstaller.execute(await requestFor(fixture))).rejects.toThrow(SyntheticDeath);
+    await recoverUninstall(fixture);
+
+    expect(await exists(fixture.paths.manifestFile)).toBe(true);
+    expect((await nodeFs.readdir(hooks)).sort()).toStrictEqual([...RECORDS].sort());
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
 async function digestsOf(paths: readonly string[]): Promise<readonly string[]> {
   return Promise.all(
     paths.map(async (path) => {

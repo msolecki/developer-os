@@ -14,6 +14,7 @@
  * the evidence, and returns what it saw.
  */
 import { SCHEDULED_JOB_IDS } from "../config/lifecycle.js";
+import { HOOK_FIRING_RECORDS_RELATIVE_PATH, inspectHookFiringRecordsShape } from "../hooks/firing-records.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
 import type { LowerHexSha256, UInt64DecimalV1 } from "../update/scalars.js";
 import {
@@ -394,6 +395,21 @@ function projectionOf(
       refuseLifecycleRecovery("absent_manifest_bookkeeping", result.offendingPath);
     }
     projectSubtree(childIndex, path, evidence.retainedPaths, projected);
+  }
+  const hooks = `${productHome}/${HOOK_FIRING_RECORDS_RELATIVE_PATH}`;
+  if (tree.has(hooks)) {
+    const result = inspectHookFiringRecordsShape(
+      observationOf(tree.get(hooks), childNamesOf(hooks)),
+      (name) => observationOf(tree.get(`${hooks}/${name}`), childNamesOf(`${hooks}/${name}`)),
+      dependencies.effectiveUid,
+    );
+    if (!result.admitted) {
+      refuseLifecycleRecovery(
+        "hook_records_shape",
+        result.offendingName === null ? hooks : `${hooks}/${result.offendingName}`,
+      );
+    }
+    projectSubtree(childIndex, hooks, new Set(), projected);
   }
   for (const name of USER_DATA_HOME_ENTRIES) {
     const path = `${productHome}/${name}`;

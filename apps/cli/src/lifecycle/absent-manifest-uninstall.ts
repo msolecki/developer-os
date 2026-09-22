@@ -20,6 +20,7 @@ import { UninstallRefusal } from "../commands/uninstall.js";
 import type { UninstallOptions, UninstallResultV1 } from "../commands/uninstall.js";
 import { residueFrom } from "./context.js";
 import type { CliLifecycleContext } from "./context.js";
+import { hookFiringRecordsPath, removeHookFiringRecords } from "./uninstall.js";
 import {
   observeSecretOpaqueKey,
   redactionKeySourcePath,
@@ -142,22 +143,29 @@ export async function runAbsentManifestUninstall(
       evidence: absentManifestEvidenceOf(evidence),
     };
 
+    const hooks = hookFiringRecordsPath(productHome);
+    /** Spec 1 §6 (amended 2026-09-22): the admitted `state/hooks` goes last, in either arm. */
+    const removeHooks = async (): Promise<readonly string[]> => {
+      if (options.dryRun) return (await lifecycle.fs.lstat(hooks)) === null ? [] : [hooks];
+      return (await removeHookFiringRecords(lifecycle.fs, productHome, lifecycle.effectiveUid)) ? [hooks] : [];
+    };
+
     const first = await inspectAbsentManifestProductHome(dependencies);
     if (first.shape !== "state_key_only") {
       const second = await inspectAbsentManifestProductHome(dependencies);
       if (second.walkFingerprint !== first.walkFingerprint) {
         throw new LifecycleRecoveryRequiredError("absent_manifest_walk_race", [productHome]);
       }
-      return resultOf("key_absent", [], evidence);
+      return resultOf("key_absent", await removeHooks(), evidence);
     }
 
     const keyPath = redactionKeySourcePath(stateDirectory);
-    if (!options.dryRun) {
-      await withBootstrapLeaf(lifecycle, stateDirectory, () =>
-        deleteOrphanedKey(lifecycle, dependencies, stateDirectory, keyPath),
-      );
-    }
-    return resultOf("key_present", [keyPath], evidence);
+    if (options.dryRun) return resultOf("key_present", [keyPath, ...(await removeHooks())], evidence);
+    const removedHooks = await withBootstrapLeaf(lifecycle, stateDirectory, async () => {
+      await deleteOrphanedKey(lifecycle, dependencies, stateDirectory, keyPath);
+      return removeHooks();
+    });
+    return resultOf("key_present", [keyPath, ...removedHooks], evidence);
   } catch (error) {
     if (error instanceof LifecycleRecoveryRequiredError) {
       throw new UninstallRefusal(

@@ -176,6 +176,16 @@ export {
   renderHookCommand,
 } from "./hooks/contract.js";
 export type { HookGuardKind, HookVendor, HookVerb } from "./hooks/contract.js";
+export {
+  decodeHookFiringRecord,
+  encodeHookFiringRecord,
+  HOOK_FIRING_RECORDS_RELATIVE_PATH,
+  hookFiringRecordName,
+  inspectHookFiringRecordsShape,
+  MAX_HOOK_FIRING_RECORD_BYTES,
+  MAX_HOOK_FIRING_RECORD_CHILDREN,
+} from "./hooks/firing-records.js";
+export type { HookFiringRecordsShapeV1, HookFiringRecordV1 } from "./hooks/firing-records.js";
 export { CAPABILITY_STATES, PROBE_OBSERVATIONS } from "./capabilities/index.js";
 export type { CapabilityState, ProbeObservation } from "./capabilities/index.js";
 export {

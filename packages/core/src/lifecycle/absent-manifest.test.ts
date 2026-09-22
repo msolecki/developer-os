@@ -580,6 +580,85 @@ describe("the product home's instructions directory (A12 spec §3.2)", () => {
   });
 });
 
+describe("the state/hooks reserved runtime path (Spec 1 §6, amended 2026-09-22)", () => {
+  const HOOKS = `${STATE}/hooks`;
+  const records = (): Map<string, PlantV1> =>
+    new Map<string, PlantV1>([
+      [HOOKS, directory()],
+      [`${HOOKS}/claude.PreToolUse.json`, file({ size: 180 })],
+      [`${HOOKS}/codex.session_start.json`, file({ size: 180 })],
+      [`${HOOKS}/claude.Stop.json.tmp-0123456789abcdef`, file({ size: 12 })],
+    ]);
+
+  it.each(["state_empty", "state_key_only"] as const)(
+    "projects a well-formed state/hooks away beside %s",
+    async (shape) => {
+      const home = memoryHome(shape, { projections: true, extra: records() });
+
+      const inspection = await inspectAbsentManifestProductHome(home.dependencies);
+
+      expect(inspection.shape).toBe(shape);
+      expect(inspection.visitedEntries).toBe(plantedUnderHome(home));
+      expect(home.fs.readsOfContent).toStrictEqual([]);
+      expect(home.fs.mutations).toStrictEqual([]);
+    },
+  );
+
+  it("projects an empty state/hooks away", async () => {
+    const home = memoryHome("state_empty", { extra: new Map([[HOOKS, directory()]]) });
+
+    expect((await inspectAbsentManifestProductHome(home.dependencies)).shape).toBe("state_empty");
+  });
+
+  it.each([
+    ["a foreign name", `${HOOKS}/notes.txt`, file({ size: 3 })],
+    ["an oversized record", `${HOOKS}/claude.Stop.json`, file({ size: 513 })],
+    ["a subdirectory", `${HOOKS}/claude.Stop.json`, directory()],
+  ] as const)("refuses %s inside it with hook_records_shape", async (_label, offending, plant) => {
+    const extra = records();
+    extra.set(offending, plant);
+    const home = memoryHome("state_empty", { extra });
+
+    const error = await refusal(home);
+
+    expect(error.reason).toBe("hook_records_shape");
+    expect(error.paths).toStrictEqual([offending]);
+    expect(home.fs.mutations).toStrictEqual([]);
+  });
+
+  it("refuses a state/hooks directory that is not owner-only", async () => {
+    const extra = records();
+    extra.set(HOOKS, directory({ mode: 0o755 }));
+    const home = memoryHome("state_empty", { extra });
+
+    const error = await refusal(home);
+
+    expect(error.reason).toBe("hook_records_shape");
+    expect(error.paths).toStrictEqual([HOOKS]);
+  });
+
+  it("refuses more than 32 children", async () => {
+    const extra = new Map<string, PlantV1>([[HOOKS, directory()]]);
+    for (let index = 0; index < 33; index += 1) {
+      extra.set(`${HOOKS}/claude.E${"x".repeat(index)}.json`, file({ size: 1 }));
+    }
+    const home = memoryHome("state_empty", { extra });
+
+    const error = await refusal(home);
+
+    expect(error.reason).toBe("hook_records_shape");
+    expect(error.paths).toStrictEqual([HOOKS]);
+  });
+
+  it("admits no other name under state as hook records", async () => {
+    const home = memoryHome("state_empty", {
+      extra: new Map([[`${STATE}/hooks-old`, directory()]]),
+    });
+
+    expect((await refusal(home)).paths).toContain(`${STATE}/hooks-old`);
+  });
+});
+
 describe("the walk's identity and name rules", () => {
   it.each([
     ["a symlink", `${STATE}/link`, directory({ kind: "symlink", mode: 0o777 })],

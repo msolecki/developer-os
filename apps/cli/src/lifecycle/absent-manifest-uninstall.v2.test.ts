@@ -165,3 +165,76 @@ describe("absent-manifest uninstall over a rolled-back V2 init", () => {
     expect((await runInit(fixture.rebuildContext(), ACCEPTED)).ok).toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
+
+describe("absent-manifest uninstall and the state/hooks reserved runtime path (Spec 1 §6, amended 2026-09-22)", () => {
+  const RECORDS = ["claude.PreToolUse.json", "codex.session_start.json", "claude.Stop.json.tmp-0123456789abcdef"];
+
+  async function stateWithHooks(label: string, names: readonly string[] = RECORDS): Promise<CommandFixture> {
+    const fixture = await createCommandFixture(label, { bootstrapAvailable: true });
+    const hooks = join(fixture.paths.stateDir, "hooks");
+    await nodeFs.mkdir(hooks, { recursive: true, mode: 0o700 });
+    await nodeFs.chmod(fixture.paths.home, 0o700);
+    await nodeFs.chmod(fixture.paths.stateDir, 0o700);
+    await nodeFs.chmod(hooks, 0o700);
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) await nodeFs.writeFile(join(hooks, name), "{}\n", { mode: 0o600 });
+    return fixture;
+  }
+
+  async function uninstallAbsent(fixture: CommandFixture, options: { readonly dryRun: boolean; readonly assumeYes: boolean } = ACCEPTED) {
+    const context = fixture.rebuildContext();
+    const lifecycle = context.lifecycle;
+    if (lifecycle === undefined) throw new Error("the fixture context has no lifecycle capability");
+    if (context.bootstrap?.state !== "available") throw new Error("the fixture has no bootstrap");
+    return runAbsentManifestUninstall({
+      context,
+      lifecycle,
+      options,
+      evidence: await context.bootstrap.inspectEvidence(),
+    });
+  }
+
+  it("admits a home whose only residue is a well-formed state/hooks and removes it", async () => {
+    const fixture = await stateWithHooks("absent-manifest-hooks-key-absent");
+    const hooks = join(fixture.paths.stateDir, "hooks");
+
+    const previewed = await uninstallAbsent(fixture, { dryRun: true, assumeYes: true });
+    expect(previewed).toMatchObject({ arm: "key_absent", removed: [hooks] });
+    expect(await exists(hooks)).toBe(true);
+
+    const outcome = await uninstallAbsent(fixture);
+
+    expect(outcome).toMatchObject({ arm: "key_absent", removed: [hooks], transactionId: null });
+    expect(await exists(hooks)).toBe(false);
+    expect(await nodeFs.readdir(fixture.paths.stateDir)).toStrictEqual([]);
+    expect((await runInit(fixture.rebuildContext(), ACCEPTED)).ok).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("removes state/hooks after the orphaned key in the key_present arm", async () => {
+    const fixture = await stateWithHooks("absent-manifest-hooks-key-present");
+    loadOrCreateRedactionKey(fixture.paths.stateDir);
+    const keyPath = join(fixture.paths.stateDir, "redaction.key");
+    const hooks = join(fixture.paths.stateDir, "hooks");
+
+    const outcome = await uninstallAbsent(fixture);
+
+    expect(outcome).toMatchObject({ arm: "key_present", removed: [keyPath, hooks], transactionId: null });
+    expect(await exists(keyPath)).toBe(false);
+    expect(await exists(hooks)).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it.each([
+    ["a foreign name", ["notes.txt"]],
+    ["too many children", Array.from({ length: 33 }, (_, index) => `claude.E${"x".repeat(index)}.json`)],
+  ])("refuses a malformed state/hooks holding %s with hook_records_shape and deletes nothing", async (_label, names) => {
+    const fixture = await stateWithHooks("absent-manifest-hooks-malformed", names);
+    const before = await inventoryDigest(fixture.root);
+
+    await expect(uninstallAbsent(fixture)).rejects.toMatchObject({
+      name: "UninstallRefusal",
+      message: expect.stringContaining("hook_records_shape") as unknown,
+    });
+
+    expect(await inventoryDigest(fixture.root)).toStrictEqual(before);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
