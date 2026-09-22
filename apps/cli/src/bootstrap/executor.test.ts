@@ -13,6 +13,7 @@ import {
   BootstrapExecutor,
   freshInitDeathPoints,
   freshInitFineGrainedDeathPoints,
+  preexistingParentShapeAdmits,
 } from "./executor.js";
 
 afterEach(removeCommandFixtures);
@@ -755,4 +756,48 @@ describe("BootstrapExecutor retained fresh V2 initialization", () => {
     expect(resumed.code).toBe(EXIT_CODES.recoveryRequired);
     expect(resumed.error.message).toBe("existing global lock escaped admitted rolled-back evidence");
   }, 600_000);
+});
+
+describe("D49 preexisting planned parent shape", () => {
+  const owner = 501;
+  const shape = (mode: number, overrides: { directory?: boolean; symlink?: boolean; uid?: number } = {}) => ({
+    isDirectory: () => overrides.directory ?? true,
+    isSymbolicLink: () => overrides.symlink ?? false,
+    uid: BigInt(overrides.uid ?? owner),
+    mode: BigInt(0o040000 | mode),
+  });
+
+  it.each([0o700, 0o750, 0o755, 0o711])("admits an owned directory at %o", (mode) => {
+    expect(preexistingParentShapeAdmits(shape(mode), owner)).toBe(true);
+  });
+
+  it.each([0o770, 0o757, 0o777, 0o720, 0o702])("refuses group or other write at %o", (mode) => {
+    expect(preexistingParentShapeAdmits(shape(mode), owner)).toBe(false);
+  });
+
+  it("refuses a symlink, a non-directory and a foreign owner", () => {
+    expect(preexistingParentShapeAdmits(shape(0o750, { symlink: true, directory: false }), owner)).toBe(false);
+    expect(preexistingParentShapeAdmits(shape(0o750, { directory: false }), owner)).toBe(false);
+    expect(preexistingParentShapeAdmits(shape(0o750, { uid: owner + 1 }), owner)).toBe(false);
+  });
+
+  it.each([0o750, 0o755])("completes a fresh init under a user home at %o", async (mode) => {
+    const fixture = await createCommandFixture(`bootstrap-d49-home-${mode.toString(8)}`, { bootstrapAvailable: true });
+    await nodeFs.chmod(fixture.userHome, mode);
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    if (!result.ok) throw new Error(JSON.stringify({ result, trace: fixture.bootstrapTrace.slice(-30) }));
+    const productHome = await nodeFs.lstat(fixture.paths.home);
+    expect(productHome.mode & 0o777).toBe(0o700);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses a fresh init under a group-writable user home", async () => {
+    const fixture = await createCommandFixture("bootstrap-d49-home-770", { bootstrapAvailable: true });
+    await nodeFs.chmod(fixture.userHome, 0o770);
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    expect(result.ok).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

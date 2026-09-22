@@ -331,6 +331,21 @@ function mode(stats: BigIntStats): number {
   return Number(stats.mode) & 0o777;
 }
 
+/**
+ * D49: a directory the product did not create (the user's home, a brain
+ * vault) keeps the mode its owner gave it. It still has to be a real
+ * directory owned by the effective uid that no group or other can write, so
+ * no other principal can swap a planned child under it. Product-created and
+ * product-owned directories keep the exact 0700 rule.
+ */
+export function preexistingParentShapeAdmits(
+  stats: Pick<BigIntStats, "isDirectory" | "isSymbolicLink" | "uid" | "mode">,
+  ownerUid: number,
+): boolean {
+  return stats.isDirectory() && !stats.isSymbolicLink() && Number(stats.uid) === ownerUid &&
+    (Number(stats.mode) & 0o022) === 0;
+}
+
 function pathHash(path: string): LowerHexSha256 {
   return lowerHash(path);
 }
@@ -2730,7 +2745,12 @@ export class BootstrapExecutor {
     const parent = planned.parent;
     const path = dirname(planned.path);
     const stats = await nodeFs.lstat(path, { bigint: true });
-    if (!stats.isDirectory() || stats.isSymbolicLink() || Number(stats.uid) !== uid() || mode(stats) !== 0o700) {
+    const { home, stateDir } = this.#dependencies.paths;
+    const productOwned = [home, stateDir].some((root) => path === root || path.startsWith(`${root}/`));
+    const admitted = parent.kind === "preexisting" && !productOwned
+      ? preexistingParentShapeAdmits(stats, uid())
+      : stats.isDirectory() && !stats.isSymbolicLink() && Number(stats.uid) === uid() && mode(stats) === 0o700;
+    if (!admitted) {
       throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "planned parent changed shape");
     }
     if (parent.kind === "preexisting") {
