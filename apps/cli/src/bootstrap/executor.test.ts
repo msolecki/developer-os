@@ -801,3 +801,57 @@ describe("D49 preexisting planned parent shape", () => {
     expect(result.ok).toBe(false);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
+
+describe("state/hooks reserved runtime path (A13 Q3-A)", () => {
+  async function preexistingHooks(fixture: CommandFixture, name: string): Promise<string> {
+    const hooks = join(fixture.paths.stateDir, "hooks");
+    await nodeFs.mkdir(hooks, { recursive: true, mode: 0o700 });
+    for (const path of [fixture.paths.home, fixture.paths.stateDir, hooks]) await nodeFs.chmod(path, 0o700);
+    const child = join(hooks, name);
+    await nodeFs.writeFile(child, "{}", { mode: 0o600 });
+    return child;
+  }
+
+  it("creates state/hooks at 0700 on a fresh init and never names it in the manifest", async () => {
+    const fixture = await createCommandFixture("bootstrap-state-hooks-created", { bootstrapAvailable: true });
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    if (!result.ok) throw new Error(JSON.stringify({ result, trace: fixture.bootstrapTrace.slice(-30) }));
+    const hooks = join(fixture.paths.stateDir, "hooks");
+    const stats = await nodeFs.lstat(hooks);
+    expect(stats.isDirectory()).toBe(true);
+    expect(stats.mode & 0o777).toBe(0o700);
+    expect(stats.uid).toBe(process.getuid?.());
+    const manifest = JSON.parse(await nodeFs.readFile(fixture.paths.manifestFile, "utf8")) as {
+      artifacts: Array<{ path: string }>;
+    };
+    expect(manifest.artifacts.length).toBeGreaterThan(0);
+    expect(manifest.artifacts.some((artifact) => artifact.path === hooks || artifact.path.startsWith(`${hooks}/`)))
+      .toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("admits a pre-existing state/hooks holding a leftover record temp", async () => {
+    const fixture = await createCommandFixture("bootstrap-state-hooks-admitted", { bootstrapAvailable: true });
+    const temp = await preexistingHooks(fixture, "claude.Stop.json.tmp-0123456789abcdef");
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    if (!result.ok) throw new Error(JSON.stringify({ result, trace: fixture.bootstrapTrace.slice(-30) }));
+    expect(await nodeFs.readFile(temp, "utf8")).toBe("{}");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses a pre-existing state/hooks holding a foreign child", async () => {
+    const fixture = await createCommandFixture("bootstrap-state-hooks-foreign", { bootstrapAvailable: true });
+    const foreign = await preexistingHooks(fixture, "notes.txt");
+
+    const result = await runInit(fixture.context, ACCEPTED);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe(EXIT_CODES.recoveryRequired);
+    expect(result.error.message).toContain("hook_records_shape");
+    expect(await nodeFs.readFile(foreign, "utf8")).toBe("{}");
+    expect(await exists(fixture.paths.manifestFile)).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});

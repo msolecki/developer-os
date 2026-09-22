@@ -17,6 +17,8 @@ import {
   encodeCanonicalJson,
   EXIT_CODES,
   hashBytes,
+  HOOK_FIRING_RECORDS_RELATIVE_PATH,
+  inspectHookFiringRecordsShape,
   inspectLifecycleBookkeepingShape,
   lifecycleBookkeepingPaths,
   serializeConfig,
@@ -1241,6 +1243,25 @@ export class BootstrapExecutor {
       }
       result.set(path, stats);
     }
+    /** Spec 1 §2.1 (amended 2026-09-22, A13 Q3-A): a present `state/hooks` is admitted by shape, never claimed. */
+    const hooks = join(this.#dependencies.paths.home, HOOK_FIRING_RECORDS_RELATIVE_PATH);
+    const { observations, present } = await observeBookkeepingTree(new Set([hooks]), [], []);
+    const hooksStats = present.get(hooks);
+    if (hooksStats !== undefined) {
+      const shape = inspectHookFiringRecordsShape(
+        observations.get(hooks) ?? { kind: "other" },
+        (name) => observations.get(join(hooks, name)) ?? { kind: "other" },
+        uid(),
+      );
+      if (!shape.admitted) {
+        throw new FreshBootstrapError(
+          EXIT_CODES.recoveryRequired,
+          `product home contains hook firing records of an unadmitted shape (hook_records_shape): ${
+            shape.offendingName === null ? hooks : join(hooks, shape.offendingName)}`,
+        );
+      }
+      result.set(hooks, hooksStats);
+    }
     return result;
   }
 
@@ -1954,6 +1975,7 @@ export class BootstrapExecutor {
       join(paths.stateDir, "git-effect-journals"),
       join(paths.stateDir, "launchd-effect-journals"),
       join(paths.home, "rollback"),
+      join(paths.home, HOOK_FIRING_RECORDS_RELATIVE_PATH),
       ...(input.brainStats === null
         ? [input.request.brainPath, ...BRAIN_TEMPLATE_DIRECTORIES.map((path) => join(input.request.brainPath, path))]
         : []),
@@ -2299,7 +2321,7 @@ export class BootstrapExecutor {
         .map((planned) => planned.path),
       ...launchability.map((planned) => planned.path),
       ...foundation.map((mutation) => mutation.targetPath),
-    ].filter((path) => !bookkeeping.has(path));
+    ].filter((path) => !bookkeeping.has(path) && path !== join(paths.home, HOOK_FIRING_RECORDS_RELATIVE_PATH));
     const kindByPath = new Map<string, "directory" | "file">([
       [paths.home, "directory"],
       [paths.stateDir, "directory"],
