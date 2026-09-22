@@ -3,7 +3,7 @@ import { join, posix } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { EXIT_CODES } from "@developer-os/core";
+import { encodeCanonicalJson, EXIT_CODES } from "@developer-os/core";
 import type { CliResult } from "@developer-os/core";
 import { PLUGIN_INSTALL_SEGMENTS } from "@developer-os/adapter-claude";
 import { PLUGIN_TREE_PREFIX, proposeCodexInstall } from "@developer-os/adapter-codex";
@@ -21,6 +21,7 @@ import {
   listIncompleteTransactions,
   runDoctor,
   runDoctorReport,
+  UNSIGNED_LOCAL_TRUST_WARNING,
 } from "./doctor.js";
 import type { DoctorReportV1 } from "./doctor.js";
 import { runInit } from "./init.js";
@@ -200,6 +201,7 @@ describe("runDoctor", () => {
       "drift",
       "brain",
       "redaction-key",
+      "release-trust",
       "agents",
       "claude-capabilities",
       "codex-capabilities",
@@ -1168,5 +1170,51 @@ describe("surveyTransactions racing terminal compaction", () => {
     };
 
     expect(await listIncompleteTransactions(compacting)).toStrictEqual([]);
+  });
+});
+
+describe("release-trust", () => {
+  const SIGNED_TRUST = {
+    schemaVersion: 1,
+    highestDelegationSequence: "1",
+    delegationHash: "a".repeat(64),
+    delegatedReleaseKeyId: "b".repeat(64),
+    highestReleaseIndexSequence: "1",
+    releaseIndexHash: "c".repeat(64),
+    highestAcceptedReleaseSequence: "1",
+    releaseIdentityHash: "d".repeat(64),
+  } as const;
+
+  async function trustCheck(label: string, state: Record<string, unknown> | null) {
+    const fixture = await createCommandFixture(label);
+    if (state !== null) {
+      await nodeFs.mkdir(fixture.paths.stateDir, { recursive: true, mode: 0o700 });
+      await nodeFs.writeFile(
+        join(fixture.paths.stateDir, "release-trust.json"),
+        encodeCanonicalJson(state as never),
+        { mode: 0o600 },
+      );
+    }
+    const report = await runDoctorReport(fixture.context);
+    return report.checks.find((check) => check.id === "release-trust");
+  }
+
+  it("warns on every run when the home was installed from an unsigned local build", async () => {
+    const check = await trustCheck("doctor-trust-unsigned", { ...SIGNED_TRUST, trust: "unsigned-local" });
+    expect(check?.status).toBe("warn");
+    expect(check?.message).toBe("installed from an unsigned local build; update and rollback refuse it");
+    expect(UNSIGNED_LOCAL_TRUST_WARNING).toBe(check?.message);
+  });
+
+  it("passes a signed state", async () => {
+    expect((await trustCheck("doctor-trust-signed", SIGNED_TRUST))?.status).toBe("pass");
+  });
+
+  it("passes when no trust state is recorded", async () => {
+    expect((await trustCheck("doctor-trust-absent", null))?.status).toBe("pass");
+  });
+
+  it("fails a state with a trust value other than unsigned-local", async () => {
+    expect((await trustCheck("doctor-trust-invalid", { ...SIGNED_TRUST, trust: "signed" }))?.status).toBe("fail");
   });
 });

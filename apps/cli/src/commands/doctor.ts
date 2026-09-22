@@ -1,13 +1,18 @@
+import { constants } from "node:fs";
+import * as nodeFs from "node:fs/promises";
 import { join } from "node:path";
 
 import {
   containsPath,
+  decodeCanonicalJson,
   detectDrift,
   EXIT_CODES,
   failure,
   loadConfig,
+  isUnsignedLocalTrust,
   ManifestStateError,
   success,
+  validateReleaseTrustState,
 } from "@developer-os/core";
 import type {
   BootstrapEvidenceSummaryV1,
@@ -943,6 +948,37 @@ async function checkRedactionKey(
   );
 }
 
+const MAX_RELEASE_TRUST_BYTES = 16 * 1024;
+
+export const UNSIGNED_LOCAL_TRUST_WARNING =
+  "installed from an unsigned local build; update and rollback refuse it";
+
+/** Reports the D47 trust downgrade on every run; not init-owned, so it never undoes an install. */
+async function checkReleaseTrust(paths: RuntimePaths): Promise<Finding> {
+  const file = join(paths.stateDir, "release-trust.json");
+  let handle;
+  try {
+    handle = await nodeFs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (error) {
+    if (isMissingEntry(error)) return pass("release-trust", "no release trust state is recorded", []);
+    throw error;
+  }
+  let bytes: Uint8Array;
+  try {
+    const stats = await handle.stat();
+    if (!stats.isFile() || stats.size > MAX_RELEASE_TRUST_BYTES) {
+      throw new Error("the release trust state is not a bounded regular file");
+    }
+    bytes = await handle.readFile();
+  } finally {
+    await handle.close();
+  }
+  const state = validateReleaseTrustState(decodeCanonicalJson(bytes, MAX_RELEASE_TRUST_BYTES));
+  return isUnsignedLocalTrust(state)
+    ? warn("release-trust", UNSIGNED_LOCAL_TRUST_WARNING, [file])
+    : pass("release-trust", "signed release trust", [file]);
+}
+
 /**
  * Discovery that refuses is a warning, never a failure.
  *
@@ -1124,6 +1160,7 @@ async function collectFindings(
     await guarded(context, "redaction-key", [], () =>
       checkRedactionKey(context, paths),
     ),
+    await guarded(context, "release-trust", [], () => checkReleaseTrust(paths)),
     await guarded(context, "agents", [], () => checkAgents(context)),
     await guarded(context, "claude-capabilities", [], () =>
       checkClaudeCapabilities(context, options.probe),

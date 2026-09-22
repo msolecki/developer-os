@@ -4,9 +4,10 @@ import { Buffer } from "node:buffer";
 import { createInterface } from "node:readline/promises";
 
 import { MAX_CAPTURE_INPUT_BYTES } from "./commands/capture.js";
-import { createProductionContext } from "./context.js";
+import { createProductionContext, PRODUCT_VERSION } from "./context.js";
 import type { CliIo } from "./io.js";
 import { run } from "./main.js";
+import { admitUnsignedLocalPackagedRelease } from "./update/packaged-release.js";
 
 /**
  * One stdin chunk as bytes, whatever shape the stream handed over. A stream
@@ -102,11 +103,14 @@ if (home === undefined || home.length === 0) {
   process.exitCode = 2;
 } else {
   try {
-    process.exitCode = await run(process.argv.slice(2), io, (commandIo) =>
+    process.exitCode = await run(process.argv.slice(2), io, async (commandIo, request) =>
       createProductionContext({
         io: commandIo,
         env: process.env,
         userHome: home,
+        localRelease: request.localRelease === null
+          ? null
+          : await admitUnsignedLocalPackagedRelease(request.localRelease, PRODUCT_VERSION),
       }),
     );
   } catch (error) {

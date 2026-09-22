@@ -59,11 +59,15 @@ import {
 import type { ProcessRunner } from "@developer-os/security";
 
 import type { CliIo } from "./io.js";
+import { createBootstrapEvidenceInspectionRequest } from "./bootstrap/context.js";
 import type { CliBootstrapContext } from "./bootstrap/context.js";
+import { BootstrapExecutor } from "./bootstrap/executor.js";
+import { inspectBootstrapEvidenceAdmission } from "./bootstrap/report.js";
 import { createLifecycleContext } from "./lifecycle/context.js";
 import type { CliLifecycleContext } from "./lifecycle/context.js";
 import { createGatedTransactionExecutor } from "./lifecycle/mutation-gate.js";
 import type { CliTransactionExecutor } from "./lifecycle/mutation-gate.js";
+import type { PackagedReleaseSourceV1 } from "./update/packaged-release.js";
 
 export const PRODUCT_VERSION = "0.0.0";
 
@@ -697,6 +701,8 @@ export interface ProductionContextOptions {
   readonly io: CliIo;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly userHome: string;
+  /** Admitted by `init --local-release <dir>` only; the one way `bootstrap` becomes available (D47). */
+  readonly localRelease?: PackagedReleaseSourceV1 | null;
 }
 
 /**
@@ -758,6 +764,7 @@ export function createProductionContext(
       publishBootstrapInitialJournalNoReplace,
     });
   const lifecycle = productionLifecycleContext(paths, lockProvider, now);
+  const transactionExecutor = executorWith(() => `tx_${randomUUID()}`);
   const composed: { current: CliContext | null } = { current: null };
   const context: CliContext = {
     io: options.io,
@@ -780,18 +787,49 @@ export function createProductionContext(
     executor: createGatedTransactionExecutor({
       context: () => composedContext(composed),
       lifecycle,
-      legacy: executorWith(() => `tx_${randomUUID()}`),
+      legacy: transactionExecutor,
       allocated: (id) => executorWith(allocatedIdOnce(id)),
     }),
     guards,
     paths,
     productVersion: PRODUCT_VERSION,
     runner,
-    bootstrap: { state: "unavailable_until_packaged_handoff" },
+    bootstrap: localBootstrap(options, paths, transactionExecutor, lockProvider, now),
     lifecycle,
   };
   composed.current = context;
   return context;
+}
+
+function localBootstrap(
+  options: ProductionContextOptions,
+  paths: RuntimePaths,
+  transactionExecutor: TransactionExecutor,
+  lockProvider: MacOsTransactionLockProvider,
+  now: () => Date,
+): CliBootstrapContext {
+  const packagedRelease = options.localRelease ?? null;
+  if (packagedRelease === null) return { state: "unavailable_until_packaged_handoff" };
+  const inspectEvidence = () =>
+    inspectBootstrapEvidenceAdmission(createBootstrapEvidenceInspectionRequest({
+      productHome: paths.home,
+      stateDirectory: paths.stateDir,
+      initialRoots: [paths.home, paths.stateDir, options.userHome],
+    }));
+  const executor = new BootstrapExecutor({
+    paths,
+    userHome: options.userHome,
+    packagedRelease,
+    transactionExecutor,
+    lockProvider,
+    renameNoReplace: BOOTSTRAP_RETAINED_RENAME.renameNoReplace.bind(BOOTSTRAP_RETAINED_RENAME),
+    renameSameParentNoReplace: BOOTSTRAP_RETAINED_RENAME.rename.bind(BOOTSTRAP_RETAINED_RENAME),
+    now,
+    uuid: randomUUID,
+    nonce: () => randomBytes(32),
+    inspectEvidence,
+  });
+  return { state: "available", executor, packagedRelease, inspectEvidence };
 }
 
 /**

@@ -60,6 +60,7 @@ const USAGE = [
   "Options:",
   "  --dry-run        show the plan without changing anything (init, uninstall, import, project init)",
   "  --yes            accept ordinary confirmations (init, uninstall; ingest never asks)",
+  "  --local-release <dir>  install from a package pack:local-release wrote; unsigned (init)",
   "  --json           emit one machine-readable line",
   "  --limit <n>      most matches to return (brain search), or captures to process (ingest, import)",
   "  --text <text>    the observation to capture; stdin when absent (capture)",
@@ -89,6 +90,7 @@ const OPTIONS = {
   rollback: { type: "string" },
   text: { type: "string" },
   version: { type: "boolean" },
+  "local-release": { type: "string" },
 } as const;
 
 type OptionName = keyof typeof OPTIONS;
@@ -119,7 +121,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly OptionName[]>> = {
   capture: ["text", "json"],
   review: ["id", "decision", "status", "json"],
   ingest: ["limit", "json", "yes", "agent"],
-  init: ["dry-run", "yes", "json"],
+  init: ["dry-run", "yes", "json", "local-release"],
   config: ["json"],
   status: ["json"],
   doctor: ["json", "probe"],
@@ -167,7 +169,10 @@ const PROJECT_SUBCOMMANDS: Readonly<Record<string, readonly OptionName[]>> = {
   check: ["json"],
 };
 
-export type CliContextFactory = (io: CliIo) => CliContext;
+export type CliContextFactory = (
+  io: CliIo,
+  request: { readonly localRelease: string | null },
+) => CliContext | Promise<CliContext>;
 
 type OptionValues = Partial<Record<OptionName, boolean | string>>;
 
@@ -294,6 +299,8 @@ function parse(argv: readonly string[]): Invocation | null {
 
   // `import_path_conflict` is a usage failure, like every other argv error.
   if (positional === "import" && values["claude-memory"] === true && rest.length > 0) return null;
+
+  if (values["local-release"] === "") return null;
 
   const limit = parseLimit(optionString(values.limit));
   if (limit === "invalid") return null;
@@ -551,7 +558,9 @@ async function dispatch(
    */
   let context: CliContext;
   try {
-    context = createContext(io);
+    context = await createContext(io, {
+      localRelease: optionString(invocation.values["local-release"]),
+    });
   } catch (error) {
     return emit(io, contextFailure(error), json, () => []);
   }

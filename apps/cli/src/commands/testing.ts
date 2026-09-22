@@ -61,11 +61,7 @@ import {
   admitRootVerifiedPackagedRelease,
   type PackagedReleaseIdentityV1,
 } from "../update/packaged-release.js";
-import { BRAIN_TEMPLATE } from "./brain-template.js";
-import {
-  OUTPUT_SCHEMAS,
-  outputSchemaFileName,
-} from "./output-schemas.js";
+import { releaseTemplateFiles } from "../update/local-release.js";
 
 const REDACTION_KEY = new Uint8Array(32).fill(11);
 const PRODUCT_STATE_DIRECTORY = ".developer-os";
@@ -435,14 +431,7 @@ async function createSyntheticPackagedRelease(root: string) {
       bytes: new TextEncoder().encode("#!/bin/sh\nexit 0\n"),
       mode: 0o700,
     },
-    ...OUTPUT_SCHEMAS.map((schema) => ({
-      relativePath: `templates/schemas/${outputSchemaFileName(schema.verb)}`,
-      bytes: new TextEncoder().encode(schema.content),
-    })),
-    ...BRAIN_TEMPLATE.map((file) => ({
-      relativePath: `templates/brain/${file.path}`,
-      bytes: new TextEncoder().encode(file.content),
-    })),
+    ...releaseTemplateFiles(),
   ];
 
   await nodeFs.mkdir(packageRoot, { recursive: true, mode: 0o700 });

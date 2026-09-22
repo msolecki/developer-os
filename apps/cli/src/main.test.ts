@@ -17,6 +17,9 @@ import {
 import type { CommandFixture } from "./commands/testing.js";
 import type { CliIo } from "./io.js";
 import { renderReview, run } from "./main.js";
+import type { CliContextFactory } from "./main.js";
+import { PRODUCT_VERSION } from "./context.js";
+import { admitUnsignedLocalPackagedRelease } from "./update/packaged-release.js";
 import type { ReviewResultV1 } from "./commands/review.js";
 import { BOOTSTRAP_MANUAL_ARCHIVE, MALFORMED_V2_MANIFEST } from "./bootstrap/report.js";
 
@@ -1173,5 +1176,62 @@ describe("import and project dispatch", () => {
     expect(usage).toContain("  import     ");
     expect(usage).toContain("  project    ");
     expect(usage).toContain("--claude-memory");
+  });
+});
+
+describe("init --local-release dispatch", () => {
+  const CONTEXT_REFUSED = Object.assign(new Error("context refused on purpose"), {
+    code: EXIT_CODES.capabilityUnavailable,
+  });
+
+  it("passes the named directory to the context factory, for init only", async () => {
+    const requests: unknown[] = [];
+    const recording: CliContextFactory = (_io, request) => {
+      requests.push(request);
+      throw CONTEXT_REFUSED;
+    };
+    const lines: string[] = [];
+
+    expect(await run(["init", "--yes", "--local-release", "/x"], collectingIo(lines), recording)).toBe(
+      EXIT_CODES.capabilityUnavailable,
+    );
+    expect(await run(["init", "--yes"], collectingIo(lines), recording)).toBe(EXIT_CODES.capabilityUnavailable);
+    expect(requests).toStrictEqual([{ localRelease: "/x" }, { localRelease: null }]);
+  });
+
+  it("refuses --local-release on every other command at parse time", async () => {
+    const others: readonly (readonly string[])[] = [
+      ["status"],
+      ["doctor"],
+      ["uninstall"],
+      ["repair"],
+      ["capture"],
+      ["review"],
+      ["ingest"],
+      ["import"],
+      ["config", "get"],
+      ["brain", "status"],
+      ["search", "query"],
+      ["project", "check"],
+    ];
+    expect(others.length).toBeGreaterThan(0);
+    for (const argv of others) await refuses([...argv, "--local-release", "/x"]);
+  });
+
+  it("refuses an empty --local-release value", async () => {
+    await refuses(["init", "--local-release="]);
+  });
+
+  it("emits the admission's exit code when the factory rejects with it", async () => {
+    const lines: string[] = [];
+    const admitting: CliContextFactory = async (_io, request) => {
+      await admitUnsignedLocalPackagedRelease(request.localRelease ?? "", PRODUCT_VERSION);
+      throw new Error("a relative package root was admitted");
+    };
+
+    const code = await run(["init", "--yes", "--local-release", "relative/pkg"], collectingIo(lines), admitting);
+
+    expect(code).toBe(EXIT_CODES.securityRefusal);
+    expect(lines.join("\n")).toContain("packaged release root must already be canonical");
   });
 });

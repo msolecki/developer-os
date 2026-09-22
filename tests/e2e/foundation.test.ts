@@ -312,6 +312,7 @@ describe("Foundation temporary-HOME lifecycle", () => {
         "drift",
         "brain",
         "redaction-key",
+        "release-trust",
         "agents",
         "claude-capabilities",
         "codex-capabilities",
