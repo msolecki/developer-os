@@ -239,7 +239,7 @@ describe("createOwnerPathAdmission — spec §2.2 closed vendor authorization", 
       owner: "claude",
       path: `${H}/.claude/skills/developer-os/agents/reviewer.md`,
       arm: content("agent"),
-      wrongArm: directory,
+      wrongArm: block,
       neighbour: `${H}/.claude/skills/other/agents/reviewer.md`,
       dotDot: `${H}/.claude/skills/developer-os/agents/../../../rules/other.md`,
     },
@@ -363,9 +363,27 @@ describe("createOwnerPathAdmission — spec §2.2 closed vendor authorization", 
     expect(admits(withVendors, "codex", `${C}/agents/nested/developer-os-x.toml`, content("agent"))).toBe(false);
   });
 
+  it("admits directory rows for the plugin subtree root and every directory nested under it", () => {
+    for (const path of [
+      `${H}/.claude/skills/developer-os`,
+      `${H}/.claude/skills/developer-os/skills`,
+      `${H}/.claude/skills/developer-os/skills/tdd`,
+      `${H}/.claude/skills/developer-os/skills/tdd/references/deep`,
+    ]) {
+      expect(admits(withVendors, "claude", path, directory)).toBe(true);
+      expect(admits(withVendors, "codex", path, directory)).toBe(false);
+      expect(admits(withVendors, "core", path, directory)).toBe(false);
+      expect(admits(withoutVendors, "claude", path, directory)).toBe(false);
+    }
+  });
+
   it("admits directory rows only for the listed directories", () => {
-    expect(admits(withVendors, "claude", `${H}/.claude/skills/developer-os`, directory)).toBe(false);
-    expect(admits(withVendors, "claude", `${H}/.claude/skills/developer-os/skills`, directory)).toBe(false);
+    expect(admits(withVendors, "claude", `${H}/.claude/skills/other`, directory)).toBe(false);
+    expect(admits(withVendors, "claude", `${H}/.claude/skills/other/nested`, directory)).toBe(false);
+    expect(admits(withVendors, "claude", `${H}/.claude/skills/developer-os-evil`, directory)).toBe(false);
+    expect(admits(withVendors, "claude", `${H}/.claude/skills/developer-os-evil/nested`, directory)).toBe(false);
+    expect(admits(withVendors, "claude", `${H}/.claude/skills/developer-os/../other`, directory)).toBe(false);
+    expect(admits(withVendors, "claude", `${H}/.claude/rules/nested`, directory)).toBe(false);
     expect(admits(withVendors, "claude", H, directory)).toBe(false);
     expect(admits(withVendors, "codex", `${H}/.codex`, directory)).toBe(false);
   });

@@ -108,13 +108,13 @@ function isVendorAuthorized(vendors: VendorHomesV1, owner: ArtifactOwner, path: 
   if (owner === "claude") {
     const claude = claudeInstructionPaths(vendors);
     if (path.startsWith(`${claude.pluginRoot}/`)) {
-      return arm.kind === "file" || isContent(arm, ["agent", "skill", "command"]);
+      return arm.kind === "file" || arm.kind === "directory" || isContent(arm, ["agent", "skill", "command"]);
     }
     if (isPrefixedLeaf(claude.rulesDir, ".md", path)) return isContent(arm, ["scoped-rule"]);
     if (isPrefixedLeaf(claude.outputStylesDir, ".md", path)) return isContent(arm, ["output-style"]);
     if (path === claude.instructionFile) return isBlock(arm);
     return arm.kind === "directory"
-      && [dirname(claude.rulesDir), dirname(claude.pluginRoot), claude.rulesDir, claude.outputStylesDir].includes(path);
+      && [dirname(claude.rulesDir), dirname(claude.pluginRoot), claude.pluginRoot, claude.rulesDir, claude.outputStylesDir].includes(path);
   }
   if (owner === "codex") {
     const codex = codexInstructionPaths(vendors);
