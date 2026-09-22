@@ -4285,8 +4285,7 @@ filesystem/process/clock dependencies rather than reaching global state directly
 3. **Completed 2026-09-17:** DOS-P7 Spec 2 Tasks 1–7 and 9 implemented `InstallationManifestV2`, the V2
    new-init handoff and its admission; the V1→V2 migration was withdrawn (D18).
 4. **Completed 2026-09-17:** founder approved the NEW-67 amendment with every recommended option.
-5. Write plan 1a (configuration, coordinator, uninstall) against this amended text, execute it, then run
-   its full gates and fresh-context review. Plan 1b (Git, launchd) follows roadmap Phase 9.
+5. **Completed 2026-09-22:** plan 1a (`43c6876..082e098`). Plan 1b (Git, launchd) follows roadmap Phase 9.
 
 ### 8.3 Accepted residuals
 

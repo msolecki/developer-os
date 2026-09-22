@@ -1,32 +1,10 @@
 # Session protocol
 
-> **D36 (2026-09-20) — implementation-first until plan 1a closes.** For the remainder of
-> `plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`, a task runs its fast commands and
-> `npm run lint`, is integrated immediately, and the next task starts. **No per-task fresh-context
-> review, no per-task fix cycle, and no per-task push.** Commits are held locally. At plan close the
-> founder runs the long checks by hand — `npm run check`, the deferred slow suites (D32), and one
-> push to `development` so CI runs every job once — and one whole-plan review plus one fix round
-> covers every task. This suspends §5 step 3 and §5 step 7 below, and `security.md`'s rule that a
-> fresh agent reviews agent-generated code. Accepted risk: a defect in a consumed interface is found
-> only after its consumers bound to it. Plan 1a's "Deferred fix list (D36)" under Task 25 collects
-> what is owed. **This block expires when plan 1a closes**; delete it then and §5 returns as written.
-
-> **D40 (2026-09-22) — no test suite runs per task for the rest of plan 1a.** A task commit runs
-> `npm run lint` and nothing else. Every vitest run is deferred to plan close: the task's own new
-> cases, the focused `-t` filters, the orchestrator's rerun on the integrated tree, and
-> `citations.test.ts`. This supersedes §5 step 1 and D32's "fast commands named by the task" for the
-> remainder of `plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`. `npm run lint` stays because it
-> is the build and typecheck step, is what keeps this a per-commit lane rather than no validation,
-> and costs 11 seconds (measured 2026-09-22).
-> Accepted risk, stated plainly: a defect that only appears on the combined tree is now found at plan
-> close against every task at once. NEW-99 and both citation regressions were caught by exactly the
-> runs this removes. **This block expires when plan 1a closes**; delete it then.
->
-> **D41 (2026-09-22) — Task 24 is exempt from D40.** Task 24's Step 2 measures the real duration of
-> `uninstall-round-trip.v2.test.ts` to set `lifecycle-v2`'s `timeout-minutes` under D39's 300-minute
-> cap and stops before commit if that budget is exceeded; deferring the run would mean committing an
-> unmeasured CI timeout. See the plan's Founder decisions for the full rationale. Every other
-> remaining task and Task 25's closure suites stay under D40 as written.
+> **Plan 1a closed 2026-09-22 as `43c6876..082e098`** (roadmap Phase 4). D36, D40 and D41 governed
+> only its remaining tasks and expired with it; §5 applies as written again. Plan 1a's surviving
+> constraints are in `docs/architecture/foundation.md` §10, `foundation-constraints.md` and
+> `threat-model.md` §5.13. Task 24 (uninstall → `init` round-trip, kill-matrix) was carved out to
+> post-A16 hardening (D42) and is tracked as `BACKLOG.md` NEW-100.
 
 Use this prompt in a fresh session:
 

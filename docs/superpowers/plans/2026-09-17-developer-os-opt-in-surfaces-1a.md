@@ -4,6 +4,13 @@
 
 **Tasks:** 27 (1–25 plus 10b, inserted by D31, and 23b, inserted by D38). Tasks 1–11 are done and listed under Completed; 12–23b run in the waves below (D33); **Task 24 is deferred out of this plan (D42)**; Task 25 closes the plan directly after Task 23b.
 
+> **CLOSED 2026-09-22, `43c6876..082e098`.** Tasks 1–23b and 25 are done; their surviving contract is
+> in `docs/architecture/foundation.md` §10, `foundation-constraints.md` and `threat-model.md` §5.13,
+> and this plan's own closure bookkeeping is in `ORDER.md`, `BACKLOG.md` and the roadmap. **This file
+> is kept, not deleted, per D42**: Task 24's full spec below is the only surviving copy of that
+> deferred work (`BACKLOG.md` NEW-100) and has not moved to a canonical document. Delete this file
+> only once Task 24 has run or its complete spec has been copied to a successor document.
+
 **Goal:** Ship Spec 1a — `config get|set`, the lifecycle coordinator with proven recovery and bounded terminal collection, and a drained V2 uninstall — against the amended Spec 1, with no Git, launchd, or network effect.
 
 **Architecture:** Core owns strict lifecycle configuration records, allocated IDs, the four-root ledger closure, absent-manifest inspection, the Foundation participant bridge, and the generic coordinator/recovery engine, all parameterised by injected leaf codecs and one guarded filesystem port. `platform-macos` adds a stable lock provider that never creates a lock file. The CLI composes the concrete execution-plan codec (Git, launchd and push arms typed but refused until plan 1b), a mutation gate every Foundation mutator passes through on a V2 home, `config get|set`, and the uninstall arms. Production `init` still writes V1 until roadmap Phase 4b; every V2 behaviour here is proven through the packaged-capability fixture.
@@ -117,6 +124,16 @@ Recorded in the roadmap's 2026-09-17 table; A14–A16 are in Spec 1 in place.
   is **not** deleted when plan 1a otherwise closes, because Task 24's contract has not yet moved to a
   canonical document in full; it stays until Task 24 runs or its complete spec is copied into a
   successor document.
+
+- **D43 (2026-09-22).** **Task 25 Step 3 (final fresh-context review) is waived at the founder's
+  explicit instruction.** Step 2 (`npm run check`) was run by the founder locally and reported green;
+  no log from that run is retained in this session. The founder then instructed the orchestrator to
+  finish every remaining closure change while skipping further checks and tests, to be run manually
+  later. Step 3's own text says continue until the verdict has no Critical or Important finding; that
+  review did not happen. **Accepted risk:** no independent reader who authored none of Tasks 1–24 has
+  read the accumulated diff `43c6876..082e098`. If a defect surfaces during Phase 4b or later, this
+  diff is the first place to look, and `superpowers:requesting-code-review` against it is the way to
+  close the gap retroactively.
 
 - **D35 (2026-09-20).** The effect-journal codec, its phase accessor and the `classify` change they require are **deferred to plan 1b**. Unlike D34 the gap is unreachable in 1a — the null plan codec makes every effect leaf a `lifecycle_effect_root_unsupported` finding before a journal codec could matter — `LifecycleLedgerDependenciesV1` has only two construction sites in the whole plan, both of which Task 18 and 1b touch anyway, and `LifecycleEffectPhaseV1` would have been a guess at 1b's schema with no implementation to check it against. Task 12's Cover list records the full 1b obligation.
 
@@ -2396,11 +2413,19 @@ Source: `SESSION.md` §5 phase close; old Task 24 steps 4–7 narrowed to 1a; ro
 - Consumes: every task above committed, pushed, and the latest completed CI run green.
 - Produces: roadmap Phase 4 closed; `ORDER.md` NOW advanced to Phase 4b.
 
-- [ ] **Step 1: Confirm the evidence set**
+- [x] **Step 1: Confirm the evidence set**
 
-Run `git status --short` (must be clean) and `gh run list --branch development --limit 1 --json status,conclusion,headSha`: the head is pushed and no completed run on it is red. Confirm every checkbox of Tasks 12–24 is ticked (1–11 are listed under Completed), and that `git log --oneline 43c6876^..HEAD` lists one commit per task plus its review fixes. Remove any worktree inside the repository first: ESLint does not read `.gitignore`.
+`git status --short` clean (`-c core.fsmonitor=false`, the daemon's IPC errors on this machine).
+`gh run list`/`gh pr list` fail with a TLS error (`x509: OSStatus -26276`); **remote/CI state is
+unverified, not inferred green**. `git log --oneline 43c6876^..HEAD` lists 40 commits, one per task
+plus review fixes, matching the checklist. Tasks 12–23b and 25 are ticked; Task 24 is correctly
+unticked per D42, which supersedes this step's original "Tasks 12–24" wording. No worktree exists
+inside the repository.
 
-- [ ] **Step 2: Run the full gate detached from the harness**
+- [x] **Step 2: Run the full gate detached from the harness**
+
+Run by the founder locally, reported green (`EXIT=0`) directly in conversation; no log file archived
+in this session.
 
 `npm run check` ran about three hours before this plan; with `test:lifecycle` it should project to roughly four and a half (the `lifecycle-v2` local total in the job comment is the added part). A background shell is killed at about 29 minutes, so detach it with a double fork:
 
@@ -2425,15 +2450,19 @@ grep -E '^EXIT=' "$LOG" || tail -n 5 "$LOG"
 
 Poll the last command until it prints `EXIT=`. Expected: `EXIT=0`. `check` begins with lint, so a lint failure means zero tests ran. On failure, keep the complete log, fix with a failing regression test first, and rerun this step.
 
-- [ ] **Step 3: Final fresh-context review of the whole change**
+- [x] **Step 3: Final fresh-context review of the whole change — waived, D43**
 
-Dispatch a reviewer who authored none of Tasks 1–24. Give it the diff `git diff 43c6876^..HEAD`, the amended Spec 1, this plan and review-only instructions. For each accepted finding: add a failing regression test, apply the smallest fix, rerun the affected focused commands and Step 2, and request a new verdict. Continue until the verdict has no Critical or Important finding.
+Not performed. See D43 above for the founder's explicit instruction and the accepted risk.
 
-- [ ] **Step 4: Carry surviving constraints into the canonical documents**
+- [x] **Step 4: Carry surviving constraints into the canonical documents**
+
+Already committed in `082e098` (`foundation.md` §10, `foundation-constraints.md`, `threat-model.md`
+§5.13) — content verified against every bullet below. `npx vitest run --root tests
+repository/citations.test.ts` run on the integrated main checkout: 22/22 passed.
 
 `docs/architecture/foundation.md` gains a section "Lifecycle kernel (Spec 1a)" stating: the bookkeeping set and its shape admission; the two present-manifest uninstall variants and their derivation (D24), the empty-directory removal inside `M(finalize_tombstones)` (D25), the `mf` reservation order (D28), and the capacity refusal (D26); the non-creating global lock and lock order; structural V2 admission; the mutation gate every V2 Foundation mutator passes (allocated `tx` IDs, compaction and reservation preflight, closure `clear`, the `repair` resolution); the closed `config` key and result grammar; the uninstall variants, point of no return, lease drain, and absent-manifest arms; what is refused until plan 1b. `docs/architecture/foundation-constraints.md` records the exact bounds from this plan's Global Constraints that code now enforces. `docs/architecture/threat-model.md` records: the global lock is never created outside fresh `init`; the gate's contention and ledger refusals; secret-opaque key handling; §8.3 residuals 8 and 9. Then run `npx vitest run --root tests repository/citations.test.ts`, and lower a citation floor only with the removed section named in its comment.
 
-- [ ] **Step 5: Close the tracking rows and advance NOW**
+- [x] **Step 5: Close the tracking rows and advance NOW**
 
 - Roadmap: tick "Execute plan 1a" ("Write plan 1a" is already ticked), and prune Phase 4 to a closed bullet ("closed <date> as `<first>..<last>`", its outcome in two sentences, the constraint locations).
 - `ORDER.md`: remove the `Plan 1a progress:` sentence; NOW becomes Phase 4b (Spec 2 Tasks 10–11 plus the pin removal, NEW-79 and NEW-81 first); update the open-sequence list and the Count section.
@@ -2441,17 +2470,27 @@ Dispatch a reviewer who authored none of Tasks 1–24. Give it the diff `git dif
 - Source plan: under its "Superseded for execution" paragraph add "Tasks 1–7, 21 and 23 were executed via plan 1a (`<first>..<last>`); the remaining tasks are plan 1b's source." Append "(executed via plan 1a)" to those seven task headings. Do not delete the file.
 - Spec 1 §8.2 step 5: add "**Completed <date>:** plan 1a (`<first>..<last>`)." before "Plan 1b (Git, launchd) follows roadmap Phase 9."
 
-- [ ] **Step 6: Commit the closure, deleting this plan**
+- [x] **Step 6: Commit the closure — this plan file is kept, not deleted (D42 overrides this step's
+  original `git rm`)**
+
+`git rm` is not run: D42 (line ~116 above, already committed before this closure) says explicitly
+"this file... is **not** deleted when plan 1a otherwise closes, because Task 24's contract has not
+yet moved to a canonical document in full." Deleting it would destroy `BACKLOG.md` NEW-100's only
+surviving copy of Task 24's spec. Instead this file is kept in full, marked CLOSED at its head, with
+Task 25's own checkboxes ticked above and Task 24 untouched and still owed.
 
 ```bash
 git add docs/architecture/foundation.md docs/architecture/foundation-constraints.md docs/architecture/threat-model.md
-git add -f docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md docs/superpowers/ORDER.md docs/superpowers/BACKLOG.md docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md
-git rm docs/superpowers/plans/2026-09-17-developer-os-opt-in-surfaces-1a.md
+git add -f docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md docs/superpowers/ORDER.md docs/superpowers/BACKLOG.md docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md docs/superpowers/SESSION.md
+git add -f docs/superpowers/plans/2026-09-17-developer-os-opt-in-surfaces-1a.md
 git diff --cached --name-only
 git commit -m "docs: close roadmap Phase 4 (plan 1a) and advance to Phase 4b"
 ```
 
-Push per the push rule, then report: the commit range, `EXIT=0` with the log's test counts, the reviewer's final verdict, and the new NOW action.
+Not pushed in this session — held locally with the rest of plan 1a's commits, per the push rule
+(founder-triggered). Report: the commit range `43c6876..082e098` plus this closure commit, `npm run
+check` reported green by the founder (no archived log), Step 3 waived (D43), and the new NOW action:
+Phase 4b.
 
 ## Spec Coverage Index
 

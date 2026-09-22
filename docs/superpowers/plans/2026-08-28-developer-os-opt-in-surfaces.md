@@ -15,7 +15,8 @@
 it and contradict it: the V1→V2 migration precondition, `LifecycleBootstrapCreationTempV1`, the
 absent-manifest recovery epoch and key-present coordinator, and unlink/rmdir cleanup of the bootstrap lock
 and its directories. Execute plans 1a and 1b, written against the amended
-Spec 1 (roadmap Phases 4 and 9), not the tasks below as written.
+Spec 1 (roadmap Phases 4 and 9), not the tasks below as written. Tasks 1–7, 21 and 23 were executed via
+plan 1a (`43c6876..082e098`); the remaining tasks are plan 1b's source.
 
 ## Global Constraints
 
@@ -50,7 +51,7 @@ Spec 1 (roadmap Phases 4 and 9), not the tasks below as written.
 
 ---
 
-### Task 1: Close the lifecycle configuration schema and key codecs
+### Task 1: Close the lifecycle configuration schema and key codecs (executed via plan 1a)
 
 **Files:**
 - Modify: `packages/core/src/config/types.ts`
@@ -148,7 +149,7 @@ git add docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md docs/s
 git commit -m "feat(core): close lifecycle configuration schema"
 ```
 
-### Task 2: Add the exact public `config get/set` command surface
+### Task 2: Add the exact public `config get/set` command surface (executed via plan 1a)
 
 **Files:**
 - Create: `apps/cli/src/commands/config.ts`
@@ -225,7 +226,7 @@ git add docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md docs/s
 git commit -m "feat(cli): add strict config command surface"
 ```
 
-### Task 3: Define canonical lifecycle primitives and generic coordinator contracts
+### Task 3: Define canonical lifecycle primitives and generic coordinator contracts (executed via plan 1a)
 
 **Files:**
 - Create: `packages/core/src/lifecycle/types.ts`
@@ -371,7 +372,7 @@ git add docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md docs/s
 git commit -m "feat(core): define generic lifecycle coordination contracts"
 ```
 
-### Task 4: Implement the install-scoped allocator, bootstrap lock, and closed ledger inventory
+### Task 4: Implement the install-scoped allocator, bootstrap lock, and closed ledger inventory (executed via plan 1a)
 
 **Files:**
 - Create: `packages/core/src/lifecycle/allocator.ts`
@@ -440,7 +441,7 @@ git add docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md docs/s
 git commit -m "feat(core): add lifecycle allocation and bootstrap admission"
 ```
 
-### Task 5: Persist feasible coordinator plans and journals before intent
+### Task 5: Persist feasible coordinator plans and journals before intent (executed via plan 1a)
 
 **Files:**
 - Create: `packages/core/src/lifecycle/store.ts`
@@ -509,7 +510,7 @@ git add docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md docs/s
 git commit -m "feat(core): persist lifecycle coordinator intent"
 ```
 
-### Task 6: Bridge Foundation participants into coordinator execution and terminal compaction
+### Task 6: Bridge Foundation participants into coordinator execution and terminal compaction (executed via plan 1a)
 
 **Files:**
 - Modify: `packages/core/src/transactions/types.ts`
@@ -578,7 +579,7 @@ git add docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md docs/s
 git commit -m "feat(core): coordinate Foundation participants"
 ```
 
-### Task 7: Execute, compensate, recover, and compact lifecycle coordinators
+### Task 7: Execute, compensate, recover, and compact lifecycle coordinators (executed via plan 1a)
 
 **Files:**
 - Create: `packages/core/src/lifecycle/coordinator.ts`
@@ -1562,7 +1563,7 @@ git add docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md docs/s
 git commit -m "feat(cli): add bounded scheduled runner state"
 ```
 
-### Task 21: Compose exact lifecycle schemas/adapters and run recovery before mutable commands
+### Task 21: Compose exact lifecycle schemas/adapters and run recovery before mutable commands (executed via plan 1a)
 
 **Files:**
 - Create: `apps/cli/src/lifecycle/schemas.ts`
@@ -1762,7 +1763,7 @@ git add docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md docs/s
 git commit -m "feat(cli): add scheduled automation lifecycle"
 ```
 
-### Task 23: Implement drained uninstall, manifest absence, and secret-opaque key deletion
+### Task 23: Implement drained uninstall, manifest absence, and secret-opaque key deletion (executed via plan 1a)
 
 **Files:**
 - Create: `apps/cli/src/lifecycle/uninstall.ts`

@@ -164,7 +164,15 @@ govern the open phases and stay.
 ### Phase 4 — Spec 1a: configuration mutability and the lifecycle coordinator · L
 
 - [x] Spec 1 amended for NEW-67 (A1–A13, D21–D23) and plan 1a written on 2026-09-17 — 26 tasks after D31 inserted 10b, its blocking questions answered by D24–D30 as Spec 1 A14–A16. The code obligations the amendment assigned are carried by plan 1a's tasks and its Spec Coverage Index.
-- [ ] Execute plan 1a, wave by wave (D33). Tasks 1–11 are integrated (`43c6876..62ef4f1`).
+- [x] **Execute plan 1a, wave by wave (D33)**, closed 2026-09-22 as `43c6876..082e098`. Shipped: the
+  closed `config get|set` surface; the mutation gate every V2 Foundation mutator passes through
+  (allocated transaction IDs, compaction and reservation preflight, closure `clear`, `repair`
+  resolution); drained present- and absent-manifest uninstall, coordinator recovery, and the
+  shape-admitted bookkeeping set. Task 24's `uninstall` → `init` round-trip and kill-matrix coverage
+  was carved out to post-A16 hardening (D42, `BACKLOG.md` NEW-100); its full spec is kept in
+  `docs/superpowers/plans/2026-09-17-developer-os-opt-in-surfaces-1a.md` until that row closes.
+  Constraints: `docs/architecture/foundation.md` §10, `foundation-constraints.md` "Plan 1a: lifecycle
+  kernel bounds", `threat-model.md` §5.13.
 
 Gate: `config get|set` shipped; coordinator recovery proven; uninstall drains leases.
 
