@@ -3520,6 +3520,9 @@ export class BootstrapExecutor {
       if (!stats.isFile() || Number(stats.nlink) !== 1 || mode(stats) !== expectedMode) {
         throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "V2 file handoff is incomplete");
       }
+      if (artifact.verification.mode === "block") {
+        throw new FreshBootstrapError(EXIT_CODES.securityRefusal, "V2 file handoff is incomplete");
+      }
       if (
         artifact.verification.mode !== "ephemeral" &&
         lowerHash(await nodeFs.readFile(artifact.path)) !== artifact.verification.installedHash

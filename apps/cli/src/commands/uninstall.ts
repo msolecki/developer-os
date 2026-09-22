@@ -8,6 +8,7 @@ import {
   failure,
   hashBytes,
   LifecycleRecoveryRefusalError,
+  ManifestUnsupportedArtifactError,
   success,
   validateChangePlan,
 } from "@developer-os/core";
@@ -598,8 +599,8 @@ export function manifestAdmissionFor(
     evidence: createCanonicalPathEvidence(),
     sourceRoot: productHome,
     backupRoot: paths.backupsDir as CanonicalAbsolutePathV1,
-    admitOwnerPath: (owner, path) => {
-      const admitted = admitOwnerPath(owner, path);
+    admitOwnerPath: (owner, path, arm) => {
+      const admitted = admitOwnerPath(owner, path, arm);
       if (admitted !== path) refusedOwnerPaths.push(path);
       return admitted;
     },
@@ -637,6 +638,8 @@ export async function downcastArtifactV2(
   context: CliContext,
   artifact: ManagedArtifactV2,
 ): Promise<ManagedArtifactV1> {
+  // Block rows leave the manifest through the detach step before the drained uninstall (spec §6.3).
+  if (artifact.verification.mode === "block") throw new ManifestUnsupportedArtifactError();
   const installedHash = artifact.kind === "directory"
     ? hashBytes(new Uint8Array())
     : artifact.verification.mode === "ephemeral"
@@ -645,7 +648,7 @@ export async function downcastArtifactV2(
   return {
     owner: artifact.owner,
     path: artifact.path,
-    kind: artifact.kind,
+    kind: artifact.kind === "instruction" ? "file" : artifact.kind,
     productVersion: artifact.productVersion,
     existedBefore: artifact.existedBefore,
     installedHash,

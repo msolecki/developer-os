@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { inspectDrift } from "./index.js";
+import { inspectDrift, renderInstructionBlock } from "./index.js";
 import type { DriftRequestV2, InstallationManifestV2, ManagedArtifactV2 } from "./index.js";
 
 const hash = (bytes: string): string => createHash("sha256").update(bytes).digest("hex");
@@ -217,5 +217,71 @@ describe("V2 manifest drift", () => {
       await expect(inspectDrift(request(artifact(path), { fs: mismatchedHandle(false) }))).rejects.toBeInstanceOf(Error);
       await expect(inspectDrift(request(artifact(path), { fs: mismatchedHandle(true) }))).rejects.toBeInstanceOf(Error);
     } finally { await nodeFs.rm(root, { recursive: true, force: true }); }
+  });
+
+  describe("instruction arms", () => {
+    const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
+    const hashOf = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
+    const render = (body: string): Uint8Array => renderInstructionBlock({ productHome: "/synthetic/product", vendor: "claude", body });
+    const block = render("installed rules\n");
+    const around = (inner: Uint8Array, top = "top\n", bottom = "bottom\n"): Uint8Array => new Uint8Array([...encode(top), ...inner, ...encode(bottom)]);
+    const blockRow = (path: string): ManagedArtifactV2 => artifact(path, {
+      owner: "claude", kind: "instruction", mergeStrategy: "marked-block",
+      instruction: { category: "vendor-file", id: "claude-md", source: "default", members: [{ category: "rule", id: "careful", source: "default", sha256: hashOf(encode("installed rules\n")) }] },
+      verification: { mode: "block", blockHash: hashOf(block) },
+    });
+    const contentRow = (path: string): ManagedArtifactV2 => artifact(path, {
+      owner: "claude", kind: "instruction",
+      instruction: { category: "skill", id: "debugging", source: "default" },
+    });
+
+    async function inspectFile(row: (path: string) => ManagedArtifactV2, bytes: Uint8Array | null): Promise<readonly unknown[]> {
+      const root = await nodeFs.mkdtemp(join(tmpdir(), "developer-os-v2-instruction-"));
+      const path = join(root, "artifact.md");
+      try {
+        if (bytes !== null) await nodeFs.writeFile(path, bytes);
+        return (await inspectDrift(request(row(path)))).map(({ kind, expectedHash, actualHash }) => ({ kind, expectedHash, actualHash }));
+      } finally { await nodeFs.rm(root, { recursive: true, force: true }); }
+    }
+
+    it("treats a content row exactly like a file content row", async () => {
+      await expect(inspectFile(contentRow, encode("installed"))).resolves.toStrictEqual([]);
+      await expect(inspectFile(contentRow, encode("changed"))).resolves.toStrictEqual([{ kind: "content_changed", expectedHash: hash("installed"), actualHash: hash("changed") }]);
+      await expect(inspectFile(contentRow, null)).resolves.toStrictEqual([{ kind: "missing", expectedHash: hash("installed"), actualHash: null }]);
+    });
+
+    it("hashes only the block and ignores every byte outside it", async () => {
+      await expect(inspectFile(blockRow, around(block))).resolves.toStrictEqual([]);
+      await expect(inspectFile(blockRow, block)).resolves.toStrictEqual([]);
+      await expect(inspectFile(blockRow, around(block, "user edited the top\r\n", "and the bottom"))).resolves.toStrictEqual([]);
+    });
+
+    it("reports an edited block as content_changed with both block hashes", async () => {
+      const edited = render("edited rules\n");
+      await expect(inspectFile(blockRow, around(edited))).resolves.toStrictEqual([{ kind: "content_changed", expectedHash: hashOf(block), actualHash: hashOf(edited) }]);
+    });
+
+    it("reports absent markers and an absent file as missing", async () => {
+      await expect(inspectFile(blockRow, encode("top\nbottom\n"))).resolves.toStrictEqual([{ kind: "missing", expectedHash: hashOf(block), actualHash: null }]);
+      await expect(inspectFile(blockRow, encode(""))).resolves.toStrictEqual([{ kind: "missing", expectedHash: hashOf(block), actualHash: null }]);
+      await expect(inspectFile(blockRow, null)).resolves.toStrictEqual([{ kind: "missing", expectedHash: hashOf(block), actualHash: null }]);
+    });
+
+    it.each([
+      ["two blocks", (): Uint8Array => around(new Uint8Array([...block, ...block]))],
+      ["a begin marker without an end", (): Uint8Array => around(encode("<!-- developer-os:begin v1 -->\n"))],
+      ["an end marker before the begin marker", (): Uint8Array => around(encode("<!-- developer-os:end v1 -->\nx\n<!-- developer-os:begin v1 -->\n"))],
+    ])("reports %s as block_malformed", async (_name, bytes) => {
+      await expect(inspectFile(blockRow, bytes())).resolves.toStrictEqual([{ kind: "block_malformed", expectedHash: hashOf(block), actualHash: null }]);
+    });
+
+    it("reports a block file replaced by a directory as type_changed", async () => {
+      const root = await nodeFs.mkdtemp(join(tmpdir(), "developer-os-v2-instruction-kind-"));
+      const path = join(root, "artifact.md");
+      try {
+        await nodeFs.mkdir(path);
+        await expect(inspectDrift(request(blockRow(path)))).resolves.toMatchObject([{ kind: "type_changed" }]);
+      } finally { await nodeFs.rm(root, { recursive: true, force: true }); }
+    });
   });
 });

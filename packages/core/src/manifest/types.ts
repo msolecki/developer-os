@@ -8,6 +8,7 @@ import type {
   rename,
   unlink,
 } from "node:fs/promises";
+import type { InstructionCategoryV1, InstructionIdV1 } from "../instructions/bounds.js";
 import type {
   BoundedArtifactSourceV1,
   CanonicalAbsolutePathV1,
@@ -24,7 +25,7 @@ export type ArtifactOwner = "core" | "claude" | "codex" | "macos";
 
 export type ArtifactKind = "file" | "directory" | "symlink" | "config-entry";
 
-export type MergeStrategy = "dedicated" | "semantic-json" | "semantic-toml";
+export type MergeStrategy = "dedicated" | "semantic-json" | "semantic-toml" | "marked-block";
 
 export interface ManagedArtifactV1 {
   readonly owner: ArtifactOwner;
@@ -51,7 +52,8 @@ export type ManagedArtifactSchemaIdV1 =
   | "developer-os-config-v1"
   | "lifecycle-id-allocator-v1"
   | "active-release-record-v1"
-  | "release-trust-state-v1";
+  | "release-trust-state-v1"
+  | "codex-registration-v1";
 
 export interface ManagedArtifactCommonV2 {
   readonly owner: ArtifactOwner;
@@ -70,7 +72,31 @@ export type ManagedArtifactV2 =
   | (ManagedArtifactCommonV2 & { readonly kind: "file"; readonly verification: { readonly mode: "schema"; readonly schemaId: ManagedArtifactSchemaIdV1; readonly installedHash: LowerHexSha256 } })
   | (ManagedArtifactCommonV2 & { readonly kind: "file"; readonly verification: { readonly mode: "ephemeral" } })
   | (ManagedArtifactCommonV2 & { readonly kind: "directory"; readonly verification: { readonly mode: "content" } })
-  | (ManagedArtifactCommonV2 & { readonly kind: "symlink"; readonly verification: { readonly mode: "content"; readonly installedHash: LowerHexSha256 } });
+  | (ManagedArtifactCommonV2 & { readonly kind: "symlink"; readonly verification: { readonly mode: "content"; readonly installedHash: LowerHexSha256 } })
+  | (ManagedArtifactCommonV2 & { readonly kind: "instruction"; readonly instruction: InstructionIdentityV1; readonly verification: { readonly mode: "content"; readonly installedHash: LowerHexSha256 } })
+  | (ManagedArtifactCommonV2 & {
+    readonly kind: "instruction";
+    readonly instruction: InstructionIdentityV1 & { readonly category: "vendor-file"; readonly source: "default"; readonly members: readonly InstructionBlockMemberV1[] };
+    readonly verification: { readonly mode: "block"; readonly blockHash: LowerHexSha256 };
+  });
+
+export interface InstructionIdentityV1 {
+  readonly category: InstructionCategoryV1;
+  readonly id: InstructionIdV1;
+  readonly source: "default" | "user";
+}
+
+export interface InstructionBlockMemberV1 {
+  readonly category: Exclude<InstructionCategoryV1, "vendor-file">;
+  readonly id: InstructionIdV1;
+  readonly source: "default" | "user";
+  /** Hash of the member's rendered bytes inside the block. */
+  readonly sha256: LowerHexSha256;
+}
+
+export type OwnerPathArmV1 =
+  | { readonly kind: "file" | "directory" | "symlink" }
+  | { readonly kind: "instruction"; readonly mode: "content" | "block"; readonly category: InstructionCategoryV1 };
 
 export interface InstallationManifestV2 {
   readonly schemaVersion: 2;
@@ -87,6 +113,7 @@ export interface ManifestAdmissionContextV1 {
   readonly admitOwnerPath: (
     owner: ArtifactOwner,
     path: CanonicalAbsolutePathV1,
+    arm: OwnerPathArmV1,
   ) => CanonicalAbsolutePathV1;
 }
 declare const migratableInstallationManifestV1: unique symbol;
@@ -99,7 +126,8 @@ export type DriftKind =
   | "content_changed"
   | "type_changed"
   | "target_changed"
-  | "schema_invalid";
+  | "schema_invalid"
+  | "block_malformed";
 
 export interface DriftFinding {
   readonly path: string;

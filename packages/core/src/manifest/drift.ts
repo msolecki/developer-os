@@ -1,6 +1,7 @@
 import { constants, type BigIntStats } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 
+import { extractInstructionBlock } from "./instruction-block.js";
 import {
   containsPath,
   hashBytes,
@@ -185,7 +186,7 @@ function v2Finding(
 ): DriftFinding {
   const expectedHash = kind === "schema_invalid" || artifact.kind === "directory" || artifact.verification.mode === "ephemeral"
     ? null
-    : artifact.verification.installedHash;
+    : artifact.verification.mode === "block" ? artifact.verification.blockHash : artifact.verification.installedHash;
   return { path: artifact.path, owner: artifact.owner, kind, expectedHash, actualHash };
 }
 
@@ -256,6 +257,13 @@ async function inspectV2Artifact(artifact: ManagedArtifactV2, request: DriftRequ
   if (artifact.verification.mode === "schema") {
     try { request.schemas.validate(artifact.verification.schemaId, bytes); return null; }
     catch { return v2Finding(artifact, "schema_invalid", null); }
+  }
+  if (artifact.verification.mode === "block") {
+    const extraction = extractInstructionBlock(bytes);
+    if (extraction.kind === "absent") return v2Finding(artifact, "missing", null);
+    if (extraction.kind === "malformed") return v2Finding(artifact, "block_malformed", null);
+    const blockHash = hashBytes(extraction.block);
+    return blockHash === artifact.verification.blockHash ? null : v2Finding(artifact, "content_changed", blockHash);
   }
   const actualHash = hashBytes(bytes);
   return actualHash === artifact.verification.installedHash ? null : v2Finding(artifact, "content_changed", actualHash);

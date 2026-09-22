@@ -143,7 +143,7 @@ describe("InstallationManifestV2", () => {
     expect(() => validateManifestV2(value, admission())).toThrow(ManifestStateError);
   });
 
-  it.each(["developer-os-config-v1", "lifecycle-id-allocator-v1", "active-release-record-v1", "release-trust-state-v1"])("accepts closed schema ID %s", (schemaId) => {
+  it.each(["developer-os-config-v1", "lifecycle-id-allocator-v1", "active-release-record-v1", "release-trust-state-v1", "codex-registration-v1"])("accepts closed schema ID %s", (schemaId) => {
     expect(validateManifestV2(manifestWith(artifact({ verification: { mode: "schema", schemaId, installedHash: hash } })), admission()).artifacts[0]?.verification.mode).toBe("schema");
   });
 
@@ -287,5 +287,146 @@ describe("InstallationManifestV2", () => {
     const context = admission({ admitOwnerPath: (_owner, path) => { admissions += 1; return path; } });
     expectMigratableRefusal(new TextEncoder().encode(JSON.stringify(legacy, null, 2) + "\n"), context);
     expect(admissions).toBe(0);
+  });
+});
+
+describe("InstallationManifestV2 instruction arms", () => {
+  const member = (category: string, id: string): Record<string, unknown> => ({ category, id, source: "default", sha256: hash });
+  function contentRow(overrides: Record<string, unknown> = {}): ManagedArtifactV2 {
+    return artifact({
+      owner: "claude", path: "/synthetic/product/claude/skills/debugging/SKILL.md", kind: "instruction",
+      instruction: { category: "skill", id: "debugging", source: "default" },
+      verification: { mode: "content", installedHash: hash }, ...overrides,
+    });
+  }
+  function blockRow(overrides: Record<string, unknown> = {}, identity: Record<string, unknown> = {}): ManagedArtifactV2 {
+    return artifact({
+      owner: "claude", path: "/synthetic/product/CLAUDE.md", kind: "instruction", mergeStrategy: "marked-block",
+      instruction: { category: "vendor-file", id: "claude-md", source: "default", members: [member("rule", "careful"), member("skill", "debugging")], ...identity },
+      verification: { mode: "block", blockHash: hash }, ...overrides,
+    });
+  }
+  const refuses = (...rows: readonly ManagedArtifactV2[]): void => {
+    expect(() => validateManifestV2(manifestWith(...rows), admission())).toThrow(ManifestStateError);
+  };
+
+  it.each([
+    { name: "content", row: contentRow() },
+    { name: "user content", row: contentRow({ instruction: { category: "scoped-rule", id: "careful", source: "user" } }) },
+    { name: "created block", row: blockRow() },
+    { name: "adopted block", row: blockRow({ existedBefore: true, beforeHash: hash, backupRelativePath: "before/CLAUDE.md" }) },
+    { name: "one-member block", row: blockRow({}, { members: [member("command", "commit")] }) },
+  ])("round-trips the $name arm strictly", ({ row }) => {
+    const value = manifestWith(row);
+    const validated = validateManifestV2(value, admission());
+    expect(validated).toStrictEqual(value);
+    expect(validateManifestBytes(new TextEncoder().encode(encodeCanonicalJson(value as never)), admission())).toStrictEqual(value);
+  });
+
+  it("passes each row's arm to admitOwnerPath", () => {
+    const arms: unknown[] = [];
+    const context = admission({ admitOwnerPath: (_owner, path, arm) => { arms.push(arm); return path; } });
+    validateManifestV2(manifestWith(
+      blockRow(),
+      artifact({ path: "/synthetic/product/claude", kind: "directory", verification: { mode: "content" } }),
+      contentRow(),
+    ), context);
+    expect(arms).toStrictEqual([
+      { kind: "instruction", mode: "block", category: "vendor-file" },
+      { kind: "directory" },
+      { kind: "instruction", mode: "content", category: "skill" },
+    ]);
+  });
+
+  it.each([
+    { name: "an extra artifact key", row: { ...contentRow(), extra: true } as never },
+    { name: "a missing instruction key", row: artifact({ owner: "claude", kind: "instruction", verification: { mode: "content", installedHash: hash } }) },
+    { name: "an instruction key on a file row", row: artifact({ instruction: { category: "skill", id: "debugging", source: "default" } }) },
+    { name: "an extra content identity key", row: contentRow({ instruction: { category: "skill", id: "debugging", source: "default", extra: true } }) },
+    { name: "members on a content identity", row: contentRow({ instruction: { category: "skill", id: "debugging", source: "default", members: [member("rule", "careful")] } }) },
+    { name: "an extra content verification key", row: contentRow({ verification: { mode: "content", installedHash: hash, extra: true } }) },
+    { name: "an extra block identity key", row: blockRow({}, { extra: true }) },
+    { name: "an extra member key", row: blockRow({}, { members: [{ ...member("rule", "careful"), extra: true }] }) },
+    { name: "an extra block verification key", row: blockRow({ verification: { mode: "block", blockHash: hash, extra: true } }) },
+    { name: "installedHash on a block", row: blockRow({ verification: { mode: "block", installedHash: hash } }) },
+  ])("refuses $name", ({ row }) => { refuses(row); });
+
+  it.each([
+    { name: "an unknown category", row: contentRow({ instruction: { category: "hook", id: "debugging", source: "default" } }) },
+    { name: "a numeric id", row: contentRow({ instruction: { category: "skill", id: 7, source: "default" } }) },
+    { name: "a product-prefixed id", row: contentRow({ instruction: { category: "skill", id: "developer-os-capture", source: "default" } }) },
+    { name: "a 65-character id", row: contentRow({ instruction: { category: "skill", id: "a".repeat(65), source: "default" } }) },
+    { name: "an unknown source", row: contentRow({ instruction: { category: "skill", id: "debugging", source: "vendor" } }) },
+    { name: "an unknown verification mode", row: contentRow({ verification: { mode: "schema", schemaId: "developer-os-config-v1", installedHash: hash } }) },
+  ])("refuses an instruction identity with $name", ({ row }) => { refuses(row); });
+
+  it.each(["semantic-json", "semantic-toml", "marked-block"])("refuses a content row with mergeStrategy %s", (mergeStrategy) => {
+    refuses(contentRow({ mergeStrategy }));
+  });
+
+  it.each([
+    { existedBefore: true, beforeHash: hash, backupRelativePath: "before/file" },
+    { existedBefore: true, beforeHash: null, backupRelativePath: null },
+    { existedBefore: false, beforeHash: hash, backupRelativePath: null },
+    { existedBefore: false, beforeHash: null, backupRelativePath: "before/file" },
+  ])("refuses a content row with restore fields %o", (fields) => { refuses(contentRow(fields)); });
+
+  it("admits a block row's restore fields only as a complete pair matching existedBefore", () => {
+    for (const existedBefore of [false, true]) for (const beforeHash of [null, hash]) for (const backupRelativePath of [null, "before/CLAUDE.md"]) {
+      const row = blockRow({ existedBefore, beforeHash, backupRelativePath });
+      const legal = existedBefore ? beforeHash !== null && backupRelativePath !== null : beforeHash === null && backupRelativePath === null;
+      if (legal) expect(validateManifestV2(manifestWith(row), admission())).toStrictEqual(manifestWith(row));
+      else refuses(row);
+    }
+  });
+
+  it.each(["dedicated", "semantic-json", "semantic-toml"])("refuses a block row with mergeStrategy %s", (mergeStrategy) => {
+    refuses(blockRow({ mergeStrategy }));
+  });
+
+  it.each([
+    { name: "file content", row: artifact({ mergeStrategy: "marked-block" }) },
+    { name: "file schema", row: artifact({ mergeStrategy: "marked-block", verification: { mode: "schema", schemaId: "developer-os-config-v1", installedHash: hash } }) },
+    { name: "file ephemeral", row: artifact({ mergeStrategy: "marked-block", verification: { mode: "ephemeral" } }) },
+    { name: "directory", row: artifact({ mergeStrategy: "marked-block", kind: "directory", verification: { mode: "content" } }) },
+    { name: "symlink", row: artifact({ mergeStrategy: "marked-block", kind: "symlink", verification: { mode: "content", installedHash: hash } }) },
+  ])("refuses marked-block on a $name row", ({ row }) => { refuses(row); });
+
+  it.each(["core", "macos"])("refuses a block row owned by %s", (owner) => { refuses(blockRow({ owner })); });
+
+  it.each([
+    { name: "a skill category", identity: { category: "skill" } },
+    { name: "a user source", identity: { source: "user" } },
+    { name: "no members", identity: { members: [] } },
+    { name: "members that are not an array", identity: { members: member("rule", "careful") } },
+    { name: "65 members", identity: { members: Array.from({ length: 65 }, (_, i) => member("rule", `m${String(i).padStart(2, "0")}`)) } },
+    { name: "unsorted ids", identity: { members: [member("rule", "zeta"), member("rule", "alpha")] } },
+    { name: "unsorted categories", identity: { members: [member("skill", "alpha"), member("rule", "zeta")] } },
+    { name: "a duplicate member", identity: { members: [member("rule", "careful"), member("rule", "careful")] } },
+    { name: "a duplicate id under different sources", identity: { members: [member("rule", "careful"), { ...member("rule", "careful"), source: "user" }] } },
+    { name: "a vendor-file member", identity: { members: [member("vendor-file", "careful")] } },
+    { name: "a member with a bad hash", identity: { members: [{ ...member("rule", "careful"), sha256: "A".repeat(64) }] } },
+    { name: "a member with a numeric id", identity: { members: [{ ...member("rule", "careful"), id: 1 }] } },
+  ])("refuses a block row with $name", ({ identity }) => { refuses(blockRow({}, identity)); });
+
+  it("admits exactly 64 sorted members", () => {
+    const members = Array.from({ length: 64 }, (_, i) => member("rule", `m${String(i).padStart(2, "0")}`));
+    expect(members.length).toBe(64);
+    const row = blockRow({}, { members });
+    expect(validateManifestV2(manifestWith(row), admission())).toStrictEqual(manifestWith(row));
+  });
+
+  it("admits one block row per owner and refuses a second for the same owner", () => {
+    const claude = blockRow();
+    const codex = blockRow({ owner: "codex", path: "/synthetic/product/codex/AGENTS.md" });
+    expect(validateManifestV2(manifestWith(claude, codex), admission())).toStrictEqual(manifestWith(claude, codex));
+    refuses(claude, blockRow({ path: "/synthetic/product/claude/CLAUDE.md" }));
+  });
+
+  it("orders instruction rows by path like every other arm", () => {
+    const first = contentRow({ path: "/synthetic/product/a" });
+    const second = contentRow({ path: "/synthetic/product/b" });
+    expect(validateManifestV2(manifestWith(first, second), admission())).toStrictEqual(manifestWith(first, second));
+    refuses(second, first);
   });
 });

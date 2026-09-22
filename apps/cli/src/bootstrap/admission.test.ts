@@ -142,7 +142,7 @@ describe("createOwnerPathAdmission", () => {
       kind: "confined",
       roots: ["/synthetic/product" as CanonicalAbsolutePathV1],
     });
-    expect(admitOwnerPath("core", "/synthetic/product/file" as CanonicalAbsolutePathV1)).toBe(
+    expect(admitOwnerPath("core", "/synthetic/product/file" as CanonicalAbsolutePathV1, { kind: "file" })).toBe(
       "/synthetic/product/file",
     );
   });
@@ -153,7 +153,7 @@ describe("createOwnerPathAdmission", () => {
       roots: ["/synthetic/product" as CanonicalAbsolutePathV1],
     });
     const outside = "/etc/passwd" as CanonicalAbsolutePathV1;
-    expect(admitOwnerPath("core", outside)).not.toBe(outside);
+    expect(admitOwnerPath("core", outside, { kind: "file" })).not.toBe(outside);
   });
 
   it("makes an out-of-root artifact observable as a validateManifestV2 refusal, not a silent rewrite", () => {
@@ -182,7 +182,7 @@ describe("createOwnerPathAdmission", () => {
       reason: "test: no live owner authority exists at this call site",
     });
     const anywhere = "/etc/passwd" as CanonicalAbsolutePathV1;
-    expect(admitOwnerPath("core", anywhere)).toBe(anywhere);
+    expect(admitOwnerPath("core", anywhere, { kind: "file" })).toBe(anywhere);
     // @ts-expect-error -- an unconfined declaration must carry a reason; there is no bare/default arm.
     void createOwnerPathAdmission({ kind: "unconfined" });
   });

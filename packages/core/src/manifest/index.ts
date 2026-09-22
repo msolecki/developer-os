@@ -69,6 +69,8 @@ export type {
   MergeStrategy,
   InstallationManifest,
   InstallationManifestV2,
+  InstructionBlockMemberV1,
+  InstructionIdentityV1,
   ManagedArtifactCommonV2,
   ManagedArtifactSchemaIdV1,
   ManagedArtifactV2,
@@ -76,6 +78,7 @@ export type {
   ManagedArtifactEphemeralRegistryV1,
   ManifestAdmissionContextV1,
   MigratableInstallationManifestV1,
+  OwnerPathArmV1,
 } from "./types.js";
 export type {
   BootstrapExpectedPayloadRefV1,
