@@ -3,7 +3,7 @@ import { join, relative, sep } from "node:path";
 import { compareCanonical, compareRawBytes } from "../discovery/index.js";
 import { buildIndex, createLinkResolver } from "../indexes/index.js";
 import type { IndexBuildRequest, IndexBuildResult, IndexedNote } from "../indexes/index.js";
-import { MAX_PROPOSED_PATH_CHARS } from "../ingest/index.js";
+import { isUnsafeProposedNotePath } from "../ingest/index.js";
 import { lintBuild } from "../lint/index.js";
 import type { LintFinding } from "../lint/index.js";
 import { parseNote } from "../schema/note.js";
@@ -84,7 +84,6 @@ export interface ModePlanV1 {
 }
 
 const GRAVEYARD = "_graveyard";
-const CONTROL = /[\p{Cc}\p{Cf}]/u;
 
 function byPath(a: string, b: string): number {
   return compareCanonical(a, b) || compareRawBytes(a, b);
@@ -118,23 +117,6 @@ function withoutMd(path: string): string {
 
 function invalid(message: string, paths: readonly string[] = []): RefactorRefusal {
   return new RefactorRefusal("brain_refactor_input_invalid", message, paths);
-}
-
-/**
- * The string rules of ingest's proposal path check, for one segment.
- * ponytail: a local copy until Task 2's `isUnsafeProposedNotePath` is on this
- * branch; the integrator swaps this for `!isUnsafeProposedNotePath(name)`.
- */
-function isSafeNoteName(name: string): boolean {
-  return (
-    name.length > 0 &&
-    name.length <= MAX_PROPOSED_PATH_CHARS &&
-    name.endsWith(".md") &&
-    name !== ".md" &&
-    !name.includes("/") &&
-    !name.includes("\\") &&
-    !CONTROL.test(name)
-  );
 }
 
 async function readPreState(input: RefactorInputV1): Promise<PreStateV1> {
@@ -298,7 +280,7 @@ function modePlan(state: PreStateV1, request: RefactorRequestV1): ModePlanV1 {
       return retirePlan(state, request.note);
     case "rename": {
       requireNote(state, request.note);
-      if (!isSafeNoteName(request.newName)) {
+      if (request.newName.includes("/") || isUnsafeProposedNotePath(request.newName)) {
         throw invalid(`${request.newName} is not a single note file name ending .md`);
       }
       const dir = dirname(request.note);
