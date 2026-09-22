@@ -26,7 +26,7 @@ description: Test-first. Refuses implementation until failing test exists.
 {what the test covers}
 
 ## Step 2: Failing test
-```typescript
+```
 {test code}
 ```
 
