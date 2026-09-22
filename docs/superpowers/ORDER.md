@@ -84,8 +84,15 @@ startable row run beside a wave when its files overlap no task in flight.
 
 ## Delivery evidence still owed
 
-- L2 still owes release permissions. Remote rules, `gh` access and direct pushes to `development` are
-  verified: the `baseline` ruleset carries only `deletion` and `non_fast_forward`.
+- L2 still owes release permissions. **Remote rules changed since last verified (found 2026-09-22,
+  plan 1a closure):** the `baseline` ruleset on `development` now also carries a `pull_request` rule
+  (`gh api repos/msolecki/developer-os/rules/branches/development`), 0 required approvals but PRs
+  mandatory — a direct `git push origin development` is rejected with `GH013`. D12's "pushed directly
+  to development, nothing gates the push" no longer holds; `SESSION.md` §5 step 7's push rule needs a
+  founder decision on whether it opens a PR (as plan 1a's closure did, `#14`) or the founder pushes
+  with bypass permissions. `gh` access itself is verified working (`gh api`/`gh pr create` succeeded
+  once network-sandboxed calls were run unsandboxed; `gh run list`/`gh pr list` failed on a sandboxed
+  TLS proxy error that was the sandbox, not GitHub).
 - Measured gate and CI costs, and why the CI budgets are what they are, live in
   `docs/architecture/foundation.md` §9. That a green local `check` is not evidence about CI lives in
   `BACKLOG.md` §5. Retain the complete log of any full-suite failure; NEW-29 owns the remaining
