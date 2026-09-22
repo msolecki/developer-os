@@ -3,6 +3,7 @@ import { validateChangePlan } from "@developer-os/core";
 import type {
   InstallationManifestV1,
   ManagedArtifactV1,
+  ManagedArtifactV2,
 } from "@developer-os/core";
 import type { RenderedArtifact } from "@developer-os/workflow-schema";
 import { proposeClaudeInstall, proposeClaudeUninstall } from "./install.js";
@@ -20,7 +21,7 @@ const root = "/synthetic/home/.claude/skills/developer-os";
 
 function managedFor(
   artifacts: readonly RenderedArtifact[],
-): ReadonlyMap<string, ManagedArtifactV1> {
+): ReadonlyMap<string, ManagedArtifactV2> {
   return new Map(
     artifacts.map((artifact, index) => {
       const path = `${root}/${artifact.path}`;
@@ -34,14 +35,37 @@ function managedFor(
           existedBefore: false,
           beforeHash: null,
           backupRelativePath: null,
-          installedHash: String(index).repeat(2).padStart(64, "a"),
           source: artifact.path,
           mergeStrategy: "dedicated",
           verifiedAt: "2026-08-11T00:00:00.000Z",
-        } satisfies ManagedArtifactV1,
+          verification: {
+            mode: "content",
+            installedHash: String(index).repeat(2).padStart(64, "a"),
+          },
+        } as unknown as ManagedArtifactV2,
       ];
     }),
   );
+}
+
+/**
+ * `validateChangePlan` reads a V1 manifest; the proposal's operations are
+ * `file` rows either way, so the V2 rows are projected for the validator only.
+ */
+function asV1(rows: Iterable<ManagedArtifactV2>): ManagedArtifactV1[] {
+  return [...rows].map((row) => ({
+    owner: row.owner,
+    path: row.path,
+    kind: "file",
+    productVersion: row.productVersion,
+    existedBefore: row.existedBefore,
+    beforeHash: row.beforeHash,
+    backupRelativePath: row.backupRelativePath,
+    installedHash: "installedHash" in row.verification ? row.verification.installedHash : "",
+    source: row.source,
+    mergeStrategy: row.mergeStrategy,
+    verifiedAt: row.verifiedAt,
+  }));
 }
 
 function manifestWith(
@@ -165,9 +189,25 @@ describe("proposeClaudeInstall", () => {
     ]);
     const plan = await validateChangePlan(
       proposal,
-      planContext(manifestWith([...already.values()])),
+      planContext(manifestWith(asV1(already.values()))),
     );
     expect(plan.operations).toHaveLength(tree.length);
+  });
+});
+
+describe("proposeClaudeInstall over V2 rows", () => {
+  it("refuses to replace a row it does not own", () => {
+    const [first] = [...managedFor(tree).values()];
+    if (first === undefined) throw new Error("fixture has no rows");
+    const managed = new Map<string, ManagedArtifactV2>([[first.path, { ...first, owner: "codex" }]]);
+    expect(() => proposeClaudeInstall(tree, context, managed)).toThrow(/does not own/u);
+  });
+
+  it("refuses to replace a directory row with a file", () => {
+    const [first] = [...managedFor(tree).values()];
+    if (first === undefined) throw new Error("fixture has no rows");
+    const managed = new Map<string, ManagedArtifactV2>([[first.path, { ...first, kind: "directory", verification: { mode: "content" } }]]);
+    expect(() => proposeClaudeInstall(tree, context, managed)).toThrow(/does not own/u);
   });
 });
 
@@ -185,7 +225,7 @@ describe("proposeClaudeUninstall", () => {
     const managed = managedFor(tree);
     const plan = await validateChangePlan(
       proposeClaudeUninstall(context, managed),
-      planContext(manifestWith([...managed.values()])),
+      planContext(manifestWith(asV1(managed.values()))),
     );
     expect(plan.operations).toHaveLength(tree.length);
     for (const operation of plan.operations) {
@@ -212,12 +252,37 @@ describe("proposeClaudeUninstall", () => {
       managed.set("/synthetic/home/.claude/settings.json", {
         ...foreign,
         path: "/synthetic/home/.claude/settings.json",
-      });
+      } as ManagedArtifactV2);
     }
     const paths = proposeClaudeUninstall(context, managed).operations.map(
       (operation) => operation.targetPath,
     );
     expect(paths).not.toContain("/synthetic/home/.claude/settings.json");
+  });
+
+  it("ignores a codex-owned row under the plugin root", () => {
+    const managed = new Map(managedFor(tree));
+    const [first] = [...managedFor(tree).values()];
+    if (first === undefined) throw new Error("fixture has no rows");
+    const foreignPath = `${root}/skills/foreign/SKILL.md`;
+    managed.set(foreignPath, { ...first, owner: "codex", path: foreignPath } as ManagedArtifactV2);
+    const operations = proposeClaudeUninstall(context, managed).operations;
+    expect(operations.length).toBeGreaterThan(0);
+    expect(operations.map((operation) => operation.targetPath)).not.toContain(foreignPath);
+    expect(operations.every((operation) => operation.owner === "claude")).toBe(true);
+  });
+
+  it("removes an instruction content row as a file with its recorded hash", () => {
+    const path = `${root}/skills/review/SKILL.md`;
+    const row = {
+      ...[...managedFor(tree).values()][0],
+      kind: "instruction",
+      path,
+      instruction: { category: "skill", id: "review", source: "default" },
+      verification: { mode: "content", installedHash: "b".repeat(64) },
+    } as unknown as ManagedArtifactV2;
+    const [operation] = proposeClaudeUninstall(context, new Map([[path, row]])).operations;
+    expect(operation).toMatchObject({ targetPath: path, kind: "file", expectedBeforeHash: "b".repeat(64) });
   });
 
   it("refuses when nothing is managed, rather than proposing a no-op", () => {

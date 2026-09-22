@@ -53,6 +53,16 @@ export {
   withClaudeHooks,
 } from "./hooks.js";
 export type { ClaudeHookEvent, ClaudeHookRow } from "./hooks.js";
+export {
+  InstructionPathNotImportableError,
+  renderClaudeVendorTree,
+  renderInstructionTree,
+} from "./instructions.js";
+export type {
+  ClaudeInstructionRenderV1,
+  InstructionSourceSetV1Like,
+  InstructionSourceV1Like,
+} from "./instructions.js";
 export { proposeClaudeInstall, proposeClaudeUninstall } from "./install.js";
 export type {
   ClaudeInstallProposal,

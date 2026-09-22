@@ -3,7 +3,7 @@ import { posix } from "node:path";
 import { hashBytes } from "@developer-os/core";
 import type {
   ChangePlanOperationV1,
-  ManagedArtifactV1,
+  ManagedArtifactV2,
 } from "@developer-os/core";
 import { compareCodePoints } from "@developer-os/workflow-schema";
 import type { RenderedArtifact } from "@developer-os/workflow-schema";
@@ -62,7 +62,12 @@ function resolveWithin(root: string, relative: string): string {
  * path. Passed in rather than read here: `packages/core` owns the manifest, and
  * an adapter that read it would be a second reader of a file with one owner.
  */
-export type ManagedByPath = ReadonlyMap<string, ManagedArtifactV1>;
+export type ManagedByPath = ReadonlyMap<string, ManagedArtifactV2>;
+
+/** The row's prior content hash; `null` for a row a file operation cannot replace or remove. */
+function installedHash(artifact: ManagedArtifactV2): string | null {
+  return "installedHash" in artifact.verification ? artifact.verification.installedHash : null;
+}
 
 export function proposeClaudeInstall(
   tree: readonly RenderedArtifact[],
@@ -82,6 +87,10 @@ export function proposeClaudeInstall(
     operations: tree.map((artifact) => {
       const targetPath = resolveWithin(root, artifact.path);
       const existing = managed.get(targetPath);
+      const expectedBeforeHash = existing === undefined ? null : installedHash(existing);
+      if (existing !== undefined && (existing.owner !== "claude" || expectedBeforeHash === null)) {
+        throw new Error(`refusing to replace a row this adapter does not own as a file: ${targetPath}`);
+      }
       // `create` for a target nobody owns, `replace` for one this adapter
       // already installed. Hardcoding `create` made `update` unrepresentable:
       // `validateChangePlan` refuses a `create` over a managed artifact with
@@ -91,7 +100,7 @@ export function proposeClaudeInstall(
         operation: existing === undefined ? ("create" as const) : ("replace" as const),
         owner: "claude" as const,
         kind: "file" as const,
-        expectedBeforeHash: existing?.installedHash ?? null,
+        expectedBeforeHash,
         source: artifact.path,
         // `dedicated` because this adapter merges no foreign file. Claude architecture former §4.3
         // dissolved the semantic config merge rather than answering it: the
@@ -114,9 +123,15 @@ export function proposeClaudeUninstall(
   managed: ManagedByPath,
 ): ClaudeInstallProposal {
   const root = pluginRoot(context);
+  // The owner check its Codex twin already performed (spec §2.2, adapter fix).
+  // Rows without a content hash (directories) are the detach planner's, not a file removal.
   const owned = [...managed.values()]
-    .filter((artifact) => artifact.path.startsWith(`${root}/`))
-    .sort((left, right) => compareCodePoints(left.path, right.path));
+    .filter((artifact) => artifact.owner === "claude" && artifact.path.startsWith(`${root}/`))
+    .flatMap((artifact) => {
+      const hash = installedHash(artifact);
+      return hash === null ? [] : [{ artifact, hash }];
+    })
+    .sort((left, right) => compareCodePoints(left.artifact.path, right.artifact.path));
 
   if (owned.length === 0) {
     throw new Error("refusing to propose an empty uninstall plan");
@@ -125,18 +140,18 @@ export function proposeClaudeUninstall(
   return {
     schemaVersion: 1,
     productVersion: context.productVersion,
-    operations: owned.map((artifact) => ({
+    operations: owned.map(({ artifact, hash }) => ({
       targetPath: artifact.path,
       operation: "remove" as const,
-      owner: artifact.owner,
-      kind: artifact.kind,
+      owner: "claude" as const,
+      kind: "file" as const,
       // `validateChangePlan` requires a real prior hash for any non-`create`
       // operation, `source === ""` and `proposedHash === null` for a `remove`,
       // and a matching managed artifact. The first version of this function
       // violated all three at once and could never have been applied — and the
       // test that guarded it asserted field values instead of calling the
       // validator, so it stayed green. Found by fresh-context review.
-      expectedBeforeHash: artifact.installedHash,
+      expectedBeforeHash: hash,
       source: "",
       mergeStrategy: artifact.mergeStrategy,
       proposedHash: null,

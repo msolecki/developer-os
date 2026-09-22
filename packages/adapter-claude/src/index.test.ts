@@ -45,6 +45,7 @@ describe("the public door", () => {
       "CLAUDE_NOT_USED_KEYS",
       "ClaudeRenderer",
       "DEFAULT_MAX_TURNS",
+      "InstructionPathNotImportableError",
       "PLUGIN_INSTALL_SEGMENTS",
       "PLUGIN_NAME",
       "SHARED_WORKFLOW_ID",
@@ -57,6 +58,8 @@ describe("the public door", () => {
       "proposeClaudeUninstall",
       "renderClaudeHooks",
       "renderClaudePlugin",
+      "renderClaudeVendorTree",
+      "renderInstructionTree",
       "resolveCapabilities",
       "withClaudeHooks",
     ]);
