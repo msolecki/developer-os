@@ -10,7 +10,9 @@ import {
   SCHEDULED_JOB_IDS,
   encodeCanonicalJson,
   lifecycleBookkeepingPaths,
+  lifecycleReservationOrder,
   parseCanonicalAbsolutePathText,
+  validateLifecyclePlanGrammar,
 } from "@developer-os/core";
 import type {
   CanonicalAbsolutePathV1,
@@ -34,14 +36,17 @@ import { manifestAdmissionFor, runUninstall } from "../commands/uninstall.js";
 import type { CliContext } from "../context.js";
 import { admitInstalledV2Home } from "./admission.js";
 import type { AdmittedV2HomeV1 } from "./admission.js";
+import { lifecycleVariantFacts } from "./codecs.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
 import { coordinatorNonceOf, lifecycleHomeKeyFromAdmission, residueFrom } from "./context.js";
 import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "./context.js";
 import { redactionKeyTombstonePath } from "./redaction-key.js";
 import {
+  chunkUninstallArtifacts,
   createUninstallAdapters,
   createUninstallParticipants,
   LifecycleUninstaller,
+  MAX_UNINSTALL_ARTIFACTS,
   releaseUninstallHolds,
   UninstallCapacityError,
 } from "./uninstall.js";
@@ -719,15 +724,27 @@ describe("V2 uninstall planning refusals", () => {
     };
   }
 
-  it("refuses more than 256 artifact mutations before it allocates (D26)", async () => {
-    const { fixture, global } = await syntheticFixture("uninstall-capacity");
+  /** `count` content rows under one synthetic directory, returned in unsigned UTF-8 path order. */
+  async function plantSyntheticArtifacts(
+    fixture: CommandFixture,
+    count: number,
+  ): Promise<readonly { readonly path: string; readonly hash: string }[]> {
+    const directory = join(fixture.paths.home, "synthetic");
+    await nodeFs.mkdir(directory, { recursive: true, mode: 0o700 });
     const artifacts: { readonly path: string; readonly hash: string }[] = [];
-    for (let index = 0; index < 257; index += 1) {
-      const path = join(fixture.paths.home, "synthetic", `${String(index)}.json`);
+    for (let index = 0; index < count; index += 1) {
+      const path = join(directory, `${String(index)}.json`);
       const content = `{"row":${String(index)}}\n`;
-      await plant(path, content);
+      await nodeFs.writeFile(path, content, { mode: 0o600 });
       artifacts.push({ path, hash: createHash("sha256").update(content).digest("hex") });
     }
+    return artifacts.sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path)));
+  }
+
+  it("refuses more than 7,936 artifact mutations before it allocates (D26, D45)", async () => {
+    const { fixture, global } = await syntheticFixture("uninstall-capacity");
+    expect(MAX_UNINSTALL_ARTIFACTS).toBe(7_936);
+    const artifacts = await plantSyntheticArtifacts(fixture, MAX_UNINSTALL_ARTIFACTS + 1);
     const request = await syntheticRequest(fixture, syntheticManifest(fixture, artifacts));
 
     await expect(new LifecycleUninstaller().preview(request, global)).rejects.toThrow(
@@ -737,6 +754,49 @@ describe("V2 uninstall planning refusals", () => {
       code: EXIT_CODES.capabilityUnavailable,
       reason: "uninstall_artifact_capacity_exceeded",
     });
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  /**
+   * D45 end to end through planning: the builder's reservation block, step run and per-step
+   * mutation lists for each chunk boundary, measured on the conservative pass's own shape.
+   */
+  it.each([
+    [0, [1]],
+    [1, [1]],
+    [256, [256]],
+    [257, [256, 1]],
+    [MAX_UNINSTALL_ARTIFACTS, Array.from({ length: 31 }, () => 256)],
+  ])("plans %i artifacts as consecutive F(uninstall_artifacts) steps of %j mutations", async (count, sizes) => {
+    const { fixture, global } = await syntheticFixture(`uninstall-chunks-${String(count)}`);
+    const artifacts = await plantSyntheticArtifacts(fixture, count);
+    await plant(join(fixture.paths.stateDir, "uninstalling.json"), "");
+    await plant(fixture.paths.manifestFile, "{}\n");
+    const request = await syntheticRequest(fixture, syntheticManifest(fixture, artifacts));
+
+    const preview = await new LifecycleUninstaller().preview(request, global);
+    const slotCount = preview.builder.slotCount;
+    expect(slotCount).toBe(4 + 2 * sizes.length);
+    const ids = Array.from({ length: slotCount }, (_unused, index) => `tx_${"f".repeat(64)}_${String(index)}`);
+    const { plan } = preview.builder.build(ids);
+
+    expect(validateLifecyclePlanGrammar(plan, lifecycleVariantFacts(plan))).toBe(preview.variant);
+    expect(lifecycleReservationOrder(plan)).toHaveLength(slotCount);
+    expect(plan.participants.manifest?.participantId).toBe(ids.at(-1));
+    const byId = new Map(plan.participants.foundation.map((ref) => [ref.id as string, ref]));
+    const artifactRefs = plan.steps.flatMap((step) =>
+      step.kind === "foundation" && step.slot === "uninstall_artifacts" ? [byId.get(step.participantId)] : [],
+    );
+    expect(artifactRefs.map((ref) => ref?.mutations.length)).toStrictEqual(sizes);
+    expect(artifactRefs.map((ref) => ref?.id)).toStrictEqual(
+      sizes.map((_size, index) => ids[3 + 2 * index]),
+    );
+    for (const ref of artifactRefs) {
+      const compensationId = ref?.role.kind === "forward" ? ref.role.compensationId : null;
+      expect(compensationId === null ? undefined : byId.get(compensationId)?.mutations.length).toBe(
+        ref?.mutations.length,
+      );
+    }
+    expect(plan.participants.manifest?.bindings.foundationTransactions.count).toBe(1 + sizes.length);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("refuses a manifest that owns an external plist row as the P variant", async () => {
@@ -806,4 +866,44 @@ describe("V2 uninstall planning refusals", () => {
       paths: [path],
     });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
+describe("chunking artifact removals into F(uninstall_artifacts) steps (D45)", () => {
+  const rows = (count: number): readonly number[] => Array.from({ length: count }, (_unused, index) => index);
+
+  it.each([
+    [0, [0]],
+    [1, [1]],
+    [255, [255]],
+    [256, [256]],
+    [257, [256, 1]],
+    [512, [256, 256]],
+    [513, [256, 256, 1]],
+    [7_935, [...Array.from({ length: 30 }, () => 256), 255]],
+    [7_936, Array.from({ length: 31 }, () => 256)],
+  ])("splits %i removals into steps of %j", (count, sizes) => {
+    const chunks = chunkUninstallArtifacts(rows(count), "/product");
+
+    expect(chunks.map((chunk) => chunk.length)).toStrictEqual(sizes);
+    expect(chunks.flat()).toStrictEqual(rows(count));
+  });
+
+  it("keeps the leading rows — the four runner leases — in the first step", () => {
+    const chunks = chunkUninstallArtifacts(rows(600), "/product");
+
+    expect(chunks[0]?.slice(0, 4)).toStrictEqual([0, 1, 2, 3]);
+  });
+
+  it.each([7_937, 10_000])("refuses %i removals with D26's capacity verdict", (count) => {
+    expect(() => chunkUninstallArtifacts(rows(count), "/product")).toThrow(UninstallCapacityError);
+    try {
+      chunkUninstallArtifacts(rows(count), "/product");
+    } catch (error) {
+      expect(error).toMatchObject({
+        code: EXIT_CODES.capabilityUnavailable,
+        reason: "uninstall_artifact_capacity_exceeded",
+        paths: ["/product"],
+      });
+    }
+  });
 });

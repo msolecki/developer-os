@@ -1143,6 +1143,10 @@ async function admitsUninstallDraining<TPlan extends CoordinatorPlan>(
   const { plan, journal } = record;
   if (journal === null || record.state !== "active") return false;
   if (plan.operation !== "uninstall") return false;
+  /**
+   * D45 repeats the step; the first one is the witness because the CLI orders the four runner
+   * leases ahead of every other removal, so they never fall in a later chunk.
+   */
   const artifacts = stepIndexOf(
     plan,
     (step) => step.kind === "foundation" && step.slot === "uninstall_artifacts",

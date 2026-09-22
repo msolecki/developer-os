@@ -136,6 +136,13 @@ const GIT_ENABLE_STEPS: readonly LifecycleStepTemplateV1[] = [
   M("finalize_tombstones"),
 ];
 
+/**
+ * D45 (NEW-85): the table's single `F(uninstall_artifacts)` stands for a contiguous run of 1..31
+ * such steps, each carrying at most 256 mutations, so an uninstall removes up to 7,936 artifacts.
+ * 31 is the most §2.4's `participants.foundation[0..64]` admits beside the marker's pair.
+ */
+export const LIFECYCLE_UNINSTALL_ARTIFACT_STEPS = { minimum: 1, maximum: 31 } as const;
+
 const UNINSTALL_SUFFIX: readonly LifecycleStepTemplateV1[] = [
   F("uninstall_artifacts"),
   K("stage"),
@@ -433,13 +440,32 @@ function requireEffectArm(
   if (arm !== null && ids[0] !== arm.id) fail(`${label}: ${kind} identity`);
 }
 
+function isArtifactsTemplate(template: LifecycleStepTemplateV1): boolean {
+  return template.kind === "F" && template.slot === "uninstall_artifacts";
+}
+
+/** D45: repeats the row's `F(uninstall_artifacts)` as often as the plan does, so the exact match below also proves contiguity. */
+function expandUninstallArtifacts(
+  templates: readonly LifecycleStepTemplateV1[],
+  steps: readonly LifecycleCoordinatorStepV1[],
+  label: string,
+): readonly LifecycleStepTemplateV1[] {
+  if (!templates.some(isArtifactsTemplate)) return templates;
+  const count = steps.filter((step) => step.kind === "foundation" && step.slot === "uninstall_artifacts").length;
+  const bounds = LIFECYCLE_UNINSTALL_ARTIFACT_STEPS;
+  if (count < bounds.minimum || count > bounds.maximum) fail(`${label}: uninstall_artifacts step count`);
+  return templates.flatMap((template) =>
+    isArtifactsTemplate(template) ? Array.from({ length: count }, () => template) : [template],
+  );
+}
+
 export function validateLifecyclePlanGrammar(
   plan: CoordinatorPlan,
   facts: LifecycleVariantFactsV1,
 ): LifecycleOperationVariantV1 {
   const variant = deriveLifecycleOperationVariant(plan, facts);
-  const templates = LIFECYCLE_STEP_GRAMMAR[variant];
   const label = `LifecycleCoordinatorPlanV1 (${variant})`;
+  const templates = expandUninstallArtifacts(LIFECYCLE_STEP_GRAMMAR[variant], plan.steps, label);
   if (plan.steps.length !== templates.length) fail(`${label}: steps length`);
   for (const [index, template] of templates.entries()) {
     const step = plan.steps[index];

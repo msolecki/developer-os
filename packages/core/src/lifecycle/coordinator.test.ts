@@ -254,7 +254,7 @@ const DEFAULT_TIMEOUT_MS = 120_000;
 
 async function syntheticWorld(
   variant: LifecycleOperationVariantV1,
-  options: { readonly pushOutcome?: "succeeded" | "failed" } = {},
+  options: { readonly pushOutcome?: "succeeded" | "failed"; readonly artifactSteps?: number } = {},
 ): Promise<WorldV1> {
   const { created, home } = await createSyntheticLifecycleHome("coordinator");
   const roots = deriveLifecycleLedgerRoots(home);
@@ -324,7 +324,13 @@ async function syntheticWorld(
     NONCE,
   );
 
-  const templates = LIFECYCLE_STEP_GRAMMAR[variant];
+  /** D45: the row's one `F(uninstall_artifacts)` repeated in place, as a chunked uninstall plans it. */
+  const artifactSteps = options.artifactSteps ?? 1;
+  const templates = LIFECYCLE_STEP_GRAMMAR[variant].flatMap((template) =>
+    template.kind === "F" && template.slot === "uninstall_artifacts"
+      ? Array.from({ length: artifactSteps }, () => template)
+      : [template],
+  );
   const boundaryIndex = templateBoundaryIndex(variant, templates);
 
   const manifestPath = parseCanonicalAbsolutePathText(join(created, "state", "installation.json"));
@@ -345,8 +351,11 @@ async function syntheticWorld(
         const forwardId = nextId("tx");
         const reversible = index < boundaryIndex;
         const compensationId = reversible ? nextId("tx") : null;
+        const repeat = steps.filter(
+          (step) => step.kind === "foundation" && step.slot === template.slot,
+        ).length;
         const target = parseCanonicalAbsolutePathText(
-          join(created, "targets", `${template.slot}.json`),
+          join(created, "targets", repeat === 0 ? `${template.slot}.json` : `${template.slot}-${String(repeat)}.json`),
         );
         targets.push(target);
         const content = encoder.encode(`{"slot":"${template.slot}"}\n`);
@@ -909,52 +918,68 @@ describe("coordinator execution", () => {
 
   it.each(VARIANTS)(
     "recovers %s from death at every boundary to the direction its point of no return selects",
-    async (variant) => {
-      const reference = await syntheticWorld(variant);
-      const boundaries: LifecycleCoordinatorBoundaryV1[] = [];
-      await reference.execute({ afterBoundary: (boundary) => void boundaries.push(boundary) });
-      expect(boundaries.length).toBeGreaterThan(0);
-
-      /**
-       * A successful `N(h)` is the one point of no return with no durable representation of its
-       * own — §2.4 journals it only through `push_pending` or the cursor advance — so a death
-       * between the push and that rewrite is indistinguishable from a push that never ran, and
-       * the crossing is read from the advance rather than from the participant's return.
-       */
-      const durablyCrossed = (prefix: readonly LifecycleCoordinatorBoundaryV1[]): boolean =>
-        LIFECYCLE_POINT_OF_NO_RETURN[variant].kind === "push_succeeded"
-          ? prefix.some(
-              (boundary) =>
-                boundary.kind === "journal_rewritten" &&
-                boundary.nextStep > reference.boundaryIndex,
-            )
-          : prefix.some(
-              (boundary) =>
-                boundary.kind === "participant_returned" &&
-                boundary.direction === "forward" &&
-                boundary.step === reference.boundaryIndex,
-            );
-
-      for (let at = 0; at < boundaries.length; at += 1) {
-        const crossed = durablyCrossed(boundaries.slice(0, at + 1));
-        const world = await syntheticWorld(variant);
-        let seen = 0;
-        await expect(
-          world.execute({
-            afterBoundary: () => {
-              seen += 1;
-              if (seen === at + 1) throw new SyntheticDeath(`boundary ${String(at)}`);
-            },
-          }),
-        ).rejects.toThrow(SyntheticDeath);
-
-        await expectRecovered(world);
-        expect(world.unjournaledMutations()).toStrictEqual([]);
-        expect(await world.terminalState()).toStrictEqual(await world.expectedAfter(crossed));
-      }
-    },
+    (variant) => recoversFromEveryBoundary(variant),
     600_000,
   );
+
+  /**
+   * D45: across a run of artifact steps the forward cursor advances step by step and the reverse
+   * cursor walks back through every one of them, so a death anywhere in the run must still route
+   * to the direction the single boundary selects.
+   */
+  it.each(["uninstall/present_manifest", "uninstall/present_manifest_without_launchd"] as const)(
+    "recovers %s with three artifact steps from death at every boundary (D45)",
+    (variant) => recoversFromEveryBoundary(variant, 3),
+    600_000,
+  );
+
+  async function recoversFromEveryBoundary(
+    variant: LifecycleOperationVariantV1,
+    artifactSteps = 1,
+  ): Promise<void> {
+    const reference = await syntheticWorld(variant, { artifactSteps });
+    const boundaries: LifecycleCoordinatorBoundaryV1[] = [];
+    await reference.execute({ afterBoundary: (boundary) => void boundaries.push(boundary) });
+    expect(boundaries.length).toBeGreaterThan(0);
+
+    /**
+     * A successful `N(h)` is the one point of no return with no durable representation of its
+     * own — §2.4 journals it only through `push_pending` or the cursor advance — so a death
+     * between the push and that rewrite is indistinguishable from a push that never ran, and
+     * the crossing is read from the advance rather than from the participant's return.
+     */
+    const durablyCrossed = (prefix: readonly LifecycleCoordinatorBoundaryV1[]): boolean =>
+      LIFECYCLE_POINT_OF_NO_RETURN[variant].kind === "push_succeeded"
+        ? prefix.some(
+            (boundary) =>
+              boundary.kind === "journal_rewritten" &&
+              boundary.nextStep > reference.boundaryIndex,
+          )
+        : prefix.some(
+            (boundary) =>
+              boundary.kind === "participant_returned" &&
+              boundary.direction === "forward" &&
+              boundary.step === reference.boundaryIndex,
+          );
+
+    for (let at = 0; at < boundaries.length; at += 1) {
+      const crossed = durablyCrossed(boundaries.slice(0, at + 1));
+      const world = await syntheticWorld(variant, { artifactSteps });
+      let seen = 0;
+      await expect(
+        world.execute({
+          afterBoundary: () => {
+            seen += 1;
+            if (seen === at + 1) throw new SyntheticDeath(`boundary ${String(at)}`);
+          },
+        }),
+      ).rejects.toThrow(SyntheticDeath);
+
+      await expectRecovered(world);
+      expect(world.unjournaledMutations()).toStrictEqual([]);
+      expect(await world.terminalState()).toStrictEqual(await world.expectedAfter(crossed));
+    }
+  }
 });
 
 describe("compensation order", () => {
@@ -984,6 +1009,40 @@ describe("compensation order", () => {
       "F(uninstall_artifacts)^-1",
       "F(uninstall_marker)^-1",
     ]);
+  }, 120_000);
+
+  it("compensates every repeated artifact step in reverse step order (D45)", async () => {
+    const world = await syntheticWorld("uninstall/present_manifest_without_launchd", { artifactSteps: 3 });
+    const { outcome } = await world.execute({ failAt: "M(commit_absence)" });
+
+    expect(outcome.kind).toBe("rolled_back");
+    expect(world.compensationOrder()).toStrictEqual([
+      "M(preserve_before)^-1",
+      "K(restore)",
+      "F(uninstall_artifacts)^-1",
+      "F(uninstall_artifacts)^-1",
+      "F(uninstall_artifacts)^-1",
+      "F(uninstall_marker)^-1",
+    ]);
+    const artifactSteps = world.steps
+      .map((entry, index) => ({ entry, index }))
+      .filter(({ entry }) => entry.label === "F(uninstall_artifacts)")
+      .map(({ index }) => index);
+    expect(artifactSteps).toHaveLength(3);
+    expect(await world.terminalState()).toStrictEqual(await world.expectedAfter(false));
+    expect(world.unjournaledMutations()).toStrictEqual([]);
+  }, 120_000);
+
+  it("finalizes an uninstall with the full 31 artifact steps (D45)", async () => {
+    const world = await syntheticWorld("uninstall/present_manifest_without_launchd", { artifactSteps: 31 });
+    expect(validateLifecyclePlanGrammar(world.plan, variantFactsOf(world.variant))).toBe(world.variant);
+    expect(world.plan.participants.foundation).toHaveLength(64);
+
+    const { outcome } = await world.execute();
+
+    expect(outcome).toStrictEqual({ kind: "finalized", id: world.plan.id });
+    expect(await world.terminalState()).toStrictEqual(await world.expectedAfter(true));
+    expect(world.unjournaledMutations()).toStrictEqual([]);
   }, 120_000);
 
   it("leaves `R` out of the reverse prefix while still passing its cursor", async () => {

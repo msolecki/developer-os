@@ -85,6 +85,7 @@ export type {
 export {
   LIFECYCLE_POINT_OF_NO_RETURN,
   LIFECYCLE_STEP_GRAMMAR,
+  LIFECYCLE_UNINSTALL_ARTIFACT_STEPS,
   deriveLifecycleOperationVariant,
   deriveTerminalCompaction,
   deriveUninstallLaunchdEvidence,

@@ -15,6 +15,7 @@ import {
   LifecycleCoordinator,
   LifecycleRecoveryRequiredError,
   LIFECYCLE_LEASE_DRAIN_MS,
+  LIFECYCLE_UNINSTALL_ARTIFACT_STEPS,
   ManifestStateParticipant,
   SCHEDULED_JOB_IDS,
   TransactionExecutor,
@@ -100,12 +101,14 @@ const MARKER_LEAF = "uninstalling.json";
 const ALLOCATOR_LEAF = "lifecycle-id-allocator.json";
 const NONCE_LEAF = "lifecycle-install-nonce";
 const ACTIVATION_LEAF = "lifecycle-activation.json";
-const MAX_ARTIFACT_MUTATIONS = 256;
+/** §2.4's `FoundationParticipantRefV1.mutations[1..256]`, per `F(uninstall_artifacts)` step. */
+const MAX_ARTIFACTS_PER_STEP = 256;
+/** D45: 31 steps of 256, the 7,936-mutation ceiling. */
+export const MAX_UNINSTALL_ARTIFACTS = MAX_ARTIFACTS_PER_STEP * LIFECYCLE_UNINSTALL_ARTIFACT_STEPS.maximum;
 const MAX_MUTATION_BYTES = 16_777_216;
 const MAX_MANIFEST_BYTES = 64 * 1024 * 1024;
 const MAX_PLAN_BYTES = 16_777_216;
 const MAX_JOURNAL_BYTES = 1_048_576;
-const RESERVATION_SLOTS = 6;
 const FOUNDATION_BINDINGS_DOMAIN = "developer-os/manifest-foundation-bindings/v1\0";
 const WIDEST_UINT64 = "18446744073709551615";
 const WIDEST_HASH = "f".repeat(64);
@@ -154,9 +157,9 @@ export async function releaseUninstallHolds(holds: UninstallHoldsV1): Promise<vo
 }
 
 /**
- * D26 is a capacity verdict and not a recovery state: nothing is durable when it fires, so it
- * joins §2.4's pre-reservation class rather than refusing a home the user can still uninstall
- * by removing artifacts by hand.
+ * D26 is a capacity verdict and not a recovery state — D45 moves its threshold to 7,936 — so
+ * nothing is durable when it fires. It joins §2.4's pre-reservation class rather than refusing
+ * a home the user can still uninstall by removing artifacts by hand.
  */
 export class UninstallCapacityError extends Error {
   readonly code: typeof EXIT_CODES.capabilityUnavailable = EXIT_CODES.capabilityUnavailable;
@@ -164,7 +167,9 @@ export class UninstallCapacityError extends Error {
   readonly paths: readonly string[];
 
   constructor(count: number, productHome: string) {
-    super(`the installation records ${String(count)} removable artifacts, more than one Foundation transaction can carry`);
+    super(
+      `the installation records ${String(count)} removable artifacts, more than the ${String(MAX_UNINSTALL_ARTIFACTS)} one uninstall can carry`,
+    );
     this.name = "UninstallArtifactCapacityExceededError";
     this.paths = [productHome];
   }
@@ -254,6 +259,26 @@ interface ArtifactMutationV1 {
   readonly content: Uint8Array;
 }
 
+/**
+ * D45: the lease-first removal order split into consecutive `F(uninstall_artifacts)` steps of at
+ * most 256 mutations. The four runner leases lead that order, so they always land in the first
+ * step, which is the one `admitsUninstallDraining` and the lease step hooks read. An empty
+ * list keeps its single step, exactly as before chunking.
+ */
+export function chunkUninstallArtifacts<T>(
+  artifacts: readonly T[],
+  productHome: string,
+): readonly (readonly T[])[] {
+  if (artifacts.length > MAX_UNINSTALL_ARTIFACTS) {
+    throw new UninstallCapacityError(artifacts.length, productHome);
+  }
+  const chunks: T[][] = [];
+  for (let start = 0; start < artifacts.length; start += MAX_ARTIFACTS_PER_STEP) {
+    chunks.push(artifacts.slice(start, start + MAX_ARTIFACTS_PER_STEP));
+  }
+  return chunks.length === 0 ? [[]] : chunks;
+}
+
 interface UninstallPlanInputsV1 {
   readonly productHome: CanonicalAbsolutePathV1;
   readonly configPath: CanonicalAbsolutePathV1;
@@ -263,9 +288,14 @@ interface UninstallPlanInputsV1 {
   readonly manifestHash: LowerHexSha256;
   readonly keyBefore: RedactionKeyStatePlanV1["before"];
   readonly markerPreimage: ArtifactMutationV1;
-  readonly artifacts: readonly ArtifactMutationV1[];
+  readonly chunks: readonly (readonly ArtifactMutationV1[])[];
   readonly createdAt: string;
   refs: readonly FoundationParticipantRefV1[] | null;
+}
+
+/** D28's block: `lc`, the marker pair, one pair per artifact step, then `mf` last. */
+function slotCountOf(inputs: UninstallPlanInputsV1): number {
+  return 4 + 2 * inputs.chunks.length;
 }
 
 /**
@@ -279,10 +309,14 @@ function placeholderRefs(
   coordinatorId: string,
   ids: readonly string[],
 ): readonly FoundationParticipantRefV1[] {
-  const marker = [inputs.markerPreimage];
   const pairs = [
-    { slot: "uninstall_marker" as const, forward: ids[0], compensation: ids[1], count: marker.length },
-    { slot: "uninstall_artifacts" as const, forward: ids[2], compensation: ids[3], count: Math.max(1, inputs.artifacts.length) },
+    { slot: "uninstall_marker" as const, forward: ids[0], compensation: ids[1], count: 1 },
+    ...inputs.chunks.map((chunk, index) => ({
+      slot: "uninstall_artifacts" as const,
+      forward: ids[2 + 2 * index],
+      compensation: ids[3 + 2 * index],
+      count: Math.max(1, chunk.length),
+    })),
   ];
   const refs: FoundationParticipantRefV1[] = [];
   for (const pair of pairs) {
@@ -328,18 +362,19 @@ function placeholderRefs(
 }
 
 function reservationFor(inputs: UninstallPlanInputsV1): LifecycleLeafReservationV1 {
-  const artifacts = Math.max(1, inputs.artifacts.length);
+  const artifacts = inputs.chunks.reduce((total, chunk) => total + Math.max(1, chunk.length), 0);
+  const refs = 2 + 2 * inputs.chunks.length;
   return {
-    /** Four participants, each a journal, its lock and one rewrite temp. */
-    foundationJournals: 12,
+    /** Every participant a journal, its lock and one rewrite temp. */
+    foundationJournals: 3 * refs,
     coordinatorJournals: 3,
     gitEffectJournals: 0,
     launchdEffectJournals: 0,
     /** Marker forward and its inverse stage one blob each; the artifact inverse stages one per row. */
-    foundationStaging: 4 + 3 * (1 + 1 + artifacts),
-    foundationBackups: 4 + 5 * (1 + 1 + artifacts),
+    foundationStaging: refs + 3 * (1 + 1 + artifacts),
+    foundationBackups: refs + 5 * (1 + 1 + artifacts),
     /** The coordinator directory, its `foundation` child, one directory and one journal per ref. */
-    lifecycleStaging: 2 + 2 * 4,
+    lifecycleStaging: 2 + 2 * refs,
   };
 }
 
@@ -388,19 +423,25 @@ function uninstallBuilder(
   inputs: UninstallPlanInputsV1,
 ): LifecycleExecutionBuilderV1<LifecycleExecutionPlanV1> {
   const builder: LifecycleExecutionBuilderV1<LifecycleExecutionPlanV1> = {
-    slotCount: RESERVATION_SLOTS,
+    slotCount: slotCountOf(inputs),
     build(ids: readonly string[]) {
       const coordinatorId = String(ids[0]);
-      const participantIds = ids.slice(1, 5);
-      const manifestId = String(ids[5]);
+      const participantIds = ids.slice(1, -1);
+      const manifestId = String(ids.at(-1));
       const refs = inputs.refs ?? placeholderRefs(inputs, coordinatorId, participantIds);
-      const forwardOf = (slot: "uninstall_marker" | "uninstall_artifacts"): FoundationParticipantRefV1 => {
-        const ref = refs.find((candidate) => candidate.slot === slot && candidate.role.kind === "forward");
-        if (ref === undefined) throw new Error("the uninstall builder needs four Foundation references");
-        return ref;
-      };
-      const markerForward = forwardOf("uninstall_marker");
-      const artifactsForward = forwardOf("uninstall_artifacts");
+      /**
+       * Positional, never by ID: the conservative pass's placeholder IDs descend, so any order
+       * read off the IDs would reverse the artifact steps between that pass and the real one.
+       */
+      const forwards = refs.filter((ref) => ref.role.kind === "forward");
+      const [markerForward, ...artifactForwards] = forwards;
+      if (
+        markerForward?.slot !== "uninstall_marker" ||
+        artifactForwards.length !== inputs.chunks.length ||
+        artifactForwards.some((ref) => ref.slot !== "uninstall_artifacts")
+      ) {
+        throw new Error("the uninstall builder needs the marker pair and one pair per artifact step");
+      }
       /** §8.1's plan codec requires `participants.foundation` in unsigned UTF-8 order by id. */
       const sorted = [...refs].sort((left, right) =>
         Buffer.compare(Buffer.from(left.id), Buffer.from(right.id)),
@@ -421,10 +462,12 @@ function uninstallBuilder(
         },
         participants: {
           foundation: sorted,
-          manifest: manifestLeafOf(inputs, coordinatorId, manifestId, [
-            markerForward.id,
-            artifactsForward.id,
-          ]),
+          manifest: manifestLeafOf(
+            inputs,
+            coordinatorId,
+            manifestId,
+            forwards.map((ref) => ref.id),
+          ),
           sourceGitEffect: null,
           destinationGitEffect: null,
           launchdBeforeFiles: null,
@@ -445,7 +488,11 @@ function uninstallBuilder(
         steps: [
           { kind: "foundation", slot: "uninstall_marker", participantId: markerForward.id },
           { kind: "drain_runners" },
-          { kind: "foundation", slot: "uninstall_artifacts", participantId: artifactsForward.id },
+          ...artifactForwards.map((ref) => ({
+            kind: "foundation" as const,
+            slot: "uninstall_artifacts" as const,
+            participantId: ref.id,
+          })),
           { kind: "redaction_key", transition: "stage" },
           { kind: "manifest", transition: "preserve_before" },
           { kind: "manifest", transition: "commit_absence" },
@@ -664,6 +711,11 @@ export function createUninstallAdapters(input: {
     }
   };
 
+  /**
+   * Every `F(uninstall_artifacts)` step passes through both hooks, but the leases lead the
+   * removal order and so all fall in the first one: from the second on, `before` finds none
+   * present and `after` holds none to check.
+   */
   const isArtifactStep = (step: LifecycleExecutionPlanV1["steps"][number]): boolean =>
     step.kind === "foundation" && step.slot === "uninstall_artifacts";
 
@@ -962,9 +1014,7 @@ export class LifecycleUninstaller {
         content,
       });
     }
-    if (artifacts.length > MAX_ARTIFACT_MUTATIONS) {
-      throw new UninstallCapacityError(artifacts.length, productHome);
-    }
+    const chunks = chunkUninstallArtifacts(artifacts, productHome);
     const markerEntry = await guardedEntry(lifecycle.fs, markerPath);
     if (markerEntry === null || markerEntry.kind !== "regular_file") {
       refuse("uninstall_marker_absent", markerPath);
@@ -992,7 +1042,7 @@ export class LifecycleUninstaller {
         lifecycle.effectiveUid,
       ),
       markerPreimage,
-      artifacts,
+      chunks,
       createdAt: context.now().toISOString(),
       refs: null,
     };
@@ -1051,6 +1101,7 @@ export class LifecycleUninstaller {
       const codec = lifecycle.codecs(request.key).executionPlan;
       assertLifecycleExecutionFeasible(preview.builder, recovered.snapshot, codec);
 
+      const slotCount = preview.builder.slotCount;
       const block = await reserveLifecycleIdBlock(
         {
           fs: lifecycle.fs,
@@ -1060,12 +1111,12 @@ export class LifecycleUninstaller {
           held: current(),
           allocatedIds: allocatedIdsFrom(recovered.snapshot),
         },
-        RESERVATION_SLOTS,
+        slotCount,
       );
-      const ids = Array.from({ length: RESERVATION_SLOTS }, (_unused, index) =>
+      const ids = Array.from({ length: slotCount }, (_unused, index) =>
         index === 0
           ? formatAllocatedLifecycleId("lc", block.nonce, block.firstCounter)
-          : index === RESERVATION_SLOTS - 1
+          : index === slotCount - 1
             ? formatAllocatedLifecycleId("mf", block.nonce, block.firstCounter + BigInt(index))
             : formatAllocatedLifecycleId("tx", block.nonce, block.firstCounter + BigInt(index)),
       );
@@ -1077,7 +1128,7 @@ export class LifecycleUninstaller {
         participants.foundation,
         inputs,
         coordinatorId,
-        ids.slice(1, 5),
+        ids.slice(1, -1),
       );
       const { plan } = preview.builder.build(ids);
       await store.publish(plan, current());
@@ -1151,12 +1202,6 @@ async function stageUninstallParticipants(
       content: marker,
     },
   ];
-  const forwardArtifacts = inputs.artifacts.map((mutation) => ({
-    targetPath: mutation.targetPath,
-    operation: "remove" as const,
-    expectedBeforeHash: mutation.hash,
-    content: null,
-  }));
   const inverseMarker = [
     {
       targetPath: inputs.markerPreimage.targetPath,
@@ -1165,16 +1210,27 @@ async function stageUninstallParticipants(
       content: inputs.markerPreimage.content,
     },
   ];
-  const inverseArtifacts = [...inputs.artifacts].reverse().map((mutation) => ({
-    targetPath: mutation.targetPath,
-    operation: "create" as const,
-    expectedBeforeHash: null,
-    content: mutation.content,
-  }));
 
+  /** Each step's inverse recreates only its own chunk, in reverse, so compensation runs backwards across steps and within each. */
   const pairs = [
     { slot: "uninstall_marker" as const, forward: ids[0], compensation: ids[1], forwardMutations: forwardMarker, inverse: inverseMarker },
-    { slot: "uninstall_artifacts" as const, forward: ids[2], compensation: ids[3], forwardMutations: forwardArtifacts, inverse: inverseArtifacts },
+    ...inputs.chunks.map((chunk, index) => ({
+      slot: "uninstall_artifacts" as const,
+      forward: ids[2 + 2 * index],
+      compensation: ids[3 + 2 * index],
+      forwardMutations: chunk.map((mutation) => ({
+        targetPath: mutation.targetPath,
+        operation: "remove" as const,
+        expectedBeforeHash: mutation.hash,
+        content: null,
+      })),
+      inverse: [...chunk].reverse().map((mutation) => ({
+        targetPath: mutation.targetPath,
+        operation: "create" as const,
+        expectedBeforeHash: null,
+        content: mutation.content,
+      })),
+    })),
   ];
   const refs: FoundationParticipantRefV1[] = [];
   for (const pair of pairs) {
@@ -1204,7 +1260,7 @@ async function stageUninstallParticipants(
       }),
     );
   }
-  return [refs[0], refs[1], refs[2], refs[3]] as readonly FoundationParticipantRefV1[];
+  return refs;
 }
 
 function allocatedIdsFrom(

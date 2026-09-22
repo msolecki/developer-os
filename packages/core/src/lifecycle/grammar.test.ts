@@ -11,6 +11,7 @@ import {
 import {
   LIFECYCLE_POINT_OF_NO_RETURN,
   LIFECYCLE_STEP_GRAMMAR,
+  LIFECYCLE_UNINSTALL_ARTIFACT_STEPS,
   deriveLifecycleOperationVariant,
   deriveTerminalCompaction,
   deriveUninstallLaunchdEvidence,
@@ -1163,5 +1164,134 @@ describe("terminal compaction entry order", () => {
       },
     };
     expect(() => deriveTerminalCompaction(overflowing, "finalized")).toThrow();
+  });
+});
+
+type UninstallVariant = "uninstall/present_manifest" | "uninstall/present_manifest_without_launchd";
+const UNINSTALL_VARIANTS: readonly UninstallVariant[] = [
+  "uninstall/present_manifest",
+  "uninstall/present_manifest_without_launchd",
+];
+
+/**
+ * D45: `variant`'s synthetic plan with its `F(uninstall_artifacts)` step repeated `count` times
+ * in place, each repetition with its own forward/compensation pair. Counters from 12 stay clear
+ * of the single-digit fixture, and nothing here depends on their byte order.
+ */
+function withArtifactSteps(
+  variant: UninstallVariant,
+  count: number,
+): { readonly plan: Plan; readonly facts: LifecycleVariantFactsV1 } {
+  const { plan, facts } = syntheticPlanFor(variant);
+  const index = plan.steps.findIndex(
+    (step) => step.kind === "foundation" && step.slot === "uninstall_artifacts",
+  );
+  if (count === 0) {
+    return {
+      plan: {
+        ...plan,
+        steps: plan.steps.filter((_, position) => position !== index),
+        participants: {
+          ...plan.participants,
+          foundation: plan.participants.foundation.filter((ref) => ref.slot !== "uninstall_artifacts"),
+        },
+      },
+      facts,
+    };
+  }
+  const steps: LifecycleCoordinatorStepV1[] = [];
+  const refs: FoundationParticipantRefV1[] = [];
+  for (let extra = 1; extra < count; extra += 1) {
+    const forwardId = transactionId(BigInt(10 + 2 * extra));
+    const compensationId = transactionId(BigInt(11 + 2 * extra));
+    refs.push(
+      foundationRef(forwardId, "uninstall_artifacts", { kind: "forward", compensationId }),
+      foundationRef(compensationId, "uninstall_artifacts", { kind: "compensation", forwardId }),
+    );
+    steps.push({ kind: "foundation", slot: "uninstall_artifacts", participantId: forwardId });
+  }
+  return {
+    plan: {
+      ...plan,
+      steps: [...plan.steps.slice(0, index + 1), ...steps, ...plan.steps.slice(index + 1)],
+      participants: { ...plan.participants, foundation: [...plan.participants.foundation, ...refs] },
+    },
+    facts,
+  };
+}
+
+describe("the repeated F(uninstall_artifacts) step (D45)", () => {
+  it("admits 1..31 steps, and 31 pairs beside the marker's fill participants.foundation exactly", () => {
+    expect(LIFECYCLE_UNINSTALL_ARTIFACT_STEPS).toStrictEqual({ minimum: 1, maximum: 31 });
+    expect(2 + 2 * LIFECYCLE_UNINSTALL_ARTIFACT_STEPS.maximum).toBe(
+      LIFECYCLE_PLAN_BOUNDS.foundationRefs.maximum,
+    );
+  });
+
+  it("leaves the literal §2.4 table with its one F(uninstall_artifacts) per uninstall row", () => {
+    for (const variant of UNINSTALL_VARIANTS) {
+      const artifacts = LIFECYCLE_STEP_GRAMMAR[variant].filter(
+        (template) => template.kind === "F" && template.slot === "uninstall_artifacts",
+      );
+      expect(artifacts).toHaveLength(1);
+    }
+  });
+
+  it.each(UNINSTALL_VARIANTS.flatMap((variant) => [1, 2, 31].map((count) => [variant, count] as const)))(
+    "accepts %s with %i contiguous artifact steps and shifts its point of no return with them",
+    (variant, count) => {
+      const { plan, facts } = withArtifactSteps(variant, count);
+      expect(validateLifecyclePlanGrammar(plan, facts)).toBe(variant);
+      expect(plan.participants.foundation).toHaveLength(2 + 2 * count);
+      expect(pointOfNoReturnStepIndex(variant, plan.steps)).toBe(
+        expectedPointOfNoReturnIndex(variant) + count - 1,
+      );
+    },
+  );
+
+  it.each(UNINSTALL_VARIANTS.flatMap((variant) => [0, 32].map((count) => [variant, count] as const)))(
+    "refuses %s with %i artifact steps",
+    (variant, count) => {
+      const { plan, facts } = withArtifactSteps(variant, count);
+      expect(() => validateLifecyclePlanGrammar(plan, facts)).toThrow(/uninstall_artifacts step count/u);
+    },
+  );
+
+  it.each(UNINSTALL_VARIANTS)("refuses %s with a non-contiguous run of artifact steps", (variant) => {
+    const { plan, facts } = withArtifactSteps(variant, 2);
+    const first = plan.steps.findIndex(
+      (step) => step.kind === "foundation" && step.slot === "uninstall_artifacts",
+    );
+    const second = at(plan.steps, first + 1);
+    const withoutSecond = plan.steps.filter((_, position) => position !== first + 1);
+    const split = [...withoutSecond.slice(0, first + 2), second, ...withoutSecond.slice(first + 2)];
+    expect(at(split, first + 1)).toStrictEqual({ kind: "redaction_key", transition: "stage" });
+    expect(() => validateLifecyclePlanGrammar({ ...plan, steps: split }, facts)).toThrow();
+  });
+
+  it.each(UNINSTALL_VARIANTS)("refuses %s when a repeated artifact step has no compensation", (variant) => {
+    const { plan, facts } = withArtifactSteps(variant, 3);
+    const last = plan.participants.foundation.at(-1);
+    if (last === undefined || last.role.kind !== "compensation") throw new Error("fixture lost its last pair");
+    const forwardId = last.role.forwardId;
+    const foundation = plan.participants.foundation
+      .filter((ref) => ref.id !== last.id)
+      .map((ref) => (ref.id === forwardId ? { ...ref, role: { kind: "forward" as const, compensationId: null } } : ref));
+    expect(() =>
+      validateLifecyclePlanGrammar({ ...plan, participants: { ...plan.participants, foundation } }, facts),
+    ).toThrow(/has no compensation reference/u);
+  });
+
+  it.each([
+    ["uninstall/present_manifest", 67],
+    ["uninstall/present_manifest_without_launchd", 66],
+  ] as const)("keeps %s at 31 pairs within the reservation and compaction bounds", (variant, slots) => {
+    const { plan } = withArtifactSteps(variant, LIFECYCLE_UNINSTALL_ARTIFACT_STEPS.maximum);
+    expect(plan.participants.foundation).toHaveLength(LIFECYCLE_PLAN_BOUNDS.foundationRefs.maximum);
+    expect(plan.steps.length).toBeLessThanOrEqual(LIFECYCLE_PLAN_BOUNDS.steps.maximum);
+    expect(lifecycleReservationOrder(plan)).toHaveLength(slots);
+    const entries = deriveTerminalCompaction(plan, "finalized").entries;
+    expect(entries).toHaveLength(slots);
+    expect(entries.length).toBeLessThanOrEqual(LIFECYCLE_PLAN_BOUNDS.compactionEntries.maximum);
   });
 });

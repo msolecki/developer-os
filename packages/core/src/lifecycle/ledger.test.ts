@@ -230,8 +230,14 @@ interface SyntheticCoordinatorV1 {
 function syntheticCoordinator(
   variant: LifecycleOperationVariantV1,
   base: bigint,
+  artifactSteps = 1,
 ): SyntheticCoordinatorV1 {
-  const templates = LIFECYCLE_STEP_GRAMMAR[variant];
+  /** D45: the row's one `F(uninstall_artifacts)` repeated in place, as a chunked uninstall plans it. */
+  const templates = LIFECYCLE_STEP_GRAMMAR[variant].flatMap((template) =>
+    template.kind === "F" && template.slot === "uninstall_artifacts"
+      ? Array.from({ length: artifactSteps }, () => template)
+      : [template],
+  );
   const id = coordinatorId(base);
   let next = base + 1n;
   const reserve = (): bigint => {
@@ -955,6 +961,44 @@ describe("the lifecycle ledger closure", () => {
       expect(snapshot.coordinators[0]?.state).toBe("compacting");
       expect(snapshot.closure).toStrictEqual({ kind: "lifecycle_recovery_required" });
     }
+  });
+});
+
+/**
+ * D45: with the step repeated, the cursor can rest on a later artifact step whose participant has
+ * not started. §2.2's "at or beyond removal of all four runner-lease paths" still holds there,
+ * because the leases lead the removal order and the first step removed them.
+ */
+describe("uninstall_draining across repeated artifact steps (D45)", () => {
+  const CHUNKED = syntheticCoordinator("uninstall/present_manifest_without_launchd", 1n, 2);
+
+  async function chunkedOnSecondArtifactStep(leasesPresent: number): Promise<HomeV1> {
+    const home = await newHome();
+    const first = artifactsStepIndex(CHUNKED);
+    expect(CHUNKED.steps[first + 1]).toMatchObject({ kind: "foundation", slot: "uninstall_artifacts" });
+    await plantCoordinator(
+      home,
+      CHUNKED,
+      journalFor(CHUNKED, { phase: "participants_applying", nextStep: first + 1 }),
+    );
+    await plantFoundationJournal(home, markerParticipantId(CHUNKED));
+    await plantFoundationJournal(home, artifactsParticipantId(CHUNKED));
+    await write(home, "state/installation.json", MANIFEST_BYTES);
+    await plantLeases(home, leasesPresent);
+    return home;
+  }
+
+  it("returns uninstall_draining with the cursor on the second artifact step once the first removed every lease", async () => {
+    const snapshot = await inspect(await chunkedOnSecondArtifactStep(0));
+
+    expect(snapshot.findings).toStrictEqual([]);
+    expect(snapshot.closure).toStrictEqual({ kind: "uninstall_draining", transactionId: CHUNKED.id });
+  });
+
+  it("never returns uninstall_draining on the second artifact step while a lease path survives", async () => {
+    const snapshot = await inspect(await chunkedOnSecondArtifactStep(1));
+
+    expect(snapshot.closure).toStrictEqual({ kind: "lifecycle_recovery_required" });
   });
 });
 

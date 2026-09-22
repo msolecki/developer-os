@@ -22,6 +22,7 @@ export {
   LIFECYCLE_LOCK_RETRY_MS,
   LIFECYCLE_POINT_OF_NO_RETURN,
   LIFECYCLE_STEP_GRAMMAR,
+  LIFECYCLE_UNINSTALL_ARTIFACT_STEPS,
   LifecycleCoordinator,
   LifecycleCoordinatorStore,
   LifecycleInfeasiblePlanError,
