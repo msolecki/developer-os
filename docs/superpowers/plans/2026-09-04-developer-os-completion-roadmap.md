@@ -236,6 +236,15 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   one artifact is accepted by the founder without a separate license review. Legacy instruction text
   reaches agents only through a founder-made copy in a session staging directory outside the
   repository (spec §3.3 clean room); no agent opens a legacy path.
+- **D51 (2026-09-22), supersedes D50's first half.** Third-party-derived skills are **not** vendored:
+  `react-best-practices` (upstream `vercel-labs/agent-skills`), `claudeception` (upstream
+  `blader/Claudeception`), `excalidraw-diagram` (upstream `coleam00/excalidraw-diagram-skill`) and the
+  `research*` family (origin unverified). The product documents the upstream skills as recommended
+  third-party installs; the founder's modified copies stay local as user overrides under
+  `<product-home>/instructions/<vendor>/skills/` (moved at A15). Removing attribution from derived text
+  is not an option. Also decided: the three lazy rules added after the inventory froze (`comments`,
+  `testing`, `lessons-code`) ship as scoped-rule defaults, and the four artifacts disabled in the
+  legacy runtime (`release`, `rev-eng`, `wrap-up`, `brain-search`) are refused.
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 

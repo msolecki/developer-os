@@ -26,6 +26,9 @@ absence is a decision).
 | `rules-lazy/nextjs.md` | same | same | planned A12 |
 | `rules-lazy/error-handling.md` | same (not linked on the legacy machine) | same | planned A12 |
 | `rules-lazy/monitoring.md` | same (not linked on the legacy machine) | same | planned A12 |
+| `rules-lazy/comments.md` | same (added after the freeze; D51) | same | planned A12 |
+| `rules-lazy/testing.md` | same (added after the freeze; D51) | same | planned A12 |
+| `rules-lazy/lessons-code.md` | same (added after the freeze; D51; generic defect classes only) | same | planned A12 |
 
 ## 2. Output styles — 4 files (A12)
 
@@ -39,6 +42,12 @@ absence is a decision).
 | Commands | 8 | `analizer`, `fix-pr`, `implementator`, `przeglad-claudemd`, `release`, `rev-eng`, `spec`, `wrap-up` | Claude: `commands/` in the product's skills-dir plugin. Codex has no commands → each becomes a skill. Every command has a duplicate skill of the same name in the legacy tree; the product ships one skill plus a thin command, not both texts. |
 | Subagents | 5 | `code-reviewer`, `performance-engineer`, `qa-expert`, `research-analyst`, `security-auditor` | Claude: `agents/` in the plugin. Codex: generated `~/.codex/agents/<name>.toml` (the legacy generator was deleted on 2026-07-27; regenerate from the Markdown source). |
 | Skills | 19 | `analizer`, `brain-search`, `bug-triage`, `claudeception`, `client-onboarding`, `code-review`, `deploy-checklist`, `fix-pr`, `implementator`, `nextjs-removeconsole-computed-access-survives`, `przeglad-claudemd`, `react-best-practices`, `recovering-killed-claude-workflow-results`, `release`, `rev-eng`, `spec`, `url-construction-silent-footguns`, `weekly-report`, `wrap-up` | Both vendors: skills beside the six product workflows. `brain-search` is **partial** today (the product's `developer-os-brain-search` calls the CLI instead of reading index files). `react-best-practices` is vendored third-party content with its own license file; keep the attribution. |
+
+**Dispositions (D51, 2026-09-22):** `release`, `rev-eng`, `wrap-up` (command and skill) and
+`brain-search` are disabled in the legacy runtime → **refused**. `react-best-practices`
+(`vercel-labs/agent-skills`) and `claudeception` (`blader/Claudeception`) are third-party →
+**refused as vendored defaults**; documented as recommended upstream installs, the founder keeps a
+local override.
 
 Vendor instruction files (2): the user's global `CLAUDE.md` import block and `~/.codex/AGENTS.md`.
 The product currently writes neither (`docs/architecture/codex-adapter.md` §2 forbids
@@ -120,7 +129,7 @@ session-end event, so `sessionEndCapture` parity is impossible on that vendor.
 | `refactor` | verb `brain refactor --rename\|--move\|--merge\|--split` | planned A12b |
 | `output` | workflow `brain-report` | planned A12b |
 | `onboard` | `init` template | shipped (no interview) |
-| `research`, `research-deep`, `research-add-fields`, `research-add-items`, `research-report`, `excalidraw-diagram` | skills in A12, not Brain workflows | planned A12 |
+| `research`, `research-deep`, `research-add-fields`, `research-add-items`, `research-report`, `excalidraw-diagram` | third-party-derived (`excalidraw-diagram`: `coleam00/excalidraw-diagram-skill`; `research*`: origin unverified) → not vendored; founder keeps local overrides (D51) | refused (D51) |
 
 Vault-level instruction files (`AGENTS.md`, `CLAUDE.md`, `WRITING_STYLE.md`) and the vault's own
 `SessionStart` hook are replaced by the concatenated workflow preamble, the A13 injection hook, and
