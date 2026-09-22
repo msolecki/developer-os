@@ -198,7 +198,14 @@ Added by D16 and pulled forward from Phase 8: without the launcher's root-verifi
 - [x] Add the missing plan step that replaces `bootstrap: { state: "unavailable_until_packaged_handoff" }` at `apps/cli/src/context.ts:790` with the admitted handoff. Added 2026-09-22 as Task 11b in `plans/2026-08-29-developer-os-release-update.md`, wiring `apps/cli/src/update/packaged-release.ts`'s existing `admitRootVerifiedPackagedRelease` (already used by the test fixture, never by production) into `bin.ts`/`context.ts` via the launcher's FD 3 handoff.
 - [ ] Stop and ask how the founder build is signed: which offline root key the launcher compiles in, and whether public releases reuse it. **Scoped 2026-09-22: this blocks the actual pin removal, not Tasks 10–11's TDD implementation** — `verifySignedReleaseDocument(document, key)` takes the key as a parameter and Task 11's own tests are written against a fixture (`vector.currentRoot`), so both tasks proceed now on test keys; ask before compiling a real launcher for the founder machine.
 - [ ] Before the pin is removed: correct the V1 refusal's recovery (D20, NEW-79) and harden the ordinary-command gate (NEW-81). The release layout move (D19, NEW-80) moved into plan 1a Task 1 (D29).
-- [ ] Before the real release bundle is fixed: settle the capacity of `F(uninstall_artifacts)` (D26, NEW-85) — repeat the step, cap the bundle's file count in Spec 2, or both. Plan 1a ships only the pre-allocation refusal.
+- [x] **D45 (2026-09-22).** Settled the capacity of `F(uninstall_artifacts)` (D26, NEW-85):
+  **repeat the step, up to 31 forward/compensation pairs — not a Spec 2 §4.4 file-count cap.**
+  Measured before deciding: `pnpm build`'s raw `tsc` output across the 8 workspace packages is 634
+  files, already more than 3× the ≤197 a cap would need, and no bundler exists in this codebase or
+  its approved specs to get there without adding one as unplanned scope. Repeating the step needs no
+  spec amendment (D26 already named it as an option) and clears 634 with wide margin (7,936-mutation
+  ceiling). Implementation (the loop in `apps/cli/src/lifecycle/uninstall.ts`) is still owed —
+  `BACKLOG.md` NEW-85. Plan 1a ships only the pre-allocation refusal.
 - [ ] Execute Tasks 10–11 and that step.
 
 Gate: on a disposable home, a fresh `init` runs the V2 path in production through the launcher, and `init` over a V1 home refuses.
