@@ -65,3 +65,13 @@ export type {
   ClaudeRunResult,
   InvokeDependencies,
 } from "./invoke.js";
+export {
+  CLAUDE_DENY_RULES,
+  CLAUDE_MEMORY_LAYOUT,
+  isValidClaudeObservation,
+} from "./observations.js";
+export type {
+  ClaudeDenyRulesV1,
+  ClaudeMemoryLayoutV1,
+  ClaudeObservationV1,
+} from "./observations.js";

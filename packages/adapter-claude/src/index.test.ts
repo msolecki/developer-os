@@ -37,8 +37,10 @@ describe("the public door", () => {
   it("exports exactly the intended surface", () => {
     expect(Object.keys(pkg).sort()).toEqual([
       "CLAUDE_CAPABILITY_KEYS",
+      "CLAUDE_DENY_RULES",
       "CLAUDE_HOOKS_PATH",
       "CLAUDE_HOOK_ROWS",
+      "CLAUDE_MEMORY_LAYOUT",
       "CLAUDE_MINIMUM_VERSION",
       "CLAUDE_NOT_USED_KEYS",
       "ClaudeRenderer",
@@ -49,6 +51,7 @@ describe("the public door", () => {
       "buildPluginTree",
       "discoverClaude",
       "invokeClaude",
+      "isValidClaudeObservation",
       "probeClaude",
       "proposeClaudeInstall",
       "proposeClaudeUninstall",
