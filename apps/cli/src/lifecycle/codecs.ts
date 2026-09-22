@@ -29,6 +29,11 @@ import { createCanonicalPathEvidence } from "../bootstrap/admission.js";
 import { createRedactionKeyStatePlanCodec } from "./redaction-key.js";
 import type { RedactionKeyStatePlanV1 } from "./redaction-key.js";
 
+/**
+ * `failureFrom` publishes `kindOf(name)`, and the published contract for every 1b-deferred
+ * arm is its `reason`, so the name is spelled to make the two equal — see
+ * `uninstall.ts`'s `refuseUnsupportedUntilPlan1b` for the same rule.
+ */
 export class LifecycleUnsupportedLeafError extends Error {
   readonly code: typeof EXIT_CODES.capabilityUnavailable = EXIT_CODES.capabilityUnavailable;
   readonly reason = "unsupported_until_plan_1b" as const;
@@ -36,7 +41,7 @@ export class LifecycleUnsupportedLeafError extends Error {
 
   constructor(arm: string) {
     super(`the ${arm} lifecycle arm is unsupported until plan 1b`);
-    this.name = "LifecycleUnsupportedLeafError";
+    this.name = "Unsupported_until_plan_1bError";
     this.arm = arm;
   }
 }

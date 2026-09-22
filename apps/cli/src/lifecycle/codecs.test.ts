@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -7,31 +5,22 @@ import {
   EXIT_CODES,
   LIFECYCLE_STEP_GRAMMAR,
   formatAllocatedLifecycleId,
-  foundationParticipantPlanHash,
   hashCanonicalJson,
   parseAllocatedLifecycleId,
   parseCanonicalAbsolutePathText,
-  parseEffectiveUid,
   parseLifecycleCoordinatorId,
   parseLowerHexSha256,
   parseManifestParticipantId,
-  parseUInt64Decimal,
   validateLifecyclePlanGrammar,
 } from "@developer-os/core";
 import type {
-  AllocatedLifecycleIdV1,
   CanonicalAbsolutePathV1,
-  FoundationParticipantRefV1,
-  FoundationParticipantSlotV1,
   GitEffectIdV1,
   LaunchdEffectIdV1,
   LifecycleCodecContextV1,
-  LifecycleCoordinatorIdV1,
-  LifecycleCoordinatorStepV1,
   LifecycleInstallNonceV1,
   LowerHexSha256,
   ManifestStatePlanV1,
-  UInt64DecimalV1,
 } from "@developer-os/core";
 
 import {
@@ -48,20 +37,12 @@ import {
   redactionKeyStatePlanHash,
   redactionKeyTombstonePath,
 } from "./redaction-key.js";
-import type { RedactionKeyStatePlanV1 } from "./redaction-key.js";
+import { foundationBindingsHash, syntheticUninstall } from "./testing.js";
 
 const HOME = parseCanonicalAbsolutePathText("/product");
 const STATE = parseCanonicalAbsolutePathText("/product/state");
-const MANIFEST_PATH = parseCanonicalAbsolutePathText("/product/installation-manifest.json");
 const NONCE: LifecycleInstallNonceV1 = parseLowerHexSha256("7a".repeat(32));
 const CONTEXT: LifecycleCodecContextV1 = { productHome: HOME, nonce: NONCE };
-const DEV: UInt64DecimalV1 = parseUInt64Decimal("16777232");
-const INO: UInt64DecimalV1 = parseUInt64Decimal("184467440737095516");
-const MANIFEST_BEFORE_HASH = parseLowerHexSha256(
-  createHash("sha256").update("{}\n").digest("hex"),
-);
-const UID = process.getuid?.() ?? 0;
-const OWNER_UID = parseEffectiveUid(UID, UID);
 
 function hash(seed: string): LowerHexSha256 {
   return parseLowerHexSha256(seed.repeat(64).slice(0, 64));
@@ -71,181 +52,16 @@ function path(text: string): CanonicalAbsolutePathV1 {
   return parseCanonicalAbsolutePathText(text);
 }
 
-function transactionId(counter: bigint): AllocatedLifecycleIdV1<"tx"> {
-  return parseAllocatedLifecycleId("tx", formatAllocatedLifecycleId("tx", NONCE, counter), NONCE);
-}
-
-const COORDINATOR_ID: LifecycleCoordinatorIdV1 = parseLifecycleCoordinatorId(
-  formatAllocatedLifecycleId("lc", NONCE, 1n),
-  NONCE,
-);
-const MANIFEST_PARTICIPANT_ID = parseManifestParticipantId(
-  formatAllocatedLifecycleId("mf", NONCE, 9n),
-  NONCE,
-);
-
-function participantRef(options: {
-  readonly id: AllocatedLifecycleIdV1<"tx">;
-  readonly slot: FoundationParticipantSlotV1;
-  readonly role: FoundationParticipantRefV1["role"];
-}): FoundationParticipantRefV1 {
-  const { id, slot, role } = options;
-  const core = {
-    slot,
-    role,
-    mutations:
-      role.kind === "forward"
-        ? [
-            {
-              targetPath: path(`/product/state/${slot}.json`),
-              operation: "create" as const,
-              expectedBeforeHash: null,
-              contentHash: hash("4"),
-              contentSize: 16,
-              stagedPath: path(`/product/staging/transactions/${id}/0.bin`),
-            },
-          ]
-        : [
-            {
-              targetPath: path(`/product/state/${slot}.json`),
-              operation: "remove" as const,
-              expectedBeforeHash: hash("4"),
-              contentHash: null,
-              contentSize: null,
-              stagedPath: null,
-            },
-          ],
-    maximumJournalBytes: 4_096,
-    initialJournal: {
-      finalPath: path(`/product/state/transactions/${id}.json`),
-      plannedBytesHash: hash("6"),
-      stagedPath: path(
-        `/product/staging/lifecycle/${COORDINATOR_ID}/foundation/${id}/journal.json`,
-      ),
-      stagedIdentity: { hash: hash("7"), size: 512, mode: 384 as const, dev: DEV, ino: INO },
-    },
-  };
-  return { id, ...core, planHash: foundationParticipantPlanHash(core) };
-}
-
-const FOUNDATION_BINDINGS_DOMAIN = "developer-os/manifest-foundation-bindings/v1\0";
-
-function foundationBindingsHash(ids: readonly string[]): LowerHexSha256 {
-  return parseLowerHexSha256(
-    createHash("sha256").update(FOUNDATION_BINDINGS_DOMAIN).update(JSON.stringify(ids)).digest("hex"),
-  );
-}
-
-const MARKER_FORWARD = transactionId(2n);
-const MARKER_COMPENSATION = transactionId(3n);
-const ARTIFACTS_FORWARD = transactionId(4n);
-const ARTIFACTS_COMPENSATION = transactionId(5n);
-
-const UNINSTALL_STEPS: readonly LifecycleCoordinatorStepV1[] = [
-  { kind: "foundation", slot: "uninstall_marker", participantId: MARKER_FORWARD },
-  { kind: "drain_runners" },
-  { kind: "foundation", slot: "uninstall_artifacts", participantId: ARTIFACTS_FORWARD },
-  { kind: "redaction_key", transition: "stage" },
-  { kind: "manifest", transition: "preserve_before" },
-  { kind: "manifest", transition: "commit_absence" },
-  { kind: "redaction_key", transition: "delete" },
-  { kind: "manifest", transition: "finalize_tombstones" },
-];
-
-const MANIFEST_LEAF: ManifestStatePlanV1 = {
-  schemaVersion: 1,
-  participantId: MANIFEST_PARTICIPANT_ID,
-  envelope: { kind: "lifecycle", id: COORDINATOR_ID },
-  bindings: {
-    foundationTransactions: {
-      count: 2,
-      orderedIdsHash: foundationBindingsHash([MARKER_FORWARD, ARTIFACTS_FORWARD]),
-    },
-    externalEffects: [],
-  },
-  manifestPath: MANIFEST_PATH,
-  tombstonePath: path(`/product/.installation-manifest.${MANIFEST_PARTICIPANT_ID}.json.tombstone`),
-  before: {
-    state: "present",
-    hash: MANIFEST_BEFORE_HASH,
-    bytes: null,
-    ownerUid: UID,
-    mode: 0o600,
-    nlink: 1,
-    size: parseUInt64Decimal("3"),
-    dev: DEV,
-    ino: INO,
-  },
-  after: { state: "absent" },
-  maximumPlanBytes: 16_777_216,
-  maximumJournalBytes: 1_048_576,
-};
-
-const REDACTION_KEY_LEAF: RedactionKeyStatePlanV1 = {
-  schemaVersion: 1,
-  coordinatorId: COORDINATOR_ID,
-  sourcePath: path("/product/state/redaction.key"),
-  tombstonePath: path(`/product/state/.redaction.key.${COORDINATOR_ID}.tombstone`),
-  before: {
-    state: "present",
-    kind: "regular_file",
-    ownerUid: OWNER_UID,
-    mode: 384,
-    nlink: 1,
-    size: 32,
-    dev: DEV,
-    ino: INO,
-  },
-};
-
-const UNINSTALL_PLAN: LifecycleExecutionPlanV1 = {
-  schemaVersion: 1,
-  id: COORDINATOR_ID,
-  previewHash: null,
-  operation: "uninstall",
-  maximumJournalBytes: 8_192,
-  authority: {
-    productHome: HOME,
-    configPath: path("/product/config.toml"),
-    activationPath: path("/product/state/lifecycle-activation.json"),
-    manifestPath: MANIFEST_PATH,
-    repositoryRoot: null,
-    plistPaths: [],
-  },
-  participants: {
-    foundation: [
-      participantRef({
-        id: MARKER_FORWARD,
-        slot: "uninstall_marker",
-        role: { kind: "forward", compensationId: MARKER_COMPENSATION },
-      }),
-      participantRef({
-        id: MARKER_COMPENSATION,
-        slot: "uninstall_marker",
-        role: { kind: "compensation", forwardId: MARKER_FORWARD },
-      }),
-      participantRef({
-        id: ARTIFACTS_FORWARD,
-        slot: "uninstall_artifacts",
-        role: { kind: "forward", compensationId: ARTIFACTS_COMPENSATION },
-      }),
-      participantRef({
-        id: ARTIFACTS_COMPENSATION,
-        slot: "uninstall_artifacts",
-        role: { kind: "compensation", forwardId: ARTIFACTS_FORWARD },
-      }),
-    ],
-    manifest: MANIFEST_LEAF,
-    sourceGitEffect: null,
-    destinationGitEffect: null,
-    launchdBeforeFiles: null,
-    launchdAfterFiles: null,
-    launchd: null,
-    redactionKey: REDACTION_KEY_LEAF,
-  },
-  push: null,
-  steps: UNINSTALL_STEPS,
-};
+// Base 1 spends counters 2..5 on the foundation participants; the manifest's own counter
+// jumps to 9 so it never collides with the git/launchd effect ids (6, 7, 8) staged below.
+const SYNTHETIC = syntheticUninstall(HOME, NONCE, 1n, 9n);
+const COORDINATOR_ID = SYNTHETIC.id;
+const MARKER_FORWARD = SYNTHETIC.markerForward;
+const ARTIFACTS_FORWARD = SYNTHETIC.artifactsForward;
+const UNINSTALL_STEPS = SYNTHETIC.steps;
+const MANIFEST_LEAF: ManifestStatePlanV1 = SYNTHETIC.manifest;
+const REDACTION_KEY_LEAF = SYNTHETIC.redactionKey;
+const UNINSTALL_PLAN: LifecycleExecutionPlanV1 = SYNTHETIC.plan;
 
 const gitEffectId = (counter: bigint): GitEffectIdV1 =>
   parseAllocatedLifecycleId("ge", formatAllocatedLifecycleId("ge", NONCE, counter), NONCE);

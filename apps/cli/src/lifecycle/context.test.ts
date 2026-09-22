@@ -10,33 +10,21 @@ import {
   TransactionStore,
   createNodeLifecycleGuardedFileSystem,
   encodeLifecycleIdAllocator,
-  formatAllocatedLifecycleId,
-  foundationParticipantPlanHash,
   maximumCoordinatorJournalBytes,
-  parseAllocatedLifecycleId,
   parseCanonicalAbsolutePathText,
-  parseEffectiveUid,
-  parseLifecycleCoordinatorId,
   parseLowerHexSha256,
-  parseManifestParticipantId,
   parseUInt64Decimal,
   parseUtcTimestamp,
   resolveRuntimePaths,
 } from "@developer-os/core";
 import type {
-  AllocatedLifecycleIdV1,
   CanonicalAbsolutePathV1,
-  FoundationParticipantRefV1,
-  FoundationParticipantSlotV1,
   HeldLifecycleStableLockV1,
   LifecycleBookkeepingResidueV1,
-  LifecycleCoordinatorIdV1,
   LifecycleCoordinatorJournalV1,
-  LifecycleCoordinatorStepV1,
   LifecycleGuardedFileSystemV1,
   LifecycleInstallNonceV1,
   LowerHexSha256,
-  ManifestStatePlanV1,
   RuntimePaths,
   TransactionJournalV1,
   TransactionLockHandle,
@@ -63,16 +51,15 @@ import {
   residueFrom,
 } from "./context.js";
 import type { CliLifecycleContext } from "./context.js";
-import type { RedactionKeyStatePlanV1 } from "./redaction-key.js";
+import { syntheticUninstall } from "./testing.js";
+import type { SyntheticUninstallV1 } from "./testing.js";
 
 const UID = process.getuid?.() ?? 0;
-const OWNER_UID = parseEffectiveUid(UID, UID);
 const NONCE: LifecycleInstallNonceV1 = parseLowerHexSha256("3f".repeat(32));
 const OTHER_NONCE: LifecycleInstallNonceV1 = parseLowerHexSha256("c1".repeat(32));
 const DEV: UInt64DecimalV1 = parseUInt64Decimal("16777232");
 const INO: UInt64DecimalV1 = parseUInt64Decimal("184467440737095516");
 const MANIFEST_BYTES = "{}\n";
-const FOUNDATION_BINDINGS_DOMAIN = "developer-os/manifest-foundation-bindings/v1\0";
 const LEASE_JOBS = ["brain-reindex", "brain-lint", "doctor", "git-sync"] as const;
 
 const EMPTY_RESIDUE: LifecycleBookkeepingResidueV1 = {
@@ -157,214 +144,6 @@ async function newHome(label: string): Promise<HomeV1> {
 
 async function write(home: HomeV1, relative: string, text: string): Promise<void> {
   await nodeFs.writeFile(join(home.paths.home, relative), text, { mode: 0o600 });
-}
-
-function fileHash(text: string): LowerHexSha256 {
-  return parseLowerHexSha256(createHash("sha256").update(text).digest("hex"));
-}
-
-function foundationBindingsHash(ids: readonly string[]): LowerHexSha256 {
-  return parseLowerHexSha256(
-    createHash("sha256")
-      .update(FOUNDATION_BINDINGS_DOMAIN)
-      .update(JSON.stringify(ids))
-      .digest("hex"),
-  );
-}
-
-function hash(seed: string): LowerHexSha256 {
-  return parseLowerHexSha256(seed.repeat(64).slice(0, 64));
-}
-
-interface SyntheticUninstallV1 {
-  readonly plan: LifecycleExecutionPlanV1;
-  readonly id: LifecycleCoordinatorIdV1;
-  readonly markerForward: AllocatedLifecycleIdV1<"tx">;
-  readonly artifactsForward: AllocatedLifecycleIdV1<"tx">;
-  readonly artifactsStep: number;
-  readonly commitAbsenceStep: number;
-}
-
-/**
- * `uninstall/present_manifest_without_launchd` with every leaf the CLI codec owns: the plan
- * 1a variant D24 derives, because the `launchd` arm the `P` variant needs is refused here.
- */
-function syntheticUninstall(
-  productHome: CanonicalAbsolutePathV1,
-  nonce: LifecycleInstallNonceV1,
-  base: bigint,
-): SyntheticUninstallV1 {
-  const path = (text: string): CanonicalAbsolutePathV1 => parseCanonicalAbsolutePathText(text);
-  const transactionId = (counter: bigint): AllocatedLifecycleIdV1<"tx"> =>
-    parseAllocatedLifecycleId("tx", formatAllocatedLifecycleId("tx", nonce, counter), nonce);
-  const id = parseLifecycleCoordinatorId(formatAllocatedLifecycleId("lc", nonce, base), nonce);
-  const manifestParticipantId = parseManifestParticipantId(
-    formatAllocatedLifecycleId("mf", nonce, base + 5n),
-    nonce,
-  );
-  const markerForward = transactionId(base + 1n);
-  const markerCompensation = transactionId(base + 2n);
-  const artifactsForward = transactionId(base + 3n);
-  const artifactsCompensation = transactionId(base + 4n);
-  const manifestPath = path(`${productHome}/installation-manifest.json`);
-
-  const participantRef = (options: {
-    readonly id: AllocatedLifecycleIdV1<"tx">;
-    readonly slot: FoundationParticipantSlotV1;
-    readonly role: FoundationParticipantRefV1["role"];
-  }): FoundationParticipantRefV1 => {
-    const core = {
-      slot: options.slot,
-      role: options.role,
-      mutations:
-        options.role.kind === "forward"
-          ? [
-              {
-                targetPath: path(`${productHome}/state/${options.slot}.json`),
-                operation: "create" as const,
-                expectedBeforeHash: null,
-                contentHash: hash("4"),
-                contentSize: 16,
-                stagedPath: path(`${productHome}/staging/transactions/${options.id}/0.bin`),
-              },
-            ]
-          : [
-              {
-                targetPath: path(`${productHome}/state/${options.slot}.json`),
-                operation: "remove" as const,
-                expectedBeforeHash: hash("4"),
-                contentHash: null,
-                contentSize: null,
-                stagedPath: null,
-              },
-            ],
-      maximumJournalBytes: 4_096,
-      initialJournal: {
-        finalPath: path(`${productHome}/state/transactions/${options.id}.json`),
-        plannedBytesHash: hash("6"),
-        stagedPath: path(
-          `${productHome}/staging/lifecycle/${id}/foundation/${options.id}/journal.json`,
-        ),
-        stagedIdentity: { hash: hash("7"), size: 512, mode: 384 as const, dev: DEV, ino: INO },
-      },
-    };
-    return { id: options.id, ...core, planHash: foundationParticipantPlanHash(core) };
-  };
-
-  const steps: readonly LifecycleCoordinatorStepV1[] = [
-    { kind: "foundation", slot: "uninstall_marker", participantId: markerForward },
-    { kind: "drain_runners" },
-    { kind: "foundation", slot: "uninstall_artifacts", participantId: artifactsForward },
-    { kind: "redaction_key", transition: "stage" },
-    { kind: "manifest", transition: "preserve_before" },
-    { kind: "manifest", transition: "commit_absence" },
-    { kind: "redaction_key", transition: "delete" },
-    { kind: "manifest", transition: "finalize_tombstones" },
-  ];
-
-  const manifest: ManifestStatePlanV1 = {
-    schemaVersion: 1,
-    participantId: manifestParticipantId,
-    envelope: { kind: "lifecycle", id },
-    bindings: {
-      foundationTransactions: {
-        count: 2,
-        orderedIdsHash: foundationBindingsHash([markerForward, artifactsForward]),
-      },
-      externalEffects: [],
-    },
-    manifestPath,
-    tombstonePath: path(
-      `${productHome}/.installation-manifest.${manifestParticipantId}.json.tombstone`,
-    ),
-    before: {
-      state: "present",
-      hash: fileHash(MANIFEST_BYTES),
-      bytes: null,
-      ownerUid: UID,
-      mode: 0o600,
-      nlink: 1,
-      size: parseUInt64Decimal(String(MANIFEST_BYTES.length)),
-      dev: DEV,
-      ino: INO,
-    },
-    after: { state: "absent" },
-    maximumPlanBytes: 16_777_216,
-    maximumJournalBytes: 1_048_576,
-  };
-
-  const redactionKey: RedactionKeyStatePlanV1 = {
-    schemaVersion: 1,
-    coordinatorId: id,
-    sourcePath: path(`${productHome}/state/redaction.key`),
-    tombstonePath: path(`${productHome}/state/.redaction.key.${id}.tombstone`),
-    before: {
-      state: "present",
-      kind: "regular_file",
-      ownerUid: OWNER_UID,
-      mode: 384,
-      nlink: 1,
-      size: 32,
-      dev: DEV,
-      ino: INO,
-    },
-  };
-
-  return {
-    id,
-    markerForward,
-    artifactsForward,
-    artifactsStep: 2,
-    commitAbsenceStep: 5,
-    plan: {
-      schemaVersion: 1,
-      id,
-      previewHash: null,
-      operation: "uninstall",
-      maximumJournalBytes: 8_192,
-      authority: {
-        productHome,
-        configPath: path(`${productHome}/config.toml`),
-        activationPath: path(`${productHome}/state/lifecycle-activation.json`),
-        manifestPath,
-        repositoryRoot: null,
-        plistPaths: [],
-      },
-      participants: {
-        foundation: [
-          participantRef({
-            id: markerForward,
-            slot: "uninstall_marker",
-            role: { kind: "forward", compensationId: markerCompensation },
-          }),
-          participantRef({
-            id: markerCompensation,
-            slot: "uninstall_marker",
-            role: { kind: "compensation", forwardId: markerForward },
-          }),
-          participantRef({
-            id: artifactsForward,
-            slot: "uninstall_artifacts",
-            role: { kind: "forward", compensationId: artifactsCompensation },
-          }),
-          participantRef({
-            id: artifactsCompensation,
-            slot: "uninstall_artifacts",
-            role: { kind: "compensation", forwardId: artifactsForward },
-          }),
-        ].sort((left, right) => (left.id < right.id ? -1 : 1)),
-        manifest,
-        sourceGitEffect: null,
-        destinationGitEffect: null,
-        launchdBeforeFiles: null,
-        launchdAfterFiles: null,
-        launchd: null,
-        redactionKey,
-      },
-      push: null,
-      steps,
-    },
-  };
 }
 
 function journalFor(
