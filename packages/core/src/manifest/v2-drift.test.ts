@@ -6,8 +6,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { inspectDrift, renderInstructionBlock } from "./index.js";
-import type { DriftRequestV2, InstallationManifestV2, ManagedArtifactV2 } from "./index.js";
+import { buildConflictEvidence, inspectDrift, ManifestStateError, renderInstructionBlock } from "./index.js";
+import type { ConflictEvidenceRequest, DriftRequestV2, InstallationManifestV2, ManagedArtifactV2 } from "./index.js";
 
 const hash = (bytes: string): string => createHash("sha256").update(bytes).digest("hex");
 const guards = { assertReadable: (path: string): Promise<string> => Promise.resolve(path) };
@@ -282,6 +282,67 @@ describe("V2 manifest drift", () => {
         await nodeFs.mkdir(path);
         await expect(inspectDrift(request(blockRow(path)))).resolves.toMatchObject([{ kind: "type_changed" }]);
       } finally { await nodeFs.rm(root, { recursive: true, force: true }); }
+    });
+  });
+
+  describe("block conflict evidence", () => {
+    const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
+    const hashOf = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");
+    const render = (body: string): Uint8Array => renderInstructionBlock({ productHome: "/synthetic/product", vendor: "codex", body });
+    const base = render("installed-rule\n");
+    type BlockRow = Extract<ConflictEvidenceRequest, { block: unknown }>["block"]["artifact"];
+    const blockRow = (backupRelativePath: string | null = null): BlockRow => artifact("/synthetic/home/.codex/AGENTS.md", {
+      owner: "codex", kind: "instruction", mergeStrategy: "marked-block", backupRelativePath,
+      instruction: { category: "vendor-file", id: "agents-md", source: "default", members: [{ category: "rule", id: "careful", source: "default", sha256: hashOf(encode("installed-rule\n")) }] },
+      verification: { mode: "block", blockHash: hashOf(base) },
+    }) as BlockRow;
+    const noFs = new Proxy({}, { get: (): never => { throw new Error("the block arm must not touch the filesystem"); } }) as typeof nodeFs;
+    const noGuards = { assertReadable: (): Promise<never> => Promise.reject(new Error("the block arm must not read a path")) };
+    const evidence = (current: Uint8Array, proposedBlock: Uint8Array, options: { readonly row?: BlockRow; readonly redact?: (text: string) => string } = {}) => buildConflictEvidence({
+      block: { artifact: options.row ?? blockRow(), fileBytes: new Uint8Array([...encode("user top\r\n"), ...current, ...encode("user bottom")]), proposedBlock },
+      fs: noFs, guards: noGuards, redactDiagnostic: options.redact ?? ((text) => text),
+    });
+
+    it("reports the base, current and proposed block hashes and a redacted current-to-proposed diff", async () => {
+      const current = render("installed-rule\nuser-added synthetic-secret-token\n");
+      const proposed = render("proposed-rule\n");
+      const result = await evidence(current, proposed, { redact: (text) => text.replaceAll("synthetic-secret-token", "[REDACTED]") });
+      expect(result).toMatchObject({
+        path: "/synthetic/home/.codex/AGENTS.md",
+        baselineBackupRelativePath: null,
+        baselineHash: hashOf(base),
+        currentHash: hashOf(current),
+        proposedHash: hashOf(proposed),
+      });
+      expect(result.diff).toMatch(/^@@ -\d+,\d+ \+\d+,\d+ @@$/mu);
+      expect(result.diff).toContain("-installed-rule");
+      expect(result.diff).toContain("+proposed-rule");
+      expect(result.diff).toContain("[REDACTED]");
+      expect(result.diff).not.toContain("synthetic-secret-token");
+      expect(result.diff).not.toContain("user top");
+      expect(result.diff).not.toContain("user bottom");
+    });
+
+    it("names the row's whole-file backup without reading it", async () => {
+      await expect(evidence(render("edited\n"), base, { row: blockRow("backups/7.bin") })).resolves.toMatchObject({ baselineBackupRelativePath: "backups/7.bin", baselineHash: hashOf(base) });
+    });
+
+    it.each([
+      ["oversized bytes", (): Uint8Array => render(`${"x".repeat(1024 * 1024)}\n`), "[content too large to diff]"],
+      ["too many lines", (): Uint8Array => render("line\n".repeat(1001)), "[content too large to diff]"],
+      ["binary content", (): Uint8Array => render("nul\u0000byte\n"), "[binary content omitted]"],
+    ])("keeps the %s notice", async (_name, proposed, notice) => {
+      const proposedBlock = proposed();
+      const result = await evidence(render("edited\n"), proposedBlock);
+      expect(result.diff).toBe(notice);
+      expect(result.proposedHash).toBe(hashOf(proposedBlock));
+    });
+
+    it.each([
+      ["absent", encode("")],
+      ["malformed", encode("<!-- developer-os:begin v1 -->\n")],
+    ])("refuses a file whose markers are %s", async (_name, current) => {
+      await expect(evidence(current, base)).rejects.toBeInstanceOf(ManifestStateError);
     });
   });
 });

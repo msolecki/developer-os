@@ -909,6 +909,34 @@ describe("buildConflictEvidence", () => {
     }
   });
 
+  it.each([
+    ["oversized bytes", `${"x".repeat(1024 * 1024 + 1)}\n`, "[content too large to diff]"],
+    ["too many lines", "line\n".repeat(1001), "[content too large to diff]"],
+    ["binary content", "nul\u0000byte\n", "[binary content omitted]"],
+  ])("keeps the %s notice", async (_name, proposed, notice) => {
+    const fixture = await createFixture("conflict-notice");
+    const filePath = join(fixture.homeDir, "settings.json");
+    const backupsDir = join(fixture.root, "backups");
+
+    try {
+      await nodeFs.mkdir(backupsDir, { recursive: true, mode: 0o700 });
+      await nodeFs.writeFile(filePath, CURRENT_TEXT, { mode: 0o600 });
+
+      const evidence = await buildConflictEvidence({
+        artifact: artifact({ path: filePath, existedBefore: false, beforeHash: null, backupRelativePath: null }),
+        backupsDir,
+        proposed: new TextEncoder().encode(proposed),
+        fs: nodeFs,
+        guards: allowAll,
+        redactDiagnostic: (text) => text,
+      });
+
+      expect(evidence.diff).toBe(notice);
+    } finally {
+      await removeFixture(fixture);
+    }
+  });
+
   it("reports a null baseline for an artifact that did not exist before install", async () => {
     const fixture = await createFixture("conflict-created");
     const filePath = join(fixture.homeDir, "agent.md");

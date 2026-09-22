@@ -225,11 +225,22 @@ export interface DriftRequestV2 {
   readonly ephemerals: ManagedArtifactEphemeralRegistryV1;
 }
 
-export interface ConflictEvidenceRequest {
-  readonly artifact: ManagedArtifactV1;
-  readonly backupsDir: string;
-  readonly proposed: Uint8Array;
-  readonly fs: DriftFileSystem;
-  readonly guards: ManifestGuards;
-  readonly redactDiagnostic: (text: string) => string;
-}
+export type ConflictEvidenceRequest =
+  | {
+    readonly artifact: ManagedArtifactV1;
+    readonly backupsDir: string;
+    readonly proposed: Uint8Array;
+    readonly fs: DriftFileSystem;
+    readonly guards: ManifestGuards;
+    readonly redactDiagnostic: (text: string) => string;
+  }
+  | {
+    readonly block: {
+      readonly artifact: Extract<ManagedArtifactV2, { readonly kind: "instruction"; readonly verification: { readonly mode: "block" } }>;
+      readonly fileBytes: Uint8Array;
+      readonly proposedBlock: Uint8Array;
+    };
+    readonly fs: DriftFileSystem;
+    readonly guards: ManifestGuards;
+    readonly redactDiagnostic: (text: string) => string;
+  };

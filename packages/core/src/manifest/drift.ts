@@ -436,6 +436,19 @@ function resolveBackupPath(backupsDir: string, relativePath: string): string {
 export async function buildConflictEvidence(
   request: ConflictEvidenceRequest,
 ): Promise<ConflictEvidence> {
+  if ("block" in request) {
+    const { artifact, fileBytes, proposedBlock } = request.block;
+    const extraction = extractInstructionBlock(fileBytes);
+    if (extraction.kind !== "present") throw new ManifestStateError();
+    return {
+      path: artifact.path,
+      baselineBackupRelativePath: artifact.backupRelativePath,
+      baselineHash: artifact.verification.blockHash,
+      currentHash: hashBytes(extraction.block),
+      proposedHash: hashBytes(proposedBlock),
+      diff: request.redactDiagnostic(unifiedDiffBody(extraction.block, proposedBlock)),
+    };
+  }
   const { artifact, backupsDir, proposed, fs, guards, redactDiagnostic } = request;
 
   let baselineHash: string | null = null;
