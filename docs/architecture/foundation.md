@@ -923,3 +923,119 @@ red was entirely clock, not code. The budget now lives in one place,
 `300_000` repeated at 24 sites across six files with a private copy of the same name in
 `executor.test.ts`. Lower it only against a measurement taken on the slowest machine that runs
 it.
+
+## 10. Lifecycle kernel (Spec 1a)
+
+Plan 1a (`docs/superpowers/plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`, Tasks 1–25) shipped
+the code this section describes. §4's "active opt-in-surfaces design … normative; implementation
+remains pending" no longer holds for the surfaces named here; what follows is the shipped contract,
+not the design intent. Git, launchd, automation reconciliation and network push are still design
+only — the last bullet below states exactly what refuses. This section cites files without lines, by
+this document's own convention; `foundation-constraints.md` and `threat-model.md` carry the exact
+`path:line` record for each claim below.
+
+- **The bookkeeping set and its shape admission.** `LIFECYCLE_BOOKKEEPING_RELATIVE_PATHS`
+  (`packages/core/src/lifecycle/bookkeeping.ts`) is the closed set — `state/.lifecycle.lock`, the
+  three journal roots, `state/transactions`, `staging`, `staging/lifecycle`, `staging/transactions`,
+  `backups`, `backups/transactions` — and it is never a manifest row and never removed by uninstall
+  (A12). Where no manifest exists, `inspectLifecycleBookkeepingShape` admits each member only by its
+  exact shape: the lock as an owner `0600` zero-byte single-link regular file, every directory owner
+  `0700`, and every child either a bookkeeping path, a retained-evidence path, an ancestor of one, or
+  a bootstrap-participant lock/staging entry named by `LifecycleBookkeepingResidueV1`. Shape grants no
+  authority by itself — a lock's liveness is decided only by acquiring it.
+- **The two present-manifest uninstall variants and their derivation (D24).** `deriveVariant`
+  (`apps/cli/src/lifecycle/uninstall.ts`) calls Core's `deriveUninstallLaunchdEvidence` on the
+  observed manifest's plist rows, the validated configuration's `automation.lifecycle` record, and
+  the activation record; it never hand-computes the disjunction. Plan 1a admits only
+  `uninstall/present_manifest_without_launchd` (a null launchd arm, empty `plistPaths`,
+  `previewHash: null`); the `uninstall/present_manifest` (`P`) row a plist or an active automation
+  arm would select refuses `unsupported_until_plan_1b` (roadmap plan
+  `docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md`, D24). The variant is
+  derived once, at planning time, because the evidence it reads is gone by the time recovery would
+  need to re-derive it; the plan hash binds the shape instead.
+- **The empty-directory removal inside `M(finalize_tombstones)` (D25).** `finalizeUninstallTombstones`
+  (`apps/cli/src/lifecycle/uninstall.ts`) authenticates the preimage manifest by SHA-256 against the
+  tombstone alone — never a live read — then removes every directory row of that preimage, deepest
+  first, through the guarded `removeDirectories`, excluding the bookkeeping set. A non-empty
+  directory is preserved and reported rather than emptied; recovery re-derives the same list from the
+  still-present tombstone, so a death mid-removal resumes deterministically.
+- **The `mf` reservation order (D28).** The manifest participant's allocated ID is reserved last in
+  the coordinator's one contiguous ID block, after `lc` and every `tx` ID: `formatAllocatedLifecycleId`
+  is called with `"mf"` only once the four Foundation IDs are already bound
+  (`apps/cli/src/lifecycle/uninstall.ts`). The reserved-prefix order for the present-manifest,
+  no-launchd coordinator is exactly `lc, tx, tx, tx, tx, mf`.
+- **The capacity refusal (D26).** `MAX_ARTIFACT_MUTATIONS` is 256 (`apps/cli/src/lifecycle/uninstall.ts`);
+  `LifecycleUninstaller.preview` throws `UninstallCapacityError` (`reason:
+  "uninstall_artifact_capacity_exceeded"`, exit 4) before any ID is reserved when the partitioned
+  artifact mutations exceed it. A release bundle over roughly 197 files cannot be uninstalled until
+  Phase 4b decides the durable cap (`BACKLOG.md` NEW-85).
+- **The non-creating global lock and lock order.** `packages/core/src/lifecycle/locks.ts` states the
+  rule its types enforce: the global lock at `state/.lifecycle.lock` is created only by Spec 2's
+  fresh `init`, so every other acquirer opens an existing path without `O_CREAT` and refuses
+  `lifecycle_lock_missing` or `lifecycle_lock_busy` (both exit 6) rather than creating or waiting past
+  a deadline. `MacOsStableLockProvider.acquireExisting` (`packages/platform-macos/src/stable-lock.ts`)
+  opens with `O_RDWR | O_NOFOLLOW` and nothing else — no `O_CREAT` appears anywhere in that class.
+  The creating provider, `MacOsTransactionLockProvider` (`packages/platform-macos/src/transaction-lock.ts`),
+  is wired as `transactionLocks`/`lockProvider` in the CLI's production composition root
+  (`apps/cli/src/context.ts`), and the one call site that uses it to create the global lock is the
+  fresh-`init` executor's `acquireLifecycleLock` (`apps/cli/src/bootstrap/executor.ts`); every
+  lifecycle service reached after install — the mutation gate, `config`, uninstall and its
+  recovery-only arm — acquires the same path only through `MacOsStableLockProvider`. Order (Global
+  Constraints): runner lease → global → transaction-specific; uninstall acquires leases only while
+  holding no global lock, and its lease drain is bounded by one absolute ten-minute deadline.
+- **Structural V2 admission.** `admitInstalledV2Home` (`apps/cli/src/lifecycle/admission.ts`)
+  replaced the deleted `admitV2Handoff`; §4 above ("`admitInstalledV2Home` admits an installed V2
+  home structurally") already carries its full contract and refusal table, including the closed
+  `V2HomeAdmissionReasonV1` union and `LIFECYCLE_RESERVATION_ROWS`'s 52 exact entries.
+- **The mutation gate every V2 Foundation mutator passes through** (`apps/cli/src/lifecycle/mutation-gate.ts`).
+  `withLifecycleMutation` runs, under one held global lock acquired with `acquireExisting` (never
+  `O_CREAT`): re-admission and lock identity agreement, `requireLifecycleStagingRoot`,
+  `LifecycleRecoveryService.recover(global, { resumeUninstall: false, standaloneFoundationId })`, a
+  closure requirement of `clear` — or, for `repair`, that the one non-terminal standalone Foundation
+  journal named by `resolution.standaloneFoundationId` is the *only* non-clear item
+  (`requireResolvedClosure`) — and only then `assertLifecycleCapacity` plus
+  `reserveLifecycleIdBlock(1)` inside `allocateStandaloneFoundationId`, which issues exactly one
+  allocated `tx_<nonce>_<counter>` ID per mutation and throws on a second call (`live`/`allocatedIdOnce`).
+  `capture`, `ingest`, `review`, `reindex`, `config set` and the V2 downcast `uninstall` (until Task
+  22 replaced it with a coordinator) all reach it via `createGatedTransactionExecutor`; `repair
+  --resume|--rollback <id>` is the explicit resolution of exactly that standalone journal, dispatched
+  from `apps/cli/src/commands/repair.ts`. A non-terminal standalone Foundation journal outside that
+  resolution, or a non-terminal uninstall coordinator, refuses exit 6 naming `developer-os repair
+  --resume <id>`/`--rollback <id>` or `developer-os uninstall`. The `retry_only` closure kind
+  (`packages/core/src/lifecycle/ledger.ts`, `classify`) is the healthy, retryable state of a
+  coordinator stuck on a refused `network_push`/`destination_git_effect` step — plan 1a refuses
+  those arms outright (below), so `retry_only` is reachable only through synthetic core-level tests
+  today — and commit `11f1b55` (`packages/core/src/lifecycle/recovery.ts`) fixed `recover()`'s
+  `collectCoordinator` to leave such a coordinator alone rather than throw
+  `lifecycle_coordinator_not_terminal`, by reusing the inspected snapshot's own `closure` instead of
+  re-deriving the condition.
+- **The closed `config` key and result grammar.** `CONFIG_MUTABLE_KEYS` and `ConfigRefusalReasonV1`
+  (`packages/core/src/config/keys.ts`) are the closed sets `runConfig`
+  (`apps/cli/src/commands/config.ts`) reads and refuses against. `admitV2Home` refuses a V1 manifest
+  with `manifest_v1_not_migratable` (exit 4) before any lock, and a manifest-absent home takes the
+  existing global lock only to reclassify and release it (`reclassifyUnderGlobalLock`), never to
+  create one. `get` on a V2 home takes no lock; `set` runs one standalone Foundation transaction
+  through `withLifecycleMutation`, guarded by the pre-read `expectedBeforeHash` (`applyConfigValue`).
+  Success output is exactly `encodeCanonicalJson(result)`, with or without `--json`; refusals use the
+  standing error envelope.
+- **The uninstall variants, point of no return, lease drain, and absent-manifest arms.**
+  `LifecycleUninstaller` (`apps/cli/src/lifecycle/uninstall.ts`) plans and executes the
+  present-manifest coordinator described above; `dispatchUninstall`
+  (`apps/cli/src/lifecycle/uninstall-recovery.ts`) routes a V1 manifest to the unchanged Foundation
+  path, a V2 manifest to that coordinator (resuming a non-terminal one rather than starting a
+  second), a missing manifest with a live uninstall coordinator to the recovery-only arm
+  (`admitRecoveryOnlyUninstall`, admitting only `compensation`, `force_forward` or `envelope_suffix`
+  per §2.1's microstates), and a missing manifest with nothing of ours to the absent-manifest arms —
+  which never acquire the permanent global lock. `runAbsentManifestUninstall`
+  (`apps/cli/src/lifecycle/absent-manifest-uninstall.ts`) has no coordinator envelope at all (A3):
+  `key_absent` performs two identical read-only walks and creates nothing; `key_present` acquires
+  only the transient bootstrap leaf, repeats the walk under it, and deletes the redaction key by
+  rechecked `dev`/`ino` identity without reading a byte of it. Any other residue — V1 Foundation
+  leftovers, a plist, an attributed bootstrap leaf — refuses exit 6 with D20's archive guidance and
+  changes nothing.
+- **What is refused until plan 1b.** `LifecycleUnsupportedLeafError`
+  (`apps/cli/src/lifecycle/codecs.ts`) publishes reason `unsupported_until_plan_1b` (exit 4,
+  `capabilityUnavailable`) for `UNSUPPORTED_STEP_KINDS` (`source_git_effect`, `destination_git_effect`,
+  `launchd_before_files`, `launchd_after_files`, `network_push`) and for any non-null launchd or push
+  arm. No plan 1a code path spawns Git or `launchctl`, opens a network connection, or invokes a
+  vendor.
