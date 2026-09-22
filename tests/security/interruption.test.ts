@@ -5,6 +5,7 @@ import { EXIT_CODES } from "@developer-os/core";
 import type { TransactionPhase } from "@developer-os/core";
 import { runCapture } from "@developer-os/cli/dist/commands/capture.js";
 import { runImport } from "@developer-os/cli/dist/commands/import.js";
+import { runRefactor } from "@developer-os/cli/dist/commands/refactor.js";
 import { runRepair } from "@developer-os/cli/dist/commands/repair.js";
 import {
   listIncompleteTransactions,
@@ -414,5 +415,96 @@ describe("what this suite drove", () => {
    */
   it("stranded a backup payload in at least one finalized interruption", () => {
     expect(strandedAtFinalized).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * **A `brain refactor` interrupted at each of the seven forward phases**, kept apart
+ * from the sweep above: `TARGETS`, `expectedStatus` and `EXPECTED_COVERAGE` describe
+ * a capture, and a rename has none. Its referrer makes the transaction replace an
+ * existing note, so it writes a backup payload and the `finalized` case strands one.
+ *
+ * Placed after "what this suite drove" on purpose: `assertDoctorReports` counts into
+ * `strandedAtFinalized`, and a refactor counted first would keep that case green
+ * through a regression in the six capture targets.
+ */
+const REFACTOR_PHASES: readonly TransactionPhase[] = [
+  "planned",
+  "backed_up",
+  "staged",
+  "validated",
+  "applied",
+  "verified",
+  "finalized",
+];
+
+const MOVED = "TOOLS/example-reference-note.md";
+const RENAMED = "TOOLS/brain-commands.md";
+const REFERRER = "DEV/example-knowledge-note.md";
+
+const droveRefactor = new Set<string>();
+
+describe("a brain refactor interrupted at every forward phase", () => {
+  it.each(REFACTOR_PHASES)(
+    "leaves a --rename with a referrer recoverable when it is killed at %s",
+    async (phase) => {
+      const armed = { value: true };
+      const fixture = await installSecurityFixture(`interrupt-brain-refactor-${phase}`, {
+        afterPhase: interruptAfter(phase, "brain-refactor", armed),
+      });
+      const moved = join(fixture.content, MOVED);
+      const renamed = join(fixture.content, RENAMED);
+      const referrer = join(fixture.content, REFERRER);
+      const movedBefore = await readFile(moved, "utf8");
+      const referrerBefore = await readFile(referrer, "utf8");
+      expect(referrerBefore).toContain("[[TOOLS/example-reference-note]]");
+
+      const result = await runRefactor(fixture.context, {
+        subcommand: "refactor",
+        request: { mode: "rename", note: MOVED, newName: "brain-commands.md" },
+        dryRun: false,
+      });
+      expect(result.ok, "the interruption must reach the caller").toBe(false);
+
+      await assertDoctorReports(fixture, phase);
+      armed.value = false;
+
+      if (phase === "finalized") {
+        await expect(readFile(renamed, "utf8")).resolves.toBe(movedBefore);
+        await expect(readFile(moved)).rejects.toMatchObject({ code: "ENOENT" });
+        const rewritten = await readFile(referrer, "utf8");
+        expect(rewritten).toContain("[[brain-commands]]");
+        expect(rewritten).not.toContain("[[TOOLS/example-reference-note]]");
+      } else {
+        const [journal] = await listIncompleteTransactions(fixture.context);
+        expect(journal, "an interrupted refactor must leave a journal").toBeDefined();
+        const repaired = await runRepair(fixture.context, {
+          resume: null,
+          rollback: journal?.id ?? "",
+        });
+        expect(repaired.ok, "the interrupted refactor must roll back").toBe(true);
+        await expect(readFile(moved, "utf8")).resolves.toBe(movedBefore);
+        await expect(readFile(referrer, "utf8")).resolves.toBe(referrerBefore);
+        await expect(readFile(renamed)).rejects.toMatchObject({ code: "ENOENT" });
+      }
+      droveRefactor.add(phase);
+    },
+  );
+});
+
+describe("what the brain refactor sweep drove", () => {
+  it("interrupted the brain-refactor transaction at each of the seven phases, and nothing else", () => {
+    expect(droveRefactor.size, "a sweep that drove nothing is not a sweep").toBeGreaterThan(0);
+    expect([...droveRefactor].sort()).toStrictEqual(
+      [
+        "planned",
+        "backed_up",
+        "staged",
+        "validated",
+        "applied",
+        "verified",
+        "finalized",
+      ].sort(),
+    );
   });
 });
