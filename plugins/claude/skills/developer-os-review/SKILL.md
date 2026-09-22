@@ -1,9 +1,9 @@
 ---
 name: "developer-os-review"
-description: "Accept, edit, or reject quarantined captures. Never deletes a source."
+description: "List captures at one status, quarantined by default, and accept, edit, or reject one; reject also withdraws an accepted capture. Never deletes a source."
 ---
 
-<!-- Generated from workflows/review/workflow.yaml (review@2.0.0). Do not edit. -->
+<!-- Generated from workflows/review/workflow.yaml (review@2.1.0). Do not edit. -->
 
 <!-- preamble from shared; concatenated, not referenced -->
 
@@ -21,7 +21,7 @@ description: "Accept, edit, or reject quarantined captures. Never deletes a sour
 # review
 
 - **Refuse** (vault-missing, exit 1): No vault was found. Run developer-os init first.
-- **Refuse** (input-invalid, exit 2): A decision must be accept, edit, or reject.
+- **Refuse** (input-invalid, exit 2): A decision must be accept, edit, or reject, and a status must be quarantined, accepted, rejected, staging, ingested, or failed. A status is never combined with a decision.
 - **Refuse** (scope-violation, exit 5): Review changes a capture's status and never deletes its source.
 
 ## Steps
@@ -32,6 +32,10 @@ Effect: `capture.list`
 
 ```text
 developer-os review
+```
+
+```json
+{"status":"$input.status"}
 ```
 
 ### decide
