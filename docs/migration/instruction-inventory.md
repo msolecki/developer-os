@@ -43,11 +43,16 @@ absence is a decision).
 | Subagents | 5 | `code-reviewer`, `performance-engineer`, `qa-expert`, `research-analyst`, `security-auditor` | Claude: `agents/` in the plugin. Codex: generated `~/.codex/agents/<name>.toml` (the legacy generator was deleted on 2026-07-27; regenerate from the Markdown source). |
 | Skills | 19 | `analizer`, `brain-search`, `bug-triage`, `claudeception`, `client-onboarding`, `code-review`, `deploy-checklist`, `fix-pr`, `implementator`, `nextjs-removeconsole-computed-access-survives`, `przeglad-claudemd`, `react-best-practices`, `recovering-killed-claude-workflow-results`, `release`, `rev-eng`, `spec`, `url-construction-silent-footguns`, `weekly-report`, `wrap-up` | Both vendors: skills beside the six product workflows. `brain-search` is **partial** today (the product's `developer-os-brain-search` calls the CLI instead of reading index files). `react-best-practices` is vendored third-party content with its own license file; keep the attribution. |
 
-**Dispositions (D51, 2026-09-22):** `release`, `rev-eng`, `wrap-up` (command and skill) and
-`brain-search` are disabled in the legacy runtime → **refused**. `react-best-practices`
-(`vercel-labs/agent-skills`) and `claudeception` (`blader/Claudeception`) are third-party →
-**refused as vendored defaults**; documented as recommended upstream installs, the founder keeps a
-local override.
+**Dispositions (D51, 2026-09-22):** names from the table above that do not ship as defaults.
+
+| Name | Reason | Status |
+|---|---|---|
+| `release` | command and skill disabled in the legacy runtime | refused (D51) |
+| `rev-eng` | command and skill disabled in the legacy runtime | refused (D51) |
+| `wrap-up` | command and skill disabled in the legacy runtime | refused (D51) |
+| `brain-search` | disabled in the legacy runtime | refused (D51) |
+| `react-best-practices` | third-party (`vercel-labs/agent-skills`): not vendored; documented as a recommended upstream install, the founder keeps a local override | refused (D51) |
+| `claudeception` | third-party (`blader/Claudeception`): not vendored; documented as a recommended upstream install, the founder keeps a local override | refused (D51) |
 
 Vendor instruction files (2): the user's global `CLAUDE.md` import block and `~/.codex/AGENTS.md`.
 The product currently writes neither (`docs/architecture/codex-adapter.md` §2 forbids

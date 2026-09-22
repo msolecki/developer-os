@@ -18,17 +18,24 @@ function section(number: number): string {
   return INVENTORY.slice(start, end < 0 ? undefined : end);
 }
 
-function tableRows(text: string): readonly (readonly string[])[] {
+/** Each Markdown table in `text`, as rows of cells without the header and divider lines. */
+function tables(text: string): readonly (readonly (readonly string[])[])[] {
   return text
-    .split("\n")
-    .filter((line) => line.startsWith("|"))
-    .slice(2)
-    .map((line) =>
-      line
-        .slice(1, -1)
-        .split(/(?<!\\)\|/u)
-        .map((cell) => cell.trim()),
+    .split(/\n(?!\|)/u)
+    .map((block) => block.split("\n").filter((line) => line.startsWith("|")))
+    .filter((lines) => lines.length > 2)
+    .map((lines) =>
+      lines.slice(2).map((line) =>
+        line
+          .slice(1, -1)
+          .split(/(?<!\\)\|/u)
+          .map((cell) => cell.trim()),
+      ),
     );
+}
+
+function tableRows(text: string): readonly (readonly string[])[] {
+  return tables(text)[0] ?? [];
 }
 
 function ticks(text: string): readonly string[] {
@@ -45,9 +52,14 @@ function expectedLegacyNames(): ReadonlySet<string> {
     .map((row) => ticks(row[0] ?? "")[0] ?? "");
   const styleSentence = (section(2).split("\n\n")[1] ?? "").split(". ")[0] ?? "";
   const styles = ticks(styleSentence).filter((name) => BARE_NAME.test(name));
-  const plugin = tableRows(section(3)).flatMap((row) =>
-    ticks(row[2] ?? "").filter((name) => BARE_NAME.test(name)),
+  const [pluginTable = [], dispositions = []] = tables(section(3));
+  const pluginRefusals = new Set(
+    dispositions.filter(refused).map((row) => ticks(row[0] ?? "")[0] ?? ""),
   );
+  const plugin = pluginTable
+    .flatMap((row) => ticks(row[2] ?? "").filter((name) => BARE_NAME.test(name)))
+    .filter((name) => !pluginRefusals.has(name));
+  // D51 refused every §7 row; a future "skills in A12" row that is not refused joins the set.
   const research = tableRows(section(7))
     .filter((row) => (row[1] ?? "").startsWith("skills in A12") && !refused(row))
     .flatMap((row) => ticks(row[0] ?? ""));
@@ -56,13 +68,11 @@ function expectedLegacyNames(): ReadonlySet<string> {
     ["§1", rules],
     ["§2", styles],
     ["§3", plugin],
-    ["§7", research],
+    ["§3 dispositions", [...pluginRefusals]],
   ] as const) {
     expect(names.length, `${label} yielded no names`).toBeGreaterThan(0);
   }
-  const expected = new Set([...rules, ...styles, ...plugin, ...research]);
-  expected.delete("brain-search");
-  return expected;
+  return new Set([...rules, ...styles, ...plugin, ...research]);
 }
 
 describe("the catalog covers the inventory (spec §9, §10.2)", () => {
@@ -75,11 +85,23 @@ describe("the catalog covers the inventory (spec §9, §10.2)", () => {
       "analizer",
       "code-reviewer",
       "weekly-report",
-      "excalidraw-diagram",
+      "rules-lazy/lessons-code.md",
     ]) {
       expect(expected, name).toContain(name);
     }
-    expect(expected).not.toContain("brain-search");
+    for (const name of [
+      "brain-search",
+      "release",
+      "rev-eng",
+      "wrap-up",
+      "react-best-practices",
+      "claudeception",
+      "excalidraw-diagram",
+      "research",
+    ]) {
+      expect(expected, name).not.toContain(name);
+    }
+    expect(expected.size).toBe(33);
   });
 
   it("lists every inventoried artifact exactly once", () => {
