@@ -2,6 +2,7 @@ import { EXIT_CODES } from "@developer-os/core";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { renderPath } from "../../context.js";
+import type { UpdateApplyPortsV1 } from "../../update/apply.js";
 import { planRollback, planUpdate, UpdatePlanningRefusal } from "../../update/planning.js";
 import { createUpdateFixture, FILE_A_PATH, unreachableUpdateContext } from "../../update/testing.js";
 import { createCommandFixture, removeCommandFixtures } from "../testing.js";
@@ -71,6 +72,38 @@ describe("runUpdate", () => {
     }
   });
 
+  it("keeps rollback --apply unavailable even when apply ports are bound", async () => {
+    const fixture = await createCommandFixture("update-rollback-apply");
+    const context = { ...fixture.context, update: { ...unreachableUpdateContext(), apply: unreachableApplyPorts() } };
+    const result = await runUpdate(context, { kind: "rollback", apply: true, json: false });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe(EXIT_CODES.capabilityUnavailable);
+    if (!result.ok) expect(result.error.kind).toBe("update_apply_unavailable");
+  });
+
+  it("recovers update residue under the lock before planning an apply, and applies nothing when up to date", async () => {
+    const commandFixture = await createCommandFixture("update-apply-current");
+    const update = createUpdateFixture({ latestVersion: "1.0.0" });
+    const calls: string[] = [];
+    const apply: UpdateApplyPortsV1 = {
+      ...unreachableApplyPorts(),
+      withGlobalLock: async (work) => {
+        calls.push("lock");
+        return work();
+      },
+      closure: () => {
+        calls.push("closure");
+        return Promise.resolve({ kind: "clear" });
+      },
+    };
+    const result = await runUpdate({ ...commandFixture.context, update: { ...update.update, apply } }, { kind: "update", version: null, apply: true, json: false });
+
+    expect(result.ok && result.data.outcome).toBe("up_to_date");
+    expect(calls).toStrictEqual(["lock", "closure"]);
+    expect(update.events.indexOf("home")).toBeGreaterThan(-1);
+  });
+
   it("returns the plan-only arms through the injected ports", async () => {
     const commandFixture = await createCommandFixture("update-run");
     const update = createUpdateFixture({ active: "1.1.0", rollbackPrevious: "1.0.0", releases: [{ version: "1.0.0", sequence: "1" }, { version: "1.1.0", sequence: "2" }, { version: "1.2.0", sequence: "3" }] });
@@ -99,6 +132,23 @@ describe("runUpdate", () => {
     expect(update.requests).toStrictEqual([]);
   });
 });
+
+/** Apply ports that fail loudly: a test that reaches one proves the routing is wrong. */
+function unreachableApplyPorts(): UpdateApplyPortsV1 {
+  const never = (): never => {
+    throw new Error("an apply port was reached");
+  };
+  return {
+    withGlobalLock: never,
+    closure: never,
+    allocate: never,
+    compose: never,
+    construction: never,
+    coordinator: never,
+    envelope: { isEnvelopeSuffix: never, completeEnvelopeSuffix: never },
+    executorCleanup: never,
+  };
+}
 
 describe("renderUpdate", () => {
   it("renders every changed path of the typed preview through renderPath and prints no private hash", async () => {

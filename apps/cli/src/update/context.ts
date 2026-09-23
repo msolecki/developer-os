@@ -88,6 +88,7 @@ import { admitInstalledV2Home } from "../lifecycle/admission.js";
 import { lifecycleHomeKeyFromAdmission, residueFrom } from "../lifecycle/context.js";
 import type { CliLifecycleContext } from "../lifecycle/context.js";
 import { gateManifestAdmission } from "../lifecycle/mutation-gate.js";
+import type { UpdateApplyPortsV1 } from "./apply.js";
 import {
   MAXIMUM_ROLLBACK_RECORD_BYTES,
   UpdatePlanningRefusal,
@@ -142,6 +143,13 @@ export interface CliUpdateContext {
   readonly readRollbackEvidence: (home: UpdateHomeV1, record: RollbackRecordV1) => Promise<RetainedRollbackEvidenceV1>;
   readonly capacity: () => Promise<UpdateCapacityObservationV1>;
   readonly admitManifest: (value: unknown) => InstallationManifestV2;
+  /**
+   * `--apply`'s mutation authority; absent, `update --apply` refuses before any port is reached.
+   * Production leaves it unbound: the leaf-plan composition needs Core contracts that do not yet
+   * line up (Foundation V2 staging paths, state-postimage identities, the retirement leaf codec,
+   * and a V2-aware ledger), so the apply orchestration runs only over injected ports for now.
+   */
+  readonly apply?: UpdateApplyPortsV1;
 }
 
 const MAX_RELEASE_RECORD_BYTES = 16 * 1024;

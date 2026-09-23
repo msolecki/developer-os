@@ -85,6 +85,13 @@ describe("readHome", () => {
   });
 });
 
+describe("apply ports", () => {
+  it("leaves --apply unbound in production so the command refuses before any port", async () => {
+    const fixture = await createCommandFixture("update-apply-unbound");
+    expect(createCliUpdateContext(fixture.context).apply).toBeUndefined();
+  });
+});
+
 describe("snapshot", () => {
   it("tokenizes the complete manifest in owner/path order and keeps every root off the wire", async () => {
     const fixture = await installed("update-snapshot");

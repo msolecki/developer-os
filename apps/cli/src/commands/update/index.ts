@@ -9,8 +9,10 @@ import type {
 
 import { failureFrom, renderPath } from "../../context.js";
 import type { CliContext } from "../../context.js";
+import { applyUpdate, recoverUpdate } from "../../update/apply.js";
 import { createCliUpdateContext } from "../../update/context.js";
-import { planRollback, planUpdate, UpdatePlanningRefusal } from "../../update/planning.js";
+import type { CliUpdateContext } from "../../update/context.js";
+import { planRollback, planUpdate, prepareUpdate, UpdatePlanningRefusal } from "../../update/planning.js";
 import type { UpdateCommandResultV1 } from "../../update/planning.js";
 
 export type { UpdateCommandResultV1 } from "../../update/planning.js";
@@ -64,22 +66,41 @@ export function parseUpdateArgv(argv: readonly string[]): UpdateInvocationV1 | n
 }
 
 /**
- * Plan-only: `--apply` is part of the grammar so its parser never changes again, and refuses
- * as unavailable until the apply orchestration exists.
+ * `update --apply` heals any update residue first, previews with its scratch kept open, then
+ * applies that same in-memory candidate. An automatic rollback is a failure: nothing changed.
+ */
+async function runApply(update: CliUpdateContext, version: StableSemverV1 | null): Promise<CliResult<UpdateCommandResultV1>> {
+  await recoverUpdate(update);
+  const prepared = await prepareUpdate(update, { version });
+  if (prepared.apply === null) return success(prepared.result);
+  const applied = await applyUpdate(update, prepared.apply);
+  if (applied.outcome === "applied") return success(applied);
+  return failure(EXIT_CODES.operationalFailure, {
+    kind: "update_rolled_back_automatically",
+    message: applied.cause,
+    paths: [],
+    recovery: `Developer OS ${applied.active.version} is still active; run \`developer-os update\` to preview again`,
+  });
+}
+
+/**
+ * `update rollback --apply` stays unavailable until Task 25; `update --apply` needs the injected
+ * apply ports and refuses before any other port when they are absent.
  */
 export async function runUpdate(context: CliContext, invocation: UpdateInvocationV1): Promise<CliResult<UpdateCommandResultV1>> {
-  if (invocation.apply) {
-    return failure(EXIT_CODES.capabilityUnavailable, {
-      kind: "update_apply_unavailable",
-      message: "update_apply_unavailable",
-      paths: [],
-    });
-  }
+  const unavailable = (): CliResult<never> => failure(EXIT_CODES.capabilityUnavailable, {
+    kind: "update_apply_unavailable",
+    message: "update_apply_unavailable",
+    paths: [],
+  });
+  if (invocation.apply && invocation.kind === "rollback") return unavailable();
   const update = context.update ?? createCliUpdateContext(context);
+  if (invocation.apply && update.apply === undefined) return unavailable();
   try {
     if (invocation.kind === "rollback") {
       return success({ schemaVersion: 1, outcome: "rollback_preview", plan: await planRollback(update) });
     }
+    if (invocation.apply) return await runApply(update, invocation.version);
     return success((await planUpdate(update, { version: invocation.version })).result);
   } catch (error) {
     if (error instanceof UpdatePlanningRefusal) return failureFrom(context, error, error.paths, error.recovery);

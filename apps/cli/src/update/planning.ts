@@ -35,6 +35,7 @@ import type {
   PreparedInverseLeafInputV1,
   PreparedUpdateCandidateV1,
   ReleaseBundleManifestV1,
+  ReleaseBundleReferenceV1,
   ReleaseIdentityV1,
   ReleaseKeyDelegationV1,
   ReleaseMetadataIdentityV1,
@@ -59,13 +60,14 @@ import type {
   UpdatePlannerRequestV1,
   UpdatePlanPreviewV1,
   UpdateRollbackPreviewV1,
+  UtcTimestampV1,
   CanonicalProductStatePathV1,
 } from "@developer-os/core";
 import { verifyReleaseMetadataChain } from "@developer-os/security";
-import type { ReleaseIndexDocumentV1, ReleaseKeyDelegationDocumentV1 } from "@developer-os/security";
+import type { ReleaseIndexDocumentV1, ReleaseKeyDelegationDocumentV1, TargetPlannerRunResultV1, VerifiedScratchBundleV1 } from "@developer-os/security";
 
 import { compareManifestRows } from "../instructions/attach.js";
-import type { CliUpdateContext, UpdateTransportV1 } from "./context.js";
+import type { CliUpdateContext, UpdateScratchAttemptV1, UpdateTransportV1 } from "./context.js";
 
 /**
  * Spec 2 §7.3. `applied` and `rolled_back` belong to `--apply` (Task 24/25); the plan-only
@@ -115,6 +117,41 @@ export interface PlannedUpdateV1 {
   readonly result: Extract<UpdateCommandResultV1, { readonly outcome: "up_to_date" | "preview" }>;
   /** The private in-memory candidate an `--apply` in this same invocation consumes; never rendered. */
   readonly candidate: PreparedUpdateCandidateV1 | null;
+}
+
+/**
+ * Everything the planner request and preview hash over, fixed before the first run so the
+ * under-lock rerun is comparable. `observation` is null only before the first capacity read.
+ */
+export interface UpdateTargetInputsV1 {
+  readonly current: ReleaseIdentityV1;
+  readonly target: ReleaseIdentityV1;
+  readonly metadata: ReleaseMetadataIdentityV1;
+  readonly bundle: ReleaseBundleReferenceV1;
+  readonly bundleManifest: ReleaseBundleManifestV1;
+  readonly verified: VerifiedScratchBundleV1;
+  readonly transport: UpdateTransportV1;
+  readonly plannedAt: UtcTimestampV1;
+  readonly retained: RetainedRollbackEvidenceV1 | null;
+  readonly observation: UpdateCapacityObservationV1 | null;
+}
+
+export interface MaterializedUpdateV1 {
+  readonly snapshot: UpdatePlannerSnapshotV1;
+  readonly run: TargetPlannerRunResultV1;
+  readonly manifest: InstallationManifestV2;
+  readonly observation: UpdateCapacityObservationV1;
+  /** The aggregate feasibility input; the lock rechecks it against a fresh observation. */
+  readonly capacity: UpdateCapacityInputV1;
+  readonly candidate: PreparedUpdateCandidateV1;
+}
+
+/** One previewed update carried in memory to the lock; its scratch attempt is still open. */
+export interface PreparedUpdateApplyV1 {
+  readonly home: UpdateHomeV1;
+  readonly inputs: UpdateTargetInputsV1 & { readonly observation: UpdateCapacityObservationV1 };
+  readonly materialized: MaterializedUpdateV1;
+  readonly scratch: UpdateScratchAttemptV1;
 }
 
 /** A content-free refusal: the reason code is the whole message (Spec 2 §11). */
@@ -522,7 +559,23 @@ function capacityRefusal(error: unknown): never {
  * only network this product makes, then one guarded scratch attempt that is removed on every
  * exit path. Nothing durable is written; the candidate stays in memory.
  */
-export async function planUpdate(update: CliUpdateContext, request: { readonly version: StableSemverV1 | null }): Promise<PlannedUpdateV1> {
+export function planUpdate(update: CliUpdateContext, request: { readonly version: StableSemverV1 | null }): Promise<PlannedUpdateV1> {
+  return planUpdateAttempt(update, request, { retainScratch: false });
+}
+
+/**
+ * The same plan, but a preview keeps its verified scratch attempt open for `applyUpdate` in this
+ * invocation, which then owns its cleanup. An up-to-date home has nothing to apply.
+ */
+export async function prepareUpdate(update: CliUpdateContext, request: { readonly version: StableSemverV1 | null }): Promise<PlannedUpdateV1 & { readonly apply: PreparedUpdateApplyV1 | null }> {
+  return planUpdateAttempt(update, request, { retainScratch: true });
+}
+
+async function planUpdateAttempt(
+  update: CliUpdateContext,
+  request: { readonly version: StableSemverV1 | null },
+  options: { readonly retainScratch: boolean },
+): Promise<PlannedUpdateV1 & { readonly apply: PreparedUpdateApplyV1 | null }> {
   const home = await update.readHome();
   const current = releaseIdentityOf(home.active);
   const offline: OfflineReleaseTrustV1 = await update.readOfflineTrust();
@@ -552,7 +605,7 @@ export async function planUpdate(update: CliUpdateContext, request: { readonly v
     if (bundle?.manifestSha256 !== current.bundleManifestHash) refuse("update_release_identity_rebound", EXIT_CODES.securityRefusal);
     await classified("update_trust_replay", EXIT_CODES.securityRefusal, () =>
       advanceReleaseTrust(home.trust, { ...metadata, releaseSequence: current.releaseSequence, releaseIdentityHash: current.releaseIdentityHash }));
-    return { result: { schemaVersion: 1, outcome: "up_to_date", active: current }, candidate: null };
+    return { result: { schemaVersion: 1, outcome: "up_to_date", active: current }, candidate: null, apply: null };
   }
 
   const { selected } = selection;
@@ -601,55 +654,72 @@ export async function planUpdate(update: CliUpdateContext, request: { readonly v
     manifest: bundleManifest,
     maximumScratchBytes: MAXIMUM_SCRATCH_BYTES,
   });
+  let retainedScratch = false;
   try {
     await attempt.download((sink) => transport.get({ kind: "archive", delegation: delegationV1, bundle: selected.bundle, sink }));
     const verified = await attempt.extract(selected.bundle);
     const plannedAt = update.clock();
-    const snapshot = await update.snapshot(home, { current, target, plannedAt });
-    const run = await update.planner.run({
-      runtime: `${verified.root}/${bundleManifest.runtimeEntrypoint}`,
-      planner: `${verified.root}/${bundleManifest.plannerEntrypoint}`,
-      // ponytail: the verified extraction root, attempt-owned and read-only to the planner; a dedicated empty directory needs a scratch-grammar change.
-      cwd: verified.root,
-      request: snapshot.request,
-      inputBlobs: snapshot.inputBlobs,
-      remainingMilliseconds: transport.remainingMilliseconds(),
-    });
-
-    const manifest = concreteManifest(update, home, snapshot, run.draft, run.outputBlobs, target);
-    const bundleModes = new Map(bundleManifest.entries.flatMap((entry) => (entry.kind === "file" ? [[entry.path as string, entry.mode] as const] : [])));
-    const prepared = prepareInverse(snapshot, run.draft, run.outputBlobs, bundleModes);
-    const inventoryBytes = prepared.entries.reduce((sum, entry) => sum + entry.bytes, 0);
-    const participants = run.draft.ownerPlans.length + run.draft.migrations.length + 4;
-    const observation = await update.capacity();
-    const candidate = await classified("update_planner_output_invalid", EXIT_CODES.securityRefusal, () => {
-      try {
-        return materializePlannerDraft(snapshot.request, run.draft, run.outputBlobs, {
-          tokenPaths: snapshot.tokenPaths,
-          ownerRoots: snapshot.ownerRoots,
-          transcript: run.transcript,
-          metadata,
-          download: {
-            archiveBytes: selected.bundle.archiveBytes,
-            archiveSha256: selected.bundle.archiveSha256,
-            expandedBytes: parseUInt64Decimal(manifestTotals(bundleManifest).bytes.toString(10)),
-            entryCount: bundleManifest.entries.length,
-          },
-          retainedRollback: home.rollback === null || retained === null ? null : { release: home.rollback.previous, payload: retained.payload },
-          capacity: updateCapacity(observation, bundleManifest, selected.bundle.archiveBytes, prepared, inventoryBytes, participants),
-          concreteManifest: manifest as unknown as CanonicalJsonValue,
-          inverseLeaves: prepared.leaves,
-          inversePlan: prepared.inversePlan,
-          rollbackInventoryEntries: prepared.entries,
-        });
-      } catch (error) {
-        return capacityRefusal(error);
-      }
-    });
-    return { result: { schemaVersion: 1, outcome: "preview", plan: candidate.preview }, candidate };
+    const inputs: UpdateTargetInputsV1 = { current, target, metadata, bundle: selected.bundle, bundleManifest, verified, transport, plannedAt, retained, observation: null };
+    const materialized = await materializeUpdate(update, home, inputs);
+    const result = { schemaVersion: 1, outcome: "preview", plan: materialized.candidate.preview } as const;
+    if (!options.retainScratch) return { result, candidate: materialized.candidate, apply: null };
+    retainedScratch = true;
+    return { result, candidate: materialized.candidate, apply: { home, inputs: { ...inputs, observation: materialized.observation }, materialized, scratch: attempt } };
   } finally {
-    await attempt.cleanup();
+    if (!retainedScratch) await attempt.cleanup();
   }
+}
+
+/**
+ * Snapshot → target planner → concrete manifest → allocation-free inverse → candidate. Every input
+ * the planner request or preview hashes over is fixed in `inputs`, so the under-lock rerun of an
+ * unchanged home reproduces the pre-lock candidate byte for byte (Spec 2 §9.1).
+ */
+export async function materializeUpdate(update: CliUpdateContext, home: UpdateHomeV1, inputs: UpdateTargetInputsV1): Promise<MaterializedUpdateV1> {
+  const { current, target, metadata, bundle, bundleManifest, verified, transport, plannedAt, retained } = inputs;
+  const snapshot = await update.snapshot(home, { current, target, plannedAt });
+  const run = await update.planner.run({
+    runtime: `${verified.root}/${bundleManifest.runtimeEntrypoint}`,
+    planner: `${verified.root}/${bundleManifest.plannerEntrypoint}`,
+    // ponytail: the verified extraction root, attempt-owned and read-only to the planner; a dedicated empty directory needs a scratch-grammar change.
+    cwd: verified.root,
+    request: snapshot.request,
+    inputBlobs: snapshot.inputBlobs,
+    remainingMilliseconds: transport.remainingMilliseconds(),
+  });
+
+  const manifest = concreteManifest(update, home, snapshot, run.draft, run.outputBlobs, target);
+  const bundleModes = new Map(bundleManifest.entries.flatMap((entry) => (entry.kind === "file" ? [[entry.path as string, entry.mode] as const] : [])));
+  const prepared = prepareInverse(snapshot, run.draft, run.outputBlobs, bundleModes);
+  const inventoryBytes = prepared.entries.reduce((sum, entry) => sum + entry.bytes, 0);
+  const participants = run.draft.ownerPlans.length + run.draft.migrations.length + 4;
+  const observation = inputs.observation ?? await update.capacity();
+  const capacity = updateCapacity(observation, bundleManifest, bundle.archiveBytes, prepared, inventoryBytes, participants);
+  const candidate = await classified("update_planner_output_invalid", EXIT_CODES.securityRefusal, () => {
+    try {
+      return materializePlannerDraft(snapshot.request, run.draft, run.outputBlobs, {
+        tokenPaths: snapshot.tokenPaths,
+        ownerRoots: snapshot.ownerRoots,
+        transcript: run.transcript,
+        metadata,
+        download: {
+          archiveBytes: bundle.archiveBytes,
+          archiveSha256: bundle.archiveSha256,
+          expandedBytes: parseUInt64Decimal(manifestTotals(bundleManifest).bytes.toString(10)),
+          entryCount: bundleManifest.entries.length,
+        },
+        retainedRollback: home.rollback === null || retained === null ? null : { release: home.rollback.previous, payload: retained.payload },
+        capacity,
+        concreteManifest: manifest as unknown as CanonicalJsonValue,
+        inverseLeaves: prepared.leaves,
+        inversePlan: prepared.inversePlan,
+        rollbackInventoryEntries: prepared.entries,
+      });
+    } catch (error) {
+      return capacityRefusal(error);
+    }
+  });
+  return { snapshot, run, manifest, observation, capacity, candidate };
 }
 
 /** Rollback's own direction: an update-created path is removed, an update-removed one created. */
