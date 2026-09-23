@@ -72,7 +72,7 @@ describe("runUpdate", () => {
     }
   });
 
-  it("keeps rollback --apply unavailable even when apply ports are bound", async () => {
+  it("keeps rollback --apply unavailable when the apply ports bind no rollback derivation", async () => {
     const fixture = await createCommandFixture("update-rollback-apply");
     const context = { ...fixture.context, update: { ...unreachableUpdateContext(), apply: unreachableApplyPorts() } };
     const result = await runUpdate(context, { kind: "rollback", apply: true, json: false });
@@ -102,6 +102,57 @@ describe("runUpdate", () => {
     expect(result.ok && result.data.outcome).toBe("up_to_date");
     expect(calls).toStrictEqual(["lock", "closure"]);
     expect(update.events.indexOf("home")).toBeGreaterThan(-1);
+  });
+
+  it("recovers residue, previews locally, and revalidates under the lock before reserving, with no network or planner", async () => {
+    const commandFixture = await createCommandFixture("update-rollback-apply-compensated");
+    const update = createUpdateFixture({ active: "1.1.0", rollbackPrevious: "1.0.0" });
+    const calls: string[] = [];
+    const apply: UpdateApplyPortsV1 = {
+      ...unreachableApplyPorts(),
+      withGlobalLock: async (work) => {
+        calls.push("lock");
+        return work();
+      },
+      closure: () => {
+        calls.push("closure");
+        return Promise.resolve({ kind: "clear" });
+      },
+      allocate: () => {
+        calls.push("allocate");
+        return Promise.reject(new UpdatePlanningRefusal("update_allocator_unavailable", EXIT_CODES.operationalFailure));
+      },
+      composeRollback: () => Promise.reject(new Error("unreachable")),
+    };
+    const result = await runUpdate({ ...commandFixture.context, update: { ...update.update, apply } }, { kind: "rollback", apply: true, json: false });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe(EXIT_CODES.operationalFailure);
+    if (!result.ok) expect(result.error.message).toBe("update_allocator_unavailable");
+    expect(calls).toStrictEqual(["lock", "closure", "lock", "closure", "allocate"]);
+    expect(update.requests).toStrictEqual([]);
+    expect(update.events).not.toContain("planner");
+    expect(update.events).not.toContain("trust");
+  });
+
+  it("refuses a post-update edit at rollback --apply as a decision before any reservation", async () => {
+    const commandFixture = await createCommandFixture("update-rollback-apply-edit");
+    const update = createUpdateFixture({
+      active: "1.1.0",
+      rollbackPrevious: "1.0.0",
+      rollbackEvidenceFailure: new UpdatePlanningRefusal("update_rollback_post_update_edit", EXIT_CODES.decisionRequired, [FILE_A_PATH]),
+    });
+    const apply: UpdateApplyPortsV1 = {
+      ...unreachableApplyPorts(),
+      withGlobalLock: (work) => work(),
+      closure: () => Promise.resolve({ kind: "clear" }),
+      composeRollback: () => Promise.reject(new Error("unreachable")),
+    };
+    const result = await runUpdate({ ...commandFixture.context, update: { ...update.update, apply } }, { kind: "rollback", apply: true, json: false });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe(EXIT_CODES.decisionRequired);
+    if (!result.ok) expect(result.error.paths).toStrictEqual([FILE_A_PATH]);
   });
 
   it("returns the plan-only arms through the injected ports", async () => {

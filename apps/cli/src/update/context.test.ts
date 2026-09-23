@@ -11,7 +11,7 @@ import {
   retainedInversePlanHash,
   validateRetainedOwnerInverseProjection,
 } from "@developer-os/core";
-import type { CanonicalJsonValue, RollbackPayloadIdV1 } from "@developer-os/core";
+import type { CanonicalJsonValue, RollbackPayloadIdV1, UpdateRollbackPreviewV1 } from "@developer-os/core";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { runInit } from "../commands/init.js";
@@ -25,6 +25,7 @@ import type { CommandFixture } from "../commands/testing.js";
 import { createCliUpdateContext } from "./context.js";
 import { releaseIdentityOf, UpdatePlanningRefusal } from "./planning.js";
 import type { RollbackRecordV1 } from "./planning.js";
+import { applyRollback } from "./rollback-apply.js";
 import { NEW_A, OLD_A, PLANNED_AT, sha256 } from "./testing.js";
 
 afterEach(removeCommandFixtures);
@@ -89,6 +90,13 @@ describe("apply ports", () => {
   it("leaves --apply unbound in production so the command refuses before any port", async () => {
     const fixture = await createCommandFixture("update-apply-unbound");
     expect(createCliUpdateContext(fixture.context).apply).toBeUndefined();
+  });
+
+  it("leaves rollback --apply unbound in production so it refuses without reading the home", async () => {
+    const fixture = await createCommandFixture("update-rollback-apply-unbound");
+    const update = createCliUpdateContext(fixture.context);
+    expect(update.apply?.composeRollback).toBeUndefined();
+    expect(await refusal(applyRollback(update, {} as UpdateRollbackPreviewV1))).toMatchObject({ reason: "update_apply_unavailable", code: EXIT_CODES.capabilityUnavailable });
   });
 });
 

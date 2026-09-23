@@ -18,6 +18,7 @@ import type {
   UpdateConstructionPlanV1,
   UpdateLifecycleCoordinatorDependenciesV1,
   UpdateLifecycleOutcomeV1,
+  UpdateRollbackPreviewV1,
 } from "@developer-os/core";
 
 import type { UpdateConstructionOuterBytesV1, UpdateConstructionStore } from "./construction.js";
@@ -43,6 +44,13 @@ export interface UpdateApplyCompositionV1 {
   readonly capacity: UpdateCapacityInputV1;
 }
 
+/** Rollback's derivation input: the admitted home and the under-lock preview; no planner run exists. */
+export interface UpdateRollbackComposeInputV1 {
+  readonly coordinatorId: LifecycleCoordinatorIdV1;
+  readonly home: UpdateHomeV1;
+  readonly preview: UpdateRollbackPreviewV1;
+}
+
 export type UpdateApplyConstructionPortV1 = Pick<UpdateConstructionStore, "publish" | "stageDirectories" | "stageFiles" | "publishOuter" | "recover">;
 
 /**
@@ -57,6 +65,8 @@ export interface UpdateApplyPortsV1 {
   /** Durably reserves the coordinator's allocator block; nothing else is written. */
   readonly allocate: () => Promise<LifecycleCoordinatorIdV1>;
   readonly compose: (input: UpdateApplyComposeInputV1) => Promise<UpdateApplyCompositionV1>;
+  /** `update rollback --apply`'s derivation; absent, the rollback arm refuses before any port. */
+  readonly composeRollback?: (input: UpdateRollbackComposeInputV1) => Promise<UpdateApplyCompositionV1>;
   readonly construction: (coordinatorId: LifecycleCoordinatorIdV1) => UpdateApplyConstructionPortV1;
   readonly coordinator: (coordinatorId: LifecycleCoordinatorIdV1) => UpdateLifecycleCoordinatorDependenciesV1;
   readonly envelope: UpdateRecoveryRoutesV1["envelope"];
@@ -73,13 +83,13 @@ export interface UpdateAutomaticRollbackV1 {
 
 export type UpdateApplyResultV1 = Extract<UpdateCommandResultV1, { readonly outcome: "applied" }> | UpdateAutomaticRollbackV1;
 
-function refuse(reason: string, code: Exclude<ExitCode, 0>, recovery?: string): never {
+export function refuse(reason: string, code: Exclude<ExitCode, 0>, recovery?: string): never {
   throw new UpdatePlanningRefusal(reason, code, [], recovery);
 }
 
 const RERUN = "run `developer-os update --apply` again";
 
-function sameJson(left: unknown, right: unknown): boolean {
+export function sameJson(left: unknown, right: unknown): boolean {
   return encodeCanonicalJson(left as CanonicalJsonValue) === encodeCanonicalJson(right as CanonicalJsonValue);
 }
 
@@ -87,7 +97,7 @@ export function updateApplyPorts(update: CliUpdateContext): UpdateApplyPortsV1 {
   return update.apply ?? refuse("update_apply_unavailable", EXIT_CODES.capabilityUnavailable);
 }
 
-function requireCapacity(input: UpdateCapacityInputV1): void {
+export function requireCapacity(input: UpdateCapacityInputV1): void {
   try {
     projectUpdateCapacity(input);
   } catch (error) {
@@ -144,13 +154,13 @@ async function revalidate(update: CliUpdateContext, prepared: PreparedUpdateAppl
  * would take; once the outer journal exists only the coordinator may choose a direction, so the
  * residue is left for the next recovery. A third state met while compensating outranks the failure.
  */
-async function construct(ports: UpdateApplyPortsV1, composition: UpdateApplyCompositionV1, materialized: MaterializedUpdateV1, cleanupScratch: () => Promise<void>): Promise<void> {
+export async function construct(ports: UpdateApplyPortsV1, composition: UpdateApplyCompositionV1, outputs: readonly SecretScreenedBlobV1[], cleanupScratch: () => Promise<void>): Promise<void> {
   const plan = composition.construction;
   const store = ports.construction(plan.coordinatorId);
   try {
     await store.publish(plan);
     await store.stageDirectories(plan);
-    await store.stageFiles(plan, frames(materialized.run.outputBlobs));
+    await store.stageFiles(plan, frames(outputs));
     await cleanupScratch();
     await store.publishOuter(plan, composition.outer);
   } catch (error) {
@@ -193,7 +203,7 @@ export async function applyUpdate(update: CliUpdateContext, prepared: PreparedUp
       const plan = composition.construction;
       if (plan.coordinatorId !== coordinatorId || plan.operation !== "update_apply") refuse("update_composition_identity", EXIT_CODES.recoveryRequired);
       requireCapacity(composition.capacity);
-      await construct(ports, composition, materialized, cleanupScratch);
+      await construct(ports, composition, materialized.run.outputBlobs, cleanupScratch);
       return resultOf(await new UpdateLifecycleCoordinator(ports.coordinator(coordinatorId)).execute(coordinatorId), prepared.inputs);
     });
   } finally {

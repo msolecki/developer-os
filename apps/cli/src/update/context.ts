@@ -144,10 +144,12 @@ export interface CliUpdateContext {
   readonly capacity: () => Promise<UpdateCapacityObservationV1>;
   readonly admitManifest: (value: unknown) => InstallationManifestV2;
   /**
-   * `--apply`'s mutation authority; absent, `update --apply` refuses before any port is reached.
-   * Production leaves it unbound: the leaf-plan composition needs Core contracts that do not yet
-   * line up (Foundation V2 staging paths, state-postimage identities, the retirement leaf codec,
-   * and a V2-aware ledger), so the apply orchestration runs only over injected ports for now.
+   * `--apply`'s mutation authority; absent, `update --apply` and `update rollback --apply` refuse
+   * before any port is reached. Production leaves it unbound: the leaf-plan composition needs Core
+   * contracts that do not yet line up (Foundation V2 staging paths, state-postimage identities, the
+   * retirement leaf codec, and a V2-aware ledger), and rollback additionally needs its
+   * retained-inverse execution leaf, the previous/retained verification participants, and the
+   * consumed-set retirement leaves, so both orchestrations run only over injected ports for now.
    */
   readonly apply?: UpdateApplyPortsV1;
 }

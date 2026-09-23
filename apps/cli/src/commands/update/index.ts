@@ -11,6 +11,7 @@ import { failureFrom, renderPath } from "../../context.js";
 import type { CliContext } from "../../context.js";
 import { applyUpdate, recoverUpdate } from "../../update/apply.js";
 import { createCliUpdateContext } from "../../update/context.js";
+import { applyRollback } from "../../update/rollback-apply.js";
 import type { CliUpdateContext } from "../../update/context.js";
 import { planRollback, planUpdate, prepareUpdate, UpdatePlanningRefusal } from "../../update/planning.js";
 import type { UpdateCommandResultV1 } from "../../update/planning.js";
@@ -84,8 +85,24 @@ async function runApply(update: CliUpdateContext, version: StableSemverV1 | null
 }
 
 /**
- * `update rollback --apply` stays unavailable until Task 25; `update --apply` needs the injected
- * apply ports and refuses before any other port when they are absent.
+ * `update rollback --apply` heals any update residue, previews from retained local evidence, and
+ * applies that preview. A compensated rollback is a failure: the rejected release stays active.
+ */
+async function runRollbackApply(update: CliUpdateContext): Promise<CliResult<UpdateCommandResultV1>> {
+  await recoverUpdate(update);
+  const rolledBack = await applyRollback(update, await planRollback(update));
+  if (rolledBack.outcome === "rolled_back") return success(rolledBack);
+  return failure(EXIT_CODES.operationalFailure, {
+    kind: "update_rollback_compensated",
+    message: rolledBack.cause,
+    paths: [],
+    recovery: `Developer OS ${rolledBack.active.version} is still active; run \`developer-os update rollback\` to preview again`,
+  });
+}
+
+/**
+ * `--apply` needs the injected apply ports, and `update rollback --apply` also their rollback
+ * derivation; either absent refuses before any other port is reached.
  */
 export async function runUpdate(context: CliContext, invocation: UpdateInvocationV1): Promise<CliResult<UpdateCommandResultV1>> {
   const unavailable = (): CliResult<never> => failure(EXIT_CODES.capabilityUnavailable, {
@@ -93,11 +110,12 @@ export async function runUpdate(context: CliContext, invocation: UpdateInvocatio
     message: "update_apply_unavailable",
     paths: [],
   });
-  if (invocation.apply && invocation.kind === "rollback") return unavailable();
   const update = context.update ?? createCliUpdateContext(context);
   if (invocation.apply && update.apply === undefined) return unavailable();
+  if (invocation.apply && invocation.kind === "rollback" && update.apply?.composeRollback === undefined) return unavailable();
   try {
     if (invocation.kind === "rollback") {
+      if (invocation.apply) return await runRollbackApply(update);
       return success({ schemaVersion: 1, outcome: "rollback_preview", plan: await planRollback(update) });
     }
     if (invocation.apply) return await runApply(update, invocation.version);
