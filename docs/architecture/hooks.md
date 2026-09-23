@@ -160,6 +160,16 @@ dummy key (the A12 *request* method), killed by an alarm.
      `*** End Patch`. The paths were relative to `cwd`, and could hold a subdirectory
      (`sub/other.txt`). An `Update File: note.txt` plus `Move to: moved.txt` patch renamed the file.
      `Delete File` was seen only in the `PreToolUse` payload of a patch that failed to apply.
+   - **The grammar above is the observer's, not Codex's.** The mock model returned patches the
+     observer scripted, so this is the grammar Codex was shown, not the grammar it accepts. A
+     fresh-context review (2026-09-23) fed the same 0.155.1 binary through
+     `codex --codex-run-as-apply-patch` and found it wider: Codex trims every line by Unicode
+     `White_Space` before reading a header. So `*** Update File: .env` followed by a space, `\t`,
+     U+00A0, U+3000 or U+0085 modified `.env`, as did the same suffix on `*** Move to:`. A header
+     behind a leading space (` *** Update File: .env`) after an `Add File` or `Delete File` hunk
+     was read as a header, not as a context line. `applyPatchPaths` now refuses both (§3.3).
+   - **One tool set only.** Every observation used code mode with the mock model's tool list.
+     Another model or tool set, and an `apply_patch` invoked from the shell tool, are unobserved.
    - **Matchers.** `Bash` matched the shell call. `apply_patch` **and** `Edit|Write` both matched
      the patch call, and the payload still said `tool_name: "apply_patch"`.
 5. **Codex: field spellings and the stop-loop flag** (2026-09-23; fixtures under
@@ -189,6 +199,9 @@ dummy key (the A12 *request* method), killed by an alarm.
      payload has `stop_hook_active: true`. Exit 1: non-blocking; the turn ends.
    - So the Codex outcome map equals Claude's: `allow` exit 0 with empty stdout, `context` exit 0
      with stdout, and `block` and `advise` exit 2 with stderr.
+   - **Timeout: unobserved.** What Codex does when a `PreToolUse` hook exceeds its `timeout`
+     (`CODEX_HOOK_ROWS` gives `path` 2 s) was not observed. If it treats a timeout as non-blocking,
+     as Claude does, a slow filesystem turns a 64-header patch into `allow`.
 
    The first observation stands: an **untrusted hook does not fire**. With the plugin hooks, and in a second run also a user
    `$CODEX_HOME/hooks.json` with the same handlers, listed `trustStatus: "untrusted"`, `codex exec` ran into the refused
@@ -312,8 +325,14 @@ failure reaches `usageFailure()` or `emit()`, because the product's exit 2 is th
   from its file headers through `applyPatchPaths` (`apps/cli/src/hooks/patch.ts`): `*** Begin Patch`,
   `*** Add File:`, `*** Update File:`, `*** Delete File:`, `*** Move to:`, `*** End Patch`, and body
   lines by their `@@`, `+`, `-` or space prefix only. At most 64 headers, each a relative path with no
-  empty, `.` or `..` segment. Anything else is outside the grammar: `path` blocks with
-  `patch-malformed`, and `format` and `edit` allow.
+  empty, `.` or `..` segment and no Unicode `White_Space` at either end. A line that begins or ends
+  with `White_Space` and trims to `***` is refused too, because Codex reads it as a header (§1
+  question 4); a context line that happens to start with ` ***` therefore blocks, fail-closed.
+  Anything else is outside the grammar: `path` blocks with `patch-malformed`, and `format` and
+  `edit` allow.
+- A relative Codex header path resolves against the canonical session `cwd`, where Codex writes it,
+  not against the project root (`relativePathBase`). A relative Claude path still resolves against
+  the project root (G7).
 
 ### 3.4 Verbs and fail modes (Q1-A)
 
@@ -360,7 +379,10 @@ normalizer `assertSafeCommand` uses, and they split quote-aware segments with `s
 ### 3.6 Firing records (Q3-A)
 
 `<product-home>/state/hooks/` (`HOOK_FIRING_RECORDS_RELATIVE_PATH`) holds one
-`<vendor>.<event>.json` record per vendor and event. Each is at most 512 bytes, written by a
+`<vendor>.<verb>.json` record per vendor and verb, carrying the verb's event. `command`, `commit`
+and `path` share `PreToolUse`, so a per-event record let a firing `command` hide an untrusted or
+modified `path`. A per-event record left by an earlier build is admitted by shape, ignored by the
+reader and removed by uninstall. Each is at most 512 bytes, written by a
 same-directory temp file and rename. `init` creates the directory with mode 0700. It is never a
 manifest row, and it is admitted by shape (`inspectHookFiringRecordsShape`) by fresh `init` and the
 absent-manifest walks. `recordHookFiring` runs after the outcome is written. It writes only when the
@@ -381,8 +403,8 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
 
 - **`hooks`** reads each vendor's installed `hooks/hooks.json` no-follow (Claude under
   `~/.claude/skills/developer-os/`, Codex under `<product-home>/codex/plugins/developer-os/`) and
-  reports each verb with the age of its last firing, plus any missing verb and an inconsistent
-  executable. A Codex verb with no firing record adds `CODEX_UNTRUSTED_HOOK_MESSAGE` and the fixed
+  reports each verb with the age of its own last firing, plus any missing verb and an inconsistent
+  executable. A Codex verb with no firing record of its own adds `CODEX_UNTRUSTED_HOOK_MESSAGE` and the fixed
   trust step as `recovery`. It is `warn`, never `fail`.
 - **`external-hooks`** (Q2-A) reads `~/.claude/settings.json` no-follow, at most 1 MiB, and reports
   hook entries that do not name the product executable as `event → count`. It never prints a command
@@ -407,9 +429,24 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
   that moves the Node executable (G1), or a change to `CODEX_HOOK_ROWS`, therefore stops every
   affected Codex hook until the user trusts it again. Inserting a row also moves later groups of
   the same event to new keys. `doctor`'s no-firing message is the only signal.
-- **The `apply_patch` grammar is only what was observed.** `*** End of File`, a blank line or any
-  other unobserved line makes `guard path` block that patch; `format` and `edit` allow it. One
-  observed turn widens it.
+- **The `apply_patch` grammar is a narrowing, not a proof.** `*** End of File`, a blank line, edge
+  `White_Space` on a header or a `***` marker, or any other line outside §3.3 makes `guard path`
+  block that patch; `format` and `edit` allow it. That is a security property only where Codex's
+  own parser is no more permissive than §3.3 in the direction that matters, and §1 question 4 shows
+  the observed grammar was not Codex's grammar. A Codex upgrade can widen it again; one probe of
+  `--codex-run-as-apply-patch` per new floor rechecks it.
+- **G7 is Claude-only.** A Codex patch path resolves against the session `cwd`. When that `cwd` is
+  the user home or below it (a dotfiles repository), `ProtectedPathPolicy` is the only barrier, as
+  it is for an absolute Claude path. The spec's G7 wording ("never the user home") needs the same
+  refinement.
+- **`guard path` does not see a shell write.** `echo … > .env` through `Bash` passes it on both
+  vendors (parity with Claude). On Codex an `apply_patch` invoked from the shell tool also reaches
+  the hook as `Bash`, is unobserved, and is not protected.
+- **A Codex `PreToolUse` timeout is unobserved** (§1 question 6). If Codex does not block on it, a
+  slow filesystem lets a patch through `guard path`.
+- **Case-folding filesystems.** On APFS, `Add File: .ENV` with no `.env` present creates a file that
+  later reads as `.env`. An existing `.env` is caught, because `realpath` restores its case. The gap
+  is in `ProtectedPathPolicy`, identical on the Claude path, and is a separate task.
 - **Codex external hooks are `unknown`** under Q2-A. A user who never approves Codex trust keeps
   `plugin_hooks` and `session_start_injection` at `unknown` forever, which is correct.
 - **The latency budget is machine-relative** (§2) until the Phase 11 release matrix measures it on

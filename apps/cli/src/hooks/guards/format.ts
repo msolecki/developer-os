@@ -5,7 +5,7 @@ import { ProtectedPathPolicy } from "@developer-os/security";
 
 import { excerpt } from "../outcome.js";
 import { editedPaths, HOOK_TOOL_MATCHERS } from "../payload.js";
-import { resolveEditedPath, resolveProjectRoot } from "../project-root.js";
+import { relativePathBase, resolveEditedPath, resolveProjectRoot } from "../project-root.js";
 import type { HookVerbHandler } from "../registry.js";
 import { FORMATTER_TIMEOUT_MS, HOOK_CHILD_ENV, isRegularFile, localBin } from "./child.js";
 
@@ -35,12 +35,17 @@ async function formatterFor(
 }
 
 /** Edited files that still exist inside the project and outside every protected path. */
-async function formattable(root: string, paths: readonly string[], userHome: string): Promise<readonly string[]> {
+async function formattable(
+  root: string,
+  base: string,
+  paths: readonly string[],
+  userHome: string,
+): Promise<readonly string[]> {
   const policy = new ProtectedPathPolicy(userHome);
   const files: string[] = [];
   for (const path of paths) {
     try {
-      const file = await resolveEditedPath(root, path);
+      const file = await resolveEditedPath(base, path);
       if (file === root || !containsPath(root, file) || !(await isRegularFile(file))) continue;
       await policy.assertWritable(file);
       files.push(file);
@@ -59,7 +64,7 @@ export const guardFormat: HookVerbHandler = async (payload, runtime) => {
   if (paths === null) return { kind: "allow" };
   if (runtime.userHome === null) return { kind: "allow", note: "format skipped: user home is unknown" };
   const root = await resolveProjectRoot(runtime.cwd);
-  const files = await formattable(root, paths, runtime.userHome);
+  const files = await formattable(root, await relativePathBase(runtime.vendor, runtime.cwd, root), paths, runtime.userHome);
   if (files.length === 0) return { kind: "allow" };
   const formatter = await formatterFor(root);
   if (formatter === null) return { kind: "allow" };

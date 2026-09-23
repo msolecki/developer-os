@@ -121,4 +121,16 @@ describe("guardEdit", () => {
     const malformed = { ...payload, command: "not a patch" };
     expect(await guardEdit(malformed, { ...runtimeFor(root), vendor: "codex" })).toStrictEqual({ kind: "allow" });
   });
+
+  it("resolves a Codex patch header against the session cwd, not the project root", async () => {
+    const outside = await tempDir();
+    await writeFile(join(outside, "shared.md"), "shared\n");
+    const root = await project();
+    await mkdir(join(root, "sub"));
+    await symlink(outside, join(root, "sub", "link"));
+    const command = ["*** Begin Patch", "*** Update File: link/shared.md", "@@", "-x", "+y", "*** End Patch", ""].join("\n");
+    const payload: HookPayloadV1 = { cwd: null, toolName: "apply_patch", command, filePath: null, prompt: null, stopHookActive: null };
+    const outcome = await guardEdit(payload, { ...runtimeFor(join(root, "sub")), vendor: "codex" });
+    expect(outcome).toMatchObject({ kind: "advise", ruleId: "shared-file" });
+  });
 });

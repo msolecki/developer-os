@@ -44,6 +44,25 @@ describe("applyPatchPaths", () => {
     expect(applyPatchPaths(body)).toBeNull();
   });
 
+  it.each([
+    ["a space", " "],
+    ["a tab", "\t"],
+    ["a no-break space", "\u00a0"],
+    ["an ideographic space", "\u3000"],
+    ["a next-line character", "\u0085"],
+  ])("refuses a header path with trailing whitespace: %s", (_label, space) => {
+    expect(applyPatchPaths(patch(`*** Update File: .env${space}`, "@@", "-S=1", "+S=2"))).toBeNull();
+    expect(applyPatchPaths(patch("*** Update File: a.txt", `*** Move to: .env${space}`, "@@", "-x", "+y"))).toBeNull();
+    expect(applyPatchPaths(patch(`*** Add File: ${space}.env`, "+S=2"))).toBeNull();
+  });
+
+  it("refuses a header smuggled behind leading whitespace as a context line", () => {
+    expect(
+      applyPatchPaths(patch("*** Add File: new.txt", "+x", " *** Update File: .env", "@@", "-S=1", "+S=pwned")),
+    ).toBeNull();
+    expect(applyPatchPaths(patch("*** Delete File: z.txt", " *** Add File: .env.local", "+S=1"))).toBeNull();
+  });
+
   it(`accepts ${String(MAX_PATCH_HEADERS)} headers and refuses one more`, () => {
     const headers = (n: number): string[] => Array.from({ length: n }, (_, i) => `*** Add File: f${String(i)}`);
     expect(applyPatchPaths(patch(...headers(MAX_PATCH_HEADERS)))).toHaveLength(MAX_PATCH_HEADERS);

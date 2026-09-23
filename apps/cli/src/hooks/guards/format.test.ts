@@ -184,6 +184,18 @@ describe("guardFormat", () => {
     expect(requests.map((request) => request.args.slice(-2))).toStrictEqual([[join(root, "a.ts"), join(root, "b.ts")]]);
   });
 
+  it("formats the file a Codex patch names relative to the session cwd, not the project root", async () => {
+    const root = await project(["biome.json"]);
+    await mkdir(join(root, "sub"));
+    await writeFile(join(root, "sub", "a.ts"), "export {};\n");
+    const { runtime, requests } = runtimeFor(join(root, "sub"));
+    const command = ["*** Begin Patch", "*** Update File: a.ts", "@@", "-x", "+y", "*** End Patch", ""].join("\n");
+    const payload: HookPayloadV1 = { cwd: null, toolName: "apply_patch", command, filePath: null, prompt: null, stopHookActive: null };
+    expect(await guardFormat(payload, { ...runtime, vendor: "codex" })).toStrictEqual({ kind: "allow" });
+    expect(requests.map((request) => request.args.at(-1))).toStrictEqual([join(root, "sub", "a.ts")]);
+    expect(requests[0]?.cwd).toBe(root);
+  });
+
   it("allows a Codex patch outside the observed grammar without running anything", async () => {
     const { runtime, requests } = runtimeFor(await project(["biome.json"]));
     const payload: HookPayloadV1 = { cwd: null, toolName: "apply_patch", command: "not a patch", filePath: null, prompt: null, stopHookActive: null };

@@ -92,10 +92,10 @@ describe("guard path", () => {
   });
 
   describe("on Codex, from apply_patch headers", () => {
-    const codex = (command: string, toolName = "apply_patch") =>
+    const codex = (command: string, toolName = "apply_patch", cwd = project) =>
       guardPath(
-        { cwd: project, toolName, command, filePath: null, prompt: null, stopHookActive: null },
-        { ...runtime(home), vendor: "codex" },
+        { cwd, toolName, command, filePath: null, prompt: null, stopHookActive: null },
+        { ...runtime(home, cwd), vendor: "codex" },
       );
     const patch = (...lines: string[]): string => ["*** Begin Patch", ...lines, "*** End Patch", ""].join("\n");
 
@@ -118,6 +118,28 @@ describe("guard path", () => {
     it("blocks a patch outside the observed grammar", async () => {
       expect(await codex(patch("*** Add File: /etc/hosts", "+x"))).toMatchObject({ kind: "block", ruleId: "patch-malformed" });
       expect(await codex("not a patch")).toMatchObject({ kind: "block", ruleId: "patch-malformed" });
+    });
+
+    it("blocks a header whose path ends in whitespace Codex trims away", async () => {
+      expect(await codex(patch("*** Update File: .env\u0085", "@@", "-S=1", "+S=2"))).toMatchObject({
+        kind: "block",
+        ruleId: "patch-malformed",
+      });
+    });
+
+    it("blocks a .env header hidden behind a leading space as a context line", async () => {
+      expect(
+        await codex(patch("*** Add File: new.txt", "+x", " *** Update File: .env", "@@", "-S=1", "+S=pwned")),
+      ).toMatchObject({ kind: "block", ruleId: "patch-malformed" });
+    });
+
+    it("resolves a relative header against the session cwd, not the project root", async () => {
+      await mkdir(join(home, ".aws"), { recursive: true });
+      await symlink(join(home, ".aws"), join(project, "sub", "link"));
+      expect(await codex(patch("*** Update File: link/config", "@@", "-x", "+y"), "apply_patch", join(project, "sub"))).toMatchObject({
+        kind: "block",
+        ruleId: "protected-path",
+      });
     });
 
     it("ignores the Bash tool", async () => {

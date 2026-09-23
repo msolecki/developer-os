@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { resolveEditedPath, resolveProjectRoot } from "./project-root.js";
+import { relativePathBase, resolveEditedPath, resolveProjectRoot } from "./project-root.js";
 
 const roots: string[] = [];
 
@@ -43,6 +43,18 @@ describe("resolveProjectRoot", () => {
   it("refuses a relative cwd and a NUL byte", async () => {
     await expect(resolveProjectRoot("relative/dir")).rejects.toThrow();
     await expect(resolveProjectRoot("/tmp/a\0b")).rejects.toThrow();
+  });
+});
+
+describe("relativePathBase", () => {
+  it("is the project root on Claude and the canonical session cwd on Codex", async () => {
+    const tmp = await tree();
+    await mkdir(join(tmp, "repo", ".git"), { recursive: true });
+    await mkdir(join(tmp, "repo", "sub"), { recursive: true });
+    const cwd = join(tmp, "repo", "sub");
+    const root = await resolveProjectRoot(cwd);
+    expect(await relativePathBase("claude", cwd, root)).toBe(join(tmp, "repo"));
+    expect(await relativePathBase("codex", cwd, root)).toBe(cwd);
   });
 });
 

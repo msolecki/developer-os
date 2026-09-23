@@ -4,7 +4,7 @@ import { ProtectedPathPolicy, SecurityRefusalError } from "@developer-os/securit
 
 import { excerpt } from "../outcome.js";
 import { editedPaths, HOOK_TOOL_MATCHERS } from "../payload.js";
-import { resolveEditedPath, resolveProjectRoot } from "../project-root.js";
+import { relativePathBase, resolveEditedPath, resolveProjectRoot } from "../project-root.js";
 import type { HookVerbHandler } from "../registry.js";
 
 /**
@@ -22,11 +22,11 @@ export const guardPath: HookVerbHandler = async (payload, runtime) => {
       : { kind: "block", ruleId: "payload-malformed", detail: "file path field absent" };
   }
   if (runtime.userHome === null) return { kind: "block", ruleId: "hook-failed-closed", detail: "user home unavailable" };
-  const root = await resolveProjectRoot(runtime.cwd);
+  const base = await relativePathBase(runtime.vendor, runtime.cwd, await resolveProjectRoot(runtime.cwd));
   const policy = new ProtectedPathPolicy(runtime.userHome);
   for (const path of paths) {
-    const canonical = await resolveEditedPath(root, path);
-    const lexical = isAbsolute(path) ? path : resolve(root, path);
+    const canonical = await resolveEditedPath(base, path);
+    const lexical = isAbsolute(path) ? path : resolve(base, path);
     try {
       await policy.assertWritable(lexical);
       await policy.assertWritable(canonical);
