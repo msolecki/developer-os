@@ -667,3 +667,10 @@ export {
   validateUpdateTerminalRetirementPlan,
 } from "./retirement.js";
 export type { RetirementLeafV1, UpdateRetirementSetV1, UpdateTerminalRetirementPlanV1 } from "./retirement.js";
+export type { CanonicalStatePostimageV1, CanonicalStatePreimageV1 } from "./participants.js";
+export type {
+  BundleMetadataPostimageV1,
+  BundleMetadataPreimageV1,
+  PresentBundleMetadataPostimageV1,
+  PresentBundleMetadataPreimageV1,
+} from "./bundle-participant.js";

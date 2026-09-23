@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  constructionEvidenceBytes,
+  constructionFileEvidence,
   createNodeLifecycleGuardedFileSystem,
   deriveCanonicalStatePayloadPath,
   encodeCanonicalJson,
@@ -13,6 +15,7 @@ import {
   parseSafeReasonCode,
   parseUInt64Decimal,
   parseUtcTimestamp,
+  updateConstructionEvidencePath,
   updateLeafPlanPath,
   updateParticipantDocumentBytes,
   updateParticipantDocumentHash,
@@ -20,17 +23,19 @@ import {
   UpdateStepRejectedError,
   type CanonicalAbsolutePathV1,
   type CanonicalStateFilePlanV1,
-  type CanonicalStateFileStateV1,
+  type CanonicalStatePostimageV1,
+  type CanonicalStatePreimageV1,
   type EffectiveUidV1,
   type LifecycleCoordinatorIdV1,
   type LowerHexSha256,
   type SafeReasonCodeV1,
   type TargetVerificationPlanV1,
+  type UpdateConstructionPlanV1,
   type UpdateInitialJournalRefV1,
 } from "@developer-os/core";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { CanonicalStateParticipant, runTargetVerifier, UpdateParticipantJournalStore, type CanonicalStateStepV1 } from "./state-participant.js";
+import { CanonicalStateParticipant, constructionPayloadIdentity, runTargetVerifier, UpdateParticipantJournalStore, type CanonicalStateStepV1 } from "./state-participant.js";
 
 const encoder = new TextEncoder();
 const sha = (value: Uint8Array | string): LowerHexSha256 => parseLowerHexSha256(createHash("sha256").update(value).digest("hex"));
@@ -58,13 +63,28 @@ async function writeOwned(path: string, content: string | Uint8Array): Promise<v
   await nodeFs.writeFile(path, content, { mode: 0o600 });
 }
 
-async function present(path: string, content: string): Promise<CanonicalStateFileStateV1> {
+async function identityOf(path: string): Promise<{ readonly dev: ReturnType<typeof parseUInt64Decimal>; readonly ino: ReturnType<typeof parseUInt64Decimal> }> {
   const stats = await nodeFs.lstat(path, { bigint: true });
-  return { state: "present", hash: sha(content), payload: null, ownerUid: uid as EffectiveUidV1, mode: 384, nlink: 1, size: encoder.encode(content).byteLength, dev: parseUInt64Decimal(stats.dev.toString(10)), ino: parseUInt64Decimal(stats.ino.toString(10)) };
+  return { dev: parseUInt64Decimal(stats.dev.toString(10)), ino: parseUInt64Decimal(stats.ino.toString(10)) };
+}
+
+async function present(path: string, content: string): Promise<CanonicalStatePreimageV1> {
+  return { state: "present", hash: sha(content), payload: null, ownerUid: uid as EffectiveUidV1, mode: 384, nlink: 1, size: encoder.encode(content).byteLength, ...(await identityOf(path)) };
+}
+
+/** A one-row construction plan: the postimage payload is construction file 0 (synthetic, not built). */
+function constructionPlan(root: CanonicalAbsolutePathV1, after: Extract<CanonicalStatePostimageV1, { readonly state: "present" }>): UpdateConstructionPlanV1 {
+  return {
+    schemaVersion: 1,
+    coordinatorId,
+    stagingRoot: { path: root },
+    files: [{ ordinal: 0, role: { kind: "payload", payloadKind: "state_after" }, path: after.payload.path, bytes: after.payload.bytes, sha256: after.payload.hash, mode: 384 }],
+  } as unknown as UpdateConstructionPlanV1;
 }
 
 interface StateFixture {
   readonly home: CanonicalAbsolutePathV1;
+  readonly root: CanonicalAbsolutePathV1;
   readonly step: CanonicalStateStepV1;
   readonly participant: CanonicalStateParticipant;
   readonly journals: UpdateParticipantJournalStore;
@@ -79,16 +99,16 @@ async function stateFixture(role: "release_trust" | "active_release" | "rollback
   const id = parseSafeReasonCode(`state_${role}`);
   const path = parseCanonicalAbsolutePathText(`${home}/state/${role}.json`);
   const payloadPath = deriveCanonicalStatePayloadPath(home, coordinatorId as string as SafeReasonCodeV1, role, id);
-  let before: CanonicalStateFileStateV1 = { state: "absent" };
-  let after: CanonicalStateFileStateV1 = { state: "absent" };
+  let before: CanonicalStatePreimageV1 = { state: "absent" };
+  let after: CanonicalStatePostimageV1 = { state: "absent" };
   if (options.before !== false) {
     await writeOwned(path, '{"record":"before"}\n');
     before = await present(path, '{"record":"before"}\n');
   }
   if (options.after !== false) {
-    await writeOwned(payloadPath, '{"record":"after"}\n');
-    const stats = await present(payloadPath, '{"record":"after"}\n');
-    after = { ...stats, payload: { kind: "update_expected", coordinatorId, ordinal: 3, path: payloadPath, hash: sha('{"record":"after"}\n'), bytes: encoder.encode('{"record":"after"}\n').byteLength, mode: 384 } } as CanonicalStateFileStateV1;
+    // The postimage is planned before its payload exists: no device/inode (D60).
+    const content = '{"record":"after"}\n';
+    after = { state: "present", hash: sha(content), payload: { kind: "update_expected", coordinatorId, ordinal: 0, path: payloadPath, hash: sha(content), bytes: encoder.encode(content).byteLength, mode: 384 }, ownerUid: uid as EffectiveUidV1, mode: 384, nlink: 1, size: encoder.encode(content).byteLength };
   }
   const plan: CanonicalStateFilePlanV1 = {
     schemaVersion: 1,
@@ -111,10 +131,18 @@ async function stateFixture(role: "release_trust" | "active_release" | "rollback
   const stagedPath = parseCanonicalAbsolutePathText(`${root}/update/initial-journals/${kind}/${id}.json`);
   await writeOwned(stagedPath, initial);
   const journal = { kind, id, planHash, finalPath: updateParticipantJournalPath(root, kind, id), stagedPath, stagedExpected: { constructionOrdinal: 1, hash: sha(initial), bytes: initial.byteLength, mode: 384 } } as UpdateInitialJournalRefV1;
+  const construction = after.state === "present" ? constructionPlan(root, after) : null;
+  if (after.state === "present" && construction !== null) {
+    // Construction writes the payload after the plan and records its inode as evidence.
+    await writeOwned(after.payload.path, '{"record":"after"}\n');
+    const { dev, ino } = await identityOf(after.payload.path);
+    await writeOwned(updateConstructionEvidencePath(root, 0), constructionEvidenceBytes(constructionFileEvidence(construction, 0, dev, ino)));
+  }
   const fs = guardedFs();
   const journals = new UpdateParticipantJournalStore({ fs, effectiveUid: uid });
-  const participant = new CanonicalStateParticipant({ fs, journals, effectiveUid: uid, now: () => new Date(at), validateBytes: (_role, bytes) => JSON.parse(new TextDecoder().decode(bytes)) as unknown });
-  return { home, journals, participant, step: { plan, planRef: { kind, id, path: planPath, hash: planHash, bytes: updateParticipantDocumentBytes(plan).byteLength }, journal } };
+  const payloadIdentity = construction === null ? () => Promise.reject(new Error("no postimage")) : constructionPayloadIdentity(fs, uid, construction);
+  const participant = new CanonicalStateParticipant({ fs, journals, effectiveUid: uid, now: () => new Date(at), validateBytes: (_role, bytes) => JSON.parse(new TextDecoder().decode(bytes)) as unknown, payloadIdentity });
+  return { home, root, journals, participant, step: { plan, planRef: { kind, id, path: planPath, hash: planHash, bytes: updateParticipantDocumentBytes(plan).byteLength }, journal } };
 }
 
 async function read(path: string): Promise<string | null> {
@@ -199,6 +227,50 @@ describe("canonical state participant", () => {
     expect(await read(step.journal.finalPath)).toBeNull();
     expect(await read(step.planRef.path)).toBeNull();
     expect(await read(step.plan.path)).toBe('{"record":"after"}\n');
+  });
+
+  it("fixes the plan bytes before the payload exists and takes the postimage inode from construction evidence", async () => {
+    const { step, participant } = await stateFixture("active_release");
+    expect(Object.keys(step.plan.after)).not.toContain("dev");
+    expect(Object.keys(step.plan.after)).not.toContain("ino");
+    expect(Object.keys(step.plan.before)).toEqual(expect.arrayContaining(["dev", "ino"]));
+    expect(updateParticipantDocumentHash(step.plan)).toBe(step.planRef.hash);
+    await expect(participant.apply(step)).resolves.toEqual({ state: "verified" });
+  });
+
+  it("refuses a payload whose inode differs from its construction evidence as recovery-required", async () => {
+    const { step, participant } = await stateFixture("active_release");
+    const payload = (step.plan.after as Extract<CanonicalStatePostimageV1, { readonly state: "present" }>).payload.path;
+    await nodeFs.rm(payload);
+    await writeOwned(payload, '{"record":"after"}\n');
+    await expect(participant.apply(step)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(await read(payload)).toBe('{"record":"after"}\n');
+    expect(await read(step.plan.path)).toBeNull();
+  });
+
+  it("refuses a published postimage moved to another inode as recovery-required", async () => {
+    const { step, participant } = await stateFixture("active_release");
+    await participant.apply(step);
+    await nodeFs.rm(step.plan.path);
+    await writeOwned(step.plan.path, '{"record":"after"}\n');
+    await expect(participant.compensate(step)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(await read(step.plan.path)).toBe('{"record":"after"}\n');
+  });
+
+  it("refuses a postimage whose construction evidence is missing or not its row", async () => {
+    const missing = await stateFixture("active_release");
+    await nodeFs.rm(updateConstructionEvidencePath(missing.root, 0));
+    await expect(missing.participant.apply(missing.step)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+
+    const tampered = await stateFixture("active_release");
+    const evidence = updateConstructionEvidencePath(tampered.root, 0);
+    const text = await nodeFs.readFile(evidence, "utf8");
+    await nodeFs.writeFile(evidence, text.replace(/"ino":"(\d+)"/, (_match, value: string) => `"ino":"${(BigInt(value) + 1n).toString(10)}"`));
+    await expect(tampered.participant.apply(tampered.step)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+
+    const other = await stateFixture("active_release");
+    const after = other.step.plan.after as Extract<CanonicalStatePostimageV1, { readonly state: "present" }>;
+    await expect(constructionPayloadIdentity(guardedFs(), uid, constructionPlan(other.root, after))({ ...after.payload, hash: sha("other") })).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
   });
 
   it("refuses a journal present at both staged and final paths", async () => {

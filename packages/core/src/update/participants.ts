@@ -701,12 +701,17 @@ export interface StatePayloadRefV1 {
   readonly mode: 384;
 }
 
-export type CanonicalStateFileStateV1 =
+/**
+ * Amended 2026-09-23 (D60): a preimage is a guarded present file with its observed device/inode
+ * and no payload; a postimage carries no device/inode, because leaf plans are written before their
+ * payloads, and takes its identity only from the reopened construction evidence of `payload`.
+ */
+export type CanonicalStatePreimageV1 =
   | { readonly state: "absent" }
   | {
       readonly state: "present";
       readonly hash: LowerHexSha256;
-      readonly payload: StatePayloadRefV1 | null;
+      readonly payload: null;
       readonly ownerUid: EffectiveUidV1;
       readonly mode: 384;
       readonly nlink: 1;
@@ -714,6 +719,21 @@ export type CanonicalStateFileStateV1 =
       readonly dev: UInt64DecimalV1;
       readonly ino: UInt64DecimalV1;
     };
+
+export type CanonicalStatePostimageV1 =
+  | { readonly state: "absent" }
+  | {
+      readonly state: "present";
+      readonly hash: LowerHexSha256;
+      readonly payload: StatePayloadRefV1;
+      readonly ownerUid: EffectiveUidV1;
+      readonly mode: 384;
+      readonly nlink: 1;
+      readonly size: number;
+    };
+
+/** Either side of a state plan. */
+export type CanonicalStateFileStateV1 = CanonicalStatePreimageV1 | CanonicalStatePostimageV1;
 
 export type CanonicalStateRoleV1 = "release_metadata" | "release_trust" | "active_release" | "rollback_record";
 
@@ -724,8 +744,8 @@ export interface CanonicalStateFilePlanV1 {
   readonly role: CanonicalStateRoleV1;
   readonly path: CanonicalAbsolutePathV1;
   readonly tombstonePath: CanonicalAbsolutePathV1;
-  readonly before: CanonicalStateFileStateV1;
-  readonly after: CanonicalStateFileStateV1;
+  readonly before: CanonicalStatePreimageV1;
+  readonly after: CanonicalStatePostimageV1;
   readonly reversal: "reversible" | "monotonic_no_reverse";
   readonly maximumPlanBytes: number;
   readonly maximumJournalBytes: number;
@@ -778,14 +798,14 @@ function stateFileState(value: unknown, plan: Pick<CanonicalStateFilePlanV1, "co
     exactKeys(value, ["state"], label);
     return { state: "absent" };
   }
-  const input = exactKeys(value, ["state", "hash", "payload", "ownerUid", "mode", "nlink", "size", "dev", "ino"], label);
+  const input = exactKeys(value, side === "before" ? ["state", "hash", "payload", "ownerUid", "mode", "nlink", "size", "dev", "ino"] : ["state", "hash", "payload", "ownerUid", "mode", "nlink", "size"], label);
   if (input.state !== "present" || input.mode !== 384 || input.nlink !== 1) fail(label);
   const hash = parseLowerHexSha256(input.hash);
   const size = integer(input.size, 1, MAX_STATE_BYTES, `${label}.size`);
   integer(input.ownerUid, 0, 4_294_967_295, `${label}.ownerUid`);
-  parseUInt64Decimal(input.dev);
-  parseUInt64Decimal(input.ino);
   if (side === "before") {
+    parseUInt64Decimal(input.dev);
+    parseUInt64Decimal(input.ino);
     if (input.payload !== null) fail(`${label}.payload: a preimage carries no payload`);
   } else {
     const payload = exactKeys(input.payload, ["kind", "coordinatorId", "ordinal", "path", "hash", "bytes", "mode"], `${label}.payload`);
@@ -800,6 +820,7 @@ function stateFileState(value: unknown, plan: Pick<CanonicalStateFilePlanV1, "co
 /**
  * Spec 2 §9.2: a present postimage requires its exact pre-intent payload under the role/ID state
  * payload path; a preimage never carries one; trust alone is monotonic and never absent after.
+ * Only the preimage carries a device/inode (D60), so plan bytes are fixed before any payload exists.
  */
 export function validateCanonicalStateFilePlan(value: unknown, productHome: CanonicalAbsolutePathV1): CanonicalStateFilePlanV1 {
   const label = "CanonicalStateFilePlanV1";

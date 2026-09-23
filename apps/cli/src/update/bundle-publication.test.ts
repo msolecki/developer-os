@@ -71,6 +71,7 @@ const metadataContent = ['{"synthetic":"delegation"}\n', '{"synthetic":"index"}\
 class Killed extends Error {}
 
 afterEach(async () => {
+  payloadEvidence.clear();
   for (const home of homes.splice(0)) await nodeFs.rm(home, { recursive: true, force: true });
 });
 
@@ -99,6 +100,14 @@ const dependencies = <TPoint extends string>(interrupt?: (point: TPoint) => void
   now: () => new Date("2026-09-23T10:00:05.000Z"),
   ...(interrupt === undefined ? {} : { interrupt }),
 });
+
+/** Stands in for construction evidence: the inode each metadata payload had when construction wrote it. */
+const payloadEvidence = new Map<string, { readonly dev: ReturnType<typeof u64>; readonly ino: ReturnType<typeof u64> }>();
+
+const payloadIdentity = (payload: { readonly path: string }) => {
+  const found = payloadEvidence.get(payload.path);
+  return found === undefined ? Promise.reject(new LifecycleRecoveryRequiredError("update_state_payload_evidence", [payload.path])) : Promise.resolve(found);
+};
 
 async function identityOf(path: string): Promise<{ readonly dev: ReturnType<typeof u64>; readonly ino: ReturnType<typeof u64> }> {
   const stats = await nodeFs.lstat(path, { bigint: true });
@@ -170,7 +179,9 @@ async function metadataRow(value: Fixture, ordinal: number, created: boolean): P
   const payloadPath = deriveCanonicalStatePayloadPath(value.home, coordinatorId as unknown as SafeReasonCodeV1, "release_metadata", id);
   const written = created ? payloadPath : path;
   if (!(await exists(written))) await nodeFs.writeFile(written, content, { mode: 0o600, flag: "wx" });
-  const present = { state: "present" as const, hash: sha(content), ownerUid: uid as EffectiveUidV1, mode: 384 as const, nlink: 1 as const, size: encoder.encode(content).byteLength, ...(await identityOf(written)) };
+  const present = { state: "present" as const, hash: sha(content), ownerUid: uid as EffectiveUidV1, mode: 384 as const, nlink: 1 as const, size: encoder.encode(content).byteLength };
+  const identity = await identityOf(written);
+  if (created) payloadEvidence.set(payloadPath, identity);
   return {
     schemaVersion: 1,
     id,
@@ -178,7 +189,8 @@ async function metadataRow(value: Fixture, ordinal: number, created: boolean): P
     role: "release_metadata",
     path,
     tombstonePath: parseCanonicalAbsolutePathText(`${value.root}/update/tombstones/${id}.json`),
-    before: created ? { state: "absent" } : { ...present, payload: null },
+    before: created ? { state: "absent" } : { ...present, payload: null, ...identity },
+    // A postimage carries no device/inode (D60); a created row's identity is its payload evidence.
     after: created ? { ...present, payload: { kind: "update_expected", coordinatorId, ordinal: 40 + ordinal, path: payloadPath, hash: present.hash, bytes: present.size, mode: 384 } } : { ...present, payload: null },
     reversal: "reversible",
     maximumPlanBytes: 16_777_216,
@@ -232,7 +244,7 @@ async function verifyPlan(value: Fixture): Promise<BundlePublicationPlanV1> {
 }
 
 function participant(value: Fixture, interrupt?: (point: BundlePublicationDeathPointV1) => void): BundlePublicationParticipant {
-  return new BundlePublicationParticipant(dependencies(interrupt), value.root);
+  return new BundlePublicationParticipant({ ...dependencies(interrupt), payloadIdentity }, value.root);
 }
 
 function dieAt(point: BundlePublicationDeathPointV1): (reached: BundlePublicationDeathPointV1) => void {
@@ -345,6 +357,17 @@ describe("BundlePublicationParticipant", () => {
     await nodeFs.chmod(ref.path, 0o600);
     await nodeFs.writeFile(ref.path, bundleSourceStagingPlanBytes({ ...tampered.source, maximumJournalBytes: 1_048_575 }));
     await expect(participant(tampered).apply(tamperedPlan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+  });
+
+  it("binds a metadata postimage only to its payload's construction evidence", async () => {
+    const value = await fixture();
+    const plan = await publishPlan(value);
+    for (const row of plan.metadata) expect(Object.keys(row.after)).not.toContain("ino");
+    const payload = (plan.metadata[0].after as Extract<BundleMetadataStatePlanV1["after"], { readonly state: "present" }>).payload?.path as string;
+    payloadEvidence.delete(payload);
+    await expect(participant(value).apply(plan)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(await exists(bundleMetadataPath(value.target, 0))).toBe(false);
+    expect(await nodeFs.readFile(payload, "utf8")).toBe(metadataContent[0]);
   });
 
   it("refuses a metadata payload whose inode is not the planned one", async () => {

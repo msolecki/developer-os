@@ -267,7 +267,7 @@ describe("canonical state files", () => {
       path: path(`/product/state/${role}.json`),
       tombstonePath: path(`/product/state/.${role}.tombstone.json`),
       before: { state: "present", hash: sha("before"), payload: null, ownerUid: 501 as EffectiveUidV1, mode: 384, nlink: 1, size: 6, dev, ino: ino(10) },
-      after: { state: "present", hash: sha("after"), payload: { kind: "update_expected", coordinatorId, ordinal: 4, path: deriveCanonicalStatePayloadPath(productHome, coordinator, role, id), hash: sha("after"), bytes: 5, mode: 384 }, ownerUid: 501 as EffectiveUidV1, mode: 384, nlink: 1, size: 5, dev, ino: ino(11) },
+      after: { state: "present", hash: sha("after"), payload: { kind: "update_expected", coordinatorId, ordinal: 4, path: deriveCanonicalStatePayloadPath(productHome, coordinator, role, id), hash: sha("after"), bytes: 5, mode: 384 }, ownerUid: 501 as EffectiveUidV1, mode: 384, nlink: 1, size: 5 },
       reversal: role === "release_trust" ? "monotonic_no_reverse" : "reversible",
       maximumPlanBytes: 65_536,
       maximumJournalBytes: 4096,
@@ -285,12 +285,21 @@ describe("canonical state files", () => {
     ["monotonic active", statePlan("active_release", { reversal: "monotonic_no_reverse" })],
     ["absent trust after", statePlan("release_trust", { after: { state: "absent" } })],
     ["absent to absent", statePlan("active_release", { before: { state: "absent" }, after: { state: "absent" } })],
-    ["a preimage with a payload", statePlan("active_release", { before: { ...(statePlan("active_release").after) } })],
-    ["a postimage without a payload", statePlan("active_release", { after: { ...(statePlan("active_release").before) } })],
+    ["a preimage with a payload", statePlan("active_release", { before: { ...statePlan("active_release").after, dev, ino: ino(11) } as never })],
+    ["a postimage without a payload", statePlan("active_release", { after: { ...statePlan("active_release").before } as never })],
+    ["a postimage with a planned device/inode", statePlan("active_release", { after: { ...statePlan("active_release").after, dev, ino: ino(11) } as never })],
+    ["a preimage without a device/inode", statePlan("active_release", { before: { state: "present", hash: sha("before"), payload: null, ownerUid: 501 as EffectiveUidV1, mode: 384, nlink: 1, size: 6 } as never })],
     ["a payload of another role", statePlan("active_release", { after: statePlan("rollback_record").after })],
     ["a non-sibling tombstone", statePlan("active_release", { tombstonePath: path("/product/other/.t.json") })],
   ])("refuses %s", (_name, plan) => {
     expect(() => validateCanonicalStateFilePlan(plan, productHome)).toThrow();
+  });
+
+  it("fixes the plan bytes before the payload exists: only the preimage carries a device/inode", () => {
+    const plan = validateCanonicalStateFilePlan(statePlan("active_release"), productHome);
+    expect(Object.keys(plan.after).sort()).toEqual(["hash", "mode", "nlink", "ownerUid", "payload", "size", "state"]);
+    expect(Object.keys(plan.before)).toEqual(expect.arrayContaining(["dev", "ino"]));
+    expect(updateParticipantDocumentHash(plan)).toBe(updateParticipantDocumentHash(statePlan("active_release")));
   });
 
   it("accepts only the linear transition prefix", () => {

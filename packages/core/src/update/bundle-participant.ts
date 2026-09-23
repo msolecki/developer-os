@@ -179,7 +179,27 @@ export interface BundleStatePayloadRefV1 {
   readonly mode: 384;
 }
 
-export type BundleMetadataFileStateV1 =
+/** Amended 2026-09-23 (D60): only the guarded preimage carries a device/inode. */
+export type BundleMetadataPreimageV1 =
+  | { readonly state: "absent" }
+  | {
+      readonly state: "present";
+      readonly hash: LowerHexSha256;
+      readonly payload: null;
+      readonly ownerUid: EffectiveUidV1;
+      readonly mode: 384;
+      readonly nlink: 1;
+      readonly size: number;
+      readonly dev: UInt64DecimalV1;
+      readonly ino: UInt64DecimalV1;
+    };
+
+/**
+ * A published postimage takes its device/inode only from the reopened construction evidence of
+ * `payload`; the null payload is the byte-identical present→present row, whose identity is the
+ * preimage's.
+ */
+export type BundleMetadataPostimageV1 =
   | { readonly state: "absent" }
   | {
       readonly state: "present";
@@ -189,11 +209,13 @@ export type BundleMetadataFileStateV1 =
       readonly mode: 384;
       readonly nlink: 1;
       readonly size: number;
-      readonly dev: UInt64DecimalV1;
-      readonly ino: UInt64DecimalV1;
     };
 
+export type BundleMetadataFileStateV1 = BundleMetadataPreimageV1 | BundleMetadataPostimageV1;
+
 export type PresentBundleMetadataFileStateV1 = Extract<BundleMetadataFileStateV1, { readonly state: "present" }>;
+export type PresentBundleMetadataPreimageV1 = Extract<BundleMetadataPreimageV1, { readonly state: "present" }>;
+export type PresentBundleMetadataPostimageV1 = Extract<BundleMetadataPostimageV1, { readonly state: "present" }>;
 
 export interface BundleMetadataStatePlanV1 {
   readonly schemaVersion: 1;
@@ -202,8 +224,8 @@ export interface BundleMetadataStatePlanV1 {
   readonly role: "release_metadata";
   readonly path: CanonicalAbsolutePathV1;
   readonly tombstonePath: CanonicalAbsolutePathV1;
-  readonly before: BundleMetadataFileStateV1;
-  readonly after: BundleMetadataFileStateV1;
+  readonly before: BundleMetadataPreimageV1;
+  readonly after: BundleMetadataPostimageV1;
   readonly reversal: "reversible";
   readonly maximumPlanBytes: number;
   readonly maximumJournalBytes: number;
@@ -913,24 +935,33 @@ function validateTarget(value: unknown, label: string): ReleaseIdentityV1 {
   return input as unknown as ReleaseIdentityV1;
 }
 
-function validateMetadataState(value: unknown, label: string): BundleMetadataFileStateV1 {
+function validateMetadataState(value: unknown, side: "before" | "after", label: string): BundleMetadataFileStateV1 {
   const input = record(value, label);
   if (input.state === "absent") {
     exact(input, ["state"], label);
     return input as unknown as BundleMetadataFileStateV1;
   }
-  identity(input, ["state", "hash", "payload", "ownerUid", "mode", "nlink", "size", "dev", "ino"], label);
+  if (side === "before") identity(input, ["state", "hash", "payload", "ownerUid", "mode", "nlink", "size", "dev", "ino"], label);
+  else exact(input, ["state", "hash", "payload", "ownerUid", "mode", "nlink", "size"], label);
   if (input.state !== "present" || input.mode !== 384 || input.nlink !== 1) fail(label);
   parseLowerHexSha256(input.hash);
   integer(input.ownerUid, 0, 4_294_967_295, `${label}.ownerUid`);
   integer(input.size, 1, MAXIMUM_METADATA_BYTES, `${label}.size`);
   if (input.payload !== null) {
+    if (side === "before") fail(`${label}.payload: a preimage carries no payload`);
     const payload = exact(input.payload, ["kind", "coordinatorId", "ordinal", "path", "hash", "bytes", "mode"], `${label}.payload`);
     if (payload.kind !== "update_expected" || payload.mode !== 384 || payload.hash !== input.hash || payload.bytes !== input.size) fail(`${label}.payload`);
     integer(payload.ordinal, 0, 1_099_999, `${label}.payload.ordinal`);
     parseCanonicalAbsolutePathText(payload.path);
   }
   return input as unknown as BundleMetadataFileStateV1;
+}
+
+/** The preimage as the postimage it must equal for a byte-identical present→present row. */
+function postimageOf(before: BundleMetadataPreimageV1): Readonly<Record<string, unknown>> {
+  if (before.state === "absent") return before;
+  const { state, hash, payload, ownerUid, mode, nlink, size } = before;
+  return { state, hash, payload, ownerUid, mode, nlink, size };
 }
 
 /** Absent → present no-replace from its derived state payload, or present → the identical present. */
@@ -942,13 +973,13 @@ function validateMetadataPlan(value: unknown, plan: Readonly<Record<string, unkn
   if (input.path !== bundleMetadataPath(target, ordinal)) fail(`${label}.path: not the hash-derived path`);
   const tombstone = parseCanonicalAbsolutePathText(input.tombstonePath);
   if (tombstone === input.path || !tombstone.startsWith(`${stagingRoot}/`)) fail(`${label}.tombstonePath`);
-  const before = validateMetadataState(input.before, `${label}.before`);
-  const after = validateMetadataState(input.after, `${label}.after`);
+  const before = validateMetadataState(input.before, "before", `${label}.before`) as BundleMetadataPreimageV1;
+  const after = validateMetadataState(input.after, "after", `${label}.after`);
   if (after.state !== "present") fail(`${label}.after: metadata is never removed`);
   if (before.state === "absent") {
     const expectedPayload = deriveCanonicalStatePayloadPath(productHomeOf(target, label), plan.coordinatorId as SafeReasonCodeV1, "release_metadata", id);
     if (after.payload?.path !== expectedPayload || after.payload.coordinatorId !== plan.coordinatorId) fail(`${label}.after.payload`);
-  } else if (before.payload !== null || after.payload !== null || canonical(before) !== canonical(after)) {
+  } else if (after.payload !== null || canonical(postimageOf(before)) !== canonical(after)) {
     fail(`${label}: replacement is illegal`);
   }
   checkPlanBounds(input, label);
@@ -1197,7 +1228,7 @@ export function advanceBundlePublicationJournal(plan: BundlePublicationPlanV1, j
     }
     case "metadata_verified": {
       need(current.phase === "metadata_publishing" && current.metadataWriteState === null && !bundleMetadataCreates(plan, current.nextMetadata));
-      const before = (plan.metadata[current.nextMetadata] as BundleMetadataStatePlanV1).before as PresentBundleMetadataFileStateV1;
+      const before = (plan.metadata[current.nextMetadata] as BundleMetadataStatePlanV1).before as PresentBundleMetadataPreimageV1;
       next = { ...base, phase: afterMetadata(current.nextMetadata + 1), nextMetadata: current.nextMetadata + 1, metadataIdentities: [...current.metadataIdentities, { ordinal: current.nextMetadata, dev: before.dev, ino: before.ino }] };
       break;
     }

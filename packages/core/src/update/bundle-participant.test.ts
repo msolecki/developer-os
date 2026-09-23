@@ -105,7 +105,8 @@ const target: ReleaseIdentityV1 = {
 
 function metadataRow(ordinal: number, created: boolean): BundleMetadataStatePlanV1 {
   const id = parseSafeReasonCode(`metadata_${ordinal.toString(10)}`);
-  const present = { state: "present" as const, hash: sha(`metadata ${ordinal.toString(10)}`), ownerUid: 501 as EffectiveUidV1, mode: 384 as const, nlink: 1 as const, size: 20, dev: u64("9"), ino: u64((100 + ordinal).toString(10)) };
+  const present = { state: "present" as const, hash: sha(`metadata ${ordinal.toString(10)}`), ownerUid: 501 as EffectiveUidV1, mode: 384 as const, nlink: 1 as const, size: 20 };
+  const identity = { dev: u64("9"), ino: u64((100 + ordinal).toString(10)) };
   const payload = { kind: "update_expected" as const, coordinatorId, ordinal: 40 + ordinal, path: deriveCanonicalStatePayloadPath(home, coordinatorId as unknown as SafeReasonCodeV1, "release_metadata", id), hash: present.hash, bytes: present.size, mode: 384 as const };
   return {
     schemaVersion: 1,
@@ -114,7 +115,7 @@ function metadataRow(ordinal: number, created: boolean): BundleMetadataStatePlan
     role: "release_metadata",
     path: bundleMetadataPath(target, ordinal),
     tombstonePath: parseCanonicalAbsolutePathText(`${root}/update/tombstones/${id}.json`),
-    before: created ? { state: "absent" } : { ...present, payload: null },
+    before: created ? { state: "absent" } : { ...present, payload: null, ...identity },
     after: created ? { ...present, payload } : { ...present, payload: null },
     reversal: "reversible",
     maximumPlanBytes: 16_777_216,
@@ -342,6 +343,9 @@ describe("BundlePublicationPlanV1", () => {
     ["a retained root of another identity", () => ({ ...verifyPlan(), targetRootBefore: { state: "present", inventoryHash: bundleInventoryHash(entries), dev: u64("7"), ino: u64("9") } })],
     ["metadata at a non-hash-derived path", () => ({ ...publishPlan(), metadata: [{ ...metadataRow(0, true), path: bundleMetadataPath(target, 1) }, metadataRow(1, false), metadataRow(2, true)] })],
     ["a metadata replacement", () => ({ ...publishPlan(), metadata: [{ ...metadataRow(1, false), after: metadataRow(0, true).after, path: bundleMetadataPath(target, 0) }, metadataRow(1, false), metadataRow(2, true)] })],
+    ["a postimage with a planned device/inode", () => ({ ...publishPlan(), metadata: [{ ...metadataRow(0, true), after: { ...metadataRow(0, true).after, dev: u64("9"), ino: u64("100") } }, metadataRow(1, false), metadataRow(2, true)] })],
+    ["a preimage without a device/inode", () => ({ ...verifyPlan(), metadata: [{ ...metadataRow(0, false), before: metadataRow(0, false).after }, metadataRow(1, false), metadataRow(2, false)] })],
+    ["a verify row whose postimage differs from its preimage", () => ({ ...verifyPlan(), metadata: [{ ...metadataRow(0, false), after: { ...metadataRow(0, false).after, size: 21 } }, metadataRow(1, false), metadataRow(2, false)] })],
     ["a wrong ready path", () => ({ ...publishPlan(), source: { ...publishPlan().source, readyEvidencePath: parseCanonicalAbsolutePathText(`${root}/ready.json`) } })],
     ["a wrong inventory hash", () => ({ ...publishPlan(), inventoryHash: sha("other") })],
     ["a bundle root outside releases", () => ({ ...publishPlan(), target: { ...target, bundleRoot: parseCanonicalAbsolutePathText(`${home}/elsewhere`) } })],

@@ -8,21 +8,28 @@ import {
   encodeCanonicalJson,
   isRetainedRecordVerification,
   LifecycleRecoveryRequiredError,
+  MAXIMUM_CONSTRUCTION_EVIDENCE_BYTES,
   MAXIMUM_UPDATE_PARTICIPANT_JOURNAL_BYTES,
   parseCanonicalAbsolutePathText,
   parseUtcTimestamp,
   rejectUpdateStep,
   stateLeafKindForRole,
+  updateConstructionEvidencePath,
   updateParticipantDocumentHash,
+  validateConstructionFileEvidence,
   validateStateParticipantJournal,
   type CanonicalAbsolutePathV1,
   type CanonicalStateFilePlanV1,
-  type CanonicalStateFileStateV1,
+  type CanonicalStatePreimageV1,
+  type CanonicalStatePostimageV1,
   type ImmutableUpdatePlanRefV1,
   type LifecycleGuardedEntryV1,
   type LifecycleGuardedFileSystemV1,
   type LowerHexSha256,
+  type StatePayloadRefV1,
   type TargetVerificationPlanV1,
+  type UInt64DecimalV1,
+  type UpdateConstructionPlanV1,
   type UpdateInitialJournalRefV1,
   type UpdateParticipantObservationV1,
   type UpdateStateParticipantJournalV1,
@@ -48,6 +55,40 @@ function sha256Hex(bytes: Uint8Array): LowerHexSha256 {
 export function participantTimestamp(now: () => Date, floor: UtcTimestampV1): UtcTimestampV1 {
   const stamp = parseUtcTimestamp(now().toISOString());
   return stamp > floor ? stamp : floor;
+}
+
+export interface UpdatePayloadIdentityV1 {
+  readonly dev: UInt64DecimalV1;
+  readonly ino: UInt64DecimalV1;
+}
+
+/**
+ * Resolves a planned postimage payload to the device/inode its construction row recorded. A plan
+ * never carries a postimage inode (D60): it is written before its payload exists.
+ */
+export type UpdatePayloadIdentityResolverV1 = (payload: Pick<StatePayloadRefV1, "coordinatorId" | "ordinal" | "path" | "hash" | "bytes" | "mode">) => Promise<UpdatePayloadIdentityV1>;
+
+/**
+ * The production resolver: the payload ref must equal its `state_after` construction row, and the
+ * identity comes only from that row's reopened, canonical construction evidence.
+ */
+export function constructionPayloadIdentity(fs: LifecycleGuardedFileSystemV1, effectiveUid: number, plan: UpdateConstructionPlanV1): UpdatePayloadIdentityResolverV1 {
+  return async (payload) => {
+    const row = plan.files[payload.ordinal];
+    if (payload.coordinatorId !== plan.coordinatorId || row?.role.kind !== "payload" || row.role.payloadKind !== "state_after" || row.path !== payload.path || row.sha256 !== payload.hash || row.bytes !== payload.bytes || row.mode !== payload.mode) {
+      return refuseParticipant("update_state_payload_row", payload.path);
+    }
+    const path = updateConstructionEvidencePath(plan.stagingRoot.path, payload.ordinal);
+    const entry = await fs.lstat(path);
+    if (entry?.kind !== "regular_file" || entry.ownerUid !== effectiveUid || entry.mode !== 0o600 || entry.nlink !== 1 || BigInt(entry.size) > BigInt(MAXIMUM_CONSTRUCTION_EVIDENCE_BYTES)) return refuseParticipant("update_state_payload_evidence", path);
+    try {
+      const evidence = validateConstructionFileEvidence(await fs.readRegular(entry, MAXIMUM_CONSTRUCTION_EVIDENCE_BYTES), plan, payload.ordinal);
+      return { dev: evidence.dev, ino: evidence.ino };
+    } catch (error) {
+      if (error instanceof LifecycleRecoveryRequiredError) throw error;
+      throw Object.assign(new LifecycleRecoveryRequiredError("update_state_payload_evidence", [path]), { cause: error });
+    }
+  };
 }
 
 export interface UpdateParticipantJournalStoreDependenciesV1 {
@@ -189,7 +230,9 @@ export class UpdateParticipantJournalStore {
   }
 }
 
-type PresentState = Extract<CanonicalStateFileStateV1, { readonly state: "present" }>;
+type PresentPreimage = Extract<CanonicalStatePreimageV1, { readonly state: "present" }>;
+type PresentPostimage = Extract<CanonicalStatePostimageV1, { readonly state: "present" }>;
+type PresentState = Pick<PresentPreimage, "hash" | "ownerUid" | "size"> & UpdatePayloadIdentityV1;
 type Observed = "missing" | "before" | "after" | "third";
 type StateKind = "release_trust_state" | "active_release_state" | "rollback_record_state";
 type StateJournal = UpdateStateParticipantJournalV1<StateKind>;
@@ -201,6 +244,8 @@ export interface CanonicalStateParticipantDependenciesV1 {
   readonly now: () => Date;
   /** The role's own strict codec over reopened bytes; throws on anything else. */
   readonly validateBytes: (role: CanonicalStateFilePlanV1["role"], bytes: Uint8Array) => void;
+  /** The postimage identity, from construction evidence only (`constructionPayloadIdentity`). */
+  readonly payloadIdentity: UpdatePayloadIdentityResolverV1;
 }
 
 export interface CanonicalStateStepV1 {
@@ -292,7 +337,7 @@ export class CanonicalStateParticipant {
       const record = await this.#dependencies.fs.lstat(step.plan.path);
       if (record !== null) {
         if ((await this.observeFile(step.plan.path, step.plan)) !== "before") refuseParticipant("update_state_third", step.plan.path);
-        await this.#dependencies.journals.remove(step.plan.path, (step.plan.before as PresentState).hash);
+        await this.#dependencies.journals.remove(step.plan.path, (step.plan.before as PresentPreimage).hash);
       }
     } else if (step.plan.before.state === "present") {
       if ((await this.observeFile(step.plan.tombstonePath, step.plan)) !== "missing") await this.#dependencies.journals.remove(step.plan.tombstonePath, step.plan.before.hash);
@@ -306,7 +351,7 @@ export class CanonicalStateParticipant {
     if ((await fs.lstat(step.journal.finalPath)) !== null) {
       const journal = await this.openJournal(step);
       if (journal.phase !== "finalized" && journal.phase !== "rolled_back") refuseParticipant("update_state_compaction_not_terminal", step.journal.finalPath);
-      if (step.plan.after.state === "present" && step.plan.after.payload !== null) await journals.remove(step.plan.after.payload.path, step.plan.after.hash);
+      if (step.plan.after.state === "present") await journals.remove(step.plan.after.payload.path, step.plan.after.hash);
       await journals.remove(step.journal.finalPath);
     }
     await journals.remove(step.planRef.path, step.planRef.hash);
@@ -329,7 +374,7 @@ export class CanonicalStateParticipant {
 
   private async forward(plan: CanonicalStateFilePlanV1, transition: number): Promise<void> {
     const { fs } = this.#dependencies;
-    const payloadPath = plan.after.state === "present" && plan.after.payload !== null ? plan.after.payload.path : null;
+    const payloadPath = plan.after.state === "present" ? plan.after.payload.path : null;
     if (transition === 0 && plan.before.state === "present") {
       const [current, tombstone] = [await this.observeFile(plan.path, plan), await this.observeFile(plan.tombstonePath, plan)];
       if (current === "before" && tombstone === "missing") await this.move(plan.path, plan.tombstonePath);
@@ -346,7 +391,7 @@ export class CanonicalStateParticipant {
   }
 
   private async backward(plan: CanonicalStateFilePlanV1, transition: number): Promise<void> {
-    const payloadPath = plan.after.state === "present" && plan.after.payload !== null ? plan.after.payload.path : null;
+    const payloadPath = plan.after.state === "present" ? plan.after.payload.path : null;
     if (transition === 1 && payloadPath !== null) {
       const [current, payload] = [await this.observeFile(plan.path, plan), await this.observeFile(payloadPath, plan)];
       if (current === "after" && payload === "missing") await this.move(plan.path, payloadPath);
@@ -373,22 +418,33 @@ export class CanonicalStateParticipant {
   }
 
   private async requireInventory(plan: CanonicalStateFilePlanV1, current: Observed, tombstone: Observed, payload: Observed): Promise<void> {
-    const payloadPath = plan.after.state === "present" && plan.after.payload !== null ? plan.after.payload.path : null;
+    const payloadPath = plan.after.state === "present" ? plan.after.payload.path : null;
     if ((await this.observeFile(plan.path, plan)) !== current) refuseParticipant("update_state_third", plan.path);
     if ((await this.observeFile(plan.tombstonePath, plan)) !== tombstone) refuseParticipant("update_state_third", plan.tombstonePath);
     if (payloadPath !== null && (await this.observeFile(payloadPath, plan)) !== payload) refuseParticipant("update_state_third", payloadPath);
   }
 
-  /** Classifies one path by exact owner/mode/link/size/inode/content identity. */
+  /**
+   * Classifies one path by exact owner/mode/link/size/inode/content identity. The preimage inode is
+   * planned; the postimage inode is its payload's construction evidence, so a moved inode is third.
+   */
   private async observeFile(path: CanonicalAbsolutePathV1, plan: CanonicalStateFilePlanV1): Promise<Observed> {
     const entry = await this.#dependencies.fs.lstat(path);
     if (entry === null) return "missing";
-    const candidates: [Observed, CanonicalStateFileStateV1][] = [["before", plan.before], ["after", plan.after]];
+    const candidates: [Observed, PresentState | null][] = [
+      ["before", plan.before.state === "present" ? plan.before : null],
+      ["after", plan.after.state === "present" ? await this.postimage(plan.after) : null],
+    ];
     for (const [label, state] of candidates) {
-      if (state.state !== "present" || !this.matches(entry, state)) continue;
+      if (state === null || !this.matches(entry, state)) continue;
       if ((await this.#dependencies.fs.hashRegular(entry, BigInt(state.size))) === state.hash) return label;
     }
     return "third";
+  }
+
+  private async postimage(after: PresentPostimage): Promise<PresentState> {
+    const { dev, ino } = await this.#dependencies.payloadIdentity(after.payload);
+    return { hash: after.hash, ownerUid: after.ownerUid, size: after.size, dev, ino };
   }
 
   private matches(entry: LifecycleGuardedEntryV1, state: PresentState): boolean {

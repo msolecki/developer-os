@@ -32,7 +32,8 @@ import {
   type BundleSourceStagingPlanV1,
   type CanonicalAbsolutePathV1,
   type LifecycleGuardedEntryV1,
-  type PresentBundleMetadataFileStateV1,
+  type PresentBundleMetadataPostimageV1,
+  type PresentBundleMetadataPreimageV1,
   type ReleaseBundleEntryV1,
   type UpdateDirectoryIdentityV1,
   type UpdatePublishedMetadataIdentityV1,
@@ -53,6 +54,7 @@ import {
   type BundleEntryDeathPointV1,
   type BundleParticipantDependenciesV1,
 } from "./bundle-source.js";
+import type { UpdatePayloadIdentityResolverV1 } from "./state-participant.js";
 
 export type BundlePublicationDeathPointV1 = BundleEntryDeathPointV1 | "root_made" | "metadata_renamed";
 
@@ -82,6 +84,11 @@ interface StagedSource {
 
 type Journal = BundleJournalFile<BundlePublicationJournalV1>;
 
+export interface BundlePublicationDependenciesV1 extends BundleParticipantDependenciesV1<BundlePublicationDeathPointV1> {
+  /** A created metadata postimage's identity, from its payload's construction evidence only (D60). */
+  readonly payloadIdentity: UpdatePayloadIdentityResolverV1;
+}
+
 function observe(journal: BundlePublicationJournalV1): BundlePublicationObservationV1 {
   return { phase: journal.phase, targetRootIdentity: journal.targetRootIdentity, metadataIdentities: journal.metadataIdentities };
 }
@@ -98,11 +105,11 @@ function targetEntryPath(plan: BundlePublicationPlanV1, ordinal: number): Canoni
  * recorded identities; a retained path is never replaced or recursively removed.
  */
 export class BundlePublicationParticipant {
-  readonly #dependencies: BundleParticipantDependenciesV1<BundlePublicationDeathPointV1>;
+  readonly #dependencies: BundlePublicationDependenciesV1;
   readonly #io: BundleGuardedIo;
   readonly #root: CanonicalAbsolutePathV1;
 
-  constructor(dependencies: BundleParticipantDependenciesV1<BundlePublicationDeathPointV1>, stagingRoot: CanonicalAbsolutePathV1) {
+  constructor(dependencies: BundlePublicationDependenciesV1, stagingRoot: CanonicalAbsolutePathV1) {
     this.#dependencies = dependencies;
     this.#io = new BundleGuardedIo(dependencies.fs, dependencies.effectiveUid);
     this.#root = parseCanonicalAbsolutePathText(stagingRoot);
@@ -230,11 +237,12 @@ export class BundlePublicationParticipant {
 
   /** `publish_intent`, identity-preserving no-replace rename of the construction payload, reopen. */
   async #publishMetadata(plan: BundlePublicationPlanV1, file: Journal, row: BundleMetadataStatePlanV1): Promise<void> {
-    const after = row.after as PresentBundleMetadataFileStateV1;
+    const after = row.after as PresentBundleMetadataPostimageV1;
     const payload = after.payload;
     if (payload === null) return refuseBundle("bundle_metadata_payload", row.path);
+    const planned = await this.#dependencies.payloadIdentity(payload);
     const found = await this.#io.fs.lstat(payload.path);
-    if (!this.#io.isBoundedRegular(found, 0o600, after.size) || found.size !== after.size.toString(10) || !sameInode(found, after)) return refuseBundle("bundle_metadata_payload", payload.path);
+    if (!this.#io.isBoundedRegular(found, 0o600, after.size) || found.size !== after.size.toString(10) || !sameInode(found, planned)) return refuseBundle("bundle_metadata_payload", payload.path);
     if ((await this.#io.fs.hashRegular(found, BigInt(after.size))) !== after.hash) refuseBundle("bundle_metadata_payload", payload.path);
     const targetParent = await this.#io.ownedDirectory(parentPath(row.path));
     const payloadParent = await this.#io.ownedDirectory(parentPath(payload.path));
@@ -253,7 +261,7 @@ export class BundlePublicationParticipant {
 
   /** Present metadata records its already planned identity without gaining deletion authority. */
   async #verifyMetadata(plan: BundlePublicationPlanV1, file: Journal, row: BundleMetadataStatePlanV1): Promise<void> {
-    const before = row.before as PresentBundleMetadataFileStateV1;
+    const before = row.before as PresentBundleMetadataPreimageV1;
     const found = await this.#io.fs.lstat(row.path);
     if (!this.#io.isBoundedRegular(found, 0o600, before.size) || found.ownerUid !== before.ownerUid || !sameInode(found, before)) return refuseBundle("bundle_metadata_identity", row.path);
     await this.#io.verifyWritten(found, before.size, before.hash, 0o600);
@@ -303,8 +311,9 @@ export class BundlePublicationParticipant {
       const row = plan.metadata[metadata.ordinal] as BundleMetadataStatePlanV1;
       const found = await this.#io.fs.lstat(row.path);
       if (found !== null) {
-        // The rename moves the payload inode, so only that planned identity binds the intent.
-        if (!sameInode(found, row.after as PresentBundleMetadataFileStateV1)) refuseBundle("bundle_unbound", row.path);
+        // The rename moves the payload inode, so only its construction-evidenced identity binds the intent.
+        const payload = (row.after as PresentBundleMetadataPostimageV1).payload;
+        if (payload === null || !sameInode(found, await this.#dependencies.payloadIdentity(payload))) refuseBundle("bundle_unbound", row.path);
         await this.#advance(plan, file, { kind: "metadata_published", dev: found.dev, ino: found.ino });
       }
     }
@@ -343,7 +352,7 @@ export class BundlePublicationParticipant {
     const inFlight = journal.metadataWriteState?.ordinal === ordinal && journal.metadataWriteState.state === "published" ? journal.metadataWriteState : null;
     const identity = inFlight ?? journal.metadataIdentities[ordinal];
     if (identity === undefined) return;
-    await this.#io.removeFile(row.path, 0o600, (row.after as PresentBundleMetadataFileStateV1).size, identity);
+    await this.#io.removeFile(row.path, 0o600, (row.after as PresentBundleMetadataPostimageV1).size, identity);
   }
 
   async #compensateEntry(plan: BundlePublicationPlanV1, journal: BundlePublicationJournalV1): Promise<void> {
