@@ -4,7 +4,9 @@
 
 **Goal:** Implement the approved DOS-P7 Spec 2 stable launcher, signed release trust, `InstallationManifestV2`, the V1 refusal and V2 initialization (the V1 migration was withdrawn by D18), plan-first update, managed-artifact/schema upgrade, and conservative one-version rollback.
 
-**Architecture:** Core owns canonical scalar/path codecs, manifest/update schemas, pure transition tables, target-plan validation, and migration-chain contracts; Security owns signatures, fixed-origin transport, bounded Zstandard/ustar admission, guarded scratch, and planner/verifier supervision; platform-macos owns launcher executable/platform admission; the launcher owns offline root trust and exact bundle selection; the adapters and Brain expose pure target planners; the CLI composes all concrete paths, owner providers, construction/source envelopes, lifecycle participants, update/rollback commands, and recovery. Tasks 1–7 and 9 deliver the V2 bootstrap handoff that unblocks the already-approved Spec 1 plan (Task 8 is withdrawn); after Spec 1 completes, Tasks 10–26 consume its lifecycle coordinator and finish Spec 2.
+Completed tasks were removed on 2026-09-23; see git history. What remains: the Phase 4b close (below, run first), Task 11b (parked), and Tasks 12–26.
+
+**Architecture:** Core owns canonical scalar/path codecs, manifest/update schemas, pure transition tables, target-plan validation, and migration-chain contracts; Security owns signatures, fixed-origin transport, bounded Zstandard/ustar admission, guarded scratch, and planner/verifier supervision; platform-macos owns launcher executable/platform admission; the launcher owns offline root trust and exact bundle selection; the adapters and Brain expose pure target planners; the CLI composes all concrete paths, owner providers, construction/source envelopes, lifecycle participants, update/rollback commands, and recovery. Tasks 12–26 consume Spec 1's lifecycle coordinator and finish Spec 2.
 
 **Tech Stack:** TypeScript 5.9 strict ESM, Node.js 24 built-ins (`node:crypto`, `node:https`, `node:zlib`, `node:fs`), Zod 4 where existing package schemas use it, Vitest 4, existing Foundation transactions and injected filesystem/process/clock/lock ports.
 
@@ -12,8 +14,7 @@
 
 ## Global Constraints
 
-- Execute Tasks 1–9 first and commit their checkpoint. Then execute `docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md` completely. Resume this plan at Task 10 only after Spec 1's lifecycle coordinator, participant, compaction, Git, launchd, and uninstall contracts pass their checkpoint. **Amended 2026-09-16 by roadmap decision D16:** Tasks 10–11 run after plan 1a (roadmap Phase 4b), provided they need nothing from Spec 1b, and Tasks 12–26 run after the founder cutover (roadmap Phase 8).
-- Tasks 1–9 may create shared files named by the Spec 1 plan (`packages/core/src/lifecycle/canonical-json.ts`, lifecycle ID codecs, and bootstrap allocator schemas). During Spec 1 execution those files are consumed/extended rather than redeclared; this is the approved split dependency, not a second implementation.
+- **Sequencing (D16, 2026-09-16):** Tasks 12–26 run as roadmap Phase 8, after the founder cutover (A15). The Phase 4b close below runs before them.
 - Package direction remains `core ← security ← platform-macos ← cli`, with the separate `apps/launcher` depending only on Core, Security, and platform-macos. Core imports no filesystem globals, HTTP, archive extraction, process, platform, adapter, or CLI implementation.
 - No command other than `developer-os update` makes an update network request. Rollback, the V1 refusal, fresh init, uninstall, config, Git, automation, Brain, adapter probes, and launcher selection make zero release-transport requests.
 - `update` and `update rollback` are plan-only unless `--apply` is present. Planning may use only one bounded attempt-owned system-temporary scratch envelope and never mutates product, Brain, vendor, launcher, manifest, trust, active-release, or allocator state.
@@ -44,208 +45,8 @@
 
 ---
 
-## Checkpoint A — Manifest V2 prerequisite before Spec 1
 
-**Tasks 1–7 and 9 are complete and Task 8 is withdrawn; their steps are pruned from this document.**
-Tasks 1–7 delivered the canonical JSON and path codecs, the release identity and signed-metadata
-schemas, `ManagedArtifactV2` and its validators, V2 drift with a guarded V1/V2 store, the recoverable
-manifest direct-write participant, and the bootstrap payload/plan/journal state machines. The contract
-they implement is `specs/2026-08-28-developer-os-release-update-design.md`; the implementation is in
-the tree and in git history, which is the archive.
-
-**One thing about Task 7 does not survive as a contract and is recorded here because nothing else
-states it.** Task 7 was the fresh V2 initialization checkpoint, and the deletion-based
-implementation that reached `1557734` **was rejected by fresh review; no part of it survives.** It
-was superseded by the six-task retained-bootstrap-evidence plan approved 2026-08-31, whose Task 6
-checkpoint landed as `050fc0d..c5022a7` and which roadmap Phase 0 closed on 2026-09-04.
-
-**Task 8 (V1→V2 migration planning) was withdrawn by roadmap decision D18 on 2026-09-17.** Its code
-(`55a06de`, `df3e947`, `8db8eb0`) was reverted by `1a482a0`.
-
-**Task 9, rescoped by D18, closed roadmap Phase 3 on 2026-09-17** as `810d342..43c30e4`: the V1
-refusal in `init` (`manifest_v1_not_migratable`, exit 4, only with the packaged capability), the
-refusal of every non-`init` command while a non-terminal bootstrap envelope exists, and the strict V2
-handoff admission. Three review fix rounds and a final whole-change review preceded the close, and
-`npm run check` passed on `43c30e4`. The surviving contract is in `docs/architecture/foundation.md` and
-`docs/architecture/threat-model.md`; the review's open findings are `BACKLOG.md` NEW-79 to NEW-83 and
-additions to NEW-67.
-
-Next in this document is Task 10, after plan 1a (roadmap Phase 4) and together with the production
-wiring step of roadmap Phase 4b. Tasks 12–26 follow the founder cutover (D16).
-
-## Checkpoint B — Release and update after Spec 1
-
-**Amended 2026-09-16 by D16:** Tasks 10–11 run as roadmap Phase 4b, after plan 1a and before A12,
-together with a new step that replaces the `unavailable_until_packaged_handoff` pin at
-`apps/cli/src/context.ts:765`. Tasks 12–26 run as roadmap Phase 8, after the founder cutover.
-
-### Task 10: Add macOS launcher admission and the stable launcher application
-
-**Done 2026-09-22, `3718969`** (cherry-picked from worktree `task/10`; D44 lane, review deferred to
-phase close). **Deviation to flag at that review:** `packages/platform-macos/src/launcher/admission.ts`
-and its 12 tests were written together rather than confirmed red first — `environment.ts`/`selection.ts`
-did follow genuine red-then-green TDD (18 tests). Also deferred to Task 11/A16 per the implementer's own
-report: signature verification is an injected port with no real Ed25519 math yet; the bootstrap-closure
-reader always supplies `handoff_complete` rather than reading Task 9's real plan/journal state; the
-release-index cross-check against the active record's `releaseIdentityHash()` is not built; `main.ts` is
-untested and its packaged-fallback location and FD 3 write are `ponytail:`-marked placeholders.
-
-**Files:**
-- Create: `packages/platform-macos/src/launcher/types.ts`
-- Create: `packages/platform-macos/src/launcher/admission.ts`
-- Create: `packages/platform-macos/src/launcher/admission.test.ts`
-- Create: `packages/platform-macos/src/launcher/index.ts`
-- Modify: `packages/platform-macos/src/index.ts`
-- Create: `apps/launcher/package.json`
-- Create: `apps/launcher/tsconfig.json`
-- Create: `apps/launcher/vitest.config.ts`
-- Create: `apps/launcher/src/environment.ts`
-- Create: `apps/launcher/src/environment.test.ts`
-- Create: `apps/launcher/src/selection.ts`
-- Create: `apps/launcher/src/selection.test.ts`
-- Create: `apps/launcher/src/main.ts`
-- Modify: `pnpm-workspace.yaml`
-- Modify: `tsconfig.json`
-- Modify: `vitest.config.ts`
-- Modify: `pnpm-lock.yaml`
-
-**Interfaces:**
-- Consumes: Checkpoint A release/manifest/bootstrap records, Spec 1 lifecycle closure, Security guarded-path/signature ports through injected interfaces.
-- Produces: `LauncherPlatformIdentityV1`, `LauncherBundleAdmission`, `LauncherSelectionV1`, `LauncherEnvironmentV1`, normal active/fallback and strict bootstrap recovery routing, shell-free absolute execution request.
-
-- [x] **Step 1: Write failing platform/environment/selection tests**
-
-```ts
-it("falls back only when active state is absent", async () => {
-  expect((await selectLauncherCandidate(absentActiveFixture())).kind).toBe("package_fallback");
-  await expect(selectLauncherCandidate(malformedActiveFixture())).rejects.toMatchObject({ code: 6 });
-});
-
-it("passes only the closed path context", () => {
-  expect(buildLauncherEnvironment(envFixture)).toEqual({
-    HOME: "/Users/test",
-    DEVELOPER_OS_HOME: "/Users/test/.developer-os",
-  });
-});
-```
-
-Cover Darwin arm64/x64 admission, unsupported platform/architecture, exact product-home grammar, optional Brain override grammar without opening it, recovery-required bootstrap routing restricted to `init`, valid launchability suffix, active record/trust/metadata/bundle/manifest set equality, present-invalid refusal, no PATH execution, and one read-only FD 3 reservation.
-
-- [x] **Step 2: Run launcher tests and verify the app/modules are absent**
-
-Run: `npx vitest run --root packages/platform-macos src/launcher/admission.test.ts && npx vitest run --root apps/launcher src/environment.test.ts src/selection.test.ts`
-
-Expected: FAIL because launcher packages and workspace configuration do not exist.
-
-- [x] **Step 3: Implement guarded launcher selection and process request construction**
-
-```ts
-export type LauncherSelectionV1 =
-  | { readonly kind: "package_fallback"; readonly bundle: AdmittedReleaseBundleV1 }
-  | { readonly kind: "active_release"; readonly bundle: AdmittedReleaseBundleV1 }
-  | { readonly kind: "bootstrap_recovery"; readonly bundle: AdmittedReleaseBundleV1; readonly argv: readonly ["init"] };
-
-export async function selectLauncherCandidate(
-  request: LauncherSelectionRequestV1,
-): Promise<LauncherSelectionV1>;
-```
-
-Open every record/tree through no-follow owner/mode/link/size and before/after inode checks; enumerate non-empty exact inventory sets; validate retained metadata/trust/manifest equality before selecting. Build absolute runtime/entrypoint argv and an exact environment object; never inherit or merge process environment.
-
-- [x] **Step 4: Run launcher tests and workspace build**
-
-Run: `npx vitest run --root packages/platform-macos src/launcher/admission.test.ts && npx vitest run --root apps/launcher src/environment.test.ts src/selection.test.ts`
-
-Run: `pnpm --pm-on-fail=ignore build`
-
-Expected: PASS with the launcher project included in the build graph.
-
-- [x] **Step 5: Commit Task 10**
-
-```bash
-git add packages/platform-macos/src/launcher/types.ts packages/platform-macos/src/launcher/admission.ts packages/platform-macos/src/launcher/admission.test.ts packages/platform-macos/src/launcher/index.ts packages/platform-macos/src/index.ts apps/launcher/package.json apps/launcher/tsconfig.json apps/launcher/vitest.config.ts apps/launcher/src/environment.ts apps/launcher/src/environment.test.ts apps/launcher/src/selection.ts apps/launcher/src/selection.test.ts apps/launcher/src/main.ts pnpm-workspace.yaml tsconfig.json vitest.config.ts pnpm-lock.yaml docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
-git commit -m "feat(launcher): select guarded release bundles"
-```
-
-### Task 11: Verify the offline root handoff and signed metadata chain
-
-**Done 2026-09-22, `3f640b3`** (cherry-picked from worktree `task/11`; D44 lane, review deferred to
-phase close; full regressions rerun on the integrated tree: `packages/security` 232/232,
-`apps/launcher` 28/28). Also touched, outside the Files list but justified — `packages/security/src/index.test.ts`,
-the package's own exact-export-door test, updated for the four new exports it would otherwise have
-failed on. **Deviations/decisions to flag at that review:** `signatures.ts`/`handoff.ts` under
-`packages/security` were written together with their tests rather than confirmed red first (same class
-as Task 10's `admission.ts`), though the implementer caught it before commit and reran a genuine red
-check by temporarily removing the implementation files. `LAUNCHER_OFFLINE_RELEASE_ROOTS` in
-`apps/launcher/src/main.ts` is `[]` — no production offline root key exists yet (Task 11b's founder
-decision); the trust compiler returns `null` and the retained-document verifier fails closed, matching
-today's behavior. `execFileSync` → `spawn` in `main.ts` (needed to hand a real pipe descriptor to the
-child) also fixes child exit codes that previously collapsed to 1. The `"release-key-delegation"` /
-`"release-index"` kind literals are this task's own choice, unfixed elsewhere in the tree.
-
-**Files:**
-- Create: `packages/security/src/update/signatures.ts`
-- Create: `packages/security/src/update/signatures.test.ts`
-- Create: `packages/security/src/update/handoff.ts`
-- Create: `packages/security/src/update/handoff.test.ts`
-- Create: `packages/security/src/update/index.ts`
-- Modify: `packages/security/src/index.ts`
-- Create: `apps/launcher/src/handoff.ts`
-- Create: `apps/launcher/src/handoff.test.ts`
-- Modify: `apps/launcher/src/main.ts`
-
-**Interfaces:**
-- Consumes: Task 2 signed-document schemas and Task 10 launcher admission.
-- Produces: `verifySignedReleaseDocument`, `verifyReleaseMetadataChain`, `readOfflineReleaseTrustFd`, `renderOfflineReleaseTrustPipe`, launcher-owned compiled trust constants and exact FD 3 handoff.
-
-- [x] **Step 1: Write failing signature/domain/descriptor tests**
-
-```ts
-it("verifies the exact domain-separated Ed25519 bytes", () => {
-  expect(verifySignedReleaseDocument(vector.document, vector.currentRoot)).toEqual(vector.signed);
-});
-
-it.each(signatureMutations)("refuses $name", mutation => {
-  expect(() => verifyReleaseMetadataChain(mutation.chain)).toThrow(SecurityRefusalError);
-});
-```
-
-Cover key-ID/raw-key equality, 32-byte public and 64-byte signature lengths, base64url without padding, one signature, document kind/domain/canonical bytes, current root online delegation, current/previous root retained metadata, one pipe, 64-KiB EOF, extra inherited descriptors, parent launcher identity, and close-before-context behavior.
-
-- [x] **Step 2: Run signature/handoff tests and verify missing verifier fails**
-
-Run: `npx vitest run --root packages/security src/update/signatures.test.ts src/update/handoff.test.ts && npx vitest run --root apps/launcher src/handoff.test.ts`
-
-Expected: FAIL because signature and descriptor handoff modules are absent.
-
-- [x] **Step 3: Implement Ed25519 verification and exact pipe handoff**
-
-```ts
-export function verifySignedReleaseDocument<TKind extends string, TSigned>(
-  document: SignedReleaseDocumentV1<TKind, TSigned>,
-  key: OfflineRootKeyV1 | DelegatedReleaseKeyV1,
-): TSigned;
-
-export async function readOfflineReleaseTrustFd(
-  descriptor: number,
-  dependencies: OfflineTrustReaderDependencies,
-): Promise<OfflineReleaseTrustV1>;
-```
-
-Use `node:crypto.verify(null, ...)` over the exact domain plus no-LF canonical `signed` bytes. The launcher writes canonical JSON plus LF to a fresh pipe, passes only read FD 3, and closes its write side; the CLI validates pipe type/EOF/size/parent/descriptor set and closes it before any descendant can inherit it.
-
-- [x] **Step 4: Run signature/handoff tests**
-
-Run: `npx vitest run --root packages/security src/update/signatures.test.ts src/update/handoff.test.ts && npx vitest run --root apps/launcher src/handoff.test.ts`
-
-Expected: PASS for current/retained root and all mutation vectors.
-
-- [x] **Step 5: Commit Task 11**
-
-```bash
-git add packages/security/src/update/signatures.ts packages/security/src/update/signatures.test.ts packages/security/src/update/handoff.ts packages/security/src/update/handoff.test.ts packages/security/src/update/index.ts packages/security/src/index.ts apps/launcher/src/handoff.ts apps/launcher/src/handoff.test.ts apps/launcher/src/main.ts docs/superpowers/plans/2026-08-29-developer-os-release-update.md docs/superpowers/ORDER.md
-git commit -m "feat(security): verify release metadata trust"
-```
+## Task 11b (parked) and Checkpoint B — Release and update after the cutover
 
 ### Task 11b: Replace the production bootstrap pin with the launcher's admitted, verified release
 
@@ -261,6 +62,8 @@ tests. `apps/cli/src/update/packaged-release.ts` already has the admission machi
 (`apps/cli/src/commands/testing.ts:502-504`, `createSyntheticPackagedRelease`) — this task is the
 first production caller. Neither Spec 1's plan nor this plan replaces the pin; that is the gap Phase
 4b's checklist named.
+
+Before the pin is removed: correct the V1 refusal's recovery (D20, NEW-79) and harden the ordinary-command gate (NEW-81) — roadmap Phase 4b.
 
 **Files:**
 - Modify: `apps/cli/src/bin.ts` — read the launcher's FD 3 handoff (Task 11's `readOfflineReleaseTrustFd`) when present; on success, derive a `RootVerifiedPackagedReleaseV1` from Task 10's admitted bundle (`AdmittedReleaseBundleV1`) and Task 11's verified metadata chain, and pass it into `createProductionContext`. When FD 3 is absent or closed (no launcher, direct CLI invocation), pass nothing — today's pin behavior is the fallback, not a regression.
@@ -1324,27 +1127,17 @@ git commit -m "feat: complete release and update lifecycle"
 
 Confirm CI is green on the exact commit before merge. Do not merge; the founder owns merging. Report the completed A11 evidence and the new `NOW` action, A12.
 
-## Spec Coverage Index
+## Phase 4b close (owed now; D44/D47)
 
-| Normative Spec 2 area | Owning tasks |
-|---|---|
-| §1 scope/invariants and explicit update-only network | Global constraints, Tasks 12, 23–26 |
-| §2 boundaries, package direction, path/scalar brands, planner graph | Tasks 1, 10, 15, 26 |
-| §3 stable launcher, installed layout, active/trust records | Tasks 2, 7, 10–11, 19, 22, 26 |
-| §4 signed metadata, selection, bundle archive, transport | Tasks 2, 11–13, 23, 26 |
-| §5 Manifest V2, drift, direct-write participant | Tasks 3–5, 9, 21, 26 |
-| §6 fresh V2 init and the V1 refusal (migration withdrawn by D18) | Tasks 6–7, 9, 26 |
-| §7 strict update grammar, preview, guarded scratch, typed result | Tasks 13–14, 23, 26 |
-| §8 target planner, owner providers, schema migrations | Tasks 15–17, 21, 26 |
-| §9 construction, participants, coordinator order/failure direction | Tasks 18–24, 26 |
-| §10 retained rollback and conservative apply | Tasks 20, 22–23, 25–26 |
-| §11 errors/output/security behavior | Global constraints and every refusal test, finalized in Task 26 |
-| §12 complete verification gates | Each focused task plus Task 26's row-by-row evidence index |
-| §13 produced interfaces and split implementation sequence | File map, Checkpoints A/B, Tasks 1–26 |
+Tasks 10 (`1e214ce`) and 11 (`3a5f200`) landed on `development` under the D44 lane: lint only, every test written but unrun, review deferred. The same holds for `d2cc737` (NEW-85), `c7bc459` (launcher trust-fd fix) and the side track `6254586` (NEW-49). This close is owned by roadmap Phase 4b (`plans/2026-09-04-developer-os-completion-roadmap.md`).
 
-## Plan Self-Review Record
-
-- **Spec coverage:** Every normative section maps to at least one implementation task and Task 26 evidence; the V2 bootstrap dependency precedes the external Spec 1 plan, and all later update coordination follows it.
-- **Placeholder scan:** The plan contains no deferred implementation placeholder. Every task names exact files, interfaces, a failing-test shape, a failing command/expected reason, implementation signatures/constraints, a passing command, and exact-path commit instructions.
-- **Type consistency:** Shared names are introduced once and consumed consistently: canonical/scalar/path codecs (Task 1), release identity/trust (Task 2), Manifest V2 (Task 3), manifest participant (Task 5), bootstrap plans (Task 6), previews/materialization (Task 14), planner wire (Task 15), owner/migration plans (Tasks 16–17), construction (Task 18), source/publication participants (Tasks 19–20), lifecycle V2 (Task 22), typed command result (Task 23).
-- **Split dependency:** Task 6 explicitly introduces only the deterministic bootstrap arms and pre-staged initial-journal bridge needed before Spec 1. The approved Spec 1 plan then extends those shared modules with allocated lifecycle IDs and the ordinary coordinator without redeclaring or weakening the bootstrap grammar.
+- [ ] Run the deferred Task 10 tests: `npx vitest run --root packages/platform-macos src/launcher/admission.test.ts && npx vitest run --root apps/launcher src/environment.test.ts src/selection.test.ts`, then `pnpm --pm-on-fail=ignore build`. Expected: PASS with the launcher project in the build graph.
+- [ ] Run the deferred Task 11 tests: `npx vitest run --root packages/security src/update/signatures.test.ts src/update/handoff.test.ts && npx vitest run --root apps/launcher src/handoff.test.ts`. Expected: PASS for current/retained root and all mutation vectors.
+- [ ] Run `npm run check` once (D32: the one phase close that closes no plan; the founder may run it by hand). The phase does not close until it is green.
+- [ ] Obtain one fresh-context whole-phase review of every Phase 4b commit. Flag to the reviewer:
+  - Task 10: `packages/platform-macos/src/launcher/admission.ts` and its 12 tests were written together, not confirmed red first. Known placeholders the implementer deferred to Task 11/A16: the bootstrap-closure reader always supplies `handoff_complete` instead of reading Task 9's plan/journal state; the release-index cross-check against the active record's `releaseIdentityHash()` is not built; `main.ts` is untested and its packaged-fallback location is a `ponytail:`-marked placeholder.
+  - Task 11: `packages/security/src/update/{signatures,handoff}.ts` were written with their tests (a red check was rerun by removing the implementation); `packages/security/src/index.test.ts` changed outside the Files list for four new exports; `LAUNCHER_OFFLINE_RELEASE_ROOTS` is `[]` (D46), so the trust compiler returns `null` and retained-document verification fails closed; `execFileSync` → `spawn` in `apps/launcher/src/main.ts` also changes child exit codes; the `"release-key-delegation"`/`"release-index"` kind literals are unfixed elsewhere in the tree.
+  - Each accepted finding gets a failing regression test before the smallest correction.
+- [ ] Push the Phase 4b commits to one branch and open one PR (as plan 1a's `#14`); do not push `development` directly.
+- [ ] **FOUNDER STOP:** the founder merges the PR.
+- [ ] **FOUNDER STOP (parked, D46):** before Task 11b can resume, the founder decides which offline root key the launcher compiles in and whether public releases reuse it.
