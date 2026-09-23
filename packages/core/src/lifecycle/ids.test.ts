@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { parseLeafPlanId } from "../update/construction.js";
+import { parseRollbackPayloadId } from "../update/preview.js";
 import { parseLowerHexSha256 } from "../update/scalars.js";
 import {
   LIFECYCLE_LEDGER_BOUNDS,
@@ -32,6 +34,8 @@ const ID_BY_PREFIX: Record<LifecycleIdPrefixV1, string> = {
   ge: `ge_${NONCE}_1`,
   le: `le_${NONCE}_1`,
   mf: `mf_${NONCE}_1`,
+  oe: `oe_${NONCE}_1`,
+  rb: `rb_${NONCE}_1`,
 };
 
 const PREFIXES = Object.keys(ID_BY_PREFIX) as readonly LifecycleIdPrefixV1[];
@@ -235,6 +239,46 @@ describe("the effect IDs", () => {
     "refuses non-canonical Git effect ID %j",
     (value) => {
       expect(() => parseGitEffectId(value)).toThrow();
+    },
+  );
+});
+
+describe("the owner-effect and rollback-payload IDs (Spec 2 §5.2, §10.1)", () => {
+  it.each(["oe", "rb"] as const)("round-trips the allocated %s grammar", (prefix) => {
+    const id = formatAllocatedLifecycleId(prefix, NONCE, 12n);
+    expect(id).toBe(`${prefix}_${NONCE}_12`);
+    expect(parseAllocatedLifecycleId(prefix, id, NONCE)).toBe(id);
+    expect(allocatedCounterOf(id)).toBe(12n);
+    expect(() => parseAllocatedLifecycleId(prefix, id, OTHER_NONCE)).toThrow();
+  });
+
+  it("parses a rollback payload ID only under the rb prefix", () => {
+    const id = formatAllocatedLifecycleId("rb", NONCE, 4n);
+    expect(parseRollbackPayloadId(id)).toBe(id);
+    for (const prefix of PREFIXES.filter((other) => other !== "rb")) {
+      expect(() => parseRollbackPayloadId(ID_BY_PREFIX[prefix])).toThrow();
+    }
+  });
+
+  it("parses an owner-effect leaf ID only under the oe prefix", () => {
+    const id = formatAllocatedLifecycleId("oe", NONCE, 4n);
+    expect(parseLeafPlanId("owner_external_effect", id)).toBe(id);
+    for (const prefix of PREFIXES.filter((other) => other !== "oe")) {
+      expect(() => parseLeafPlanId("owner_external_effect", ID_BY_PREFIX[prefix])).toThrow();
+    }
+  });
+
+  it.each([`rb_${NONCE}_01`, `rb_${NONCE}_18446744073709551616`, `RB_${NONCE}_1`, `rb_${"A".repeat(64)}_1`, `rb_${NONCE}_1/`, 7])(
+    "refuses non-canonical rollback payload ID %j",
+    (value) => {
+      expect(() => parseRollbackPayloadId(value)).toThrow();
+    },
+  );
+
+  it.each([`oe_${NONCE}_01`, `oe_${NONCE}_`, `OE_${NONCE}_1`, `oe_${"a".repeat(63)}_1`])(
+    "refuses non-canonical owner-effect ID %j",
+    (value) => {
+      expect(() => parseLeafPlanId("owner_external_effect", value)).toThrow();
     },
   );
 });

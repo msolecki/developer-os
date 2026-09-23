@@ -2,7 +2,7 @@ import type { LifecycleInstallNonceV1 } from "../manifest/bootstrap.js";
 import type { LifecycleCoordinatorIdV1, ManifestParticipantIdV1 } from "../manifest/manifest-state.js";
 import { parseLowerHexSha256 } from "../update/scalars.js";
 
-export type LifecycleIdPrefixV1 = "tx" | "lc" | "ge" | "le" | "mf";
+export type LifecycleIdPrefixV1 = "tx" | "lc" | "ge" | "le" | "mf" | "oe" | "rb";
 
 /**
  * Spec 1 §2.4: the literal prefix, the allocator's 64-byte lowercase-hex `installNonce`,
@@ -48,7 +48,7 @@ const MAX_ALLOCATED_MUTATION_INDEX = 255;
 const MAX_LEGACY_MUTATION_INDEX = 4_294_967_294;
 const MAX_EFFECTIVE_UID = 4_294_967_295;
 
-const PREFIXES: readonly LifecycleIdPrefixV1[] = ["tx", "lc", "ge", "le", "mf"];
+const PREFIXES: readonly LifecycleIdPrefixV1[] = ["tx", "lc", "ge", "le", "mf", "oe", "rb"];
 const CANONICAL_DECIMAL = "(?:0|[1-9][0-9]*)";
 const ALLOCATED = new RegExp(`^(${PREFIXES.join("|")})_([0-9a-f]{64})_(${CANONICAL_DECIMAL})$`, "u");
 const CANONICAL_DECIMAL_ONLY = new RegExp(`^${CANONICAL_DECIMAL}$`, "u");

@@ -144,6 +144,9 @@ const JOURNAL_TEMP_SUFFIX = ".json.tmp";
 const NONCE_LEAF = "lifecycle-install-nonce";
 const ALLOCATOR_LEAF = "lifecycle-id-allocator.json";
 const STAGED_JOURNAL_LEAF = "journal.json";
+const ROLLBACK_RECORD_LEAF = "update-rollback.json";
+/** `MAXIMUM_ROLLBACK_DOCUMENT_BYTES` (update/rollback.ts), mirrored so the ledger imports no update graph. */
+const MAX_ROLLBACK_RECORD_BYTES = 67_108_864;
 
 const EFFECT_PLAN_DOMAINS = {
   git: LIFECYCLE_HASH_DOMAINS.gitEffectPlan,
@@ -631,6 +634,32 @@ function admitsControlFileAbsence<TPlan extends CoordinatorPlan>(
   if (facts.journal.phase !== "compacting") return false;
   const entries = deriveTerminalCompaction(facts.plan, facts.journal.terminalOutcome ?? "finalized").entries;
   return facts.journal.compactionNext === entries.length - 1;
+}
+
+/**
+ * Spec 2 §10.1: the retained rollback record's `rb` payload ID was reserved from the allocator
+ * and survives every coordinator that allocated it, so the counter must stay above it too. Only
+ * the ID is read; the record's full codec belongs to the update reader. The nonce is bound by the
+ * allocator check itself, and an absent or empty leaf retains nothing.
+ */
+async function retainedRollbackPayloadId<TPlan extends CoordinatorPlan>(
+  scan: LedgerScanV1<TPlan>,
+): Promise<string | null> {
+  const path = leafPath(scan.roots.stateDirectory, ROLLBACK_RECORD_LEAF);
+  if ((await scan.dependencies.fs.lstat(path)) === null) return null;
+  const entry = await guardedRegularFile(scan, path, MAX_ROLLBACK_RECORD_BYTES, "lifecycle_rollback_record_shape");
+  // A fresh home's §6.4 empty reservation holds no record.
+  if (entry === null || entry.size === "0") return null;
+  const text = await guardedText(scan, entry, MAX_ROLLBACK_RECORD_BYTES, "lifecycle_rollback_record_bytes");
+  if (text === null) return null;
+  try {
+    const record = decodeCanonicalJson(new TextEncoder().encode(text), MAX_ROLLBACK_RECORD_BYTES);
+    if (typeof record !== "object" || record === null || Array.isArray(record)) throw new Error("not an object");
+    return parseAllocatedLifecycleId("rb", (record as Record<string, unknown>)["payloadId"], null);
+  } catch {
+    refuse(scan, "lifecycle_rollback_record_bytes", path);
+    return null;
+  }
 }
 
 async function resolveAllocator<TPlan extends CoordinatorPlan>(
@@ -1596,6 +1625,8 @@ export async function inspectLifecycleLedger<TPlan extends CoordinatorPlan>(
     }
   }
   for (const id of participantIds) allocatedIds.push(id);
+  const rollbackPayloadId = await retainedRollbackPayloadId(scan);
+  if (rollbackPayloadId !== null) allocatedIds.push(rollbackPayloadId);
 
   const allocator = await resolveAllocator(scan, allocatedIds);
   const nonce = allocator?.nonce ?? null;

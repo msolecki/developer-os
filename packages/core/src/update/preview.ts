@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { encodeCanonicalJson, hashCanonicalJson, type CanonicalJsonV1, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
+import { parseAllocatedLifecycleId, type AllocatedLifecycleIdV1 } from "../lifecycle/ids.js";
 import type { ArtifactOwner } from "../manifest/types.js";
 import { projectUpdateCapacity, type UpdateCapacityInputV1, type UpdateCapacityProjectionV1 } from "./capacity.js";
 import {
@@ -27,7 +28,6 @@ import {
 } from "./scalars.js";
 
 declare const safeRenderedPathV1: unique symbol;
-declare const rollbackPayloadIdV1: unique symbol;
 
 /**
  * The lossy `renderPath` projection the CLI applies at the human output boundary only. Core
@@ -37,11 +37,10 @@ declare const rollbackPayloadIdV1: unique symbol;
 export type SafeRenderedPathV1 = string & { readonly [safeRenderedPathV1]: true };
 
 /**
- * Spec 2 §10.1 spells this `AllocatedLifecycleIdV1<"rb">`. The allocator's prefix set does not
- * carry `rb` yet, so the grammar is checked here under its own nominal brand; rollback.ts, which
- * owns every payload schema, imports it from here so construction and preview need no cycle.
+ * Spec 2 §10.1's payload ID, reserved from the lifecycle allocator. rollback.ts, which owns every
+ * payload schema, imports it from here so construction and preview need no cycle.
  */
-export type RollbackPayloadIdV1 = `rb_${string}_${string}` & { readonly [rollbackPayloadIdV1]: true };
+export type RollbackPayloadIdV1 = AllocatedLifecycleIdV1<"rb">;
 
 export interface OwnerUpdatePreviewV1 {
   readonly owner: ArtifactOwner;
@@ -380,11 +379,7 @@ export function validatePlannerWireBounds(bounds: PlannerWireBoundsV1): PlannerW
 }
 
 export function parseRollbackPayloadId(value: unknown): RollbackPayloadIdV1 {
-  if (typeof value !== "string") fail("RollbackPayloadIdV1");
-  const match = /^rb_[0-9a-f]{64}_(0|[1-9][0-9]*)$/u.exec(value);
-  if (match === null) fail("RollbackPayloadIdV1");
-  parseUInt64Decimal(match[1]);
-  return value as RollbackPayloadIdV1;
+  return parseAllocatedLifecycleId("rb", value, null);
 }
 
 function validateRollbackPayloadPreview(payload: RollbackPayloadPreviewV1): RollbackPayloadPreviewV1 {

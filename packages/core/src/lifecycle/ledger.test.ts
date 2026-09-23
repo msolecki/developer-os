@@ -2202,3 +2202,62 @@ describe("the effect journal hookup", () => {
     });
   });
 });
+
+describe("the retained rollback payload ID", () => {
+  const OTHER_NONCE = parseLowerHexSha256("4e".repeat(32));
+
+  async function withRollbackRecord(payloadId: unknown): Promise<HomeV1> {
+    const home = await newHome();
+    await write(home, "state/update-rollback.json", encodeCanonicalJson({ schemaVersion: 1, payloadId } as CanonicalJsonValue));
+    return home;
+  }
+
+  it("treats the empty §6.4 reservation as no record", async () => {
+    const home = await newHome();
+    await write(home, "state/update-rollback.json", "");
+
+    const snapshot = await inspect(home);
+
+    expect(snapshot.findings).toStrictEqual([]);
+    expect(snapshot.closure).toStrictEqual({ kind: "clear" });
+  });
+
+  it("admits an rb ID the allocator counter already covers", async () => {
+    const snapshot = await inspect(await withRollbackRecord(formatAllocatedLifecycleId("rb", NONCE, 99n)));
+
+    expect(snapshot.findings).toStrictEqual([]);
+    expect(snapshot.closure).toStrictEqual({ kind: "clear" });
+  });
+
+  it.each([100n, 101n])("refuses an allocator that could reissue the retained rb counter %s", async (counter) => {
+    const snapshot = await inspect(await withRollbackRecord(formatAllocatedLifecycleId("rb", NONCE, counter)));
+
+    expect(reasons(snapshot)).toContain("lifecycle_allocator_counter_rewind");
+    expect(snapshot.closure).toStrictEqual({ kind: "lifecycle_recovery_required" });
+  });
+
+  it("refuses an rb ID from another installation nonce", async () => {
+    const snapshot = await inspect(await withRollbackRecord(formatAllocatedLifecycleId("rb", OTHER_NONCE, 1n)));
+
+    expect(reasons(snapshot)).toContain("lifecycle_allocated_id_nonce");
+    expect(snapshot.closure).toStrictEqual({ kind: "lifecycle_recovery_required" });
+  });
+
+  it.each([
+    ["another prefix", formatAllocatedLifecycleId("oe", NONCE, 1n)],
+    ["a non-canonical counter", `rb_${NONCE}_01`],
+    ["no payload ID", null],
+  ])("refuses a record whose payload ID is %s", async (_label, payloadId) => {
+    const snapshot = await inspect(await withRollbackRecord(payloadId));
+
+    expect(reasons(snapshot)).toContain("lifecycle_rollback_record_bytes");
+    expect(snapshot.closure).toStrictEqual({ kind: "lifecycle_recovery_required" });
+  });
+
+  it("refuses non-JSON record bytes", async () => {
+    const home = await newHome();
+    await write(home, "state/update-rollback.json", "{");
+
+    expect(reasons(await inspect(home))).toContain("lifecycle_rollback_record_bytes");
+  });
+});

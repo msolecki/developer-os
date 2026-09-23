@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { decodeCanonicalJson, encodeCanonicalJson, type CanonicalJsonV1, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
-import { parseManifestParticipantId, type EffectiveUidV1 } from "../lifecycle/ids.js";
+import { parseAllocatedLifecycleId, parseManifestParticipantId, type AllocatedLifecycleIdV1, type EffectiveUidV1 } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1, ManifestParticipantIdV1 } from "../manifest/manifest-state.js";
 import type { UpdateFoundationParticipantRefV2 } from "./migrations.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1, type ExactProductStatePathV1 } from "./paths.js";
@@ -22,11 +22,8 @@ import {
   type UtcTimestampV1,
 } from "./scalars.js";
 
-/**
- * Spec 2 §5.2's owner-effect ID. `AllocatedLifecycleIdV1` has no `oe` prefix yet, so the arm is
- * branded here with the same `<prefix>_<nonce>_<counter>` grammar.
- */
-export type OwnerExternalEffectIdV1 = `oe_${string}_${string}` & { readonly __ownerExternalEffectIdV1: true };
+/** Spec 2 §5.2's owner-effect ID, reserved from the lifecycle allocator. */
+export type OwnerExternalEffectIdV1 = AllocatedLifecycleIdV1<"oe">;
 
 export type UpdateLeafPlanKindV1 =
   | "update_execution" | "bundle_source_staging" | "bundle_publication"
@@ -402,7 +399,6 @@ const TARGET_JOURNAL_KINDS: readonly UpdateTargetJournalKindV1[] = ["bundle_publ
 const LEAF_KINDS: readonly UpdateLeafPlanKindV1[] = ["update_execution", "bundle_source_staging", "bundle_publication", "owner_update", "owner_external_effect", "schema_migration", "manifest_state", "release_trust_state", "active_release_state", "rollback_record_state", "rollback_payload_source", "rollback_payload_state", "target_verification", "terminal_retirement"];
 const PHASES: readonly UpdateConstructionPhaseV1[] = ["planned", "directories_staging", "files_staging", "sources_staging", "files_ready", "outer_plan_publishing", "outer_journal_publishing", "handed_off", "compensating", "rolled_back", "compacting"];
 const PRE_HANDOFF: readonly UpdateConstructionPhaseV1[] = ["planned", "directories_staging", "files_staging", "sources_staging", "files_ready", "outer_plan_publishing", "outer_journal_publishing"];
-const OWNER_EFFECT_ID = /^oe_[0-9a-f]{64}_(?:0|[1-9][0-9]*)$/u;
 const encoder = new TextEncoder();
 /** A plan is immutable once built, and re-encoding up to 512 MiB per journal transition would be quadratic. */
 const PLAN_HASHES = new WeakMap<UpdateConstructionPlanV1, LowerHexSha256>();
@@ -506,10 +502,7 @@ export function parseLeafPlanId(kind: UpdateLeafPlanKindV1, value: unknown): Lea
   if (typeof value !== "string" || utf8Bytes(value) > MAX_LEAF_ID_BYTES || value.includes("/") || value.startsWith(".")) fail("UpdateLeafPlanIdV1");
   if (kind === "schema_migration") return parseSchemaMigrationId(value);
   if (kind === "manifest_state") return parseManifestParticipantId(value, null);
-  if (kind === "owner_external_effect") {
-    if (!OWNER_EFFECT_ID.test(value)) fail("OwnerExternalEffectIdV1");
-    return value as OwnerExternalEffectIdV1;
-  }
+  if (kind === "owner_external_effect") return parseAllocatedLifecycleId("oe", value, null);
   return parseSafeReasonCode(value);
 }
 
