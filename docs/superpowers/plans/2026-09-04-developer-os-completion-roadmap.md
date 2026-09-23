@@ -254,6 +254,13 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   and `init` writes one product-owned, version-free entrypoint `<product-home>/bin/developer-os.mjs`
   that loads the active release. Hooks (A13 G1) run `<node> <product-home>/bin/developer-os.mjs`; the
   founder runs the same file. Found by A13 Task 14: the bundle held only a refusing stub.
+- **D54 (2026-09-23).** A re-run `init` refused with exit 6 whenever a committed gated transaction had
+  moved the manifest past the bootstrap plan's recorded hash (`exactV2Handoff`). The evidence
+  classifier treats a finalized bootstrap envelope as superseded when the ledger proves every later
+  manifest change came from committed gated transactions; anything else still refuses.
+- **D55 (2026-09-23).** The launchable CLI is bundled with `esbuild` (root devDependency) into a single
+  module plus third-party license files, so fresh `init` retains a handful of files instead of ~500
+  (measured 63 min vs ~11 min).
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 
