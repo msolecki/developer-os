@@ -12,6 +12,7 @@ import {
 } from "../../helpers/temp-home.js";
 import type { Inventory, TempHome } from "../../helpers/temp-home.js";
 import { renderAllForClaude } from "../../contracts/adapters/claude/render-all.js";
+import type { RenderedArtifact } from "@developer-os/workflow-schema";
 
 const run = promisify(execFile);
 
@@ -44,6 +45,8 @@ const claude: string | null = await findClaude();
 
 let temp: TempHome | null = null;
 let before: Inventory = new Map();
+/** The plugin tree this suite wrote: workflow skills plus every instruction skill, agent and command. */
+let rendered: readonly RenderedArtifact[] = [];
 /**
  * Captured after this suite writes the plugin and **before** any Claude
  * invocation, because `claude plugin validate` mutates the home it is pointed
@@ -55,7 +58,8 @@ beforeAll(async () => {
   if (claude === null) return;
   temp = await createTempHome();
   before = await inventory(temp.root);
-  for (const artifact of await renderAllForClaude()) {
+  rendered = await renderAllForClaude();
+  for (const artifact of rendered) {
     const target = join(
       temp.home,
       ".claude",
@@ -126,6 +130,50 @@ describe("the generated plugin against a real Claude Code installation", () => {
         { env: isolatedEnv(home), timeout: 60_000 },
       );
       expect(result.stderr).not.toMatch(/error/iu);
+    },
+    120_000,
+  );
+
+  /**
+   * NEW-65: `validate` is not loading (claude-adapter.md §14). `plugin details` is the unbilled
+   * loading proof: it lists every component the skills-directory plugin actually loaded, and a
+   * command is listed under `Skills` (a thin command beside its same-id skill appears twice), so
+   * the `Skills (N)` count is what pins commands.
+   */
+  it.skipIf(claude === null)(
+    "lists every rendered skill, agent and command in claude plugin details",
+    async () => {
+      const ids = (pattern: RegExp): string[] =>
+        rendered.flatMap((artifact) => pattern.exec(artifact.path)?.[1] ?? []);
+      const skills = ids(/^skills\/([^/]+)\/SKILL\.md$/u);
+      const agents = ids(/^agents\/([^/]+)\.md$/u);
+      const commands = ids(/^commands\/([^/]+)\.md$/u);
+      expect(skills.length).toBeGreaterThan(0);
+      expect(agents.length).toBeGreaterThan(0);
+      expect(commands.length).toBeGreaterThan(0);
+
+      const { stdout } = await run(claude ?? "", ["plugin", "details", "developer-os"], {
+        env: isolatedEnv(temporary()),
+        cwd: temporary().root,
+        timeout: 60_000,
+      });
+      const listed = (label: string): { count: number; names: readonly string[] } => {
+        const match = new RegExp(`^\\s*${label} \\((\\d+)\\)\\s+(.+)$`, "mu").exec(stdout);
+        return {
+          count: Number(match?.[1] ?? -1),
+          names: (match?.[2] ?? "").split(",").map((name) => name.trim()),
+        };
+      };
+      const listedSkills = listed("Skills");
+      const listedAgents = listed("Agents");
+      for (const id of [...skills, ...commands]) {
+        expect(listedSkills.names, `skill or command ${id} not loaded`).toContain(id);
+      }
+      for (const id of agents) {
+        expect(listedAgents.names, `agent ${id} not loaded`).toContain(id);
+      }
+      expect(listedSkills.count).toBe(skills.length + commands.length);
+      expect(listedAgents.count).toBe(agents.length);
     },
     120_000,
   );

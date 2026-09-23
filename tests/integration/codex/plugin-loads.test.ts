@@ -4,6 +4,7 @@ import { dirname, join, posix } from "node:path";
 import { env as processEnv } from "node:process";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { insertInstructionBlock, renderInstructionBlock } from "@developer-os/core";
 import type { ManagedArtifactV2 } from "@developer-os/core";
 import {
   CODEX_ROOT_SEGMENT,
@@ -12,8 +13,12 @@ import {
   proposeCodexInstall,
   proposeCodexUninstall,
   renderCodexInstallTree,
+  renderCodexVendorTree,
+  renderInstructionTree,
 } from "@developer-os/adapter-codex";
-import type { ManagedByPath } from "@developer-os/adapter-codex";
+import type { CodexInstructionRenderV1, ManagedByPath } from "@developer-os/adapter-codex";
+import { registerCodexPlugin } from "@developer-os/cli/dist/instructions/codex-registration.js";
+import type { ProcessRunner } from "@developer-os/security";
 import { loadWorkflow } from "@developer-os/workflow-schema";
 import type { WorkflowContractV1 } from "@developer-os/workflow-schema";
 import {
@@ -24,6 +29,7 @@ import {
 } from "../../helpers/temp-home.js";
 import type { Inventory, TempHome } from "../../helpers/temp-home.js";
 import { WORKFLOWS_ROOT } from "../../contracts/adapters/codex/render-all.js";
+import { loadDefaultInstructionSources } from "../../contracts/adapters/claude/render-all.js";
 
 const run = promisify(execFile);
 
@@ -81,6 +87,10 @@ let codexHome: string | null = null;
 let before: Inventory = new Map();
 /** Captured after this suite writes the plugin tree and before any `codex` invocation. */
 let afterOurWrites: Inventory = new Map();
+/** The instruction defaults as installed: plugin skills, `C/agents/*.toml`, and the `C/AGENTS.md` block. */
+let instructions: CodexInstructionRenderV1 | null = null;
+/** The whole `C/AGENTS.md` this suite wrote: one user line and the product's block. */
+let agentsFile = "";
 let marketplaceExit: number | null = null;
 let pluginAddExit: number | null = null;
 let pluginAddStderr = "";
@@ -119,6 +129,57 @@ function isolatedEnv(home: TempHome): Record<string, string> {
   };
 }
 
+/**
+ * `registerCodexPlugin`'s own runner hands the child `env: { CODEX_HOME }` alone, which through a
+ * real spawn would resolve the developer's live home. This runner keeps the function's argv and
+ * sequencing and swaps in the isolated environment; nothing is redacted, so the listed plugin
+ * path reaches `registeredAt` unchanged.
+ */
+const isolatedRunner: ProcessRunner = {
+  async run(request) {
+    try {
+      const { stdout, stderr } = await runCodex(request.args);
+      return { stdout, stderr, exitCode: 0, signal: null, timedOut: false };
+    } catch (error) {
+      const failure = error as { code?: unknown; signal?: NodeJS.Signals | null; killed?: boolean; stdout?: string; stderr?: string };
+      return {
+        stdout: failure.stdout ?? "",
+        stderr: failure.stderr ?? "",
+        exitCode: typeof failure.code === "number" ? failure.code : 1,
+        signal: failure.signal ?? null,
+        timedOut: failure.killed === true,
+      };
+    }
+  },
+};
+
+/**
+ * `codex debug prompt-input` prints the input messages as JSON (observed 0.155.1); every string
+ * in it, joined, is the model-visible text with JSON escaping undone.
+ */
+async function promptInputText(): Promise<string> {
+  const { stdout } = await runCodex(["debug", "prompt-input", "probe"]);
+  const texts: string[] = [];
+  const walk = (value: unknown): void => {
+    if (typeof value === "string") texts.push(value);
+    else if (typeof value === "object" && value !== null) Object.values(value).forEach(walk);
+  };
+  walk(JSON.parse(stdout));
+  return texts.join("\n");
+}
+
+function installedInstructions(): CodexInstructionRenderV1 {
+  if (instructions === null) throw new Error("the instruction tree was not installed");
+  return instructions;
+}
+
+/** Instruction skill ids, from the installed tree itself. */
+function instructionSkillIds(): string[] {
+  return installedInstructions().pluginFiles.flatMap(
+    (artifact) => /^plugins\/developer-os\/skills\/([^/]+)\/SKILL\.md$/u.exec(artifact.path)?.[1] ?? [],
+  );
+}
+
 async function runCodex(args: readonly string[]) {
   return run(codex ?? "", [...args], {
     env: isolatedEnv(temporary()),
@@ -135,7 +196,9 @@ beforeAll(async () => {
   before = await inventory(temp.root);
 
   const contracts = await loadContracts();
-  const tree = renderCodexInstallTree(contracts, { home: temp.productHome });
+  const { defaults, none } = await loadDefaultInstructionSources("codex", contracts);
+  instructions = renderInstructionTree(defaults, none);
+  const tree = renderCodexVendorTree(contracts, instructions, { home: temp.productHome });
   const proposal = proposeCodexInstall(tree, {
     home: temp.productHome,
     productVersion: "0.0.0",
@@ -146,9 +209,25 @@ beforeAll(async () => {
     if (artifact === undefined || operation === undefined) {
       throw new Error("renderCodexInstallTree and proposeCodexInstall disagree on artifact count");
     }
+    if (!operation.targetPath.endsWith(`/${artifact.path}`)) {
+      throw new Error(`proposeCodexInstall is not index-aligned with the tree at ${artifact.path}`);
+    }
     await mkdir(dirname(operation.targetPath), { recursive: true });
     await writeFile(operation.targetPath, artifact.contents, "utf8");
   }
+  for (const agent of instructions.agentFiles) {
+    await mkdir(dirname(join(codexHome, agent.path)), { recursive: true });
+    await writeFile(join(codexHome, agent.path), agent.contents, "utf8");
+  }
+  const block = renderInstructionBlock({
+    productHome: temp.productHome,
+    vendor: "codex",
+    body: instructions.block.body,
+  });
+  agentsFile = new TextDecoder().decode(
+    insertInstructionBlock(new TextEncoder().encode("A user line outside the block.\n"), block),
+  );
+  await writeFile(join(codexHome, "AGENTS.md"), agentsFile, "utf8");
   afterOurWrites = await inventory(temp.root);
 
   const marketplaceStep = proposal.registration[0];
@@ -261,6 +340,60 @@ describe("the generated install tree against a real Codex installation", () => {
         );
       }
     },
+  );
+
+  /**
+   * NEW-65 (spec §10.2 "loading is asserted"): every instruction skill reaches the model-visible
+   * skill list, and the whole `C/AGENTS.md` (the user's bytes and the product's block) is carried
+   * verbatim (codex-adapter.md §15). Agent roles are not in `prompt-input`; the isolation test
+   * observes them through the request instead.
+   */
+  it.skipIf(codex === null)(
+    "surfaces every instruction skill and the whole AGENTS.md block in the prompt input",
+    async () => {
+      const skills = instructionSkillIds();
+      expect(skills.length).toBeGreaterThan(0);
+      expect(installedInstructions().block.members.length).toBeGreaterThan(0);
+      const text = await promptInputText();
+      for (const id of skills) {
+        expect(text, `missing instruction skill ${id}`).toContain(`${PLUGIN_NAME}:${id}`);
+      }
+      expect(text).toContain(agentsFile);
+    },
+  );
+
+  /**
+   * Spec §6.4: Codex reads its cache copy, so an in-place change to the installed tree stays
+   * invisible until `plugin add` runs again, which `registerCodexPlugin` always does
+   * (codex-adapter.md §15 "`plugin add` over a registered plugin"). The description is what
+   * changes because `prompt-input` carries a skill's name and description, not its body.
+   */
+  it.skipIf(codex === null)(
+    "keeps an in-place skill change invisible until registerCodexPlugin re-registers",
+    async () => {
+      const [id] = instructionSkillIds();
+      if (id === undefined) throw new Error("no instruction skill to change");
+      const productHome = temporary().productHome;
+      const pluginRoot = posix.join(productHome, ...PLUGIN_TREE_SEGMENTS);
+      const skillFile = join(pluginRoot, "skills", id, "SKILL.md");
+      const token = "A12 in-place change probe 7c1d.";
+      const original = await readFile(skillFile, "utf8");
+      const edited = original.replace(/^description: .*$/mu, `description: "${token}"`);
+      expect(edited).not.toBe(original);
+      await writeFile(skillFile, edited, "utf8");
+      const visible = `${PLUGIN_NAME}:${id}: ${token}`;
+
+      expect(await promptInputText()).not.toContain(visible);
+      await registerCodexPlugin({
+        runner: isolatedRunner,
+        codexExecutable: codex ?? "",
+        codexHome: temporaryCodexHome(),
+        marketplaceRoot: join(productHome, CODEX_ROOT_SEGMENT),
+        pluginRoot,
+      });
+      expect(await promptInputText()).toContain(visible);
+    },
+    120_000,
   );
 
   /**
