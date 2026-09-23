@@ -15,8 +15,9 @@ The next product work after these closes is the founder cutover A15.
 
 Phase 4b (A11, `plans/2026-08-29-developer-os-release-update.md`): code done — Task 10 (`1e214ce`),
 Task 11 (`3f640b3`), NEW-85 (`d2cc737`), launcher trust-fd fix (`c7bc459`), side track NEW-49
-(`6254586`). Task 11b is parked by D46 (no signing keys); A12's unsigned local build
-(`init --local-release`, D47) is the install source until then.
+(`6254586`). Task 11b is parked by D46 (no signing keys), so the bootstrap pin at
+`apps/cli/src/context.ts:812` still answers every run without a packaged release; A12's unsigned
+local build (`init --local-release`, D47) is the install source until then.
 
 Phase 5 (A12, `plans/2026-09-22-developer-os-instruction-artifacts.md`): Tasks 1–28 committed; D48–D55
 recorded; production-facing follow-ups committed with it — D52 isolated Codex ingest home (`5afa493`),
