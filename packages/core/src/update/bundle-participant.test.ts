@@ -25,7 +25,6 @@ import {
   initialBundlePublicationJournal,
   initialBundleSourceJournal,
   updateLeafPlanHash,
-  updateParticipantJournalPath,
   updateSourceEvidenceSetHash,
   updateSourceStructuresHash,
   validateBundlePublicationJournal,
@@ -44,6 +43,7 @@ import {
   type BundleSourceStepV1,
 } from "./bundle-participant.js";
 import { updateLeafPlanPath } from "./construction.js";
+import { updateParticipantJournalPath } from "./participants.js";
 import { deriveCanonicalStatePayloadPath, parseCanonicalAbsolutePathText } from "./paths.js";
 import type { BundleRelativePathV1, ReleaseBundleEntryV1, ReleaseIdentityV1 } from "./release.js";
 import { parseLowerHexSha256, parseSafeReasonCode, parseUInt64Decimal, parseUtcTimestamp, type LowerHexSha256, type SafeReasonCodeV1 } from "./scalars.js";

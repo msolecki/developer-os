@@ -386,11 +386,6 @@ export function updateLeafPlanHash(kind: UpdateLeafPlanKindV1, bytes: Uint8Array
   return createHash("sha256").update(`developer-os/update-leaf/${kind}/v1\0`, "ascii").update(bytes).digest("hex") as LowerHexSha256;
 }
 
-/** `staging/lifecycle/<coordinator-id>/update/journals/<kind>/<id>.json`. */
-export function updateParticipantJournalPath(stagingRoot: CanonicalAbsolutePathV1, kind: UpdateLeafPlanKindV1, id: SafeReasonCodeV1): CanonicalAbsolutePathV1 {
-  return parseCanonicalAbsolutePathText(`${stagingRoot}/update/journals/${kind}/${parseSafeReasonCode(id)}.json`);
-}
-
 export interface BundleSourcePathsV1 {
   /** `update/source/bundle`: the pre-existing parent `sourceParentDev/Ino` binds. */
   readonly parent: CanonicalAbsolutePathV1;
