@@ -162,6 +162,8 @@ const STAT_OPTION_EXEMPT: readonly string[] = [
   "packages/core/src/lifecycle/coordinator.ts",
   "packages/security/src/update/scratch.ts",
   "packages/core/src/git/metadata.ts",
+  "packages/core/src/git/scope.ts",
+  "packages/core/src/git/planner.ts",
 ];
 
 /**

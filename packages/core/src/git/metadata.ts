@@ -202,7 +202,7 @@ class GitMetadataReader {
   }
 }
 
-interface GitConfigEntryV1 {
+export interface GitConfigEntryV1 {
   readonly section: string;
   readonly subsection: string | null;
   readonly name: string;
@@ -220,7 +220,7 @@ function isSpace(character: string | undefined): boolean {
  * (CR line endings, unknown escapes, unterminated quotes) refuses instead of
  * guessing what Git would have done.
  */
-function parseGitConfig(text: string): readonly GitConfigEntryV1[] {
+export function parseGitConfig(text: string): readonly GitConfigEntryV1[] {
   const entries: GitConfigEntryV1[] = [];
   let index = 0;
   let section: string | null = null;
