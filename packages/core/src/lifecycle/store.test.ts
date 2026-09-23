@@ -553,7 +553,7 @@ describe("conservative and exact journal maxima", () => {
     const widest = longestLegalAllocatedId("tx");
     expect(widest).toBe(`tx_${"f".repeat(64)}_18446744073709551615`);
     expect(parseAllocatedLifecycleId("tx", widest, parseLowerHexSha256("f".repeat(64)))).toBe(widest);
-    for (const prefix of ["tx", "lc", "ge", "le", "mf"] as const) {
+    for (const prefix of ["tx", "lc", "ge", "le", "mf", "oe", "rb"] as const) {
       expect(longestLegalAllocatedId(prefix)).toHaveLength(widest.length);
       expect(longestLegalAllocatedId(prefix).startsWith(`${prefix}_`)).toBe(true);
     }
