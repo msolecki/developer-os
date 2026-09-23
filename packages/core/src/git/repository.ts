@@ -374,6 +374,29 @@ export function appendGitRemoteSection(config: Uint8Array, url: NormalizedRemote
 }
 
 /**
+ * Every path of the enable-only `.git`, which carries each directory a later
+ * sync publishes into: the 256 loose-object fan-outs and the reflog parents.
+ * The Git effect creates no parent directory, so a first sync into a tree
+ * without them refused `git_effect_parent` (plan 1b Task 14 handoff).
+ */
+export function initialGitDirectoryPaths(branch: ValidatedGitBranchV1): readonly string[] {
+  const branchParents = branch.split("/").slice(0, -1).map((_segment, index, all) => all.slice(0, index + 1).join("/"));
+  return [
+    "HEAD",
+    "config",
+    "objects",
+    ...Array.from({ length: 256 }, (_unused, byte) => `objects/${byte.toString(16).padStart(2, "0")}`),
+    "refs",
+    "refs/heads",
+    ...branchParents.map((parent) => `refs/heads/${parent}`),
+    "logs",
+    "logs/refs",
+    "logs/refs/heads",
+    ...branchParents.map((parent) => `logs/refs/heads/${parent}`),
+  ].sort(compareUnsignedUtf8);
+}
+
+/**
  * The enable-only minimal `.git` (spec §4.1): no commit, no index, the
  * recorded branch unborn, and the fixed remote already present. Its hash
  * binds names, kinds, modes and content; inode identity is bound only once
@@ -386,13 +409,16 @@ export function planInitialGitDirectory(
   const config =
     "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n" +
     remoteSection(url);
-  const entries: GitInitialDirectoryEntryV1[] = [
-    { relativePath: "HEAD", kind: "regular_file", mode: 0o644, bytes: encoder.encode(`ref: refs/heads/${branch}\n`) },
-    { relativePath: "config", kind: "regular_file", mode: 0o644, bytes: encoder.encode(config) },
-    { relativePath: "objects", kind: "directory", mode: 0o755, bytes: null },
-    { relativePath: "refs", kind: "directory", mode: 0o755, bytes: null },
-    { relativePath: "refs/heads", kind: "directory", mode: 0o755, bytes: null },
-  ];
+  const files: Readonly<Record<string, Uint8Array>> = {
+    HEAD: encoder.encode(`ref: refs/heads/${branch}\n`),
+    config: encoder.encode(config),
+  };
+  const entries: GitInitialDirectoryEntryV1[] = initialGitDirectoryPaths(branch).map((relativePath) => {
+    const bytes = files[relativePath];
+    return bytes === undefined
+      ? { relativePath, kind: "directory", mode: 0o755, bytes: null }
+      : { relativePath, kind: "regular_file", mode: 0o644, bytes };
+  });
   entries.sort((left, right) => compareUnsignedUtf8(left.relativePath, right.relativePath));
   const treeHash = hashCanonicalJson(
     INITIAL_TREE_DOMAIN,

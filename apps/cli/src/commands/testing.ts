@@ -56,7 +56,9 @@ import {
 } from "../context.js";
 import type { CliContext } from "../context.js";
 import type { CliIo } from "../io.js";
+import type { LifecycleEffectPortsV1 } from "../lifecycle/adapters.js";
 import { createLifecycleContext } from "../lifecycle/context.js";
+import type { CliLifecycleContext } from "../lifecycle/context.js";
 import { createGatedTransactionExecutor } from "../lifecycle/mutation-gate.js";
 import {
   admitRootVerifiedPackagedRelease,
@@ -402,6 +404,8 @@ export interface FixtureOptions {
   /** Inserts an adversarial namespace race immediately before lifecycle lock acquisition. */
   readonly bootstrapBeforeLockAcquire?: (path: string) => Promise<void>;
   /** Synthetic aggregate used only to exercise exact/first-over admission boundaries. */
+  /** Replaces the composed Git/launchd/push ports, e.g. with a scripted Git runtime. */
+  readonly effectPorts?: (context: CliLifecycleContext) => LifecycleEffectPortsV1;
   readonly bootstrapEvidenceAggregate?: {
     readonly idCount: number;
     readonly entryCount: number;
@@ -683,6 +687,7 @@ export async function createCommandFixture(
       transactionLocks: lockProvider,
       effectiveUid: process.getuid?.() ?? -1,
       now,
+      ...(options.effectPorts === undefined ? {} : { effectPorts: options.effectPorts }),
     });
     const composed: { current: CliContext | null } = { current: null };
     const built: CliContext = {

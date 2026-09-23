@@ -772,6 +772,36 @@ describe("config dispatch", () => {
   });
 });
 
+describe("git dispatch", () => {
+  it("refuses a subcommand git does not have, and a missing or extra positional", async () => {
+    await refuses(["git"]);
+    await refuses(["git", "push"]);
+    await refuses(["git", "toString"]);
+    await refuses(["git", "status", "extra"]);
+  });
+
+  it("requires --remote on enable and refuses it everywhere else", async () => {
+    await refuses(["git", "enable"]);
+    await refuses(["git", "enable", "--remote", ""]);
+    await refuses(["git", "enable", "--remote", "/remote.git", "--branch", ""]);
+    await refuses(["git", "disable", "--remote", "/remote.git"]);
+    await refuses(["git", "status", "--branch", "main"]);
+  });
+
+  it("admits --apply only on enable and disable", async () => {
+    await refuses(["git", "status", "--apply"]);
+    await refuses(["git", "sync", "--apply"]);
+    await refuses(["status", "--apply"]);
+    await refuses(["init", "--remote", "/remote.git"]);
+  });
+
+  it("dispatches an admitted git invocation to a context and refuses a home with no installation", async () => {
+    const harness = await createHarness("git-dispatch");
+    expect(await harness.invoke(["git", "status", "--json"])).toBe(EXIT_CODES.invalidInput);
+    expect(harness.out.join("\n")).toContain("manifest_absent");
+  });
+});
+
 describe("capture dispatch", () => {
   it("refuses an option capture does not accept", async () => {
     await refuses(["capture", "--limit", "5"]);

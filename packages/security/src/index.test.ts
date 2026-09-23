@@ -76,6 +76,13 @@ describe("the package's public door", () => {
         "inspectPlannerGraph",
         "sampleNodePlannerProcess",
         "spawnNodePlannerChild",
+        "createOpaqueGitLocalToken",
+        "hashShadowConfigTemplate",
+        "materializeGitExecGateway",
+        "materializeSanitizedGitShadow",
+        "runGitGateway",
+        "SanitizedLocalRemoteHelper",
+        "sanitizedGitEnvironment",
       ].sort(),
     );
   });

@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, open, readdir, readFile, stat } from "node:fs/promises";
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
 
 import {
   GitEffectExecutor,
@@ -34,6 +34,7 @@ import {
   LaunchdSnapshotBootstrapper,
   NodeLaunchdPlistReader,
   SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
+  SpawnRenameAtxRunner,
   loadLaunchdProcessTable,
 } from "@developer-os/platform-macos";
 import type {
@@ -41,10 +42,11 @@ import type {
   LaunchdEmptyDirectoryObservationV1,
   ObservedLaunchdDistributionV1,
 } from "@developer-os/platform-macos";
-import { SupervisedProcessRunner, nodeSupervisedProcessDependencies } from "@developer-os/security";
+import { SecurityRefusalError, SupervisedProcessRunner, nodeSupervisedProcessDependencies } from "@developer-os/security";
 
+import { createProductionGitRuntime } from "../commands/git/runtime.js";
+import type { GitRuntimeV1 } from "../commands/git/runtime.js";
 import {
-  LifecycleUnsupportedLeafError,
   lifecycleHomeKeyFromCoordinatorId,
   lifecycleManifestPlanAdmission,
 } from "./codecs.js";
@@ -57,6 +59,8 @@ type ManifestFileIdentityV1 = Parameters<ManifestStateParticipant["dependencies"
 
 export interface LifecycleEffectPortsV1 {
   readonly git: GitEffectDependenciesV1;
+  /** The pinned Git boundary `git sync` plans and pushes through; fixtures script it. */
+  readonly gitRuntime: GitRuntimeV1;
   /** The per-coordinator plan, journal store and process table are bound per effect reference. */
   readonly launchd: Omit<LaunchdEffectDependenciesV1, "plan" | "journals" | "processTable">;
   readonly push: {
@@ -272,13 +276,50 @@ export function createLifecycleManifestAdapter(
 
 /**
  * `renameGitNoReplace` crosses from the 0700 quarantine into a 0755 repository, which neither the
- * guarded port nor the retained rename admits; Task 15 supplies it with the Git commands.
+ * guarded port nor the retained rename admits, so it takes `renameatx_np(RENAME_EXCL)` directly
+ * between the two reopened parent descriptors.
  */
+async function renameGitNoReplace(
+  fs: CliLifecycleContext["fs"],
+  source: LifecycleGuardedEntryV1,
+  destinationPath: CanonicalAbsolutePathV1,
+): Promise<"renamed" | "exists"> {
+  // identity-free stat: the guarded port already returns an exact decimal identity.
+  const reopened = await fs.lstat(source.path);
+  if (reopened === null || reopened.dev !== source.dev || reopened.ino !== source.ino || reopened.kind !== source.kind) {
+    recovery("git_effect_third_state", source.path);
+  }
+  if ((await fs.lstat(destinationPath)) !== null) return "exists";
+  const flags = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
+  const sourceParent = await open(dirname(source.path), flags);
+  try {
+    const destinationParent = await open(dirname(destinationPath), flags);
+    try {
+      const result = await new SpawnRenameAtxRunner().run({
+        parentDescriptor: sourceParent.fd,
+        sourceParentDescriptor: sourceParent.fd,
+        destinationParentDescriptor: destinationParent.fd,
+        sourceName: basename(source.path),
+        destinationName: basename(destinationPath),
+        tombstoneName: basename(destinationPath),
+      });
+      if (result.exitCode === 0) return "renamed";
+    } finally {
+      await destinationParent.close();
+    }
+  } finally {
+    await sourceParent.close();
+  }
+  // identity-free stat: presence alone decides whether the refused rename met an existing name.
+  if ((await fs.lstat(destinationPath)) !== null) return "exists";
+  return recovery("git_effect_rename_refused", source.path);
+}
+
 function gitPort(context: CliLifecycleContext): GitEffectDependenciesV1 {
   return {
     fs: {
       ...context.fs,
-      renameGitNoReplace: () => Promise.reject(new LifecycleUnsupportedLeafError("Git no-replace rename")),
+      renameGitNoReplace: (source, destinationPath) => renameGitNoReplace(context.fs, source, destinationPath),
     },
     journalRoot: context.roots.gitEffectJournals,
     effectiveUid: context.effectiveUid,
@@ -288,9 +329,9 @@ function gitPort(context: CliLifecycleContext): GitEffectDependenciesV1 {
   };
 }
 
-/** `git sync` alone may consume a persisted push plan (§2.2 `retry_only`); Task 15 supplies it. */
-const UNSUPPORTED_PUSH: LifecycleEffectPortsV1["push"] = {
-  push: () => Promise.reject(new LifecycleUnsupportedLeafError("network push")),
+/** D59 (Q4-A): HTTPS and SSH have no recorded process trace, so a network push is an unsupported distribution. */
+const UNSUPPORTED_NETWORK_PUSH: LifecycleEffectPortsV1["push"] = {
+  push: () => Promise.reject(new SecurityRefusalError("unsupported_git_distribution")),
 };
 
 function launchdPort(context: CliLifecycleContext, host: LaunchdHostV1): LifecycleEffectPortsV1["launchd"] {
@@ -319,7 +360,12 @@ export function createLifecycleEffectPorts(
   context: CliLifecycleContext,
   host: LaunchdHostV1,
 ): LifecycleEffectPortsV1 {
-  return { git: gitPort(context), launchd: launchdPort(context, host), push: UNSUPPORTED_PUSH };
+  return {
+    git: gitPort(context),
+    gitRuntime: createProductionGitRuntime(),
+    launchd: launchdPort(context, host),
+    push: UNSUPPORTED_NETWORK_PUSH,
+  };
 }
 
 function rejectHost(): never {

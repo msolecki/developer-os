@@ -54,6 +54,7 @@ import {
   gitObject,
   parseAdmittedGitIndex,
   planInitialGitDirectory,
+  initialGitDirectoryPaths,
   type GitCommitterV1,
   type GitIndexEntryV1,
 } from "./repository.js";
@@ -244,8 +245,9 @@ async function vault(options: VaultOptions = {}): Promise<Vault> {
   const commitTrees = new Map<string, LowerHexSha1>();
   let headOid: LowerHexSha1 | null = null;
   if (options.git !== false) {
-    await nodeFs.mkdir(join(git, "objects"), { recursive: true });
-    await nodeFs.mkdir(join(git, "refs", "heads"), { recursive: true });
+    for (const relative of initialGitDirectoryPaths(parseValidatedGitBranch("main"))) {
+      if (relative !== "HEAD" && relative !== "config") await nodeFs.mkdir(join(git, relative), { recursive: true });
+    }
     const remote = options.remote === undefined ? null : options.remote;
     await writeGit("config", remote === null ? CONFIG : `${CONFIG}[remote "developer-os"]\n\turl = ${remote}\n`);
     await writeGit("HEAD", "ref: refs/heads/main\n");
@@ -514,6 +516,19 @@ describe("GitPlanner.planSync", () => {
     expect(feasibility.transitions).toBe(draft.transitions.length);
   });
 
+  it("refuses an adopted repository missing a planned object's fan-out directory before any reservation", async () => {
+    const fixture = await vault();
+    await fixture.write("content/DEV/new.md", "# New\n");
+    const planned = await new GitPlanner(fixture.dependencies()).planSync(fixture.syncRequest());
+    const object = planned.transitions.find((transition) => transition.role === "source_object" && transition.operation === "create");
+    expect(object).toBeDefined();
+    await nodeFs.rm(dirname(object?.path ?? ""), { recursive: true });
+    const before = await fixture.snapshotGit();
+    expect(await refusal(new GitPlanner(fixture.dependencies()).planSync(fixture.syncRequest()))).toBe("git_object_parent_absent");
+    expect(await fixture.reservations).toBe(0);
+    expect(await fixture.snapshotGit()).toEqual(before);
+  });
+
   it("builds the exact commit with the fixed committer, date and message", async () => {
     const fixture = await vault();
     await fixture.write("content/DEV/new.md", "# New\n");
@@ -758,7 +773,13 @@ describe("GitPlanner previews", () => {
         after: { state: "present", hash: initial.treeHash, size: initial.totalBytes },
       },
     ]);
-    expect(initial.entries.map((entry) => entry.relativePath)).toEqual(["HEAD", "config", "objects", "refs", "refs/heads"]);
+    expect(initial.entries.map((entry) => entry.relativePath)).toEqual(
+      initialGitDirectoryPaths(parseValidatedGitBranch("main")),
+    );
+    expect(initial.entries.map((entry) => entry.relativePath)).toEqual(
+      expect.arrayContaining(["HEAD", "config", "objects", "objects/00", "objects/ff", "refs", "refs/heads", "logs", "logs/refs", "logs/refs/heads"]),
+    );
+    expect(initial.entries).toHaveLength(264);
     expect(Buffer.from(initial.entries[0]?.bytes ?? []).toString("utf8")).toBe("ref: refs/heads/main\n");
     expect(Buffer.from(initial.entries[1]?.bytes ?? []).toString("utf8")).toContain(
       '[remote "developer-os"]\n\turl = "https://example.com/org/brain.git"\n',

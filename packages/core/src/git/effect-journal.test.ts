@@ -190,6 +190,46 @@ describe("GitEffectPlanV1", () => {
   });
 });
 
+describe("the enable tree's staging children", () => {
+  it("lists every unpublished .git entry under its post leaf, including a slash branch's parents", () => {
+    const tree = {
+      treeHash: HASH,
+      entryCount: 266,
+      ownerUid: UID,
+      mode: 0o755,
+      symbolicHead: "refs/heads/team/brain" as const,
+    };
+    const transition = {
+      role: "source_git_directory_tree",
+      path: GIT,
+      operation: "create",
+      before: { state: "absent" },
+      after: { state: "directory_tree", ...tree },
+      evidence: {
+        stagedPostimagePath: evidence("post", 0),
+        stagedPostimage: { state: "directory_tree", ...tree, dev: parseUInt64Decimal("16777220"), ino: parseUInt64Decimal("9") },
+        beforeTombstonePath: null,
+        afterTombstonePath: null,
+      },
+    } as unknown as GitEffectTransitionV1;
+    const children = [...parseEffectStagingChildren(gitEffectStagingChildren(buildPlan([transition])))];
+    expect(children.length).toBeGreaterThan(0);
+    expect(children).toEqual(
+      expect.arrayContaining([
+        "post",
+        "post/0",
+        "post/0/HEAD",
+        "post/0/config",
+        "post/0/objects/00",
+        "post/0/objects/ff",
+        "post/0/refs/heads/team",
+        "post/0/logs/refs/heads/team",
+      ]),
+    );
+    expect(children).toHaveLength(2 + 266);
+  });
+});
+
 describe("journal feasibility", () => {
   it("bounds the widest reachable journal of a feasible plan", () => {
     const transitions = Array.from({ length: 1000 }, (_, index) => objectCreate(index));

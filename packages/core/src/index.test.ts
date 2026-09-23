@@ -525,6 +525,7 @@ describe("the package's public door", () => {
         "validateStateParticipantJournal",
         "validateTargetVerificationPlan",
         "validateUpdatePlannerRequest",
+        "initialGitDirectoryPaths",
       ].sort(),
     );
   });

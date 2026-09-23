@@ -574,6 +574,7 @@ export {
   looseObjectRelativePath,
   parseAdmittedGitIndex,
   planInitialGitDirectory,
+  initialGitDirectoryPaths,
   GIT_EFFECT_EVIDENCE_UNBOUND,
   GIT_EFFECT_TRANSITION_OPERATIONS,
   GIT_EFFECT_TRANSITION_ROLES,

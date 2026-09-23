@@ -95,6 +95,7 @@ export {
   looseObjectRelativePath,
   parseAdmittedGitIndex,
   planInitialGitDirectory,
+  initialGitDirectoryPaths,
 } from "./repository.js";
 export type {
   GitAdmittedIndexV1,

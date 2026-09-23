@@ -41,7 +41,8 @@ export type GitPlanningRefusalReasonV1 =
   | "unborn_branch_empty"
   | "concurrent_change"
   | "git_cardinality_exceeded"
-  | "git_plan_too_large";
+  | "git_plan_too_large"
+  | "git_object_parent_absent";
 
 /**
  * A planning refusal: nothing was reserved, staged or written, so the reason

@@ -154,6 +154,20 @@ export type {
   GitProcessSupervisorV1,
   GitPushPhaseV1,
 } from "./git/index.js";
+export {
+  createOpaqueGitLocalToken,
+  hashShadowConfigTemplate,
+  materializeGitExecGateway,
+  materializeSanitizedGitShadow,
+  runGitGateway,
+  SanitizedLocalRemoteHelper,
+  sanitizedGitEnvironment,
+} from "./git/index.js";
+export type {
+  GitEnvironmentSlotValuesV1,
+  GitExecGatewayV1,
+  SanitizedGitShadowConfigTemplateV1,
+} from "./git/index.js";
 
 export interface SecurityPolicy {
   assertReadable(path: string): Promise<void>;

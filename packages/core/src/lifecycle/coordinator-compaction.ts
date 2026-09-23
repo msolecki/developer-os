@@ -189,7 +189,25 @@ async function removeCoordinatorStaging<TPlan extends CoordinatorPlan>(
     await fs.rmdirExactEmpty(directory);
     await syncDirectoryAt(fs, foundationStaging);
   }
-  for (const path of [foundationStaging, coordinatorStaging]) {
+  const participants = child(coordinatorStaging, "participants");
+  const manifestStaging = child(participants, "manifest");
+  const manifestId = (plan.participants.manifest as { readonly participantId?: unknown } | null)?.participantId;
+  const payloadDirectory = typeof manifestId === "string" ? child(manifestStaging, manifestId) : null;
+  if (payloadDirectory !== null) {
+    const payload = await fs.lstat(child(payloadDirectory, "after.json"));
+    if (payload !== null) {
+      await fs.unlinkExact(payload);
+      await syncDirectoryAt(fs, payloadDirectory);
+    }
+  }
+  const directories = [
+    ...(payloadDirectory === null ? [] : [payloadDirectory]),
+    manifestStaging,
+    participants,
+    foundationStaging,
+    coordinatorStaging,
+  ];
+  for (const path of directories) {
     const directory = await fs.lstat(path);
     if (directory === null) continue;
     await fs.rmdirExactEmpty(directory);

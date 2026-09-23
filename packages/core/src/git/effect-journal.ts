@@ -5,6 +5,7 @@
  * a journal proves on its own; the plan-bound half of the phase table is
  * `assertGitEffectJournalForPlan`, which the executor applies at every reopen.
  */
+import type { ValidatedGitBranchV1 } from "../config/lifecycle.js";
 import { encodeCanonicalJson, hashCanonicalJson, type CanonicalJsonV1, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import {
   GIT_EFFECT_STAGING_SIDES,
@@ -30,6 +31,7 @@ import {
   type GitEffectTransitionRoleV1,
   type GitEffectTransitionV1,
 } from "./planner.js";
+import { initialGitDirectoryPaths } from "./repository.js";
 import {
   GIT_ZERO_OID,
   validateGitPackReaderBudget,
@@ -669,6 +671,11 @@ export function gitEffectStagingChildren(plan: GitEffectPlanV1): readonly string
       if (path === null) continue;
       children.add(root);
       children.add(`${root}/${index.toString(10)}`);
+    }
+    const staged = evidence.stagedPostimage;
+    if (transition.role === "source_git_directory_tree" && staged?.state === "directory_tree") {
+      const branch = staged.symbolicHead.slice("refs/heads/".length) as ValidatedGitBranchV1;
+      for (const relative of initialGitDirectoryPaths(branch)) children.add(`post/${index.toString(10)}/${relative}`);
     }
   }
   return [...children];

@@ -18,6 +18,8 @@ import { renderConfigResult, runConfig } from "./commands/config.js";
 import type { ConfigCommandRequestV1 } from "./commands/config.js";
 import { runDoctor } from "./commands/doctor.js";
 import type { DoctorReportV1 } from "./commands/doctor.js";
+import { renderGit, runGit } from "./commands/git/index.js";
+import type { GitCommandRequestV1 } from "./commands/git/index.js";
 import { renderImport, runImport } from "./commands/import.js";
 import { renderIngest, runIngest } from "./commands/ingest.js";
 import { runInit } from "./commands/init.js";
@@ -64,6 +66,7 @@ const USAGE = [
   "  repair     resume or roll back one incomplete transaction",
   "  uninstall  remove manifest-owned artifacts",
   "  update     [rollback]: preview a signed release update, or a rollback to the retained release",
+  "  git        enable --remote <url> [--branch <name>] | disable | status | sync: opt-in Brain synchronization",
   "",
   "Options:",
   "  --dry-run        show the plan without changing anything (init, uninstall, import, project init, brain retire, brain refactor)",
@@ -87,7 +90,9 @@ const USAGE = [
   "  --merge          fold <source> into <target> and retire <source> (brain refactor)",
   "  --split          move the section under <heading> of <note> into a new note (brain refactor)",
   "  --version        print the product version; with a value, the stable release to preview (update)",
-  "  --apply          apply the previewed update or rollback (update)",
+  "  --apply          apply the previewed update or rollback (update), or the Git plan (git enable, git disable)",
+  "  --remote <url>   the bare local repository, or HTTPS or SSH URL, Git pushes to (git enable)",
+  "  --branch <name>  the branch to synchronize; the attached branch or main by default (git enable)",
 ].join("\n");
 
 const OPTIONS = {
@@ -112,6 +117,9 @@ const OPTIONS = {
   move: { type: "boolean" },
   merge: { type: "boolean" },
   split: { type: "boolean" },
+  apply: { type: "boolean" },
+  remote: { type: "string" },
+  branch: { type: "string" },
 } as const;
 
 type OptionName = keyof typeof OPTIONS;
@@ -150,6 +158,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly OptionName[]>> = {
   uninstall: ["dry-run", "yes", "json"],
   import: ["claude-memory", "limit", "dry-run", "json"],
   project: ["dry-run", "json"],
+  git: ["remote", "branch", "apply", "json"],
 };
 
 /**
@@ -174,6 +183,7 @@ const COMMAND_POSITIONALS: Readonly<
   search: { min: 1, max: 1 },
   import: { min: 0, max: 1 },
   project: { min: 1, max: 2 },
+  git: { min: 1, max: 1 },
 };
 
 const BRAIN_SUBCOMMANDS: Readonly<
@@ -192,6 +202,13 @@ const REFACTOR_MODES = ["rename", "move", "merge", "split"] as const;
 const PROJECT_SUBCOMMANDS: Readonly<Record<string, readonly OptionName[]>> = {
   init: ["dry-run", "json"],
   check: ["json"],
+};
+
+const GIT_SUBCOMMANDS: Readonly<Record<string, readonly OptionName[]>> = {
+  enable: ["remote", "branch", "apply", "json"],
+  disable: ["apply", "json"],
+  status: ["json"],
+  sync: ["json"],
 };
 
 export type CliContextFactory = (
@@ -324,6 +341,15 @@ function parse(argv: readonly string[]): Invocation | null {
     if (allowedHere === undefined || !suppliedOptions(values).every((o) => allowedHere.includes(o))) {
       return null;
     }
+  }
+
+  if (positional === "git") {
+    const [name] = rest;
+    if (name === undefined || !Object.hasOwn(GIT_SUBCOMMANDS, name)) return null;
+    const allowedHere = GIT_SUBCOMMANDS[name];
+    if (allowedHere === undefined || !suppliedOptions(values).every((o) => allowedHere.includes(o))) return null;
+    if (name === "enable" && (typeof values.remote !== "string" || values.remote === "")) return null;
+    if (values.branch === "") return null;
   }
 
   // `import_path_conflict` is a usage failure, like every other argv error.
@@ -578,6 +604,22 @@ function brainOptionsFor(
   };
 }
 
+/** `parse` has already admitted the subcommand, its options and `--remote` for `enable`. */
+function gitRequestFor(invocation: Invocation): GitCommandRequestV1 {
+  const [subcommand] = invocation.positionals;
+  const apply = invocation.values.apply === true;
+  if (subcommand === "enable") {
+    return {
+      subcommand,
+      remote: optionString(invocation.values.remote) ?? "",
+      branch: optionString(invocation.values.branch),
+      apply,
+    };
+  }
+  if (subcommand === "disable") return { subcommand, apply };
+  return subcommand === "sync" ? { subcommand } : { subcommand: "status" };
+}
+
 /** `parse` has already required exactly one mode flag for `refactor`. */
 function refactorRequestFor(
   values: OptionValues,
@@ -778,6 +820,8 @@ async function dispatch(
         json,
         renderUninstall,
       );
+    case "git":
+      return emit(io, await runGit(context, gitRequestFor(invocation)), json, renderGit);
     case "update":
       return invocation.update === undefined
         ? emit(io, usageFailure(), json, () => [])

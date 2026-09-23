@@ -819,7 +819,7 @@ async function validateEffectJournals<TPlan extends CoordinatorPlan>(
   }
 }
 
-const STAGING_CHILDREN = ["foundation", "git", "launchd-process"] as const;
+const STAGING_CHILDREN = ["foundation", "git", "launchd-process", "participants"] as const;
 
 async function scanLifecycleStaging<TPlan extends CoordinatorPlan>(
   scan: LedgerScanV1<TPlan>,
@@ -892,6 +892,11 @@ async function scanCoordinatorStaging<TPlan extends CoordinatorPlan>(
     if (entry === null) continue;
     if (name === "foundation") {
       await scanStagedParticipants(scan, facts, entry, nonce);
+      if (scan.stopped) return;
+      continue;
+    }
+    if (name === "participants") {
+      await countStagingSubtree(scan, facts, entry, manifestStagingAdmission(scan, coordinatorId), "");
       if (scan.stopped) return;
       continue;
     }
@@ -976,6 +981,29 @@ function gitStagingAdmission<TPlan extends CoordinatorPlan>(
       admitted.set(`${prefix}/${child}`, "entry");
     }
   }
+  return (relative) => admitted.get(relative) ?? null;
+}
+
+/**
+ * The manifest participant's staged `update_expected` postimage,
+ * `participants/manifest/<mf>/after.json`, admitted only for the one manifest
+ * participant this coordinator's plan names.
+ */
+function manifestStagingAdmission<TPlan extends CoordinatorPlan>(
+  scan: LedgerScanV1<TPlan>,
+  coordinatorId: string,
+): StagingAdmissionV1 {
+  const manifest = scan.coordinators.get(coordinatorId)?.plan?.participants.manifest as
+    | { readonly participantId?: unknown }
+    | null
+    | undefined;
+  const id = typeof manifest?.participantId === "string" ? manifest.participantId : null;
+  if (id === null) return () => null;
+  const admitted = new Map<string, StagingShapeV1>([
+    ["manifest", "directory"],
+    [`manifest/${id}`, "directory"],
+    [`manifest/${id}/after.json`, "entry"],
+  ]);
   return (relative) => admitted.get(relative) ?? null;
 }
 

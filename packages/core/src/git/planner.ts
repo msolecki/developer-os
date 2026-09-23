@@ -75,6 +75,7 @@ import {
   GIT_METADATA_BOUNDS,
   GIT_OBJECT_COUNT_MAX,
   GIT_REFLOG_MESSAGE,
+  GIT_TREE_FINGERPRINT_MAX_ENTRIES,
   GIT_ZERO_OID,
   compareUnsignedUtf8,
   gitReflogAppendLine,
@@ -765,6 +766,7 @@ export class GitPlanner {
       if (recorded !== null) throw new GitMetadataRefusalError("git_repository_absent");
       const branch = request.branch ?? parseValidatedGitBranch("main");
       const initial = planInitialGitDirectory(branch, remote.declaredUrl);
+      if (initial.entries.length > GIT_TREE_FINGERPRINT_MAX_ENTRIES) refuseGitPlanning("git_cardinality_exceeded");
       return {
         repositoryMode: "initialize",
         repositoryRoot: root,
@@ -1218,6 +1220,18 @@ export class GitPlanner {
       plannedFile(sha256(input.refBytes), input.refBytes.byteLength, refState.mode ?? 0o644, input.commitOid),
     );
     assertGitSyncSourceTransitions(transitions, reflogPlan);
+    /**
+     * The effect publishes no directory. Enable's own tree carries every fan-out and reflog
+     * parent; an adopted repository that lacks one refuses here, before any ID is reserved,
+     * instead of as `git_effect_parent` after intent.
+     */
+    for (const transition of transitions) {
+      if (transition.operation === "reuse") continue;
+      const parent = transition.path.slice(0, transition.path.lastIndexOf("/"));
+      if ((await this.#dependencies.fs.lstat(parseCanonicalAbsolutePathText(parent)))?.kind !== "directory") {
+        refuseGitPlanning("git_object_parent_absent", parent);
+      }
+    }
     return transitions;
   }
 }
