@@ -8,6 +8,7 @@ import { runStatus } from "./status.js";
 import {
   createCommandFixture,
   inventory,
+  REAL_FILESYSTEM_TIMEOUT_MS,
   removeCommandFixtures,
 } from "./testing.js";
 import type { CommandFixture } from "./testing.js";
@@ -113,6 +114,60 @@ describe("runStatus", () => {
       true,
       false,
     ]);
+    expect(await inventory(fixture.root)).toEqual(before);
+  });
+
+  it("reads a V1 installation manifest", async () => {
+    const fixture = await createCommandFixture("status-v1");
+    await runInit(fixture.context, ACCEPTED);
+    expect((await fixture.context.manifests.readOptional())?.schemaVersion).toBe(1);
+
+    const result = await runStatus(fixture.context);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.installed).toBe(true);
+    expect(result.data.managedArtifacts).toBeGreaterThan(0);
+    expect(result.warnings).toEqual([]);
+  });
+
+  /**
+   * A V2 manifest is refused by the store without the admission `init` wrote it under, so a
+   * status that read it bare reported every V2 home as "installed no" with an unreadable warning.
+   */
+  it("reads a V2 installation manifest without changing the home", async () => {
+    const fixture = await createCommandFixture("status-v2", { bootstrapAvailable: true });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    const initialized = await runInit(fixture.context, ACCEPTED);
+    expect(initialized.ok).toBe(true);
+    const manifestText = await nodeFs.readFile(fixture.paths.manifestFile, "utf8");
+    expect((JSON.parse(manifestText) as { schemaVersion: unknown }).schemaVersion).toBe(2);
+    const before = await inventory(fixture.root);
+
+    const result = await runStatus(fixture.context);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.warnings).toEqual([]);
+    expect(result.data.installed).toBe(true);
+    expect(result.data.productVersion).toBe(fixture.context.productVersion);
+    expect(result.data.managedArtifacts).toBeGreaterThan(0);
+    expect(result.data.driftCount).toBe(0);
+    expect(await inventory(fixture.root)).toEqual(before);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("warns rather than fails when the manifest is malformed", async () => {
+    const fixture = await createCommandFixture("status-bad-manifest");
+    await runInit(fixture.context, ACCEPTED);
+    await nodeFs.writeFile(fixture.paths.manifestFile, "{\"schemaVersion\":2}\n", { mode: 0o600 });
+    const before = await inventory(fixture.root);
+
+    const result = await runStatus(fixture.context);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.installed).toBe(false);
+    expect(result.warnings.some((warning) => warning.startsWith("installation manifest is unreadable"))).toBe(true);
     expect(await inventory(fixture.root)).toEqual(before);
   });
 

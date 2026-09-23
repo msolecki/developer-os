@@ -888,7 +888,7 @@ async function checkConfiguration(
  * The authority `init` built the manifest with: the product home, the Brain and spec §2.2's vendor
  * paths. Built here rather than imported from `commands/uninstall.ts`, which imports this module.
  */
-function manifestAdmission(paths: RuntimePaths, homes: VendorHomesV1): ManifestAdmissionContextV1 {
+export function manifestAdmission(paths: RuntimePaths, homes: VendorHomesV1): ManifestAdmissionContextV1 {
   const productHome = paths.home as CanonicalAbsolutePathV1;
   return {
     evidence: createCanonicalPathEvidence(),
@@ -1197,6 +1197,16 @@ async function readInstallNonce(paths: RuntimePaths): Promise<LifecycleInstallNo
   } catch {
     return null;
   }
+}
+
+/** Managed drift under either manifest schema; vendor rows are left to `instructions`, as in the `drift` check. */
+export async function inspectManagedDrift(
+  context: CliContext,
+  manifest: InstallationManifest,
+  paths: RuntimePaths,
+): Promise<readonly DriftFinding[]> {
+  if (manifest.schemaVersion === 1) return detectManagedDrift(context, manifest);
+  return (await inspectV2Drift(context, manifest, paths)).filter((finding) => !isVendor(finding.owner));
 }
 
 async function inspectV2Drift(

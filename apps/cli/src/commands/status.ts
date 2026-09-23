@@ -1,14 +1,16 @@
 import { success } from "@developer-os/core";
-import type { CliResult, DeveloperOsConfigV1 } from "@developer-os/core";
+import type { CliResult, DeveloperOsConfigV1, InstallationManifest } from "@developer-os/core";
 import type { AgentDiscovery } from "@developer-os/platform-macos";
 
 import { failureFrom, runtimePathsFor } from "../context.js";
 import type { CliContext } from "../context.js";
+import { resolveVendorHomes } from "../instructions/vendor-homes.js";
 import {
-  detectManagedDrift,
   discoverAgents,
+  inspectManagedDrift,
   isDirectory,
   listIncompleteTransactions,
+  manifestAdmission,
   readConfigFile,
 } from "./doctor.js";
 
@@ -52,9 +54,12 @@ export async function runStatus(
 
     const paths = runtimePathsFor(context, config ?? undefined);
 
-    let manifest = null;
+    // A V2 manifest is refused without the admission `init` wrote it under; V1 ignores it.
+    let manifest: InstallationManifest | null = null;
     try {
-      manifest = await context.manifests.readOptional();
+      manifest = await context.manifests.readOptional(
+        manifestAdmission(paths, resolveVendorHomes(context.env, context.userHome, paths.home)),
+      );
     } catch (error) {
       warnings.push(
         context.guards.redactDiagnostic(
@@ -66,7 +71,7 @@ export async function runStatus(
     }
 
     const drift =
-      manifest === null ? [] : await detectManagedDrift(context, manifest);
+      manifest === null ? [] : await inspectManagedDrift(context, manifest, paths);
 
     let agents: readonly AgentDiscovery[] = [];
     try {
