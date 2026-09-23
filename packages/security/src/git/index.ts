@@ -126,3 +126,19 @@ export type {
 } from "./gateways.js";
 export { PERSISTED_GIT_PUSH_PLAN_CODEC, validateGitSyncPlan, validatePersistedGitPushPlan } from "./push-plan.js";
 export type { GitSyncPlanV1, PersistedGitPushDestinationV1, PersistedGitPushPlanV1 } from "./push-plan.js";
+export {
+  destroyGitQuarantine,
+  GIT_PACK_READER_LIMITS,
+  GIT_PACK_READER_TRANSIENT_BYTES,
+  GitPackReaderLedger,
+  gitPackReaderBudget,
+  GuardedSha1PackReader,
+} from "./pack-reader.js";
+export type { GitPackClosureEvidenceV1, GitPackReaderLimitsV1, GitPackReadRequestV1 } from "./pack-reader.js";
+export { prepareLocalReceive } from "./local-receive.js";
+export type {
+  GitLocalReceivePreparationV1,
+  GitLocalReceiveProcessNodeV1,
+  GitLocalReceiveRequestV1,
+  GitLocalReceiveRunV1,
+} from "./local-receive.js";

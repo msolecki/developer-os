@@ -129,6 +129,19 @@ export type {
 } from "./git/index.js";
 export { PERSISTED_GIT_PUSH_PLAN_CODEC, validateGitSyncPlan } from "./git/index.js";
 export type { GitSyncPlanV1, PersistedGitPushPlanV1 } from "./git/index.js";
+export {
+  GuardedSha1PackReader,
+  materializeSanitizedBareDestinationShadow,
+  prepareLocalReceive,
+  validateShadowConfigTemplate,
+} from "./git/index.js";
+export type {
+  GitLocalReceivePreparationV1,
+  GitLocalReceiveRequestV1,
+  GitLocalReceiveRunV1,
+  GitPackClosureEvidenceV1,
+  SanitizedBareDestinationShadowV1,
+} from "./git/index.js";
 
 export interface SecurityPolicy {
   assertReadable(path: string): Promise<void>;

@@ -63,6 +63,10 @@ describe("the package's public door", () => {
         "validateSupportedGitProcessTable",
         "PERSISTED_GIT_PUSH_PLAN_CODEC",
         "validateGitSyncPlan",
+        "GuardedSha1PackReader",
+        "materializeSanitizedBareDestinationShadow",
+        "prepareLocalReceive",
+        "validateShadowConfigTemplate",
       ].sort(),
     );
   });
