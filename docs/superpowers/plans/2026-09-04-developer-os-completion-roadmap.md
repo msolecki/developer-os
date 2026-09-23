@@ -221,6 +221,14 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
 - **D58 (2026-09-23), amends program plan Task 8.** The founder cutover skips shadow mode (a separate
   shadow quarantine and an old-versus-new capture comparison). The runbook's disposable-home rehearsal
   (step 7c), the per-adapter gate cycle (step 16) and the exercised rollback (step 18) replace it.
+- **D59 (2026-09-23).** Plan 1b (`plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`) is
+  approved with every recommended answer to its founder questions: Q1-A (re-pin to macOS 26.6.2
+  `25G83`, the measured `/bin/launchctl` hash and Git 2.54.0 with a 13-line build-option literal), Q2-A
+  (`certification` field, `null` refuses mutation), Q3-A (accepted residual 10: a stale row refuses
+  with the exact manual `launchctl bootout` per generated label), Q4-A (agent-recorded local Git
+  trace; HTTPS and SSH refuse until the founder supplies a disposable remote), Q5-A
+  (`*.pinned-host.test.ts` and `npm run test:pinned-host`, run locally). Under D56 plan 1b's waves run
+  now, beside Phase 8, instead of waiting for it to close.
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 

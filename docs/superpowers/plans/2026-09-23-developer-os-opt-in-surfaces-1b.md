@@ -117,6 +117,8 @@ Both rows in the spec are dead on this machine. Two concrete consequences:
 
 None of these is silently applied. The owning tasks name the question they wait on.
 
+**Answered 2026-09-23 (D59): every question takes its recommended option A.** The spec amendments are applied in the spec as "Amended 2026-09-23 (D59)". Wave 1 runs now, beside Phase 8 (D56).
+
 - **Q1: re-pin both rows (NEW-84).** Amend spec §4.2 (the `SupportedGitDistributionV1` literal row and the ssh row), §5.3 (both `launchctl` tables) and §7 (the "11 build lines", "Apple-Git-155" and "25F84" wording) to the measured values above.
   - Sub-question **Q1a**: §4.2 types `buildOptionLines` as a fixed `readonly BoundedTextLineV1[11]`, and Git 2.54 prints 13 lines.
     - **A (recommended):** re-pin the literal count to 13, which keeps exact-set identity.
