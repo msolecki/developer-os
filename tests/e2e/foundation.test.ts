@@ -326,7 +326,7 @@ describe("Foundation temporary-HOME lifecycle", () => {
         "instructions",
         "codex-registration",
       ]);
-      /** `vendor-config` warns while `CLAUDE_DENY_RULES` is unobserved (plan A14 Task 10). */
+      /** `vendor-config` warns: the fixture home has no Claude user settings file (A14 Task 10). */
       expect(
         checks.checks.filter(
           (check) => check.status !== "pass" && check.id !== "vendor-config",

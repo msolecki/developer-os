@@ -6,6 +6,7 @@ Written by A13 plan Task 1, the observation spike, on 2026-09-22 against Claude 
 Codex CLI 0.155.1 (D48). Each question gets one answer: an observed answer, `unsupported (<reason>)`
 for observed non-support, or `founder-deferred (<reason>)` when only a billed model turn or a manual
 Codex trust grant can answer it. Nothing was billed, nothing logged in, and no trust was granted.
+Every `founder-deferred` cell was then answered on 2026-09-23 under D57 (method below).
 
 **Isolation.** Every vendor command ran as `env -i PATH="$PATH" TMPDIR="$TMPDIR" HOME="$T"
 CODEX_HOME="$T/.codex" XDG_CONFIG_HOME="$T/.config" …` with `T` a fresh `mktemp -d` under the agent's
@@ -14,6 +15,44 @@ also set `ANTHROPIC_BASE_URL=http://127.0.0.1:9`, a dummy `ANTHROPIC_API_KEY`,
 `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 DISABLE_TELEMETRY=1 DISABLE_AUTOUPDATER=1`, ran
 `claude -p <prompt> --output-format json --debug-file …` from `$T/work`, and were killed by an alarm
 (exit 142) while the CLI retried the refused connection, unless noted.
+
+**2026-09-23 rows (D57).** Same versions, same isolation (`env -i`, fresh `mktemp -d` home `T`,
+`HOME="$T" CODEX_HOME="$T/.codex" XDG_CONFIG_HOME="$T/.config"`), the same `$T/bin/dos` wrapper,
+now with a per-verb mode file, and the hooks file written by `renderClaudeHooks`, but with network
+and a real model turn. Rows answered this way say "(2026-09-23)".
+
+- **Claude authentication.** macOS resolves the login keychain through `$HOME`, so
+  `$T/Library/Keychains` was a symlink to the user's `~/Library/Keychains`. No credential was
+  read, printed or copied by the observer: `claude` found its own unsuffixed credentials item. `CLAUDE_CONFIG_DIR` was
+  **not** set for billed turns: with it set, Claude looks up a keychain item suffixed per config
+  directory and reports `Not logged in · Please run /login`. Turns ran as `claude -p <prompt>
+  --model claude-haiku-4-5-20251001 --output-format stream-json --verbose --max-turns ≤ 24` from
+  `$T/work`, with `--permission-mode acceptEdits --allowedTools 'Bash(echo:*)'` or
+  `--allowedTools Read`. The transcript under `$T/.claude/projects/` shows what reached the model.
+  Nine billed `claude -p` sessions, USD 0.35 in total.
+- **Codex authentication and model.** `$T/.codex/auth.json` was a symlink to the user's Codex
+  `auth.json`. That account is on the free plan at its limit (`account/rateLimits/read`:
+  `usedPercent: 100`, `planType: "free"`, resets 2026-10-22), so every real turn failed with
+  `You've hit your usage limit`. The Codex rows were therefore observed against a **local mock
+  model**: a loopback Node server set as `-c model_provider=mock -c
+  'model_providers.mock={name="mock",base_url="http://127.0.0.1:<port>/v1",wire_api="responses",env_key="MOCK_KEY"}'`
+  with `-m gpt-6-luna` (the default model). It served `/v1/models` from the catalog Codex had
+  cached in `$T/.codex/models_cache.json`, recorded every `/v1/responses` request body, and replayed
+  scripted tool calls. Hooks run in the CLI, so firing, payloads and exit semantics are Codex's own.
+  "Reaches the model" means "appears in the next request body". `gpt-6-luna` runs in code mode:
+  the model's one tool is `exec` (JavaScript), which calls nested tools such as
+  `tools.exec_command({cmd})` and `tools.apply_patch(<patch>)`. Runs used `codex exec --json
+  --skip-git-repo-check -s workspace-write` from `$T/cwork`.
+- **Codex trust grant, disposable home only.** Through the app-server (`initialize`, then
+  `config/batchWrite` with `{"edits": [{"keyPath": "hooks.state", "mergeStrategy": "upsert",
+  "value": {"<hook key>": {"trusted_hash": "<currentHash>"}}}]}`, each key and hash copied from
+  `hooks/list`). That writes `[hooks.state."<hook key>"] trusted_hash = "sha256:…"` into
+  `$T/.codex/config.toml`, the same request the TUI's trust prompt uses, and `hooks/list` then
+  reports `trustStatus: "trusted"`. `codex --help` also offers `--dangerously-bypass-hook-trust`;
+  it was not used.
+- **Teardown.** Both credential links were removed with `unlink` before `rm -rf "$T"`. The user's
+  `~/.claude/settings.json`, `~/.codex/config.toml`, `~/.codex/auth.json` and `~/.codex/hooks.json`
+  kept their size and mtime.
 
 **Claude tree.** The checked-in `plugins/claude/` copied to `$T/.claude/skills/developer-os/`, plus
 `hooks/hooks.json` written by the product's own `renderClaudeHooks` (all eight `CLAUDE_HOOK_ROWS`,
@@ -40,8 +79,12 @@ dummy key (the A12 *request* method), killed by an alarm.
    which ran and exited. The debug line `installed plugins' hooks modules not loaded: rollout flag
    (tengu_plugin_hooks_modules) is off` concerns hook *modules*, not `hooks.json`; plugin
    `hooks.json` fired regardless. Q4-A does not trigger. `PreToolUse`, `PostToolUse` and `Stop`
-   firing: founder-deferred (they need a model turn; with `CLAUDE_CODE_MAX_RETRIES=0` the turn
-   ended on the API error, `claude` exited 1, and `Stop` did not fire).
+   (2026-09-23): **observed firing.** One turn that ran `echo synthetic` with Bash, created a file
+   with Write and changed it with Edit fired `PreToolUse` for Bash (both the `command` and
+   `commit` rows), Write and Edit (`path`), `PostToolUse` for Write and Edit (`format`, `edit`), and
+   `Stop` once at the end. **`MultiEdit` is unsupported (no such tool in 2.1.280):** the
+   stream-json `init` event lists `Bash`, `Edit`, `Write`, `Read` and others, but no `MultiEdit`,
+   so the `Edit|Write|MultiEdit` matcher's third alternative never matches.
 2. **Claude: exit and output semantics (§4.4).**
    - `SessionStart`, exit 0 with stdout: logged as `Hook SessionStart:startup (SessionStart)
      success:` with the stdout text; `Hook output does not start with {, treating as plain text`
@@ -55,17 +98,41 @@ dummy key (the A12 *request* method), killed by an alarm.
      "success"`, `"is_error": false` and `result` = `UserPromptSubmit operation blocked by hook:\n[<command>]:
      <stderr>\n\n\nOriginal prompt: <prompt>`.
    - Exit 1 with stderr on both events: logged as `error:`, non-blocking; the prompt was sent.
-   - Whether `SessionStart` and `UserPromptSubmit` stdout reaches the model: founder-deferred (the
-     request body is not observable against a dead endpoint).
-   - `PreToolUse`, `PostToolUse` and `Stop`, exit 0 and exit 2: founder-deferred (need a model
-     turn).
+   - Whether `SessionStart` and `UserPromptSubmit` stdout reaches the model (2026-09-23): **yes,
+     both.** Asked to quote every line that carries the marker, the model quoted
+     `SessionStart:startup hook success: <stdout>` and `UserPromptSubmit hook success: <stdout>`,
+     each from a system reminder.
+   - `PreToolUse`, exit 2 (2026-09-23): **blocks.** The tool does not run (the Bash redirect
+     target and the Write target were both absent afterwards). The model receives a tool result
+     with `is_error: true` and the content `PreToolUse:<Tool> hook error: [<command>]: <stderr>`.
+   - `PreToolUse`, exit 1: non-blocking. The command ran, and the transcript records a
+     `hook_non_blocking_error`. The model did not quote the stderr.
+   - `PreToolUse`, exit 0 with stdout: recorded as `hook_success`, and the tool ran. The model did
+     not quote the stdout, so `allow` must keep stdout empty.
+   - `PostToolUse`, exit 2: the tool had already run (the file existed). The transcript records a
+     `hook_blocking_error`, and `[<command>]: <stderr>` **reaches the model**, which quoted it. This
+     confirms spec §4.4's `advise` = exit 2.
+   - `PostToolUse`, exit 1: non-blocking, and the model did not see the stderr.
+   - `Stop`, exit 2: **blocks the stop.** The model receives `Stop hook feedback:\n[<command>]:
+     <stderr>` as a meta user message and continues. The next `Stop` payload carries
+     `stop_hook_active: true`, and exit 0 then ends the turn.
+   - `Stop`, exit 1: non-blocking; the session ended.
 3. **Claude: payload field spellings.** Observed for two events (fixtures
    `tests/fixtures/hooks/claude/SessionStart.json` and `UserPromptSubmit.json`, scrubbed):
    `SessionStart` carries `session_id`, the transcript-path key, `cwd`, `hook_event_name`,
    `source`; `UserPromptSubmit` carries `session_id`, the transcript-path key, `cwd`, `prompt_id`,
    `permission_mode`, `hook_event_name`, `prompt`. `cwd` is the session working directory as an
-   absolute path. `tool_name`, `tool_input.command`, `tool_input.file_path` (Edit, Write,
-   MultiEdit) and `stop_hook_active`: founder-deferred (need a model turn).
+   absolute path. The other events (2026-09-23; fixtures `PreToolUse-Bash.json`,
+   `PreToolUse-Write.json`, `PreToolUse-Edit.json`, `PostToolUse-Edit.json`, `Stop.json`):
+   - `PreToolUse` carries `session_id`, the transcript-path key, `cwd`, `prompt_id`,
+     `permission_mode`, `hook_event_name`, `tool_name`, `tool_input` and `tool_use_id`.
+     `PostToolUse` adds `tool_response` and `duration_ms`.
+   - Bash: `tool_name: "Bash"`, and `tool_input` is `{command, description}`.
+   - Write: `tool_input` is `{file_path, content}`. Edit: `tool_input` is `{file_path, old_string,
+     new_string, replace_all}`. `file_path` is absolute. MultiEdit: unsupported (see 1).
+   - `Stop` carries `session_id`, the transcript-path key, `cwd`, `prompt_id`, `permission_mode`,
+     `hook_event_name`, `stop_hook_active` (a boolean, `false` on the first stop),
+     `last_assistant_message`, `background_tasks` and `session_crons`.
 4. **Codex: event names, matcher, tool name, file edits (§3).** The plugin `hooks.json` uses the
    Claude-shaped document `{"hooks": {"<Event>": [{"matcher": …, "hooks": [{"type": "command",
    "command": …, "timeout": …}]}]}}` with **PascalCase** event keys: `PreToolUse`, `PostToolUse`,
@@ -75,13 +142,49 @@ dummy key (the A12 *request* method), killed by an alarm.
    set is `preToolUse`, `permissionRequest`, `postToolUse`, `preCompact`, `postCompact`,
    `sessionStart`, `sessionEnd`, `userPromptSubmit`, `subagentStart`, `subagentStop`, `stop`,
    `interrupt`. The matcher is stored verbatim (`Bash`, `shell`, `Edit|Write|apply_patch` all
-   accepted without validation). The shell tool name, whether a file edit fires
-   `PreToolUse`/`PostToolUse`, and path versus patch body: founder-deferred (need a trusted hook and
-   a model turn).
-5. **Codex: field spellings and the stop-loop flag.** founder-deferred (no payload reaches an
-   untrusted hook, and a trusted one needs the founder's trust grant).
-6. **Codex: exit and output semantics.** founder-deferred (as 5). Observed only: an **untrusted hook
-   does not fire**. With the plugin hooks, and in a second run also a user
+   accepted without validation). The rest (2026-09-23, mock model, trusted hooks):
+   - **Shell tool name: `Bash`.** A `tools.exec_command({cmd: "echo synthetic"})` call reaches the
+     hook as `tool_name: "Bash"` with `tool_input.command: "echo synthetic"`. The model-facing tool is
+     `exec_command`, and the `exec` code-mode wrapper fires no hook of its own.
+   - **A file edit fires both events.** `tools.apply_patch(<patch>)` fired `PreToolUse` and, once
+     the patch applied, `PostToolUse`, with `tool_name: "apply_patch"`. A patch that failed to apply
+     fired `PreToolUse` only.
+   - **Patch body, not a path.** `tool_input.command` holds the whole patch text, for example
+     `*** Begin Patch\n*** Add File: note.txt\n+synthetic\n*** End Patch\n`. The grammar observed:
+     `*** Begin Patch`, then per file `*** Add File: <path>`, `*** Update File: <path>` or
+     `*** Delete File: <path>`, hunk headers `@@…`, body lines prefixed `+`, `-` or a space, then
+     `*** End Patch`. The paths were relative to `cwd`.
+   - **Matchers.** `Bash` matched the shell call. `apply_patch` **and** `Edit|Write` both matched
+     the patch call, and the payload still said `tool_name: "apply_patch"`.
+5. **Codex: field spellings and the stop-loop flag** (2026-09-23; fixtures under
+   `tests/fixtures/hooks/codex/`).
+   - `SessionStart`: `session_id`, the transcript-path key, `cwd`, `hook_event_name`, `model`,
+     `permission_mode`, `source` (`"startup"`).
+   - `UserPromptSubmit`: the same without `source`, plus `turn_id` and `prompt`.
+   - `PreToolUse`: `turn_id`, `tool_name`, `tool_input` (`{command}` for both `Bash` and
+     `apply_patch`) and `tool_use_id`. `PostToolUse` adds `tool_response`, a string.
+   - `Stop`: `turn_id`, `stop_hook_active` (a boolean: `false` on the first stop, `true` on the stop
+     that follows a blocked one) and `last_assistant_message`.
+   - `cwd` is the absolute real path of the session directory. **The stop-loop flag is
+     `stop_hook_active`**, spelled as on Claude.
+6. **Codex: exit and output semantics** (2026-09-23, mock model).
+   - `SessionStart`, exit 0 with stdout: the stdout **reaches the model** as a `developer` message
+     ahead of the user prompt. Exit 2 and exit 1: non-blocking, and the stderr is not in the request.
+   - `UserPromptSubmit`, exit 0 with stdout: the stdout **reaches the model** as a `developer`
+     message after the prompt. Exit 2 **blocks**: no request is sent, `Stop` does not fire, and
+     `codex exec` exits 0 with `turn.completed` and no agent message. Exit 1: non-blocking.
+   - `PreToolUse`, exit 2: **blocks.** The command did not run and the patch did not apply. The
+     model receives `Command blocked by PreToolUse hook: <stderr>. Command: <command>`. Exit 1:
+     non-blocking, and the stderr is not delivered. Exit 0 with stdout: the stdout is not delivered.
+   - `PostToolUse`, exit 2: the tool had already run (the file existed). The stderr **reaches the
+     model** in place of the tool's result. Exit 1: non-blocking, and the stderr is not delivered.
+   - `Stop`, exit 2: **blocks the stop.** The stderr reaches the model as a user message
+     `<hook_prompt hook_run_id="stop:…">…</hook_prompt>`, the turn continues, and the next `Stop`
+     payload has `stop_hook_active: true`. Exit 1: non-blocking; the turn ends.
+   - So the Codex outcome map equals Claude's: `allow` exit 0 with empty stdout, `context` exit 0
+     with stdout, and `block` and `advise` exit 2 with stderr.
+
+   The first observation stands: an **untrusted hook does not fire**. With the plugin hooks, and in a second run also a user
    `$CODEX_HOME/hooks.json` with the same handlers, listed `trustStatus: "untrusted"`, `codex exec` ran into the refused
    request and the wrapper logged nothing; neither `--json` stdout nor `RUST_LOG=trace` stderr
    mentioned the skipped hooks.
@@ -103,19 +206,26 @@ dummy key (the A12 *request* method), killed by an alarm.
    `"timeout": 2` changed it). It does **not** cover the location: the same handler as a user hook
    and as a plugin hook, and the same plugin handler moved from `hooks/hooks.json` to the inline
    manifest form, kept the same hash. So any change to command bytes, matcher or timeout moves a
-   trusted hook to re-trust; whether that shows as `modified` or `untrusted` is founder-deferred
-   (needs a grant first).
+   trusted hook to re-trust. After a grant (2026-09-23): a trusted hook whose command or matcher
+   then changed lists **`modified`**, and a hook at a key that had no grant lists **`untrusted`**.
+   **Neither fires.** Only the three unchanged trusted hooks fired. The key embeds the matcher
+   group's index (`…:pre_tool_use:<group>:<handler>`), so inserting a group before another moves
+   that one to a new key, and it lists as `untrusted`.
 9. **Isolated `ingest` (§6.3).** Claude: a planted plugin `SessionStart` hook **does not fire**
    under the ingest argv (`--tools "" --strict-mcp-config --restricted --safe-mode
    --no-session-persistence --permission-prompts none`): the wrapper logged nothing, and the debug
    log shows `Safe mode: installed plugins are disabled, none of their hooks or hooks modules load`,
    `Registered 0 hooks from 0 plugins` and `Skipping plugin hooks - safe mode disables installed
    plugins (managed settings-file hooks still run; built-in plugins load regardless)`. Residual:
-   managed-settings hooks still run under safe mode. Codex: founder-deferred (an untrusted hook never
-   fires, so only a trusted planted hook under `--ephemeral --ignore-user-config --ignore-rules`
-   answers it).
+   managed-settings hooks still run under safe mode. Codex (2026-09-23): with all five plugin hooks
+   trusted, `codex exec --ephemeral --ignore-user-config --ignore-rules` against the mock model sent
+   its request, and the wrapper logged **nothing**. `--ignore-user-config` drops `config.toml`, and
+   both the plugin's enablement and the hook trust live there. Planted trusted plugin hooks
+   **do not fire** under the ingest argv.
 10. **Versions observed.** `claude --version` → `2.1.280 (Claude Code)`; `codex --version` →
-    `codex-cli 0.155.1`.
+    `codex-cli 0.155.1`, on 2026-09-22 and again on 2026-09-23. Each is the only version tested, so
+    it is the documented floor (`DOCUMENTED_FLOORS`) for `plugin_hooks` and
+    `session_start_injection` on its vendor. It is not a range.
 
 ## 2. Measurements
 

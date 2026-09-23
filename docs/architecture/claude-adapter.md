@@ -473,15 +473,16 @@ block whose content is `@$T/p/claude/instructions/probe-rule.md`;
 ## 15. Observation rows used by A14
 
 A14 (`import --claude-memory` and the `doctor` check `vendor-config`) depends on two vendor facts. Both
-are rows in `packages/adapter-claude/src/observations.ts`, and both are `null` until a founder
-observation on a disposable home records them (A14 plan Task 14). Neither is ever written from
+are rows in `packages/adapter-claude/src/observations.ts`. Each stayed `null` until an observation on a
+disposable home recorded it (A14 plan Task 14). Both were recorded on 2026-09-23 (below). Neither is ever written from
 memory or documentation, the rule `AGENT_DETECTION_ROWS` set. `isValidClaudeObservation` checks each
 row's version, date and one-sentence provenance.
 
 - **`CLAUDE_MEMORY_LAYOUT`** names the projects directory, the per-project memory directory, the
   extension and the index file to exclude, relative to `<user-home>/.claude`. While it is `null`,
   `import --claude-memory` exits 4 with `claude_memory_layout_unobserved` and reads nothing.
-  `CLAUDE_CONFIG_DIR` is not honoured.
+  `CLAUDE_CONFIG_DIR` is not honoured, although the observation shows that Claude Code moves the
+  layout under it.
 - **`CLAUDE_DENY_RULES`** maps each product rule ID in `PROTECTED_PATH_RULES` (`packages/security`)
   to the exact Claude deny-rule strings for it. The IDs are derived from the protected-path policy,
   so there is no second list; only the vendor syntax lives here. While it is `null`, `vendor-config`
@@ -500,6 +501,38 @@ name plus the file name, so no decoded project path reaches output or the envelo
 allow and ask lists are personal choices and `env` routinely holds credentials. A rule counts only
 on an exact string match. The check reports missing **rule IDs**, never a user string, and never
 returns `fail`. Codex is not examined, and the message says so.
+
+### 15.1 Observed against Claude Code 2.1.280 on 2026-09-23
+
+Recorded under founder decision D57 by a headless agent session.
+
+**Method.** `T` was a fresh `mktemp -d`. Every command ran as `env -i PATH="$PATH" TMPDIR="$TMPDIR"
+HOME="$T" USER=… CODEX_HOME="$T/.codex" XDG_CONFIG_HOME="$T/.config" claude -p <prompt> --model
+claude-haiku-4-5-20251001 --output-format stream-json --verbose` from `$T/work`, with network. To
+authenticate, `$T/Library/Keychains` was a symlink to the user's `~/Library/Keychains`; nothing was
+read or copied. `docs/architecture/hooks.md` §1 records the details. Every planted file was
+synthetic.
+
+| Row | Evidence | Value |
+|---|---|---|
+| `CLAUDE_MEMORY_LAYOUT` | one `--permission-mode acceptEdits` turn asked to save a memory. It wrote `$T/.claude/projects/<cwd-slug>/memory/project_mascot.md` (frontmatter, then the fact) and `MEMORY.md` beside it, holding one `- [Project Mascot](project_mascot.md) — …` line. The session also creates the empty `memory/` directory at start | `projects` / `memory` / `.md` / index `MEMORY.md` |
+| `CLAUDE_CONFIG_DIR` | an unbilled session with `CLAUDE_CONFIG_DIR=$T/cfg` created `$T/cfg/projects/<cwd-slug>/memory/` and nothing under `$T/.claude/projects/`. With it set, Claude does not find the keychain login (`Not logged in`) | it **moves** the layout; the product does not follow it |
+| `CLAUDE_DENY_RULES` | `--allowedTools Read`, 16 synthetic protected files and 2 control files, both in and outside the working directory. **Baseline** (no `settings.json`): all 18 read. **With** the strings in `$T/.claude/settings.json` `permissions.deny`: all 16 protected reads denied (`File is in a directory that is denied by your permission settings.`), both control reads succeeded | the table below |
+| relative patterns | a first attempt with `Read(**/.ssh/**)`, `Read(**/.aws/**)` and `Read(**/.gnupg/**)` denied nothing under `$T`, because those patterns resolve against the working directory. The `//**/…` (filesystem-root) form denies both inside and outside it | not used |
+
+| Rule id | `permissions.deny` strings (each needed) | Proven by a denied read of |
+|---|---|---|
+| `read-env` | `Read(//**/.env)`, `Read(//**/.env/**)` | `$T/.env`, `$T/work/.env`, `$T/work/sub/.env/inner.txt`, `$T/other/.env/inner.txt` |
+| `read-env-variants` | `Read(//**/.env.*)`, `Read(//**/.env.*/**)` | `$T/work/.env.local`, `$T/other/.env.prod`, `$T/other/.env.d/inner.txt` |
+| `read-ssh` | `Read(//**/.ssh/**)` | `$T/.ssh/id_synthetic`, `$T/work/.ssh/k` |
+| `read-aws` | `Read(//**/.aws/**)` | `$T/.aws/credentials`, `$T/work/.aws/k` |
+| `read-gnupg` | `Read(//**/.gnupg/**)` | `$T/.gnupg/synthetic.txt`, `$T/work/.gnupg/k` |
+| `read-gh-hosts` | `Read(~/.config/gh/hosts.yml)` | `$T/.config/gh/hosts.yml` |
+| `read-codex-auth` | `Read(~/.codex/auth.json)` | `$T/.codex/auth.json` (a synthetic file, placed before any Codex credential link existed) |
+| `read-claude-credentials` | `Read(~/.claude/.credentials.json)` | `$T/.claude/.credentials.json` |
+
+The strings were proven as one set, not one at a time. Each file was readable in the baseline, and
+each file matches only its own rule's strings. `~` resolved to `HOME`.
 
 ## 16. Recommended third-party skills
 

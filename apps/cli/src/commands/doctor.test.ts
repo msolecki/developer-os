@@ -194,7 +194,7 @@ describe("runDoctor", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.code).toBe(EXIT_CODES.success);
-    /** `vendor-config` warns while `CLAUDE_DENY_RULES` is unobserved (plan A14 Task 10). */
+    /** `vendor-config` warns: the fixture home has no Claude user settings file (A14 Task 10). */
     expect(
       result.data.checks.filter(
         (check) => check.status !== "pass" && check.id !== "vendor-config",
