@@ -61,6 +61,8 @@ describe("the package's public door", () => {
         "SUPPORTED_GIT_DISTRIBUTION",
         "validateSupportedGitDistribution",
         "validateSupportedGitProcessTable",
+        "PERSISTED_GIT_PUSH_PLAN_CODEC",
+        "validateGitSyncPlan",
       ].sort(),
     );
   });

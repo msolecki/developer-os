@@ -67,3 +67,62 @@ export type {
   GitProcessSupervisorV1,
   GitPushPhaseV1,
 } from "./supervisor.js";
+export {
+  bindShadowConfigToTemplate,
+  createOpaqueGitLocalToken,
+  deslotShadowConfig,
+  hashShadowConfig,
+  hashShadowConfigProjection,
+  hashShadowConfigTemplate,
+  instantiateShadowConfig,
+  materializeSanitizedBareDestinationShadow,
+  materializeSanitizedGitShadow,
+  OPAQUE_LOCAL_SELECTOR_PREFIX,
+  parseOpaqueGitLocalToken,
+  renderGitConfigQuoted,
+  renderShadowConfig,
+  validateShadowConfig,
+  validateShadowConfigTemplate,
+  verifySanitizedGitShadow,
+} from "./shadow.js";
+export type {
+  GitShadowIdentityV1,
+  GitShadowSnapshotRefV1,
+  InstantiatedGitShadowConfigV1,
+  OpaqueGitLocalTokenV1,
+  SanitizedBareDestinationShadowV1,
+  SanitizedGitShadowConfigBytesV1,
+  SanitizedGitShadowConfigTemplateV1,
+  SanitizedGitShadowConfigV1,
+  SanitizedGitShadowRequestV1,
+  SanitizedGitShadowSlotsV1,
+  SanitizedGitShadowV1,
+  SanitizedShadowRemoteUrlV1,
+} from "./shadow.js";
+export {
+  GIT_GATEWAY_TRAMPOLINE_TEMPLATE,
+  hashGitGatewayTemplate,
+  materializeGitExecGateway,
+  renderGitGatewayTrampoline,
+  runGitGateway,
+  runSshBridge,
+  SanitizedLocalRemoteHelper,
+  sanitizedGitEnvironment,
+  verifyGitExecGateway,
+} from "./gateways.js";
+export type {
+  GitExecGatewayRequestV1,
+  GitExecGatewayV1,
+  GitGatewayInvocationV1,
+  GitGatewayOutcomeV1,
+  GitGatewayTransitionV1,
+  GitGatewayTrampolineV1,
+  GitLocalHelperStepV1,
+  GitSshBridgeInvocationV1,
+  SanitizedGitEnvironmentV1,
+  SanitizedLocalRemoteHelperOptionsV1,
+  SanitizedLocalRemoteHelperV1,
+  SanitizedSshBridgeV1,
+} from "./gateways.js";
+export { PERSISTED_GIT_PUSH_PLAN_CODEC, validateGitSyncPlan, validatePersistedGitPushPlan } from "./push-plan.js";
+export type { GitSyncPlanV1, PersistedGitPushDestinationV1, PersistedGitPushPlanV1 } from "./push-plan.js";

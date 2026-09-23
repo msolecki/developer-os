@@ -127,6 +127,8 @@ export type {
   SupportedGitExecutableV1,
   SupportedGitProcessTableV1,
 } from "./git/index.js";
+export { PERSISTED_GIT_PUSH_PLAN_CODEC, validateGitSyncPlan } from "./git/index.js";
+export type { GitSyncPlanV1, PersistedGitPushPlanV1 } from "./git/index.js";
 
 export interface SecurityPolicy {
   assertReadable(path: string): Promise<void>;
