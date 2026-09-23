@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+Completed tasks were removed on 2026-09-23; see git history.
+
 **Goal:** Deliver `developer-os` as an open-source, local-first macOS CLI that installs independent Claude Code and Codex adapters over a private Obsidian-compatible Brain.
 
 **Architecture:** Build a clean public TypeScript monorepo in a dedicated target checkout from audited source material, without importing either legacy Git history. Keep product code and generated plugins in the public repository while all notes, captures, configuration, staging, backups, and logs remain in user-owned local paths. Deliver seven independently testable subprojects behind explicit security, compatibility, migration, and release gates.
@@ -48,13 +50,12 @@
 - Every code-producing task receives a fresh-context review by an agent other than the author.
 - The repository remains private until its own publication-candidate secret scan is clean and an OSI-approved license is selected with qualified legal counsel. Historical credential rotations in unrelated repositories are explicitly outside the Developer OS release gate.
 - This program plan is an umbrella. Each subsystem after Foundation receives its own approved spec and implementation plan before code work.
-- `docs/superpowers/plans/legacy-runtime/` described the founder's pre-Developer-OS machine, not this product. It is a publication-excluded path, named by Task 0's `exclusion-policy.md`, and it is now **empty** — its one document closed on 2026-08-10 and was deleted. The exclusion stands for anything that might be written there again.
+- `docs/superpowers/plans/legacy-runtime/` is a publication-excluded path, named by `docs/migration/exclusion-policy.md`; the exclusion stands for anything written there.
 - `docs/superpowers/BACKLOG.md` is the single index of outstanding plans, specs, and gates. Any new plan or spec must be registered there in the same change that creates it.
 
 ## Approved execution decisions
 
 - 2026-07-21: the founder explicitly waived the four historical credential rotations as Developer OS implementation and publication blockers. This does not permit copying secret-bearing history, private content, credentials, or unredacted source material; Task 0 must still prove the new repository's publication candidates are clean.
-- Task 0 is an audit/control task and does not create a standalone commit. Its reviewed artifacts enter the Task 1 bootstrap commit only after the repository has a working `npm run lint && npm test` gate.
 - The execution environment cannot access SSH or GitHub CLI credential stores. Private local implementation may proceed in a dedicated repository with `origin` recorded but no fetch or push. Remote hooks/configuration verification, reconciliation, and all remote writes remain blocked until the founder supplies a safely cloned checkout or performs that verification outside this environment.
 
 ## Canonical inputs
@@ -66,8 +67,6 @@ Every input is in this repository. Nothing below resolves outside it.
 - Publication boundary: `docs/migration/exclusion-policy.md`
 - Frozen legacy behavior: `docs/migration/baseline-capabilities.json` — the recorded Claude Code, Codex, and Brain capability surface as of 2026-07-21, and the only admissible statement about what the legacy runtime did
 - Cutover requirements: `docs/superpowers/BACKLOG.md` §4 and Task 8 below.
-
-Three former inputs were retired on 2026-07-27 because they contradicted this program's own exclusion policy: the legacy `README.md` and `AGENTS.md` were never publication candidates, and the two Brain proposals are `private-content`. Their product-relevant substance is `baseline-capabilities.json`; their unresolved obligations are cutover preconditions, not build inputs.
 
 ## Program file map
 
@@ -98,19 +97,12 @@ The following paths are created relative to the target repository root over the 
 ## Dependency graph
 
 ```text
-P0 Source safety
-  -> P1 Foundation and CLI lifecycle
-      -> P2 Brain engine
-      -> P3 Workflow compiler
-          -> P4 Claude adapter
-          -> P5 Codex adapter
-              -> P6 Capture/ingest/security hardening
-                  -> P7 Git/automation/update lifecycle
-                      -> P8 Founder shadow migration
-                          -> P9 Public beta and v1 release
+P7 Git/automation/update lifecycle
+  -> P8 Founder shadow migration
+      -> P9 Public beta and v1 release
 ```
 
-P2 and P3 may proceed in parallel only after P1 interfaces are frozen. P4 and P5 may proceed in parallel only after P3's workflow and capability schemas are frozen. P6 consumes both adapter contracts and therefore starts after P4 and P5.
+P0–P6 are closed. The executed order of the P7 remainder relative to P8 is `docs/superpowers/ORDER.md` (A15 before A11b, D16).
 
 ---
 
@@ -453,7 +445,6 @@ token-only adapter planners, macOS adapter, and isolated integration fixtures.
 
 | Gate | Command or evidence | Blocks |
 |---|---|---|
-| Source preservation | Disposable-clone patch restore plus classified status inventory | Task 1 |
 | Historical secrets | Founder rotation/log-review record with no secret values | Public visibility |
 | Repository validation | `npm run lint && npm test && pnpm build && git diff --check` | Every commit/release |
 | Generated artifacts | clean regeneration diff | Adapter commits/release |
