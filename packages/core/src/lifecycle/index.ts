@@ -245,3 +245,6 @@ export {
   LIFECYCLE_SUBSYSTEMS,
   LIFECYCLE_TERMINAL_OUTCOMES,
 } from "./types.js";
+export { inspectLifecycleLedgerV2 } from "./ledger-v2.js";
+export type { LifecycleLedgerV2DependenciesV1, LifecycleLedgerV2SnapshotV1 } from "./ledger-v2.js";
+export type { LifecycleLedgerExclusionV1 } from "./ledger.js";

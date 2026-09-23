@@ -33,6 +33,7 @@ import type {
   ExitCode,
   HeldLifecycleStableLockV1,
   LifecycleBookkeepingResidueV1,
+  LifecycleJournalClosureV2,
   LifecycleLedgerSnapshotV1,
   LifecycleParticipantAdaptersV1,
   ManifestAdmissionContextV1,
@@ -477,6 +478,30 @@ function requireResolvedClosure(
 }
 
 /**
+ * Spec 2 §9.2: every Spec 1 operation and every new plan refuses an update arm, before V1
+ * recovery can touch that update's Foundation participants. Only the recorded update operation
+ * may resume it, so the recovery names that command. A lone executor record is invisible to the
+ * V1 scan, which is why this reads closure V2 rather than trusting the V1 snapshot.
+ */
+function refuseUpdateResidue(closure: LifecycleJournalClosureV2, paths: RuntimePaths): void {
+  if (closure.kind !== "update_recovery" && closure.kind !== "update_construction_cleanup" && closure.kind !== "update_executor_cleanup") {
+    return;
+  }
+  const operation =
+    closure.kind === "update_recovery"
+      ? closure.operation
+      : closure.kind === "update_construction_cleanup" && closure.construction.frontier !== "plan_pending"
+        ? closure.construction.operation
+        : "update_apply";
+  throw new LifecycleMutationRefusal({
+    reason: "lifecycle_update_recovery_required",
+    code: EXIT_CODES.recoveryRequired,
+    paths: [paths.home],
+    recovery: operation === "update_rollback" ? "developer-os update rollback --apply" : "developer-os update --apply",
+  });
+}
+
+/**
  * `held` is Review Focus 1: a scheduled handler runs under the global lock its runner already
  * holds (§5.4), and a second `lockf` on a fresh descriptor in the same process reports busy.
  * With it the gate verifies the held descriptor's `dev`/`ino` against the lock path instead of
@@ -523,6 +548,7 @@ export async function withLifecycleMutation<T>(
         }),
       ),
     );
+    refuseUpdateResidue((await lifecycle.inspectClosureV2(key, residue)).closure, context.paths);
     await cleanAllocatorTemp(context, lifecycle, key, residue, held);
     await deriveManifestAnchor(context, lifecycle, key, residue);
 

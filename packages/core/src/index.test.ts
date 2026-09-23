@@ -532,6 +532,7 @@ describe("the package's public door", () => {
         "buildUpdateFoundationParticipantRef",
         "updateFoundationStagedDigestBytes",
         "updateFoundationStagedPath",
+        "inspectLifecycleLedgerV2",
       ].sort(),
     );
   });

@@ -86,7 +86,20 @@ export interface LifecycleLedgerDependenciesV1<TPlan extends CoordinatorPlan> {
   readonly manifestBeforeHash: (plan: TPlan) => LowerHexSha256 | null;
   /** The four lease paths an uninstall plan binds, for the draining discriminator. */
   readonly leasePaths: (plan: TPlan) => readonly CanonicalAbsolutePathV1[];
+  /**
+   * Spec 2 §9.2: the V2 inspector (`ledger-v2.ts`) owns these update coordinators — their
+   * envelope leaves and staging roots — and their Foundation participants. The V1 scan skips
+   * them, never lists their journals as standalone, and still keeps the allocator above them.
+   */
+  readonly exclude?: LifecycleLedgerExclusionV1;
 }
+
+export interface LifecycleLedgerExclusionV1 {
+  readonly coordinatorIds: ReadonlySet<string>;
+  readonly foundationTransactionIds: ReadonlySet<string>;
+}
+
+const NO_EXCLUSION: LifecycleLedgerExclusionV1 = { coordinatorIds: new Set(), foundationTransactionIds: new Set() };
 
 export interface LifecycleCoordinatorRecordV1<TPlan> {
   readonly id: LifecycleCoordinatorIdV1;
@@ -429,8 +442,18 @@ async function scanCoordinatorRoot<TPlan extends CoordinatorPlan>(
     }
     if (!admitLeaf(scan, "coordinatorJournals", path)) return;
     if (scan.dependencies.residue.retainedPaths.has(path)) continue;
+    if (exclusionOf(scan).coordinatorIds.has(coordinatorLeafStem(name))) continue;
     await admitCoordinatorLeaf(scan, path, name);
   }
+}
+
+function exclusionOf<TPlan extends CoordinatorPlan>(scan: LedgerScanV1<TPlan>): LifecycleLedgerExclusionV1 {
+  return scan.dependencies.exclude ?? NO_EXCLUSION;
+}
+
+/** Every envelope leaf is `[.]<id>.<suffix>` and an ID holds no dot, so the stem is the ID. */
+export function coordinatorLeafStem(name: string): string {
+  return (name.startsWith(".") ? name.slice(1) : name).split(".")[0] ?? "";
 }
 
 async function admitCoordinatorLeaf<TPlan extends CoordinatorPlan>(
@@ -864,6 +887,7 @@ async function scanLifecycleStaging<TPlan extends CoordinatorPlan>(
     }
     if (!admitStagingLeaf(scan, path)) return;
     if (scan.dependencies.residue.retainedPaths.has(path)) continue;
+    if (exclusionOf(scan).coordinatorIds.has(name)) continue;
     const id = coordinatorIdOf(name, nonce);
     if (id === null) {
       refuse(scan, "lifecycle_staging_name", path);
@@ -1624,7 +1648,10 @@ export async function inspectLifecycleLedger<TPlan extends CoordinatorPlan>(
       if (arm !== null) allocatedIds.push(arm.id);
     }
   }
+  const exclusion = exclusionOf(scan);
+  for (const id of exclusion.foundationTransactionIds) participantIds.add(id);
   for (const id of participantIds) allocatedIds.push(id);
+  allocatedIds.push(...exclusion.coordinatorIds);
   const rollbackPayloadId = await retainedRollbackPayloadId(scan);
   if (rollbackPayloadId !== null) allocatedIds.push(rollbackPayloadId);
 
@@ -1670,7 +1697,7 @@ export async function inspectLifecycleLedger<TPlan extends CoordinatorPlan>(
     }
   }
 
-  const nonTerminalCoordinators = new Set<string>();
+  const nonTerminalCoordinators = new Set<string>(exclusion.foundationTransactionIds);
   for (const record of nonTerminalRecords(records)) {
     for (const ref of record.plan.participants.foundation) nonTerminalCoordinators.add(ref.id);
   }

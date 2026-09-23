@@ -642,3 +642,9 @@ export type {
   UpdateFoundationInitialJournalAdmissionContextV1,
   UpdateFoundationPayloadIdentityV1,
 } from "./transactions/index.js";
+export { inspectLifecycleLedgerV2 } from "./lifecycle/index.js";
+export type {
+  LifecycleLedgerExclusionV1,
+  LifecycleLedgerV2DependenciesV1,
+  LifecycleLedgerV2SnapshotV1,
+} from "./lifecycle/index.js";

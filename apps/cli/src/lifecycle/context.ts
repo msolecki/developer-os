@@ -27,6 +27,7 @@ import {
   createNodeLifecycleGuardedFileSystem,
   deriveLifecycleLedgerRoots,
   inspectLifecycleLedger,
+  inspectLifecycleLedgerV2,
   parseCanonicalAbsolutePathText,
   parseLowerHexSha256,
   parseUtcTimestamp,
@@ -38,7 +39,9 @@ import type {
   LifecycleCoordinatorJournalV1,
   LifecycleGuardedFileSystemV1,
   LifecycleInstallNonceV1,
+  LifecycleLedgerDependenciesV1,
   LifecycleLedgerRootsV1,
+  LifecycleLedgerV2SnapshotV1,
   LifecycleLedgerSnapshotV1,
   LifecycleParticipantAdaptersV1,
   LifecycleStableLockProviderV1,
@@ -50,6 +53,7 @@ import type {
 } from "@developer-os/core";
 import { LAUNCHD_EFFECT_LEDGER_CODEC } from "@developer-os/platform-macos";
 
+import { createCanonicalPathEvidence } from "../bootstrap/admission.js";
 import { createLifecycleEffectPorts, REJECTING_LAUNCHD_HOST } from "./adapters.js";
 import type { LaunchdHostV1, LifecycleEffectPortsV1 } from "./adapters.js";
 import type { AdmittedV2HomeV1 } from "./admission.js";
@@ -104,6 +108,14 @@ export interface CliLifecycleContext {
     key: LifecycleHomeKeyV1,
     residue: LifecycleBookkeepingResidueV1,
   ): Promise<LifecycleLedgerSnapshotV1<LifecycleExecutionPlanV1>>;
+  /**
+   * Spec 2 §9.2's closure V2. Its `snapshot` is the V1 ledger with update residue excluded, so
+   * only an update arm consumer may act on it; `inspectLedger` keeps every V1 caller fail-closed.
+   */
+  inspectClosureV2(
+    key: LifecycleHomeKeyV1,
+    residue: LifecycleBookkeepingResidueV1,
+  ): Promise<LifecycleLedgerV2SnapshotV1<LifecycleExecutionPlanV1>>;
   store(key: LifecycleHomeKeyV1): LifecycleCoordinatorStore<LifecycleExecutionPlanV1>;
   recovery(
     key: LifecycleHomeKeyV1,
@@ -205,28 +217,40 @@ export function createLifecycleContext(input: {
   ): ReturnType<typeof createLifecycleExecutionCodecs> =>
     createLifecycleExecutionCodecs({ productHome: key.productHome, nonce: key.nonce });
 
+  const ledgerDependencies = (
+    key: LifecycleHomeKeyV1,
+    residue: LifecycleBookkeepingResidueV1,
+  ): LifecycleLedgerDependenciesV1<LifecycleExecutionPlanV1> => {
+    const leaves = codecs(key);
+    return {
+      fs,
+      effectiveUid: input.effectiveUid,
+      executionPlanCodec: leaves.executionPlan,
+      coordinatorJournalCodec: leaves.coordinatorJournal,
+      variantFacts: lifecycleVariantFacts,
+      pushPlanHash: lifecyclePushPlanHash,
+      gitEffectPlanCodec: createGitEffectLedgerCodec(input.effectiveUid),
+      launchdEffectPlanCodec: LAUNCHD_EFFECT_LEDGER_CODEC,
+      residue,
+      manifestBeforeHash: manifestBeforeHashOf,
+      leasePaths: (plan) => uninstallLeasePaths(plan.authority.productHome),
+    };
+  };
+
   const inspectLedger = (
     key: LifecycleHomeKeyV1,
     residue: LifecycleBookkeepingResidueV1,
-  ): Promise<LifecycleLedgerSnapshotV1<LifecycleExecutionPlanV1>> => {
-    const leaves = codecs(key);
-    return inspectLifecycleLedger(
-      {
-        fs,
-        effectiveUid: input.effectiveUid,
-        executionPlanCodec: leaves.executionPlan,
-        coordinatorJournalCodec: leaves.coordinatorJournal,
-        variantFacts: lifecycleVariantFacts,
-        pushPlanHash: lifecyclePushPlanHash,
-        gitEffectPlanCodec: createGitEffectLedgerCodec(input.effectiveUid),
-        launchdEffectPlanCodec: LAUNCHD_EFFECT_LEDGER_CODEC,
-        residue,
-        manifestBeforeHash: manifestBeforeHashOf,
-        leasePaths: (plan) => uninstallLeasePaths(plan.authority.productHome),
-      },
+  ): Promise<LifecycleLedgerSnapshotV1<LifecycleExecutionPlanV1>> =>
+    inspectLifecycleLedger(ledgerDependencies(key, residue), deriveLifecycleLedgerRoots(key.productHome));
+
+  const inspectClosureV2 = (
+    key: LifecycleHomeKeyV1,
+    residue: LifecycleBookkeepingResidueV1,
+  ): Promise<LifecycleLedgerV2SnapshotV1<LifecycleExecutionPlanV1>> =>
+    inspectLifecycleLedgerV2(
+      { ...ledgerDependencies(key, residue), evidence: createCanonicalPathEvidence() },
       deriveLifecycleLedgerRoots(key.productHome),
     );
-  };
 
   /**
    * Task 14 left `publish` unable to check the grammar — the store has no `variantFacts` and
@@ -274,6 +298,7 @@ export function createLifecycleContext(input: {
       return ports;
     },
     inspectLedger,
+    inspectClosureV2,
     store,
     recovery: (key, adapters, residue) =>
       new LifecycleRecoveryService<LifecycleExecutionPlanV1>({
