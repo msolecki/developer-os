@@ -167,6 +167,8 @@ const STAT_OPTION_EXEMPT: readonly string[] = [
   "apps/cli/src/update/construction.ts",
   "packages/core/src/git/effects.ts",
   "apps/cli/src/update/state-participant.ts",
+  "apps/cli/src/update/bundle-source.ts",
+  "apps/cli/src/update/bundle-publication.ts",
 ];
 
 /**
