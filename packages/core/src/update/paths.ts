@@ -246,9 +246,17 @@ export function deriveUpdatePayloadPath(
   return derive(productHome, `staging/lifecycle/${coordinatorId}/update/payloads/${ordinal.toString(10).padStart(10, "0")}.payload`) as UpdatePayloadPathV1;
 }
 
+/** §9.2: the two staged records, `initial.json` (executing) then `terminal.json` (terminal cleanup). */
 export function deriveUpdateRecoveryExecutorStagedPath(
   productHome: CanonicalAbsolutePathV1,
   coordinatorId: SafeReasonCodeV1,
+  state: "executing" | "terminal_cleanup",
 ): UpdateRecoveryExecutorStagedPathV1 {
-  return derive(productHome, `staging/lifecycle/${coordinatorId}/update/recovery-executor.json`) as UpdateRecoveryExecutorStagedPathV1;
+  const leaf = state === "executing" ? "initial" : "terminal";
+  return derive(productHome, `staging/lifecycle/${coordinatorId}/update/recovery-executor/${leaf}.json`) as UpdateRecoveryExecutorStagedPathV1;
+}
+
+/** §3.2/§9.2: the one optional recovery-executor record, `state/update-executor.json`. */
+export function deriveUpdateExecutorRecordPath(productHome: CanonicalAbsolutePathV1): ExactProductStatePathV1 {
+  return derive(productHome, "state/update-executor.json") as ExactProductStatePathV1;
 }

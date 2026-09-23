@@ -31,7 +31,13 @@ import {
 } from "./ids.js";
 import { inspectLifecycleLedger, type LifecycleLedgerSnapshotV1 } from "./ledger.js";
 import type { HeldLifecycleStableLockV1 } from "./locks.js";
-import { LifecycleRecoveryRefusalError, LifecycleRecoveryService } from "./recovery.js";
+import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
+import {
+  LifecycleRecoveryRefusalError,
+  LifecycleRecoveryService,
+  classifyLifecycleJournalClosureV2,
+  type LifecycleClosureV2ObservationV1,
+} from "./recovery.js";
 import { encodeLifecycleIdAllocator } from "./records.js";
 import { LifecycleCoordinatorStore, maximumCoordinatorJournalBytes } from "./store.js";
 import {
@@ -898,4 +904,65 @@ describe("Foundation overflow recovery through the in-memory port", () => {
     },
     600_000,
   );
+});
+
+describe("classifyLifecycleJournalClosureV2", () => {
+  const nonce = "d".repeat(64);
+  const update = `lc_${nonce}_11` as LifecycleCoordinatorIdV1;
+  const other = `lc_${nonce}_12` as LifecycleCoordinatorIdV1;
+  const hash = parseLowerHexSha256("e".repeat(64));
+  const clear: LifecycleClosureV2ObservationV1 = {
+    v1: { kind: "clear" },
+    malformed: false,
+    updateCoordinators: [],
+    constructions: [],
+    executorRecord: null,
+  };
+  const coordinator = { id: update, operation: "update_apply", direction: "forward" } as const;
+
+  it("keeps every V1 arm when no update residue exists", () => {
+    expect(classifyLifecycleJournalClosureV2(clear)).toEqual({ kind: "clear" });
+    expect(classifyLifecycleJournalClosureV2({ ...clear, v1: { kind: "lifecycle_recovery_required" } })).toEqual({ kind: "lifecycle_recovery_required" });
+  });
+
+  it("yields one update_recovery arm in the recorded operation and direction", () => {
+    expect(classifyLifecycleJournalClosureV2({ ...clear, updateCoordinators: [coordinator], executorRecord: { state: "executing", coordinatorId: update } })).toEqual({
+      kind: "update_recovery",
+      coordinatorId: update,
+      operation: "update_apply",
+      direction: "forward",
+    });
+    expect(classifyLifecycleJournalClosureV2({ ...clear, updateCoordinators: [{ ...coordinator, operation: "update_rollback", direction: "compensating" }] })).toMatchObject({ kind: "update_recovery", operation: "update_rollback", direction: "compensating" });
+  });
+
+  it("refuses two, mixed, malformed, or foreign-record update coordinators", () => {
+    const required = { kind: "lifecycle_recovery_required" };
+    expect(classifyLifecycleJournalClosureV2({ ...clear, updateCoordinators: [coordinator, { ...coordinator, id: other }] })).toEqual(required);
+    expect(classifyLifecycleJournalClosureV2({ ...clear, v1: { kind: "uninstall_draining", transactionId: other }, updateCoordinators: [coordinator] })).toEqual(required);
+    expect(classifyLifecycleJournalClosureV2({ ...clear, malformed: true, updateCoordinators: [coordinator] })).toEqual(required);
+    expect(classifyLifecycleJournalClosureV2({ ...clear, updateCoordinators: [coordinator], executorRecord: { state: "executing", coordinatorId: other } })).toEqual(required);
+    expect(classifyLifecycleJournalClosureV2({ ...clear, updateCoordinators: [coordinator], constructions: [{ coordinatorId: other, construction: { frontier: "plan_pending" } }] })).toEqual(required);
+  });
+
+  it.each([
+    { frontier: "plan_pending" },
+    { frontier: "journal_bootstrap", journal: "absent", operation: "update_apply", constructionPlanHash: hash },
+    { frontier: "journal_bootstrap", journal: "pending", operation: "update_rollback", constructionPlanHash: hash },
+    { frontier: "journal", operation: "update_apply", constructionPlanHash: hash },
+    { frontier: "plan_only_suffix", operation: "update_apply", constructionPlanHash: hash },
+  ] as const)("routes the $frontier construction frontier to compensation-only cleanup", (construction) => {
+    expect(classifyLifecycleJournalClosureV2({ ...clear, constructions: [{ coordinatorId: update, construction }] })).toEqual({
+      kind: "update_construction_cleanup",
+      coordinatorId: update,
+      direction: "compensating",
+      construction,
+    });
+    expect(classifyLifecycleJournalClosureV2({ ...clear, constructions: [{ coordinatorId: update, construction }], executorRecord: { state: "terminal_cleanup", coordinatorId: update } })).toEqual({ kind: "lifecycle_recovery_required" });
+  });
+
+  it("admits only a lone terminal_cleanup record as executor cleanup", () => {
+    expect(classifyLifecycleJournalClosureV2({ ...clear, executorRecord: { state: "terminal_cleanup", coordinatorId: update } })).toEqual({ kind: "update_executor_cleanup", coordinatorId: update });
+    expect(classifyLifecycleJournalClosureV2({ ...clear, executorRecord: { state: "executing", coordinatorId: update } })).toEqual({ kind: "lifecycle_recovery_required" });
+    expect(classifyLifecycleJournalClosureV2({ ...clear, v1: { kind: "lifecycle_recovery_required" }, executorRecord: { state: "terminal_cleanup", coordinatorId: update } })).toEqual({ kind: "lifecycle_recovery_required" });
+  });
 });

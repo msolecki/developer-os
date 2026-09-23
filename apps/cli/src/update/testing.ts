@@ -3,6 +3,19 @@ import type { KeyObject } from "node:crypto";
 
 import {
   admitTargetUpdateDraft,
+  buildUpdateCoordinatorPlan,
+  deriveUpdateExecutorRecordPath,
+  parseLowerHexSha256,
+  parsePositiveUInt32,
+  parseRollbackPayloadId,
+  updateConstructionEnvelopePaths,
+  updateCoordinatorStagingRoot,
+  updateExecutionBindingHash,
+  updateLeafPlanPath,
+  updateRecoveryExecutorRecordBytes,
+  updateRecoveryExecutorRecordHash,
+  updateRecoveryExecutorStagedPath,
+  validateReleaseIdentity,
   encodeCanonicalJson,
   PLANNER_PROTOCOL_V1,
   PLANNER_WIRE_BOUNDS_V1,
@@ -24,6 +37,16 @@ import {
 } from "@developer-os/core";
 import type {
   ActiveReleaseRecordV1,
+  CanonicalAbsolutePathV1,
+  ImmutableUpdatePlanRefV1,
+  LifecycleCoordinatorIdV1,
+  UpdateExecutionPlanV1,
+  UpdateFallbackHandoffV1,
+  UpdateLeafPlanKindV1,
+  UpdateLifecycleCoordinatorPlanV2,
+  UpdateOperationV1,
+  UpdateRecoveryExecutorRecordV1,
+  UpdateStepOwnerV1,
   Base64UrlNoPaddingV1,
   CanonicalJsonValue,
   CanonicalPathEvidenceV1,
@@ -552,4 +575,102 @@ export function unreachableUpdateContext(): CliUpdateContext {
     capacity: never,
     admitManifest: never,
   };
+}
+
+export const SYNTHETIC_COORDINATOR_ID = `lc_${"c".repeat(64)}_5` as LifecycleCoordinatorIdV1;
+
+export interface SyntheticUpdateCoordinatorV1 {
+  readonly execution: UpdateExecutionPlanV1;
+  readonly plan: UpdateLifecycleCoordinatorPlanV2;
+  readonly owners: readonly UpdateStepOwnerV1[];
+  readonly fallback: UpdateFallbackHandoffV1;
+  readonly current: ReleaseIdentityV1;
+  readonly target: ReleaseIdentityV1;
+}
+
+function syntheticCoordinatorRelease(home: CanonicalAbsolutePathV1, version: string, sequence: string): ReleaseIdentityV1 {
+  return validateReleaseIdentity({
+    version,
+    releaseSequence: sequence,
+    releaseIdentityHash: sha256(`identity-${version}`),
+    delegationSequence: "1",
+    delegationHash: sha256("delegation"),
+    releaseIndexSequence: sequence,
+    releaseIndexHash: sha256(`index-${version}`),
+    bundleManifestHash: sha256(`manifest-${version}`),
+    bundleRoot: `${home}/releases/${version}/darwin-arm64`,
+    platform: "darwin",
+    architecture: "arm64",
+    launcherProtocol: 1,
+    updateProtocol: 1,
+  }, SYNTHETIC_EVIDENCE);
+}
+
+/**
+ * A complete synthetic V2 coordinator under `home`: an execution leaf with two owners, one Codex
+ * effect, two migrations, both recovery records, and the one outer plan derived from them.
+ */
+export function syntheticUpdateCoordinator(home: CanonicalAbsolutePathV1, operation: UpdateOperationV1 = "update_apply", fallbackManifestHash: LowerHexSha256 = sha256("fallback-manifest")): SyntheticUpdateCoordinatorV1 {
+  const id = SYNTHETIC_COORDINATOR_ID;
+  const nonce = "c".repeat(64);
+  const root = updateCoordinatorStagingRoot(home, id);
+  const ref = <TKind extends UpdateLeafPlanKindV1>(kind: TKind, leaf: string): ImmutableUpdatePlanRefV1<TKind> =>
+    ({ kind, id: leaf, path: updateLeafPlanPath(root, kind, leaf), hash: sha256(`${kind}/${leaf}`), bytes: 128 }) as ImmutableUpdatePlanRefV1<TKind>;
+  const current = syntheticCoordinatorRelease(home, "1.0.0", "1");
+  const target = syntheticCoordinatorRelease(home, "1.1.0", "2");
+  const fallback: UpdateFallbackHandoffV1 = { bundleManifestHash: parseLowerHexSha256(fallbackManifestHash), launcherProtocol: parsePositiveUInt32(1), updateProtocol: parsePositiveUInt32(1) };
+  const executionBindingHash = updateExecutionBindingHash({ coordinatorId: id, operation, previewHash: sha256("preview"), current, target });
+  const common = { schemaVersion: 1, coordinatorId: id, operation, executionBindingHash, createdAt: PLANNED_AT } as const;
+  const initial: UpdateRecoveryExecutorRecordV1 = { ...common, state: "executing", executor: { kind: "release_bundle", release: current } };
+  const terminal: UpdateRecoveryExecutorRecordV1 = { ...common, state: "terminal_cleanup", executor: { kind: "package_fallback", ...fallback } };
+  const staged = (record: UpdateRecoveryExecutorRecordV1, ordinal: number) => ({
+    constructionOrdinal: ordinal,
+    path: updateRecoveryExecutorStagedPath(root, record.state) as UpdateExecutionPlanV1["recoveryExecutor"]["initialStaged"]["path"],
+    bytes: updateRecoveryExecutorRecordBytes(record).byteLength,
+    hash: updateRecoveryExecutorRecordHash(record),
+    mode: 384 as const,
+  });
+  const owners: readonly UpdateStepOwnerV1[] = [
+    { id: ref("owner_update", "owner_core").id, owner: "core", externalEffects: [] },
+    { id: ref("owner_update", "owner_codex").id, owner: "codex", externalEffects: [{ id: ref("owner_external_effect", `oe_${nonce}_9`).id }] },
+  ];
+  const execution: UpdateExecutionPlanV1 = {
+    schemaVersion: 1,
+    coordinatorId: id,
+    operation,
+    previewHash: sha256("preview"),
+    executionBindingHash,
+    maximumPlanBytes: 16_777_216,
+    current,
+    target,
+    metadata: { delegationSequence: current.delegationSequence, delegationHash: current.delegationHash, delegatedReleaseKeyId: sha256("release-key"), releaseIndexSequence: target.releaseIndexSequence, releaseIndexHash: target.releaseIndexHash },
+    planner: operation === "update_apply" ? { protocol: PLANNER_PROTOCOL_V1, bounds: PLANNER_WIRE_BOUNDS_V1, requestHash: sha256("request"), inputBlobsHash: sha256("input-blobs"), resultHash: sha256("result"), outputBlobsHash: sha256("output-blobs") } : null,
+    bundle: ref("bundle_publication", "bundle"),
+    owners: [ref("owner_update", "owner_core"), ref("owner_update", "owner_codex")],
+    migrations: [ref("schema_migration", "migration_product-v2"), ref("schema_migration", "migration_brain-v2")],
+    manifest: { transitional: ref("manifest_state", `mf_${nonce}_6`), terminal: ref("manifest_state", `mf_${nonce}_7`) },
+    trust: operation === "update_apply" ? ref("release_trust_state", "trust") : null,
+    active: ref("active_release_state", "active"),
+    rollback: ref("rollback_record_state", "rollback_record"),
+    rollbackPayload: ref("rollback_payload_state", "rollback_payload"),
+    initialParticipantJournals: [{
+      kind: "bundle_publication",
+      id: ref("bundle_publication", "bundle").id,
+      planHash: sha256("bundle_publication/bundle"),
+      finalPath: parseCanonicalAbsolutePathText(`${root}/update/journals/bundle_publication/bundle.json`),
+      stagedPath: parseCanonicalAbsolutePathText(`${root}/update/initial-journals/bundle_publication/bundle.json`),
+      stagedExpected: { constructionOrdinal: 9, hash: sha256("initial-journal"), bytes: 256, mode: 384 },
+    }],
+    recoveryExecutor: { finalPath: deriveUpdateExecutorRecordPath(home), initial, initialStaged: staged(initial, 10), terminal, terminalStaged: staged(terminal, 11), maximumRecordBytes: 16_384 },
+    verification: ref("target_verification", "verification"),
+    retirement: ref("terminal_retirement", "retirement"),
+  };
+  const plan = buildUpdateCoordinatorPlan({
+    execution,
+    executionRef: ref("update_execution", "execution"),
+    construction: { path: updateConstructionEnvelopePaths(root).plan, hash: sha256("construction"), bytes: 4096 },
+    owners,
+    retainPayloadId: operation === "update_apply" ? parseRollbackPayloadId(`rb_${nonce}_8`) : null,
+  });
+  return { execution, plan, owners, fallback, current, target };
 }

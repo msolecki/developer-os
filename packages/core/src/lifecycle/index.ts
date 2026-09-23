@@ -52,8 +52,13 @@ export {
   completeCoordinatorEnvelope,
 } from "./coordinator-compaction.js";
 export type { LifecycleCoordinatorCompactionDependenciesV1 } from "./coordinator-compaction.js";
-export { LifecycleRecoveryRefusalError, LifecycleRecoveryService } from "./recovery.js";
+export {
+  LifecycleRecoveryRefusalError,
+  LifecycleRecoveryService,
+  classifyLifecycleJournalClosureV2,
+} from "./recovery.js";
 export type {
+  LifecycleClosureV2ObservationV1,
   LifecycleRecoveryDependenciesV1,
   LifecycleRecoveryPolicyV1,
 } from "./recovery.js";
@@ -195,7 +200,9 @@ export type {
   LifecycleCoordinatorPlanCoreV1,
   LifecycleCoordinatorStepV1,
   LifecycleEffectRefV1,
+  LifecycleExecutionPlanV2,
   LifecycleJournalClosureV1,
+  LifecycleJournalClosureV2,
   LifecyclePlanPreviewCoreV1,
   LifecyclePreviewFileChangeV1,
   LifecyclePreviewFileStateV1,

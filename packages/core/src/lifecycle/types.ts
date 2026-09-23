@@ -1,5 +1,7 @@
 import type { FoundationMutationRefV1 } from "../manifest/bootstrap.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
+import type { UpdateConstructionClosureV1 } from "../update/construction.js";
+import type { UpdateLifecycleCoordinatorPlanV2, UpdateOperationV1 } from "../update/coordinator.js";
 import type { CanonicalAbsolutePathV1 } from "../update/paths.js";
 import type { LowerHexSha256, UInt64DecimalV1, UtcTimestampV1 } from "../update/scalars.js";
 import type {
@@ -309,3 +311,31 @@ export type LifecycleJournalClosureV1 =
     }
   | { readonly kind: "uninstall_draining"; readonly transactionId: LifecycleCoordinatorIdV1 }
   | { readonly kind: "lifecycle_recovery_required" };
+
+/**
+ * Spec 2 §9.2: a strict schema-version-2 envelope beside, never inside, the closed V1 plan union.
+ * The concrete V1 plan type stays a parameter because its leaf codecs are composed downstream.
+ */
+export type LifecycleExecutionPlanV2<TPlanV1 = LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown, unknown>> =
+  | TPlanV1
+  | UpdateLifecycleCoordinatorPlanV2;
+
+/**
+ * Spec 2 §9.2's closure: every V1 arm unchanged, plus the three update arms. The spec spells the
+ * discriminant `state`; it is `kind` here to match the V1 union it extends.
+ */
+export type LifecycleJournalClosureV2 =
+  | LifecycleJournalClosureV1
+  | {
+      readonly kind: "update_recovery";
+      readonly coordinatorId: LifecycleCoordinatorIdV1;
+      readonly operation: UpdateOperationV1;
+      readonly direction: "forward" | "compensating";
+    }
+  | {
+      readonly kind: "update_construction_cleanup";
+      readonly coordinatorId: LifecycleCoordinatorIdV1;
+      readonly direction: "compensating";
+      readonly construction: UpdateConstructionClosureV1["construction"];
+    }
+  | { readonly kind: "update_executor_cleanup"; readonly coordinatorId: LifecycleCoordinatorIdV1 };

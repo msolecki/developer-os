@@ -1,6 +1,7 @@
 import {
   admitReleaseAgainstTrust,
   decodeCanonicalJson,
+  decodeUpdateRecoveryExecutorRecord,
   isUnsignedLocalTrust,
   LifecycleRecoveryRequiredError,
   parseCanonicalAbsolutePathText,
@@ -15,6 +16,8 @@ import type {
   LifecycleGuardedEntryV1,
   LowerHexSha256,
   ReleaseBundleManifestV1,
+  ReleaseIdentityV1,
+  UpdateRecoveryExecutorRecordV1,
 } from "@developer-os/core";
 import {
   admitLauncherPlatformIdentity,
@@ -32,6 +35,11 @@ export type LauncherSelectionV1 =
   | { readonly kind: "package_fallback"; readonly bundle: AdmittedReleaseBundleV1 }
   | { readonly kind: "active_release"; readonly bundle: AdmittedReleaseBundleV1 }
   | {
+      readonly kind: "update_executor";
+      readonly bundle: AdmittedReleaseBundleV1;
+      readonly release: ReleaseIdentityV1;
+    }
+  | {
       readonly kind: "bootstrap_recovery";
       readonly bundle: AdmittedReleaseBundleV1;
       readonly argv: readonly ["init"];
@@ -47,6 +55,15 @@ export type LauncherSelectionV1 =
 export type LauncherBootstrapClosureV1 =
   | { readonly kind: "handoff_complete" }
   | { readonly kind: "non_terminal" }
+  | { readonly kind: "malformed" };
+
+/**
+ * The bounded outcome of the V2 update-coordinator envelope reader (Spec 2 §9.2), injected like
+ * the bootstrap closure: the launcher routes on it and never interprets update steps.
+ */
+export type LauncherUpdateEnvelopeV1 =
+  | { readonly kind: "absent" }
+  | { readonly kind: "present"; readonly coordinatorId: string }
   | { readonly kind: "malformed" };
 
 export interface LauncherPackagedFallbackV1 {
@@ -76,6 +93,8 @@ export interface LauncherSelectionRequestV1 {
   readonly fs: LauncherGuardedReaderV1;
   readonly packagedFallback: LauncherPackagedFallbackV1;
   readonly bootstrapClosure: LauncherBootstrapClosureV1;
+  /** Absent when no reader is wired: an `executing` record then refuses as an orphan (exit 6). */
+  readonly updateEnvelope?: LauncherUpdateEnvelopeV1;
   readonly verifyRetainedDocument: LauncherRetainedDocumentVerifierV1;
 }
 
@@ -91,6 +110,7 @@ export interface LauncherProcessRequestV1 {
 }
 
 const MAX_ACTIVE_BYTES = 16 * 1024;
+const MAX_EXECUTOR_RECORD_BYTES = 16 * 1024;
 const MAX_TRUST_BYTES = 16 * 1024;
 const MAX_DELEGATION_BYTES = 65_536;
 const MAX_INDEX_BYTES = 4 * 1024 * 1024;
@@ -259,7 +279,7 @@ async function admitActiveRelease(
   request: LauncherSelectionRequestV1,
   activeEntry: LifecycleGuardedEntryV1,
 ): Promise<AdmittedReleaseBundleV1> {
-  const { fs, productHome, effectiveUid, verifyRetainedDocument } = request;
+  const { fs, productHome, effectiveUid } = request;
 
   const activeBytes = await fs.readRegular(activeEntry, MAX_ACTIVE_BYTES);
   const active = parseActive(activeBytes, activeEntry.path);
@@ -274,13 +294,29 @@ async function admitActiveRelease(
     recoveryRequired("launcher_active_release_not_dominated_by_trust", trustPath);
   }
 
+  return admitRetainedRelease(request, active, "exact_stores");
+}
+
+/**
+ * The retained-metadata and bundle admission shared by the active and recorded-executor routes.
+ * Only a clear state has exact store-set equality; while an update executes, the target's
+ * metadata already sits beside the current release's, so the executing route checks by hash.
+ */
+async function admitRetainedRelease(
+  request: LauncherSelectionRequestV1,
+  active: ReleaseIdentityV1,
+  stores: "exact_stores" | "contains_release",
+): Promise<AdmittedReleaseBundleV1> {
+  const { fs, productHome, effectiveUid, verifyRetainedDocument } = request;
   const delegationsRoot = derive(productHome, "state/release-metadata/delegations");
   const indexesRoot = derive(productHome, "state/release-metadata/indexes");
   const bundlesRoot = derive(productHome, "state/release-metadata/bundles");
 
-  await assertExactStoreSet(fs, delegationsRoot, [`${active.delegationHash}.json`], effectiveUid);
-  await assertExactStoreSet(fs, indexesRoot, [`${active.releaseIndexHash}.json`], effectiveUid);
-  await assertExactStoreSet(fs, bundlesRoot, [`${active.bundleManifestHash}.json`], effectiveUid);
+  if (stores === "exact_stores") {
+    await assertExactStoreSet(fs, delegationsRoot, [`${active.delegationHash}.json`], effectiveUid);
+    await assertExactStoreSet(fs, indexesRoot, [`${active.releaseIndexHash}.json`], effectiveUid);
+    await assertExactStoreSet(fs, bundlesRoot, [`${active.bundleManifestHash}.json`], effectiveUid);
+  }
 
   await admitRetainedDocument(
     fs,
@@ -332,6 +368,67 @@ async function admitActiveRelease(
   });
 }
 
+async function readUpdateExecutorRecord(request: LauncherSelectionRequestV1): Promise<UpdateRecoveryExecutorRecordV1 | null> {
+  const path = derive(request.productHome, "state/update-executor.json");
+  const entry = await request.fs.lstat(path);
+  if (entry === null) return null;
+  if (entry.kind !== "regular_file" || entry.ownerUid !== request.effectiveUid || entry.mode !== 0o600 || entry.nlink !== 1 || BigInt(entry.size) > BigInt(MAX_EXECUTOR_RECORD_BYTES)) {
+    recoveryRequired("launcher_update_executor_record_invalid", path);
+  }
+  try {
+    return decodeUpdateRecoveryExecutorRecord(await request.fs.readRegular(entry, MAX_EXECUTOR_RECORD_BYTES), createCanonicalPathEvidence());
+  } catch {
+    return recoveryRequired("launcher_update_executor_record_invalid", path);
+  }
+}
+
+/**
+ * Spec 2 §9.2 routing. `executing` requires its own coordinator envelope and runs the recorded
+ * original release; `terminal_cleanup` requires that envelope or none and runs the package
+ * fallback, which must equal the record's manifest hash and protocols. Any other pairing is exit 6.
+ */
+async function routeUpdateExecutor(
+  request: LauncherSelectionRequestV1,
+  record: UpdateRecoveryExecutorRecordV1,
+): Promise<LauncherSelectionV1> {
+  const envelope = request.updateEnvelope ?? { kind: "absent" };
+  const recordPath = derive(request.productHome, "state/update-executor.json");
+  if (envelope.kind === "malformed") recoveryRequired("launcher_update_envelope_malformed", request.productHome);
+  const ownEnvelope = envelope.kind === "present" && envelope.coordinatorId === record.coordinatorId;
+  if (record.executor.kind === "release_bundle") {
+    if (!ownEnvelope) recoveryRequired("launcher_update_executor_orphan", recordPath);
+    const { release } = record.executor;
+    const expectedRoot = derive(request.productHome, `releases/${release.version}/darwin-${release.architecture}`);
+    if (release.bundleRoot !== expectedRoot || release.architecture !== request.platform.architecture) {
+      recoveryRequired("launcher_update_executor_release_root", recordPath);
+    }
+    const bundle = await admitRetainedRelease(request, record.executor.release, "contains_release");
+    return { kind: "update_executor", bundle, release: record.executor.release };
+  }
+  if (envelope.kind === "present" && !ownEnvelope) recoveryRequired("launcher_update_executor_foreign", recordPath);
+  const manifestHash = await packagedFallbackManifestHash(request);
+  const bundle = await admitPackagedFallback(request);
+  if (
+    manifestHash !== record.executor.bundleManifestHash ||
+    bundle.manifest.launcherProtocol !== record.executor.launcherProtocol ||
+    bundle.manifest.updateProtocol !== record.executor.updateProtocol
+  ) {
+    recoveryRequired("launcher_update_fallback_mismatch", request.packagedFallback.manifestPath);
+  }
+  return { kind: "package_fallback", bundle };
+}
+
+async function packagedFallbackManifestHash(request: LauncherSelectionRequestV1): Promise<LowerHexSha256> {
+  const entry = await ownedRegular(
+    request.fs,
+    request.packagedFallback.manifestPath,
+    request.effectiveUid,
+    MAX_BUNDLE_MANIFEST_BYTES,
+    "launcher_packaged_fallback_manifest_missing",
+  );
+  return request.fs.hashRegular(entry, BigInt(MAX_BUNDLE_MANIFEST_BYTES));
+}
+
 /**
  * Guarded launcher selection (Spec 2 §3.1). Before normal active/fallback
  * routing, a non-terminal bootstrap envelope is a recovery-routing arm
@@ -343,6 +440,9 @@ export async function selectLauncherCandidate(
   request: LauncherSelectionRequestV1,
 ): Promise<LauncherSelectionV1> {
   admitLauncherPlatformIdentity(request.platform);
+
+  const executor = await readUpdateExecutorRecord(request);
+  if (executor !== null) return routeUpdateExecutor(request, executor);
 
   if (request.bootstrapClosure.kind === "malformed") {
     recoveryRequired("launcher_bootstrap_residue_malformed", request.productHome);

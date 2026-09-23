@@ -85,6 +85,12 @@ class FakeFileSystem implements LauncherGuardedReaderV1 {
     this.nodes.set(path, { kind: "directory", ownerUid, mode, children });
   }
 
+  readBytes(path: string): Buffer {
+    const node = this.nodes.get(path);
+    if (node?.kind !== "regular_file") throw new Error("not a file");
+    return node.content;
+  }
+
   deletePath(path: string): void {
     this.nodes.delete(path);
   }
@@ -317,6 +323,81 @@ describe("selectLauncherCandidate", () => {
   it("refuses malformed bootstrap residue", async () => {
     const request = { ...absentActiveFixture(), bootstrapClosure: { kind: "malformed" as const } };
     await expect(selectLauncherCandidate(request)).rejects.toMatchObject({ code: 6 });
+  });
+});
+
+const COORDINATOR_ID = `lc_${"c".repeat(64)}_5`;
+const EXECUTOR_RECORD = `${PRODUCT_HOME}/state/update-executor.json`;
+
+function executorRecord(state: "executing" | "terminal_cleanup", executor: CanonicalJsonValue): Buffer {
+  return canonicalBytes({
+    schemaVersion: 1,
+    state,
+    coordinatorId: COORDINATOR_ID,
+    operation: "update_apply",
+    executor,
+    executionBindingHash: sha256(Buffer.from("execution-binding")),
+    createdAt: "2026-09-23T12:00:00.000Z",
+  });
+}
+
+/** An update mid-flight: the recorded original release plus target metadata already retained beside it. */
+function executingFixture(): LauncherSelectionRequestV1 & { readonly current: CanonicalJsonValue } {
+  const { fs, active } = activeFixture();
+  const current = Object.fromEntries(Object.entries(active).filter(([key]) => key !== "schemaVersion" && key !== "activatedAt")) as CanonicalJsonValue;
+  const directory = `${PRODUCT_HOME}/state/release-metadata/delegations`;
+  fs.setFile(`${directory}/${sha256(Buffer.from("target-delegation"))}.json`, canonicalBytes({ target: true }));
+  fs.addChild(directory, `${sha256(Buffer.from("target-delegation"))}.json`);
+  fs.setFile(EXECUTOR_RECORD, executorRecord("executing", { kind: "release_bundle", release: current }));
+  return { ...baseRequest(fs), updateEnvelope: { kind: "present", coordinatorId: COORDINATOR_ID }, current };
+}
+
+/** After the post-verifier rewrite: the record names the package-owned fallback. */
+function cleanupFixture(manifestHash?: LowerHexSha256): LauncherSelectionRequestV1 {
+  const request = absentActiveFixture();
+  const fs = request.fs as FakeFileSystem;
+  const fallbackHash = sha256(Buffer.from(fs.readBytes(FALLBACK_MANIFEST)));
+  fs.setFile(EXECUTOR_RECORD, executorRecord("terminal_cleanup", { kind: "package_fallback", bundleManifestHash: manifestHash ?? fallbackHash, launcherProtocol: 1, updateProtocol: 1 }));
+  return request;
+}
+
+describe("update recovery-executor routing", () => {
+  it("routes executing to the original bundle and terminal cleanup to fallback", async () => {
+    const executing = executingFixture();
+    const selected = await selectLauncherCandidate(executing);
+    expect(selected.kind).toBe("update_executor");
+    if (selected.kind === "update_executor") {
+      expect(selected.release).toEqual(executing.current);
+      expect(selected.bundle.bundleRoot).toBe(`${PRODUCT_HOME}/releases/2.0.0/darwin-arm64`);
+    }
+    expect((await selectLauncherCandidate(cleanupFixture())).kind).toBe("package_fallback");
+    const suffix = { ...cleanupFixture(), updateEnvelope: { kind: "present" as const, coordinatorId: COORDINATOR_ID } };
+    expect((await selectLauncherCandidate(suffix)).kind).toBe("package_fallback");
+  });
+
+  it("refuses an executing record without its own coordinator envelope", async () => {
+    const orphan = { ...executingFixture(), updateEnvelope: { kind: "absent" as const } };
+    await expect(selectLauncherCandidate(orphan)).rejects.toMatchObject({ code: 6, reason: "launcher_update_executor_orphan" });
+    const foreign = { ...executingFixture(), updateEnvelope: { kind: "present" as const, coordinatorId: `lc_${"c".repeat(64)}_6` } };
+    await expect(selectLauncherCandidate(foreign)).rejects.toMatchObject({ code: 6 });
+  });
+
+  it("refuses a fallback whose manifest or protocol differs from the terminal record", async () => {
+    await expect(selectLauncherCandidate(cleanupFixture(sha256(Buffer.from("other-manifest"))))).rejects.toMatchObject({ code: 6, reason: "launcher_update_fallback_mismatch" });
+  });
+
+  it("never ignores a malformed record or envelope in favour of normal selection", async () => {
+    const { fs } = activeFixture();
+    fs.setFile(EXECUTOR_RECORD, Buffer.from("not json\n"));
+    await expect(selectLauncherCandidate(baseRequest(fs))).rejects.toMatchObject({ code: 6, reason: "launcher_update_executor_record_invalid" });
+    const malformed = { ...executingFixture(), updateEnvelope: { kind: "malformed" as const } };
+    await expect(selectLauncherCandidate(malformed)).rejects.toMatchObject({ code: 6 });
+  });
+
+  it("passes the public argv through to the recorded executor", async () => {
+    const selected = await selectLauncherCandidate(executingFixture());
+    const request = buildLauncherProcessRequest(selected, { HOME: "/Users/test", DEVELOPER_OS_HOME: PRODUCT_HOME }, ["update", "--apply"], false);
+    expect(request.argv).toEqual([selected.bundle.entrypoint, "update", "--apply"]);
   });
 });
 

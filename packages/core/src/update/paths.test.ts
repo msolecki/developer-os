@@ -11,6 +11,7 @@ import {
   deriveFoundationInitialJournalPayloadPath,
   deriveManifestPayloadPath,
   deriveUpdatePayloadPath,
+  deriveUpdateExecutorRecordPath,
   deriveUpdateRecoveryExecutorStagedPath,
   parseCanonicalAbsolutePathText,
   type CanonicalPathEvidenceV1,
@@ -139,9 +140,13 @@ describe("strict update paths", () => {
     expect(deriveUpdatePayloadPath(productHome, run, 1_099_999)).toBe(
       "/synthetic/product/staging/lifecycle/run_1/update/payloads/0001099999.payload",
     );
-    expect(deriveUpdateRecoveryExecutorStagedPath(productHome, run)).toBe(
-      "/synthetic/product/staging/lifecycle/run_1/update/recovery-executor.json",
+    expect(deriveUpdateRecoveryExecutorStagedPath(productHome, run, "executing")).toBe(
+      "/synthetic/product/staging/lifecycle/run_1/update/recovery-executor/initial.json",
     );
+    expect(deriveUpdateRecoveryExecutorStagedPath(productHome, run, "terminal_cleanup")).toBe(
+      "/synthetic/product/staging/lifecycle/run_1/update/recovery-executor/terminal.json",
+    );
+    expect(deriveUpdateExecutorRecordPath(productHome)).toBe("/synthetic/product/state/update-executor.json");
     expect(() => deriveBootstrapPayloadPath(productHome, "fresh_v2_init", run, 1_000_000)).toThrow();
   });
 });

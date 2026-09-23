@@ -29,7 +29,14 @@ import {
 } from "./guarded-fs.js";
 import type { LifecycleCoordinatorRecordV1, LifecycleLedgerSnapshotV1 } from "./ledger.js";
 import type { HeldLifecycleStableLockV1 } from "./locks.js";
-import type { LifecycleCoordinatorPlanCoreV1, LifecycleJournalClosureV1 } from "./types.js";
+import type { UpdateConstructionClosureV1 } from "../update/construction.js";
+import type { UpdateOperationV1 } from "../update/coordinator.js";
+import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
+import type {
+  LifecycleCoordinatorPlanCoreV1,
+  LifecycleJournalClosureV1,
+  LifecycleJournalClosureV2,
+} from "./types.js";
 
 type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown, unknown>;
 
@@ -299,4 +306,59 @@ async function syncDirectoryAt(
   const entry = await fs.lstat(path);
   if (entry === null) refuseLifecycleRecovery("lifecycle_guarded_parent", path);
   await fs.syncDirectory(entry);
+}
+
+/** What the V2 scan observed beside the V1 ledger; the V1 closure is computed without V2 envelopes. */
+export interface LifecycleClosureV2ObservationV1 {
+  readonly v1: LifecycleJournalClosureV1;
+  /** Unknown schema, missing plan or journal, a cursor mismatch, or any unparseable V2 residue. */
+  readonly malformed: boolean;
+  readonly updateCoordinators: readonly {
+    readonly id: LifecycleCoordinatorIdV1;
+    readonly operation: UpdateOperationV1;
+    readonly direction: "forward" | "compensating";
+  }[];
+  readonly constructions: readonly UpdateConstructionClosureV1[];
+  readonly executorRecord: {
+    readonly state: "executing" | "terminal_cleanup";
+    readonly coordinatorId: LifecycleCoordinatorIdV1;
+  } | null;
+}
+
+/**
+ * Spec 2 §9.2's closure V2. One update coordinator (terminal ones compact before `clear`) yields
+ * `update_recovery`; with no outer plan, one construction envelope yields its compensation-only
+ * cleanup; a lone `terminal_cleanup` record yields executor cleanup. Two coordinators, V1/V2
+ * mixing, an orphan `executing` record, or a record naming another coordinator is recovery-required.
+ */
+export function classifyLifecycleJournalClosureV2(
+  observation: LifecycleClosureV2ObservationV1,
+): LifecycleJournalClosureV2 {
+  const required = { kind: "lifecycle_recovery_required" } as const;
+  const { v1, updateCoordinators, constructions, executorRecord } = observation;
+  if (observation.malformed || updateCoordinators.length + constructions.length > 1) return required;
+  const [coordinator] = updateCoordinators;
+  if (coordinator !== undefined) {
+    if (v1.kind !== "clear") return required;
+    if (executorRecord !== null && executorRecord.coordinatorId !== coordinator.id) return required;
+    return {
+      kind: "update_recovery",
+      coordinatorId: coordinator.id,
+      operation: coordinator.operation,
+      direction: coordinator.direction,
+    };
+  }
+  const [construction] = constructions;
+  if (construction !== undefined) {
+    if (v1.kind !== "clear" || executorRecord !== null) return required;
+    return {
+      kind: "update_construction_cleanup",
+      coordinatorId: construction.coordinatorId,
+      direction: "compensating",
+      construction: construction.construction,
+    };
+  }
+  if (executorRecord === null) return v1;
+  if (executorRecord.state !== "terminal_cleanup" || v1.kind !== "clear") return required;
+  return { kind: "update_executor_cleanup", coordinatorId: executorRecord.coordinatorId };
 }
