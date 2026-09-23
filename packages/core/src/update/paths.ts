@@ -9,6 +9,7 @@ declare const canonicalAbsolutePathV1: unique symbol;
 declare const exactProductStatePathV1: unique symbol;
 declare const canonicalProductStatePathV1: unique symbol;
 declare const vaultFreeRelativePathV1: unique symbol;
+declare const vaultRelativePathV1: unique symbol;
 declare const ownerRelativePathV1: unique symbol;
 declare const rollbackPayloadRelativePathV1: unique symbol;
 declare const bootstrapPayloadPathV1: unique symbol;
@@ -23,6 +24,8 @@ export type ExactProductStatePathV1 = CanonicalAbsolutePathV1 & { readonly [exac
 export type CanonicalProductStatePathV1 = CanonicalAbsolutePathV1 & { readonly [canonicalProductStatePathV1]: true };
 export type VaultFreeRelativePathV1 = string & { readonly [vaultFreeRelativePathV1]: true };
 export type BoundedArtifactSourceV1 = VaultFreeRelativePathV1;
+/** A path relative to the Brain vault root, as Spec 2 §8.4 migration previews and drafts name it. */
+export type VaultRelativePathV1 = string & { readonly [vaultRelativePathV1]: true };
 export type OwnerRelativePathV1 = string & { readonly [ownerRelativePathV1]: true };
 export type RollbackPayloadRelativePathV1 = string & { readonly [rollbackPayloadRelativePathV1]: true };
 export type BootstrapPayloadPathV1 = CanonicalAbsolutePathV1 & { readonly [bootstrapPayloadPathV1]: true };
@@ -120,6 +123,14 @@ function assertRelativePath(value: unknown, label: string): string {
     if (component.length === 0 || component === "." || component === ".." || byteLength(component) > 255) fail(`${label}: component`);
   }
   return value;
+}
+
+/**
+ * The relative-path grammar alone. A Brain path in a migration draft is already relative to
+ * the admitted snapshot, so no filesystem adapter is consulted here and no authority is granted.
+ */
+export function parseVaultRelativePathText(value: unknown): VaultRelativePathV1 {
+  return assertRelativePath(value, "VaultRelativePathV1") as VaultRelativePathV1;
 }
 
 function admitRelativePath(

@@ -12,6 +12,7 @@ export {
   deriveUpdateRecoveryExecutorStagedPath,
   parseCanonicalAbsolutePathText,
   parseCanonicalStatePayloadRole,
+  parseVaultRelativePathText,
 } from "./paths.js";
 export type {
   BootstrapPayloadPathV1,
@@ -31,6 +32,7 @@ export type {
   UpdatePayloadPathV1,
   UpdateRecoveryExecutorStagedPathV1,
   VaultFreeRelativePathV1,
+  VaultRelativePathV1,
 } from "./paths.js";
 export {
   decodeTenDigitOrdinal,
@@ -110,3 +112,47 @@ export type {
   SignedReleaseTrustStateV1,
   UnsignedLocalReleaseTrustStateV1,
 } from "./release.js";
+export {
+  projectUpdateCapacity,
+  UPDATE_CAPACITY_COMPONENT_ORDER,
+  UpdateCapacityInsufficientError,
+} from "./capacity.js";
+export type {
+  UpdateCapacityComponentKindV1,
+  UpdateCapacityComponentV1,
+  UpdateCapacityInputV1,
+  UpdateCapacityProjectionV1,
+} from "./capacity.js";
+export {
+  buildPreparedUpdateCandidate,
+  buildPreparedUpdateMaterialization,
+  buildRollbackPreview,
+  buildUpdatePreview,
+  parseRollbackPayloadId,
+  previewHash,
+  validatePlannerWireBounds,
+} from "./preview.js";
+export type {
+  OwnerPreviewPathsV1,
+  OwnerUpdatePreviewInputV1,
+  OwnerUpdatePreviewV1,
+  PlannerPublicSummaryV1,
+  PlannerTranscriptIdentityV1,
+  PlannerWireBoundsV1,
+  PreparedInverseLeafInputV1,
+  PreparedInverseProjectionV1,
+  PreparedOutputBlobIdentityV1,
+  PreparedUpdateCandidateV1,
+  PreparedUpdateMaterializationInputV1,
+  PreparedUpdateMaterializationV1,
+  RollbackPayloadEntryV1,
+  RollbackPayloadIdV1,
+  RollbackPayloadPreviewV1,
+  RollbackPreviewInputV1,
+  SafeRenderedPathV1,
+  SchemaMigrationPreviewV1,
+  UpdateDownloadPreviewV1,
+  UpdatePlanPreviewV1,
+  UpdatePreviewInputV1,
+  UpdateRollbackPreviewV1,
+} from "./preview.js";

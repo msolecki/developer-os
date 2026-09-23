@@ -224,7 +224,7 @@ function array(value: unknown, label: string, minimum: number, maximum: number):
 }
 function string(value: unknown, label: string): string { if (typeof value !== "string") invalid(label); return value; }
 function bytes(value: string): number { return textEncoder.encode(value).byteLength; }
-function compareUtf8(left: string, right: string): number {
+export function compareUtf8(left: string, right: string): number {
   const a = textEncoder.encode(left); const b = textEncoder.encode(right);
   for (let index = 0; index < Math.min(a.length, b.length); index += 1) { const difference = (a[index] as number) - (b[index] as number); if (difference !== 0) return difference; }
   return a.length - b.length;
