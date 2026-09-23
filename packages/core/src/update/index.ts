@@ -655,3 +655,13 @@ export type {
   UpdateRecoveryExecutorV1,
   UpdateStepOwnerV1,
 } from "./coordinator.js";
+export {
+  MAXIMUM_RETIREMENT_INVENTORIES,
+  MAXIMUM_RETIREMENT_INVENTORY_LEAVES,
+  flattenUpdateRetirementLeaves,
+  updateTerminalRetirementPlanBytes,
+  updateTerminalRetirementPlanHash,
+  updateTerminalRetirementPlanRef,
+  validateUpdateTerminalRetirementPlan,
+} from "./retirement.js";
+export type { RetirementLeafV1, UpdateRetirementSetV1, UpdateTerminalRetirementPlanV1 } from "./retirement.js";
