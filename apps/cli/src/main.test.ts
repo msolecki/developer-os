@@ -802,6 +802,78 @@ describe("git dispatch", () => {
   });
 });
 
+describe("automation dispatch", () => {
+  it("refuses a subcommand automation does not have, the hidden runner verb, and a missing or extra positional", async () => {
+    await refuses(["automation"]);
+    await refuses(["automation", "run"]);
+    await refuses(["automation", "run", "doctor"]);
+    await refuses(["automation", "toString"]);
+    await refuses(["automation", "status", "extra"]);
+  });
+
+  it("admits --schedule only on enable, once per job, in the closed grammar", async () => {
+    await refuses(["automation", "enable", "--schedule", "doctor=daily@2:00"]);
+    await refuses(["automation", "enable", "--schedule", "doctor=every@02:00"]);
+    await refuses(["automation", "enable", "--schedule", "doctor=0 2 * * *"]);
+    await refuses(["automation", "enable", "--schedule", "import=daily@02:00"]);
+    await refuses(["automation", "enable", "--schedule", "ingest=daily@02:00"]);
+    await refuses(["automation", "enable", "--schedule", "doctor=daily@02:00", "--schedule", "doctor=weekly@mon,03:00"]);
+    await refuses(["automation", "disable", "--schedule", "doctor=daily@02:00"]);
+    await refuses(["automation", "status", "--schedule", "doctor=daily@02:00"]);
+    await refuses(["git", "enable", "--remote", "/remote.git", "--schedule", "doctor=daily@02:00"]);
+  });
+
+  it("admits --apply only on enable and disable", async () => {
+    await refuses(["automation", "status", "--apply"]);
+    await refuses(["automation", "enable", "--remote", "/remote.git"]);
+  });
+
+  it("dispatches an admitted automation invocation to a context and refuses a home with no installation", async () => {
+    const harness = await createHarness("automation-dispatch");
+    expect(await harness.invoke(["automation", "status", "--json"])).toBe(EXIT_CODES.invalidInput);
+    expect(harness.out.join("\n")).toContain("manifest_absent");
+  });
+});
+
+describe("the hidden scheduled invocation", () => {
+  const GENERATION = "c".repeat(64);
+  const scheduledArgv = (productHome: string): string[] => [
+    "automation", "run", "doctor", "--scheduled", "--product-home", productHome, "--generation", GENERATION,
+  ];
+
+  it("rejects the hidden options interactively", async () => {
+    await refuses(["status", "--product-home", "/synthetic/.developer-os"]);
+    await refuses(["status", "--scheduled"]);
+    await refuses(["doctor", "--generation", GENERATION]);
+    await refuses([...scheduledArgv("/synthetic/.developer-os"), "--json"]);
+  });
+
+  it("accepts the exact ProgramArguments only in scheduled mode, with the supplied product home as the sole authority", async () => {
+    const fixture = await createCommandFixture("scheduled-dispatch");
+    await nodeFs.mkdir(fixture.paths.home, { recursive: true, mode: 0o700 });
+    const requests: { readonly localRelease: string | null; readonly scheduledProductHome?: string }[] = [];
+    const factory: CliContextFactory = (_io, request) => {
+      requests.push(request);
+      return fixture.context;
+    };
+
+    const code = await run(scheduledArgv(fixture.paths.home), fixture.io, factory);
+
+    expect(code).toBe(EXIT_CODES.success);
+    expect(requests).toStrictEqual([{ localRelease: null, scheduledProductHome: fixture.paths.home }]);
+    expect(fixture.io.out).toStrictEqual([]);
+  });
+
+  it("refuses a product home that is a symbolic link before any context exists", async () => {
+    const fixture = await createCommandFixture("scheduled-symlink");
+    await nodeFs.mkdir(fixture.paths.home, { recursive: true, mode: 0o700 });
+    const linked = join(fixture.root, "linked-home");
+    await nodeFs.symlink(fixture.paths.home, linked);
+
+    expect(await run(scheduledArgv(linked), fixture.io, neverCreatesContext)).toBe(EXIT_CODES.securityRefusal);
+  });
+});
+
 describe("capture dispatch", () => {
   it("refuses an option capture does not accept", async () => {
     await refuses(["capture", "--limit", "5"]);

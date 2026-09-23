@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
 import { Buffer } from "node:buffer";
+import { userInfo } from "node:os";
 import { createInterface } from "node:readline/promises";
 
+import { parseScheduledInvocation } from "./commands/automation/index.js";
 import { MAX_CAPTURE_INPUT_BYTES } from "./commands/capture.js";
 import { createProductionContext, PRODUCT_VERSION } from "./context.js";
 import { hookLastResortExit, isHookInvocation } from "./hooks/argv.js";
@@ -114,6 +116,7 @@ const io: CliIo = {
 const home = process.env.HOME;
 const argv = process.argv.slice(2);
 const hookMode = isHookInvocation(argv);
+const scheduledMode = parseScheduledInvocation(argv) !== null;
 const hookEnvironment = (userHome: string | null): HookEnvironment => ({
   env: process.env,
   userHome,
@@ -121,7 +124,7 @@ const hookEnvironment = (userHome: string | null): HookEnvironment => ({
   nodeExecutable: process.execPath,
 });
 
-if (home === undefined || home.length === 0) {
+if ((home === undefined || home.length === 0) && !scheduledMode) {
   if (hookMode) {
     try {
       process.exitCode = await run(argv, io, () => {
@@ -137,16 +140,27 @@ if (home === undefined || home.length === 0) {
   }
 } else {
   try {
-    process.exitCode = await run(argv, io, async (commandIo, request) =>
-      createProductionContext({
+    process.exitCode = await run(argv, io, async (commandIo, request) => {
+      // §5.3: a scheduled run's user home is the account record, never the ambient `HOME`.
+      if (request.scheduledProductHome !== undefined) {
+        return createProductionContext({
+          io: commandIo,
+          env: { DEVELOPER_OS_HOME: request.scheduledProductHome },
+          userHome: userInfo().homedir,
+          localRelease: null,
+        });
+      }
+      if (home === undefined) throw new Error("HOME is not set");
+      return createProductionContext({
         io: commandIo,
         env: process.env,
         userHome: home,
         localRelease: request.localRelease === null
           ? null
           : await admitUnsignedLocalPackagedRelease(request.localRelease, PRODUCT_VERSION),
-      }),
-    hookMode ? hookEnvironment(home) : undefined);
+      });
+    },
+    hookMode && home !== undefined ? hookEnvironment(home) : undefined);
   } catch (error) {
     /**
      * Last resort. An escaping rejection here would otherwise surface as an

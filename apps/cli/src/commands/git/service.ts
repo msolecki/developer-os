@@ -241,14 +241,14 @@ function refuse(reason: string, code: ExitCode, paths: readonly string[] = [], r
   throw new GitCommandRefusal(reason, code, paths, recovery);
 }
 
-function foundationBindingsHash(ids: readonly string[]): LowerHexSha256 {
+export function foundationBindingsHash(ids: readonly string[]): LowerHexSha256 {
   return createHash("sha256").update(FOUNDATION_BINDINGS_DOMAIN).update(JSON.stringify(ids)).digest("hex") as LowerHexSha256;
 }
 
 // ---------------------------------------------------------------------------------------------
 // Observation
 
-interface ObservedFileV1 {
+export interface ObservedFileV1 {
   readonly path: CanonicalAbsolutePathV1;
   readonly entry: LifecycleGuardedEntryV1 | null;
   readonly bytes: Uint8Array | null;
@@ -270,7 +270,7 @@ async function observeFile(
   return { path, entry, bytes, hash: sha256(bytes) };
 }
 
-interface GitHomeV1 {
+export interface GitHomeV1 {
   readonly admitted: AdmittedV2HomeV1;
   readonly key: LifecycleHomeKeyV1;
   readonly authority: {
@@ -288,7 +288,7 @@ interface GitHomeV1 {
   readonly syncRecord: SyncRecordV1 | null;
 }
 
-async function observeHome(context: CliContext, lifecycle: CliLifecycleContext): Promise<GitHomeV1> {
+export async function observeHome(context: CliContext, lifecycle: CliLifecycleContext): Promise<GitHomeV1> {
   const admitted = await admitInstalledV2Home({
     fs: lifecycle.fs,
     paths: context.paths,
@@ -338,7 +338,7 @@ async function observeHome(context: CliContext, lifecycle: CliLifecycleContext):
   };
 }
 
-async function residueOf(context: CliContext): Promise<LifecycleBookkeepingResidueV1> {
+export async function residueOf(context: CliContext): Promise<LifecycleBookkeepingResidueV1> {
   return residueFrom(
     await inspectBootstrapEvidenceAdmission(
       createBootstrapEvidenceInspectionRequest({
@@ -576,7 +576,7 @@ function fileState(bytes: Uint8Array | null): LifecyclePreviewFileChangeV1["befo
   return bytes === null ? { state: "absent" } : { state: "present", hash: sha256(bytes), size: bytes.byteLength };
 }
 
-function fileChange(
+export function fileChange(
   role: "activation" | "config" | "manifest",
   targetPath: CanonicalAbsolutePathV1,
   before: Uint8Array | null,
@@ -622,7 +622,7 @@ interface LifecycleFilesV1 {
 }
 
 /** The manifest postimage is admitted exactly as the manifest participant will read it back. */
-function admitManifestAfter(context: CliContext, bytes: Uint8Array): void {
+export function admitManifestAfter(context: CliContext, bytes: Uint8Array): void {
   try {
     validateManifestV2(decodeCanonicalJson(bytes, MAX_MANIFEST_BYTES), gateManifestAdmission(context));
   } catch {
@@ -652,7 +652,7 @@ function previewFiles(home: GitHomeV1, files: LifecycleFilesV1): readonly Lifecy
   ].sort((left, right) => Buffer.compare(Buffer.from(left.targetPath), Buffer.from(right.targetPath)));
 }
 
-function withPreviewHash(preview: Omit<LifecyclePlanPreviewV1, "previewHash">): LifecyclePlanPreviewV1 {
+export function withPreviewHash(preview: Omit<LifecyclePlanPreviewV1, "previewHash">): LifecyclePlanPreviewV1 {
   const unhashed = { ...preview, previewHash: WIDEST_HASH } as LifecyclePlanPreviewV1;
   return { ...unhashed, previewHash: lifecyclePreviewHash(unhashed) };
 }
@@ -867,12 +867,12 @@ function allocatedIdsFrom(snapshot: LifecycleLedgerSnapshotV1<LifecycleExecution
   });
 }
 
-type NetworkPushV1 = NonNullable<LifecycleParticipantAdaptersV1<LifecycleExecutionPlanV1>["networkPush"]>;
+export type NetworkPushV1 = NonNullable<LifecycleParticipantAdaptersV1<LifecycleExecutionPlanV1>["networkPush"]>;
 
 /** Recovery never pushes: a bound network push is consumed only by `git sync`'s retry. */
-const NO_PUSH: NetworkPushV1 = { push: () => Promise.resolve("failed") };
+export const NO_PUSH: NetworkPushV1 = { push: () => Promise.resolve("failed") };
 
-function gitAdapters(
+export function gitAdapters(
   context: CliContext,
   lifecycle: CliLifecycleContext,
   networkPush: NetworkPushV1,
@@ -910,7 +910,7 @@ function gitAdapters(
   };
 }
 
-interface PreparedV1 {
+export interface PreparedV1 {
   readonly home: GitHomeV1;
   readonly residue: LifecycleBookkeepingResidueV1;
   readonly snapshot: LifecycleLedgerSnapshotV1<LifecycleExecutionPlanV1>;
@@ -933,7 +933,7 @@ function requireGlobal(context: CliContext, global: HeldLifecycleStableLockV1): 
 }
 
 /** Under the caller's global lock: re-admit, run the recovery pass and settle what can settle. */
-async function prepareUnderLock(context: CliContext, lifecycle: CliLifecycleContext, global: HeldLifecycleStableLockV1): Promise<PreparedV1> {
+export async function prepareUnderLock(context: CliContext, lifecycle: CliLifecycleContext, global: HeldLifecycleStableLockV1): Promise<PreparedV1> {
   requireGlobal(context, global);
   const home = await observeHome(context, lifecycle);
   if (home.admitted.globalLock.dev !== global.dev || home.admitted.globalLock.ino !== global.ino) {
@@ -946,18 +946,18 @@ async function prepareUnderLock(context: CliContext, lifecycle: CliLifecycleCont
   return { home: await observeHome(context, lifecycle), residue, snapshot: recovered.snapshot };
 }
 
-function requireClear(prepared: PreparedV1, paths: { readonly home: string }): void {
+export function requireClear(prepared: PreparedV1, paths: { readonly home: string }): void {
   if (prepared.snapshot.closure.kind !== "clear") {
     refuse("lifecycle_closure_unresolved", EXIT_CODES.recoveryRequired, [paths.home], "developer-os doctor");
   }
 }
 
-async function reserveIds(
+export async function reserveIds(
   context: CliContext,
   lifecycle: CliLifecycleContext,
   global: HeldLifecycleStableLockV1,
   snapshot: LifecycleLedgerSnapshotV1<LifecycleExecutionPlanV1>,
-  prefixes: readonly ("lc" | "tx" | "ge" | "mf")[],
+  prefixes: readonly ("lc" | "tx" | "ge" | "le" | "mf")[],
 ): Promise<readonly string[]> {
   const block = await reserveLifecycleIdBlock(
     {
@@ -974,9 +974,9 @@ async function reserveIds(
 }
 
 /** Spec §2.4's reservation order, read off the builder's own placeholder plan. */
-function prefixesOf(builder: LifecycleExecutionBuilderV1<LifecycleExecutionPlanV1>): readonly ("lc" | "tx" | "ge" | "mf")[] {
+export function prefixesOf(builder: LifecycleExecutionBuilderV1<LifecycleExecutionPlanV1>): readonly ("lc" | "tx" | "ge" | "le" | "mf")[] {
   const placeholders = Array.from({ length: builder.slotCount }, (_unused, index) => `tx_${"f".repeat(64)}_${String(index)}`);
-  return lifecycleReservationOrder(builder.build(placeholders).plan).map((slot) => slot.prefix as "lc" | "tx" | "ge" | "mf");
+  return lifecycleReservationOrder(builder.build(placeholders).plan).map((slot) => slot.prefix);
 }
 
 /**
@@ -996,7 +996,7 @@ async function removeOwnedTree(path: string, effectiveUid: number): Promise<void
   await rmdir(path);
 }
 
-async function destroyUnpublishedStaging(productHome: string, coordinatorId: string, effectiveUid: number): Promise<void> {
+export async function destroyUnpublishedStaging(productHome: string, coordinatorId: string, effectiveUid: number): Promise<void> {
   await removeOwnedTree(join(productHome, "staging", "lifecycle", coordinatorId), effectiveUid);
 }
 
@@ -1023,12 +1023,12 @@ async function executeCoordinator(
   return result.outcome.kind;
 }
 
-async function settle(context: CliContext, lifecycle: CliLifecycleContext, key: LifecycleHomeKeyV1, residue: LifecycleBookkeepingResidueV1, global: HeldLifecycleStableLockV1): Promise<void> {
+export async function settle(context: CliContext, lifecycle: CliLifecycleContext, key: LifecycleHomeKeyV1, residue: LifecycleBookkeepingResidueV1, global: HeldLifecycleStableLockV1): Promise<void> {
   await lifecycle.recovery(key, gitAdapters(context, lifecycle, NO_PUSH), residue).recover(global, { resumeUninstall: false });
 }
 
 /** D54: a manifest the coordinator rewrote keeps its anchor current; a failure only warns. */
-async function reanchorManifest(context: CliContext, lifecycle: CliLifecycleContext, beforeHash: LowerHexSha256, afterBytes: Uint8Array): Promise<void> {
+export async function reanchorManifest(context: CliContext, lifecycle: CliLifecycleContext, beforeHash: LowerHexSha256, afterBytes: Uint8Array): Promise<void> {
   try {
     const anchor = await readManifestAnchor(lifecycle.fs, context.paths.home, lifecycle.effectiveUid);
     if (anchor.kind !== "anchored" || anchor.manifestHash !== beforeHash) return;
@@ -1192,7 +1192,7 @@ function lifecycleBuilder(inputs: LifecycleApplyInputsV1): LifecycleExecutionBui
   };
 }
 
-async function stageManifestPayload(productHome: CanonicalAbsolutePathV1, coordinatorId: string, participantId: string, bytes: Uint8Array): Promise<{ readonly dev: string; readonly ino: string }> {
+export async function stageManifestPayload(productHome: CanonicalAbsolutePathV1, coordinatorId: string, participantId: string, bytes: Uint8Array): Promise<{ readonly dev: string; readonly ino: string }> {
   const participants = join(productHome, "staging", "lifecycle", coordinatorId, "participants");
   const directory = join(participants, "manifest", participantId);
   for (const path of [participants, join(participants, "manifest"), directory]) await mkdirOwned(path);

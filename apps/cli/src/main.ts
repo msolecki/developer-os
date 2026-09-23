@@ -8,10 +8,20 @@ import {
 } from "@developer-os/core";
 import type { CliResult, ExitCode } from "@developer-os/core";
 import { CAPTURE_STATUSES } from "@developer-os/brain";
+import { parseScheduleFlag } from "@developer-os/platform-macos";
 import type { RefactorRequestV1 } from "@developer-os/brain";
 
 import { renderBrain, runBrain } from "./commands/brain.js";
 import type { BrainOptions, BrainResultV1, BrainSubcommand } from "./commands/brain.js";
+import {
+  admitScheduledProductHome,
+  parseScheduledInvocation,
+  renderAutomation,
+  runAutomation,
+  runScheduledAutomation,
+  scheduledExitCode,
+} from "./commands/automation/index.js";
+import type { AutomationCommandRequestV1, ScheduledInvocationV1 } from "./commands/automation/index.js";
 import { runCapture } from "./commands/capture.js";
 import type { CaptureResultV1 } from "./commands/capture.js";
 import { renderConfigResult, runConfig } from "./commands/config.js";
@@ -67,6 +77,7 @@ const USAGE = [
   "  uninstall  remove manifest-owned artifacts",
   "  update     [rollback]: preview a signed release update, or a rollback to the retained release",
   "  git        enable --remote <url> [--branch <name>] | disable | status | sync: opt-in Brain synchronization",
+  "  automation enable --schedule <job>=<schedule>... | disable | status: opt-in scheduled jobs",
   "",
   "Options:",
   "  --dry-run        show the plan without changing anything (init, uninstall, import, project init, brain retire, brain refactor)",
@@ -90,9 +101,10 @@ const USAGE = [
   "  --merge          fold <source> into <target> and retire <source> (brain refactor)",
   "  --split          move the section under <heading> of <note> into a new note (brain refactor)",
   "  --version        print the product version; with a value, the stable release to preview (update)",
-  "  --apply          apply the previewed update or rollback (update), or the Git plan (git enable, git disable)",
+  "  --apply          apply the previewed update or rollback (update), or the plan (git and automation enable, disable)",
   "  --remote <url>   the bare local repository, or HTTPS or SSH URL, Git pushes to (git enable)",
   "  --branch <name>  the branch to synchronize; the attached branch or main by default (git enable)",
+  "  --schedule <job>=<schedule>  hourly@MM, daily@HH:MM or weekly@<day>,HH:MM; one per job (automation enable)",
 ].join("\n");
 
 const OPTIONS = {
@@ -120,6 +132,7 @@ const OPTIONS = {
   apply: { type: "boolean" },
   remote: { type: "string" },
   branch: { type: "string" },
+  schedule: { type: "string", multiple: true },
 } as const;
 
 type OptionName = keyof typeof OPTIONS;
@@ -159,6 +172,7 @@ const COMMAND_OPTIONS: Readonly<Record<string, readonly OptionName[]>> = {
   import: ["claude-memory", "limit", "dry-run", "json"],
   project: ["dry-run", "json"],
   git: ["remote", "branch", "apply", "json"],
+  automation: ["schedule", "apply", "json"],
 };
 
 /**
@@ -184,6 +198,7 @@ const COMMAND_POSITIONALS: Readonly<
   import: { min: 0, max: 1 },
   project: { min: 1, max: 2 },
   git: { min: 1, max: 1 },
+  automation: { min: 1, max: 1 },
 };
 
 const BRAIN_SUBCOMMANDS: Readonly<
@@ -211,12 +226,23 @@ const GIT_SUBCOMMANDS: Readonly<Record<string, readonly OptionName[]>> = {
   sync: ["json"],
 };
 
+const AUTOMATION_SUBCOMMANDS: Readonly<Record<string, readonly OptionName[]>> = {
+  enable: ["schedule", "apply", "json"],
+  disable: ["apply", "json"],
+  status: ["json"],
+};
+
+/**
+ * `scheduledProductHome` is present only for spec §5.3's hidden scheduled invocation: the
+ * supplied, already-guarded product home is then the sole authority, and ambient `HOME`,
+ * `DEVELOPER_OS_HOME` and `DEVELOPER_OS_BRAIN` are ignored.
+ */
 export type CliContextFactory = (
   io: CliIo,
-  request: { readonly localRelease: string | null },
+  request: { readonly localRelease: string | null; readonly scheduledProductHome?: string },
 ) => CliContext | Promise<CliContext>;
 
-type OptionValues = Partial<Record<OptionName, boolean | string>>;
+type OptionValues = Partial<Record<OptionName, boolean | string | readonly string[]>>;
 
 interface Invocation {
   readonly command: string;
@@ -350,6 +376,23 @@ function parse(argv: readonly string[]): Invocation | null {
     if (allowedHere === undefined || !suppliedOptions(values).every((o) => allowedHere.includes(o))) return null;
     if (name === "enable" && (typeof values.remote !== "string" || values.remote === "")) return null;
     if (values.branch === "") return null;
+  }
+
+  if (positional === "automation") {
+    const [name] = rest;
+    if (name === undefined || !Object.hasOwn(AUTOMATION_SUBCOMMANDS, name)) return null;
+    const allowedHere = AUTOMATION_SUBCOMMANDS[name];
+    if (allowedHere === undefined || !suppliedOptions(values).every((o) => allowedHere.includes(o))) return null;
+    const schedules = scheduleFlags(values);
+    const jobs = new Set<string>();
+    for (const flag of schedules) {
+      try {
+        jobs.add(parseScheduleFlag(flag).job);
+      } catch {
+        return null;
+      }
+    }
+    if (jobs.size !== schedules.length) return null;
   }
 
   // `import_path_conflict` is a usage failure, like every other argv error.
@@ -578,7 +621,20 @@ function contextFailure(error: unknown): CliResult<never> {
   });
 }
 
-function optionString(value: boolean | string | undefined): string | null {
+function scheduleFlags(values: OptionValues): readonly string[] {
+  const value = values.schedule;
+  return Array.isArray(value) ? (value as readonly string[]) : [];
+}
+
+/** `parse` has already admitted the subcommand, its options and every `--schedule` grammar. */
+function automationRequestFor(invocation: Invocation): AutomationCommandRequestV1 {
+  const [subcommand] = invocation.positionals;
+  const apply = invocation.values.apply === true;
+  if (subcommand === "enable") return { subcommand, schedules: scheduleFlags(invocation.values), apply };
+  return subcommand === "disable" ? { subcommand, apply } : { subcommand: "status" };
+}
+
+function optionString(value: boolean | string | readonly string[] | undefined): string | null {
   return typeof value === "string" ? value : null;
 }
 
@@ -822,6 +878,8 @@ async function dispatch(
       );
     case "git":
       return emit(io, await runGit(context, gitRequestFor(invocation)), json, renderGit);
+    case "automation":
+      return emit(io, await runAutomation(context, automationRequestFor(invocation)), json, renderAutomation);
     case "update":
       return invocation.update === undefined
         ? emit(io, usageFailure(), json, () => [])
@@ -840,6 +898,27 @@ async function dispatch(
 }
 
 /**
+ * Spec §5.3's scheduled bootstrap: launchd sends both streams to the null sink, so the outcome
+ * is the exit status alone, and the runner has released every lock before it returns.
+ */
+async function runScheduledMode(
+  invocation: ScheduledInvocationV1,
+  io: CliIo,
+  createContext: CliContextFactory,
+): Promise<number> {
+  if (!(await admitScheduledProductHome(invocation.productHome, process.getuid?.() ?? -1))) {
+    return EXIT_CODES.securityRefusal;
+  }
+  let context: CliContext;
+  try {
+    context = await createContext(io, { localRelease: null, scheduledProductHome: invocation.productHome });
+  } catch (error) {
+    return exitCodeOf(error);
+  }
+  return scheduledExitCode(await runScheduledAutomation(context, invocation));
+}
+
+/**
  * Dispatch is strict on purpose: an unknown command, an unknown option, or an
  * option a command does not accept is invalid input, never a best guess at what
  * the caller meant.
@@ -851,6 +930,8 @@ export async function run(
   hookEnvironment?: HookEnvironment,
 ): Promise<number> {
   if (isHookInvocation(argv)) return runHookMode(argv, io, createContext, hookEnvironment);
+  const scheduled = parseScheduledInvocation(argv);
+  if (scheduled !== null) return runScheduledMode(scheduled, io, createContext);
   if (argv[0] === "update") {
     const update = parseUpdateArgv(argv);
     if (update === null) return emit(io, usageFailure(), argv.includes("--json"), () => []);

@@ -11,6 +11,7 @@ import type {
   ManifestAdmissionContextV1,
   OwnerPathArmV1,
 } from "@developer-os/core";
+import { LAUNCHD_JOBS } from "@developer-os/platform-macos";
 
 import { claudeInstructionPaths, codexInstructionPaths } from "../instructions/vendor-homes.js";
 import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
@@ -121,6 +122,10 @@ function isVendorAuthorized(vendors: VendorHomesV1, owner: ArtifactOwner, path: 
     if (isPrefixedLeaf(codex.agentsDir, ".toml", path)) return isContent(arm, ["agent"]);
     if (path === codex.instructionFile) return isBlock(arm);
     return arm.kind === "directory" && (path === vendors.codexHome || path === codex.agentsDir);
+  }
+  // §6: the closed external-file authorization for one installed automation plist, and nothing else.
+  if (owner === "macos") {
+    return arm.kind === "file" && LAUNCHD_JOBS.some((job) => path === join(vendors.userHome, "Library", "LaunchAgents", job.plistFileName));
   }
   return false;
 }

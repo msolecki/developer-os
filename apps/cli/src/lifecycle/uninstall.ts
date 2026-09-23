@@ -169,7 +169,7 @@ const FOUNDATION_BINDINGS_DOMAIN = "developer-os/manifest-foundation-bindings/v1
 const WIDEST_UINT64 = "18446744073709551615";
 const WIDEST_HASH = "f".repeat(64);
 /** No core codec hashes a `ManifestStatePlanV1` yet, and `assertLaunchdPlanBindings` does not recompute this one. */
-const MANIFEST_STATE_PLAN_DOMAIN = "developer-os:manifest-state-plan:v1";
+export const MANIFEST_STATE_PLAN_DOMAIN = "developer-os:manifest-state-plan:v1";
 
 const encoder = new TextEncoder();
 
@@ -238,7 +238,7 @@ export class UninstallCapacityError extends Error {
  * preserves every file and names the manual unload for each installed generated label.
  * `failureFrom` publishes `kindOf(name)`, so the name is spelled to make it the `reason`.
  */
-function refuseUnsupportedLaunchd(
+export function refuseUnsupportedLaunchd(
   uid: number,
   labels: readonly GeneratedLaunchdLabelV1[],
   cause: LaunchdDistributionUnsupportedError,
@@ -1379,7 +1379,7 @@ async function planUninstallLaunchd(
  * The effect's process staging, created under the global lock once the coordinator ID exists:
  * the mutation table's `HOME`/`TMPDIR` are these directories, so its hash is only knowable now.
  */
-async function stageLaunchdProcessTable(
+export async function stageLaunchdProcessTable(
   lifecycle: CliLifecycleContext,
   productHome: CanonicalAbsolutePathV1,
   coordinatorId: LifecycleCoordinatorIdV1,
