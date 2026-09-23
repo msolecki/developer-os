@@ -10,6 +10,8 @@ import {
   parseAllocatedLifecycleId,
   parseEffectiveUid,
   parseFoundationTransactionId,
+  parseGitEffectId,
+  parseLaunchdEffectId,
   parseLegacyFoundationMutationIndex,
   parseLifecycleCoordinatorId,
   parseManifestParticipantId,
@@ -201,4 +203,38 @@ describe("the ledger bounds", () => {
   it("carries the unsigned 64-bit ceiling", () => {
     expect(UINT64_MAX).toBe(18_446_744_073_709_551_615n);
   });
+});
+
+describe("the effect IDs", () => {
+  it("parses only its own prefix", () => {
+    expect(parseGitEffectId(formatAllocatedLifecycleId("ge", NONCE, 7n))).toMatch(/^ge_/u);
+    expect(parseLaunchdEffectId(formatAllocatedLifecycleId("le", NONCE, 7n))).toMatch(/^le_/u);
+    expect(() => parseGitEffectId(formatAllocatedLifecycleId("le", NONCE, 7n))).toThrow();
+    expect(() => parseLaunchdEffectId(formatAllocatedLifecycleId("ge", NONCE, 7n))).toThrow();
+  });
+
+  it("refuses every non-effect prefix", () => {
+    const others = PREFIXES.filter((prefix) => prefix !== "ge" && prefix !== "le");
+    expect(others.length).toBeGreaterThan(0);
+    for (const prefix of others) {
+      expect(() => parseGitEffectId(ID_BY_PREFIX[prefix])).toThrow();
+      expect(() => parseLaunchdEffectId(ID_BY_PREFIX[prefix])).toThrow();
+    }
+  });
+
+  it("binds the installation nonce only when one is supplied", () => {
+    const git = formatAllocatedLifecycleId("ge", OTHER_NONCE, 3n);
+    const launchd = formatAllocatedLifecycleId("le", OTHER_NONCE, 3n);
+    expect(parseGitEffectId(git)).toBe(git);
+    expect(parseLaunchdEffectId(launchd)).toBe(launchd);
+    expect(() => parseGitEffectId(git, NONCE)).toThrow();
+    expect(() => parseLaunchdEffectId(launchd, NONCE)).toThrow();
+  });
+
+  it.each([`ge_${NONCE}_01`, `ge_${NONCE}_`, `GE_${NONCE}_1`, `ge_${NONCE}_1.json`, 7])(
+    "refuses non-canonical Git effect ID %j",
+    (value) => {
+      expect(() => parseGitEffectId(value)).toThrow();
+    },
+  );
 });

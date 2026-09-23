@@ -25,6 +25,18 @@ import type { LifecycleBookkeepingResidueV1 } from "./bookkeeping.js";
 import { decodeCanonicalJson, hashCanonicalJson, type CanonicalJsonValue } from "./canonical-json.js";
 import type { LifecycleValueCodec } from "./codecs.js";
 import {
+  GIT_EFFECT_STAGING_SIDES,
+  LAUNCHD_BOOTSTRAP_SNAPSHOT_CHILD,
+  LAUNCHD_PROCESS_STAGING_CHILDREN,
+  MAX_GIT_EFFECT_JOURNAL_BYTES,
+  MAX_LAUNCHD_BOOTSTRAP_SNAPSHOT_BYTES,
+  MAX_LAUNCHD_EFFECT_JOURNAL_BYTES,
+  effectJournalBinding,
+  parseEffectStagingChildren,
+  type LifecycleEffectLedgerCodecV1,
+  type LifecycleEffectTerminalV1,
+} from "./effect-ledger.js";
+import {
   inspectFoundationLedger,
   type FoundationLedgerV1,
   type LifecycleLedgerRootsV1,
@@ -66,9 +78,9 @@ export interface LifecycleLedgerDependenciesV1<TPlan extends CoordinatorPlan> {
   readonly coordinatorJournalCodec: LifecycleValueCodec<LifecycleCoordinatorJournalV1>;
   readonly variantFacts: (plan: TPlan) => LifecycleVariantFactsV1;
   readonly pushPlanHash: (plan: TPlan) => LowerHexSha256 | null;
-  /** null in plan 1a: every leaf in that root, or its staging, is a finding. */
-  readonly gitEffectPlanCodec: LifecycleValueCodec<unknown> | null;
-  readonly launchdEffectPlanCodec: LifecycleValueCodec<unknown> | null;
+  /** null keeps plan 1a's refusal: every leaf in that root, or its staging, is a finding. */
+  readonly gitEffectPlanCodec: LifecycleEffectLedgerCodecV1 | null;
+  readonly launchdEffectPlanCodec: LifecycleEffectLedgerCodecV1 | null;
   readonly residue: LifecycleBookkeepingResidueV1;
   /** The plan's manifest before-state hash, or null where the variant binds no manifest preimage. */
   readonly manifestBeforeHash: (plan: TPlan) => LowerHexSha256 | null;
@@ -120,8 +132,6 @@ export interface LifecycleLedgerSnapshotV1<TPlan> {
 
 const MAX_PLAN_BYTES = 16_777_216;
 const MAX_COORDINATOR_JOURNAL_BYTES = 1_048_576;
-const MAX_GIT_EFFECT_JOURNAL_BYTES = 16_777_216;
-const MAX_LAUNCHD_EFFECT_JOURNAL_BYTES = 1_048_576;
 const MAX_STAGED_JOURNAL_BYTES = 1_048_576;
 /** The manifest is published through a Foundation mutation, so its bytes carry that ceiling. */
 const MAX_MANIFEST_BYTES = BigInt(LIFECYCLE_PLAN_BOUNDS.mutationContentSize.maximum);
@@ -163,6 +173,9 @@ interface EffectFactsV1 {
   journalEntry: LifecycleGuardedEntryV1 | null;
   lock: LifecycleGuardedEntryV1 | null;
   planHash: LowerHexSha256 | null;
+  plan: unknown;
+  journal: unknown;
+  terminal: LifecycleEffectTerminalV1;
   malformed: boolean;
 }
 
@@ -250,6 +263,9 @@ function effectFactsFor<TPlan extends CoordinatorPlan>(
     journalEntry: null,
     lock: null,
     planHash: null,
+    plan: null,
+    journal: null,
+    terminal: null,
     malformed: false,
   };
   map.set(id, created);
@@ -704,8 +720,7 @@ async function scanEffectRoot<TPlan extends CoordinatorPlan>(
           continue;
         }
         facts.planEntry = entry;
-        facts.planHash = await effectPlanHash(scan, kind, codec, entry);
-        if (facts.planHash === null) facts.malformed = true;
+        await admitEffectPlan(scan, kind, codec.plan, facts, entry);
         continue;
       }
     }
@@ -726,25 +741,78 @@ async function scanEffectRoot<TPlan extends CoordinatorPlan>(
     }
     refuse(scan, "lifecycle_effect_name", path);
   }
+  if (codec !== null) await validateEffectJournals(scan, kind, codec, maximumJournalBytes);
 }
 
-async function effectPlanHash<TPlan extends CoordinatorPlan>(
+async function admitEffectPlan<TPlan extends CoordinatorPlan>(
   scan: LedgerScanV1<TPlan>,
   kind: EffectKindV1,
   codec: LifecycleValueCodec<unknown>,
+  facts: EffectFactsV1,
   entry: LifecycleGuardedEntryV1,
-): Promise<LowerHexSha256 | null> {
+): Promise<void> {
   const text = await guardedText(scan, entry, MAX_PLAN_BYTES, "lifecycle_effect_plan_bytes");
-  if (text === null) return null;
+  if (text === null) {
+    facts.malformed = true;
+    return;
+  }
   try {
     const decoded = decodeCanonicalJson(new TextEncoder().encode(text), MAX_PLAN_BYTES);
-    if (codec.encode(codec.validate(decoded)) !== text) {
+    const plan = codec.validate(decoded);
+    if (codec.encode(plan) !== text) {
       throw new Error("effect plan bytes are not their own re-encoding");
     }
-    return hashCanonicalJson(EFFECT_PLAN_DOMAINS[kind], decoded);
+    facts.plan = plan;
+    facts.planHash = hashCanonicalJson(EFFECT_PLAN_DOMAINS[kind], decoded);
   } catch {
     refuse(scan, "lifecycle_effect_plan_bytes", entry.path);
-    return null;
+    facts.malformed = true;
+  }
+}
+
+/**
+ * Runs after the whole root is enumerated, because a journal is judged against
+ * its plan's hash and directory order puts no plan before its journal.
+ */
+async function validateEffectJournals<TPlan extends CoordinatorPlan>(
+  scan: LedgerScanV1<TPlan>,
+  kind: EffectKindV1,
+  codec: LifecycleEffectLedgerCodecV1,
+  maximumJournalBytes: number,
+): Promise<void> {
+  for (const [id, facts] of scan.effects[kind]) {
+    const entry = facts.journalEntry;
+    if (entry === null || facts.malformed || facts.planHash === null) continue;
+    const text = await guardedText(scan, entry, maximumJournalBytes, "lifecycle_effect_journal_bytes");
+    if (text === null) {
+      facts.malformed = true;
+      continue;
+    }
+    let journal: unknown;
+    try {
+      const decoded = decodeCanonicalJson(new TextEncoder().encode(text), maximumJournalBytes);
+      journal = codec.journal.validate(decoded);
+      if (codec.journal.encode(journal) !== text) {
+        throw new Error("effect journal bytes are not their own re-encoding");
+      }
+    } catch {
+      refuse(scan, "lifecycle_effect_journal_bytes", entry.path);
+      facts.malformed = true;
+      continue;
+    }
+    const binding = effectJournalBinding(journal);
+    if (binding === null || binding.id !== id) {
+      refuse(scan, "lifecycle_effect_journal_identity", entry.path);
+      facts.malformed = true;
+      continue;
+    }
+    if (binding.planHash !== facts.planHash) {
+      refuse(scan, "lifecycle_effect_plan_hash", entry.path);
+      facts.malformed = true;
+      continue;
+    }
+    facts.journal = journal;
+    facts.terminal = codec.terminal(journal);
   }
 }
 
@@ -773,7 +841,7 @@ async function scanLifecycleStaging<TPlan extends CoordinatorPlan>(
     if (entry === null) continue;
     const facts: StagingFactsV1 = { entry, leaves: 1, participantIds: new Set() };
     scan.staging.set(id, facts);
-    await scanCoordinatorStaging(scan, facts, nonce);
+    await scanCoordinatorStaging(scan, id, facts, nonce);
     scan.counts.lifecycleStagingMaximumPerCoordinator = Math.max(
       scan.counts.lifecycleStagingMaximumPerCoordinator,
       facts.leaves,
@@ -801,6 +869,7 @@ function admitStagingLeaf<TPlan extends CoordinatorPlan>(
 
 async function scanCoordinatorStaging<TPlan extends CoordinatorPlan>(
   scan: LedgerScanV1<TPlan>,
+  coordinatorId: string,
   facts: StagingFactsV1,
   nonce: LifecycleInstallNonceV1 | null,
 ): Promise<void> {
@@ -828,20 +897,154 @@ async function scanCoordinatorStaging<TPlan extends CoordinatorPlan>(
       refuse(scan, "lifecycle_staging_effect_unsupported", path);
       continue;
     }
-    await countStagingSubtree(scan, facts, entry);
+    const admit =
+      name === "git"
+        ? gitStagingAdmission(scan, coordinatorId, codec, entry.path, nonce)
+        : launchdStagingAdmission(scan, coordinatorId, codec, entry.path);
+    await countStagingSubtree(scan, facts, entry, admit, "");
     if (scan.stopped) return;
   }
 }
 
 /**
- * Plan 1a ships no `git/<side>/<effect-id>` or `launchd-process/{home,tmp}`
- * grammar, so a supplied effect codec only brings these subtrees inside the
- * ledger caps. Deciding their shape is plan 1b's closure work, not a codec swap.
+ * What a relative path below `git` or `launchd-process` must be: a guarded
+ * 0700 directory, any owner-held directory or regular file a validated effect
+ * plan lists, or the one bounded 0600 bootstrap snapshot.
+ */
+type StagingShapeV1 = "directory" | "entry" | "snapshot";
+type StagingAdmissionV1 = (relative: string) => StagingShapeV1 | null;
+
+function effectStagingChildren<TPlan extends CoordinatorPlan>(
+  scan: LedgerScanV1<TPlan>,
+  codec: LifecycleEffectLedgerCodecV1,
+  plan: unknown,
+  path: CanonicalAbsolutePathV1,
+): ReadonlySet<string> {
+  try {
+    return parseEffectStagingChildren(codec.stagingChildren(plan));
+  } catch {
+    refuse(scan, "lifecycle_effect_staging_children", path);
+    return new Set();
+  }
+}
+
+/**
+ * Exact `<side>/<ge-id>` directories. With a coordinator plan, only its bound
+ * side/effect pairs and the children each validated effect plan owns are
+ * admitted. A planless tree may hold only empty ID directories, because no
+ * immutable plan yet says what may sit inside them.
+ */
+function gitStagingAdmission<TPlan extends CoordinatorPlan>(
+  scan: LedgerScanV1<TPlan>,
+  coordinatorId: string,
+  codec: LifecycleEffectLedgerCodecV1,
+  path: CanonicalAbsolutePathV1,
+  nonce: LifecycleInstallNonceV1 | null,
+): StagingAdmissionV1 {
+  const plan = scan.coordinators.get(coordinatorId)?.plan ?? null;
+  const admitted = new Map<string, StagingShapeV1>();
+  if (plan === null) {
+    for (const side of GIT_EFFECT_STAGING_SIDES) admitted.set(side, "directory");
+    return (relative) => {
+      const known = admitted.get(relative);
+      if (known !== undefined) return known;
+      const [side, id, ...rest] = relative.split("/");
+      const planless =
+        rest.length === 0 &&
+        side !== undefined &&
+        admitted.has(side) &&
+        id !== undefined &&
+        allocatedIdOf("ge", id, nonce) !== null;
+      return planless ? "directory" : null;
+    };
+  }
+  const sides = [
+    ["source", plan.participants.sourceGitEffect],
+    ["destination", plan.participants.destinationGitEffect],
+  ] as const;
+  for (const [side, ref] of sides) {
+    if (ref === null) continue;
+    const prefix = `${side}/${ref.id}`;
+    admitted.set(side, "directory");
+    admitted.set(prefix, "directory");
+    const effect = scan.effects.git.get(ref.id);
+    if (effect === undefined || effect.malformed || effect.plan === null) continue;
+    for (const child of effectStagingChildren(scan, codec, effect.plan, path)) {
+      admitted.set(`${prefix}/${child}`, "entry");
+    }
+  }
+  return (relative) => admitted.get(relative) ?? null;
+}
+
+/**
+ * `home` and `tmp` stay empty at every process boundary (spec §2.4, §5.3). The
+ * one exception is the linked bootstrap snapshot in `tmp`, admitted only while
+ * one of this coordinator's launchd effects holds a non-terminal journal whose
+ * plan owns it; whether that journal names the exact current frontier is the
+ * effect-locked recovery's check, not this read-only one.
+ */
+function launchdStagingAdmission<TPlan extends CoordinatorPlan>(
+  scan: LedgerScanV1<TPlan>,
+  coordinatorId: string,
+  codec: LifecycleEffectLedgerCodecV1,
+  path: CanonicalAbsolutePathV1,
+): StagingAdmissionV1 {
+  const admitted = new Map<string, StagingShapeV1>(
+    LAUNCHD_PROCESS_STAGING_CHILDREN.map((child) => [child, "directory"]),
+  );
+  const plan = scan.coordinators.get(coordinatorId)?.plan ?? null;
+  const refs = plan === null ? [] : [plan.participants.launchdBeforeFiles, plan.participants.launchdAfterFiles];
+  for (const ref of refs) {
+    if (ref === null) continue;
+    const effect = scan.effects.launchd.get(ref.id);
+    if (
+      effect === undefined ||
+      effect.malformed ||
+      effect.plan === null ||
+      effect.journal === null ||
+      effect.terminal !== null
+    ) {
+      continue;
+    }
+    if (effectStagingChildren(scan, codec, effect.plan, path).has(LAUNCHD_BOOTSTRAP_SNAPSHOT_CHILD)) {
+      admitted.set(LAUNCHD_BOOTSTRAP_SNAPSHOT_CHILD, "snapshot");
+    }
+  }
+  return (relative) => admitted.get(relative) ?? null;
+}
+
+async function admitStagingShape<TPlan extends CoordinatorPlan>(
+  scan: LedgerScanV1<TPlan>,
+  path: CanonicalAbsolutePathV1,
+  shape: StagingShapeV1,
+): Promise<LifecycleGuardedEntryV1 | null> {
+  if (shape === "directory") return guardedDirectory(scan, path, "lifecycle_staging_shape");
+  if (shape === "snapshot") {
+    return guardedRegularFile(scan, path, MAX_LAUNCHD_BOOTSTRAP_SNAPSHOT_BYTES, "lifecycle_staging_shape");
+  }
+  const entry = await scan.dependencies.fs.lstat(path);
+  if (
+    entry === null ||
+    (entry.kind !== "directory" && entry.kind !== "regular_file") ||
+    entry.ownerUid !== scan.dependencies.effectiveUid
+  ) {
+    refuse(scan, "lifecycle_staging_shape", path);
+    return null;
+  }
+  return entry;
+}
+
+/**
+ * The one walker for effect staging: every entry counts against the ledger
+ * caps, and each must be admitted by its exact relative path and shape. An
+ * unadmitted entry is a finding and is not descended into.
  */
 async function countStagingSubtree<TPlan extends CoordinatorPlan>(
   scan: LedgerScanV1<TPlan>,
   facts: StagingFactsV1,
   directory: LifecycleGuardedEntryV1,
+  admit: StagingAdmissionV1,
+  prefix: string,
 ): Promise<void> {
   for await (const name of scan.dependencies.fs.names(directory)) {
     const child = childPath(directory.path, name);
@@ -851,9 +1054,15 @@ async function countStagingSubtree<TPlan extends CoordinatorPlan>(
     }
     if (!admitStagingLeaf(scan, child)) return;
     facts.leaves += 1;
-    const entry = await scan.dependencies.fs.lstat(child);
+    const relative = prefix === "" ? name : `${prefix}/${name}`;
+    const shape = admit(relative);
+    if (shape === null) {
+      refuse(scan, "lifecycle_staging_name", child);
+      continue;
+    }
+    const entry = await admitStagingShape(scan, child, shape);
     if (entry !== null && entry.kind === "directory") {
-      await countStagingSubtree(scan, facts, entry);
+      await countStagingSubtree(scan, facts, entry, admit, relative);
       if (scan.stopped) return;
     }
   }
@@ -1192,12 +1401,15 @@ async function manifestAgreesWithCursor<TPlan extends CoordinatorPlan>(
   }
 }
 
-/** Plan 1a ships no effect-journal schema, so a present effect journal is never terminal. */
-function presentEffectJournals<TPlan extends CoordinatorPlan>(scan: LedgerScanV1<TPlan>): number {
+/**
+ * A journal the codec did not call terminal, including every journal present
+ * under a `null` codec, keeps closure non-clear.
+ */
+function nonTerminalEffectJournals<TPlan extends CoordinatorPlan>(scan: LedgerScanV1<TPlan>): number {
   let present = 0;
   for (const kind of ["git", "launchd"] as const) {
     for (const facts of scan.effects[kind].values()) {
-      if (facts.journalEntry !== null) present += 1;
+      if (facts.journalEntry !== null && facts.terminal === null) present += 1;
     }
   }
   return present;
@@ -1276,7 +1488,7 @@ function classify<TPlan extends CoordinatorPlan>(
     return Promise.resolve({ kind: "lifecycle_recovery_required" });
   }
   const candidates = nonTerminalRecords(records);
-  const others = standaloneNonTerminal + presentEffectJournals(scan);
+  const others = standaloneNonTerminal + nonTerminalEffectJournals(scan);
   if (candidates.length === 0 && others === 0) return Promise.resolve({ kind: "clear" });
   const [candidate] = candidates;
   if (candidates.length !== 1 || others > 0 || candidate === undefined) {

@@ -16,6 +16,7 @@ import type { LifecycleBookkeepingResidueV1 } from "./bookkeeping.js";
 import {
   encodeCanonicalJson,
   hashCanonicalJson,
+  type CanonicalJsonV1,
   type CanonicalJsonValue,
 } from "./canonical-json.js";
 import {
@@ -24,6 +25,7 @@ import {
   type LifecycleLeafCodecsV1,
   type LifecycleValueCodec,
 } from "./codecs.js";
+import type { LifecycleEffectLedgerCodecV1 } from "./effect-ledger.js";
 import { deriveLifecycleLedgerRoots, type LifecycleLedgerRootsV1 } from "./foundation-ledger.js";
 import {
   LIFECYCLE_STEP_GRAMMAR,
@@ -471,8 +473,8 @@ async function newHome(
 }
 
 interface DependencyOptionsV1 {
-  readonly gitEffectPlanCodec?: LifecycleValueCodec<unknown> | null;
-  readonly launchdEffectPlanCodec?: LifecycleValueCodec<unknown> | null;
+  readonly gitEffectPlanCodec?: LifecycleEffectLedgerCodecV1 | null;
+  readonly launchdEffectPlanCodec?: LifecycleEffectLedgerCodecV1 | null;
   readonly residue?: LifecycleBookkeepingResidueV1;
   readonly fs?: LifecycleGuardedFileSystemV1;
   readonly manifestBeforeHash?: (plan: SyntheticPlan) => LowerHexSha256 | null;
@@ -669,6 +671,40 @@ async function pushPendingHome(coordinators: readonly SyntheticCoordinatorV1[]):
     );
   }
   return home;
+}
+
+/**
+ * A synthetic effect codec: plans are `{ marker }` leaves, journals carry the
+ * `EffectJournalV1` identity fields plus a phase, and staging ownership is
+ * whatever list the test hands in.
+ */
+function effectLedgerCodec(children: readonly string[] = []): LifecycleEffectLedgerCodecV1 {
+  const encode = (value: unknown): CanonicalJsonV1 => encodeCanonicalJson(value as CanonicalJsonValue);
+  return {
+    plan: {
+      validate: (value) => {
+        if (typeof value !== "object" || value === null || !("marker" in value)) {
+          throw new Error("invalid synthetic effect plan");
+        }
+        return value;
+      },
+      encode,
+    },
+    journal: {
+      validate: (value) => {
+        if (typeof value !== "object" || value === null || !("phase" in value) || typeof value.phase !== "string") {
+          throw new Error("invalid synthetic effect journal");
+        }
+        return value;
+      },
+      encode,
+    },
+    terminal: (journal) => {
+      const phase = (journal as { readonly phase: string }).phase;
+      return phase === "finalized" || phase === "rolled_back" ? phase : null;
+    },
+    stagingChildren: () => children,
+  };
 }
 
 describe("the lifecycle ledger closure", () => {
@@ -1384,16 +1420,8 @@ describe("the effect journal roots", () => {
   const GIT = syntheticCoordinator("git_sync/new_network", 1n);
   const LAUNCHD = syntheticCoordinator("automation_reconcile/live_only", 6n);
 
-  function effectCodec(): LifecycleValueCodec<unknown> {
-    return {
-      validate: (value) => {
-        if (typeof value !== "object" || value === null || !("marker" in value)) {
-          throw new Error("invalid synthetic effect plan");
-        }
-        return value;
-      },
-      encode: (value) => encodeCanonicalJson(value as CanonicalJsonValue),
-    };
+  function effectCodec(): LifecycleEffectLedgerCodecV1 {
+    return effectLedgerCodec();
   }
 
   async function plantGitEffect(home: HomeV1): Promise<void> {
@@ -1722,4 +1750,417 @@ describe("the ledger bounds", () => {
     },
     600_000,
   );
+});
+
+describe("the effect journal hookup", () => {
+  const LOCAL = syntheticCoordinator("git_sync/new_local", 1n);
+  const LIVE = syntheticCoordinator("automation_reconcile/live_only", 6n);
+  const BOOTSTRAP_CHILDREN = ["tmp", "tmp/bootstrap-plist"] as const;
+
+  type EffectKindV1 = "git" | "launchd";
+  type EffectRefV1 = LifecycleEffectRefV1<GitEffectIdV1> | LifecycleEffectRefV1<LaunchdEffectIdV1>;
+
+  function refOf<T>(ref: T | null, label: string): T {
+    if (ref === null) throw new Error(`fixture lost its ${label}`);
+    return ref;
+  }
+
+  const SOURCE = refOf(LOCAL.plan.participants.sourceGitEffect, "source Git effect");
+  const DESTINATION = refOf(LOCAL.plan.participants.destinationGitEffect, "destination Git effect");
+  const AFTER_FILES = refOf(LIVE.plan.participants.launchdAfterFiles, "after-files effect");
+  const MARKERS = new Map<string, string>([
+    [SOURCE.id, "source-git"],
+    [DESTINATION.id, "destination-git"],
+    [AFTER_FILES.id, "after-files"],
+  ]);
+
+  function effectJournalText(
+    ref: EffectRefV1,
+    phase: string,
+    overrides: { readonly id?: string; readonly planHash?: string; readonly pad?: string } = {},
+  ): string {
+    return encodeCanonicalJson({
+      id: overrides.id ?? ref.id,
+      phase,
+      planHash: overrides.planHash ?? ref.planHash,
+      ...(overrides.pad === undefined ? {} : { pad: overrides.pad }),
+    });
+  }
+
+  async function plantEffect(
+    home: HomeV1,
+    kind: EffectKindV1,
+    ref: EffectRefV1,
+    journal: string | null,
+  ): Promise<void> {
+    const marker = MARKERS.get(ref.id);
+    if (marker === undefined) throw new Error("fixture has no marker for that effect");
+    await write(home, `state/${kind}-effect-journals/${ref.id}.plan.json`, encodeCanonicalJson({ marker }));
+    if (journal !== null) await write(home, `state/${kind}-effect-journals/${ref.id}.json`, journal);
+  }
+
+  /** `git_sync/new_local` finalized: its one forward participant and both Git effects are terminal. */
+  async function terminalLocalSync(
+    phases: { readonly source?: string; readonly destination?: string } = {},
+  ): Promise<HomeV1> {
+    const home = await newHome();
+    await plantCoordinator(home, LOCAL);
+    expect(LOCAL.forwardIds.length).toBeGreaterThan(0);
+    for (const id of LOCAL.forwardIds) await plantFoundationJournal(home, id);
+    await plantEffect(home, "git", SOURCE, effectJournalText(SOURCE, phases.source ?? "finalized"));
+    await plantEffect(home, "git", DESTINATION, effectJournalText(DESTINATION, phases.destination ?? "finalized"));
+    return home;
+  }
+
+  /** `git_sync/new_local` with its cursor on `S`, the source effect plan published and no effect journal yet. */
+  async function localSyncAtSource(): Promise<HomeV1> {
+    const home = await newHome();
+    const cursor = LOCAL.steps.findIndex((step) => step.kind === "source_git_effect");
+    await plantCoordinator(home, LOCAL, journalFor(LOCAL, { phase: "external_applying", nextStep: cursor }));
+    await plantEffect(home, "git", SOURCE, null);
+    return home;
+  }
+
+  /** `automation_reconcile/live_only` with its cursor on `Q` and the after-files journal in `phase`. */
+  async function liveOnlyAtAfterFiles(phase: string | null): Promise<HomeV1> {
+    const home = await newHome();
+    await plantCoordinator(home, LIVE, journalFor(LIVE, { phase: "external_applying", nextStep: 0 }));
+    await plantEffect(home, "launchd", AFTER_FILES, phase === null ? null : effectJournalText(AFTER_FILES, phase));
+    return home;
+  }
+
+  /** Creates every missing ancestor directory of `relative`, then `relative` itself as a directory or file. */
+  async function plantStaging(home: HomeV1, relative: string, leaf: "directory" | "file" = "directory"): Promise<void> {
+    const segments = relative.split("/");
+    for (let depth = 1; depth < segments.length; depth += 1) {
+      const ancestor = segments.slice(0, depth).join("/");
+      if ((await home.fs.lstat(path(`${HOME}/${ancestor}`))) === null) await mkdir(home, ancestor);
+    }
+    if (leaf === "directory") await mkdir(home, relative);
+    else await write(home, relative, "staged\n");
+  }
+
+  function withEntry(
+    fs: LifecycleGuardedFileSystemV1,
+    target: string,
+    patch: Partial<LifecycleGuardedEntryV1>,
+  ): LifecycleGuardedFileSystemV1 {
+    return {
+      ...fs,
+      lstat: async (candidate) => {
+        const entry = await fs.lstat(candidate);
+        return entry !== null && candidate === target ? { ...entry, ...patch } : entry;
+      },
+    };
+  }
+
+  describe("terminal classification", () => {
+    it.each(["finalized", "rolled_back"])("classifies a %s Git effect journal as terminal and the closure clear", async (phase) => {
+      const home = await terminalLocalSync({ source: phase, destination: phase });
+
+      const snapshot = await inspect(home, { gitEffectPlanCodec: effectLedgerCodec() });
+
+      expect(snapshot.findings).toStrictEqual([]);
+      expect(snapshot.counts.gitEffectJournals).toBe(4);
+      expect(snapshot.closure).toStrictEqual({ kind: "clear" });
+    });
+
+    it.each(["planned", "applied", "verified", "compensating"])(
+      "keeps closure non-clear while a terminal coordinator's effect journal is %s",
+      async (phase) => {
+        const home = await terminalLocalSync({ destination: phase });
+
+        const snapshot = await inspect(home, { gitEffectPlanCodec: effectLedgerCodec() });
+
+        expect(snapshot.findings).toStrictEqual([]);
+        expect(snapshot.closure).toStrictEqual({ kind: "lifecycle_recovery_required" });
+      },
+    );
+
+    it("keeps a non-terminal launchd effect journal non-clear beside an active coordinator", async () => {
+      const home = await liveOnlyAtAfterFiles("applied");
+
+      const snapshot = await inspect(home, { launchdEffectPlanCodec: effectLedgerCodec() });
+
+      expect(snapshot.findings).toStrictEqual([]);
+      expect(snapshot.closure).toStrictEqual({ kind: "lifecycle_recovery_required" });
+    });
+
+    it("keeps refusing effect roots when the codec is null (no widening before Task 14)", async () => {
+      const home = await terminalLocalSync();
+
+      const snapshot = await inspect(home, { gitEffectPlanCodec: null });
+
+      expect(reasons(snapshot)).toContain("lifecycle_effect_root_unsupported");
+      expect(snapshot.closure).toStrictEqual({ kind: "lifecycle_recovery_required" });
+    });
+
+    it("refuses a journal whose embedded ID names the other effect", async () => {
+      const home = await newHome();
+      await plantCoordinator(home, LOCAL);
+      for (const id of LOCAL.forwardIds) await plantFoundationJournal(home, id);
+      await plantEffect(home, "git", SOURCE, effectJournalText(SOURCE, "finalized", { id: DESTINATION.id }));
+      await plantEffect(home, "git", DESTINATION, effectJournalText(DESTINATION, "finalized"));
+
+      const snapshot = await inspect(home, { gitEffectPlanCodec: effectLedgerCodec() });
+
+      expect(reasons(snapshot)).toStrictEqual(["lifecycle_effect_journal_identity"]);
+      expect(snapshot.closure).toStrictEqual({ kind: "lifecycle_recovery_required" });
+    });
+
+    it("refuses a journal bound to another plan hash", async () => {
+      const home = await newHome();
+      await plantCoordinator(home, LOCAL);
+      for (const id of LOCAL.forwardIds) await plantFoundationJournal(home, id);
+      await plantEffect(home, "git", SOURCE, effectJournalText(SOURCE, "finalized", { planHash: DESTINATION.planHash }));
+      await plantEffect(home, "git", DESTINATION, effectJournalText(DESTINATION, "finalized"));
+
+      const snapshot = await inspect(home, { gitEffectPlanCodec: effectLedgerCodec() });
+
+      expect(reasons(snapshot)).toStrictEqual(["lifecycle_effect_plan_hash"]);
+      expect(snapshot.closure).toStrictEqual({ kind: "lifecycle_recovery_required" });
+    });
+
+    it.each([
+      ["non-canonical", (text: string) => ` ${text}`],
+      ["codec-rejected", () => encodeCanonicalJson({ id: SOURCE.id, planHash: SOURCE.planHash })],
+      ["non-JSON", () => "journal\n"],
+    ])("refuses a %s effect journal", async (_label, mutate) => {
+      const home = await newHome();
+      await plantCoordinator(home, LOCAL);
+      for (const id of LOCAL.forwardIds) await plantFoundationJournal(home, id);
+      await plantEffect(home, "git", SOURCE, mutate(effectJournalText(SOURCE, "finalized")));
+      await plantEffect(home, "git", DESTINATION, effectJournalText(DESTINATION, "finalized"));
+
+      const snapshot = await inspect(home, { gitEffectPlanCodec: effectLedgerCodec() });
+
+      expect(reasons(snapshot)).toStrictEqual(["lifecycle_effect_journal_bytes"]);
+      expect(snapshot.closure).toStrictEqual({ kind: "lifecycle_recovery_required" });
+    });
+  });
+
+  describe("journal size ceilings", () => {
+    /** Pads a canonical journal to exactly `size` bytes; the pad is ASCII, one byte per character. */
+    function journalOfSize(ref: EffectRefV1, size: number): string {
+      const base = effectJournalText(ref, "finalized", { pad: "" }).length;
+      return effectJournalText(ref, "finalized", { pad: "a".repeat(size - base) });
+    }
+
+    it.each([
+      ["git", 16_777_216, false],
+      ["git", 16_777_217, true],
+      ["launchd", 1_048_576, false],
+      ["launchd", 1_048_577, true],
+    ] as const)("judges a %s effect journal of %i bytes (over the cap: %s)", async (kind, size, over) => {
+      const home = await newHome();
+      const codec = effectLedgerCodec();
+      if (kind === "git") {
+        await plantCoordinator(home, LOCAL);
+        for (const id of LOCAL.forwardIds) await plantFoundationJournal(home, id);
+        await plantEffect(home, "git", SOURCE, journalOfSize(SOURCE, size));
+        await plantEffect(home, "git", DESTINATION, effectJournalText(DESTINATION, "finalized"));
+      } else {
+        await plantCoordinator(home, LIVE);
+        await plantEffect(home, "launchd", AFTER_FILES, journalOfSize(AFTER_FILES, size));
+      }
+
+      const snapshot = await inspect(
+        home,
+        kind === "git" ? { gitEffectPlanCodec: codec } : { launchdEffectPlanCodec: codec },
+      );
+
+      expect(reasons(snapshot)).toStrictEqual(over ? ["lifecycle_effect_journal_shape"] : []);
+      expect(snapshot.closure.kind).toBe(over ? "lifecycle_recovery_required" : "clear");
+    }, 120_000);
+  });
+
+  describe("the Git staging grammar", () => {
+    const CHILDREN = ["post", "post/0", "before"] as const;
+    const SOURCE_STAGING = `staging/lifecycle/${LOCAL.id}/git/source/${SOURCE.id}`;
+
+    it("admits exact git/<side>/<ge-id> directories and the children its effect plan owns", async () => {
+      const home = await localSyncAtSource();
+      await plantStaging(home, `${SOURCE_STAGING}/post`);
+      await plantStaging(home, `${SOURCE_STAGING}/post/0`, "file");
+      await plantStaging(home, `${SOURCE_STAGING}/before`);
+      await plantStaging(home, `staging/lifecycle/${LOCAL.id}/git/destination/${DESTINATION.id}`);
+
+      const snapshot = await inspect(home, { gitEffectPlanCodec: effectLedgerCodec(CHILDREN) });
+
+      expect(snapshot.findings).toStrictEqual([]);
+      /** The coordinator directory, `git`, both sides, both ID directories, `post`, `post/0` and `before`. */
+      expect(snapshot.counts.lifecycleStagingMaximumPerCoordinator).toBe(9);
+    });
+
+    it.each([
+      `${SOURCE_STAGING}/extra`,
+      `${SOURCE_STAGING}/post/1`,
+      `staging/lifecycle/${LOCAL.id}/git/sideways`,
+      `staging/lifecycle/${LOCAL.id}/git/source/${DESTINATION.id}`,
+      `staging/lifecycle/${LOCAL.id}/git/destination/${SOURCE.id}`,
+      `staging/lifecycle/${LOCAL.id}/git/source/${formatAllocatedLifecycleId("ge", NONCE, 9n)}`,
+      `staging/lifecycle/${LOCAL.id}/git/source/${formatAllocatedLifecycleId("le", NONCE, 3n)}`,
+      `staging/lifecycle/${LOCAL.id}/launchd-process/home/child`,
+      `staging/lifecycle/${LOCAL.id}/launchd-process/other`,
+      `staging/lifecycle/${LOCAL.id}/launchd-process/tmp/bootstrap-plist`,
+    ])("refuses staging entry %s outside the closed grammar", async (entry) => {
+      const home = await localSyncAtSource();
+      await plantStaging(home, entry);
+
+      const snapshot = await inspect(home, {
+        gitEffectPlanCodec: effectLedgerCodec(CHILDREN),
+        launchdEffectPlanCodec: effectLedgerCodec(BOOTSTRAP_CHILDREN),
+      });
+
+      expect(snapshot.findings).toStrictEqual([
+        { reason: "lifecycle_staging_name", path: path(`${HOME}/${entry}`) },
+      ]);
+      expect(snapshot.closure).toStrictEqual({ kind: "lifecycle_recovery_required" });
+    });
+
+    it.each([
+      ["a symlink", { kind: "symlink" }],
+      ["a special file", { kind: "other" }],
+      ["a foreign owner", { ownerUid: UID + 1 }],
+    ] as const)("refuses an owned child that is %s", async (_label, patch) => {
+      const home = await localSyncAtSource();
+      await plantStaging(home, `${SOURCE_STAGING}/post`);
+      const target = `${HOME}/${SOURCE_STAGING}/post`;
+
+      const snapshot = await inspect(home, {
+        fs: withEntry(home.fs, target, patch),
+        gitEffectPlanCodec: effectLedgerCodec(CHILDREN),
+      });
+
+      expect(snapshot.findings).toStrictEqual([{ reason: "lifecycle_staging_shape", path: path(target) }]);
+    });
+
+    it("refuses an effect ID directory that is not a 0700 directory", async () => {
+      const home = await localSyncAtSource();
+      await plantStaging(home, SOURCE_STAGING);
+      const target = `${HOME}/${SOURCE_STAGING}`;
+
+      const snapshot = await inspect(home, {
+        fs: withEntry(home.fs, target, { mode: 0o755 }),
+        gitEffectPlanCodec: effectLedgerCodec(CHILDREN),
+      });
+
+      expect(snapshot.findings).toStrictEqual([{ reason: "lifecycle_staging_shape", path: path(target) }]);
+    });
+
+    it("refuses a malformed stagingChildren answer and admits nothing below the ID", async () => {
+      const home = await localSyncAtSource();
+      await plantStaging(home, `${SOURCE_STAGING}/post`);
+
+      const snapshot = await inspect(home, { gitEffectPlanCodec: effectLedgerCodec(["post/0"]) });
+
+      expect(reasons(snapshot)).toStrictEqual(["lifecycle_effect_staging_children", "lifecycle_staging_name"]);
+    });
+
+    it("keeps an empty planless git/<side>/<ge-id> tree a planless_staging orphan", async () => {
+      const home = await newHome();
+      await plantStaging(home, `staging/lifecycle/${LOCAL.id}/git/source/${SOURCE.id}`);
+
+      const snapshot = await inspect(home, { gitEffectPlanCodec: effectLedgerCodec(CHILDREN) });
+
+      expect(snapshot.findings).toStrictEqual([]);
+      expect(snapshot.coordinatorOrphans.map((orphan) => orphan.kind)).toStrictEqual(["planless_staging"]);
+    });
+
+    it("refuses anything below a planless effect ID directory", async () => {
+      const home = await newHome();
+      const entry = `staging/lifecycle/${LOCAL.id}/git/source/${SOURCE.id}/post`;
+      await plantStaging(home, entry);
+
+      const snapshot = await inspect(home, { gitEffectPlanCodec: effectLedgerCodec(CHILDREN) });
+
+      expect(snapshot.findings).toStrictEqual([{ reason: "lifecycle_staging_name", path: path(`${HOME}/${entry}`) }]);
+    });
+  });
+
+  describe("the launchd-process staging grammar", () => {
+    const PROCESS = `staging/lifecycle/${LIVE.id}/launchd-process`;
+    const SNAPSHOT = `${PROCESS}/tmp/bootstrap-plist`;
+
+    it.each([[["home", "tmp"]], [["tmp"]], [["home"]], [[]]] as const)(
+      "admits exact empty 0700 children %j, the creation and child-first removal states",
+      async (children) => {
+        const home = await liveOnlyAtAfterFiles(null);
+        await plantStaging(home, PROCESS);
+        for (const child of children) await plantStaging(home, `${PROCESS}/${child}`);
+
+        const snapshot = await inspect(home, { launchdEffectPlanCodec: effectLedgerCodec(BOOTSTRAP_CHILDREN) });
+
+        expect(snapshot.findings).toStrictEqual([]);
+        expect(snapshot.counts.lifecycleStagingMaximumPerCoordinator).toBe(2 + children.length);
+      },
+    );
+
+    it.each(["home", "tmp"])("refuses a %s child that is not a 0700 directory", async (child) => {
+      const home = await liveOnlyAtAfterFiles(null);
+      await plantStaging(home, `${PROCESS}/${child}`);
+      const target = `${HOME}/${PROCESS}/${child}`;
+
+      const snapshot = await inspect(home, {
+        fs: withEntry(home.fs, target, { mode: 0o755 }),
+        launchdEffectPlanCodec: effectLedgerCodec(BOOTSTRAP_CHILDREN),
+      });
+
+      expect(snapshot.findings).toStrictEqual([{ reason: "lifecycle_staging_shape", path: path(target) }]);
+    });
+
+    it("admits the one bootstrap snapshot prefix while its effect journal is at a non-terminal frontier", async () => {
+      const home = await liveOnlyAtAfterFiles("applied");
+      await plantStaging(home, `${PROCESS}/home`);
+      await plantStaging(home, SNAPSHOT, "file");
+
+      const snapshot = await inspect(home, { launchdEffectPlanCodec: effectLedgerCodec(BOOTSTRAP_CHILDREN) });
+
+      expect(snapshot.findings).toStrictEqual([]);
+    });
+
+    it.each([
+      ["no effect journal exists", null, BOOTSTRAP_CHILDREN],
+      ["the effect journal is finalized", "finalized", BOOTSTRAP_CHILDREN],
+      ["the effect journal is rolled back", "rolled_back", BOOTSTRAP_CHILDREN],
+      ["the effect plan owns no snapshot", "applied", ["tmp"]],
+    ] as const)("refuses the bootstrap snapshot when %s", async (_label, phase, children) => {
+      const home = await liveOnlyAtAfterFiles(phase);
+      await plantStaging(home, SNAPSHOT, "file");
+
+      const snapshot = await inspect(home, { launchdEffectPlanCodec: effectLedgerCodec(children) });
+
+      expect(snapshot.findings).toStrictEqual([
+        { reason: "lifecycle_staging_name", path: path(`${HOME}/${SNAPSHOT}`) },
+      ]);
+    });
+
+    it("refuses a bootstrap snapshot planted in home", async () => {
+      const home = await liveOnlyAtAfterFiles("applied");
+      const entry = `${PROCESS}/home/bootstrap-plist`;
+      await plantStaging(home, entry, "file");
+
+      const snapshot = await inspect(home, { launchdEffectPlanCodec: effectLedgerCodec(BOOTSTRAP_CHILDREN) });
+
+      expect(snapshot.findings).toStrictEqual([{ reason: "lifecycle_staging_name", path: path(`${HOME}/${entry}`) }]);
+    });
+
+    it.each([
+      ["over 1 MiB", { size: parseUInt64Decimal("1048577") }],
+      ["not mode 0600", { mode: 0o644 }],
+      ["hard-linked", { nlink: 2 }],
+      ["a directory", { kind: "directory" }],
+    ] as const)("refuses a bootstrap snapshot that is %s", async (_label, patch) => {
+      const home = await liveOnlyAtAfterFiles("applied");
+      await plantStaging(home, SNAPSHOT, "file");
+      const target = `${HOME}/${SNAPSHOT}`;
+
+      const snapshot = await inspect(home, {
+        fs: withEntry(home.fs, target, patch),
+        launchdEffectPlanCodec: effectLedgerCodec(BOOTSTRAP_CHILDREN),
+      });
+
+      expect(snapshot.findings).toStrictEqual([{ reason: "lifecycle_staging_shape", path: path(target) }]);
+    });
+  });
 });

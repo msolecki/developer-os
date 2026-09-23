@@ -138,6 +138,20 @@ export function parseManifestParticipantId(
   return value as ManifestParticipantIdV1;
 }
 
+export function parseGitEffectId(
+  value: unknown,
+  nonce: LifecycleInstallNonceV1 | null = null,
+): GitEffectIdV1 {
+  return parseAllocatedLifecycleId("ge", value, nonce);
+}
+
+export function parseLaunchdEffectId(
+  value: unknown,
+  nonce: LifecycleInstallNonceV1 | null = null,
+): LaunchdEffectIdV1 {
+  return parseAllocatedLifecycleId("le", value, nonce);
+}
+
 export function parseEffectiveUid(value: unknown, expected: number): EffectiveUidV1 {
   if (
     typeof value !== "number" ||
