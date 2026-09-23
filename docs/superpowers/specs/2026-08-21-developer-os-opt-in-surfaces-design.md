@@ -2368,7 +2368,7 @@ GitProcessPhaseBudgetV1 = {
 
 SupportedGitProcessTableV1 = {
   schemaVersion: 1,
-  id: "apple-git-155-process-v1",
+  id: "apple-git-157-process-v1",
   distributionId: SupportedGitDistributionV1.id,
   environmentProfiles: readonly GitEnvironmentProfileV1[12],
   ioProfiles: readonly GitProcessIoProfileV1[7],
@@ -2406,10 +2406,10 @@ ClosedGitProcessEdgeIdV1 =
 
 SupportedGitDistributionV1 = {
   schemaVersion: 1,
-  id: "apple-git-155-arm64-xcode-26.6-17F113",
-  xcode: { version: "26.6", build: "17F113" },
+  id: "apple-git-157-arm64-xcode-27.0-27A266a",
+  xcode: { version: "27.0", build: "27A266a" },
   architecture: "arm64",
-  buildOptionLines: readonly BoundedTextLineV1[11],
+  buildOptionLines: readonly BoundedTextLineV1[13],
   executables: readonly SupportedGitExecutableV1[3],
   execPathLinks: readonly { name: "git" | "git-pack-objects" |
     "git-receive-pack" | "git-index-pack" | "git-unpack-objects" |
@@ -2418,6 +2418,10 @@ SupportedGitDistributionV1 = {
   processTable: SupportedGitProcessTableV1
 }
 ```
+
+**Amended 2026-09-23 (D59).** The process-table ID, distribution ID, Xcode identity and the fixed
+`buildOptionLines` count above are re-pinned to the row measured on 2026-09-23 (NEW-84). The count is
+13, which keeps exact-set identity; the version line is not a build-option line.
 
 Every schema above is exact-key and uses `CanonicalJsonV1`. Top-level `environmentProfiles`,
 `ioProfiles`, `phaseBudgets`, `nodes`, `edges`, and `executables` are non-empty, unique, and sorted by
@@ -2455,44 +2459,56 @@ suffix is a non-empty argument. `versionLines` is empty exactly for `git_remote_
 no independent version probe in this row; it is non-empty for `git_main` and `system_ssh`. Executable
 bytes/link identity, not a fabricated helper version line, remains the admission authority.
 
-The initial and only distribution row was measured 2026-08-26. The first line below is the exact
-selected-Xcode identity; the remaining eleven are `buildOptionLines` in order:
+**Amended 2026-09-23 (D59).** The only distribution row was measured 2026-09-23 (NEW-84); it
+replaces the 2026-08-26 row. The first line below is the exact selected-Xcode identity, the second is
+the `git_main` version line, and the remaining thirteen are `buildOptionLines` in order:
 
 ```text
-Xcode 26.6 (17F113)
-git version 2.50.1 (Apple Git-155)
+Xcode 27.0 (27A266a)
+git version 2.54.0 (Apple Git-157)
 cpu: arm64
 no commit associated with this build
 sizeof-long: 8
 sizeof-size_t: 8
 shell-path: /bin/sh
+rust: disabled
 feature: fsmonitor--daemon
 libcurl: 8.7.1
 zlib: 1.2.12
 SHA-1: SHA1_DC
 SHA-256: SHA256_BLK
+default-ref-format: files
+default-hash: sha1
 ```
 
-The root-owned mode-`0755` main target is
-`/Applications/Xcode.app/Contents/Developer/usr/bin/git`, size 3,704,880 and SHA-256
-`10f9c1df894525ae4c7454258febab6d3d25071062b42cb48dbb1842cdffd2a9`.
+**Amended 2026-09-23 (D59).** The root-owned mode-`0755` main target is
+`/Applications/Xcode.app/Contents/Developer/usr/bin/git`, size 3,837,392 and SHA-256
+`9a1c8fc68dc75e1b3c0cd8e5ad9d13ac9bc92cb53c9578b3cff4beaf2e9b1e70`.
 Exec-path names `git`, `git-pack-objects`, `git-receive-pack`, `git-index-pack`, and
 `git-unpack-objects` must be root-owned mode-`0755`, size-13 symlinks `../../bin/git` at the exact
 `/Applications/Xcode.app/Contents/Developer/usr/libexec/git-core/<name>` paths.
 The measured `git-unpack-objects` link remains part of distribution identity but has no process-table
 node or permit; `receive.unpackLimit=0` makes any attempt to execute it a closed-graph refusal.
 `git-remote-https` at that root must be the root-owned mode-`0755`, size-15 exact symlink
-`git-remote-http`; its root-owned mode-`0755` physical target has size 2,305,920 and SHA-256
-`76169453971bd5e40598de217998bcb77ace9fd1ec72ba97fbaa68c17ad56611`. Planning captures
+`git-remote-http`; its root-owned mode-`0755` physical target has size 2,346,832 and SHA-256
+`1a68d873ea23502f44e63d8013ad2d1374a8f0161fe4a07ba8f708f686794124`. Planning captures
 `{ dev: UInt64DecimalV1, ino: UInt64DecimalV1, size, hash }` for every resolved target and symlink identity and rechecks the row before
 each Git phase and immediately before each real exec. A changed Xcode selection, path, link, byte,
-build-output line, architecture, or future binary that merely reports `2.50.1` is
+build-output line, architecture, or future binary that merely reports `2.54.0` is
 `unsupported_git_distribution` before repository or network spawn. Adding a row requires a new
 measured process trace, reviewed hashes, and gates in the same change.
 
-The row also pins `/usr/bin/ssh` as the `system_ssh` executable: root-owned mode `0755`, size
-1,555,472, SHA-256 `470f812f6e71ee4ca1b49c79f9c2982c054493e22502d4648bd010feb4b2a9b2`, and version line
-`OpenSSH_10.2p1, LibreSSL 3.3.6`. Its invocation-time device/inode is plan evidence, not compiled
+**Amended 2026-09-23 (D59).** The process trace is recorded per transport. For the 2026-09-23 row an
+agent records the local/file-transport trace on temporary repositories with a local bare remote, with
+no live-machine change and no network. The HTTPS and SSH traces need a disposable remote the founder
+owns; until each is recorded, that transport refuses `unsupported_git_distribution` while local stays
+available. Statements in this section that name Git 2.50.1 behaviour were observed on the replaced
+row.
+
+**Amended 2026-09-23 (D59).** The row also pins `/usr/bin/ssh` as the `system_ssh` executable:
+root-owned mode `0755`, size 1,584,576, SHA-256
+`17542914a3fb55e7efeb35a90d594a21c84bf6a4cfe1fc8ddff5606dc2658fc3`, and version line
+`OpenSSH_10.3p1, LibreSSL 3.3.6`. Its invocation-time device/inode is plan evidence, not compiled
 machine identity, and is rechecked immediately before exec. Any other system SSH bytes refuse the SSH
 transport while HTTPS/local remain independently available under the same Git row.
 
@@ -2516,7 +2532,7 @@ distribution_probe = {
   GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0",
   DEVELOPER_OS_GIT_SUPERVISOR_SOCKET: <supervisor_socket>,
   DEVELOPER_OS_GIT_INVOCATION_CAPABILITY: <invocation_capability>,
-  DEVELOPER_OS_GIT_DISTRIBUTION: "apple-git-155-arm64-xcode-26.6-17F113",
+  DEVELOPER_OS_GIT_DISTRIBUTION: "apple-git-157-arm64-xcode-27.0-27A266a",
   DEVELOPER_OS_GIT_PHASE: "distribution_probe"
 }
 
@@ -2530,7 +2546,7 @@ SOURCE_BASE(<phase>) = {
   GIT_ALTERNATE_OBJECT_DIRECTORIES: <source_alternate>,
   DEVELOPER_OS_GIT_SUPERVISOR_SOCKET: <supervisor_socket>,
   DEVELOPER_OS_GIT_INVOCATION_CAPABILITY: <invocation_capability>,
-  DEVELOPER_OS_GIT_DISTRIBUTION: "apple-git-155-arm64-xcode-26.6-17F113",
+  DEVELOPER_OS_GIT_DISTRIBUTION: "apple-git-157-arm64-xcode-27.0-27A266a",
   DEVELOPER_OS_GIT_PHASE: <phase>
 }
 
@@ -2549,7 +2565,7 @@ ssh_bridge = {
   LC_ALL: "C", LANG: "C", TMPDIR: <temporary_directory>,
   DEVELOPER_OS_GIT_SUPERVISOR_SOCKET: <supervisor_socket>,
   DEVELOPER_OS_GIT_INVOCATION_CAPABILITY: <invocation_capability>,
-  DEVELOPER_OS_GIT_DISTRIBUTION: "apple-git-155-arm64-xcode-26.6-17F113",
+  DEVELOPER_OS_GIT_DISTRIBUTION: "apple-git-157-arm64-xcode-27.0-27A266a",
   DEVELOPER_OS_GIT_PHASE: "push_transport"
 }
 system_ssh_no_agent = {
@@ -2561,7 +2577,7 @@ local_helper = {
   LC_ALL: "C", LANG: "C", TMPDIR: <temporary_directory>,
   DEVELOPER_OS_GIT_SUPERVISOR_SOCKET: <supervisor_socket>,
   DEVELOPER_OS_GIT_INVOCATION_CAPABILITY: <invocation_capability>,
-  DEVELOPER_OS_GIT_DISTRIBUTION: "apple-git-155-arm64-xcode-26.6-17F113",
+  DEVELOPER_OS_GIT_DISTRIBUTION: "apple-git-157-arm64-xcode-27.0-27A266a",
   DEVELOPER_OS_GIT_PHASE: "push_transport",
   DEVELOPER_OS_GIT_LOCAL_TOKEN: <opaque_local_token>,
   DEVELOPER_OS_GIT_DESTINATION_SHADOW: <private_destination_shadow>
@@ -2574,7 +2590,7 @@ destination_receive = {
   GIT_DIR: <destination_git_dir>,
   DEVELOPER_OS_GIT_SUPERVISOR_SOCKET: <supervisor_socket>,
   DEVELOPER_OS_GIT_INVOCATION_CAPABILITY: <invocation_capability>,
-  DEVELOPER_OS_GIT_DISTRIBUTION: "apple-git-155-arm64-xcode-26.6-17F113",
+  DEVELOPER_OS_GIT_DISTRIBUTION: "apple-git-157-arm64-xcode-27.0-27A266a",
   DEVELOPER_OS_GIT_PHASE: "destination_receive"
 }
 ```
@@ -3539,11 +3555,11 @@ LaunchdProcessArgvV1 =
 
 LaunchdPreviewObservationProcessTableV1 = {
   schemaVersion: 1,
-  id: "launchctl-macos-26.5.2-25F84-preview-v1",
-  operatingSystem: { productName: "macOS", productVersion: "26.5.2",
-    buildVersion: "25F84" },
-  executable: { path: "/bin/launchctl", ownerUid: 0, mode: 493, size: 364448,
-    sha256: "b1f2b90f349938cc4c3c9234f11cefd05545f7b4bfe9b1751ac01f1cb27d3714" },
+  id: "launchctl-macos-26.6.2-25G83-preview-v1",
+  operatingSystem: { productName: "macOS", productVersion: "26.6.2",
+    buildVersion: "25G83" },
+  executable: { path: "/bin/launchctl", ownerUid: 0, mode: 493, size: 363488,
+    sha256: "b4dbf509754d8e1117f7851baa93ede75bc75218c48d6ddf19fbb1505d261be7" },
   emptyDirectory: { path: "/private/var/empty", ownerUid: 0, mode: 493 },
   environment: {
     HOME: "/private/var/empty",
@@ -3561,11 +3577,11 @@ LaunchdPreviewObservationProcessTableV1 = {
 
 SupportedLaunchdProcessTableV1 = {
   schemaVersion: 1,
-  id: "launchctl-macos-26.5.2-25F84-fd3-v1",
-  operatingSystem: { productName: "macOS", productVersion: "26.5.2",
-    buildVersion: "25F84" },
-  executable: { path: "/bin/launchctl", ownerUid: 0, mode: 493, size: 364448,
-    sha256: "b1f2b90f349938cc4c3c9234f11cefd05545f7b4bfe9b1751ac01f1cb27d3714" },
+  id: "launchctl-macos-26.6.2-25G83-fd3-v1",
+  operatingSystem: { productName: "macOS", productVersion: "26.6.2",
+    buildVersion: "25G83" },
+  executable: { path: "/bin/launchctl", ownerUid: 0, mode: 493, size: 363488,
+    sha256: "b4dbf509754d8e1117f7851baa93ede75bc75218c48d6ddf19fbb1505d261be7" },
   staging: {
     root: LaunchdProcessDirectoryIdentityV1,
     home: LaunchdProcessDirectoryIdentityV1,
@@ -3577,7 +3593,9 @@ SupportedLaunchdProcessTableV1 = {
   argvAlternatives: readonly LaunchdProcessArgvV1[4],
   observationDeadlineMs: 30000,
   transitionDeadlineMs: 30000,
-  terminationGraceMs: 100
+  terminationGraceMs: 100,
+  certification: { certifiedAt: UtcTimestampV1,
+    fixtureTranscriptSha256: LowerHexSha256 } | null
 }
 
 LaunchdProcessDirectorySlotV1 =
@@ -3607,7 +3625,8 @@ SupportedLaunchdProcessTableTemplateV1 = {
   argvAlternatives: SupportedLaunchdProcessTableV1.argvAlternatives,
   observationDeadlineMs: 30000,
   transitionDeadlineMs: 30000,
-  terminationGraceMs: 100
+  terminationGraceMs: 100,
+  certification: SupportedLaunchdProcessTableV1.certification
 }
 
 LaunchdPlanPreviewEntryV1 = {
@@ -3710,6 +3729,11 @@ LaunchdPlanV1 = {
 }
 ```
 
+**Amended 2026-09-23 (D59).** Both `launchctl` tables above are re-pinned to the row measured on
+2026-09-23 (NEW-84): macOS 26.6.2 build `25G83`, `/bin/launchctl` size 363488 and the measured SHA-256.
+`SupportedLaunchdProcessTableV1` and its template gain the `certification` field; the preview
+observation table does not.
+
 The plist renderer has one byte grammar. It emits the XML declaration
 `<?xml version="1.0" encoding="UTF-8"?>`, then literal
 `<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">`, then
@@ -3778,6 +3802,12 @@ whose private snapshot has already been unlinked, loads the plist's generated la
 descendant, open descriptor, or staging child. A fixture failure or missing certification is
 `unsupported_launchd_distribution`; the adapter never substitutes the mutable plist pathname or a
 still-linked snapshot.
+
+**Amended 2026-09-23 (D59).** The row records that evidence in its `certification` field:
+`certifiedAt` and the SHA-256 of the fixture transcript. `null` means uncertified, and
+`SupportedLaunchdProcessTableV1` validation then refuses every mutation as
+`unsupported_launchd_distribution`; read-only observation, preview and `automation status` still
+report state. The re-pin change that certifies the row fills the field.
 
 Before any forward or reverse bootstrap, the adapter guarded-opens the exact plan-bound plist with
 no-follow semantics and verifies its `LaunchdBootstrapPlistIdentityV1`, hash, generated Label, and
@@ -4253,8 +4283,8 @@ only the global mutation-lock file retains the stable never-unlink contract.
 | Git cardinality is closed | boundary arithmetic/property fixtures cover 100,000 blobs, 100,000 trees, one commit, four source-control transitions, the 511-entry enable-only repository fingerprint, and four destination transitions; the matching 200,005 effect/observation and million-leaf staging schemas cover the shared count worst case, while the next object, transition, fingerprint entry, companion leaf, encoded-plan byte, or computed reachable-journal byte refuses before ID reservation (the independent 16-MiB plan and Git-journal bounds may each refuse an otherwise count-valid concrete plan earlier) |
 | Git distribution identity is exact | the initial row asserts Xcode/build-options bytes, architecture, canonical paths, root ownership/modes, symlink targets, sizes, and both literal SHA-256 values; change each field independently and plant a same-version different binary to prove `unsupported_git_distribution` before repository/network spawn |
 | Git exec gateway enforces descendants | non-empty exact-name tests prove the five-name gateway set, gateway-only Git `PATH`/`GIT_EXEC_PATH`, direct absolute top-level Git, guarded Node shebang/template hashes, one-shot supervisor permits, PID/PPID and same-PID transitions, target identity rechecks, and exit-126/process-group refusal for wrong name/argv/env/order/reuse; `GIT_SSH` is the exact gateway bridge path and a requested unknown child has no executable |
-| process table is canonical | strict schema/round-trip tests pin the one Git distribution ID, 11 build lines, three executable identities including empty helper `versionLines`, six exec-path links, twelve exact environment maps, seven I/O profiles, four inherited phase budgets, 21 node and 21 edge IDs including the no-child distribution probe, and every field-specific empty/ordered/unique array rule, literal/semantic/joined argv alternative and cardinality, zero through 200,001 pack objects, counted-proxy byte/hash totals, idle/wall/group-termination outcomes, empty joined fragments with non-empty combined tokens, and the domain-separated table/transcript hashes; one top-level push attempt has one non-resettable 600-second phase while a later exact `push_pending` invocation receives a new independently gated phase; unknown keys, free strings, wildcard/regex/ellipsis tokens, extra environment keys, an unexpanded slot, counter reset, over-limit byte, or deadline overrun refuses before further authority |
-| process tree is level-closed | exact Apple-Git-155 spawn/exec tests prove every push reaches one transport branch; a ref-update reaches the literal pack-objects argv and local index-pack child through named permits, including a zero-object pack, while an exact up-to-date target reaches neither pack nor index and yields only its closed porcelain outcome/zero-transition destination effect. HTTPS and local branches pass exact dispatcher and helper transitions, the SSH gateway consumes both entry and system-SSH same-PID permits, local helper reaches only shadow-bound `git-receive-pack --skip-connectivity-check <private_destination_shadow>`, and receive-pack reaches only the conditional gateway-`git` index-pack argv under `receive.unpackLimit=0`; `unpack-objects`, `rev-list`, maintenance, shell, and vendor nodes have neither process-table node nor edge, and every wrong-level transition refuses |
+| process table is canonical | strict schema/round-trip tests pin the one Git distribution ID, 13 build lines (amended 2026-09-23, D59), three executable identities including empty helper `versionLines`, six exec-path links, twelve exact environment maps, seven I/O profiles, four inherited phase budgets, 21 node and 21 edge IDs including the no-child distribution probe, and every field-specific empty/ordered/unique array rule, literal/semantic/joined argv alternative and cardinality, zero through 200,001 pack objects, counted-proxy byte/hash totals, idle/wall/group-termination outcomes, empty joined fragments with non-empty combined tokens, and the domain-separated table/transcript hashes; one top-level push attempt has one non-resettable 600-second phase while a later exact `push_pending` invocation receives a new independently gated phase; unknown keys, free strings, wildcard/regex/ellipsis tokens, extra environment keys, an unexpanded slot, counter reset, over-limit byte, or deadline overrun refuses before further authority |
+| process tree is level-closed | exact Apple-Git-157 (amended 2026-09-23, D59) spawn/exec tests prove every push reaches one transport branch; a ref-update reaches the literal pack-objects argv and local index-pack child through named permits, including a zero-object pack, while an exact up-to-date target reaches neither pack nor index and yields only its closed porcelain outcome/zero-transition destination effect. HTTPS and local branches pass exact dispatcher and helper transitions, the SSH gateway consumes both entry and system-SSH same-PID permits, local helper reaches only shadow-bound `git-receive-pack --skip-connectivity-check <private_destination_shadow>`, and receive-pack reaches only the conditional gateway-`git` index-pack argv under `receive.unpackLimit=0`; `unpack-objects`, `rev-list`, maintenance, shell, and vendor nodes have neither process-table node nor edge, and every wrong-level transition refuses |
 | tree construction is NUL-safe | exact fixtures with ordinary, tab, LF, and CR `VaultSegmentV1` names prove only `git mktree -z` receives the NUL-delimited mode/type/OID/name grammar and yields the planned tree OID; line-oriented input, symlink/gitlink modes, duplicate names, missing objects, invalid order, or more than 16 MiB refuses |
 | hostile Git config is inert | every source and local-destination Git subprocess uses its corresponding shadow; exact byte fixtures pin `SanitizedGitShadowConfigV1` section/key order, escaping/LF, empty hooks, fsmonitor/signing/maintenance/GC/proxy/credential resets, the one optional remote or receive arm, and absence of every include, pushurl, URL rewrite, proc-receive, command-bearing, or extra key. `GitConfigQuotedPathV1` rejects every C0/C1/line-break boundary before rendering while quote/backslash fixtures round-trip through the sole escape grammar. Every non-null persisted push binds the domain-separated source template hash, local additionally binds its destination template, and initial/existing/retry permits de-slot fresh concrete paths/token back to that template before binding projection bytes and config/hooks identities; no source effect is needed for this authority. Real source/destination hooks, filters, fsmonitor, signing, credential/custom remote helpers, SSH commands, proxy redirects, `pushurl`, URL rewrites, and includes cannot execute or redirect the validated push. A cross-host/path HTTPS 3xx fixture proves `http.followRedirects=false` issues no second request and leaves the push retry-only rather than accepting another destination |
 | transport set is closed | non-empty exact input cases accept only local/file, HTTPS, and sanitized SSH forms and refuse unknown/future schemes plus every user/config-supplied `::` helper form; only the in-process coordinator can synthesize the one invocation-scoped internal helper URL |
@@ -4270,8 +4300,8 @@ only the global mutation-lock file retains the stable never-unlink contract.
 | automation is closed | non-empty exact enum, exhaustive dispatch, `maySpawnVendor: false`, exact generation-bound argv including guarded `--product-home`, sanitized Git children, and scheduled doctor without external probes; custom-home fixtures prove scheduled bootstrap uses the argument before normal context construction and ignores ambient `HOME`, `DEVELOPER_OS_HOME`, and `DEVELOPER_OS_BRAIN`, while interactive mode rejects the hidden argument |
 | every stale job is inert | all four jobs first authenticate the supplied generation from exact manifest-owned plist/install evidence without requiring active current provenance, then under the lifetime lease/global lock recheck closure, that evidence, strict config, activation, and eligibility. Unowned/missing/drifted installation evidence grants no status write; a non-clear journal exits silently except that exact active `git-sync` `retry_only` may consume only its persisted push plan, and the post-handler recheck suppresses log/status if that retry remains non-clear. With clear closure, disabled, incomplete, malformed-config, inactive, or mismatched automation writes only `automation_disabled`; active automation with only Git ineligible writes only `git_disabled`. Both branches perform no handler, Brain-root resolution, Git, vendor, or network effect |
 | schedules are complete | first enable refuses every missing eligible job; reconcile preserves old schedules and requires newly eligible Git; stored entries are exactly the three mandatory jobs plus optional fourth `git-sync` in canonical order and use only the normalized tagged schedule union |
-| launchd identity is closed | exact-set tests bind all four job IDs to frozen base labels, canonical plist paths, the guarded canonical product home, exact nine-argument scheduled argv, the exact `gui/<effective-uid>` domain, domain-separated generation projections, generated labels, and the one five-key canonical plist XML: exact ProgramArguments, hourly/daily/weekly calendar dictionaries, weekday mapping, XML escaping/order/LF, and literal `/dev/null` output paths; every product-home change, ambient override, extra key/argument, alternate encoding, alias, domain, filename, and fifth dictionary entry refuses. The pinned 25F84 `/bin/launchctl` identity and hash-bound process-table template/expanded table admit only domain/service `print`, exact FD-3 `/dev/fd/3` bootstrap from an already-unlinked private snapshot, and exact `bootout` argv; domain-targeted exit-0/113 fixtures distinguish unloaded, exact old, exact new, unsuffixed/exact-label collision, dual-generation, wrong-domain, truncated, over-limit, and unobservable states without parsing or persisting raw `print` output |
-| launchd replace is ordered | every row of the exhaustive install/replace/keep/remove live/file table has forward/reverse crash injection; affected old generations unload before plist mutation and new generations snapshot-bootstrap only after matching bytes/identity verify, with exact observable states across both command-before-observation windows. A disposable pinned-macOS certification proves launchctl consumes unlinked inherited FD 3; unit races rename, replace, and write the real plist in place after verification while proving the loaded generated label remains attributable to the immutable snapshot. Snapshot-creation fixtures kill after linked create, every partial-prefix write, sync, open, and immediately before/after unlink; only the exact current-frontier `LaunchdBootstrapSnapshotCreationV1` may be completed or guarded-cleaned while live state remains the directional command preimage. Spawn-refusal, timeout, success, reverse, and recovery fixtures prove the parent's source/snapshot descriptors and child's sole FD 3 return to the open-FD baseline; unsupported certification refuses with no linked or pathname fallback. Query/mutation fixtures enforce at most 13 read-only `print` processes in each preview or revalidation pass, hash-bind the exact root/home/tmp path-owner-mode-dev-ino mutation-staging identities, require the root's two-child set and entry-empty home/tmp before/after every mutation-table spawn, shared 30-second observation/transition deadlines, stream/idle/process-wall bounds, SIGTERM→100-ms→SIGKILL group termination, complete reaping, guarded empty pre-intent cleanup, retained nonempty/unknown children, and post-intent cursor-preserving recovery-required outcome |
+| launchd identity is closed | exact-set tests bind all four job IDs to frozen base labels, canonical plist paths, the guarded canonical product home, exact nine-argument scheduled argv, the exact `gui/<effective-uid>` domain, domain-separated generation projections, generated labels, and the one five-key canonical plist XML: exact ProgramArguments, hourly/daily/weekly calendar dictionaries, weekday mapping, XML escaping/order/LF, and literal `/dev/null` output paths; every product-home change, ambient override, extra key/argument, alternate encoding, alias, domain, filename, and fifth dictionary entry refuses. The pinned 25G83 (amended 2026-09-23, D59) `/bin/launchctl` identity and hash-bound process-table template/expanded table admit only domain/service `print`, exact FD-3 `/dev/fd/3` bootstrap from an already-unlinked private snapshot, and exact `bootout` argv; domain-targeted exit-0/113 fixtures distinguish unloaded, exact old, exact new, unsuffixed/exact-label collision, dual-generation, wrong-domain, truncated, over-limit, and unobservable states without parsing or persisting raw `print` output |
+| launchd replace is ordered | every row of the exhaustive install/replace/keep/remove live/file table has forward/reverse crash injection; affected old generations unload before plist mutation and new generations snapshot-bootstrap only after matching bytes/identity verify, with exact observable states across both command-before-observation windows. A disposable pinned-macOS certification proves launchctl consumes unlinked inherited FD 3; unit races rename, replace, and write the real plist in place after verification while proving the loaded generated label remains attributable to the immutable snapshot. Snapshot-creation fixtures kill after linked create, every partial-prefix write, sync, open, and immediately before/after unlink; only the exact current-frontier `LaunchdBootstrapSnapshotCreationV1` may be completed or guarded-cleaned while live state remains the directional command preimage. Spawn-refusal, timeout, success, reverse, and recovery fixtures prove the parent's source/snapshot descriptors and child's sole FD 3 return to the open-FD baseline; unsupported certification, including a `null` `certification` field (amended 2026-09-23, D59), refuses with no linked or pathname fallback. Query/mutation fixtures enforce at most 13 read-only `print` processes in each preview or revalidation pass, hash-bind the exact root/home/tmp path-owner-mode-dev-ino mutation-staging identities, require the root's two-child set and entry-empty home/tmp before/after every mutation-table spawn, shared 30-second observation/transition deadlines, stream/idle/process-wall bounds, SIGTERM→100-ms→SIGKILL group termination, complete reaping, guarded empty pre-intent cleanup, retained nonempty/unknown children, and post-intent cursor-preserving recovery-required outcome |
 | lock behavior is serialized | interactive contention refuses; a runner guarded-opens the pre-created lease, acquires it before any global-lock wait, rechecks marker/path identity, and holds it through exit; same-job contention exits silently, global contention waits no more than ten minutes, and a still-busy final nonblocking acquire exits silently, while a successful final acquire rechecks marker/closure/stage-1 evidence/current provenance under the global lock and serializes only `skipped_lock_timeout` for active state or `automation_disabled` for inactive state through the already-held lease, without handler effects. Absent/replaced lease fixtures exit silently only for a present marker, absent manifest, or the exact typed `uninstall_draining` coordinator after its verified lease removal; every still-installed state without that proof is recovery-required |
 | logs are bounded and safe | redaction precedes the Foundation file transaction; each exact slot stays at or below 1 MiB; the eleventh generation and transaction temp files are discarded; each terminal status/log transaction then compacts its exact journal, staging, backup metadata, and stable lock so cadence cannot exhaust the ledger |
 | uninstall drains without deadlock | pause a runner before lease acquisition, after lease acquisition/before global acquisition, and while queued on the global lock; marker publication plus global release makes each exit silently, uninstall acquires all four lifetime leases without the global lock, retains them while reacquiring/revalidating, removes their exact paths while descriptors remain held, and no runner/late opener writes handler status after `uninstalling` exists. Crash fixtures after each lease removal prove `LifecycleJournalClosureV1.uninstall_draining` is returned only for the one exact plan/cursor/manifest binding and cannot be synthesized by path absence |
@@ -4286,6 +4316,12 @@ Git integration uses only temporary repositories and local bare remotes with syn
 no real credential. Launchd integration uses only injected filesystems, clocks, process runners, and
 launchd runners. Enumerators and policy gates assert their expected sets before asserting properties
 over them.
+
+**Amended 2026-09-23 (D59).** A test that execs the pinned Git or the pinned `/bin/launchctl` lives in
+a file named `*.pinned-host.test.ts`. On any other host it refuses by design, and never skips. The
+default suite (`test:suite`) excludes these files, and `npm run test:pinned-host` runs them locally
+at phase close and at every re-pin; CI still runs every injected-runner test. A `*.pinned-host.test.ts`
+file is never also a `*.v2.test.ts` file.
 
 ## 8. Produced interfaces, sequencing, and residuals
 
@@ -4362,3 +4398,10 @@ filesystem/process/clock dependencies rather than reaching global state directly
    bookkeeping path is admitted by fresh `init` and absent-manifest uninstall; neither grants anything a
    same-uid process could not already do. **Owner: the accepted local-write boundary. Added 2026-09-17
    (A12).**
+10. **A stale launchd row strands loaded jobs.** Once the certified launchd row no longer matches the
+    host (for example after a macOS update), `automation disable` and the `uninstall/present_manifest`
+    variant cannot `bootout`, and uninstall refuses until the row is re-pinned. The refusal names the
+    exact manual `launchctl bootout gui/<uid>/<generated-label>` for each installed generated label and
+    preserves every file. Residual 6 covers the same drift for Git. **Owner: DOS-P9 compatibility
+    documentation; `bootout` on an unsupported build needs a new reviewed design. Amended 2026-09-23
+    (D59).**
