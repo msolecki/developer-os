@@ -1258,7 +1258,7 @@ export async function inspectManagedDrift(
   return (await inspectV2Drift(context, manifest, paths)).filter((finding) => !isVendor(finding.owner));
 }
 
-async function inspectV2Drift(
+export async function inspectV2Drift(
   context: CliContext,
   manifest: InstallationManifestV2,
   paths: RuntimePaths,

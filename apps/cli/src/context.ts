@@ -65,6 +65,7 @@ import { BootstrapExecutor } from "./bootstrap/executor.js";
 import { inspectBootstrapEvidenceAdmission } from "./bootstrap/report.js";
 import { createLifecycleContext } from "./lifecycle/context.js";
 import type { CliLifecycleContext } from "./lifecycle/context.js";
+import type { CliUpdateContext } from "./update/context.js";
 import { createGatedTransactionExecutor } from "./lifecycle/mutation-gate.js";
 import type { CliTransactionExecutor } from "./lifecycle/mutation-gate.js";
 import type { PackagedReleaseSourceV1 } from "./update/packaged-release.js";
@@ -197,6 +198,8 @@ export interface CliContext {
    * refuses when the composition root did not supply one.
    */
   readonly lifecycle?: CliLifecycleContext | undefined;
+  /** The plan-only update ports; absent, `update` binds the production ones from this context. */
+  readonly update?: CliUpdateContext | undefined;
 }
 
 export const NODE_FILE_SYSTEM: CliFileSystem = {

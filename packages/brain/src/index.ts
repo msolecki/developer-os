@@ -70,6 +70,7 @@ export type {
   RetrievalResult,
 } from "./retrieval/index.js";
 export { BRAIN_MIGRATIONS } from "./migrations/index.js";
+export { isBrainMigrationPath } from "./migrations/update/index.js";
 export type { BrainMigration, VaultSnapshot } from "./migrations/index.js";
 export {
   AGENT_DETECTION_ROWS,

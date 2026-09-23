@@ -17,6 +17,10 @@ import {
 import type { CommandFixture } from "./commands/testing.js";
 import type { CliIo } from "./io.js";
 import { renderReview, run } from "./main.js";
+import { renderUpdate } from "./commands/update/index.js";
+import type { UpdateCommandResultV1 } from "./commands/update/index.js";
+import { createUpdateFixture } from "./update/testing.js";
+import type { UpdateFixture } from "./update/testing.js";
 import type { CliContextFactory } from "./main.js";
 import type { HookEnvironment } from "./hooks/entry.js";
 import { PRODUCT_VERSION } from "./context.js";
@@ -1449,5 +1453,112 @@ describe("hook-mode routing", () => {
 
   it("leaves ordinary dispatch unchanged", async () => {
     await refuses(["nonsense"]);
+  });
+});
+
+describe("update dispatch", () => {
+  interface UpdateHarness {
+    readonly fixture: CommandFixture;
+    readonly update: UpdateFixture;
+    contextBuilds: number;
+  }
+
+  /** An installed-release world behind the injected update ports: 1.1.0 active, 1.0.0 retained, 1.2.0 published. */
+  async function updateHarness(label: string): Promise<UpdateHarness> {
+    const fixture = await createCommandFixture(label);
+    const update = createUpdateFixture({
+      releases: [{ version: "1.0.0", sequence: "1" }, { version: "1.1.0", sequence: "2" }, { version: "1.2.0", sequence: "3" }],
+      active: "1.1.0",
+      rollbackPrevious: "1.0.0",
+    });
+    return { fixture, update, contextBuilds: 0 };
+  }
+
+  function invoke(harness: UpdateHarness, argv: readonly string[]): Promise<number> {
+    const context = { ...harness.fixture.context, update: harness.update.update };
+    return run(argv, harness.fixture.io, () => {
+      harness.contextBuilds += 1;
+      return context;
+    });
+  }
+
+  async function runMain(
+    argv: readonly string[],
+    harness: UpdateHarness,
+  ): Promise<{ readonly exitCode: number; readonly data: UpdateCommandResultV1 }> {
+    const exitCode = await invoke(harness, argv.includes("--json") ? argv : [...argv, "--json"]);
+    const published = JSON.parse(harness.fixture.io.out.at(-1) ?? "null") as { readonly data: UpdateCommandResultV1 };
+    return { exitCode, data: published.data };
+  }
+
+  it.each([
+    [["update"], "preview"],
+    [["update", "--version", "1.2.0", "--json"], "preview"],
+    [["update", "rollback"], "rollback_preview"],
+  ] as const)("accepts %j", async (argv, outcome) => {
+    const harness = await updateHarness("update-accepts");
+    const result = await runMain(argv, harness);
+    expect(result.exitCode).toBe(0);
+    expect(result.data.outcome).toBe(outcome);
+    expect(harness.contextBuilds).toBe(1);
+  });
+
+  const illegalUpdateArgv: readonly (readonly string[])[] = [
+    ["update", "1.2.0"],
+    ["update", "--version"],
+    ["update", "--version", "1.2.0-rc.1"],
+    ["update", "--version", "1.2.0", "--version", "1.2.0"],
+    ["update", "--dry-run"],
+    ["update", "--yes"],
+    ["update", "--channel", "beta"],
+    ["update", "--url", "https://releases.example/x"],
+    ["update", "--origin", "https://releases.example"],
+    ["update", "--allow-downgrade"],
+    ["update", "rollback", "--version", "1.2.0"],
+    ["update", "rollback", "extra"],
+  ];
+
+  it.each(illegalUpdateArgv.map((argv) => [argv] as const))("refuses %j before context/network", async (argv) => {
+    await refuses(argv);
+    const harness = await updateHarness("update-refuses");
+    expect(await invoke(harness, argv)).toBe(2);
+    expect(harness.contextBuilds).toBe(0);
+    expect(harness.update.requests).toEqual([]);
+  });
+
+  it("leaves every durable scope byte-identical after preview", async () => {
+    const harness = await updateHarness("update-durable");
+    const before = await inventoryDigest(harness.fixture.root);
+    await runMain(["update"], harness);
+    await runMain(["update", "rollback"], harness);
+    expect(await inventoryDigest(harness.fixture.root)).toEqual(before);
+  });
+
+  it("makes no release request for rollback", async () => {
+    const harness = await updateHarness("update-rollback-offline");
+    await runMain(["update", "rollback"], harness);
+    expect(harness.update.requests).toEqual([]);
+    expect(harness.update.events).not.toContain("trust");
+  });
+
+  it("renders the human view from the same typed result --json publishes", async () => {
+    const harness = await updateHarness("update-human");
+    const { data } = await runMain(["update"], harness);
+    harness.fixture.io.out.length = 0;
+    expect(await invoke(harness, ["update"])).toBe(0);
+    expect(harness.fixture.io.out).toStrictEqual(renderUpdate(data));
+  });
+
+  it("refuses --apply as unavailable until the apply orchestration exists", async () => {
+    const harness = await updateHarness("update-apply");
+    expect(await invoke(harness, ["update", "--apply", "--json"])).toBe(EXIT_CODES.capabilityUnavailable);
+    expect(harness.fixture.io.out.at(-1)).toContain("update_apply_unavailable");
+    expect(harness.update.events).toStrictEqual([]);
+  });
+
+  it("keeps the bare --version flag printing the product version", async () => {
+    const lines: string[] = [];
+    expect(await run(["--version"], collectingIo(lines), neverCreatesContext)).toBe(0);
+    expect(lines).toStrictEqual([`developer-os ${PRODUCT_VERSION}`]);
   });
 });

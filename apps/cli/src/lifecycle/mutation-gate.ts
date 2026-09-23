@@ -133,7 +133,7 @@ function globalLockPath(paths: RuntimePaths): CanonicalAbsolutePathV1 {
  * `lifecycle/mutation-gate.ts` → `commands/uninstall.ts` → `context.ts` a runtime import
  * cycle through the composition root.
  */
-function gateManifestAdmission(context: CliContext): ManifestAdmissionContextV1 {
+export function gateManifestAdmission(context: CliContext): ManifestAdmissionContextV1 {
   const { paths } = context;
   const productHome = paths.home as CanonicalAbsolutePathV1;
   return {

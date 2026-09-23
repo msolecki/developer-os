@@ -1,0 +1,883 @@
+import { createHash } from "node:crypto";
+
+import {
+  admitReleaseAgainstTrust,
+  admitReleaseIdentity,
+  advanceReleaseTrust,
+  buildRollbackPreview,
+  decodeCanonicalJson,
+  encodeCanonicalJson,
+  encodeTenDigitOrdinal,
+  EXIT_CODES,
+  materializePlannerDraft,
+  MAXIMUM_SCHEMA_MIGRATION_PLAN_BYTES,
+  OWNER_UPDATE_ORDER,
+  parseCanonicalAbsolutePathText,
+  parseLowerHexSha256,
+  parseRollbackPayloadId,
+  parseUInt64Decimal,
+  parseUtcTimestamp,
+  parseVaultRelativePathText,
+  PLANNER_PROTOCOL_V1,
+  selectRelease,
+  UpdateCapacityInsufficientError,
+  validateBundleManifest,
+  validateReleaseIdentity,
+} from "@developer-os/core";
+import type {
+  ActiveReleaseRecordV1,
+  ArtifactOwner,
+  CanonicalAbsolutePathV1,
+  CanonicalJsonValue,
+  CanonicalPathEvidenceV1,
+  ExitCode,
+  InstallationManifestV2,
+  LowerHexSha256,
+  ManagedArtifactV2,
+  OfflineReleaseTrustV1,
+  OwnerUpdatePreviewInputV1,
+  PlannerContentRefV1,
+  PlannerPathTokenV1,
+  PreparedInverseLeafInputV1,
+  PreparedUpdateCandidateV1,
+  ReleaseBundleManifestV1,
+  ReleaseIdentityV1,
+  ReleaseKeyDelegationV1,
+  ReleaseMetadataIdentityV1,
+  ReleaseTrustStateV1,
+  RetainedInverseBlobRefV1,
+  RollbackPayloadEntryV1,
+  RollbackPayloadIdV1,
+  RollbackPayloadPreviewV1,
+  RollbackPayloadRelativePathV1,
+  SafeReasonCodeV1,
+  SchemaMigrationIdV1,
+  SchemaMigrationPreviewV1,
+  SecretScreenedBlobV1,
+  StableSemverV1,
+  TargetUpdateDraftV1,
+  UInt64DecimalV1,
+  UpdateCapacityComponentV1,
+  UpdateCapacityInputV1,
+  UpdatePlannerRequestV1,
+  UpdatePlanPreviewV1,
+  UpdateRollbackPreviewV1,
+  UtcTimestampV1,
+  VaultRelativePathV1,
+  CanonicalProductStatePathV1,
+  PositiveUInt32V1,
+  SchemaMigrationDomainV1,
+} from "@developer-os/core";
+import { verifyReleaseMetadataChain } from "@developer-os/security";
+import type { ReleaseIndexDocumentV1, ReleaseKeyDelegationDocumentV1 } from "@developer-os/security";
+
+import { compareManifestRows } from "../instructions/attach.js";
+import type { CliUpdateContext, UpdateTransportV1 } from "./context.js";
+
+/**
+ * Spec 2 §7.3. `applied` and `rolled_back` belong to `--apply` (Task 24/25); the plan-only
+ * commands here return the other three arms.
+ */
+export type UpdateCommandResultV1 =
+  | { readonly schemaVersion: 1; readonly outcome: "up_to_date"; readonly active: ReleaseIdentityV1 }
+  | { readonly schemaVersion: 1; readonly outcome: "preview"; readonly plan: UpdatePlanPreviewV1 }
+  | { readonly schemaVersion: 1; readonly outcome: "applied"; readonly active: ReleaseIdentityV1; readonly rollbackAvailable: true }
+  | { readonly schemaVersion: 1; readonly outcome: "rollback_preview"; readonly plan: UpdateRollbackPreviewV1 }
+  | { readonly schemaVersion: 1; readonly outcome: "rolled_back"; readonly active: ReleaseIdentityV1; readonly rollbackAvailable: false };
+
+/** Spec 2 §10.1, validated here until the rollback payload task owns a Core codec. */
+export interface RollbackRecordV1 {
+  readonly schemaVersion: 1;
+  readonly installed: ReleaseIdentityV1;
+  readonly previous: ReleaseIdentityV1;
+  readonly executionBindingHash: LowerHexSha256;
+  readonly rollbackBindingHash: LowerHexSha256;
+  readonly payloadId: RollbackPayloadIdV1;
+  readonly payloadInventoryHash: LowerHexSha256;
+  readonly inversePlanHash: LowerHexSha256;
+  readonly createdAt: UtcTimestampV1;
+}
+
+/** The read-only admitted V2 home both plan-only commands start from. */
+export interface UpdateHomeV1 {
+  readonly manifest: InstallationManifestV2;
+  readonly active: ActiveReleaseRecordV1;
+  readonly trust: ReleaseTrustStateV1;
+  readonly rollback: RollbackRecordV1 | null;
+}
+
+/** Tokenized planner input plus the in-memory authority that never crosses the wire. */
+export interface UpdatePlannerSnapshotV1 {
+  readonly request: UpdatePlannerRequestV1;
+  readonly inputBlobs: readonly Uint8Array[];
+  readonly tokenPaths: ReadonlyMap<PlannerPathTokenV1, CanonicalAbsolutePathV1>;
+  readonly ownerRoots: Readonly<Partial<Record<ArtifactOwner, CanonicalAbsolutePathV1>>>;
+}
+
+export interface UpdateCapacityObservationV1 {
+  readonly availableBytes: UInt64DecimalV1;
+  readonly availableEntries: UInt64DecimalV1;
+  readonly reservationGranularityBytes: UInt64DecimalV1;
+}
+
+export type OwnerInverseActionV1 =
+  /** Undoes a create: the created bytes must still be current. */
+  | { readonly action: "remove"; readonly path: CanonicalAbsolutePathV1; readonly expectedCurrentHash: LowerHexSha256 }
+  /** Undoes a replace (`expectedCurrentHash` set) or a remove (`null`: the path must be absent). */
+  | {
+      readonly action: "restore";
+      readonly path: CanonicalAbsolutePathV1;
+      readonly expectedCurrentHash: LowerHexSha256 | null;
+      readonly restoreHash: LowerHexSha256;
+      readonly restoreBlob: RetainedInverseBlobRefV1;
+    };
+
+/**
+ * The allocation-free owner inverse leaf (Spec 2 §7.2's `PreparedInverseProjectionV1`). The
+ * rollback payload task persists it with its binding fields added; rollback preview reads the
+ * same shape back.
+ */
+export interface OwnerInverseLeafV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "owner_inverse";
+  readonly id: SafeReasonCodeV1;
+  readonly owner: ArtifactOwner;
+  readonly actions: readonly OwnerInverseActionV1[];
+  readonly unchanged: readonly CanonicalAbsolutePathV1[];
+  readonly externalEffect: "codex_registration_refresh" | null;
+  readonly maximumPlanBytes: number;
+}
+
+/** Core's `RetainedSchemaMigrationInversePlanV1` without the allocation-bound fields. */
+export interface MigrationInverseLeafV1 {
+  readonly schemaVersion: 1;
+  readonly kind: "schema_migration_inverse";
+  readonly id: SchemaMigrationIdV1;
+  readonly domain: SchemaMigrationDomainV1;
+  readonly fromVersion: PositiveUInt32V1;
+  readonly toVersion: PositiveUInt32V1;
+  readonly mutations: readonly {
+    readonly path: VaultRelativePathV1 | CanonicalProductStatePathV1;
+    readonly expectedCurrentHash: LowerHexSha256;
+    readonly restoreHash: LowerHexSha256;
+    readonly restoreBlob: RetainedInverseBlobRefV1;
+  }[];
+  readonly maximumPlanBytes: number;
+}
+
+/** What rollback preview reads from the retained payload, already hash- and postimage-checked. */
+export interface RetainedRollbackEvidenceV1 {
+  readonly payload: RollbackPayloadPreviewV1;
+  readonly owners: readonly OwnerInverseLeafV1[];
+  readonly migrations: readonly MigrationInverseLeafV1[];
+}
+
+export interface PlannedUpdateV1 {
+  readonly result: Extract<UpdateCommandResultV1, { readonly outcome: "up_to_date" | "preview" }>;
+  /** The private in-memory candidate an `--apply` in this same invocation consumes; never rendered. */
+  readonly candidate: PreparedUpdateCandidateV1 | null;
+}
+
+/** A content-free refusal: the reason code is the whole message (Spec 2 §11). */
+export class UpdatePlanningRefusal extends Error {
+  constructor(
+    readonly reason: SafeReasonCodeV1 | string,
+    readonly code: Exclude<ExitCode, 0>,
+    readonly paths: readonly string[] = [],
+    readonly recovery?: string,
+  ) {
+    super(reason);
+    this.name = "UpdatePlanningRefusal";
+  }
+}
+
+function refuse(reason: string, code: Exclude<ExitCode, 0>, paths: readonly string[] = [], recovery?: string): never {
+  throw new UpdatePlanningRefusal(reason, code, paths, recovery);
+}
+
+/**
+ * Runs `work` and turns an unclassified validator throw into a fixed reason. An error that already
+ * carries an exit code keeps it; a JavaScript defect is never reclassified as a policy refusal.
+ */
+async function classified<T>(reason: string, code: Exclude<ExitCode, 0>, work: () => T | Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    if (error instanceof TypeError || error instanceof RangeError || error instanceof ReferenceError) throw error;
+    if (typeof error === "object" && error !== null && "code" in error && typeof error.code === "number") throw error;
+    return refuse(reason, code);
+  }
+}
+
+function sha256(bytes: Uint8Array): LowerHexSha256 {
+  return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
+}
+
+const encoder = new TextEncoder();
+const MiB = 1_048_576;
+const MAXIMUM_DELEGATION_BYTES = 64 * 1024;
+const MAXIMUM_INDEX_BYTES = 4 * MiB;
+const MAXIMUM_BUNDLE_MANIFEST_BYTES = 16 * MiB;
+const MAXIMUM_SCRATCH_BYTES = 12 * 1024 * MiB;
+const MAXIMUM_LEAF_BYTES = 16 * MiB;
+const PARTICIPANT_JOURNAL_BYTES = 1 * MiB;
+const COORDINATOR_JOURNAL_BYTES = 64 * MiB;
+
+function exact(value: unknown, label: string, keys: readonly string[]): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`invalid ${label}`);
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) throw new Error(`invalid ${label}: keys`);
+  return value as Record<string, unknown>;
+}
+
+/** Spec 2 §10.1's exact keys; release identities keep their Core grammar. */
+export function validateRollbackRecord(value: unknown, evidence: CanonicalPathEvidenceV1): RollbackRecordV1 {
+  const input = exact(value, "RollbackRecordV1", [
+    "schemaVersion",
+    "installed",
+    "previous",
+    "executionBindingHash",
+    "rollbackBindingHash",
+    "payloadId",
+    "payloadInventoryHash",
+    "inversePlanHash",
+    "createdAt",
+  ]);
+  if (input.schemaVersion !== 1) throw new Error("invalid RollbackRecordV1.schemaVersion");
+  const installed = validateReleaseIdentity(input.installed, evidence);
+  const previous = validateReleaseIdentity(input.previous, evidence);
+  if (installed.architecture !== previous.architecture || installed.releaseIdentityHash === previous.releaseIdentityHash) {
+    throw new Error("invalid RollbackRecordV1: releases");
+  }
+  return {
+    schemaVersion: 1,
+    installed,
+    previous,
+    executionBindingHash: parseLowerHexSha256(input.executionBindingHash),
+    rollbackBindingHash: parseLowerHexSha256(input.rollbackBindingHash),
+    payloadId: parseRollbackPayloadId(input.payloadId),
+    payloadInventoryHash: parseLowerHexSha256(input.payloadInventoryHash),
+    inversePlanHash: parseLowerHexSha256(input.inversePlanHash),
+    createdAt: parseUtcTimestamp(input.createdAt),
+  };
+}
+
+/** The active record's release identity: the record minus its own two fields. */
+export function releaseIdentityOf(active: ActiveReleaseRecordV1): ReleaseIdentityV1 {
+  return {
+    version: active.version,
+    releaseSequence: active.releaseSequence,
+    releaseIdentityHash: active.releaseIdentityHash,
+    delegationSequence: active.delegationSequence,
+    delegationHash: active.delegationHash,
+    releaseIndexSequence: active.releaseIndexSequence,
+    releaseIndexHash: active.releaseIndexHash,
+    bundleManifestHash: active.bundleManifestHash,
+    bundleRoot: active.bundleRoot,
+    platform: active.platform,
+    architecture: active.architecture,
+    launcherProtocol: active.launcherProtocol,
+    updateProtocol: active.updateProtocol,
+  };
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+  return encodeCanonicalJson(left as CanonicalJsonValue) === encodeCanonicalJson(right as CanonicalJsonValue);
+}
+
+async function fetchDocument(
+  transport: UpdateTransportV1,
+  kind: "release_key_delegation" | "release_index",
+  maximumBytes: number,
+): Promise<{ readonly value: unknown; readonly hash: LowerHexSha256 }> {
+  const bytes = await collect(maximumBytes, (sink) => transport.get({ kind, sink }));
+  return { value: await classified("update_metadata_invalid", EXIT_CODES.securityRefusal, () => decodeCanonicalJson(bytes.body, maximumBytes)), hash: bytes.hash };
+}
+
+/** Collects one bounded body; the transport already enforces the length, this only refuses a lie. */
+async function collect(
+  maximumBytes: number,
+  fetch: (sink: (chunk: Uint8Array) => Promise<void>) => Promise<{ readonly bodyHash: LowerHexSha256 }>,
+): Promise<{ readonly body: Uint8Array; readonly hash: LowerHexSha256 }> {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const response = await fetch((chunk) => {
+    total += chunk.byteLength;
+    if (total > maximumBytes) refuse("update_metadata_oversized", EXIT_CODES.securityRefusal);
+    chunks.push(chunk);
+    return Promise.resolve();
+  });
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  if (sha256(body) !== response.bodyHash) refuse("update_metadata_hash_mismatch", EXIT_CODES.securityRefusal);
+  return { body, hash: response.bodyHash };
+}
+
+/** Removes only crash residue whose journal grants authority; anything else is preserved by Security. */
+async function cleanScratchResidue(update: CliUpdateContext): Promise<void> {
+  for (const id of await update.scratch.listRecoverableAttempts()) await update.scratch.recoverCleanup(id);
+}
+
+function selectTarget(
+  index: Parameters<typeof selectRelease>[0],
+  request: { readonly version: StableSemverV1 | null; readonly active: ReleaseIdentityV1 },
+): ReturnType<typeof selectRelease> {
+  try {
+    return selectRelease(index, request);
+  } catch (error) {
+    if (error instanceof TypeError || error instanceof RangeError || error instanceof ReferenceError) throw error;
+    const message = error instanceof Error ? error.message : "";
+    // A nonexistent stable version and an arbitrary downgrade are invalid input (Spec 2 §11).
+    if (message.includes("requested release")) return refuse("update_release_not_found", EXIT_CODES.invalidInput);
+    if (message.includes("downgrade")) return refuse("update_downgrade_refused", EXIT_CODES.invalidInput);
+    return refuse("update_release_identity_rebound", EXIT_CODES.securityRefusal);
+  }
+}
+
+function contentHash(content: PlannerContentRefV1, outputs: readonly SecretScreenedBlobV1[]): LowerHexSha256 {
+  if (content.kind === "target_bundle") return content.sha256;
+  const blob = outputs[content.blob.ordinal];
+  if (blob === undefined) refuse("update_planner_output_invalid", EXIT_CODES.securityRefusal);
+  return blob.sha256;
+}
+
+function tokenPath(snapshot: UpdatePlannerSnapshotV1, token: PlannerPathTokenV1): CanonicalAbsolutePathV1 {
+  return snapshot.tokenPaths.get(token) ?? refuse("update_planner_output_invalid", EXIT_CODES.securityRefusal);
+}
+
+function ownerRoot(snapshot: UpdatePlannerSnapshotV1, owner: ArtifactOwner): CanonicalAbsolutePathV1 {
+  return snapshot.ownerRoots[owner] ?? refuse("update_owner_root_unavailable", EXIT_CODES.capabilityUnavailable);
+}
+
+function installedHashOf(row: ManagedArtifactV2): LowerHexSha256 | null {
+  const verification: ManagedArtifactV2["verification"] = row.verification;
+  if ("installedHash" in verification) return verification.installedHash;
+  return "blockHash" in verification ? verification.blockHash : null;
+}
+
+/**
+ * Spec 2 §8.2's rehydration: every token and owner-relative path becomes the current process's
+ * absolute path, every installed hash is computed here, and installation history is copied from
+ * the current manifest rather than accepted from target code. The result is admitted by the
+ * same V2 validator every other manifest passes.
+ */
+function concreteManifest(
+  update: CliUpdateContext,
+  home: UpdateHomeV1,
+  snapshot: UpdatePlannerSnapshotV1,
+  draft: TargetUpdateDraftV1,
+  outputs: readonly SecretScreenedBlobV1[],
+  target: ReleaseIdentityV1,
+): InstallationManifestV2 {
+  const plannedAt = snapshot.request.plannedAt;
+  const current = new Map(home.manifest.artifacts.map((row) => [row.path as string, row]));
+  const rows = draft.expectedManifest.artifacts.map((row): ManagedArtifactV2 => {
+    const path = row.path.kind === "installed"
+      ? tokenPath(snapshot, row.path.token)
+      : parseCanonicalAbsolutePathText(`${row.path.kind === "target_bundle" ? target.bundleRoot : ownerRoot(snapshot, row.path.owner)}/${row.path.path}`);
+    const prior = row.path.kind === "installed" ? current.get(path) : undefined;
+    const installed = (content: { readonly kind: "installed"; readonly token: PlannerPathTokenV1 } | PlannerContentRefV1): LowerHexSha256 => {
+      if (content.kind !== "installed") return contentHash(content, outputs);
+      const source = current.get(tokenPath(snapshot, content.token));
+      return (source === undefined ? null : installedHashOf(source)) ?? refuse("update_planner_output_invalid", EXIT_CODES.securityRefusal);
+    };
+    const draftVerification = row.verification;
+    let verification: ManagedArtifactV2["verification"];
+    if (draftVerification.mode === "schema") {
+      verification = { mode: "schema", schemaId: draftVerification.schemaId, installedHash: installed(draftVerification.installed) };
+    } else if ("installed" in draftVerification) {
+      verification = { mode: "content", installedHash: installed(draftVerification.installed) };
+    } else {
+      verification = draftVerification.mode === "ephemeral" ? { mode: "ephemeral" } : { mode: "content" };
+    }
+    const common = {
+      owner: row.owner,
+      path,
+      productVersion: row.productVersion,
+      source: row.source,
+      mergeStrategy: row.mergeStrategy,
+      existedBefore: prior?.existedBefore ?? false,
+      beforeHash: prior?.beforeHash ?? null,
+      backupRelativePath: prior?.backupRelativePath ?? null,
+    };
+    const built = { ...common, kind: row.kind, verification, verifiedAt: plannedAt } as ManagedArtifactV2;
+    // A byte-identical keep preserves its verification time; anything changed is verified at plannedAt.
+    const unchanged = prior !== undefined && sameJson({ ...prior, verifiedAt: plannedAt }, built);
+    return unchanged ? prior : built;
+  });
+  return update.admitManifest({
+    schemaVersion: 2,
+    productVersion: draft.expectedManifest.productVersion,
+    installedAt: home.manifest.installedAt,
+    artifacts: rows.sort(compareManifestRows),
+  });
+}
+
+interface PreparedInverseV1 {
+  readonly leaves: readonly PreparedInverseLeafInputV1[];
+  readonly inversePlan: CanonicalJsonValue;
+  readonly entries: readonly RollbackPayloadEntryV1[];
+  readonly preimageBytes: number;
+  readonly preimageEntries: number;
+  readonly stagedBytes: number;
+  readonly stagedEntries: number;
+}
+
+function leafPath(kind: string, id: string): RollbackPayloadRelativePathV1 {
+  return `plans/${kind}/${id}.plan.json` as RollbackPayloadRelativePathV1;
+}
+
+/**
+ * The allocation-free inverse: one owner leaf per owner plan (so the set is never empty), one
+ * migration leaf per migration, every preimage as a derived-path blob, then the leaves themselves.
+ * Hashes come only from the current process's own observation and screened output frames.
+ */
+function prepareInverse(
+  snapshot: UpdatePlannerSnapshotV1,
+  draft: TargetUpdateDraftV1,
+  outputs: readonly SecretScreenedBlobV1[],
+): PreparedInverseV1 {
+  const entries: RollbackPayloadEntryV1[] = [];
+  let stagedBytes = 0;
+  let stagedEntries = 0;
+  const addBlob = (role: RollbackPayloadEntryV1["role"], bytes: number, hash: LowerHexSha256): RetainedInverseBlobRefV1 => {
+    const ordinal = entries.length;
+    const path = `blobs/${encodeTenDigitOrdinal(ordinal)}.bin` as RollbackPayloadRelativePathV1;
+    entries.push({ ordinal, path, role, bytes, sha256: hash });
+    return { path, bytes, sha256: hash };
+  };
+  const inputs = new Map(snapshot.request.artifactInputs.map((input) => [input.token as string, input]));
+  const preimage = (token: PlannerPathTokenV1, expected: LowerHexSha256 | null): RetainedInverseBlobRefV1 => {
+    const observed = inputs.get(token)?.observed;
+    if (observed?.state !== "content" || observed.blob === null || observed.sha256 !== expected) {
+      return refuse("update_planner_output_invalid", EXIT_CODES.securityRefusal);
+    }
+    return addBlob("owner_preimage", observed.bytes, observed.sha256);
+  };
+  const stagedSize = (content: PlannerContentRefV1): void => {
+    stagedBytes += content.kind === "target_bundle" ? content.bytes : content.blob.bytes;
+    stagedEntries += 1;
+  };
+
+  const owners = draft.ownerPlans.map((plan): OwnerInverseLeafV1 => {
+    const actions: OwnerInverseActionV1[] = [];
+    const touched = new Set<string>();
+    for (const operation of plan.proposedOperations) {
+      if (operation.operation === "create") {
+        stagedSize(operation.content);
+        actions.push({
+          action: "remove",
+          path: parseCanonicalAbsolutePathText(`${ownerRoot(snapshot, plan.owner)}/${operation.target.path}`),
+          expectedCurrentHash: contentHash(operation.content, outputs),
+        });
+        continue;
+      }
+      if (operation.operation === "keep") continue;
+      touched.add(operation.target.token);
+      const restoreHash = operation.expectedHash ?? refuse("update_planner_output_invalid", EXIT_CODES.securityRefusal);
+      if (operation.operation === "replace") stagedSize(operation.content);
+      actions.push({
+        action: "restore",
+        path: tokenPath(snapshot, operation.target.token),
+        expectedCurrentHash: operation.operation === "replace" ? contentHash(operation.content, outputs) : null,
+        restoreHash,
+        restoreBlob: preimage(operation.target.token, restoreHash),
+      });
+    }
+    return {
+      schemaVersion: 1,
+      kind: "owner_inverse",
+      id: `owner_${plan.owner}` as SafeReasonCodeV1,
+      owner: plan.owner,
+      actions,
+      unchanged: plan.currentArtifacts
+        .filter((token) => !touched.has(token))
+        .map((token) => tokenPath(snapshot, token))
+        .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right))),
+      externalEffect: plan.externalEffects.length === 0 ? null : "codex_registration_refresh",
+      maximumPlanBytes: MAXIMUM_LEAF_BYTES,
+    };
+  });
+
+  const migrations = draft.migrations.map((migration): MigrationInverseLeafV1 => ({
+    schemaVersion: 1,
+    kind: "schema_migration_inverse",
+    id: migration.id,
+    domain: migration.domain,
+    fromVersion: migration.fromVersion,
+    toVersion: migration.toVersion,
+    mutations: migration.mutations.map((mutation) => {
+      const after = outputs[mutation.afterBlob.ordinal];
+      const inverse = outputs[mutation.inverseBlob.ordinal];
+      // The inverse must restore the exact before bytes, or rollback could not return to them.
+      if (after === undefined || inverse === undefined || inverse.sha256 !== mutation.beforeHash) {
+        return refuse("update_planner_output_invalid", EXIT_CODES.securityRefusal);
+      }
+      stagedBytes += after.bytes;
+      stagedEntries += 1;
+      return {
+        path: mutation.path.domain === "brain" ? mutation.path.path : tokenPath(snapshot, mutation.path.token) as CanonicalProductStatePathV1,
+        expectedCurrentHash: after.sha256,
+        restoreHash: mutation.beforeHash,
+        restoreBlob: addBlob("migration_preimage", inverse.bytes, inverse.sha256),
+      };
+    }),
+    maximumPlanBytes: MAXIMUM_SCHEMA_MIGRATION_PLAN_BYTES,
+  }));
+
+  const preimageEntries = entries.length;
+  const preimageBytes = entries.reduce((sum, entry) => sum + entry.bytes, 0);
+  const leaves: PreparedInverseLeafInputV1[] = [...owners, ...migrations].map((leaf) => ({
+    kind: leaf.kind,
+    id: leaf.id,
+    projection: leaf as unknown as CanonicalJsonValue,
+  }));
+  const leafRows = leaves.map((leaf) => {
+    const bytes = encoder.encode(encodeCanonicalJson(leaf.projection));
+    const row = { kind: leaf.kind, id: leaf.id, path: leafPath(leaf.kind, leaf.id), bytes: bytes.byteLength, sha256: sha256(bytes) };
+    entries.push({ ordinal: entries.length, path: row.path, role: "inverse_plan_leaf", bytes: row.bytes, sha256: row.sha256 });
+    return row;
+  });
+  return {
+    leaves,
+    inversePlan: {
+      schemaVersion: 1,
+      operation: "update_inverse",
+      current: snapshot.request.currentRelease.releaseIdentityHash,
+      target: snapshot.request.targetRelease.releaseIdentityHash,
+      leaves: leafRows,
+    },
+    entries,
+    preimageBytes,
+    preimageEntries,
+    stagedBytes,
+    stagedEntries,
+  };
+}
+
+function component(kind: UpdateCapacityComponentV1["kind"], bytes: bigint | number, entries: bigint | number): UpdateCapacityComponentV1 {
+  return { kind, bytes: parseUInt64Decimal(BigInt(bytes).toString(10)), entries: parseUInt64Decimal(BigInt(entries).toString(10)) };
+}
+
+function manifestTotals(manifest: ReleaseBundleManifestV1): { readonly bytes: bigint; readonly entries: number } {
+  let bytes = 0n;
+  for (const entry of manifest.entries) if (entry.kind === "file") bytes += BigInt(entry.bytes);
+  return { bytes, entries: manifest.entries.length };
+}
+
+/**
+ * Per-scope ceilings for Spec 2 §9.1's aggregate check. The persisted execution plan (Task 24)
+ * re-derives exact journal and compaction bytes under the lock; these bound them from above.
+ * ponytail: journal and headroom use fixed per-participant ceilings, not the exact reachable bytes.
+ */
+function updateCapacity(
+  observation: UpdateCapacityObservationV1,
+  manifest: ReleaseBundleManifestV1,
+  archiveBytes: UInt64DecimalV1,
+  prepared: PreparedInverseV1,
+  inventoryBytes: number,
+  participants: number,
+): UpdateCapacityInputV1 {
+  const bundle = manifestTotals(manifest);
+  return {
+    operation: "update",
+    components: [
+      // Scratch holds the archive, the extraction, and one evidence file per entry.
+      component("verified_scratch", BigInt(archiveBytes) + bundle.bytes, bundle.entries * 2 + 4),
+      component("durable_bundle_source", BigInt(archiveBytes), 1),
+      component("target_bundle", bundle.bytes, bundle.entries),
+      component("transaction_staging", prepared.stagedBytes, prepared.stagedEntries),
+      component("backups", prepared.preimageBytes, prepared.preimageEntries),
+      // The payload root, `plans`, `blobs`, the two canonical files, then every inventory entry.
+      component("inverse_payload", inventoryBytes, prepared.entries.length + 5),
+      component("journals", COORDINATOR_JOURNAL_BYTES + participants * PARTICIPANT_JOURNAL_BYTES, participants + 1),
+      component("terminal_compaction_headroom", COORDINATOR_JOURNAL_BYTES, 1),
+    ],
+    reservationGranularityBytes: observation.reservationGranularityBytes,
+    availableBytes: observation.availableBytes,
+    availableEntries: observation.availableEntries,
+  };
+}
+
+function capacityRefusal(error: unknown): never {
+  if (error instanceof UpdateCapacityInsufficientError) refuse(`update_capacity_insufficient_${error.dimension}`, EXIT_CODES.operationalFailure);
+  throw error;
+}
+
+/**
+ * Plan-only `update` (Spec 2 §7.2): the read-only home gates first, then FD 3 trust, then the
+ * only network this product makes, then one guarded scratch attempt that is removed on every
+ * exit path. Nothing durable is written; the candidate stays in memory.
+ */
+export async function planUpdate(update: CliUpdateContext, request: { readonly version: StableSemverV1 | null }): Promise<PlannedUpdateV1> {
+  const home = await update.readHome();
+  const current = releaseIdentityOf(home.active);
+  const offline: OfflineReleaseTrustV1 = await update.readOfflineTrust();
+  await cleanScratchResidue(update);
+
+  const transport = update.createTransport(offline);
+  const delegation = await fetchDocument(transport, "release_key_delegation", MAXIMUM_DELEGATION_BYTES);
+  const index = await fetchDocument(transport, "release_index", MAXIMUM_INDEX_BYTES);
+  const chain = verifyReleaseMetadataChain({
+    trust: offline,
+    role: "online_target",
+    delegation: delegation.value as ReleaseKeyDelegationDocumentV1,
+    index: index.value as ReleaseIndexDocumentV1,
+  });
+  const metadata: ReleaseMetadataIdentityV1 = {
+    delegationSequence: chain.delegation.sequence,
+    delegationHash: delegation.hash,
+    delegatedReleaseKeyId: chain.delegation.releaseKey.keyId,
+    releaseIndexSequence: chain.index.sequence,
+    releaseIndexHash: index.hash,
+  };
+
+  const selection = selectTarget(chain.index, { version: request.version, active: current });
+  if (selection.outcome === "up_to_date") {
+    // Equal version is not enough: the signed bundle must be the one this home runs.
+    const bundle = chain.index.releases.find((entry) => entry.version === current.version)?.bundles[current.architecture === "arm64" ? 0 : 1];
+    if (bundle?.manifestSha256 !== current.bundleManifestHash) refuse("update_release_identity_rebound", EXIT_CODES.securityRefusal);
+    await classified("update_trust_replay", EXIT_CODES.securityRefusal, () =>
+      advanceReleaseTrust(home.trust, { ...metadata, releaseSequence: current.releaseSequence, releaseIdentityHash: current.releaseIdentityHash }));
+    return { result: { schemaVersion: 1, outcome: "up_to_date", active: current }, candidate: null };
+  }
+
+  const { selected } = selection;
+  if (selected.entry.minimumLauncherProtocol > offline.handoffProtocol) {
+    refuse("update_launcher_too_old", EXIT_CODES.capabilityUnavailable, [], "upgrade the Developer OS launcher, then run developer-os update again");
+  }
+  if (selected.entry.updateProtocol > PLANNER_PROTOCOL_V1) {
+    refuse("update_protocol_too_new", EXIT_CODES.capabilityUnavailable, [], "upgrade the Developer OS launcher, then run developer-os update again");
+  }
+  await classified("update_trust_replay", EXIT_CODES.securityRefusal, () => {
+    admitReleaseAgainstTrust(home.trust, { releaseSequence: selected.entry.releaseSequence, releaseIdentityHash: selected.releaseIdentityHash }, "online_target");
+  });
+  await classified("update_trust_replay", EXIT_CODES.securityRefusal, () =>
+    advanceReleaseTrust(home.trust, { ...metadata, releaseSequence: selected.entry.releaseSequence, releaseIdentityHash: selected.releaseIdentityHash }));
+
+  const delegationV1: ReleaseKeyDelegationV1 = chain.delegation;
+  const manifestBody = await collect(MAXIMUM_BUNDLE_MANIFEST_BYTES, (sink) =>
+    transport.get({ kind: "bundle_manifest", delegation: delegationV1, bundle: selected.bundle, sink }));
+  const bundleManifest = await classified("update_bundle_manifest_invalid", EXIT_CODES.securityRefusal, () =>
+    validateBundleManifest(decodeCanonicalJson(manifestBody.body, MAXIMUM_BUNDLE_MANIFEST_BYTES)));
+  const target = await classified("update_release_identity_invalid", EXIT_CODES.securityRefusal, () =>
+    admitReleaseIdentity(
+      {
+        version: selected.entry.version,
+        releaseSequence: selected.entry.releaseSequence,
+        releaseIdentityHash: selected.releaseIdentityHash,
+        delegationSequence: metadata.delegationSequence,
+        delegationHash: metadata.delegationHash,
+        releaseIndexSequence: metadata.releaseIndexSequence,
+        releaseIndexHash: metadata.releaseIndexHash,
+        bundleManifestHash: manifestBody.hash,
+        bundleRoot: `${update.productHome}/releases/${selected.entry.version}/darwin-${selected.bundle.architecture}`,
+        platform: "darwin",
+        architecture: selected.bundle.architecture,
+        launcherProtocol: bundleManifest.launcherProtocol,
+        updateProtocol: selected.entry.updateProtocol,
+      },
+      update.pathEvidence,
+      { productHome: update.productHome, selected, metadata, bundleManifest, bundleManifestHash: manifestBody.hash },
+    ));
+
+  const retained = home.rollback === null ? null : await update.readRollbackEvidence(home, home.rollback);
+  const attempt = await update.scratch.create({
+    archive: { bytes: selected.bundle.archiveBytes, sha256: selected.bundle.archiveSha256 },
+    manifestHash: manifestBody.hash,
+    manifest: bundleManifest,
+    maximumScratchBytes: MAXIMUM_SCRATCH_BYTES,
+  });
+  try {
+    await attempt.download((sink) => transport.get({ kind: "archive", delegation: delegationV1, bundle: selected.bundle, sink }));
+    const verified = await attempt.extract(selected.bundle);
+    const plannedAt = update.clock();
+    const snapshot = await update.snapshot(home, { current, target, plannedAt });
+    const run = await update.planner.run({
+      runtime: `${verified.root}/${bundleManifest.runtimeEntrypoint}`,
+      planner: `${verified.root}/${bundleManifest.plannerEntrypoint}`,
+      // ponytail: the verified extraction root, attempt-owned and read-only to the planner; a dedicated empty directory needs a scratch-grammar change.
+      cwd: verified.root,
+      request: snapshot.request,
+      inputBlobs: snapshot.inputBlobs,
+      remainingMilliseconds: transport.remainingMilliseconds(),
+    });
+
+    const manifest = concreteManifest(update, home, snapshot, run.draft, run.outputBlobs, target);
+    const prepared = prepareInverse(snapshot, run.draft, run.outputBlobs);
+    const inventoryBytes = prepared.entries.reduce((sum, entry) => sum + entry.bytes, 0);
+    const participants = run.draft.ownerPlans.length + run.draft.migrations.length + 4;
+    const observation = await update.capacity();
+    const candidate = await classified("update_planner_output_invalid", EXIT_CODES.securityRefusal, () => {
+      try {
+        return materializePlannerDraft(snapshot.request, run.draft, run.outputBlobs, {
+          tokenPaths: snapshot.tokenPaths,
+          ownerRoots: snapshot.ownerRoots,
+          transcript: run.transcript,
+          metadata,
+          download: {
+            archiveBytes: selected.bundle.archiveBytes,
+            archiveSha256: selected.bundle.archiveSha256,
+            expandedBytes: parseUInt64Decimal(manifestTotals(bundleManifest).bytes.toString(10)),
+            entryCount: bundleManifest.entries.length,
+          },
+          retainedRollback: home.rollback === null || retained === null ? null : { release: home.rollback.previous, payload: retained.payload },
+          capacity: updateCapacity(observation, bundleManifest, selected.bundle.archiveBytes, prepared, inventoryBytes, participants),
+          concreteManifest: manifest as unknown as CanonicalJsonValue,
+          inverseLeaves: prepared.leaves,
+          inversePlan: prepared.inversePlan,
+          rollbackInventoryEntries: prepared.entries,
+        });
+      } catch (error) {
+        return capacityRefusal(error);
+      }
+    });
+    return { result: { schemaVersion: 1, outcome: "preview", plan: candidate.preview }, candidate };
+  } finally {
+    await attempt.cleanup();
+  }
+}
+
+function ownerRollbackPreview(leaf: OwnerInverseLeafV1): OwnerUpdatePreviewInputV1 {
+  const paths = { create: [] as CanonicalAbsolutePathV1[], replace: [] as CanonicalAbsolutePathV1[], remove: [] as CanonicalAbsolutePathV1[], unchanged: [...leaf.unchanged] };
+  for (const action of leaf.actions) {
+    if (action.action === "remove") paths.remove.push(action.path);
+    else if (action.expectedCurrentHash === null) paths.create.push(action.path);
+    else paths.replace.push(action.path);
+  }
+  return {
+    owner: leaf.owner,
+    partition: [...paths.create, ...paths.replace, ...paths.remove, ...paths.unchanged],
+    paths,
+    externalEffects: leaf.externalEffect === null ? 0 : 1,
+  };
+}
+
+/**
+ * Plan-only `update rollback` (Spec 2 §10.2): retained local evidence only, so no FD 3 read,
+ * no transport, and no scratch. A post-update edit is refused inside `readRollbackEvidence`.
+ */
+export async function planRollback(update: CliUpdateContext): Promise<UpdateRollbackPreviewV1> {
+  const home = await update.readHome();
+  const record = home.rollback ?? refuse("update_rollback_unavailable", EXIT_CODES.capabilityUnavailable);
+  const current = releaseIdentityOf(home.active);
+  if (!sameJson(record.installed, current)) refuse("update_rollback_record_mismatch", EXIT_CODES.recoveryRequired, [], "developer-os doctor");
+  await classified("update_rollback_trust_invalid", EXIT_CODES.securityRefusal, () => {
+    admitReleaseAgainstTrust(home.trust, record.previous, "guarded_retained_rollback");
+  });
+  const evidence = await update.readRollbackEvidence(home, record);
+  const observation = await update.capacity();
+  const leaves = evidence.owners.length + evidence.migrations.length;
+  const restoreBytes = evidence.payload.aggregateBytes;
+  try {
+    return buildRollbackPreview({
+      current,
+      target: record.previous,
+      owners: evidence.owners.map(ownerRollbackPreview),
+      migrations: evidence.migrations.map((leaf): SchemaMigrationPreviewV1 => ({
+        id: leaf.id,
+        domain: leaf.domain,
+        fromVersion: leaf.fromVersion,
+        toVersion: leaf.toVersion,
+        affectedPaths: leaf.mutations.map((mutation) => mutation.path),
+      })),
+      payload: evidence.payload,
+      capacity: {
+        operation: "rollback",
+        components: [
+          component("transaction_staging", restoreBytes, evidence.payload.entryCount),
+          component("backups", restoreBytes, evidence.payload.entryCount),
+          component("journals", COORDINATOR_JOURNAL_BYTES + (leaves + 4) * PARTICIPANT_JOURNAL_BYTES, leaves + 5),
+          component("terminal_compaction_headroom", COORDINATOR_JOURNAL_BYTES, 1),
+        ],
+        reservationGranularityBytes: observation.reservationGranularityBytes,
+        availableBytes: observation.availableBytes,
+        availableEntries: observation.availableEntries,
+      },
+    });
+  } catch (error) {
+    return capacityRefusal(error);
+  }
+}
+
+/** Spec 2 §10.1: the record, inverse plan, and inventory are each at most 64 MiB. */
+export const MAXIMUM_ROLLBACK_RECORD_BYTES = 64 * MiB;
+
+/** Parses one retained owner leaf back; exact keys, every path canonical. */
+export function parseOwnerInverseLeaf(value: unknown): OwnerInverseLeafV1 {
+  const input = exact(value, "OwnerInverseLeafV1", ["schemaVersion", "kind", "id", "owner", "actions", "unchanged", "externalEffect", "maximumPlanBytes"]);
+  const owner = OWNER_UPDATE_ORDER.find((candidate) => candidate === input.owner);
+  if (input.schemaVersion !== 1 || input.kind !== "owner_inverse" || owner === undefined || input.id !== `owner_${owner}`) throw new Error("invalid OwnerInverseLeafV1");
+  if (input.externalEffect !== null && input.externalEffect !== "codex_registration_refresh") throw new Error("invalid OwnerInverseLeafV1.externalEffect");
+  if (input.maximumPlanBytes !== MAXIMUM_LEAF_BYTES || !Array.isArray(input.actions) || !Array.isArray(input.unchanged)) throw new Error("invalid OwnerInverseLeafV1");
+  const blob = (value: unknown): RetainedInverseBlobRefV1 => {
+    const ref = exact(value, "RetainedInverseBlobRefV1", ["path", "bytes", "sha256"]);
+    if (typeof ref.path !== "string" || !/^blobs\/[0-9]{10}\.bin$/u.test(ref.path)) throw new Error("invalid RetainedInverseBlobRefV1.path");
+    if (typeof ref.bytes !== "number" || !Number.isSafeInteger(ref.bytes) || ref.bytes < 0 || ref.bytes > MAXIMUM_LEAF_BYTES) throw new Error("invalid RetainedInverseBlobRefV1.bytes");
+    return { path: ref.path as RollbackPayloadRelativePathV1, bytes: ref.bytes, sha256: parseLowerHexSha256(ref.sha256) };
+  };
+  const actions = (input.actions as unknown[]).map((row): OwnerInverseActionV1 => {
+    const action = row as Record<string, unknown>;
+    if (action.action === "remove") {
+      exact(row, "OwnerInverseActionV1", ["action", "path", "expectedCurrentHash"]);
+      return { action: "remove", path: parseCanonicalAbsolutePathText(action.path), expectedCurrentHash: parseLowerHexSha256(action.expectedCurrentHash) };
+    }
+    exact(row, "OwnerInverseActionV1", ["action", "path", "expectedCurrentHash", "restoreHash", "restoreBlob"]);
+    if (action.action !== "restore") throw new Error("invalid OwnerInverseActionV1.action");
+    const restoreBlob = blob(action.restoreBlob);
+    const restoreHash = parseLowerHexSha256(action.restoreHash);
+    if (restoreBlob.sha256 !== restoreHash) throw new Error("invalid OwnerInverseActionV1: the blob does not restore its hash");
+    return {
+      action: "restore",
+      path: parseCanonicalAbsolutePathText(action.path),
+      expectedCurrentHash: action.expectedCurrentHash === null ? null : parseLowerHexSha256(action.expectedCurrentHash),
+      restoreHash,
+      restoreBlob,
+    };
+  });
+  return {
+    schemaVersion: 1,
+    kind: "owner_inverse",
+    id: input.id as SafeReasonCodeV1,
+    owner,
+    actions,
+    unchanged: (input.unchanged as unknown[]).map(parseCanonicalAbsolutePathText),
+    externalEffect: input.externalEffect,
+    maximumPlanBytes: MAXIMUM_LEAF_BYTES,
+  };
+}
+
+/** Parses one retained migration leaf back; Brain paths stay vault-relative, product paths absolute. */
+export function parseMigrationInverseLeaf(value: unknown): MigrationInverseLeafV1 {
+  const input = exact(value, "MigrationInverseLeafV1", ["schemaVersion", "kind", "id", "domain", "fromVersion", "toVersion", "mutations", "maximumPlanBytes"]);
+  if (input.schemaVersion !== 1 || input.kind !== "schema_migration_inverse" || input.maximumPlanBytes !== MAXIMUM_SCHEMA_MIGRATION_PLAN_BYTES) throw new Error("invalid MigrationInverseLeafV1");
+  if (input.domain !== "brain" && input.domain !== "product_state") throw new Error("invalid MigrationInverseLeafV1.domain");
+  const domain = input.domain;
+  if (!Array.isArray(input.mutations) || input.mutations.length < 1) throw new Error("invalid MigrationInverseLeafV1.mutations");
+  // The preview builder rechecks id grammar, version order, and path uniqueness.
+  return {
+    schemaVersion: 1,
+    kind: "schema_migration_inverse",
+    id: input.id as SchemaMigrationIdV1,
+    domain,
+    fromVersion: input.fromVersion as PositiveUInt32V1,
+    toVersion: input.toVersion as PositiveUInt32V1,
+    mutations: (input.mutations as unknown[]).map((row) => {
+      const mutation = exact(row, "MigrationInverseMutationV1", ["path", "expectedCurrentHash", "restoreHash", "restoreBlob"]);
+      const blob = exact(mutation.restoreBlob, "RetainedInverseBlobRefV1", ["path", "bytes", "sha256"]);
+      if (typeof blob.path !== "string" || !/^blobs\/[0-9]{10}\.bin$/u.test(blob.path) || typeof blob.bytes !== "number") throw new Error("invalid RetainedInverseBlobRefV1");
+      return {
+        path: domain === "brain" ? parseVaultRelativePathText(mutation.path) : parseCanonicalAbsolutePathText(mutation.path) as CanonicalProductStatePathV1,
+        expectedCurrentHash: parseLowerHexSha256(mutation.expectedCurrentHash),
+        restoreHash: parseLowerHexSha256(mutation.restoreHash),
+        restoreBlob: { path: blob.path as RollbackPayloadRelativePathV1, bytes: blob.bytes, sha256: parseLowerHexSha256(blob.sha256) },
+      };
+    }),
+    maximumPlanBytes: MAXIMUM_SCHEMA_MIGRATION_PLAN_BYTES,
+  };
+}

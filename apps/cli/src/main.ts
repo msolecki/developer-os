@@ -33,6 +33,8 @@ import { runStatus } from "./commands/status.js";
 import type { StatusReportV1 } from "./commands/status.js";
 import { runUninstall } from "./commands/uninstall.js";
 import type { UninstallResultV1 } from "./commands/uninstall.js";
+import { parseUpdateArgv, renderUpdate, runUpdate } from "./commands/update/index.js";
+import type { UpdateInvocationV1 } from "./commands/update/index.js";
 import { createBootstrapEvidenceInspectionRequest } from "./bootstrap/context.js";
 import { assertOrdinaryCommandAdmitted, BootstrapRecoveryRequiredError, BootstrapRootInvalidError } from "./bootstrap/report.js";
 import { exitCodeOf, failureFrom, PRODUCT_VERSION, renderPath } from "./context.js";
@@ -61,6 +63,7 @@ const USAGE = [
   "  doctor     run every health check without repairing anything",
   "  repair     resume or roll back one incomplete transaction",
   "  uninstall  remove manifest-owned artifacts",
+  "  update     [rollback]: preview a signed release update, or a rollback to the retained release",
   "",
   "Options:",
   "  --dry-run        show the plan without changing anything (init, uninstall, import, project init, brain retire, brain refactor)",
@@ -83,7 +86,8 @@ const USAGE = [
   "  --move           move <note> into <topic-folder> (brain refactor)",
   "  --merge          fold <source> into <target> and retire <source> (brain refactor)",
   "  --split          move the section under <heading> of <note> into a new note (brain refactor)",
-  "  --version        print the product version",
+  "  --version        print the product version; with a value, the stable release to preview (update)",
+  "  --apply          apply the previewed update or rollback (update)",
 ].join("\n");
 
 const OPTIONS = {
@@ -202,6 +206,7 @@ interface Invocation {
   readonly values: OptionValues;
   readonly positionals: readonly string[];
   readonly limit: number | null;
+  readonly update?: UpdateInvocationV1;
 }
 
 /**
@@ -773,6 +778,10 @@ async function dispatch(
         json,
         renderUninstall,
       );
+    case "update":
+      return invocation.update === undefined
+        ? emit(io, usageFailure(), json, () => [])
+        : emit(io, await runUpdate(context, invocation.update), json, renderUpdate);
     case "brain":
     case "search":
       return emit(
@@ -798,6 +807,11 @@ export async function run(
   hookEnvironment?: HookEnvironment,
 ): Promise<number> {
   if (isHookInvocation(argv)) return runHookMode(argv, io, createContext, hookEnvironment);
+  if (argv[0] === "update") {
+    const update = parseUpdateArgv(argv);
+    if (update === null) return emit(io, usageFailure(), argv.includes("--json"), () => []);
+    return dispatch({ command: "update", values: { json: update.json }, positionals: [], limit: null, update }, io, createContext);
+  }
   const invocation = parse(argv);
   if (invocation === null) {
     return emit(io, usageFailure(), argv.includes("--json"), () => []);
