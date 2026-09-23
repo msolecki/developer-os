@@ -11,6 +11,7 @@ import {
   MAXIMUM_UPDATE_PARTICIPANT_JOURNAL_BYTES,
   parseCanonicalAbsolutePathText,
   parseUtcTimestamp,
+  rejectUpdateStep,
   stateLeafKindForRole,
   updateParticipantDocumentHash,
   validateStateParticipantJournal,
@@ -418,12 +419,16 @@ export interface TargetVerifierPortV1 {
   verify(plan: TargetVerificationPlanV1): Promise<TargetVerifierObservationV1>;
 }
 
-/** Success only when the verifier exits zero and echoes every plan-bound postimage digest. */
+/**
+ * Success only when the verifier exits zero and echoes every plan-bound postimage digest. A
+ * disagreeing verifier is a rejection the coordinator compensates (§9.4); a plan that breaches
+ * the read-only single-process policy is a third state (exit 6).
+ */
 export async function runTargetVerifier(plan: TargetVerificationPlanV1, port: TargetVerifierPortV1): Promise<UpdateParticipantObservationV1> {
   if (!(plan.readOnly as boolean) || (plan.processCount as number) !== 1) refuseParticipant("update_verifier_policy");
   const observed = await port.verify(plan);
   if (observed.exitCode !== 0 || observed.manifestHash !== plan.manifestHash || observed.ownerPostimagesHash !== plan.ownerPostimagesHash || observed.migrationPostimagesHash !== plan.migrationPostimagesHash) {
-    refuseParticipant("update_verifier_rejected");
+    rejectUpdateStep("update_verifier_rejected");
   }
   return { state: "verified" };
 }

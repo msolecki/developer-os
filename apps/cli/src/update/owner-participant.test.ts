@@ -18,10 +18,12 @@ import {
   parseStableSemver,
   parseUInt64Decimal,
   parseUtcTimestamp,
+  TransactionPreconditionError,
   updateLeafPlanPath,
   updateParticipantDocumentBytes,
   updateParticipantDocumentHash,
   updateParticipantJournalPath,
+  UpdateStepRejectedError,
   type AllocatedLifecycleIdV1,
   type CanonicalAbsolutePathV1,
   type CodexRegistrationProjectionV1,
@@ -128,7 +130,10 @@ interface OwnerFixture {
   readonly participant: OwnerUpdateParticipant;
 }
 
-async function fixture(options: { readonly effect?: boolean } = {}): Promise<OwnerFixture> {
+const edited = sha("edited a");
+
+/** `drift`: a concurrent edit lands after the participant's check, and the executor refuses it. */
+async function fixture(options: { readonly effect?: boolean; readonly drift?: "rolled_back" | "throws" } = {}): Promise<OwnerFixture> {
   const home = parseCanonicalAbsolutePathText(await nodeFs.realpath(await nodeFs.mkdtemp(join(tmpdir(), "dos-owner-"))));
   homes.push(home);
   const root = parseCanonicalAbsolutePathText(`${home}/staging/lifecycle/${coordinatorId}`);
@@ -209,6 +214,12 @@ async function fixture(options: { readonly effect?: boolean } = {}): Promise<Own
   });
   const port: UpdateFoundationPortV1 = {
     apply: (row) => {
+      if (options.drift !== undefined && row.role.kind === "forward") {
+        hashes.set(target, edited);
+        if (options.drift === "throws") return Promise.reject(new TransactionPreconditionError());
+        foundationState.set(row.id, "rolled_back");
+        return Promise.resolve();
+      }
       events.push(row.role.kind === "forward" ? "foundation" : "foundation_inverse");
       hashes.set(target, row.role.kind === "forward" ? newHash : oldHash);
       foundationState.set(row.id, "committed");
@@ -245,11 +256,41 @@ describe("owner update participant", () => {
     expect(await readJson(step.journal.finalPath)).toMatchObject({ phase: "verified" });
   });
 
-  it("refuses a concurrent edit before any Foundation row", async () => {
+  it("rejects a concurrent edit before any Foundation row, and compensates around it", async () => {
     const { step, events, hashes, participant } = await fixture();
-    hashes.set(target, sha("edited"));
-    await expect(participant.apply(step)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    hashes.set(target, edited);
+    await expect(participant.apply(step)).rejects.toMatchObject({ name: "UpdateStepRejectedError", reason: "update_owner_precondition" });
     expect(events).toEqual([]);
+    await expect(participant.compensate(step)).resolves.toEqual({ state: "compensated" });
+    expect(hashes.get(target)).toBe(edited);
+    expect(events.filter((event) => event.startsWith("foundation"))).toEqual([]);
+    expect(await readJson(step.journal.finalPath)).toMatchObject({ phase: "rolled_back", compensationNext: -1 });
+  });
+
+  it.each(["rolled_back", "throws"] as const)("rejects a Foundation row that refused precondition drift (%s) and leaves the edit", async (drift) => {
+    const { step, events, hashes, participant } = await fixture({ drift });
+    const rejected = await participant.apply(step).catch((error: unknown) => error);
+    expect(rejected).toBeInstanceOf(UpdateStepRejectedError);
+    expect(rejected).not.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(rejected).toMatchObject({ reason: "update_foundation_rolled_back" });
+    await expect(participant.compensate(step)).resolves.toEqual({ state: "compensated" });
+    expect(events).not.toContain("foundation_inverse");
+    expect(events).not.toContain("foundation_rollback");
+    expect(hashes.get(target)).toBe(edited);
+  });
+
+  it("still refuses an inverted row whose target was edited after it committed", async () => {
+    const { step, hashes, participant } = await fixture({ effect: false });
+    await participant.applyFiles(step);
+    hashes.set(target, edited);
+    const compensating = new OwnerUpdateParticipant({
+      journals: new UpdateParticipantJournalStore({ fs: createNodeLifecycleGuardedFileSystem({ effectiveUid: uid, renameNoReplace: async ({ sourcePath, destinationPath }) => { await nodeFs.link(sourcePath, destinationPath); await nodeFs.unlink(sourcePath); } }), effectiveUid: uid }),
+      foundation: { apply: () => Promise.resolve(), observe: () => Promise.resolve("committed"), rollback: () => Promise.resolve(), compact: () => Promise.resolve() },
+      effects: { apply: () => Promise.reject(new Error("unreachable")), compensate: () => Promise.reject(new Error("unreachable")), finalize: () => Promise.reject(new Error("unreachable")) },
+      hashTarget: (path) => Promise.resolve(hashes.get(path) ?? null),
+      now: () => new Date(at),
+    });
+    await expect(compensating.compensate(step)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
   });
 
   it("restores files before compensating the effect", async () => {

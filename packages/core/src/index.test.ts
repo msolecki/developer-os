@@ -526,6 +526,8 @@ describe("the package's public door", () => {
         "validateTargetVerificationPlan",
         "validateUpdatePlannerRequest",
         "initialGitDirectoryPaths",
+        "UpdateStepRejectedError",
+        "rejectUpdateStep",
       ].sort(),
     );
   });

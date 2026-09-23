@@ -40,7 +40,7 @@ import {
   type UpdateRecoveryExecutorRecordV1,
   type UpdateStepOwnerV1,
 } from "./coordinator.js";
-import type { UpdateCompactionEntryV1, UpdateLifecycleCoordinatorStepV1, UpdateParticipantObservationV1 } from "./participants.js";
+import { UpdateStepRejectedError, type UpdateCompactionEntryV1, type UpdateLifecycleCoordinatorStepV1, type UpdateParticipantObservationV1 } from "./participants.js";
 import { deriveUpdateExecutorRecordPath, parseCanonicalAbsolutePathText, type CanonicalPathEvidenceV1 } from "./paths.js";
 import { PLANNER_PROTOCOL_V1, PLANNER_WIRE_BOUNDS_V1 } from "./planner.js";
 import type { PlannerTranscriptIdentityV1 } from "./preview.js";
@@ -402,7 +402,13 @@ class Killed extends Error {}
 interface EngineFixture {
   readonly recoverWithoutNetwork: () => Promise<UpdateLifecycleOutcomeV1 | null>;
   readonly assertExpectedTerminal: () => Promise<boolean>;
-  readonly firstRun: { readonly error: unknown; readonly compensated: number; readonly journal: UpdateLifecycleCoordinatorJournalV2 | null };
+  readonly firstRun: {
+    readonly error: unknown;
+    readonly outcome: UpdateLifecycleOutcomeV1 | null;
+    readonly compensated: number;
+    readonly compensatedSteps: readonly number[];
+    readonly journal: UpdateLifecycleCoordinatorJournalV2 | null;
+  };
 }
 
 interface DeathPoint {
@@ -436,7 +442,11 @@ const compensationDeathPoints: readonly DeathPoint[] = [
  * An in-memory world: one plan/journal envelope, an executor record state, and a participant log.
  * It exposes no transport or planner at all, so recovery cannot reach either.
  */
-async function interruptUpdateCoordinator(point: DeathPoint | null, failAt: UpdateLifecycleCoordinatorStepV1["kind"] | null = null): Promise<EngineFixture> {
+async function interruptUpdateCoordinator(
+  point: DeathPoint | null,
+  failAt: UpdateLifecycleCoordinatorStepV1["kind"] | null = null,
+  failWith: () => Promise<UpdateParticipantObservationV1> = () => Promise.reject(Object.assign(new Error("semantic failure"), { reason: "synthetic_step_failed" })),
+): Promise<EngineFixture> {
   const built = plan();
   let journal: UpdateLifecycleCoordinatorJournalV2 | null = initialUpdateCoordinatorJournal(built, createdAt);
   let executor: "absent" | "initial" | "terminal" = "absent";
@@ -465,7 +475,7 @@ async function interruptUpdateCoordinator(point: DeathPoint | null, failAt: Upda
       apply: (step) => {
         if (step.kind === failing) {
           failing = null;
-          return Promise.reject(Object.assign(new Error("semantic failure"), { reason: "synthetic_step_failed" }));
+          return failWith();
         }
         applied.push(indexOf(step));
         return observed(step.kind === "target_verifier" ? "verified" : "applied");
@@ -521,12 +531,13 @@ async function interruptUpdateCoordinator(point: DeathPoint | null, failAt: Upda
   });
 
   let error: unknown = null;
+  let outcome: UpdateLifecycleOutcomeV1 | null = null;
   try {
-    await coordinator().execute(coordinatorId);
+    outcome = await coordinator().execute(coordinatorId);
   } catch (caught) {
     error = caught;
   }
-  const firstRun = { error, compensated: compensated.length, journal };
+  const firstRun = { error, outcome, compensated: compensated.length, compensatedSteps: [...compensated], journal };
 
   const expectRolledBack = failAt !== null && failAt !== "terminal_retire";
   return {
@@ -585,6 +596,42 @@ describe("UpdateLifecycleCoordinator", () => {
     const outcome = await fixture.recoverWithoutNetwork();
     expect(outcome === null || outcome.kind === "rolled_back").toBe(true);
     expect(await fixture.assertExpectedTerminal()).toBe(true);
+  });
+
+  it("compensates a rejected target verifier back to the old active release without reversing trust", async () => {
+    const built = plan();
+    const fixture = await interruptUpdateCoordinator(null, "target_verifier", () => Promise.reject(new UpdateStepRejectedError("update_verifier_rejected", [])));
+    expect(fixture.firstRun.error).toBeNull();
+    expect(fixture.firstRun.outcome).toEqual({ kind: "rolled_back", id: coordinatorId, cause: "update_verifier_rejected" });
+    expect(fixture.firstRun.compensatedSteps).toContain(stepIndex(built, (step) => step.kind === "active"));
+    expect(fixture.firstRun.compensatedSteps).not.toContain(stepIndex(built, (step) => step.kind === "trust"));
+    expect(await fixture.assertExpectedTerminal()).toBe(true);
+  });
+
+  it("keeps a verifier policy breach recovery-required instead of compensating", async () => {
+    const fixture = await interruptUpdateCoordinator(null, "target_verifier", () => Promise.reject(new LifecycleRecoveryRequiredError("update_verifier_policy", [])));
+    expect(fixture.firstRun.error).toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(fixture.firstRun.compensated).toBe(0);
+    expect(fixture.firstRun.journal).toMatchObject({ direction: "forward", phase: "verifying", pointOfNoReturnReached: false });
+  });
+
+  it("treats a verifier that does not observe verified as a rejection", async () => {
+    const fixture = await interruptUpdateCoordinator(null, "target_verifier", () => Promise.resolve({ state: "applied" }));
+    expect(fixture.firstRun.outcome).toEqual({ kind: "rolled_back", id: coordinatorId, cause: "update_verifier_not_verified" });
+    expect(await fixture.assertExpectedTerminal()).toBe(true);
+  });
+
+  it("compensates a pre-point-of-no-return step observed back at its preimage", async () => {
+    const fixture = await interruptUpdateCoordinator(null, "owner_files", () => Promise.resolve({ state: "compensated" }));
+    expect(fixture.firstRun.outcome).toEqual({ kind: "rolled_back", id: coordinatorId, cause: "update_step_not_applied" });
+    expect(fixture.firstRun.compensatedSteps.length).toBeGreaterThan(0);
+    expect(await fixture.assertExpectedTerminal()).toBe(true);
+  });
+
+  it("keeps an apply observation that is no preimage recovery-required", async () => {
+    const fixture = await interruptUpdateCoordinator(null, "owner_files", () => Promise.resolve({ state: "not_reversed" }));
+    expect(fixture.firstRun.error).toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(fixture.firstRun.compensated).toBe(0);
   });
 
   it("force-forwards a failure after the point of no return instead of compensating", async () => {

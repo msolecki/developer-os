@@ -17,6 +17,7 @@ import {
   updateParticipantDocumentBytes,
   updateParticipantDocumentHash,
   updateParticipantJournalPath,
+  UpdateStepRejectedError,
   type CanonicalAbsolutePathV1,
   type CanonicalStateFilePlanV1,
   type CanonicalStateFileStateV1,
@@ -223,7 +224,25 @@ describe("target verifier", () => {
   it("crosses only on an exact successful observation", async () => {
     const ok = { exitCode: 0, manifestHash: plan.manifestHash, ownerPostimagesHash: plan.ownerPostimagesHash, migrationPostimagesHash: plan.migrationPostimagesHash };
     await expect(runTargetVerifier(plan, { verify: () => Promise.resolve(ok) })).resolves.toEqual({ state: "verified" });
-    await expect(runTargetVerifier(plan, { verify: () => Promise.resolve({ ...ok, exitCode: 1 }) })).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
-    await expect(runTargetVerifier(plan, { verify: () => Promise.resolve({ ...ok, migrationPostimagesHash: sha("other") }) })).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    await expect(runTargetVerifier(plan, { verify: () => Promise.resolve({ ...ok, exitCode: 1 }) })).rejects.toMatchObject({ name: "UpdateStepRejectedError", reason: "update_verifier_rejected" });
+    await expect(runTargetVerifier(plan, { verify: () => Promise.resolve({ ...ok, migrationPostimagesHash: sha("other") }) })).rejects.toBeInstanceOf(UpdateStepRejectedError);
+  });
+
+  it("rejects without recovery-required so the coordinator compensates", async () => {
+    const ok = { exitCode: 0, manifestHash: plan.manifestHash, ownerPostimagesHash: plan.ownerPostimagesHash, migrationPostimagesHash: plan.migrationPostimagesHash };
+    const rejected = await runTargetVerifier(plan, { verify: () => Promise.resolve({ ...ok, manifestHash: sha("other") }) }).catch((error: unknown) => error);
+    expect(rejected).toBeInstanceOf(UpdateStepRejectedError);
+    expect(rejected).not.toBeInstanceOf(LifecycleRecoveryRequiredError);
+  });
+
+  it("keeps a policy breach recovery-required and never spawns the verifier", async () => {
+    let spawned = false;
+    const verify = () => {
+      spawned = true;
+      return Promise.reject(new Error("unreachable"));
+    };
+    await expect(runTargetVerifier({ ...plan, readOnly: false } as unknown as TargetVerificationPlanV1, { verify })).rejects.toMatchObject({ name: "LifecycleRecoveryRequiredError", reason: "update_verifier_policy" });
+    await expect(runTargetVerifier({ ...plan, processCount: 2 } as unknown as TargetVerificationPlanV1, { verify })).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    expect(spawned).toBe(false);
   });
 });

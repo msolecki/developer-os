@@ -26,6 +26,7 @@ import {
 import { OWNER_UPDATE_ORDER } from "./owner.js";
 import {
   isReversibleUpdateStep,
+  rejectUpdateStep,
   type UpdateCompactionEntryV1,
   type UpdateLifecycleCoordinatorStepV1,
   type UpdateParticipantAdapterV1,
@@ -1143,7 +1144,8 @@ function causeOf(error: unknown): SafeReasonCodeV1 {
 /**
  * §9.3/§9.4's engine. It drives only derived steps: forward until the verifier's durable success
  * crosses the point of no return, then force-forward through retirement, the terminal manifest,
- * and compaction. Before that point a semantic failure compensates the exact reached reverse list;
+ * and compaction. Before that point a semantic failure (`UpdateStepRejectedError`, or any error
+ * that is not recovery-required) compensates the exact reached reverse list;
  * a third state (`LifecycleRecoveryRequiredError`) preserves evidence as exit 6. Process death
  * never chooses a direction: `recover` resumes whatever the journal recorded.
  */
@@ -1259,14 +1261,17 @@ export class UpdateLifecycleCoordinator {
       case "target_verifier": {
         if (!session.journal.pointOfNoReturnReached) {
           const observed = await participants.apply(step);
-          if (observed.state !== "verified") refuseLifecycleRecovery("update_verifier_not_verified", session.plan.id);
+          if (observed.state !== "verified") rejectUpdateStep("update_verifier_not_verified", session.plan.id);
           await this.#advance(session, { kind: "point_of_no_return" });
         }
         return;
       }
       default: {
         const observed = await participants.apply(step);
-        if (observed.state !== "applied" && observed.state !== "verified") refuseLifecycleRecovery("update_step_not_applied", session.plan.id);
+        if (observed.state === "applied" || observed.state === "verified") return;
+        // A step left at or returned to its preimage is a semantic refusal; after the point of no return nothing may compensate.
+        if (!session.journal.pointOfNoReturnReached && (observed.state === "before" || observed.state === "compensated")) rejectUpdateStep("update_step_not_applied", session.plan.id);
+        refuseLifecycleRecovery("update_step_not_applied", session.plan.id);
       }
     }
   }

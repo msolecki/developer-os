@@ -12,10 +12,12 @@ import {
   parsePositiveUInt32,
   parseSchemaMigrationId,
   parseUtcTimestamp,
+  TransactionPreconditionError,
   updateLeafPlanPath,
   updateParticipantDocumentBytes,
   updateParticipantDocumentHash,
   updateParticipantJournalPath,
+  UpdateStepRejectedError,
   type AllocatedLifecycleIdV1,
   type CanonicalAbsolutePathV1,
   type CanonicalProductStatePathV1,
@@ -152,11 +154,47 @@ describe("schema migration participant", () => {
     expect(await readJson(step.journal.finalPath)).toMatchObject({ phase: "verified", nextForwardFoundation: 1 });
   });
 
-  it("refuses a concurrent edit of a migration subject before any row", async () => {
+  it("rejects a concurrent edit of a migration subject before any row, and compensates around it", async () => {
     const { step, events, hashes, participant } = await fixture("product_state");
     hashes.set(configPath, sha("edited"));
-    await expect(participant.apply(step)).rejects.toBeInstanceOf(LifecycleRecoveryRequiredError);
+    await expect(participant.apply(step)).rejects.toMatchObject({ name: "UpdateStepRejectedError", reason: "update_migration_before_hash" });
     expect(events).toEqual([]);
+    await expect(participant.compensate(step)).resolves.toEqual({ state: "compensated" });
+    expect(events).toEqual([]);
+    expect(hashes.get(configPath)).toBe(sha("edited"));
+  });
+
+  it.each(["rolled_back", "throws"] as const)("rejects a Foundation row that refused precondition drift (%s) and leaves the edit", async (drift) => {
+    const { step, hashes, journals } = await fixture("product_state");
+    const state = new Map<string, "future" | "partial" | "committed" | "rolled_back">();
+    const events: string[] = [];
+    const drifting = new SchemaMigrationParticipant({
+      journals,
+      foundation: {
+        apply: (row) => {
+          hashes.set(configPath, sha("edited"));
+          if (drift === "throws") return Promise.reject(new TransactionPreconditionError());
+          state.set(row.id, "rolled_back");
+          return Promise.resolve();
+        },
+        observe: (row) => Promise.resolve(state.get(row.id) ?? "future"),
+        rollback: () => {
+          events.push("rollback");
+          return Promise.resolve();
+        },
+        compact: () => Promise.resolve(),
+      },
+      hashTarget: (path) => Promise.resolve(hashes.get(path) ?? null),
+      brainRoot,
+      now: () => new Date(at),
+    });
+    const rejected = await drifting.apply(step).catch((error: unknown) => error);
+    expect(rejected).toBeInstanceOf(UpdateStepRejectedError);
+    expect(rejected).toMatchObject({ reason: "update_foundation_rolled_back" });
+    await expect(drifting.compensate(step)).resolves.toEqual({ state: "compensated" });
+    expect(events).toEqual([]);
+    expect(hashes.get(configPath)).toBe(sha("edited"));
+    expect(await readJson(step.journal.finalPath)).toMatchObject({ phase: "rolled_back", compensationNext: -1 });
   });
 
   it("refuses an after state that is not the planned postimage", async () => {

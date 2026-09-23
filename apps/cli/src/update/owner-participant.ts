@@ -1,7 +1,10 @@
 import {
   forwardFoundationRefs,
   pairedCompensationRef,
+  rejectUpdateStep,
+  TransactionPreconditionError,
   updateParticipantDocumentHash,
+  UpdateStepRejectedError,
   validateOwnerUpdateJournal,
   type CanonicalAbsolutePathV1,
   type ImmutableUpdatePlanRefV1,
@@ -19,7 +22,8 @@ import { participantTimestamp, refuseParticipant, type UpdateParticipantJournalS
 /**
  * Spec 1's Foundation participant over a V2 update ref. It publishes the ref's evidence-bound staged
  * initial journal, runs the transaction with its caller-supplied preconditions, and resumes from
- * that journal; composition binds it to the shipped executor.
+ * that journal; composition binds it to the shipped executor. A transaction that refuses its
+ * precondition either throws `TransactionPreconditionError` or returns and observes `rolled_back`.
  */
 export interface UpdateFoundationPortV1 {
   apply(ref: UpdateFoundationParticipantRefV2): Promise<void>;
@@ -31,6 +35,34 @@ export interface UpdateFoundationPortV1 {
 
 /** Guarded current content hash of one target, or null when absent. */
 export type UpdateTargetHashPortV1 = (path: CanonicalAbsolutePathV1) => Promise<LowerHexSha256 | null>;
+
+/**
+ * Runs one forward ref. A transaction that refused its precondition or rolled itself back left its
+ * targets untouched, so it is a §9.4 rejection the coordinator compensates, not a third state.
+ */
+export async function applyForwardRef(foundation: UpdateFoundationPortV1, ref: UpdateFoundationParticipantRefV2): Promise<void> {
+  try {
+    await foundation.apply(ref);
+  } catch (error) {
+    if (error instanceof TransactionPreconditionError) throw new UpdateStepRejectedError("update_foundation_rolled_back", [ref.initialJournal.finalPath], { cause: error });
+    throw error;
+  }
+  if ((await foundation.observe(ref)) === "rolled_back") rejectUpdateStep("update_foundation_rolled_back", ref.initialJournal.finalPath);
+}
+
+/**
+ * The targets compensation must find restored: those of forward refs that committed and were
+ * inverted. A ref never begun or rolled back by its own executor left its targets as it found
+ * them, which after a rejected drift is the concurrent edit this update must not overwrite.
+ */
+export async function committedForwardTargets(foundation: UpdateFoundationPortV1, refs: readonly UpdateFoundationParticipantRefV2[]): Promise<ReadonlySet<string>> {
+  const targets = new Set<string>();
+  // ponytail: a partial ref this update rolled back also reads `rolled_back`, so its restore is trusted to the executor; re-verify it if refs gain a refusal-versus-rollback observation.
+  for (const ref of forwardFoundationRefs(refs)) {
+    if ((await foundation.observe(ref)) === "committed") for (const mutation of ref.mutations) targets.add(mutation.targetPath);
+  }
+  return targets;
+}
 
 /** Reverses one forward ref by its reached state: committed pairs its compensation, partial rolls back. */
 export async function compensateForwardRef(foundation: UpdateFoundationPortV1, refs: readonly UpdateFoundationParticipantRefV2[], forward: UpdateFoundationParticipantRefV2): Promise<void> {
@@ -76,13 +108,13 @@ export class OwnerUpdateParticipant {
     let journal = await this.openJournal(step);
     if (journal.phase === "effects_applying" || journal.phase === "verified" || journal.phase === "finalized") return { state: "applied" };
     if (journal.phase === "planned") {
-      await this.requirePreconditions(step.plan);
+      await this.requirePreconditions(step.plan, null, rejectUpdateStep);
       journal = await this.persist(step, { ...journal, phase: "files_applying" });
     }
     if (journal.phase !== "files_applying") return refuseParticipant("update_owner_journal_direction", step.journal.finalPath);
     const forward = forwardFoundationRefs(step.plan.foundation);
     while (journal.nextForwardFoundation < forward.length) {
-      await this.#dependencies.foundation.apply(forward[journal.nextForwardFoundation] as UpdateFoundationParticipantRefV2);
+      await applyForwardRef(this.#dependencies.foundation, forward[journal.nextForwardFoundation] as UpdateFoundationParticipantRefV2);
       journal = await this.persist(step, { ...journal, nextForwardFoundation: journal.nextForwardFoundation + 1 });
     }
     await this.requirePostimages(step.plan);
@@ -125,7 +157,7 @@ export class OwnerUpdateParticipant {
       await compensateForwardRef(this.#dependencies.foundation, refs, forward[journal.compensationNext] as UpdateFoundationParticipantRefV2);
       journal = await this.persist(step, { ...journal, compensationNext: journal.compensationNext - 1 });
     }
-    await this.requirePreconditions(step.plan);
+    await this.requirePreconditions(step.plan, await committedForwardTargets(this.#dependencies.foundation, refs), refuseParticipant);
     if (step.effect !== null) await this.#dependencies.effects.compensate(step.effect);
     await this.persist(step, { ...journal, phase: "rolled_back", compensationNext: -1 });
     return { state: "compensated" };
@@ -169,12 +201,16 @@ export class OwnerUpdateParticipant {
     return next;
   }
 
-  /** Concurrent-edit guard: every changed target still holds its plan-bound preimage. */
-  private async requirePreconditions(plan: OwnerUpdatePlanV1): Promise<void> {
+  /**
+   * Concurrent-edit guard: every changed target in `scope` (all when null) still holds its
+   * plan-bound preimage. Before the first row a mismatch is a rejection; after compensation it is
+   * a third state.
+   */
+  private async requirePreconditions(plan: OwnerUpdatePlanV1, scope: ReadonlySet<string> | null, refuse: (reason: string, ...paths: readonly string[]) => never): Promise<void> {
     for (const operation of plan.operations) {
-      if (operation.operation === "keep") continue;
+      if (operation.operation === "keep" || (scope !== null && !scope.has(operation.targetPath))) continue;
       const expected = operation.expectedBefore.state === "file" ? operation.expectedBefore.hash : null;
-      if ((await this.#dependencies.hashTarget(operation.targetPath)) !== expected) refuseParticipant("update_owner_precondition", operation.targetPath);
+      if ((await this.#dependencies.hashTarget(operation.targetPath)) !== expected) refuse("update_owner_precondition", operation.targetPath);
     }
   }
 

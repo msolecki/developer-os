@@ -1,6 +1,7 @@
 import {
   forwardFoundationRefs,
   parseCanonicalAbsolutePathText,
+  rejectUpdateStep,
   updateParticipantDocumentHash,
   validateSchemaMigrationExecutionJournal,
   type CanonicalAbsolutePathV1,
@@ -12,7 +13,7 @@ import {
   type UpdateParticipantObservationV1,
 } from "@developer-os/core";
 
-import { compensateForwardRef, type UpdateFoundationPortV1, type UpdateTargetHashPortV1 } from "./owner-participant.js";
+import { applyForwardRef, committedForwardTargets, compensateForwardRef, type UpdateFoundationPortV1, type UpdateTargetHashPortV1 } from "./owner-participant.js";
 import { participantTimestamp, refuseParticipant, type UpdateParticipantJournalStore } from "./state-participant.js";
 
 export interface SchemaMigrationParticipantDependenciesV1 {
@@ -46,16 +47,16 @@ export class SchemaMigrationParticipant {
     let journal = await this.openJournal(step);
     if (journal.phase === "verified" || journal.phase === "finalized") return { state: "verified" };
     if (journal.phase === "planned") {
-      await this.requireHashes(step.plan, "before");
+      await this.requireHashes(step.plan, "before", null, rejectUpdateStep);
       journal = await this.persist(step, { ...journal, phase: "applying" });
     }
     if (journal.phase !== "applying") return refuseParticipant("update_migration_journal_direction", step.journal.finalPath);
     const forward = forwardFoundationRefs(step.plan.foundation);
     while (journal.nextForwardFoundation < forward.length) {
-      await this.#dependencies.foundation.apply(forward[journal.nextForwardFoundation] as UpdateFoundationParticipantRefV2);
+      await applyForwardRef(this.#dependencies.foundation, forward[journal.nextForwardFoundation] as UpdateFoundationParticipantRefV2);
       journal = await this.persist(step, { ...journal, nextForwardFoundation: journal.nextForwardFoundation + 1 });
     }
-    await this.requireHashes(step.plan, "after");
+    await this.requireHashes(step.plan, "after", null, refuseParticipant);
     await this.persist(step, { ...journal, phase: "verified" });
     return { state: "verified" };
   }
@@ -84,7 +85,7 @@ export class SchemaMigrationParticipant {
       await compensateForwardRef(this.#dependencies.foundation, refs, forward[journal.compensationNext] as UpdateFoundationParticipantRefV2);
       journal = await this.persist(step, { ...journal, compensationNext: journal.compensationNext - 1 });
     }
-    await this.requireHashes(step.plan, "before");
+    await this.requireHashes(step.plan, "before", await committedForwardTargets(this.#dependencies.foundation, refs), refuseParticipant);
     await this.persist(step, { ...journal, phase: "rolled_back", compensationNext: -1 });
     return { state: "compensated" };
   }
@@ -124,10 +125,12 @@ export class SchemaMigrationParticipant {
     return next;
   }
 
-  private async requireHashes(plan: SchemaMigrationPlanV1, side: "before" | "after"): Promise<void> {
+  /** Every subject in `scope` (all when null) holds its `side` hash; `refuse` decides rejection versus third state. */
+  private async requireHashes(plan: SchemaMigrationPlanV1, side: "before" | "after", scope: ReadonlySet<string> | null, refuse: (reason: string, ...paths: readonly string[]) => never): Promise<void> {
     for (const mutation of plan.mutations) {
       const target = plan.domain === "brain" ? parseCanonicalAbsolutePathText(`${this.#dependencies.brainRoot}/${mutation.path}`) : parseCanonicalAbsolutePathText(mutation.path);
-      if ((await this.#dependencies.hashTarget(target)) !== (side === "before" ? mutation.beforeHash : mutation.afterHash)) refuseParticipant(`update_migration_${side}_hash`, target);
+      if (scope !== null && !scope.has(target)) continue;
+      if ((await this.#dependencies.hashTarget(target)) !== (side === "before" ? mutation.beforeHash : mutation.afterHash)) refuse(`update_migration_${side}_hash`, target);
     }
   }
 }

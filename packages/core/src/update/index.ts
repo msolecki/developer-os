@@ -362,6 +362,7 @@ export {
   ownerPostimagesHash,
   pairedCompensationRef,
   parseOwnerExternalEffectLiteral,
+  rejectUpdateStep,
   stateLeafKindForRole,
   updateCompensationSteps,
   updateParticipantDocumentBytes,
@@ -375,6 +376,7 @@ export {
   validateOwnerUpdatePlan,
   validateStateParticipantJournal,
   validateTargetVerificationPlan,
+  UpdateStepRejectedError,
 } from "./participants.js";
 export type {
   ActiveReleaseStatePlanV1,

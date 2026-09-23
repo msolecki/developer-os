@@ -68,6 +68,27 @@ export type UpdateCompactionEntryV1 =
   | { readonly kind: "coordinator_staging" }
   | { readonly kind: "coordinator_envelope" };
 
+/**
+ * §9.4's semantic failure: a step refused or rolled itself back without leaving a third state.
+ * Before the point of no return the coordinator compensates on it and reports `reason` as the
+ * cause; it deliberately is not a `LifecycleRecoveryRequiredError`, which means exit 6.
+ */
+export class UpdateStepRejectedError extends Error {
+  readonly reason: SafeReasonCodeV1;
+  readonly paths: readonly string[];
+
+  constructor(reason: string, paths: readonly string[], options?: { readonly cause?: unknown }) {
+    super(`update step rejected: ${reason}`, options);
+    this.name = "UpdateStepRejectedError";
+    this.reason = parseSafeReasonCode(reason);
+    this.paths = [...paths];
+  }
+}
+
+export function rejectUpdateStep(reason: string, ...paths: readonly string[]): never {
+  throw new UpdateStepRejectedError(reason, paths);
+}
+
 /** What a participant durably reached at one step; the coordinator advances only on this. */
 export interface UpdateParticipantObservationV1 {
   readonly state: "before" | "applied" | "verified" | "compensated" | "not_reversed";
