@@ -17,7 +17,7 @@ const RESERVED_REASON_CODES: ReadonlySet<string> = new Set(["ok", "git_disabled"
 function reasonOf(value: unknown): SafeReasonCodeV1 | null {
   try {
     const code = parseSafeReasonCode(value);
-    return RESERVED_REASON_CODES.has(code) ? null : code;
+    return RESERVED_REASON_CODES.has(code) ? parseSafeReasonCode("handler_refused") : code;
   } catch {
     return null;
   }

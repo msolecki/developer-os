@@ -56,6 +56,7 @@ import {
   validateManifestV2,
 } from "@developer-os/core";
 import type {
+  LifecycleIdPrefixV1,
   CanonicalAbsolutePathV1,
   CanonicalJsonValue,
   DeveloperOsConfigV1,
@@ -957,7 +958,7 @@ export async function reserveIds(
   lifecycle: CliLifecycleContext,
   global: HeldLifecycleStableLockV1,
   snapshot: LifecycleLedgerSnapshotV1<LifecycleExecutionPlanV1>,
-  prefixes: readonly ("lc" | "tx" | "ge" | "le" | "mf")[],
+  prefixes: readonly LifecycleIdPrefixV1[],
 ): Promise<readonly string[]> {
   const block = await reserveLifecycleIdBlock(
     {
@@ -974,7 +975,7 @@ export async function reserveIds(
 }
 
 /** Spec §2.4's reservation order, read off the builder's own placeholder plan. */
-export function prefixesOf(builder: LifecycleExecutionBuilderV1<LifecycleExecutionPlanV1>): readonly ("lc" | "tx" | "ge" | "le" | "mf")[] {
+export function prefixesOf(builder: LifecycleExecutionBuilderV1<LifecycleExecutionPlanV1>): readonly LifecycleIdPrefixV1[] {
   const placeholders = Array.from({ length: builder.slotCount }, (_unused, index) => `tx_${"f".repeat(64)}_${String(index)}`);
   return lifecycleReservationOrder(builder.build(placeholders).plan).map((slot) => slot.prefix);
 }

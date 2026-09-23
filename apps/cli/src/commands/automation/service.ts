@@ -756,7 +756,8 @@ const MUTATION_STEPS: Readonly<Record<AutomationOperationV1, readonly ("P" | "M0
 function reservationOf(inputs: AutomationApplyInputsV1): LifecycleLeafReservationV1 {
   const effects = (hasEffect(inputs, "before") ? 1 : 0) + (hasEffect(inputs, "after") ? 1 : 0);
   const refs = inputs.planned.liveOnly ? 0 : 5;
-  const mutations = inputs.planned.liveOnly ? 0 : 3 + mutatedEntries(inputs.planned.preview.launchd as LaunchdPlanPreviewV1).length;
+  // Each plist appears in both `plist_files` refs; activation twice and config once.
+  const mutations = inputs.planned.liveOnly ? 0 : 3 + 2 * mutatedEntries(inputs.planned.preview.launchd as LaunchdPlanPreviewV1).length;
   return {
     foundationJournals: 3 * refs,
     coordinatorJournals: 3,
