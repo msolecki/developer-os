@@ -10,7 +10,10 @@ wording, `SafeReasonCodeV1`, the byte-cap reading of the two "exact maximum" gat
 `symlink` arm as an accepted residual — was approved by the founder in conversation and is marked
 "Amended 2026-09-08" in place; the 2026-09-17 withdrawal of the V1→V2 migration (D18), the V1 refusal's
 recovery (D20) and the bookkeeping-set admission of Spec 1's NEW-67 amendment (A12) were approved by the
-founder and are marked "Amended 2026-09-17" in place.** This
+founder and are marked "Amended 2026-09-17" in place; the 2026-09-23 founder decision D60 — lifecycle
+Foundation publication and the legal coordinator staging children (§5.3, §9), the split state
+preimage/postimage types, automatic-rollback exit classes (§9.4, §11) and the two V2 Foundation ref
+types as an accepted residual (§13.3) — is marked "Amended 2026-09-23 (D60)" in place.** This
 is DOS-P7 Spec 2, the second half of `ORDER.md` entry A11 and program-plan Task 7. Spec 1 is the
 approved opt-in surfaces design at
 `docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md`.
@@ -955,8 +958,10 @@ content `hash`: lifecycle `update_expected` contributes kind, coordinator ID, or
 bytes, and mode; bootstrap `bootstrap_expected` contributes kind, bootstrap ID, ordinal, branded
 path, bytes, and mode. The projection excludes `planHash`, `initialJournal.plannedBytesHash`, and
 that staged content hash to avoid self-reference.
-After computing `planHash`, the codec constructs the exact initial planned-journal bytes containing
-that hash and computes their raw SHA-256; both `plannedBytesHash` and the full staged arm's `hash`
+After computing `planHash`, the codec constructs the exact initial planned journal whose
+planned journal bytes are hashed, and computes their raw SHA-256 (**Amended 2026-09-23 (D60):** the
+previous wording "containing that hash" is withdrawn; Spec 1's V1 journal key set cannot hold
+`planHash`, and bootstrap never embedded it); both `plannedBytesHash` and the full staged arm's `hash`
 must equal it. Every enclosing ref,
 construction/bootstrap payload row, and reopened planned journal independently recomputes both
 digests and requires exact equality; the V1 Foundation digest/domain is never reused.
@@ -964,6 +969,10 @@ A lifecycle `FoundationInitialJournalPayloadPathV1` is derived exactly as
 `staging/lifecycle/<coordinator-id>/participants/foundation/<transaction-id>/initial-journal.json`;
 bootstrap refs use only their ordinal-derived payload path. Both are included in their envelope's
 exact-set/orphan/terminal-closure inventory.
+
+**Amended 2026-09-23 (D60):** lifecycle refs follow §6.3's publication rule: `stagedPath` is the
+standard `<tx>/<ordinal>.bin`, `content`/`digest` are `update_expected` construction rows, and they
+are published no-replace at the Foundation cursor before the initial journal.
 
 Execution cursors count only the forward-role projection: at most 256 bootstrap, 3,907 owner, or 391
 schema refs. Compensation cursors address the reverse reached forward projection and dispatch its
@@ -3226,12 +3235,21 @@ interface OwnerExternalEffectEvidenceV1 {
   readonly completedAt: UtcTimestampV1;
 }
 
-type CanonicalStateFileStateV1 =
+/** Amended 2026-09-23 (D60). The former CanonicalStateFileStateV1 is split. A postimage carries no
+ *  dev/ino, because leaf plans are written before their payloads; its identity comes from the
+ *  reopened construction evidence of `payload`, as ManifestBytesStateV1 already does. */
+type CanonicalStatePreimageV1 =
   | { readonly state: "absent" }
   | { readonly state: "present"; readonly hash: LowerHexSha256;
-      readonly payload: StatePayloadRefV1 | null; readonly ownerUid: EffectiveUidV1;
+      readonly payload: null; readonly ownerUid: EffectiveUidV1;
       readonly mode: 384; readonly nlink: 1; readonly size: Integer[1..67_108_864];
       readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1 };
+
+type CanonicalStatePostimageV1 =
+  | { readonly state: "absent" }
+  | { readonly state: "present"; readonly hash: LowerHexSha256;
+      readonly payload: StatePayloadRefV1; readonly ownerUid: EffectiveUidV1;
+      readonly mode: 384; readonly nlink: 1; readonly size: Integer[1..67_108_864] };
 
 interface StatePayloadRefV1 {
   readonly kind: "update_expected";
@@ -3251,8 +3269,8 @@ interface CanonicalStateFilePlanV1 {
     "rollback_record";
   readonly path: CanonicalAbsolutePathV1;
   readonly tombstonePath: CanonicalAbsolutePathV1;
-  readonly before: CanonicalStateFileStateV1;
-  readonly after: CanonicalStateFileStateV1;
+  readonly before: CanonicalStatePreimageV1;
+  readonly after: CanonicalStatePostimageV1;
   readonly reversal: "reversible" | "monotonic_no_reverse";
   readonly maximumPlanBytes: Integer[1..16_777_216];
   readonly maximumJournalBytes: Integer[1..1_048_576];
@@ -4143,7 +4161,9 @@ rollback-source `nextEntry` covers the exact payload inventory at the larger bou
 the exact `update-construction.plan.json`, `update-construction.journal.json`, phase-legal pending/
 rewrite sibling, plus `update/construction`, `update/plans`, `update/initial-journals`,
 `update/journals`, `update/evidence`, and `update/source` subtrees to the coordinator staging grammar;
-no other child is legal.
+**Amended 2026-09-23 (D60):** it also adds the `participants/foundation` (§5.3),
+`participants/manifest` (§5.3), `update/payloads`, and `update/recovery-executor` subtrees, which
+this specification derives elsewhere; no other child is legal.
 
 An owner external-effect plan is the `owner_external_effect` leaf at the generic plan path. Its
 journal uses the matching generic journal path, and each reached observation is the sole canonical
@@ -4231,7 +4251,9 @@ Tests mutate, omit, duplicate, and reorder every row and include a vector provin
 containing digest cannot affect its own projection.
 
 `CanonicalStateFilePlanV1` permits a null payload only for the still-present guarded preimage; a
-present postimage requires an exact pre-intent `StatePayloadRefV1`. Trust plans alone are
+present postimage requires an exact pre-intent `StatePayloadRefV1` and takes its device/inode only from the
+matching construction evidence (**Amended 2026-09-23 (D60)**: the postimage type carries no
+device/inode). Trust plans alone are
 `monotonic_no_reverse`; every other state plan is reversible. `TargetVerificationPlanV1` admits only
 the signed bundle verifier, exact expected postimage hashes, fixed read-only process table, and the
 shown caps. `UpdateTerminalRetirementPlanV1` flattens each referenced inventory in kind/root/unsigned
@@ -4699,6 +4721,12 @@ leaves the old active bundle. After active publication but before verifier succe
 the exact verifier; a verifier failure executes the persisted inverse plan. Process death alone never
 chooses rollback: the journal direction/cursor controls resume.
 
+**Amended 2026-09-23 (D60):** a compensated apply exits with the class of its cause; trust stays
+advanced. §7.3 remains a success-only union: an automatic rollback is reported as the
+`update_rolled_back_automatically` error envelope, exit 5 when the cause is
+`update_verifier_rejected` and exit 1 for any other operational cause, with the recovery text
+"version X is still active" naming the previous active version.
+
 If inverse execution encounters a third state, recovery preserves all evidence as exit 6. It never
 forces an overwrite to make rollback look complete. Trust state is the sole reached participant that
 is not reversed; once a signed high watermark is durably accepted, retaining it narrows future
@@ -4828,7 +4856,7 @@ The stable exit mapping is:
 | 2 | invalid input | malformed argv/version, unsupported option combination, nonexistent requested stable release |
 | 3 | decision required | managed drift, post-update edit blocking rollback, user-owned collision requiring disposition |
 | 4 | capability unavailable | unsupported architecture, launcher/update protocol too old, missing installed-owner provider row |
-| 5 | security refusal | signature/checksum/effective-origin mismatch, archive/path/process policy violation, unsafe executable/vendor effect |
+| 5 | security refusal | signature/checksum/effective-origin mismatch, archive/path/process policy violation, unsafe executable/vendor effect, target-verifier rejection (the update was rolled back automatically; amended 2026-09-23 (D60)) |
 | 6 | recovery required | incomplete/contradictory journal, migration residue, third state, missing rollback evidence, malformed local trust/active/manifest state |
 
 Errors use fixed reason codes and content-free messages. Safe public version and reason-code values may
@@ -4935,3 +4963,8 @@ Homebrew installation, SBOM, checksums, clean-account flows, and public metadata
    later link-capable transaction operation needs no manifest schema bump, and one exact-set test
    asserts that no path in this specification produces a symlink artifact. **Owner: the first
    link-capable transaction operation.**
+10. **Two V2 Foundation ref types.** Amended 2026-09-23 (D60). The implementation keeps bootstrap's
+    `FoundationParticipantRefV2` and a separate update-side `UpdateFoundationParticipantRefV2` instead
+    of the one union shown in §5.3. Both enforce §5.3's rules for their own envelope arm; unifying
+    them would reopen shipped, security-sensitive bootstrap admission. **Owner: a later cleanup after
+    the Spec 2 synthetic end-to-end run, re-testing bootstrap.**
