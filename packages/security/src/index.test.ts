@@ -53,6 +53,14 @@ describe("the package's public door", () => {
         "verifySignedReleaseDocument",
         "SupervisedProcessRunner",
         "nodeSupervisedProcessDependencies",
+        "admitGitDistribution",
+        "expandGitArgv",
+        "hashGitProcessTable",
+        "parseGitAlternateObjectDirectory",
+        "parseGitConfigQuotedPath",
+        "SUPPORTED_GIT_DISTRIBUTION",
+        "validateSupportedGitDistribution",
+        "validateSupportedGitProcessTable",
       ].sort(),
     );
   });

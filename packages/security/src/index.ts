@@ -100,6 +100,34 @@ export type {
   TargetPlannerSupervisorDependencies,
 } from "./update/index.js";
 
+export {
+  admitGitDistribution,
+  expandGitArgv,
+  hashGitProcessTable,
+  parseGitAlternateObjectDirectory,
+  parseGitConfigQuotedPath,
+  SUPPORTED_GIT_DISTRIBUTION,
+  validateSupportedGitDistribution,
+  validateSupportedGitProcessTable,
+} from "./git/index.js";
+export type {
+  GitAlternateObjectDirectoryV1,
+  GitArgSlotV1,
+  GitArgSlotValuesV1,
+  GitArgTokenV1,
+  GitArgvGrammarV1,
+  GitConfigQuotedPathV1,
+  GitEnvironmentProfileV1,
+  GitProcessEdgeV1,
+  GitProcessIoProfileV1,
+  GitProcessNodeV1,
+  GitProcessPhaseBudgetV1,
+  ObservedGitDistributionV1,
+  SupportedGitDistributionV1,
+  SupportedGitExecutableV1,
+  SupportedGitProcessTableV1,
+} from "./git/index.js";
+
 export interface SecurityPolicy {
   assertReadable(path: string): Promise<void>;
   assertWritable(path: string): Promise<void>;
