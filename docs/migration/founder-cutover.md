@@ -710,16 +710,9 @@ One complete cycle, in order; the gate of roadmap Phase 10.
 Then continue with step 18 (exercise the rollback) while the product is uninstalled, and return with
 step 17.
 
-**Founder decision needed: shadow mode.** Program plan Task 8 asks for capture into a separate shadow
-quarantine with canonical apply disabled, and for a comparison of the old and new capture, redaction
-and deduplication on synthetic sessions, before Claude is cut over. This runbook cuts over directly
-and installs both adapters at once; no recorded decision covers that. Before step 8, the founder
-chooses one and records it in the roadmap:
-
-- **A — restore shadow mode:** add a shadow stage between steps 7c and 8 that runs the product capture
-  into its own quarantine beside the legacy runtime and compares the two on synthetic sessions; or
-- **B — accept skipping it:** record that the step 7c rehearsal, the step 16 cycle for each adapter and
-  the step 18 rollback replace the shadow comparison.
+**Shadow mode: skipped (D58, 2026-09-23).** Program plan Task 8's separate shadow quarantine and
+old-versus-new capture comparison are not run. The step 7c rehearsal, the step 16 cycle for each
+adapter and the step 18 rollback replace them.
 
 ## Step 17 — Return to the product after the uninstall or a rollback
 

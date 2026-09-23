@@ -218,6 +218,9 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   committing — the founder's existing vendor credentials, as D52 does for Codex ingest. The session
   grants the Codex hook trust itself on that disposable home only. The founder's working `~/.claude`
   and `~/.codex` are not modified.
+- **D58 (2026-09-23), amends program plan Task 8.** The founder cutover skips shadow mode (a separate
+  shadow quarantine and an old-versus-new capture comparison). The runbook's disposable-home rehearsal
+  (step 7c), the per-adapter gate cycle (step 16) and the exercised rollback (step 18) replace it.
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 
