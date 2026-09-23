@@ -158,7 +158,7 @@ extra fixture pair and table row in Task 8 or Task 9, or as a follow-up task aft
 
 ### Task 15: Codex half from the observations · M
 
-**Blocked.** Every Codex cell in `docs/architecture/hooks.md` §1 that this task consumes is `founder-deferred` (billed turn or manual trust); nothing is implemented (BACKLOG NEW-104).
+**Committed 2026-09-23 under D57** (`4041286` observations, `4e308d2` implementation, `2e75574` and `2bec6a7` review fixes; re-review ACCEPT). Tests written, not run (D56); they run at Task 19.
 
 Spec §3 (Codex column), §4.3, §4.4, §7.2 and §8.1 floors. Every *observe* cell is filled from
 `docs/architecture/hooks.md` §1, and no Codex value is guessed. A row Task 1 recorded `unsupported`

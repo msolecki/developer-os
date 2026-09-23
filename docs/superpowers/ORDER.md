@@ -27,7 +27,7 @@ bundle (`811d74b`), V2 manifest reads in write commands and `status` (`b3bb8cc`,
 Phase 5b (A12b, `plans/2026-09-22-developer-os-brain-workflows.md`): Tasks 1–15 committed.
 
 Phase 6 (A13, `plans/2026-09-22-developer-os-hooks.md`): Claude half committed — Tasks 3–14, 16, 17,
-with Claude hooks installed by `init` (`a156b0c`). Task 15 (Codex hooks) is blocked (NEW-104).
+with Claude hooks installed by `init` (`a156b0c`). Task 15 (Codex hooks) committed under D57 (`4041286`, `4e308d2`, review fixes `2e75574`, `2bec6a7`, re-review ACCEPT); Codex rows observed on a local mock Responses API because the linked Codex account had no quota.
 
 Phase 7 (A14, `plans/2026-09-22-developer-os-tooling-verbs.md`): Tasks 1–13 and 15 committed.
 
@@ -50,9 +50,9 @@ Founder stops per phase, on top of that:
   the phase review).
 - A12b: Task 16 real-vendor run (`npm run test:vendor-brain`, all five workflows `pass` on Claude);
   the red-first runs of the new security cases against `13eb18e` (orchestrator).
-- A13: Task 15 Codex hooks, blocked on billed and trust observations (NEW-104); Task 18 real-agent
+- A13: Task 15's tests (committed, D57); Task 18 real-agent
   matrix on both vendors; Task 2 legacy parity check, never run.
-- A14: Task 14 vendor observations (NEW-109); `project init` templates' founder-local scan (Task 15
+- A14: Task 14's recorded observations tested (committed `4041286`, D57); `project init` templates' founder-local scan (Task 15
   Step 4).
 
 Spec 2: Tasks 1–7, 9, 10 and 11 complete, Task 8 withdrawn (D18), Task 11b parked (D46), Tasks 12–26
@@ -86,7 +86,7 @@ Strict sequence; do not start a blocked row early.
 | A11 | DOS-P7, pre-cutover part (D16): Spec 2 Tasks 10–11 (Task 9 closed 2026-09-17; Spec 1a closed 2026-09-22) | nothing | a fresh production `init` runs V2 through the launcher; `config get\|set`, coordinator recovery and drained uninstall ship | phase close owed; Task 11b parked (D46) |
 | A12 | DOS-P10 Managed instruction artifacts — spec, plan, implementation | A11 | every artifact in `docs/migration/instruction-inventory.md` §1–§3, §6 installs, drift-checks, and uninstalls on both vendors | committed; phase close owed |
 | A12b | Brain workflows — spec, plan, implementation | A12 | every workflow and verb in the inventory §7 is proven on the synthetic vault | committed; phase close owed |
-| A13 | DOS-P11 Hooks — spec, plan, implementation | A12b | every hook in the inventory §4 plus session-start injection is observed firing and names the installed binary | Claude half committed; Codex blocked (NEW-104); phase close owed |
+| A13 | DOS-P11 Hooks — spec, plan, implementation | A12b | every hook in the inventory §4 plus session-start injection is observed firing and names the installed binary | committed (Codex half under D57); phase close owed |
 | A14 | DOS-P12 Repository tooling verbs — spec, plan, implementation | A13 | inventory §5 and §6: every row is a shipped verb or a recorded refusal (D47) | committed; phase close owed |
 | A15 | DOS-P8 Founder shadow migration — dedicated plan and execution | A14 | rollback to the legacy runtime is exercised and one stable cycle completes | next |
 | A11b | DOS-P7 remainder (D16): Spec 2 Tasks 12–26 (update, rollback), then Spec 1b (git, launchd) | A15 (D56: Tasks 12–25 run now) | `update`, `update rollback`, `git` and `automation` proven on a disposable install, then on the founder machine | Tasks 12–25 in progress (D56) |
@@ -114,7 +114,7 @@ Needs a human, a policy decision, or an external application:
 
 `BACKLOG.md` §1 holds 64 open numbered rows (NEW-101..103 added 2026-09-22, NEW-104..109
 2026-09-23). Rows implemented this session stay open until their tests pass at phase close: NEW-49,
-NEW-85 (Phase 4b); NEW-60, NEW-61, NEW-65, NEW-95, NEW-102 (A12); NEW-98 (A14).
+NEW-85 (Phase 4b); NEW-60, NEW-61, NEW-65, NEW-95, NEW-102 (A12); NEW-104 (A13, D57); NEW-98, NEW-109 (A14, D57).
 Owners: NEW-85 and NEW-86 are owned by Phase 4b; NEW-82 by plan 1a; NEW-84 by Phase 9;
 NEW-87 travels with whichever row each mis-aimed citation belongs to; NEW-88 and NEW-89 by plan 1a Tasks 16 and 22; NEW-91 by plan 1a Task 16; NEW-90 and NEW-92 by Phase 4b; NEW-97 by Phase 4b and NEW-98 by A14 Task 6 (repository tooling, D47), both opened by plan 1a Task 22; NEW-99 is owned by plan 1a Task 23b (D38); NEW-100 by a later sharding of `test:lifecycle` (D39); NEW-101, NEW-103 and NEW-109 by the founder; NEW-104 by A13 Task 15; NEW-105 to NEW-107 by A12's follow-ups; NEW-108 by each phase close.
 They are not ordered ahead of A11 unless the touched subsystem makes one relevant; D33 lets a

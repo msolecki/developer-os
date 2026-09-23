@@ -89,7 +89,7 @@ Gate: every inventoried script is a verb or a recorded refusal. Plan base: `13eb
 
 ### Task 14: Record the Claude observations · S — **FOUNDER STOP POINT**
 
-**Open (founder stop).** Not observed; `CLAUDE_MEMORY_LAYOUT` and `CLAUDE_DENY_RULES` stay `null`, so `import --claude-memory` exits 4 and `vendor-config` warns (BACKLOG NEW-109).
+**Recorded 2026-09-23 under D57** (`4041286`): both rows observed on a disposable home and filled. Test owed at phase close (Step 3).
 
 Spec §5.5 "Capability precondition" and §8 "exact rule strings are vendor syntax". An agent never
 observes these facts. It does not run Claude Code, read the founder's `~/.claude`, or write a
