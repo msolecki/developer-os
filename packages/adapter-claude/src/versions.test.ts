@@ -13,7 +13,7 @@ describe("tablePermits", () => {
   it("covers every capability key, so no key is silently unreachable", () => {
     expect(CLAUDE_CAPABILITY_KEYS.length).toBeGreaterThan(0);
     for (const key of CLAUDE_CAPABILITY_KEYS) {
-      expect(tablePermits(key, "2.1.216"), `${key} must be reachable`).toBe(
+      expect(tablePermits(key, "2.1.280"), `${key} must be reachable`).toBe(
         true,
       );
     }

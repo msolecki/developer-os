@@ -12,6 +12,7 @@ import {
   proposeCodexInstall,
   renderCodexVendorTree,
   renderInstructionTree as renderCodexInstructions,
+  withCodexHooks,
 } from "@developer-os/adapter-codex";
 import {
   buildConflictEvidence,
@@ -553,7 +554,7 @@ async function planCodex(planner: Planner, input: InstructionAttachInputV1, repo
   const byKey = new Map(set.artifacts.map((artifact) => [sourceKey(artifact.category, artifact.id), artifact]));
   const paths = codexInstructionPaths(planner.homes);
   const render = renderCodexInstructions(set, { artifacts: [] });
-  const tree = renderCodexVendorTree(input.workflows, render, { home: planner.homes.productHome });
+  const tree = withCodexHooks(renderCodexVendorTree(input.workflows, render, { home: planner.homes.productHome }), input.hookExecutable);
   const instructionPaths = new Set(render.pluginFiles.map((file) => file.path));
   const proposal = proposeCodexInstall(tree, { home: planner.homes.productHome, productVersion: input.productVersion });
 

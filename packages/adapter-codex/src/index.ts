@@ -50,6 +50,15 @@ export {
 } from "./plugin.js";
 export type { MarketplaceRootArtifact, PluginRootArtifact } from "./plugin.js";
 export { MARKETPLACE_NAME, renderMarketplace } from "./marketplace.js";
+export {
+  CODEX_HOOK_ROWS,
+  CODEX_HOOK_TRUST_RESIDUE,
+  CODEX_HOOK_TRUST_STEP,
+  CODEX_HOOKS_PATH,
+  renderCodexHooks,
+  withCodexHooks,
+} from "./hooks.js";
+export type { CodexHookEvent, CodexHookRow } from "./hooks.js";
 export type { MarketplaceContext } from "./marketplace.js";
 export { AGENT_TOML_KEYS, renderAgentToml } from "./agent-toml.js";
 export {

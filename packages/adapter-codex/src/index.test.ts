@@ -34,6 +34,10 @@ describe("the package's public door", () => {
       [
         "AGENT_TOML_KEYS",
         "CODEX_CAPABILITY_KEYS",
+        "CODEX_HOOKS_PATH",
+        "CODEX_HOOK_ROWS",
+        "CODEX_HOOK_TRUST_RESIDUE",
+        "CODEX_HOOK_TRUST_STEP",
         "CODEX_MINIMUM_VERSION",
         "CODEX_NOT_USED_KEYS",
         "CODEX_ROOT_SEGMENT",
@@ -54,12 +58,14 @@ describe("the package's public door", () => {
         "proposeCodexInstall",
         "proposeCodexUninstall",
         "renderAgentToml",
+        "renderCodexHooks",
         "renderCodexInstallTree",
         "renderCodexPlugin",
         "renderCodexVendorTree",
         "renderInstructionTree",
         "renderMarketplace",
         "resolveCapabilities",
+        "withCodexHooks",
       ].sort(),
     );
   });

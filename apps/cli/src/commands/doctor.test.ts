@@ -6,7 +6,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import { encodeCanonicalJson, encodeHookFiringRecord, EXIT_CODES, hookFiringRecordName } from "@developer-os/core";
 import type { CliResult } from "@developer-os/core";
 import { CLAUDE_HOOK_ROWS, CLAUDE_HOOKS_PATH, PLUGIN_INSTALL_SEGMENTS, renderClaudeHooks } from "@developer-os/adapter-claude";
-import { PLUGIN_TREE_PREFIX, proposeCodexInstall } from "@developer-os/adapter-codex";
+import {
+  CODEX_HOOK_ROWS,
+  CODEX_HOOK_TRUST_STEP,
+  CODEX_HOOKS_PATH,
+  PLUGIN_TREE_PREFIX,
+  PLUGIN_TREE_SEGMENTS,
+  proposeCodexInstall,
+  renderCodexHooks,
+} from "@developer-os/adapter-codex";
 import type { MarketplaceRootArtifact } from "@developer-os/adapter-codex";
 import { MacOsPlatformDiscoveryError } from "@developer-os/platform-macos";
 import type {
@@ -19,6 +27,7 @@ import type { ProcessResult, ProcessRunner } from "@developer-os/security";
 import {
   advisoryWarnings,
   checkHooks,
+  CODEX_UNTRUSTED_HOOK_MESSAGE,
   codexPluginRoot,
   describeInstructions,
   hasBlockingFailure,
@@ -1362,13 +1371,13 @@ describe("hooks and external-hooks", () => {
     return { hooks, external };
   }
 
-  it("reports claude=not-installed and codex=not-rendered without a hooks file", async () => {
+  it("reports claude=not-installed and codex=not-installed without a hooks file", async () => {
     const fixture = await hooksFixture("doctor-hooks-absent");
 
     const { hooks } = await checksOf(fixture);
 
     expect(hooks.status).toBe("pass");
-    expect(hooks.message).toBe("claude=not-installed; codex=not-rendered");
+    expect(hooks.message).toBe("claude=not-installed; codex=not-installed");
   });
 
   it("passes with every row installed and names each row's firing age in whole hours", async () => {
@@ -1389,7 +1398,41 @@ describe("hooks and external-hooks", () => {
     expect(hooks.message).toContain("stop=never");
     for (const row of CLAUDE_HOOK_ROWS) expect(hooks.message).toContain(`${row.verb}=`);
     expect(hooks.message).not.toContain("missing=");
-    expect(hooks.message.endsWith("; codex=not-rendered")).toBe(true);
+    expect(hooks.message.endsWith("; codex=not-installed")).toBe(true);
+  });
+
+  it("warns with the fixed trust step while an installed Codex hook has not fired, and passes once each has", async () => {
+    const fixture = await hooksFixture("doctor-hooks-codex");
+    expect(CODEX_HOOK_ROWS).toHaveLength(8);
+    await plant(join(fixture.paths.home, ...PLUGIN_TREE_SEGMENTS, CODEX_HOOKS_PATH), renderCodexHooks(HOOK_EXECUTABLE).contents);
+
+    const unfired = (await checksOf(fixture)).hooks;
+    expect(unfired.status).toBe("warn");
+    expect(unfired.message).toContain("codex=installed");
+    expect(unfired.message).toContain(CODEX_UNTRUSTED_HOOK_MESSAGE);
+    expect(unfired.recovery).toBe(CODEX_HOOK_TRUST_STEP);
+
+    const directory = join(fixture.paths.stateDir, "hooks");
+    await nodeFs.mkdir(directory, { recursive: true, mode: 0o700 });
+    for (const event of ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]) {
+      await nodeFs.writeFile(
+        join(directory, hookFiringRecordName("codex", event)),
+        encodeHookFiringRecord({
+          schemaVersion: 1,
+          vendor: "codex",
+          event,
+          productVersion: "0.0.0-test",
+          firstSeen: "2026-09-22T11:00:00.000Z",
+          lastSeen: "2026-09-22T11:00:00.000Z",
+        }),
+        { mode: 0o600 },
+      );
+    }
+    const fired = (await checksOf(fixture)).hooks;
+    expect(fired.status).toBe("pass");
+    expect(fired.message).toContain("codex=installed inject=1h");
+    expect(fired.message).not.toContain(CODEX_UNTRUSTED_HOOK_MESSAGE);
+    expect(fired).not.toHaveProperty("recovery");
   });
 
   it("warns and names the one missing row, matched per row rather than per event", async () => {

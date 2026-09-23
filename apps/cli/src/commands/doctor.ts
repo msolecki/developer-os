@@ -27,6 +27,7 @@ import type {
   DeveloperOsConfigV1,
   DriftFinding,
   ExitCode,
+  HookVendor,
   InstallationManifest,
   InstallationManifestV1,
   InstallationManifestV2,
@@ -41,7 +42,14 @@ import type {
   TransactionJournalV1,
 } from "@developer-os/core";
 import { CLAUDE_HOOK_ROWS, CLAUDE_HOOKS_PATH, PLUGIN_INSTALL_SEGMENTS } from "@developer-os/adapter-claude";
-import { MARKETPLACE_NAME, PLUGIN_NAME, PLUGIN_TREE_SEGMENTS } from "@developer-os/adapter-codex";
+import {
+  CODEX_HOOK_ROWS,
+  CODEX_HOOK_TRUST_STEP,
+  CODEX_HOOKS_PATH,
+  MARKETPLACE_NAME,
+  PLUGIN_NAME,
+  PLUGIN_TREE_SEGMENTS,
+} from "@developer-os/adapter-codex";
 import { MacOsPlatformDiscoveryError } from "@developer-os/platform-macos";
 import type { AgentDiscovery, AgentName } from "@developer-os/platform-macos";
 import { compareCodePoints } from "@developer-os/workflow-schema";
@@ -650,7 +658,7 @@ const HOUR_MS = 3_600_000;
 /** Event names are keys of a user file; anything else is counted under `other` rather than echoed. */
 const EVENT_NAME = /^[A-Za-z]{1,64}$/u;
 
-interface InstalledClaudeHooks {
+interface InstalledHooks {
   readonly state: "not-installed" | "unknown" | "installed";
   readonly path: string | null;
   readonly missing: readonly string[];
@@ -675,10 +683,12 @@ function commandsOf(group: unknown): readonly string[] {
     .filter((command): command is string => typeof command === "string");
 }
 
-async function readInstalledClaudeHooks(context: CliContext): Promise<InstalledClaudeHooks> {
+async function readInstalledHooks(context: CliContext, vendor: HookVendor): Promise<InstalledHooks> {
   let path: string | null = null;
   try {
-    path = join(await context.guards.canonicalize(context.userHome), ...PLUGIN_INSTALL_SEGMENTS, CLAUDE_HOOKS_PATH);
+    path = vendor === "claude"
+      ? join(await context.guards.canonicalize(context.userHome), ...PLUGIN_INSTALL_SEGMENTS, CLAUDE_HOOKS_PATH)
+      : join(await context.guards.canonicalize(codexPluginRoot(context)), CODEX_HOOKS_PATH);
     let text: string;
     try {
       text = await readUntrustedText(context, path, MAX_CLAUDE_SETTINGS_BYTES);
@@ -691,8 +701,8 @@ async function readInstalledClaudeHooks(context: CliContext): Promise<InstalledC
     const hooks = field(JSON.parse(text) as unknown, "hooks");
     const missing: string[] = [];
     const prefixes = new Set<string>();
-    for (const row of CLAUDE_HOOK_ROWS) {
-      const suffix = ` ${hookCommandTail(row.verb, "claude").join(" ")}`;
+    for (const row of vendor === "claude" ? CLAUDE_HOOK_ROWS : CODEX_HOOK_ROWS) {
+      const suffix = ` ${hookCommandTail(row.verb, vendor).join(" ")}`;
       const commands = list(field(hooks, row.event))
         .filter((group) => (field(group, "matcher") ?? null) === row.matcher)
         .flatMap(commandsOf)
@@ -713,37 +723,60 @@ async function readInstalledClaudeHooks(context: CliContext): Promise<InstalledC
   }
 }
 
-async function checkProductHooks(
+interface VendorHooksReport {
+  readonly text: string;
+  readonly healthy: boolean;
+  readonly unfired: boolean;
+}
+
+async function reportVendorHooks(
   context: CliContext,
   stateDirectory: string,
-  installed: InstalledClaudeHooks,
-): Promise<Finding> {
-  const paths = installed.path === null ? [] : [installed.path];
-  const codex = "codex=not-rendered";
+  vendor: HookVendor,
+  installed: InstalledHooks,
+): Promise<VendorHooksReport> {
   if (installed.state !== "installed") {
-    return (installed.state === "unknown" ? warn : pass)("hooks", `claude=${installed.state}; ${codex}`, paths);
+    return { text: `${vendor}=${installed.state}`, healthy: installed.state === "not-installed", unfired: false };
   }
   const lastSeen = new Map<string, number>();
-  for (const record of (await readHookFiringObservations(stateDirectory, "claude")).records) {
+  for (const record of (await readHookFiringObservations(stateDirectory, vendor)).records) {
     lastSeen.set(record.event, Date.parse(record.lastSeen));
   }
   const now = context.now().getTime();
-  const ages = CLAUDE_HOOK_ROWS.filter((row) => !installed.missing.includes(row.verb)).map((row) => {
+  const rows = (vendor === "claude" ? CLAUDE_HOOK_ROWS : CODEX_HOOK_ROWS).filter((row) => !installed.missing.includes(row.verb));
+  const ages = rows.map((row) => {
     const seen = lastSeen.get(row.event);
     return `${row.verb}=${seen === undefined ? "never" : `${String(Math.max(0, Math.floor((now - seen) / HOUR_MS)))}h`}`;
   });
   const parts = [
-    "claude=installed",
+    `${vendor}=installed`,
     ...ages,
     ...(installed.missing.length === 0 ? [] : [`missing=${installed.missing.join(",")}`]),
     ...(installed.conflicting ? ["executable=inconsistent"] : []),
   ];
-  const healthy = installed.missing.length === 0 && !installed.conflicting;
-  return (healthy ? pass : warn)("hooks", `${parts.join(" ")}; ${codex}`, paths);
+  // Spec §8.2: an untrusted Codex hook never fires, and Codex says nothing about it (hooks.md §1 question 6).
+  const unfired = vendor === "codex" && rows.some((row) => !lastSeen.has(row.event));
+  return {
+    text: unfired ? `${parts.join(" ")} (${CODEX_UNTRUSTED_HOOK_MESSAGE})` : parts.join(" "),
+    healthy: installed.missing.length === 0 && !installed.conflicting && !unfired,
+    unfired,
+  };
+}
+
+async function checkProductHooks(
+  context: CliContext,
+  stateDirectory: string,
+  installed: Readonly<Record<HookVendor, InstalledHooks>>,
+): Promise<Finding> {
+  const paths = [installed.claude.path, installed.codex.path].filter((path): path is string => path !== null);
+  const claude = await reportVendorHooks(context, stateDirectory, "claude", installed.claude);
+  const codex = await reportVendorHooks(context, stateDirectory, "codex", installed.codex);
+  const finding = (claude.healthy && codex.healthy ? pass : warn)("hooks", `${claude.text}; ${codex.text}`, paths);
+  return codex.unfired ? { ...finding, check: { ...finding.check, recovery: CODEX_HOOK_TRUST_STEP } } : finding;
 }
 
 /** Spec §8.2 (Q2-A): structural only; no command string ever reaches the message. */
-async function checkExternalHooks(context: CliContext, installed: InstalledClaudeHooks): Promise<Finding> {
+async function checkExternalHooks(context: CliContext, installed: InstalledHooks): Promise<Finding> {
   const id = "external-hooks";
   let path: string | null = null;
   try {
@@ -781,10 +814,13 @@ async function checkExternalHooks(context: CliContext, installed: InstalledClaud
 }
 
 async function hookFindings(context: CliContext, stateDirectory: string): Promise<readonly Finding[]> {
-  const installed = await readInstalledClaudeHooks(context);
+  const installed = {
+    claude: await readInstalledHooks(context, "claude"),
+    codex: await readInstalledHooks(context, "codex"),
+  };
   return [
     await checkProductHooks(context, stateDirectory, installed),
-    await checkExternalHooks(context, installed),
+    await checkExternalHooks(context, installed.claude),
   ];
 }
 

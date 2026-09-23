@@ -10,6 +10,8 @@ import { dirname, join } from "node:path";
 import { constants } from "node:fs";
 import { lstat, open, readdir } from "node:fs/promises";
 
+import { CODEX_HOOK_TRUST_RESIDUE } from "@developer-os/adapter-codex";
+
 import {
   EXIT_CODES,
   FoundationParticipantExecutor,
@@ -1603,6 +1605,7 @@ export async function detachVendorInstructions(context: CliContext, lifecycle: C
         codexHome: input.homes.codexHome,
       });
       if (warning !== null) warnings.push(warning);
+      warnings.push(CODEX_HOOK_TRUST_RESIDUE);
     }
     if (plan.kind === "noop") return { removed: [], preserved: [], warnings };
 

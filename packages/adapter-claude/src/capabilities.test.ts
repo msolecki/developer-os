@@ -107,7 +107,11 @@ describe("the hook keys", () => {
   });
 
   it.each(HOOK_KEYS)("reports %s as yes when the floor permits and a firing was observed", (key) => {
-    expect(resolveCapabilities("2.1.216", observed([[key, "observed"]]))[key]).toBe("yes");
+    expect(resolveCapabilities("2.1.280", observed([[key, "observed"]]))[key]).toBe("yes");
+  });
+
+  it.each(HOOK_KEYS)("reports %s as unknown below the observed hook floor, whatever fired", (key) => {
+    expect(resolveCapabilities("2.1.279", observed([[key, "observed"]]))[key]).toBe("unknown");
   });
 
   it.each(HOOK_KEYS)("reports %s as unknown without a firing observation", (key) => {
@@ -121,7 +125,7 @@ describe("the hook keys", () => {
   });
 
   it("never reports either hook key as no", () => {
-    for (const version of ["1.0.0", "2.1.216"]) {
+    for (const version of ["1.0.0", "2.1.280"]) {
       for (const observation of ["observed", "absent", "unavailable"] as const) {
         const resolved = resolveCapabilities(
           version,

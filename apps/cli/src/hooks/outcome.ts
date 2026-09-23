@@ -28,9 +28,10 @@ interface OutcomeMap {
   readonly advise: number;
 }
 
-const OUTCOME_MAPS: Readonly<Record<HookVendor, OutcomeMap | null>> = {
+/** Codex exit semantics match Claude's (`docs/architecture/hooks.md` §1 question 6, 0.155.1). */
+const OUTCOME_MAPS: Readonly<Record<HookVendor, OutcomeMap>> = {
   claude: { block: 2, advise: 2 },
-  codex: null,
+  codex: { block: 2, advise: 2 },
 };
 
 // screenAndCap counts graphemes, not bytes, so the byte bound is applied after it.
@@ -55,10 +56,6 @@ export function writeHookOutcome(
   redact: (text: string) => string,
 ): number {
   const map = OUTCOME_MAPS[vendor];
-  if (map === null) {
-    io.stderr(`developer-os: ${vendor} hook outcome map is unobserved; allowing`);
-    return 0;
-  }
   switch (outcome.kind) {
     case "allow":
       if (outcome.note !== undefined) io.stderr(line(`developer-os: ${outcome.note}`, redact, MAX_HOOK_REASON_BYTES));

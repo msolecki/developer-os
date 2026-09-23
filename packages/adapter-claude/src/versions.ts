@@ -56,8 +56,9 @@ export const CLAUDE_MINIMUM_VERSION = "2.1.142";
 const DOCUMENTED_FLOORS: ReadonlyMap<ClaudeCapabilityKey, string | null> =
   new Map([
     ["skills", null],
-    ["plugin_hooks", null],
-    ["session_start_injection", null],
+    // The only version hooks were observed firing on (`hooks.md` §1 question 10), not a range.
+    ["plugin_hooks", "2.1.280"],
+    ["session_start_injection", "2.1.280"],
     ["session_end_capture", null],
     ["pre_compact_backup", null],
     ["non_interactive_run", null],

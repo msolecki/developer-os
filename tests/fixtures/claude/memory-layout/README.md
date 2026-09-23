@@ -14,8 +14,9 @@ created a memory file and an index beside it.
         project_mascot.md           # one memory: YAML frontmatter, then the fact
 ```
 
-With `CLAUDE_CONFIG_DIR` set, the session created `projects/<cwd-slug>/memory/` under that
-directory and nothing under `<home>/.claude/projects/`. `import --claude-memory` reads
+With `CLAUDE_CONFIG_DIR` set, a session from a new working directory created
+`projects/<cwd-slug>/memory/` under that directory, and no directory for that slug appeared under
+`<home>/.claude/projects/`. `import --claude-memory` reads
 `<home>/.claude` only and does not follow `CLAUDE_CONFIG_DIR`.
 
 The tree `apps/cli/src/commands/import.test.ts` builds under a temporary home is synthetic and uses

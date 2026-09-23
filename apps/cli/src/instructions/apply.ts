@@ -3,7 +3,7 @@ import * as nodeFs from "node:fs/promises";
 import { join } from "node:path";
 
 import { CLAUDE_MINIMUM_VERSION, discoverClaude } from "@developer-os/adapter-claude";
-import { CODEX_MINIMUM_VERSION, discoverCodex } from "@developer-os/adapter-codex";
+import { CODEX_HOOK_TRUST_RESIDUE, CODEX_HOOK_TRUST_STEP, CODEX_MINIMUM_VERSION, discoverCodex } from "@developer-os/adapter-codex";
 import {
   assertHookExecutablePath,
   assertHookNodePath,
@@ -338,11 +338,11 @@ export async function applyInstructions(context: CliContext, input: {
   }
 
   /**
-   * A13 Task 14: the Claude hooks run `<this Node> <product-home>/bin/developer-os.mjs`. Checked
-   * once, before any transaction, so an unsafe home refuses with exit 2 and nothing written.
+   * A13 Tasks 14 and 15: both vendors' hooks run `<this Node> <product-home>/bin/developer-os.mjs`.
+   * Checked once, before any transaction, so an unsafe home refuses with exit 2 and nothing written.
    */
   const hookExecutable: HookCommandExecutable = { node: process.execPath, entrypoint: entrypointPath(home) };
-  if (selection.includes("claude")) {
+  if (selection.length > 0) {
     assertHookNodePath(hookExecutable.node);
     assertHookExecutablePath(hookExecutable.entrypoint);
   }
@@ -369,6 +369,7 @@ export async function applyInstructions(context: CliContext, input: {
       const plan = await planInstructionDetach({ vendors: detached, homes, ...(await gatedState(context, authority)), fs: PLANNER_FS });
       if (plan.kind === "noop") return;
       if (detached.includes("codex")) {
+        warnings.push(CODEX_HOOK_TRUST_RESIDUE);
         const { warning } = await unregisterCodexPlugin({
           runner: context.runner,
           codexExecutable: executables.get("codex") ?? null,
@@ -413,5 +414,7 @@ export async function applyInstructions(context: CliContext, input: {
   const registration = selection.includes("codex") && codex !== null
     ? await reconcileRegistration(context, lifecycle, homes, codex)
     : null;
+  // Spec §7.2: Codex runs no hook until the user trusts it, and the product never writes that trust.
+  if (selection.includes("codex")) warnings.push(CODEX_HOOK_TRUST_STEP);
   return { ...report, registration, warnings };
 }

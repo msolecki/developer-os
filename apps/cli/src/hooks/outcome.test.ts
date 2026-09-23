@@ -59,10 +59,12 @@ describe("writeHookOutcome", () => {
     expect(s.out).toStrictEqual(["a\nb"]);
   });
 
-  it("falls back to exit 0 with one stderr line while the Codex map is unobserved", () => {
-    const s = sink();
-    expect(writeHookOutcome({ kind: "block", ruleId: "r", detail: "d" }, "codex", s.io, identity)).toBe(0);
-    expect(s.err).toHaveLength(1);
-    expect(s.out).toStrictEqual([]);
+  it("maps Codex block and advise to exit 2 with the reason on stderr, as observed", () => {
+    for (const kind of ["block", "advise"] as const) {
+      const s = sink();
+      expect(writeHookOutcome({ kind, ruleId: "r", detail: "d" }, "codex", s.io, identity)).toBe(2);
+      expect(s.err).toStrictEqual(["developer-os r: d"]);
+      expect(s.out).toStrictEqual([]);
+    }
   });
 });

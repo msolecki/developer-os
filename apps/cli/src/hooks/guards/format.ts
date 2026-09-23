@@ -4,7 +4,7 @@ import { containsPath } from "@developer-os/core";
 import { ProtectedPathPolicy } from "@developer-os/security";
 
 import { excerpt } from "../outcome.js";
-import { HOOK_TOOL_MATCHERS } from "../payload.js";
+import { editedPaths, HOOK_TOOL_MATCHERS } from "../payload.js";
 import { resolveEditedPath, resolveProjectRoot } from "../project-root.js";
 import type { HookVerbHandler } from "../registry.js";
 import { FORMATTER_TIMEOUT_MS, HOOK_CHILD_ENV, isRegularFile, localBin } from "./child.js";
@@ -34,22 +34,33 @@ async function formatterFor(
   return null;
 }
 
+/** Edited files that still exist inside the project and outside every protected path. */
+async function formattable(root: string, paths: readonly string[], userHome: string): Promise<readonly string[]> {
+  const policy = new ProtectedPathPolicy(userHome);
+  const files: string[] = [];
+  for (const path of paths) {
+    try {
+      const file = await resolveEditedPath(root, path);
+      if (file === root || !containsPath(root, file) || !(await isRegularFile(file))) continue;
+      await policy.assertWritable(file);
+      files.push(file);
+    } catch {
+      continue;
+    }
+  }
+  return files;
+}
+
 export const guardFormat: HookVerbHandler = async (payload, runtime) => {
-  const matchers = HOOK_TOOL_MATCHERS[runtime.vendor];
-  if (matchers === null || payload.toolName === null || !matchers.file.includes(payload.toolName)) {
+  if (payload.toolName === null || !HOOK_TOOL_MATCHERS[runtime.vendor].file.includes(payload.toolName)) {
     return { kind: "allow" };
   }
-  if (payload.filePath === null) return { kind: "allow" };
+  const paths = editedPaths(payload, runtime.vendor);
+  if (paths === null) return { kind: "allow" };
   if (runtime.userHome === null) return { kind: "allow", note: "format skipped: user home is unknown" };
   const root = await resolveProjectRoot(runtime.cwd);
-  let file: string;
-  try {
-    file = await resolveEditedPath(root, payload.filePath);
-    if (file === root || !containsPath(root, file)) return { kind: "allow" };
-    await new ProtectedPathPolicy(runtime.userHome).assertWritable(file);
-  } catch {
-    return { kind: "allow" };
-  }
+  const files = await formattable(root, paths, runtime.userHome);
+  if (files.length === 0) return { kind: "allow" };
   const formatter = await formatterFor(root);
   if (formatter === null) return { kind: "allow" };
   const script = await localBin(root, formatter.name);
@@ -58,7 +69,7 @@ export const guardFormat: HookVerbHandler = async (payload, runtime) => {
   try {
     result = await runtime.runner.run({
       executable: runtime.nodeExecutable,
-      args: [script, ...formatter.args, file],
+      args: [script, ...formatter.args, ...files],
       cwd: root,
       stdin: "",
       timeoutMs: FORMATTER_TIMEOUT_MS,
@@ -72,6 +83,6 @@ export const guardFormat: HookVerbHandler = async (payload, runtime) => {
   return {
     kind: "advise",
     ruleId: "format-failed",
-    detail: `${formatter.name} could not format ${excerpt(payload.filePath)}`,
+    detail: `${formatter.name} could not format ${excerpt(paths.join(", "))}`,
   };
 };

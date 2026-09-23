@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
+import { CODEX_HOOK_TRUST_STEP } from "@developer-os/adapter-codex";
 import { decodeCanonicalJson, EXIT_CODES, INSTRUCTION_BLOCK_BEGIN, loadConfig } from "@developer-os/core";
 import type { InstallationManifestV2 } from "@developer-os/core";
 import type { AgentDiscovery } from "@developer-os/platform-macos";
@@ -161,6 +162,8 @@ describe("init --adapters: fresh install and reconcile (one chained home)", () =
     expect(ids.length).toBeGreaterThan(0);
     expect(existsSync(join(installed.claudePlugin, ".claude-plugin", "plugin.json"))).toBe(true);
     expect(existsSync(join(installed.codexPlugin, ".codex-plugin", "plugin.json"))).toBe(true);
+    expect(existsSync(join(installed.codexPlugin, "hooks", "hooks.json"))).toBe(true);
+    expect(result.ok && result.warnings).toContain(CODEX_HOOK_TRUST_STEP);
     for (const id of ids) {
       expect(existsSync(join(installed.claudePlugin, "skills", `developer-os-${id}`, "SKILL.md")), id).toBe(true);
       expect(existsSync(join(installed.codexPlugin, "skills", `developer-os-${id}`, "SKILL.md")), id).toBe(true);

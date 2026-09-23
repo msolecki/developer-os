@@ -1,4 +1,5 @@
 import type { HookVendor, HookVerb } from "./argv.js";
+import { applyPatchPaths } from "./patch.js";
 
 export const MAX_HOOK_PAYLOAD_BYTES = 1_048_576;
 
@@ -22,14 +23,15 @@ export type DecodedHookPayload =
         | "nul"
         | "not_json"
         | "not_object"
-        | "field_type"
-        | "vendor_unobserved";
+        | "field_type";
     };
 
 type FieldPath = readonly string[];
-type FieldMap = Readonly<Record<keyof HookPayloadV1, FieldPath>>;
+/** `null`: the vendor never sends the field. */
+type FieldMap = Readonly<Record<keyof HookPayloadV1, FieldPath | null>>;
 
-const FIELD_MAPS: Readonly<Record<HookVendor, FieldMap | null>> = {
+/** Codex spellings: `docs/architecture/hooks.md` §1 question 5 (0.155.1). */
+const FIELD_MAPS: Readonly<Record<HookVendor, FieldMap>> = {
   claude: {
     cwd: ["cwd"],
     toolName: ["tool_name"],
@@ -38,15 +40,33 @@ const FIELD_MAPS: Readonly<Record<HookVendor, FieldMap | null>> = {
     prompt: ["prompt"],
     stopHookActive: ["stop_hook_active"],
   },
-  codex: null,
+  codex: {
+    cwd: ["cwd"],
+    toolName: ["tool_name"],
+    command: ["tool_input", "command"],
+    filePath: null,
+    prompt: ["prompt"],
+    stopHookActive: ["stop_hook_active"],
+  },
 };
 
+/** Codex's shell arrives as `Bash` and a file edit as `apply_patch` (hooks.md §1 question 4). */
 export const HOOK_TOOL_MATCHERS: Readonly<
-  Record<HookVendor, Readonly<Record<"shell" | "file", readonly string[]>> | null>
+  Record<HookVendor, Readonly<Record<"shell" | "file", readonly string[]>>>
 > = {
   claude: { shell: ["Bash"], file: ["Edit", "Write", "MultiEdit"] },
-  codex: null,
+  codex: { shell: ["Bash"], file: ["apply_patch"] },
 };
+
+/**
+ * The paths a file tool call edits: Claude's `tool_input.file_path`, or the headers of Codex's
+ * `apply_patch` body, which arrives in `tool_input.command`. `null` when absent or outside the
+ * patch grammar.
+ */
+export function editedPaths(payload: HookPayloadV1, vendor: HookVendor): readonly string[] | null {
+  if (vendor === "codex") return payload.command === null ? null : applyPatchPaths(payload.command);
+  return payload.filePath === null ? null : [payload.filePath];
+}
 
 const REQUIRED: Readonly<Record<HookVerb, readonly (keyof HookPayloadV1)[]>> = {
   command: ["toolName"],
@@ -59,7 +79,8 @@ const REQUIRED: Readonly<Record<HookVerb, readonly (keyof HookPayloadV1)[]>> = {
   inject: [],
 };
 
-function at(root: unknown, path: FieldPath): unknown {
+function at(root: unknown, path: FieldPath | null): unknown {
+  if (path === null) return undefined;
   let node: unknown = root;
   for (const key of path) {
     if (typeof node !== "object" || node === null || Array.isArray(node) || !Object.hasOwn(node, key)) {
@@ -78,7 +99,6 @@ export function decodeHookPayload(
   if (bytes === null) return { ok: false, reason: "absent" };
   if (bytes.byteLength > MAX_HOOK_PAYLOAD_BYTES) return { ok: false, reason: "too_large" };
   const map = FIELD_MAPS[vendor];
-  if (map === null) return { ok: false, reason: "vendor_unobserved" };
   let text: string;
   try {
     text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
@@ -96,7 +116,7 @@ export function decodeHookPayload(
     return { ok: false, reason: "not_object" };
   }
   let wrongType = false;
-  const str = (path: FieldPath): string | null => {
+  const str = (path: FieldPath | null): string | null => {
     const value = at(root, path);
     if (value === undefined) return null;
     if (typeof value === "string") return value;

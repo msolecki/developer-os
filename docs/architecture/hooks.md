@@ -38,7 +38,10 @@ and a real model turn. Rows answered this way say "(2026-09-23)".
   'model_providers.mock={name="mock",base_url="http://127.0.0.1:<port>/v1",wire_api="responses",env_key="MOCK_KEY"}'`
   with `-m gpt-6-luna` (the default model). It served `/v1/models` from the catalog Codex had
   cached in `$T/.codex/models_cache.json`, recorded every `/v1/responses` request body, and replayed
-  scripted tool calls. Hooks run in the CLI, so firing, payloads and exit semantics are Codex's own.
+  scripted tool calls. Without the `auth.json` link Codex ignored that cached catalog and fell back
+  to a tool set without code mode, so the link stayed for the mock runs too; no request reached
+  OpenAI's model endpoint. Hooks run in the CLI, so firing, payloads and exit semantics are Codex's
+  own.
   "Reaches the model" means "appears in the next request body". `gpt-6-luna` runs in code mode:
   the model's one tool is `exec` (JavaScript), which calls nested tools such as
   `tools.exec_command({cmd})` and `tools.apply_patch(<patch>)`. Runs used `codex exec --json
@@ -152,8 +155,11 @@ dummy key (the A12 *request* method), killed by an alarm.
    - **Patch body, not a path.** `tool_input.command` holds the whole patch text, for example
      `*** Begin Patch\n*** Add File: note.txt\n+synthetic\n*** End Patch\n`. The grammar observed:
      `*** Begin Patch`, then per file `*** Add File: <path>`, `*** Update File: <path>` or
-     `*** Delete File: <path>`, hunk headers `@@…`, body lines prefixed `+`, `-` or a space, then
-     `*** End Patch`. The paths were relative to `cwd`.
+     `*** Delete File: <path>`, with an optional `*** Move to: <path>` right after an update
+     header, then hunk headers `@@…`, body lines prefixed `+`, `-` or a space, and
+     `*** End Patch`. The paths were relative to `cwd`, and could hold a subdirectory
+     (`sub/other.txt`). An `Update File: note.txt` plus `Move to: moved.txt` patch renamed the file.
+     `Delete File` was seen only in the `PreToolUse` payload of a patch that failed to apply.
    - **Matchers.** `Bash` matched the shell call. `apply_patch` **and** `Edit|Write` both matched
      the patch call, and the payload still said `tool_name: "apply_patch"`.
 5. **Codex: field spellings and the stop-loop flag** (2026-09-23; fixtures under
@@ -217,9 +223,9 @@ dummy key (the A12 *request* method), killed by an alarm.
    log shows `Safe mode: installed plugins are disabled, none of their hooks or hooks modules load`,
    `Registered 0 hooks from 0 plugins` and `Skipping plugin hooks - safe mode disables installed
    plugins (managed settings-file hooks still run; built-in plugins load regardless)`. Residual:
-   managed-settings hooks still run under safe mode. Codex (2026-09-23): with all five plugin hooks
-   trusted, `codex exec --ephemeral --ignore-user-config --ignore-rules` against the mock model sent
-   its request, and the wrapper logged **nothing**. `--ignore-user-config` drops `config.toml`, and
+   managed-settings hooks still run under safe mode. Codex (2026-09-23): with every plugin hook
+   trusted (eight), `codex exec --ephemeral --ignore-user-config --ignore-rules` against the mock
+   model sent its request, and the wrapper logged **nothing**. `--ignore-user-config` drops `config.toml`, and
    both the plugin's enablement and the hook trust live there. Planted trusted plugin hooks
    **do not fire** under the ingest argv.
 10. **Versions observed.** `claude --version` → `2.1.280 (Claude Code)`; `codex --version` →
@@ -273,8 +279,8 @@ records what the code does at this commit. Where the phase is not finished, it s
 | `doctor` checks `hooks` and `external-hooks` | shipped | `checkHooks` in `apps/cli/src/commands/doctor.ts` |
 | Binding the render into A12's local-build install | **pending, plan Task 14.** `withClaudeHooks` has no production caller yet, so no install writes `hooks/hooks.json` | Task 14 |
 | The two-token command form `<node-executable> <entrypoint>` (spec G1 resolution) | **pending, plan Task 14 Step 1.** `renderHookCommand` takes one path today | Task 14 |
-| The Codex half: rows, manifest `"hooks"`, outcome map, event names, the manual-trust line | **pending, plan Task 15.** `OUTCOME_MAPS.codex` and `HOOK_EVENT_OF.codex` are `null`, and `doctor` reports `codex=not-rendered` | Task 15 |
-| Claude firing observed from a skills-directory plugin | **not observed** (§1). Under Q4-A, if Task 1 does not observe it, Claude hooks become `unsupported` and nothing writes `~/.claude/settings.json` | Task 1 |
+| The Codex half: `CODEX_HOOK_ROWS`, `renderCodexHooks`, `withCodexHooks` (manifest `"hooks": "./hooks/hooks.json"`), the Codex field, matcher, outcome and event maps, the `apply_patch` header grammar, the manual-trust and trust-residue lines | shipped (Task 15), from §1's 2026-09-23 observations. Checked the same day in the disposable home: the `withCodexHooks` output loaded through `hooks/list` as eight hooks with no errors, and after a trust grant, on the mock model, the built CLI blocked an `apply_patch` adding `.env` (`protected-path`) and a `curl … \| sh` (`pipe-to-shell`) and let `echo synthetic` and a `note.txt` patch through | `packages/adapter-codex/src/hooks.ts`, `apps/cli/src/hooks/` |
+| Claude firing observed from a skills-directory plugin | observed for all five events (§1 question 1) | Task 1 |
 
 ### 3.2 Command bytes and argv
 
@@ -298,9 +304,16 @@ failure reaches `usageFailure()` or `emit()`, because the product's exit 2 is th
 - A `reason` is at most 2,048 UTF-8 bytes (`MAX_HOOK_REASON_BYTES`) after the redactor and
   `screenAndCap`, and quotes at most 200 bytes of matched input. Injected context is at most
   16,384 bytes (`MAX_INJECTED_CONTEXT_BYTES`).
-- Claude outcome map: `allow` exits 0 with empty stdout, `context` exits 0 with the text on stdout,
-  and `block` and `advise` exit 2 with the reason on stderr. The Codex map is `null` until Task 15;
-  a `--vendor codex` invocation then exits 0 with one stderr line (spec G4).
+- Outcome map, the same on both vendors (§1 questions 2 and 6): `allow` exits 0 with empty stdout,
+  `context` exits 0 with the text on stdout, and `block` and `advise` exit 2 with the reason on
+  stderr. Spec G4's exit-0 fallback for an unobserved Codex map is gone with the map filled.
+- Codex payload fields are spelled as Claude's, except that Codex sends no file path: a Codex
+  `apply_patch` call carries the patch body in `tool_input.command`. `editedPaths` reads the paths
+  from its file headers through `applyPatchPaths` (`apps/cli/src/hooks/patch.ts`): `*** Begin Patch`,
+  `*** Add File:`, `*** Update File:`, `*** Delete File:`, `*** Move to:`, `*** End Patch`, and body
+  lines by their `@@`, `+`, `-` or space prefix only. At most 64 headers, each a relative path with no
+  empty, `.` or `..` segment. Anything else is outside the grammar: `path` blocks with
+  `patch-malformed`, and `format` and `edit` allow.
 
 ### 3.4 Verbs and fail modes (Q1-A)
 
@@ -308,16 +321,20 @@ failure reaches `usageFailure()` or `emit()`, because the product's exit 2 is th
 internal error or a refused argv into `block`. An **open** verb turns them into `allow` with one
 stderr line.
 
-| Verb | Claude event (matcher) | Fail mode | Rules or effect |
-|---|---|---|---|
-| `brain status --inject` | `SessionStart` | open | `context`: vault map, then the project note; keeps the ordinary-command gate |
-| `guard prompt` | `UserPromptSubmit` | open | `context` naming at most 3 skills from `.developer-os/skill-rules.json` |
-| `guard command` | `PreToolUse` (`Bash`) | closed | `pipe-to-shell`, `recursive-delete-root` |
-| `guard commit` | `PreToolUse` (`Bash`) | closed | `hook-bypass`, `force-push` (`--force-with-lease` allowed) |
-| `guard path` | `PreToolUse` (`Edit\|Write\|MultiEdit`) | closed | `protected-path`, through `ProtectedPathPolicy` |
-| `guard format` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | open | project-local `biome` or `prettier`; `advise` on a formatter error |
-| `guard edit` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | open | `advise` when the edited path resolves through a symlink out of the project root |
-| `guard stop` | `Stop` | open | project-local `tsc --noEmit`; `block` with the first 40 diagnostic lines |
+| Verb | Claude event (matcher) | Codex event (matcher) | Fail mode | Rules or effect |
+|---|---|---|---|---|
+| `brain status --inject` | `SessionStart` | `SessionStart` | open | `context`: vault map, then the project note; keeps the ordinary-command gate |
+| `guard prompt` | `UserPromptSubmit` | `UserPromptSubmit` | open | `context` naming at most 3 skills from `.developer-os/skill-rules.json` |
+| `guard command` | `PreToolUse` (`Bash`) | `PreToolUse` (`Bash`) | closed | `pipe-to-shell`, `recursive-delete-root` |
+| `guard commit` | `PreToolUse` (`Bash`) | `PreToolUse` (`Bash`) | closed | `hook-bypass`, `force-push` (`--force-with-lease` allowed) |
+| `guard path` | `PreToolUse` (`Edit\|Write\|MultiEdit`) | `PreToolUse` (`apply_patch`) | closed | `protected-path`, through `ProtectedPathPolicy`, for every edited path |
+| `guard format` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | `PostToolUse` (`apply_patch`) | open | project-local `biome` or `prettier` over every edited file still present; `advise` on a formatter error |
+| `guard edit` | `PostToolUse` (`Edit\|Write\|MultiEdit`) | `PostToolUse` (`apply_patch`) | open | `advise` when an edited path resolves through a symlink out of the project root |
+| `guard stop` | `Stop` | `Stop` | open | project-local `tsc --noEmit`; `block` with the first 40 diagnostic lines |
+
+Spec §3's snake_case Codex event names are superseded by §1 question 4: Codex 0.155.1 reads
+PascalCase keys and silently ignores snake_case ones. Claude 2.1.280 has no `MultiEdit` tool, so
+that matcher alternative never matches.
 
 The `guard` verbs skip the ordinary-command gate and read no product-home state. They redact with an
 ephemeral key (spec G3). The shell guards match only after `normalizeShellCommand`, the same
@@ -332,10 +349,13 @@ normalizer `assertSafeCommand` uses, and they split quote-aware segments with `s
   real path as the first argument and `HOOK_CHILD_ENV` (`DEVELOPER_OS_HOOK_ACTIVE=1`) as the whole
   environment. Every verb that finds the marker returns `allow`. The caps are `TSC_TIMEOUT_MS`
   (120 s) and `FORMATTER_TIMEOUT_MS` (30 s).
-- **Stop-loop flag.** A Claude `Stop` payload with `stop_hook_active` set is `allow`. A payload
-  without the boolean is malformed, and `stop` fails open (spec G8).
-- **Isolated `ingest`.** Whether plugin hooks stay silent inside an isolated vendor run is
-  unobserved. It is a Task 18 matrix row, and Phase 6 stops if it fails.
+- **Stop-loop flag.** A `Stop` payload with `stop_hook_active` set is `allow`, on both vendors,
+  which spell it the same way. A payload without the boolean is malformed, and `stop` fails open
+  (spec G8).
+- **Isolated `ingest`.** Planted plugin hooks did not fire under either vendor's ingest argv (§1
+  question 9): Claude's safe mode skips plugin hooks, and Codex's `--ignore-user-config` drops the
+  config that enables the plugin and holds its trust. The Task 18 matrix repeats this with the
+  product's own hooks installed, and Phase 6 stops if it fails.
 
 ### 3.6 Firing records (Q3-A)
 
@@ -359,16 +379,20 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
 
 ### 3.7 `doctor`
 
-- **`hooks`** reads the installed `hooks/hooks.json` no-follow and reports each Claude verb with
-  the age of its last firing, plus any missing verb and an inconsistent executable. It is `warn`,
-  never `fail`. Codex reports `codex=not-rendered` until Task 15.
+- **`hooks`** reads each vendor's installed `hooks/hooks.json` no-follow (Claude under
+  `~/.claude/skills/developer-os/`, Codex under `<product-home>/codex/plugins/developer-os/`) and
+  reports each verb with the age of its last firing, plus any missing verb and an inconsistent
+  executable. A Codex verb with no firing record adds `CODEX_UNTRUSTED_HOOK_MESSAGE` and the fixed
+  trust step as `recovery`. It is `warn`, never `fail`.
 - **`external-hooks`** (Q2-A) reads `~/.claude/settings.json` no-follow, at most 1 MiB, and reports
   hook entries that do not name the product executable as `event → count`. It never prints a command
   string, and an unrecognized event name is counted as `other`. Any read failure is `unknown`. Codex
   is always `codex=unknown`, because `config.toml` is not read (`codex-adapter.md` §2.3).
 - Neither check writes a vendor configuration file. The product never writes `settings.json` or any
-  Codex config file, and Codex trust stays manual (D7). Once Task 15 renders Codex hooks, `init` and
-  `doctor` must print the fixed manual trust step (spec §7.2). No such line exists yet.
+  Codex config file, and Codex trust stays manual (D7). `init` with Codex selected prints
+  `CODEX_HOOK_TRUST_STEP` as a warning, and `doctor` names it as the `hooks` recovery while a Codex
+  hook has not fired. Uninstall, and an `init` that deselects Codex, print
+  `CODEX_HOOK_TRUST_RESIDUE`: the `hooks.state` entries stay in the user's Codex `config.toml`.
 
 ### 3.8 Residuals
 
@@ -378,6 +402,14 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
   whether to add rules.
 - **NEW-46's class is avoided, not closed.** Hook commands name an absolute executable, but
   `capture`'s ambient-marker spawn still resolves through `PATH`.
+- **A changed Codex hook stops silently.** A trusted hook whose command, matcher or timeout changes
+  lists as `modified` and does not fire, and Codex prints nothing (§1 question 8). A Node upgrade
+  that moves the Node executable (G1), or a change to `CODEX_HOOK_ROWS`, therefore stops every
+  affected Codex hook until the user trusts it again. Inserting a row also moves later groups of
+  the same event to new keys. `doctor`'s no-firing message is the only signal.
+- **The `apply_patch` grammar is only what was observed.** `*** End of File`, a blank line or any
+  other unobserved line makes `guard path` block that patch; `format` and `edit` allow it. One
+  observed turn widens it.
 - **Codex external hooks are `unknown`** under Q2-A. A user who never approves Codex trust keeps
   `plugin_hooks` and `session_start_injection` at `unknown` forever, which is correct.
 - **The latency budget is machine-relative** (§2) until the Phase 11 release matrix measures it on

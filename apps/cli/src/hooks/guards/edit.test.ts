@@ -107,4 +107,18 @@ describe("guardEdit", () => {
       kind: "allow",
     });
   });
+
+  it("advises shared-file for any Codex patch header that resolves outside the root", async () => {
+    const outside = await tempDir();
+    await writeFile(join(outside, "shared.md"), "shared\n");
+    const root = await project();
+    await writeFile(join(root, "a.md"), "a\n");
+    await symlink(join(outside, "shared.md"), join(root, "AGENTS.md"));
+    const command = ["*** Begin Patch", "*** Update File: a.md", "@@", "-a", "+b", "*** Update File: AGENTS.md", "@@", "-x", "+y", "*** End Patch", ""].join("\n");
+    const payload: HookPayloadV1 = { cwd: null, toolName: "apply_patch", command, filePath: null, prompt: null, stopHookActive: null };
+    const outcome = await guardEdit(payload, { ...runtimeFor(root), vendor: "codex" });
+    expect(outcome.kind === "advise" ? outcome.detail : "").toContain("AGENTS.md");
+    const malformed = { ...payload, command: "not a patch" };
+    expect(await guardEdit(malformed, { ...runtimeFor(root), vendor: "codex" })).toStrictEqual({ kind: "allow" });
+  });
 });

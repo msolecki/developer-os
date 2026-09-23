@@ -48,12 +48,16 @@ export type CodexCapabilityKey = (typeof CODEX_CAPABILITY_KEYS)[number];
  */
 export const CODEX_MINIMUM_VERSION = "0.147.0";
 
+/** The only version hooks were observed firing on (`hooks.md` §1 question 10), not a range. */
+const CODEX_HOOKS_OBSERVED_VERSION = "0.155.1";
+const HOOK_FLOOR_KEYS: ReadonlySet<CodexCapabilityKey> = new Set(["plugin_hooks", "session_start_injection"]);
+
 /**
  * A documented floor per key, or `null` meaning "no documented floor above the
  * minimum; the probe decides".
  *
- * Deliberately sparse: nobody has documented a per-key floor for Codex above
- * `CODEX_MINIMUM_VERSION` yet, so every key maps to `null`.
+ * Deliberately sparse: only the two hook keys have a floor above
+ * `CODEX_MINIMUM_VERSION`, the version A13 observed hooks firing on.
  *
  * A `Map`, not an object literal. `workflow-schema`'s architecture note §9
  * records four modules in one package that shipped `table[key] !== undefined`
@@ -62,7 +66,7 @@ export const CODEX_MINIMUM_VERSION = "0.147.0";
  * refusal. A lookup table is not a lookup unless it cannot inherit.
  */
 const DOCUMENTED_FLOORS: ReadonlyMap<CodexCapabilityKey, string | null> = new Map(
-  CODEX_CAPABILITY_KEYS.map((key) => [key, null]),
+  CODEX_CAPABILITY_KEYS.map((key) => [key, HOOK_FLOOR_KEYS.has(key) ? CODEX_HOOKS_OBSERVED_VERSION : null]),
 );
 
 const TABLE: CapabilityVersionTable<CodexCapabilityKey> = {

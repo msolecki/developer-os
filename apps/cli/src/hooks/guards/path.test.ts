@@ -90,4 +90,38 @@ describe("guard path", () => {
   it("blocks when the user home is unknown (fail closed)", async () => {
     expect(await run("src/index.ts", "Edit", null)).toMatchObject({ kind: "block", ruleId: "hook-failed-closed" });
   });
+
+  describe("on Codex, from apply_patch headers", () => {
+    const codex = (command: string, toolName = "apply_patch") =>
+      guardPath(
+        { cwd: project, toolName, command, filePath: null, prompt: null, stopHookActive: null },
+        { ...runtime(home), vendor: "codex" },
+      );
+    const patch = (...lines: string[]): string => ["*** Begin Patch", ...lines, "*** End Patch", ""].join("\n");
+
+    it("blocks a patch that names a protected path in any header", async () => {
+      expect(await codex(patch("*** Add File: a.txt", "+x", "*** Add File: sub/.env", "+A=1"))).toMatchObject({
+        kind: "block",
+        ruleId: "protected-path",
+      });
+      expect(await codex(patch("*** Update File: a.txt", "*** Move to: .env.local", "@@", "-x", "+y"))).toMatchObject({
+        kind: "block",
+        ruleId: "protected-path",
+      });
+      expect(await codex(patch("*** Delete File: .env"))).toMatchObject({ kind: "block", ruleId: "protected-path" });
+    });
+
+    it("allows a patch of ordinary files", async () => {
+      expect(await codex(patch("*** Add File: note.txt", "+synthetic"))).toStrictEqual({ kind: "allow" });
+    });
+
+    it("blocks a patch outside the observed grammar", async () => {
+      expect(await codex(patch("*** Add File: /etc/hosts", "+x"))).toMatchObject({ kind: "block", ruleId: "patch-malformed" });
+      expect(await codex("not a patch")).toMatchObject({ kind: "block", ruleId: "patch-malformed" });
+    });
+
+    it("ignores the Bash tool", async () => {
+      expect(await codex("echo synthetic > .env", "Bash")).toStrictEqual({ kind: "allow" });
+    });
+  });
 });

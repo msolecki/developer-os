@@ -1,10 +1,20 @@
+import { posix } from "node:path";
 import { describe, expect, it } from "vitest";
+import { compareCodePoints } from "@developer-os/workflow-schema";
+import type { RenderedArtifact } from "@developer-os/workflow-schema";
+import { CODEX_HOOKS_PATH, withCodexHooks } from "./hooks.js";
 import {
   buildPluginTree,
   PLUGIN_NAME,
   PLUGIN_TREE_PREFIX,
   PLUGIN_TREE_SEGMENTS,
 } from "./plugin.js";
+import type { MarketplaceRootArtifact } from "./plugin.js";
+
+const EXE = { node: "/usr/local/bin/node", entrypoint: "/Users/synthetic/.developer-os/bin/developer-os" };
+
+const rerooted = (tree: readonly RenderedArtifact[]): readonly MarketplaceRootArtifact[] =>
+  tree.map((a) => ({ path: posix.join(PLUGIN_TREE_PREFIX, a.path), contents: a.contents }) as MarketplaceRootArtifact);
 
 const skills = [
   { path: "skills/developer-os-shared/SKILL.md", contents: "shared\n" },
@@ -54,13 +64,26 @@ describe("buildPluginTree", () => {
     ).toThrow(/one path/u);
   });
 
-  it("ships no hooks file, no AGENTS.md, and no absolute path", () => {
+  it("ships no hooks file, no manifest hooks key, no AGENTS.md, and no absolute path", () => {
     const tree = buildPluginTree(skills);
     expect(tree.length).toBeGreaterThan(0);
-    expect(tree.map((a) => a.path)).not.toContain("hooks/hooks.json");
+    expect(tree.map((a) => a.path)).not.toContain(CODEX_HOOKS_PATH);
+    const manifest = tree.find((a) => a.path === ".codex-plugin/plugin.json");
+    expect(JSON.parse(manifest?.contents ?? "{}")).not.toHaveProperty("hooks");
     for (const artifact of tree) {
       expect(artifact.path).not.toContain("AGENTS");
       expect(artifact.contents).not.toMatch(/\/Users\/|\/home\//u);
     }
+  });
+
+  it("puts hooks only in the install tree, referenced from the manifest", () => {
+    const install = withCodexHooks(rerooted(buildPluginTree(skills)), EXE);
+    const paths = install.map((a) => a.path);
+    expect(paths).toContain(posix.join(PLUGIN_TREE_PREFIX, CODEX_HOOKS_PATH));
+    const manifest = install.find((a) => a.path === posix.join(PLUGIN_TREE_PREFIX, ".codex-plugin/plugin.json"));
+    expect(JSON.parse(manifest?.contents ?? "{}")).toMatchObject({ hooks: "./hooks/hooks.json", skills: "skills" });
+    expect(paths).toStrictEqual([...paths].sort(compareCodePoints));
+    expect(() => withCodexHooks(install, EXE)).toThrow(/already/u);
+    expect(() => withCodexHooks([], EXE)).toThrow(/manifest/u);
   });
 });

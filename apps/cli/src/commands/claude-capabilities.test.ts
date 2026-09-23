@@ -284,7 +284,7 @@ describe("the hook keys come from firing records", () => {
   it("reports plugin_hooks=yes and every other key unknown on the non-probe branch", async () => {
     const report = await reportClaudeCapabilities({
       executablePath: "/opt/synthetic/bin/claude",
-      runner: version("2.1.216"),
+      runner: version("2.1.280"),
       pluginDirectory: "/synthetic/plugin",
       firingObservations: fired([["plugin_hooks", "observed"]]),
     });
@@ -298,7 +298,7 @@ describe("the hook keys come from firing records", () => {
   it("reports session_start_injection=yes from its own firing observation", async () => {
     const report = await reportClaudeCapabilities({
       executablePath: "/opt/synthetic/bin/claude",
-      runner: version("2.1.216"),
+      runner: version("2.1.280"),
       pluginDirectory: "/synthetic/plugin",
       firingObservations: fired([
         ["plugin_hooks", "observed"],
@@ -321,7 +321,7 @@ describe("the hook keys come from firing records", () => {
   it("takes nothing but the two hook keys from the firing observations", async () => {
     const report = await reportClaudeCapabilities({
       executablePath: "/opt/synthetic/bin/claude",
-      runner: version("2.1.216"),
+      runner: version("2.1.280"),
       pluginDirectory: "/synthetic/plugin",
       probe: true,
       listPluginFiles: () => Promise.resolve([".claude-plugin/plugin.json"]),
@@ -337,7 +337,7 @@ describe("the hook keys come from firing records", () => {
   it("uses only the firing observations for the hook keys on the probe branch", async () => {
     const without = await reportClaudeCapabilities({
       executablePath: "/opt/synthetic/bin/claude",
-      runner: version("2.1.216"),
+      runner: version("2.1.280"),
       pluginDirectory: "/synthetic/plugin",
       probe: true,
       listPluginFiles: skillsPresent,
@@ -348,7 +348,7 @@ describe("the hook keys come from firing records", () => {
 
     const withFiring = await reportClaudeCapabilities({
       executablePath: "/opt/synthetic/bin/claude",
-      runner: version("2.1.216"),
+      runner: version("2.1.280"),
       pluginDirectory: "/synthetic/plugin",
       probe: true,
       listPluginFiles: skillsPresent,

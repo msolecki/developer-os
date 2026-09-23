@@ -297,6 +297,18 @@ describe("planInstructionAttach: a fresh attach", () => {
     expect(rowAt(plan.manifest, `${PLUGIN}/hooks/hooks.json`)).toMatchObject({ owner: "claude", kind: "file" });
   });
 
+  it("adds the Codex hooks file and points the plugin manifest at it (A13 Task 15)", async () => {
+    const plan = transaction(await planInstructionAttach(input(freshState())));
+    const codexPlugin = `${P}/codex/plugins/developer-os`;
+    const write = mutationAt(plan, `${codexPlugin}/hooks/hooks.json`);
+    expect(write?.operation).toBe("create");
+    const text = decoder.decode(write?.content ?? new Uint8Array());
+    expect(text).toContain(`"${HOOK_EXECUTABLE.node} ${HOOK_EXECUTABLE.entrypoint} guard path --vendor codex"`);
+    const manifest = mutationAt(plan, `${codexPlugin}/.codex-plugin/plugin.json`);
+    expect(JSON.parse(decoder.decode(manifest?.content ?? new Uint8Array()))).toMatchObject({ hooks: "./hooks/hooks.json" });
+    expect(rowAt(plan.manifest, `${codexPlugin}/hooks/hooks.json`)).toMatchObject({ owner: "codex", kind: "file" });
+  });
+
   it("plans one transaction whose manifest admits under the closed vendor authorization", async () => {
     const plan = transaction(await planInstructionAttach(input(freshState())));
     expect(plan.mutations.length).toBeGreaterThan(0);

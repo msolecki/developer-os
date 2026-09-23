@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { decodeHookPayload, MAX_HOOK_PAYLOAD_BYTES } from "./payload.js";
+import { decodeHookPayload, editedPaths, MAX_HOOK_PAYLOAD_BYTES } from "./payload.js";
 
 const TRANSCRIPT_FIELD = ["transcript", "path"].join("_");
 const bytes = (value: unknown): Uint8Array => new TextEncoder().encode(JSON.stringify(value));
@@ -66,10 +66,26 @@ describe("decodeHookPayload", () => {
     });
   });
 
-  it("decodes nothing for a vendor whose spellings are unobserved", () => {
-    expect(decodeHookPayload(bytes(bash), "codex", "command")).toStrictEqual({
-      ok: false,
-      reason: "vendor_unobserved",
+  it("decodes Codex with its observed spellings and never reads a file path field", () => {
+    const patch = "*** Begin Patch\n*** Add File: note.txt\n+synthetic\n*** End Patch\n";
+    const decoded = decodeHookPayload(
+      bytes({ cwd: "/Users/synthetic/p", tool_name: "apply_patch", tool_input: { command: patch, file_path: "/x" } }),
+      "codex",
+      "path",
+    );
+    expect(decoded).toStrictEqual({
+      ok: true,
+      payload: { cwd: "/Users/synthetic/p", toolName: "apply_patch", command: patch, filePath: null, prompt: null, stopHookActive: null },
     });
+    if (decoded.ok) expect(editedPaths(decoded.payload, "codex")).toStrictEqual(["note.txt"]);
+  });
+
+  it("reads Claude's file path as the one edited path", () => {
+    const decoded = decodeHookPayload(
+      bytes({ cwd: "/a", tool_name: "Write", tool_input: { file_path: "/a/b.txt" } }),
+      "claude",
+      "path",
+    );
+    expect(decoded.ok && editedPaths(decoded.payload, "claude")).toStrictEqual(["/a/b.txt"]);
   });
 });

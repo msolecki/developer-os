@@ -16,18 +16,21 @@ import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.j
 import { assertOrdinaryCommandAdmitted } from "../bootstrap/report.js";
 import type { HookVendor, HookVerb } from "./argv.js";
 
-export const HOOK_EVENT_OF: Readonly<Record<HookVendor, Readonly<Record<HookVerb, string>> | null>> = Object.freeze({
-  claude: Object.freeze({
-    inject: "SessionStart",
-    command: "PreToolUse",
-    commit: "PreToolUse",
-    path: "PreToolUse",
-    format: "PostToolUse",
-    edit: "PostToolUse",
-    stop: "Stop",
-    prompt: "UserPromptSubmit",
-  }),
-  codex: null,
+const PASCAL_CASE_EVENTS: Readonly<Record<HookVerb, string>> = Object.freeze({
+  inject: "SessionStart",
+  command: "PreToolUse",
+  commit: "PreToolUse",
+  path: "PreToolUse",
+  format: "PostToolUse",
+  edit: "PostToolUse",
+  stop: "Stop",
+  prompt: "UserPromptSubmit",
+});
+
+/** Codex keys its hooks document with the same PascalCase names (hooks.md §1 question 4). */
+export const HOOK_EVENT_OF: Readonly<Record<HookVendor, Readonly<Record<HookVerb, string>>>> = Object.freeze({
+  claude: PASCAL_CASE_EVENTS,
+  codex: PASCAL_CASE_EVENTS,
 });
 
 export const FIRING_RECORD_REFRESH_MS = 86_400_000;
@@ -68,8 +71,7 @@ async function readRecord(path: string): Promise<HookFiringRecordV1 | null> {
 /** Spec §7.3: best effort after the outcome is written; never creates a directory, never throws. */
 export async function recordHookFiring(request: HookFiringRequest): Promise<void> {
   try {
-    const event = HOOK_EVENT_OF[request.vendor]?.[request.verb];
-    if (event === undefined) return;
+    const event = HOOK_EVENT_OF[request.vendor][request.verb];
     const directory = join(request.stateDirectory, "hooks");
     const stats = await lstat(directory);
     if (!stats.isDirectory() || stats.uid !== request.effectiveUid || (stats.mode & 0o777) !== 0o700) return;
@@ -140,8 +142,8 @@ export async function readHookFiringObservations(stateDirectory: string, vendor:
   }
   const observations = new Map<FiringKey, "observed">();
   if (records.length > 0) observations.set("plugin_hooks", "observed");
-  const sessionStart = HOOK_EVENT_OF[vendor]?.inject;
-  if (sessionStart !== undefined && records.some((record) => record.event === sessionStart)) {
+  const sessionStart = HOOK_EVENT_OF[vendor].inject;
+  if (records.some((record) => record.event === sessionStart)) {
     observations.set("session_start_injection", "observed");
   }
   return { observations, records };

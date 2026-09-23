@@ -173,4 +173,21 @@ describe("guardFormat", () => {
     expect(outcome.kind === "allow" ? outcome.note : undefined).toEqual(expect.any(String));
     expect(requests).toStrictEqual([]);
   });
+
+  it("formats every file a Codex patch leaves behind and skips a deleted one", async () => {
+    const root = await project(["biome.json"]);
+    await writeFile(join(root, "b.ts"), "export {};\n");
+    const { runtime, requests } = runtimeFor(root);
+    const command = ["*** Begin Patch", "*** Update File: a.ts", "@@", "-x", "+y", "*** Add File: b.ts", "+z", "*** Delete File: gone.ts", "*** End Patch", ""].join("\n");
+    const payload: HookPayloadV1 = { cwd: null, toolName: "apply_patch", command, filePath: null, prompt: null, stopHookActive: null };
+    expect(await guardFormat(payload, { ...runtime, vendor: "codex" })).toStrictEqual({ kind: "allow" });
+    expect(requests.map((request) => request.args.slice(-2))).toStrictEqual([[join(root, "a.ts"), join(root, "b.ts")]]);
+  });
+
+  it("allows a Codex patch outside the observed grammar without running anything", async () => {
+    const { runtime, requests } = runtimeFor(await project(["biome.json"]));
+    const payload: HookPayloadV1 = { cwd: null, toolName: "apply_patch", command: "not a patch", filePath: null, prompt: null, stopHookActive: null };
+    expect(await guardFormat(payload, { ...runtime, vendor: "codex" })).toStrictEqual({ kind: "allow" });
+    expect(requests).toStrictEqual([]);
+  });
 });

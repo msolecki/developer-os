@@ -70,7 +70,8 @@ describe("resolveCapabilities", () => {
     "reports %s as yes only when the floor permits and a firing was observed, never no",
     (key) => {
       const fired = new Map<string, ProbeObservation>([[key, "observed"]]);
-      expect(resolveCapabilities("0.147.0", fired)[key]).toBe("yes");
+      expect(resolveCapabilities("0.155.1", fired)[key]).toBe("yes");
+      expect(resolveCapabilities("0.155.0", fired)[key]).toBe("unknown");
       expect(resolveCapabilities("0.1.0", fired)[key]).toBe("unknown");
       expect(resolveCapabilities("0.147.0", new Map<string, ProbeObservation>([[key, "unavailable"]]))[key]).toBe("unknown");
       expect(resolveCapabilities("0.147.0", fired).session_end_capture).toBe("not-used");

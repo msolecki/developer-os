@@ -39,6 +39,14 @@ describe("tablePermits", () => {
     expect(tablePermits("skills", "not a version")).toBe(false);
   });
 
+  it("floors both hook keys at the observed 0.155.1 and nothing else above the minimum", () => {
+    expect(tablePermits("plugin_hooks", "0.155.0")).toBe(false);
+    expect(tablePermits("session_start_injection", "0.155.0")).toBe(false);
+    expect(tablePermits("plugin_hooks", "0.155.1")).toBe(true);
+    expect(tablePermits("session_start_injection", "0.155.1")).toBe(true);
+    expect(tablePermits("skills", CODEX_MINIMUM_VERSION)).toBe(true);
+  });
+
   it("never grants a capability by itself, which is the probe's job", () => {
     expect(tablePermits("session_end_capture", CODEX_MINIMUM_VERSION)).toBe(true);
   });

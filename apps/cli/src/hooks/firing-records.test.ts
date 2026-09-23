@@ -77,7 +77,7 @@ function record(event: string, firstSeen: Date, lastSeen: Date, vendor: HookVend
 }
 
 describe("HOOK_EVENT_OF", () => {
-  it("maps every Claude verb to its §3 event and leaves Codex unset until Task 15", () => {
+  it("maps every verb to its §3 event, with the same PascalCase names on Codex", () => {
     expect(HOOK_EVENT_OF.claude).toStrictEqual({
       inject: "SessionStart",
       command: "PreToolUse",
@@ -88,7 +88,7 @@ describe("HOOK_EVENT_OF", () => {
       stop: "Stop",
       prompt: "UserPromptSubmit",
     });
-    expect(HOOK_EVENT_OF.codex).toBeNull();
+    expect(HOOK_EVENT_OF.codex).toStrictEqual(HOOK_EVENT_OF.claude);
   });
 });
 
@@ -167,10 +167,10 @@ describe("recordHookFiring", () => {
     expect(await readdir(hooks)).toStrictEqual([]);
   });
 
-  it("writes nothing for Codex while its event map is unset", async () => {
+  it("records a Codex firing under the Codex vendor", async () => {
     await createHooksDirectory();
     await recordHookFiring(request({ vendor: "codex" }));
-    expect(await readdir(hooks)).toStrictEqual([]);
+    expect(await readdir(hooks)).toStrictEqual(["codex.Stop.json"]);
   });
 
   it("resolves and removes its temp file when the rename fails", async () => {

@@ -61,7 +61,7 @@ export function shellSegments(normalized: string): readonly (readonly string[])[
 
 export function shellRuleGuard(rules: readonly ShellRule<string>[]): HookVerbHandler {
   return (payload, runtime) => {
-    const shell = HOOK_TOOL_MATCHERS[runtime.vendor]?.shell ?? [];
+    const shell = HOOK_TOOL_MATCHERS[runtime.vendor].shell;
     if (payload.toolName === null || !shell.includes(payload.toolName)) return Promise.resolve({ kind: "allow" });
     if (payload.command === null) {
       return Promise.resolve({ kind: "block", ruleId: "payload-malformed", detail: "shell command field absent" });

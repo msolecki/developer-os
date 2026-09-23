@@ -40,7 +40,7 @@ const version = (stdout: string) =>
  */
 const ourTreeAt = (pluginRoot: string) =>
   runner((request) => {
-    if (request.args[0] === "--version") return { stdout: "codex-cli 0.147.0" };
+    if (request.args[0] === "--version") return { stdout: "codex-cli 0.155.1" };
     if (request.args[0] === "plugin" && request.args[1] === "list") {
       return {
         stdout: JSON.stringify({
@@ -266,7 +266,7 @@ describe("the hook keys come from firing records", () => {
   it("reports plugin_hooks=yes and every other key unknown on the non-probe branch", async () => {
     const report = await reportCodexCapabilities({
       executablePath: "/opt/synthetic/bin/codex",
-      runner: version("codex-cli 0.147.0"),
+      runner: version("codex-cli 0.155.1"),
       pluginRoot: "/synthetic/plugin",
       firingObservations: fired([["plugin_hooks", "observed"]]),
     });

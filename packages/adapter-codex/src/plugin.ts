@@ -52,6 +52,9 @@ export const PLUGIN_TREE_SEGMENTS: readonly string[] = [
 /** Codex architecture former §4: relative to `<product-home>/codex`, which is the marketplace root. */
 export const MARKETPLACE_RELATIVE_PATH = ".agents/plugins/marketplace.json";
 
+/** Codex architecture former §14.4: relative to the plugin root. */
+export const CODEX_MANIFEST_PATH = ".codex-plugin/plugin.json";
+
 /**
  * `PLUGIN_TREE_SEGMENTS` with the leading `CODEX_ROOT_SEGMENT` dropped —
  * i.e. `plugins/developer-os`, relative to the **marketplace root**
@@ -94,15 +97,16 @@ export const PLUGIN_DESCRIPTION =
  * string `"skills"`, resolved by Codex against the plugin root — never an
  * absolute path, which would tie the tree to the machine that generated it.
  */
-function manifest(): RenderedArtifact {
+export function renderCodexManifest(hooks: string | null = null): RenderedArtifact {
   return {
-    path: ".codex-plugin/plugin.json",
+    path: CODEX_MANIFEST_PATH,
     contents: `${JSON.stringify(
       {
         name: PLUGIN_NAME,
         version: PLUGIN_VERSION,
         description: PLUGIN_DESCRIPTION,
         skills: "skills",
+        ...(hooks === null ? {} : { hooks: `./${hooks}` }),
       },
       null,
       2,
@@ -111,12 +115,11 @@ function manifest(): RenderedArtifact {
 }
 
 /**
- * No `hooks/hooks.json` — see the Claude adapter's `plugin.ts` for the
- * full record. The decision is ratified for both adapters in one change:
- * neither ships a hook whose command names an executable this pipeline can
- * produce, since `RenderedArtifact` is `{ path, contents }` with no mode and
- * `ManagedArtifactV1` has `kind: "file"` and no mode either. DOS-P6 restores
- * hooks for both adapters together, once there is a command to name.
+ * **`buildPluginTree` emits no `hooks/hooks.json` and no manifest `"hooks"`
+ * key; hooks exist only in the install tree.** A13 renders them through
+ * `withCodexHooks` (`hooks.ts`), which adds `hooks/hooks.json` and points the
+ * manifest at it, with commands naming the local-build install's absolute
+ * entrypoint. The checked-in tree stays hook-free and machine-path-free.
  */
 
 /**
@@ -131,7 +134,7 @@ export function buildPluginTree(
   if (skills.length === 0) {
     throw new Error("refusing to build a plugin tree with no skills");
   }
-  const tree = [...skills, manifest()].sort((left, right) =>
+  const tree = [...skills, renderCodexManifest()].sort((left, right) =>
     compareCodePoints(left.path, right.path),
   );
   /**

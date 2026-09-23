@@ -313,6 +313,12 @@ describe("codexPluginTreeHash", () => {
     expect(codexPluginTreeHash([{ ...skillB, sha256: HASH_A }, manifest, skillA])).not.toBe(codexPluginTreeHash(files));
   });
 
+  it("changes when the hook manifest is added or its bytes change, so re-registration covers it (NEW-61)", () => {
+    const hooks = { path: "hooks/hooks.json", sha256: HASH_A };
+    expect(codexPluginTreeHash([...files, hooks])).not.toBe(codexPluginTreeHash(files));
+    expect(codexPluginTreeHash([...files, { ...hooks, sha256: HASH_B }])).not.toBe(codexPluginTreeHash([...files, hooks]));
+  });
+
   it("refuses an empty tree, a duplicate path and a malformed digest", () => {
     expect(() => codexPluginTreeHash([])).toThrow();
     expect(() => codexPluginTreeHash([skillB, { ...skillB, sha256: HASH_A }])).toThrow();

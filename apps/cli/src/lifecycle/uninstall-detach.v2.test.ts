@@ -4,7 +4,7 @@ import { dirname, join, sep } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { MARKETPLACE_NAME, PLUGIN_NAME } from "@developer-os/adapter-codex";
+import { CODEX_HOOK_TRUST_RESIDUE, MARKETPLACE_NAME, PLUGIN_NAME } from "@developer-os/adapter-codex";
 import {
   decodeCanonicalJson,
   encodeCanonicalJson,
@@ -314,7 +314,7 @@ describe("uninstall detaches vendor instruction artifacts before draining", () =
     const result = await runUninstall(installed.context, ACCEPTED);
 
     if (!result.ok) throw new Error(`${String(result.code)} ${result.error.kind}: ${result.error.message}`);
-    expect(result.warnings).toStrictEqual([]);
+    expect(result.warnings).toStrictEqual([CODEX_HOOK_TRUST_RESIDUE]);
     expect(result.data.removed).toEqual(expect.arrayContaining([...installed.vendorPaths]));
     expect(codex.calls.map((call) => call.argv)).toEqual(expect.arrayContaining([
       `plugin remove ${PLUGIN_ID}`,
@@ -379,7 +379,7 @@ describe("uninstall detaches vendor instruction artifacts before draining", () =
     const result = await runUninstall(installed.context, ACCEPTED);
 
     if (!result.ok) throw new Error(`${String(result.code)} ${result.error.kind}: ${result.error.message}`);
-    expect(result.warnings).toStrictEqual([CODEX_CLI_ABSENT_WARNING]);
+    expect(result.warnings).toStrictEqual([CODEX_CLI_ABSENT_WARNING, CODEX_HOOK_TRUST_RESIDUE]);
     expect(installed.codex.calls).toStrictEqual([]);
     expect(await exists(installed.agentsMd)).toBe(false);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
