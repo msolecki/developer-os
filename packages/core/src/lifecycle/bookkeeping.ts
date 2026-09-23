@@ -21,12 +21,16 @@ export const LIFECYCLE_BOOKKEEPING_RELATIVE_PATHS = [
 
 /**
  * D54: the manifest hash the mutation gate recorded after the last committed manifest-writing
- * transaction. It cannot be a manifest row (writing it would move the hash it records), so it
- * joins the bookkeeping set and is admitted by shape where no manifest exists.
+ * transaction, bound to the manifest hash of the bootstrap that chain started from. It cannot
+ * be a manifest row (writing it would move the hash it records), so it joins the bookkeeping
+ * set and is admitted by shape where no manifest exists.
  */
 export const MANIFEST_ANCHOR_RELATIVE_PATH = "state/manifest-anchor.json";
-/** The exact canonical encoding `{"manifestHash":"<64 hex>","schemaVersion":1}` plus its LF. */
-export const MANIFEST_ANCHOR_BYTES = 102;
+/**
+ * The exact canonical encoding
+ * `{"bootstrapManifestHash":"<64 hex>","manifestHash":"<64 hex>","schemaVersion":1}` plus its LF.
+ */
+export const MANIFEST_ANCHOR_BYTES = 193;
 
 export type LifecycleBookkeepingObservationV1 =
   | {

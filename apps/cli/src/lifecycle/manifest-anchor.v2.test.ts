@@ -13,12 +13,20 @@ import type { AgentDiscovery } from "@developer-os/platform-macos";
 import type { ProcessRequest, ProcessResult, ProcessRunner } from "@developer-os/security";
 
 import { BOOTSTRAP_MANUAL_ARCHIVE } from "../bootstrap/report.js";
+import { runDoctorReport } from "../commands/doctor.js";
 import { runInit } from "../commands/init.js";
 import { createCommandFixture, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../commands/testing.js";
 import type { CommandFixture } from "../commands/testing.js";
+import { runUninstall } from "../commands/uninstall.js";
 import type { ReleaseFileV1 } from "../update/local-release.js";
 import type { CliLifecycleContext } from "./context.js";
-import { encodeManifestAnchor, manifestAnchorPath } from "./manifest-anchor.js";
+import {
+  decodeManifestAnchor,
+  encodeManifestAnchor,
+  isOwnedManifestAnchorShape,
+  MANIFEST_ANCHOR_WARNING,
+  manifestAnchorPath,
+} from "./manifest-anchor.js";
 import { withLifecycleMutation } from "./mutation-gate.js";
 
 afterAll(removeCommandFixtures);
@@ -62,9 +70,16 @@ function touched(bytes: Uint8Array, verifiedAt: string): Uint8Array {
 
 /** One committed gated transaction that writes only the manifest. */
 async function gatedManifestWrite(fixture: CommandFixture, verifiedAt: string): Promise<Uint8Array> {
+  return (await gatedManifestCommit(fixture, verifiedAt)).after;
+}
+
+async function gatedManifestCommit(
+  fixture: CommandFixture,
+  verifiedAt: string,
+): Promise<{ readonly after: Uint8Array; readonly phase: string }> {
   const before = await manifestBytes(fixture);
   const after = touched(before, verifiedAt);
-  await withLifecycleMutation(fixture.context, lifecycleOf(fixture), () => fixture.context.executor.execute({
+  const journal = await withLifecycleMutation(fixture.context, lifecycleOf(fixture), () => fixture.context.executor.execute({
     kind: "manifest-anchor-test",
     mutations: [{
       targetPath: fixture.paths.manifestFile,
@@ -73,7 +88,7 @@ async function gatedManifestWrite(fixture: CommandFixture, verifiedAt: string): 
       expectedBeforeHash: hashBytes(before),
     }],
   }));
-  return after;
+  return { after, phase: journal.phase };
 }
 
 async function noOpGateSession(fixture: CommandFixture): Promise<void> {
@@ -84,8 +99,19 @@ async function anchorBytes(fixture: CommandFixture): Promise<Uint8Array> {
   return new Uint8Array(await nodeFs.readFile(manifestAnchorPath(fixture.paths.home)));
 }
 
-async function expectAnchoredTo(fixture: CommandFixture, manifest: Uint8Array): Promise<void> {
-  expect(await anchorBytes(fixture)).toStrictEqual(encodeManifestAnchor(hashBytes(manifest)));
+/** The manifest the finalized bootstrap left, read before any gated write moves it. */
+async function bootstrapHashOf(fixture: CommandFixture): Promise<string> {
+  return hashBytes(await manifestBytes(fixture));
+}
+
+async function anchorExists(fixture: CommandFixture): Promise<boolean> {
+  return nodeFs.lstat(manifestAnchorPath(fixture.paths.home)).then(() => true, () => false);
+}
+
+async function expectAnchoredTo(fixture: CommandFixture, manifest: Uint8Array, bootstrap?: string): Promise<void> {
+  const anchor = decodeManifestAnchor(await anchorBytes(fixture));
+  expect(anchor?.manifestHash).toBe(hashBytes(manifest));
+  if (bootstrap !== undefined) expect(anchor?.bootstrapManifestHash).toBe(bootstrap);
   expect((await nodeFs.lstat(manifestAnchorPath(fixture.paths.home))).mode & 0o777).toBe(0o600);
 }
 
@@ -105,18 +131,20 @@ async function expectInitRefusesArchive(fixture: CommandFixture): Promise<void> 
 describe("the durable manifest anchor (D54)", () => {
   it("settles a re-run init after one committed gated manifest write", async () => {
     const fixture = await initialisedV2Home("anchor-one");
+    const bootstrap = await bootstrapHashOf(fixture);
     const written = await gatedManifestWrite(fixture, "2026-09-23T10:00:00.000Z");
 
-    await expectAnchoredTo(fixture, written);
+    await expectAnchoredTo(fixture, written, bootstrap);
     await expectInitSettles(fixture);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("settles after two chained gated transactions, across a compaction of the first", async () => {
     const fixture = await initialisedV2Home("anchor-chain");
+    const bootstrap = await bootstrapHashOf(fixture);
     await gatedManifestWrite(fixture, "2026-09-23T10:00:00.000Z");
     const second = await gatedManifestWrite(fixture, "2026-09-23T11:00:00.000Z");
 
-    await expectAnchoredTo(fixture, second);
+    await expectAnchoredTo(fixture, second, bootstrap);
     await expectInitSettles(fixture);
     await expectInitSettles(fixture);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
@@ -148,17 +176,19 @@ describe("the durable manifest anchor (D54)", () => {
 
   it("refuses an anchor naming another hash, and one that is not the exact encoding", async () => {
     const fixture = await initialisedV2Home("anchor-tampered");
+    const bootstrapManifestHash = await bootstrapHashOf(fixture);
     await gatedManifestWrite(fixture, "2026-09-23T10:00:00.000Z");
     const anchor = manifestAnchorPath(fixture.paths.home);
+    const manifestHash = hashBytes(await manifestBytes(fixture));
 
-    await nodeFs.writeFile(anchor, encodeManifestAnchor("0".repeat(64)));
+    await nodeFs.writeFile(anchor, encodeManifestAnchor({ manifestHash: "0".repeat(64), bootstrapManifestHash }));
     await expectInitRefusesArchive(fixture);
 
-    const exact = new TextDecoder().decode(encodeManifestAnchor(hashBytes(await manifestBytes(fixture))));
+    const exact = new TextDecoder().decode(encodeManifestAnchor({ manifestHash, bootstrapManifestHash }));
     await nodeFs.writeFile(anchor, exact.replace("\n", " "));
     await expectInitRefusesArchive(fixture);
 
-    await nodeFs.writeFile(anchor, encodeManifestAnchor(hashBytes(await manifestBytes(fixture))));
+    await nodeFs.writeFile(anchor, encodeManifestAnchor({ manifestHash, bootstrapManifestHash }));
     await nodeFs.chmod(anchor, 0o644);
     await expectInitRefusesArchive(fixture);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
@@ -179,14 +209,81 @@ describe("the durable manifest anchor (D54)", () => {
 
   it("recovers an anchor that was never written at all", async () => {
     const fixture = await initialisedV2Home("anchor-crash-first");
+    const bootstrap = await bootstrapHashOf(fixture);
     const written = await gatedManifestWrite(fixture, "2026-09-23T10:00:00.000Z");
     await nodeFs.unlink(manifestAnchorPath(fixture.paths.home));
 
     await noOpGateSession(fixture);
 
-    await expectAnchoredTo(fixture, written);
+    await expectAnchoredTo(fixture, written, bootstrap);
     await expectInitSettles(fixture);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
+describe("the manifest anchor fails safe (D54 review)", () => {
+  it("refuses an anchor whose chain does not start at this plan's manifest (finding 1)", async () => {
+    const fixture = await initialisedV2Home("anchor-foreign-chain");
+    const written = await gatedManifestWrite(fixture, "2026-09-23T10:00:00.000Z");
+    // The exact encoding naming the manifest on disk, but a chain another bootstrap started.
+    await nodeFs.writeFile(manifestAnchorPath(fixture.paths.home), encodeManifestAnchor({
+      manifestHash: hashBytes(written),
+      bootstrapManifestHash: "f".repeat(64),
+    }));
+
+    await expectInitRefusesArchive(fixture);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("does not derive an anchor for a manifest the committed journal did not stage (finding 2)", async () => {
+    const fixture = await initialisedV2Home("anchor-derive-mismatch");
+    const written = await gatedManifestWrite(fixture, "2026-09-23T10:00:00.000Z");
+    // The crash window, then a hand edit before the next gate entry.
+    await nodeFs.unlink(manifestAnchorPath(fixture.paths.home));
+    await nodeFs.writeFile(fixture.paths.manifestFile, touched(written, "2026-09-23T12:00:00.000Z"));
+
+    await noOpGateSession(fixture);
+
+    expect(await anchorExists(fixture)).toBe(false);
+    await expectInitRefusesArchive(fixture);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("replaces a malformed owned anchor from the committed journal", async () => {
+    const fixture = await initialisedV2Home("anchor-malformed-derive");
+    const bootstrap = await bootstrapHashOf(fixture);
+    const written = await gatedManifestWrite(fixture, "2026-09-23T10:00:00.000Z");
+    // An interrupted first write: the owned shape, not the exact encoding.
+    await nodeFs.writeFile(manifestAnchorPath(fixture.paths.home), "{");
+
+    await noOpGateSession(fixture);
+
+    await expectAnchoredTo(fixture, written, bootstrap);
+    await expectInitSettles(fixture);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("keeps a committed result when the anchor cannot be written, and does not wedge the gate (finding 3)", async () => {
+    const fixture = await initialisedV2Home("anchor-write-failure");
+    await gatedManifestWrite(fixture, "2026-09-23T10:00:00.000Z");
+    await nodeFs.chmod(manifestAnchorPath(fixture.paths.home), 0o644);
+
+    const committed = await gatedManifestCommit(fixture, "2026-09-23T11:00:00.000Z");
+
+    expect(committed.phase).toBe("finalized");
+    expect(await manifestBytes(fixture)).toStrictEqual(committed.after);
+    expect(fixture.io.err).toContain(MANIFEST_ANCHOR_WARNING);
+    await noOpGateSession(fixture);
+    const report = await runDoctorReport(fixture.context);
+    expect(report.checks.find((check) => check.id === "manifest-anchor")?.status).toBe("warn");
+    await expectInitRefusesArchive(fixture);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("admits only an anchor owned by the expected user (finding 4)", () => {
+    const uid = process.getuid?.() ?? 501;
+    const shape = { ownerUid: uid, mode: 0o600, nlink: 1 };
+    expect(isOwnedManifestAnchorShape(shape, 193n, uid)).toBe(true);
+    expect(isOwnedManifestAnchorShape({ ...shape, ownerUid: uid + 1 }, 193n, uid)).toBe(false);
+    expect(isOwnedManifestAnchorShape({ ...shape, mode: 0o644 }, 193n, uid)).toBe(false);
+    expect(isOwnedManifestAnchorShape({ ...shape, nlink: 2 }, 193n, uid)).toBe(false);
+    expect(isOwnedManifestAnchorShape(shape, 194n, uid)).toBe(false);
+  });
 });
 
 /** A Claude CLI that answers its version probe and nothing else. */
@@ -232,5 +329,39 @@ describe("the durable manifest anchor after attach (D54)", () => {
 
     await expectAnchoredTo(fixture, await manifestBytes(fixture));
     await expectInitSettles(fixture);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("never lets an earlier installation's anchor settle a reinstall (finding 1)", async () => {
+    const fixture = await createCommandFixture("anchor-reinstall", {
+      bootstrapAvailable: true,
+      instructions: INSTRUCTIONS,
+      runner: claudeRunner(),
+      agents: AGENTS,
+    });
+    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    const attached = await runInit(fixture.context, { ...ACCEPTED, adapters: ["claude"] });
+    expect(attached.ok, JSON.stringify(attached)).toBe(true);
+    const earlierManifest = await manifestBytes(fixture);
+    const earlierAnchor = await anchorBytes(fixture);
+
+    const uninstalled = await runUninstall(fixture.context, ACCEPTED);
+    expect(uninstalled.ok, JSON.stringify(uninstalled)).toBe(true);
+    expect(await anchorExists(fixture)).toBe(false);
+
+    const context = fixture.rebuildContext();
+    const reinstalled = await runInit(context, ACCEPTED);
+    expect(reinstalled.ok, JSON.stringify(reinstalled)).toBe(true);
+    // The binding is what is under test: the two bootstraps must not share a manifest.
+    expect(decodeManifestAnchor(earlierAnchor)?.bootstrapManifestHash).not.toBe(await bootstrapHashOf(fixture));
+
+    // The earlier installation's manifest and anchor come back (a backup restore, a copied home).
+    await nodeFs.writeFile(fixture.paths.manifestFile, earlierManifest);
+    await nodeFs.writeFile(manifestAnchorPath(fixture.paths.home), earlierAnchor, { mode: 0o600 });
+    await nodeFs.chmod(manifestAnchorPath(fixture.paths.home), 0o600);
+
+    const rerun = await runInit(context, ACCEPTED);
+    expect(rerun.ok).toBe(false);
+    if (rerun.ok) return;
+    expect(rerun.code).toBe(EXIT_CODES.recoveryRequired);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

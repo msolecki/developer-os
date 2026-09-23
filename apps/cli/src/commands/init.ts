@@ -73,6 +73,11 @@ import {
   instructionRefusalDetails,
 } from "../instructions/apply.js";
 import type { AdapterSelectionV1 } from "../instructions/apply.js";
+import {
+  isCodeDefect,
+  MANIFEST_ANCHOR_WARNING,
+  removeManifestAnchor,
+} from "../lifecycle/manifest-anchor.js";
 import { installEntrypoint } from "../update/entrypoint.js";
 import { inspectPackagedRelease } from "../update/packaged-release.js";
 
@@ -201,6 +206,24 @@ class InitRefusal extends Error {
 
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : "an unexpected failure";
+}
+
+/**
+ * D54 review, finding 1: a committed fresh bootstrap starts a new installation, so an anchor
+ * that survived an earlier one (an uninstall leaves the bookkeeping set) describes nothing
+ * here. Removed after the commit rather than before it, because the plan admitted the anchor
+ * as pre-existing bookkeeping. A failure is reported, never a failed init: the anchor also
+ * names its bootstrap's manifest, so a stale one cannot settle this installation anyway.
+ */
+async function dropStaleManifestAnchor(context: CliContext): Promise<void> {
+  const lifecycle = context.lifecycle;
+  if (lifecycle === undefined) return;
+  try {
+    await removeManifestAnchor(lifecycle.fs, context.paths.home, lifecycle.effectiveUid);
+  } catch (error) {
+    if (isCodeDefect(error)) throw error;
+    context.io.stderr(MANIFEST_ANCHOR_WARNING);
+  }
 }
 
 async function rawManifest(
@@ -948,6 +971,7 @@ export async function runInit(
         });
       }
       const outcome = await bootstrap.executor.initializeFresh(request, evidence);
+      await dropStaleManifestAnchor(context);
       loadOrCreateRedactionKey(context.paths.stateDir);
       // D53: before the instructions, whose Claude hooks name it.
       await installEntrypoint(context);

@@ -97,6 +97,7 @@ import {
 } from "./codecs.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
 import { residueFrom } from "./context.js";
+import { isCodeDefect, MANIFEST_ANCHOR_WARNING, removeManifestAnchor } from "./manifest-anchor.js";
 import { withLifecycleMutation } from "./mutation-gate.js";
 import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "./context.js";
 import {
@@ -1314,6 +1315,16 @@ export class LifecycleUninstaller {
         .recovery(request.key, adapters, residue)
         .recover(current(), { resumeUninstall: true });
       holds.global = settled.global;
+      /**
+       * D54 review, finding 1: the manifest is gone, so the anchor describes no installation.
+       * Still under the global lock; a failure is reported, never a failed uninstall.
+       */
+      try {
+        await removeManifestAnchor(lifecycle.fs, productHome, lifecycle.effectiveUid);
+      } catch (error) {
+        if (isCodeDefect(error)) throw error;
+        context.io.stderr(MANIFEST_ANCHOR_WARNING);
+      }
 
       return {
         schemaVersion: 1,

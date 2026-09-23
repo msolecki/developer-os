@@ -51,7 +51,7 @@ import type {
   UInt64DecimalV1,
 } from "@developer-os/core";
 
-import { decodeManifestAnchor, manifestAnchorPath } from "../lifecycle/manifest-anchor.js";
+import { decodeManifestAnchor, isOwnedManifestAnchorShape, manifestAnchorPath } from "../lifecycle/manifest-anchor.js";
 import { createCanonicalPathEvidence, createOwnerPathAdmission } from "./admission.js";
 import { projectBootstrapRetentionPostimage } from "./retention.js";
 
@@ -717,7 +717,10 @@ async function exactV2Handoff(
  * D54: a finalized plan whose manifest a later committed gated transaction moved. The mutation
  * gate anchors the manifest hash after every such commit (`lifecycle/manifest-anchor.ts`), so a
  * current manifest equal to the anchor is one the product wrote; a hand edit, or an anchor that
- * is not the exact encoding, matches nothing and stays unresolved.
+ * is not the exact encoding, matches nothing and stays unresolved. The anchor must also name this
+ * plan's own manifest as the start of its chain, so an anchor an earlier installation left
+ * behind never settles a later one, and it must be owned by the plan's user like every other
+ * control file the gate admits (D54 review, findings 1 and 4).
  */
 async function supersededV2Handoff(
   request: BootstrapEvidenceInspectionRequestV1,
@@ -728,10 +731,13 @@ async function supersededV2Handoff(
     const anchor = await guardedFile(request, manifestAnchorPath(request.productHome));
     const manifest = await guardedFile(request, plan.manifest.manifestPath);
     if (anchor.kind !== "regular_file" || manifest.kind !== "regular_file") return false;
-    if (anchor.entry.mode !== 0o600 || anchor.entry.nlink !== 1) return false;
+    if (!isOwnedManifestAnchorShape(anchor.entry, BigInt(anchor.entry.bytes), plan.bootstrapIdentity.ownerUid)) {
+      return false;
+    }
     const anchored = decodeManifestAnchor(await request.reader.readRegularFile(anchor.entry, 1024));
+    if (anchored?.bootstrapManifestHash !== plan.manifest.after.hash) return false;
     const bytes = await request.reader.readRegularFile(manifest.entry, plan.manifest.maximumPlanBytes);
-    return anchored !== null && hashBytes(bytes) === anchored &&
+    return hashBytes(bytes) === anchored.manifestHash &&
       isStructurallyValidV2Manifest(bytes, request.productHome);
   } catch {
     return false;

@@ -13,6 +13,7 @@ import {
   inspectDrift,
   isUnsignedLocalTrust,
   ManifestStateError,
+  parseCanonicalAbsolutePathText,
   parseLifecycleInstallNonce,
   success,
   validateActiveReleaseRecord,
@@ -70,6 +71,7 @@ import type { CodexRegistrationRecordV1 } from "../instructions/codex-registrati
 import { loadInstructionOverrides } from "../instructions/sources.js";
 import { claudeInstructionPaths, codexInstructionPaths, resolveVendorHomes } from "../instructions/vendor-homes.js";
 import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
+import { isCodeDefect, manifestAnchorPath, readManifestAnchor } from "../lifecycle/manifest-anchor.js";
 import { entrypointPath } from "../update/local-release.js";
 import {
   createManagedArtifactEphemeralRegistry,
@@ -1734,7 +1736,38 @@ async function collectFindings(
       checkCodexRegistration(context, inspected, config, homes, options.probe),
     ),
     ...evidenceFindings,
+    ...await manifestAnchorFindings(context),
   ], retainedBootstrapEvidence: evidenceIds, instructions };
+}
+
+const MANIFEST_ANCHOR_ADVICE =
+  "a re-run init refuses a superseded bootstrap until the next committed manifest write; remove the file if it is not an owned 0600 file";
+
+/**
+ * D54 review, finding 3: the anchor only when it cannot do its job — not an owned `0600` file,
+ * not the exact encoding, or naming a manifest that is not the one on disk. Absent is the
+ * ordinary state after a fresh bootstrap, and a matching anchor is healthy, so both are silent
+ * and the report's check list is unchanged on a healthy home. A warning, never a failure: the
+ * anchor is evidence for `init`, not something Foundation depends on.
+ */
+async function manifestAnchorFindings(context: CliContext): Promise<readonly Finding[]> {
+  const lifecycle = context.lifecycle;
+  if (lifecycle === undefined) return [];
+  const path = manifestAnchorPath(context.paths.home);
+  const stale = (message: string): readonly Finding[] =>
+    [warn("manifest-anchor", `${message}; ${MANIFEST_ANCHOR_ADVICE}`, [path])];
+  try {
+    const anchor = await readManifestAnchor(lifecycle.fs, context.paths.home, lifecycle.effectiveUid);
+    if (anchor.kind === "absent") return [];
+    if (anchor.kind === "malformed") return stale("the manifest anchor is not the exact encoding");
+    const manifest = await lifecycle.fs.lstat(parseCanonicalAbsolutePathText(context.paths.manifestFile));
+    if (manifest?.kind !== "regular_file") return stale("the manifest anchor outlived its manifest");
+    const hash = await lifecycle.fs.hashRegular(manifest, BigInt(manifest.size));
+    return hash === anchor.manifestHash ? [] : stale("the manifest anchor names another manifest");
+  } catch (error) {
+    if (isCodeDefect(error)) throw error;
+    return stale("the manifest anchor could not be read as an owned 0600 file");
+  }
 }
 
 /** Human output: one line per artifact (spec §7). */

@@ -53,7 +53,15 @@ import type { AdmittedV2HomeV1 } from "./admission.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
 import { lifecycleHomeKeyFromAdmission, residueFrom } from "./context.js";
 import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "./context.js";
-import { cleanManifestAnchorTemp, readManifestAnchor, writeManifestAnchor } from "./manifest-anchor.js";
+import {
+  cleanManifestAnchorTemp,
+  isCodeDefect,
+  MANIFEST_ANCHOR_WARNING,
+  readManifestAnchor,
+  removeManifestAnchor,
+  writeManifestAnchor,
+} from "./manifest-anchor.js";
+import type { ManifestAnchorReadV1 } from "./manifest-anchor.js";
 
 const GLOBAL_LOCK_LEAF = ".lifecycle.lock";
 
@@ -336,13 +344,39 @@ async function cleanAllocatorTemp(
 }
 
 /**
+ * The digest the executor persisted beside a staged postimage, `<hash>\n`, or `null` when it
+ * is not there in the owned shape.
+ */
+async function stagedDigest(
+  lifecycle: CliLifecycleContext,
+  stagingDirectory: string,
+  transactionId: string,
+  stagedRelativePath: string,
+): Promise<string | null> {
+  const path = parseCanonicalAbsolutePathText(
+    join(stagingDirectory, "transactions", transactionId, `${stagedRelativePath}.sha256`),
+  );
+  // identity-free stat: the guarded port's entry, read through the same port; no dev/ino is recorded.
+  const entry = await lifecycle.fs.lstat(path);
+  if (entry?.kind !== "regular_file" || entry.ownerUid !== lifecycle.effectiveUid || BigInt(entry.size) !== 65n) {
+    return null;
+  }
+  const text = new TextDecoder().decode(await lifecycle.fs.readRegular(entry, 65));
+  return /^[0-9a-f]{64}\n$/u.test(text) ? text.slice(0, 64) : null;
+}
+
+/**
  * D54 crash safety: a committed manifest-writing journal whose anchor write never happened is
  * still present here, because only the `recover` below compacts it. The anchor is derived only
- * when it is absent or still names that journal's before-hash — so an anchor written after the
- * journal (the ordinary case, where the journal waits for the next gate entry to be compacted)
- * is never overwritten with a hand edit.
- * ponytail: the staged postimage is pruned at `finalized`, so the derived hash is the manifest
- * on disk; a hand edit inside the crash window itself is absorbed.
+ * when it is absent (or malformed, which the owned-shape write safely replaces) or still names
+ * that journal's before-hash — so an anchor written after the journal (the ordinary case, where
+ * the journal waits for the next gate entry to be compacted) is never overwritten with a hand
+ * edit. The manifest on disk is anchored only when it is byte-for-byte the postimage the
+ * journal staged, proven by the persisted `.sha256` (D54 review, finding 2); anything else
+ * leaves the anchor as it is and `init` refuses (exit 6).
+ *
+ * An anchor this cannot read in the owned shape is reported and skipped, never a refusal of the
+ * gate entry: it is evidence for `init`, not a lifecycle precondition (finding 3).
  */
 async function deriveManifestAnchor(
   context: CliContext,
@@ -351,17 +385,28 @@ async function deriveManifestAnchor(
   residue: LifecycleBookkeepingResidueV1,
 ): Promise<void> {
   const { fs, effectiveUid } = lifecycle;
-  await cleanManifestAnchorTemp(fs, context.paths.stateDir, effectiveUid);
+  let anchor: ManifestAnchorReadV1;
+  try {
+    await cleanManifestAnchorTemp(fs, context.paths.stateDir, effectiveUid);
+    anchor = await readManifestAnchor(fs, context.paths.home, effectiveUid);
+  } catch (error) {
+    if (isCodeDefect(error)) throw error;
+    context.io.stderr(MANIFEST_ANCHOR_WARNING);
+    return;
+  }
   // identity-free stat: the guarded port's entry, hashed through the same port; no dev/ino is recorded.
   const manifest = await fs.lstat(parseCanonicalAbsolutePathText(context.paths.manifestFile));
   if (manifest?.kind !== "regular_file") return;
   const manifestHash = await fs.hashRegular(manifest, BigInt(manifest.size));
-  const anchor = await readManifestAnchor(fs, context.paths.home, effectiveUid);
   if (anchor.kind === "anchored" && anchor.manifestHash === manifestHash) return;
-  if (anchor.kind === "malformed") return;
 
   const snapshot = await lifecycle.inspectLedger(key, residue);
-  let latest: { readonly counter: bigint; readonly beforeHash: string | null } | null = null;
+  let latest: {
+    readonly counter: bigint;
+    readonly id: string;
+    readonly beforeHash: string | null;
+    readonly stagedRelativePath: string | null;
+  } | null = null;
   for (const compaction of snapshot.standaloneTerminalFoundation) {
     if (compaction.terminalPhase !== "finalized") continue;
     const journal = snapshot.foundation.journals.get(compaction.transactionId)?.journal;
@@ -373,11 +418,31 @@ async function deriveManifestAnchor(
     } catch {
       continue;
     }
-    if (latest === null || counter > latest.counter) latest = { counter, beforeHash: write.expectedBeforeHash };
+    if (latest === null || counter > latest.counter) {
+      latest = {
+        counter,
+        id: compaction.transactionId,
+        beforeHash: write.expectedBeforeHash,
+        stagedRelativePath: write.stagedRelativePath,
+      };
+    }
   }
-  if (latest === null) return;
+  if (latest?.stagedRelativePath == null) return;
   if (anchor.kind === "anchored" && anchor.manifestHash !== latest.beforeHash) return;
-  await writeManifestAnchor(fs, context.paths.home, context.paths.stateDir, effectiveUid, manifestHash);
+  const bootstrapManifestHash = anchor.kind === "anchored" ? anchor.bootstrapManifestHash : latest.beforeHash;
+  if (bootstrapManifestHash === null) return;
+  try {
+    if (await stagedDigest(lifecycle, context.paths.stagingDir, latest.id, latest.stagedRelativePath) !== manifestHash) {
+      return;
+    }
+    await writeManifestAnchor(fs, context.paths.home, context.paths.stateDir, effectiveUid, {
+      manifestHash,
+      bootstrapManifestHash,
+    });
+  } catch (error) {
+    if (isCodeDefect(error)) throw error;
+    context.io.stderr(MANIFEST_ANCHOR_WARNING);
+  }
 }
 
 /**
@@ -536,6 +601,14 @@ export function createGatedTransactionExecutor(input: {
    * D54: under the held global lock and before any later gate entry can compact the journal,
    * a committed manifest write records the manifest hash it produced. A resumed transaction
    * carries no postimage any more, so its anchor is the manifest it just left on disk.
+   *
+   * The chain's `bootstrapManifestHash` carries forward only while the anchor still names this
+   * write's before-hash; otherwise the chain restarts at that before-hash, which settles a plan
+   * only when it is the plan's own manifest (finding 1). A transaction that leaves no manifest
+   * ends the installation the anchor describes, so it removes the anchor.
+   *
+   * Never a throw: the transaction has committed, and a throw here means "nothing happened" to
+   * every caller (finding 3). A failure is reported and the anchor is left for the next write.
    */
   const anchorCommitted = async (
     journal: TransactionJournalV1,
@@ -544,23 +617,35 @@ export function createGatedTransactionExecutor(input: {
     const context = input.context();
     const lifecycle = input.lifecycle;
     if (lifecycle === undefined || journal.phase !== "finalized") return journal;
-    if (!journal.mutations.some((mutation) => mutation.targetPath === context.paths.manifestFile)) return journal;
-    let manifestHash: string;
-    if (postimage === null || postimage === undefined) {
+    const write = journal.mutations.find((mutation) => mutation.targetPath === context.paths.manifestFile);
+    if (write === undefined) return journal;
+    const { fs, effectiveUid } = lifecycle;
+    try {
       // identity-free stat: the guarded port's entry, hashed through the same port; no dev/ino is recorded.
-      const manifest = await lifecycle.fs.lstat(parseCanonicalAbsolutePathText(context.paths.manifestFile));
-      if (manifest?.kind !== "regular_file") return journal;
-      manifestHash = await lifecycle.fs.hashRegular(manifest, BigInt(manifest.size));
-    } else {
-      manifestHash = hashBytes(postimage);
+      const manifest = await fs.lstat(parseCanonicalAbsolutePathText(context.paths.manifestFile));
+      if (manifest?.kind !== "regular_file") {
+        await removeManifestAnchor(fs, context.paths.home, effectiveUid);
+        return journal;
+      }
+      const manifestHash = postimage === null || postimage === undefined
+        ? await fs.hashRegular(manifest, BigInt(manifest.size))
+        : hashBytes(postimage);
+      const previous = await readManifestAnchor(fs, context.paths.home, effectiveUid);
+      const bootstrapManifestHash = previous.kind === "anchored" && previous.manifestHash === write.expectedBeforeHash
+        ? previous.bootstrapManifestHash
+        : write.expectedBeforeHash;
+      if (bootstrapManifestHash === null) {
+        await removeManifestAnchor(fs, context.paths.home, effectiveUid);
+        return journal;
+      }
+      await writeManifestAnchor(fs, context.paths.home, context.paths.stateDir, effectiveUid, {
+        manifestHash,
+        bootstrapManifestHash,
+      });
+    } catch (error) {
+      if (isCodeDefect(error)) throw error;
+      context.io.stderr(MANIFEST_ANCHOR_WARNING);
     }
-    await writeManifestAnchor(
-      lifecycle.fs,
-      context.paths.home,
-      context.paths.stateDir,
-      lifecycle.effectiveUid,
-      manifestHash,
-    );
     return journal;
   };
   const manifestPostimage = (plan: TransactionPlan): Uint8Array | null | undefined =>

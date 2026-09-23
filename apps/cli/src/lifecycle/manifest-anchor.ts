@@ -3,6 +3,12 @@
  * installation manifest, the mutation gate records the resulting manifest hash here, so the
  * bootstrap evidence classifier can tell a manifest the product moved from a hand edit after
  * recovery has compacted the journals that could otherwise prove the chain.
+ *
+ * The anchor also carries `bootstrapManifestHash`: the manifest hash the unbroken chain of
+ * gated writes started from, which is the finalized bootstrap plan's `manifest.after.hash`
+ * when nothing else touched the manifest in between. `init` settles a superseded plan only
+ * when that value is the plan's own, so an anchor left behind by an earlier installation can
+ * never settle a later one (D54 review, finding 1).
  */
 import { join } from "node:path";
 
@@ -27,40 +33,66 @@ function refuse(reason: string, path: string): never {
 
 const TEMP_LEAF = ".manifest-anchor.json.tmp";
 
+export interface ManifestAnchorV1 {
+  readonly manifestHash: string;
+  readonly bootstrapManifestHash: string;
+}
+
 export function manifestAnchorPath(productHome: string): string {
   return join(productHome, MANIFEST_ANCHOR_RELATIVE_PATH);
 }
 
-export function encodeManifestAnchor(manifestHash: string): Uint8Array {
-  return encoder.encode(encodeCanonicalJson({ schemaVersion: 1, manifestHash }));
+export function encodeManifestAnchor(anchor: ManifestAnchorV1): Uint8Array {
+  return encoder.encode(encodeCanonicalJson({
+    schemaVersion: 1,
+    manifestHash: anchor.manifestHash,
+    bootstrapManifestHash: anchor.bootstrapManifestHash,
+  }));
 }
 
-/** The anchored hash, or `null` for anything but the exact canonical encoding. */
-export function decodeManifestAnchor(bytes: Uint8Array): string | null {
+/** The anchor, or `null` for anything but the exact canonical encoding. */
+export function decodeManifestAnchor(bytes: Uint8Array): ManifestAnchorV1 | null {
   if (bytes.byteLength !== MANIFEST_ANCHOR_BYTES) return null;
   try {
     const value = decodeCanonicalJson(bytes, MANIFEST_ANCHOR_BYTES) as Record<string, unknown> | null;
-    const hash = value?.manifestHash;
-    if (typeof hash !== "string" || !LOWER_HEX_SHA256.test(hash)) return null;
-    const expected = encodeManifestAnchor(hash);
-    return expected.every((byte, index) => bytes[index] === byte) ? hash : null;
+    const manifestHash = value?.manifestHash;
+    const bootstrapManifestHash = value?.bootstrapManifestHash;
+    if (typeof manifestHash !== "string" || !LOWER_HEX_SHA256.test(manifestHash)) return null;
+    if (typeof bootstrapManifestHash !== "string" || !LOWER_HEX_SHA256.test(bootstrapManifestHash)) return null;
+    const anchor = { manifestHash, bootstrapManifestHash };
+    const expected = encodeManifestAnchor(anchor);
+    return expected.every((byte, index) => bytes[index] === byte) ? anchor : null;
   } catch {
     return null;
   }
 }
 
+/**
+ * The one shape rule for the anchor and its temp: a single-link `0600` regular file owned by
+ * the effective user and no longer than the exact encoding. The gate and `init` both use it.
+ */
+export function isOwnedManifestAnchorShape(
+  entry: { readonly ownerUid: number; readonly mode: number; readonly nlink: number },
+  size: bigint,
+  effectiveUid: number,
+): boolean {
+  return entry.ownerUid === effectiveUid && entry.mode === 0o600 && entry.nlink === 1 &&
+    size <= BigInt(MANIFEST_ANCHOR_BYTES);
+}
+
 function ownedControlFile(entry: LifecycleGuardedEntryV1 | null, effectiveUid: number): boolean {
-  return entry !== null && entry.kind === "regular_file" && entry.ownerUid === effectiveUid &&
-    entry.mode === 0o600 && entry.nlink === 1 && BigInt(entry.size) <= BigInt(MANIFEST_ANCHOR_BYTES);
+  return entry !== null && entry.kind === "regular_file" &&
+    isOwnedManifestAnchorShape(entry, BigInt(entry.size), effectiveUid);
 }
 
 /**
- * `absent`, the exact anchored hash, or `malformed` for a file of admitted shape whose bytes
- * are not the exact encoding (an interrupted first write, or an edit).
+ * `absent`, the exact anchor, or `malformed` for a file of admitted shape whose bytes are not
+ * the exact encoding (an interrupted first write, or an edit). A file of any other shape
+ * refuses `manifest_anchor_shape`.
  */
 export type ManifestAnchorReadV1 =
   | { readonly kind: "absent" }
-  | { readonly kind: "anchored"; readonly manifestHash: string }
+  | ({ readonly kind: "anchored" } & ManifestAnchorV1)
   | { readonly kind: "malformed" };
 
 export async function readManifestAnchor(
@@ -71,8 +103,38 @@ export async function readManifestAnchor(
   const entry = await fs.lstat(parseCanonicalAbsolutePathText(manifestAnchorPath(productHome)));
   if (entry === null) return { kind: "absent" };
   if (!ownedControlFile(entry, effectiveUid)) refuse("manifest_anchor_shape", entry.path);
-  const manifestHash = decodeManifestAnchor(await fs.readRegular(entry, MANIFEST_ANCHOR_BYTES));
-  return manifestHash === null ? { kind: "malformed" } : { kind: "anchored", manifestHash };
+  const anchor = decodeManifestAnchor(await fs.readRegular(entry, MANIFEST_ANCHOR_BYTES));
+  return anchor === null ? { kind: "malformed" } : { kind: "anchored", ...anchor };
+}
+
+/**
+ * Removes the anchor, when the installation it describes is gone (its manifest was removed)
+ * or a fresh bootstrap starts a new one. A file of any shape but the owned control file
+ * refuses rather than being removed.
+ */
+export async function removeManifestAnchor(
+  fs: LifecycleGuardedFileSystemV1,
+  productHome: string,
+  effectiveUid: number,
+): Promise<void> {
+  const entry = await fs.lstat(parseCanonicalAbsolutePathText(manifestAnchorPath(productHome)));
+  if (entry === null) return;
+  if (!ownedControlFile(entry, effectiveUid)) refuse("manifest_anchor_shape", entry.path);
+  await fs.unlinkExact(entry);
+}
+
+/**
+ * D54 review, finding 3: the anchor is evidence for a later `init`, never part of a committed
+ * transaction, so a failure to record, derive or remove it is reported on `stderr` and the
+ * command's result stands. The anchor is then absent or stale, which `init` reads as "not
+ * proven" (exit 6) until a later committed manifest write refreshes it.
+ */
+export const MANIFEST_ANCHOR_WARNING =
+  "warning: the manifest anchor could not be updated; a re-run init may refuse until the next committed manifest write (see developer-os doctor)";
+
+/** NEW-82: a defect in this code is not a fact about the anchor, so it is never downgraded. */
+export function isCodeDefect(error: unknown): boolean {
+  return error instanceof TypeError || error instanceof RangeError || error instanceof ReferenceError;
 }
 
 /**
@@ -96,17 +158,20 @@ export async function cleanManifestAnchorTemp(
 /**
  * Atomic replace through a same-directory temp. The very first anchor has nothing to rename
  * over, so it is one `O_EXCL` create-write-fsync; an interruption there leaves a short file the
- * shape rule admits and the decoder rejects, which the next write replaces.
+ * shape rule admits and the decoder rejects, which the next write replaces. A malformed file of
+ * the owned shape is replaced the same way; any other shape refuses and is left for `doctor`.
  */
 export async function writeManifestAnchor(
   fs: LifecycleGuardedFileSystemV1,
   productHome: string,
   stateDirectory: string,
   effectiveUid: number,
-  manifestHash: string,
+  anchor: ManifestAnchorV1,
 ): Promise<void> {
-  if (!LOWER_HEX_SHA256.test(manifestHash)) throw new Error("the manifest anchor takes a lowercase SHA-256");
-  const bytes = encodeManifestAnchor(manifestHash);
+  if (!LOWER_HEX_SHA256.test(anchor.manifestHash) || !LOWER_HEX_SHA256.test(anchor.bootstrapManifestHash)) {
+    throw new Error("the manifest anchor takes lowercase SHA-256 hashes");
+  }
+  const bytes = encodeManifestAnchor(anchor);
   const path = parseCanonicalAbsolutePathText(manifestAnchorPath(productHome));
   const state = await fs.lstat(parseCanonicalAbsolutePathText(stateDirectory));
   if (state === null) refuse("lifecycle_guarded_parent", stateDirectory);
