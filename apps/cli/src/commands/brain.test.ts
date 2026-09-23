@@ -1,10 +1,11 @@
 import * as nodeFs from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { EXIT_CODES, serializeConfig } from "@developer-os/core";
+import { EXIT_CODES, parseCanonicalAbsolutePathText, parseUInt64Decimal, serializeConfig } from "@developer-os/core";
+import type { HeldLifecycleStableLockV1 } from "@developer-os/core";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { renderBrain, runBrain } from "./brain.js";
+import { renderBrain, runBrain, runScheduledBrain } from "./brain.js";
 import type { BrainOptions } from "./brain.js";
 import { runInit } from "./init.js";
 import {
@@ -762,4 +763,47 @@ describe("brain reindex on a V2 home", () => {
     ).toContain("content/");
     expect((await runInit(fixture.context, { dryRun: false, assumeYes: true })).ok).toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
+describe("the scheduled brain handlers", () => {
+  function borrowedLock(fixture: CommandFixture, releases: string[]): HeldLifecycleStableLockV1 {
+    const path = parseCanonicalAbsolutePathText(join(fixture.paths.stateDir, ".lifecycle.lock"));
+    return {
+      path,
+      dev: parseUInt64Decimal("16777232"),
+      ino: parseUInt64Decimal("1"),
+      release: () => {
+        releases.push(path);
+        return Promise.resolve();
+      },
+    };
+  }
+
+  it.each(["brain-reindex", "brain-lint"] as const)(
+    "refuses %s on a home that is not V2 without writing or releasing the runner's lock",
+    async (job) => {
+      const fixture = await installed(`brain-scheduled-${job}`);
+      const releases: string[] = [];
+
+      const result = await runScheduledBrain(fixture.context, job, borrowedLock(fixture, releases));
+
+      expect(result).toMatchObject({ outcome: "handler_refused", reasonCode: "lifecycle_mutation_home_not_v2" });
+      expect(releases).toStrictEqual([]);
+      expect(await nodeFs.readdir(join(fixture.paths.brain, "content")).then((names) => names.includes("_indexes"))).toBe(false);
+    },
+  );
+
+  it("refuses without a lifecycle context rather than taking the legacy path", async () => {
+    const fixture = await installed("brain-scheduled-no-lifecycle");
+    const releases: string[] = [];
+
+    const result = await runScheduledBrain(
+      { ...fixture.context, lifecycle: undefined },
+      "brain-reindex",
+      borrowedLock(fixture, releases),
+    );
+
+    expect(result).toMatchObject({ outcome: "handler_refused", reasonCode: "lifecycle_context_unavailable" });
+    expect(releases).toStrictEqual([]);
+  });
 });

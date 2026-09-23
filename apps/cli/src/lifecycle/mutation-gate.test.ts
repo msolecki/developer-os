@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { EXIT_CODES, TransactionExecutor } from "@developer-os/core";
+import { EXIT_CODES, TransactionExecutor, parseCanonicalAbsolutePathText, parseUInt64Decimal } from "@developer-os/core";
 
 import { runCapture } from "../commands/capture.js";
 import { runInit } from "../commands/init.js";
@@ -19,6 +19,7 @@ import {
   classifyMutationHome,
   createGatedTransactionExecutor,
   isGatedTransactionExecutor,
+  withLifecycleMutation,
 } from "./mutation-gate.js";
 
 afterEach(removeCommandFixtures);
@@ -198,5 +199,44 @@ describe("the mutation gate on a home that is not an admitted V2 installation", 
       );
       expect(source, command).toContain("context.executor.execute(");
     }
+  });
+});
+
+describe("the mutation gate with a borrowed global lock", () => {
+  it("refuses a home that is not V2 before any work, and never releases the borrowed lock", async () => {
+    const { fixture } = await installedV1("gate-borrowed-v1");
+    const lifecycle = fixture.context.lifecycle;
+    if (lifecycle === undefined) throw new Error("the fixture composed no lifecycle context");
+    const releases: string[] = [];
+    const worked: string[] = [];
+    const before = await inventoryDigest(fixture.root);
+
+    await expect(
+      withLifecycleMutation(
+        fixture.context,
+        lifecycle,
+        () => {
+          worked.push("work");
+          return Promise.resolve("ok");
+        },
+        undefined,
+        {
+          global: {
+            path: parseCanonicalAbsolutePathText(globalLockPath(fixture)),
+            dev: parseUInt64Decimal("16777232"),
+            ino: parseUInt64Decimal("1"),
+            release: () => {
+              releases.push("released");
+              return Promise.resolve();
+            },
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ reason: "lifecycle_mutation_home_not_v2", code: EXIT_CODES.invalidInput });
+
+    expect(worked).toStrictEqual([]);
+    expect(releases).toStrictEqual([]);
+    expect(fixture.stableLockEvents).toStrictEqual([]);
+    expect(await inventoryDigest(fixture.root)).toStrictEqual(before);
   });
 });

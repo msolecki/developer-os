@@ -15,6 +15,7 @@ import {
   ManifestStateError,
   parseCanonicalAbsolutePathText,
   parseLifecycleInstallNonce,
+  parseSafeReasonCode,
   success,
   validateActiveReleaseRecord,
   validateInstructionCatalog,
@@ -80,6 +81,7 @@ import { loadInstructionOverrides } from "../instructions/sources.js";
 import { claudeInstructionPaths, codexInstructionPaths, resolveVendorHomes } from "../instructions/vendor-homes.js";
 import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
 import { isCodeDefect, manifestAnchorPath, readManifestAnchor } from "../lifecycle/manifest-anchor.js";
+import type { ScheduledHandlerResultV1 } from "../lifecycle/runtime-records.js";
 import { entrypointPath } from "../update/local-release.js";
 import {
   createManagedArtifactEphemeralRegistry,
@@ -1848,6 +1850,53 @@ export async function runDoctorReport(
     retainedBootstrapEvidence,
     instructions,
   };
+}
+
+/**
+ * Spec 1 §5.1's scheduled-safe profile: configuration, manifest, path and local artifact
+ * checks only. Platform inspection, agent discovery and the transaction survey each spawn a
+ * process in production (`sw_vers`, `which`, `/usr/bin/lockf`), so none of them runs here.
+ */
+export async function runScheduledDoctorReport(context: CliContext): Promise<DoctorReportV1> {
+  let config: DeveloperOsConfigV1 | null = null;
+  try {
+    config = await readConfigFile(context, context.paths.configFile);
+  } catch {
+    config = null;
+  }
+  const paths = runtimePathsFor(context, config ?? undefined);
+  const homes = resolveVendorHomes(context.env, context.userHome, paths.home);
+  let inspected: InstallationManifest | null = null;
+  const findings = [
+    await guarded(context, "product-home", [paths.home], () => checkProductHome(context, paths)),
+    await guarded(context, "configuration", [paths.configFile], () => checkConfiguration(context, paths)),
+    await guarded(context, "manifest", [paths.manifestFile], async () => {
+      const checked = await checkManifest(context, paths, homes);
+      inspected = checked.manifest;
+      return checked.finding;
+    }),
+    await guarded(context, "drift", [], async () => {
+      const current = inspected;
+      if (current === null) return pass("drift", "no manifest to compare against", []);
+      return reportDrift(await inspectManagedDrift(context, current, paths), paths);
+    }),
+    await guarded(context, "brain", [paths.brain], () => checkBrain(context, paths)),
+    await guarded(context, "redaction-key", [], () => checkRedactionKey(context, paths)),
+  ];
+  return {
+    schemaVersion: 1,
+    checks: findings.map((finding) => finding.check),
+    retainedBootstrapEvidence: [],
+    instructions: [],
+  };
+}
+
+/** §5.1's `doctor` job: the scheduled-safe report, failing when any of its checks fails. */
+export async function runScheduledDoctor(context: CliContext): Promise<ScheduledHandlerResultV1> {
+  const report = await runScheduledDoctorReport(context);
+  return hasFailingCheck(report)
+    ? { outcome: "handler_failed", reasonCode: parseSafeReasonCode("doctor_check_failed"), data: report }
+    : { outcome: "success", reasonCode: parseSafeReasonCode("ok"), data: report };
 }
 
 export function hasFailingCheck(report: DoctorReportV1): boolean {

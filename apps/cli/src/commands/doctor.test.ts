@@ -3,8 +3,15 @@ import { join, posix } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { encodeCanonicalJson, encodeHookFiringRecord, EXIT_CODES, hookFiringRecordName } from "@developer-os/core";
-import type { CliResult } from "@developer-os/core";
+import {
+  encodeCanonicalJson,
+  encodeHookFiringRecord,
+  EXIT_CODES,
+  hookFiringRecordName,
+  parseCanonicalAbsolutePathText,
+  parseUInt64Decimal,
+} from "@developer-os/core";
+import type { CliResult, HeldLifecycleStableLockV1 } from "@developer-os/core";
 import { CLAUDE_HOOK_ROWS, CLAUDE_HOOKS_PATH, PLUGIN_INSTALL_SEGMENTS, renderClaudeHooks } from "@developer-os/adapter-claude";
 import {
   CODEX_HOOK_ROWS,
@@ -35,13 +42,16 @@ import {
   MAX_CLAUDE_SETTINGS_BYTES,
   runDoctor,
   runDoctorReport,
+  runScheduledDoctor,
   UNSIGNED_LOCAL_TRUST_WARNING,
 } from "./doctor.js";
 import type { DoctorReportV1 } from "./doctor.js";
+import { createScheduledJobHandlers } from "./automation/runner.js";
 import { runInit } from "./init.js";
 import { runRepair } from "./repair.js";
 import { createCommandFixture, firstRegularFile, inventory, inventoryDigest, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures, retainedTombstones } from "./testing.js";
 import type { CommandFixture } from "./testing.js";
+import type { CliContext } from "../context.js";
 
 /**
  * A local, structural stand-in for `RenderedArtifact`, which
@@ -1549,5 +1559,82 @@ describe("hooks and external-hooks", () => {
     expect(report.checks.find((check) => check.id === "external-hooks")?.status).toBe("warn");
     expect(hasBlockingFailure(report)).toBe(false);
     expect(JSON.stringify(report)).not.toContain("SENTINEL");
+  });
+});
+
+describe("the scheduled-safe doctor profile", () => {
+  const HELD: HeldLifecycleStableLockV1 = {
+    path: parseCanonicalAbsolutePathText("/synthetic-home/.developer-os/state/.lifecycle.lock"),
+    dev: parseUInt64Decimal("16777232"),
+    ino: parseUInt64Decimal("1"),
+    release: () => Promise.reject(new Error("a handler never releases the runner's global lock")),
+  };
+
+  /** Every platform call and process a check could make, recorded instead of performed. */
+  function recordingContext(context: CliContext, spawns: string[]): CliContext {
+    const platform: PlatformAdapter = {
+      inspect: () => {
+        spawns.push("platform.inspect");
+        return context.platform.inspect();
+      },
+      assertTrustedExecutable: (path) => {
+        spawns.push("platform.assertTrustedExecutable");
+        return context.platform.assertTrustedExecutable(path);
+      },
+      discoverExecutable: (name) => {
+        spawns.push(`platform.discoverExecutable:${name}`);
+        return context.platform.discoverExecutable(name);
+      },
+      productStateRoot: (home) => context.platform.productStateRoot(home),
+      proposedBrainRoot: (home) => context.platform.proposedBrainRoot(home),
+    };
+    const runner: ProcessRunner = {
+      run: (request) => {
+        spawns.push(`runner:${request.executable}`);
+        return context.runner.run(request);
+      },
+    };
+    return { ...context, platform, runner };
+  }
+
+  it("spawns something in the ordinary no-probe report, which is why the scheduled profile exists", async () => {
+    const fixture = await createCommandFixture("doctor-scheduled-contrast");
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    const spawns: string[] = [];
+
+    await runDoctorReport(recordingContext(fixture.context, spawns));
+
+    expect(spawns.length).toBeGreaterThan(0);
+  });
+
+  it("spawns nothing in the scheduled doctor profile", async () => {
+    const fixture = await createCommandFixture("doctor-scheduled");
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    const spawns: string[] = [];
+    const handlers = createScheduledJobHandlers(recordingContext(fixture.context, spawns), null);
+
+    const result = await handlers.run("doctor", HELD);
+
+    expect(spawns).toEqual([]);
+    expect(result.outcome).toBe("success");
+    const report = result.data as DoctorReportV1;
+    expect(report.checks.map((check) => check.id)).toStrictEqual([
+      "product-home",
+      "configuration",
+      "manifest",
+      "drift",
+      "brain",
+      "redaction-key",
+    ]);
+  });
+
+  it("reports a failing local check as handler_failed without spawning", async () => {
+    const fixture = await createCommandFixture("doctor-scheduled-failing");
+    const spawns: string[] = [];
+
+    const result = await runScheduledDoctor(recordingContext(fixture.context, spawns));
+
+    expect(spawns).toEqual([]);
+    expect(result).toMatchObject({ outcome: "handler_failed", reasonCode: "doctor_check_failed" });
   });
 });

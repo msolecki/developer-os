@@ -297,7 +297,7 @@ function gateAdapters(
  * preflight. Materialising it under the held global lock restores the shape the ledger was
  * written against; the durable fix belongs in that fresh layout.
  */
-async function requireLifecycleStagingRoot(
+export async function requireLifecycleStagingRoot(
   lifecycle: CliLifecycleContext,
   paths: RuntimePaths,
 ): Promise<void> {
@@ -476,17 +476,32 @@ function requireResolvedClosure(
   });
 }
 
+/**
+ * `held` is Review Focus 1: a scheduled handler runs under the global lock its runner already
+ * holds (§5.4), and a second `lockf` on a fresh descriptor in the same process reports busy.
+ * With it the gate verifies the held descriptor's `dev`/`ino` against the lock path instead of
+ * acquiring, and never releases it — the runner does, after its record write.
+ */
 export async function withLifecycleMutation<T>(
   context: CliContext,
   lifecycle: CliLifecycleContext,
   work: (authority: LifecycleMutationAuthorityV1) => Promise<T>,
   resolution?: { readonly standaloneFoundationId: string },
+  borrowed?: { readonly global: HeldLifecycleStableLockV1 },
 ): Promise<T> {
   const home = await classifyMutationHome(context, lifecycle);
   if (home.kind !== "v2") refuseNonV2(home, context.paths);
 
   const lockPath = globalLockPath(context.paths);
-  let held = await lifecycle.locks.acquireExisting(lockPath);
+  const identityRefusal = (): LifecycleMutationRefusal =>
+    new LifecycleMutationRefusal({
+      reason: "lifecycle_lock_identity",
+      code: EXIT_CODES.recoveryRequired,
+      paths: [lockPath],
+      recovery: "developer-os doctor",
+    });
+  if (borrowed !== undefined && borrowed.global.path !== lockPath) throw identityRefusal();
+  let held = borrowed?.global ?? await lifecycle.locks.acquireExisting(lockPath);
   let live = true;
   try {
     const admitted = await admitInstalledV2Home({
@@ -495,14 +510,7 @@ export async function withLifecycleMutation<T>(
       manifestAdmission: gateManifestAdmission(context),
       effectiveUid: lifecycle.effectiveUid,
     });
-    if (admitted.globalLock.dev !== held.dev || admitted.globalLock.ino !== held.ino) {
-      throw new LifecycleMutationRefusal({
-        reason: "lifecycle_lock_identity",
-        code: EXIT_CODES.recoveryRequired,
-        paths: [lockPath],
-        recovery: "developer-os doctor",
-      });
-    }
+    if (admitted.globalLock.dev !== held.dev || admitted.globalLock.ino !== held.ino) throw identityRefusal();
 
     await requireLifecycleStagingRoot(lifecycle, context.paths);
     const key = lifecycleHomeKeyFromAdmission(admitted, context.paths);
@@ -526,6 +534,7 @@ export async function withLifecycleMutation<T>(
           ? {}
           : { standaloneFoundationId: resolution.standaloneFoundationId }),
       });
+    if (borrowed !== undefined && recovered.global !== borrowed.global) throw identityRefusal();
     held = recovered.global;
     requireResolvedClosure(recovered.snapshot, resolution, context.paths);
 
@@ -563,7 +572,7 @@ export async function withLifecycleMutation<T>(
     );
   } finally {
     live = false;
-    await held.release();
+    if (borrowed === undefined) await held.release();
   }
 }
 

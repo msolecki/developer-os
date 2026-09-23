@@ -3,12 +3,14 @@ import { join } from "node:path";
 import {
   EXIT_CODES,
   failure,
+  parseSafeReasonCode,
   success,
 } from "@developer-os/core";
 import type {
   CliResult,
   DeveloperOsConfigV1,
   ExitCode,
+  HeldLifecycleStableLockV1,
   RuntimePaths,
 } from "@developer-os/core";
 import { BrainService, resolveBrainConfig } from "@developer-os/brain";
@@ -16,6 +18,8 @@ import type { LintFinding, RefactorRequestV1, RetrievalMatch } from "@developer-
 
 import { failureFrom, renderPath, runtimePathsFor } from "../context.js";
 import type { CliContext } from "../context.js";
+import { LifecycleMutationRefusal, withLifecycleMutation } from "../lifecycle/mutation-gate.js";
+import type { ScheduledHandlerResultV1 } from "../lifecycle/runtime-records.js";
 import { ConfigurationError, readConfigFile } from "./doctor.js";
 import { runRefactor } from "./refactor.js";
 import type { BrainRefactorResultV1 } from "./refactor.js";
@@ -389,6 +393,64 @@ export async function runBrain(
     }
     return failureFrom(context, error);
   }
+}
+
+const INERT_REASON_CODES: ReadonlySet<string> = new Set(["ok", "git_disabled", "automation_disabled", "skipped_lock_timeout"]);
+
+/** A failure's `kind` when it is already a safe reason code no status outcome reserves. */
+function scheduledReasonCode(kind: string, fallback: "handler_refused" | "handler_failed"): ScheduledHandlerResultV1["reasonCode"] {
+  try {
+    const code = parseSafeReasonCode(kind);
+    return INERT_REASON_CODES.has(code) ? parseSafeReasonCode(fallback) : code;
+  } catch {
+    return parseSafeReasonCode(fallback);
+  }
+}
+
+/**
+ * §5.1's `brain-reindex` and `brain-lint` handlers. They run under the global lock the
+ * scheduled runner already holds (Review Focus 1): the gate borrows it, so the reindex
+ * transaction reuses that descriptor instead of taking a second `lockf` that reports busy.
+ */
+export async function runScheduledBrain(
+  context: CliContext,
+  job: "brain-reindex" | "brain-lint",
+  held: HeldLifecycleStableLockV1,
+): Promise<ScheduledHandlerResultV1> {
+  const lifecycle = context.lifecycle;
+  if (lifecycle === undefined) {
+    return { outcome: "handler_refused", reasonCode: parseSafeReasonCode("lifecycle_context_unavailable"), data: null };
+  }
+  let result: CliResult<BrainResultV1>;
+  try {
+    result = await withLifecycleMutation(
+      context,
+      lifecycle,
+      () =>
+        runBrain(context, {
+          subcommand: job === "brain-reindex" ? "reindex" : "lint",
+          query: null,
+          limit: null,
+          dryRun: false,
+        }),
+      undefined,
+      { global: held },
+    );
+  } catch (error) {
+    if (!(error instanceof LifecycleMutationRefusal)) throw error;
+    return {
+      outcome: "handler_refused",
+      reasonCode: scheduledReasonCode(error.reason, "handler_refused"),
+      data: { code: error.code, paths: error.paths },
+    };
+  }
+  if (result.ok) return { outcome: "success", reasonCode: parseSafeReasonCode("ok"), data: result.data };
+  const outcome = result.code === EXIT_CODES.operationalFailure ? "handler_failed" : "handler_refused";
+  return {
+    outcome,
+    reasonCode: scheduledReasonCode(result.error.kind, outcome),
+    data: { code: result.code, error: result.error },
+  };
 }
 
 /** Human-facing rendering. Every path goes through `renderPath` first. */
