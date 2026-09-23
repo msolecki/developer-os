@@ -211,6 +211,13 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   (D46) stay parked. Implementers run as separate headless sessions, one worktree each under
   `../developer-os.worktrees/`. The founder authorized model credits for the owed vendor observations
   (NEW-101..104, NEW-109).
+- **D57 (2026-09-23), amends A13 Task 1/15 and A14 Task 14 ("an agent never observes").** The
+  founder delegates the owed vendor observations (NEW-104 Codex hooks and trust, the Claude
+  `PreToolUse`/`PostToolUse`/`Stop` rows, NEW-109 memory layout and deny rules) to a headless agent
+  session on a disposable home, authenticated by linking — never reading, copying, printing or
+  committing — the founder's existing vendor credentials, as D52 does for Codex ingest. The session
+  grants the Codex hook trust itself on that disposable home only. The founder's working `~/.claude`
+  and `~/.codex` are not modified.
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 
