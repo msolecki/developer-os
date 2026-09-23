@@ -582,6 +582,11 @@ export {
   validateGitPlanPreview,
   validateGitScopeSnapshot,
   validateGitSyncPlanCore,
+  GitEffectExecutor,
+  createGitEffectLedgerCodec,
+  gitEffectPlanHash,
+  maximumGitEffectJournalBytes,
+  validateGitEffectPlan,
 } from "./git/index.js";
 export type {
   GitPlanningRefusalReasonV1,
@@ -618,4 +623,9 @@ export type {
   GitSyncPlanCoreV1,
   GitSyncPlanningDraft,
   GitSyncRequestV1,
+  GitEffectBoundaryV1,
+  GitEffectDependenciesV1,
+  GitEffectFileSystemV1,
+  GitEffectJournalV1,
+  GitEffectPlanV1,
 } from "./git/index.js";

@@ -331,6 +331,11 @@ describe("the package's public door", () => {
         "validateGitPlanPreview",
         "validateGitScopeSnapshot",
         "validateGitSyncPlanCore",
+        "GitEffectExecutor",
+        "createGitEffectLedgerCodec",
+        "gitEffectPlanHash",
+        "maximumGitEffectJournalBytes",
+        "validateGitEffectPlan",
       ].sort(),
     );
   });

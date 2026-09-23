@@ -146,3 +146,33 @@ export type {
   GitSyncPlanningDraft,
   GitSyncRequestV1,
 } from "./planner.js";
+export {
+  GIT_EFFECT_MATCHED_IDENTITIES,
+  GIT_EFFECT_OUTCOMES,
+  GIT_EFFECT_PHASES,
+  GIT_EFFECT_RELINQUISHABLE_OBJECT_ROLES,
+  assertGitEffectJournalForPlan,
+  createGitEffectLedgerCodec,
+  gitEffectForwardObservation,
+  gitEffectPlanHash,
+  gitEffectStagingChildren,
+  gitEffectTerminal,
+  maximumGitEffectJournalBytes,
+  validateGitEffectJournal,
+  validateGitEffectPlan,
+} from "./effect-journal.js";
+export type {
+  GitEffectJournalV1,
+  GitEffectMatchedIdentityV1,
+  GitEffectObservationV1,
+  GitEffectOutcomeV1,
+  GitEffectPhaseV1,
+  GitEffectPlanV1,
+} from "./effect-journal.js";
+export { GitEffectExecutor } from "./effects.js";
+export type {
+  GitEffectBoundaryV1,
+  GitEffectDependenciesV1,
+  GitEffectFileSystemV1,
+  GitEffectMoveV1,
+} from "./effects.js";

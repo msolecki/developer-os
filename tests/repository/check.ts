@@ -165,6 +165,7 @@ const STAT_OPTION_EXEMPT: readonly string[] = [
   "packages/core/src/git/scope.ts",
   "packages/core/src/git/planner.ts",
   "apps/cli/src/update/construction.ts",
+  "packages/core/src/git/effects.ts",
 ];
 
 /**
