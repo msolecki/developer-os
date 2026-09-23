@@ -195,7 +195,7 @@ const RETAINED_PATHS = [
 ] as const;
 
 /**
- * The projections §6 admits beside each shape. The bootstrap leaf and the six
+ * The projections §6 admits beside each shape. The bootstrap leaf and the seven
  * `state` bookkeeping paths exist only where `state` does, so the two shapes
  * without it carry only the projections their own shape can hold.
  */
@@ -204,7 +204,7 @@ function projectedPlants(shape: AbsentManifestShapeV1): ReadonlyMap<string, Plan
   const withState = shape === "state_empty" || shape === "state_key_only";
   for (const relative of LIFECYCLE_BOOKKEEPING_RELATIVE_PATHS) {
     if (!withState && relative.startsWith("state")) continue;
-    plants.set(`${HOME}/${relative}`, relative.endsWith(".lock") ? file() : directory());
+    plants.set(`${HOME}/${relative}`, relative.endsWith(".lock") || relative.endsWith(".json") ? file() : directory());
   }
   plants.set(`${HOME}/staging/transactions/${PARTICIPANT}`, directory());
   plants.set(retained(`${HOME}/staging/transactions/${PARTICIPANT}`, "0000000003"), file({ size: 12 }));
@@ -895,7 +895,7 @@ describe("the counting seam (A8)", () => {
     await fs.mkdirExclusive(productHome);
     await fs.mkdirExclusive(at("state"));
     for (const relative of LIFECYCLE_BOOKKEEPING_RELATIVE_PATHS) {
-      if (relative.endsWith(".lock")) continue;
+      if (relative.endsWith(".lock") || relative.endsWith(".json")) continue;
       await fs.mkdirExclusive(at(relative));
     }
     await fs.writeExclusive(at("state/.lifecycle.lock"), new Uint8Array(0));

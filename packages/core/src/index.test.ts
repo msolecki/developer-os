@@ -83,6 +83,8 @@ describe("the package's public door", () => {
         "inspectDrift",
         "inspectLifecycleBookkeepingShape",
         "lifecycleBookkeepingPaths",
+        "MANIFEST_ANCHOR_BYTES",
+        "MANIFEST_ANCHOR_RELATIVE_PATH",
         "ABSENT_MANIFEST_WALK_BOUNDS",
         "inspectAbsentManifestProductHome",
         "USER_DATA_HOME_ENTRIES",

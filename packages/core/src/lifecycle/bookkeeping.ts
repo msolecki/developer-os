@@ -15,8 +15,18 @@ export const LIFECYCLE_BOOKKEEPING_RELATIVE_PATHS = [
   "state/git-effect-journals",
   "state/launchd-effect-journals",
   "state/lifecycle-journals",
+  "state/manifest-anchor.json",
   "state/transactions",
 ] as const;
+
+/**
+ * D54: the manifest hash the mutation gate recorded after the last committed manifest-writing
+ * transaction. It cannot be a manifest row (writing it would move the hash it records), so it
+ * joins the bookkeeping set and is admitted by shape where no manifest exists.
+ */
+export const MANIFEST_ANCHOR_RELATIVE_PATH = "state/manifest-anchor.json";
+/** The exact canonical encoding `{"manifestHash":"<64 hex>","schemaVersion":1}` plus its LF. */
+export const MANIFEST_ANCHOR_BYTES = 102;
 
 export type LifecycleBookkeepingObservationV1 =
   | {
@@ -171,6 +181,13 @@ export function inspectLifecycleBookkeepingShape(
   const observation = observe(path);
   if (path === `${productHome}/${LOCK_RELATIVE_PATH}`) {
     return exactStableLock(observation, effectiveUid) ? ADMITTED : refuse(path);
+  }
+  if (path === `${productHome}/${MANIFEST_ANCHOR_RELATIVE_PATH}`) {
+    // A create interrupted before its write leaves a shorter file; its content is never authority here.
+    return observation.kind === "regular_file" && observation.ownerUid === effectiveUid &&
+      observation.mode === 0o600 && observation.nlink === 1 && observation.size <= BigInt(MANIFEST_ANCHOR_BYTES)
+      ? ADMITTED
+      : refuse(path);
   }
   if (!ownedDirectory(observation, effectiveUid) || observation.mode !== 0o700) return refuse(path);
   for (const name of observation.childNames) {

@@ -8,6 +8,8 @@ export type { CanonicalJsonV1, CanonicalJsonValue } from "./lifecycle/canonical-
 export {
   inspectLifecycleBookkeepingShape,
   lifecycleBookkeepingPaths,
+  MANIFEST_ANCHOR_BYTES,
+  MANIFEST_ANCHOR_RELATIVE_PATH,
 } from "./lifecycle/bookkeeping.js";
 export type {
   LifecycleBookkeepingObservationV1,

@@ -122,7 +122,7 @@ describe("runAbsentManifestUninstall", () => {
     const bookkeeping = [...lifecycleBookkeepingPaths(fixture.paths.home)].sort();
     expect(bookkeeping.length).toBeGreaterThan(0);
     for (const path of bookkeeping) {
-      if (path.endsWith("/.lifecycle.lock")) {
+      if (path.endsWith("/.lifecycle.lock") || path.endsWith("/manifest-anchor.json")) {
         await nodeFs.writeFile(path, new Uint8Array(), { mode: 0o600 });
         await nodeFs.chmod(path, 0o600);
         continue;

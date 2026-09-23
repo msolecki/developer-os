@@ -19,6 +19,7 @@ import {
   cleanLifecycleAllocatorTemp,
   createNodeLifecycleGuardedFileSystem,
   formatAllocatedLifecycleId,
+  hashBytes,
   LifecycleRecoveryRequiredError,
   inspectLifecycleAllocator,
   parseCanonicalAbsolutePathText,
@@ -52,6 +53,7 @@ import type { AdmittedV2HomeV1 } from "./admission.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
 import { lifecycleHomeKeyFromAdmission, residueFrom } from "./context.js";
 import type { CliLifecycleContext, LifecycleHomeKeyV1 } from "./context.js";
+import { cleanManifestAnchorTemp, readManifestAnchor, writeManifestAnchor } from "./manifest-anchor.js";
 
 const GLOBAL_LOCK_LEAF = ".lifecycle.lock";
 
@@ -334,6 +336,51 @@ async function cleanAllocatorTemp(
 }
 
 /**
+ * D54 crash safety: a committed manifest-writing journal whose anchor write never happened is
+ * still present here, because only the `recover` below compacts it. The anchor is derived only
+ * when it is absent or still names that journal's before-hash — so an anchor written after the
+ * journal (the ordinary case, where the journal waits for the next gate entry to be compacted)
+ * is never overwritten with a hand edit.
+ * ponytail: the staged postimage is pruned at `finalized`, so the derived hash is the manifest
+ * on disk; a hand edit inside the crash window itself is absorbed.
+ */
+async function deriveManifestAnchor(
+  context: CliContext,
+  lifecycle: CliLifecycleContext,
+  key: LifecycleHomeKeyV1,
+  residue: LifecycleBookkeepingResidueV1,
+): Promise<void> {
+  const { fs, effectiveUid } = lifecycle;
+  await cleanManifestAnchorTemp(fs, context.paths.stateDir, effectiveUid);
+  // identity-free stat: the guarded port's entry, hashed through the same port; no dev/ino is recorded.
+  const manifest = await fs.lstat(parseCanonicalAbsolutePathText(context.paths.manifestFile));
+  if (manifest?.kind !== "regular_file") return;
+  const manifestHash = await fs.hashRegular(manifest, BigInt(manifest.size));
+  const anchor = await readManifestAnchor(fs, context.paths.home, effectiveUid);
+  if (anchor.kind === "anchored" && anchor.manifestHash === manifestHash) return;
+  if (anchor.kind === "malformed") return;
+
+  const snapshot = await lifecycle.inspectLedger(key, residue);
+  let latest: { readonly counter: bigint; readonly beforeHash: string | null } | null = null;
+  for (const compaction of snapshot.standaloneTerminalFoundation) {
+    if (compaction.terminalPhase !== "finalized") continue;
+    const journal = snapshot.foundation.journals.get(compaction.transactionId)?.journal;
+    const write = journal?.mutations.find((mutation) => mutation.targetPath === context.paths.manifestFile);
+    if (write === undefined) continue;
+    let counter: bigint;
+    try {
+      counter = allocatedCounterOf(compaction.transactionId);
+    } catch {
+      continue;
+    }
+    if (latest === null || counter > latest.counter) latest = { counter, beforeHash: write.expectedBeforeHash };
+  }
+  if (latest === null) return;
+  if (anchor.kind === "anchored" && anchor.manifestHash !== latest.beforeHash) return;
+  await writeManifestAnchor(fs, context.paths.home, context.paths.stateDir, effectiveUid, manifestHash);
+}
+
+/**
  * §2.2's closure prerequisite. The one admitted exception is the standalone Foundation
  * journal the caller is explicitly resolving, and only while it is the sole thing left: every
  * other non-clear cause either refused inside `recover` or is unrecoverable here.
@@ -403,6 +450,7 @@ export async function withLifecycleMutation<T>(
       ),
     );
     await cleanAllocatorTemp(context, lifecycle, key, residue, held);
+    await deriveManifestAnchor(context, lifecycle, key, residue);
 
     const recovered = await lifecycle
       .recovery(key, gateAdapters(context, lifecycle), residue)
@@ -484,16 +532,57 @@ export function createGatedTransactionExecutor(input: {
     return withLifecycleMutation(context, input.lifecycle, run, resolution);
   };
 
+  /**
+   * D54: under the held global lock and before any later gate entry can compact the journal,
+   * a committed manifest write records the manifest hash it produced. A resumed transaction
+   * carries no postimage any more, so its anchor is the manifest it just left on disk.
+   */
+  const anchorCommitted = async (
+    journal: TransactionJournalV1,
+    postimage: Uint8Array | null | undefined,
+  ): Promise<TransactionJournalV1> => {
+    const context = input.context();
+    const lifecycle = input.lifecycle;
+    if (lifecycle === undefined || journal.phase !== "finalized") return journal;
+    if (!journal.mutations.some((mutation) => mutation.targetPath === context.paths.manifestFile)) return journal;
+    let manifestHash: string;
+    if (postimage === null || postimage === undefined) {
+      // identity-free stat: the guarded port's entry, hashed through the same port; no dev/ino is recorded.
+      const manifest = await lifecycle.fs.lstat(parseCanonicalAbsolutePathText(context.paths.manifestFile));
+      if (manifest?.kind !== "regular_file") return journal;
+      manifestHash = await lifecycle.fs.hashRegular(manifest, BigInt(manifest.size));
+    } else {
+      manifestHash = hashBytes(postimage);
+    }
+    await writeManifestAnchor(
+      lifecycle.fs,
+      context.paths.home,
+      context.paths.stateDir,
+      lifecycle.effectiveUid,
+      manifestHash,
+    );
+    return journal;
+  };
+  const manifestPostimage = (plan: TransactionPlan): Uint8Array | null | undefined =>
+    plan.mutations.find((mutation) => mutation.targetPath === input.context().paths.manifestFile)?.content;
+
   const executor: CliTransactionExecutor = {
     execute: (plan) =>
       gated(
         undefined,
         async (authority) =>
-          input.allocated(await authority.allocateStandaloneFoundationId(plan.mutations)).execute(plan),
+          anchorCommitted(
+            await input.allocated(await authority.allocateStandaloneFoundationId(plan.mutations)).execute(plan),
+            manifestPostimage(plan),
+          ),
         () => input.legacy.execute(plan),
       ),
     resume: (id) =>
-      gated({ standaloneFoundationId: id }, () => input.legacy.resume(id), () => input.legacy.resume(id)),
+      gated(
+        { standaloneFoundationId: id },
+        async () => anchorCommitted(await input.legacy.resume(id), null),
+        () => input.legacy.resume(id),
+      ),
     rollback: (id) =>
       gated({ standaloneFoundationId: id }, () => input.legacy.rollback(id), () => input.legacy.rollback(id)),
   };

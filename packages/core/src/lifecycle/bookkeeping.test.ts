@@ -6,6 +6,8 @@ import {
   inspectLifecycleBookkeepingShape,
   LIFECYCLE_BOOKKEEPING_RELATIVE_PATHS,
   lifecycleBookkeepingPaths,
+  MANIFEST_ANCHOR_BYTES,
+  MANIFEST_ANCHOR_RELATIVE_PATH,
 } from "./bookkeeping.js";
 import type {
   LifecycleBookkeepingObservationV1,
@@ -47,13 +49,23 @@ function stableLock(): LifecycleBookkeepingObservationV1 {
   return { kind: "regular_file", ownerUid: UID, mode: 0o600, nlink: 1, size: 0n };
 }
 
+/** D54: the anchor's exact encoding; a shorter file is an interrupted first write. */
+function manifestAnchor(size = BigInt(MANIFEST_ANCHOR_BYTES)): LifecycleBookkeepingObservationV1 {
+  return { kind: "regular_file", ownerUid: UID, mode: 0o600, nlink: 1, size };
+}
+
+function exactShapeOf(relative: string): LifecycleBookkeepingObservationV1 {
+  if (relative === MANIFEST_ANCHOR_RELATIVE_PATH) return manifestAnchor();
+  return relative.endsWith(".lock") ? stableLock() : directory();
+}
+
 function wrongShapesOf(
   exact: LifecycleBookkeepingObservationV1,
 ): readonly LifecycleBookkeepingObservationV1[] {
   if (exact.kind === "regular_file") {
     return [
       { ...exact, mode: 0o644 },
-      { ...exact, size: 1n },
+      { ...exact, size: exact.size === 0n ? 1n : exact.size + 1n },
       { ...exact, nlink: 2 },
       { ...exact, ownerUid: FOREIGN_UID },
       directory(),
@@ -84,6 +96,7 @@ describe("the closed lifecycle bookkeeping set", () => {
       "state/git-effect-journals",
       "state/launchd-effect-journals",
       "state/lifecycle-journals",
+      "state/manifest-anchor.json",
       "state/transactions",
     ]);
     expect([...lifecycleBookkeepingPaths(HOME)].toSorted()).toStrictEqual(
@@ -95,7 +108,7 @@ describe("the closed lifecycle bookkeeping set", () => {
     "admits %s by exact shape and refuses every other shape",
     (relative) => {
       const path = join(HOME, relative);
-      const exact = relative.endsWith(".lock") ? stableLock() : directory();
+      const exact = exactShapeOf(relative);
       expect(
         inspectLifecycleBookkeepingShape(HOME, path, observing({ [path]: exact }), UID, NO_RESIDUE),
       ).toStrictEqual({ admitted: true });
@@ -109,6 +122,24 @@ describe("the closed lifecycle bookkeeping set", () => {
       }
     },
   );
+
+  it("admits an interrupted first anchor write, which is shorter, and nothing longer", () => {
+    const path = join(HOME, MANIFEST_ANCHOR_RELATIVE_PATH);
+    for (const size of [0n, 1n, BigInt(MANIFEST_ANCHOR_BYTES)]) {
+      expect(
+        inspectLifecycleBookkeepingShape(HOME, path, observing({ [path]: manifestAnchor(size) }), UID, NO_RESIDUE),
+      ).toStrictEqual({ admitted: true });
+    }
+    expect(
+      inspectLifecycleBookkeepingShape(
+        HOME,
+        path,
+        observing({ [path]: manifestAnchor(BigInt(MANIFEST_ANCHOR_BYTES) + 1n) }),
+        UID,
+        NO_RESIDUE,
+      ),
+    ).toStrictEqual({ admitted: false, offendingPath: path });
+  });
 
   it("refuses a bookkeeping directory holding an unknown child, naming the child", () => {
     const journals = join(HOME, "state", "lifecycle-journals");

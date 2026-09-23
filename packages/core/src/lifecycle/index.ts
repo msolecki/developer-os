@@ -22,6 +22,8 @@ export {
   inspectLifecycleBookkeepingShape,
   LIFECYCLE_BOOKKEEPING_RELATIVE_PATHS,
   lifecycleBookkeepingPaths,
+  MANIFEST_ANCHOR_BYTES,
+  MANIFEST_ANCHOR_RELATIVE_PATH,
 } from "./bookkeeping.js";
 export type {
   LifecycleBookkeepingObservationV1,

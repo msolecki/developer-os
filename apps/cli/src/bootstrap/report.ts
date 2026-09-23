@@ -51,6 +51,7 @@ import type {
   UInt64DecimalV1,
 } from "@developer-os/core";
 
+import { decodeManifestAnchor, manifestAnchorPath } from "../lifecycle/manifest-anchor.js";
 import { createCanonicalPathEvidence, createOwnerPathAdmission } from "./admission.js";
 import { projectBootstrapRetentionPostimage } from "./retention.js";
 
@@ -712,6 +713,31 @@ async function exactV2Handoff(
   }
 }
 
+/**
+ * D54: a finalized plan whose manifest a later committed gated transaction moved. The mutation
+ * gate anchors the manifest hash after every such commit (`lifecycle/manifest-anchor.ts`), so a
+ * current manifest equal to the anchor is one the product wrote; a hand edit, or an anchor that
+ * is not the exact encoding, matches nothing and stays unresolved.
+ */
+async function supersededV2Handoff(
+  request: BootstrapEvidenceInspectionRequestV1,
+  plan: FreshV2InitPlanV1,
+): Promise<boolean> {
+  if (plan.manifest.after.state !== "present") return false;
+  try {
+    const anchor = await guardedFile(request, manifestAnchorPath(request.productHome));
+    const manifest = await guardedFile(request, plan.manifest.manifestPath);
+    if (anchor.kind !== "regular_file" || manifest.kind !== "regular_file") return false;
+    if (anchor.entry.mode !== 0o600 || anchor.entry.nlink !== 1) return false;
+    const anchored = decodeManifestAnchor(await request.reader.readRegularFile(anchor.entry, 1024));
+    const bytes = await request.reader.readRegularFile(manifest.entry, plan.manifest.maximumPlanBytes);
+    return anchored !== null && hashBytes(bytes) === anchored &&
+      isStructurallyValidV2Manifest(bytes, request.productHome);
+  } catch {
+    return false;
+  }
+}
+
 async function exactRestoredBase(
   request: BootstrapEvidenceInspectionRequestV1,
   plan: FreshV2InitPlanV1,
@@ -1167,8 +1193,16 @@ async function inspectPlan(
    */
   const handoffIntact = terminalRetained && retainedOutcome === "finalized" &&
     await exactV2Handoff(request, plan) !== null;
+  /**
+   * Settled rather than active: `init` then takes the ordinary V2 path, whose admission reads
+   * the vendor rows a later attach added, instead of resuming a plan that no longer describes
+   * the manifest.
+   */
+  const superseded = terminalRetained && retainedOutcome === "finalized" && !handoffIntact &&
+    await supersededV2Handoff(request, plan);
   const inert = terminalRetained && retainedOutcome !== null && (
     handoffIntact ||
+    superseded ||
     await exactRestoredBase(
       request,
       plan,
