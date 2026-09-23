@@ -2,7 +2,7 @@ import * as nodeFs from "node:fs/promises";
 import { join } from "node:path";
 
 import { EXIT_CODES } from "@developer-os/core";
-import type { ExitCode } from "@developer-os/core";
+import type { ExitCode, RuntimePaths } from "@developer-os/core";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -32,9 +32,10 @@ class TestRefusal extends Error {
  * build them — `contentRoot` and `indexesDir` are independent fields, not one
  * re-split from the other.
  */
-function requestFor(vaultRoot: string): IndexWriteRequest {
+function requestFor(paths: RuntimePaths): IndexWriteRequest {
   return {
-    vaultRoot,
+    vaultRoot: paths.brain,
+    paths,
     contentRoot: "content",
     indexesDir: "content/_indexes",
     files: { "content/_indexes/index.json": '{"schemaVersion":1}' },
@@ -77,7 +78,7 @@ describe("writeIndexArtifacts, content symlinked to a vault elsewhere", () => {
 
     const transactionId = await writeIndexArtifacts(
       fixture.context,
-      requestFor(fixture.paths.brain),
+      requestFor(fixture.paths),
     );
 
     expect(transactionId.length).toBeGreaterThan(0);
@@ -102,7 +103,7 @@ describe("writeIndexArtifacts, content symlinked to a vault elsewhere", () => {
     );
 
     await expect(
-      writeIndexArtifacts(fixture.context, requestFor(fixture.paths.brain)),
+      writeIndexArtifacts(fixture.context, requestFor(fixture.paths)),
     ).rejects.toMatchObject({ code: EXIT_CODES.securityRefusal });
     expect(await nodeFs.readdir(stolen)).toStrictEqual([]);
   });

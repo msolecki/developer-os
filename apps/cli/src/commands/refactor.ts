@@ -273,6 +273,7 @@ export async function runRefactor(
     try {
       await writeIndexArtifacts(context, {
         vaultRoot: paths.brain,
+        paths,
         contentRoot: brainConfig.contentRoot,
         indexesDir: join(brainConfig.contentRoot, brainConfig.indexesDir),
         files: (await new BrainService(deps).reindex()).files,

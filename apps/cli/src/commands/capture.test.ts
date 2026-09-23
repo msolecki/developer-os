@@ -17,7 +17,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import { discoverSourceAgent, runCapture } from "./capture.js";
 import type { CaptureOptions } from "./capture.js";
 import { runInit } from "./init.js";
-import { createCommandFixture, removeCommandFixtures } from "./testing.js";
+import {
+  createCommandFixture,
+  REAL_FILESYSTEM_TIMEOUT_MS,
+  removeCommandFixtures,
+} from "./testing.js";
 import type { CommandFixture } from "./testing.js";
 import { loadOrCreateRedactionKey } from "../context.js";
 import type { CliContext } from "../context.js";
@@ -1246,4 +1250,20 @@ describe("discoverSourceAgent", () => {
       sourceAgentVersion: "unknown",
     });
   });
+});
+
+/** The quarantine write `capture` and `import` share read the manifest bare, which refuses V2. */
+describe("runCapture on a V2 home", () => {
+  it("captures into quarantine and leaves the V2 manifest untouched", async () => {
+    const fixture = await installedFixture("capture-v2", { fixture: { bootstrapAvailable: true } });
+    const manifestText = await nodeFs.readFile(fixture.paths.manifestFile, "utf8");
+    expect((JSON.parse(manifestText) as { schemaVersion: unknown }).schemaVersion).toBe(2);
+
+    const result = await fixture.run(fixture.context, { text: OBSERVATION }, () => "claude");
+
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.path.startsWith(quarantineDirectory(fixture))).toBe(true);
+    expect(await nodeFs.readFile(fixture.paths.manifestFile, "utf8")).toBe(manifestText);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

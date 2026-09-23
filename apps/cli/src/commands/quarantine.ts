@@ -13,6 +13,7 @@ import type { Redactor } from "@developer-os/security";
 
 import { resolveContainedRoot } from "../context.js";
 import type { CliContext } from "../context.js";
+import { readAdmittedManifest } from "./doctor.js";
 
 /**
  * The quarantine seam `capture` and `import` share (spec §5.3, §5.4): root
@@ -269,7 +270,7 @@ export async function writeQuarantineCapture(
   await context.fs.mkdir(quarantine, { recursive: true, mode: 0o700 });
 
   const content = new TextEncoder().encode(contents);
-  const manifest = (await context.manifests.readOptional()) ?? EMPTY_MANIFEST;
+  const manifest = (await readAdmittedManifest(context, paths)) ?? EMPTY_MANIFEST;
   const validated = await validateChangePlan(
     {
       schemaVersion: 1,

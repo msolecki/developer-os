@@ -411,7 +411,7 @@ export type {
   InstructionCategoryV1,
   InstructionIdV1,
 } from "./instructions/index.js";
-export { ChangePlanError, validateChangePlan } from "./plans/index.js";
+export { ChangePlanError, managedInstalledHash, validateChangePlan } from "./plans/index.js";
 export type {
   ChangeOperationKind,
   ChangePlanContext,

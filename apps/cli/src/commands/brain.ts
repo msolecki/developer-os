@@ -9,6 +9,7 @@ import type {
   CliResult,
   DeveloperOsConfigV1,
   ExitCode,
+  RuntimePaths,
 } from "@developer-os/core";
 import { BrainService, resolveBrainConfig } from "@developer-os/brain";
 import type { LintFinding, RefactorRequestV1, RetrievalMatch } from "@developer-os/brain";
@@ -132,7 +133,7 @@ export async function readConfig(context: CliContext): Promise<DeveloperOsConfig
 async function runReindex(
   context: CliContext,
   service: BrainService,
-  vaultRoot: string,
+  paths: RuntimePaths,
   contentRoot: string,
   indexesDir: string,
   dryRun: boolean,
@@ -160,7 +161,8 @@ async function runReindex(
    * the style the quarantine call sites use.
    */
   const transactionId = await writeIndexArtifacts(context, {
-    vaultRoot,
+    vaultRoot: paths.brain,
+    paths,
     contentRoot,
     indexesDir,
     files: artifacts.files,
@@ -347,7 +349,7 @@ export async function runBrain(
         return await runReindex(
           context,
           service,
-          paths.brain,
+          paths,
           brainConfig.contentRoot,
           join(brainConfig.contentRoot, brainConfig.indexesDir),
           options.dryRun,

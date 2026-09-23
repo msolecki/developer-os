@@ -14,6 +14,7 @@ import {
   createCommandFixture,
   exists,
   inventoryDigest,
+  REAL_FILESYSTEM_TIMEOUT_MS,
   removeCommandFixtures,
 } from "./testing.js";
 import type { CommandFixture } from "./testing.js";
@@ -358,4 +359,28 @@ describe("runProjectInit", () => {
     expect(uninstalled.ok).toBe(true);
     expect(await readProjectFiles(fixture.project)).toEqual(bytes);
   });
+});
+
+/** A bare manifest read refuses every V2 manifest, which made `project init` exit 6 on a V2 home. */
+describe("runProjectInit on a V2 home", () => {
+  it("creates the template set and leaves the V2 manifest untouched", async () => {
+    const fixture = await createCommandFixture("project-init-v2", { bootstrapAvailable: true });
+    const installed = await runInit(fixture.context, ACCEPTED);
+    expect(installed.ok && installed.data.schemaVersion).toBe(2);
+    const project = join(fixture.root, "project");
+    await nodeFs.mkdir(project, { recursive: true, mode: 0o700 });
+    const manifestBefore = await nodeFs.readFile(fixture.paths.manifestFile);
+
+    const result = await runProjectInit(
+      fixture.context,
+      { dir: "project", dryRun: false },
+      { cwd: () => fixture.root, templates: TEMPLATES },
+    );
+
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.created).toEqual(NAMES);
+    expect(await readProjectFiles(project)).toEqual(TEMPLATES.map((file) => file.content));
+    expect(await nodeFs.readFile(fixture.paths.manifestFile)).toEqual(manifestBefore);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

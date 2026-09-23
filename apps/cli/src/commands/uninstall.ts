@@ -482,12 +482,7 @@ export async function revertArtifacts(
         operations: planned.operations,
       },
       {
-        manifest: {
-          schemaVersion: 1,
-          productVersion: context.productVersion,
-          installedAt: context.now().toISOString(),
-          artifacts: request.artifacts,
-        },
+        manifest: { artifacts: request.artifacts },
         ownedRoots: request.ownedRoots,
         excludedRoots: request.excludedRoots,
         canonicalize: context.guards.canonicalize,

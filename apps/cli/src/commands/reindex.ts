@@ -1,11 +1,18 @@
 import { join } from "node:path";
 
-import { foldPath, hashBytes, validateChangePlan } from "@developer-os/core";
+import {
+  foldPath,
+  hashBytes,
+  managedInstalledHash,
+  validateChangePlan,
+} from "@developer-os/core";
 import type {
   DeveloperOsConfigV1,
   InstallationManifestV1,
   ManagedArtifactV1,
+  ManagedArtifactV2,
   PlannedFileMutation,
+  RuntimePaths,
 } from "@developer-os/core";
 import { resolveBrainConfig } from "@developer-os/brain";
 import type {
@@ -15,6 +22,7 @@ import type {
 
 import { resolveContainedRoot } from "../context.js";
 import type { CliContext } from "../context.js";
+import { readAdmittedManifest } from "./doctor.js";
 
 /**
  * Writing Brain's four generated index artifacts, for the two commands that do
@@ -76,6 +84,8 @@ export function dependenciesFor(
 
 export interface IndexWriteRequest {
   readonly vaultRoot: string;
+  /** The caller's configured paths, which a V2 manifest is admitted under. */
+  readonly paths: RuntimePaths;
   /**
    * Vault-relative — `content` under a default configuration, which is
    * `brainConfig.contentRoot`. This, not `vaultRoot`, is what
@@ -208,13 +218,10 @@ async function stageArtifacts(
    * Both reconciliations move the manifest *towards* what is on disk, so a
    * crash part-way through leaves it more accurate than it was, not less.
    */
-  const existing = (await context.manifests.readOptional()) ?? {
-    ...EMPTY_MANIFEST,
-    productVersion: context.productVersion,
-    installedAt: verifiedAt,
-  };
+  const existing: readonly (ManagedArtifactV1 | ManagedArtifactV2)[] =
+    ((await readAdmittedManifest(context, request.paths)) ?? EMPTY_MANIFEST).artifacts;
   const recorded = new Map(
-    existing.artifacts.map((artifact) => [foldPath(artifact.path), artifact]),
+    existing.map((artifact) => [foldPath(artifact.path), artifact]),
   );
 
   const adopted: ManagedArtifactV1[] = [];
@@ -257,10 +264,9 @@ async function stageArtifacts(
    * succeeds, and because it replaces every entry for the paths it wrote, the
    * forgotten ones are dropped there too.
    */
-  const manifest: InstallationManifestV1 = {
-    ...existing,
+  const manifest = {
     artifacts: [
-      ...existing.artifacts.filter(
+      ...existing.filter(
         (artifact) => !forgotten.has(foldPath(artifact.path)),
       ),
       ...adopted,
@@ -290,7 +296,7 @@ async function stageArtifacts(
        * `brain lint`'s `index-drift` class is where a user is told they had
        * diverged.
        */
-      expectedBeforeHash: managed?.installedHash ?? null,
+      expectedBeforeHash: managed === undefined ? null : managedInstalledHash(managed),
       mergeStrategy: "dedicated" as const,
       proposedHash: hashBytes(entry.content),
     };
@@ -377,12 +383,21 @@ async function stageArtifacts(
  * artifact nobody owns. Recording them is also safe for `uninstall`, which
  * partitions artifacts by *location* before it plans anything and preserves
  * everything under the Brain path whatever the manifest says.
+ *
+ * A V2 manifest is left alone. Written here, outside the gated transaction, it
+ * would miss the D54 anchor chain and read as a hand edit, so the next `init`
+ * refuses; and nothing needs the record, because `stageArtifacts` adopts the
+ * index files from the disk on every run and the second run is still a
+ * `replace`.
  */
 async function recordArtifacts(
   context: CliContext,
+  paths: RuntimePaths,
   artifacts: readonly ManagedArtifactV1[],
 ): Promise<void> {
-  const manifest = (await context.manifests.readOptional()) ?? {
+  const recorded = await readAdmittedManifest(context, paths);
+  if (recorded?.schemaVersion === 2) return;
+  const manifest = recorded ?? {
     ...EMPTY_MANIFEST,
     productVersion: context.productVersion,
     installedAt: context.now().toISOString(),
@@ -476,6 +491,6 @@ export async function writeIndexArtifacts(
     kind: request.kind,
     mutations: staged.mutations,
   });
-  await recordArtifacts(context, staged.artifacts);
+  await recordArtifacts(context, request.paths, staged.artifacts);
   return journal.id;
 }

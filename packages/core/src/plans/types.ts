@@ -1,7 +1,8 @@
 import type {
   ArtifactKind,
   ArtifactOwner,
-  InstallationManifestV1,
+  ManagedArtifactV1,
+  ManagedArtifactV2,
   MergeStrategy,
 } from "../manifest/index.js";
 
@@ -35,7 +36,8 @@ export interface ChangePlanV1 {
 }
 
 export interface ChangePlanContext {
-  readonly manifest: InstallationManifestV1;
+  /** Either schema's rows: ownership reads only path, owner, kind, strategy and hash. */
+  readonly manifest: { readonly artifacts: readonly (ManagedArtifactV1 | ManagedArtifactV2)[] };
   readonly ownedRoots: readonly string[];
   readonly excludedRoots: readonly string[];
   /**

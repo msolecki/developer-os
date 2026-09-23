@@ -6,7 +6,12 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { renderBrain, runBrain } from "./brain.js";
 import type { BrainOptions } from "./brain.js";
-import { createCommandFixture, removeCommandFixtures } from "./testing.js";
+import { runInit } from "./init.js";
+import {
+  createCommandFixture,
+  REAL_FILESYSTEM_TIMEOUT_MS,
+  removeCommandFixtures,
+} from "./testing.js";
 import type { CommandFixture } from "./testing.js";
 
 afterEach(removeCommandFixtures);
@@ -732,4 +737,29 @@ describe("rendering", () => {
       expect(line).not.toMatch(/(?!\u200D)[\p{Cc}\p{Cf}]/u);
     }
   });
+});
+
+/**
+ * On a V2 home `reindex` reads the manifest through the admission `init` wrote it under and
+ * never rewrites it: a write outside the gated transaction would miss the D54 anchor and make
+ * the next `init` refuse. The second run proves disk adoption still turns it into a `replace`.
+ */
+describe("brain reindex on a V2 home", () => {
+  it("reindexes twice without touching the manifest, and init still settles", async () => {
+    const fixture = await createCommandFixture("brain-reindex-v2", { bootstrapAvailable: true });
+    const installed = await runInit(fixture.context, { dryRun: false, assumeYes: true });
+    expect(installed.ok && installed.data.schemaVersion).toBe(2);
+    const manifestBefore = await nodeFs.readFile(fixture.paths.manifestFile);
+
+    const first = await runBrain(fixture.context, { ...OPTIONS, subcommand: "reindex" });
+    expect(first.ok, JSON.stringify(first)).toBe(true);
+    const second = await runBrain(fixture.context, { ...OPTIONS, subcommand: "reindex" });
+    expect(second.ok, JSON.stringify(second)).toBe(true);
+
+    expect(await nodeFs.readFile(fixture.paths.manifestFile)).toEqual(manifestBefore);
+    expect(
+      await nodeFs.readFile(join(fixture.paths.brain, "content", "_indexes", "index.json"), "utf8"),
+    ).toContain("content/");
+    expect((await runInit(fixture.context, { dryRun: false, assumeYes: true })).ok).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

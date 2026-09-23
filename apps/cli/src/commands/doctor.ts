@@ -904,6 +904,16 @@ export function manifestAdmission(paths: RuntimePaths, homes: VendorHomesV1): Ma
   };
 }
 
+/** The installed manifest under either schema; a bare read refuses every V2 manifest. */
+export function readAdmittedManifest(
+  context: CliContext,
+  paths: RuntimePaths,
+): Promise<InstallationManifest | null> {
+  return context.manifests.readOptional(
+    manifestAdmission(paths, resolveVendorHomes(context.env, context.userHome, paths.home)),
+  );
+}
+
 async function checkManifest(
   context: CliContext,
   paths: RuntimePaths,

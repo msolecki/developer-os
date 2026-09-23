@@ -11,6 +11,7 @@ import type {
   ArtifactKind,
   ArtifactOwner,
   ManagedArtifactV1,
+  ManagedArtifactV2,
   MergeStrategy,
 } from "../manifest/index.js";
 import type {
@@ -237,9 +238,15 @@ async function canonicalizeOrRefuse(
   return canonical;
 }
 
+/** A row's recorded content hash under either schema; `null` for a V2 row that records none. */
+export function managedInstalledHash(artifact: ManagedArtifactV1 | ManagedArtifactV2): string | null {
+  if ("installedHash" in artifact) return artifact.installedHash;
+  return "installedHash" in artifact.verification ? artifact.verification.installedHash : null;
+}
+
 function assertOwnership(
   operation: ChangePlanOperationV1,
-  managed: ManagedArtifactV1 | undefined,
+  managed: ManagedArtifactV1 | ManagedArtifactV2 | undefined,
 ): void {
   if (operation.operation === "create") {
     if (managed !== undefined) refuse("already_owned");
@@ -253,7 +260,7 @@ function assertOwnership(
   ) {
     refuse("ownership_mismatch");
   }
-  if (managed.installedHash !== operation.expectedBeforeHash) {
+  if (managedInstalledHash(managed) !== operation.expectedBeforeHash) {
     refuse("hash_expectation");
   }
 }
@@ -293,7 +300,7 @@ export async function validateChangePlan(
     targets.add(key);
   }
 
-  const managedByPath = new Map<string, ManagedArtifactV1>();
+  const managedByPath = new Map<string, ManagedArtifactV1 | ManagedArtifactV2>();
   for (const artifact of context.manifest.artifacts) {
     const canonical = await canonicalizeOrRefuse(
       context,

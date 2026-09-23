@@ -22,7 +22,7 @@ import {
   runtimePathsFor,
 } from "../context.js";
 import type { CliContext, CliGuards } from "../context.js";
-import { readConfigFile } from "./doctor.js";
+import { readAdmittedManifest, readConfigFile } from "./doctor.js";
 import {
   PROJECT_TEMPLATE,
   PROJECT_TEMPLATE_MAX_BYTES,
@@ -263,7 +263,7 @@ export async function runProjectInit(
         })),
       },
       {
-        manifest: (await context.manifests.readOptional()) ?? EMPTY_MANIFEST,
+        manifest: (await readAdmittedManifest(context, paths)) ?? EMPTY_MANIFEST,
         ownedRoots: [root],
         excludedRoots: [paths.home, paths.brain],
         canonicalize: context.guards.canonicalize,

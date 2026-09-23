@@ -1,4 +1,4 @@
-export { ChangePlanError, validateChangePlan } from "./validate.js";
+export { ChangePlanError, managedInstalledHash, validateChangePlan } from "./validate.js";
 export type {
   ChangeOperationKind,
   ChangePlanContext,
