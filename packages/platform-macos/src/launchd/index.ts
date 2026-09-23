@@ -115,3 +115,61 @@ export type {
   LaunchdSnapshotRequestV1,
   LaunchdSnapshotRoleV1,
 } from "./snapshot.js";
+export {
+  LAUNCHD_EFFECT_JOURNAL_PHASES,
+  LAUNCHD_EFFECT_LEDGER_CODEC,
+  LaunchdEffectJournalStore,
+  encodeLaunchdEffectJournal,
+  encodeLaunchdEffectPlan,
+  launchdEffectPlanHash,
+  maximumLaunchdEffectJournalBytes,
+  parseLaunchdLiveState,
+  sameLaunchdLiveState,
+  validateLaunchdEffectJournal,
+  validateLaunchdEffectJournalForPlan,
+  validateLaunchdEffectPlan,
+} from "./effect-journal.js";
+export type {
+  LaunchdEffectJournalPhaseV1,
+  LaunchdEffectJournalPortV1,
+  LaunchdEffectJournalStoreDependenciesV1,
+  LaunchdEffectJournalV1,
+  LaunchdEffectObservationV1,
+  LaunchdEffectPlanV1,
+  LaunchdEffectPositionV1,
+  LaunchdEffectTransitionV1,
+} from "./effect-journal.js";
+export {
+  LAUNCHD_PLAN_CODEC,
+  assertLaunchdPlan,
+  assertLaunchdPlanBindings,
+  launchdEffectPlan,
+  launchdEntryTransitions,
+  launchdPlanHash,
+  launchdPlanVariant,
+  launchdPlistBytesHash,
+  parseCanonicalLaunchdPlist,
+  planLaunchdTransitions,
+  validateLaunchdPlan,
+} from "./plan.js";
+export type {
+  LaunchdBootstrapPlistsV1,
+  LaunchdCoordinatorOperationV1,
+  LaunchdEffectBindingV1,
+  LaunchdEntryTransitionsV1,
+  LaunchdManifestBindingV1,
+  LaunchdManifestFileStateV1,
+  LaunchdPlanEntryV1,
+  LaunchdPlanV1,
+  LaunchdPlanVariantV1,
+  LaunchdTransitionRequestV1,
+  LifecycleFileBindingV1,
+} from "./plan.js";
+export { LaunchdBootoutRunner, LaunchdEffectExecutor, NodeLaunchdPlistReader, loadLaunchdProcessTable } from "./effects.js";
+export type {
+  LaunchdBootoutDependenciesV1,
+  LaunchdBootoutEvidenceV1,
+  LaunchdBootoutPortV1,
+  LaunchdEffectDependenciesV1,
+  LaunchdPlistPortV1,
+} from "./effects.js";
