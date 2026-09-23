@@ -51,6 +51,8 @@ describe("the package's public door", () => {
         "renderOfflineReleaseTrustPipe",
         "verifyReleaseMetadataChain",
         "verifySignedReleaseDocument",
+        "SupervisedProcessRunner",
+        "nodeSupervisedProcessDependencies",
       ].sort(),
     );
   });

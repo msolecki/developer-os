@@ -25,6 +25,16 @@ export type {
 } from "./redaction.js";
 export { assertSafeCommand, NodeProcessRunner } from "./process.js";
 export { normalizeShellCommand } from "./shell-command.js";
+export { nodeSupervisedProcessDependencies, SupervisedProcessRunner } from "./supervised-process.js";
+export type {
+  SupervisedChildHandleV1,
+  SupervisedChildSpawnV1,
+  SupervisedPhaseV1,
+  SupervisedProcessDependenciesV1,
+  SupervisedProcessEvidenceV1,
+  SupervisedSpawnRequestV1,
+  SupervisedTerminationV1,
+} from "./supervised-process.js";
 export type { NormalizedShellCommand } from "./shell-command.js";
 export type {
   CommandPolicy,
