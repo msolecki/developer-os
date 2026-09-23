@@ -249,6 +249,8 @@ git commit -m "feat(security): verify release metadata trust"
 
 ### Task 11b: Replace the production bootstrap pin with the launcher's admitted, verified release
 
+**Parked 2026-09-22 by D46, `f80f3a1`.** Release signing keys are dropped for now and the FD 3 handoff carries no packaged-release identity; A12 Tasks 1 and 4 ship the unsigned local build (`init --local-release`, D47) instead. Nothing below has started.
+
 **Added 2026-09-22 (Phase 4b, `docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md`).**
 `apps/cli/src/context.ts:790` hardcodes `bootstrap: { state: "unavailable_until_packaged_handoff" }`
 in `createProductionContext` — no production code path ever reaches the `"available"` arm of

@@ -247,6 +247,8 @@ different waves).
 
 ### Task 1: Observation spike · founder stop point
 
+**Partial 2026-09-22, `83442c7`, `e14a04a`.** The unbilled answers are recorded in `docs/architecture/hooks.md` §1 with two Claude fixtures (`SessionStart`, `UserPromptSubmit`); every row that needs a model turn or Codex trust is `founder-deferred`, and no Codex fixture exists.
+
 Spec §11 Task 1, **minus the latency baseline** (G5, moved to Task 16). Real sessions spend credits,
 and both vendors run against a disposable `HOME` and `CODEX_HOME` on the founder's machine. The
 agent's part is limited to preparing the kit (Step 1) and recording what the founder reports
@@ -262,7 +264,7 @@ agent's part is limited to preparing the kit (Step 1) and recording what the fou
 - Produces: the observation record `docs/architecture/hooks.md` §1, with one line per question below
   giving an observed answer or `unsupported (<reason>)`; also the scrubbed fixtures.
 
-- [ ] **Step 1: Agent prepares the observation kit (no vendor run)**
+- [x] **Step 1: Agent prepares the observation kit (no vendor run)**
 
 Write `docs/architecture/hooks.md` §1 as a checklist with an empty answer slot for each question:
 
@@ -296,6 +298,7 @@ git commit -m "docs(hooks): add the A13 observation checklist"
 
 - [ ] **Step 2: FOUNDER runs the observations** in disposable homes and records each payload
   verbatim to a scratch location outside the repository.
+  **Status:** Partial: the agent ran the unbilled rows; the billed and Codex-trust rows are owed by the founder.
 
 - [ ] **Step 3: Agent scrubs and checks in the fixtures** that the founder hands over. For each
   fixture:
@@ -303,6 +306,7 @@ git commit -m "docs(hooks): add the A13 observation checklist"
   - rewrite every absolute path to start with `/Users/synthetic/`;
   - replace prompt and command text with the synthetic strings the contract tests name
     (`echo synthetic`, `synthetic prompt`).
+  **Status:** Partial: 2 of 7 Claude fixtures, 0 Codex fixtures.
 
   Confirm that `grep -rn "$(printf 'transcript%spath' _)" tests/fixtures/hooks` prints nothing. Fill
   every answer slot in `docs/architecture/hooks.md` §1.
@@ -314,11 +318,14 @@ npm run lint
 git commit -m "test(hooks): record scrubbed vendor hook payload fixtures"
 ```
 
-- [ ] **Step 4: Q4-A decision.** If question 1 is "does not fire", **stop and ask the founder.**
+- [x] **Step 4: Q4-A decision.** If question 1 is "does not fire", **stop and ask the founder.**
   Task 14 does not start, Claude rows are recorded `unsupported (skills-directory plugin hooks do not
   fire)`, and Task 15 proceeds alone.
+  **Status:** Q4-A does not trigger: plugin `hooks.json` fired on Claude.
 
 ### Task 2: Legacy parity check · founder stop point
+
+**Open.** No parity list has been returned; owed by the founder.
 
 Spec §2 parity obligation. The founder runs it outside this repository against the legacy scripts.
 
@@ -339,6 +346,8 @@ extra fixture pair and table row in Task 8 or Task 9, or as a follow-up task aft
   Task 8's pattern: a table row, a block fixture and a near-miss allow fixture.
 
 ### Task 3: Spec amendments · orchestrator, docs only · S
+
+**Done 2026-09-22, `f3605a7`** (G1 narrowed for the Node token, `f473a91`).
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-09-22-developer-os-hooks-design.md` (a dated amendment block
@@ -380,6 +389,8 @@ git commit -m "docs(specs): amend A13 for the local-build entrypoint and Spec 1 
 
 ### Task 4: `normalizeShellCommand` · S
 
+**Done 2026-09-22, `a3f9e46`** (D47 lane: lint only, tests and review owed at phase close).
+
 Spec §5.2 normalization and §10.1 normalization tests.
 
 **Files:**
@@ -398,7 +409,7 @@ export type NormalizedShellCommand =
 export function normalizeShellCommand(command: string): NormalizedShellCommand;
 ```
 
-- [ ] **Step 1: Write the tests**
+- [x] **Step 1: Write the tests**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -445,7 +456,7 @@ existing order rule.
 
 - [ ] **Step 2: Run the tests.** Deferred to phase close (D47).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```ts
 export type NormalizedShellCommand =
@@ -471,8 +482,8 @@ if (/\|\s*(?:ba|z)?sh(?:\s|$)/iu.test(normalized.text)) {
 
 Export `normalizeShellCommand` and `NormalizedShellCommand` from `packages/security/src/index.ts`.
 
-- [ ] **Step 4: Gate.** `npm run lint` must pass.
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Gate.** `npm run lint` must pass.
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/security/src/shell-command.ts packages/security/src/shell-command.test.ts packages/security/src/process.ts packages/security/src/process.test.ts packages/security/src/index.ts packages/security/src/index.test.ts
@@ -481,6 +492,8 @@ git commit -m "feat(security): extract normalizeShellCommand and adopt it in ass
 ```
 
 ### Task 5: Hook runtime · M
+
+**Done 2026-09-22, `0e8cbd5`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §4.2–§4.4, §6.1, §6.2, §9, and the "argv refusal" and "hook-mode routing is normative" rules.
 
@@ -567,7 +580,7 @@ export async function run(argv: readonly string[], io: CliIo, createContext: Cli
   hookEnvironment?: HookEnvironment): Promise<ExitCode | number>;
 ```
 
-- [ ] **Step 1: Write the argv tests (`argv.test.ts`)**
+- [x] **Step 1: Write the argv tests (`argv.test.ts`)**
 
 ```ts
 it.each([
@@ -602,7 +615,7 @@ it("uses the exit of the argv's own fail mode as the last resort", () => {
 });
 ```
 
-- [ ] **Step 2: Write the payload tests (`payload.test.ts`)**
+- [x] **Step 2: Write the payload tests (`payload.test.ts`)**
 
 ```ts
 const TRANSCRIPT_FIELD = ["transcript", "path"].join("_");
@@ -653,7 +666,7 @@ it("decodes nothing for a vendor whose spellings are unobserved", () => {
 });
 ```
 
-- [ ] **Step 3: Write the outcome tests (`outcome.test.ts`)**
+- [x] **Step 3: Write the outcome tests (`outcome.test.ts`)**
 
 ```ts
 const sink = () => { const out: string[] = []; const err: string[] = [];
@@ -700,7 +713,7 @@ it("falls back to exit 0 with one stderr line while the Codex map is unobserved"
 });
 ```
 
-- [ ] **Step 4: Write the entry and routing tests (`entry.test.ts`, `main.test.ts`)**
+- [x] **Step 4: Write the entry and routing tests (`entry.test.ts`, `main.test.ts`)**
 
 In `entry.test.ts`, drive `runHookMode` with an in-memory `CliIo` whose `readStdinBytes` returns the
 given bytes. Cover each of these:
@@ -732,7 +745,7 @@ it("leaves ordinary dispatch unchanged", async () => {
 });
 ```
 
-- [ ] **Step 5: Write `project-root.test.ts`.** Use a temporary tree containing `repo/.git/` and
+- [x] **Step 5: Write `project-root.test.ts`.** Use a temporary tree containing `repo/.git/` and
   `repo/a/b/`:
   - `resolveProjectRoot("<tmp>/repo/a/b")` returns the canonical `<tmp>/repo`;
   - a tree with no `.git` returns the canonical cwd;
@@ -741,7 +754,7 @@ it("leaves ordinary dispatch unchanged", async () => {
   - `resolveEditedPath(root, "/abs/x")` returns `/abs/x`;
   - a NUL byte or a relative cwd refuses.
 
-- [ ] **Step 6: Write `isolation.test.ts`** (spec §6.1)
+- [x] **Step 6: Write `isolation.test.ts`** (spec §6.1)
 
 ```ts
 import { readFile } from "node:fs/promises";
@@ -779,7 +792,7 @@ it("reaches no adapter package and no invocation module from the hook entry", as
 
 - [ ] **Step 7: Run the tests.** Deferred to phase close (D47).
 
-- [ ] **Step 8: Implement `argv.ts`**
+- [x] **Step 8: Implement `argv.ts`**
 
 ```ts
 export const HOOK_GUARD_KINDS = ["command", "path", "commit", "stop", "format", "prompt", "edit"] as const;
@@ -835,7 +848,7 @@ export function hookLastResortExit(argv: readonly string[]): 0 | 2 {
 The accepted grammar is exactly the rendered command's token sequence. `main.ts`'s `parse` keeps
 refusing `guard` and `--inject` for every other path, because `run` never reaches it with them.
 
-- [ ] **Step 9: Implement `payload.ts`**
+- [x] **Step 9: Implement `payload.ts`**
 
 ```ts
 export const MAX_HOOK_PAYLOAD_BYTES = 1_048_576;
@@ -895,7 +908,7 @@ export function decodeHookPayload(bytes: Uint8Array | null, vendor: HookVendor, 
 `Object.values(payload)` iterates the decoder's own six-field object and never the vendor payload.
 The allow-list rule holds.
 
-- [ ] **Step 10: Implement `outcome.ts`**
+- [x] **Step 10: Implement `outcome.ts`**
 
 ```ts
 import { screenAndCap } from "@developer-os/security";
@@ -956,7 +969,7 @@ afterwards. `screenControlCharacters` (`packages/security/src/screen.ts`) replac
 with one space, so `block` screens context per line. Add an `outcome.test.ts` case: context
 `"a\nb"` reaches `io.stdout` as exactly `"a\nb"`, with the LF kept.
 
-- [ ] **Step 11: Implement `project-root.ts`**
+- [x] **Step 11: Implement `project-root.ts`**
 
 ```ts
 import { lstat } from "node:fs/promises";
@@ -977,7 +990,7 @@ export async function resolveEditedPath(projectRoot: string, filePath: string): 
 }
 ```
 
-- [ ] **Step 12: Implement `registry.ts` and `entry.ts`**
+- [x] **Step 12: Implement `registry.ts` and `entry.ts`**
 
 ```ts
 // registry.ts
@@ -1030,7 +1043,7 @@ export const HOOK_HANDLERS: Partial<Record<HookVerb, HookVerbHandler>> = { comma
 
 Each of those tasks adds one import line and one table entry to `registry.ts`.
 
-- [ ] **Step 13: Wire `main.ts`, `io.ts` and `bin.ts`**
+- [x] **Step 13: Wire `main.ts`, `io.ts` and `bin.ts`**
 
 At the top of `run`, before `parse`:
 
@@ -1056,8 +1069,8 @@ In `bin.ts`, implement it on `io`. Reuse the `asBytes` loop with the bound `limi
   `process.exitCode = hookLastResortExit(argv)` and write only `developer-os failed: <name>` to
   stderr.
 
-- [ ] **Step 14: Gate.** `npm run lint` must pass.
-- [ ] **Step 15: Commit**
+- [x] **Step 14: Gate.** `npm run lint` must pass.
+- [x] **Step 15: Commit**
 
 ```bash
 git add apps/cli/src/hooks/argv.ts apps/cli/src/hooks/argv.test.ts apps/cli/src/hooks/payload.ts apps/cli/src/hooks/payload.test.ts apps/cli/src/hooks/outcome.ts apps/cli/src/hooks/outcome.test.ts apps/cli/src/hooks/project-root.ts apps/cli/src/hooks/project-root.test.ts apps/cli/src/hooks/registry.ts apps/cli/src/hooks/entry.ts apps/cli/src/hooks/entry.test.ts apps/cli/src/hooks/isolation.test.ts apps/cli/src/main.ts apps/cli/src/main.test.ts apps/cli/src/bin.ts apps/cli/src/io.ts
@@ -1066,6 +1079,8 @@ git commit -m "feat(cli): add the hook-mode runtime with fail modes and the outc
 ```
 
 ### Task 6: Core hook contract and Claude install-tree render · M
+
+**Done 2026-09-22, `3ead7b8`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §3 (Claude column), §4.1 and §10.1 "Render".
 
@@ -1100,7 +1115,7 @@ export function renderClaudeHooks(executablePath: string): RenderedArtifact;
 export function withClaudeHooks(tree: readonly RenderedArtifact[], executablePath: string): readonly RenderedArtifact[];
 ```
 
-- [ ] **Step 1: Write the core tests (`contract.test.ts`)**
+- [x] **Step 1: Write the core tests (`contract.test.ts`)**
 
 ```ts
 it("renders the exact §4.1 command bytes", () => {
@@ -1123,7 +1138,7 @@ it("keeps the verb set equal to the CLI's closed set", () => {
 });
 ```
 
-- [ ] **Step 2: Write the Claude render tests (`hooks.test.ts`, `plugin.test.ts`)**
+- [x] **Step 2: Write the Claude render tests (`hooks.test.ts`, `plugin.test.ts`)**
 
 ```ts
 const EXE = "/Users/synthetic/.developer-os/bin/developer-os";
@@ -1171,7 +1186,7 @@ The `emits no absolute machine path anywhere in the tree` test stays unchanged, 
 
 - [ ] **Step 3: Run the tests.** Deferred to phase close (D47).
 
-- [ ] **Step 4: Implement `packages/core/src/hooks/contract.ts`**
+- [x] **Step 4: Implement `packages/core/src/hooks/contract.ts`**
 
 ```ts
 import { EXIT_CODES } from "../result.js";
@@ -1217,7 +1232,7 @@ export function renderHookCommand(executablePath: string, verb: HookVerb, vendor
 Export all of these from `packages/core/src/index.ts`, and add them to the exact list in
 `packages/core/src/index.test.ts`.
 
-- [ ] **Step 5: Implement `packages/adapter-claude/src/hooks.ts`**
+- [x] **Step 5: Implement `packages/adapter-claude/src/hooks.ts`**
 
 ```ts
 export const CLAUDE_HOOKS_PATH = "hooks/hooks.json";
@@ -1265,8 +1280,8 @@ tree via `withClaudeHooks` (A13). Keep the dated history sentences, because they
 alternatives. Export the new symbols from `index.ts` and add them to the pinned list in
 `index.test.ts`.
 
-- [ ] **Step 6: Gate.** `npm run lint` must pass.
-- [ ] **Step 7: Commit**
+- [x] **Step 6: Gate.** `npm run lint` must pass.
+- [x] **Step 7: Commit**
 
 ```bash
 git add packages/core/src/hooks/contract.ts packages/core/src/hooks/contract.test.ts packages/core/src/index.ts packages/core/src/index.test.ts packages/adapter-claude/src/hooks.ts packages/adapter-claude/src/hooks.test.ts packages/adapter-claude/src/plugin.ts packages/adapter-claude/src/plugin.test.ts packages/adapter-claude/src/index.ts packages/adapter-claude/src/index.test.ts
@@ -1275,6 +1290,8 @@ git commit -m "feat(adapter-claude): render hooks.json into the install tree onl
 ```
 
 ### Task 7: `state/hooks` reserved runtime path: shape, admission and removal · M
+
+**Done 2026-09-22, `986faf4`** (D47 lane: lint only, tests and review owed at phase close).
 
 Implements Task 3's Spec 1 amendment. This task covers the removal half. Task 11 covers creation.
 
@@ -1307,7 +1324,7 @@ export function inspectHookFiringRecordsShape(
 ): { readonly admitted: true } | { readonly admitted: false; readonly offendingName: string | null };
 ```
 
-- [ ] **Step 1: Write the tests (`firing-records.test.ts`)**
+- [x] **Step 1: Write the tests (`firing-records.test.ts`)**
 
 ```ts
 const dir = (childNames: string[], mode = 0o700): LifecycleBookkeepingObservationV1 =>
@@ -1348,7 +1365,7 @@ In the absent-manifest test, add three cases:
 
 - [ ] **Step 2: Run the tests.** Deferred to phase close (D47).
 
-- [ ] **Step 3: Implement `firing-records.ts`**
+- [x] **Step 3: Implement `firing-records.ts`**
 
 ```ts
 const RECORD_NAME = /^(claude|codex)\.[A-Za-z_]{1,64}\.json$/u;
@@ -1386,7 +1403,7 @@ following, returning `null` otherwise:
 - `productVersion` a string of 1–64 bytes;
 - `firstSeen` and `lastSeen` matching `ISO`, with `firstSeen <= lastSeen`.
 
-- [ ] **Step 4: Admit and remove in the walks.**
+- [x] **Step 4: Admit and remove in the walks.**
   - In `packages/core/src/lifecycle/absent-manifest.ts` `projectionOf`, when the tree contains
     `<productHome>/state/hooks`, run `inspectHookFiringRecordsShape`. On refusal, call
     `refuseLifecycleRecovery("hook_records_shape", <offending path>)`. On admission, project the
@@ -1400,7 +1417,7 @@ following, returning `null` otherwise:
   - The removal is a guarded delete through the existing filesystem port, of exactly the admitted
     names. The directory itself goes last.
 
-- [ ] **Step 4b: Prove that the installed-home gates tolerate `state/hooks`.**
+- [x] **Step 4b: Prove that the installed-home gates tolerate `state/hooks`.**
   `admitInstalledV2Home` (`apps/cli/src/lifecycle/admission.ts`) checks reservation rows, which are
   manifest rows, so `state/hooks` must **not** join `LIFECYCLE_RESERVATION_ROWS`. Grep the `state/`
   handling behind `inspectBootstrapEvidenceAdmission` and `assertOrdinaryCommandAdmitted`
@@ -1411,9 +1428,10 @@ following, returning `null` otherwise:
     refuse with exit 6, and the firing-record writer's own gate (Task 12) would never write.
   - If any gate refuses, add `inspectHookFiringRecordsShape` admission at that walk in this task. Stop
     and tell the orchestrator, so that Task 3's Spec 1 amendment names that gate too.
+  **Status:** Tests written; their run is deferred to phase close (D47).
 
-- [ ] **Step 5: Gate.** `npm run lint` must pass.
-- [ ] **Step 6: Commit**
+- [x] **Step 5: Gate.** `npm run lint` must pass.
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/core/src/hooks/firing-records.ts packages/core/src/hooks/firing-records.test.ts packages/core/src/index.ts packages/core/src/index.test.ts packages/core/src/lifecycle/absent-manifest.ts packages/core/src/lifecycle/absent-manifest.test.ts apps/cli/src/lifecycle/uninstall.ts apps/cli/src/lifecycle/absent-manifest-uninstall.ts
@@ -1427,6 +1445,8 @@ git commit -m "feat(lifecycle): admit and remove the state/hooks reserved runtim
 ```
 
 ### Task 8: Security guards `command`, `commit`, `path` · M
+
+**Done 2026-09-22, `ef00f07`** (D47 lane: lint only, tests and review owed at phase close); quote-aware segments close a `--no-verify` bypass, `fe1d21a`.
 
 Spec §5.2, §9 and §10.1 "Rule tables".
 
@@ -1446,7 +1466,7 @@ export const COMMAND_RULES: readonly { readonly id: "pipe-to-shell" | "recursive
 export const COMMIT_RULES: readonly { readonly id: "hook-bypass" | "force-push"; readonly matches: (normalized: string) => boolean }[];
 ```
 
-- [ ] **Step 1: Write the rule-table tests.** Each rule ID gets at least one block fixture and one
+- [x] **Step 1: Write the rule-table tests.** Each rule ID gets at least one block fixture and one
   near-miss allow fixture. The helper builds a Claude Bash payload.
 
 ```ts
@@ -1501,7 +1521,7 @@ Path cases, using a temporary project with a `.git` directory:
 
 - [ ] **Step 2: Run the tests.** Deferred to phase close (D47).
 
-- [ ] **Step 3: Implement.** Write `shell-segments.ts` first:
+- [x] **Step 3: Implement.** Write `shell-segments.ts` first:
 
 ```ts
 export function shellSegments(normalized: string): readonly (readonly string[])[] {
@@ -1560,8 +1580,8 @@ value. Stop scanning for flags at `--`.
 
 Register all three handlers in `registry.ts`.
 
-- [ ] **Step 4: Gate.** `npm run lint` must pass.
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Gate.** `npm run lint` must pass.
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/cli/src/hooks/guards/command.ts apps/cli/src/hooks/guards/commit.ts apps/cli/src/hooks/guards/path.ts apps/cli/src/hooks/guards/shell-segments.ts apps/cli/src/hooks/guards/command.test.ts apps/cli/src/hooks/guards/commit.test.ts apps/cli/src/hooks/guards/path.test.ts apps/cli/src/hooks/registry.ts
@@ -1570,6 +1590,8 @@ git commit -m "feat(cli): add the command, commit and path security guards"
 ```
 
 ### Task 9: Advisory verbs `stop`, `format`, `prompt`, `edit` · M
+
+**Done 2026-09-22, `49010f2`** (D47 lane: lint only, tests and review owed at phase close); package-bin fix `f53078b`.
 
 Spec §5.3, §5.4 (child caps), §6.2, and G2 and G8.
 
@@ -1594,7 +1616,7 @@ export const MAX_SKILL_RULES_BYTES = 65_536;
 export function parseSkillRules(text: string): readonly { readonly skill: string; readonly keywords: readonly string[] }[] | null;
 ```
 
-- [ ] **Step 1: Write the tests** with an injected `ProcessRunner` that records every
+- [x] **Step 1: Write the tests** with an injected `ProcessRunner` that records every
   `ProcessRequest`, and a temporary project.
   - **`stop`:**
     - `stopHookActive: true` returns `allow` and spawns nothing.
@@ -1635,7 +1657,7 @@ export function parseSkillRules(text: string): readonly { readonly skill: string
 
 - [ ] **Step 2: Run the tests.** Deferred to phase close (D47).
 
-- [ ] **Step 3: Implement `child.ts`**
+- [x] **Step 3: Implement `child.ts`**
 
 ```ts
 export async function localBin(projectRoot: string, name: "tsc" | "biome" | "prettier"): Promise<string | null> {
@@ -1651,7 +1673,7 @@ export async function localBin(projectRoot: string, name: "tsc" | "biome" | "pre
 }
 ```
 
-- [ ] **Step 4: Implement the four verbs.**
+- [x] **Step 4: Implement the four verbs.**
   - **`stop`.** Implement §5.3 exactly as the tests pin it. Run the child through `runtime.runner`
     with `{ executable: runtime.nodeExecutable, args: [script, "--noEmit", "-p", config], cwd: root, stdin: "", timeoutMs: TSC_TIMEOUT_MS, env: HOOK_CHILD_ENV }`.
     Diagnostics are `(stdout + stderr).split("\n").filter(nonEmpty).slice(0, 40).join("\n")`, passed
@@ -1679,8 +1701,8 @@ export async function localBin(projectRoot: string, name: "tsc" | "biome" | "pre
 
 Register all four handlers in `registry.ts`.
 
-- [ ] **Step 5: Gate.** `npm run lint` must pass.
-- [ ] **Step 6: Commit**
+- [x] **Step 5: Gate.** `npm run lint` must pass.
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/cli/src/hooks/guards/stop.ts apps/cli/src/hooks/guards/format.ts apps/cli/src/hooks/guards/prompt.ts apps/cli/src/hooks/guards/edit.ts apps/cli/src/hooks/guards/child.ts apps/cli/src/hooks/guards/stop.test.ts apps/cli/src/hooks/guards/format.test.ts apps/cli/src/hooks/guards/prompt.test.ts apps/cli/src/hooks/guards/edit.test.ts apps/cli/src/hooks/registry.ts
@@ -1689,6 +1711,8 @@ git commit -m "feat(cli): add the stop, format, prompt and edit advisory verbs"
 ```
 
 ### Task 10: `brain status --inject` · M
+
+**Done 2026-09-22, `ae27d01`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §5.1 and §4.4 context rules. The isolation test from Task 5 must stay green, which forces two
 extractions out of adapter-importing modules.
@@ -1721,7 +1745,7 @@ export function composeInjection(context: BrainSessionContextV1): string | null;
 export const injectBrainContext: HookVerbHandler;
 ```
 
-- [ ] **Step 1: Write the tests.**
+- [x] **Step 1: Write the tests.**
   - **Brain (`service.test.ts`):** on the synthetic vault fixture,
     - `sessionContext("developer-os")` returns the vault map bytes and the one `project-note` whose
       title is `developer-os`;
@@ -1746,14 +1770,14 @@ export const injectBrainContext: HookVerbHandler;
 
 - [ ] **Step 2: Run the tests.** Deferred to phase close (D47).
 
-- [ ] **Step 3: Extract.** Move `slugify`, `UNNAMED_PROJECT` and `MAX_PROJECT_SLUG_LENGTH` verbatim,
+- [x] **Step 3: Extract.** Move `slugify`, `UNNAMED_PROJECT` and `MAX_PROJECT_SLUG_LENGTH` verbatim,
   docblocks included, into `apps/cli/src/project-slug.ts`, and import them in `capture.ts`. Move
   `ConfigurationError` and `readConfigFile` verbatim into `apps/cli/src/config-file.ts`. In
   `doctor.ts`, add `export { ConfigurationError, readConfigFile } from "../config-file.js";` so its 25
   callers stay unchanged. `config-file.ts` may import only `../context.js`, `@developer-os/core` and
   node built-ins.
 
-- [ ] **Step 4: Implement `BrainService.sessionContext`.**
+- [x] **Step 4: Implement `BrainService.sessionContext`.**
   - Read `artifactPaths(config).vaultMap` and `.index` through `readArtifact`.
   - Parse the index with the existing index reader in `service.ts`, and re-locate it by the symbol
     that returns `IndexDocumentV1`.
@@ -1762,7 +1786,7 @@ export const injectBrainContext: HookVerbHandler;
     at `join(vaultRoot, note.path)`. This is the Brain folder policy of `brain.md` §6.2.
   - Write nothing.
 
-- [ ] **Step 5: Implement `inject.ts`**
+- [x] **Step 5: Implement `inject.ts`**
 
 ```ts
 export function composeInjection(context: BrainSessionContextV1): string | null {
@@ -1811,8 +1835,8 @@ redactor, not the ephemeral one, was applied.
 
 Register `inject: injectBrainContext` in `registry.ts`.
 
-- [ ] **Step 6: Gate.** `npm run lint` must pass.
-- [ ] **Step 7: Commit**
+- [x] **Step 6: Gate.** `npm run lint` must pass.
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/cli/src/project-slug.ts apps/cli/src/config-file.ts apps/cli/src/commands/capture.ts apps/cli/src/commands/doctor.ts apps/cli/src/hooks/inject.ts apps/cli/src/hooks/inject.test.ts apps/cli/src/hooks/registry.ts apps/cli/src/hooks/entry.ts apps/cli/src/hooks/entry.test.ts apps/cli/src/hooks/outcome.ts packages/brain/src/service.ts packages/brain/src/service.test.ts
@@ -1821,6 +1845,8 @@ git commit -m "feat(cli): add brain status --inject for session-start context"
 ```
 
 ### Task 11: `init` creates `state/hooks` and fresh `init` admits it · S
+
+**Done 2026-09-22, `b49939e`** (D47 lane: lint only, tests and review owed at phase close).
 
 This is the creation half of Task 3's Spec 1 amendment.
 
@@ -1834,7 +1860,7 @@ This is the creation half of Task 3's Spec 1 amendment.
   effective uid, and is not a manifest row. A pre-existing `state/hooks` of admitted shape does not
   refuse a fresh `init`.
 
-- [ ] **Step 1: Write the tests** in `executor.test.ts`:
+- [x] **Step 1: Write the tests** in `executor.test.ts`:
   - a fresh V2 `init` creates `state/hooks` with mode 0700, and no manifest row names it;
   - a pre-existing `state/hooks/claude.Stop.json.tmp-0123456789abcdef` is admitted;
   - a pre-existing `state/hooks/notes.txt` refuses with the fresh-`init` shape refusal.
@@ -1842,13 +1868,13 @@ This is the creation half of Task 3's Spec 1 amendment.
   Put them in the file D32 defers. They run at phase close.
 - [ ] **Step 2: Run the tests.** Deferred to phase close (D47). This file is the 330-minute
   `bootstrap-executor` job.
-- [ ] **Step 3: Implement.** Append `HOOK_FIRING_RECORDS_RELATIVE_PATH` to `ordinaryDirectories`
+- [x] **Step 3: Implement.** Append `HOOK_FIRING_RECORDS_RELATIVE_PATH` to `ordinaryDirectories`
   with mode 0700. In the fresh-home admission (re-locate by `admittedPreexistingPaths`), treat a
   present `state/hooks` as admitted when `inspectHookFiringRecordsShape` admits it.
   **Coordinate with D37:** if D37's `staging/lifecycle` entry has landed in `ordinaryDirectories`,
   keep both entries. If it has not, add only this one.
-- [ ] **Step 4: Gate.** `npm run lint` must pass.
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Gate.** `npm run lint` must pass.
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/cli/src/bootstrap/executor.ts apps/cli/src/bootstrap/executor.test.ts
@@ -1857,6 +1883,8 @@ git commit -m "feat(bootstrap): create and admit the state/hooks runtime directo
 ```
 
 ### Task 12: Firing-record writer and capability keys · M
+
+**Done 2026-09-22, `9a3838f`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §7.3 and §8.1.
 
@@ -1888,7 +1916,7 @@ export async function readHookFiringObservations(stateDirectory: string, vendor:
 readonly firingObservations?: ReadonlyMap<string, ProbeObservation>;
 ```
 
-- [ ] **Step 1: Write the tests.**
+- [x] **Step 1: Write the tests.**
   - **`firing-records.test.ts`:**
     - An absent directory writes nothing and creates nothing.
     - A directory with mode 0755 writes nothing.
@@ -1921,7 +1949,7 @@ readonly firingObservations?: ReadonlyMap<string, ProbeObservation>;
 
 - [ ] **Step 2: Run the tests.** Deferred to phase close (D47).
 
-- [ ] **Step 3: Implement the writer.**
+- [x] **Step 3: Implement the writer.**
   1. `lstat` `<stateDirectory>/hooks`. Continue only when it is a directory, owned by
      `effectiveUid`, with `mode & 0o777 === 0o700`.
   2. Read the record without following links, and skip when it is valid and
@@ -1938,7 +1966,7 @@ readonly firingObservations?: ReadonlyMap<string, ProbeObservation>;
   `null`. Take `productVersion` from `PRODUCT_VERSION` (`context.ts`) and `effectiveUid` from
   `process.getuid?.() ?? -1`.
 
-- [ ] **Step 4: Implement the capability keys.** Remove `"plugin_hooks"` and
+- [x] **Step 4: Implement the capability keys.** Remove `"plugin_hooks"` and
   `"session_start_injection"` from **both** `CLAUDE_NOT_USED_KEYS` and `CODEX_NOT_USED_KEYS` in this
   one commit. Rewrite both docblocks' `plugin_hooks` sentences to state the new rule: the observation
   is a firing record (A13 §8.1). Leave `DOCUMENTED_FLOORS` at `null` for both keys, because Task 15
@@ -1952,8 +1980,8 @@ readonly firingObservations?: ReadonlyMap<string, ProbeObservation>;
 
   Apply the same change to `reportCodexCapabilities`.
 
-- [ ] **Step 5: Gate.** `npm run lint` must pass.
-- [ ] **Step 6: Commit.** Stage every path named in **Files** above, exactly. Then:
+- [x] **Step 5: Gate.** `npm run lint` must pass.
+- [x] **Step 6: Commit.** Stage every path named in **Files** above, exactly. Then:
 
 ```bash
 git diff --cached --name-only
@@ -1961,6 +1989,8 @@ git commit -m "feat: record hook firings and resolve plugin_hooks and session_st
 ```
 
 ### Task 13: `doctor` checks `hooks` and `external-hooks` · M
+
+**Done 2026-09-22, `c69031e`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §8.2 and Q2-A.
 
@@ -1978,7 +2008,7 @@ export const CODEX_UNTRUSTED_HOOK_MESSAGE = "installed; not observed firing — 
 export const MAX_CLAUDE_SETTINGS_BYTES = 1_048_576;
 ```
 
-- [ ] **Step 1: Write the tests** with a temporary user home and product home.
+- [x] **Step 1: Write the tests** with a temporary user home and product home.
   - **`hooks`:**
     - with no installed Claude `hooks.json`, the message reads `claude=not-installed`;
     - with an installed file matching all 8 rows and records present, the check is `pass`, and the
@@ -2002,7 +2032,7 @@ export const MAX_CLAUDE_SETTINGS_BYTES = 1_048_576;
 
 - [ ] **Step 2: Run the tests.** Deferred to phase close (D47).
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
   - **Reading `hooks.json`.** Read the installed Claude file at
     `join(context.userHome, ...PLUGIN_INSTALL_SEGMENTS, CLAUDE_HOOKS_PATH)` no-follow, with a
     1 MiB cap. For each group, parse `hooks[].command`. A row counts as present when a command ends
@@ -2018,8 +2048,8 @@ export const MAX_CLAUDE_SETTINGS_BYTES = 1_048_576;
   Wire both checks into `collectFindings` after the capability checks. Use the existing `pass` and
   `warn` finding helpers.
 
-- [ ] **Step 4: Gate.** `npm run lint` must pass.
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Gate.** `npm run lint` must pass.
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/cli/src/commands/doctor.ts apps/cli/src/commands/doctor.test.ts
@@ -2028,6 +2058,8 @@ git commit -m "feat(doctor): report product hooks with firing age and external C
 ```
 
 ### Task 14: Bind Claude hooks into A12's local-build install · S · gated
+
+**Done 2026-09-23, `416ec8e`, `a156b0c`** (D47 lane: lint only, tests and review owed at phase close); the entrypoint is D53's `<product-home>/bin/developer-os.mjs`.
 
 Spec §7.1 and G1. **Stop before Step 1 unless both of these hold:**
 
@@ -2062,7 +2094,7 @@ explicitly, so the shebang never runs.
   like every other file in the tree. User edits show up as drift, and uninstall removes it with the
   tree.
 
-- [ ] **Step 1: Widen Task 6's render to the two-token command (G1 as resolved).** Task 6 is
+- [x] **Step 1: Widen Task 6's render to the two-token command (G1 as resolved).** Task 6 is
   integrated with single-path signatures; do not rewrite its history. In
   `packages/core/src/hooks/contract.ts`, add `HookCommandExecutable` and `assertHookNodePath`, which
   applies the shell-safe charset rule and the absolute, no empty, `.` or `..` segment rule, and
@@ -2082,7 +2114,7 @@ git diff --cached --name-only
 git commit -m "feat(hooks): render the two-token hook command (node plus entrypoint)"
 ```
 
-- [ ] **Step 2: Write the tests** at A12's install test seam, using the synthetic packaged release
+- [x] **Step 2: Write the tests** at A12's install test seam, using the synthetic packaged release
   and a temporary home:
   - the Claude install proposal contains `hooks/hooks.json` whose commands begin with the Node
     executable path followed by the installed entrypoint path;
@@ -2092,13 +2124,13 @@ git commit -m "feat(hooks): render the two-token hook command (node plus entrypo
   - no file under `~/.claude/` other than the plugin tree changes, which means `settings.json` is
     untouched. Snapshot `~/.claude/` before and after, excluding the plugin tree.
 - [ ] **Step 3: Run the tests.** Deferred to phase close (D47).
-- [ ] **Step 4: Implement.** At A12's call site, pass
+- [x] **Step 4: Implement.** At A12's call site, pass
   `withClaudeHooks(tree, { node: process.execPath, entrypoint: installedEntrypointPath })` instead of
   `tree`, where the entrypoint has been checked once with `assertHookExecutablePath` and the Node
   path with `assertHookNodePath`. A `HookExecutablePathError` refuses the `init` with exit 2 before
   any mutation.
-- [ ] **Step 5: Gate.** `npm run lint` must pass.
-- [ ] **Step 6: Commit.** Stage the exact A12 files edited. Then:
+- [x] **Step 5: Gate.** `npm run lint` must pass.
+- [x] **Step 6: Commit.** Stage the exact A12 files edited. Then:
 
 ```bash
 git diff --cached --name-only
@@ -2106,6 +2138,8 @@ git commit -m "feat(init): install Claude hooks naming the local-build entrypoin
 ```
 
 ### Task 15: Codex half from the observations · M
+
+**Blocked.** Every Codex cell in `docs/architecture/hooks.md` §1 that this task consumes is `founder-deferred` (billed turn or manual trust); nothing is implemented (BACKLOG NEW-104).
 
 Spec §3 (Codex column), §4.3, §4.4, §7.2 and §8.1 floors. Every *observe* cell is filled from
 `docs/architecture/hooks.md` §1, and no Codex value is guessed. A row Task 1 recorded `unsupported`
@@ -2166,6 +2200,8 @@ git commit -m "feat(adapter-codex): render observed Codex hooks and decode Codex
 
 ### Task 16: Latency baseline and declared timeouts · S
 
+**Done 2026-09-22, `8133c92`** (D47 lane: lint only, tests and review owed at phase close); measured p95 recorded in `docs/architecture/hooks.md` §2.
+
 Spec §5.4 and G5.
 
 **Files:**
@@ -2177,7 +2213,7 @@ Spec §5.4 and G5.
 - Consumes: Tasks 6, 8, 9 and 10.
 - Produces: every `CLAUDE_HOOK_ROWS[i].timeoutSeconds` non-null, and a test pinning that.
 
-- [ ] **Step 1: Write the pinning test**
+- [x] **Step 1: Write the pinning test**
 
 ```ts
 it("declares a timeout on every row, stop and format above their child caps by 5 s", () => {
@@ -2188,7 +2224,7 @@ it("declares a timeout on every row, stop and format above their child caps by 5
 });
 ```
 
-- [ ] **Step 2: Write `tests/tools/hook-latency.ts`.** It spawns
+- [x] **Step 2: Write `tests/tools/hook-latency.ts`.** It spawns
   `process.execPath apps/cli/dist/bin.js guard command --vendor claude` 200 times with a Claude
   allow payload (`echo synthetic`) on stdin. `HOME` is a fresh `mkdtemp` directory, and
   `DEVELOPER_OS_HOME` is a subdirectory of it. Before timing, it **asserts exit codes** through the
@@ -2197,15 +2233,15 @@ it("declares a timeout on every row, stop and format above their child caps by 5
   non-zero. The script prints p50 and p95 wall milliseconds, and
   also the p95 of a variant that runs `assertOrdinaryCommandAdmitted` once, as evidence for Q1. It
   touches nothing outside the temporary directory and spends no credits.
-- [ ] **Step 3: Run the measurement.** Run `npm run build && node tests/dist/tools/hook-latency.js`
+- [x] **Step 3: Run the measurement.** Run `npm run build && node tests/dist/tools/hook-latency.js`
   on the development machine. This is not a vitest run, so D47 permits it. Record p50, p95, the
   machine and the date in `docs/architecture/hooks.md` §2. Set every null `timeoutSeconds` to
   `ceil(10 × p95 / 1000)`, with a minimum of 1. The CI half is deferred to phase close (D47).
   **If p95 exceeds 500 ms, stop and ask the founder.** The upgrade is a `bin.ts` pre-route that
   dynamic-imports only `hooks/entry.ts`, and that choice changes the spec's "extended rather than
   bypassed" sentence.
-- [ ] **Step 4: Gate.** `npm run lint` must pass.
-- [ ] **Step 5: Commit**
+- [x] **Step 4: Gate.** `npm run lint` must pass.
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/tools/hook-latency.ts packages/adapter-claude/src/hooks.ts packages/adapter-claude/src/hooks.test.ts docs/architecture/hooks.md
@@ -2214,6 +2250,8 @@ git commit -m "perf(hooks): measure guard latency and declare hook timeouts"
 ```
 
 ### Task 17: Architecture documentation · S
+
+**Done 2026-09-22, `b583ac3`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §10.1 "Documentation".
 
@@ -2227,11 +2265,11 @@ Spec §10.1 "Documentation".
 - Produces: documents that say hooks moved from declined to shipped and capture stays declined. They
   name `state/hooks`, the fail modes, the external-hooks report, and the manual Codex trust step.
 
-- [ ] **Step 1: Rewrite the named sections.** Cite by symbol, never `path:line` outside fences.
+- [x] **Step 1: Rewrite the named sections.** Cite by symbol, never `path:line` outside fences.
   Include the residuals from spec §11: `pipe-to-shell` is a heuristic, NEW-46 is avoided but not
   closed, Codex external hooks are `unknown`, and the latency budget is machine-relative.
 - [ ] **Step 2: Check the citations test.** Deferred to phase close (D47). `npm run lint` must pass.
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/architecture/threat-model.md docs/architecture/claude-adapter.md docs/architecture/codex-adapter.md docs/architecture/hooks.md
@@ -2240,6 +2278,8 @@ git commit -m "docs(architecture): record shipped hooks, fail modes and firing r
 ```
 
 ### Task 18: Real-agent matrix · founder stop point
+
+**Open.** Founder real-agent matrix; not run.
 
 Spec §10.2 and the roadmap gate.
 
@@ -2271,6 +2311,8 @@ them.
   lists any `unsupported (<reason>)` row for founder acceptance. Commit that file alone.
 
 ### Task 19: Phase close
+
+**Open.** Nothing below has run.
 
 **Files:** only what the fix round touches, plus the orchestrator's `docs/superpowers/` bookkeeping.
 

@@ -257,6 +257,8 @@ tasks of one wave run in parallel, each in its own worktree.
 
 ### Task 1: Inventory, backlog and roadmap amendments · S (orchestrator)
 
+**Done 2026-09-22, `a7cec3f`.**
+
 Spec §2, §9, §11 (the `docs/superpowers` and `docs/migration` rows), and D47's registry amendment.
 Docs only. The orchestrator does it because it edits `docs/superpowers/`.
 
@@ -325,6 +327,8 @@ git commit -m "docs: record A14 dispositions and refusals (D47)"
 ---
 
 ### Task 2: Dispatch, result types and not-implemented stubs · S
+
+**Done 2026-09-22, `f4f1ca9`** (D47 lane: lint only, tests and review owed at phase close); dispatch rows aligned with the shipped verb, `b8030ee`.
 
 Spec §3; §10 row "dispatch is strict". Spec §12 step 2.
 
@@ -402,7 +406,7 @@ export function renderProjectCheck(report: ProjectCheckReportV1): readonly strin
 Tasks 7, 8 and 9 add a third optional `dependencies` parameter to their `run*` function. Dispatch
 never passes it.
 
-- [ ] **Step 1: Write the dispatch matrix (it must fail against the current `main.ts`)**
+- [x] **Step 1: Write the dispatch matrix (it must fail against the current `main.ts`)**
 
 ```ts
 it.each([
@@ -449,7 +453,7 @@ accessor. Also add `import` and `project` to any existing "every command appears
 - [ ] **Step 2: Run the tests.** Deferred to phase close (D47). At close:
   `npx vitest run --root apps/cli src/main.test.ts -t 'import|project|repo|usage'`
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
 
 In `main.ts`:
 - Add `"claude-memory": { type: "boolean" }` to `OPTIONS`.
@@ -524,7 +528,7 @@ Renderers:
 
 Every path goes through `renderPath`.
 
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -536,6 +540,8 @@ git commit -m "feat(cli): dispatch import and project with not-implemented stubs
 ---
 
 ### Task 3: Bounded untrusted reader and the protected-rule table · S
+
+**Done 2026-09-22, `7e1fb07`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §4.2, §8 "Reference".
 
@@ -586,7 +592,7 @@ export function readUntrustedText(
 - `read-codex-auth` home-exact `.codex/auth.json`
 - `read-claude-credentials` home-exact `.claude/.credentials.json`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `protected-paths.test.ts`:
 
@@ -636,7 +642,7 @@ home. Cover:
   `npx vitest run --root packages/security src/protected-paths.test.ts src/index.test.ts` and
   `npx vitest run --root apps/cli src/commands/untrusted-file.test.ts`
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
 
 `protected-paths.ts`:
 - Define `PROTECTED_PATH_RULES`.
@@ -684,7 +690,7 @@ Messages are fixed strings per reason, for example "the file is larger than the 
 read past it". They never include content, and never the path, which callers attach through
 `paths`.
 
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -696,6 +702,8 @@ git commit -m "feat(security): bounded untrusted reader and the protected-path r
 ---
 
 ### Task 4: Extract the quarantine seam from `capture`; widen `captureMethod` · S
+
+**Done 2026-09-22, `ac8d5f6`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §5.3 and §5.4 "reuse … extracted and never copied".
 
@@ -740,7 +748,7 @@ export function writeQuarantineCapture(
 readonly captureMethod: "agent-authored" | "manual" | "import" | "import-claude-memory";
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - `quarantine.test.ts`: `fingerprintDirectory` is 16 lowercase hex characters, stable for one key,
     and different for another key.
   - `resolveQuarantine` refuses through `refuse` when the quarantine directory is a symlink out of
@@ -756,7 +764,7 @@ readonly captureMethod: "agent-authored" | "manual" | "import" | "import-claude-
   `npx vitest run --root apps/cli src/commands/quarantine.test.ts src/commands/capture.test.ts` and
   `npx vitest run --root packages/brain src/capture/build.test.ts`
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
   - Move `fingerprintDirectory`, `FINGERPRINT_LENGTH`, `QUARANTINE_SEGMENTS`, `EMPTY_MANIFEST`,
     `ExistingCapture`, `readExistingCapture`, `readCaptureQuietly` and `writeCapture` from
     `capture.ts` into `quarantine.ts`, with their comments.
@@ -772,7 +780,7 @@ readonly captureMethod: "agent-authored" | "manual" | "import" | "import-claude-
   - Widen the `captureMethod` union in `build.ts`. No consumer switches on the value (grepped at
     plan writing: `parse.ts`, `render.ts` and `schema/capture.ts` treat it as a scalar string).
 
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -784,6 +792,8 @@ git commit -m "refactor(cli): extract the quarantine seam from capture"
 ---
 
 ### Task 5: Claude observation rows, `null` until observed · S
+
+**Done 2026-09-22, `c1bdada`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §5.5 "Capability precondition", §8 "Reference".
 
@@ -817,7 +827,7 @@ export const CLAUDE_DENY_RULES: ClaudeDenyRulesV1 | null = null;
 export function isValidClaudeObservation(row: ClaudeObservationV1): boolean;
 ```
 
-- [ ] **Step 1: Write the failing test.** `observations.test.ts` checks, for each row that is not
+- [x] **Step 1: Write the failing test.** `observations.test.ts` checks, for each row that is not
   `null`:
   - `isValidClaudeObservation(row)`: semver version, ISO date that is not in the future, and a
     non-empty `observedIn`;
@@ -829,11 +839,11 @@ export function isValidClaudeObservation(row: ClaudeObservationV1): boolean;
   exports to `index.test.ts`'s sorted list.
 - [ ] **Step 2: Run the tests.** Deferred to phase close (D47). At close:
   `npx vitest run --root packages/adapter-claude src/observations.test.ts src/index.test.ts`
-- [ ] **Step 3: Implement** the file as specified, with both rows `null`. Put a docblock on each
+- [x] **Step 3: Implement** the file as specified, with both rows `null`. Put a docblock on each
   constant: "Vendor behaviour, taken from a founder observation on a disposable home and never from
   memory or documentation (spec §5.5). `null` until observed. The verb that needs it refuses exit 4
   or warns while it is `null`." Re-export from `index.ts`.
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -845,6 +855,8 @@ git commit -m "feat(adapter-claude): observation rows for memory layout and deny
 ---
 
 ### Task 6: Per-worktree test package links (NEW-98) · S
+
+**Done 2026-09-22, `8bb6a1a`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec Q3 A: NEW-98 is re-owned to repository tooling.
 
@@ -858,7 +870,7 @@ Spec Q3 A: NEW-98 is re-owned to repository tooling.
 - Produces: `npm run link:tests`, which makes every `tests/node_modules/@developer-os/<name>` a
   relative symlink to this checkout's workspace package.
 
-- [ ] **Step 1: Write the pin test**
+- [x] **Step 1: Write the pin test**
 
 ```ts
 it("resolves every tests/node_modules/@developer-os link inside this checkout", async () => {
@@ -877,7 +889,7 @@ it("resolves every tests/node_modules/@developer-os link inside this checkout", 
 
 - [ ] **Step 2: Run the test.** Deferred to phase close (D47). At close:
   `npx vitest run --root tests repository/workspace-links.test.ts`
-- [ ] **Step 3: Implement** `tests/tools/link-workspace-packages.ts`:
+- [x] **Step 3: Implement** `tests/tools/link-workspace-packages.ts`:
   1. Set root = `git rev-parse --show-toplevel`.
   2. Read the workspace directories from `pnpm-workspace.yaml`'s `packages:` list. The lines have
      the form `  - <dir>`; stop at the first non-list line.
@@ -890,7 +902,7 @@ it("resolves every tests/node_modules/@developer-os link inside this checkout", 
 
   Add `"link:tests": "tsc -b && node tests/dist/tools/link-workspace-packages.js"` to `package.json`
   scripts. **Do not run `npm install`.**
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -905,6 +917,8 @@ a new worktree before any `tests/` suite." It does this in the integration commi
 ---
 
 ### Task 7: `import` for inbox and path sources · M
+
+**Done 2026-09-22, `f3d3694`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §5.1–§5.4 and §5.6–§5.7 for `inbox` and `path`, with Q5 A. The §10 rows are "import happy
 path" (unit half), "path policy", "bounds" (import half), "dry run writes nothing" (import half)
@@ -952,7 +966,7 @@ export function processCandidates(input: {
 }): Promise<CliResult<ImportResultV1>>;
 ```
 
-- [ ] **Step 1: Write the failing tests** (`import.test.ts`, built on `createCommandFixture` plus
+- [x] **Step 1: Write the failing tests** (`import.test.ts`, built on `createCommandFixture` plus
   `runInit(..., { dryRun: false, assumeYes: true })`, with `cwd` injected). Every row below is one
   `it`:
   1. **Inbox happy path.**
@@ -1036,7 +1050,7 @@ export function processCandidates(input: {
 - [ ] **Step 2: Run the tests.** Deferred to phase close (D47). At close:
   `npx vitest run --root apps/cli src/commands/import.test.ts`
 
-- [ ] **Step 3: Implement `runImport`.**
+- [x] **Step 3: Implement `runImport`.**
   1. Read the configuration with `readConfigFile`. If it is `null`, refuse exit 1 "Developer OS is
      not initialized", recovery `developer-os init`. Then `paths = runtimePathsFor(context, config)`,
      and require the vault as `capture` does: `isDirectory(paths.brain)` must be `true`.
@@ -1102,7 +1116,7 @@ export function processCandidates(input: {
 
   `cap = Math.min(options.limit ?? IMPORT_MAX_FILES_PER_RUN, IMPORT_MAX_FILES_PER_RUN)`.
 
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -1114,6 +1128,8 @@ git commit -m "feat(cli): import inbox and path sources into quarantine"
 ---
 
 ### Task 8: `project init` mechanism · M
+
+**Done 2026-09-22, `798b0e4`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §6; the §10 row "project init" and the `project init` half of "dry run writes nothing". The
 content is Task 15's.
@@ -1134,7 +1150,7 @@ export interface ProjectInitDependencies {
 export function runProjectInit(context: CliContext, options: ProjectInitOptions, dependencies?: ProjectInitDependencies): Promise<CliResult<ProjectInitResultV1>>;
 ```
 
-- [ ] **Step 1: Write the failing tests.** Inject synthetic templates
+- [x] **Step 1: Write the failing tests.** Inject synthetic templates
   `[{ name: "AGENTS.md", content: "# Synthetic agents\n" }, { name: "CLAUDE.md", content: "# Synthetic claude\n" }, { name: "CONTEXT.md", content: "# Synthetic signpost\n" }]`.
   - **Empty set.** `templates: []` refuses exit 4 `project_templates_unavailable` and writes nothing.
     So does the production default today.
@@ -1170,7 +1186,7 @@ export function runProjectInit(context: CliContext, options: ProjectInitOptions,
 - [ ] **Step 2: Run the tests.** Deferred to phase close (D47). At close:
   `npx vitest run --root apps/cli src/commands/project-init.test.ts`
 
-- [ ] **Step 3: Implement.** The order is fixed, and each step refuses before any write:
+- [x] **Step 3: Implement.** The order is fixed, and each step refuses before any write:
   1. An empty set refuses exit 4.
   2. Read the configuration. If it is absent, refuse exit 1.
   3. `target = resolve(cwd(), dir ?? ".")`. `lstat` it: missing or not a directory refuses exit 2.
@@ -1191,7 +1207,7 @@ export function runProjectInit(context: CliContext, options: ProjectInitOptions,
 
   Any thrown gate or executor error goes through `failureFrom` with its own code.
 
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -1203,6 +1219,8 @@ git commit -m "feat(cli): project init writes the template set create-only"
 ---
 
 ### Task 9: `project check` · S
+
+**Done 2026-09-22, `f616709`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §7 and the §10 row "project check".
 
@@ -1224,7 +1242,7 @@ export interface ProjectCheckDependencies {
 export function runProjectCheck(context: CliContext, options: ProjectCheckOptions, dependencies?: ProjectCheckDependencies): Promise<CliResult<ProjectCheckReportV1>>;
 ```
 
-- [ ] **Step 1: Write the failing tests.** Inject
+- [x] **Step 1: Write the failing tests.** Inject
   `templateNames: ["AGENTS.md", "CLAUDE.md", "CONTEXT.md"]` so every arm is reachable before
   Task 15.
   - **All pass.** Clean `AGENTS.md`, `CLAUDE.md` and `CONTEXT.md` give exactly the checks
@@ -1247,7 +1265,7 @@ export function runProjectCheck(context: CliContext, options: ProjectCheckOption
 - [ ] **Step 2: Run the tests.** Deferred to phase close (D47). At close:
   `npx vitest run --root apps/cli src/commands/project-check.test.ts`
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
   - `root = canonicalize(resolve(cwd(), dir ?? "."))`, which must be a directory (exit 2 otherwise).
   - The scanned set is `unique(["AGENTS.md", "CLAUDE.md", ...templateNames])`.
   - Key: `readRedactionKey(paths.stateDir) ?? randomBytes(32)`. User patterns come from
@@ -1261,7 +1279,7 @@ export function runProjectCheck(context: CliContext, options: ProjectCheckOption
     return `failureFrom` with a `ProjectCheckFailure` whose code is the most severe, a message
     listing the failing lines, and `data: report`.
 
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -1273,6 +1291,8 @@ git commit -m "feat(cli): project check reports instruction-file hygiene"
 ---
 
 ### Task 10: `doctor` check `vendor-config` · S
+
+**Done 2026-09-22, `d12cf20`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §8 and the §10 row "vendor-config is value-free".
 
@@ -1294,7 +1314,7 @@ export interface VendorConfigDependencies { readonly observation: ClaudeDenyRule
 export function checkVendorConfig(context: CliContext, dependencies?: VendorConfigDependencies): Promise<DoctorCheck>;
 ```
 
-- [ ] **Step 1: Write the failing tests** (`vendor-config.test.ts`). The synthetic observation is
+- [x] **Step 1: Write the failing tests** (`vendor-config.test.ts`). The synthetic observation is
   `rules` = one string per `PROTECTED_PATH_RULES` id, for example `Read(synthetic-${id})`. It is
   **not** a claim about Claude's syntax. The file holds only the literals the test writes.
   - **Unobserved.** `observation: null` gives `warn` with the unobserved message, and an
@@ -1333,7 +1353,7 @@ export function checkVendorConfig(context: CliContext, dependencies?: VendorConf
   `npx vitest run --root apps/cli src/commands/vendor-config.test.ts src/commands/doctor.test.ts`
   and `npm run build && npx vitest run --root tests e2e/foundation.test.ts`
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
   - `checkVendorConfig` wraps its whole body in `try`/`catch`, and any throw returns `warn` with the
     fixed message "the Claude user settings could not be read". **Do not register it through
     `guarded()`**: `guarded` turns a throw into `fail`, which spec §8 forbids.
@@ -1347,7 +1367,7 @@ export function checkVendorConfig(context: CliContext, dependencies?: VendorConf
   - In `collectFindings`, append `{ check: await checkVendorConfig(context), code: EXIT_CODES.success }`
     after the `codex-capabilities` finding.
 
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -1359,6 +1379,8 @@ git commit -m "feat(cli): doctor reports Claude deny-list coverage without value
 ---
 
 ### Task 11: Import sentinel, interruption and end-to-end gates · M
+
+**Done 2026-09-22, `01bcb16`** (D47 lane: lint only, tests and review owed at phase close).
 
 The §10 rows "redaction precedes everything" (product-home and vault walk), "interruption and
 capacity" (repair half), the compiled-binary half of "import happy path", and "no new capability".
@@ -1372,7 +1394,7 @@ capacity" (repair half), the compiled-binary half of "import happy path", and "n
 - Consumes: Task 7's `runImport(context, options, { cwd })` from `@developer-os/cli/dist/commands/import.js`, and `ImportResultV1`.
 - Produces: nothing.
 
-- [ ] **Step 1: Write the gates**
+- [x] **Step 1: Write the gates**
   - **`sentinel.test.ts`, new `describe("import")`:**
     - Setup: `installSecurityFixture`, then write `<content>/_raw/inbox/leak.md` holding
       `SENTINEL`, then `runImport`.
@@ -1400,7 +1422,7 @@ capacity" (repair half), the compiled-binary half of "import happy path", and "n
     - `tests/security/network.test.ts` and `tests/e2e/foundation.test.ts`'s network scan are **not
       edited**. Their unchanged pass at close is the "no new capability" row.
 - [ ] **Step 2: Run the tests.** Deferred to phase close (D47). At close: `npm run build && npx vitest run --root tests security/sentinel.test.ts security/interruption.test.ts e2e/import.test.ts security/network.test.ts`
-- [ ] **Step 3: Gate and commit**
+- [x] **Step 3: Gate and commit**
 
 ```bash
 npm run lint
@@ -1413,6 +1435,8 @@ git commit -m "test(security): import sentinel, interruption and end-to-end gate
 
 ### Task 12: `import --claude-memory` · M
 
+**Done 2026-09-22, `5876989`** (D47 lane: lint only, tests and review owed at phase close).
+
 Spec §5.5 and the §10 rows "deduplication is the cursor", "transcripts untouched", "layout
 capability" and "bounds" (memory project directories).
 
@@ -1424,7 +1448,7 @@ capability" and "bounds" (memory project directories).
 - Consumes: Task 5's `CLAUDE_MEMORY_LAYOUT` and `ClaudeMemoryLayoutV1`; Task 7's `processCandidates` and `ImportCandidate`.
 - Produces: `ImportDependencies` gains `readonly memoryLayout: ClaudeMemoryLayoutV1 | null`, default `CLAUDE_MEMORY_LAYOUT`.
 
-- [ ] **Step 1: Write the failing tests.** Inject a **synthetic** layout:
+- [x] **Step 1: Write the failing tests.** Inject a **synthetic** layout:
   `{ claudeVersion: "0.0.0", observedOn: "2026-01-01", observedIn: "synthetic test layout", projectsDirectory: "projects", memoryDirectory: "memory", extension: ".md", indexFileName: "INDEX.md" }`.
 
   The fixture tree under `<user-home>/.claude/projects/`:
@@ -1456,7 +1480,7 @@ capability" and "bounds" (memory project directories).
 - [ ] **Step 2: Run the tests.** Deferred to phase close (D47). At close:
   `npx vitest run --root apps/cli src/commands/import.test.ts -t 'claude-memory|memory'`
 
-- [ ] **Step 3: Implement** `enumerateClaudeMemory(context, layout, key)`, which returns
+- [x] **Step 3: Implement** `enumerateClaudeMemory(context, layout, key)`, which returns
   `{ candidates, preset }`, and replace Task 7's unconditional exit-4 line:
   - A `null` layout refuses exit 4 before any filesystem call.
   - `vendorHome = canonicalize(join(context.userHome, ".claude"))`.
@@ -1475,7 +1499,7 @@ capability" and "bounds" (memory project directories).
     `IMPORT_MAX_ENTRIES_WALKED` across every `readdir` result.
   - `CLAUDE_CONFIG_DIR` is not read. The row does not cover it.
 
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -1487,6 +1511,8 @@ git commit -m "feat(cli): import Claude Code auto-memory behind its observed lay
 ---
 
 ### Task 13: Architecture documentation · S
+
+**Done 2026-09-22, `f135510`** (D47 lane: lint only, tests and review owed at phase close); design-spec amendment `6b15604`.
 
 Spec §11, the rows outside `docs/superpowers` and `docs/migration`.
 
@@ -1500,7 +1526,7 @@ Spec §11, the rows outside `docs/superpowers` and `docs/migration`.
 - Consumes: Tasks 7–12 as integrated, because the docs describe shipped behaviour.
 - Produces: nothing code-facing.
 
-- [ ] **Step 1: Write.**
+- [x] **Step 1: Write.**
   - **`claude-adapter.md`:**
     - `CLAUDE_MEMORY_LAYOUT` and `CLAUDE_DENY_RULES` exist in `packages/adapter-claude/src/observations.ts`, both
       `null` until Task 14.
@@ -1520,7 +1546,7 @@ Spec §11, the rows outside `docs/superpowers` and `docs/migration`.
   - **Design §12:** "`_raw/processed/` is created by `init` and written by no product verb (A14
     Q5 A)."
   - Name symbols, never `path:line` (the citations gate).
-- [ ] **Step 2: Gate and commit**
+- [x] **Step 2: Gate and commit**
 
 ```bash
 npm run lint
@@ -1536,6 +1562,8 @@ cherry-picks an implementer's commit and adds that one path itself.
 ---
 
 ### Task 14: Record the Claude observations · S — **FOUNDER STOP POINT**
+
+**Open (founder stop).** Not observed; `CLAUDE_MEMORY_LAYOUT` and `CLAUDE_DENY_RULES` stay `null`, so `import --claude-memory` exits 4 and `vendor-config` warns (BACKLOG NEW-109).
 
 Spec §5.5 "Capability precondition" and §8 "exact rule strings are vendor syntax". An agent never
 observes these facts. It does not run Claude Code, read the founder's `~/.claude`, or write a
@@ -1560,6 +1588,7 @@ value from memory or documentation.
      that Claude Code enforces as a read denial of that path, each proven by a denied read in that
      disposable session;
   4. the Claude Code version, the date, and one sentence of method.
+  **Status:** Owed: founder observation on a disposable home (NEW-109).
 
   If the founder does not observe now, the orchestrator adds `BACKLOG.md` row "A14 observations
   owed: `CLAUDE_MEMORY_LAYOUT`, `CLAUDE_DENY_RULES` (Task 14)" and skips to Task 16. Both verbs stay
@@ -1582,6 +1611,8 @@ git commit -m "feat(adapter-claude): record observed memory layout and deny rule
 ---
 
 ### Task 15: Project template content through A12's redaction procedure · M
+
+**Partial 2026-09-22, `10282ab`** (agent scan 0 findings without a pattern file). Owed: the founder-local `--patterns` scan and an independent content review.
 
 Spec §6 "Template set" and the §10 row "templates are clean". **Spec gap, decided here:**
 - A12 §1 puts "`project init` templates (A14)" out of its scope.
@@ -1606,11 +1637,11 @@ second scanner.
 - Consumes: Tasks 8 and 9; A12's scanner.
 - Produces: a non-empty `PROJECT_TEMPLATE`. `project init` stops refusing exit 4.
 
-- [ ] **Step 1: STOP and ask the founder** for:
+- [x] **Step 1: STOP and ask the founder** for:
   - the legacy project instruction file and the project context signpost, through the
     owner-controlled process;
   - the signpost's file name in the product.
-- [ ] **Step 2: Write the failing test** `project-template.test.ts`:
+- [x] **Step 2: Write the failing test** `project-template.test.ts`:
 
 ```ts
 const ROOT = fileURLToPath(new URL("../../../../templates/project", import.meta.url));
@@ -1632,7 +1663,7 @@ it("embeds templates/project byte for byte, flat, within bounds, finding-free", 
 
 Replace `<signpost name>` with the founder's answer from Step 1.
 
-- [ ] **Step 3: Write the content.**
+- [x] **Step 3: Write the content.**
   - Use A12 §3.3's redaction classes: no client, project, person, machine path, private
     repository, secret or personal preference.
   - The instruction files point at product verbs (`developer-os capture`, `developer-os brain
@@ -1644,10 +1675,11 @@ Replace `<signpost name>` with the founder's answer from Step 1.
   `node tests/dist/tools/scan-instruction-defaults.js --patterns <private file>` over
   `templates/project/`. The commit message records the finding count (zero) and the command, never
   the pattern file. An independent reviewer reads the files before staging (A12 §3.3).
+  **Status:** Owed: founder-local `--patterns` scan; independent review not recorded.
 - [ ] **Step 5: Run the tests.** Deferred to phase close (D47). At close:
   `npx vitest run --root apps/cli src/commands/project-template.test.ts src/commands/project-init.test.ts` and
   `npx vitest run --root tests repository/instruction-defaults.test.ts`
-- [ ] **Step 6: Gate and commit**
+- [x] **Step 6: Gate and commit**
 
 ```bash
 npm run lint
@@ -1659,6 +1691,8 @@ git commit -m "feat(templates): project instruction templates, redacted (A12 §3
 ---
 
 ### Task 16: Phase 7 close · M (orchestrator + founder)
+
+**Open.** Nothing below has run.
 
 **Files:**
 - Modify: `docs/migration/instruction-inventory.md` (A14 rows: `planned` → `shipped`)

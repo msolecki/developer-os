@@ -227,6 +227,8 @@ the hotspot files (`main.ts`, `context.ts`, `init.ts`, `doctor.ts`, `commands/un
 
 ### Task 1: Unsigned-local release trust and admission · M
 
+**Done 2026-09-22, `25675d3`** (D47 lane: lint only, tests and review owed at phase close).
+
 Spec: D47 Q1 option A; §8 `packaged_release_unavailable`; §11 Spec 2 row (trust state
 `unsigned-local`, orchestrator applies the text at Task 29).
 
@@ -275,7 +277,7 @@ The unsigned-local package contract (the writer is Task 4):
 - `metadata/bundle-manifest.json` = canonical `{"files":[{"bytes":n,"path":"<relative to bundle/>","sha256":"<hex>"},…],"schemaVersion":1,"trust":"unsigned-local"}`, sorted by UTF-8 path, listing exactly every file under `bundle/`
 - Identity: `version`/`releaseSequence` from the index; `delegationSequence` and `releaseIndexSequence` `"1"`; the three document hashes are the sha256 of their bytes; `delegatedReleaseKeyId = UNSIGNED_LOCAL_RELEASE_KEY_ID`; `releaseIdentityHash = sha256("developer-os:unsigned-local-release-identity:v1\0" ‖ bundle-manifest bytes)`; `platform: "darwin"`; `architecture` = `process.arch` (`arm64`|`x64`, else refuse); both protocols `1`.
 
-- [ ] **Step 1: Write the failing core tests**
+- [x] **Step 1: Write the failing core tests**
 
 ```ts
 it("admits the unsigned-local arm with exactly one extra key", () => {
@@ -302,13 +304,13 @@ sha256 of the ASCII domain; the export list gains the four new names.
 
 Run: `npx vitest run --root packages/core src/update/release.test.ts src/index.test.ts` · Expected: FAIL (missing exports).
 
-- [ ] **Step 3: Implement the core arm**
+- [x] **Step 3: Implement the core arm**
 
 `validateReleaseTrustState` accepts the signed key set, or the signed key set plus `trust` whose
 only legal value is `"unsigned-local"`. `advanceReleaseTrust` and `admitReleaseAgainstTrust` call
 `isUnsignedLocalTrust` first as specified above.
 
-- [ ] **Step 4: Write the failing admission tests** (`packaged-release.test.ts`)
+- [x] **Step 4: Write the failing admission tests** (`packaged-release.test.ts`)
 
 Build the package in a `mkdtemp` root inside the test (0700 directories, 0600 files, 0700 for
 `bundle/bin/developer-os`). Cases: a valid package admits and `inspectPackagedRelease` returns
@@ -323,14 +325,14 @@ results report `trust: "root-verified"`.
 
 Run: `npx vitest run --root apps/cli src/update/packaged-release.test.ts` · Expected: FAIL.
 
-- [ ] **Step 6: Implement admission**
+- [x] **Step 6: Implement admission**
 
 Reuse `inventory` and the sealed map; add `trust` to `SealedPackagedRelease` and the admitted
 record; build the `RootVerifiedPackagedReleaseV1`-shaped handoff from the derived identity so
 `validateSemanticBindings` runs unchanged, then check the bundle manifest against the inventory's
 `bundle/` rows.
 
-- [ ] **Step 7: Record the trust arm in bootstrap and refuse it in the launcher**
+- [x] **Step 7: Record the trust arm in bootstrap and refuse it in the launcher**
 
 In `executor.ts`, `trustValue` gains `trust: "unsigned-local"` exactly when
 `packaged.trust === "unsigned-local"`. In `apps/launcher/src/selection.ts`, after
@@ -344,7 +346,7 @@ it("never launches a home whose trust state is unsigned-local", async () => {
 });
 ```
 
-- [ ] **Step 8: Gate and commit**
+- [x] **Step 8: Gate and commit**
 
 ```bash
 npm run lint
@@ -360,6 +362,8 @@ finds one derivation site, `executor.ts`'s `trustValue`; the persisted plan carr
 re-derives the payload from `identity`, it must read `packaged.trust` too.)
 
 ### Task 2: Vendor observations (spec §10.1) · M
+
+**Partial 2026-09-22, `e498614`** (unbilled rows recorded; the installed versions differed from the pin and were re-pinned by D48, `29e8c36`; findings filed as NEW-101..103, `b1c2f68`). Owed: the billed real-agent row (Step 3, NEW-101).
 
 The precondition for every task that encodes a vendor fact. It writes no product code.
 
@@ -377,7 +381,7 @@ The precondition for every task that encodes a vendor fact. It writes no product
   (Task 12), **whether `plugin add` over a registered plugin refreshes the cache** (Task 14), **the
   ingest-isolation method** (Task 21).
 
-- [ ] **Step 1: Confirm the pinned versions in an isolated home**
+- [x] **Step 1: Confirm the pinned versions in an isolated home** — found 2.1.280 / 0.155.1; re-pinned by D48
 
 ```bash
 T=$(mktemp -d); env -u CLAUDE_CONFIG_DIR HOME="$T" CODEX_HOME="$T/.codex" XDG_CONFIG_HOME="$T/.config" claude --version
@@ -387,7 +391,7 @@ env -u CLAUDE_CONFIG_DIR HOME="$T" CODEX_HOME="$T/.codex" XDG_CONFIG_HOME="$T/.c
 Expected: `2.1.280` and `0.155.1`. A different version is a **FOUNDER STOP** (the adapter notes pin
 these; re-pinning is a founder decision).
 
-- [ ] **Step 2: Run the unbilled rows in the isolated home**
+- [x] **Step 2: Run the unbilled rows in the isolated home**
 
 Hand-place a minimal tree in `$T` for each row (a rule file, a `paths:` rule, an output style, an
 agent in the skills-dir plugin, a thin command, a Codex `agents/*.toml`, an `AGENTS.md` with the
@@ -399,7 +403,7 @@ size at which `prompt-input` stops including it (binary search on block size up 
 **FOUNDER STOP** if any command asks for a login, reaches the network or a model, or names a path
 outside `$T` in its output; do not inspect the live `~/.claude` or `~/.codex` to check.
 
-- [ ] **Step 3: FOUNDER STOP — billed real-agent row (spec §10.2 "real agent")**
+- [ ] **Step 3: FOUNDER STOP — billed real-agent row (spec §10.2 "real agent")** — owed: founder, one paid Claude session (NEW-101)
 
 For every mechanism Step 2 could not prove unbilled (expected: `rule`, `scoped-rule`,
 `output-style` on Claude), the founder runs one Claude session in a disposable home proving the text
@@ -407,12 +411,12 @@ reached the model, and records it in the compatibility matrix. Until that row pa
 is not installed (invariant 3); Task 12 renders it but Task 16's `UNPROVEN_CLAUDE_CATEGORIES`
 holds it back. Emptying that constant is a founder decision recorded at Task 29.
 
-- [ ] **Step 4: Decide or stop**
+- [x] **Step 4: Decide or stop** — no §4 loading proof failed; unproven Claude categories are held back (D48)
 
 If any §4 row's loading proof fails, the plan **stops for a founder decision**; it is never
 downgraded to `unsupported-vendor`.
 
-- [ ] **Step 5: Gate and commit**
+- [x] **Step 5: Gate and commit**
 
 ```bash
 npm run lint
@@ -422,6 +426,8 @@ git commit -m "docs(adapters): record the A12 loading observations"
 ```
 
 ### Task 3: Default-content gates and catalog scaffold · M
+
+**Done 2026-09-22, `067bdb0`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §3.1 (catalog), §3.3 (gates), §10.2 "defaults are redacted", "coverage is exhaustive".
 
@@ -436,7 +442,7 @@ Spec §3.1 (catalog), §3.3 (gates), §10.2 "defaults are redacted", "coverage i
 - Consumes: the product secret scanner exported by `@developer-os/security` (reuse; do not write a new one).
 - Produces: `scanInstructionDefaults(root: string, extraPatterns: readonly RegExp[]): readonly { path: string; line: number; rule: string }[]` in `tests/tools/scan-instruction-defaults.ts`, CLI form `node tests/dist/tools/scan-instruction-defaults.js --patterns <file>`.
 
-- [ ] **Step 1: Write the scanner tests**
+- [x] **Step 1: Write the scanner tests**
 
 ```ts
 it("reports path and line only, never the matched text", () => {
@@ -450,7 +456,7 @@ Rules: the security secret scanner; absolute home paths (`/Users/`, `/home/`); `
 `instruction-hosts.json`; the frozen-source environment prefix (as in `tests/repository/self-containment.ts`); `docs/superpowers/plans/legacy-runtime/`. Each rule
 has a positive and a negative case; an injected e-mail, home path and legacy-runtime path each fail.
 
-- [ ] **Step 2: Write `instruction-defaults.test.ts` and `instruction-coverage.test.ts`**
+- [x] **Step 2: Write `instruction-defaults.test.ts` and `instruction-coverage.test.ts`**
 
 `instruction-defaults.test.ts` asserts `scanInstructionDefaults("instructions", [])` is empty and
 that the enumerated file set is non-empty once `catalog.json` lists a row (it lists the catalog
@@ -463,9 +469,9 @@ the inventory §1–§3 names minus `brain-search` minus rows whose inventory st
 
 Run: `npx vitest run tests/repository/instruction-defaults.test.ts tests/repository/instruction-coverage.test.ts tests/tools/scan-instruction-defaults.test.ts`
 
-- [ ] **Step 4: Implement the scanner tool** (bounded read per file, 256 KiB cap, LF split).
+- [x] **Step 4: Implement the scanner tool** (bounded read per file, 256 KiB cap, LF split).
 
-- [ ] **Step 5: Gate and commit**
+- [x] **Step 5: Gate and commit**
 
 ```bash
 npm run lint
@@ -475,6 +481,8 @@ git commit -m "test(instructions): gate default content on redaction and invento
 ```
 
 ### Task 4: Local package writer and `init --local-release` · M
+
+**Done 2026-09-22, `358ff57`** (D47 lane: lint only, tests and review owed at phase close); made launchable by D53 (`a629f77`) and bundled by D55 (`811d74b`, 2026-09-23).
 
 D47 Q1: explicit flag, never fallback; `doctor` warns.
 
@@ -511,7 +519,7 @@ export type CliContextFactory = (io: CliIo, request: { readonly localRelease: st
 export interface ProductionContextOptions { /* existing */ readonly localRelease?: PackagedReleaseSourceV1 | null }
 ```
 
-- [ ] **Step 1: Write the writer tests**
+- [x] **Step 1: Write the writer tests**
 
 ```ts
 it("writes a package the unsigned-local admission accepts", async () => {
@@ -527,7 +535,7 @@ it("refuses an existing output directory", async () => { /* exit-coded refusal, 
 Also: two writes of the same input are byte-identical per file (determinism); `LOCAL_BUNDLE_BIN`
 exits 4 with a message naming `node apps/cli/dist/bin.js`.
 
-- [ ] **Step 2: Write the CLI tests**
+- [x] **Step 2: Write the CLI tests**
 
 `main.test.ts`: `init --local-release /x` parses and passes `{ localRelease: "/x" }` to the factory;
 `--local-release` on any other command is usage failure (exit 2); a factory that rejects with the
@@ -544,7 +552,7 @@ takes the V1 path (no silent fallback).
 
 Run: `npx vitest run --root apps/cli src/update/local-release.test.ts src/main.test.ts src/commands/doctor.test.ts` and `npx vitest run --root apps/cli src/commands/init-local-release.v2.test.ts`.
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 - Move the fixture's schema/brain file list out of `createSyntheticPackagedRelease` into
   `releaseTemplateFiles()`; the fixture calls it (behaviour unchanged).
@@ -566,7 +574,7 @@ Run: `npx vitest run --root apps/cli src/update/local-release.test.ts src/main.t
 - `doctor.ts`: check `release-trust` reads `state/release-trust.json` bounded, decodes it with
   `decodeCanonicalJson`, validates with `validateReleaseTrustState`; not init-owned.
 
-- [ ] **Step 5: Gate and commit**
+- [x] **Step 5: Gate and commit**
 
 ```bash
 npm run lint
@@ -576,6 +584,8 @@ git commit -m "feat(cli): install V2 from an explicitly named unsigned local bui
 ```
 
 ### Task 5: Block grammar and the merge table · M
+
+**Done 2026-09-22, `7c72a00`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §5.1, §5.2, §6.3 strip rule. Pure; no filesystem.
 
@@ -610,7 +620,7 @@ export function decideInstructionBlockMerge(input: {
 }): InstructionBlockMergeV1;
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it.each([
@@ -636,9 +646,9 @@ b)` returns exactly `b`; the second header line names `<P>/instructions/<vendor>
 
 - [ ] **Step 2: Run — deferred to phase close (D47)** · `npx vitest run --root packages/core src/manifest/instruction-block.test.ts src/index.test.ts`
 
-- [ ] **Step 3: Implement** (byte-level scan for LF-terminated marker lines; no string decode of user bytes)
+- [x] **Step 3: Implement** (byte-level scan for LF-terminated marker lines; no string decode of user bytes)
 
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -648,6 +658,8 @@ git commit -m "feat(core): marked instruction block grammar and merge table"
 ```
 
 ### Task 6: Instruction catalog, ids and bounds · M
+
+**Done 2026-09-22, `c38cafd`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §2.3, §3.1 catalog.
 
@@ -683,10 +695,10 @@ export function assertInstructionRelativePath(path: string): void;              
 export function parseScopedRulePaths(path: string, text: string): readonly string[]; // `paths:` frontmatter, 1–32 globs
 ```
 
-- [ ] **Step 1: Write failing tests** — first-over-limit for every bound (exact maximum admits, +1 refuses with path only): id length 64/65, `developer-os-` prefix, a workflow id (`capture`), segment 128/129 chars, depth 4/5, file 262,144/262,145 bytes, BOM, NUL, CR, 64/65 files, 1 MiB/+1, 32/33 globs, glob 256/257 bytes. Catalog: strict keys, sorted by `(category, id)`, unique, `thinCommand: true` on a non-`skill` row refuses, empty `vendors` refuses.
+- [x] **Step 1: Write failing tests** — first-over-limit for every bound (exact maximum admits, +1 refuses with path only): id length 64/65, `developer-os-` prefix, a workflow id (`capture`), segment 128/129 chars, depth 4/5, file 262,144/262,145 bytes, BOM, NUL, CR, 64/65 files, 1 MiB/+1, 32/33 globs, glob 256/257 bytes. Catalog: strict keys, sorted by `(category, id)`, unique, `thinCommand: true` on a non-`skill` row refuses, empty `vendors` refuses.
 - [ ] **Step 2: Run — deferred to phase close (D47)** · `npx vitest run --root packages/core src/instructions src/index.test.ts`
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -696,6 +708,8 @@ git commit -m "feat(core): instruction catalog, id grammar and source bounds"
 ```
 
 ### Task 7: `instructions/` is user data in the product home · S
+
+**Done 2026-09-22, `5391d52`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §3.2 lifecycle standing (Spec 2 §6.1 and Spec 1 §6 amendments; texts applied by the orchestrator at Task 29).
 
@@ -708,10 +722,10 @@ Spec §3.2 lifecycle standing (Spec 2 §6.1 and Spec 1 §6 amendments; texts app
 - Consumes: Task 1 (file overlap on `executor.ts` only).
 - Produces: `USER_DATA_HOME_ENTRIES: readonly ["instructions"]` exported from `packages/core/src/lifecycle/absent-manifest.ts`.
 
-- [ ] **Step 1: Write failing tests** — absent-manifest walk: `P/instructions/claude/rules/x.md` is classified user data (not residue), still walked with the same bounds, and a symlink inside it still refuses; `P/instructions` as a file (not a directory) refuses. v2: a fresh `init` over a home holding only `P/instructions/**` succeeds and leaves those bytes untouched; the plan's `admittedPreexistingPaths` contains exactly `P/instructions`.
+- [x] **Step 1: Write failing tests** — absent-manifest walk: `P/instructions/claude/rules/x.md` is classified user data (not residue), still walked with the same bounds, and a symlink inside it still refuses; `P/instructions` as a file (not a directory) refuses. v2: a fresh `init` over a home holding only `P/instructions/**` succeeds and leaves those bytes untouched; the plan's `admittedPreexistingPaths` contains exactly `P/instructions`.
 - [ ] **Step 2: Run — deferred to phase close (D47)** · `npx vitest run --root packages/core src/lifecycle/absent-manifest.test.ts` and `npx vitest run --root apps/cli src/bootstrap/instructions-user-data.v2.test.ts`
-- [ ] **Step 3: Implement** — admit the exact name `instructions` as an opaque user-data subtree in both places; nothing else widens.
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 3: Implement** — admit the exact name `instructions` as an opaque user-data subtree in both places; nothing else widens.
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -723,6 +737,8 @@ git commit -m "feat(lifecycle): treat the product home's instructions directory 
 (Add `apps/cli/src/lifecycle/absent-manifest-uninstall.ts` only if changed.)
 
 ### Task 8: Manifest `instruction` arms, drift, downcast and schema id · M
+
+**Done 2026-09-22, `324923d`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §2.1 (all touch points in one change), §10.2 "manifest arms are exact".
 
@@ -749,12 +765,12 @@ export type OwnerPathArmV1 =
 // ManifestAdmissionContextV1.admitOwnerPath(owner, path, arm: OwnerPathArmV1) — existing implementers ignore `arm` until Task 11.
 ```
 
-- [ ] **Step 1: Write failing validator tests** — strict round trip and refusal fixtures for both arms: every key; `content` with `mergeStrategy` other than `dedicated`, `existedBefore: true`, or non-null restore fields refuses; `block` with other than `marked-block` refuses; `marked-block` on any non-block arm refuses; `members` empty, 65 entries, unsorted, duplicate refuse; a second block row for one owner refuses; owner other than `claude`/`codex` on a block row refuses; `block` with `existedBefore: true` requires both backup fields and with `false` requires both null; `codex-registration-v1` is an accepted schema id.
-- [ ] **Step 2: Write failing drift tests** — `content` rows behave like `file`/`content`; `block` rows: markers absent → `missing`; edited block → `content_changed`; malformed → `block_malformed`; bytes changed outside the block → no finding.
-- [ ] **Step 3: Write the manifest-rewrite case** (`manifest-rewrite.v2.test.ts`): on a fixture V2 home, inside `withLifecycleMutation`, one `context.executor.execute` replacing `paths.manifestFile` (guarded by its current hash) with a manifest adding one `instruction`/`content` row commits; the next `withLifecycleMutation` admits the home. If this fails at phase close, the phase stops (see "Verified at plan writing").
+- [x] **Step 1: Write failing validator tests** — strict round trip and refusal fixtures for both arms: every key; `content` with `mergeStrategy` other than `dedicated`, `existedBefore: true`, or non-null restore fields refuses; `block` with other than `marked-block` refuses; `marked-block` on any non-block arm refuses; `members` empty, 65 entries, unsorted, duplicate refuse; a second block row for one owner refuses; owner other than `claude`/`codex` on a block row refuses; `block` with `existedBefore: true` requires both backup fields and with `false` requires both null; `codex-registration-v1` is an accepted schema id.
+- [x] **Step 2: Write failing drift tests** — `content` rows behave like `file`/`content`; `block` rows: markers absent → `missing`; edited block → `content_changed`; malformed → `block_malformed`; bytes changed outside the block → no finding.
+- [x] **Step 3: Write the manifest-rewrite case** (`manifest-rewrite.v2.test.ts`): on a fixture V2 home, inside `withLifecycleMutation`, one `context.executor.execute` replacing `paths.manifestFile` (guarded by its current hash) with a manifest adding one `instruction`/`content` row commits; the next `withLifecycleMutation` admits the home. If this fails at phase close, the phase stops (see "Verified at plan writing").
 - [ ] **Step 4: Run — deferred to phase close (D47)** · `npx vitest run --root packages/core src/manifest src/index.test.ts` and `npx vitest run --root apps/cli src/lifecycle/manifest-rewrite.v2.test.ts`
-- [ ] **Step 5: Implement** — arms and `restore()` rule per arm in `v2.ts`; the sort key's existing `kind`/`mode` ordering covers the new arm; `validateManifestV2` passes the arm to `admitOwnerPath`; `downcastArtifactV2` maps `content` rows to V1 `file` and throws on `block` rows (they never reach the drained uninstall, §6.3).
-- [ ] **Step 6: Gate and commit**
+- [x] **Step 5: Implement** — arms and `restore()` rule per arm in `v2.ts`; the sort key's existing `kind`/`mode` ordering covers the new arm; `validateManifestV2` passes the arm to `admitOwnerPath`; `downcastArtifactV2` maps `content` rows to V1 `file` and throws on `block` rows (they never reach the drained uninstall, §6.3).
+- [x] **Step 6: Gate and commit**
 
 ```bash
 npm run lint
@@ -764,6 +780,8 @@ git commit -m "feat(core): instruction manifest arms and block drift"
 ```
 
 ### Task 9: Source loaders and the fixture's instruction tree · M
+
+**Done 2026-09-22, `020e89e`** (D47 lane: lint only, tests and review owed at phase close); `.DS_Store` fix `5073a08`.
 
 Spec §2.3 filesystem rules, §3.1 runtime reads, §3.2 overrides and precedence.
 
@@ -794,10 +812,10 @@ export async function loadInstructionOverrides(input: { readonly productHome: st
 export function mergeInstructionSources(vendor: "claude" | "codex", defaults: Awaited<ReturnType<typeof loadInstructionDefaults>>, overrides: readonly InstructionSourceV1[]): InstructionSourceSetV1;
 ```
 
-- [ ] **Step 1: Write failing tests** — defaults: an unlisted file under `bundle/instructions/` and a listed-but-missing file each refuse `instruction_catalog_invalid` (exit 2); every read goes through `release.readFile`. Overrides: a symlinked file, a symlinked directory, a hard-linked file (`nlink` 2), a BOM, a NUL, CRLF, an unknown category directory each refuse `instruction_source_invalid` with path (and line where applicable) and no content in the message; foreign owner is covered by injecting `effectiveUid: uid + 1`. Precedence: a same-`(category, id)` override replaces the default on that vendor only, and for a skill replaces the whole directory (a default-only extra file disappears); a new id adds; `codex/output-styles/x.md` lands in `unsupported`, not a refusal; per-vendor caps 128 artifacts/8 MiB at exact and first-over.
+- [x] **Step 1: Write failing tests** — defaults: an unlisted file under `bundle/instructions/` and a listed-but-missing file each refuse `instruction_catalog_invalid` (exit 2); every read goes through `release.readFile`. Overrides: a symlinked file, a symlinked directory, a hard-linked file (`nlink` 2), a BOM, a NUL, CRLF, an unknown category directory each refuse `instruction_source_invalid` with path (and line where applicable) and no content in the message; foreign owner is covered by injecting `effectiveUid: uid + 1`. Precedence: a same-`(category, id)` override replaces the default on that vendor only, and for a skill replaces the whole directory (a default-only extra file disappears); a new id adds; `codex/output-styles/x.md` lands in `unsupported`, not a refusal; per-vendor caps 128 artifacts/8 MiB at exact and first-over.
 - [ ] **Step 2: Run — deferred to phase close (D47)** · `npx vitest run --root apps/cli src/instructions/sources.test.ts`
-- [ ] **Step 3: Implement** — no-follow opens (`O_NOFOLLOW`), `lstat` every component under `P/instructions/<vendor>/`, identity check before and after read; workflow ids are the ids `loadReleaseWorkflows` returns; the workflow-collision rule of §2.3 is enforced here, not in Core's manifest validator.
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 3: Implement** — no-follow opens (`O_NOFOLLOW`), `lstat` every component under `P/instructions/<vendor>/`, identity check before and after read; workflow ids are the ids `loadReleaseWorkflows` returns; the workflow-collision rule of §2.3 is enforced here, not in Core's manifest validator.
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -807,6 +825,8 @@ git commit -m "feat(cli): bounded instruction default and override loaders"
 ```
 
 ### Task 10: Conflict evidence block arm · S
+
+**Done 2026-09-22, `3b9116b`** (D47 lane: lint only, tests and review owed at phase close); the code's notice limits are 1 MiB / 1,000 lines, not the 4 MiB / 20,000 this task names (BACKLOG NEW-108).
 
 Spec §5.3; §10.2 "conflict evidence".
 
@@ -818,10 +838,10 @@ Spec §5.3; §10.2 "conflict evidence".
 - Consumes: Task 5 `extractInstructionBlock`; Task 8 block arm type.
 - Produces: `ConflictEvidenceRequest = <existing V1 shape> | { readonly block: { readonly artifact: Extract<ManagedArtifactV2, { kind: "instruction"; verification: { mode: "block" } }>; readonly fileBytes: Uint8Array; readonly proposedBlock: Uint8Array }; readonly fs: …; readonly guards: …; readonly redactDiagnostic: (text: string) => string }`; returns the existing `ConflictEvidence` with `baselineHash = blockHash`, `baselineBackupRelativePath` = the row's backup or `null`, `currentHash` of the extracted block, `proposedHash`, and a redacted two-way diff current → proposed.
 
-- [ ] **Step 1: Write failing tests** — all three hashes reported; the diff is redacted (an injected secret in the user's edit does not appear); the 4 MiB and 20,000-line notices and the binary notice are unchanged; the V1 arm's existing cases pass untouched.
+- [x] **Step 1: Write failing tests** — all three hashes reported; the diff is redacted (an injected secret in the user's edit does not appear); the 4 MiB and 20,000-line notices and the binary notice are unchanged; the V1 arm's existing cases pass untouched.
 - [ ] **Step 2: Run — deferred to phase close (D47)** · `npx vitest run --root packages/core src/manifest`
-- [ ] **Step 3: Implement** by reusing the existing bounded diff body.
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 3: Implement** by reusing the existing bounded diff body.
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -831,6 +851,8 @@ git commit -m "feat(core): conflict evidence for an edited instruction block"
 ```
 
 ### Task 11: Closed owner-aware path authorization · M
+
+**Done 2026-09-22, `1718ac2`** (D47 lane: lint only, tests and review owed at phase close); plugin-subtree directory fix `ff6efb7`.
 
 Spec §2.2; §10.2 "authorization is closed".
 
@@ -855,10 +877,10 @@ export type OwnerPathConfinementV1 =
   | { readonly kind: "unconfined"; readonly reason: string };
 ```
 
-- [ ] **Step 1: Write failing tests** — table-driven over spec §2.2: each row admits exactly its owner and arm; for each row, a neighbouring path (`developer-os-x.md.bak`, `rules/other.md`, `H/.claude/CLAUDE.md.orig`), the other owner, a wrong arm (`file` at `H/.claude/CLAUDE.md`, `block` at a `content` target), a `..` segment each refuse (value rewritten with the outside-authority suffix); `directory` rows admitted only for the listed directories; product-home and Brain rules unchanged; `vendors: null` behaves exactly as today. `resolveVendorHomes`: relative `CODEX_HOME` falls back to `H/.codex`. (Symlinked components refuse in the planners, Tasks 16–17.)
+- [x] **Step 1: Write failing tests** — table-driven over spec §2.2: each row admits exactly its owner and arm; for each row, a neighbouring path (`developer-os-x.md.bak`, `rules/other.md`, `H/.claude/CLAUDE.md.orig`), the other owner, a wrong arm (`file` at `H/.claude/CLAUDE.md`, `block` at a `content` target), a `..` segment each refuse (value rewritten with the outside-authority suffix); `directory` rows admitted only for the listed directories; product-home and Brain rules unchanged; `vendors: null` behaves exactly as today. `resolveVendorHomes`: relative `CODEX_HOME` falls back to `H/.codex`. (Symlinked components refuse in the planners, Tasks 16–17.)
 - [ ] **Step 2: Run — deferred to phase close (D47)** · `npx vitest run --root apps/cli src/bootstrap/admission.test.ts src/instructions/vendor-homes.test.ts`
-- [ ] **Step 3: Implement** and pass `vendors: resolveVendorHomes(context.env, context.userHome, paths.home)` at each confined call site; the drained uninstall's removable partition and `ownedRoots: [paths.home]` stay unchanged.
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 3: Implement** and pass `vendors: resolveVendorHomes(context.env, context.userHome, paths.home)` at each confined call site; the drained uninstall's removable partition and `ownedRoots: [paths.home]` stay unchanged.
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -868,6 +890,8 @@ git commit -m "feat(cli): closed owner-bound authorization for vendor instructio
 ```
 
 ### Task 12: Claude `renderInstructionTree` and V2 proposals · M
+
+**Done 2026-09-22, `a83d145`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §4 (Claude column), §5.1 Claude content, §2.3 importable-path bound, §2.2 adapter fix.
 
@@ -894,10 +918,10 @@ export function proposeClaudeInstall(tree: readonly RenderedArtifact[], context:
 export function proposeClaudeUninstall(context: InstallContext, managed: ReadonlyMap<string, ManagedArtifactV2>): ClaudeInstallProposal; // filters owner === "claude"
 ```
 
-- [ ] **Step 1: Write failing tests** — `renderClaudeVendorTree` contains `.claude-plugin/plugin.json` and the six `developer-os-*` workflow skills, and a path collision between an instruction skill and a workflow skill refuses; byte-identical across two renders and under a reversed input order; a thin command's body only invokes skill `<id>` (one text, not two); `scoped-rule` keeps its `paths:` frontmatter; output-style frontmatter `name` unchanged and nothing selects it; the block holds one `@<P>/claude/instructions/<id>.md` line per `rule`, sorted by id; a `P` with a space refuses `instruction_path_not_importable`; instruction skills are not prefixed `developer-os-`; an override replaces a whole skill directory; `proposeClaudeUninstall` ignores a `codex`-owned row under the plugin root.
+- [x] **Step 1: Write failing tests** — `renderClaudeVendorTree` contains `.claude-plugin/plugin.json` and the six `developer-os-*` workflow skills, and a path collision between an instruction skill and a workflow skill refuses; byte-identical across two renders and under a reversed input order; a thin command's body only invokes skill `<id>` (one text, not two); `scoped-rule` keeps its `paths:` frontmatter; output-style frontmatter `name` unchanged and nothing selects it; the block holds one `@<P>/claude/instructions/<id>.md` line per `rule`, sorted by id; a `P` with a space refuses `instruction_path_not_importable`; instruction skills are not prefixed `developer-os-`; an override replaces a whole skill directory; `proposeClaudeUninstall` ignores a `codex`-owned row under the plugin root.
 - [ ] **Step 2: Run — deferred to phase close (D47)** · `npx vitest run --root packages/adapter-claude`
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -907,6 +931,8 @@ git commit -m "feat(adapter-claude): render instruction artifacts and V2 install
 ```
 
 ### Task 13: Codex `renderInstructionTree`, agent TOML and V2 proposals · M
+
+**Done 2026-09-22, `a55c9bf`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §4 (Codex column), §5.1 Codex content, §2.3 block bound.
 
@@ -935,10 +961,10 @@ export function proposeCodexInstall(…, managed: ReadonlyMap<string, ManagedArt
 export function proposeCodexUninstall(context: InstallContext, managed: ReadonlyMap<string, ManagedArtifactV2>): CodexInstallProposal;
 ```
 
-- [ ] **Step 1: Write failing tests** — `renderCodexVendorTree` contains the marketplace file, `.codex-plugin/plugin.json` and the six workflow skills; determinism under a reversed reader; the block body is the `rule` sections then the `scoped-rule` sections, sorted by id, each `## <id>` / `## <id> — applies only to paths matching: <globs>`; a block of `codexBlockBytes + 1` refuses `instruction_block_too_large`; output styles produce nothing and appear in `unsupported`; commands collapse to their skill; agent TOML contains exactly the observed key set and round-trips through `smol-toml` parse; `AGENTS.override.md` is never a target (assert over every rendered path).
+- [x] **Step 1: Write failing tests** — `renderCodexVendorTree` contains the marketplace file, `.codex-plugin/plugin.json` and the six workflow skills; determinism under a reversed reader; the block body is the `rule` sections then the `scoped-rule` sections, sorted by id, each `## <id>` / `## <id> — applies only to paths matching: <globs>`; a block of `codexBlockBytes + 1` refuses `instruction_block_too_large`; output styles produce nothing and appear in `unsupported`; commands collapse to their skill; agent TOML contains exactly the observed key set and round-trips through `smol-toml` parse; `AGENTS.override.md` is never a target (assert over every rendered path).
 - [ ] **Step 2: Run — deferred to phase close (D47)** · `npx vitest run --root packages/adapter-codex`
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -948,6 +974,8 @@ git commit -m "feat(adapter-codex): render instruction artifacts, agent TOML and
 ```
 
 ### Task 14: Codex registration (NEW-61) · M
+
+**Done 2026-09-22, `485ca5a`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §6.4 and its partial-state table.
 
@@ -968,10 +996,10 @@ export async function registerCodexPlugin(input: { runner: ProcessRunner; codexE
 export async function unregisterCodexPlugin(input: { runner: ProcessRunner; codexExecutable: string | null; codexHome: string }): Promise<{ readonly warning: string | null }>; // null executable → warning "codex registration not removed: codex CLI absent"
 ```
 
-- [ ] **Step 1: Write failing tests with an injected runner** — the runner receives argv arrays only and `env` exactly `{ CODEX_HOME: C }`; registration order is marketplace add (only if absent) → `plugin add developer-os@developer-os --json` (always) → `plugin list --json` whose `installed[].source.path` equals the plugin root with `enabled: true`; unregister order is `plugin remove` then `marketplace remove`, each skipped when `plugin list` shows it absent; every §6.4 table state is produced by fault injection (fail at each command); a present CLI that fails unregistration throws before any caller mutation.
+- [x] **Step 1: Write failing tests with an injected runner** — the runner receives argv arrays only and `env` exactly `{ CODEX_HOME: C }`; registration order is marketplace add (only if absent) → `plugin add developer-os@developer-os --json` (always) → `plugin list --json` whose `installed[].source.path` equals the plugin root with `enabled: true`; unregister order is `plugin remove` then `marketplace remove`, each skipped when `plugin list` shows it absent; every §6.4 table state is produced by fault injection (fail at each command); a present CLI that fails unregistration throws before any caller mutation.
 - [ ] **Step 2: Run — deferred to phase close (D47)** · `npx vitest run --root apps/cli src/instructions/codex-registration.test.ts`
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -982,6 +1010,8 @@ git commit -m "feat(cli): Codex plugin registration with closed partial states"
 
 ### Task 15: Checked-in plugin trees cover the default render · S
 
+**Done 2026-09-22, `60d6fa6`** (D47 lane: lint only, tests and review owed at phase close).
+
 Spec §3.1 "`npm run render:claude|render:codex`", §10.2 "render is deterministic".
 
 **Files:**
@@ -991,10 +1021,10 @@ Spec §3.1 "`npm run render:claude|render:codex`", §10.2 "render is determinist
 - Consumes: Tasks 12, 13.
 - Produces: `renderAllForClaude()` / `renderAllForCodex()` include the default instruction render read from the repository's `instructions/` (defaults only, no overrides). With Task 3's empty catalog the output is unchanged, so `plugins/**` does not change in this task.
 
-- [ ] **Step 1: Write failing tests** — the generated drift test enumerates the instruction files too (non-empty assertion guarded by the catalog having rows); a reversed directory reader yields identical bytes.
+- [x] **Step 1: Write failing tests** — the generated drift test enumerates the instruction files too (non-empty assertion guarded by the catalog having rows); a reversed directory reader yields identical bytes.
 - [ ] **Step 2: Run — deferred to phase close (D47)** · `npx vitest run tests/contracts/adapters tests/tools`
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -1004,6 +1034,8 @@ git commit -m "test(render): generated plugin trees include the default instruct
 ```
 
 ### Task 16: Attach planner · M
+
+**Done 2026-09-22, `4a77cf0`** (D47 lane: lint only, tests and review owed at phase close); refusal reason codes and exports for apply `0fa9391`.
 
 Spec §6.1 steps 1–4, §5.2 (write through `expectedBeforeHash`), §2.2 missing parents, §8 target refusals.
 
@@ -1035,10 +1067,10 @@ export async function planInstructionAttach(input: InstructionAttachInputV1): Pr
 export const UNPROVEN_CLAUDE_CATEGORIES: ReadonlySet<InstructionCategoryV1> = new Set(["rule", "scoped-rule", "output-style"]); // minus any category Task 2 proved unbilled
 ```
 
-- [ ] **Step 1: Write failing tests** (in-memory `fs`) — an unmanaged file at a `content` target refuses `instruction_target_occupied` (exit 3); a symlink at any component of a §2.2 target, including a linked `CLAUDE.md`/`AGENTS.md`, refuses `instruction_target_symlinked` (exit 5); missing parents become exact `directory` rows with `existedBefore: false`, existing parents are never rows; every §5.2 row, with the conflict refusal carrying `ConflictEvidence` and the §5.2 recovery text; the manifest rewrite is one `replace` guarded by `manifestHash`; `adapters.*` config values are written in the same mutation list; a pre-existing `CLAUDE.md` gets a block row with `existedBefore: true` and backup fields; an unchanged re-plan returns `noop`; `UNPROVEN_CLAUDE_CATEGORIES` filters those Claude categories out and reports them as held back (the tests pin both the initial value and the empty-set behaviour); the Claude plugin tree always includes the six workflow skills and `.claude-plugin/plugin.json`; the `adapters.*` config write and the config's manifest row are kept coherent exactly as `config set` keeps them (`apps/cli/src/commands/config.ts` `applyConfigValue`).
+- [x] **Step 1: Write failing tests** (in-memory `fs`) — an unmanaged file at a `content` target refuses `instruction_target_occupied` (exit 3); a symlink at any component of a §2.2 target, including a linked `CLAUDE.md`/`AGENTS.md`, refuses `instruction_target_symlinked` (exit 5); missing parents become exact `directory` rows with `existedBefore: false`, existing parents are never rows; every §5.2 row, with the conflict refusal carrying `ConflictEvidence` and the §5.2 recovery text; the manifest rewrite is one `replace` guarded by `manifestHash`; `adapters.*` config values are written in the same mutation list; a pre-existing `CLAUDE.md` gets a block row with `existedBefore: true` and backup fields; an unchanged re-plan returns `noop`; `UNPROVEN_CLAUDE_CATEGORIES` filters those Claude categories out and reports them as held back (the tests pin both the initial value and the empty-set behaviour); the Claude plugin tree always includes the six workflow skills and `.claude-plugin/plugin.json`; the `adapters.*` config write and the config's manifest row are kept coherent exactly as `config set` keeps them (`apps/cli/src/commands/config.ts` `applyConfigValue`).
 - [ ] **Step 2: Run — deferred to phase close (D47)** · `npx vitest run --root apps/cli src/instructions/attach.test.ts`
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -1048,6 +1080,8 @@ git commit -m "feat(cli): plan the instruction attach as one guarded transaction
 ```
 
 ### Task 17: Detach planner · M
+
+**Done 2026-09-22, `6cc72bf`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §6.3 steps 2–3, §6.2 deselection.
 
@@ -1072,10 +1106,10 @@ export type InstructionDetachPlanV1 =
 export async function planInstructionDetach(input: InstructionDetachInputV1): Promise<InstructionDetachPlanV1>;
 ```
 
-- [ ] **Step 1: Write failing tests** — every `content` row and every plugin-tree `file` row outside the product home is removed; a drifted file refuses exit 3 before any mutation is returned; a block equal to base → `replace` with the block bytes stripped, and a product-created file whose remainder is empty → `remove`; markers absent → row dropped, no write; anything else → refuse exit 3 with evidence; the whole-file backup is never restored; product-created parents are removed only when the plan empties them, deepest first, and a non-empty one is preserved and reported; `adapters.<vendor>` set to `false`; the resulting manifest holds only product-home rows when both vendors detach.
+- [x] **Step 1: Write failing tests** — every `content` row and every plugin-tree `file` row outside the product home is removed; a drifted file refuses exit 3 before any mutation is returned; a block equal to base → `replace` with the block bytes stripped, and a product-created file whose remainder is empty → `remove`; markers absent → row dropped, no write; anything else → refuse exit 3 with evidence; the whole-file backup is never restored; product-created parents are removed only when the plan empties them, deepest first, and a non-empty one is preserved and reported; `adapters.<vendor>` set to `false`; the resulting manifest holds only product-home rows when both vendors detach.
 - [ ] **Step 2: Run — deferred to phase close (D47)** · `npx vitest run --root apps/cli src/instructions/detach.test.ts`
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -1085,6 +1119,8 @@ git commit -m "feat(cli): plan the instruction detach; strip blocks, never resto
 ```
 
 ### Task 18: `init --adapters`: fresh install and reconcile (NEW-60) · M
+
+**Done 2026-09-22, `be9b6de`** (D47 lane: lint only, tests and review owed at phase close); Claude hooks bound into the attach by A13 Task 14, `a156b0c`.
 
 Spec §6.1, §6.2, Q2 A; §10.2 "init installs", "reconcile".
 
@@ -1107,11 +1143,11 @@ export async function applyInstructions(context: CliContext, input: {
 export interface InitOptions { readonly dryRun: boolean; readonly assumeYes: boolean; readonly adapters: AdapterSelectionV1 | null }
 ```
 
-- [ ] **Step 1: Write failing unit tests** (`apply.test.ts`, fixture without real init) — a selected vendor whose CLI is absent, unreadable or below its floor refuses `adapter_unavailable` (exit 4) before any mutation (discovery through `context.platform`); detach of deselected vendors runs first (unregister Codex, then the detach transaction), attach second; Codex registration runs only when the tree hash differs from the registration row or `plugin list` lacks the plugin, and success writes the registration row in a second small gated transaction; an unchanged re-run performs no transaction and no runner call; `release_mismatch` (exit 4) when the release's version differs from the manifest's `productVersion` or its `releaseIdentityHash` differs from `state/active-release.json`'s; no release and a needed instruction step → `packaged_release_unavailable` (exit 4).
-- [ ] **Step 2: Write failing v2 cases** (`init-instructions.v2.test.ts`, one shared home, chained) — fresh `init --adapters claude,codex` on a synthetic release with `instructions:` installs the six workflow skills, the plugin manifests, every fixture catalog artifact not in `UNPROVEN_CLAUDE_CATEGORIES` (Claude) and every one on Codex, and both blocks; fresh `init` without `--adapters` writes nothing in `H/.claude` or `C` and its output names `--adapters`; a failing attach (injected occupied target) exits 3 and leaves the handoff complete (a later `doctor` sees a valid V2 home); override add, change and removal each converge in one re-run; deselecting `codex` strips its block and unregisters.
+- [x] **Step 1: Write failing unit tests** (`apply.test.ts`, fixture without real init) — a selected vendor whose CLI is absent, unreadable or below its floor refuses `adapter_unavailable` (exit 4) before any mutation (discovery through `context.platform`); detach of deselected vendors runs first (unregister Codex, then the detach transaction), attach second; Codex registration runs only when the tree hash differs from the registration row or `plugin list` lacks the plugin, and success writes the registration row in a second small gated transaction; an unchanged re-run performs no transaction and no runner call; `release_mismatch` (exit 4) when the release's version differs from the manifest's `productVersion` or its `releaseIdentityHash` differs from `state/active-release.json`'s; no release and a needed instruction step → `packaged_release_unavailable` (exit 4).
+- [x] **Step 2: Write failing v2 cases** (`init-instructions.v2.test.ts`, one shared home, chained) — fresh `init --adapters claude,codex` on a synthetic release with `instructions:` installs the six workflow skills, the plugin manifests, every fixture catalog artifact not in `UNPROVEN_CLAUDE_CATEGORIES` (Claude) and every one on Codex, and both blocks; fresh `init` without `--adapters` writes nothing in `H/.claude` or `C` and its output names `--adapters`; a failing attach (injected occupied target) exits 3 and leaves the handoff complete (a later `doctor` sees a valid V2 home); override add, change and removal each converge in one re-run; deselecting `codex` strips its block and unregisters.
 - [ ] **Step 3: Run — deferred to phase close (D47)** · `npx vitest run --root apps/cli src/instructions/apply.test.ts src/main.test.ts` and `npx vitest run --root apps/cli src/commands/init-instructions.v2.test.ts`
-- [ ] **Step 4: Implement** — `applyInstructions` runs inside `withLifecycleMutation(context, lifecycle, work)`; `work` loads sources (Task 9), plans (Tasks 16/17), and calls `context.executor.execute({ kind: "instructions", mutations })`; registration and the registration-row transaction follow. In `init.ts`, the fresh path calls it after `initializeFresh` returns (not init-owned; the instruction check is not added to `INIT_OWNED_CHECKS`); `settleExistingV2` keeps its non-instruction drift refusal and resolves instruction rows through the planners instead of refusing. `init` exits with the instruction step's code.
-- [ ] **Step 5: Gate and commit**
+- [x] **Step 4: Implement** — `applyInstructions` runs inside `withLifecycleMutation(context, lifecycle, work)`; `work` loads sources (Task 9), plans (Tasks 16/17), and calls `context.executor.execute({ kind: "instructions", mutations })`; registration and the registration-row transaction follow. In `init.ts`, the fresh path calls it after `initializeFresh` returns (not init-owned; the instruction check is not added to `INIT_OWNED_CHECKS`); `settleExistingV2` keeps its non-instruction drift refusal and resolves instruction rows through the planners instead of refusing. `init` exits with the instruction step's code.
+- [x] **Step 5: Gate and commit**
 
 ```bash
 npm run lint
@@ -1121,6 +1157,8 @@ git commit -m "feat(init): install and reconcile instruction artifacts per selec
 ```
 
 ### Task 19: `uninstall` detaches before the drained uninstall · M
+
+**Done 2026-09-22, `022dc98`** (D47 lane: lint only, tests and review owed at phase close); uninstall dispatch and schema-row fixes `2c2aff6`, `4c1d005`; backup admissibility `b42b8a8`.
 
 Spec §6.3; §10.2 "uninstall".
 
@@ -1132,10 +1170,10 @@ Spec §6.3; §10.2 "uninstall".
 - Consumes: Tasks 14, 17 (`planInstructionDetach`, `unregisterCodexPlugin`).
 - Produces: no new exports; `uninstall` on a V2 home with vendor rows runs detach of every selected vendor through the same gated transaction path as Task 18, then the existing drained uninstall unchanged.
 
-- [ ] **Step 1: Write failing v2 cases** — detach runs before the drained uninstall, which then sees only product-home rows (assert the coordinator plan's artifact set); every vendor row is removed; a pre-existing `CLAUDE.md` keeps post-install user edits outside the block; a product-created `AGENTS.md` whose remainder is empty is deleted; a drifted managed file or edited block refuses exit 3 before any write; Codex unregistration runs before any file mutation, and an absent CLI is a warning; `P/instructions/**` survives, and a fresh `init --local-release … --adapters claude` after `uninstall` admits it.
+- [x] **Step 1: Write failing v2 cases** — detach runs before the drained uninstall, which then sees only product-home rows (assert the coordinator plan's artifact set); every vendor row is removed; a pre-existing `CLAUDE.md` keeps post-install user edits outside the block; a product-created `AGENTS.md` whose remainder is empty is deleted; a drifted managed file or edited block refuses exit 3 before any write; Codex unregistration runs before any file mutation, and an absent CLI is a warning; `P/instructions/**` survives, and a fresh `init --local-release … --adapters claude` after `uninstall` admits it.
 - [ ] **Step 2: Run — deferred to phase close (D47)** · `npx vitest run --root apps/cli src/lifecycle/uninstall-detach.v2.test.ts`
-- [ ] **Step 3: Implement** — detach precedes the envelope dispatch; the removable partition and Spec 1 §2.4's grammar are untouched.
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 3: Implement** — detach precedes the envelope dispatch; the removable partition and Spec 1 §2.4's grammar are untouched.
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -1145,6 +1183,8 @@ git commit -m "feat(uninstall): detach vendor instruction artifacts before drain
 ```
 
 ### Task 20: `doctor` names every artifact · M
+
+**Done 2026-09-22, `17b5010`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §7; §10.2 "doctor names every artifact"; scope decision 5.
 
@@ -1168,10 +1208,10 @@ export interface InstructionStatusV1 {
 // DoctorReportV1 gains `readonly instructions: readonly InstructionStatusV1[]` sorted by (owner, category, id).
 ```
 
-- [ ] **Step 1: Write failing tests** — every catalog artifact (read from the installed, manifest-hash-verified `…/bundle/instructions/catalog.json`), every override, and the `vendor-file` block are listed once per selected vendor; nothing for an unselected vendor; block members take `source`/`state` from `members` and the block's drift; a multi-file skill with one drifted file is `drifted`; Codex output styles are `unsupported-vendor`, scoped rules `emulated`; check `instructions` fails on `drifted`, `missing` or `block_malformed` and warns on `unsupported-vendor`; check `codex-registration` reports `fail: unregistered`, `fail: stale`, and with `--probe` `fail: cache-stale`; a set `CLAUDE_CONFIG_DIR` warns; neither new id is init-owned; human output is one line per artifact `<owner> <category>/<id>: <source>, <state>`; a user override flips exactly its row to `user`.
+- [x] **Step 1: Write failing tests** — every catalog artifact (read from the installed, manifest-hash-verified `…/bundle/instructions/catalog.json`), every override, and the `vendor-file` block are listed once per selected vendor; nothing for an unselected vendor; block members take `source`/`state` from `members` and the block's drift; a multi-file skill with one drifted file is `drifted`; Codex output styles are `unsupported-vendor`, scoped rules `emulated`; check `instructions` fails on `drifted`, `missing` or `block_malformed` and warns on `unsupported-vendor`; check `codex-registration` reports `fail: unregistered`, `fail: stale`, and with `--probe` `fail: cache-stale`; a set `CLAUDE_CONFIG_DIR` warns; neither new id is init-owned; human output is one line per artifact `<owner> <category>/<id>: <source>, <state>`; a user override flips exactly its row to `user`.
 - [ ] **Step 2: Run — deferred to phase close (D47)** · `npx vitest run --root apps/cli src/lifecycle/schema-registry.test.ts src/commands/doctor.test.ts` and `npx vitest run --root apps/cli src/commands/doctor-instructions.v2.test.ts`
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -1181,6 +1221,8 @@ git commit -m "feat(doctor): report every instruction artifact with its source a
 ```
 
 ### Task 21: Loading and isolation assertions (NEW-65, D8) · M
+
+**Partial 2026-09-23, `084f1ba`** (with `7b4a6aa`; NEW-102's Codex isolation implemented per D52, `5afa493`; D47 lane: lint only, tests and review owed at phase close). Owed: the founder-run real-vendor tests, including the Claude isolation observation (NEW-103) and the Codex re-observation (NEW-102).
 
 Spec §10.2 "loading is asserted", "ingest stays isolated". These tests run real vendor CLIs in
 disposable homes; they are written here and **run by the founder at Task 29**.
@@ -1194,11 +1236,11 @@ disposable homes; they are written here and **run by the founder at Task 29**.
 - Consumes: Task 15 (`renderAllFor*` with instructions), Task 18 (install through the CLI); Task 2's pinned commands and ingest-isolation method.
 - Produces: none.
 
-- [ ] **Step 1: Write the Claude assertion** — after installing the rendered tree into a temp home, `claude plugin details developer-os` lists every skill, agent and command by name (non-empty expected set first).
-- [ ] **Step 2: Write the Codex assertion** — `codex debug prompt-input` contains every skill and the `AGENTS.md` block; an in-place override change is invisible before re-registration and visible after `registerCodexPlugin`.
-- [ ] **Step 3: Write the isolation assertion** — with every instruction installed in a disposable home, each vendor's ingest argv yields a prompt input containing neither block marker nor any managed file's text, by Task 2's method. A failure stops the phase (D8 outranks A12).
-- [ ] **Step 4: Run — deferred to phase close (D47); FOUNDER STOP** · `npx vitest run tests/integration/claude tests/integration/codex tests/integration/ingest/instruction-isolation.test.ts`
-- [ ] **Step 5: Gate and commit**
+- [x] **Step 1: Write the Claude assertion** — after installing the rendered tree into a temp home, `claude plugin details developer-os` lists every skill, agent and command by name (non-empty expected set first).
+- [x] **Step 2: Write the Codex assertion** — `codex debug prompt-input` contains every skill and the `AGENTS.md` block; an in-place override change is invisible before re-registration and visible after `registerCodexPlugin`.
+- [x] **Step 3: Write the isolation assertion** — with every instruction installed in a disposable home, each vendor's ingest argv yields a prompt input containing neither block marker nor any managed file's text, by Task 2's method. A failure stops the phase (D8 outranks A12).
+- [ ] **Step 4: Run — deferred to phase close (D47); FOUNDER STOP** · `npx vitest run tests/integration/claude tests/integration/codex tests/integration/ingest/instruction-isolation.test.ts` — owed: founder runs the three integration files; NEW-102 and NEW-103 stay open until then
+- [x] **Step 5: Gate and commit**
 
 ```bash
 npm run lint
@@ -1208,6 +1250,8 @@ git commit -m "test(integration): assert instruction loading and ingest isolatio
 ```
 
 ### Tasks 22–26: Default content, founder in the loop · M each
+
+**Partial 2026-09-22.** Task 22: `2a6900b`, content review applied `e6f8877` (plus D51's scoped rules `comments`, `testing`, `lessons-code`). Task 23: output styles `b42e524`, review applied `b661663`; agents `e67243e`. Task 24: `c711414` (five skills; `release`, `rev-eng`, `wrap-up` refused by D51). Task 25: `34d9c9e` (eight skills; `claudeception` and `react-best-practices` are linked, not vendored, by D51, so the L1 stop no longer applies). Task 26: withdrawn by D51 (`research*`, `excalidraw-diagram` not vendored). Owed: the agent scan result is not recorded in these commits, the founder-local `--patterns` scan has not run, and no content review is recorded for `e67243e`, `c711414` or `34d9c9e`.
 
 Spec §3.3 clean room, §9 coverage. Every one of these tasks begins with a **FOUNDER STOP**: the
 founder supplies the named legacy artifacts' text through an owner-controlled process; the agent
@@ -1232,11 +1276,11 @@ sorted union). Task 25 adds the vendored license file inside `instructions/skill
 **Interfaces:** Consumes Task 3 (catalog file, scan tool) and Task 6 (catalog schema). Produces
 catalog rows.
 
-- [ ] **Step 1: FOUNDER STOP** — receive the batch's source texts.
-- [ ] **Step 2:** Write each redacted default and its catalog row; every file satisfies Task 6's bounds.
-- [ ] **Step 3:** Run the CI scan locally as a tool (not vitest): `npm run build && node tests/dist/tools/scan-instruction-defaults.js` — Expected: zero findings. **FOUNDER STOP:** the founder runs the same command with `--patterns <private-file>` (a file outside the repository, never committed) and reports the finding count.
-- [ ] **Step 4:** Independent content review by a fresh agent that authored none of it, over the diff only, before staging.
-- [ ] **Step 5: Gate and commit**
+- [x] **Step 1: FOUNDER STOP** — receive the batch's source texts. — received through the D50 staging directory
+- [x] **Step 2:** Write each redacted default and its catalog row; every file satisfies Task 6's bounds.
+- [ ] **Step 3:** Run the CI scan locally as a tool (not vitest): `npm run build && node tests/dist/tools/scan-instruction-defaults.js` — Expected: zero findings. **FOUNDER STOP:** the founder runs the same command with `--patterns <private-file>` (a file outside the repository, never committed) and reports the finding count. — owed: agent zero-finding run not recorded; founder-local `--patterns` scan not run
+- [ ] **Step 4:** Independent content review by a fresh agent that authored none of it, over the diff only, before staging. — done for Task 22 and Task 23's output styles; owed for `e67243e`, `c711414`, `34d9c9e`
+- [x] **Step 5: Gate and commit**
 
 ```bash
 npm run lint
@@ -1247,14 +1291,16 @@ git commit -m "feat(instructions): redacted defaults for <batch>" -m "Founder-lo
 
 ### Task 27: Regenerate the plugin trees from the finished defaults · S
 
+**Done 2026-09-22, `4160239`** (D47 lane: lint only, tests and review owed at phase close); after D51 the coverage set is 33 catalog rows, not 44 (`dfd2a3d`).
+
 **Files:** `plugins/claude/**`, `plugins/codex/**` (regenerated only).
 
 **Interfaces:** Consumes Tasks 15 and 22–26.
 
-- [ ] **Step 1:** `npm run render:claude && npm run render:codex`
-- [ ] **Step 2:** `git status --short plugins/` lists only files under `plugins/claude/` and `plugins/codex/`.
+- [x] **Step 1:** `npm run render:claude && npm run render:codex`
+- [x] **Step 2:** `git status --short plugins/` lists only files under `plugins/claude/` and `plugins/codex/`.
 - [ ] **Step 3: Run — deferred to phase close (D47)** · `npx vitest run tests/contracts/adapters tests/repository/instruction-coverage.test.ts tests/repository/instruction-defaults.test.ts` — Expected at close: PASS (coverage is exhaustive, 41 catalog rows + `brain-search` + 2 vendor files = 44; 43 if the founder refused `react-best-practices` under L1).
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -1265,14 +1311,16 @@ git commit -m "chore(plugins): regenerate vendor trees with the default instruct
 
 ### Task 28: Architecture notes and the threat model · S
 
+**Done 2026-09-22, `0ec066a`** (D47 lane: lint only, tests and review owed at phase close).
+
 Spec §11 rows whose documents are outside `docs/superpowers/`.
 
 **Files:** `docs/architecture/claude-adapter.md` (§2.2, §2.3 writes outside the plugin dir only to §2.2 rows, still no settings key, no style selected; §9.8 closed), `docs/architecture/codex-adapter.md` (§2.2 one marked block in `C/AGENTS.md`, never `AGENTS.override.md`, `durable_project_guidance` stays `not-used`; §11.9 and §11.14 closed), `docs/architecture/threat-model.md` (new §5.14 from spec §11.4, including the unsigned-local downgrade).
 
 **Interfaces:** Consumes Tasks 18–20 (so the notes describe what shipped).
 
-- [ ] **Step 1:** Mark each change "Amended <date> (A12)" in place.
-- [ ] **Step 2: Gate and commit**
+- [x] **Step 1:** Mark each change "Amended <date> (A12)" in place.
+- [x] **Step 2: Gate and commit**
 
 ```bash
 npm run lint
@@ -1282,6 +1330,8 @@ git commit -m "docs(architecture): A12 amendments and threat-model entry 5.14"
 ```
 
 ### Task 29: Phase close · founder
+
+**Open.** Nothing below has run; Task 21 Step 4, Task 2 Step 3 (NEW-101) and Tasks 22–26 Steps 3–4 feed it.
 
 **Interfaces:** Consumes every task above integrated on `development`.
 

@@ -144,6 +144,8 @@ These waves are derived from each task's `Consumes:` line. A task starts only wh
 
 ### Task 1: Lint classes `isolated` and `gap` · S
 
+**Done 2026-09-22, `85cd3b9`** (D47 lane: lint only, tests and review owed at phase close).
+
 Spec §5. This task maps the three roadmap names to shipped classes and adds two new ones. Both new classes have severity `info`, so `brain lint`'s exit code does not change.
 
 **Files:**
@@ -162,7 +164,7 @@ export type LintClass =
 const GAP_MIN_NOTES = 3;
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add a `describe("isolated")` and a `describe("gap")` to `lint.test.ts`. Build vaults with the file's existing in-memory helpers (`lint/testing.ts`), the way the `staleness` cases do:
 
@@ -218,11 +220,11 @@ Also cover these cases:
 - Findings stay sorted by the existing `lintBuild` comparator.
 - Determinism: the findings are identical under a reversed directory reader.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [ ] **Step 2: Run the tests and verify they fail** — deferred to phase close (D47)
 
 This run is deferred to phase close (D47). Task 16 runs `npx vitest run --root packages/brain src/lint/lint.test.ts`, where it must pass. There is no red run per task.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `lint.ts`:
 1. Widen `LintClass`.
@@ -230,11 +232,11 @@ In `lint.ts`:
 3. Add `gapFindings(build)`. For each `build.index.tags` entry whose `paths.length >= GAP_MIN_NOTES`, when no path in it belongs to an `IndexedNote` whose `type` is `"compiled-note"`, it emits a finding at the lowest path (`[...paths].sort((a, b) => compareCanonical(a, b) || compareRawBytes(a, b))[0]`). The key is `"tags"` and the message is `` `${String(paths.length)} notes share the tag ${renderValue(tag)} and no compiled note covers it` ``.
 4. Spread both functions into `lintBuild`'s findings array, before `driftFindings`. Import `compareRawBytes` from `../discovery/index.js`.
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 4: Run the tests** — deferred to phase close (D47)
 
 This run is deferred to phase close (D47).
 
-- [ ] **Step 5: Gate and commit**
+- [x] **Step 5: Gate and commit**
 
 ```bash
 npm run lint
@@ -244,6 +246,8 @@ git commit -m "feat(brain): add isolated and gap lint classes"
 ```
 
 ### Task 2: `CaptureEnvelopeV1.note` and the exported proposal path rule · S
+
+**Done 2026-09-22, `838d435`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §3.2. This task adds the note field to the envelope. Rendering and parsing change only when the field is non-null, and the deduplication hash stays content-only (R3).
 
@@ -273,7 +277,7 @@ export function isUnsafeProposedNotePath(path: string): boolean;
 
 Export `CaptureNoteTargetV1` and `isUnsafeProposedNotePath` from `capture/index.ts` or `ingest/index.ts` respectively, and from `src/index.ts`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // render.test.ts
@@ -314,11 +318,11 @@ it("keeps the deduplication hash content-only, so a note target does not change 
 
 `PRE_NOTE_FIXTURE_TEXT` is the expected text an existing render test already pins. Reuse it rather than writing a new one. In `proposal.test.ts`, assert that `isUnsafeProposedNotePath` agrees with `parseIngestProposal`'s `unsafe-path` refusal over that file's existing path cases.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [ ] **Step 2: Run the tests and verify they fail** — deferred to phase close (D47)
 
 Deferred to phase close (D47). Close runs `npx vitest run --root packages/brain src/capture src/ingest/proposal.test.ts`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 - `schema/capture.ts`: add the interface and the field.
 - `build.ts`: set `note: request.note ?? null` in the envelope. Do not touch `redactAndNormalize` or the id.
@@ -332,11 +336,11 @@ Deferred to phase close (D47). Close runs `npx vitest run --root packages/brain 
   - Put `note` in the returned envelope.
 - `proposal.ts`: rename `pathViolation` to `isUnsafeProposedNotePath`, export it, and update its one caller.
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 4: Run the tests** — deferred to phase close (D47)
 
 Deferred to phase close (D47).
 
-- [ ] **Step 5: Gate and commit**
+- [x] **Step 5: Gate and commit**
 
 ```bash
 npm run lint
@@ -346,6 +350,8 @@ git commit -m "feat(brain): add the note target to the capture envelope"
 ```
 
 ### Task 3: Wikilink occurrences, resolver and body rewriter · S
+
+**Done 2026-09-22, `04e2289`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §6.4. This task is the link machinery every refactor mode uses. It does not change `extractLinks` or the index.
 
@@ -378,7 +384,7 @@ export function rewriteWikilinks(
 export function withoutAnchor(tail: string): string; // "#h|d" → "|d"; "#h" → ""; "|d" → "|d"
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it("finds exactly the links extractLinks counts, in order", () => {
@@ -418,11 +424,11 @@ it.each([["#h|d", "|d"], ["#h", ""], ["|d", "|d"], ["", ""]])("withoutAnchor(%s)
 
 `buildFromNotes` and `note` are the same kind of in-memory helpers `lint/testing.ts` and `indexes/testing.ts` provide. Reuse them.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [ ] **Step 2: Run the tests and verify they fail** — deferred to phase close (D47)
 
 Deferred to phase close (D47). Close runs `npx vitest run --root packages/brain src/refactor/links.test.ts src/indexes`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `build.ts`:
 - **`findWikilinks`** masks code without moving offsets. It replaces every character of each `FENCED_CODE` match and then each `INLINE_CODE` match with a space, keeping `\n`. It then runs `/\[\[([^\]|#[]+)([^\]]*)\]\]/gu` (the same language as `WIKILINK`) over the masked text, and drops matches whose trimmed text is empty.
@@ -432,11 +438,11 @@ In `build.ts`:
 
 In `refactor/links.ts`, implement `rewriteWikilinks` by walking the occurrences in reverse order, so offsets stay valid, and implement `withoutAnchor`. `refactor/index.ts` re-exports both.
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 4: Run the tests** — deferred to phase close (D47)
 
 Deferred to phase close (D47).
 
-- [ ] **Step 5: Gate and commit**
+- [x] **Step 5: Gate and commit**
 
 ```bash
 npm run lint
@@ -446,6 +452,8 @@ git commit -m "feat(brain): find, resolve and rewrite wikilinks with offsets"
 ```
 
 ### Task 4: `developer-os capture --note` and note-aware `review` rows · M
+
+**Done 2026-09-22, `d5782fb`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §§3.1, 3.3. The capture writes to quarantine only. It reads the destination to prove containment and to bind the hash.
 
@@ -473,7 +481,7 @@ export interface ReviewedCaptureV1 {
 // main.ts: OPTIONS.note = { type: "string" }; COMMAND_OPTIONS.capture = ["text", "json", "note"]
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `capture.test.ts`, use the file's `installedFixture` (real `init`):
 
@@ -540,11 +548,11 @@ In `main.test.ts`:
 
 **Update the existing value assertions in the same commit.** `npm run lint` cannot find them. `CaptureResultV1` gains `note` and `ReviewedCaptureV1` gains `note` and `redactionCount`, so any existing `toStrictEqual` or `toEqual` over those objects fails at close. Find them with `grep -rn "duplicate: \|captures).toStrictEqual\|captures).toEqual\|redactionCount" apps/cli/src tests --include=*.test.ts`, add `note: null` (and `redactionCount`) where a plain capture is asserted, and stage every file you change.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [ ] **Step 2: Run the tests and verify they fail** — deferred to phase close (D47)
 
 Deferred to phase close (D47). Close runs `npx vitest run --root apps/cli src/commands/capture.test.ts src/commands/review.test.ts src/main.test.ts`. It also runs every file changed by the assertion update, plus `npm run test:e2e`, because `tests/e2e/knowledge-lifecycle/lifecycle.test.ts` asserts capture and review results.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `capture.ts`. When `options.note !== undefined`, do the following after `resolveText` and before `buildCapture`. Order matters: nothing is written until every check passes.
 
@@ -574,11 +582,11 @@ Both new error classes extend `CaptureRefusal`. Each sets `this.name` so that `k
 - Pass `note` into `runCapture` only when present, because of `exactOptionalPropertyTypes`.
 - `renderReview` appends `` `  ${renderPath(note.path)} (${n} redactions)` `` with `creates` or `replaces` to rows whose `note` is non-null.
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 4: Run the tests** — deferred to phase close (D47)
 
 Deferred to phase close (D47).
 
-- [ ] **Step 5: Gate and commit**
+- [x] **Step 5: Gate and commit**
 
 ```bash
 npm run lint
@@ -589,6 +597,8 @@ git commit -m "feat(cli): capture --note binds a destination and review shows it
 ```
 
 ### Task 5: Validators for a replacing note capture · S
+
+**Done 2026-09-22, `f53a881`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §§3.4, 5.1. The projection already overlays a replaced path: `projectionOf`'s `readFile` prefers the virtual map, and `readDir` de-duplicates names. So `duplicate-detection` needs no code change, only a pin. `source-and-provenance` gains the `created` check.
 
@@ -608,7 +618,7 @@ export interface IngestValidationContext {
 }
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it("passes a replacing note capture that keeps created and collides only with its own old bytes", async () => {
@@ -642,11 +652,11 @@ it("passes all nine when the projection carries only isolated and gap findings (
 
 `vaultWith`, `noteText`, `proposalOf` and `contextFor` stand for this file's existing fixture helpers. Extend `contextFor` with an optional `replaces`.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [ ] **Step 2: Run the tests and verify they fail** — deferred to phase close (D47)
 
 Deferred to phase close (D47). Close runs `npx vitest run --root packages/brain src/ingest/validate.test.ts`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `sourceAndProvenance`, pass `context`. When `context.replaces !== undefined`, find the proposed note whose `path === context.replaces`.
 - Read the current file with `context.brain.readFile(join(vaultRoot, config.contentRoot, context.replaces))` and parse both with `parseNote`.
@@ -657,11 +667,11 @@ In `sourceAndProvenance`, pass `context`. When `context.replaces !== undefined`,
 
 This makes `sourceAndProvenance` async, so `await` it in `validateProposal`. Do not touch `duplicateDetection`.
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 4: Run the tests** — deferred to phase close (D47)
 
 Deferred to phase close (D47).
 
-- [ ] **Step 5: Gate and commit**
+- [x] **Step 5: Gate and commit**
 
 ```bash
 npm run lint
@@ -671,6 +681,8 @@ git commit -m "feat(brain): a replacing note capture must keep the note's create
 ```
 
 ### Task 6: Refactor planner core: retire, rename, move, post-conditions, bound · M
+
+**Done 2026-09-22, `02c2be7`** (D47 lane: lint only, tests and review owed at phase close); refactor `71e0c70`.
 
 Spec §§6.2 (steps 1–4), 6.3 (first three rows), 6.4, 6.5, 6.6. This task is pure. It reads through an `IndexBuildRequest` and returns a plan.
 
@@ -732,7 +744,7 @@ export interface PreStateV1 { readonly build: IndexBuildResult; readonly files: 
 
 Until Task 9 lands, `planRefactor` refuses `merge` and `split` with `brain_refactor_input_invalid`, message `"not implemented"`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 it("retires a note nobody links to or cites: remove + create under _graveyard, bytes unchanged", async () => {
@@ -773,11 +785,11 @@ it("plans identically under a reversed directory reader", async () => { /* same 
 
 `memoryInput(files)` builds a `RefactorInputV1` over an in-memory map, using the same pattern `validate.ts`'s `projectionOf` uses. Put it in `plan.test.ts`.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [ ] **Step 2: Run the tests and verify they fail** — deferred to phase close (D47)
 
 Deferred to phase close (D47). Close runs `npx vitest run --root packages/brain src/refactor`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `vault.ts`, `overlayBuildRequest`:
 - `readFile` returns the overlay value, or throws ENOENT when the value is `null`, or else reads through `base`.
@@ -807,11 +819,11 @@ Deferred to phase close (D47). Close runs `npx vitest run --root packages/brain 
    - (c) Compare edges as a multiset of `(source, target)` pairs with self-edges dropped. The pre-state is mapped through `moves` and given `extraEdges`; it must equal the projection's multiset.
    - A failure throws `refactor_postcondition_failed`, naming the first differing finding or edge in the message.
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 4: Run the tests** — deferred to phase close (D47)
 
 Deferred to phase close (D47).
 
-- [ ] **Step 5: Gate and commit**
+- [x] **Step 5: Gate and commit**
 
 ```bash
 npm run lint
@@ -821,6 +833,8 @@ git commit -m "feat(brain): plan retire, rename and move with post-conditions"
 ```
 
 ### Task 7: Verbatim ingest of note captures · M
+
+**Done 2026-09-22, `e15fbdc`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §3.4. A note capture makes no vendor call, checks its precondition before `ingest-stage`, validates as a replacement, and applies `create` or `replace` with `expectedBeforeHash`.
 
@@ -844,7 +858,7 @@ export interface RunReportV1 { /* … */ readonly agent: AgentName | null;
 // recovery "developer-os review --id <id> --decision reject, then run the workflow again against the current note"
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Use `ingest.test.ts`'s existing installed fixture and fake-vendor helpers. Plant a vendor executable that exits 97, the way `installFakeExecutable`'s default does in `tests/helpers/temp-home.ts`. If the in-process fixture discovers agents through `FixtureOptions.agents` instead, register one whose runner records any spawn and fails the test.
 
@@ -884,11 +898,11 @@ it("resolves a vendor when a batch mixes plain and note captures, and ingests bo
 
 **Update the existing value assertions in the same commit.** `npm run lint` cannot find them. `RefusedCaptureV1`, `RunReportV1.refused[]` gain `reason`, and `agent` may now be `null`, so existing strict assertions over refusal reports fail at close. Find them with `grep -rn "leftAt:\|refused\|agent:" apps/cli/src tests --include=*.test.ts`, add `reason: null` where a plain refusal is asserted, and stage every file you change.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [ ] **Step 2: Run the tests and verify they fail** — deferred to phase close (D47)
 
 Deferred to phase close (D47). Close runs `npx vitest run --root apps/cli src/commands/ingest.test.ts`. It also runs every file changed by the assertion update, plus `tests/security/interruption.test.ts` and `tests/security/malformed-manifest.test.ts`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `ingest.ts`:
 
@@ -921,11 +935,11 @@ In `ingest.ts`:
    - The plain path is otherwise unchanged. `vendor` is non-null whenever a plain capture reaches `invokeVendor`; assert that with a thrown `Error` rather than `!`.
 5. **`reason` field.** Carry `reason` into `RefusedCaptureV1` as `error instanceof NoteChangedSinceCaptureRefusal ? error.reason : null`, and into `reportFields`.
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 4: Run the tests** — deferred to phase close (D47)
 
 Deferred to phase close (D47).
 
-- [ ] **Step 5: Gate and commit**
+- [x] **Step 5: Gate and commit**
 
 ```bash
 npm run lint
@@ -936,6 +950,8 @@ git commit -m "feat(cli): ingest note captures verbatim, bound to the capture-ti
 ```
 
 ### Task 8: The five workflows, `capture.writeNote`, and both rendered trees · M
+
+**Done 2026-09-22, `f1b72c7`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §§3.5, 4, and Appendix A.
 
@@ -955,7 +971,7 @@ Spec §§3.5, 4, and Appendix A.
   owner: "A12b", implemented: true, command: "developer-os capture --note" },
 ```
 
-- [ ] **Step 1: Write the contracts and the failing pins**
+- [x] **Step 1: Write the contracts and the failing pins**
 
 1. Copy the five YAML documents from spec Appendix A.1–A.5 verbatim. In A.2, A.3 and A.4, the capture step stays `do: capture.writeNote`, not the `capture.write` stand-in the spec used to validate.
 2. Add the `capture.writeNote` row to `EFFECT_VOCABULARY`, after `capture.write`, and the matching row to the exact-table pin in `vocabulary.test.ts`: `{ read: ["content/**"], write: quarantine, ...capture, owner: "A12b", command: "developer-os capture --note" }`, adapted to that file's local helper names.
@@ -991,7 +1007,7 @@ it("declares every brain-* workflow's writes as quarantine alone", () => {
    - `codex/generated.test.ts`: `toHaveLength(6)` → `11`, `toHaveLength(7)` → `12`, and `toHaveLength(5)` → `10`.
    - Update each comment's "six canonical workflows" to "eleven".
 
-- [ ] **Step 2: Render both trees**
+- [x] **Step 2: Render both trees**
 
 ```bash
 npm run render:claude
@@ -1003,11 +1019,11 @@ Expected: five new `SKILL.md` files in each tree and no other changed path.
 - Open `plugins/claude/skills/developer-os-brain-enhance/SKILL.md` and confirm that the `capture` step renders `developer-os capture --note` in its `text` block.
 - If A12 has already integrated and changed these trees, the renders include A12's artifacts. Rebase the literal counts on the actual rendered numbers and record both plans' contributions in the comment.
 
-- [ ] **Step 3: Run the tests**
+- [ ] **Step 3: Run the tests** — deferred to phase close (D47)
 
 Deferred to phase close (D47). Close runs `npx vitest run --root packages/workflow-schema src/vocabulary.test.ts`. It then runs `npx vitest run tests/contracts/workflows tests/contracts/adapters tests/tools`. The render-drift cases live there.
 
-- [ ] **Step 4: Gate and commit**
+- [x] **Step 4: Gate and commit**
 
 ```bash
 npm run lint
@@ -1021,6 +1037,8 @@ git commit -m "feat(workflows): add the five brain workflows and capture.writeNo
 If `git status --short plugins/` showed any other changed file, such as a plugin manifest, stage it by its exact path too.
 
 ### Task 9: Merge and split planners · M
+
+**Done 2026-09-22, `9eaa3e6`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §6.3, the `--merge` and `--split` rows. No frontmatter is edited except the split child's fresh frontmatter.
 
@@ -1039,7 +1057,7 @@ export function planSplit(state: PreStateV1, note: string, heading: string): Mod
 export function splitSlug(heading: string): string; // NFC lower-case, runs of non-[\p{L}\p{N}] → "-", "-" trimmed
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // merge.test.ts
@@ -1076,11 +1094,11 @@ it.each([["absent"], ["ambiguous: two ## Deep Dive"], ["a level-1 heading"], ["a
   "refuses %s", async () => { /* input_invalid, except occupied → refactor_destination_exists */ });
 ```
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [ ] **Step 2: Run the tests and verify they fail** — deferred to phase close (D47)
 
 Deferred to phase close (D47). Close runs `npx vitest run --root packages/brain src/refactor`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 - **`planMerge`**
   - Parse both notes. The target content is `renderNote({ header: target.header, body: `${target.body.trimEnd()}\n\n## ${sourceTitle}\n\n${source.body.trim()}\n` })`.
@@ -1102,11 +1120,11 @@ Deferred to phase close (D47). Close runs `npx vitest run --root packages/brain 
   - Rewrite links `[[<note>#<heading>…]]` whose anchor equals `heading` to the child, using `withoutAnchor`. Other links to the parent stay.
 - Dispatch both modes from `planRefactor`, which removes Task 6's "not implemented" refusal.
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 4: Run the tests** — deferred to phase close (D47)
 
 Deferred to phase close (D47).
 
-- [ ] **Step 5: Gate and commit**
+- [x] **Step 5: Gate and commit**
 
 ```bash
 npm run lint
@@ -1116,6 +1134,8 @@ git commit -m "feat(brain): plan merge and split refactors"
 ```
 
 ### Task 10: `developer-os brain retire` and `brain refactor` · M
+
+**Done 2026-09-22, `dd5ec23`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §§6.1, 6.2 (steps 5–7), 6.7, 6.8, 6.9.
 
@@ -1151,7 +1171,7 @@ export type BrainResultV1 = /* …existing arms… */ | BrainRefactorResultV1;
 export interface BrainOptions { /* …existing… */ readonly refactor?: RefactorRequestV1 }
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `main.test.ts`, the parser:
 ```ts
@@ -1193,11 +1213,11 @@ it.each([["brain_refactor_input_invalid", 2], ["retire_has_referrers", 3], ["ref
 
 `agent.test.ts` covers `anyAgentMarker` with `{}` → false, `CLAUDECODE: "1"` → true, `CLAUDECODE: "0"` → false, a non-empty `CODEX_THREAD_ID` → true, both → true, and an empty string → false.
 
-- [ ] **Step 2: Run the tests and verify they fail**
+- [ ] **Step 2: Run the tests and verify they fail** — deferred to phase close (D47)
 
 Deferred to phase close (D47). Close runs `npx vitest run --root apps/cli src/commands/refactor.test.ts src/main.test.ts` and `npx vitest run --root packages/brain src/capture/agent.test.ts`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 **`agent.ts`.** `anyAgentMarker(env)` is `AGENT_DETECTION_ROWS.some((row) => { const v = env[row.variable]; return v !== undefined && v.length > 0 && (row.value === null || row.value === v); })`.
 
@@ -1247,11 +1267,11 @@ Error classes follow `V2HomeAdmissionError`'s pattern: `this.name` is derived fr
   - `--split` → `{ note, heading }`
 - Change the help text's `brain` line to `reindex | lint | search <query> | status | retire <note> | refactor --rename|--move|--merge|--split <a> <b>`. Add one line per flag, for example `  --rename         rename <note> to <new-name> in its folder (brain refactor)`, and similar lines for `--move`, `--merge` and `--split`. Extend `--dry-run`'s parenthetical with `brain retire, brain refactor`.
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 4: Run the tests** — deferred to phase close (D47)
 
 Deferred to phase close (D47).
 
-- [ ] **Step 5: Gate and commit**
+- [x] **Step 5: Gate and commit**
 
 ```bash
 npm run lint
@@ -1262,6 +1282,8 @@ git commit -m "feat(cli): brain retire and brain refactor, refused inside agent 
 
 ### Task 11: Security cases for note captures and verbatim ingest · S
 
+**Done 2026-09-22, `5be3304`** (D47 lane: lint only, tests and review owed at phase close).
+
 Spec §7.4, the capture and ingest half. These cases run against the compiled binary.
 
 **Files:**
@@ -1271,7 +1293,7 @@ Spec §7.4, the capture and ingest half. These cases run against the compiled bi
 - Consumes: Task 4 (`capture --note`) and Task 7 (verbatim ingest). It uses the existing helpers `tests/security/helpers.ts` and `tests/helpers/{run-cli,temp-home}.ts`.
 - Produces: nothing consumed later.
 
-- [ ] **Step 1: Write the cases**
+- [x] **Step 1: Write the cases**
 
 ```ts
 describe("a note capture aimed outside a topic folder", () => {
@@ -1302,11 +1324,11 @@ it("leaves malformed-manifest.test.ts's plain-capture replace refusal in force",
 
 `installedHome`, `isVolatile` and `SENTINEL` come from `tests/security/helpers.ts` and `sentinel.test.ts`. Reuse their exports. If a helper is not exported, copy the few lines needed rather than editing the other security files.
 
-- [ ] **Step 2: Run the cases**
+- [ ] **Step 2: Run the cases** — deferred to phase close (D47)
 
 Deferred to phase close (D47). Close runs `npx vitest run tests/security/note-capture.test.ts`. Spec §7.4's "watched failing first" is met at close as Task 16 Step 3 describes.
 
-- [ ] **Step 3: Gate and commit**
+- [x] **Step 3: Gate and commit**
 
 ```bash
 npm run lint
@@ -1316,6 +1338,8 @@ git commit -m "test(security): note captures refuse escapes and replace only unc
 ```
 
 ### Task 12: E2E harness and `brain-answer`, `brain-report`, `brain-compile` · M
+
+**Done 2026-09-22, `d3cba24`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §7.2. Each test plays the agent. It runs, in step order, the `developer-os` commands that the **rendered** `plugins/claude/skills/developer-os-<id>/SKILL.md` names, drives the result through review and ingest, and asserts that the workflow step added nothing outside quarantine.
 
@@ -1344,7 +1368,7 @@ export async function acceptAndIngest(home: TempHome, captureId: string): Promis
 export function quarantineOnly(added: readonly string[], contentRoot: string): boolean;
 ```
 
-- [ ] **Step 1: Write the harness and three tests**
+- [x] **Step 1: Write the harness and three tests**
 
 1. **`skillSteps`** reads `plugins/claude/skills/developer-os-<id>/SKILL.md` from the repository root, located by `fileURLToPath(new URL("../../../", import.meta.url))`. That is the same expression as `tests/contracts/workflows/canonical.test.ts`'s `ROOT`: vitest runs the `.ts` sources in place, so the harness at `tests/e2e/brain-workflows/` is three levels below the root. It splits on `\n### `, takes `Effect: \`(.+?)\``, and takes the first `` ```text\n(.+?)\n``` `` in the section. The format is the one `developer-os-brain-search/SKILL.md` shows. It asserts that the parsed list is non-empty.
 2. **`installCannedCodex`** moves `vendorScript` out of `tests/e2e/knowledge-lifecycle/lifecycle.test.ts`. That means copying the function, with the reply framed as an `item.completed` `agent_message` exactly as that test builds it, and filling `tests/fixtures/knowledge/ingest-proposal.json`'s `__CAPTURE_ID__`. Leave `lifecycle.test.ts` unchanged.
@@ -1386,11 +1410,11 @@ it("writes nothing when file-back is false", async () => { /* run only the read 
      - It asserts that the capture's `note` is `{ path, beforeSha256: null }`.
      - Then it runs `acceptAndIngest`. That exits 0 with `agent: null`, the note's bytes equal the reviewed content plus `\n`, and `brain lint` has `errorCount` 0.
 
-- [ ] **Step 2: Run the tests**
+- [ ] **Step 2: Run the tests** — deferred to phase close (D47)
 
 Deferred to phase close (D47). Close runs `npm run test:e2e`, after `npm run build`. Record each file's duration for the `e2e` CI budget (40 minutes).
 
-- [ ] **Step 3: Gate and commit**
+- [x] **Step 3: Gate and commit**
 
 ```bash
 npm run lint
@@ -1400,6 +1424,8 @@ git commit -m "test(e2e): drive brain-answer, brain-report and brain-compile fro
 ```
 
 ### Task 13: The real-vendor gate test and `npm run test:vendor-brain` · S
+
+**Done 2026-09-22, `d2c999b`** (D47 lane: lint only, tests and review owed at phase close); the real-vendor run itself is Task 16 Step 5.
 
 Spec §7.3. The agent writes this test and never runs it: each run spends the founder's credits.
 
@@ -1411,7 +1437,7 @@ Spec §7.3. The agent writes this test and never runs it: each run spends the fo
 - Consumes: Task 4, Task 7 and Task 8.
 - Produces: the script `test:vendor-brain`, run by the founder at Task 16.
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 **Setup.**
 - Run only when `/usr/bin/which claude` succeeds **and** `process.env.DEVELOPER_OS_VENDOR_BRAIN_API_KEY` is non-empty (Plan decision 9). Otherwise mark the tests `it.skip`, the way `plugin-loads.test.ts` gates on `claude`.
@@ -1447,11 +1473,11 @@ it.each(Object.entries(PROMPTS))("%s loads and drives the CLI on a real Claude",
 - Append `--exclude 'integration/brain-workflows/**'` to `test:suite`.
 - Do **not** add `test:vendor-brain` to `check`.
 
-- [ ] **Step 2: Run the test**
+- [ ] **Step 2: Run the test** — owed: founder, real vendor (Task 16 Step 5)
 
 The agent never runs this. At Task 16 the founder runs it as a stop condition.
 
-- [ ] **Step 3: Gate and commit**
+- [x] **Step 3: Gate and commit**
 
 ```bash
 npm run lint
@@ -1462,6 +1488,8 @@ git commit -m "test(integration): real-vendor gate for the five brain workflows,
 
 ### Task 14: E2E `brain-enhance` and `brain-garden` · M
 
+**Done 2026-09-22, `4db919f`** (D47 lane: lint only, tests and review owed at phase close).
+
 Spec §7.2, the remaining two workflows.
 
 **Files:**
@@ -1471,7 +1499,7 @@ Spec §7.2, the remaining two workflows.
 - Consumes: Task 12's harness, and Task 10, because garden runs the printed `--dry-run` commands.
 - Produces: nothing.
 
-- [ ] **Step 1: Write the tests**
+- [x] **Step 1: Write the tests**
 
 **`brain-enhance`.**
 - Expected verbs: `["brain.readNote", "brain.readIndex", null, "brain.search", "brain.readNote", null, "capture.writeNote"]`.
@@ -1492,11 +1520,11 @@ Spec §7.2, the remaining two workflows.
 - Play the structural half. Run `brain retire PROJECTS/example-project-note.md --dry-run --json` and `brain refactor --merge DEV/garden-a.md DEV/garden-b.md --dry-run --json`. Both exit 0 with `transactionId: null`, and the inventory is unchanged.
 - Run the same `retire` without `--dry-run`, with `env: { CLAUDECODE: "1" }`. It exits 5 with `brain_refactor_in_agent_session`, and the inventory is unchanged.
 
-- [ ] **Step 2: Run the tests**
+- [ ] **Step 2: Run the tests** — deferred to phase close (D47)
 
 Deferred to phase close (D47). Close runs `npm run test:e2e`.
 
-- [ ] **Step 3: Gate and commit**
+- [x] **Step 3: Gate and commit**
 
 ```bash
 npm run lint
@@ -1506,6 +1534,8 @@ git commit -m "test(e2e): drive brain-enhance and brain-garden from their render
 ```
 
 ### Task 15: Refactor security cases and the `brain-refactor` interruption sweep · M
+
+**Done 2026-09-22, `49f84bd`** (D47 lane: lint only, tests and review owed at phase close).
 
 Spec §7.4, the refactor half.
 
@@ -1517,7 +1547,7 @@ Spec §7.4, the refactor half.
 - Consumes: Task 10.
 - Produces: nothing.
 
-- [ ] **Step 1: Write the cases**
+- [x] **Step 1: Write the cases**
 
 `brain-refactor.test.ts`:
 - `brain refactor --move DEV/example-knowledge-note.md TOOLS` through a topic folder that is a symlink, where `content/TOOLS` points outside the vault, exits 5 `brain_refactor_path_refused` and changes nothing.
@@ -1535,11 +1565,11 @@ Spec §7.4, the refactor half.
   - Assert that `repair --rollback <id>` restores the pre-state bytes of the moved note and the referrer, or, after `finalized`, that the post-state is complete.
 - Assert that `droveRefactor` equals the seven phases.
 
-- [ ] **Step 2: Run the cases**
+- [ ] **Step 2: Run the cases** — deferred to phase close (D47)
 
 Deferred to phase close (D47). Close runs `npx vitest run tests/security/brain-refactor.test.ts tests/security/interruption.test.ts`.
 
-- [ ] **Step 3: Gate and commit**
+- [x] **Step 3: Gate and commit**
 
 ```bash
 npm run lint
@@ -1549,6 +1579,8 @@ git commit -m "test(security): refactor refuses symlinks and agent sessions, and
 ```
 
 ### Task 16: Phase 5b closure · M
+
+**Open.** Nothing below has run: canonical-document amendments, `npm run check`, the red-first runs against `13eb18e`, the whole-phase review, and the founder's real-vendor gate.
 
 The orchestrator owns this task. Only it edits `docs/superpowers/`.
 
