@@ -534,7 +534,10 @@ export async function withLifecycleMutation<T>(
           ? {}
           : { standaloneFoundationId: resolution.standaloneFoundationId }),
       });
-    if (borrowed !== undefined && recovered.global !== borrowed.global) throw identityRefusal();
+    if (borrowed !== undefined && recovered.global !== borrowed.global) {
+      await recovered.global.release();
+      throw identityRefusal();
+    }
     held = recovered.global;
     requireResolvedClosure(recovered.snapshot, resolution, context.paths);
 

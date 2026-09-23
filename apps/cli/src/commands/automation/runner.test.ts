@@ -4,6 +4,7 @@ import {
   EXIT_CODES,
   LifecycleLockBusyError,
   LifecycleLockMissingError,
+  LifecycleRecoveryRequiredError,
   SCHEDULED_JOB_IDS,
   hashBytes,
   parseCanonicalAbsolutePathText,
@@ -87,6 +88,8 @@ interface RunnerFixtureOptions {
   readonly leaseAbsent?: boolean;
   readonly leaseBusy?: boolean;
   readonly leaseReplacedOnAcquire?: boolean;
+  /** The post-acquisition identity recheck itself refuses. */
+  readonly leaseRecheckRefuses?: boolean;
   readonly markerPresent?: boolean;
   readonly markerAfterLease?: boolean;
   readonly uninstallProof?: boolean;
@@ -113,6 +116,7 @@ function runnerFixture(options: RunnerFixtureOptions = {}) {
   const networkCalls: string[] = [];
   const authentications: ScheduledRunRequestV1[] = [];
   let inspections = 0;
+  let leaseRecheckArmed = false;
   let clockTick = 0;
   let nowMs = START_MS;
 
@@ -133,6 +137,7 @@ function runnerFixture(options: RunnerFixtureOptions = {}) {
         if (options.leaseBusy === true) return Promise.reject(new LifecycleLockBusyError(path));
         lockEvents.push("lease-acquired");
         if (options.leaseReplacedOnAcquire === true) files.set(leasePath, entry(leasePath, "101"));
+        if (options.leaseRecheckRefuses === true) leaseRecheckArmed = true;
         if (options.markerAfterLease === true) files.set(markerPath, entry(markerPath, "200", "96"));
         return Promise.resolve(held(path, "100", "lease"));
       }
@@ -157,7 +162,10 @@ function runnerFixture(options: RunnerFixtureOptions = {}) {
   };
 
   const fs = {
-    lstat: (path: CanonicalAbsolutePathV1) => Promise.resolve(files.get(path) ?? null),
+    lstat: (path: CanonicalAbsolutePathV1) =>
+      leaseRecheckArmed && path === leasePath
+        ? Promise.reject(new LifecycleRecoveryRequiredError("lifecycle_guarded_identity", [path]))
+        : Promise.resolve(files.get(path) ?? null),
   } as unknown as LifecycleGuardedFileSystemV1;
 
   const runner = new AutomationRunner({
@@ -312,6 +320,19 @@ describe("AutomationRunner lease", () => {
     const fixture = runnerFixture({ leaseReplacedOnAcquire: true, uninstallProof: true });
     expect(await fixture.runner.run(fixture.request)).toStrictEqual({ kind: "silent", reason: "lease_released_by_uninstall" });
     expect(fixture.lockEvents).toEqual(["lease-acquired", "lease-released"]);
+  });
+});
+
+describe("AutomationRunner lease error paths", () => {
+  it("releases an acquired lease whose identity recheck refuses, and reports the refusal", async () => {
+    const fixture = runnerFixture({ leaseRecheckRefuses: true });
+    expect(await fixture.runner.run(fixture.request)).toStrictEqual({
+      kind: "refused",
+      code: EXIT_CODES.recoveryRequired,
+      reason: "lifecycle_guarded_identity",
+    });
+    expect(fixture.lockEvents).toEqual(["lease-acquired", "lease-released"]);
+    expect(fixture.statuses).toEqual([]);
   });
 });
 

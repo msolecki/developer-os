@@ -162,17 +162,19 @@ export class AutomationRunner {
 
   async run(request: ScheduledRunRequestV1): Promise<ScheduledRunOutcomeV1> {
     const job = launchdJob(request.job).id;
-    if (await this.#markerPresent()) return silent("uninstalling");
-    const lease = await this.#acquireLease(job);
-    if (!("lock" in lease)) return lease;
     try {
-      return await this.#underLease({ job, generation: request.generation }, lease);
+      if (await this.#markerPresent()) return silent("uninstalling");
+      const lease = await this.#acquireLease(job);
+      if (!("lock" in lease)) return lease;
+      try {
+        return await this.#underLease({ job, generation: request.generation }, lease);
+      } finally {
+        await lease.lock.release();
+      }
     } catch (error) {
       const refusal = refused(error);
       if (refusal === null) throw error;
       return refusal;
-    } finally {
-      await lease.lock.release();
     }
   }
 
@@ -204,15 +206,18 @@ export class AutomationRunner {
       throw error;
     }
     const lease = { job, lock };
-    if (!(await this.#leaseStillBound(lease))) {
+    let bound: boolean;
+    let marker: boolean;
+    try {
+      bound = await this.#leaseStillBound(lease);
+      marker = bound && (await this.#markerPresent());
+    } catch (error) {
       await lock.release();
-      return this.#missingLease(job);
+      throw error;
     }
-    if (await this.#markerPresent()) {
-      await lock.release();
-      return silent("uninstalling");
-    }
-    return lease;
+    if (!bound || marker) await lock.release();
+    if (!bound) return this.#missingLease(job);
+    return marker ? silent("uninstalling") : lease;
   }
 
   async #missingLease(job: ScheduledJobIdV1): Promise<ScheduledRunOutcomeV1> {
@@ -477,9 +482,10 @@ export function createAutomationRunnerDependencies(
       manifestAdmission: gateManifestAdmission(context),
       effectiveUid: lifecycle.effectiveUid,
     });
-  const closureOf = async (): Promise<LifecycleJournalClosureV1["kind"]> => {
+  /** `underGlobal` is false only for step 2's lock-free recheck, which must never write. */
+  const closureOf = async (underGlobal: boolean): Promise<LifecycleJournalClosureV1["kind"]> => {
     const admitted = await admit();
-    await requireLifecycleStagingRoot(lifecycle, context.paths);
+    if (underGlobal) await requireLifecycleStagingRoot(lifecycle, context.paths);
     const residue = residueFrom(
       await inspectBootstrapEvidenceAdmission(
         createBootstrapEvidenceInspectionRequest({
@@ -511,7 +517,7 @@ export function createAutomationRunnerDependencies(
       authenticateScheduledGeneration(request, { ...installation, productHome, manifest, plistBytes });
     },
     inspect: async (job) => ({
-      closure: await closureOf(),
+      closure: await closureOf(true),
       eligibility: await scheduledEligibility(context, lifecycle, job),
     }),
     leaseRemovedByUninstall: async (job) => {
@@ -520,7 +526,13 @@ export function createAutomationRunnerDependencies(
       if (manifest === null) return true;
       // identity-free stat: absence of the bound lease path is the whole of the proof read here.
       const leaseGone = (await lifecycle.fs.lstat(automationRunnerLeasePath(productHome, job))) === null;
-      return leaseGone && (await closureOf()) === "uninstall_draining";
+      if (!leaseGone) return false;
+      try {
+        return (await closureOf(false)) === "uninstall_draining";
+      } catch (error) {
+        if (refused(error) === null) throw error;
+        return false;
+      }
     },
     records: (global) =>
       new AutomationRuntimeRecordStore({
