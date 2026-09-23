@@ -53,3 +53,17 @@ export type {
   SupportedGitExecutableV1,
   SupportedGitProcessTableV1,
 } from "./types.js";
+export { admittingGitIdentityProbe, GitProcessSupervisor } from "./supervisor.js";
+export type {
+  GitConcreteProcessRequestV1,
+  GitEnvironmentSlotValuesV1,
+  GitExecutableIdentityProbeV1,
+  GitProcessAdmissionV1,
+  GitProcessEvidenceV1,
+  GitProcessIntentV1,
+  GitProcessPermitV1,
+  GitProcessPhaseV1,
+  GitProcessStdinClassV1,
+  GitProcessSupervisorV1,
+  GitPushPhaseV1,
+} from "./supervisor.js";
