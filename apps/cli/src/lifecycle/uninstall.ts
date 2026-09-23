@@ -31,6 +31,8 @@ import {
   formatAllocatedLifecycleId,
   foundationParticipantPlanHash,
   hashBytes,
+  hashCanonicalJson,
+  LAUNCHD_PROCESS_STAGING_CHILDREN,
   loadConfig,
   CODEX_INGEST_HOME_RELATIVE_PATH,
   HOOK_FIRING_RECORDS_RELATIVE_PATH,
@@ -41,6 +43,7 @@ import {
   MAX_HOOK_FIRING_RECORD_CHILDREN,
   maximumCoordinatorJournalBytes,
   parseCanonicalAbsolutePathText,
+  parseEffectiveUid,
   parseLifecycleCoordinatorId,
   parseManifestParticipantId,
   reserveLifecycleIdBlock,
@@ -48,9 +51,11 @@ import {
 } from "@developer-os/core";
 import type {
   CanonicalAbsolutePathV1,
+  CanonicalJsonValue,
   FoundationParticipantRefV1,
   HeldLifecycleStableLockV1,
   InstallationManifestV2,
+  LaunchdEffectIdV1,
   LifecycleCoordinatorBoundaryV1,
   LifecycleCoordinatorIdV1,
   LifecycleBookkeepingObservationV1,
@@ -62,11 +67,44 @@ import type {
   LifecycleParticipantAdaptersV1,
   LowerHexSha256,
   ManagedArtifactV1,
+  ManagedArtifactV2,
   ManifestAdmissionContextV1,
   ManifestStatePlanV1,
   RuntimePaths,
   ScheduledJobIdV1,
 } from "@developer-os/core";
+import {
+  LAUNCHD_PREVIEW_OBSERVATION_TABLE,
+  LaunchdDistributionUnsupportedError,
+  LaunchdEffectJournalStore,
+  MAX_LAUNCHD_PLIST_BYTES,
+  SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
+  assertLaunchdPlanBindings,
+  buildLaunchdPlanPreview,
+  launchdEffectPlan,
+  launchdGuiDomain,
+  launchdObservationProcessTableHash,
+  launchdPlistPath,
+  launchdProcessTableHash,
+  launchdProcessTableTemplateHash,
+  loadLaunchdProcessTable,
+  parseCanonicalLaunchdPlist,
+  parseGeneratedLabel,
+  parseScheduledProductHome,
+  planLaunchdTransitions,
+} from "@developer-os/platform-macos";
+import type {
+  GeneratedLaunchdLabelV1,
+  LaunchdBootstrapPlistIdentityV1,
+  LaunchdGenerationV1,
+  LaunchdLiveStateV1,
+  LaunchdObserver,
+  LaunchdPlanPreviewV1,
+  LaunchdPlanV1,
+  LaunchdPriorJobStateV1,
+  LifecycleFileBindingV1,
+  SupportedLaunchdProcessTableTemplateV1,
+} from "@developer-os/platform-macos";
 
 import { createCanonicalPathEvidence, createOwnerPathAdmission } from "../bootstrap/admission.js";
 import type { BootstrapEvidenceAdmissionV1 } from "../bootstrap/report.js";
@@ -89,12 +127,12 @@ import { unregisterCodexPlugin } from "../instructions/codex-registration.js";
 import { planInstructionDetach } from "../instructions/detach.js";
 import type { InstructionDetachInputV1, InstructionDetachPlanV1, InstructionFileSystemV1 } from "../instructions/detach.js";
 import { resolveVendorHomes } from "../instructions/vendor-homes.js";
+import { createLifecycleEffectAdapters } from "./adapters.js";
 import { observeLifecycleActivationRecord, observeManifestSchema, V2HomeAdmissionError } from "./admission.js";
 import type { AdmittedV2HomeV1 } from "./admission.js";
 import {
   lifecyclePushPlanHash,
   lifecycleVariantFacts,
-  LifecycleUnsupportedLeafError,
   uninstallLeasePaths,
 } from "./codecs.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
@@ -130,6 +168,8 @@ const MAX_JOURNAL_BYTES = 1_048_576;
 const FOUNDATION_BINDINGS_DOMAIN = "developer-os/manifest-foundation-bindings/v1\0";
 const WIDEST_UINT64 = "18446744073709551615";
 const WIDEST_HASH = "f".repeat(64);
+/** No core codec hashes a `ManifestStatePlanV1` yet, and `assertLaunchdPlanBindings` does not recompute this one. */
+const MANIFEST_STATE_PLAN_DOMAIN = "developer-os:manifest-state-plan:v1";
 
 const encoder = new TextEncoder();
 
@@ -194,13 +234,21 @@ export class UninstallCapacityError extends Error {
 }
 
 /**
- * `failureFrom` publishes `kindOf(name)`, and the published contract for every 1b-deferred arm
- * is its `reason`, so the name is spelled to make the two equal — the same rule
- * `LifecycleMutationRefusal` and `V2HomeAdmissionError` follow, with a digit in the reason.
+ * Residual 10 (D59): a launchctl row this host no longer matches cannot `bootout`, so uninstall
+ * preserves every file and names the manual unload for each installed generated label.
+ * `failureFrom` publishes `kindOf(name)`, so the name is spelled to make it the `reason`.
  */
-function refuseUnsupportedUntilPlan1b(arm: string): never {
-  const error = new LifecycleUnsupportedLeafError(arm);
-  error.name = "Unsupported_until_plan_1bError";
+function refuseUnsupportedLaunchd(
+  uid: number,
+  labels: readonly GeneratedLaunchdLabelV1[],
+  cause: LaunchdDistributionUnsupportedError,
+): never {
+  const detail = cause.message.replace(/^unsupported_launchd_distribution: /u, "");
+  const manual = labels.length === 0
+    ? "no generated label is installed"
+    : `unload by hand: ${labels.map((label) => `launchctl bootout gui/${String(uid)}/${label}`).join("; ")}`;
+  const error = new LaunchdDistributionUnsupportedError(`${detail}; every file is preserved; ${manual}`, { cause });
+  error.name = "Unsupported_launchd_distributionError";
   throw error;
 }
 
@@ -297,6 +345,15 @@ export function chunkUninstallArtifacts<T>(
   return chunks.length === 0 ? [[]] : chunks;
 }
 
+/** What `P` binds: the all-`remove` preview, the retained plist inodes, and the pinned mutation template. */
+interface UninstallLaunchdInputsV1 {
+  readonly preview: LaunchdPlanPreviewV1;
+  readonly identities: ReadonlyMap<ScheduledJobIdV1, LaunchdBootstrapPlistIdentityV1>;
+  readonly template: SupportedLaunchdProcessTableTemplateV1;
+  /** Bound once the coordinator's `launchd-process` staging exists; null on the conservative pass. */
+  processTableHash: LowerHexSha256 | null;
+}
+
 interface UninstallPlanInputsV1 {
   readonly productHome: CanonicalAbsolutePathV1;
   readonly configPath: CanonicalAbsolutePathV1;
@@ -308,12 +365,13 @@ interface UninstallPlanInputsV1 {
   readonly markerPreimage: ArtifactMutationV1;
   readonly chunks: readonly (readonly ArtifactMutationV1[])[];
   readonly createdAt: string;
+  readonly launchd: UninstallLaunchdInputsV1 | null;
   refs: readonly FoundationParticipantRefV1[] | null;
 }
 
-/** D28's block: `lc`, the marker pair, one pair per artifact step, then `mf` last. */
+/** D28's block: `lc`, the marker pair, one pair per artifact step, the `P` effect's `le`, then `mf` last. */
 function slotCountOf(inputs: UninstallPlanInputsV1): number {
-  return 4 + 2 * inputs.chunks.length;
+  return 4 + 2 * inputs.chunks.length + (inputs.launchd === null ? 0 : 1);
 }
 
 /**
@@ -387,12 +445,16 @@ function reservationFor(inputs: UninstallPlanInputsV1): LifecycleLeafReservation
     foundationJournals: 3 * refs,
     coordinatorJournals: 3,
     gitEffectJournals: 0,
-    launchdEffectJournals: 0,
+    /** The `P` effect's plan, journal, lock and one rewrite temp. */
+    launchdEffectJournals: inputs.launchd === null ? 0 : 4,
     /** Marker forward and its inverse stage one blob each; the artifact inverse stages one per row. */
     foundationStaging: refs + 3 * (1 + 1 + artifacts),
     foundationBackups: refs + 5 * (1 + 1 + artifacts),
-    /** The coordinator directory, its `foundation` child, one directory and one journal per ref. */
-    lifecycleStaging: 2 + 2 * refs,
+    /**
+     * The coordinator directory, its `foundation` child, one directory and one journal per ref,
+     * and for `P` the `launchd-process` root, `home`, `tmp` and one bootstrap snapshot.
+     */
+    lifecycleStaging: 2 + 2 * refs + (inputs.launchd === null ? 0 : 4),
   };
 }
 
@@ -434,6 +496,68 @@ function manifestLeafOf(
   };
 }
 
+function byUtf8(left: string, right: string): number {
+  return Buffer.compare(Buffer.from(left), Buffer.from(right));
+}
+
+/**
+ * Spec §5.3's uninstall `LaunchdPlanV1`: every entry a `remove`, `config`, the activation record
+ * when it is an artifact and every plist bound to the exact removal in its artifact step, and a
+ * reverse bootstrap bound to the retained inode of each loaded label.
+ */
+function uninstallLaunchdPlan(
+  inputs: UninstallPlanInputsV1,
+  launchd: UninstallLaunchdInputsV1,
+  coordinatorId: string,
+  effectId: string,
+  artifactForwards: readonly FoundationParticipantRefV1[],
+  manifest: ManifestStatePlanV1,
+): LaunchdPlanV1 {
+  const removals = new Map<string, LifecycleFileBindingV1>();
+  inputs.chunks.forEach((chunk, index) => {
+    const participantId = (artifactForwards[index]?.id ?? null) as LifecycleFileBindingV1["participantId"];
+    for (const mutation of chunk) {
+      removals.set(mutation.targetPath, {
+        participantId,
+        targetPath: mutation.targetPath,
+        expectedBeforeHash: mutation.hash,
+        afterHash: null,
+      });
+    }
+  });
+  const removal = (path: CanonicalAbsolutePathV1): LifecycleFileBindingV1 =>
+    removals.get(path) ?? refuse("uninstall_launchd_file_unbound", path);
+  return planLaunchdTransitions({
+    coordinatorId: coordinatorId as LifecycleCoordinatorIdV1,
+    coordinatorOperation: "uninstall",
+    previewHash: null,
+    processTableHash: launchd.processTableHash ?? (WIDEST_HASH as LowerHexSha256),
+    preview: launchd.preview,
+    config: removal(inputs.configPath),
+    activation: removals.get(inputs.activationPath) ?? null,
+    plistFiles: launchd.preview.entries
+      .map((entry) => removal(entry.plistPath))
+      .sort((left, right) => byUtf8(left.targetPath, right.targetPath)),
+    manifest: {
+      path: inputs.manifestPath,
+      statePlanHash: hashCanonicalJson(MANIFEST_STATE_PLAN_DOMAIN, manifest as unknown as CanonicalJsonValue),
+      before: { state: "present", hash: inputs.manifestHash },
+      after: { state: "absent" },
+    },
+    beforeFilesEffectId: effectId as LaunchdEffectIdV1,
+    afterFilesEffectId: null,
+    bootstrapPlists: Object.fromEntries(
+      launchd.preview.entries.map((entry) => [
+        entry.job,
+        {
+          before: entry.beforeLiveState.state === "loaded" ? (launchd.identities.get(entry.job) ?? null) : null,
+          after: null,
+        },
+      ]),
+    ),
+  });
+}
+
 /** The builder closes over its inputs so `execute` can bind the staged refs before it rebuilds. */
 const BUILDER_INPUTS = new WeakMap<object, UninstallPlanInputsV1>();
 
@@ -444,7 +568,9 @@ function uninstallBuilder(
     slotCount: slotCountOf(inputs),
     build(ids: readonly string[]) {
       const coordinatorId = String(ids[0]);
-      const participantIds = ids.slice(1, -1);
+      const launchdInputs = inputs.launchd;
+      const participantIds = ids.slice(1, launchdInputs === null ? -1 : -2);
+      const effectId = String(ids.at(-2));
       const manifestId = String(ids.at(-1));
       const refs = inputs.refs ?? placeholderRefs(inputs, coordinatorId, participantIds);
       /**
@@ -461,9 +587,24 @@ function uninstallBuilder(
         throw new Error("the uninstall builder needs the marker pair and one pair per artifact step");
       }
       /** §8.1's plan codec requires `participants.foundation` in unsigned UTF-8 order by id. */
-      const sorted = [...refs].sort((left, right) =>
-        Buffer.compare(Buffer.from(left.id), Buffer.from(right.id)),
+      const sorted = [...refs].sort((left, right) => byUtf8(left.id, right.id));
+      const manifest = manifestLeafOf(
+        inputs,
+        coordinatorId,
+        manifestId,
+        forwards.map((ref) => ref.id),
       );
+      /** The conservative pass's placeholders are all `tx_` IDs of the widest width, which `le_` keeps. */
+      const launchd = launchdInputs === null
+        ? null
+        : uninstallLaunchdPlan(
+            inputs,
+            launchdInputs,
+            coordinatorId,
+            inputs.refs === null ? `le${effectId.slice(2)}` : effectId,
+            artifactForwards,
+            manifest,
+          );
       const base: LifecycleExecutionPlanV1 = {
         schemaVersion: 1,
         id: coordinatorId as LifecycleCoordinatorIdV1,
@@ -476,21 +617,16 @@ function uninstallBuilder(
           activationPath: inputs.activationPath,
           manifestPath: inputs.manifestPath,
           repositoryRoot: null,
-          plistPaths: [],
+          plistPaths: launchd === null ? [] : launchd.plistFiles.map((binding) => binding.targetPath),
         },
         participants: {
           foundation: sorted,
-          manifest: manifestLeafOf(
-            inputs,
-            coordinatorId,
-            manifestId,
-            forwards.map((ref) => ref.id),
-          ),
+          manifest,
           sourceGitEffect: null,
           destinationGitEffect: null,
-          launchdBeforeFiles: null,
+          launchdBeforeFiles: launchd?.beforeFilesEffect ?? null,
           launchdAfterFiles: null,
-          launchd: null,
+          launchd,
           redactionKey: {
             schemaVersion: 1,
             coordinatorId: coordinatorId as LifecycleCoordinatorIdV1,
@@ -505,6 +641,9 @@ function uninstallBuilder(
         push: null,
         steps: [
           { kind: "foundation", slot: "uninstall_marker", participantId: markerForward.id },
+          ...(launchd === null || launchd.beforeFilesEffect === null
+            ? []
+            : [{ kind: "launchd_before_files" as const, participantId: launchd.beforeFilesEffect.id }]),
           { kind: "drain_runners" },
           ...artifactForwards.map((ref) => ({
             kind: "foundation" as const,
@@ -518,10 +657,10 @@ function uninstallBuilder(
           { kind: "manifest", transition: "finalize_tombstones" },
         ],
       };
-      return {
-        plan: { ...base, maximumJournalBytes: maximumCoordinatorJournalBytes(base) },
-        reservation: reservationFor(inputs),
-      };
+      const plan = { ...base, maximumJournalBytes: maximumCoordinatorJournalBytes(base) };
+      /** Refused before intent rather than at `P`'s apply: the staged refs are real only on this pass. */
+      if (launchd !== null && inputs.refs !== null) assertLaunchdPlanBindings(launchd, plan);
+      return { plan, reservation: reservationFor(inputs) };
     },
   };
   BUILDER_INPUTS.set(builder, inputs);
@@ -931,7 +1070,8 @@ export function createUninstallAdapters(input: {
     },
     sourceGitEffect: null,
     destinationGitEffect: null,
-    launchdBeforeFiles: null,
+    launchdBeforeFiles: createLifecycleEffectAdapters(request.lifecycle, request.lifecycle.effectPorts())
+      .launchdBeforeFiles,
     launchdAfterFiles: null,
     networkPush: null,
     drainRunners: { drain: (_plan, global) => drain(global) },
@@ -1055,6 +1195,206 @@ async function planningPaths(context: CliContext): Promise<RuntimePaths> {
   return runtimePathsFor(context, config ?? undefined);
 }
 
+interface UninstallLaunchdRowV1 {
+  readonly job: ScheduledJobIdV1;
+  readonly label: GeneratedLaunchdLabelV1;
+  readonly generation: LaunchdGenerationV1;
+  readonly executablePath: CanonicalAbsolutePathV1;
+  readonly identity: LaunchdBootstrapPlistIdentityV1;
+  readonly mutation: ArtifactMutationV1;
+}
+
+/**
+ * §6's closed external-file authorization for one installed plist: an exact `macos` content row
+ * that existed only because of this installation, no symlink on its path, a private regular file
+ * holding the installed bytes, and a label and product home that are this installation's.
+ */
+async function admitPlistRow(
+  request: LifecycleUninstallRequestV1,
+  job: ScheduledJobIdV1,
+  artifact: ManagedArtifactV2,
+): Promise<UninstallLaunchdRowV1> {
+  const { context, lifecycle } = request;
+  const path = canonical(artifact.path);
+  const installedHash = artifact.kind === "file" && artifact.verification.mode === "content"
+    ? artifact.verification.installedHash
+    : null;
+  if (
+    artifact.owner !== "macos" ||
+    artifact.existedBefore ||
+    installedHash === null ||
+    (await context.guards.canonicalize(path)) !== path
+  ) {
+    refuse("uninstall_plist_row", path);
+  }
+  const entry = await guardedEntry(lifecycle.fs, path);
+  if (
+    entry?.kind !== "regular_file" ||
+    entry.ownerUid !== lifecycle.effectiveUid ||
+    entry.mode !== 0o600 ||
+    entry.nlink !== 1
+  ) {
+    return refuse("uninstall_plist_shape", path);
+  }
+  const content = await lifecycle.fs.readRegular(entry, MAX_LAUNCHD_PLIST_BYTES);
+  const hash = digestOf(content);
+  if (hash !== installedHash) {
+    throw new UninstallRefusal(
+      EXIT_CODES.decisionRequired,
+      "an installed automation plist was modified after installation; resolve it before removing",
+      [path],
+    );
+  }
+  let label: GeneratedLaunchdLabelV1;
+  let argv: readonly string[];
+  let parsed: ReturnType<typeof parseGeneratedLabel>;
+  try {
+    const plist = parseCanonicalLaunchdPlist(content);
+    label = plist.Label;
+    argv = plist.ProgramArguments;
+    parsed = parseGeneratedLabel(label);
+  } catch {
+    return refuse("uninstall_plist_bytes", path);
+  }
+  if (parsed.job !== job || argv[6] !== request.key.productHome) refuse("uninstall_plist_foreign", path);
+  return {
+    job,
+    label,
+    generation: parsed.generation,
+    executablePath: canonical(String(argv[0])),
+    identity: {
+      path,
+      ownerUid: parseEffectiveUid(entry.ownerUid, lifecycle.effectiveUid),
+      mode: 384,
+      nlink: 1,
+      size: content.byteLength,
+      hash,
+      dev: entry.dev,
+      ino: entry.ino,
+    },
+    mutation: { targetPath: path, hash, content },
+  };
+}
+
+/** One bounded read-only pass through the preview row: each label's closed candidate set. */
+async function observeLabels(
+  observer: Pick<LaunchdObserver, "observe">,
+  uid: number,
+  rows: readonly UninstallLaunchdRowV1[],
+  productHome: CanonicalAbsolutePathV1,
+): Promise<ReadonlyMap<ScheduledJobIdV1, LaunchdLiveStateV1>> {
+  const live = new Map<ScheduledJobIdV1, LaunchdLiveStateV1>();
+  if (rows.length === 0) return live;
+  const observed = await observer.observe({
+    domain: launchdGuiDomain(parseEffectiveUid(uid, uid)),
+    jobs: rows.map((row) => ({ job: row.job, retained: row.label, planned: null })),
+  });
+  if (observed.kind === "unobservable") refuse("launchd_unobservable", productHome);
+  rows.forEach((row, index) => {
+    const state = observed.jobs[index]?.job === row.job ? observed.jobs[index].state : null;
+    if (state?.kind === "unloaded") {
+      live.set(row.job, { state: "unloaded" });
+    } else if (state?.kind === "exact_old" || state?.kind === "exact_new") {
+      live.set(row.job, { state: "loaded", label: state.label, generation: state.generation });
+    } else {
+      refuse("launchd_live_state_third_state", row.identity.path);
+    }
+  });
+  return live;
+}
+
+/**
+ * The `P` variant's launchd inputs, observed before any ID is reserved: every manifest-owned
+ * plist admitted and read, every label's live state, and — when a label is loaded — a certified
+ * mutation row, so an unsupported host refuses here instead of rolling back after the marker.
+ */
+async function planUninstallLaunchd(
+  request: LifecycleUninstallRequestV1,
+  manifest: InstallationManifestV2,
+): Promise<{ readonly launchd: UninstallLaunchdInputsV1; readonly plists: readonly ArtifactMutationV1[] }> {
+  const { context, lifecycle } = request;
+  const productHome = request.key.productHome;
+  const userHome = canonical(context.userHome);
+  const ports = lifecycle.effectPorts().launchd;
+  const template = ports.template ?? SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE;
+  const rows: UninstallLaunchdRowV1[] = [];
+  for (const job of SCHEDULED_JOB_IDS) {
+    const path = launchdPlistPath(userHome, job);
+    const artifact = manifest.artifacts.find((candidate) => candidate.path === path);
+    if (artifact !== undefined) rows.push(await admitPlistRow(request, job, artifact));
+  }
+  const executablePath = rows[0]?.executablePath ?? productHome;
+  const foreign = rows.find((row) => row.executablePath !== executablePath);
+  if (foreign !== undefined) refuse("uninstall_plist_foreign", foreign.identity.path);
+
+  let live: ReadonlyMap<ScheduledJobIdV1, LaunchdLiveStateV1>;
+  try {
+    live = await observeLabels(ports.observer, lifecycle.effectiveUid, rows, productHome);
+    if (template.certification === null && [...live.values()].some((state) => state.state === "loaded")) {
+      throw new LaunchdDistributionUnsupportedError("launchctl row is not certified");
+    }
+  } catch (error) {
+    if (error instanceof LaunchdDistributionUnsupportedError) {
+      refuseUnsupportedLaunchd(lifecycle.effectiveUid, rows.map((row) => row.label), error);
+    }
+    throw error;
+  }
+
+  const unloaded: LaunchdPriorJobStateV1 = { beforeFileHash: null, beforeGeneration: null, beforeLiveState: { state: "unloaded" } };
+  const prior = Object.fromEntries(
+    SCHEDULED_JOB_IDS.map((job) => {
+      const row = rows.find((candidate) => candidate.job === job);
+      const state: LaunchdPriorJobStateV1 = row === undefined
+        ? unloaded
+        : {
+            beforeFileHash: row.identity.hash,
+            beforeGeneration: row.generation,
+            beforeLiveState: live.get(job) ?? { state: "unloaded" },
+          };
+      return [job, state];
+    }),
+  ) as Record<ScheduledJobIdV1, LaunchdPriorJobStateV1>;
+  const preview = buildLaunchdPlanPreview({
+    observationProcessTableHash: launchdObservationProcessTableHash(LAUNCHD_PREVIEW_OBSERVATION_TABLE),
+    mutationProcessTableTemplateHash: launchdProcessTableTemplateHash(template),
+    domain: launchdGuiDomain(parseEffectiveUid(lifecycle.effectiveUid, lifecycle.effectiveUid)),
+    userHome,
+    productHome: parseScheduledProductHome(productHome),
+    executablePath,
+    automation: null,
+    prior,
+  });
+  return {
+    launchd: {
+      preview,
+      identities: new Map(rows.map((row) => [row.job, row.identity])),
+      template,
+      processTableHash: null,
+    },
+    plists: rows.map((row) => row.mutation),
+  };
+}
+
+/**
+ * The effect's process staging, created under the global lock once the coordinator ID exists:
+ * the mutation table's `HOME`/`TMPDIR` are these directories, so its hash is only knowable now.
+ */
+async function stageLaunchdProcessTable(
+  lifecycle: CliLifecycleContext,
+  productHome: CanonicalAbsolutePathV1,
+  coordinatorId: LifecycleCoordinatorIdV1,
+  template: SupportedLaunchdProcessTableTemplateV1,
+): Promise<LowerHexSha256> {
+  const coordinatorStaging = canonical(`${lifecycle.roots.lifecycleStaging}/${coordinatorId}`);
+  const root = await lifecycle.fs.mkdirExclusive(canonical(`${coordinatorStaging}/launchd-process`));
+  for (const name of LAUNCHD_PROCESS_STAGING_CHILDREN) {
+    await lifecycle.fs.syncDirectory(await lifecycle.fs.mkdirExclusive(canonical(`${root.path}/${name}`)));
+  }
+  await lifecycle.fs.syncDirectory(root);
+  await syncDirectoryAt(lifecycle.fs, coordinatorStaging);
+  return launchdProcessTableHash(await loadLaunchdProcessTable(productHome, coordinatorId, { template }));
+}
+
 /**
  * A14's three evidence conditions, exactly. The disjunction is Task 8's, never hand-computed
  * here, because the plan hash binds only the resulting shape: a boolean that contradicts its own
@@ -1102,7 +1442,10 @@ export class LifecycleUninstaller {
     const { context, lifecycle, evidence } = request;
     const paths = await planningPaths(context);
     const variant = await deriveVariant(request, paths, admitted.manifest);
-    if (variant === "uninstall/present_manifest") refuseUnsupportedUntilPlan1b(variant);
+    const launchd = variant === "uninstall/present_manifest"
+      ? await planUninstallLaunchd(request, admitted.manifest)
+      : null;
+    const plistPaths = new Set<string>(launchd?.plists.map((mutation) => mutation.targetPath) ?? []);
     await assertNoRedactionKeyTombstone(lifecycle.fs, canonical(`${productHome}/state`));
 
     const markerPath = stateLeaf(productHome, MARKER_LEAF);
@@ -1126,7 +1469,7 @@ export class LifecycleUninstaller {
       kind: "uninstall",
       artifacts: await Promise.all(
         admitted.manifest.artifacts
-          .filter((artifact) => !reserved.has(artifact.path as string))
+          .filter((artifact) => !reserved.has(artifact.path as string) && !plistPaths.has(artifact.path))
           .map((artifact) => downcastArtifactV2(context, artifact)),
       ),
       ownedRoots: [paths.home],
@@ -1146,12 +1489,13 @@ export class LifecycleUninstaller {
         partitioned.drift.get(entry.artifact.path)?.kind !== "missing",
     );
     /** §6: the four runner leases first, in reconciliation order, then unsigned UTF-8 order. */
-    const ordered = [...files].sort((left, right) => {
-      const leftLease = leaseOrder.get(left.artifact.path) ?? Number.MAX_SAFE_INTEGER;
-      const rightLease = leaseOrder.get(right.artifact.path) ?? Number.MAX_SAFE_INTEGER;
+    const removalOrder = (left: string, right: string): number => {
+      const leftLease = leaseOrder.get(left) ?? Number.MAX_SAFE_INTEGER;
+      const rightLease = leaseOrder.get(right) ?? Number.MAX_SAFE_INTEGER;
       if (leftLease !== rightLease) return leftLease - rightLease;
-      return Buffer.compare(Buffer.from(left.artifact.path), Buffer.from(right.artifact.path));
-    });
+      return byUtf8(left, right);
+    };
+    const ordered = [...files].sort((left, right) => removalOrder(left.artifact.path, right.artifact.path));
 
     const artifacts: ArtifactMutationV1[] = [];
     for (const entry of ordered) {
@@ -1168,6 +1512,8 @@ export class LifecycleUninstaller {
         content,
       });
     }
+    artifacts.push(...(launchd?.plists ?? []));
+    artifacts.sort((left, right) => removalOrder(left.targetPath, right.targetPath));
     const chunks = chunkUninstallArtifacts(artifacts, productHome);
     const markerEntry = await guardedEntry(lifecycle.fs, markerPath);
     if (markerEntry === null || markerEntry.kind !== "regular_file") {
@@ -1198,6 +1544,7 @@ export class LifecycleUninstaller {
       markerPreimage,
       chunks,
       createdAt: context.now().toISOString(),
+      launchd: launchd?.launchd ?? null,
       refs: null,
     };
 
@@ -1208,6 +1555,7 @@ export class LifecycleUninstaller {
       variant,
       removable: [
         ...partitioned.removable.map((entry) => entry.artifact.path),
+        ...plistPaths,
         ...reserved,
         ...(hooks === null ? [] : [hooks.directory.path]),
         ...(codexIngestHome === null ? [] : [codexIngestHome.directory.path]),
@@ -1272,12 +1620,15 @@ export class LifecycleUninstaller {
         },
         slotCount,
       );
+      /** `lifecycleReservationOrder`: `lc`, the Foundation pairs, `P`'s `le`, then `mf`. */
+      const effectSlot = inputs.launchd === null ? -1 : slotCount - 2;
+      const prefixAt = (index: number): "lc" | "tx" | "le" | "mf" => {
+        if (index === 0) return "lc";
+        if (index === slotCount - 1) return "mf";
+        return index === effectSlot ? "le" : "tx";
+      };
       const ids = Array.from({ length: slotCount }, (_unused, index) =>
-        index === 0
-          ? formatAllocatedLifecycleId("lc", block.nonce, block.firstCounter)
-          : index === slotCount - 1
-            ? formatAllocatedLifecycleId("mf", block.nonce, block.firstCounter + BigInt(index))
-            : formatAllocatedLifecycleId("tx", block.nonce, block.firstCounter + BigInt(index)),
+        formatAllocatedLifecycleId(prefixAt(index), block.nonce, block.firstCounter + BigInt(index)),
       );
       const coordinatorId = parseLifecycleCoordinatorId(ids[0], request.key.nonce);
 
@@ -1287,9 +1638,27 @@ export class LifecycleUninstaller {
         participants.foundation,
         inputs,
         coordinatorId,
-        ids.slice(1, -1),
+        ids.slice(1, inputs.launchd === null ? -1 : -2),
       );
+      if (inputs.launchd !== null) {
+        inputs.launchd.processTableHash = await stageLaunchdProcessTable(
+          lifecycle,
+          productHome,
+          coordinatorId,
+          inputs.launchd.template,
+        );
+      }
       const { plan } = preview.builder.build(ids);
+      /** Spec §2.4: the effect plan is published once, before coordinator intent. */
+      const effect = plan.participants.launchd === null ? null : launchdEffectPlan(plan.participants.launchd, "before_files");
+      if (effect !== null) {
+        await new LaunchdEffectJournalStore({
+          fs: lifecycle.fs,
+          roots: lifecycle.roots,
+          locks: lifecycle.transactionLocks,
+          uuid: lifecycle.uuid,
+        }).publishPlan(effect);
+      }
       await store.publish(plan, current());
 
       const coordinator = new LifecycleCoordinator<LifecycleExecutionPlanV1>({

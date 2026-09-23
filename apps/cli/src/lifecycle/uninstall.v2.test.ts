@@ -483,19 +483,26 @@ describe("V2 uninstall through the lifecycle coordinator", () => {
   it.each([
     ["an automation lifecycle record in the configuration", plantAutomationLifecycleRecord],
     ["an active automation arm in the activation record", plantActiveAutomationActivation],
-  ])("refuses the P variant selected by %s as unsupported until plan 1b (D24)", async (_label, planter) => {
+  ])("uninstalls the P variant selected by %s, with no generated label to unload (plan 1b Task 18)", async (_label, planter) => {
     const fixture = await initializedV2Fixture("uninstall-p-variant");
     await planter(fixture);
-    const before = await allocatorCounter(fixture);
 
-    expect(await runUninstall(fixture.context, ACCEPTED)).toMatchObject({
-      ok: false,
-      code: EXIT_CODES.capabilityUnavailable,
-      error: { kind: "unsupported_until_plan_1b" },
-    });
+    const result = await runUninstall(fixture.context, ACCEPTED);
 
-    expect(await allocatorCounter(fixture)).toBe(before);
-    expect(await exists(fixture.paths.manifestFile)).toBe(true);
+    if (!result.ok) throw new Error(`${String(result.code)} ${result.error.kind}: ${result.error.message}`);
+    const plan = fixture.publishedPlans.at(-1);
+    if (plan === undefined) throw new Error("no published plan");
+    expect(validateLifecyclePlanGrammar(plan, lifecycleVariantFacts(plan))).toBe("uninstall/present_manifest");
+    expect(plan.steps.map((step) => step.kind).slice(0, 3)).toStrictEqual([
+      "foundation",
+      "launchd_before_files",
+      "drain_runners",
+    ]);
+    expect(plan.participants.launchd?.entries).toStrictEqual([]);
+    expect(plan.authority.plistPaths).toStrictEqual([]);
+    expect(lifecycleReservationOrder(plan).map((slot) => slot.prefix)).toStrictEqual(["lc", "tx", "tx", "tx", "tx", "le", "mf"]);
+    expect(await exists(fixture.paths.manifestFile)).toBe(false);
+    expect(await exists(fixture.paths.brain)).toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("re-derives the empty-directory list from the tombstone after a death between an rmdir and the tombstone deletion (D25)", async () => {
@@ -975,7 +982,7 @@ describe("V2 uninstall planning refusals", () => {
     expect(plan.participants.manifest?.bindings.foundationTransactions.count).toBe(1 + sizes.length);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
-  it("refuses a manifest that owns an external plist row as the P variant", async () => {
+  it("refuses a plist row that is not §6's exact macos content row, before it allocates", async () => {
     const { fixture, global } = await syntheticFixture("uninstall-plist-row");
     const plist = join(
       fixture.userHome,
@@ -992,8 +999,8 @@ describe("V2 uninstall planning refusals", () => {
     );
 
     await expect(new LifecycleUninstaller().preview(request, global)).rejects.toMatchObject({
-      code: EXIT_CODES.capabilityUnavailable,
-      reason: "unsupported_until_plan_1b",
+      code: EXIT_CODES.recoveryRequired,
+      reason: "uninstall_plist_row",
     });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 

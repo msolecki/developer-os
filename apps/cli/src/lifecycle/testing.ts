@@ -36,19 +36,32 @@ import type {
   ManifestStatePlanV1,
   ScheduledJobIdV1,
   UInt64DecimalV1,
+  UtcTimestampV1,
   VaultSegmentV1,
 } from "@developer-os/core";
 import {
+  NodeLaunchdPlistReader,
+  SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
   buildLaunchdPlanPreview,
   launchdGuiDomain,
   launchdPlistBytesHash,
+  parseGeneratedLabel,
   parseScheduledProductHome,
   planLaunchdTransitions,
 } from "@developer-os/platform-macos";
-import type { LaunchdPlanPreviewV1, LaunchdPriorJobStateV1 } from "@developer-os/platform-macos";
+import type {
+  GeneratedLaunchdLabelV1,
+  LaunchdBootstrapSnapshotAttemptV1,
+  LaunchdLiveObservationV1,
+  LaunchdPlanPreviewV1,
+  LaunchdPriorJobStateV1,
+  LaunchdSnapshotRequestV1,
+  SupportedLaunchdProcessTableTemplateV1,
+} from "@developer-os/platform-macos";
 import { PERSISTED_GIT_PUSH_PLAN_CODEC, SUPPORTED_GIT_DISTRIBUTION } from "@developer-os/security";
 import type { PersistedGitPushPlanV1 } from "@developer-os/security";
 
+import type { LifecycleEffectPortsV1 } from "./adapters.js";
 import type { LifecycleExecutionPlanV1, LifecyclePlanPreviewV1 } from "./codecs.js";
 import type { RedactionKeyStatePlanV1 } from "./redaction-key.js";
 
@@ -128,19 +141,22 @@ export interface SyntheticUninstallV1 {
 }
 
 /**
- * `uninstall/present_manifest_without_launchd` with every leaf the CLI codec owns: the plan
- * 1a variant D24 derives, because the `launchd` arm the `P` variant needs is refused here.
+ * `uninstall/present_manifest_without_launchd` with every leaf the CLI codec owns — the plan 1a
+ * variant D24 derives — or, with `withLaunchd`, `uninstall/present_manifest`: the `P` effect at
+ * `base + 5n` unloads the three synthetic installed jobs and the artifact step removes their
+ * plists and `config.toml`.
  *
  * `manifestCounter` defaults to the id right after the four foundation participants
- * (`base + 5n`). A caller that stages its own ids past `base + 4n` — codecs.test.ts plants
- * git/launchd effect ids at `base + 5n..base + 7n` — passes its own ninth id explicitly so
- * every counter in the plan stays distinct.
+ * (`base + 5n`, or `base + 6n` after `P`). A caller that stages its own ids past `base + 4n` —
+ * codecs.test.ts plants git/launchd effect ids at `base + 5n..base + 7n` — passes its own ninth
+ * id explicitly so every counter in the plan stays distinct.
  */
 export function syntheticUninstall(
   productHome: CanonicalAbsolutePathV1,
   nonce: LifecycleInstallNonceV1,
   base: bigint,
-  manifestCounter: bigint = base + 5n,
+  manifestCounter?: bigint,
+  shape: { readonly withLaunchd?: boolean } = {},
 ): SyntheticUninstallV1 {
   const path = (text: string): CanonicalAbsolutePathV1 => parseCanonicalAbsolutePathText(text);
   const transactionId = (counter: bigint): AllocatedLifecycleIdV1<"tx"> =>
@@ -149,8 +165,9 @@ export function syntheticUninstall(
   const ownerUid = parseEffectiveUid(uid, uid);
 
   const id = parseLifecycleCoordinatorId(formatAllocatedLifecycleId("lc", nonce, base), nonce);
+  const withLaunchd = shape.withLaunchd === true;
   const manifestParticipantId = parseManifestParticipantId(
-    formatAllocatedLifecycleId("mf", nonce, manifestCounter),
+    formatAllocatedLifecycleId("mf", nonce, manifestCounter ?? base + (withLaunchd ? 6n : 5n)),
     nonce,
   );
   const markerForward = transactionId(base + 1n);
@@ -224,7 +241,7 @@ export function syntheticUninstall(
     },
   };
 
-  return {
+  const synthetic: SyntheticUninstallV1 = {
     id,
     markerForward,
     markerCompensation,
@@ -284,6 +301,151 @@ export function syntheticUninstall(
       push: null,
       steps,
     },
+  };
+  return withLaunchd ? withSyntheticUninstallLaunchd(synthetic, productHome, allocated(nonce).le(base + 5n)) : synthetic;
+}
+
+/** The installed synthetic jobs as uninstall sees them: every retained plist a `remove`. */
+function syntheticUninstallLaunchdPreview(productHome: CanonicalAbsolutePathV1): LaunchdPlanPreviewV1 {
+  const installed = syntheticInstalledLaunchdPreview(productHome);
+  const unloaded: LaunchdPriorJobStateV1 = { beforeFileHash: null, beforeGeneration: null, beforeLiveState: { state: "unloaded" } };
+  const prior = Object.fromEntries(
+    SCHEDULED_JOB_IDS.map((job) => {
+      const entry = installed.entries.find((candidate) => candidate.job === job);
+      const state: LaunchdPriorJobStateV1 = entry === undefined
+        ? unloaded
+        : { beforeFileHash: entry.beforeFileHash, beforeGeneration: entry.generation, beforeLiveState: entry.beforeLiveState };
+      return [job, state];
+    }),
+  ) as Record<ScheduledJobIdV1, LaunchdPriorJobStateV1>;
+  return buildLaunchdPlanPreview({
+    observationProcessTableHash: installed.observationProcessTableHash,
+    mutationProcessTableTemplateHash: installed.mutationProcessTableTemplateHash,
+    domain: launchdGuiDomain(SYNTHETIC_UID),
+    userHome: SYNTHETIC_USER_HOME,
+    productHome: parseScheduledProductHome(productHome),
+    executablePath: parseCanonicalAbsolutePathText(`${productHome}/bin/developer-os`),
+    automation: null,
+    prior,
+  });
+}
+
+function withSyntheticUninstallLaunchd(
+  synthetic: SyntheticUninstallV1,
+  productHome: CanonicalAbsolutePathV1,
+  effectId: LaunchdEffectIdV1,
+): SyntheticUninstallV1 {
+  const { id, artifactsForward, artifactsCompensation, plan } = synthetic;
+  const installed = syntheticInstalledLaunchdPreview(productHome);
+  const preview = syntheticUninstallLaunchdPreview(productHome);
+  const configHash = hex("5");
+  const removals = [
+    { targetPath: plan.authority.configPath, hash: configHash, size: 64 },
+    ...installed.entries.map((entry) => ({
+      targetPath: entry.plistPath,
+      hash: launchdPlistBytesHash(entry.plistBytes ?? ""),
+      size: new TextEncoder().encode(entry.plistBytes ?? "").byteLength,
+    })),
+  ].sort((left, right) => Buffer.compare(Buffer.from(left.targetPath), Buffer.from(right.targetPath)));
+  const artifactRef = (
+    refId: AllocatedLifecycleIdV1<"tx">,
+    role: FoundationParticipantRefV1["role"],
+  ): FoundationParticipantRefV1 => {
+    const template = syntheticFoundationRef({ productHome, coordinatorId: id, id: refId, slot: "uninstall_artifacts", role });
+    const mutations = role.kind === "forward"
+      ? removals.map((removal) => ({
+          targetPath: removal.targetPath,
+          operation: "remove" as const,
+          expectedBeforeHash: removal.hash,
+          contentHash: null,
+          contentSize: null,
+          stagedPath: null,
+        }))
+      : [...removals].reverse().map((removal, index) => ({
+          targetPath: removal.targetPath,
+          operation: "create" as const,
+          expectedBeforeHash: null,
+          contentHash: removal.hash,
+          contentSize: removal.size,
+          stagedPath: parseCanonicalAbsolutePathText(`${productHome}/staging/transactions/${refId}/${String(index)}.bin`),
+        }));
+    const core = {
+      slot: template.slot,
+      role: template.role,
+      mutations,
+      maximumJournalBytes: template.maximumJournalBytes,
+      initialJournal: template.initialJournal,
+    };
+    return { id: refId, ...core, planHash: foundationParticipantPlanHash(core) };
+  };
+  const launchd = planLaunchdTransitions({
+    coordinatorId: id,
+    coordinatorOperation: "uninstall",
+    previewHash: null,
+    processTableHash: hex("3"),
+    preview,
+    config: { participantId: artifactsForward, targetPath: plan.authority.configPath, expectedBeforeHash: configHash, afterHash: null },
+    activation: null,
+    plistFiles: preview.entries
+      .map((entry) => ({
+        participantId: artifactsForward,
+        targetPath: entry.plistPath,
+        expectedBeforeHash: entry.beforeFileHash,
+        afterHash: null,
+      }))
+      .sort((left, right) => Buffer.compare(Buffer.from(left.targetPath), Buffer.from(right.targetPath))),
+    manifest: {
+      path: plan.authority.manifestPath,
+      statePlanHash: hex("b"),
+      before: { state: "present", hash: sha256(SYNTHETIC_MANIFEST_BYTES) },
+      after: { state: "absent" },
+    },
+    beforeFilesEffectId: effectId,
+    afterFilesEffectId: null,
+    bootstrapPlists: Object.fromEntries(
+      installed.entries.map((entry) => {
+        const bytes = entry.plistBytes ?? "";
+        const retained = {
+          path: entry.plistPath,
+          ownerUid: SYNTHETIC_UID,
+          mode: 384 as const,
+          nlink: 1 as const,
+          size: new TextEncoder().encode(bytes).byteLength,
+          hash: launchdPlistBytesHash(bytes),
+          dev: DEV,
+          ino: parseUInt64Decimal(String(900_000 + SCHEDULED_JOB_IDS.indexOf(entry.job))),
+        };
+        return [entry.job, { before: entry.beforeLiveState.state === "loaded" ? retained : null, after: null }];
+      }),
+    ),
+  });
+  const effect = launchd.beforeFilesEffect;
+  if (effect === null) throw new Error("the uninstall launchd plan carries its P effect");
+  const [marker, ...rest] = synthetic.steps;
+  if (marker === undefined) throw new Error("the synthetic uninstall starts with its marker step");
+  const steps: readonly LifecycleCoordinatorStepV1[] = [marker, { kind: "launchd_before_files", participantId: effect.id }, ...rest];
+  return {
+    ...synthetic,
+    steps,
+    artifactsStep: synthetic.artifactsStep + 1,
+    commitAbsenceStep: synthetic.commitAbsenceStep + 1,
+    plan: withJournalMaximum({
+      ...plan,
+      authority: { ...plan.authority, plistPaths: launchd.plistFiles.map((binding) => binding.targetPath) },
+      participants: {
+        ...plan.participants,
+        foundation: plan.participants.foundation.map((ref) =>
+          ref.id === artifactsForward
+            ? artifactRef(artifactsForward, ref.role)
+            : ref.id === artifactsCompensation
+              ? artifactRef(artifactsCompensation, ref.role)
+              : ref,
+        ),
+        launchdBeforeFiles: effect,
+        launchd,
+      },
+      steps,
+    }),
   };
 }
 
@@ -722,4 +884,117 @@ export function syntheticAutomationPreview(productHome: CanonicalAbsolutePathV1)
     git: null,
     launchd,
   });
+}
+
+/** The pinned mutation template with synthetic certification evidence, as Task 19 will fill it. */
+export function certifiedLaunchdTemplate(): SupportedLaunchdProcessTableTemplateV1 {
+  return {
+    ...SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
+    certification: { certifiedAt: "2026-09-23T00:00:00.000Z" as UtcTimestampV1, fixtureTranscriptSha256: hex("a") },
+  };
+}
+
+export interface ScriptedLaunchdV1 {
+  /** The live domain: each loaded job's generated label. */
+  readonly loaded: Map<ScheduledJobIdV1, GeneratedLaunchdLabelV1>;
+  /** `bootout <label>` and `bootstrap <label>`, in the order the executor ran them. */
+  readonly events: string[];
+  readonly ports: LifecycleEffectPortsV1["launchd"];
+}
+
+/**
+ * An injected launchd domain: observation reads `loaded`, `bootout` and bootstrap edit it, and the
+ * plan-bound plist checks run against the real files. No process is ever spawned.
+ */
+export function scriptedLaunchd(options: {
+  readonly clock: () => UtcTimestampV1;
+  readonly certified: boolean;
+  readonly beforeBootout?: (label: GeneratedLaunchdLabelV1) => void | Promise<void>;
+}): ScriptedLaunchdV1 {
+  const loaded = new Map<ScheduledJobIdV1, GeneratedLaunchdLabelV1>();
+  const events: string[] = [];
+  const attempts = new Map<object, LaunchdSnapshotRequestV1>();
+  const exited = { exitCode: 0, signal: null, termination: "exited" as const, stdoutBytes: 0, stderrBytes: 0, groupReaped: true as const };
+  const observe = (request: {
+    readonly jobs: readonly { readonly job: ScheduledJobIdV1; readonly retained: GeneratedLaunchdLabelV1 | null; readonly planned: GeneratedLaunchdLabelV1 | null }[];
+  }): Promise<LaunchdLiveObservationV1> =>
+    Promise.resolve({
+      kind: "observed",
+      jobs: request.jobs.map(({ job, retained, planned }) => {
+        const label = loaded.get(job);
+        if (label === undefined) return { job, state: { kind: "unloaded" as const } };
+        const kind = label === planned ? ("exact_new" as const) : label === retained ? ("exact_old" as const) : null;
+        return kind === null
+          ? { job, state: { kind: "third_state" as const, reason: "dual_generation" as const } }
+          : { job, state: { kind, label, generation: parseGeneratedLabel(label).generation } };
+      }),
+    });
+  const ports = {
+    observer: { observe },
+    launchctl: {
+      bootout: async (_table: unknown, target: string) => {
+        const label = target.slice(target.indexOf("/", "gui/".length) + 1) as GeneratedLaunchdLabelV1;
+        await options.beforeBootout?.(label);
+        events.push(`bootout ${label}`);
+        loaded.delete(parseGeneratedLabel(label).job);
+        return exited;
+      },
+    },
+    bootstrapper: {
+      inspect: () => Promise.resolve(null),
+      recover: (_creation: unknown, request: LaunchdSnapshotRequestV1) => {
+        const attempt = { role: request.role, source: request.source, inheritedFd: 3 };
+        attempts.set(attempt, request);
+        return Promise.resolve(attempt as unknown as LaunchdBootstrapSnapshotAttemptV1);
+      },
+      bootstrap: (attempt: LaunchdBootstrapSnapshotAttemptV1) => {
+        const request = attempts.get(attempt);
+        if (request === undefined) return Promise.reject(new Error("unknown bootstrap attempt"));
+        attempts.delete(attempt);
+        const label = request.plist.Label;
+        events.push(`bootstrap ${label}`);
+        loaded.set(parseGeneratedLabel(label).job, label);
+        return Promise.resolve({ argvId: "bootstrap" as const, attempt, process: exited });
+      },
+      recheckSource: () => Promise.resolve(),
+    },
+    plists: new NodeLaunchdPlistReader(),
+    beginTransition: () => ({ id: "launchd-transition", deadlineAtMs: Number.MAX_SAFE_INTEGER, remainingMilliseconds: () => 30_000 }),
+    clock: options.clock,
+    pause: () => Promise.resolve(),
+    template: options.certified ? certifiedLaunchdTemplate() : SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
+  } as unknown as LifecycleEffectPortsV1["launchd"];
+  return { loaded, events, ports };
+}
+
+export interface SyntheticInstalledPlistV1 {
+  readonly job: ScheduledJobIdV1;
+  readonly path: CanonicalAbsolutePathV1;
+  readonly bytes: string;
+  readonly label: GeneratedLaunchdLabelV1;
+}
+
+/** The exact bytes `automation enable` would install for `job` in this product home, daily at 02:00. */
+export function syntheticInstalledPlist(options: {
+  readonly userHome: string;
+  readonly productHome: string;
+  readonly uid: number;
+  readonly job: ScheduledJobIdV1;
+}): SyntheticInstalledPlistV1 {
+  const unloaded: LaunchdPriorJobStateV1 = { beforeFileHash: null, beforeGeneration: null, beforeLiveState: { state: "unloaded" } };
+  const preview = buildLaunchdPlanPreview({
+    observationProcessTableHash: hex("1"),
+    mutationProcessTableTemplateHash: hex("2"),
+    domain: launchdGuiDomain(parseEffectiveUid(options.uid, options.uid)),
+    userHome: parseCanonicalAbsolutePathText(options.userHome),
+    productHome: parseScheduledProductHome(options.productHome),
+    executablePath: parseCanonicalAbsolutePathText(`${options.productHome}/bin/developer-os`),
+    automation: { schemaVersion: 1, schedules: [{ job: options.job, schedule: DAILY }] },
+    prior: Object.fromEntries(SCHEDULED_JOB_IDS.map((job) => [job, unloaded])) as Record<ScheduledJobIdV1, LaunchdPriorJobStateV1>,
+  });
+  const [entry] = preview.entries;
+  if (entry === undefined || entry.plistBytes === null || entry.generatedLabel === null) {
+    throw new Error("one scheduled job installs one plist");
+  }
+  return { job: options.job, path: entry.plistPath, bytes: entry.plistBytes, label: entry.generatedLabel };
 }

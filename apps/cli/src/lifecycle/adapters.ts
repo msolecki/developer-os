@@ -33,6 +33,7 @@ import {
   LaunchdObserver,
   LaunchdSnapshotBootstrapper,
   NodeLaunchdPlistReader,
+  SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
   loadLaunchdProcessTable,
 } from "@developer-os/platform-macos";
 import type {
@@ -110,7 +111,11 @@ export function createLifecycleEffectAdapters(
       ...ports.launchd,
       plan: plan.participants.launchd,
       journals,
-      processTable: () => loadLaunchdProcessTable(key.productHome, effect.coordinatorId),
+      /** The same template the executor certifies against, or every table de-slots to a foreign row. */
+      processTable: () =>
+        loadLaunchdProcessTable(key.productHome, effect.coordinatorId, {
+          template: ports.launchd.template ?? SUPPORTED_LAUNCHD_PROCESS_TABLE_TEMPLATE,
+        }),
     });
   };
   const launchd: LifecycleEffectAdapterV1 = {
