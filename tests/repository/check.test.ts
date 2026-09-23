@@ -6,6 +6,8 @@ import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { ALLOWED_SPAWN_SITES, inspectOptInAuthoritySurfaces } from "./opt-in-authority.js";
+
 const run = promisify(execFile);
 
 /**
@@ -56,16 +58,28 @@ interface CheckOutcome {
  */
 const PLANNER_ENTRY = "packages/core/dist/update/planner.js";
 
+/**
+ * The opt-in authority gate is total the same way: a checkout in which no file constructs a
+ * Git supervisor, names `/bin/launchctl` or dispatches scheduled handlers fails. These three
+ * stand in for the real entrypoints unless a case says otherwise.
+ */
+const OPT_IN_SEEDS: Readonly<Record<string, string>> = {
+  "apps/cli/src/git-entry.ts": "export const supervisor = new GitProcessSupervisor();\n",
+  "apps/cli/src/launchd-entry.ts": 'export const LAUNCHCTL = "/bin/launchctl";\n',
+  "apps/cli/src/scheduled-entry.ts": "export type Handlers = ScheduledJobHandlersV1;\n",
+};
+
 async function sandbox(
   files: Readonly<Record<string, string>>,
-  options: { readonly stage?: boolean; readonly name?: string; readonly planner?: boolean } = {},
+  options: { readonly stage?: boolean; readonly name?: string; readonly planner?: boolean; readonly optIn?: boolean } = {},
 ): Promise<string> {
   const root = await mkdtemp(join("/tmp", options.name ?? "dosSc"));
   sandboxes.push(root);
 
   await run("git", ["init", "-q"], { cwd: root });
   const planner = options.planner === false || PLANNER_ENTRY in files ? {} : { [PLANNER_ENTRY]: "export const planned = 1;\n" };
-  for (const [path, content] of Object.entries({ ...planner, ...files })) {
+  const optIn = options.optIn === false ? {} : OPT_IN_SEEDS;
+  for (const [path, content] of Object.entries({ ...planner, ...optIn, ...files })) {
     const full = join(root, path);
     await mkdir(join(full, ".."), { recursive: true });
     await writeFile(full, content);
@@ -315,6 +329,99 @@ describe("the repository check gate", () => {
     expect(outcome.stderr).toContain("packages/core/dist/update/helper.js: randomness");
   });
 
+  it("fails, and names the file and symbol, on a spawn outside every entrypoint and the allowlist", async () => {
+    const root = await sandbox({
+      "packages/core/src/stray.ts": 'import { execFile } from "node:child_process";\nexport function probe(): void {\n  execFile("/usr/bin/true");\n}\n',
+    });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("opt-in-authority");
+    expect(outcome.stderr).toContain("unexpected spawn site: packages/core/src/stray.ts::probe");
+  });
+
+  it.each([
+    { name: "a namespace import", source: 'import * as cp from "child_process";\nexport const go = () => cp.spawn("x");\n', symbol: "go" },
+    { name: "an aliased import handed to promisify", source: 'import { promisify } from "node:util";\nimport { execFile as run } from "node:child_process";\nexport const exec = promisify(run);\n', symbol: "exec" },
+    { name: "a dynamic load", source: 'export async function later(): Promise<unknown> {\n  return import("node:child_process");\n}\n', symbol: "later (dynamic child_process load)" },
+    { name: "the supervised primitive's real dependencies", source: "export const runner = new SupervisedProcessRunner(nodeSupervisedProcessDependencies);\n", symbol: "runner (nodeSupervisedProcessDependencies)" },
+  ])("resolves $name through its binding and reports it", async ({ source, symbol }) => {
+    const root = await sandbox({ "apps/cli/src/stray.ts": source });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain(`unexpected spawn site: apps/cli/src/stray.ts::${symbol}`);
+  });
+
+  it("does not read a regex exec, an injected dependency's spawn or a type-only import as a spawn", async () => {
+    const root = await sandbox({
+      "packages/core/src/benign.ts": [
+        'import type { ChildProcess } from "node:child_process";',
+        'import { type SpawnOptions } from "node:child_process";',
+        "export const match = /x/u.exec(\"x\");",
+        "export function start(dependencies: { spawn(): ChildProcess }, options: SpawnOptions): ChildProcess {",
+        "  void options;",
+        "  return dependencies.spawn();",
+        "}",
+        "",
+      ].join("\n"),
+    });
+
+    expect(await check(root)).toStrictEqual({ exitCode: 0, stderr: "" });
+  });
+
+  it("classifies the supervised primitive's dependencies inside a Git or launchd entrypoint", async () => {
+    const root = await sandbox({
+      "apps/cli/src/git-entry.ts":
+        "export const supervisor = new GitProcessSupervisor(new SupervisedProcessRunner(nodeSupervisedProcessDependencies));\n",
+      "apps/cli/src/launchd-entry.ts":
+        'export const LAUNCHCTL = "/bin/launchctl";\nexport const runner = new SupervisedProcessRunner(nodeSupervisedProcessDependencies);\n',
+    });
+
+    expect(await check(root)).toStrictEqual({ exitCode: 0, stderr: "" });
+  });
+
+  it("keeps a raw spawn in a Git entrypoint unexpected unless its symbol is allowlisted", async () => {
+    const root = await sandbox({
+      "apps/cli/src/git-entry.ts": [
+        'import { spawn } from "node:child_process";',
+        "export const supervisor = new GitProcessSupervisor();",
+        'export function bypass(): void {\n  spawn("/usr/bin/git");\n}',
+        "",
+      ].join("\n"),
+    });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("unexpected spawn site: apps/cli/src/git-entry.ts::bypass");
+  });
+
+  it("accepts an allowlisted spawn at its exact file and symbol", async () => {
+    const root = await sandbox({
+      "packages/security/src/process.ts":
+        'import { spawn } from "node:child_process";\nexport class NodeProcessRunner {\n  run(): void {\n    spawn("/usr/bin/true");\n  }\n}\n',
+    });
+
+    expect(await check(root)).toStrictEqual({ exitCode: 0, stderr: "" });
+  });
+
+  it.each([
+    { removed: "apps/cli/src/git-entry.ts", problem: "no file constructs a GitProcessSupervisor" },
+    { removed: "apps/cli/src/launchd-entry.ts", problem: "no file names /bin/launchctl" },
+    { removed: "apps/cli/src/scheduled-entry.ts", problem: "no file dispatches ScheduledJobHandlersV1" },
+  ])("fails when an enumerator is empty: $problem", async ({ removed, problem }) => {
+    const seeds = Object.fromEntries(Object.entries(OPT_IN_SEEDS).filter(([path]) => path !== removed));
+    const root = await sandbox(seeds, { optIn: false });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain(problem);
+  });
+
   it("fails outside a git checkout instead of finding nothing", async () => {
     const root = await mkdtemp(join("/tmp", "dosNoGit"));
     sandboxes.push(root);
@@ -323,5 +430,30 @@ describe("the repository check gate", () => {
 
     expect(outcome.exitCode).toBe(1);
     expect(outcome.stderr).toContain("git checkout");
+  });
+});
+
+describe("the opt-in authority surfaces of this repository", () => {
+  const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
+
+  it("asserts every authority enumerator is non-empty and there is no stray spawn site", async () => {
+    const report = await inspectOptInAuthoritySurfaces(repositoryRoot);
+    expect(report.gitEntrypoints.length).toBeGreaterThan(0);
+    expect(report.launchdEntrypoints.length).toBeGreaterThan(0);
+    expect(report.scheduledEntrypoints.length).toBeGreaterThan(0);
+    expect(report.unexpectedSpawnSites).toEqual([]);
+  });
+
+  it("observes every allowlisted spawn site, so the allowlist cannot outlive the code it names", async () => {
+    expect(ALLOWED_SPAWN_SITES.length).toBeGreaterThan(0);
+    const report = await inspectOptInAuthoritySurfaces(repositoryRoot);
+    expect(report.allowedSpawnSites).toStrictEqual([...ALLOWED_SPAWN_SITES].sort());
+  });
+
+  it("finds the Git supervisor composition, the launchd adapters and the scheduled runner", async () => {
+    const report = await inspectOptInAuthoritySurfaces(repositoryRoot);
+    expect(report.gitEntrypoints).toContain("apps/cli/src/commands/git/runtime.ts");
+    expect(report.launchdEntrypoints).toContain("apps/cli/src/lifecycle/adapters.ts");
+    expect(report.scheduledEntrypoints).toContain("apps/cli/src/commands/automation/runner.ts");
   });
 });

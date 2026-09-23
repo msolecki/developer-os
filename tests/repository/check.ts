@@ -7,35 +7,25 @@
  * rule and why each of its allowlist entries is there.
  */
 
-import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
 
 import { inspectPlannerGraph } from "@developer-os/security";
 
 import { codeWithoutLiterals } from "../helpers/typescript-lexer.js";
 
 import {
+  candidateFiles,
+  describeOptInAuthorityProblems,
+  git,
+  inspectOptInAuthoritySurfaces,
+} from "./opt-in-authority.js";
+import {
   describeViolation,
   findViolations,
   isProbablyText,
 } from "./self-containment.js";
 import type { Violation } from "./self-containment.js";
-
-const runProcess = promisify(execFile);
-const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
-
-async function git(
-  args: readonly string[],
-  cwd: string,
-): Promise<string> {
-  const { stdout } = await runProcess("git", [...args], {
-    cwd,
-    maxBuffer: MAX_OUTPUT_BYTES,
-  });
-  return stdout;
-}
 
 /**
  * Asked of `git` rather than derived from this module's own location. The
@@ -45,29 +35,6 @@ async function git(
  */
 async function repositoryRoot(): Promise<string> {
   return (await git(["rev-parse", "--show-toplevel"], process.cwd())).trim();
-}
-
-/**
- * Tracked files, plus untracked ones that `.gitignore` does not exclude.
- *
- * Tracked alone was wrong in the one case that matters: `git ls-files` reads the
- * index, so a newly written file is invisible until it is staged — and the
- * workflow runs lint *before* `git add`, which is exactly when a new violating
- * file exists and has never been staged. Including `--others
- * --exclude-standard` keeps the `.gitignore` agreement that made `git` the right
- * enumerator while closing that window.
- */
-async function candidateFiles(root: string): Promise<readonly string[]> {
-  const [tracked, untracked] = await Promise.all([
-    git(["ls-files", "-z"], root),
-    git(["ls-files", "--others", "--exclude-standard", "-z"], root),
-  ]);
-
-  return [
-    ...new Set(
-      `${tracked}${untracked}`.split("\0").filter((path) => path.length > 0),
-    ),
-  ].sort();
 }
 
 /**
@@ -349,6 +316,18 @@ async function main(): Promise<number> {
     );
   }
 
+  const authority = describeOptInAuthorityProblems(await inspectOptInAuthoritySurfaces(root));
+  if (authority.length > 0) {
+    process.stderr.write(
+      `opt-in-authority: ${String(authority.length)} problem(s) with the Git, launchd and scheduled authority surfaces\n`,
+    );
+    for (const problem of authority) process.stderr.write(`  ${problem}\n`);
+    process.stderr.write(
+      "\nA new process spawn is new authority: route it through an existing entrypoint, or add it to\n" +
+        "ALLOWED_SPAWN_SITES in tests/repository/opt-in-authority.ts in a reviewed change.\n",
+    );
+  }
+
   const capabilities = findPlannerCapabilities(root);
   if (capabilities.length > 0) {
     process.stderr.write(
@@ -362,6 +341,7 @@ async function main(): Promise<number> {
   }
 
   return violations.length > 0 ||
+    authority.length > 0 ||
     capabilities.length > 0 ||
     renderings.length > 0 ||
     numberValued.length > 0 ||

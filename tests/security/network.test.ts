@@ -11,7 +11,9 @@ import {
 } from "@developer-os/security";
 import { runBrain } from "@developer-os/cli/dist/commands/brain.js";
 import { runCapture } from "@developer-os/cli/dist/commands/capture.js";
+import { runAutomation } from "@developer-os/cli/dist/commands/automation/index.js";
 import { runDoctor } from "@developer-os/cli/dist/commands/doctor.js";
+import { runGit } from "@developer-os/cli/dist/commands/git/index.js";
 import { runReview } from "@developer-os/cli/dist/commands/review.js";
 import { runStatus } from "@developer-os/cli/dist/commands/status.js";
 import { runInit } from "@developer-os/cli/dist/commands/init.js";
@@ -183,6 +185,32 @@ const COMMANDS: readonly CommandCase[] = [
     label: "status",
     localSpawns: 2,
     run: (fixture) => runStatus(fixture.context),
+  },
+  /**
+   * Plan 1b's opt-in surfaces, never enabled on this fixture. Git and `launchctl` spawn through
+   * the supervised-process primitive rather than this runner, so a zero here proves no probe
+   * leaked through the vendor runner; the no-Git, no-launchd, no-network evidence on a real V2
+   * home is `tests/integration/git/lifecycle.test.ts` and `tests/e2e/opt-in-surfaces.test.ts`.
+   */
+  {
+    label: "git status",
+    localSpawns: 0,
+    run: (fixture) => runGit(fixture.context, { subcommand: "status" }),
+  },
+  {
+    label: "git sync, while Git is disabled",
+    localSpawns: 0,
+    run: (fixture) => runGit(fixture.context, { subcommand: "sync" }),
+  },
+  {
+    label: "automation status",
+    localSpawns: 0,
+    run: (fixture) => runAutomation(fixture.context, { subcommand: "status" }),
+  },
+  {
+    label: "automation disable, without --apply",
+    localSpawns: 0,
+    run: (fixture) => runAutomation(fixture.context, { subcommand: "disable", apply: false }),
   },
 ];
 
@@ -470,7 +498,30 @@ describe("the release transport is the only network entrypoint", () => {
       }
     }
 
-    expect(networkCapable.sort()).toStrictEqual(["packages/security/src/update/transport.ts"]);
+    /**
+     * `node:net` is also how a process opens a Unix-domain socket, and the Git runtime's
+     * gateway server listens on one inside its private quarantine directory: its trampolines
+     * report to it, nothing leaves the host. It is classified rather than exempted, and only
+     * while its sole value import from `node:net` is `createServer` and it names no other
+     * network module, so a `connect` or an `https` import there reddens this case.
+     */
+    const localSocketServers = ["apps/cli/src/commands/git/runtime.ts"];
+    const localOnly: string[] = [];
+    for (const path of networkCapable.filter((candidate) => localSocketServers.includes(candidate))) {
+      const source = await readFile(join(root, path), "utf8");
+      const imports = [...source.matchAll(/^import\s+(type\s+)?\{([^}]*)\}\s+from\s+["']([^"']+)["'];$/gmu)];
+      const network = imports.filter((match) => networkModule.test(`from "${match[3] ?? ""}"`));
+      const values = network.filter((match) => match[1] === undefined);
+      const valueNames = values.map((match) => (match[2] ?? "").trim());
+      if (network.every((match) => match[3] === "node:net") && valueNames.length === 1 && valueNames[0] === "createServer") {
+        localOnly.push(path);
+      }
+    }
+    expect(localOnly).toStrictEqual(localSocketServers);
+
+    expect(networkCapable.filter((path) => !localOnly.includes(path)).sort()).toStrictEqual([
+      "packages/security/src/update/transport.ts",
+    ]);
   });
 });
 
