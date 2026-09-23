@@ -31,3 +31,12 @@ export interface BrainMigration {
  * exactly once, on somebody's real vault, having never run before.
  */
 export const BRAIN_MIGRATIONS: readonly BrainMigration[] = Object.freeze([]);
+
+export {
+  BRAIN_MIGRATION_PRIVATE_FOLDERS,
+  BRAIN_UPDATE_MIGRATIONS,
+  brainMigrationSubjects,
+  isBrainMigrationPath,
+  planBrainSchemaMigrations,
+} from "./update/index.js";
+export type { BrainMigrationPlanningRequestV1 } from "./update/index.js";
