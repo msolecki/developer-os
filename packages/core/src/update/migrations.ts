@@ -58,7 +58,7 @@ export interface UpdatePayloadRefV1 {
  */
 export interface UpdateFoundationParticipantRefV2 {
   readonly id: AllocatedLifecycleIdV1<"tx">;
-  readonly slot: "schema_forward" | "schema_inverse";
+  readonly slot: "schema_forward" | "schema_inverse" | "owner_forward_files" | "owner_inverse_files";
   readonly role:
     | { readonly kind: "forward"; readonly compensationId: AllocatedLifecycleIdV1<"tx"> | null }
     | { readonly kind: "compensation"; readonly forwardId: AllocatedLifecycleIdV1<"tx"> };
