@@ -152,3 +152,16 @@ export type {
   SupportedLaunchdProcessTableTemplateV1,
   SupportedLaunchdProcessTableV1,
 } from "./launchd/index.js";
+export { LaunchdSnapshotBootstrapper } from "./launchd/index.js";
+export type {
+  LaunchdBootstrapPlistIdentityV1,
+  LaunchdBootstrapSnapshotAttemptV1,
+  LaunchdBootstrapSnapshotCreationV1,
+  LaunchdMutationEvidenceV1,
+  LaunchdSnapshotDependenciesV1,
+  LaunchdSnapshotDirectionV1,
+  LaunchdSnapshotFileHandleV1,
+  LaunchdSnapshotFileSystemV1,
+  LaunchdSnapshotRequestV1,
+  LaunchdSnapshotRoleV1,
+} from "./launchd/index.js";
