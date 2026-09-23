@@ -58,16 +58,26 @@ export function parseEffectStagingChildren(children: readonly string[]): Readonl
   return admitted;
 }
 
+export interface LifecycleEffectJournalBindingV1 {
+  readonly id: string;
+  readonly coordinatorId: string;
+  readonly planHash: string;
+}
+
 /**
- * Spec §2.4 `EffectJournalV1`: every effect journal names its own ID and the
- * hash of its immutable plan. The ledger binds both to the filename and to the
- * plan it already hashed, so a journal copied under another effect's name is
- * refused whatever the injected codec accepts.
+ * Spec §2.4 `EffectJournalV1`: every effect journal names its own ID, its
+ * coordinator and the hash of its immutable plan. The ledger binds all three
+ * to the filename, the referencing coordinator and the plan it already hashed,
+ * so a journal copied under another name is refused whatever the codec accepts.
  */
-export function effectJournalBinding(
-  journal: unknown,
-): { readonly id: string; readonly planHash: string } | null {
+export function effectJournalBinding(journal: unknown): LifecycleEffectJournalBindingV1 | null {
   if (typeof journal !== "object" || journal === null) return null;
-  const { id, planHash } = journal as { readonly id?: unknown; readonly planHash?: unknown };
-  return typeof id === "string" && typeof planHash === "string" ? { id, planHash } : null;
+  const { id, coordinatorId, planHash } = journal as {
+    readonly id?: unknown;
+    readonly coordinatorId?: unknown;
+    readonly planHash?: unknown;
+  };
+  return typeof id === "string" && typeof coordinatorId === "string" && typeof planHash === "string"
+    ? { id, coordinatorId, planHash }
+    : null;
 }

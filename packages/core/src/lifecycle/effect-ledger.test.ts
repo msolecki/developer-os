@@ -64,15 +64,25 @@ describe("parseEffectStagingChildren", () => {
 });
 
 describe("effectJournalBinding", () => {
-  it("reads the journal's own ID and plan hash", () => {
-    expect(effectJournalBinding({ id: "ge_x_1", planHash: "a".repeat(64), phase: "finalized" })).toStrictEqual({
-      id: "ge_x_1",
-      planHash: "a".repeat(64),
-    });
+  it("reads the journal's own ID, coordinator and plan hash", () => {
+    expect(
+      effectJournalBinding({ id: "ge_x_1", coordinatorId: "lc_x_0", planHash: "a".repeat(64), phase: "finalized" }),
+    ).toStrictEqual({ id: "ge_x_1", coordinatorId: "lc_x_0", planHash: "a".repeat(64) });
   });
 
-  it.each([null, "journal", 7, [], {}, { id: "ge_x_1" }, { planHash: "a" }, { id: 1, planHash: "a" }])(
-    "refuses a journal without a string id and planHash: %j",
+  it.each([
+    null,
+    "journal",
+    7,
+    [],
+    {},
+    { id: "ge_x_1", coordinatorId: "lc_x_0" },
+    { coordinatorId: "lc_x_0", planHash: "a" },
+    { id: "ge_x_1", planHash: "a" },
+    { id: 1, coordinatorId: "lc_x_0", planHash: "a" },
+    { id: "ge_x_1", coordinatorId: null, planHash: "a" },
+  ])(
+    "refuses a journal without a string id, coordinatorId and planHash: %j",
     (journal) => {
       expect(effectJournalBinding(journal)).toBeNull();
     },

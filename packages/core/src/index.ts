@@ -488,6 +488,7 @@ export {
 } from "./lifecycle/index.js";
 export type {
   GitEffectStagingSideV1,
+  LifecycleEffectJournalBindingV1,
   LifecycleEffectLedgerCodecV1,
   LifecycleEffectTerminalV1,
 } from "./lifecycle/index.js";

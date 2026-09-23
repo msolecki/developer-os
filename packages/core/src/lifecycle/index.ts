@@ -215,6 +215,7 @@ export {
 } from "./effect-ledger.js";
 export type {
   GitEffectStagingSideV1,
+  LifecycleEffectJournalBindingV1,
   LifecycleEffectLedgerCodecV1,
   LifecycleEffectTerminalV1,
 } from "./effect-ledger.js";

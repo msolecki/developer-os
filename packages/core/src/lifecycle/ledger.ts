@@ -175,6 +175,7 @@ interface EffectFactsV1 {
   planHash: LowerHexSha256 | null;
   plan: unknown;
   journal: unknown;
+  journalCoordinatorId: string | null;
   terminal: LifecycleEffectTerminalV1;
   malformed: boolean;
 }
@@ -265,6 +266,7 @@ function effectFactsFor<TPlan extends CoordinatorPlan>(
     planHash: null,
     plan: null,
     journal: null,
+    journalCoordinatorId: null,
     terminal: null,
     malformed: false,
   };
@@ -812,6 +814,7 @@ async function validateEffectJournals<TPlan extends CoordinatorPlan>(
       continue;
     }
     facts.journal = journal;
+    facts.journalCoordinatorId = binding.coordinatorId;
     facts.terminal = codec.terminal(journal);
   }
 }
@@ -977,10 +980,11 @@ function gitStagingAdmission<TPlan extends CoordinatorPlan>(
 }
 
 /**
- * `home` and `tmp` stay empty at every process boundary (spec §2.4, §5.3). The
- * one exception is the linked bootstrap snapshot in `tmp`, admitted only while
- * one of this coordinator's launchd effects holds a non-terminal journal whose
- * plan owns it; whether that journal names the exact current frontier is the
+ * `home` and `tmp` stay empty at every process boundary (spec §2.4, §5.3), and
+ * exist only for a planless tree or a plan with a launchd effect. The one
+ * exception is the linked bootstrap snapshot in `tmp`, admitted only while one
+ * of this coordinator's launchd effects holds a non-terminal journal whose plan
+ * owns it; whether that journal names the exact current frontier is the
  * effect-locked recovery's check, not this read-only one.
  */
 function launchdStagingAdmission<TPlan extends CoordinatorPlan>(
@@ -989,11 +993,11 @@ function launchdStagingAdmission<TPlan extends CoordinatorPlan>(
   codec: LifecycleEffectLedgerCodecV1,
   path: CanonicalAbsolutePathV1,
 ): StagingAdmissionV1 {
-  const admitted = new Map<string, StagingShapeV1>(
-    LAUNCHD_PROCESS_STAGING_CHILDREN.map((child) => [child, "directory"]),
-  );
   const plan = scan.coordinators.get(coordinatorId)?.plan ?? null;
   const refs = plan === null ? [] : [plan.participants.launchdBeforeFiles, plan.participants.launchdAfterFiles];
+  const admitted = new Map<string, StagingShapeV1>();
+  if (plan !== null && refs.every((ref) => ref === null)) return () => null;
+  for (const child of LAUNCHD_PROCESS_STAGING_CHILDREN) admitted.set(child, "directory");
   for (const ref of refs) {
     if (ref === null) continue;
     const effect = scan.effects.launchd.get(ref.id);
@@ -1439,6 +1443,14 @@ function admitEffectCursors<TPlan extends CoordinatorPlan>(
         refuse(scan, "lifecycle_effect_plan_hash", facts.planEntry.path);
         continue;
       }
+      if (
+        facts.journalEntry !== null &&
+        facts.journalCoordinatorId !== null &&
+        facts.journalCoordinatorId !== reference.coordinatorId
+      ) {
+        refuse(scan, "lifecycle_effect_journal_identity", facts.journalEntry.path);
+        continue;
+      }
       if (facts.journalEntry === null && reference.stepIndex < reference.nextStep) {
         refuse(scan, "lifecycle_effect_journal_missing", facts.planEntry.path);
       }
@@ -1449,7 +1461,12 @@ function admitEffectCursors<TPlan extends CoordinatorPlan>(
 function referencedEffect<TPlan extends CoordinatorPlan>(
   records: readonly LifecycleCoordinatorRecordV1<TPlan>[],
   id: string,
-): { readonly planHash: LowerHexSha256; readonly stepIndex: number; readonly nextStep: number } | null {
+): {
+  readonly coordinatorId: string;
+  readonly planHash: LowerHexSha256;
+  readonly stepIndex: number;
+  readonly nextStep: number;
+} | null {
   for (const record of records) {
     const arms = [
       record.plan.participants.sourceGitEffect,
@@ -1463,6 +1480,7 @@ function referencedEffect<TPlan extends CoordinatorPlan>(
         (step) => "participantId" in step && (step.participantId as string) === id,
       );
       return {
+        coordinatorId: record.id,
         planHash: arm.planHash,
         stepIndex,
         nextStep: record.journal?.nextStep ?? record.plan.steps.length,

@@ -1773,13 +1773,24 @@ describe("the effect journal hookup", () => {
     [DESTINATION.id, "destination-git"],
     [AFTER_FILES.id, "after-files"],
   ]);
+  const OWNERS = new Map<string, LifecycleCoordinatorIdV1>([
+    [SOURCE.id, LOCAL.id],
+    [DESTINATION.id, LOCAL.id],
+    [AFTER_FILES.id, LIVE.id],
+  ]);
 
   function effectJournalText(
     ref: EffectRefV1,
     phase: string,
-    overrides: { readonly id?: string; readonly planHash?: string; readonly pad?: string } = {},
+    overrides: {
+      readonly id?: string;
+      readonly coordinatorId?: string;
+      readonly planHash?: string;
+      readonly pad?: string;
+    } = {},
   ): string {
     return encodeCanonicalJson({
+      coordinatorId: overrides.coordinatorId ?? OWNERS.get(ref.id) ?? null,
       id: overrides.id ?? ref.id,
       phase,
       planHash: overrides.planHash ?? ref.planHash,
@@ -1908,6 +1919,19 @@ describe("the effect journal hookup", () => {
       expect(snapshot.closure).toStrictEqual({ kind: "lifecycle_recovery_required" });
     });
 
+    it("refuses a journal that names another coordinator", async () => {
+      const home = await newHome();
+      await plantCoordinator(home, LOCAL);
+      for (const id of LOCAL.forwardIds) await plantFoundationJournal(home, id);
+      await plantEffect(home, "git", SOURCE, effectJournalText(SOURCE, "finalized", { coordinatorId: LIVE.id }));
+      await plantEffect(home, "git", DESTINATION, effectJournalText(DESTINATION, "finalized"));
+
+      const snapshot = await inspect(home, { gitEffectPlanCodec: effectLedgerCodec() });
+
+      expect(reasons(snapshot)).toStrictEqual(["lifecycle_effect_journal_identity"]);
+      expect(snapshot.closure).toStrictEqual({ kind: "lifecycle_recovery_required" });
+    });
+
     it("refuses a journal bound to another plan hash", async () => {
       const home = await newHome();
       await plantCoordinator(home, LOCAL);
@@ -2000,9 +2024,8 @@ describe("the effect journal hookup", () => {
       `staging/lifecycle/${LOCAL.id}/git/destination/${SOURCE.id}`,
       `staging/lifecycle/${LOCAL.id}/git/source/${formatAllocatedLifecycleId("ge", NONCE, 9n)}`,
       `staging/lifecycle/${LOCAL.id}/git/source/${formatAllocatedLifecycleId("le", NONCE, 3n)}`,
-      `staging/lifecycle/${LOCAL.id}/launchd-process/home/child`,
-      `staging/lifecycle/${LOCAL.id}/launchd-process/other`,
-      `staging/lifecycle/${LOCAL.id}/launchd-process/tmp/bootstrap-plist`,
+      `staging/lifecycle/${LOCAL.id}/launchd-process/home`,
+      `staging/lifecycle/${LOCAL.id}/launchd-process/tmp`,
     ])("refuses staging entry %s outside the closed grammar", async (entry) => {
       const home = await localSyncAtSource();
       await plantStaging(home, entry);
@@ -2093,6 +2116,21 @@ describe("the effect journal hookup", () => {
 
         expect(snapshot.findings).toStrictEqual([]);
         expect(snapshot.counts.lifecycleStagingMaximumPerCoordinator).toBe(2 + children.length);
+      },
+    );
+
+    it.each([`${PROCESS}/home/child`, `${PROCESS}/other`, `${PROCESS}/tmp/bootstrap-plist.tmp`, `${PROCESS}/tmp/other`])(
+      "refuses staging entry %s outside the closed grammar",
+      async (entry) => {
+        const home = await liveOnlyAtAfterFiles("applied");
+        await plantStaging(home, entry);
+
+        const snapshot = await inspect(home, { launchdEffectPlanCodec: effectLedgerCodec(BOOTSTRAP_CHILDREN) });
+
+        expect(snapshot.findings).toStrictEqual([
+          { reason: "lifecycle_staging_name", path: path(`${HOME}/${entry}`) },
+        ]);
+        expect(snapshot.closure).toStrictEqual({ kind: "lifecycle_recovery_required" });
       },
     );
 
