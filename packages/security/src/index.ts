@@ -44,13 +44,22 @@ export { capGraphemes, screenAndCap, screenControlCharacters } from "./screen.js
 export { isVisuallyBlank, perceptualKey } from "./text.js";
 export { boundedProse, fenced, screenParagraphs } from "./markdown.js";
 export {
+  FixedReleaseTransport,
+  nodeReleaseExchange,
   readOfflineReleaseTrustFd,
+  ReleaseTransportError,
   renderOfflineReleaseTrustPipe,
   verifyReleaseMetadataChain,
   verifySignedReleaseDocument,
 } from "./update/index.js";
 export type {
+  BoundedReleaseResponseV1,
+  FixedReleaseTransportDependencies,
   OfflineTrustReaderDependencies,
+  ReleaseBodySink,
+  ReleaseExchangeRequestV1,
+  ReleaseExchangeResponseV1,
+  ReleaseTransportRequestV1,
   ReleaseIndexDocumentV1,
   ReleaseKeyDelegationDocumentV1,
   ReleaseMetadataChainRequestV1,

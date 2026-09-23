@@ -1,4 +1,8 @@
-import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 import {
   assertSafeCommand,
@@ -23,6 +27,7 @@ import { MacOsPlatformAdapter } from "@developer-os/platform-macos";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { codeWithoutLiterals } from "../helpers/typescript-lexer.js";
 import {
   CLAUDE,
   clearCalls,
@@ -428,6 +433,44 @@ describe("the bootstrap refusal paths", () => {
       expect(await run([...argv, "--json"], fixture.io, () => context), argv.join(" ")).toBe(6);
     }
     expect(fixture.vendorProcesses).toStrictEqual([]);
+  });
+});
+
+/**
+ * **The update-only row.** No `update` command exists yet, so this row is a
+ * static classifier rather than a command run: every non-test TypeScript
+ * source under `packages/` and `apps/` is read, and the set of files that can
+ * open a socket — a network module import or a global `fetch` call — must be
+ * exactly the fixed release transport. Total in both directions like the rows
+ * above: an empty set would mean the transport stopped being the entrypoint,
+ * and any second member is an unclassified network path.
+ */
+describe("the release transport is the only network entrypoint", () => {
+  it("finds network capability in exactly packages/security/src/update/transport.ts", async () => {
+    const run = promisify(execFile);
+    const here = dirname(fileURLToPath(import.meta.url));
+    const root = (await run("git", ["rev-parse", "--show-toplevel"], { cwd: here })).stdout.trim();
+    const listed = (
+      await run("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "packages", "apps"], {
+        cwd: root,
+        maxBuffer: 32 * 1024 * 1024,
+      })
+    ).stdout;
+    const sources = [...new Set(listed.split("\0"))].filter(
+      (path) => /^(?:packages|apps)\/[^/]+\/src\/.*\.ts$/u.test(path) && !path.endsWith(".test.ts") && !path.endsWith(".d.ts"),
+    );
+    expect(sources.length).toBeGreaterThan(0);
+
+    const networkModule = /(?:from\s+|import\s*\(\s*|require\s*\(\s*)["'](?:node:)?(?:https?|http2|net|tls|dns|dgram|undici)(?:\/[a-z]+)?["']/u;
+    const networkCapable: string[] = [];
+    for (const path of sources) {
+      const source = await readFile(join(root, path), "utf8");
+      if (networkModule.test(source) || /(?<![.\w$])fetch\s*\(/u.test(codeWithoutLiterals(source))) {
+        networkCapable.push(path);
+      }
+    }
+
+    expect(networkCapable.sort()).toStrictEqual(["packages/security/src/update/transport.ts"]);
   });
 });
 

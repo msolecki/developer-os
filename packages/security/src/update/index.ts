@@ -7,3 +7,12 @@ export type {
   ReleaseMetadataChainRequestV1,
   ReleaseMetadataChainV1,
 } from "./signatures.js";
+export { FixedReleaseTransport, nodeReleaseExchange, ReleaseTransportError } from "./transport.js";
+export type {
+  BoundedReleaseResponseV1,
+  FixedReleaseTransportDependencies,
+  ReleaseBodySink,
+  ReleaseExchangeRequestV1,
+  ReleaseExchangeResponseV1,
+  ReleaseTransportRequestV1,
+} from "./transport.js";
