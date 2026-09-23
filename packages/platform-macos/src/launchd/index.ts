@@ -141,6 +141,7 @@ export type {
 } from "./effect-journal.js";
 export {
   LAUNCHD_PLAN_CODEC,
+  LAUNCHD_PLAN_PREVIEW_CODEC,
   assertLaunchdPlan,
   assertLaunchdPlanBindings,
   launchdEffectPlan,
@@ -151,6 +152,7 @@ export {
   parseCanonicalLaunchdPlist,
   planLaunchdTransitions,
   validateLaunchdPlan,
+  validateLaunchdPlanPreview,
 } from "./plan.js";
 export type {
   LaunchdBootstrapPlistsV1,

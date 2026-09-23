@@ -67,6 +67,15 @@ describe("the package's public door", () => {
         "materializeSanitizedBareDestinationShadow",
         "prepareLocalReceive",
         "validateShadowConfigTemplate",
+        "GitProcessSupervisor",
+        "ReleasePlanningScratchAttempt",
+        "ReleasePlanningScratchStore",
+        "TargetPlannerSupervisor",
+        "ZstdUstarAdmission",
+        "admittingGitIdentityProbe",
+        "inspectPlannerGraph",
+        "sampleNodePlannerProcess",
+        "spawnNodePlannerChild",
       ].sort(),
     );
   });

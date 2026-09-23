@@ -48,6 +48,7 @@ import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.j
 import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
 import type { CliContext } from "../context.js";
 import { resolveVendorHomes } from "../instructions/vendor-homes.js";
+import { createLifecycleEffectAdapters, createLifecycleManifestAdapter } from "./adapters.js";
 import { admitInstalledV2Home, observeManifestSchema } from "./admission.js";
 import type { AdmittedV2HomeV1 } from "./admission.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
@@ -237,11 +238,14 @@ function allocatedIdsFrom(snapshot: LifecycleLedgerSnapshotV1<LifecycleExecution
 }
 
 /**
- * In plan 1a the CLI codec admits no operation but `uninstall` and no effect leaf at all, and
- * `assertRecoverable` refuses every active coordinator before the recovery loop reaches one —
- * so the only adapters the preflight can reach are the Foundation participant's
- * `discardUnstarted`, which touches the guarded port alone. Completing an uninstall
- * coordinator's control files is Task 22's, and refuses here rather than deleting them.
+ * `assertRecoverable` refuses an active uninstall before the recovery loop reaches it, so the
+ * preflight finishes only Git and automation coordinators: their manifest arm and journaled
+ * effects run here, and completing an uninstall coordinator's control files refuses rather than
+ * deleting them.
+ *
+ * §2.2 lets only `git sync` consume a persisted push plan, so a gated mutator never pushes: a
+ * coordinator that reaches `N` here stays `push_pending`, the closure reads `retry_only`, and
+ * `requireResolvedClosure` refuses the caller.
  */
 function gateAdapters(
   context: CliContext,
@@ -273,13 +277,10 @@ function gateAdapters(
       }),
       effectiveUid: lifecycle.effectiveUid,
     }),
-    manifest: null,
+    manifest: createLifecycleManifestAdapter(lifecycle, gateManifestAdmission(context)),
     redactionKey: null,
-    sourceGitEffect: null,
-    destinationGitEffect: null,
-    launchdBeforeFiles: null,
-    launchdAfterFiles: null,
-    networkPush: null,
+    ...createLifecycleEffectAdapters(lifecycle, lifecycle.effectPorts()),
+    networkPush: { push: () => Promise.resolve("failed") },
     drainRunners: null,
     controlFiles: {
       removeAllocator: () => unsupported("lifecycle-id-allocator.json"),

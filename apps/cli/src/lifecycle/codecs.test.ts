@@ -23,7 +23,11 @@ import type {
   ManifestStatePlanV1,
 } from "@developer-os/core";
 
+import { LAUNCHD_PLAN_PREVIEW_CODEC } from "@developer-os/platform-macos";
+import { PERSISTED_GIT_PUSH_PLAN_CODEC } from "@developer-os/security";
+
 import {
+  createLifecycleExecutionCodecs,
   createLifecycleExecutionPlanCodec,
   LifecycleUnsupportedLeafError,
   lifecyclePushPlanHash,
@@ -37,7 +41,17 @@ import {
   redactionKeyStatePlanHash,
   redactionKeyTombstonePath,
 } from "./redaction-key.js";
-import { foundationBindingsHash, syntheticUninstall } from "./testing.js";
+import {
+  foundationBindingsHash,
+  syntheticAutomationLiveOnly,
+  syntheticAutomationPreview,
+  syntheticGitEnable,
+  syntheticGitEnablePreview,
+  syntheticGitSync,
+  syntheticInstalledLaunchdPreview,
+  syntheticUninstall,
+  withPreviewHash,
+} from "./testing.js";
 
 const HOME = parseCanonicalAbsolutePathText("/product");
 const STATE = parseCanonicalAbsolutePathText("/product/state");
@@ -70,10 +84,9 @@ const launchdEffectId = (counter: bigint): LaunchdEffectIdV1 =>
 
 /**
  * Core binds each effect arm to its own step inside `validate`, so an arm planted alone
- * refuses as a malformed plan rather than as an unsupported leaf: the pair is what reaches
- * the CLI's post-check.
+ * refuses as a malformed plan: the pair is what reaches the grammar.
  */
-const UNSUPPORTED_EFFECT_PAIRS: readonly {
+const EFFECT_PAIRS: readonly {
   readonly label: string;
   readonly plan: LifecycleExecutionPlanV1;
 }[] = [
@@ -151,27 +164,26 @@ describe("the concrete lifecycle execution-plan codec", () => {
     expect(lifecyclePushPlanHash(plan)).toBeNull();
   });
 
-  it("refuses a non-null launchd leaf and a non-null push leaf as unsupported until plan 1b", () => {
+  it("refuses a malformed launchd leaf and push leaf as invalid bytes, not as unsupported arms", () => {
     const codec = createLifecycleExecutionPlanCodec(CONTEXT);
-    const unsupported = { marker: "plan-1b" };
+    const malformed = { marker: "not-a-leaf" };
 
-    expect(() =>
-      codec.validate({
-        ...UNINSTALL_PLAN,
-        participants: { ...UNINSTALL_PLAN.participants, launchd: unsupported },
-      }),
-    ).toThrow(LifecycleUnsupportedLeafError);
-    expect(() => codec.validate({ ...UNINSTALL_PLAN, push: unsupported })).toThrow(
-      LifecycleUnsupportedLeafError,
-    );
+    for (const plan of [
+      { ...UNINSTALL_PLAN, participants: { ...UNINSTALL_PLAN.participants, launchd: malformed } },
+      { ...UNINSTALL_PLAN, push: malformed },
+    ]) {
+      expect(() => codec.validate(plan)).toThrow();
+      expect(() => codec.validate(plan)).not.toThrow(LifecycleUnsupportedLeafError);
+    }
   });
 
-  it("refuses every 1b effect arm and its step as unsupported until plan 1b", () => {
+  it("admits every effect arm with its step and leaves the uninstall grammar to refuse the pair", () => {
     const codec = createLifecycleExecutionPlanCodec(CONTEXT);
-    expect(UNSUPPORTED_EFFECT_PAIRS.length).toBeGreaterThan(0);
+    expect(EFFECT_PAIRS.length).toBeGreaterThan(0);
 
-    for (const { label, plan } of UNSUPPORTED_EFFECT_PAIRS) {
-      expect(() => codec.validate(plan), label).toThrow(LifecycleUnsupportedLeafError);
+    for (const { label, plan } of EFFECT_PAIRS) {
+      const admitted = codec.validate(plan);
+      expect(() => validateLifecyclePlanGrammar(admitted, lifecycleVariantFacts(admitted)), label).toThrow();
     }
   });
 
@@ -182,17 +194,162 @@ describe("the concrete lifecycle execution-plan codec", () => {
     expect(error.reason).toBe("unsupported_until_plan_1b");
   });
 
-  it("refuses every non-uninstall operation in plan 1a", () => {
+  it("admits every operation's bytes and leaves an uninstall step list under another operation to the grammar", () => {
     const codec = createLifecycleExecutionPlanCodec(CONTEXT);
     const operations = Object.keys(LIFECYCLE_STEP_GRAMMAR)
       .map((variant) => variant.split("/")[0] ?? variant)
-      .filter((operation) => operation !== "uninstall");
+      .filter((operation) => operation !== "uninstall" && operation !== "git_sync");
     expect(operations.length).toBeGreaterThan(0);
 
     for (const operation of new Set(operations)) {
-      expect(() => codec.validate({ ...UNINSTALL_PLAN, operation }), operation).toThrow(
-        LifecycleUnsupportedLeafError,
-      );
+      const plan = codec.validate({ ...UNINSTALL_PLAN, operation });
+      expect(() => validateLifecyclePlanGrammar(plan, lifecycleVariantFacts(plan)), operation).toThrow();
+    }
+  });
+});
+
+describe("the composed Git, launchd and push leaves", () => {
+  const codecs = createLifecycleExecutionCodecs(CONTEXT);
+  const gitEnablePlanFixture = syntheticGitEnable(HOME, NONCE, 20n);
+  const automationLiveOnlyFixture = syntheticAutomationLiveOnly(HOME, NONCE, 40n);
+  const gitSyncNewNetworkFixture = syntheticGitSync(HOME, NONCE, 30n, "new_network");
+  const gitSyncExistingLocalFixture = syntheticGitSync(HOME, NONCE, 50n, "existing_local");
+  const gitPreviewFixture = syntheticGitEnablePreview(HOME);
+  const mixedPreviewFixture = withPreviewHash({
+    ...gitPreviewFixture,
+    launchd: syntheticInstalledLaunchdPreview(HOME),
+  });
+
+  it("round-trips a git_enable execution plan and a live-only automation plan", () => {
+    for (const plan of [gitEnablePlanFixture, automationLiveOnlyFixture]) {
+      expect(codecs.executionPlan.validate(JSON.parse(codecs.executionPlan.encode(plan)))).toEqual(plan);
+    }
+  });
+
+  it("no longer refuses Git or launchd step kinds with unsupported_until_plan_1b", () => {
+    expect(() => codecs.executionPlan.validate(gitSyncNewNetworkFixture)).not.toThrow();
+    const plan = codecs.executionPlan.validate(gitSyncNewNetworkFixture);
+    expect(validateLifecyclePlanGrammar(plan, lifecycleVariantFacts(plan))).toBe("git_sync/new_network");
+  });
+
+  it("derives every git_sync variant and the live-only reconcile from the plan's own leaves", () => {
+    const rows = [
+      { plan: gitSyncNewNetworkFixture, variant: "git_sync/new_network" },
+      { plan: syntheticGitSync(HOME, NONCE, 60n, "existing_network"), variant: "git_sync/existing_network" },
+      { plan: syntheticGitSync(HOME, NONCE, 70n, "new_local"), variant: "git_sync/new_local" },
+      { plan: gitSyncExistingLocalFixture, variant: "git_sync/existing_local" },
+      { plan: automationLiveOnlyFixture, variant: "automation_reconcile/live_only" },
+      { plan: gitEnablePlanFixture, variant: "git_enable" },
+    ] as const;
+    expect(rows.length).toBeGreaterThan(0);
+
+    for (const { plan, variant } of rows) {
+      expect(validateLifecyclePlanGrammar(plan, lifecycleVariantFacts(plan)), variant).toBe(variant);
+    }
+    expect(lifecycleVariantFacts(automationLiveOnlyFixture).automationReconcile).toBe("live_only");
+  });
+
+  it("derives git_sync variant facts from the plan rather than hardcoding null", () => {
+    expect(lifecycleVariantFacts(gitSyncExistingLocalFixture).gitSync).toEqual({
+      newCommit: false,
+      transport: "local",
+      noChanges: false,
+    });
+    expect(lifecycleVariantFacts(gitSyncNewNetworkFixture).gitSync).toEqual({
+      newCommit: true,
+      transport: "network",
+      noChanges: false,
+    });
+  });
+
+  it("hashes the push leaf with the persisted push-plan codec and leaves a push-free plan null", () => {
+    const push = gitSyncNewNetworkFixture.push;
+    expect(push).not.toBeNull();
+    expect(lifecyclePushPlanHash(gitSyncNewNetworkFixture)).toBe(
+      PERSISTED_GIT_PUSH_PLAN_CODEC.hash(push as NonNullable<typeof push>),
+    );
+    expect(lifecyclePushPlanHash(gitEnablePlanFixture)).toBeNull();
+  });
+
+  it("refuses a launchd leaf the coordinator does not bind", () => {
+    const plan = {
+      ...automationLiveOnlyFixture,
+      authority: { ...automationLiveOnlyFixture.authority, configPath: path("/product/other-config.toml") },
+    };
+
+    expect(() => codecs.executionPlan.validate(plan)).toThrow();
+  });
+
+  it("lets the manifest arm name only the plan's own journaled effect", () => {
+    const manifest = gitEnablePlanFixture.participants.manifest as ManifestStatePlanV1;
+    const foreign = {
+      ...gitEnablePlanFixture,
+      participants: {
+        ...gitEnablePlanFixture.participants,
+        manifest: {
+          ...manifest,
+          bindings: {
+            ...manifest.bindings,
+            externalEffects: [{ kind: "git" as const, id: gitEffectId(99n), planHash: hash("a") }],
+          },
+        },
+      },
+    };
+
+    expect(() => codecs.executionPlan.validate(foreign)).toThrow(ManifestStateParticipantError);
+  });
+
+  it("round-trips a git_enable preview through the Git preview and projection leaves", () => {
+    expect(codecs.preview.validate(JSON.parse(codecs.preview.encode(gitPreviewFixture)))).toEqual(gitPreviewFixture);
+  });
+
+  it("round-trips an automation preview through the launchd preview leaf and binds its table hashes", () => {
+    const preview = syntheticAutomationPreview(HOME);
+    expect(preview.launchd?.entries.length).toBeGreaterThan(0);
+
+    expect(codecs.preview.validate(JSON.parse(codecs.preview.encode(preview)))).toEqual(preview);
+    const drifted = withPreviewHash({
+      ...preview,
+      processTableTemplateHashes: {
+        git: null,
+        launchd: { observation: hash("e"), mutationTemplate: preview.launchd?.mutationProcessTableTemplateHash ?? hash("e") },
+      },
+    });
+    expect(() => codecs.preview.validate(drifted)).toThrow(/launchd table hashes/u);
+  });
+
+  it("refuses a launchd preview entry that carries a bootstrap identity or leaves registry order", () => {
+    const launchd = syntheticInstalledLaunchdPreview(HOME);
+    const [first, second] = launchd.entries;
+    if (first === undefined || second === undefined) throw new Error("the fixture installs three jobs");
+
+    expect(LAUNCHD_PLAN_PREVIEW_CODEC.validate(JSON.parse(LAUNCHD_PLAN_PREVIEW_CODEC.encode(launchd)))).toEqual(launchd);
+    expect(() =>
+      LAUNCHD_PLAN_PREVIEW_CODEC.validate({
+        ...launchd,
+        entries: [{ ...first, bootstrapPlists: { before: null, after: null } }],
+      }),
+    ).toThrow();
+    expect(() => LAUNCHD_PLAN_PREVIEW_CODEC.validate({ ...launchd, entries: [second, first] })).toThrow();
+  });
+
+  it("still refuses a preview with both git and launchd members", () => {
+    expect(() => codecs.preview.validate(mixedPreviewFixture)).toThrow(/Git preview arms/u);
+  });
+
+  it("refuses a projection with an unknown subsystem, an extra key or a lifecycle the config schema refuses", () => {
+    const projection = gitPreviewFixture.normalizedProjection;
+    const refused = [
+      { ...projection, subsystem: "vendor" },
+      { ...projection, extra: true },
+      { ...projection, lifecycle: { ...(projection.lifecycle as object), branch: "../main" } },
+    ];
+    expect(refused.length).toBeGreaterThan(0);
+
+    for (const normalizedProjection of refused) {
+      expect(() =>
+        codecs.preview.validate(withPreviewHash({ ...gitPreviewFixture, normalizedProjection } as never)),
+      ).toThrow();
     }
   });
 });

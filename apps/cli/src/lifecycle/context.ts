@@ -23,6 +23,7 @@ import {
   LifecycleRecoveryRequiredError,
   LifecycleRecoveryService,
   TransactionStore,
+  createGitEffectLedgerCodec,
   createNodeLifecycleGuardedFileSystem,
   deriveLifecycleLedgerRoots,
   inspectLifecycleLedger,
@@ -47,29 +48,25 @@ import type {
   TransactionLockProvider,
   UtcTimestampV1,
 } from "@developer-os/core";
+import { LAUNCHD_EFFECT_LEDGER_CODEC } from "@developer-os/platform-macos";
 
+import { createLifecycleEffectPorts, REJECTING_LAUNCHD_HOST } from "./adapters.js";
+import type { LaunchdHostV1, LifecycleEffectPortsV1 } from "./adapters.js";
 import type { AdmittedV2HomeV1 } from "./admission.js";
 import {
   createLifecycleExecutionCodecs,
+  lifecycleHomeKeyFromCoordinatorId,
   lifecyclePushPlanHash,
   lifecycleVariantFacts,
   manifestBeforeHashOf,
   uninstallLeasePaths,
 } from "./codecs.js";
-import type { LifecycleExecutionPlanV1 } from "./codecs.js";
+import type { LifecycleExecutionPlanV1, LifecycleHomeKeyV1, LifecyclePlanPreviewV1 } from "./codecs.js";
 
-const COORDINATOR_ID_GRAMMAR = /^lc_([0-9a-f]{64})_(?:0|[1-9][0-9]*)$/u;
+export { lifecycleHomeKeyFromCoordinatorId };
+export type { LifecycleHomeKeyV1 };
+
 const COORDINATOR_LEAF_GRAMMAR = /^\.?lc_([0-9a-f]{64})_(?:0|[1-9][0-9]*)[.]/u;
-
-/**
- * What the lifecycle services need to know about a home. It never requires an admitted
- * manifest: recovery after `M(preserve_before)` runs with the manifest gone, and after the
- * uninstall control-file steps with the nonce gone.
- */
-export interface LifecycleHomeKeyV1 {
-  readonly productHome: CanonicalAbsolutePathV1;
-  readonly nonce: LifecycleInstallNonceV1;
-}
 
 export interface LifecycleResidueEvidenceV1 {
   readonly retainedPaths: readonly CanonicalAbsolutePathV1[];
@@ -98,8 +95,11 @@ export interface CliLifecycleContext {
   readonly sleepMs: (milliseconds: number) => Promise<void>;
   codecs(key: LifecycleHomeKeyV1): {
     readonly executionPlan: LifecycleValueCodec<LifecycleExecutionPlanV1>;
+    readonly preview: LifecycleValueCodec<LifecyclePlanPreviewV1>;
     readonly coordinatorJournal: LifecycleValueCodec<LifecycleCoordinatorJournalV1>;
   };
+  /** The Git, launchd and push ports every effect participant of this home runs through. */
+  effectPorts(): LifecycleEffectPortsV1;
   inspectLedger(
     key: LifecycleHomeKeyV1,
     residue: LifecycleBookkeepingResidueV1,
@@ -120,16 +120,6 @@ export function lifecycleHomeKeyFromAdmission(
     productHome: parseCanonicalAbsolutePathText(paths.home),
     nonce: admitted.nonce,
   };
-}
-
-/** Parses the nonce out of `lc_<nonce>_<counter>`; refuses any other grammar. */
-export function lifecycleHomeKeyFromCoordinatorId(
-  productHome: CanonicalAbsolutePathV1,
-  coordinatorId: string,
-): LifecycleHomeKeyV1 {
-  const match = COORDINATOR_ID_GRAMMAR.exec(coordinatorId);
-  if (match === null) throw new Error("invalid LifecycleCoordinatorIdV1");
-  return { productHome, nonce: parseLowerHexSha256(match[1]) };
 }
 
 /**
@@ -188,6 +178,10 @@ export function createLifecycleContext(input: {
   readonly now: () => Date;
   readonly uuid?: () => string;
   readonly sleepMs?: (milliseconds: number) => Promise<void>;
+  /** Absent, every launchd probe and spawn rejects: only the production root injects the real host. */
+  readonly launchdHost?: LaunchdHostV1;
+  /** Replaces the composed ports outright, for fixtures that record every effect call. */
+  readonly effectPorts?: (context: CliLifecycleContext) => LifecycleEffectPortsV1;
 }): CliLifecycleContext {
   const fs = createNodeLifecycleGuardedFileSystem({
     renameNoReplace: input.renameNoReplace,
@@ -224,8 +218,8 @@ export function createLifecycleContext(input: {
         coordinatorJournalCodec: leaves.coordinatorJournal,
         variantFacts: lifecycleVariantFacts,
         pushPlanHash: lifecyclePushPlanHash,
-        gitEffectPlanCodec: null,
-        launchdEffectPlanCodec: null,
+        gitEffectPlanCodec: createGitEffectLedgerCodec(input.effectiveUid),
+        launchdEffectPlanCodec: LAUNCHD_EFFECT_LEDGER_CODEC,
         residue,
         manifestBeforeHash: manifestBeforeHashOf,
         leasePaths: (plan) => uninstallLeasePaths(plan.authority.productHome),
@@ -260,7 +254,8 @@ export function createLifecycleContext(input: {
     });
   };
 
-  return {
+  let ports: LifecycleEffectPortsV1 | null = null;
+  const context: CliLifecycleContext = {
     fs,
     renameNoReplace: input.renameNoReplace,
     locks: input.locks,
@@ -272,6 +267,12 @@ export function createLifecycleContext(input: {
     nowMs: () => input.now().getTime(),
     sleepMs,
     codecs,
+    effectPorts: () => {
+      ports ??=
+        input.effectPorts?.(context) ??
+        createLifecycleEffectPorts(context, input.launchdHost ?? REJECTING_LAUNCHD_HOST);
+      return ports;
+    },
     inspectLedger,
     store,
     recovery: (key, adapters, residue) =>
@@ -287,4 +288,5 @@ export function createLifecycleContext(input: {
         inspect: () => inspectLedger(key, residue),
       }),
   };
+  return context;
 }

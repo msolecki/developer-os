@@ -38,7 +38,7 @@ export type {
   ValidatedGitBranchV1,
   VaultSegmentV1,
 } from "./lifecycle.js";
-export { loadConfig, serializeConfig } from "./loader.js";
+export { loadConfig, parseAutomationConfig, parseGitSyncConfig, serializeConfig } from "./loader.js";
 export { resolveRuntimePaths } from "./paths.js";
 export { pathSegmentViolation } from "./segment.js";
 export type {

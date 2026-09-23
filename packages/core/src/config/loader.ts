@@ -14,6 +14,8 @@ import {
   parseNormalizedRemoteUrl,
   parseValidatedGitBranch,
   parseVaultSegment,
+  type AutomationConfigV1,
+  type GitSyncConfigV1,
   type NormalizedRemoteUrlV1,
 } from "./lifecycle.js";
 import { pathSegmentViolation } from "./segment.js";
@@ -386,6 +388,18 @@ function boundedLifecycleRecord<TSchema extends z.ZodType>(label: string, schema
   }, schema);
 }
 
+const gitLifecycleSchema = boundedLifecycleRecord("git.lifecycle", gitSyncConfigSchema);
+const automationLifecycleSchema = boundedLifecycleRecord("automation.lifecycle", automationConfigSchema);
+
+/** A lifecycle preview's normalized projection carries these records, so it is admitted by the config's own schema. */
+export function parseGitSyncConfig(value: unknown): GitSyncConfigV1 {
+  return gitLifecycleSchema.parse(value);
+}
+
+export function parseAutomationConfig(value: unknown): AutomationConfigV1 {
+  return automationLifecycleSchema.parse(value);
+}
+
 const configSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -399,16 +413,13 @@ const configSchema = z
     git: z
       .object({
         enabled: z.boolean(),
-        lifecycle: boundedLifecycleRecord("git.lifecycle", gitSyncConfigSchema).optional(),
+        lifecycle: gitLifecycleSchema.optional(),
       })
       .strict(),
     automation: z
       .object({
         enabled: z.boolean(),
-        lifecycle: boundedLifecycleRecord(
-          "automation.lifecycle",
-          automationConfigSchema,
-        ).optional(),
+        lifecycle: automationLifecycleSchema.optional(),
       })
       .strict(),
     brain: brainSchema.optional(),

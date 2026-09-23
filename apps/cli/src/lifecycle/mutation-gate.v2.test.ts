@@ -6,10 +6,13 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import {
   EXIT_CODES,
+  LIFECYCLE_HASH_DOMAINS,
   SCHEDULED_JOB_IDS,
+  decodeCanonicalJson,
   encodeLifecycleIdAllocator,
   formatAllocatedLifecycleId,
   foundationParticipantPlanHash,
+  hashCanonicalJson,
   parseAllocatedLifecycleId,
   parseCanonicalAbsolutePathText,
   parseEffectiveUid,
@@ -18,6 +21,7 @@ import {
   parseLowerHexSha256,
   parseManifestParticipantId,
   parseUInt64Decimal,
+  parseUtcTimestamp,
 } from "@developer-os/core";
 import type {
   AllocatedLifecycleIdV1,
@@ -25,6 +29,7 @@ import type {
   FoundationParticipantRefV1,
   FoundationParticipantSlotV1,
   LifecycleCoordinatorIdV1,
+  LifecycleCoordinatorJournalV1,
   LifecycleCoordinatorStepV1,
   LifecycleInstallNonceV1,
   LifecycleLedgerSnapshotV1,
@@ -51,12 +56,14 @@ import {
   retainedTombstones,
 } from "../commands/testing.js";
 import type { CommandFixture } from "../commands/testing.js";
+import { lifecyclePushPlanHash } from "./codecs.js";
 import type { LifecycleExecutionPlanV1 } from "./codecs.js";
 import { lifecycleHomeKeyFromAdmission, residueFrom } from "./context.js";
 import type { CliLifecycleContext } from "./context.js";
 import { admitInstalledV2Home } from "./admission.js";
 import { classifyMutationHome, withLifecycleMutation } from "./mutation-gate.js";
 import type { RedactionKeyStatePlanV1 } from "./redaction-key.js";
+import { syntheticGitSync } from "./testing.js";
 
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
 const UID = process.getuid?.() ?? 0;
@@ -833,3 +840,77 @@ describe("the installed-home gates beside D52's state/codex-ingest-home", () => 
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
 
+
+/**
+ * Plan 1b Task 14: the gate's recovery now reaches Git and launchd coordinators. §2.2 lets only
+ * `git sync` consume a persisted push plan, so a gated mutator finds a `push_pending` Git sync,
+ * leaves it bound to its push and refuses instead of pushing.
+ */
+describe("the mutation gate around a Git sync waiting on its push", () => {
+  it("keeps a push_pending git_sync at retry_only without pushing and refuses the mutation", async () => {
+    const fixture = await sharedV2Home();
+    const nonce = await nonceOf(fixture);
+    const base = await allocatorCounter(fixture);
+    await nodeFs.writeFile(
+      allocatorPath(fixture),
+      encodeLifecycleIdAllocator({
+        schemaVersion: 1,
+        installNonce: nonce,
+        nextCounter: parseUInt64Decimal(String(base + 4n)),
+      }),
+      { mode: 0o600 },
+    );
+    const key = await admittedKeyOf(fixture);
+    const codecs = lifecycleOf(fixture).codecs(key);
+    const plan = syntheticGitSync(key.productHome, nonce, base, "existing_network");
+    const planText = codecs.executionPlan.encode(plan);
+    const pushPlanHash = lifecyclePushPlanHash(plan);
+    const journal: LifecycleCoordinatorJournalV1 = {
+      schemaVersion: 1,
+      id: plan.id,
+      operation: "git_sync",
+      phase: "push_pending",
+      planHash: hashCanonicalJson(
+        LIFECYCLE_HASH_DOMAINS.coordinatorPlan,
+        decodeCanonicalJson(new TextEncoder().encode(planText), 16_777_216),
+      ),
+      pushPlanHash,
+      nextStep: 0,
+      compensationNext: null,
+      compactionNext: null,
+      terminalOutcome: null,
+      createdAt: parseUtcTimestamp("2026-09-23T00:00:00.000Z"),
+      updatedAt: parseUtcTimestamp("2026-09-23T00:00:00.000Z"),
+    };
+    const planPath = join(fixture.paths.stateDir, "lifecycle-journals", `${plan.id}.plan.json`);
+    const journalPath = join(fixture.paths.stateDir, "lifecycle-journals", `${plan.id}.json`);
+
+    await restoring(
+      async () => {
+        await nodeFs.writeFile(planPath, planText, { mode: 0o600 });
+        await nodeFs.writeFile(journalPath, codecs.coordinatorJournal.encode(journal), { mode: 0o600 });
+      },
+      async () => {
+        /** The recovery pass rewrites the journal under the coordinator's own stable lock leaf. */
+        await nodeFs.rm(join(fixture.paths.stateDir, "lifecycle-journals", `.${plan.id}.lock`), { force: true });
+        await nodeFs.rm(journalPath, { force: true });
+        await nodeFs.rm(planPath, { force: true });
+      },
+      async () => {
+        const planted = await snapshotOf(fixture);
+        expect(planted.findings).toStrictEqual([]);
+        expect(planted.closure).toStrictEqual({ kind: "retry_only", transactionId: plan.id, pushPlanHash });
+
+        expect(await refusalOf(mutate(fixture, "push-pending"))).toMatchObject({
+          refused: true,
+          code: EXIT_CODES.recoveryRequired,
+          reason: "lifecycle_closure_unresolved",
+        });
+
+        const after = codecs.coordinatorJournal.validate(JSON.parse(await nodeFs.readFile(journalPath, "utf8")));
+        expect(after).toMatchObject({ phase: "push_pending", nextStep: 0, pushPlanHash });
+        expect(await exists(join(fixture.paths.home, "push-pending.probe.json"))).toBe(false);
+      },
+    );
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});

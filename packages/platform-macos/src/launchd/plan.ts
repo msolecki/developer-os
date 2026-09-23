@@ -638,6 +638,45 @@ export function validateLaunchdPlan(value: unknown): LaunchdPlanV1 {
   return plan;
 }
 
+/**
+ * A preview entry is a plan entry before any bootstrap inode exists, so it is admitted by the same
+ * canonical reconstruction with no bootstrap identity, and must not carry one of its own.
+ */
+export function validateLaunchdPlanPreview(value: unknown): LaunchdPlanPreviewV1 {
+  const raw = exactKeys(
+    value,
+    ["schemaVersion", "observationProcessTableHash", "mutationProcessTableTemplateHash", "entries"],
+    "LaunchdPlanPreviewV1",
+  );
+  if (raw.schemaVersion !== 1) refuse("LaunchdPlanPreviewV1: schemaVersion");
+  if (!Array.isArray(raw.entries) || raw.entries.length > 4) refuse("LaunchdPlanPreviewV1: entries");
+  let order = -1;
+  const entries = (raw.entries as readonly unknown[]).map((entry, index) => {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry) || Object.hasOwn(entry, "bootstrapPlists")) {
+      refuse(`LaunchdPlanPreviewV1.entries[${String(index)}]`);
+    }
+    const planned = parseEntry({ ...entry, bootstrapPlists: { before: null, after: null } }, index);
+    const parsed = Object.fromEntries(
+      Object.entries(planned).filter(([key]) => key !== "bootstrapPlists"),
+    ) as unknown as LaunchdPlanPreviewEntryV1;
+    const position = SCHEDULED_JOB_IDS.indexOf(parsed.job);
+    if (position <= order) refuse("LaunchdPlanPreviewV1: entries are not unique in registry order");
+    order = position;
+    return Object.freeze(parsed);
+  });
+  return Object.freeze({
+    schemaVersion: 1,
+    observationProcessTableHash: parseLowerHexSha256(raw.observationProcessTableHash),
+    mutationProcessTableTemplateHash: parseLowerHexSha256(raw.mutationProcessTableTemplateHash),
+    entries: Object.freeze(entries),
+  });
+}
+
+export const LAUNCHD_PLAN_PREVIEW_CODEC: LifecycleValueCodec<LaunchdPlanPreviewV1> = Object.freeze({
+  validate: validateLaunchdPlanPreview,
+  encode: (preview: LaunchdPlanPreviewV1) => encodeCanonicalJson(canonical(preview)),
+});
+
 /** The coordinator plan's `participants.launchd` leaf codec. */
 export const LAUNCHD_PLAN_CODEC: LifecycleValueCodec<LaunchdPlanV1> = Object.freeze({
   validate: validateLaunchdPlan,

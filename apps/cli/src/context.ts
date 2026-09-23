@@ -63,6 +63,7 @@ import { createBootstrapEvidenceInspectionRequest } from "./bootstrap/context.js
 import type { CliBootstrapContext } from "./bootstrap/context.js";
 import { BootstrapExecutor } from "./bootstrap/executor.js";
 import { inspectBootstrapEvidenceAdmission } from "./bootstrap/report.js";
+import { createProductionLaunchdHost } from "./lifecycle/adapters.js";
 import { createLifecycleContext } from "./lifecycle/context.js";
 import type { CliLifecycleContext } from "./lifecycle/context.js";
 import type { CliUpdateContext } from "./update/context.js";
@@ -881,5 +882,6 @@ function productionLifecycleContext(
     // No file is owned by uid -1, so a platform without `getuid` refuses every guarded read.
     effectiveUid: process.getuid?.() ?? -1,
     now,
+    launchdHost: createProductionLaunchdHost(),
   });
 }

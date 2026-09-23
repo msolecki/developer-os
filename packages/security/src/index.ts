@@ -142,6 +142,18 @@ export type {
   GitPackClosureEvidenceV1,
   SanitizedBareDestinationShadowV1,
 } from "./git/index.js";
+export { admittingGitIdentityProbe, GitProcessSupervisor } from "./git/index.js";
+export type {
+  GitConcreteProcessRequestV1,
+  GitExecutableIdentityProbeV1,
+  GitProcessAdmissionV1,
+  GitProcessEvidenceV1,
+  GitProcessIntentV1,
+  GitProcessPermitV1,
+  GitProcessPhaseV1,
+  GitProcessSupervisorV1,
+  GitPushPhaseV1,
+} from "./git/index.js";
 
 export interface SecurityPolicy {
   assertReadable(path: string): Promise<void>;
