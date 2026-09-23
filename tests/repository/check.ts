@@ -12,6 +12,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
+import { inspectPlannerGraph } from "@developer-os/security";
+
 import { codeWithoutLiterals } from "../helpers/typescript-lexer.js";
 
 import {
@@ -214,6 +216,27 @@ function findNumberValuedStats(
   return violations;
 }
 
+/**
+ * Spec 2 §2's capability-absence gate. No shipped planner bundle exists yet, so the entry
+ * list is the compiled protocol module every target planner imports; the bundle's own
+ * planner entrypoint joins it when the release packer produces one. `lint` builds before
+ * this runs, so a missing entrypoint is a failure, never a skip.
+ */
+const PLANNER_ENTRYPOINTS: readonly string[] = ["packages/core/dist/update/planner.js"];
+
+function findPlannerCapabilities(root: string): readonly string[] {
+  const problems: string[] = [];
+  const relative = (path: string): string => (path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path);
+  for (const entrypoint of PLANNER_ENTRYPOINTS) {
+    const graph = inspectPlannerGraph(join(root, entrypoint));
+    if (graph.modules.length === 0) problems.push(`${entrypoint}: the compiled graph is empty or missing`);
+    for (const finding of graph.forbidden) {
+      problems.push(`${entrypoint}: ${relative(finding.module)}: ${finding.capability} (${finding.evidence})`);
+    }
+  }
+  return problems;
+}
+
 function isMissing(error: unknown): boolean {
   return (
     typeof error === "object" &&
@@ -314,7 +337,20 @@ async function main(): Promise<number> {
     );
   }
 
+  const capabilities = findPlannerCapabilities(root);
+  if (capabilities.length > 0) {
+    process.stderr.write(
+      `planner-graph: ${String(capabilities.length)} capability finding(s) in the target planner graph\n`,
+    );
+    for (const problem of capabilities) process.stderr.write(`  ${problem}\n`);
+    process.stderr.write(
+      "\nThe target planner may reach no filesystem, network, process, environment, clock, randomness,\n" +
+        "native addon, worker, or dynamic import. Move the capability to the current process and pass its result in the request.\n",
+    );
+  }
+
   return violations.length > 0 ||
+    capabilities.length > 0 ||
     renderings.length > 0 ||
     numberValued.length > 0 ||
     unreadable.length > 0

@@ -45,7 +45,11 @@ export { isVisuallyBlank, perceptualKey } from "./text.js";
 export { boundedProse, fenced, screenParagraphs } from "./markdown.js";
 export {
   FixedReleaseTransport,
+  inspectPlannerGraph,
   nodeReleaseExchange,
+  sampleNodePlannerProcess,
+  spawnNodePlannerChild,
+  TargetPlannerSupervisor,
   readOfflineReleaseTrustFd,
   ReleasePlanningScratchAttempt,
   ReleasePlanningScratchStore,
@@ -59,6 +63,14 @@ export type {
   BoundedReleaseResponseV1,
   FixedReleaseTransportDependencies,
   OfflineTrustReaderDependencies,
+  PlannerCapabilityV1,
+  PlannerChildProcessV1,
+  PlannerGraphFindingV1,
+  PlannerGraphV1,
+  PlannerProcessSampleV1,
+  PlannerSpawnRequestV1,
+  PlannerTranscriptIdentityV1,
+  PlannerWireBoundsV1,
   ReleaseBodySink,
   ReleaseExchangeRequestV1,
   ReleaseExchangeResponseV1,
@@ -73,6 +85,9 @@ export type {
   ReleasePlanningScratchStoreDependencies,
   ReleasePlanningScratchV1,
   VerifiedScratchBundleV1,
+  TargetPlannerRunRequestV1,
+  TargetPlannerRunResultV1,
+  TargetPlannerSupervisorDependencies,
 } from "./update/index.js";
 
 export interface SecurityPolicy {

@@ -410,7 +410,7 @@ function hasControlOrFormat(value: string): boolean {
   }
   return false;
 }
-function parseBundleRelativePath(value: unknown): BundleRelativePathV1 {
+export function parseBundleRelativePath(value: unknown): BundleRelativePathV1 {
   const input = string(value, "BundleRelativePathV1"); const total = bytes(input); const components = input.split("/");
   if (input.normalize("NFC") !== input || total < 1 || total > 255 || components.length < 1 || components.length > 32 || input.includes("\\") || input.startsWith("/") || components.some((part) => part.length === 0 || part === "." || part === ".." || bytes(part) > 100 || part.includes(":") || part.startsWith("-") || hasControlOrFormat(part))) invalid("BundleRelativePathV1");
   const name = components[components.length - 1] as string; const prefix = components.slice(0, -1).join("/");

@@ -49,15 +49,23 @@ interface CheckOutcome {
  * `git rev-parse --show-toplevel` from the working directory, which is what lets
  * this run it against a fixture instead of against the repository under test.
  */
+/**
+ * The planner-graph gate is total: a checkout without the compiled planner
+ * entrypoint fails. Every fixture gets a clean one unless it says otherwise, so
+ * the cases above keep testing only their own rule.
+ */
+const PLANNER_ENTRY = "packages/core/dist/update/planner.js";
+
 async function sandbox(
   files: Readonly<Record<string, string>>,
-  options: { readonly stage?: boolean; readonly name?: string } = {},
+  options: { readonly stage?: boolean; readonly name?: string; readonly planner?: boolean } = {},
 ): Promise<string> {
   const root = await mkdtemp(join("/tmp", options.name ?? "dosSc"));
   sandboxes.push(root);
 
   await run("git", ["init", "-q"], { cwd: root });
-  for (const [path, content] of Object.entries(files)) {
+  const planner = options.planner === false || PLANNER_ENTRY in files ? {} : { [PLANNER_ENTRY]: "export const planned = 1;\n" };
+  for (const [path, content] of Object.entries({ ...planner, ...files })) {
     const full = join(root, path);
     await mkdir(join(full, ".."), { recursive: true });
     await writeFile(full, content);
@@ -269,6 +277,42 @@ describe("the repository check gate", () => {
     });
 
     expect(await check(root)).toStrictEqual({ exitCode: 0, stderr: "" });
+  });
+
+  it("fails when the compiled planner entrypoint is missing", async () => {
+    const root = await sandbox({ "src/fine.ts": "export const a = 1;\n" }, { planner: false });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("planner-graph");
+    expect(outcome.stderr).toContain(PLANNER_ENTRY);
+  });
+
+  it.each([
+    { name: "an environment read", source: "export const home = process.env.HOME;\n", capability: "environment" },
+    { name: "a filesystem import", source: 'import { readFileSync } from "node:fs";\nexport const read = readFileSync;\n', capability: "filesystem" },
+    { name: "a clock read", source: "export const now = Date.now();\n", capability: "clock" },
+    { name: "a dynamic import", source: 'export const later = import("./later.js");\n', capability: "dynamic_import" },
+  ])("fails, and names the module, on $name in the planner graph", async ({ source, capability }) => {
+    const root = await sandbox({ [PLANNER_ENTRY]: source });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain(`${PLANNER_ENTRY}: ${capability}`);
+  });
+
+  it("follows the planner graph transitively", async () => {
+    const root = await sandbox({
+      [PLANNER_ENTRY]: 'export { value } from "./helper.js";\n',
+      "packages/core/dist/update/helper.js": "export const value = Math.random();\n",
+    });
+
+    const outcome = await check(root);
+
+    expect(outcome.exitCode).toBe(1);
+    expect(outcome.stderr).toContain("packages/core/dist/update/helper.js: randomness");
   });
 
   it("fails outside a git checkout instead of finding nothing", async () => {

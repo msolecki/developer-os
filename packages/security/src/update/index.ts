@@ -44,3 +44,21 @@ export type {
   ReleaseScratchPathWriteStateV1,
   VerifiedScratchBundleV1,
 } from "./scratch.js";
+export { blankPlannerModule, inspectPlannerGraph, scanPlannerModule } from "./graph.js";
+export type { PlannerCapabilityV1, PlannerGraphFindingV1, PlannerGraphV1, PlannerModuleScanV1 } from "./graph.js";
+export {
+  sampleNodePlannerProcess,
+  screenPlannerFrame,
+  spawnNodePlannerChild,
+  TargetPlannerSupervisor,
+} from "./planner-process.js";
+export type {
+  PlannerChildProcessV1,
+  PlannerProcessSampleV1,
+  PlannerSpawnRequestV1,
+  PlannerTranscriptIdentityV1,
+  PlannerWireBoundsV1,
+  TargetPlannerRunRequestV1,
+  TargetPlannerRunResultV1,
+  TargetPlannerSupervisorDependencies,
+} from "./planner-process.js";
