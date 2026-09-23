@@ -113,20 +113,28 @@ describe("recordHookFiring", () => {
   it("writes a fresh record with firstSeen equal to lastSeen equal to now", async () => {
     await createHooksDirectory();
     await recordHookFiring(request());
-    expect(await readFile(join(hooks, "claude.Stop.json"), "utf8")).toBe(record("Stop", NOW, NOW));
+    expect(await readFile(join(hooks, "claude.stop.json"), "utf8")).toBe(record("Stop", NOW, NOW));
   });
 
   it("leaves no temp file behind after a successful write", async () => {
     await createHooksDirectory();
     await recordHookFiring(request({ verb: "inject" }));
-    expect(await readdir(hooks)).toStrictEqual(["claude.SessionStart.json"]);
+    expect(await readdir(hooks)).toStrictEqual(["claude.inject.json"]);
+  });
+
+  it("keeps one record per verb, so verbs sharing an event are observed apart", async () => {
+    await createHooksDirectory();
+    await recordHookFiring(request({ vendor: "codex", verb: "command" }));
+    await recordHookFiring(request({ vendor: "codex", verb: "path" }));
+    expect((await readdir(hooks)).sort()).toStrictEqual(["codex.command.json", "codex.path.json"]);
+    expect(await readFile(join(hooks, "codex.path.json"), "utf8")).toBe(record("PreToolUse", NOW, NOW, "codex"));
   });
 
   it("leaves a record younger than 24 h byte-identical", async () => {
     await createHooksDirectory();
     const seen = new Date(NOW.getTime() - HOUR);
     const bytes = record("Stop", new Date(NOW.getTime() - 100 * HOUR), seen);
-    await writeFile(join(hooks, "claude.Stop.json"), bytes, { mode: 0o600 });
+    await writeFile(join(hooks, "claude.stop.json"), bytes, { mode: 0o600 });
     let gateCalls = 0;
     await recordHookFiring(request({
       admit: () => {
@@ -134,7 +142,7 @@ describe("recordHookFiring", () => {
         return Promise.resolve();
       },
     }));
-    expect(await readFile(join(hooks, "claude.Stop.json"), "utf8")).toBe(bytes);
+    expect(await readFile(join(hooks, "claude.stop.json"), "utf8")).toBe(bytes);
     expect(gateCalls).toBe(0);
   });
 
@@ -142,16 +150,16 @@ describe("recordHookFiring", () => {
     await createHooksDirectory();
     const first = new Date(NOW.getTime() - 100 * HOUR);
     const stale = new Date(NOW.getTime() - FIRING_RECORD_REFRESH_MS - 1);
-    await writeFile(join(hooks, "claude.Stop.json"), record("Stop", first, stale), { mode: 0o600 });
+    await writeFile(join(hooks, "claude.stop.json"), record("Stop", first, stale), { mode: 0o600 });
     await recordHookFiring(request());
-    expect(await readFile(join(hooks, "claude.Stop.json"), "utf8")).toBe(record("Stop", first, NOW));
+    expect(await readFile(join(hooks, "claude.stop.json"), "utf8")).toBe(record("Stop", first, NOW));
   });
 
   it("replaces a malformed record with a fresh one", async () => {
     await createHooksDirectory();
-    await writeFile(join(hooks, "claude.Stop.json"), "{not json", { mode: 0o600 });
+    await writeFile(join(hooks, "claude.stop.json"), "{not json", { mode: 0o600 });
     await recordHookFiring(request());
-    expect(await readFile(join(hooks, "claude.Stop.json"), "utf8")).toBe(record("Stop", NOW, NOW));
+    expect(await readFile(join(hooks, "claude.stop.json"), "utf8")).toBe(record("Stop", NOW, NOW));
   });
 
   it("writes nothing when the gate refuses", async () => {
@@ -170,14 +178,14 @@ describe("recordHookFiring", () => {
   it("records a Codex firing under the Codex vendor", async () => {
     await createHooksDirectory();
     await recordHookFiring(request({ vendor: "codex" }));
-    expect(await readdir(hooks)).toStrictEqual(["codex.Stop.json"]);
+    expect(await readdir(hooks)).toStrictEqual(["codex.stop.json"]);
   });
 
   it("resolves and removes its temp file when the rename fails", async () => {
     await createHooksDirectory();
-    await mkdir(join(hooks, "claude.Stop.json"));
+    await mkdir(join(hooks, "claude.stop.json"));
     await expect(recordHookFiring(request())).resolves.toBeUndefined();
-    expect(await readdir(hooks)).toStrictEqual(["claude.Stop.json"]);
+    expect(await readdir(hooks)).toStrictEqual(["claude.stop.json"]);
   });
 
   it("resolves when the state directory cannot be reached at all", async () => {
@@ -200,15 +208,16 @@ describe("readHookFiringObservations", () => {
 
   it("observes plugin_hooks from any valid Claude record", async () => {
     await createHooksDirectory();
-    await writeFile(join(hooks, "claude.Stop.json"), record("Stop", NOW, NOW));
+    await writeFile(join(hooks, "claude.stop.json"), record("Stop", NOW, NOW));
     const read = await readHookFiringObservations(stateDirectory, "claude");
     expect([...read.observations]).toStrictEqual([["plugin_hooks", "observed"]]);
     expect(read.records).toHaveLength(1);
+    expect(read.records[0]?.verb).toBe("stop");
   });
 
   it("also observes session_start_injection from the SessionStart record", async () => {
     await createHooksDirectory();
-    await writeFile(join(hooks, "claude.SessionStart.json"), record("SessionStart", NOW, NOW));
+    await writeFile(join(hooks, "claude.inject.json"), record("SessionStart", NOW, NOW));
     const read = await readHookFiringObservations(stateDirectory, "claude");
     expect(read.observations.get("plugin_hooks")).toBe("observed");
     expect(read.observations.get("session_start_injection")).toBe("observed");
@@ -216,17 +225,18 @@ describe("readHookFiringObservations", () => {
 
   it("never lets a Codex record observe a Claude key", async () => {
     await createHooksDirectory();
-    await writeFile(join(hooks, "codex.SessionStart.json"), record("SessionStart", NOW, NOW, "codex"));
+    await writeFile(join(hooks, "codex.inject.json"), record("SessionStart", NOW, NOW, "codex"));
     const claude = await readHookFiringObservations(stateDirectory, "claude");
     expect(claude.observations.size).toBe(0);
     const codex = await readHookFiringObservations(stateDirectory, "codex");
     expect(codex.observations.get("plugin_hooks")).toBe("observed");
   });
 
-  it("ignores a malformed record and a record filed under another event's name", async () => {
+  it("ignores a malformed record, a record filed under another verb's event and a per-event record", async () => {
     await createHooksDirectory();
-    await writeFile(join(hooks, "claude.Stop.json"), "{not json");
-    await writeFile(join(hooks, "claude.PreToolUse.json"), record("SessionStart", NOW, NOW));
+    await writeFile(join(hooks, "claude.stop.json"), "{not json");
+    await writeFile(join(hooks, "claude.path.json"), record("SessionStart", NOW, NOW));
+    await writeFile(join(hooks, "claude.PreToolUse.json"), record("PreToolUse", NOW, NOW));
     const read = await readHookFiringObservations(stateDirectory, "claude");
     expect(read.observations.size).toBe(0);
     expect(read.records).toStrictEqual([]);

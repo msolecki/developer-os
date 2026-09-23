@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, open, readdir, rename, unlink } from "node:fs/promises";
+import { lstat, open, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
@@ -8,12 +8,12 @@ import {
   encodeHookFiringRecord,
   hookFiringRecordName,
   MAX_HOOK_FIRING_RECORD_BYTES,
-  MAX_HOOK_FIRING_RECORD_CHILDREN,
 } from "@developer-os/core";
 import type { HookFiringRecordV1 } from "@developer-os/core";
 
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import { assertOrdinaryCommandAdmitted } from "../bootstrap/report.js";
+import { HOOK_GUARD_KINDS } from "./argv.js";
 import type { HookVendor, HookVerb } from "./argv.js";
 
 const PASCAL_CASE_EVENTS: Readonly<Record<HookVerb, string>> = Object.freeze({
@@ -34,6 +34,8 @@ export const HOOK_EVENT_OF: Readonly<Record<HookVendor, Readonly<Record<HookVerb
 });
 
 export const FIRING_RECORD_REFRESH_MS = 86_400_000;
+
+const HOOK_VERBS: readonly HookVerb[] = ["inject", ...HOOK_GUARD_KINDS];
 
 type FiringKey = "plugin_hooks" | "session_start_injection";
 
@@ -68,7 +70,12 @@ async function readRecord(path: string): Promise<HookFiringRecordV1 | null> {
   }
 }
 
-/** Spec §7.3: best effort after the outcome is written; never creates a directory, never throws. */
+/**
+ * Spec §7.3: best effort after the outcome is written; never creates a directory, never throws. One
+ * record per verb, named `<vendor>.<verb>.json`, carrying the verb's event: `command`, `commit` and
+ * `path` share `PreToolUse`, and a per-event record would hide an untrusted `path` behind a firing
+ * `command` (hooks.md §3.7).
+ */
 export async function recordHookFiring(request: HookFiringRequest): Promise<void> {
   try {
     const event = HOOK_EVENT_OF[request.vendor][request.verb];
@@ -76,7 +83,7 @@ export async function recordHookFiring(request: HookFiringRequest): Promise<void
     const stats = await lstat(directory);
     if (!stats.isDirectory() || stats.uid !== request.effectiveUid || (stats.mode & 0o777) !== 0o700) return;
 
-    const name = hookFiringRecordName(request.vendor, event);
+    const name = hookFiringRecordName(request.vendor, request.verb);
     const target = join(directory, name);
     const existing = await readRecord(target);
     const valid = existing !== null && existing.vendor === request.vendor && existing.event === event;
@@ -119,22 +126,24 @@ export async function recordHookFiring(request: HookFiringRequest): Promise<void
   }
 }
 
+export interface HookFiringObservation {
+  readonly verb: HookVerb;
+  readonly record: HookFiringRecordV1;
+}
+
+/** Reads the vendor's per-verb records only; a record whose event is not its verb's is ignored. */
 export async function readHookFiringObservations(stateDirectory: string, vendor: HookVendor): Promise<{
   readonly observations: ReadonlyMap<FiringKey, "observed">;
-  readonly records: readonly HookFiringRecordV1[];
+  readonly records: readonly HookFiringObservation[];
 }> {
-  const records: HookFiringRecordV1[] = [];
+  const records: HookFiringObservation[] = [];
   try {
     const directory = join(stateDirectory, "hooks");
     if (!(await lstat(directory)).isDirectory()) return { observations: new Map(), records: [] };
-    const names = (await readdir(directory))
-      .filter((name) => name.startsWith(`${vendor}.`) && name.endsWith(".json"))
-      .sort()
-      .slice(0, MAX_HOOK_FIRING_RECORD_CHILDREN);
-    for (const name of names) {
-      const record = await readRecord(join(directory, name));
-      if (record !== null && record.vendor === vendor && hookFiringRecordName(vendor, record.event) === name) {
-        records.push(record);
+    for (const verb of HOOK_VERBS) {
+      const record = await readRecord(join(directory, hookFiringRecordName(vendor, verb)));
+      if (record !== null && record.vendor === vendor && record.event === HOOK_EVENT_OF[vendor][verb]) {
+        records.push({ verb, record });
       }
     }
   } catch {
@@ -142,8 +151,7 @@ export async function readHookFiringObservations(stateDirectory: string, vendor:
   }
   const observations = new Map<FiringKey, "observed">();
   if (records.length > 0) observations.set("plugin_hooks", "observed");
-  const sessionStart = HOOK_EVENT_OF[vendor].inject;
-  if (records.some((record) => record.event === sessionStart)) {
+  if (records.some((record) => record.verb === "inject")) {
     observations.set("session_start_injection", "observed");
   }
   return { observations, records };

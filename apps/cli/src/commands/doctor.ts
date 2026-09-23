@@ -739,13 +739,13 @@ async function reportVendorHooks(
     return { text: `${vendor}=${installed.state}`, healthy: installed.state === "not-installed", unfired: false };
   }
   const lastSeen = new Map<string, number>();
-  for (const record of (await readHookFiringObservations(stateDirectory, vendor)).records) {
-    lastSeen.set(record.event, Date.parse(record.lastSeen));
+  for (const { verb, record } of (await readHookFiringObservations(stateDirectory, vendor)).records) {
+    lastSeen.set(verb, Date.parse(record.lastSeen));
   }
   const now = context.now().getTime();
   const rows = (vendor === "claude" ? CLAUDE_HOOK_ROWS : CODEX_HOOK_ROWS).filter((row) => !installed.missing.includes(row.verb));
   const ages = rows.map((row) => {
-    const seen = lastSeen.get(row.event);
+    const seen = lastSeen.get(row.verb);
     return `${row.verb}=${seen === undefined ? "never" : `${String(Math.max(0, Math.floor((now - seen) / HOUR_MS)))}h`}`;
   });
   const parts = [
@@ -755,7 +755,8 @@ async function reportVendorHooks(
     ...(installed.conflicting ? ["executable=inconsistent"] : []),
   ];
   // Spec §8.2: an untrusted Codex hook never fires, and Codex says nothing about it (hooks.md §1 question 6).
-  const unfired = vendor === "codex" && rows.some((row) => !lastSeen.has(row.event));
+  // Per verb: `path` shares `PreToolUse` with `command`, and an untrusted `path` must not hide behind it.
+  const unfired = vendor === "codex" && rows.some((row) => !lastSeen.has(row.verb));
   return {
     text: unfired ? `${parts.join(" ")} (${CODEX_UNTRUSTED_HOOK_MESSAGE})` : parts.join(" "),
     healthy: installed.missing.length === 0 && !installed.conflicting && !unfired,

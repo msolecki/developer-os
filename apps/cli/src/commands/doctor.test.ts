@@ -1342,14 +1342,21 @@ describe("hooks and external-hooks", () => {
     await plant(hooksFile(fixture), `${JSON.stringify(rendered, null, 2)}\n`);
   }
 
-  async function plantRecord(fixture: CommandFixture, event: string, lastSeen: string): Promise<void> {
+  async function plantRecord(
+    fixture: CommandFixture,
+    verb: string,
+    lastSeen: string,
+    vendor: "claude" | "codex" = "claude",
+  ): Promise<void> {
+    const event = (vendor === "claude" ? CLAUDE_HOOK_ROWS : CODEX_HOOK_ROWS).find((row) => row.verb === verb)?.event;
+    if (event === undefined) throw new Error(`no hook row for ${verb}`);
     const directory = join(fixture.paths.stateDir, "hooks");
     await nodeFs.mkdir(directory, { recursive: true, mode: 0o700 });
     await nodeFs.writeFile(
-      join(directory, hookFiringRecordName("claude", event)),
+      join(directory, hookFiringRecordName(vendor, verb)),
       encodeHookFiringRecord({
         schemaVersion: 1,
-        vendor: "claude",
+        vendor,
         event,
         productVersion: "0.0.0-test",
         firstSeen: lastSeen,
@@ -1384,8 +1391,8 @@ describe("hooks and external-hooks", () => {
     const fixture = await hooksFixture("doctor-hooks-installed");
     expect(CLAUDE_HOOK_ROWS).toHaveLength(8);
     await plantHooks(fixture);
-    await plantRecord(fixture, "SessionStart", "2026-09-22T09:00:00.000Z");
-    await plantRecord(fixture, "PreToolUse", "2026-09-21T11:30:00.000Z");
+    await plantRecord(fixture, "inject", "2026-09-22T09:00:00.000Z");
+    for (const verb of ["command", "commit", "path"]) await plantRecord(fixture, verb, "2026-09-21T11:30:00.000Z");
 
     const { hooks } = await checksOf(fixture);
 
@@ -1412,27 +1419,28 @@ describe("hooks and external-hooks", () => {
     expect(unfired.message).toContain(CODEX_UNTRUSTED_HOOK_MESSAGE);
     expect(unfired.recovery).toBe(CODEX_HOOK_TRUST_STEP);
 
-    const directory = join(fixture.paths.stateDir, "hooks");
-    await nodeFs.mkdir(directory, { recursive: true, mode: 0o700 });
-    for (const event of ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]) {
-      await nodeFs.writeFile(
-        join(directory, hookFiringRecordName("codex", event)),
-        encodeHookFiringRecord({
-          schemaVersion: 1,
-          vendor: "codex",
-          event,
-          productVersion: "0.0.0-test",
-          firstSeen: "2026-09-22T11:00:00.000Z",
-          lastSeen: "2026-09-22T11:00:00.000Z",
-        }),
-        { mode: 0o600 },
-      );
-    }
+    for (const row of CODEX_HOOK_ROWS) await plantRecord(fixture, row.verb, "2026-09-22T11:00:00.000Z", "codex");
     const fired = (await checksOf(fixture)).hooks;
     expect(fired.status).toBe("pass");
     expect(fired.message).toContain("codex=installed inject=1h");
     expect(fired.message).not.toContain(CODEX_UNTRUSTED_HOOK_MESSAGE);
     expect(fired).not.toHaveProperty("recovery");
+  });
+
+  it("warns with the trust step when Codex path never fired although command shares its event", async () => {
+    const fixture = await hooksFixture("doctor-hooks-codex-path");
+    await plant(join(fixture.paths.home, ...PLUGIN_TREE_SEGMENTS, CODEX_HOOKS_PATH), renderCodexHooks(HOOK_EXECUTABLE).contents);
+    for (const row of CODEX_HOOK_ROWS) {
+      if (row.verb !== "path") await plantRecord(fixture, row.verb, "2026-09-22T11:00:00.000Z", "codex");
+    }
+
+    const { hooks } = await checksOf(fixture);
+
+    expect(hooks.status).toBe("warn");
+    expect(hooks.message).toContain("command=1h");
+    expect(hooks.message).toContain("path=never");
+    expect(hooks.message).toContain(CODEX_UNTRUSTED_HOOK_MESSAGE);
+    expect(hooks.recovery).toBe(CODEX_HOOK_TRUST_STEP);
   });
 
   it("warns and names the one missing row, matched per row rather than per event", async () => {
