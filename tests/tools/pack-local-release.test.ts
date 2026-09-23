@@ -11,7 +11,7 @@ import { PRODUCT_VERSION } from "@developer-os/cli/dist/context.js";
 import { LOCAL_BUNDLE_CLI_ENTRY } from "@developer-os/cli/dist/update/local-release.js";
 import { admitUnsignedLocalPackagedRelease } from "@developer-os/cli/dist/update/packaged-release.js";
 
-import { isDependencyRuntimeFile, isWorkspaceRuntimeFile, pack, RUNTIME_PACKAGES } from "./pack-local-release.js";
+import { pack, THIRD_PARTY_LICENSES, thirdPartyPackageDirectory } from "./pack-local-release.js";
 
 /** This file is `tests/tools/…`, whether run from source or from `tests/dist/tools/…`'s sibling. */
 const REPOSITORY_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -44,47 +44,32 @@ async function tree(root: string): Promise<ReadonlyMap<string, string>> {
   return files;
 }
 
-describe("runtime file selection", () => {
-  it("keeps compiled workspace JavaScript and drops declarations, maps, tests and test helpers", () => {
-    expect(isWorkspaceRuntimeFile("bin.js")).toBe(true);
-    expect(isWorkspaceRuntimeFile("commands/init.js")).toBe(true);
-    for (const path of ["bin.d.ts", "bin.js.map", "commands/init.test.js", "commands/testing.js", "lifecycle/testing.js"]) {
-      expect(isWorkspaceRuntimeFile(path), path).toBe(false);
-    }
-  });
-
-  it("keeps what import resolution reaches in a dependency, and its licence", () => {
-    for (const path of ["LICENSE", "LICENSE.md", "package.json", "v4/package.json", "index.js", "dist/index.mjs", "bin.mjs"]) {
-      expect(isDependencyRuntimeFile(path), path).toBe(true);
-    }
-    for (const path of ["index.cjs", "index.d.ts", "index.d.cts", "v4/index.d.mts", "browser/index.js", "README.md", "src/index.ts", "dist/index.js.map", "docs/LICENSE"]) {
-      expect(isDependencyRuntimeFile(path), path).toBe(false);
-    }
+describe("third-party package directory", () => {
+  it("finds the installed package of a bundled input, scoped or not, and skips workspace files", () => {
+    expect(thirdPartyPackageDirectory("node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/core/core.js"))
+      .toBe("node_modules/.pnpm/zod@4.4.3/node_modules/zod");
+    expect(thirdPartyPackageDirectory("node_modules/.pnpm/@a+b@1.0.0/node_modules/@a/b/index.js"))
+      .toBe("node_modules/.pnpm/@a+b@1.0.0/node_modules/@a/b");
+    expect(thirdPartyPackageDirectory("packages/core/dist/index.js")).toBeUndefined();
   });
 });
 
-describe("pack (D53: a launchable local release)", () => {
-  it("packs every workspace runtime package and its dependencies, and nothing a runtime does not load", async () => {
+describe("pack (D55: one bundled CLI module)", () => {
+  it("packs the CLI as one module plus its third-party licences, and nothing else outside the release trees", async () => {
     const root = await temporary();
     const out = await pack(join(root, "pkg"), OPTIONS);
     const files = [...(await tree(join(out, "bundle"))).keys()];
 
-    expect(files).toContain(LOCAL_BUNDLE_CLI_ENTRY);
-    for (const name of RUNTIME_PACKAGES.keys()) {
-      expect(files, name).toContain(`node_modules/@developer-os/${name}/package.json`);
-      expect(files.some((path) => path.startsWith(`node_modules/@developer-os/${name}/dist/`) && path.endsWith(".js")), name).toBe(true);
-    }
-    for (const dependency of ["zod", "yaml", "smol-toml"]) {
-      expect(files, dependency).toContain(`node_modules/${dependency}/package.json`);
-      expect(files, dependency).toContain(`node_modules/${dependency}/LICENSE`);
-    }
-    const unwanted = files.filter((path) =>
-      /\.d\.[cm]?ts$|\.map$|\.test\.js$|\.cjs$|\/testing\.js$|\/src\//u.test(path) ||
-      path.startsWith("node_modules/yaml/browser/") ||
-      path === "bin/developer-os");
-    expect(unwanted).toStrictEqual([]);
+    const rest = files.filter((path) => !path.startsWith("workflows/") && !path.startsWith("instructions/")).sort();
+    expect(rest).toStrictEqual([THIRD_PARTY_LICENSES, LOCAL_BUNDLE_CLI_ENTRY].sort());
+    expect(files.filter((path) => path.endsWith(".js"))).toStrictEqual([LOCAL_BUNDLE_CLI_ENTRY]);
     expect(files).toContain("workflows/capture/workflow.yaml");
     expect(files).toContain("instructions/catalog.json");
+
+    const licenses = await readFile(join(out, "bundle", THIRD_PARTY_LICENSES), "utf8");
+    for (const dependency of ["zod", "yaml", "smol-toml"]) {
+      expect(licenses, dependency).toMatch(new RegExp(`^${dependency}@\\d`, "mu"));
+    }
 
     const modes = new Set([...(await tree(out)).values()].map((value) => value.split(":")[0]));
     expect(modes).toStrictEqual(new Set(["600"]));

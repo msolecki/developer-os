@@ -2,11 +2,11 @@
  * Pack this checkout into an unsigned local release directory that
  * `developer-os init --local-release <dir>` admits (D47 Q1 option A).
  *
- * D53: the bundle is launchable. It carries every workspace runtime package as
- * `node_modules/@developer-os/<name>/` (its `package.json` and compiled `dist` JavaScript) and their
- * third-party runtime dependencies under `node_modules/<dep>/`, so `init` can point the product's
- * version-free entrypoint at `node_modules/@developer-os/cli/dist/bin.js`. Build first
- * (`npm run pack:local-release` does): the packer copies `dist`, it never compiles.
+ * D55: the bundle is launchable and small. `esbuild` bundles the compiled CLI entry
+ * (`apps/cli/dist/bin.js`) with every workspace package and third-party dependency into the one
+ * module the product's version-free entrypoint imports, `node_modules/@developer-os/cli/dist/bin.js`
+ * (D53), next to `THIRD-PARTY-LICENSES` with the licence of every bundled third-party package.
+ * Build first (`npm run pack:local-release` does): the packer bundles `dist`, it never compiles.
  *
  * Run it with `npm run pack:local-release -- <out-dir>`; the output directory
  * must not exist. It prints the directory's realpath, which is the spelling
@@ -14,12 +14,14 @@
  */
 import { realpathSync } from "node:fs";
 import { lstat, readdir, readFile } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { argv, cwd, stdout } from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { build } from "esbuild";
+
 import { PRODUCT_VERSION } from "@developer-os/cli/dist/context.js";
-import { writeUnsignedLocalRelease } from "@developer-os/cli/dist/update/local-release.js";
+import { LOCAL_BUNDLE_CLI_ENTRY, writeUnsignedLocalRelease } from "@developer-os/cli/dist/update/local-release.js";
 import type { ReleaseFileV1 } from "@developer-os/cli/dist/update/local-release.js";
 
 /** `tests/dist/tools/pack-local-release.js` → the checkout that contains it. */
@@ -34,12 +36,9 @@ export function assertRepositoryRoot(workingDirectory: string, repositoryRoot: s
   }
 }
 
-/** Every regular file under `base` that `include` keeps, as bundle files at `destination/…`, mode 0600. */
-async function collectFiles(
-  base: string,
-  destination: string,
-  include: (relativePath: string) => boolean,
-): Promise<readonly ReleaseFileV1[]> {
+/** Every regular file under `root/directory`, as bundle files at `directory/…`, mode 0600. */
+export async function collectTree(root: string, directory: string): Promise<readonly ReleaseFileV1[]> {
+  const base = join(root, directory);
   const files: ReleaseFileV1[] = [];
   for (const entry of await readdir(base, { recursive: true, withFileTypes: true })) {
     const path = join(entry.parentPath, entry.name);
@@ -47,105 +46,78 @@ async function collectFiles(
     if (stats.isDirectory()) continue;
     if (!stats.isFile()) throw new Error(`refusing to pack a non-regular file: ${path}`);
     const relativePath = relative(base, path).split(sep).join("/");
-    if (!include(relativePath)) continue;
-    files.push({ relativePath: `${destination}/${relativePath}`, bytes: await readFile(path), mode: 0o600 });
+    files.push({ relativePath: `${directory}/${relativePath}`, bytes: await readFile(path), mode: 0o600 });
   }
   return files;
 }
 
-/** Every regular file under `root/directory`, as bundle files at `directory/…`. */
-export async function collectTree(root: string, directory: string): Promise<readonly ReleaseFileV1[]> {
-  return collectFiles(join(root, directory), directory, () => true);
-}
+/** The compiled CLI entry `esbuild` starts from, relative to the checkout. */
+export const CLI_ENTRY = "apps/cli/dist/bin.js";
 
-/** The workspace packages the CLI loads at runtime, by `@developer-os/<name>` → checkout directory. */
-export const RUNTIME_PACKAGES: ReadonlyMap<string, string> = new Map([
-  ["adapter-claude", "packages/adapter-claude"],
-  ["adapter-codex", "packages/adapter-codex"],
-  ["brain", "packages/brain"],
-  ["cli", "apps/cli"],
-  ["core", "packages/core"],
-  ["platform-macos", "packages/platform-macos"],
-  ["security", "packages/security"],
-  ["workflow-schema", "packages/workflow-schema"],
-]);
-
-const WORKSPACE_SCOPE = "@developer-os/";
+/** Where the licences of the bundled third-party packages land in the bundle. */
+export const THIRD_PARTY_LICENSES = "THIRD-PARTY-LICENSES";
 
 /**
- * A path under a workspace package's `dist`: compiled runtime only, so no declarations, source
- * maps, tests, or the `testing.js` helpers only tests import.
+ * The installed package directory of a bundled input under `node_modules/`, or `undefined` for a
+ * workspace file (esbuild follows pnpm's links to realpaths, so workspace inputs never pass
+ * through `node_modules/`).
  */
-export function isWorkspaceRuntimeFile(relativePath: string): boolean {
-  return relativePath.endsWith(".js") && !relativePath.endsWith(".test.js") && basename(relativePath) !== "testing.js";
+export function thirdPartyPackageDirectory(input: string): string | undefined {
+  const marker = "node_modules/";
+  const at = input.lastIndexOf(marker);
+  if (at === -1) return undefined;
+  const segments = input.slice(at + marker.length).split("/");
+  const length = segments[0]?.startsWith("@") === true ? 2 : 1;
+  return input.slice(0, at + marker.length) + segments.slice(0, length).join("/");
 }
 
-/**
- * What Node's `import` resolution can reach in a published dependency, plus its licence:
- * every `package.json` (nested ones select a subpath's module type), `.js`/`.mjs` files, and
- * `LICENSE*`. The store already holds only the files the package publishes; `.cjs` (the
- * `require` condition), declarations, maps and the `browser/` build are left out.
- */
-export function isDependencyRuntimeFile(relativePath: string): boolean {
-  const name = basename(relativePath);
-  if (relativePath === name && /^licen[cs]e/iu.test(name)) return true;
-  if (relativePath.startsWith("browser/")) return false;
-  if (name === "package.json") return true;
-  if (/\.d\.[cm]?ts$/u.test(name)) return false;
-  return name.endsWith(".js") || name.endsWith(".mjs");
-}
-
-interface PackageJson {
-  readonly name?: unknown;
-  readonly version?: unknown;
-  readonly dependencies?: Readonly<Record<string, string>>;
-}
-
-async function packageJson(directory: string): Promise<PackageJson> {
-  return JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as PackageJson;
+async function license(root: string, directory: string): Promise<string> {
+  const base = join(root, directory);
+  const manifest = JSON.parse(await readFile(join(base, "package.json"), "utf8")) as { name?: unknown; version?: unknown };
+  const names = (await readdir(base)).filter((name) => /^licen[cs]e/iu.test(name)).sort();
+  const first = names[0];
+  if (first === undefined) throw new Error(`refusing to pack: bundled package ${directory} ships no LICENSE file`);
+  const text = (await readFile(join(base, first), "utf8")).trimEnd();
+  return `${String(manifest.name)}@${String(manifest.version)}\n${"-".repeat(72)}\n${text}\n`;
 }
 
 /**
- * The workspace runtime packages and their third-party dependencies, as bundle files under
- * `node_modules/`. A dependency is resolved from the package that declares it, through its
- * realpath (pnpm links it), and must itself declare no dependencies: this tool resolves one
- * level, and a dependency that grew its own would otherwise ship broken.
+ * The CLI as one ESM module at {@link LOCAL_BUNDLE_CLI_ENTRY} plus {@link THIRD_PARTY_LICENSES}.
+ * Only Node builtins stay external (`platform: "node"`); no minification or source map, names
+ * kept, and every path esbuild writes is relative to the checkout, so the same checkout bundles to
+ * the same bytes.
  */
-export async function collectRuntime(root: string): Promise<readonly ReleaseFileV1[]> {
-  const files: ReleaseFileV1[] = [];
-  const dependencies = new Map<string, string>();
-  for (const [name, directory] of RUNTIME_PACKAGES) {
-    const base = join(root, directory);
-    const manifest = await packageJson(base);
-    if (manifest.name !== `${WORKSPACE_SCOPE}${name}`) {
-      throw new Error(`refusing to pack: ${directory}/package.json is not ${WORKSPACE_SCOPE}${name}`);
-    }
-    const destination = `node_modules/${WORKSPACE_SCOPE}${name}`;
-    const runtime = await collectFiles(join(base, "dist"), `${destination}/dist`, isWorkspaceRuntimeFile);
-    if (runtime.length === 0) throw new Error(`refusing to pack: ${directory}/dist holds no compiled runtime; build first`);
-    files.push(
-      { relativePath: `${destination}/package.json`, bytes: await readFile(join(base, "package.json")), mode: 0o600 },
-      ...runtime,
-    );
-    for (const dependency of Object.keys(manifest.dependencies ?? {})) {
-      if (dependency.startsWith(WORKSPACE_SCOPE)) continue;
-      const real = realpathSync(join(base, "node_modules", dependency));
-      const previous = dependencies.get(dependency);
-      if (previous !== undefined && previous !== real) {
-        throw new Error(`refusing to pack: ${dependency} resolves to two installations, ${previous} and ${real}`);
-      }
-      dependencies.set(dependency, real);
-    }
+export async function bundleCli(root: string): Promise<readonly ReleaseFileV1[]> {
+  const result = await build({
+    absWorkingDir: root,
+    entryPoints: [CLI_ENTRY],
+    outfile: join(root, "bundle", LOCAL_BUNDLE_CLI_ENTRY),
+    bundle: true,
+    write: false,
+    metafile: true,
+    platform: "node",
+    format: "esm",
+    target: "node24",
+    keepNames: true,
+    minify: false,
+    sourcemap: false,
+    // `yaml` resolves to its CommonJS build under the `node` condition and requires Node builtins;
+    // an ESM bundle has no `require` unless one is made.
+    banner: { js: 'import { createRequire as __developerOsCreateRequire } from "node:module";\nconst require = __developerOsCreateRequire(import.meta.url);' },
+    logLevel: "silent",
+  });
+  const [output, ...rest] = result.outputFiles;
+  if (output === undefined || rest.length > 0) throw new Error("refusing to pack: esbuild did not emit exactly one module");
+  const packages = new Set<string>();
+  for (const input of Object.keys(result.metafile.inputs)) {
+    const directory = thirdPartyPackageDirectory(input);
+    if (directory !== undefined) packages.add(directory);
   }
-  for (const [dependency, real] of dependencies) {
-    const manifest = await packageJson(real);
-    if (manifest.name !== dependency) throw new Error(`refusing to pack: ${real} is not ${dependency}`);
-    if (Object.keys(manifest.dependencies ?? {}).length > 0) {
-      throw new Error(`refusing to pack: ${dependency} has runtime dependencies this tool does not resolve`);
-    }
-    files.push(...(await collectFiles(real, `node_modules/${dependency}`, isDependencyRuntimeFile)));
-  }
-  return files;
+  const licenses = await Promise.all([...packages].map((directory) => license(root, directory)));
+  return [
+    { relativePath: LOCAL_BUNDLE_CLI_ENTRY, bytes: output.contents, mode: 0o600 },
+    { relativePath: THIRD_PARTY_LICENSES, bytes: new TextEncoder().encode(licenses.sort().join("\n")), mode: 0o600 },
+  ];
 }
 
 export async function pack(outDir: string, options: {
@@ -158,7 +130,7 @@ export async function pack(outDir: string, options: {
     outDir: resolve(workingDirectory, outDir),
     version: PRODUCT_VERSION,
     bundleFiles: [
-      ...(await collectRuntime(workingDirectory)),
+      ...(await bundleCli(workingDirectory)),
       ...(await collectTree(workingDirectory, "workflows")),
       ...(await collectTree(workingDirectory, "instructions")),
     ],
