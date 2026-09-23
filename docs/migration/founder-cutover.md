@@ -1,7 +1,8 @@
 # Founder cutover runbook (A15, DOS-P8)
 
 Written on 2026-09-23 under D56 from program plan Task 8 ("Migrate the founder in shadow mode"),
-roadmap Phase 10 and decisions D16, D47, D51, D52, D53, D55 and D56. Inputs, all in this repository:
+roadmap Phase 10 and decisions D16, D47, D51, D52, D53, D54, D55, D56 and D57. Inputs, all in this
+repository:
 `instruction-inventory.md` (§4 hooks, §5 scripts, §8 vault mapping), `source-manifest.json`,
 `exclusion-policy.md`, and the architecture notes `foundation.md`, `hooks.md`, `brain.md`,
 `claude-adapter.md`, `codex-adapter.md` and `knowledge-pipeline.md`. The founder executes it on the
@@ -22,6 +23,7 @@ and labels stay on the machine (`exclusion-policy.md`). Every path below is a pl
 | `<vault>` | the founder's live vault (the `private-brain` source); it becomes the Brain in place and is never moved |
 | `<vault-copy>` | a throwaway full copy of `<vault>` for the §8 migration |
 | `<scratch-home>` | a throwaway product home used only against `<vault-copy>` |
+| `<vault-copy-2>`, `<rehearsal-home>` | a throwaway copy of the migrated `<vault>` and a disposable `HOME` for the step 7c rehearsal |
 | `<legacy-shared-repo>` | the legacy shared runtime checkout (the `shared-runtime` source) |
 | `<legacy-plugin>`, `<legacy-marketplace>` | the legacy plugin and the marketplace it was installed from |
 | `<legacy-job-label>` | one legacy launchd label; there may be several |
@@ -51,13 +53,14 @@ and labels stay on the machine (`exclusion-policy.md`). Every path below is a pl
 **Command**
 
 ```sh
-mkdir -p <backup-dir> <work>
+mkdir -p <backup-dir> <work> && chmod 700 <backup-dir>
 { sw_vers; node --version; pnpm --version; claude --version; codex --version
   git -C <devos-checkout> rev-parse HEAD
   git -C <legacy-shared-repo> rev-parse HEAD; git -C <legacy-shared-repo> status --porcelain
   git -C <vault> rev-parse HEAD; git -C <vault> status --porcelain
   launchctl list | grep '<legacy-job-label-prefix>'
   ls -l ~/Library/LaunchAgents
+  test -e <product-home> && echo "PRODUCT HOME EXISTS" || echo "product home absent"
 } > <work>/preflight-versions.txt 2>&1
 ```
 
@@ -66,7 +69,14 @@ mkdir -p <backup-dir> <work>
 **Verify** Both legacy checkouts report an empty `status --porcelain`; if not, commit or stash them
 in their own repositories first, because the backup must be a known state. Compare the vendor
 versions with the D48 pins (Claude Code 2.1.280, Codex CLI 0.155.1); a newer vendor is a finding
-to record, not a stop. Write down every legacy launchd label the listing shows.
+to record, not a stop. Compare them also with the adapter floors, `CLAUDE_MINIMUM_VERSION` in
+`packages/adapter-claude/src/versions.ts` and `CODEX_MINIMUM_VERSION` in
+`packages/adapter-codex/src/versions.ts`: a vendor below its floor is a stop, because `init` refuses
+that adapter (`adapter_unavailable`) only after step 8 has removed the legacy surfaces. The listing
+must say `product home absent`; a leftover home from an earlier attempt changes what `init` does, so
+remove it with its own `uninstall` first. Write down every legacy launchd label the listing shows,
+and where the legacy Codex hooks are defined: `~/.codex/config.toml`, `$CODEX_HOME/hooks.json`
+(`hooks.md` §3), or the legacy Codex plugin itself. Step 8 checks that they survive.
 
 **Rollback** none needed.
 
@@ -81,13 +91,15 @@ tar -czf <backup-dir>/vault.tgz       -C "$(dirname <vault>)" "$(basename <vault
 tar -czf <backup-dir>/legacy-shared.tgz -C "$(dirname <legacy-shared-repo>)" "$(basename <legacy-shared-repo>)"
 mkdir -p <backup-dir>/launchagents
 cp -p ~/Library/LaunchAgents/<legacy-job-label>.plist <backup-dir>/launchagents/   # once per label
+tar -czf <backup-dir>/shell-profile.tgz -C "$HOME" .zshrc .zprofile
 shasum -a 256 <backup-dir>/*.tgz > <backup-dir>/SHA256SUMS
 ```
 
-Drop `.claude.json` from the first line if it does not exist. The backups hold credentials and
+Drop `.claude.json` from the first line, and either profile file from the `shell-profile` line, if it
+does not exist. Step 13 edits the shell profile. The backups hold credentials and
 private notes: keep `<backup-dir>` mode 0700 and out of every synced or public location.
 
-**Changes** creates `<backup-dir>` only.
+**Changes** writes into `<backup-dir>` only.
 
 **Verify** `shasum -a 256 -c <backup-dir>/SHA256SUMS` passes, and `tar -tzf` on each archive lists
 the expected top-level directory.
@@ -139,9 +151,9 @@ as `<release-dir>` from now on, because admission requires it.
 
 **Changes** writes `<release-dir>` and the checkout's build output only.
 
-**Verify** `<cli> --version` prints the product version. `npm run lint` exited 0. Under D56 the full
-suite is owed at the phase close; record in `<work>/preflight-versions.txt` that this build's tests
-did not run.
+**Verify** `<cli> --version` prints the product version. `npm run lint` exited 0. Under D56 commits
+run lint only, so this build's tests have not run yet; step 7b runs them before this build touches
+the live vendor homes.
 
 **Rollback** `rm -rf <release-dir>`.
 
@@ -157,7 +169,7 @@ reviewed as a diff; there is no product migrator (`BRAIN_MIGRATIONS` stays empty
 cp -Rp <vault> <vault-copy>                       # includes .git and untracked files
 node <work>/migrate-vault.mjs <vault-copy>        # the throwaway script
 git -C <vault-copy> add -A && git -C <vault-copy> diff --cached --stat
-git -C <vault-copy> diff --cached > <work>/vault-migration.patch
+git -C <vault-copy> diff --cached --binary > <work>/vault-migration.patch
 ```
 
 The script applies exactly the §8 mapping to every note's frontmatter and links:
@@ -247,18 +259,25 @@ Run the rollback also on success, before step 7: the scratch home has done its j
 
 ## Step 7 — Apply the reviewed migration to the live vault
 
+Open no agent session between step 5 and this step: the legacy session hooks and the vault's own
+`SessionStart` hook stay live until step 10, and anything they write lands in the migration commit.
+
 **Command**
 
 ```sh
-git -C <vault> apply --check <work>/vault-migration.patch
-git -C <vault> apply <work>/vault-migration.patch
-git -C <vault> add -A
+git -C <vault> status --porcelain                                          # must print nothing
+test "$(git -C <vault> rev-parse HEAD)" = "$(git -C <vault-copy> rev-parse HEAD)" && echo same-base
+git -C <vault> apply --check --index <work>/vault-migration.patch
+git -C <vault> apply --index <work>/vault-migration.patch
 git -C <vault> commit -m "Migrate notes to the Developer OS schema (inventory §8)"
 git -C <vault> rev-parse HEAD >> <work>/preflight-versions.txt   # the migration commit
 rm -rf <vault-copy>
 ```
 
-The commit is the founder's own vault history, made by hand; product Git stays disabled.
+The base check must print `same-base`, and that HEAD must be the one step 1 recorded unless the
+founder committed on purpose in between. If the vault moved or is dirty, stop and redo steps 5–6 from
+a fresh copy. `--index` stages exactly the patch, so nothing else enters the commit. The commit is
+the founder's own vault history, made by hand; product Git stays disabled.
 
 **Changes** `<vault>` notes, in place. The vault is not moved.
 
@@ -267,17 +286,89 @@ The commit is the founder's own vault history, made by hand; product Git stays d
 
 **Rollback** `git -C <vault> revert --no-edit <migration-commit>`.
 
+## Step 7b — Gate: the full suite is green on the commit being installed
+
+D56 waives tests for commits only, not for an install that replaces live guards. Steps 8–10 do not
+start until the full suite has passed on exactly the commit packed in step 4 (and, in step 15, on the
+commit of every newer build).
+
+**Command** (outside any sandbox: the e2e suites hang under one)
+
+```sh
+cd <devos-checkout>
+git status --porcelain        # must be empty
+git rev-parse HEAD            # must equal the <devos-checkout> commit recorded in step 1
+npm run check
+npm run test:vendor-brain
+```
+
+`npm run check` runs lint, the unit, lifecycle, e2e and vendor-ingest suites, the build and
+`git diff --check`; `test:vendor-brain` is the deferred slow suite `check` leaves out. The vendor
+suites call the installed vendor CLIs.
+
+**Changes** the checkout's build output only.
+
+**Verify** both commands exit 0, with no skipped suite. Record the commit and the date in the
+founder's own log. A red or skipped suite is a stop; it is never waived for the live install.
+
+**Rollback** none needed.
+
+## Step 7c — Rehearse steps 8–10 on a disposable home
+
+`init --dry-run` never plans vendor artifacts: on a fresh home it previews the bootstrap paths only,
+and on an existing home it skips the instruction step. The first real collision check is therefore an
+`init --yes`, and on the live machine that runs after the legacy rules and plugin are gone. It runs
+here first, as D57 runs its observations, on a disposable home that the founder's `~/.claude` and
+`~/.codex` never see.
+
+**Command** (in a fresh shell, closed afterwards)
+
+```sh
+cp -Rp <vault> <vault-copy-2>
+mkdir -p <rehearsal-home> && chmod 700 <rehearsal-home>
+tar -xzf <backup-dir>/claude-home.tgz -C <rehearsal-home> --exclude '.claude/.credentials.json' --exclude '.claude.json'
+tar -xzf <backup-dir>/codex-home.tgz  -C <rehearsal-home> --exclude '.codex/auth.json'
+ls -la <rehearsal-home>/.claude <rehearsal-home>/.codex     # no credential file may be listed
+export HOME=<rehearsal-home> DEVELOPER_OS_BRAIN=<vault-copy-2>
+unset DEVELOPER_OS_HOME CODEX_HOME
+# apply step 8's table against this HOME, then:
+(cd "$HOME" && find .claude/rules .claude/output-styles .claude/skills .codex/agents -mindepth 1 -maxdepth 1 | sort) > <work>/rehearsal-before.txt
+<cli> init --dry-run --local-release <release-dir> --adapters claude,codex
+<cli> init --yes --local-release <release-dir> --adapters claude,codex
+(cd "$HOME" && find .claude/rules .claude/output-styles .claude/skills .codex/agents -mindepth 1 -maxdepth 1 | sort) > <work>/rehearsal-after.txt
+comm -13 <work>/rehearsal-before.txt <work>/rehearsal-after.txt > <work>/managed-paths.txt
+node "$HOME/.developer-os/bin/developer-os.mjs" doctor
+node "$HOME/.developer-os/bin/developer-os.mjs" uninstall --dry-run
+node "$HOME/.developer-os/bin/developer-os.mjs" uninstall --yes
+```
+
+The rehearsal makes no model call and needs no vendor login, so no credential is copied into it
+(D57 links credentials, never copies them); `tar` ignores an `--exclude` that matches nothing, so the
+`ls` is the check. Delete any other credential file it shows before going on. Then, back in a normal
+shell: `rm -rf <rehearsal-home> <vault-copy-2>`. Rehearse step 10's
+`settings.json` edit here too, so its `node` checks are known to work.
+
+**Changes** `<rehearsal-home>`, `<vault-copy-2>` and three lists in `<work>`; nothing in the live homes.
+
+**Verify** `init --yes` exits 0, `doctor` has no `[fail]` line, `find -L "$HOME/.claude" "$HOME/.codex"
+-type l` prints nothing before the uninstall, and `<work>/managed-paths.txt` lists the rules, output
+styles, `skills/developer-os` and Codex agents the install wrote. Any refusal (`adapter_unavailable`,
+a symlink where an artifact belongs, `entrypoint_target_occupied`) is fixed in the rehearsal and the
+rehearsal reruns; step 8 does not start until it passes.
+
+**Rollback** `rm -rf <rehearsal-home> <vault-copy-2>`.
+
 ## Step 8 — Remove the legacy surfaces that collide with the install
 
 Done in one sitting with steps 9 and 10, so the machine is without guards and rules for minutes, not
-days. First see what the product will write:
-
-```sh
-DEVELOPER_OS_BRAIN=<vault> <cli> init --dry-run --local-release <release-dir> --adapters claude,codex
-```
+days. Start only once step 7b's gate and step 7c's rehearsal have passed and step 10's precondition
+holds.
 
 The product refuses to write through a symlink or over an unmanaged file where a managed artifact
-belongs, so every legacy file the dry run names as a conflict goes first.
+belongs. The install writes `~/.claude/rules/<id>.md`, `~/.claude/output-styles/*`,
+`~/.claude/skills/developer-os` and `~/.codex/agents/*.toml`; the exact names are in
+`<work>/managed-paths.txt` from step 7c. The dry run does not plan these paths, so it cannot name a
+conflict; the checks in **Verify** below do.
 
 **Command** (after backing up in step 2; inspect each target before removing it)
 
@@ -287,7 +378,7 @@ belongs, so every legacy file the dry run names as a conflict goes first.
 | legacy rule symlinks in `~/.claude/rules/` | `find ~/.claude/rules -type l -lname '<legacy-shared-repo>/*' -delete`; then `find -L ~/.claude/rules -type l` lists dead links left over, delete those too |
 | legacy output styles in `~/.claude/output-styles/` | remove the four legacy files (`architect`, `debug`, `direct-objective`, `tdd-enforcer`) or their symlinks |
 | legacy plugin, Claude | `claude plugin uninstall <legacy-plugin>@<legacy-marketplace>`, then `claude plugin marketplace remove <legacy-marketplace>`; confirm the verbs with `claude plugin --help` on the installed version. If the plugin was linked into `~/.claude/skills/`, remove that symlink instead |
-| legacy plugin, Codex | `codex plugin remove <legacy-plugin>`, then `codex plugin marketplace remove <legacy-marketplace>` |
+| legacy plugin, Codex | `codex plugin remove <legacy-plugin>@<legacy-marketplace>` (the qualified form: a bare name refuses once a second marketplace exists, and a name nothing added still exits 0), then `codex plugin marketplace remove <legacy-marketplace>`. If step 1 found the legacy Codex hooks inside this plugin, stop before this row: removing it leaves Codex without guards until NEW-104, and the founder decides whether to keep the plugin |
 | legacy-generated text in `~/.codex/AGENTS.md` | delete the generated rule text; keep hand-written lines |
 | orphaned generated agents in `~/.codex/agents/` | remove every `<name>.toml` the legacy generator wrote (it was deleted on 2026-07-27, so these are orphans), including names the product does not ship |
 | dead symlinks anywhere in both homes | `find -L ~/.claude ~/.codex -type l` (BSD `find` has no `-xtype`) must print nothing afterwards |
@@ -298,8 +389,15 @@ inline third-party hook: those are the user's own tooling (inventory §4) and `d
 
 **Changes** the listed legacy files only.
 
-**Verify** the dry run above, repeated, reports no conflict. `claude plugin list` and
-`codex plugin list --json` no longer show `<legacy-plugin>`.
+**Verify**
+
+```sh
+find ~/.claude/rules ~/.claude/output-styles ~/.claude/skills ~/.codex/agents -type l   # prints nothing
+while read -r p; do test -e "$HOME/$p" || test -L "$HOME/$p" && echo "OCCUPIED $p"; done < <work>/managed-paths.txt
+```
+
+Both print nothing. `claude plugin list` and `codex plugin list --json` no longer show
+`<legacy-plugin>`, and the legacy Codex hooks are still where step 1 recorded them.
 
 **Rollback** restore the listed paths from the step 2 archives:
 
@@ -347,7 +445,13 @@ entry from the resolved Codex home (D52); nothing to do here beyond noting it.
 
 **Changes** `<product-home>`, the files listed above, and the index files under `<vault>/content/_indexes`.
 
-**Verify** `status` names `<vault>` as the Brain and both adapters; `doctor` has no `[fail]` line (the
+If `init --yes` refuses, it leaves a complete product home without the vendor artifacts and exits
+with the instruction step's code. Do not retry by hand: run this step's rollback now (`<cli>
+uninstall` if the entrypoint was not written), so the machine does not stay without rules or plugin.
+
+**Verify** `status` names `<vault>` as the Brain; `dos config get adapters` shows both adapters
+selected (`status`'s `agents` line reports only whether the vendor CLIs are present); `doctor` has no
+`[fail]` line (the
 unsigned-local-build warning is expected on every run); `dos brain status --json` reports the same
 `noteCount` as step 6; `claude plugin list` shows `developer-os@skills-dir` loaded; a new Claude
 session lists the product skills and the product rules. `doctor --probe` additionally probes each
@@ -357,17 +461,40 @@ vendor CLI and writes `~/.claude.json`; run it once, knowingly.
 
 ## Step 10 — Product hooks replace the legacy guards
 
-**Claude, now.** In `~/.claude/settings.json` delete every hook entry whose command runs a script
-from `<legacy-shared-repo>` (inventory §4: `knowledge-inject`, `bash-danger-guard`,
-`secret-file-guard`, `commit-guard`, `stop-gate`, `format-smart`, `skill-activator`,
-`shared-file-warn`, `instructions-check`, and the declined `knowledge-capture` and
-`precompact-backup`). Leave `dippy-guard` and the inline third-party hooks. The product never writes
-this file; the founder edits it by hand.
+**Precondition.** The D57 observations of the Claude `PreToolUse`, `PostToolUse` and `Stop` rows are
+recorded (roadmap D57). Nobody has yet seen a skills-directory plugin's `hooks/hooks.json` fire
+(`claude-adapter.md`); without that record the legacy guards stay and step 8 does not start.
+
+**Claude, first prove the product hooks fire.** With the legacy entries still in place, open one
+short Claude session: let it start, run one harmless command such as `true`, and read one file; edit
+nothing, because both the legacy and the product format hooks would run. Close it, then run
+`dos doctor`. The `hooks` line keys ages by event: `inject` (SessionStart) and `command`, `commit`
+and `path` (all PreToolUse) must show an age in hours, not `never`. `doctor` reports `hooks` as
+passing even when every age is `never`, so the pass alone proves nothing. If an age stays `never`,
+stop: the product hooks do not fire, and the legacy entries stay.
+
+**Claude, then remove the legacy entries.** Copy the file first:
+
+```sh
+cp -p ~/.claude/settings.json <backup-dir>/settings.pre-step10.json
+```
+
+In `~/.claude/settings.json` delete every hook entry whose command runs a script from
+`<legacy-shared-repo>` (inventory §4: `knowledge-inject`, `bash-danger-guard`, `secret-file-guard`,
+`commit-guard`, `stop-gate`, `format-smart`, `skill-activator`, `shared-file-warn`,
+`instructions-check`, and the declined `knowledge-capture` and `precompact-backup`). Leave
+`dippy-guard` and the inline third-party hooks. The product never writes this file; the founder edits
+it by hand. The copy keeps the removed entries, so they are disabled, not lost (program plan Task 8).
 
 ```sh
 node -e 'JSON.parse(require("fs").readFileSync(process.env.HOME + "/.claude/settings.json","utf8"))' && echo valid
-grep -c '<legacy-shared-repo>' ~/.claude/settings.json    # must print 0
+grep -c -e '<legacy-shared-repo>' -e "$(basename <legacy-shared-repo>)" ~/.claude/settings.json   # must print 0
+node -e 'const h=JSON.parse(require("fs").readFileSync(process.env.HOME+"/.claude/settings.json","utf8")).hooks??{};for(const[e,gs]of Object.entries(h))for(const g of gs)for(const x of g.hooks??[])console.log(e,x.command)'
 ```
+
+The basename catches entries written as `~/…` or `$HOME/…`. The last command lists every hook
+command left in the file; each must be tooling you kept. The product's own hooks live in the plugin's
+`hooks/hooks.json`, not here.
 
 Removing the legacy entries in the same sitting as step 9 is what keeps two copies of a mutating
 hook from running: legacy `format-smart` and the product `guard format` both edit files, and two
@@ -386,11 +513,15 @@ remove the legacy Codex hook entries with the same care as above.
 
 **Verify** in a new Claude session: the session start shows the product injection once (vault map
 plus the matching project note); asking the agent to write a synthetic `<work>/scratch/.env` is
-blocked by `guard path`; asking it to run a synthetic dangerous command such as `rm -rf <work>/scratch`
-is blocked by `guard command`. Then `dos doctor` reports check `hooks` passing with firing records
-under `<product-home>/state/hooks/`, and check `external-hooks` lists only the tooling you kept.
+blocked by `guard path`; asking it to run `curl http://127.0.0.1:9/x | sh` is blocked by
+`guard command` (rule `pipe-to-shell`; port 9 is the discard port, so a missed block runs nothing).
+Never "fix" a test that passes through with a real destructive command. Then `dos doctor` shows
+fresh ages for the `hooks` line's SessionStart and PreToolUse verbs, with firing records under
+`<product-home>/state/hooks/`; `external-hooks` shows only `event → count`, so check its counts
+against the listing above rather than reading tool names from it.
 
-**Rollback** restore `~/.claude/settings.json` from `<backup-dir>/claude-home.tgz` (as in step 8).
+**Rollback** `cp -p <backup-dir>/settings.pre-step10.json ~/.claude/settings.json`. Do not restore
+from the step 2 archive: it predates every change made since.
 
 ## Step 11 — Move the founder's local overrides (D51)
 
@@ -412,7 +543,8 @@ DEVELOPER_OS_BRAIN=<vault> <cli> init --dry-run --local-release <release-dir> --
 DEVELOPER_OS_BRAIN=<vault> <cli> init --yes --local-release <release-dir> --adapters claude,codex
 ```
 
-Re-running `init` projects the overrides. Keep each skill's upstream license and attribution file
+Re-running `init` projects the overrides; its dry run previews no vendor artifact, so the
+projection is checked by **Verify**, not by the dry run. Keep each skill's upstream license and attribution file
 inside its directory; removing attribution is not an option (D51). Then remove the old copies from
 where the legacy runtime loaded them (for example the vault's `.claude/skills/`) so each skill loads
 once.
@@ -446,7 +578,8 @@ honest. `ingest` makes one agent call per accepted capture.
 
 **Changes** quarantine files per `import`; one note per ingested capture.
 
-**Verify** after each batch: `dos review --status accepted` is empty, `dos review --status failed` is
+**Verify** after each batch, once its last `ingest --limit 5` has run (repeat `ingest` until no
+accepted capture is left): `dos review --status accepted` is empty, `dos review --status failed` is
 empty or understood, `brain lint` has 0 errors, and a `brain search` for one ingested topic returns
 the new note. The capture ID is a content hash, so re-running `import` over the same files adds
 nothing.
@@ -463,10 +596,11 @@ vault's own Git (`git -C <vault> log`, then `git -C <vault> revert`), or retired
 commit recorded in step 1. Remove any shell alias or `PATH` entry that points into it, except what the
 Codex hooks of step 10 still call.
 
-**Verify** `grep -rn '<legacy-shared-repo>' ~/.zshrc ~/.zprofile ~/.claude ~/.codex` shows only the
-Codex hook entries.
+**Verify** `grep -rn --exclude-dir=projects '<legacy-shared-repo>' ~/.zshrc ~/.zprofile ~/.claude ~/.codex`
+shows only the Codex hook entries. `projects/` holds session transcripts; excluding it keeps their
+private text off the terminal.
 
-**Rollback** restore the removed lines.
+**Rollback** restore the removed lines from `<backup-dir>/shell-profile.tgz`.
 
 ## Step 14 — Run each retired job by hand until Phase 9
 
@@ -495,7 +629,16 @@ the run is in the log.
 
 ## Step 15 — Prove that reinstalling a newer build preserves the Brain and every override
 
-`update` does not exist until Phase 8, so this is the only upgrade path (D16).
+`update` does not exist until Phase 8, so this is the only upgrade path (D16). An in-place `init`
+from a newer bundle always refuses with `release_mismatch`: `assertInstalledRelease`
+(`apps/cli/src/instructions/apply.ts`) compares the release with the installed one recorded in the
+manifest and `state/active-release.json`, and any other build has another identity hash, even at the
+same version. The path is therefore uninstall, then init, as the refusal's own recovery says.
+
+`uninstall` removes `config.toml` (a manifest row) and the redaction key. `config get` shows only
+`patternsCount` for the redaction patterns, so they cannot be read back through the CLI: the copy of
+`config.toml` below is the only record of them. Read it; never copy it back over the new
+`config.toml`, which is a manifest row and would drift the install.
 
 **Command**
 
@@ -503,28 +646,36 @@ the run is in the log.
 # before
 (cd <vault> && find . -type f -not -path './.git/*' -not -path './.obsidian/*' -print0 | sort -z | xargs -0 shasum -a 256) > <work>/brain-before.sha256
 (cd <product-home>/instructions && find . -type f -print0 | sort -z | xargs -0 shasum -a 256) > <work>/overrides-before.sha256
-dos config get brain > <work>/brain-config-before.json
-# a newer build, launched from its own bundle: release admission requires the running CLI's version
+VALUE='process.stdout.write(JSON.stringify(JSON.parse(require("fs").readFileSync(0,"utf8")).value))'
+dos config get brain | node -e "$VALUE" > <work>/brain-config-before.json
+cp -p <product-home>/config.toml <backup-dir>/config.pre-reinstall.toml
+# a newer build; step 7b's gate must pass on its commit before it is installed
 cd <devos-checkout> && git pull --ff-only && npm run lint && npm run pack:local-release -- <release-dir-2>
-node <release-dir-2>/bundle/node_modules/@developer-os/cli/dist/bin.js init --dry-run --local-release <release-dir-2> --adapters claude,codex
-node <release-dir-2>/bundle/node_modules/@developer-os/cli/dist/bin.js init --yes --local-release <release-dir-2> --adapters claude,codex
+# close every Claude and Codex session: from uninstall until doctor below, Claude has no guards
+dos uninstall --dry-run
+dos uninstall --yes
+DEVELOPER_OS_BRAIN=<vault> node <release-dir-2>/bundle/node_modules/@developer-os/cli/dist/bin.js init --dry-run --local-release <release-dir-2> --adapters claude,codex
+DEVELOPER_OS_BRAIN=<vault> node <release-dir-2>/bundle/node_modules/@developer-os/cli/dist/bin.js init --yes --local-release <release-dir-2> --adapters claude,codex
+dos config set brain "$(cat <work>/brain-config-before.json)"
+dos config set redaction '{"patterns":[<the patterns from config.pre-reinstall.toml, as canonical JSON>]}'   # only if it had any
 # after
 (cd <vault> && find . -type f -not -path './.git/*' -not -path './.obsidian/*' -print0 | sort -z | xargs -0 shasum -a 256) | diff <work>/brain-before.sha256 -
 (cd <product-home>/instructions && find . -type f -print0 | sort -z | xargs -0 shasum -a 256) | diff <work>/overrides-before.sha256 -
-dos config get brain | diff <work>/brain-config-before.json -
+dos config get brain | node -e "$VALUE" | diff <work>/brain-config-before.json -
 dos doctor
 ```
 
-Never launch the newer release through the old entrypoint: a release whose version differs from the
-running CLI is refused (`release_mismatch`). If the in-place `init` refuses, the D16 fallback is
-`dos uninstall --dry-run`, `dos uninstall --yes`, the same `init --yes` from `<release-dir-2>` with
-`DEVELOPER_OS_BRAIN=<vault>`, and `dos config set brain` from `<work>/brain-config-before.json`
-(`uninstall` removes `config.toml`, a manifest row); run the three `diff`s after it.
+Launch the newer release from its own bundle, never through the old entrypoint: a release whose
+version differs from the running CLI is refused (`release_mismatch`). The reinstall rotates the
+redaction key (`uninstall` deletes it, `init` creates a new one); record that in the founder's log,
+and finish reviewing pending captures before reinstalling. If the redaction patterns name clients,
+restore them before any capture or import runs, or those names reach the vault unredacted.
 
-**Changes** the active release, the entrypoint and the managed vendor artifacts.
+**Changes** the active release, the entrypoint, `config.toml`, the redaction key and the managed
+vendor artifacts.
 
-**Verify** all three `diff`s print nothing; `dos --version` and `doctor`'s entrypoint line name the
-new release; the Claude session checks of steps 9–11 still hold.
+**Verify** all three `diff`s print nothing; `dos config get redaction.patterns` prints the same count
+as before; `dos --version` names the new release; the Claude session checks of steps 9–11 still hold.
 
 **Rollback** reinstall from `<release-dir>` the same way.
 
@@ -532,31 +683,55 @@ new release; the Claude session checks of steps 9–11 still hold.
 
 One complete cycle, in order; the gate of roadmap Phase 10.
 
-1. **Capture.** In a Claude session, the agent runs
-   `dos capture --text "<synthetic observation>" --note <topic>/<new-note>.md`.
-   Verify `dos review` lists it, redacted.
+1. **Capture.** In a Claude session, the agent runs `dos capture --text "<synthetic observation>"`.
+   Verify `dos review` lists it, redacted. (No `--note`: with it, the text must be a complete note
+   whose frontmatter parses, and the folder must be a configured topic folder, so a step 6 alias key
+   such as `PROJEKTY` refuses and `PROJECTS` would create a new folder beside it.)
 2. **Review.** `dos review --id <capture-id> --decision accept`. Verify
    `dos review --status accepted` lists it.
 3. **Ingest.** `dos ingest --limit 1 --agent claude`. Verify the note exists, `dos brain lint` has 0
    errors, and `dos review --status ingested` lists the capture.
 4. **Search.** `dos brain reindex`, then `dos brain search "<a term from the observation>"` returns the
    new note; a new Claude session's injection reflects the updated vault map.
-5. **Reinstall.** Step 15 against a freshly packed build, all three `diff`s empty (take the "before"
-   hashes after step 4 of this cycle).
-6. **Uninstall.** `dos uninstall --dry-run`, then `dos uninstall --yes`. Verify: the Brain hash list
-   matches step 5's "after"; `<product-home>/instructions/` is reported preserved and its hash list is
-   unchanged; `~/.claude/skills/developer-os` and the product block in `~/.claude/CLAUDE.md` are gone;
+5. **Codex.** Repeat items 1–4 with a second, different synthetic observation, captured from a Codex
+   session and ingested with `dos ingest --limit 1 --agent codex` (under D52's own `CODEX_HOME`). Every
+   Verify line must hold as it did for Claude: each adapter completes the same outcome contract
+   (program plan Task 8). Codex has no product hooks until NEW-104, so its injection check is the
+   legacy one of step 10.
+6. **Reinstall.** Step 15 against a freshly packed build, all three `diff`s empty (take the "before"
+   hashes after item 5 of this cycle).
+7. **Uninstall.** `dos uninstall --dry-run`, then `dos uninstall --yes`. Verify: the Brain hash list
+   matches item 6's "after"; `test -d <product-home>/instructions` succeeds and its hash list is
+   unchanged (it is not a manifest row, so `uninstall` does not list it as preserved);
+   `~/.claude/skills/developer-os` and the product block in `~/.claude/CLAUDE.md` are gone;
    `codex plugin list --json` no longer lists `developer-os` and the product block in
    `~/.codex/AGENTS.md` is gone; `find -L ~/.claude ~/.codex -type l` prints nothing.
 
 Then continue with step 18 (exercise the rollback) while the product is uninstalled, and return with
 step 17.
 
+**Founder decision needed: shadow mode.** Program plan Task 8 asks for capture into a separate shadow
+quarantine with canonical apply disabled, and for a comparison of the old and new capture, redaction
+and deduplication on synthetic sessions, before Claude is cut over. This runbook cuts over directly
+and installs both adapters at once; no recorded decision covers that. Before step 8, the founder
+chooses one and records it in the roadmap:
+
+- **A — restore shadow mode:** add a shadow stage between steps 7c and 8 that runs the product capture
+  into its own quarantine beside the legacy runtime and compares the two on synthetic sessions; or
+- **B — accept skipping it:** record that the step 7c rehearsal, the step 16 cycle for each adapter and
+  the step 18 rollback replace the shadow comparison.
+
 ## Step 17 — Return to the product after the uninstall or a rollback
 
-Repeat, in order: step 3 (only if step 18 re-enabled the legacy jobs), step 8, step 9 (including
+Repeat, in order: step 3 (only if a legacy job is loaded again), step 8, step 9 (including
 `config set brain`), step 10 (Claude half), step 11's `init` re-run, and the `doctor` and session
-checks. The vault needs no migration again. Git and launchd stay disabled.
+checks. After step 11, remove again the legacy override copies that step 18 item 3 put back, so each
+skill loads once.
+
+If step 18 item 5 reverted the migration commit, the vault is in the legacy schema again: before
+step 9, run `git -C <vault> revert --no-edit <revert-commit>` to reapply the migration, and after
+step 9 rerun step 6's `brain lint` (0 errors) and the every-note `brain search` loop against
+`<vault>` with `dos`. Otherwise the vault needs no migration again. Git and launchd stay disabled.
 
 ## Step 18 — Full rollback to the legacy runtime (exercise once)
 
@@ -565,8 +740,8 @@ restores the legacy runtime and **preserves every post-cutover Brain change**: t
 restored from backup.
 
 1. **Remove the product**, if installed: `dos uninstall --dry-run`, `dos uninstall --yes`. The Brain
-   and `<product-home>/instructions/` are never removed (`uninstall` only `rmdir`s, so a non-empty
-   directory is reported preserved).
+   and `<product-home>/instructions/` are never removed: neither is a manifest row, and `uninstall`
+   only `rmdir`s product directories, so a non-empty one stays.
 2. **Restore the vendor surfaces** from `<backup-dir>`: extract `claude-home.tgz` and `codex-home.tgz`
    into `<work>/restore`, `diff -r` each against the live home, and copy back exactly the paths steps
    8 and 10 changed: `~/.claude/CLAUDE.md`, `~/.claude/settings.json`, `~/.claude/rules/`,
@@ -576,15 +751,20 @@ restored from backup.
    since step 2. Re-register the legacy plugin with the vendor's install verb if `plugin list` does
    not show it.
 3. **Put the legacy overrides back** where the legacy runtime loaded them, if step 11 moved them.
-4. **Restore the scheduled jobs** with step 3's rollback, per label.
+4. **Restore the scheduled jobs** with step 3's rollback, per label, check each with
+   `launchctl print gui/$(id -u)/<legacy-job-label>` (loaded; do not kickstart a job that commits or
+   pushes), then repeat step 3 at once. A restored job left loaded fires on its schedule against the
+   migrated vault, and `brain-weekly` commits and pushes. Alternatively continue with step 17 in the
+   same sitting.
 5. **The vault stays migrated.** Post-cutover notes are in the product schema. If the legacy tooling
    refuses the migrated schema, `git -C <vault> revert --no-edit <migration-commit>` returns the
    migrated notes to the legacy schema; notes created after the cutover stay in the product schema
    and the legacy lint will report them. Accept that for a rollback; there is no reverse §8 script.
 6. **Verify the legacy runtime.** `claude plugin list` shows `<legacy-plugin>`; a new Claude session
-   shows the legacy injection; the synthetic `.env` write and the synthetic dangerous command of step
-   10 are blocked by the legacy guards; `launchctl print gui/$(id -u)/<legacy-job-label>` shows each job
-   loaded (do not kickstart a job that commits or pushes); a Codex session behaves as before.
+   shows the legacy injection; the synthetic `.env` write of step 10 is blocked by the legacy guards,
+   and the synthetic command of step 10 is blocked if the legacy `bash-danger-guard` covers piping to
+   a shell (record the outcome either way; never substitute a real destructive command); the jobs were
+   checked in item 4; a Codex session behaves as before.
 7. **Record** the date and outcome, then roll forward with step 17.
 
 ## Step 19 — Close the cutover and archive the legacy repository
@@ -602,5 +782,12 @@ Then:
 - `<vault>` is the Brain; it is not archived.
 - `<backup-dir>` may be deleted after the stable cycle, once the founder has decided to keep no
   offline copy.
-- The three `docs/migration/founder-*.json` result files of program plan Task 8 carry only redacted,
-  value-free outcomes (per-step pass/fail, versions, counts), never paths, labels or note content.
+- The three result files of program plan Task 8 carry only redacted, value-free outcomes (per-step
+  pass/fail, versions, counts), never paths, labels or note content. The founder writes them from
+  the founder's own log, as one reviewed repository change after the stable cycle:
+  - `docs/migration/founder-baseline-results.json`: steps 1, 6 and 7b (vendor versions against the
+    pins and floors, note counts, lint error count, suite result);
+  - `docs/migration/founder-shadow-results.json`: the step 16 cycle per adapter (Claude, Codex) and
+    the shadow-mode choice recorded before step 8;
+  - `docs/migration/founder-cutover-manifest.json`: every step's pass/fail and date, whether step 18
+    was exercised, and whether its item 5 revert was used.
