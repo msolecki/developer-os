@@ -47,10 +47,13 @@ export {
   FixedReleaseTransport,
   nodeReleaseExchange,
   readOfflineReleaseTrustFd,
+  ReleasePlanningScratchAttempt,
+  ReleasePlanningScratchStore,
   ReleaseTransportError,
   renderOfflineReleaseTrustPipe,
   verifyReleaseMetadataChain,
   verifySignedReleaseDocument,
+  ZstdUstarAdmission,
 } from "./update/index.js";
 export type {
   BoundedReleaseResponseV1,
@@ -64,6 +67,12 @@ export type {
   ReleaseKeyDelegationDocumentV1,
   ReleaseMetadataChainRequestV1,
   ReleaseMetadataChainV1,
+  ReleasePlanningAttemptIdV1,
+  ReleasePlanningScratchJournalV1,
+  ReleasePlanningScratchRequestV1,
+  ReleasePlanningScratchStoreDependencies,
+  ReleasePlanningScratchV1,
+  VerifiedScratchBundleV1,
 } from "./update/index.js";
 
 export interface SecurityPolicy {
