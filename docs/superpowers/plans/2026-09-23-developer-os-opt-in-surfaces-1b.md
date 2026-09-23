@@ -23,6 +23,14 @@
 
 ---
 
+## Status 2026-09-23 (D56 lane)
+
+Tasks 1–18 and 20 committed, tests written and not run (D56): 1 `5e6c9b2` `667bf2f`, 2 `b41d730`,
+3 `8588cc3`, 4 `176b259`, 5 `51b04e3`, 6 `06d265c`, 7 `19bd1f0`, 8 `ef724f6`, 9 `8ec8709`,
+10 `ec51962`, 11 `fd3f316`, 12 `c87a276`, 13 `f1ccbf9`, 14 `bf3c526`, 15 `44ca96e`,
+16 `8403283` `0cca77e`, 17 `4b68276` `a66d7ee`, 18 `4794517`, 20 `d1b1e77`. Open: Task 19 (founder
+certification on the pinned host, HTTPS/SSH traces need a disposable remote) and Task 21 (phase close).
+
 ## What plan 1a already delivered (do not rebuild)
 
 Every task below consumes these by name. The source plan's tasks produced several of them anew, and this plan drops those productions.

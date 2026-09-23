@@ -89,7 +89,7 @@ Strict sequence; do not start a blocked row early.
 | A13 | DOS-P11 Hooks — spec, plan, implementation | A12b | every hook in the inventory §4 plus session-start injection is observed firing and names the installed binary | committed (Codex half under D57); phase close owed |
 | A14 | DOS-P12 Repository tooling verbs — spec, plan, implementation | A13 | inventory §5 and §6: every row is a shipped verb or a recorded refusal (D47) | committed; phase close owed |
 | A15 | DOS-P8 Founder shadow migration — dedicated plan and execution | A14 | rollback to the legacy runtime is exercised and one stable cycle completes | next |
-| A11b | DOS-P7 remainder (D16): Spec 2 Tasks 12–26 (update, rollback), then Spec 1b (git, launchd) | A15 (D56: Tasks 12–25 run now) | `update`, `update rollback`, `git` and `automation` proven on a disposable install, then on the founder machine | Tasks 12–25 in progress (D56) |
+| A11b | DOS-P7 remainder (D16): Spec 2 Tasks 12–26 (update, rollback), then Spec 1b (git, launchd) | A15 (D56: Tasks 12–25 run now) | `update`, `update rollback`, `git` and `automation` proven on a disposable install, then on the founder machine | Spec 2 Tasks 12–25 and plan 1b Tasks 1–18, 20 committed (D56); Spec 2 closure plan in progress (D60); Task 19 (founder) and both phase closes owed |
 | A16 | DOS-P9 Public beta and v1 | A11b, L1, L2 | `v1.0.0` is published and reproducible | blocked |
 
 ## Repository work not owned by the product sequence

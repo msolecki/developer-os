@@ -12,6 +12,14 @@ Completed tasks were removed on 2026-09-23; see git history. What remains: the P
 
 **Spec:** `docs/superpowers/specs/2026-08-28-developer-os-release-update-design.md`
 
+## Status 2026-09-23 (D56 lane)
+
+Tasks 12–25 committed, tests written and not run (D56): 12 `0d379b6`, 13 `bfa1ab8`, 14 `3fa320a`,
+15 `2d8b6e2`, 16 `3d0295a`, 17 `913cbfc`, 18 `1c46285`, 19 `0db9aa4`, 20 `6cbc08c`, 21 `8aede3b`,
+22 `8848a9c`, 23 `25755c9`, 24 `11cfbbf`, 25 `2c2c4a5`. The apply path is completed by
+`plans/2026-09-23-developer-os-spec2-closure.md` (D60). Task 26 (the lifecycle proof) and Task 11b
+remain parked; every task's tests and review run at the Phase 8 close.
+
 ## Global Constraints
 
 - **Sequencing (D16, 2026-09-16):** Tasks 12–26 run as roadmap Phase 8, after the founder cutover (A15). The Phase 4b close below runs before them. **Amended 2026-09-23 by D56:** Tasks 12–25 run now, in parallel with the A15 cutover, under the D44/D47 lane (tests written, not run; `npm run lint` per commit; tests and review at phase close); Task 26 stays parked with 11b.
