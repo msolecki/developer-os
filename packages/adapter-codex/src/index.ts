@@ -85,6 +85,11 @@ export type {
   InvocationContext,
   InvokeDependencies,
 } from "./invoke.js";
+export {
+  codexOwnerUpdateProvider,
+  codexTargetEntries,
+  planCodexOwner,
+} from "./update/plan.js";
 
 import { resolveCapabilities } from "./capabilities.js";
 import { renderCodexInstallTree, renderCodexPlugin } from "./compose.js";

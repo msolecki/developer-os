@@ -85,3 +85,8 @@ export type {
   ClaudeMemoryLayoutV1,
   ClaudeObservationV1,
 } from "./observations.js";
+export {
+  claudeOwnerUpdateProvider,
+  claudeTargetEntries,
+  planClaudeOwner,
+} from "./update/plan.js";
