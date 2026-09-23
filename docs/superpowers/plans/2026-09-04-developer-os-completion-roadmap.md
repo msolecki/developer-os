@@ -229,6 +229,13 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   trace; HTTPS and SSH refuse until the founder supplies a disposable remote), Q5-A
   (`*.pinned-host.test.ts` and `npm run test:pinned-host`, run locally). Under D56 plan 1b's waves run
   now, beside Phase 8, instead of waiting for it to close.
+- **D60 (2026-09-23).** Spec 2's apply path is closed by `plans/2026-09-23-developer-os-spec2-closure.md`,
+  with option A on every founder question: F1-A (update Foundation refs follow §6.3's publication rule —
+  standard `<tx>/<i>.bin`, no-replace before the initial journal — and the legal staging children list
+  grows by the paths the spec itself derives), F2-A (`CanonicalStateFileStateV1` postimage carries no
+  dev/ino; identity comes from reopened construction evidence), F3-A (an automatic rollback is the
+  error envelope, exit 5 for `update_verifier_rejected`, 1 otherwise; trust stays advanced), F4-A (the
+  two V2 ref types are an accepted residual in §13.3).
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 
