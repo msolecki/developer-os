@@ -62,3 +62,5 @@ export type {
   TargetPlannerRunResultV1,
   TargetPlannerSupervisorDependencies,
 } from "./planner-process.js";
+export { TargetVerifierSupervisor } from "./verifier-process.js";
+export type { TargetVerifierRunRequestV1, TargetVerifierRunResultV1, TargetVerifierSupervisorDependencies } from "./verifier-process.js";

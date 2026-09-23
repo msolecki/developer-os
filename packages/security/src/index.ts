@@ -176,3 +176,5 @@ export interface SecurityPolicy {
   redact(text: string): RedactionResult;
   assertCommand(request: ProcessRequest): void;
 }
+export { TargetVerifierSupervisor } from "./update/index.js";
+export type { TargetVerifierRunRequestV1, TargetVerifierRunResultV1, TargetVerifierSupervisorDependencies } from "./update/index.js";

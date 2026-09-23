@@ -83,6 +83,7 @@ describe("the package's public door", () => {
         "runGitGateway",
         "SanitizedLocalRemoteHelper",
         "sanitizedGitEnvironment",
+        "TargetVerifierSupervisor",
       ].sort(),
     );
   });
