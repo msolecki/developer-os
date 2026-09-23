@@ -203,6 +203,14 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
 - **D55 (2026-09-23).** The launchable CLI is bundled with `esbuild` (root devDependency) into a single
   module plus third-party license files, so fresh `init` retains a handful of files instead of ~500
   (measured 63 min vs ~11 min).
+- **D56 (2026-09-23), amends D16's order.** The founder runs two tracks at once: the A15 cutover
+  (write `docs/migration/founder-cutover.md`, then execute it step by step with founder approval) and
+  Phase 8 (Spec 2 Tasks 12–25) in parallel, before the cutover completes. The D44/D47 lane extends to
+  Phase 8: each task writes its tests but does not run them, a commit runs `npm run lint` only, and
+  tests plus fresh-context review run at the phase close. Task 26 (the lifecycle proof) and Task 11b
+  (D46) stay parked. Implementers run as separate headless sessions, one worktree each under
+  `../developer-os.worktrees/`. The founder authorized model credits for the owed vendor observations
+  (NEW-101..104, NEW-109).
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 

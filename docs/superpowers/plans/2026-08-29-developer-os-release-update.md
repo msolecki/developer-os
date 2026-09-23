@@ -14,7 +14,7 @@ Completed tasks were removed on 2026-09-23; see git history. What remains: the P
 
 ## Global Constraints
 
-- **Sequencing (D16, 2026-09-16):** Tasks 12–26 run as roadmap Phase 8, after the founder cutover (A15). The Phase 4b close below runs before them.
+- **Sequencing (D16, 2026-09-16):** Tasks 12–26 run as roadmap Phase 8, after the founder cutover (A15). The Phase 4b close below runs before them. **Amended 2026-09-23 by D56:** Tasks 12–25 run now, in parallel with the A15 cutover, under the D44/D47 lane (tests written, not run; `npm run lint` per commit; tests and review at phase close); Task 26 stays parked with 11b.
 - Package direction remains `core ← security ← platform-macos ← cli`, with the separate `apps/launcher` depending only on Core, Security, and platform-macos. Core imports no filesystem globals, HTTP, archive extraction, process, platform, adapter, or CLI implementation.
 - No command other than `developer-os update` makes an update network request. Rollback, the V1 refusal, fresh init, uninstall, config, Git, automation, Brain, adapter probes, and launcher selection make zero release-transport requests.
 - `update` and `update rollback` are plan-only unless `--apply` is present. Planning may use only one bounded attempt-owned system-temporary scratch envelope and never mutates product, Brain, vendor, launcher, manifest, trust, active-release, or allocator state.
