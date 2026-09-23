@@ -38,3 +38,9 @@ export type {
   TransactionRecoveryResult,
   TransactionStoreDependencies,
 } from "./types.js";
+export { admitUpdateFoundationInitialJournal } from "./executor.js";
+export type {
+  AdmittedUpdateFoundationInitialJournalV1,
+  UpdateFoundationInitialJournalAdmissionContextV1,
+  UpdateFoundationPayloadIdentityV1,
+} from "./executor.js";

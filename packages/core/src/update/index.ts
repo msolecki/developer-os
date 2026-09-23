@@ -674,3 +674,13 @@ export type {
   PresentBundleMetadataPostimageV1,
   PresentBundleMetadataPreimageV1,
 } from "./bundle-participant.js";
+export {
+  buildUpdateFoundationParticipantRef,
+  updateFoundationStagedDigestBytes,
+  updateFoundationStagedPath,
+} from "./migrations.js";
+export type {
+  UpdateFoundationMutationInputV1,
+  UpdateFoundationMutationRefV1,
+  UpdateFoundationParticipantRefInputV1,
+} from "./migrations.js";

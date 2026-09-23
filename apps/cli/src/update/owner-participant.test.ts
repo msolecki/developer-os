@@ -112,7 +112,7 @@ function ref(id: AllocatedLifecycleIdV1<"tx">, role: UpdateFoundationParticipant
     id,
     slot: forward ? "owner_forward_files" : "owner_inverse_files",
     role,
-    mutations: [{ targetPath: target, operation: "replace", expectedBeforeHash: forward ? oldHash : newHash, contentHash: forward ? newHash : oldHash, contentSize: 5, stagedPath: parseCanonicalAbsolutePathText(`/synthetic/staged/${id}.bin`) }],
+    mutations: [{ targetPath: target, operation: "replace", expectedBeforeHash: forward ? oldHash : newHash, contentHash: forward ? newHash : oldHash, contentSize: 5, stagedPath: parseCanonicalAbsolutePathText(`/synthetic/staged/${id}.bin`), content: null, digest: null }],
     maximumJournalBytes: 4096,
     planHash: sha(id),
     initialJournal: { finalPath: parseCanonicalAbsolutePathText(`/synthetic/state/transactions/${id}.json`), plannedBytesHash: sha(id), staged: { kind: "update_expected", coordinatorId, ordinal: 0, path: parseCanonicalAbsolutePathText(`/synthetic/staging/${id}.json`) as never, hash: sha(id), bytes: 10, mode: 0o600 } },

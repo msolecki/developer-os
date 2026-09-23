@@ -7,6 +7,7 @@ import type {
   FoundationParticipantRefV2,
 } from "../manifest/bootstrap.js";
 import type { FoundationParticipantRefV1 } from "../lifecycle/types.js";
+import type { UpdateFoundationParticipantRefV2, UpdatePayloadRefV1 } from "../update/migrations.js";
 import { EXIT_CODES } from "../result.js";
 import { parseUtcTimestamp } from "../update/scalars.js";
 import type { CanonicalAbsolutePathV1 } from "../update/paths.js";
@@ -648,6 +649,297 @@ function validateLifecycleFoundationBridgeInput(
           );
     if (mutation.stagedPath !== expected) throw new TransactionStateError();
   }
+}
+
+const admittedUpdateFoundationInitialJournal: unique symbol = Symbol(
+  "admittedUpdateFoundationInitialJournal",
+);
+
+/** Spec 2 §5.3 (D60): the capability for one lifecycle update ref's Foundation cursor. */
+export interface AdmittedUpdateFoundationInitialJournalV1 {
+  readonly [admittedUpdateFoundationInitialJournal]: true;
+}
+
+/** A construction-evidence inode: the only authority to adopt a published payload. */
+export interface UpdateFoundationPayloadIdentityV1 {
+  readonly dev: UInt64DecimalV1;
+  readonly ino: UInt64DecimalV1;
+}
+
+export interface UpdateFoundationInitialJournalAdmissionContextV1 {
+  readonly ref: UpdateFoundationParticipantRefV2;
+  readonly ownerUid: number;
+  readonly initialJournal: TransactionJournalV1;
+  /** Construction evidence of the staged initial-journal row. */
+  readonly journalIdentity: UpdateFoundationPayloadIdentityV1;
+  /** Per mutation, the evidence of its content and digest rows; null exactly for a remove. */
+  readonly payloadIdentities: readonly ({
+    readonly content: UpdateFoundationPayloadIdentityV1;
+    readonly digest: UpdateFoundationPayloadIdentityV1;
+  } | null)[];
+  /** The coordinator's `update/payloads` directory, the source parent of every content move. */
+  readonly payloadParent: BootstrapInitialJournalPublicationV1["sourceParent"];
+  readonly sourceParent: BootstrapInitialJournalPublicationV1["sourceParent"];
+  readonly destinationParent: BootstrapInitialJournalPublicationV1["destinationParent"];
+}
+
+interface RetainedUpdateFoundationInitialJournalV1 {
+  readonly ref: UpdateFoundationParticipantRefV2;
+  readonly ownerUid: number;
+  readonly initialJournal: TransactionJournalV1;
+  readonly plannedBytes: Uint8Array;
+  readonly journalIdentity: UpdateFoundationPayloadIdentityV1;
+  readonly payloadIdentities: UpdateFoundationInitialJournalAdmissionContextV1["payloadIdentities"];
+  readonly payloadParent: BootstrapInitialJournalPublicationV1["sourceParent"];
+  readonly sourceParent: BootstrapInitialJournalPublicationV1["sourceParent"];
+  readonly destinationParent: BootstrapInitialJournalPublicationV1["destinationParent"];
+}
+
+const retainedUpdateFoundationInitialJournals = new WeakMap<
+  AdmittedUpdateFoundationInitialJournalV1,
+  RetainedUpdateFoundationInitialJournalV1
+>();
+
+const DECIMAL_IDENTITY = /^(?:0|[1-9][0-9]*)$/u;
+
+function retainedIdentity(value: UpdateFoundationPayloadIdentityV1): UpdateFoundationPayloadIdentityV1 {
+  if (!DECIMAL_IDENTITY.test(value.dev) || !DECIMAL_IDENTITY.test(value.ino)) {
+    throw new TransactionStateError();
+  }
+  return { dev: value.dev, ino: value.ino };
+}
+
+/** The sidecar the V1 stage check requires for `contentHash`: lowercase hex plus LF. */
+function stagedDigestBytes(contentHash: string): Uint8Array {
+  return new TextEncoder().encode(`${contentHash}\n`);
+}
+
+/**
+ * The planned journal an update ref stages: Spec 1's shape with the slot as its kind. A
+ * mutation with bytes stages `<i>.bin` from two distinct `update_expected` rows whose hashes
+ * bind the mutation; a remove carries neither.
+ */
+function updateParticipantPlannedShape(
+  ref: UpdateFoundationParticipantRefV2,
+  initialJournal: TransactionJournalV1,
+  payloadIdentities: UpdateFoundationInitialJournalAdmissionContextV1["payloadIdentities"],
+): void {
+  if (
+    initialJournal.id !== ref.id ||
+    initialJournal.kind !== ref.slot ||
+    initialJournal.phase !== "planned" ||
+    initialJournal.createdAt !== initialJournal.updatedAt ||
+    ref.mutations.length !== initialJournal.mutations.length ||
+    ref.mutations.length !== payloadIdentities.length ||
+    ref.mutations.length < 1 ||
+    ref.mutations.length > 256
+  ) {
+    throw new TransactionStateError();
+  }
+  for (const [index, mutation] of ref.mutations.entries()) {
+    const planned = initialJournal.mutations[index];
+    const identities = payloadIdentities[index];
+    const remove = mutation.operation === "remove";
+    const validShape = remove
+      ? mutation.expectedBeforeHash !== null &&
+        mutation.contentHash === null &&
+        mutation.contentSize === null &&
+        mutation.stagedPath === null &&
+        mutation.content === null &&
+        mutation.digest === null &&
+        identities === null
+      : (mutation.operation === "create") === (mutation.expectedBeforeHash === null) &&
+        mutation.contentHash !== null &&
+        mutation.contentSize !== null &&
+        mutation.stagedPath !== null &&
+        mutation.content !== null &&
+        mutation.digest !== null &&
+        identities !== null && identities !== undefined &&
+        mutation.content.sha256 === mutation.contentHash &&
+        mutation.content.bytes === mutation.contentSize &&
+        mutation.content.ordinal !== mutation.digest.ordinal &&
+        mutation.digest.mode === 0o600 &&
+        mutation.digest.bytes === stagedDigestBytes(mutation.contentHash).byteLength &&
+        mutation.digest.sha256 === hash(stagedDigestBytes(mutation.contentHash));
+    if (
+      planned === undefined ||
+      !validShape ||
+      planned.targetPath !== mutation.targetPath ||
+      planned.operation !== mutation.operation ||
+      planned.expectedBeforeHash !== mutation.expectedBeforeHash ||
+      planned.stagedRelativePath !== (remove ? null : `${String(index)}.bin`) ||
+      !isAbsolute(mutation.targetPath) ||
+      (mutation.contentSize !== null &&
+        (!Number.isSafeInteger(mutation.contentSize) ||
+          mutation.contentSize < 0 ||
+          mutation.contentSize > LIFECYCLE_PAYLOAD_MAXIMUM_BYTES))
+    ) {
+      throw new TransactionStateError();
+    }
+    if (identities !== null && identities !== undefined) {
+      retainedIdentity(identities.content);
+      retainedIdentity(identities.digest);
+    }
+  }
+}
+
+/**
+ * Converts a lifecycle update ref, its planned journal, and the construction evidence of
+ * every row it consumes into the only value `executeUpdateFoundationParticipant` accepts.
+ * A Spec 1 V1 ref has no `staged` arm and is refused here.
+ */
+export function admitUpdateFoundationInitialJournal(
+  context: UpdateFoundationInitialJournalAdmissionContextV1,
+): AdmittedUpdateFoundationInitialJournalV1 {
+  try {
+    if (!Number.isSafeInteger(context.ownerUid) || context.ownerUid < 0) {
+      throw new TransactionStateError();
+    }
+    const ref = structuredClone(context.ref);
+    const payloadIdentities = structuredClone(context.payloadIdentities);
+    const initialJournal = validateJournal(structuredClone(context.initialJournal));
+    updateParticipantPlannedShape(ref, initialJournal, payloadIdentities);
+    const plannedBytes = new TextEncoder().encode(
+      encodeFoundationJournalJsonV1(initialJournal),
+    );
+    const staged = ref.initialJournal.staged;
+    if (
+      (staged.kind as string) !== "update_expected" ||
+      !ALLOCATED_LIFECYCLE_TRANSACTION_ID.test(ref.id) ||
+      !Number.isSafeInteger(ref.maximumJournalBytes) ||
+      ref.maximumJournalBytes < 1 ||
+      ref.maximumJournalBytes > LIFECYCLE_JOURNAL_MAXIMUM_BYTES ||
+      plannedBytes.byteLength < 1 ||
+      plannedBytes.byteLength > ref.maximumJournalBytes ||
+      (staged.mode as number) !== 0o600 ||
+      staged.bytes !== plannedBytes.byteLength ||
+      staged.hash !== hash(plannedBytes) ||
+      ref.initialJournal.plannedBytesHash !== hash(plannedBytes)
+    ) {
+      throw new TransactionStateError();
+    }
+    const payloadParent = retainedPublicationParent(
+      context.payloadParent,
+      context.payloadParent.path,
+      context.ownerUid,
+    );
+    for (const mutation of ref.mutations) {
+      for (const payload of [mutation.content, mutation.digest]) {
+        if (payload !== null && dirname(payload.path) !== payloadParent.path) {
+          throw new TransactionStateError();
+        }
+      }
+    }
+    const admitted = Object.freeze({
+      [admittedUpdateFoundationInitialJournal]: true as const,
+    });
+    retainedUpdateFoundationInitialJournals.set(admitted, {
+      ref,
+      ownerUid: context.ownerUid,
+      initialJournal,
+      plannedBytes,
+      journalIdentity: retainedIdentity(context.journalIdentity),
+      payloadIdentities,
+      payloadParent,
+      sourceParent: retainedPublicationParent(
+        context.sourceParent,
+        dirname(staged.path),
+        context.ownerUid,
+      ),
+      destinationParent: retainedPublicationParent(
+        context.destinationParent,
+        dirname(ref.initialJournal.finalPath),
+        context.ownerUid,
+      ),
+    });
+    return admitted;
+  } catch (error) {
+    if (error instanceof TransactionStateError) throw error;
+    throw new TransactionStateError();
+  }
+}
+
+function consumeUpdateFoundationInitialJournal(
+  admitted: AdmittedUpdateFoundationInitialJournalV1,
+): RetainedUpdateFoundationInitialJournalV1 {
+  const retained = retainedUpdateFoundationInitialJournals.get(admitted);
+  if (retained === undefined) throw new TransactionStateError();
+  return retained;
+}
+
+/**
+ * The half of an update ref's shape the executor's own directories derive: the §5.3 staged
+ * initial journal under its V2 coordinator, the standard `<tx>/<i>.bin`, and payloads under
+ * that coordinator's `update/payloads`. The V1 `foundation/<tx>/journal.json` never matches.
+ */
+function validateUpdateFoundationBridgeInput(
+  ref: UpdateFoundationParticipantRefV2,
+  dependencies: TransactionExecutorDependencies,
+): void {
+  const coordinatorId = ref.initialJournal.staged.coordinatorId;
+  if (!ALLOCATED_LIFECYCLE_COORDINATOR_ID.test(coordinatorId)) {
+    throw new TransactionStateError();
+  }
+  const coordinatorRoot = join(dependencies.stagingDir, "lifecycle", coordinatorId);
+  const payloadPath = (payload: UpdatePayloadRefV1): string =>
+    join(coordinatorRoot, "update", "payloads", `${String(payload.ordinal).padStart(10, "0")}.payload`);
+  if (
+    ref.initialJournal.finalPath !==
+      join(dependencies.stateDir, "transactions", `${ref.id}.json`) ||
+    ref.initialJournal.staged.path !==
+      join(coordinatorRoot, "participants", "foundation", ref.id, "initial-journal.json")
+  ) {
+    throw new TransactionStateError();
+  }
+  for (const [index, mutation] of ref.mutations.entries()) {
+    if (mutation.operation === "remove") continue;
+    const { content, digest } = mutation;
+    if (
+      content === null ||
+      digest === null ||
+      mutation.stagedPath !==
+        join(dependencies.stagingDir, "transactions", ref.id, `${String(index)}.bin`)
+    ) {
+      throw new TransactionStateError();
+    }
+    for (const payload of [content, digest]) {
+      if (
+        (payload.kind as string) !== "update_expected" ||
+        payload.coordinatorId !== coordinatorId ||
+        !Number.isSafeInteger(payload.ordinal) ||
+        payload.ordinal < 0 ||
+        payload.ordinal > 1_099_999 ||
+        payload.path !== payloadPath(payload)
+      ) {
+        throw new TransactionStateError();
+      }
+    }
+  }
+}
+
+/** The observed identity of a publication parent the executor itself just ensured. */
+async function observedPublicationParent(
+  fs: TransactionFileSystem,
+  path: CanonicalAbsolutePathV1,
+  ownerUid: number,
+): Promise<BootstrapInitialJournalPublicationV1["destinationParent"]> {
+  const stats = await optionalLstat(fs, path);
+  if (
+    stats === null ||
+    stats.isSymbolicLink() ||
+    !stats.isDirectory() ||
+    Number(stats.uid) !== ownerUid ||
+    (Number(stats.mode) & 0o7777) !== 0o700
+  ) {
+    throw new TransactionStateError();
+  }
+  return {
+    path,
+    ownerUid,
+    mode: 0o700,
+    dev: stats.dev.toString(10) as UInt64DecimalV1,
+    ino: stats.ino.toString(10) as UInt64DecimalV1,
+  };
 }
 
 const BOOTSTRAP_FOUNDATION_ID_RE = new RegExp(
@@ -1570,6 +1862,150 @@ export class TransactionExecutor {
             this.dependencies.fs,
             finalPath,
             identity,
+            ownerUid,
+            plannedBytes,
+          );
+        }
+      }
+
+      return this.resume(ref.id);
+    });
+  }
+
+  /**
+   * Spec 2 §5.3 (D60): at an update ref's Foundation cursor, no-replace-publishes each
+   * content row then its sidecar to the standard `<tx>/<i>.bin` pair, then the staged
+   * initial journal, then resumes the unchanged state machine under the same lock. A pair
+   * is adopted only at its construction-evidence inode; any other state is exit 6.
+   */
+  async executeUpdateFoundationParticipant(
+    admitted: AdmittedUpdateFoundationInitialJournalV1,
+  ): Promise<TransactionJournalV1> {
+    const retained = consumeUpdateFoundationInitialJournal(admitted);
+    const { ref, ownerUid, initialJournal, plannedBytes, journalIdentity } = retained;
+    validateUpdateFoundationBridgeInput(ref, this.dependencies);
+    const stagedPath = ref.initialJournal.staged.path;
+    const finalPath = ref.initialJournal.finalPath;
+
+    return this.store.withTransactionLock(ref.id, async () => {
+      const [stagedBefore, finalBefore] = await Promise.all([
+        optionalLstat(this.dependencies.fs, stagedPath),
+        optionalLstat(this.dependencies.fs, finalPath),
+      ]);
+      if ((stagedBefore === null) === (finalBefore === null)) {
+        throw new TransactionStateError();
+      }
+
+      if (stagedBefore !== null) {
+        await readExactBootstrapJournalByIdentity(
+          this.dependencies.fs,
+          stagedPath,
+          journalIdentity,
+          ownerUid,
+          plannedBytes,
+        );
+        await this.ensureTransactionDirectories(ref.id);
+        const stageParent = await observedPublicationParent(
+          this.dependencies.fs,
+          this.stageDirectory(ref.id) as CanonicalAbsolutePathV1,
+          ownerUid,
+        );
+        for (const [index, mutation] of ref.mutations.entries()) {
+          const identities = retained.payloadIdentities[index];
+          if (mutation.operation === "remove") continue;
+          if (
+            mutation.content === null ||
+            mutation.digest === null ||
+            mutation.stagedPath === null ||
+            identities === null ||
+            identities === undefined
+          ) {
+            throw new TransactionStateError();
+          }
+          const pairs = [
+            [mutation.content, mutation.stagedPath, identities.content],
+            [mutation.digest, `${mutation.stagedPath}.sha256`, identities.digest],
+          ] as const;
+          for (const [payload, destinationPath, identity] of pairs) {
+            await this.publishBootstrapMutationNoReplace({
+              sourcePath: payload.path,
+              destinationPath: destinationPath as CanonicalAbsolutePathV1,
+              sourceParent: retained.payloadParent,
+              destinationParent: stageParent,
+              postimage: {
+                kind: "regular_file",
+                ownerUid,
+                mode: payload.mode === 0o700 ? 0o700 : 0o600,
+                nlink: 1,
+                bytes: String(payload.bytes) as UInt64DecimalV1,
+                sha256: payload.sha256,
+                dev: identity.dev,
+                ino: identity.ino,
+              },
+            });
+          }
+        }
+        const publish = this.dependencies.publishBootstrapInitialJournalNoReplace;
+        if (publish === undefined) throw new TransactionStateError();
+        const [sourceParent, destinationParent] = await Promise.all([
+          exactPublicationParent(
+            this.dependencies.fs,
+            dirname(stagedPath) as CanonicalAbsolutePathV1,
+            retained.sourceParent,
+          ),
+          exactPublicationParent(
+            this.dependencies.fs,
+            dirname(finalPath) as CanonicalAbsolutePathV1,
+            retained.destinationParent,
+          ),
+        ]);
+        try {
+          await publish({
+            sourcePath: stagedPath,
+            destinationPath: finalPath,
+            sourceParent,
+            destinationParent,
+            postimage: {
+              kind: "regular_file",
+              ownerUid,
+              mode: 0o600,
+              nlink: 1,
+              bytes: String(plannedBytes.byteLength) as UInt64DecimalV1,
+              sha256: ref.initialJournal.plannedBytesHash,
+              dev: journalIdentity.dev,
+              ino: journalIdentity.ino,
+            },
+          });
+        } catch {
+          throw new TransactionStateError();
+        }
+        await syncReopenDirectory(this.dependencies.fs, dirname(stagedPath));
+        await syncReopenDirectory(this.dependencies.fs, dirname(finalPath));
+        const [stagedAfter, finalAfter] = await Promise.all([
+          optionalLstat(this.dependencies.fs, stagedPath),
+          optionalLstat(this.dependencies.fs, finalPath),
+        ]);
+        if (stagedAfter !== null || finalAfter === null) {
+          throw new TransactionStateError();
+        }
+        await readExactBootstrapJournalByIdentity(
+          this.dependencies.fs,
+          finalPath,
+          journalIdentity,
+          ownerUid,
+          plannedBytes,
+        );
+      } else {
+        const observed = await this.store.read(ref.id);
+        if (!exactBootstrapFoundationJournalShape(observed, initialJournal)) {
+          throw new TransactionStateError();
+        }
+        // As in the V1 arm: only `planned` still carries the construction inode.
+        if (observed.phase === "planned") {
+          await readExactBootstrapJournalByIdentity(
+            this.dependencies.fs,
+            finalPath,
+            journalIdentity,
             ownerUid,
             plannedBytes,
           );

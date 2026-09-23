@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { decodeCanonicalJson, encodeCanonicalJson, type CanonicalJsonV1, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import { parseAllocatedLifecycleId, parseManifestParticipantId, type AllocatedLifecycleIdV1, type EffectiveUidV1 } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1, ManifestParticipantIdV1 } from "../manifest/manifest-state.js";
+import { encodeFoundationJournalJsonV1, validateJournal } from "../transactions/store.js";
+import type { TransactionJournalV1 } from "../transactions/types.js";
 import type { UpdateFoundationParticipantRefV2 } from "./migrations.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1, type ExactProductStatePathV1 } from "./paths.js";
 import type { PreparedUpdateCandidateV1, RollbackPayloadEntryV1, RollbackPayloadIdV1 } from "./preview.js";
@@ -138,7 +140,10 @@ export interface UpdateConstructionRollbackSourceV1 {
 }
 
 export type UpdateConstructionPlanDerivedSourceV1 =
-  | { readonly kind: "plan_derived"; readonly role: "foundation_initial_journal"; readonly participant: UpdateFoundationParticipantRefV2; readonly foundationPlanHash: LowerHexSha256; readonly plannedBytesHash: LowerHexSha256; readonly value: CanonicalJsonV1; readonly valueBytes: number }
+  /** `value` is Spec 1's exact `FoundationJournalJsonV1` text (with its LF), which the executor rereads byte for byte. */
+  | { readonly kind: "plan_derived"; readonly role: "foundation_initial_journal"; readonly participant: UpdateFoundationParticipantRefV2; readonly foundationPlanHash: LowerHexSha256; readonly plannedBytesHash: LowerHexSha256; readonly value: string; readonly valueBytes: number }
+  /** Spec 2 §5.3 (D60): the `.bin.sha256` sidecar, exactly `contentHash` plus LF. */
+  | { readonly kind: "plan_derived"; readonly role: "foundation_staged_digest"; readonly contentHash: LowerHexSha256; readonly value: string; readonly valueBytes: 64 }
   | { readonly kind: "plan_derived"; readonly role: "manifest_after"; readonly plan: ImmutableUpdatePlanRefV1<"manifest_state">; readonly value: CanonicalJsonV1; readonly valueBytes: number }
   | { readonly kind: "plan_derived"; readonly role: "release_trust_after"; readonly plan: ImmutableUpdatePlanRefV1<"release_trust_state">; readonly value: CanonicalJsonV1; readonly valueBytes: number }
   | { readonly kind: "plan_derived"; readonly role: "active_release_after"; readonly plan: ImmutableUpdatePlanRefV1<"active_release_state">; readonly value: CanonicalJsonV1; readonly valueBytes: number }
@@ -176,7 +181,7 @@ export type UpdateConstructionPayloadSourceV1 =
   | GuardedPreimageSourceV1
   | UpdateConstructionPlanDerivedSourceV1;
 
-export type UpdateConstructionPayloadKindV1 = "foundation_initial" | "foundation_content" | "owner_content" | "migration_content" | "state_after";
+export type UpdateConstructionPayloadKindV1 = "foundation_initial" | "foundation_content" | "foundation_digest" | "owner_content" | "migration_content" | "state_after";
 
 export type UpdateConstructionFileRoleV1 =
   | { readonly kind: "immutable_plan"; readonly planKind: UpdateLeafPlanKindV1; readonly id: LeafId }
@@ -580,6 +585,25 @@ function checkDerivedValue(value: unknown, valueBytes: unknown, maximum: number,
   return { bytes: bytes.byteLength, sha256: sha256Hex(bytes) };
 }
 
+/**
+ * A lifecycle Foundation initial journal is Spec 1's planned `FoundationJournalJsonV1`, not canonical
+ * JSON: the unchanged executor rereads and re-encodes it byte for byte (spec:957 as amended by D60).
+ */
+function checkFoundationJournalValue(value: unknown, valueBytes: unknown, id: unknown, label: string): { readonly bytes: number; readonly sha256: LowerHexSha256 } {
+  if (typeof value !== "string" || !value.endsWith("\n")) fail(`${label}.value`);
+  const bytes = encoder.encode(value);
+  if (bytes.byteLength > MAXIMUM_PARTICIPANT_JOURNAL_BYTES) fail(`${label}.value: exceeds its bound`);
+  let journal: TransactionJournalV1;
+  try {
+    journal = validateJournal(JSON.parse(value) as unknown);
+  } catch {
+    return fail(`${label}.value: not a Foundation journal`);
+  }
+  if (encodeFoundationJournalJsonV1(journal) !== value || journal.id !== id || journal.phase !== "planned" || journal.createdAt !== journal.updatedAt) fail(`${label}.value: not the planned journal`);
+  if (integer(valueBytes, 1, MAXIMUM_PARTICIPANT_JOURNAL_BYTES - 1, `${label}.valueBytes`) !== bytes.byteLength - 1) fail(`${label}.valueBytes`);
+  return { bytes: bytes.byteLength, sha256: sha256Hex(bytes) };
+}
+
 function checkGuardedPreimage(source: Readonly<Record<string, unknown>>, stagingRoot: CanonicalAbsolutePathV1, label: string): string {
   exact(source, GUARDED_PREIMAGE_KEYS, label);
   const authority = record(source.authority, `${label}.authority`);
@@ -655,13 +679,26 @@ function checkPayloadSource(row: UpdateConstructionFilePlanV1, payloadKind: Upda
       return key;
     }
     case "plan_derived": {
+      if (source.role === "foundation_staged_digest") {
+        exact(source, ["kind", "role", "contentHash", "value", "valueBytes"], label);
+        if (payloadKind !== "foundation_digest") fail(`${label}: Foundation digest for ${payloadKind}`);
+        const expected = `${parseLowerHexSha256(source.contentHash)}\n`;
+        if (source.value !== expected || source.valueBytes !== 64) fail(`${label}.value: not the content hash sidecar`);
+        if (row.bytes !== 65 || row.sha256 !== sha256Hex(expected) || row.mode !== 384) fail(`${label}: differs from its row`);
+        return null;
+      }
       const foundation = source.role === "foundation_initial_journal";
       if (foundation) {
         exact(source, ["kind", "role", "participant", "foundationPlanHash", "plannedBytesHash", "value", "valueBytes"], label);
-        record(source.participant, `${label}.participant`);
+        const participant = record(source.participant, `${label}.participant`);
         parseLowerHexSha256(source.foundationPlanHash);
         parseLowerHexSha256(source.plannedBytesHash);
         if (payloadKind !== "foundation_initial") fail(`${label}: Foundation journal for ${payloadKind}`);
+        if (participant.planHash !== source.foundationPlanHash || record(participant.initialJournal, `${label}.participant.initialJournal`).plannedBytesHash !== source.plannedBytesHash) fail(`${label}: differs from its participant`);
+        const derived = checkFoundationJournalValue(source.value, source.valueBytes, participant.id, label);
+        if (derived.sha256 !== source.plannedBytesHash) fail(`${label}.plannedBytesHash`);
+        if (derived.bytes !== row.bytes || derived.sha256 !== row.sha256 || row.mode !== 384) fail(`${label}: differs from its row`);
+        return null;
       } else {
         exact(source, ["kind", "role", "plan", "value", "valueBytes"], label);
         const kinds = { manifest_after: "manifest_state", release_trust_after: "release_trust_state", active_release_after: "active_release_state", rollback_record_after: "rollback_record_state" } as const;
@@ -669,8 +706,7 @@ function checkPayloadSource(row: UpdateConstructionFilePlanV1, payloadKind: Upda
         checkPlanRef(source.plan, kinds[role], stagingRoot, `${label}.plan`);
         if (payloadKind !== "state_after") fail(`${label}: plan-derived state for ${payloadKind}`);
       }
-      const derived = checkDerivedValue(source.value, source.valueBytes, foundation ? MAXIMUM_PARTICIPANT_JOURNAL_BYTES - 1 : MAXIMUM_CONSTRUCTION_JOURNAL_BYTES - 1, label);
-      if (foundation && derived.sha256 !== source.plannedBytesHash) fail(`${label}.plannedBytesHash`);
+      const derived = checkDerivedValue(source.value, source.valueBytes, MAXIMUM_CONSTRUCTION_JOURNAL_BYTES - 1, label);
       if (derived.bytes !== row.bytes || derived.sha256 !== row.sha256 || row.mode !== 384) fail(`${label}: differs from its row`);
       return null;
     }
@@ -712,11 +748,13 @@ function checkRollbackEntrySource(entry: UpdateConstructionRollbackSourceEntryV1
 /** §5.3/§9.2 payload paths; guarded signed metadata has no derivation of its own here. */
 function derivedPayloadPath(root: string, ordinal: number, payloadKind: UpdateConstructionPayloadKindV1, role: Extract<UpdateConstructionFileRoleV1, { readonly kind: "payload" }>): string | null {
   const source = role.source;
-  if (payloadKind === "foundation_content" || payloadKind === "owner_content" || payloadKind === "migration_content") return `${root}/update/payloads/${encodeTenDigitOrdinal(ordinal)}.payload`;
+  if (payloadKind === "foundation_content" || payloadKind === "foundation_digest" || payloadKind === "owner_content" || payloadKind === "migration_content") return `${root}/update/payloads/${encodeTenDigitOrdinal(ordinal)}.payload`;
   if (source.kind !== "plan_derived") return null;
   switch (source.role) {
     case "foundation_initial_journal":
       return `${root}/participants/foundation/${source.participant.id}/initial-journal.json`;
+    case "foundation_staged_digest":
+      return null;
     case "manifest_after":
       return `${root}/participants/manifest/${source.plan.id}/after.json`;
     case "release_trust_after":
@@ -848,7 +886,7 @@ export function validateConstructionBijections(plan: UpdateConstructionPlanV1): 
       }
       case "payload": {
         exact(role, ["kind", "payloadKind", "source", "sourceProjectionHash"], `${rowLabel}.role`);
-        const payloadKind = oneOf(role.payloadKind, ["foundation_initial", "foundation_content", "owner_content", "migration_content", "state_after"] as const, `${rowLabel}.role.payloadKind`);
+        const payloadKind = oneOf(role.payloadKind, ["foundation_initial", "foundation_content", "foundation_digest", "owner_content", "migration_content", "state_after"] as const, `${rowLabel}.role.payloadKind`);
         const source = record(role.source, `${rowLabel}.role.source`);
         takeAuthority(authorities, checkPayloadSource(row, payloadKind, source, rootPath, `${rowLabel}.role.source`), rowLabel);
         const derived = derivedPayloadPath(rootPath, index, payloadKind, row.role as Extract<UpdateConstructionFileRoleV1, { readonly kind: "payload" }>);

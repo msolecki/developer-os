@@ -71,7 +71,7 @@ function ref(id: AllocatedLifecycleIdV1<"tx">, role: UpdateFoundationParticipant
     id,
     slot: forward ? "schema_forward" : "schema_inverse",
     role,
-    mutations: [{ targetPath: target, operation: "replace", expectedBeforeHash: forward ? v1 : v2, contentHash: forward ? v2 : v1, contentSize: 9, stagedPath: parseCanonicalAbsolutePathText(`/synthetic/staged/${id}.bin`) }],
+    mutations: [{ targetPath: target, operation: "replace", expectedBeforeHash: forward ? v1 : v2, contentHash: forward ? v2 : v1, contentSize: 9, stagedPath: parseCanonicalAbsolutePathText(`/synthetic/staged/${id}.bin`), content: null, digest: null }],
     maximumJournalBytes: 4096,
     planHash: sha(id),
     initialJournal: { finalPath: parseCanonicalAbsolutePathText(`/synthetic/state/transactions/${id}.json`), plannedBytesHash: sha(id), staged: { kind: "update_expected", coordinatorId, ordinal: 0, path: parseCanonicalAbsolutePathText(`/synthetic/staging/${id}.json`) as never, hash: sha(id), bytes: 10, mode: 0o600 } },

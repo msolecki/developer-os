@@ -2,11 +2,10 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import type { AllocatedLifecycleIdV1, EffectiveUidV1 } from "../lifecycle/ids.js";
-import type { FoundationMutationRefV1 } from "../manifest/bootstrap.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import type { ManagedArtifactV2 } from "../manifest/types.js";
 import type { ImmutableUpdatePlanRefV1, OwnerExternalEffectIdV1 } from "./construction.js";
-import type { SchemaMigrationPlanV1, UpdateFoundationParticipantRefV2, UpdatePayloadRefV1 } from "./migrations.js";
+import { updateFoundationStagedPath, type SchemaMigrationPlanV1, type UpdateFoundationMutationRefV1, type UpdateFoundationParticipantRefV2, type UpdatePayloadRefV1 } from "./migrations.js";
 import {
   codexRegistrationProjectionHash,
   compensateParticipants,
@@ -91,11 +90,17 @@ const operations: PersistedOwnerChangeOperationV1[] = [
   { operation: "create", owner: "codex", targetPath: created, expectedBefore: { state: "absent" }, afterArtifact: artifact(created, "file", sha("new b")), content: payload(1, "new b") },
 ];
 
-function mutation(target: CanonicalAbsolutePathV1, operation: "create" | "replace", before: LowerHexSha256 | null, after: LowerHexSha256): FoundationMutationRefV1 {
-  return { targetPath: target, operation, expectedBeforeHash: before, contentHash: after, contentSize: 5, stagedPath: path(`/product/staging/x/${after}`) };
+/** Spec 2 §5.3 (D60): the standard staged path, the operation's content payload, and its sidecar row. */
+function mutation(target: CanonicalAbsolutePathV1, operation: "create" | "replace", before: LowerHexSha256 | null, after: string, index: number, contentOrdinal: number): UpdateFoundationMutationRefV1 {
+  return {
+    targetPath: target, operation, expectedBeforeHash: before, contentHash: sha(after), contentSize: after.length,
+    stagedPath: updateFoundationStagedPath(productHome, tx(1), index),
+    content: payload(contentOrdinal, after),
+    digest: payload(10 + contentOrdinal, `${sha(after)}\n`),
+  };
 }
 
-function foundationRef(id: AllocatedLifecycleIdV1<"tx">, role: UpdateFoundationParticipantRefV2["role"], mutations: readonly FoundationMutationRefV1[]): UpdateFoundationParticipantRefV2 {
+function foundationRef(id: AllocatedLifecycleIdV1<"tx">, role: UpdateFoundationParticipantRefV2["role"], mutations: readonly UpdateFoundationMutationRefV1[]): UpdateFoundationParticipantRefV2 {
   return {
     id,
     slot: role.kind === "forward" ? "owner_forward_files" : "owner_inverse_files",
@@ -108,7 +113,7 @@ function foundationRef(id: AllocatedLifecycleIdV1<"tx">, role: UpdateFoundationP
 }
 
 const foundation = [
-  foundationRef(tx(1), { kind: "forward", compensationId: tx(2) }, [mutation(replaced, "replace", sha("old a"), sha("new a")), mutation(created, "create", null, sha("new b"))]),
+  foundationRef(tx(1), { kind: "forward", compensationId: tx(2) }, [mutation(replaced, "replace", sha("old a"), "new a", 0, 0), mutation(created, "create", null, "new b", 1, 1)]),
   foundationRef(tx(2), { kind: "compensation", forwardId: tx(1) }, []),
 ];
 
@@ -197,6 +202,9 @@ describe("owner update plans", () => {
     ["a non-Codex effect", (plan: OwnerUpdatePlanV1) => ({ ...plan, owner: "claude" as const })],
     ["an unpaired Foundation ref", (plan: OwnerUpdatePlanV1) => ({ ...plan, foundation: plan.foundation.slice(0, 1) })],
     ["a schema-slot Foundation ref", (plan: OwnerUpdatePlanV1) => ({ ...plan, foundation: plan.foundation.map((ref) => ({ ...ref, slot: "schema_forward" as const })) })],
+    ["a Foundation mutation staged at its payload path", (plan: OwnerUpdatePlanV1) => ({ ...plan, foundation: plan.foundation.map((ref) => ({ ...ref, mutations: ref.mutations.map((row) => ({ ...row, stagedPath: row.content?.path ?? null })) })) })],
+    ["a Foundation mutation without its sidecar row", (plan: OwnerUpdatePlanV1) => ({ ...plan, foundation: plan.foundation.map((ref) => ({ ...ref, mutations: ref.mutations.map((row) => ({ ...row, digest: null })) })) })],
+    ["a Foundation mutation staging other content than its operation", (plan: OwnerUpdatePlanV1) => ({ ...plan, foundation: plan.foundation.map((ref) => ({ ...ref, mutations: ref.mutations.map((row) => ({ ...row, content: payload(7, "new a"), digest: payload(17, `${sha("new a")}\n`) })) })) })],
     ["a stale partition hash", (plan: OwnerUpdatePlanV1) => ({ ...plan, currentPartitionHash: sha("stale") })],
     ["out-of-order operations", (plan: OwnerUpdatePlanV1) => ({ ...plan, operations: [...plan.operations].reverse() })],
   ])("refuses %s", (_name, mutate) => {

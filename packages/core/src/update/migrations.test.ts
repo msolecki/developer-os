@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import type { AllocatedLifecycleIdV1 } from "../lifecycle/ids.js";
-import type { FoundationMutationRefV1 } from "../manifest/bootstrap.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import {
   materializeSchemaMigration,
@@ -13,7 +12,10 @@ import {
   schemaMigrationInitialState,
   schemaMigrationPlanHash,
   selectMigrationChain,
+  buildUpdateFoundationParticipantRef,
   updateFoundationParticipantPlanHash,
+  updateFoundationStagedDigestBytes,
+  updateFoundationStagedPath,
   validateSchemaMigrationExecutionJournal,
   validateSchemaMigrationRegistry,
   type MigrationMaterializationContextV1,
@@ -21,6 +23,7 @@ import {
   type SchemaMigrationProviderV1,
   type SchemaMigrationRegistryV1,
   type SchemaMigrationSubjectV1,
+  type UpdateFoundationMutationRefV1,
   type UpdateFoundationParticipantRefV2,
   type UpdatePayloadRefV1,
 } from "./migrations.js";
@@ -42,7 +45,7 @@ import {
   type SecretScreenedBlobV1,
 } from "./planner.js";
 import { validateReleaseIdentity, type ReleaseIdentityV1 } from "./release.js";
-import { parseLowerHexSha256, parsePositiveUInt32, parseSchemaMigrationId, type LowerHexSha256, type SafeReasonCodeV1 } from "./scalars.js";
+import { parseLowerHexSha256, parsePositiveUInt32, parseSchemaMigrationId, type LowerHexSha256, type SafeReasonCodeV1, type UtcTimestampV1 } from "./scalars.js";
 
 const encoder = new TextEncoder();
 const bytes = (text: string): Uint8Array => encoder.encode(text);
@@ -271,7 +274,7 @@ function screened(blobs: readonly Uint8Array[]): SecretScreenedBlobV1[] {
   return blobs.map((content, ordinal) => ({ ordinal, bytes: content.byteLength, sha256: sha(content), content }) as SecretScreenedBlobV1);
 }
 
-function foundationRef(counter: number, role: UpdateFoundationParticipantRefV2["role"], mutations: readonly FoundationMutationRefV1[]): UpdateFoundationParticipantRefV2 {
+function foundationRef(counter: number, role: UpdateFoundationParticipantRefV2["role"], mutations: readonly UpdateFoundationMutationRefV1[]): UpdateFoundationParticipantRefV2 {
   const refId = tx(counter);
   const journalHash = sha(`initial journal ${String(counter)}`);
   const unsigned: Omit<UpdateFoundationParticipantRefV2, "planHash"> = {
@@ -293,10 +296,19 @@ function foundationRef(counter: number, role: UpdateFoundationParticipantRefV2["
   return { ...unsigned, planHash: updateFoundationParticipantPlanHash(unsigned) };
 }
 
+/** Spec 2 §5.3 (D60): the standard staged blob, the content payload, and its own sidecar payload. */
+function staged(counter: number, content: Uint8Array, contentOrdinal: number): Pick<UpdateFoundationMutationRefV1, "stagedPath" | "content" | "digest"> {
+  return {
+    stagedPath: updateFoundationStagedPath(productHome, tx(counter), 0),
+    content: payload(contentOrdinal, content),
+    digest: payload(50 + contentOrdinal, updateFoundationStagedDigestBytes(sha(content))),
+  };
+}
+
 function foundationPair(forwardCounter: number, target: string, before: Uint8Array, after: Uint8Array, afterOrdinal: number, inverseOrdinal: number): UpdateFoundationParticipantRefV2[] {
   const targetPath = target as CanonicalAbsolutePathV1;
-  const forward: FoundationMutationRefV1 = { targetPath, operation: "replace", expectedBeforeHash: sha(before), contentHash: sha(after), contentSize: after.byteLength, stagedPath: payload(afterOrdinal, after).path };
-  const compensation: FoundationMutationRefV1 = { targetPath, operation: "replace", expectedBeforeHash: sha(after), contentHash: sha(before), contentSize: before.byteLength, stagedPath: payload(inverseOrdinal, before).path };
+  const forward: UpdateFoundationMutationRefV1 = { targetPath, operation: "replace", expectedBeforeHash: sha(before), contentHash: sha(after), contentSize: after.byteLength, ...staged(forwardCounter, after, afterOrdinal) };
+  const compensation: UpdateFoundationMutationRefV1 = { targetPath, operation: "replace", expectedBeforeHash: sha(after), contentHash: sha(before), contentSize: before.byteLength, ...staged(forwardCounter + 1, before, inverseOrdinal) };
   return [
     foundationRef(forwardCounter, { kind: "forward", compensationId: tx(forwardCounter + 1) }, [forward]),
     foundationRef(forwardCounter + 1, { kind: "compensation", forwardId: tx(forwardCounter) }, [compensation]),
@@ -409,12 +421,22 @@ describe("materializeSchemaMigration", () => {
       ["a ref with no mutations", (): UpdateFoundationParticipantRefV2[] => pair().map((ref) => resign({ ...ref, mutations: [] }))],
       ["a ref above 256 mutations", (): UpdateFoundationParticipantRefV2[] => {
         const [forward, compensation] = pair() as [UpdateFoundationParticipantRefV2, UpdateFoundationParticipantRefV2];
-        return [resign({ ...forward, mutations: Array.from({ length: 257 }, () => forward.mutations[0] as FoundationMutationRefV1) }), compensation];
+        return [resign({ ...forward, mutations: Array.from({ length: 257 }, () => forward.mutations[0] as UpdateFoundationMutationRefV1) }), compensation];
       }],
       ["a journal above its participant bound", (): UpdateFoundationParticipantRefV2[] => pair().map((ref) => resign({ ...ref, maximumJournalBytes: 1_048_577 }))],
       ["a staged journal of another coordinator", (): UpdateFoundationParticipantRefV2[] => pair().map((ref) => resign({ ...ref, initialJournal: { ...ref.initialJournal, staged: { ...ref.initialJournal.staged, coordinatorId: `lc_${nonce}_8` as LifecycleCoordinatorIdV1 } } }))],
       ["a final journal path outside state/transactions", (): UpdateFoundationParticipantRefV2[] => pair().map((ref) => resign({ ...ref, initialJournal: { ...ref.initialJournal, finalPath: "/product/state/other.json" as CanonicalAbsolutePathV1 } }))],
       ["a planned journal hash unequal to its staged hash", (): UpdateFoundationParticipantRefV2[] => pair().map((ref) => resign({ ...ref, initialJournal: { ...ref.initialJournal, plannedBytesHash: sha("other") } }))],
+      ["a mutation staged at its payload path instead of the standard path", (): UpdateFoundationParticipantRefV2[] => pair().map((ref) => resign({ ...ref, mutations: ref.mutations.map((mutation) => ({ ...mutation, stagedPath: mutation.content?.path ?? null })) }))],
+      ["a mutation staged under another transaction", (): UpdateFoundationParticipantRefV2[] => pair().map((ref) => resign({ ...ref, mutations: ref.mutations.map((mutation) => ({ ...mutation, stagedPath: updateFoundationStagedPath(productHome, tx(99), 0) })) }))],
+      ["a mutation with no content row", (): UpdateFoundationParticipantRefV2[] => pair().map((ref) => resign({ ...ref, mutations: ref.mutations.map((mutation) => ({ ...mutation, content: null })) }))],
+      ["a mutation with no digest row", (): UpdateFoundationParticipantRefV2[] => pair().map((ref) => resign({ ...ref, mutations: ref.mutations.map((mutation) => ({ ...mutation, digest: null })) }))],
+      ["a sidecar of another hash", (): UpdateFoundationParticipantRefV2[] => pair().map((ref) => resign({ ...ref, mutations: ref.mutations.map((mutation) => ({ ...mutation, digest: payload(60, updateFoundationStagedDigestBytes(sha("other"))) })) }))],
+      ["content and digest sharing one payload", (): UpdateFoundationParticipantRefV2[] => pair().map((ref) => resign({ ...ref, mutations: ref.mutations.map((mutation) => ({ ...mutation, digest: mutation.content === null ? null : { ...mutation.content, bytes: 65, sha256: sha(updateFoundationStagedDigestBytes(mutation.contentHash as LowerHexSha256)) } })) }))],
+      ["a forward ref staging other content than the plan", (): UpdateFoundationParticipantRefV2[] => {
+        const [forward, compensation] = pair() as [UpdateFoundationParticipantRefV2, UpdateFoundationParticipantRefV2];
+        return [resign({ ...forward, mutations: forward.mutations.map((mutation) => ({ ...mutation, content: payload(7, configV2), digest: payload(57, updateFoundationStagedDigestBytes(sha(configV2))) })) }), compensation];
+      }],
     ])("refuses %s", (_name, foundation) => {
       expect(() => materializeMigration(configDraft, { foundation: foundation() })).toThrow(/foundation|Foundation/);
     });
@@ -515,5 +537,46 @@ describe("validateSchemaMigrationExecutionJournal", () => {
     ["an update before creation", { updatedAt: "2026-09-22T08:00:00Z" }],
   ])("refuses %s", (_name, overrides) => {
     expect(() => validateSchemaMigrationExecutionJournal(journal(overrides), plan())).toThrow();
+  });
+});
+
+describe("buildUpdateFoundationParticipantRef", () => {
+  const at = "2026-09-23T10:00:00.000Z" as UtcTimestampV1;
+  const build = (counter: number, role: UpdateFoundationParticipantRefV2["role"], before: Uint8Array, after: Uint8Array, contentOrdinal: number) =>
+    buildUpdateFoundationParticipantRef({
+      productHome,
+      coordinatorId,
+      id: tx(counter),
+      slot: "schema_forward",
+      role,
+      mutations: [{ targetPath: configPath, operation: "replace", expectedBeforeHash: sha(before), content: payload(contentOrdinal, after), digest: payload(50 + contentOrdinal, updateFoundationStagedDigestBytes(sha(after))) }],
+      journalOrdinal: 100 + counter,
+      createdAt: at,
+    });
+
+  it("stages at the standard path and hashes the exact planned journal bytes", () => {
+    const { ref, initialJournalBytes } = build(10, { kind: "forward", compensationId: tx(11) }, configV1, configV2, 0);
+    expect(ref.mutations[0]?.stagedPath).toBe(`${productHome}/staging/transactions/${tx(10)}/0.bin`);
+    expect(ref.initialJournal.plannedBytesHash).toBe(sha(initialJournalBytes));
+    expect(ref.initialJournal.staged).toMatchObject({ kind: "update_expected", coordinatorId, ordinal: 110, hash: sha(initialJournalBytes), bytes: initialJournalBytes.byteLength, mode: 0o600 });
+    expect(JSON.parse(new TextDecoder().decode(initialJournalBytes))).toEqual({
+      schemaVersion: 1, id: tx(10), kind: "schema_forward", phase: "planned", createdAt: at, updatedAt: at,
+      mutations: [{ targetPath: configPath, operation: "replace", expectedBeforeHash: sha(configV1), stagedRelativePath: "0.bin" }],
+    });
+    expect(ref.planHash).toBe(updateFoundationParticipantPlanHash(ref));
+  });
+
+  it("builds a pair that the schema migration binding admits", () => {
+    const forward = build(10, { kind: "forward", compensationId: tx(11) }, configV1, configV2, 0).ref;
+    const compensation = build(11, { kind: "compensation", forwardId: tx(10) }, configV2, configV1, 1).ref;
+    expect(materializeMigration(configDraft, { foundation: [forward, compensation] }).inverseVerified).toBe(true);
+  });
+
+  it("refuses a digest row that is not the content hash sidecar", () => {
+    expect(() => buildUpdateFoundationParticipantRef({
+      productHome, coordinatorId, id: tx(10), slot: "schema_forward", role: { kind: "forward", compensationId: tx(11) },
+      mutations: [{ targetPath: configPath, operation: "replace", expectedBeforeHash: sha(configV1), content: payload(0, configV2), digest: payload(50, configV2) }],
+      journalOrdinal: 110, createdAt: at,
+    })).toThrow(/digest/);
   });
 });

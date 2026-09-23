@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import { encodeCanonicalJson, type CanonicalJsonV1 } from "../lifecycle/canonical-json.js";
-import type { EffectiveUidV1 } from "../lifecycle/ids.js";
+import { encodeCanonicalJson } from "../lifecycle/canonical-json.js";
+import type { AllocatedLifecycleIdV1, EffectiveUidV1 } from "../lifecycle/ids.js";
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import {
   advanceConstructionJournal,
@@ -31,9 +31,10 @@ import {
   type UpdateConstructionPlanV1,
   type UpdateConstructionStepV1,
 } from "./construction.js";
-import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1, type ExactProductStatePathV1 } from "./paths.js";
+import { buildUpdateFoundationParticipantRef, updateFoundationStagedDigestBytes, type UpdatePayloadRefV1 } from "./migrations.js";
+import { deriveUpdatePayloadPath, parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1, type ExactProductStatePathV1 } from "./paths.js";
 import type { PreparedUpdateCandidateV1, RollbackPayloadEntryV1, RollbackPayloadIdV1 } from "./preview.js";
-import { parseLowerHexSha256, parseSafeReasonCode, parseUInt64Decimal, parseUtcTimestamp, type LowerHexSha256 } from "./scalars.js";
+import { parseLowerHexSha256, parseSafeReasonCode, parseUInt64Decimal, parseUtcTimestamp, type LowerHexSha256, type SafeReasonCodeV1 } from "./scalars.js";
 
 const encoder = new TextEncoder();
 const sha = (value: Uint8Array | string): LowerHexSha256 => parseLowerHexSha256(createHash("sha256").update(value).digest("hex"));
@@ -392,8 +393,64 @@ describe("update construction evidence", () => {
     const plan = buildConstructionPlan(input());
     const row = plan.files.find((file) => file.role.kind === "payload" && file.role.source.kind === "plan_derived");
     if (row?.role.kind !== "payload" || row.role.source.kind !== "plan_derived") throw new Error("fixture has a plan-derived row");
-    const value: CanonicalJsonV1 = row.role.source.value;
+    const value: string = row.role.source.value;
     expect(row.bytes).toBe(row.role.source.valueBytes + 1);
     expect(row.sha256).toBe(sha(value));
+  });
+});
+
+describe("Foundation construction rows (Spec 2 §5.3, D60)", () => {
+  const txId = `tx_${nonce}_12` as AllocatedLifecycleIdV1<"tx">;
+  const content = encoder.encode("owner content v2\n");
+  const payloadRef = (ordinal: number, bytes: Uint8Array): UpdatePayloadRefV1 => ({
+    kind: "update_expected", coordinatorId, ordinal, path: deriveUpdatePayloadPath(home, coordinatorId as string as SafeReasonCodeV1, ordinal), bytes: bytes.byteLength, sha256: sha(bytes), mode: 384,
+  });
+
+  /** Inserts a sidecar row and the ref's V1 initial journal row before the manifest postimage. */
+  function withFoundationRows(digestValue: string, journalValue?: (text: string) => string): UpdateConstructionPlanInputV1 {
+    const base = input();
+    const rows = [...base.files];
+    const at0 = rows.findIndex((file) => file.role.kind === "payload" && file.role.payloadKind === "state_after");
+    const digestOrdinal = at0;
+    const { ref, initialJournalBytes } = buildUpdateFoundationParticipantRef({
+      productHome: home, coordinatorId, id: txId, slot: "owner_forward_files", role: { kind: "forward", compensationId: null },
+      mutations: [{ targetPath: parseCanonicalAbsolutePathText("/synthetic/home/.codex/a.md"), operation: "create", expectedBeforeHash: null, content: payloadRef(3, content), digest: payloadRef(digestOrdinal, updateFoundationStagedDigestBytes(sha(content))) }],
+      journalOrdinal: at0 + 1, createdAt: at,
+    });
+    const text = new TextDecoder().decode(initialJournalBytes);
+    const journalText = journalValue === undefined ? text : journalValue(text);
+    const digestBytes = encoder.encode(digestValue);
+    const journalBytes = encoder.encode(journalText);
+    const digestRow: UpdateConstructionFileInputV1 = {
+      role: { kind: "payload", payloadKind: "foundation_digest", source: { kind: "plan_derived", role: "foundation_staged_digest", contentHash: sha(content), value: digestValue, valueBytes: 64 } },
+      path: path(`update/payloads/${digestOrdinal.toString(10).padStart(10, "0")}.payload`), bytes: digestBytes.byteLength, sha256: sha(digestBytes), mode: 384,
+    };
+    const journalRow: UpdateConstructionFileInputV1 = {
+      role: { kind: "payload", payloadKind: "foundation_initial", source: { kind: "plan_derived", role: "foundation_initial_journal", participant: ref, foundationPlanHash: ref.planHash, plannedBytesHash: ref.initialJournal.plannedBytesHash, value: journalText, valueBytes: journalBytes.byteLength - 1 } },
+      path: path(`participants/foundation/${txId}/initial-journal.json`), bytes: journalBytes.byteLength, sha256: sha(journalBytes), mode: 384,
+    };
+    rows.splice(at0, 0, digestRow, journalRow);
+    return { ...base, files: rows };
+  }
+
+  it("admits the content-hash sidecar and the exact V1 planned journal bytes", () => {
+    const plan = buildConstructionPlan(withFoundationRows(`${sha(content)}\n`));
+    expect(validateConstructionBijections(plan)).toBe(true);
+    const digest = plan.files.find((file) => file.role.kind === "payload" && file.role.payloadKind === "foundation_digest");
+    expect(digest?.bytes).toBe(65);
+    expect(digest === undefined ? "absent" : constructionDeletionAuthority(digest)).toBe("nested");
+  });
+
+  it.each([
+    ["a sidecar of another hash", `${sha("other")}\n`],
+    ["a sidecar without its LF", sha(content) as string],
+    ["an uppercase sidecar", `${sha(content).toUpperCase()}\n`],
+  ])("refuses %s", (_name, value) => {
+    expect(() => buildConstructionPlan(withFoundationRows(value))).toThrow();
+  });
+
+  it("refuses a Foundation journal re-encoded as canonical JSON", () => {
+    const canonicalText = (text: string): string => encodeCanonicalJson(JSON.parse(text) as never);
+    expect(() => buildConstructionPlan(withFoundationRows(`${sha(content)}\n`, canonicalText))).toThrow();
   });
 });

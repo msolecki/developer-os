@@ -2,8 +2,10 @@ import { createHash } from "node:crypto";
 
 import { encodeCanonicalJson, type CanonicalJsonValue } from "../lifecycle/canonical-json.js";
 import type { AllocatedLifecycleIdV1 } from "../lifecycle/ids.js";
+import { maximumFoundationJournalBytes } from "../lifecycle/store.js";
 import type { FoundationMutationRefV1 } from "../manifest/bootstrap.js";
 import type { LifecycleCoordinatorIdV1, UpdateExpectedPayloadRefV1 } from "../manifest/manifest-state.js";
+import { encodeFoundationJournalJsonV1 } from "../transactions/store.js";
 import {
   deriveFoundationInitialJournalPayloadPath,
   deriveUpdatePayloadPath,
@@ -53,6 +55,16 @@ export interface UpdatePayloadRefV1 {
 }
 
 /**
+ * Spec 2 §5.3 (amended D60): a lifecycle mutation follows §6.3's publication rule. `stagedPath` is
+ * the executor's standard `<staging>/transactions/<tx>/<ordinal>.bin`, and `content`/`digest` are
+ * the two `update_expected` construction rows published there no-replace at the Foundation cursor.
+ */
+export type UpdateFoundationMutationRefV1 = Omit<FoundationMutationRefV1, "content" | "digest"> & {
+  readonly content: UpdatePayloadRefV1 | null;
+  readonly digest: UpdatePayloadRefV1 | null;
+};
+
+/**
  * Spec 2 §5.3's post-handoff lifecycle arm of `FoundationParticipantRefV2`. The shipped
  * `FoundationParticipantRefV2` admits only the bootstrap arms, so the update arm lives here.
  */
@@ -62,7 +74,7 @@ export interface UpdateFoundationParticipantRefV2 {
   readonly role:
     | { readonly kind: "forward"; readonly compensationId: AllocatedLifecycleIdV1<"tx"> | null }
     | { readonly kind: "compensation"; readonly forwardId: AllocatedLifecycleIdV1<"tx"> };
-  readonly mutations: readonly FoundationMutationRefV1[];
+  readonly mutations: readonly UpdateFoundationMutationRefV1[];
   readonly maximumJournalBytes: number;
   readonly planHash: LowerHexSha256;
   readonly initialJournal: {
@@ -418,8 +430,133 @@ function concretePath(path: SchemaMigrationSubjectPathV1, context: MigrationMate
   return { path: absolute, absolute };
 }
 
-function compensationOf(mutation: FoundationMutationRefV1, inverse: UpdatePayloadRefV1): FoundationMutationRefV1 {
-  return { targetPath: mutation.targetPath, operation: "replace", expectedBeforeHash: mutation.contentHash, contentHash: mutation.expectedBeforeHash, contentSize: inverse.bytes, stagedPath: inverse.path };
+/** The part of a mutation a plan derives; `stagedPath` and `digest` are bound per ref by `checkUpdateFoundationMutations`. */
+type ForwardMutationCoreV1 = Pick<UpdateFoundationMutationRefV1, "targetPath" | "operation" | "expectedBeforeHash" | "contentHash" | "contentSize" | "content">;
+
+function mutationCore(mutation: ForwardMutationCoreV1): ForwardMutationCoreV1 {
+  return { targetPath: mutation.targetPath, operation: mutation.operation, expectedBeforeHash: mutation.expectedBeforeHash, contentHash: mutation.contentHash, contentSize: mutation.contentSize, content: mutation.content };
+}
+
+function compensationOf(mutation: ForwardMutationCoreV1, inverse: UpdatePayloadRefV1): ForwardMutationCoreV1 {
+  return { targetPath: mutation.targetPath, operation: "replace", expectedBeforeHash: mutation.contentHash, contentHash: mutation.expectedBeforeHash, contentSize: inverse.bytes, content: inverse };
+}
+
+/** Spec 2 §5.3 (D60): the executor's standard staged blob path for mutation `index` of transaction `id`. */
+export function updateFoundationStagedPath(productHome: CanonicalAbsolutePathV1, id: AllocatedLifecycleIdV1<"tx">, index: number): CanonicalAbsolutePathV1 {
+  if (!Number.isSafeInteger(index) || index < 0 || index >= MAX_FOUNDATION_MUTATIONS) fail("UpdateFoundationMutationRefV1: mutation ordinal");
+  return parseCanonicalAbsolutePathText(`${productHome}/staging/transactions/${id}/${String(index)}.bin`);
+}
+
+/** The exact `.bin.sha256` sidecar bytes the executor's staged-blob check requires: lowercase hex plus LF. */
+export function updateFoundationStagedDigestBytes(contentHash: LowerHexSha256): Uint8Array {
+  return new TextEncoder().encode(`${parseLowerHexSha256(contentHash)}\n`);
+}
+
+function checkMutationPayload(value: UpdatePayloadRefV1, coordinatorId: LifecycleCoordinatorIdV1, productHome: CanonicalAbsolutePathV1, label: string): void {
+  if ((value.kind as string) !== "update_expected" || value.coordinatorId !== coordinatorId) fail(`${label}: not this coordinator's staged payload`);
+  if (!Number.isSafeInteger(value.ordinal) || value.ordinal < 0 || value.ordinal > MAX_UPDATE_PAYLOAD_ORDINAL) fail(`${label}.ordinal`);
+  if (value.path !== deriveUpdatePayloadPath(productHome, coordinatorId as string as SafeReasonCodeV1, value.ordinal)) fail(`${label}.path: not the derived payload path`);
+  if ((value.mode as number) !== 384 && (value.mode as number) !== 448) fail(`${label}.mode`);
+}
+
+/**
+ * Spec 2 §5.3 (D60): every non-remove mutation stages at the standard `<tx>/<i>.bin` path from two
+ * distinct construction payloads, content equal to the mutation's hash and size, and a `0600`
+ * sidecar of exactly the content hash plus LF. A remove carries none of the three.
+ */
+export function checkUpdateFoundationMutations(ref: Pick<UpdateFoundationParticipantRefV2, "id" | "mutations">, coordinatorId: LifecycleCoordinatorIdV1, productHome: CanonicalAbsolutePathV1): void {
+  const label = "UpdateFoundationMutationRefV1";
+  ref.mutations.forEach((mutation, index) => {
+    const row = `${label}[${String(index)}]`;
+    if (mutation.operation === "remove") {
+      if (mutation.stagedPath !== null || mutation.content !== null || mutation.digest !== null) fail(`${row}: a remove with staged bytes`);
+      return;
+    }
+    const { content, digest, contentHash } = mutation;
+    if (content === null || digest === null || contentHash === null) fail(`${row}: no staged content`);
+    if (mutation.stagedPath !== updateFoundationStagedPath(productHome, ref.id, index)) fail(`${row}.stagedPath: not the standard staged path`);
+    checkMutationPayload(content, coordinatorId, productHome, `${row}.content`);
+    checkMutationPayload(digest, coordinatorId, productHome, `${row}.digest`);
+    if (content.sha256 !== contentHash || content.bytes !== mutation.contentSize) fail(`${row}.content: differs from the mutation`);
+    const sidecar = updateFoundationStagedDigestBytes(contentHash);
+    if (digest.bytes !== sidecar.byteLength || digest.sha256 !== sha256Hex(sidecar) || digest.mode !== 384) fail(`${row}.digest: not the content hash sidecar`);
+    if (digest.ordinal === content.ordinal) fail(`${row}: content and digest share one payload`);
+  });
+}
+
+export interface UpdateFoundationMutationInputV1 {
+  readonly targetPath: CanonicalAbsolutePathV1;
+  readonly operation: FoundationMutationRefV1["operation"];
+  readonly expectedBeforeHash: LowerHexSha256 | null;
+  readonly content: UpdatePayloadRefV1 | null;
+  readonly digest: UpdatePayloadRefV1 | null;
+}
+
+export interface UpdateFoundationParticipantRefInputV1 {
+  readonly productHome: CanonicalAbsolutePathV1;
+  readonly coordinatorId: LifecycleCoordinatorIdV1;
+  readonly id: AllocatedLifecycleIdV1<"tx">;
+  readonly slot: UpdateFoundationParticipantRefV2["slot"];
+  readonly role: UpdateFoundationParticipantRefV2["role"];
+  readonly mutations: readonly UpdateFoundationMutationInputV1[];
+  /** The construction ordinal of the ref's initial-journal payload row. */
+  readonly journalOrdinal: number;
+  readonly createdAt: UtcTimestampV1;
+}
+
+/**
+ * Builds one lifecycle ref and its exact planned initial-journal bytes. The journal is Spec 1's
+ * `FoundationJournalJsonV1` whose `kind` is the slot; its bytes are hashed, never embedding
+ * `planHash` (spec:957 as amended by D60). Pure: composition stages the returned bytes.
+ */
+export function buildUpdateFoundationParticipantRef(input: UpdateFoundationParticipantRefInputV1): { readonly ref: UpdateFoundationParticipantRefV2; readonly initialJournalBytes: Uint8Array } {
+  const label = "UpdateFoundationParticipantRefInputV1";
+  if (input.mutations.length < 1 || input.mutations.length > MAX_FOUNDATION_MUTATIONS) fail(`${label}.mutations: count`);
+  const createdAt = parseUtcTimestamp(input.createdAt);
+  const mutations = input.mutations.map((mutation, index): UpdateFoundationMutationRefV1 => {
+    const staged = mutation.operation !== "remove";
+    return {
+      targetPath: mutation.targetPath,
+      operation: mutation.operation,
+      expectedBeforeHash: mutation.expectedBeforeHash,
+      contentHash: staged ? (mutation.content?.sha256 ?? null) : null,
+      contentSize: staged ? (mutation.content?.bytes ?? null) : null,
+      stagedPath: staged ? updateFoundationStagedPath(input.productHome, input.id, index) : null,
+      content: mutation.content,
+      digest: mutation.digest,
+    };
+  });
+  const fileMutations = mutations.map((mutation, index) => ({
+    targetPath: mutation.targetPath,
+    operation: mutation.operation,
+    expectedBeforeHash: mutation.expectedBeforeHash,
+    stagedRelativePath: mutation.operation === "remove" ? null : `${String(index)}.bin`,
+  }));
+  const initialJournalBytes = new TextEncoder().encode(encodeFoundationJournalJsonV1({ schemaVersion: 1, id: input.id, kind: input.slot, phase: "planned", createdAt, updatedAt: createdAt, mutations: fileMutations }));
+  const hash = sha256Hex(initialJournalBytes);
+  const unsigned: Omit<UpdateFoundationParticipantRefV2, "planHash"> = {
+    id: input.id,
+    slot: input.slot,
+    role: input.role,
+    mutations,
+    maximumJournalBytes: maximumFoundationJournalBytes({ id: input.id, kind: input.slot, mutations: fileMutations }),
+    initialJournal: {
+      finalPath: parseCanonicalAbsolutePathText(`${input.productHome}/state/transactions/${input.id}.json`),
+      plannedBytesHash: hash,
+      staged: {
+        kind: "update_expected",
+        coordinatorId: input.coordinatorId,
+        ordinal: input.journalOrdinal,
+        path: deriveFoundationInitialJournalPayloadPath(input.productHome, input.coordinatorId as string as SafeReasonCodeV1, input.id as string as SafeReasonCodeV1),
+        hash,
+        bytes: initialJournalBytes.byteLength,
+        mode: 0o600,
+      },
+    },
+  };
+  const ref = { ...unsigned, planHash: updateFoundationParticipantPlanHash(unsigned) };
+  checkUpdateFoundationMutations(ref, input.coordinatorId, input.productHome);
+  return { ref, initialJournalBytes };
 }
 
 /** Spec 2 §5.3: the domain-separated no-LF hash over the ref without its own digests or staged hash. */
@@ -453,6 +590,7 @@ function checkFoundationRef(ref: UpdateFoundationParticipantRefV2, slot: UpdateF
   if (staged.bytes < 1 || staged.bytes > ref.maximumJournalBytes) fail(`${label}.initialJournal.staged.bytes`);
   if (plannedBytesHash !== staged.hash) fail(`${label}.initialJournal.plannedBytesHash`);
   if (ref.planHash !== updateFoundationParticipantPlanHash(ref)) fail(`${label}.planHash`);
+  checkUpdateFoundationMutations(ref, context.coordinatorId, context.productHome);
 }
 
 /**
@@ -460,7 +598,7 @@ function checkFoundationRef(ref: UpdateFoundationParticipantRefV2, slot: UpdateF
  * compensation whose mutations reverse it, and the concatenated forward mutations equal to the
  * plan's replace set in canonical target-path order.
  */
-function checkFoundationBinding(refs: readonly UpdateFoundationParticipantRefV2[], forward: readonly FoundationMutationRefV1[], inverses: ReadonlyMap<string, UpdatePayloadRefV1>, context: MigrationMaterializationContextV1): void {
+function checkFoundationBinding(refs: readonly UpdateFoundationParticipantRefV2[], forward: readonly ForwardMutationCoreV1[], inverses: ReadonlyMap<string, UpdatePayloadRefV1>, context: MigrationMaterializationContextV1): void {
   const label = "SchemaMigrationPlanV1.foundation";
   if (refs.length < 2 || refs.length > MAX_FOUNDATION_REFS || refs.length % 2 !== 0) fail(`${label}: count`);
   for (let index = 1; index < refs.length; index += 1) {
@@ -475,9 +613,9 @@ function checkFoundationBinding(refs: readonly UpdateFoundationParticipantRefV2[
     const compensation = compensationId === null ? undefined : byId.get(compensationId);
     if (compensation?.role.kind !== "compensation" || compensation.role.forwardId !== ref.id) fail(`${label}: an unpaired forward ref`);
     const expected = [...ref.mutations].reverse().map((mutation) => compensationOf(mutation, inverses.get(mutation.targetPath) ?? fail(`${label}: a mutation outside the plan`)));
-    if (!same(compensation.mutations, expected)) fail(`${label}: compensation does not reverse its forward ref`);
+    if (!same(compensation.mutations.map(mutationCore), expected)) fail(`${label}: compensation does not reverse its forward ref`);
   }
-  if (!same(forwardRefs.flatMap((ref) => ref.mutations), forward)) fail(`${label}: forward mutations are not the plan's complete ordered set`);
+  if (!same(forwardRefs.flatMap((ref) => ref.mutations.map(mutationCore)), forward)) fail(`${label}: forward mutations are not the plan's complete ordered set`);
 }
 
 /**
@@ -492,7 +630,7 @@ export function materializeSchemaMigration(draft: SchemaMigrationDraftV1, contex
   const state = new Map(context.state);
   const seen = new Set<string>();
   const inverses = new Map<string, UpdatePayloadRefV1>();
-  const forward: FoundationMutationRefV1[] = [];
+  const forward: ForwardMutationCoreV1[] = [];
   const mutations = draft.mutations.map((mutation): SchemaMigrationMutationV1 => {
     if (mutation.path.domain !== draft.domain) fail(`${label}: a mutation in another domain`);
     const key = subjectKey(mutation.path);
@@ -511,7 +649,7 @@ export function materializeSchemaMigration(draft: SchemaMigrationDraftV1, contex
     const { path, absolute } = concretePath(mutation.path, context);
     if (inverses.has(absolute)) fail(`${label}: two mutations rehydrate to one path`);
     inverses.set(absolute, inverseBlob);
-    forward.push({ targetPath: absolute, operation: "replace", expectedBeforeHash: beforeHash, contentHash: after.sha256, contentSize: after.bytes, stagedPath: afterBlob.path });
+    forward.push({ targetPath: absolute, operation: "replace", expectedBeforeHash: beforeHash, contentHash: after.sha256, contentSize: after.bytes, content: afterBlob });
     state.set(key, after.sha256);
     return { path, beforeHash, afterHash: after.sha256, afterBlob, inverseBlob };
   });

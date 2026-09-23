@@ -636,3 +636,9 @@ export type {
   GitEffectJournalV1,
   GitEffectPlanV1,
 } from "./git/index.js";
+export { admitUpdateFoundationInitialJournal } from "./transactions/index.js";
+export type {
+  AdmittedUpdateFoundationInitialJournalV1,
+  UpdateFoundationInitialJournalAdmissionContextV1,
+  UpdateFoundationPayloadIdentityV1,
+} from "./transactions/index.js";

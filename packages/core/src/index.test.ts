@@ -528,6 +528,10 @@ describe("the package's public door", () => {
         "initialGitDirectoryPaths",
         "UpdateStepRejectedError",
         "rejectUpdateStep",
+        "admitUpdateFoundationInitialJournal",
+        "buildUpdateFoundationParticipantRef",
+        "updateFoundationStagedDigestBytes",
+        "updateFoundationStagedPath",
       ].sort(),
     );
   });

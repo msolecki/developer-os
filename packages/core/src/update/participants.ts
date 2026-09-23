@@ -10,7 +10,7 @@ import type { AllocatedLifecycleIdV1, EffectiveUidV1 } from "../lifecycle/ids.js
 import type { LifecycleCoordinatorIdV1 } from "../manifest/manifest-state.js";
 import type { ArtifactOwner, ManagedArtifactV2 } from "../manifest/types.js";
 import { parseLeafPlanId, type ImmutableUpdatePlanRefV1, type OwnerExternalEffectIdV1, type UpdateLeafPlanIdV1 } from "./construction.js";
-import type { SchemaMigrationPlanV1, UpdateFoundationParticipantRefV2, UpdatePayloadRefV1 } from "./migrations.js";
+import { checkUpdateFoundationMutations, type SchemaMigrationPlanV1, type UpdateFoundationParticipantRefV2, type UpdatePayloadRefV1 } from "./migrations.js";
 import { OWNER_UPDATE_ORDER, MAX_OWNER_CHANGED_FILE_BYTES } from "./owner.js";
 import {
   deriveCanonicalStatePayloadPath,
@@ -353,7 +353,7 @@ function checkCreateParents(plan: OwnerUpdatePlanV1, label: string): void {
 }
 
 /** Forward/compensation refs paired and ordered by ID; forward mutations equal the changed operations. */
-function checkOwnerFoundation(plan: OwnerUpdatePlanV1, label: string): void {
+function checkOwnerFoundation(plan: OwnerUpdatePlanV1, context: OwnerUpdatePlanContextV1, label: string): void {
   const refs = plan.foundation;
   if (refs.length > MAX_OWNER_FOUNDATION_REFS || refs.length % 2 !== 0) fail(`${label}.foundation: count`);
   for (let index = 1; index < refs.length; index += 1) {
@@ -371,6 +371,12 @@ function checkOwnerFoundation(plan: OwnerUpdatePlanV1, label: string): void {
   const changed = plan.operations.filter((row) => row.operation !== "keep").map((row) => row.targetPath as string).sort(compareUtf8);
   const mutated = forward.flatMap((ref) => ref.mutations.map((mutation) => mutation.targetPath as string));
   if (!same(mutated, changed)) fail(`${label}.foundation: forward mutations are not the changed operation set`);
+  // Spec 2 §5.3 (D60): each forward mutation stages exactly its operation's content payload.
+  for (const ref of refs) checkUpdateFoundationMutations(ref, plan.coordinatorId, context.productHome);
+  const contentByTarget = new Map(plan.operations.map((row) => [row.targetPath as string, row.content]));
+  for (const mutation of forward.flatMap((ref) => ref.mutations)) {
+    if (!same(mutation.content, contentByTarget.get(mutation.targetPath) ?? null)) fail(`${label}.foundation: a forward mutation stages other content than its operation`);
+  }
 }
 
 /**
@@ -403,7 +409,7 @@ export function validateOwnerUpdatePlan(value: unknown, context: OwnerUpdatePlan
   if (installed.length !== current.size || installed.some((path) => !current.has(path))) fail(`${label}.operations: not the complete current partition`);
   if (plan.operations.some((row) => row.operation === "create" && current.has(row.targetPath))) fail(`${label}.operations: create targets an installed path`);
   checkCreateParents(plan, label);
-  checkOwnerFoundation(plan, label);
+  checkOwnerFoundation(plan, context, label);
   if (plan.externalEffects.length > 1) fail(`${label}.externalEffects: a second effect`);
   if (plan.externalEffects.length === 1 && plan.owner !== "codex") fail(`${label}.externalEffects: a non-Codex effect`);
   for (const ref of plan.externalEffects) {
