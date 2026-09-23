@@ -431,15 +431,14 @@ export class CanonicalStateParticipant {
   private async observeFile(path: CanonicalAbsolutePathV1, plan: CanonicalStateFilePlanV1): Promise<Observed> {
     const entry = await this.#dependencies.fs.lstat(path);
     if (entry === null) return "missing";
-    const candidates: [Observed, PresentState | null][] = [
-      ["before", plan.before.state === "present" ? plan.before : null],
-      ["after", plan.after.state === "present" ? await this.postimage(plan.after) : null],
-    ];
-    for (const [label, state] of candidates) {
-      if (state === null || !this.matches(entry, state)) continue;
-      if ((await this.#dependencies.fs.hashRegular(entry, BigInt(state.size))) === state.hash) return label;
-    }
+    if (plan.before.state === "present" && (await this.holds(entry, plan.before))) return "before";
+    // Resolved only when needed, so a preimage-only observation never reads construction evidence.
+    if (plan.after.state === "present" && (await this.holds(entry, await this.postimage(plan.after)))) return "after";
     return "third";
+  }
+
+  private async holds(entry: LifecycleGuardedEntryV1, state: PresentState): Promise<boolean> {
+    return this.matches(entry, state) && (await this.#dependencies.fs.hashRegular(entry, BigInt(state.size))) === state.hash;
   }
 
   private async postimage(after: PresentPostimage): Promise<PresentState> {
