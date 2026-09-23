@@ -89,7 +89,7 @@ Strict sequence; do not start a blocked row early.
 | A13 | DOS-P11 Hooks — spec, plan, implementation | A12b | every hook in the inventory §4 plus session-start injection is observed firing and names the installed binary | committed (Codex half under D57); phase close owed |
 | A14 | DOS-P12 Repository tooling verbs — spec, plan, implementation | A13 | inventory §5 and §6: every row is a shipped verb or a recorded refusal (D47) | committed; phase close owed |
 | A15 | DOS-P8 Founder shadow migration — dedicated plan and execution | A14 | rollback to the legacy runtime is exercised and one stable cycle completes | next |
-| A11b | DOS-P7 remainder (D16): Spec 2 Tasks 12–26 (update, rollback), then Spec 1b (git, launchd) | A15 (D56: Tasks 12–25 run now) | `update`, `update rollback`, `git` and `automation` proven on a disposable install, then on the founder machine | Spec 2 Tasks 12–25 and plan 1b Tasks 1–18, 20 committed (D56); Spec 2 closure plan in progress (D60); Task 19 (founder) and both phase closes owed |
+| A11b | DOS-P7 remainder (D16): Spec 2 Tasks 12–26 (update, rollback), then Spec 1b (git, launchd) | A15 (D56: Tasks 12–25 run now) | `update`, `update rollback`, `git` and `automation` proven on a disposable install, then on the founder machine | Spec 2 Tasks 12–25 and plan 1b Tasks 1–18, 20 committed (D56); Spec 2 closure Tasks 1–8 committed, 9–10 blocked on design (NEW-110); Task 19 (founder) and both phase closes owed |
 | A16 | DOS-P9 Public beta and v1 | A11b, L1, L2 | `v1.0.0` is published and reproducible | blocked |
 
 ## Repository work not owned by the product sequence
@@ -112,7 +112,7 @@ Needs a human, a policy decision, or an external application:
 - NEW-7 — verify percent-encoded local links in Obsidian.
 - Foundation watchdog — decide whether `SpawnLockfRunner` needs one around non-blocking `lockf`.
 
-`BACKLOG.md` §1 holds 64 open numbered rows (NEW-101..103 added 2026-09-22, NEW-104..109
+`BACKLOG.md` §1 holds 65 open numbered rows (NEW-110 added 2026-09-23; §6 lists the 2026-09-23 phase-close handoffs) (NEW-101..103 added 2026-09-22, NEW-104..109
 2026-09-23). Rows implemented this session stay open until their tests pass at phase close: NEW-49,
 NEW-85 (Phase 4b); NEW-60, NEW-61, NEW-65, NEW-95, NEW-102 (A12); NEW-104 (A13, D57); NEW-98, NEW-109 (A14, D57).
 Owners: NEW-85 and NEW-86 are owned by Phase 4b; NEW-82 by plan 1a; NEW-84 by Phase 9;

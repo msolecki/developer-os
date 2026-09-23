@@ -11,6 +11,36 @@ Task 10 below therefore binds rollback's production ports and closes Task 25's r
 participants, state-postimage identities for compensation, V2 closure residue `update_rollback`,
 and Task 20's empty plan-only `externalEffects`).
 
+## Status 2026-09-23
+
+Closure Tasks 1–8 committed (`404a59e` `8a837d5` `632b4b6`, `32b7477`, `2f8120b`, `bb5a2fd`,
+`d32a167`, `3388508` `73b29c1`, `4bf3912`), tests written and not run (D56). **Tasks 9 and 10 are
+blocked on design (BACKLOG NEW-110)** and parked by the founder's order of work (D16: update follows
+the cutover).
+
+### Blocked 2026-09-23 — closure Task 9 found
+
+1. `BundleSourceStagingPlanV1` / `RollbackPayloadSourceStagingPlanV1` require `sourceParentDev/Ino`
+   of `update/source/{bundle,rollback}` (`bundle-participant.ts:105,412`, `rollback.ts`), but those
+   plans are hashed into the construction plan before any directory exists, and construction never
+   lists `update/source/*` (`construction.ts:827,915`); tests `mkdir` by hand.
+2. `validateManifestBytesState` requires non-null `after.dev/ino` equal to the payload identity for
+   lifecycle envelopes (`manifest-state.ts:383`) and a transitional `before` identity (`:380`) —
+   both unknowable before execution. The analysis above wrongly said the manifest avoids the cycle.
+3. No CLI participant handles the V2 `manifest/*` steps (`preserve_before`, `publish_transitional`,
+   `publish_terminal`, `finalize_tombstones`); `ManifestStateParticipant.apply` fuses preserve and
+   publish; the transitional versus terminal manifest content is unspecified.
+4. `guarded_signed_metadata` needs a file with a known path and dev/ino, but `planUpdate` discards
+   the delegation, index and bundle-manifest bytes (`planning.ts:585,625`) and scratch keeps none.
+5. `PersistedManagedPathStateV1` has no ephemeral state and `keep` requires `before` ≠ `absent`
+   (`participants.ts:318`), so a real home's absent ephemeral reservation cannot be planned.
+6. Nothing outside tests builds `OwnerExternalEffectProcessPolicyV1` for the Codex refresh.
+
+Minor: `allocate()` needs the block size (`allocate(prefixes)` via `reserveIds`); no
+`UpdateFallbackHandoffV1` source outside `init --local-release`; leaf-plan hashes mix plain SHA-256
+(owner/state/migration) and the `update-leaf/<kind>` domain (bundle/rollback) against spec :3990;
+F3's exit mapping and `readHome` → `inspectClosureV2` are one-line fixes.
+
 ## Scope
 
 - **What "end to end" can mean today.** Only the synthetic Task 26 fixture, not the founder's machine. Two things block the real path no matter how (a)–(e) are fixed, and they belong to Task 11b/A16:
