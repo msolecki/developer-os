@@ -111,7 +111,7 @@ function entryOf(path: CanonicalAbsolutePathV1, stats: BigIntStats): LifecycleGu
   };
 }
 
-async function writeAll(handle: FileHandle, bytes: Uint8Array): Promise<void> {
+export async function writeAll(handle: FileHandle, bytes: Uint8Array): Promise<void> {
   let offset = 0;
   while (offset < bytes.byteLength) {
     const { bytesWritten } = await handle.write(bytes, offset, bytes.byteLength - offset, offset);
@@ -324,8 +324,13 @@ export async function copyBundleEntry(copy: BundleEntryCopyV1): Promise<void> {
     created = await io.verifyWritten(target.entry, Number(entry.bytes), entry.sha256, entry.mode);
   }
   await io.fs.syncDirectory(copy.targetParent);
+  await writeEntryEvidence(copy, created);
+}
 
-  const bytes = copy.evidenceBytes(created.dev, created.ino);
+/** `evidence_intent` → exclusive create → recorded inode → canonical bytes → reopen → `entry_complete`. */
+export async function writeEntryEvidence(copy: Pick<BundleEntryCopyV1, "io" | "evidencePath" | "evidenceParent" | "evidenceBytes" | "advance" | "interrupt">, created: Identity): Promise<void> {
+  const { io } = copy;
+  const bytes = copy.evidenceBytes(created.dev as UInt64DecimalV1, created.ino as UInt64DecimalV1);
   await copy.advance({ kind: "evidence_intent" });
   const evidence = await io.createEmpty(copy.evidencePath, 0o600);
   try {

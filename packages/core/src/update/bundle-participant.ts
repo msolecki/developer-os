@@ -254,7 +254,7 @@ export interface BundlePublicationJournalV1 {
   readonly updatedAt: UtcTimestampV1;
 }
 
-type Identity = { readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1 };
+export type Identity = { readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1 };
 
 /** Entry microsteps shared by both journals; the next journal is derived, never supplied. */
 export type UpdateEntryStepV1 =
@@ -320,61 +320,63 @@ const encoder = new TextEncoder();
 /** Plans are immutable once validated; re-encoding up to 16 MiB per journal transition would be quadratic. */
 const PLAN_HASHES = new WeakMap<object, LowerHexSha256>();
 
-function fail(label: string): never {
+// The codec helpers and journal microstate checks below are shared with rollback.ts, whose source
+// and publication journals reuse the same structure/entry protocol. index.ts does not re-export them.
+export function fail(label: string): never {
   throw new Error(`invalid ${label}`);
 }
 
-function record(value: unknown, label: string): Readonly<Record<string, unknown>> {
+export function record(value: unknown, label: string): Readonly<Record<string, unknown>> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) fail(label);
   return value as Readonly<Record<string, unknown>>;
 }
 
-function exact(value: unknown, keys: readonly string[], label: string): Readonly<Record<string, unknown>> {
+export function exact(value: unknown, keys: readonly string[], label: string): Readonly<Record<string, unknown>> {
   const input = record(value, label);
   const present = Object.keys(input);
   if (present.length !== keys.length || present.some((key) => !keys.includes(key))) fail(`${label}: keys`);
   return input;
 }
 
-function list(value: unknown, minimum: number, maximum: number, label: string): readonly unknown[] {
+export function list(value: unknown, minimum: number, maximum: number, label: string): readonly unknown[] {
   if (!Array.isArray(value) || value.length < minimum || value.length > maximum) fail(label);
   return value as readonly unknown[];
 }
 
-function integer(value: unknown, minimum: number, maximum: number, label: string): number {
+export function integer(value: unknown, minimum: number, maximum: number, label: string): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < minimum || value > maximum) fail(label);
   return value;
 }
 
-function nullableInteger(value: unknown, minimum: number, maximum: number, label: string): number | null {
+export function nullableInteger(value: unknown, minimum: number, maximum: number, label: string): number | null {
   return value === null ? null : integer(value, minimum, maximum, label);
 }
 
-function oneOf<T>(value: unknown, allowed: readonly T[], label: string): T {
+export function oneOf<T>(value: unknown, allowed: readonly T[], label: string): T {
   if (!allowed.includes(value as T)) fail(label);
   return value as T;
 }
 
-function canonical(value: unknown): string {
+export function canonical(value: unknown): string {
   return encodeCanonicalJson(value as CanonicalJsonValue);
 }
 
-function sha256Hex(bytes: Uint8Array | string): LowerHexSha256 {
+export function sha256Hex(bytes: Uint8Array | string): LowerHexSha256 {
   return createHash("sha256").update(bytes).digest("hex") as LowerHexSha256;
 }
 
 /** SHA-256 over an ASCII domain, NUL, and the canonical bytes without their LF. */
-function noLfHash(domain: string, value: unknown): LowerHexSha256 {
+export function noLfHash(domain: string, value: unknown): LowerHexSha256 {
   return createHash("sha256").update(`${domain}\0`, "ascii").update(canonical(value).slice(0, -1), "utf8").digest("hex") as LowerHexSha256;
 }
 
-function identity(value: unknown, keys: readonly string[], label: string): Readonly<Record<string, unknown>> {
+export function identity(value: unknown, keys: readonly string[], label: string): Readonly<Record<string, unknown>> {
   const input = exact(value, keys, label);
   for (const key of keys) if (key === "dev" || key === "ino" || key === "evidenceDev" || key === "evidenceIno") parseUInt64Decimal(input[key]);
   return input;
 }
 
-function coordinatorOf(stagingRoot: CanonicalAbsolutePathV1, coordinatorId: unknown, label: string): LifecycleCoordinatorIdV1 {
+export function coordinatorOf(stagingRoot: CanonicalAbsolutePathV1, coordinatorId: unknown, label: string): LifecycleCoordinatorIdV1 {
   if (typeof coordinatorId !== "string" || !stagingRoot.endsWith(`/staging/lifecycle/${coordinatorId}`)) fail(`${label}.coordinatorId: not this staging root's coordinator`);
   return coordinatorId as LifecycleCoordinatorIdV1;
 }
@@ -498,7 +500,7 @@ export function bundleEntryParentOrdinal(entries: readonly ReleaseBundleEntryV1[
   return fail("bundle entry parent");
 }
 
-function checkPlanBounds(input: Readonly<Record<string, unknown>>, label: string): void {
+export function checkPlanBounds(input: Readonly<Record<string, unknown>>, label: string): void {
   integer(input.maximumPlanBytes, 1, MAXIMUM_LEAF_PLAN_BYTES, `${label}.maximumPlanBytes`);
   integer(input.maximumJournalBytes, 1, MAXIMUM_PARTICIPANT_JOURNAL_BYTES, `${label}.maximumJournalBytes`);
   if (encoder.encode(canonical(input)).byteLength > (input.maximumPlanBytes as number)) fail(`${label}: exceeds its plan bytes`);
@@ -530,7 +532,7 @@ export function bundleSourceStagingPlanBytes(plan: BundleSourceStagingPlanV1): U
   return encoder.encode(canonical(plan));
 }
 
-function cachedPlanHash(plan: object, kind: UpdateLeafPlanKindV1): LowerHexSha256 {
+export function cachedPlanHash(plan: object, kind: UpdateLeafPlanKindV1): LowerHexSha256 {
   let hash = PLAN_HASHES.get(plan);
   if (hash === undefined) {
     hash = updateLeafPlanHash(kind, encoder.encode(canonical(plan)));
@@ -574,7 +576,7 @@ export function bundleSourceJournalBytes(journal: BundleSourceStagingJournalV1):
   return encoder.encode(canonical(journal));
 }
 
-function checkStructureState(value: unknown, next: number, count: number, label: string): UpdateStructureWriteStateV1 | null {
+export function checkStructureState(value: unknown, next: number, count: number, label: string): UpdateStructureWriteStateV1 | null {
   if (value === null) return null;
   const input = record(value, label);
   const state = oneOf(input.state, ["create_intent", "created"] as const, `${label}.state`);
@@ -583,7 +585,7 @@ function checkStructureState(value: unknown, next: number, count: number, label:
   return input as unknown as UpdateStructureWriteStateV1;
 }
 
-function checkEntryState(value: unknown, next: number, count: number, label: string): UpdateEntryWriteStateV1 | null {
+export function checkEntryState(value: unknown, next: number, count: number, label: string): UpdateEntryWriteStateV1 | null {
   if (value === null) return null;
   const input = record(value, label);
   const keys = {
@@ -597,7 +599,7 @@ function checkEntryState(value: unknown, next: number, count: number, label: str
   return input as unknown as UpdateEntryWriteStateV1;
 }
 
-function checkDirectoryIdentities(value: unknown, expected: readonly { readonly role: UpdateDirectoryRoleV1; readonly path: string }[], label: string): readonly UpdateDirectoryIdentityV1[] {
+export function checkDirectoryIdentities(value: unknown, expected: readonly { readonly role: UpdateDirectoryRoleV1; readonly path: string }[], label: string): readonly UpdateDirectoryIdentityV1[] {
   const rows = list(value, 0, expected.length, label);
   rows.forEach((row, index) => {
     const input = identity(row, ["role", "path", "mode", "dev", "ino"], label);
@@ -607,18 +609,18 @@ function checkDirectoryIdentities(value: unknown, expected: readonly { readonly 
   return rows as readonly UpdateDirectoryIdentityV1[];
 }
 
-function checkTimestamps(input: Readonly<Record<string, unknown>>, label: string): { readonly createdAt: UtcTimestampV1; readonly updatedAt: UtcTimestampV1 } {
+export function checkTimestamps(input: Readonly<Record<string, unknown>>, label: string): { readonly createdAt: UtcTimestampV1; readonly updatedAt: UtcTimestampV1 } {
   const createdAt = parseUtcTimestamp(input.createdAt);
   const updatedAt = parseUtcTimestamp(input.updatedAt);
   if (updatedAt < createdAt) fail(`${label}: timestamps`);
   return { createdAt, updatedAt };
 }
 
-function entryTop(state: UpdateEntryWriteStateV1 | null, next: number): number {
+export function entryTop(state: UpdateEntryWriteStateV1 | null, next: number): number {
   return state !== null && state.state !== "entry_intent" ? next : next - 1;
 }
 
-function structureTop(state: UpdateStructureWriteStateV1 | null, next: number): number {
+export function structureTop(state: UpdateStructureWriteStateV1 | null, next: number): number {
   return state?.state === "created" ? next : next - 1;
 }
 
@@ -689,7 +691,7 @@ export function validateBundleSourceJournal(value: unknown, plan: BundleSourceSt
 }
 
 /** Shared entry microsteps; `null` when `step` is not an entry step. */
-function advanceEntry(state: UpdateEntryWriteStateV1 | null, next: number, step: BundleSourceStepV1 | BundlePublicationStepV1, need: (condition: boolean) => void): { readonly state: UpdateEntryWriteStateV1 | null; readonly complete: boolean } | null {
+export function advanceEntry(state: UpdateEntryWriteStateV1 | null, next: number, step: BundleSourceStepV1 | BundlePublicationStepV1, need: (condition: boolean) => void): { readonly state: UpdateEntryWriteStateV1 | null; readonly complete: boolean } | null {
   switch (step.kind) {
     case "entry_intent":
       need(state === null);
@@ -716,7 +718,7 @@ function advanceEntry(state: UpdateEntryWriteStateV1 | null, next: number, step:
 }
 
 /** Entry compensation walk: each reached entry, then its evidence, in reverse ordinal order. */
-function nextEntryCompensation(at: number, part: "entry" | "evidence" | null): { readonly at: number; readonly part: "entry" | "evidence" | null } {
+export function nextEntryCompensation(at: number, part: "entry" | "evidence" | null): { readonly at: number; readonly part: "entry" | "evidence" | null } {
   if (part === "entry") return { at, part: "evidence" };
   return at === 0 ? { at: -1, part: null } : { at: at - 1, part: "entry" };
 }
@@ -838,7 +840,7 @@ export function durableEntryEvidenceBytes(evidence: DurableSourceEntryEvidenceV1
   return bytes;
 }
 
-function decodeIdentity(bytes: Uint8Array, maximum: number, label: string): Identity {
+export function decodeIdentity(bytes: Uint8Array, maximum: number, label: string): Identity {
   const input = record(decodeCanonicalJson(bytes, maximum), label);
   return { dev: parseUInt64Decimal(input.dev), ino: parseUInt64Decimal(input.ino) };
 }

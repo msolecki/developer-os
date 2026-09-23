@@ -1,10 +1,8 @@
-import { decodeCanonicalJson, EXIT_CODES } from "@developer-os/core";
+import { decodeCanonicalJson, EXIT_CODES, validateRetainedOwnerInverseProjection, validateRetainedSchemaMigrationInverseProjection } from "@developer-os/core";
 import { SecurityRefusalError } from "@developer-os/security";
 import { describe, expect, it } from "vitest";
 
 import {
-  parseMigrationInverseLeaf,
-  parseOwnerInverseLeaf,
   planRollback,
   planUpdate,
   UpdatePlanningRefusal,
@@ -201,12 +199,13 @@ describe("planUpdate", () => {
     ]);
     const [leaf] = materialization.inversePlanProjections;
     if (leaf === undefined) throw new Error("expected a leaf");
-    const parsed = parseOwnerInverseLeaf(decodeCanonicalJson(new TextEncoder().encode(leaf.projection), 16_777_216));
-    expect(parsed.actions.map((action) => [action.action, action.path])).toStrictEqual([
-      ["restore", FILE_A_PATH],
-      ["restore", FILE_B_PATH],
+    const parsed = validateRetainedOwnerInverseProjection(decodeCanonicalJson(new TextEncoder().encode(leaf.projection), 16_777_216));
+    expect(parsed.operations.map((operation) => [operation.path, operation.expectedCurrent.state, operation.restore.state])).toStrictEqual([
+      [FILE_A_PATH, "file", "file"],
+      [FILE_B_PATH, "file", "file"],
     ]);
-    expect(parsed.unchanged).toStrictEqual([DIRECTORY_PATH]);
+    expect(parsed.operations.map((operation) => operation.path)).not.toContain(DIRECTORY_PATH);
+    expect(parsed.externalEffects).toStrictEqual([]);
   });
 });
 
@@ -261,17 +260,21 @@ describe("retained rollback codecs", () => {
   });
 
   it("refuses an owner leaf whose restore blob does not carry its restore hash", () => {
+    const restoredBytes = { state: "file", mode: 384, bytes: 1, sha256: "a".repeat(64) };
     const evidence = {
       schemaVersion: 1,
       kind: "owner_inverse",
       id: "owner_core",
       owner: "core",
-      actions: [{ action: "restore", path: FILE_A_PATH, expectedCurrentHash: null, restoreHash: "a".repeat(64), restoreBlob: { path: "blobs/0000000000.bin", bytes: 1, sha256: "b".repeat(64) } }],
-      unchanged: [],
-      externalEffect: null,
+      operations: [{
+        path: FILE_A_PATH,
+        expectedCurrent: { state: "absent" },
+        restore: { ...restoredBytes, payload: { chunks: [{ path: "blobs/0000000000.bin", bytes: 1, sha256: "b".repeat(64) }], aggregateBytes: 1, sha256: "a".repeat(64) } },
+      }],
+      externalEffects: [],
       maximumPlanBytes: 16_777_216,
     };
-    expect(() => parseOwnerInverseLeaf(evidence)).toThrow();
-    expect(() => parseMigrationInverseLeaf({ ...evidence, kind: "schema_migration_inverse" })).toThrow();
+    expect(() => validateRetainedOwnerInverseProjection(evidence)).toThrow();
+    expect(() => validateRetainedSchemaMigrationInverseProjection({ ...evidence, kind: "schema_migration_inverse" })).toThrow();
   });
 });

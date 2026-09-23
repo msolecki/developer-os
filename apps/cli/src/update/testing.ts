@@ -323,11 +323,18 @@ const AMPLE: UpdateCapacityObservationV1 = {
 };
 
 export function rollbackEvidenceFor(record: RollbackRecordV1): RetainedRollbackEvidenceV1 {
-  const blob = (bytes: Uint8Array, ordinal: number) => ({
-    path: `blobs/${String(ordinal).padStart(10, "0")}.bin` as RollbackPayloadRelativePathV1,
+  const written = (bytes: Uint8Array) => ({ state: "file", mode: 384, bytes: bytes.byteLength, sha256: sha256(bytes), payload: null }) as const;
+  const restored = (bytes: Uint8Array, ordinal: number) => ({
+    state: "file",
+    mode: 384,
     bytes: bytes.byteLength,
     sha256: sha256(bytes),
-  });
+    payload: {
+      chunks: [{ path: `blobs/${String(ordinal).padStart(10, "0")}.bin` as RollbackPayloadRelativePathV1, bytes: bytes.byteLength, sha256: sha256(bytes) }],
+      aggregateBytes: bytes.byteLength,
+      sha256: sha256(bytes),
+    },
+  }) as const;
   return {
     payload: { payloadId: record.payloadId, entryCount: 3, aggregateBytes: OLD_A.byteLength + OLD_B.byteLength + 512 },
     owners: [{
@@ -335,12 +342,11 @@ export function rollbackEvidenceFor(record: RollbackRecordV1): RetainedRollbackE
       kind: "owner_inverse",
       id: "owner_core" as RetainedRollbackEvidenceV1["owners"][number]["id"],
       owner: "core",
-      actions: [
-        { action: "restore", path: FILE_A_PATH, expectedCurrentHash: sha256(NEW_A), restoreHash: sha256(OLD_A), restoreBlob: blob(OLD_A, 0) },
-        { action: "restore", path: FILE_B_PATH, expectedCurrentHash: sha256(NEW_B), restoreHash: sha256(OLD_B), restoreBlob: blob(OLD_B, 1) },
+      operations: [
+        { path: FILE_A_PATH, expectedCurrent: written(NEW_A), restore: restored(OLD_A, 0) },
+        { path: FILE_B_PATH, expectedCurrent: written(NEW_B), restore: restored(OLD_B, 1) },
       ],
-      unchanged: [DIRECTORY_PATH],
-      externalEffect: null,
+      externalEffects: [],
       maximumPlanBytes: 16_777_216,
     }],
     migrations: [],

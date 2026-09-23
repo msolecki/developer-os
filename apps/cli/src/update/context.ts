@@ -7,21 +7,25 @@ import { join, relative, sep } from "node:path";
 import { promisify } from "node:util";
 
 import {
+  bindRetainedInversePlan,
   createOwnerUpdateRegistry,
   decodeCanonicalJson,
+  decodeRetainedInverseLeaf,
   EXIT_CODES,
   hashBytes,
   keepOwnerUpdateProvider,
   OWNER_UPDATE_ORDER,
   ownerContentDependencies,
   parseCanonicalAbsolutePathText,
-  parseLowerHexSha256,
   parsePositiveUInt32,
   parseUInt64Decimal,
   plannerPathToken,
+  retainedInversePlanHash,
   validateActiveReleaseRecord,
+  validateBoundedUpdateInversePlan,
   validateManifestV2,
   validateReleaseTrustState,
+  validateRollbackPayloadInventory,
   validateUpdatePlannerRequest,
 } from "@developer-os/core";
 import type {
@@ -43,7 +47,8 @@ import type {
   PlannerPathTokenV1,
   ReleaseBundleReferenceV1,
   ReleaseIdentityV1,
-  RollbackPayloadEntryV1,
+  RetainedOwnerInverseProjectionV1,
+  RetainedSchemaMigrationInverseProjectionV1,
   UtcTimestampV1,
 } from "@developer-os/core";
 import { claudeOwnerUpdateProvider } from "@developer-os/adapter-claude";
@@ -85,14 +90,10 @@ import type { CliLifecycleContext } from "../lifecycle/context.js";
 import { gateManifestAdmission } from "../lifecycle/mutation-gate.js";
 import {
   MAXIMUM_ROLLBACK_RECORD_BYTES,
-  parseMigrationInverseLeaf,
-  parseOwnerInverseLeaf,
   UpdatePlanningRefusal,
   validateRollbackRecord,
 } from "./planning.js";
 import type {
-  MigrationInverseLeafV1,
-  OwnerInverseLeafV1,
   RetainedRollbackEvidenceV1,
   RollbackRecordV1,
   UpdateCapacityObservationV1,
@@ -386,14 +387,6 @@ async function snapshot(
   return { request, inputBlobs: blobs, tokenPaths, ownerRoots: ownerRoots(context) };
 }
 
-function exactKeys(value: unknown, keys: readonly string[]): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("invalid retained rollback object");
-  const actual = Object.keys(value).sort();
-  const expected = [...keys].sort();
-  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) throw new Error("invalid retained rollback keys");
-  return value as Record<string, unknown>;
-}
-
 async function currentHash(path: string): Promise<LowerHexSha256 | null> {
   const bytes = await readNoFollow(path);
   return bytes === null ? null : hashBytes(bytes) as LowerHexSha256;
@@ -423,37 +416,41 @@ async function readRollbackEvidence(context: CliContext, record: RollbackRecordV
 
   const inventoryPath = join(root, "inventory.json");
   const inventoryBytes = await read(inventoryPath, record.payloadInventoryHash);
-  await read(join(root, "inverse-plan.json"), record.inversePlanHash);
-  const inventory = parse(inventoryPath, () => {
-    const input = exactKeys(decodeCanonicalJson(inventoryBytes, MAXIMUM_ROLLBACK_RECORD_BYTES), ["schemaVersion", "payloadId", "rollbackBindingHash", "inversePlanHash", "entries", "aggregateBytes"]);
-    if (input.schemaVersion !== 1 || input.payloadId !== record.payloadId || input.rollbackBindingHash !== record.rollbackBindingHash || input.inversePlanHash !== record.inversePlanHash || !Array.isArray(input.entries)) {
-      throw new Error("invalid RollbackPayloadInventoryV1");
+  const inversePath = join(root, "inverse-plan.json");
+  const inverseBytes = await read(inversePath, record.inversePlanHash);
+  const inversePlan = parse(inversePath, () => {
+    const plan = validateBoundedUpdateInversePlan(decodeCanonicalJson(inverseBytes, MAXIMUM_ROLLBACK_RECORD_BYTES));
+    if (plan.payloadId !== record.payloadId || plan.rollbackBindingHash !== record.rollbackBindingHash
+      || plan.installedReleaseIdentityHash !== record.installed.releaseIdentityHash || plan.previousReleaseIdentityHash !== record.previous.releaseIdentityHash) {
+      throw new Error("invalid BoundedUpdateInversePlanV1: not this record's");
     }
-    const entries = (input.entries as unknown[]).map((row, ordinal): RollbackPayloadEntryV1 => {
-      const entry = exactKeys(row, ["ordinal", "path", "role", "bytes", "sha256"]);
-      if (entry.ordinal !== ordinal || typeof entry.path !== "string" || typeof entry.bytes !== "number" || !Number.isSafeInteger(entry.bytes)) throw new Error("invalid RollbackPayloadEntryV1");
-      return { ordinal, path: entry.path as RollbackPayloadEntryV1["path"], role: entry.role as RollbackPayloadEntryV1["role"], bytes: entry.bytes, sha256: parseLowerHexSha256(entry.sha256) };
-    });
-    if (entries.reduce((sum, entry) => sum + entry.bytes, 0) !== input.aggregateBytes) throw new Error("invalid RollbackPayloadInventoryV1.aggregateBytes");
-    return { entries, aggregateBytes: input.aggregateBytes };
+    return plan;
   });
-
-  const owners: OwnerInverseLeafV1[] = [];
-  const migrations: MigrationInverseLeafV1[] = [];
+  const inventory = parse(inventoryPath, () => {
+    const found = validateRollbackPayloadInventory(decodeCanonicalJson(inventoryBytes, MAXIMUM_ROLLBACK_RECORD_BYTES));
+    if (found.payloadId !== record.payloadId || found.rollbackBindingHash !== record.rollbackBindingHash || found.inversePlanHash !== record.inversePlanHash) {
+      throw new Error("invalid RollbackPayloadInventoryV1: not this record's");
+    }
+    return found;
+  });
   for (const entry of inventory.entries) {
     const path = join(root, entry.path);
-    const bytes = await read(path, entry.sha256);
-    if (bytes.byteLength !== entry.bytes) missing(path);
-    if (entry.role !== "inverse_plan_leaf") continue;
+    if ((await read(path, entry.sha256)).byteLength !== entry.bytes) missing(path);
+  }
+
+  // Each retained leaf is its prepared projection; the inverse plan's ref binds it to this record.
+  const owners: RetainedOwnerInverseProjectionV1[] = [];
+  const migrations: RetainedSchemaMigrationInverseProjectionV1[] = [];
+  for (const ref of [...inversePlan.ownerPlans, ...inversePlan.migrationPlans]) {
+    const path = join(root, ref.path);
+    const bytes = await read(path, null);
     parse(path, () => {
-      // The retained leaf is the prepared projection plus the one binding it gained at allocation.
-      const decoded = decodeCanonicalJson(bytes, MAXIMUM_ROLLBACK_RECORD_BYTES);
-      if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) throw new Error("invalid retained leaf");
-      const { rollbackBindingHash, ...projection } = decoded as Record<string, unknown>;
-      if (rollbackBindingHash !== record.rollbackBindingHash) throw new Error("invalid retained leaf binding");
-      if (entry.path.startsWith("plans/owner_inverse/")) owners.push(parseOwnerInverseLeaf(projection));
-      else if (entry.path.startsWith("plans/schema_migration_inverse/")) migrations.push(parseMigrationInverseLeaf(projection));
-      else throw new Error("invalid retained leaf path");
+      const projection = decodeRetainedInverseLeaf(ref.kind, bytes);
+      if (bytes.byteLength !== ref.bytes || projection.id !== ref.id || retainedInversePlanHash(bindRetainedInversePlan(projection, record.rollbackBindingHash, ref.sourcePlanHash)) !== ref.retainedHash) {
+        throw new Error("invalid retained leaf: not its ref");
+      }
+      if (projection.kind === "owner_inverse") owners.push(projection);
+      else migrations.push(projection);
     });
   }
   if (owners.length < 1) missing(root);
@@ -461,7 +458,12 @@ async function readRollbackEvidence(context: CliContext, record: RollbackRecordV
 
   const edited = (path: string): never => refuse("update_rollback_post_update_edit", EXIT_CODES.decisionRequired, [path]);
   for (const owner of owners) {
-    for (const action of owner.actions) if ((await currentHash(action.path)) !== action.expectedCurrentHash) edited(action.path);
+    for (const operation of owner.operations) {
+      const expected = operation.expectedCurrent;
+      if (expected.state === "directory") {
+        if ((await lstatOrNull(operation.path))?.isDirectory() !== true) edited(operation.path);
+      } else if ((await currentHash(operation.path)) !== (expected.state === "file" ? expected.sha256 : null)) edited(operation.path);
+    }
   }
   for (const migration of migrations) {
     for (const mutation of migration.mutations) {

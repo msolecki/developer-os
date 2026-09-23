@@ -10,26 +10,20 @@ import {
   encodeTenDigitOrdinal,
   EXIT_CODES,
   materializePlannerDraft,
+  MAXIMUM_ROLLBACK_DOCUMENT_BYTES,
   MAXIMUM_SCHEMA_MIGRATION_PLAN_BYTES,
-  OWNER_UPDATE_ORDER,
   parseCanonicalAbsolutePathText,
-  parseLowerHexSha256,
-  parseRollbackPayloadId,
   parseUInt64Decimal,
-  parseUtcTimestamp,
-  parseVaultRelativePathText,
   PLANNER_PROTOCOL_V1,
   selectRelease,
   UpdateCapacityInsufficientError,
   validateBundleManifest,
-  validateReleaseIdentity,
 } from "@developer-os/core";
 import type {
   ActiveReleaseRecordV1,
   ArtifactOwner,
   CanonicalAbsolutePathV1,
   CanonicalJsonValue,
-  CanonicalPathEvidenceV1,
   ExitCode,
   InstallationManifestV2,
   LowerHexSha256,
@@ -45,13 +39,16 @@ import type {
   ReleaseKeyDelegationV1,
   ReleaseMetadataIdentityV1,
   ReleaseTrustStateV1,
+  RetainedInversePathStateV1,
+  RetainedOwnerInverseOperationV1,
+  RetainedOwnerInverseProjectionV1,
+  RetainedSchemaMigrationInverseProjectionV1,
+  RollbackRecordV1,
   RetainedInverseBlobRefV1,
   RollbackPayloadEntryV1,
-  RollbackPayloadIdV1,
   RollbackPayloadPreviewV1,
   RollbackPayloadRelativePathV1,
   SafeReasonCodeV1,
-  SchemaMigrationIdV1,
   SchemaMigrationPreviewV1,
   SecretScreenedBlobV1,
   StableSemverV1,
@@ -62,11 +59,7 @@ import type {
   UpdatePlannerRequestV1,
   UpdatePlanPreviewV1,
   UpdateRollbackPreviewV1,
-  UtcTimestampV1,
-  VaultRelativePathV1,
   CanonicalProductStatePathV1,
-  PositiveUInt32V1,
-  SchemaMigrationDomainV1,
 } from "@developer-os/core";
 import { verifyReleaseMetadataChain } from "@developer-os/security";
 import type { ReleaseIndexDocumentV1, ReleaseKeyDelegationDocumentV1 } from "@developer-os/security";
@@ -85,18 +78,9 @@ export type UpdateCommandResultV1 =
   | { readonly schemaVersion: 1; readonly outcome: "rollback_preview"; readonly plan: UpdateRollbackPreviewV1 }
   | { readonly schemaVersion: 1; readonly outcome: "rolled_back"; readonly active: ReleaseIdentityV1; readonly rollbackAvailable: false };
 
-/** Spec 2 §10.1, validated here until the rollback payload task owns a Core codec. */
-export interface RollbackRecordV1 {
-  readonly schemaVersion: 1;
-  readonly installed: ReleaseIdentityV1;
-  readonly previous: ReleaseIdentityV1;
-  readonly executionBindingHash: LowerHexSha256;
-  readonly rollbackBindingHash: LowerHexSha256;
-  readonly payloadId: RollbackPayloadIdV1;
-  readonly payloadInventoryHash: LowerHexSha256;
-  readonly inversePlanHash: LowerHexSha256;
-  readonly createdAt: UtcTimestampV1;
-}
+/** Spec 2 §10.1's record codec lives in Core; the CLI re-exports it for its existing readers. */
+export { validateRollbackRecord } from "@developer-os/core";
+export type { RollbackRecordV1 } from "@developer-os/core";
 
 /** The read-only admitted V2 home both plan-only commands start from. */
 export interface UpdateHomeV1 {
@@ -120,56 +104,11 @@ export interface UpdateCapacityObservationV1 {
   readonly reservationGranularityBytes: UInt64DecimalV1;
 }
 
-export type OwnerInverseActionV1 =
-  /** Undoes a create: the created bytes must still be current. */
-  | { readonly action: "remove"; readonly path: CanonicalAbsolutePathV1; readonly expectedCurrentHash: LowerHexSha256 }
-  /** Undoes a replace (`expectedCurrentHash` set) or a remove (`null`: the path must be absent). */
-  | {
-      readonly action: "restore";
-      readonly path: CanonicalAbsolutePathV1;
-      readonly expectedCurrentHash: LowerHexSha256 | null;
-      readonly restoreHash: LowerHexSha256;
-      readonly restoreBlob: RetainedInverseBlobRefV1;
-    };
-
-/**
- * The allocation-free owner inverse leaf (Spec 2 §7.2's `PreparedInverseProjectionV1`). The
- * rollback payload task persists it with its binding fields added; rollback preview reads the
- * same shape back.
- */
-export interface OwnerInverseLeafV1 {
-  readonly schemaVersion: 1;
-  readonly kind: "owner_inverse";
-  readonly id: SafeReasonCodeV1;
-  readonly owner: ArtifactOwner;
-  readonly actions: readonly OwnerInverseActionV1[];
-  readonly unchanged: readonly CanonicalAbsolutePathV1[];
-  readonly externalEffect: "codex_registration_refresh" | null;
-  readonly maximumPlanBytes: number;
-}
-
-/** Core's `RetainedSchemaMigrationInversePlanV1` without the allocation-bound fields. */
-export interface MigrationInverseLeafV1 {
-  readonly schemaVersion: 1;
-  readonly kind: "schema_migration_inverse";
-  readonly id: SchemaMigrationIdV1;
-  readonly domain: SchemaMigrationDomainV1;
-  readonly fromVersion: PositiveUInt32V1;
-  readonly toVersion: PositiveUInt32V1;
-  readonly mutations: readonly {
-    readonly path: VaultRelativePathV1 | CanonicalProductStatePathV1;
-    readonly expectedCurrentHash: LowerHexSha256;
-    readonly restoreHash: LowerHexSha256;
-    readonly restoreBlob: RetainedInverseBlobRefV1;
-  }[];
-  readonly maximumPlanBytes: number;
-}
-
 /** What rollback preview reads from the retained payload, already hash- and postimage-checked. */
 export interface RetainedRollbackEvidenceV1 {
   readonly payload: RollbackPayloadPreviewV1;
-  readonly owners: readonly OwnerInverseLeafV1[];
-  readonly migrations: readonly MigrationInverseLeafV1[];
+  readonly owners: readonly RetainedOwnerInverseProjectionV1[];
+  readonly migrations: readonly RetainedSchemaMigrationInverseProjectionV1[];
 }
 
 export interface PlannedUpdateV1 {
@@ -222,46 +161,6 @@ const MAXIMUM_SCRATCH_BYTES = 12 * 1024 * MiB;
 const MAXIMUM_LEAF_BYTES = 16 * MiB;
 const PARTICIPANT_JOURNAL_BYTES = 1 * MiB;
 const COORDINATOR_JOURNAL_BYTES = 64 * MiB;
-
-function exact(value: unknown, label: string, keys: readonly string[]): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`invalid ${label}`);
-  const actual = Object.keys(value).sort();
-  const expected = [...keys].sort();
-  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) throw new Error(`invalid ${label}: keys`);
-  return value as Record<string, unknown>;
-}
-
-/** Spec 2 §10.1's exact keys; release identities keep their Core grammar. */
-export function validateRollbackRecord(value: unknown, evidence: CanonicalPathEvidenceV1): RollbackRecordV1 {
-  const input = exact(value, "RollbackRecordV1", [
-    "schemaVersion",
-    "installed",
-    "previous",
-    "executionBindingHash",
-    "rollbackBindingHash",
-    "payloadId",
-    "payloadInventoryHash",
-    "inversePlanHash",
-    "createdAt",
-  ]);
-  if (input.schemaVersion !== 1) throw new Error("invalid RollbackRecordV1.schemaVersion");
-  const installed = validateReleaseIdentity(input.installed, evidence);
-  const previous = validateReleaseIdentity(input.previous, evidence);
-  if (installed.architecture !== previous.architecture || installed.releaseIdentityHash === previous.releaseIdentityHash) {
-    throw new Error("invalid RollbackRecordV1: releases");
-  }
-  return {
-    schemaVersion: 1,
-    installed,
-    previous,
-    executionBindingHash: parseLowerHexSha256(input.executionBindingHash),
-    rollbackBindingHash: parseLowerHexSha256(input.rollbackBindingHash),
-    payloadId: parseRollbackPayloadId(input.payloadId),
-    payloadInventoryHash: parseLowerHexSha256(input.payloadInventoryHash),
-    inversePlanHash: parseLowerHexSha256(input.inversePlanHash),
-    createdAt: parseUtcTimestamp(input.createdAt),
-  };
-}
 
 /** The active record's release identity: the record minus its own two fields. */
 export function releaseIdentityOf(active: ActiveReleaseRecordV1): ReleaseIdentityV1 {
@@ -344,6 +243,10 @@ function contentHash(content: PlannerContentRefV1, outputs: readonly SecretScree
   const blob = outputs[content.blob.ordinal];
   if (blob === undefined) refuse("update_planner_output_invalid", EXIT_CODES.securityRefusal);
   return blob.sha256;
+}
+
+function contentBytes(content: PlannerContentRefV1): number {
+  return content.kind === "target_bundle" ? content.bytes : content.blob.bytes;
 }
 
 function tokenPath(snapshot: UpdatePlannerSnapshotV1, token: PlannerPathTokenV1): CanonicalAbsolutePathV1 {
@@ -441,6 +344,7 @@ function prepareInverse(
   snapshot: UpdatePlannerSnapshotV1,
   draft: TargetUpdateDraftV1,
   outputs: readonly SecretScreenedBlobV1[],
+  bundleModes: ReadonlyMap<string, 384 | 448>,
 ): PreparedInverseV1 {
   const entries: RollbackPayloadEntryV1[] = [];
   let stagedBytes = 0;
@@ -452,41 +356,47 @@ function prepareInverse(
     return { path, bytes, sha256: hash };
   };
   const inputs = new Map(snapshot.request.artifactInputs.map((input) => [input.token as string, input]));
-  const preimage = (token: PlannerPathTokenV1, expected: LowerHexSha256 | null): RetainedInverseBlobRefV1 => {
+  /** The observed preimage as a restore state; a zero-byte file restores from zero chunks. */
+  const preimage = (token: PlannerPathTokenV1, expected: LowerHexSha256 | null): Extract<RetainedInversePathStateV1, { readonly state: "file" }> => {
     const observed = inputs.get(token)?.observed;
     if (observed?.state !== "content" || observed.blob === null || observed.sha256 !== expected) {
       return refuse("update_planner_output_invalid", EXIT_CODES.securityRefusal);
     }
-    return addBlob("owner_preimage", observed.bytes, observed.sha256);
+    const chunks = observed.bytes === 0 ? [] : [addBlob("owner_preimage", observed.bytes, observed.sha256)];
+    return { state: "file", mode: observed.mode, bytes: observed.bytes, sha256: observed.sha256, payload: { chunks, aggregateBytes: observed.bytes, sha256: observed.sha256 } };
   };
   const stagedSize = (content: PlannerContentRefV1): void => {
-    stagedBytes += content.kind === "target_bundle" ? content.bytes : content.blob.bytes;
+    stagedBytes += contentBytes(content);
     stagedEntries += 1;
   };
+  /** The written file an inverse expects; a bundle file keeps its signed mode, a planner output its fallback. */
+  const written = (content: PlannerContentRefV1, fallbackMode: 384 | 448): RetainedInversePathStateV1 => ({
+    state: "file",
+    mode: content.kind === "target_bundle" ? bundleModes.get(content.path) ?? refuse("update_planner_output_invalid", EXIT_CODES.securityRefusal) : fallbackMode,
+    bytes: contentBytes(content),
+    sha256: contentHash(content, outputs),
+    payload: null,
+  });
 
-  const owners = draft.ownerPlans.map((plan): OwnerInverseLeafV1 => {
-    const actions: OwnerInverseActionV1[] = [];
-    const touched = new Set<string>();
+  const owners = draft.ownerPlans.map((plan): RetainedOwnerInverseProjectionV1 => {
+    const operations: RetainedOwnerInverseOperationV1[] = [];
     for (const operation of plan.proposedOperations) {
+      if (operation.operation === "keep") continue;
       if (operation.operation === "create") {
         stagedSize(operation.content);
-        actions.push({
-          action: "remove",
+        operations.push({
           path: parseCanonicalAbsolutePathText(`${ownerRoot(snapshot, plan.owner)}/${operation.target.path}`),
-          expectedCurrentHash: contentHash(operation.content, outputs),
+          expectedCurrent: written(operation.content, 384),
+          restore: { state: "absent" },
         });
         continue;
       }
-      if (operation.operation === "keep") continue;
-      touched.add(operation.target.token);
-      const restoreHash = operation.expectedHash ?? refuse("update_planner_output_invalid", EXIT_CODES.securityRefusal);
+      const restore = preimage(operation.target.token, operation.expectedHash);
       if (operation.operation === "replace") stagedSize(operation.content);
-      actions.push({
-        action: "restore",
+      operations.push({
         path: tokenPath(snapshot, operation.target.token),
-        expectedCurrentHash: operation.operation === "replace" ? contentHash(operation.content, outputs) : null,
-        restoreHash,
-        restoreBlob: preimage(operation.target.token, restoreHash),
+        expectedCurrent: operation.operation === "replace" ? written(operation.content, restore.mode) : { state: "absent" },
+        restore,
       });
     }
     return {
@@ -494,17 +404,15 @@ function prepareInverse(
       kind: "owner_inverse",
       id: `owner_${plan.owner}` as SafeReasonCodeV1,
       owner: plan.owner,
-      actions,
-      unchanged: plan.currentArtifacts
-        .filter((token) => !touched.has(token))
-        .map((token) => tokenPath(snapshot, token))
-        .sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right))),
-      externalEffect: plan.externalEffects.length === 0 ? null : "codex_registration_refresh",
+      operations: operations.sort((left, right) => Buffer.compare(Buffer.from(left.path), Buffer.from(right.path))),
+      // The Codex refresh inverse needs the process policy and registration state hashes that only the
+      // apply-time owner provider observes; the plan-only projection carries none (Task 24 adds them).
+      externalEffects: [],
       maximumPlanBytes: MAXIMUM_LEAF_BYTES,
     };
   });
 
-  const migrations = draft.migrations.map((migration): MigrationInverseLeafV1 => ({
+  const migrations = draft.migrations.map((migration): RetainedSchemaMigrationInverseProjectionV1 => ({
     schemaVersion: 1,
     kind: "schema_migration_inverse",
     id: migration.id,
@@ -709,7 +617,8 @@ export async function planUpdate(update: CliUpdateContext, request: { readonly v
     });
 
     const manifest = concreteManifest(update, home, snapshot, run.draft, run.outputBlobs, target);
-    const prepared = prepareInverse(snapshot, run.draft, run.outputBlobs);
+    const bundleModes = new Map(bundleManifest.entries.flatMap((entry) => (entry.kind === "file" ? [[entry.path as string, entry.mode] as const] : [])));
+    const prepared = prepareInverse(snapshot, run.draft, run.outputBlobs, bundleModes);
     const inventoryBytes = prepared.entries.reduce((sum, entry) => sum + entry.bytes, 0);
     const participants = run.draft.ownerPlans.length + run.draft.migrations.length + 4;
     const observation = await update.capacity();
@@ -743,18 +652,22 @@ export async function planUpdate(update: CliUpdateContext, request: { readonly v
   }
 }
 
-function ownerRollbackPreview(leaf: OwnerInverseLeafV1): OwnerUpdatePreviewInputV1 {
-  const paths = { create: [] as CanonicalAbsolutePathV1[], replace: [] as CanonicalAbsolutePathV1[], remove: [] as CanonicalAbsolutePathV1[], unchanged: [...leaf.unchanged] };
-  for (const action of leaf.actions) {
-    if (action.action === "remove") paths.remove.push(action.path);
-    else if (action.expectedCurrentHash === null) paths.create.push(action.path);
-    else paths.replace.push(action.path);
+/** Rollback's own direction: an update-created path is removed, an update-removed one created. */
+function ownerRollbackPreview(leaf: RetainedOwnerInverseProjectionV1, manifest: InstallationManifestV2): OwnerUpdatePreviewInputV1 {
+  const paths = { create: [] as CanonicalAbsolutePathV1[], replace: [] as CanonicalAbsolutePathV1[], remove: [] as CanonicalAbsolutePathV1[], unchanged: [] as CanonicalAbsolutePathV1[] };
+  const touched = new Set<string>();
+  for (const operation of leaf.operations) {
+    touched.add(operation.path);
+    if (operation.restore.state === "absent") paths.remove.push(operation.path);
+    else if (operation.expectedCurrent.state === "absent") paths.create.push(operation.path);
+    else paths.replace.push(operation.path);
   }
+  for (const row of manifest.artifacts) if (row.owner === leaf.owner && !touched.has(row.path)) paths.unchanged.push(row.path);
   return {
     owner: leaf.owner,
     partition: [...paths.create, ...paths.replace, ...paths.remove, ...paths.unchanged],
     paths,
-    externalEffects: leaf.externalEffect === null ? 0 : 1,
+    externalEffects: leaf.externalEffects.length === 0 ? 0 : 1,
   };
 }
 
@@ -778,7 +691,7 @@ export async function planRollback(update: CliUpdateContext): Promise<UpdateRoll
     return buildRollbackPreview({
       current,
       target: record.previous,
-      owners: evidence.owners.map(ownerRollbackPreview),
+      owners: evidence.owners.map((leaf) => ownerRollbackPreview(leaf, home.manifest)),
       migrations: evidence.migrations.map((leaf): SchemaMigrationPreviewV1 => ({
         id: leaf.id,
         domain: leaf.domain,
@@ -806,78 +719,4 @@ export async function planRollback(update: CliUpdateContext): Promise<UpdateRoll
 }
 
 /** Spec 2 §10.1: the record, inverse plan, and inventory are each at most 64 MiB. */
-export const MAXIMUM_ROLLBACK_RECORD_BYTES = 64 * MiB;
-
-/** Parses one retained owner leaf back; exact keys, every path canonical. */
-export function parseOwnerInverseLeaf(value: unknown): OwnerInverseLeafV1 {
-  const input = exact(value, "OwnerInverseLeafV1", ["schemaVersion", "kind", "id", "owner", "actions", "unchanged", "externalEffect", "maximumPlanBytes"]);
-  const owner = OWNER_UPDATE_ORDER.find((candidate) => candidate === input.owner);
-  if (input.schemaVersion !== 1 || input.kind !== "owner_inverse" || owner === undefined || input.id !== `owner_${owner}`) throw new Error("invalid OwnerInverseLeafV1");
-  if (input.externalEffect !== null && input.externalEffect !== "codex_registration_refresh") throw new Error("invalid OwnerInverseLeafV1.externalEffect");
-  if (input.maximumPlanBytes !== MAXIMUM_LEAF_BYTES || !Array.isArray(input.actions) || !Array.isArray(input.unchanged)) throw new Error("invalid OwnerInverseLeafV1");
-  const blob = (value: unknown): RetainedInverseBlobRefV1 => {
-    const ref = exact(value, "RetainedInverseBlobRefV1", ["path", "bytes", "sha256"]);
-    if (typeof ref.path !== "string" || !/^blobs\/[0-9]{10}\.bin$/u.test(ref.path)) throw new Error("invalid RetainedInverseBlobRefV1.path");
-    if (typeof ref.bytes !== "number" || !Number.isSafeInteger(ref.bytes) || ref.bytes < 0 || ref.bytes > MAXIMUM_LEAF_BYTES) throw new Error("invalid RetainedInverseBlobRefV1.bytes");
-    return { path: ref.path as RollbackPayloadRelativePathV1, bytes: ref.bytes, sha256: parseLowerHexSha256(ref.sha256) };
-  };
-  const actions = (input.actions as unknown[]).map((row): OwnerInverseActionV1 => {
-    const action = row as Record<string, unknown>;
-    if (action.action === "remove") {
-      exact(row, "OwnerInverseActionV1", ["action", "path", "expectedCurrentHash"]);
-      return { action: "remove", path: parseCanonicalAbsolutePathText(action.path), expectedCurrentHash: parseLowerHexSha256(action.expectedCurrentHash) };
-    }
-    exact(row, "OwnerInverseActionV1", ["action", "path", "expectedCurrentHash", "restoreHash", "restoreBlob"]);
-    if (action.action !== "restore") throw new Error("invalid OwnerInverseActionV1.action");
-    const restoreBlob = blob(action.restoreBlob);
-    const restoreHash = parseLowerHexSha256(action.restoreHash);
-    if (restoreBlob.sha256 !== restoreHash) throw new Error("invalid OwnerInverseActionV1: the blob does not restore its hash");
-    return {
-      action: "restore",
-      path: parseCanonicalAbsolutePathText(action.path),
-      expectedCurrentHash: action.expectedCurrentHash === null ? null : parseLowerHexSha256(action.expectedCurrentHash),
-      restoreHash,
-      restoreBlob,
-    };
-  });
-  return {
-    schemaVersion: 1,
-    kind: "owner_inverse",
-    id: input.id as SafeReasonCodeV1,
-    owner,
-    actions,
-    unchanged: (input.unchanged as unknown[]).map(parseCanonicalAbsolutePathText),
-    externalEffect: input.externalEffect,
-    maximumPlanBytes: MAXIMUM_LEAF_BYTES,
-  };
-}
-
-/** Parses one retained migration leaf back; Brain paths stay vault-relative, product paths absolute. */
-export function parseMigrationInverseLeaf(value: unknown): MigrationInverseLeafV1 {
-  const input = exact(value, "MigrationInverseLeafV1", ["schemaVersion", "kind", "id", "domain", "fromVersion", "toVersion", "mutations", "maximumPlanBytes"]);
-  if (input.schemaVersion !== 1 || input.kind !== "schema_migration_inverse" || input.maximumPlanBytes !== MAXIMUM_SCHEMA_MIGRATION_PLAN_BYTES) throw new Error("invalid MigrationInverseLeafV1");
-  if (input.domain !== "brain" && input.domain !== "product_state") throw new Error("invalid MigrationInverseLeafV1.domain");
-  const domain = input.domain;
-  if (!Array.isArray(input.mutations) || input.mutations.length < 1) throw new Error("invalid MigrationInverseLeafV1.mutations");
-  // The preview builder rechecks id grammar, version order, and path uniqueness.
-  return {
-    schemaVersion: 1,
-    kind: "schema_migration_inverse",
-    id: input.id as SchemaMigrationIdV1,
-    domain,
-    fromVersion: input.fromVersion as PositiveUInt32V1,
-    toVersion: input.toVersion as PositiveUInt32V1,
-    mutations: (input.mutations as unknown[]).map((row) => {
-      const mutation = exact(row, "MigrationInverseMutationV1", ["path", "expectedCurrentHash", "restoreHash", "restoreBlob"]);
-      const blob = exact(mutation.restoreBlob, "RetainedInverseBlobRefV1", ["path", "bytes", "sha256"]);
-      if (typeof blob.path !== "string" || !/^blobs\/[0-9]{10}\.bin$/u.test(blob.path) || typeof blob.bytes !== "number") throw new Error("invalid RetainedInverseBlobRefV1");
-      return {
-        path: domain === "brain" ? parseVaultRelativePathText(mutation.path) : parseCanonicalAbsolutePathText(mutation.path) as CanonicalProductStatePathV1,
-        expectedCurrentHash: parseLowerHexSha256(mutation.expectedCurrentHash),
-        restoreHash: parseLowerHexSha256(mutation.restoreHash),
-        restoreBlob: { path: blob.path as RollbackPayloadRelativePathV1, bytes: blob.bytes, sha256: parseLowerHexSha256(blob.sha256) },
-      };
-    }),
-    maximumPlanBytes: MAXIMUM_SCHEMA_MIGRATION_PLAN_BYTES,
-  };
-}
+export const MAXIMUM_ROLLBACK_RECORD_BYTES = MAXIMUM_ROLLBACK_DOCUMENT_BYTES;

@@ -1,7 +1,16 @@
 import * as nodeFs from "node:fs/promises";
 import { join } from "node:path";
 
-import { encodeCanonicalJson, EXIT_CODES, parseCanonicalAbsolutePathText, parseStableSemver, plannerInputBlobRefs } from "@developer-os/core";
+import {
+  bindRetainedInversePlan,
+  encodeCanonicalJson,
+  EXIT_CODES,
+  parseCanonicalAbsolutePathText,
+  parseStableSemver,
+  plannerInputBlobRefs,
+  retainedInversePlanHash,
+  validateRetainedOwnerInverseProjection,
+} from "@developer-os/core";
 import type { CanonicalJsonValue, RollbackPayloadIdV1 } from "@developer-os/core";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -106,6 +115,8 @@ describe("snapshot", () => {
 describe("readRollbackEvidence", () => {
   const payloadId = `rb_${sha256("synthetic nonce")}_3` as RollbackPayloadIdV1;
   const binding = sha256("synthetic rollback binding");
+  const installedHash = sha256("synthetic installed release");
+  const previousHash = sha256("synthetic previous release");
 
   /** A retained payload restoring one file whose current bytes are the update's postimage. */
   async function retained(fixture: CommandFixture): Promise<{ readonly record: RollbackRecordV1; readonly current: string; readonly root: string }> {
@@ -118,25 +129,41 @@ describe("readRollbackEvidence", () => {
     await nodeFs.mkdir(join(root, "blobs"), { recursive: true, mode: 0o700 });
     await nodeFs.mkdir(join(root, "plans", "owner_inverse"), { recursive: true, mode: 0o700 });
     await nodeFs.writeFile(join(root, "blobs", "0000000000.bin"), OLD_A, { mode: 0o600 });
-    const leaf = bytes({
+    const blob = { path: "blobs/0000000000.bin", bytes: OLD_A.byteLength, sha256: sha256(OLD_A) };
+    const projection = validateRetainedOwnerInverseProjection({
       schemaVersion: 1,
       kind: "owner_inverse",
       id: "owner_core",
       owner: "core",
-      actions: [{
-        action: "restore",
+      operations: [{
         path: current,
-        expectedCurrentHash: sha256(NEW_A),
-        restoreHash: sha256(OLD_A),
-        restoreBlob: { path: "blobs/0000000000.bin", bytes: OLD_A.byteLength, sha256: sha256(OLD_A) },
+        expectedCurrent: { state: "file", mode: 384, bytes: NEW_A.byteLength, sha256: sha256(NEW_A), payload: null },
+        restore: { state: "file", mode: 384, bytes: OLD_A.byteLength, sha256: sha256(OLD_A), payload: { chunks: [blob], aggregateBytes: OLD_A.byteLength, sha256: sha256(OLD_A) } },
       }],
-      unchanged: [],
-      externalEffect: null,
+      externalEffects: [],
       maximumPlanBytes: 16_777_216,
-      rollbackBindingHash: binding,
     });
+    const leaf = bytes(projection);
     await nodeFs.writeFile(join(root, "plans", "owner_inverse", "owner_core.plan.json"), leaf, { mode: 0o600 });
-    const inversePlan = bytes({ schemaVersion: 1, synthetic: true });
+    const sourcePlanHash = sha256("synthetic owner plan");
+    const inversePlan = bytes({
+      schemaVersion: 1,
+      rollbackBindingHash: binding,
+      payloadId,
+      installedReleaseIdentityHash: installedHash,
+      previousReleaseIdentityHash: previousHash,
+      ownerPlans: [{
+        kind: "owner_inverse",
+        id: "owner_core",
+        path: "plans/owner_inverse/owner_core.plan.json",
+        sourcePlanHash,
+        retainedHash: retainedInversePlanHash(bindRetainedInversePlan(projection, binding, sourcePlanHash)),
+        bytes: leaf.byteLength,
+      }],
+      migrationPlans: [],
+      exactStepListHash: sha256("synthetic rollback step list"),
+      maximumBytes: 16_777_216,
+    });
     await nodeFs.writeFile(join(root, "inverse-plan.json"), inversePlan, { mode: 0o600 });
     const inventory = bytes({
       schemaVersion: 1,
@@ -157,7 +184,8 @@ describe("readRollbackEvidence", () => {
       rollbackBindingHash: binding,
       payloadInventoryHash: sha256(inventory),
       inversePlanHash: sha256(inversePlan),
-      previous: { bundleRoot: parseCanonicalAbsolutePathText(fixture.root) },
+      installed: { releaseIdentityHash: installedHash },
+      previous: { bundleRoot: parseCanonicalAbsolutePathText(fixture.root), releaseIdentityHash: previousHash },
     } as unknown as RollbackRecordV1;
     return { record, current, root };
   }
@@ -170,7 +198,7 @@ describe("readRollbackEvidence", () => {
     const evidence = await createCliUpdateContext(fixture.context).readRollbackEvidence(null as never, record);
 
     expect(evidence.payload).toStrictEqual({ payloadId, entryCount: 2, aggregateBytes: expect.any(Number) as unknown });
-    expect(evidence.owners.map((owner) => owner.actions.map((action) => action.path))).toStrictEqual([[current]]);
+    expect(evidence.owners.map((owner) => owner.operations.map((operation) => operation.path))).toStrictEqual([[current]]);
     expect(await inventoryDigest(fixture.root)).toEqual(before);
   });
 

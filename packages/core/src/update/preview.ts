@@ -38,7 +38,8 @@ export type SafeRenderedPathV1 = string & { readonly [safeRenderedPathV1]: true 
 
 /**
  * Spec 2 §10.1 spells this `AllocatedLifecycleIdV1<"rb">`. The allocator's prefix set does not
- * carry `rb` yet, so the grammar is checked here under its own nominal brand.
+ * carry `rb` yet, so the grammar is checked here under its own nominal brand; rollback.ts, which
+ * owns every payload schema, imports it from here so construction and preview need no cycle.
  */
 export type RollbackPayloadIdV1 = `rb_${string}_${string}` & { readonly [rollbackPayloadIdV1]: true };
 
