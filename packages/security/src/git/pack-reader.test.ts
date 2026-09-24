@@ -114,7 +114,8 @@ function deltaChain(length: number, baseBytes = 16): { readonly entries: readonl
   for (let level = 1; level <= length; level += 1) {
     const step = delta(contentOf(current), [{ copy: [0, baseBytes] }, { insert: new TextEncoder().encode(`${level.toString(10)}\n`) }]);
     const next = blob(new TextDecoder().decode(step.result));
-    entries.push({ kind: "ofs_delta", base: entries.length - 1, delta: step.delta, result: next });
+    // `base` indexes the final pack, which puts the commit and the tree first.
+    entries.push({ kind: "ofs_delta", base: 2 + entries.length - 1, delta: step.delta, result: next });
     current = next;
   }
   const names = entries.map((_, index) => `f${index.toString(10).padStart(3, "0")}.md`);
@@ -247,12 +248,13 @@ describe("GuardedSha1PackReader budget boundaries", () => {
 
   it("spills a legal object past the resident ceiling to the private temp and removes the spill", async () => {
     const chain = deltaChain(1, 2000);
+    // Room for the always-resident 1,184-byte index of this 4-object pack, not for the 2,001-byte blob.
     const fixture = await readerFixture(buildPack(chain.entries), chain.head, {
-      limits: { residentMemoryMaxBytes: GIT_PACK_READER_TRANSIENT_BYTES + 512 },
+      limits: { residentMemoryMaxBytes: GIT_PACK_READER_TRANSIENT_BYTES + 1536 },
     });
     const evidence = await fixture.reader.validate(fixture.request, fixture.budget);
     expect(evidence.peakTempBytes).toBeGreaterThan(0);
-    expect(evidence.peakResidentBytes).toBeLessThanOrEqual(GIT_PACK_READER_TRANSIENT_BYTES + 512);
+    expect(evidence.peakResidentBytes).toBeLessThanOrEqual(GIT_PACK_READER_TRANSIENT_BYTES + 1536);
     expect((await nodeFs.readdir(fixture.request.quarantineRoot)).sort()).toEqual(["post-0", "post-1"]);
   });
 });
