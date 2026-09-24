@@ -201,12 +201,16 @@ function rollbackPlan(fixture: CommandFixture, id: LifecycleCoordinatorIdV1): Up
   });
 }
 
+/** Fresh `init` reserves some planted paths (`state/update-executor.json`) as empty files; those are restored, not removed. */
 async function withPlanted(path: string, bytes: Uint8Array, body: () => Promise<void>): Promise<void> {
-  await nodeFs.writeFile(path, bytes, { mode: 0o600, flag: "wx" });
+  const reserved = await nodeFs.readFile(path).catch(() => null);
+  if (reserved !== null && reserved.byteLength !== 0) throw new Error(`${path} already holds a record`);
+  await nodeFs.writeFile(path, bytes, { mode: 0o600, flag: reserved === null ? "wx" : "w" });
   try {
     await body();
   } finally {
-    await nodeFs.rm(path, { force: true });
+    if (reserved === null) await nodeFs.rm(path, { force: true });
+    else await nodeFs.writeFile(path, reserved);
   }
 }
 
