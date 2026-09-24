@@ -106,7 +106,8 @@ const encoder = new TextEncoder();
 const roots: string[] = [];
 
 afterEach(async () => {
-  for (const root of roots.splice(0)) await nodeFs.rm(root, { recursive: true, force: true });
+  // A timed-out body keeps writing into its vault while this runs; retry the ENOTEMPTY race instead of failing cleanup.
+  for (const root of roots.splice(0)) await nodeFs.rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 });
 
 function sha256(bytes: Uint8Array | string): string {
@@ -620,7 +621,8 @@ describe("GitPlanner.planSync", () => {
         "history_operation_in_progress",
       );
     }
-  });
+    // Five fresh real-filesystem vaults: ~5 s under a loaded full suite.
+  }, 60_000);
 
   it("refuses a scoped tab, LF or CR filename at scope admission, before any read", async () => {
     for (const name of ["content/DEV/tab\tname.md", "content/DEV/line\nfeed.md", "content/DEV/carriage\rreturn.md"]) {

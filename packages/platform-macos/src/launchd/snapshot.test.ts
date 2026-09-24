@@ -321,7 +321,8 @@ describe("LaunchdSnapshotBootstrapper", () => {
       expect(creation.snapshot.bytes).toEqual(crashed.fixture.bytes.subarray(0, creation.snapshot.size));
       expect(creation.snapshot.size).toBeLessThanOrEqual(MAX_LAUNCHD_BOOTSTRAP_SNAPSHOT_BYTES);
     }
-  });
+    // Seven fresh fixtures written one byte per write: ~5 s under a loaded full suite.
+  }, 60_000);
 
   it("never inherits the real plist descriptor", async () => {
     const fixture = await createFixture();
