@@ -62,20 +62,23 @@ rewritten from was deleted on 2026-09-24.
 Open sequence (D16, daily use before completeness):
 
 1. Now: close Phases 4b, 5, 5b, 6 and 7 — evidence only, as listed above.
-2. Then: the founder cutover A15 on the live machine
-   (`npm run pack:local-release -- <dir>`, then `init --local-release <dir> --adapters claude,codex`).
-3. After the cutover: A11b (Spec 2 Tasks 12–26, then Spec 1b), then A16.
+2. Then: the founder cutover A15 on the live machine, step by step through
+   `docs/migration/founder-cutover.md` (`npm run pack:local-release -- <dir>`, then
+   `init --local-release <dir> --adapters claude,codex`).
+3. Beside the cutover (D56, D59): A11b's two phase closes — Phase 8 (the release plan's "Phase 8
+   close") and Phase 9 (plan 1b Task 19, founder certification, then Task 21). After them the parked
+   Spec 2 work (closure Tasks 9–10 on NEW-110's design, Task 26, Task 11b), then A16.
 
 Lane (D44, extended to Phases 5–7 by D47): a task commit runs `npm run lint` only and is held
 locally; tests, `npm run check` and fresh-context review run once per phase at its close, and the
 phase lands as one PR. D17/D33's push-per-commit rule does not hold while the ruleset requires PRs.
 
 The parent document is `plans/2026-07-21-developer-os-program.md`, which is live rather than
-superseded: its 23 open items are DOS-P7's remainder (A11b and plan 1b), the DOS-P8 cutover (A15)
-and DOS-P9's release gates (A16, L1). It closes with A16 and with nothing earlier.
+superseded: its 19 open items are DOS-P7's remainder (three pointers into the A11b plans), the
+DOS-P8 cutover (A15, eight steps) and DOS-P9's release (A16 with L1, eight steps). It closes with A16 and with nothing earlier.
 
 Phase 4b onward is sequenced by `plans/2026-09-04-developer-os-completion-roadmap.md` (9 open phases,
-4b through 11 with a 5b, the founder decisions D1–D55, and the spec or plan each phase requires). `docs/migration/instruction-inventory.md` is the scope of A12, A12b, A13 and A14.
+4b through 11 with a 5b, the founder decisions D1–D61, and the spec or plan each phase requires). `docs/migration/instruction-inventory.md` is the scope of A12, A12b, A13 and A14.
 
 ## Product path
 
@@ -88,7 +91,7 @@ Strict sequence; do not start a blocked row early.
 | A12b | Brain workflows — spec, plan, implementation | A12 | every workflow and verb in the inventory §7 is proven on the synthetic vault | committed; phase close owed |
 | A13 | DOS-P11 Hooks — spec, plan, implementation | A12b | every hook in the inventory §4 plus session-start injection is observed firing and names the installed binary | committed (Codex half under D57); phase close owed |
 | A14 | DOS-P12 Repository tooling verbs — spec, plan, implementation | A13 | inventory §5 and §6: every row is a shipped verb or a recorded refusal (D47) | committed; phase close owed |
-| A15 | DOS-P8 Founder shadow migration — dedicated plan and execution | A14 | rollback to the legacy runtime is exercised and one stable cycle completes | next |
+| A15 | DOS-P8 Founder migration (shadow mode dropped, D58) — `docs/migration/founder-cutover.md`, then execution | A14 | rollback to the legacy runtime is exercised and one stable cycle completes | runbook written; execution next |
 | A11b | DOS-P7 remainder (D16): Spec 2 Tasks 12–26 (update, rollback), then Spec 1b (git, launchd) | A15 (D56: Tasks 12–25 run now) | `update`, `update rollback`, `git` and `automation` proven on a disposable install, then on the founder machine | Spec 2 Tasks 12–25 and plan 1b Tasks 1–18, 20 committed (D56); Spec 2 closure Tasks 1–8 committed, 9–10 blocked on design (NEW-110); Task 19 (founder) and both phase closes owed |
 | A16 | DOS-P9 Public beta and v1 | A11b, L1, L2 | `v1.0.0` is published and reproducible | blocked |
 
@@ -145,13 +148,16 @@ startable row run beside a wave when its files overlap no task in flight.
 
 ## Count
 
-- Product sequence: 8 open entries, A11, A12, A12b, A13, A14, A15, A11b, A16. A11–A14 have their
-  implementation committed and owe phase-close evidence only (A13 also owes its Codex half).
-- Implementation tasks still to build: A13 Task 15 (blocked on observations), A14 Task 14 (blocked on
-  observations), Spec 2 Task 11b (parked, D46), Spec 2 Tasks 12–26 (15), plan 1b 15 (the 2026-08-28
-  plan's remaining tasks, not yet rewritten). Before the cutover: the two blocked tasks. After it:
-  Spec 2 Tasks 12–26 and plan 1b, 30 tasks. Plan 1a closed (Task 24 deferred to post-A16, NEW-100).
-- Phase-close tasks owed: A12 Task 29, A12b Task 16, A13 Tasks 18–19 (and Task 2), A14 Task 16, and
-  Phase 4b's close.
-- A15 and A16 each still need their dedicated plan.
-- Repository backlog: 64 open numbered rows, plus the Foundation watchdog decision.
+- Product sequence: 8 open entries, A11, A12, A12b, A13, A14, A15, A11b, A16. A11–A14 and A11b have
+  their implementation committed and owe phase-close evidence only (D44, D47, D56).
+- Implementation tasks still to build: NEW-61's Codex re-registration on `update` (roadmap Phase 5,
+  lands with Phase 8) and A16's plan and work. Blocked or parked: Spec 2 closure Tasks 9–10
+  (NEW-110), Spec 2 Task 26, Spec 2 Task 11b (D46) and plan 1a Task 24 (NEW-100, post-A16).
+- Founder stop points: A12 NEW-101 billed row, Task 21 Step 4 real-vendor tests (NEW-102, NEW-103),
+  the `UNPROVEN_CLAUDE_CATEGORIES` decision and the founder-local scan; A12b's real-vendor run; A13
+  Task 2 and Task 18; A14's founder-local template scan; plan 1b Task 19; the A15 cutover execution;
+  L1 and L2.
+- Phase closes owed: Phase 4b (release plan), A12 Task 29, A12b Task 16, A13 Task 19, A14 Task 16,
+  Phase 8 (release plan "Phase 8 close") and Phase 9 (plan 1b Task 21).
+- A16 still needs its dedicated plan; A15's is `docs/migration/founder-cutover.md`.
+- Repository backlog: 65 open numbered rows, plus the Foundation watchdog decision.

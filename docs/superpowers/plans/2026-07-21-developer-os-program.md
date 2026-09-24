@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Completed tasks were removed on 2026-09-23; see git history.
+Completed tasks were removed on 2026-09-23 and 2026-09-24; see git history.
 
 **Goal:** Deliver `developer-os` as an open-source, local-first macOS CLI that installs independent Claude Code and Codex adapters over a private Obsidian-compatible Brain.
 
@@ -241,12 +241,18 @@ token-only adapter planners, macOS adapter, and isolated integration fixtures.
 
 **How — unfinished work only:**
 
-- [ ] Implement Git against temporary repositories and bare remotes; never use real credentials in tests.
-- [ ] Implement `launchd` plan/apply/status/disable through an injected filesystem/runner in tests.
-- [ ] Implement signed/checksummed release metadata, dry-run updates, schema migration staging, and rollback.
-- [ ] Ensure update refuses drift and uninstall removes only manifest-owned artifacts plus the one
-      exact, ratified non-manifest redaction-key path.
-- [ ] Test push failure, partial download, checksum mismatch, stale lock, concurrent edit, and migration failure.
+The five implementation items this section held — Git on temporary repositories and bare remotes,
+`launchd` plan/apply/status/disable, signed release metadata with dry-run update, migration staging
+and rollback, drift-refusing update with manifest-owned uninstall, and the failure-mode tests — are
+committed under D56 with their tests unrun (plan 1b Tasks 1–18 and 20; Spec 2 Tasks 12–25; Spec 2
+closure Tasks 1–8). What stays open:
+
+- [ ] Phase 8 close: `plans/2026-08-29-developer-os-release-update.md`, "Phase 8 close".
+- [ ] Phase 9: plan 1b Task 19 (founder certification) and Task 21 (phase close),
+      `plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`.
+- [ ] Parked: `update --apply` / `update rollback --apply` composition (Spec 2 closure Tasks 9–10,
+      `BACKLOG.md` NEW-110), the lifecycle proof (Spec 2 Task 26) and the launcher-admitted
+      release (Task 11b, D46).
 
 **Test:**
 
@@ -357,7 +363,7 @@ token-only adapter planners, macOS adapter, and isolated integration fixtures.
 **Complexity:** L
 
 **Files:**
-- Create: `docs/migration/founder-cutover.md`
+- Create: `docs/migration/founder-cutover.md` (written 2026-09-23, `974376a`; D58 `c613db7`)
 - Create: `docs/migration/founder-baseline-results.json`
 - Create: `docs/migration/founder-shadow-results.json`
 - Create: `docs/migration/founder-cutover-manifest.json`
@@ -377,12 +383,13 @@ token-only adapter planners, macOS adapter, and isolated integration fixtures.
 - The weekly job's preflight refuses pre-existing changes under `content`, so any cutover step that
   edits the vault and does not commit the edit will abort the next scheduled run.
 
-**How:**
+**How:** executed step by step through `docs/migration/founder-cutover.md` (D56).
 
 - [ ] Run read-only `developer-os doctor` against `~/brain` and record redacted findings.
 - [ ] Validate legacy topic aliases, schema, indexes, permissions, and protected paths.
-- [ ] Enable new capture to a separate shadow quarantine with canonical apply disabled.
-- [ ] Compare old and new capture/redaction/deduplication on synthetic sessions.
+- Withdrawn by D58: the separate shadow quarantine and the old-versus-new capture comparison. The
+  runbook's disposable-home rehearsal (step 7c), per-adapter gate cycle (step 16) and exercised
+  rollback (step 18) replace them.
 - [ ] Cut over Claude first while preserving a one-command rollback manifest.
 - [ ] Complete a full Claude capture/review/ingest/retrieval cycle and review the diff.
 - [ ] Cut over Codex and repeat the lifecycle.

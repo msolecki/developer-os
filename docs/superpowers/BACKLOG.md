@@ -19,8 +19,8 @@ its closure conditions.
 | A12b · Brain workflows | implementation committed (plan Tasks 1–15); phase close owed: tests, review, real-vendor run | phase close |
 | A13 · DOS-P11 | implementation committed (plan Tasks 3–17; Task 15 under D57); phase close owed: tests, review, real-agent matrix | phase close |
 | A14 · DOS-P12 | implementation committed (plan Tasks 1–13, 15); phase close owed: tests, review, founder-local template scan (Task 14 recorded under D57) | phase close |
-| A15 · DOS-P8 | dedicated cutover plan and founder shadow migration | A14 |
-| A11b · DOS-P7 remainder | Spec 2 Tasks 12–26 (update, rollback), then Spec 1b (git, launchd) (D16) | A15 |
+| A15 · DOS-P8 | execute `docs/migration/founder-cutover.md` (written; D58 dropped shadow mode) | founder, live machine |
+| A11b · DOS-P7 remainder | Spec 2 Tasks 12–25, closure Tasks 1–8 and plan 1b Tasks 1–18, 20 committed (D56); Phase 8 close and plan 1b Tasks 19 (founder) and 21 owed; closure Tasks 9–10 blocked (NEW-110); Task 26 and 11b parked | phase closes, NEW-110 |
 | A16 · DOS-P9 | plan decision, beta, packaging, documentation, v1 publication | A11b, L1, L2 |
 
 The phase order, the founder decisions of 2026-09-04 and 2026-09-16 that fixed it, and the documents each phase
@@ -126,63 +126,42 @@ Required behavior:
 
 ### A12 · DOS-P10
 
-Status 2026-09-23: plan Tasks 1–28 committed (`25675d3`..`084f1ba`); tests owed at phase close (D47), with the founder stops in `ORDER.md`.
+Status 2026-09-23: plan Tasks 1–28 committed (`25675d3`..`084f1ba`); tests owed at phase close (D47), with the founder stops in `ORDER.md`. Spec approved (D47); the 2026-09-04 decisions it implements are D5 and the roadmap's Phase 5.
 
-- [ ] Specify the managed artifact kind `instruction` with `source: default | user`, the artifact
-  kinds for subagents, commands, output styles, skills, and vendor instruction files, and an explicit
-  unsupported-vendor state (path-scoped rules emulated on Codex; output styles unsupported there).
-- [ ] Founder decision 2026-09-04: every legacy artifact in `docs/migration/instruction-inventory.md`
-  §1–§3 and §6 ships as a public default with client references redacted; personal overrides live
-  under the product home as user data. No parallel private repository.
-- [ ] Wire the existing adapter install proposals into `init` and `uninstall` first (NEW-60), then
-  implement install, drift detection, and uninstall for every inventoried artifact on both vendors,
-  re-registering the Codex plugin after each tree change (NEW-61).
+- [ ] Phase close: `plans/2026-09-22-developer-os-instruction-artifacts.md` Task 29, including NEW-60,
+  NEW-61 and NEW-65.
 
 ### A12b · Brain workflows
 
-Status 2026-09-22: plan Tasks 1–15 committed (`85cd3b9`..`49f84bd`); tests owed at phase close (D47), with the founder's real-vendor run.
+Status 2026-09-22: plan Tasks 1–15 committed (`85cd3b9`..`49f84bd`); tests owed at phase close (D47), with the founder's real-vendor run. Spec approved (D47); D11 governs it.
 
-- [ ] Specify `brain-answer`, `brain-compile`, `brain-enhance`, `brain-garden`, `brain-report` as
-  canonical workflows, and `brain retire`, `brain refactor` and the lint classes `stale`,
-  `isolated`, `dead-link`, `duplicate`, `gap` as deterministic verbs
-  (`docs/migration/instruction-inventory.md` §7).
-- [ ] The agent never writes to the vault directly: every proposed change is a capture that passes
-  the ingest validators and a transaction.
+- [ ] Phase close: `plans/2026-09-22-developer-os-brain-workflows.md` Task 16.
 
 ### A13 · DOS-P11
 
-Status 2026-09-23: plan Tasks 3–14, 16 and 17 committed (`a3f9e46`..`a156b0c`); Task 15 committed under D57 (`4041286`..`2bec6a7`); tests owed at phase close (D47).
+Status 2026-09-23: plan Tasks 3–14, 16 and 17 committed (`a3f9e46`..`a156b0c`); Task 1's observations and Task 15 committed under D57 (`4041286`..`2bec6a7`); tests owed at phase close (D47). Spec approved (D47), amended by D61; D6 and D7 govern it.
 
-- [ ] Specify the cross-vendor event mapping in `docs/migration/instruction-inventory.md` §4; every
-  hook is a call to the installed `developer-os` binary (`guard command|path|commit|stop|format|prompt|edit`,
-  `brain status --inject`).
-- [ ] Founder decision 2026-09-04: `session_start_injection` returns as a product hook; the two
-  transcript-dependent capture hooks stay declined.
-- [ ] Codex hooks ship in the plugin manifest and are trusted manually by the user; the product never
-  writes the Codex config file; `doctor` reports `plugin_hooks=unknown` until trust is granted.
-- [ ] Implement only hooks that can be observed firing, name the installed binary, and participate
-  in manifest drift/uninstall; third-party hooks beside them are reported as `external`.
+- [ ] Founder stops: Task 2 (legacy parity) and Task 18 (real-agent matrix), then the phase close,
+  Task 19 of `plans/2026-09-22-developer-os-hooks.md`.
 
 ### A14 · DOS-P12
 
-Status 2026-09-22: plan Tasks 1–13 and 15 committed (`a7cec3f`..`10282ab`); Task 14 recorded under D57 (`4041286`); tests owed at phase close (D47).
+Status 2026-09-22: plan Tasks 1–13 and 15 committed (`a7cec3f`..`10282ab`); Task 14 recorded under D57 (`4041286`); tests owed at phase close (D47). Spec approved (D47): every §5 script is a verb or a recorded refusal.
 
 - [ ] Keep the boundary with A11 explicit: A11 owns when scheduled work runs; A14 owns what it runs.
-- [ ] Every script in `docs/migration/instruction-inventory.md` §5 is a verb or a recorded refusal
-  (D47, spec `specs/2026-09-22-developer-os-tooling-verbs-design.md` §3 and §9). Verbs:
-  `import [<path>] | --claude-memory` (inbox files and Claude Code auto-memory into quarantine
-  captures; sources are not archived), `project init [<dir>]`, `project check [<dir>]`, and the
-  `doctor` check `vendor-config`. Recorded refusals: `repo audit` and `repo bootstrap` (Q1),
-  `repo secrets-scan` (Q2), `project worktree` (Q3), and the project settings template (Q4). The
-  language gate stays a repository gate.
+- [ ] Founder-local template scan (Task 15 Step 4), then the phase close, Task 16 of
+  `plans/2026-09-22-developer-os-tooling-verbs.md`.
 
 ## 4. Program Tasks 8–9 and external blockers
 
 ### A15 · DOS-P8
 
-- [ ] Write a dedicated plan against the finished output of A11–A14.
-- [ ] Create `docs/migration/founder-cutover.md`, `founder-baseline-results.json`,
-  `founder-shadow-results.json`, and `founder-cutover-manifest.json`.
+- The dedicated plan is `docs/migration/founder-cutover.md` (written 2026-09-23, `974376a`,
+  `3bb435e`; D58 `c613db7`).
+- [ ] Founder decision: program Task 8 also lists `founder-baseline-results.json`,
+  `founder-shadow-results.json` and `founder-cutover-manifest.json`; the runbook writes nothing from
+  the machine back into the repository, and D58 leaves the shadow results without content. Create
+  them or record that the runbook replaces them.
 - [ ] Keep the vault in place, preserve recovery data, never enable two copies of a mutating hook,
   and exercise rollback before declaring cutover stable.
 - [ ] Founder decision 2026-09-04: migrate the founder's vault once, by hand with a throwaway script
@@ -192,7 +171,7 @@ Status 2026-09-22: plan Tasks 1–13 and 15 committed (`a7cec3f`..`10282ab`); Ta
   accepted): product hooks restore its guards at cutover; afterwards boot out the legacy scheduled
   jobs, remove the legacy import block, the legacy plugin on both vendors, dead symlinks and
   orphaned generated agents. Archive the legacy repositories after one stable cycle; never delete.
-- [ ] Execute the ten unchecked Task 8 steps in the program plan.
+- [ ] Execute the eight unchecked Task 8 steps in the program plan (two were withdrawn by D58).
 
 ### A16 · DOS-P9
 
@@ -266,7 +245,6 @@ Recorded by the orchestrator from each implementer's report (D56 lane: nothing b
 - Spec 2 Task 21: UpdateLifecycleCoordinatorStepV1/UpdateCompactionEntryV1/UpdateStateCompactionEntryV1 local in participants.ts (Task 22 owns); no step->participant dispatcher; UpdateFoundationPortV1 not wired to FoundationParticipantExecutor V1 (Task 22/24 composition).
 - Spec 2 Tasks 19/21: updateParticipantJournalPath defined twice (bundle-participant.ts and participants.ts, same path); index exports the participants.ts one; dedupe bundle-participant's copy.
 - Plan 1b Task 12: launchd symbols not re-exported from platform-macos root (Task 14); 30s budget enforced in executor not observer; bootstrapPlists before/after reading chosen; crash between snapshot create and unlink leaves linked snapshot -> recovery-required.
-- Plan 1b Q5: test:suite does not yet exclude *.pinned-host.test.ts and npm run test:pinned-host does not exist — must land (plan 1b Task 20 or phase close) before any CI run.
 - Spec 2 Task 20: plan-only rollback projection has empty externalEffects (Codex policy/registration hashes unavailable at planning) — Task 24 must add; terminal-plan leaf enumeration in UTF-8 order owned by Tasks 24/25.
 - Spec 2 Task 22 open handoffs: Task 24 wire UpdateFoundationPortV1, plan-only rollback externalEffects, V2 envelope reader for launcher+ledger; retirementLeaves port (24/25); UpdateFoundationParticipantRefV2 vs bootstrap FoundationParticipantRefV2 cannot alias.
 - Plan 1b Task 16 -> Task 17: derive ScheduledInstallationV1.executablePath from verified install data (entrypointPath + manifest row), never argv; run() releases lease on return — main.ts must not depend on locks after; inject git-sync handler (else git_sync_handler_unavailable). Task 21 note: runner.v2.test.ts 2000 gate passes in 900s limit.

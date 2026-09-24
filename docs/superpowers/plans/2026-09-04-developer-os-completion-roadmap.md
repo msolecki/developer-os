@@ -6,7 +6,7 @@
 
 **Architecture:** The engine (transactions, manifest, redaction, quarantine, ingest, Brain index, both adapters) exists. What remains is the lifecycle (Spec 2 update/release, Spec 1 config/git/launchd), the instruction layer (A12), hooks (A13), tooling verbs (A14), Brain workflows (A12b), the cutover (A15) and release (A16). The order below is dictated by hard dependencies: nothing installs instruction artifacts before the manifest V2 handoff lands, and no cutover happens before the product replaces every legacy surface the founder uses daily.
 
-Completed tasks were removed on 2026-09-23; see git history.
+Completed tasks were removed on 2026-09-23 and 2026-09-24; see git history.
 
 **Tech Stack:** as in `docs/superpowers/plans/2026-07-21-developer-os-program.md`.
 
@@ -269,7 +269,9 @@ Scope: inventory §4.
 
 - Spec and the Claude half landed as Tasks 3–14, 16, 17 of `plans/2026-09-22-developer-os-hooks.md`
   (Claude hooks installed by `init`, `a156b0c`), tests unrun (D47).
-- [ ] Task 15: the Codex half from the observations — Codex hooks bundled in the plugin manifest and trusted manually (D7). Blocked on billed and trust observations (NEW-104).
+- Task 15, the Codex half (Codex hooks bundled in the plugin manifest and trusted manually, D7), and
+  Task 1's remaining observations landed under D57 (`4041286`, `4e308d2`, `2e75574`, `2bec6a7`),
+  tests unrun.
 - [ ] Task 2: legacy parity check (founder stop point), never run.
 - [ ] Task 18: "observed firing" proven in the real-agent matrix on both vendors (founder stop point).
 - [ ] Phase close — Task 19, see "Phase close (Phases 4b–7)" below.
@@ -282,7 +284,7 @@ Scope: inventory §5, §6.
 
 - `import`, `project init|check`, `doctor` `vendor-config` and the D47 refusals landed as Tasks 1–13 and
   15 of `plans/2026-09-22-developer-os-tooling-verbs.md`, tests unrun (D47).
-- [ ] Task 14 (FOUNDER STOP): record the Claude observations (NEW-109); until then `--claude-memory` exits 4 and `vendor-config` warns.
+- Task 14's Claude observations (NEW-109) were recorded under D57 (`4041286`), test unrun.
 - [ ] Phase close — Task 16, see "Phase close (Phases 4b–7)" below.
 - The automation job registry is Spec 1b's and belongs to Phase 9 (D16). It is Spec 1 §5.1's four jobs: `brain-reindex`, `brain-lint`, `doctor` and `git-sync`. `import` and `ingest` stay manual and are not registry entries (D47, Spec 1 §1).
 
@@ -311,16 +313,24 @@ Founder stops per phase, on top of that:
 - [ ] A12b: Task 16 real-vendor run (`npm run build && DEVELOPER_OS_VENDOR_BRAIN_API_KEY=<key> npm run test:vendor-brain`,
   all five workflows `pass` on Claude); the red-first runs of the new security cases against `13eb18e`
   (orchestrator).
-- [ ] A13: Task 15 Codex hooks (NEW-104); Task 18 real-agent matrix on both vendors; Task 2 legacy
-  parity check.
-- [ ] A14: Task 14 vendor observations (NEW-109); the `project init` templates' founder-local scan
-  (Task 15 Step 4).
+- [ ] A13: Task 18 real-agent matrix on both vendors; Task 2 legacy parity check. Task 15's tests
+  (NEW-104, D57) run with the phase's deferred suites.
+- [ ] A14: the `project init` templates' founder-local scan (Task 15 Step 4). Task 14's test (NEW-109,
+  D57) runs with the phase's deferred suites.
 
 ### Phase 8 — Spec 2 Tasks 12–26: release transport, update, rollback · L
 
 Runs after Phase 10 (D16). Tasks 10–11 moved to Phase 4b.
 
 NEW-68's corrections landed on 2026-09-08 — `SafeReasonCodeV1` is bounded, the §5.3/§6.3 limit conflict is resolved, the exact-maximum gates are read against both bounds, and the `symlink` arm is accepted residual 9. Tasks 20 and 26 carry what that leaves them. Execute the baseline plan.
+
+- Tasks 12–25 of `plans/2026-08-29-developer-os-release-update.md` and Tasks 1–8 of
+  `plans/2026-09-23-developer-os-spec2-closure.md` landed under D56, tests unrun.
+- [ ] Phase close — the release plan's "Phase 8 close": every deferred test, one whole-phase review,
+  one PR.
+- [ ] Closure Tasks 9–10 (`update --apply` / `update rollback --apply` composition): blocked on design,
+  NEW-110; parked by D61.
+- [ ] Task 26 (the lifecycle proof) and Task 11b: parked (D56, D46).
 
 Gate: `update` dry-run and apply and rollback proven on a disposable install, then once on the founder machine.
 
@@ -330,12 +340,21 @@ Runs after Phase 8 (D16), and takes over the automation job registry bullet from
 
 Preconditions (NEW-84): a freshly measured `launchctl` row for the current macOS with a re-pinning rule (the pinned row no longer matches the development machine), the suite fits CI, Phase 7 jobs exist.
 
+- Plan 1b (`plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`, D59) Tasks 1–18 and 20 landed
+  under D56, tests unrun; the rows were measured and re-pinned in the spec (NEW-84, D59).
+- [ ] Task 19 (FOUNDER STOP): certify the re-pinned rows on a disposable 25G83 host.
+- [ ] Phase close — plan 1b Task 21.
+
 Gate: `git enable|sync|disable` and `automation enable|disable|status` proven; scheduled runs observed.
 
 ### Phase 10 — A15: founder cutover · L
 
-- [ ] Write `docs/migration/founder-cutover.md` from program plan Task 8, with these additions: the one-off vault migration on a copy using inventory §8, reviewed as a diff, then `brain lint` = 0 errors and `brain search` returning every note; `import` of the accumulated inbox in batches; installation over the live machine with the vault as Brain; product hooks replace the legacy guards (closes D3's accepted risk); legacy launchd jobs booted out, the legacy import block removed from the vendor instruction file, the legacy plugin removed from both vendors, dead symlinks and orphaned generated agents removed; rollback exercised once.
-- [ ] D16 additions: `update` does not exist yet, so prove that reinstalling a newer build preserves the Brain and every user-owned override; retire the legacy scheduled jobs and record how each is run by hand until Phase 9; leave Git and launchd disabled.
+- `docs/migration/founder-cutover.md` is written (`974376a`, review `3bb435e`, D58 `c613db7`) from
+  program plan Task 8 with this phase's additions and D16's: the one-off vault migration on a copy,
+  inbox import in batches, installation with the vault as Brain, product hooks replacing the legacy
+  guards (closes D3's accepted risk), legacy surfaces removed, reinstall preserving the Brain and
+  overrides, retired jobs run by hand until Phase 9, Git and launchd left disabled, rollback
+  exercised once.
 - [ ] Execute it. Do not delete the legacy repositories; archive them after one stable cycle.
 
 Gate: one complete capture → review → ingest → search → reinstall → uninstall cycle on the live machine; rollback to the legacy runtime exercised.
@@ -366,8 +385,8 @@ Unchanged from program plan Task 9. L1 (license) and L2 (remote permissions) sti
 | 5b | `specs/<date>-developer-os-brain-workflows-design.md` and its plan |
 | 6 | `specs/<date>-developer-os-hooks-design.md` and its plan |
 | 7 | `specs/<date>-developer-os-tooling-verbs-design.md` and its plan |
-| 8 | baseline plan Tasks 12–26 |
-| 9 | `plans/<date>-developer-os-opt-in-surfaces-1b.md` |
+| 8 | baseline plan Tasks 12–26 and `plans/2026-09-23-developer-os-spec2-closure.md` |
+| 9 | `plans/2026-09-23-developer-os-opt-in-surfaces-1b.md` |
 | 10 | `docs/migration/founder-cutover.md` |
 | 11 | program plan Task 9 |
 
