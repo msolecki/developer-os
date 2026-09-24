@@ -7,22 +7,18 @@ import {
   validateChangePlan,
 } from "@developer-os/core";
 import type {
-  DeveloperOsConfigV1,
   InstallationManifestV1,
   ManagedArtifactV1,
   ManagedArtifactV2,
   PlannedFileMutation,
   RuntimePaths,
 } from "@developer-os/core";
-import { resolveBrainConfig } from "@developer-os/brain";
-import type {
-  BrainServiceDependencies,
-  DirectoryEntry,
-} from "@developer-os/brain";
 
 import { resolveContainedRoot } from "../context.js";
 import type { CliContext } from "../context.js";
 import { readAdmittedManifest } from "./doctor.js";
+
+export { dependenciesFor } from "./brain-dependencies.js";
 
 /**
  * Writing Brain's four generated index artifacts, for the two commands that do
@@ -48,39 +44,6 @@ const EMPTY_MANIFEST: InstallationManifestV1 = {
   installedAt: "1970-01-01T00:00:00.000Z",
   artifacts: [],
 };
-
-/**
- * Notes are read through the protected-path policy, not through the raw
- * filesystem. They are user files in a user-writable tree, and `readText` is
- * the channel that opens with `O_NOFOLLOW` and re-checks `dev`/`ino` after
- * open — the same guard configuration gets.
- */
-export function dependenciesFor(
-  context: CliContext,
-  vaultRoot: string,
-  config: DeveloperOsConfigV1,
-): BrainServiceDependencies {
-  return {
-    vaultRoot,
-    config: resolveBrainConfig(config),
-    reader: {
-      readDir: async (path: string): Promise<readonly DirectoryEntry[]> => {
-        const entries = await context.fs.readdir(path, { withFileTypes: true });
-        return entries.map((entry) => ({
-          name: entry.name,
-          isDirectory: entry.isDirectory(),
-          isFile: entry.isFile(),
-          isSymbolicLink: entry.isSymbolicLink(),
-        }));
-      },
-    },
-    readFile: (path: string) => context.guards.readText(path),
-    assertReadable: async (path: string): Promise<void> => {
-      await context.guards.manifest.assertReadable(path);
-    },
-    now: context.now,
-  };
-}
 
 export interface IndexWriteRequest {
   readonly vaultRoot: string;

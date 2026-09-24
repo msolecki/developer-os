@@ -5,7 +5,7 @@ import type { BrainSessionContextV1 } from "@developer-os/brain";
 
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import { assertOrdinaryCommandAdmitted } from "../bootstrap/report.js";
-import { dependenciesFor } from "../commands/reindex.js";
+import { dependenciesFor } from "../commands/brain-dependencies.js";
 import { readConfigFile } from "../config-file.js";
 import { runtimePathsFor } from "../context.js";
 import { slugify } from "../project-slug.js";

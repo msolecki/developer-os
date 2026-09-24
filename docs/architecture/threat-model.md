@@ -267,7 +267,7 @@ having because the collision guard is incidental: it depends on `init` recording
 is not a security property, and its message names the manifest rather than the link.
 
 **The check is proven once and the path is followed again afterwards**, which is a check-then-use
-window this arrangement accepts: `resolveContainedRoot` answers at `apps/cli/src/commands/capture.ts:762`
+window this arrangement accepts: `resolveContainedRoot` answers at `apps/cli/src/commands/quarantine.ts:100`
 and every later operation re-follows the declared path. `BACKLOG.md` §1 **NEW-20** carries it, with
 why it is registered rather than closed.
 
@@ -277,7 +277,7 @@ capture path against the proven root. One implementation rather than three, beca
 own rule for a security check is that it must not exist twice
 (`packages/security/src/cli.ts:10-13`); each command injects its own refusal so the exit code and
 recovery text stay its own, the way `writeIndexArtifacts` already takes one
-(`apps/cli/src/commands/reindex.ts:93-99`). **`BACKLOG.md` §1 NEW-14 closed with it**, and the parked
+(`apps/cli/src/commands/reindex.ts:56-62`). **`BACKLOG.md` §1 NEW-14 closed with it**, and the parked
 `it.fails` that announced it is an ordinary passing case.
 
 **The leaf refusal in the first row is still no evidence about the directory case** — it is a

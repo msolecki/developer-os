@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 
 const ENTRY = resolve(dirname(fileURLToPath(import.meta.url)), "entry.ts");
-const SPECIFIER = /(?:^|\n)\s*(?:import|export)\b[^'"]*?from\s*["']([^"']+)["']/gu;
+/** `import type` is erased under `verbatimModuleSyntax`, so it loads nothing at runtime and is not an edge. */
+const SPECIFIER = /(?:^|\n)\s*(?:import|export)(?!\s+type\b)\b[^'"]*?from\s*["']([^"']+)["']/gu;
 
 async function graph(): Promise<{ files: Set<string>; bare: Set<string> }> {
   const files = new Set<string>();
