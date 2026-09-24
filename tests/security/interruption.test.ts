@@ -171,6 +171,7 @@ let strandedAtFinalized = 0;
 async function assertDoctorReports(
   fixture: InstalledFixture,
   phase: TransactionPhase,
+  expectedDrift: readonly string[] = [],
 ): Promise<void> {
   const incomplete = await listIncompleteTransactions(fixture.context);
   const report = await runDoctor(fixture.context);
@@ -203,11 +204,16 @@ async function assertDoctorReports(
      * check — coverage the flat `not.toBe(recoveryRequired)` this branch replaced did have.
      * Naming `transactions` keeps it.
      */
-    const failing = (await runDoctorReport(fixture.context)).checks.filter(
-      (check) => check.status === "fail",
+    const failing = new Map(
+      (await runDoctorReport(fixture.context)).checks
+        .filter((check) => check.status === "fail")
+        .map((check) => [check.id, check] as const),
     );
-    expect(failing.map((check) => check.id)).toStrictEqual(["transactions"]);
-    expect(failing[0]?.recovery).toBe(
+    expect([...failing.keys()].sort()).toStrictEqual(
+      expectedDrift.length === 0 ? ["transactions"] : ["drift", "transactions"],
+    );
+    expect([...(failing.get("drift")?.paths ?? [])].sort()).toStrictEqual([...expectedDrift].sort());
+    expect(failing.get("transactions")?.recovery).toBe(
       `developer-os repair --resume ${retained[0]?.id ?? ""}`,
     );
     return;
@@ -466,7 +472,12 @@ describe("a brain refactor interrupted at every forward phase", () => {
       });
       expect(result.ok, "the interruption must reach the caller").toBe(false);
 
-      await assertDoctorReports(fixture, phase);
+      /**
+       * A finalized rename moved and rewrote two template notes `init` installed as managed
+       * rows (brain.md §6.10), and refactor does not rewrite their manifest rows, so doctor
+       * reports them under `drift` at decisionRequired, beside the recovery-required finding.
+       */
+      await assertDoctorReports(fixture, phase, phase === "finalized" ? [moved, referrer] : []);
       armed.value = false;
 
       if (phase === "finalized") {
