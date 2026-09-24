@@ -124,7 +124,8 @@ describe("RollbackPayloadParticipant.publish", () => {
     expect(await nodeFs.readFile(`${root}/inverse-plan.json`)).toStrictEqual(Buffer.from(fixture.payload.inversePlanBytes));
     expect(await nodeFs.readFile(`${root}/inventory.json`)).toStrictEqual(Buffer.from(fixture.payload.inventoryBytes));
     const inventory = await verifyRetainedRollbackPayload(new BundleGuardedIo(guardedFs(), uid), fixture.payload.identity);
-    expect(inventory.entries).toStrictEqual(fixture.payload.inventory.entries);
+    // The canonical decoder yields null-prototype records by design; re-home them to compare strictly.
+    expect(inventory.entries.map((entry) => ({ ...entry }))).toStrictEqual(fixture.payload.inventory.entries);
     // Publication is a copy: the ready source stays intact for its own later compaction.
     expect(await exists(fixture.plan.sourceRoot)).toBe(true);
 

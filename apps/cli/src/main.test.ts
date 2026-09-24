@@ -262,7 +262,7 @@ describe("run", () => {
     expect(lines.length).toBeGreaterThan(10);
     expect(lines.join("\n")).not.toContain("�");
     expect(lines).toContain("error:Commands:");
-    expect(lines).toContain("error:  --version        print the product version");
+    expect(lines).toContain("error:  --version        print the product version; with a value, the stable release to preview (update)");
   });
 
   it("reports an unbuildable context as invalid input rather than rejecting", async () => {

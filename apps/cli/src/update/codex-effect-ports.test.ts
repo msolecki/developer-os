@@ -159,7 +159,9 @@ describe("the production owner-effect run", () => {
   }
 
   it("returns the exact bytes of a clean exit under exactly the two environment entries", async () => {
-    const result = await runScript("process.stdout.write(JSON.stringify(Object.keys(process.env).sort())); process.stderr.write('warn');");
+    // macOS's libSystem adds __CF_USER_TEXT_ENCODING to every process it launches, even under an
+    // empty environment; the child's own loader wrote it, not the runner.
+    const result = await runScript("process.stdout.write(JSON.stringify(Object.keys(process.env).filter((key) => key !== '__CF_USER_TEXT_ENCODING').sort())); process.stderr.write('warn');");
     expect(result.exitCode).toBe(0);
     expect(JSON.parse(new TextDecoder().decode(result.stdout))).toEqual(["HOME", "TMPDIR"]);
     expect(new TextDecoder().decode(result.stderr)).toBe("warn");

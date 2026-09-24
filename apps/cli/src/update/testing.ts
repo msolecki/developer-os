@@ -108,7 +108,8 @@ function signDocument(kind: string, signed: unknown, key: SyntheticKey): Uint8Ar
 }
 
 const ORIGIN = validateOfficialReleaseOrigin({ scheme: "https", host: "releases.example", port: 443, pathPrefix: "/developer-os/" });
-const LOCATOR = { origin: "https://releases.example", repositoryPath: "/developer-os/" } as const;
+/** Spec 2 pins both metadata locators; only the asset origins are fixture-chosen. */
+const LOCATOR = { origin: "https://github.com", repositoryPath: "/msolecki/developer-os/releases/latest/download/" } as const;
 
 export interface SyntheticRelease {
   readonly version: StableSemverV1;

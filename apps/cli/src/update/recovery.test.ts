@@ -126,7 +126,10 @@ describe("UpdateRecoveryExecutorFiles", () => {
       await files(interrupt).removeRecord(synthetic.plan);
     };
     await expect(run(killAt(point))).rejects.toBeInstanceOf(Killed);
-    await run();
+    // §9.2: the unlink runs after the envelope is gone, so resume never re-publishes; with no final
+    // record and no stage, publishInitial is an unadmitted state and rightly exit 6.
+    if (point === "record_unlinked") await files().removeRecord(synthetic.plan);
+    else await run();
     expect(await exists(finalPath)).toBe(false);
   });
 

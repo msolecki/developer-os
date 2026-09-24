@@ -115,7 +115,7 @@ describe("planUpdate", () => {
   });
 
   it("returns up_to_date with no scratch and no bundle request when the active release is latest", async () => {
-    const fixture = createUpdateFixture({ latestVersion: "1.0.0" });
+    const fixture = createUpdateFixture({ releases: [{ version: "1.0.0", sequence: "1" }] });
     const planned = await planUpdate(fixture.update, { version: null });
 
     expect(planned.result).toStrictEqual({ schemaVersion: 1, outcome: "up_to_date", active: fixture.current });

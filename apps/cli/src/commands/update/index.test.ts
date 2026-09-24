@@ -84,7 +84,7 @@ describe("runUpdate", () => {
 
   it("recovers update residue under the lock before planning an apply, and applies nothing when up to date", async () => {
     const commandFixture = await createCommandFixture("update-apply-current");
-    const update = createUpdateFixture({ latestVersion: "1.0.0" });
+    const update = createUpdateFixture({ releases: [{ version: "1.0.0", sequence: "1" }] });
     const calls: string[] = [];
     const apply: UpdateApplyPortsV1 = {
       ...unreachableApplyPorts(),
@@ -221,7 +221,7 @@ describe("renderUpdate", () => {
   });
 
   it("renders up_to_date and rollback previews from the same result JSON carries", async () => {
-    const upToDate = createUpdateFixture({ latestVersion: "1.0.0" });
+    const upToDate = createUpdateFixture({ releases: [{ version: "1.0.0", sequence: "1" }] });
     const current = await planUpdate(upToDate.update, { version: null });
     expect(renderUpdate(current.result)).toStrictEqual(["Developer OS 1.0.0 is up to date."]);
 
