@@ -636,6 +636,7 @@ describe("closure V2 over a V1-only ledger", () => {
     ["a standalone non-terminal Foundation journal", async (home: HomeV1) => plantFoundationJournal(home, TRANSACTION, "applied")],
     ["a malformed coordinator-root leaf", async (home: HomeV1) => write(home, "state/lifecycle-journals/synthetic-orphan.json", "{}\n")],
     ["a V1 staging root", async (home: HomeV1) => mkdirs(home, `staging/lifecycle/${FIRST}/foundation`)],
+    ["fresh init's empty executor-record reservation", async (home: HomeV1) => write(home, "state/update-executor.json", "")],
   ])("returns exactly today's V1 snapshot and closure for %s", async (_label, plant) => {
     const home = await newHome();
     await plant(home);

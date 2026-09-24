@@ -363,6 +363,8 @@ async function readExecutorRecord(
   if ((await scan.fs.lstat(path)) === null) return null;
   const bytes = await ownedBytes(scan, path, MAX_EXECUTOR_RECORD_BYTES);
   if (bytes === null) return "malformed";
+  // Fresh `init`'s zero-byte runtime reservation holds no record, exactly as the V1 ledger reads it.
+  if (bytes.byteLength === 0) return null;
   try {
     const record = decodeUpdateRecoveryExecutorRecord(bytes, evidence);
     return { state: record.state, coordinatorId: record.coordinatorId };
