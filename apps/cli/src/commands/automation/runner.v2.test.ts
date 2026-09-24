@@ -45,7 +45,7 @@ let sharedHome: Promise<CommandFixture> | null = null;
 function sharedV2Home(): Promise<CommandFixture> {
   sharedHome ??= (async () => {
     const fixture = await createCommandFixture("runner-shared", { bootstrapAvailable: true });
-    await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
+    // No pre-created brain: fresh init seeds the template vault the scheduled brain jobs walk.
     const result = await runInit(fixture.context, ACCEPTED);
     if (!result.ok) throw new Error(`fixture init failed: ${JSON.stringify(result)}`);
     return fixture;
