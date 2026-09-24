@@ -419,7 +419,8 @@ describe("GitPlanner.planSync", () => {
     const readme = candidate.entries.find((entry) => Buffer.from(entry.name).toString("utf8") === "README.md");
     const originalIndex = parseAdmittedGitIndex(await nodeFs.readFile(join(fixture.git, "index")));
     const original = originalIndex.entries.find((entry) => Buffer.from(entry.name).toString("utf8") === "README.md");
-    expect(readme && Buffer.from(readme.raw)).toEqual(original?.raw);
+    if (readme === undefined || original === undefined) throw new Error("README.md left the index");
+    expect(Buffer.from(readme.raw)).toEqual(original.raw);
   });
 
   it("binds every reflog append bijectively to one ref transition", async () => {
