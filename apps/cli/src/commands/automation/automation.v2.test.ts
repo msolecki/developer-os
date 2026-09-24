@@ -29,6 +29,7 @@ import type {
   ManagedArtifactV2,
   ScheduledJobIdV1,
 } from "@developer-os/core";
+import { DEFAULT_BRAIN_CONFIG } from "@developer-os/brain";
 import {
   LaunchdDistributionUnsupportedError,
   NodeLaunchdPlistReader,
@@ -249,7 +250,13 @@ describe("automation on a real V2 home", () => {
         home.paths.configFile,
         serializeConfig({
           ...config,
-          automation: { enabled: true, lifecycle: { schemaVersion: 1, schedules: [{ job: "doctor", schedule: { cadence: "daily", hour: 2, minute: 0 } }] } },
+          automation: {
+            enabled: true,
+            lifecycle: {
+              schemaVersion: 1,
+              schedules: (["brain-reindex", "brain-lint", "doctor"] as const).map((job) => ({ job, schedule: { cadence: "daily", hour: 2, minute: 0 } })),
+            },
+          },
         }),
       );
       try {
@@ -381,7 +388,12 @@ describe("automation on a real V2 home", () => {
       const home = await sharedHome();
       const service = createAutomationService(home.context, home.lifecycle);
       const preview = await service.previewEnable(["doctor=daily@04:00"]);
-      const changed = await runConfig(home.context, { operation: "set", key: "brain.staleness.reviewAfterDays", value: "30" });
+      /** Fresh `init` writes no `[brain]` table, so the whole section is the change that stales the preview. */
+      const changed = await runConfig(home.context, {
+        operation: "set",
+        key: "brain",
+        value: encodeCanonicalJson(DEFAULT_BRAIN_CONFIG as unknown as CanonicalJsonValue).slice(0, -1),
+      });
       expect(changed.ok, JSON.stringify(changed)).toBe(true);
       const eventsBefore = [...launchd.events];
       const doctorBefore = await nodeFs.readFile(plistPath(home, "doctor"), "utf8");
