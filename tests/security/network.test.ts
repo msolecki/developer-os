@@ -29,6 +29,7 @@ import { MacOsPlatformAdapter } from "@developer-os/platform-macos";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { isLocalSocketClient, isLocalSocketServer, networkModule } from "../helpers/network-boundary.js";
 import { codeWithoutLiterals } from "../helpers/typescript-lexer.js";
 import {
   CLAUDE,
@@ -464,20 +465,7 @@ describe("the bootstrap refusal paths", () => {
   });
 });
 
-const networkModule = /(?:from\s+|import\s*\(\s*|require\s*\(\s*)["'](?:node:)?(?:https?|http2|net|tls|dns|dgram|undici)(?:\/[a-z]+)?["']/u;
-
 const GIT_GATEWAY_TRAMPOLINE_SOURCE = "packages/security/src/git/gateways.ts";
-
-/** The trampoline template's classification, shared by the sweep and its mutation cases. */
-function isLocalSocketClient(source: string): boolean {
-  const references = [...source.matchAll(new RegExp(networkModule.source, "gu"))].map((match) => match[0]);
-  const calls = [...source.matchAll(/\bnet\.(\w+)\(([^)]*)\)/gu)].map((match) => `${match[1] ?? ""}(${match[2] ?? ""})`);
-  /** `net` the binding, not `node:net` the module: bound once and called once, so no alias exists. */
-  const bindings = [...source.matchAll(/(?<!:)\bnet\b/gu)].length;
-  return references.length === 1 && references[0] === 'require("node:net"' && bindings === 2 &&
-    calls.length === 1 &&
-    calls[0] === 'createConnection({ path: process.env.DEVELOPER_OS_GIT_SUPERVISOR_SOCKET ?? \\"\\" })';
-}
 
 /**
  * **The update-only row.** No `update` command exists yet, so this row is a
@@ -523,11 +511,7 @@ describe("the release transport is the only network entrypoint", () => {
     const localOnly: string[] = [];
     for (const path of networkCapable.filter((candidate) => localSocketServers.includes(candidate))) {
       const source = await readFile(join(root, path), "utf8");
-      const imports = [...source.matchAll(/^import\s+(type\s+)?\{([^}]*)\}\s+from\s+["']([^"']+)["'];$/gmu)];
-      const network = imports.filter((match) => networkModule.test(`from "${match[3] ?? ""}"`));
-      const values = network.filter((match) => match[1] === undefined);
-      const valueNames = values.map((match) => (match[2] ?? "").trim());
-      if (network.every((match) => match[3] === "node:net") && valueNames.length === 1 && valueNames[0] === "createServer") {
+      if (isLocalSocketServer(source)) {
         localOnly.push(path);
       }
     }

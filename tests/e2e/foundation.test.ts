@@ -7,7 +7,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -25,6 +25,7 @@ import type { RepairResultV1 } from "@developer-os/cli/dist/commands/repair.js";
 import type { StatusReportV1 } from "@developer-os/cli/dist/commands/status.js";
 import type { UninstallResultV1 } from "@developer-os/cli/dist/commands/uninstall.js";
 
+import { isLocalSocketClient, isLocalSocketServer } from "../helpers/network-boundary.js";
 import { runCli, runJson } from "../helpers/run-cli.js";
 import {
   addedPaths,
@@ -38,6 +39,7 @@ import {
   removeTempHome,
 } from "../helpers/temp-home.js";
 import type { Inventory, TempHome } from "../helpers/temp-home.js";
+import { codeWithoutLiterals } from "../helpers/typescript-lexer.js";
 
 /**
  * A marker with no meaning to the product, planted where a leak would land. It
@@ -1190,15 +1192,54 @@ describe.each(INTERRUPTION_PHASES)(
   },
 );
 
+const NETWORK_MODULE = /node:(?:http|https|net|tls|dgram|dns|http2)\b/gu;
+const NETWORK_GLOBALS = [/[^\w.]fetch\s*\(/u, /XMLHttpRequest/u, /WebSocket/u];
+
+/**
+ * **Classified, not exempted: the same rules `tests/security/network.test.ts` applies to the
+ * sources, applied here to what actually ships, through the same classifier.**
+ *
+ * - Spec 2 (`2026-08-28-developer-os-release-update-design.md`): "No command other than
+ *   `developer-os update` performs an update network request." Its fixed release transport is
+ *   the one module that may reach a network, whatever it imports.
+ * - Plan 1b (`2026-09-23-developer-os-opt-in-surfaces-1b.md`) gives the Git runtime a gateway
+ *   server on a Unix-domain socket inside its private quarantine directory, and the gateway
+ *   trampoline a client of that socket. `node:net` is how a process opens one, so each is
+ *   admitted only while its one network reference is `node:net` and its shape is the pinned
+ *   local-socket shape; an `https` import, a second module, a `connect` or an alias fails.
+ * - Spec 2's planner capability classifier names `fetch`, `WebSocket` and `XMLHttpRequest` as
+ *   data inside regular expressions. In that one file the globals are matched against code
+ *   with literals and comments blanked, so a real use there still fails.
+ *
+ * Every other compiled module is held to every pattern, unchanged.
+ */
+const RELEASE_TRANSPORT = "packages/security/dist/update/transport.js";
+const LOCAL_SOCKET_SERVER = "apps/cli/dist/commands/git/runtime.js";
+const LOCAL_SOCKET_CLIENT = "packages/security/dist/git/gateways.js";
+const CAPABILITY_CLASSIFIER = "packages/security/dist/update/graph.js";
+
+function networkOffences(path: string, source: string): readonly string[] {
+  if (path === RELEASE_TRANSPORT) return [];
+  const offences: string[] = [];
+  const modules = [...source.matchAll(NETWORK_MODULE)].map((match) => match[0]);
+  const localSocket =
+    modules.length === 1 &&
+    modules[0] === "node:net" &&
+    ((path === LOCAL_SOCKET_SERVER && isLocalSocketServer(source)) ||
+      (path === LOCAL_SOCKET_CLIENT && isLocalSocketClient(source)));
+  if (modules.length > 0 && !localSocket) {
+    offences.push(`${path} matches ${String(NETWORK_MODULE)}`);
+  }
+  const code = path === CAPABILITY_CLASSIFIER ? codeWithoutLiterals(source) : source;
+  for (const pattern of NETWORK_GLOBALS) {
+    if (pattern.test(code)) offences.push(`${path} matches ${String(pattern)}`);
+  }
+  return offences;
+}
+
 describe("Foundation boundaries", () => {
   it("ships no network capability", async () => {
     const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
-    const patterns = [
-      /node:(?:http|https|net|tls|dgram|dns|http2)\b/u,
-      /[^\w.]fetch\s*\(/u,
-      /XMLHttpRequest/u,
-      /WebSocket/u,
-    ];
 
     /**
      * Discovered, not listed. `BACKLOG.md` NEW-1: `packages/brain` was added on
@@ -1223,6 +1264,7 @@ describe("Foundation boundaries", () => {
     expect(workspaces).toContain("packages/brain");
 
     const offenders: string[] = [];
+    const classified: string[] = [];
     const perPackage = new Map<string, number>();
     for (const packageDir of workspaces) {
       const dist = join(repoRoot, packageDir, "dist");
@@ -1246,15 +1288,19 @@ describe("Foundation boundaries", () => {
       perPackage.set(packageDir, files.length);
       for (const [path] of files) {
         const source = await readFile(path, "utf8");
-        for (const pattern of patterns) {
-          if (pattern.test(source)) {
-            offenders.push(`${path} matches ${String(pattern)}`);
-          }
+        const shipped = relative(repoRoot, path);
+        offenders.push(...networkOffences(shipped, source));
+        if ([RELEASE_TRANSPORT, LOCAL_SOCKET_SERVER, LOCAL_SOCKET_CLIENT, CAPABILITY_CLASSIFIER].includes(shipped)) {
+          classified.push(shipped);
         }
       }
     }
 
     expect(offenders).toStrictEqual([]);
+    /** A classification whose file no longer exists admits nothing and should be removed. */
+    expect(classified.sort()).toStrictEqual(
+      [RELEASE_TRANSPORT, LOCAL_SOCKET_SERVER, LOCAL_SOCKET_CLIENT, CAPABILITY_CLASSIFIER].sort(),
+    );
 
     /**
      * Per package, never a single total: a floor over the sum is satisfied by
@@ -1268,6 +1314,35 @@ describe("Foundation boundaries", () => {
     for (const workspace of workspaces) {
       expect(perPackage.get(workspace), workspace).toBeGreaterThan(0);
     }
+  });
+
+  /**
+   * The mutation cases for the classification above, over the shipped sources: each admitted
+   * file stays clean as built, and one added network reach makes it — or any other module —
+   * an offender again.
+   */
+  it("still flags a new network reach outside the release transport", async () => {
+    const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
+    const https = 'import { request } from "node:https";\n';
+    const admitted = [LOCAL_SOCKET_SERVER, LOCAL_SOCKET_CLIENT, CAPABILITY_CLASSIFIER];
+    expect(admitted.length).toBeGreaterThan(0);
+
+    for (const path of admitted) {
+      const source = await readFile(join(repoRoot, path), "utf8");
+      expect(networkOffences(path, source), path).toStrictEqual([]);
+      expect(networkOffences(path, https + source), path).not.toStrictEqual([]);
+    }
+
+    const elsewhere = "packages/core/dist/index.js";
+    const core = await readFile(join(repoRoot, elsewhere), "utf8");
+    expect(networkOffences(elsewhere, core)).toStrictEqual([]);
+    expect(networkOffences(elsewhere, https + core)).toStrictEqual([
+      `${elsewhere} matches ${String(NETWORK_MODULE)}`,
+    ]);
+
+    const classifier = await readFile(join(repoRoot, CAPABILITY_CLASSIFIER), "utf8");
+    expect(networkOffences(CAPABILITY_CLASSIFIER, `${classifier}\nnew WebSocket("wss://example.test");\n`))
+      .toStrictEqual([`${CAPABILITY_CLASSIFIER} matches ${String(/WebSocket/u)}`]);
   });
 
   /**
