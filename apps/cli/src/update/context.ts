@@ -172,9 +172,9 @@ function lifecycleOf(context: CliContext): CliLifecycleContext {
 }
 
 /** A malformed local record is recovery-required (Spec 2 §11), never a guess. */
-async function readRecord<T>(path: string, maximumBytes: number, reason: string, validate: (value: unknown) => T): Promise<T | null> {
+async function readRecord<T>(path: string, maximumBytes: number, reason: string, validate: (value: unknown) => T, emptyIsAbsent = false): Promise<T | null> {
   const bytes = await readNoFollow(path);
-  if (bytes === null) return null;
+  if (bytes === null || (emptyIsAbsent && bytes.byteLength === 0)) return null;
   try {
     if (bytes.byteLength > maximumBytes) throw new Error("oversized");
     return validate(decodeCanonicalJson(bytes, maximumBytes));
@@ -216,8 +216,9 @@ async function readHome(context: CliContext): Promise<UpdateHomeV1> {
     ?? refuse("update_active_release_absent", EXIT_CODES.recoveryRequired, [activePath], "developer-os doctor");
   const trust = await readRecord(trustPath, MAX_RELEASE_RECORD_BYTES, "update_release_trust_invalid", validateReleaseTrustState)
     ?? refuse("update_release_trust_absent", EXIT_CODES.recoveryRequired, [trustPath], "developer-os doctor");
+  // A fresh home's §6.4 empty reservation holds no record, exactly as the lifecycle ledger reads it.
   const rollback = await readRecord(join(paths.stateDir, "update-rollback.json"), MAXIMUM_ROLLBACK_RECORD_BYTES, "update_rollback_record_invalid", (value) =>
-    validateRollbackRecord(value, evidence));
+    validateRollbackRecord(value, evidence), true);
   return { manifest: admitted.manifest, active, trust, rollback };
 }
 
