@@ -78,6 +78,11 @@ places on disk".
 - **G7 — Relative payload paths.** `ProtectedPathPolicy` resolves a relative path against the **user
   home**, not the payload `cwd`. `guard path`, `format` and `edit` therefore resolve a relative path
   against the canonical project root before any policy call.
+  **Amended 2026-09-24 (D61).** The "never the user home" base applies to Claude only. A Codex
+  `apply_patch` path is relative to the session `cwd`, which Codex itself writes under, so `guard
+  path`, `format` and `edit` resolve it against the canonical `cwd` (`relativePathBase`,
+  `docs/architecture/hooks.md` §3.8), even when that `cwd` is below the project root or inside the
+  user home. There `ProtectedPathPolicy` is the only barrier, as it is for an absolute Claude path.
 - **G8 — Stop-loop flag absent.** A Claude `Stop` payload without a boolean `stop_hook_active` is
   malformed. `stop` fails open, so the result is `allow`.
 - **G9 — Hook argv routes around `parse()`.** §4.2 says strict dispatch is "extended rather than
@@ -131,11 +136,12 @@ probe observation. No vendor CLI is known to report Codex hook trust, and the pr
 Codex's trust store (D7, §2.3).
 
 - **A (recommended).** Firing records. Each hook invocation, after it has done its work,
-  best-effort rewrites one fixed-schema record per (vendor, event) under a declared runtime
+  best-effort rewrites one fixed-schema record per (vendor, verb) under a declared runtime
   directory `<product-home>/state/hooks/`. The directory is created by `init`, is never a manifest
   row, and is removed by uninstall. A hook never creates the directory, and never changes its exit
   code because of the record. `doctor` resolves `plugin_hooks` and `session_start_injection` from
   those records. On Codex this is also the only evidence that manual trust was granted.
+  **Amended 2026-09-24 (D61):** the record is per verb, not per event (§7.3).
   **Cost: this amends Spec 1.** The new reserved runtime path must enter Spec 1's owner table,
   uninstall's drain, the absent-manifest walks (D22, D27), which otherwise refuse unknown residue,
   and fresh-`init` shape admission (D23). It is also a product-home write outside any transaction,
@@ -460,10 +466,15 @@ prints that as a fixed line.
 
 The records live under `<product-home>/state/hooks/`, a runtime directory `init` creates with mode
 0700 and registers as a reserved runtime path under Spec 1's owner table. It is never a manifest
-row, and the uninstall drain deletes it. Each record is
-`<vendor>.<event>.json = { schemaVersion: 1, vendor, event, productVersion, firstSeen, lastSeen }`,
-at most 16 records and 512 bytes each, written by same-directory temp file and rename. A hook writes
-a record only when all of these hold:
+row, and the uninstall drain deletes it. **Amended 2026-09-24 (D61).** Each record is named per
+verb and carries its verb's event:
+`<vendor>.<verb>.json = { schemaVersion: 1, vendor, event, productVersion, firstSeen, lastSeen }`,
+at most 16 records and 512 bytes each, written by same-directory temp file and rename. `command`,
+`commit` and `path` share `PreToolUse`, so a per-event record let a firing `command` hide an
+untrusted or modified `path`. The reader ignores a record whose event is not its verb's. A
+per-event record left by an earlier build is admitted by shape, ignored by the reader and removed
+by uninstall (`apps/cli/src/hooks/firing-records.ts`, `docs/architecture/hooks.md` §3.6). A hook
+writes a record only when all of these hold:
 
 - the directory already exists, is owned by the user and has mode 0700;
 - the record is absent, or its `lastSeen` is older than 24 h;
@@ -486,7 +497,7 @@ with `adapter-capability-parity.test.ts` green. `session_end_capture` and `pre_c
 `not-used`. Under Q3-A each key follows the existing two-gate rule (`claude-adapter.md` §3):
 `yes` requires both the version floor and the observation. The observation for `plugin_hooks` is
 any firing record for that vendor, and for `session_start_injection` it is that vendor's
-session-start record. Without an observation the key stays `unknown`, never `no` (NEW-62 is not
+session-start record (**Amended 2026-09-24 (D61):** its `inject` verb record, §7.3). Without an observation the key stays `unknown`, never `no` (NEW-62 is not
 widened here). `DOCUMENTED_FLOORS` for both keys are set from the versions Task 1 observes.
 
 ### 8.2 `doctor` checks
@@ -494,7 +505,10 @@ widened here). `DOCUMENTED_FLOORS` for both keys are set from the versions Task 
 - **`hooks`**: per vendor, the product hooks present in the installed tree against §3, together
   with each hook's last firing age. On Codex, a hook with no firing record gets a fixed message:
   "installed; not observed firing — approve it in Codex if you have not". The check is `warn`,
-  never `fail`: an untrusted hook is the user's decision (D7).
+  never `fail`: an untrusted hook is the user's decision (D7). **Amended 2026-09-24 (D61):** the
+  age and the warning are per verb. Each verb reports the age of its own record, and a Codex verb
+  with no record of its own gets the message and the trust step as recovery, even when another
+  verb on the same event has fired (`docs/architecture/hooks.md` §3.7).
 - **`external-hooks`**: under Q2-A, the Claude hook entries in `~/.claude/settings.json` that do not
   name the launcher path, reported as `event → count` with no command string, a `warn` when any
   exist and `codex=unknown` on Codex. The read uses no-follow and is at most 1 MiB, and it fails
