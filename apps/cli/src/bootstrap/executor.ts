@@ -1999,6 +1999,7 @@ export class BootstrapExecutor {
       paths.stagingDir,
       join(paths.stagingDir, "fresh-v2-init"),
       join(paths.stagingDir, "fresh-v2-init", input.id),
+      join(paths.stagingDir, "lifecycle"),
       join(paths.stagingDir, "transactions"),
       join(paths.stagingDir, "transactions", forwardId),
       join(paths.stateDir, "transactions"),

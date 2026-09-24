@@ -292,11 +292,10 @@ function gateAdapters(
 
 /**
  * A12 lists `staging/lifecycle` in the closed bookkeeping set and `inspectLifecycleLedger`
- * refuses its absence as `lifecycle_ledger_root_shape`, but the fresh V2 coordinator creates
- * every other bookkeeping root and not this one (`apps/cli/src/bootstrap/executor.ts`,
- * `ordinaryDirectories`) — so without this no mutation on a real fresh V2 home can pass the
- * preflight. Materialising it under the held global lock restores the shape the ledger was
- * written against; the durable fix belongs in that fresh layout.
+ * refuses its absence as `lifecycle_ledger_root_shape`. The fresh V2 coordinator now creates it
+ * (`apps/cli/src/bootstrap/executor.ts`, `ordinaryDirectories`), but a home initialized before
+ * that change lacks it — so without this no mutation on such a home can pass the preflight.
+ * Materialising it under the held global lock restores the shape the ledger was written against.
  */
 export async function requireLifecycleStagingRoot(
   lifecycle: CliLifecycleContext,

@@ -7,6 +7,9 @@ import { deriveBootstrapRetentionLocations, EXIT_CODES } from "@developer-os/cor
 import { MacOsTransactionLockProvider } from "@developer-os/platform-macos";
 
 import { runInit } from "../commands/init.js";
+import { admitInstalledV2Home } from "../lifecycle/admission.js";
+import { lifecycleHomeKeyFromAdmission, residueFrom } from "../lifecycle/context.js";
+import { gateManifestAdmission } from "../lifecycle/mutation-gate.js";
 import { createCommandFixture, exists, inventory, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../commands/testing.js";
 import type { CommandFixture } from "../commands/testing.js";
 import {
@@ -15,6 +18,8 @@ import {
   freshInitFineGrainedDeathPoints,
   preexistingParentShapeAdmits,
 } from "./executor.js";
+import { createBootstrapEvidenceInspectionRequest } from "./context.js";
+import { inspectBootstrapEvidenceAdmission } from "./report.js";
 
 afterEach(removeCommandFixtures);
 
@@ -119,6 +124,35 @@ async function closeBootstrapContext(context: CommandFixture["context"]): Promis
 }
 
 describe("BootstrapExecutor retained fresh V2 initialization", () => {
+  it("creates every A12 bookkeeping root so a fresh home's lifecycle ledger is clear", async () => {
+    const fixture = await createCommandFixture("bootstrap-fresh-ledger-clear", { bootstrapAvailable: true });
+    const result = await runInit(fixture.context, ACCEPTED);
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    await closeBootstrapProcess(fixture);
+
+    const lifecycleStaging = await nodeFs.lstat(join(fixture.paths.stagingDir, "lifecycle"));
+    expect(lifecycleStaging.isDirectory()).toBe(true);
+    expect(lifecycleStaging.mode & 0o7777).toBe(0o700);
+    expect(lifecycleStaging.uid).toBe(process.getuid?.());
+
+    const lifecycle = fixture.context.lifecycle;
+    if (lifecycle === undefined) throw new Error("fixture supplied no lifecycle ports");
+    const { paths } = fixture.context;
+    const admitted = await admitInstalledV2Home({
+      fs: lifecycle.fs,
+      paths,
+      manifestAdmission: gateManifestAdmission(fixture.context),
+      effectiveUid: lifecycle.effectiveUid,
+    });
+    const residue = residueFrom(await inspectBootstrapEvidenceAdmission(createBootstrapEvidenceInspectionRequest({
+      productHome: paths.home,
+      stateDirectory: paths.stateDir,
+      initialRoots: [paths.home, paths.stateDir, fixture.context.userHome],
+    })));
+    const ledger = await lifecycle.inspectLedger(lifecycleHomeKeyFromAdmission(admitted, paths), residue);
+    expect(ledger.closure.kind).toBe("clear");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("publishes a complete V2 handoff and permanently retains its exact plan and two slots", async () => {
     const fixture = await createCommandFixture("bootstrap-retained-complete", {
       bootstrapAvailable: true,
