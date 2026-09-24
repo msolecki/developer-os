@@ -9,6 +9,7 @@ import {
   BootstrapStateError,
   CODEX_INGEST_AUTH_LINK,
   CODEX_INGEST_HOME_RELATIVE_PATH,
+  MANIFEST_ANCHOR_RELATIVE_PATH,
   encodeCanonicalJson,
   parseLowerHexSha256,
   parseUInt64Decimal,
@@ -184,12 +185,24 @@ async function projectRegularEntry(
   }
 }
 
+/**
+ * Runtime state beside retained rows whose shape another rule judges, so a parent walk over
+ * `state` neither projects nor refuses it: D52's one symlink (cf. 53794c5), and D54's anchor,
+ * which the gate admits by shape and which must not wedge the gate when malformed (D54 review,
+ * finding 3).
+ */
+function judgedElsewhere(absolutePath: string, stats: BigIntStats): boolean {
+  if (absolutePath.endsWith(`/${MANIFEST_ANCHOR_RELATIVE_PATH}`)) return true;
+  return stats.isSymbolicLink() && absolutePath.endsWith(`/${CODEX_INGEST_HOME_RELATIVE_PATH}/${CODEX_INGEST_AUTH_LINK}`);
+}
+
 async function walkDirectory(
   root: string,
   relativeDirectory: string,
   entries: BootstrapRetentionDirectoryEntryV1[],
   identities: Set<string>,
   expectedDirectory: BigIntStats,
+  skipped: Set<string>,
 ): Promise<void> {
   const absoluteDirectory = relativeDirectory.length === 0 ? root : join(root, relativeDirectory);
   let handle: nodeFs.FileHandle | undefined;
@@ -215,6 +228,10 @@ async function walkDirectory(
       const identity = `${stats.dev.toString()}:${stats.ino.toString()}`;
       if (identities.has(identity) || entries.length >= BOOTSTRAP_RETAINED_MAX_ENTRIES) return refuse();
       identities.add(identity);
+      if (judgedElsewhere(absolutePath, stats)) {
+        skipped.add(relativePath);
+        continue;
+      }
       if (stats.isDirectory() && !stats.isSymbolicLink()) {
         if (!exactDirectory(stats)) return refuse();
         entries.push({
@@ -228,15 +245,9 @@ async function walkDirectory(
           dev: uint64(stats.dev),
           ino: uint64(stats.ino),
         });
-        await walkDirectory(root, relativePath, entries, identities, stats);
+        await walkDirectory(root, relativePath, entries, identities, stats, skipped);
       } else if (stats.isFile() && !stats.isSymbolicLink()) {
         entries.push(await projectRegularEntry(absolutePath, relativePath, stats));
-      } else if (
-        stats.isSymbolicLink() &&
-        absolutePath.endsWith(`/${CODEX_INGEST_HOME_RELATIVE_PATH}/${CODEX_INGEST_AUTH_LINK}`)
-      ) {
-        /** D52: the one symlink a product home holds; admitted by shape in the ledger, never a retention entry (cf. 53794c5). */
-        continue;
       } else {
         return refuse();
       }
@@ -271,7 +282,8 @@ export async function projectRetainedDirectoryTreeOnce(
   if (!exactDirectory(rootBefore)) return refuse();
   const entries: BootstrapRetentionDirectoryEntryV1[] = [];
   const identities = new Set<string>([`${rootBefore.dev.toString()}:${rootBefore.ino.toString()}`]);
-  await walkDirectory(root, "", entries, identities, rootBefore);
+  const skipped = new Set<string>();
+  await walkDirectory(root, "", entries, identities, rootBefore, skipped);
   entries.sort((left, right) => compareUtf8(left.relativePath, right.relativePath));
   let regularFileBytes = 0n;
   for (const entry of entries) {
@@ -284,7 +296,7 @@ export async function projectRetainedDirectoryTreeOnce(
   if (
     !exactDirectorySnapshot(rootAfter, rootBefore)
   ) return refuse();
-  const rootNamesAfter = await nodeFs.readdir(root).catch(() => refuse());
+  const rootNamesAfter = (await nodeFs.readdir(root).catch(() => refuse())).filter((name) => !skipped.has(name));
   rootNamesAfter.sort(compareUtf8);
   const projectedRootNames = entries
     .filter((entry) => !entry.relativePath.includes("/"))
