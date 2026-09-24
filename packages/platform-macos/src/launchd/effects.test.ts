@@ -421,7 +421,10 @@ const launchdTransitionRows: readonly { readonly name: string; readonly row: Row
 
 /** A replace's `Q` runs after `F(plist_files)` has published the new bytes. */
 function prepareFiles(fx: Fixture, row: Row): void {
-  if (row.position !== "after_files") return;
+  if (row.position === "after_files") publishPlists(fx);
+}
+
+function publishPlists(fx: Fixture): void {
   for (const entry of fx.plan.entries) {
     if (entry.plistBytes !== null) fx.world.plists.set(entry.plistPath, launchdPlistBytesHash(entry.plistBytes));
   }
@@ -556,6 +559,7 @@ describe("LaunchdEffectExecutor", () => {
 
   it("maps journal phases onto the coordinator's effect states", async () => {
     const fx = fixture(plan("automation_enable", ["doctor"], {}));
+    publishPlists(fx);
     const executor = fx.executor();
     const ref = fx.ref("after_files");
     expect(await executor.observe(ref)).toBe("future");
@@ -571,6 +575,7 @@ describe("LaunchdEffectExecutor", () => {
 
   it("refuses to compact a journal whose terminal outcome differs", async () => {
     const fx = fixture(plan("automation_enable", ["doctor"], {}));
+    publishPlists(fx);
     await fx.executor().apply(fx.ref("after_files"));
     await expect(fx.executor().compact(fx.ref("after_files"), "finalized")).rejects.toThrow(LifecycleRecoveryRequiredError);
     expect(fx.journals.compacted).toStrictEqual([]);
@@ -578,6 +583,7 @@ describe("LaunchdEffectExecutor", () => {
 
   it("binds each bootstrap to the sole current frontier: effect, plan hash, direction, index and role", async () => {
     const fx = fixture(plan("automation_enable", ["brain-lint", "doctor"], {}));
+    publishPlists(fx);
     await fx.executor().apply(fx.ref("after_files"));
     await fx.executor().compensate(fx.ref("after_files"));
     const effect = launchdEffectPlan(fx.plan, "after_files");
