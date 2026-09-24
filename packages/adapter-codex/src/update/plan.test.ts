@@ -56,9 +56,9 @@ function requestFor(rows: readonly Row[]): UpdatePlannerRequestV1 {
   };
   const owners = ["core", "claude", "codex", "macos"].filter((owner) => rows.some((row) => row.owner === owner));
   return validateUpdatePlannerRequest({
-    schemaVersion: 1, protocol: 1, plannedAt: "2026-09-23T08:00:00Z", platform: "darwin", architecture: "arm64",
+    schemaVersion: 1, protocol: 1, plannedAt: "2026-09-23T08:00:00.000Z", platform: "darwin", architecture: "arm64",
     currentRelease: release("1.0.0", "1"), targetRelease: release("2.0.0", "2"),
-    manifest: { schemaVersion: 1, productVersion: "1.0.0", installedAt: "2026-09-01T08:00:00Z", artifacts: rows.map((row, index) => ({ token: t(index), ...columns(row), currentHash: row.contents === null ? null : sha(row.contents) })) },
+    manifest: { schemaVersion: 1, productVersion: "1.0.0", installedAt: "2026-09-01T08:00:00.000Z", artifacts: rows.map((row, index) => ({ token: t(index), ...columns(row), currentHash: row.contents === null ? null : sha(row.contents) })) },
     config: { schemaVersion: 1, brainRoot: "brain_root", adapters: { claude: owners.includes("claude"), codex: true }, git: { enabled: false }, automation: { enabled: false }, brain: null, redactionPatternsCount: 0, telemetry: false },
     installedOwners: owners,
     artifactInputs: rows.map((row, index) => ({ token: t(index), ...columns(row), observed: observed(row) })),

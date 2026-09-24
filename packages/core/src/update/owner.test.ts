@@ -80,12 +80,12 @@ function requestValue(): Record<string, unknown> {
   return {
     schemaVersion: 1,
     protocol: 1,
-    plannedAt: "2026-09-23T08:00:00Z",
+    plannedAt: "2026-09-23T08:00:00.000Z",
     platform: "darwin",
     architecture: "arm64",
     currentRelease: release("1.0.0", "1"),
     targetRelease: release("2.0.0", "2"),
-    manifest: { schemaVersion: 1, productVersion: "1.0.0", installedAt: "2026-09-01T08:00:00Z", artifacts: all.map((row, index) => ({ token: t(index), ...common(row), currentHash: row.currentHash })) },
+    manifest: { schemaVersion: 1, productVersion: "1.0.0", installedAt: "2026-09-01T08:00:00.000Z", artifacts: all.map((row, index) => ({ token: t(index), ...common(row), currentHash: row.currentHash })) },
     config: {
       schemaVersion: 1, brainRoot: "brain_root", adapters: { claude: false, codex: true }, git: { enabled: false }, automation: { enabled: false },
       brain: null, redactionPatternsCount: 0, telemetry: false,
@@ -258,7 +258,7 @@ describe("validateOwnerDraft", () => {
     ["a case-folded duplicate create", [create("plugins/developer-os/B.md"), create("plugins/developer-os/b.md")]],
     ["a create for another owner", [{ operation: "create", target: { kind: "owner_relative", owner: "core", path: rel("x.md") }, content: bundle("payload/x.md") }]],
     ["a create through an installed token", [{ operation: "create", target: installed(7), content: bundle("payload/x.md") }]],
-    ["a traversal create", [create("plugins/../escape.md")]],
+    ["a traversal create", [{ operation: "create", target: { kind: "owner_relative", owner: "codex", path: rel("plugins/../escape.md") }, content: bundle("payload/escape.md") }]],
     ["a changed file over 16 MiB", [create("plugins/developer-os/big.bin", 16_777_217)]],
     ["an output blob over 16 MiB", [{ operation: "replace", target: installed(7), expectedHash: sha(skillBytes), content: { kind: "output_blob", blob: { stream: "output", ordinal: 0, bytes: 16_777_217 } } }]],
   ] as unknown as [string, PlannerChangePlanOperationV1[]][])("refuses %s", (_name, operations) => {

@@ -85,12 +85,12 @@ function requestValue(): Record<string, unknown> {
   return {
     schemaVersion: 1,
     protocol: 1,
-    plannedAt: "2026-09-23T08:00:00Z",
+    plannedAt: "2026-09-23T08:00:00.000Z",
     platform: "darwin",
     architecture: "arm64",
     currentRelease: release("1.0.0", "1"),
     targetRelease: release("2.0.0", "2"),
-    manifest: { schemaVersion: 1, productVersion: "1.0.0", installedAt: "2026-09-01T08:00:00Z", artifacts: rows },
+    manifest: { schemaVersion: 1, productVersion: "1.0.0", installedAt: "2026-09-01T08:00:00.000Z", artifacts: rows },
     config: {
       schemaVersion: 1, brainRoot: "brain_root", adapters: { claude: false, codex: true }, git: { enabled: false }, automation: { enabled: false },
       brain: null, redactionPatternsCount: 2, telemetry: false,
@@ -266,7 +266,7 @@ describe("target draft admission", () => {
     { name: "a migration before-hash that differs from the snapshot", path: ["migrations", 1, "mutations", 0, "beforeHash"], next: sha("other") },
     { name: "a mutation arm in another domain", path: ["migrations", 1, "mutations", 0, "path"], next: { domain: "product_state", token: t(0) } },
     { name: "an installation-history key in a draft row", path: ["expectedManifest", "artifacts", 0, "existedBefore"], next: false },
-    { name: "a verifiedAt key in a draft row", path: ["expectedManifest", "artifacts", 1, "verifiedAt"], next: "2026-09-23T08:00:00Z" },
+    { name: "a verifiedAt key in a draft row", path: ["expectedManifest", "artifacts", 1, "verifiedAt"], next: "2026-09-23T08:00:00.000Z" },
     { name: "an expected manifest for another version", path: ["expectedManifest", "productVersion"], next: "3.0.0" },
     { name: "a blob-less artifact reused elsewhere", path: ["expectedManifest", "artifacts", 3, "verification", "installed"], next: { kind: "installed", token: t(2) } },
     { name: "one output ordinal with two lengths", path: ["expectedManifest", "artifacts", 3, "verification", "installed", "blob", "bytes"], next: 1 },

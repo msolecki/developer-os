@@ -97,9 +97,9 @@ function request() {
     return columns;
   };
   return validateUpdatePlannerRequest({
-    schemaVersion: 1, protocol: 1, plannedAt: "2026-09-23T08:00:00Z", platform: "darwin", architecture: "arm64",
+    schemaVersion: 1, protocol: 1, plannedAt: "2026-09-23T08:00:00.000Z", platform: "darwin", architecture: "arm64",
     currentRelease: release("1.0.0", "1"), targetRelease: release("2.0.0", "2"),
-    manifest: { schemaVersion: 1, productVersion: "1.0.0", installedAt: "2026-09-01T08:00:00Z", artifacts: rows },
+    manifest: { schemaVersion: 1, productVersion: "1.0.0", installedAt: "2026-09-01T08:00:00.000Z", artifacts: rows },
     config: { schemaVersion: 1, brainRoot: "brain_root", adapters: { claude: false, codex: true }, git: { enabled: false }, automation: { enabled: false }, brain: null, redactionPatternsCount: 0, telemetry: false },
     installedOwners: ["core", "codex"],
     artifactInputs: [
@@ -510,7 +510,7 @@ describe("validateSchemaMigrationExecutionJournal", () => {
   const journal = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
     schemaVersion: 1, id: plan().id, coordinatorId, planHash: schemaMigrationPlanHash(plan()), phase: "planned",
     nextForwardFoundation: 0, compensationNext: null, compactionNext: null,
-    createdAt: "2026-09-23T08:00:00Z", updatedAt: "2026-09-23T08:00:00Z", ...overrides,
+    createdAt: "2026-09-23T08:00:00.000Z", updatedAt: "2026-09-23T08:00:00.000Z", ...overrides,
   });
 
   it.each([
@@ -534,7 +534,7 @@ describe("validateSchemaMigrationExecutionJournal", () => {
     ["verified before every forward ref", { phase: "verified" }],
     ["a compensation cursor outside compensation", { phase: "applying", compensationNext: 0 }],
     ["a compaction cursor past both halves", { phase: "compacting", compactionNext: 3 }],
-    ["an update before creation", { updatedAt: "2026-09-22T08:00:00Z" }],
+    ["an update before creation", { updatedAt: "2026-09-22T08:00:00.000Z" }],
   ])("refuses %s", (_name, overrides) => {
     expect(() => validateSchemaMigrationExecutionJournal(journal(overrides), plan())).toThrow();
   });
