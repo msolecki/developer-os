@@ -32,7 +32,7 @@ Tasks 1–18 and 20 committed, tests written and not run (D56): 1 `5e6c9b2` `667
 certification on the pinned host, HTTPS/SSH traces need a disposable remote) and Task 21 (phase close).
 
 The bodies of the committed tasks and the wave table were deleted on 2026-09-24 (git history holds
-them: `git show c6be513:docs/superpowers/plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`, which
+them: `git show d2f18b4:docs/superpowers/plans/2026-09-23-developer-os-opt-in-surfaces-1b.md`, which
 Task 21 Step 3 reads for the per-task decisions it carries into the architecture documents); the tests they wrote are listed in Task 21 Step 1. Task numbers elsewhere in this file name
 those commits. Order of the open work: Task 19, then Task 21.
 
