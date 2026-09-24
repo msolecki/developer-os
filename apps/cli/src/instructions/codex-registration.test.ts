@@ -225,7 +225,7 @@ describe("the spec §6.4 partial states, by fault injection", () => {
   it("is registered only when the listing, the record hash and the record home all agree", async () => {
     const codex = registered();
     expect(await inspect(codex, record(HASH_A))).toBe("registered");
-    expect(await inspect(codex, null)).toBe("stale");
+    expect(await inspect(codex, null)).toBe("unregistered");
     expect(await inspect(codex, record(HASH_A, "/Users/synthetic/other-codex"))).toBe("stale");
     expect(await inspect(codex, record(HASH_A), HASH_B)).toBe("stale");
   });

@@ -148,7 +148,9 @@ export async function inspectCodexRegistration(input: {
   readonly treeHash: LowerHexSha256;
 }): Promise<CodexRegistrationStateV1> {
   if (!registeredAt(await listInstalled(input), input.pluginRoot)) return "unregistered";
-  if (input.record === null || input.record.treeHash !== input.treeHash || input.record.codexHome !== input.codexHome) {
+  /** No row means no registration ever completed, even if `plugin add` landed (spec §6.4, first partial state). */
+  if (input.record === null) return "unregistered";
+  if (input.record.treeHash !== input.treeHash || input.record.codexHome !== input.codexHome) {
     return "stale";
   }
   return "registered";

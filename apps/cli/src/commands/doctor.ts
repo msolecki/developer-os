@@ -1557,7 +1557,7 @@ async function checkCodexRegistration(
     treeHash: codexPluginTreeHash(files),
   });
   if (state === "unregistered") {
-    return fail("codex-registration", "unregistered: codex plugin list does not show the plugin enabled at its tree", [pluginRoot], EXIT_CODES.operationalFailure, REGISTRATION_RECOVERY);
+    return fail("codex-registration", "unregistered: codex plugin list does not show the plugin enabled at its tree, or no registration completed", [pluginRoot], EXIT_CODES.operationalFailure, REGISTRATION_RECOVERY);
   }
   if (state === "stale") {
     return fail("codex-registration", "stale: the plugin tree changed since its last registration", [registrationFile], EXIT_CODES.operationalFailure, REGISTRATION_RECOVERY);
