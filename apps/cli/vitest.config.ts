@@ -36,6 +36,10 @@ export default defineProject({
       "@developer-os/security": fileURLToPath(
         new URL("../../packages/security/src/index.ts", import.meta.url),
       ),
+      /** Reached through `adapter-codex`; without it a run with no `dist` cannot load the lifecycle suites. */
+      "@developer-os/workflow-schema": fileURLToPath(
+        new URL("../../packages/workflow-schema/src/index.ts", import.meta.url),
+      ),
     },
   },
   test: {
