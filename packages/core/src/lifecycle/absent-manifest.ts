@@ -15,7 +15,11 @@
  */
 import { SCHEDULED_JOB_IDS } from "../config/lifecycle.js";
 import { HOOK_FIRING_RECORDS_RELATIVE_PATH, inspectHookFiringRecordsShape } from "../hooks/firing-records.js";
-import { CODEX_INGEST_HOME_RELATIVE_PATH, inspectCodexIngestHomeShape } from "./codex-ingest-home.js";
+import {
+  CODEX_INGEST_AUTH_LINK,
+  CODEX_INGEST_HOME_RELATIVE_PATH,
+  inspectCodexIngestHomeShape,
+} from "./codex-ingest-home.js";
 import { parseCanonicalAbsolutePathText, type CanonicalAbsolutePathV1 } from "../update/paths.js";
 import type { LowerHexSha256, UInt64DecimalV1 } from "../update/scalars.js";
 import {
@@ -206,7 +210,14 @@ function childPathOf(
   }
 }
 
-function admitWalkEntry(effectiveUid: number, entry: LifecycleGuardedEntryV1): void {
+function admitWalkEntry(dependencies: AbsentManifestDependenciesV1, entry: LifecycleGuardedEntryV1): void {
+  const { effectiveUid, productHome } = dependencies;
+  /** D52: the one symlink a product home holds; its shape is judged with `state/codex-ingest-home`. */
+  const codexAuthLink = `${productHome}/${CODEX_INGEST_HOME_RELATIVE_PATH}/${CODEX_INGEST_AUTH_LINK}`;
+  if (entry.kind === "symlink" && entry.path === codexAuthLink) {
+    if (entry.ownerUid !== effectiveUid) refuseLifecycleRecovery("absent_manifest_owner", entry.path);
+    return;
+  }
   if (entry.kind !== "regular_file" && entry.kind !== "directory") {
     refuseLifecycleRecovery("absent_manifest_kind", entry.path);
   }
@@ -236,7 +247,7 @@ async function walkDirectory(
     const path = childPathOf(directory.path, name, components + 1);
     const entry = await dependencies.fs.lstat(path);
     if (entry === null) refuseLifecycleRecovery("absent_manifest_walk_race", path);
-    admitWalkEntry(dependencies.effectiveUid, entry);
+    admitWalkEntry(dependencies, entry);
     if (walk.rows.length >= ABSENT_MANIFEST_WALK_BOUNDS.entries) {
       refuseLifecycleRecovery("absent_manifest_bound", path);
     }
