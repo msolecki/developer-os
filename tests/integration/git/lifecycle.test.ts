@@ -754,7 +754,8 @@ describe("the opt-in lifecycle end to end: enable → sync → automation → di
       const home = await chainHome();
       const service = createGitService(home.context, home.lifecycle);
       const preview = await service.previewDisable();
-      const changed = await runConfig(home.context, { operation: "set", key: "brain.staleness.reviewAfterDays", value: "61" });
+      // Fresh init writes no [brain] table, so a brain leaf is refused config_parent_absent; an empty redaction table changes the config and nothing it governs.
+      const changed = await runConfig(home.context, { operation: "set", key: "redaction", value: '{"patterns":[]}' });
       expect(changed.ok, JSON.stringify(changed)).toBe(true);
       const configBefore = await nodeFs.readFile(home.paths.configFile);
       const activationBefore = await nodeFs.readFile(join(home.paths.stateDir, "lifecycle-activation.json"));
@@ -845,7 +846,12 @@ describe("the opt-in lifecycle end to end: enable → sync → automation → di
 let forgery: Promise<OptInHomeV1> | null = null;
 
 function forgeryHome(): Promise<OptInHomeV1> {
-  forgery ??= createOptInHome("opt-in-forgery");
+  forgery ??= (async () => {
+    const home = await createOptInHome("opt-in-forgery");
+    // The Brain predates init, so no template was written; recoverThroughNextMutation's reindex needs a content root.
+    await nodeFs.mkdir(join(home.paths.brain, "content"), { mode: 0o700 });
+    return home;
+  })();
   return forgery;
 }
 
