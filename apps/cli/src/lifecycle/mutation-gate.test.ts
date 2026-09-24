@@ -202,6 +202,9 @@ describe("the mutation gate on a home that is not an admitted V2 installation", 
       );
       expect(source, command).toContain("context.executor.execute(");
     }
+    /** `capture` left `MUTATORS` for `quarantine`; a direct write there would escape this list. */
+    const capture = await nodeFs.readFile(new URL("../commands/capture.ts", import.meta.url), "utf8");
+    expect(capture).not.toMatch(/\.executor\b|\bexecutor\s*[,}]/u);
   });
 });
 
