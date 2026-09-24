@@ -7,6 +7,8 @@ import {
   BOOTSTRAP_RETAINED_MAX_ENTRIES,
   BOOTSTRAP_RETAINED_MAX_REGULAR_BYTES,
   BootstrapStateError,
+  CODEX_INGEST_AUTH_LINK,
+  CODEX_INGEST_HOME_RELATIVE_PATH,
   encodeCanonicalJson,
   parseLowerHexSha256,
   parseUInt64Decimal,
@@ -229,6 +231,12 @@ async function walkDirectory(
         await walkDirectory(root, relativePath, entries, identities, stats);
       } else if (stats.isFile() && !stats.isSymbolicLink()) {
         entries.push(await projectRegularEntry(absolutePath, relativePath, stats));
+      } else if (
+        stats.isSymbolicLink() &&
+        absolutePath.endsWith(`/${CODEX_INGEST_HOME_RELATIVE_PATH}/${CODEX_INGEST_AUTH_LINK}`)
+      ) {
+        /** D52: the one symlink a product home holds; admitted by shape in the ledger, never a retention entry (cf. 53794c5). */
+        continue;
       } else {
         return refuse();
       }
