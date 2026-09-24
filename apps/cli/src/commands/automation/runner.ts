@@ -52,7 +52,6 @@ import type {
 import { createBootstrapEvidenceInspectionRequest } from "../../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission } from "../../bootstrap/report.js";
 import { readConfigFile } from "../../config-file.js";
-import { redactData } from "../../context.js";
 import type { CliContext } from "../../context.js";
 import { admitInstalledV2Home, observeLifecycleActivationRecord } from "../../lifecycle/admission.js";
 import { lifecycleHomeKeyFromAdmission, residueFrom } from "../../lifecycle/context.js";
@@ -116,7 +115,7 @@ export interface AutomationRunnerDependenciesV1 {
   readonly nowMs: () => number;
   readonly sleepMs: (milliseconds: number) => Promise<void>;
   readonly clock: () => UtcTimestampV1;
-  /** `redactData` bound to the product redactor; see `context.ts`. */
+  /** `guards.redactData`, bound to the product redactor in `context.ts`. */
   readonly redact: (data: unknown) => RedactedPayload;
   /** Stage 1; throws `ScheduledAuthenticationError` (or an admission refusal) and writes nothing. */
   authenticate(request: ScheduledRunRequestV1): Promise<void>;
@@ -507,7 +506,7 @@ export function createAutomationRunnerDependencies(
     nowMs: lifecycle.nowMs,
     sleepMs: lifecycle.sleepMs,
     clock: lifecycle.clock,
-    redact: (data) => redactData(context, data),
+    redact: context.guards.redactData,
     authenticate: async (request) => {
       const { manifest } = await admit();
       const plistPath = launchdPlistPath(installation.userHome, request.job);

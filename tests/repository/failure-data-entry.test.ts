@@ -68,6 +68,14 @@ const ALLOWED = [
   "packages/core/src/index.ts",
 ] as const;
 
+/**
+ * **The one consumer of the bound data redactor**, which may call `guards.redactData` and
+ * nothing else: `redactPayload`, every cast and every annotation are still swept here.
+ */
+const BOUND_DATA_CONSUMERS = ["apps/cli/src/commands/automation/runner.ts"] as const;
+
+const PRODUCERS = ["redactPayload", "redactData"] as const;
+
 /** Tests may write whatever they like; this gate is about production wiring. */
 const TEST_FILE = /\.test\.ts$/u;
 
@@ -109,10 +117,17 @@ const TEST_FILE = /\.test\.ts$/u;
  * that answered a route by adding a *predicate* beside an identity check had that predicate
  * falsified in the next.
  */
-function forgesRedactedPayload(source: string): boolean {
+function forgesRedactedPayload(
+  source: string,
+  producers: readonly string[] = PRODUCERS,
+): boolean {
   const file = ts.createSourceFile("gate.ts", source, ts.ScriptTarget.Latest, true);
   const brandNames = new Set<string>(["RedactedPayload"]);
-  const producerNames = new Set<string>(["redactPayload"]);
+  /**
+   * `redactData` is the guard `createGuards` binds to the product redactor; calling it on
+   * guards a caller built itself mints a payload that redactor never touched.
+   */
+  const producerNames = new Set<string>(producers);
 
   /**
    * **Renames, from imports *and* exports.** A review reached the producer through
@@ -127,7 +142,9 @@ function forgesRedactedPayload(source: string): boolean {
     for (const element of bindings.elements) {
       const original = element.propertyName?.text;
       if (original === "RedactedPayload") brandNames.add(element.name.text);
-      if (original === "redactPayload") producerNames.add(element.name.text);
+      if (original !== undefined && producers.includes(original)) {
+        producerNames.add(element.name.text);
+      }
     }
   };
 
@@ -201,7 +218,7 @@ function forgesRedactedPayload(source: string): boolean {
       if (clause !== undefined && ts.isNamedExports(clause)) {
         for (const element of clause.elements) {
           const original = element.propertyName?.text ?? element.name.text;
-          if (original === "redactPayload") reExportsProducer = true;
+          if (producers.includes(original)) reExportsProducer = true;
         }
       }
     }
@@ -460,7 +477,10 @@ describe("nothing forges a RedactedPayload", () => {
       if ((ALLOWED as readonly string[]).includes(path)) continue;
 
       const source = await readFile(join(root, path), "utf8");
-      if (forgesRedactedPayload(source)) {
+      const producers = (BOUND_DATA_CONSUMERS as readonly string[]).includes(path)
+        ? PRODUCERS.filter((name) => name !== "redactData")
+        : PRODUCERS;
+      if (forgesRedactedPayload(source, producers)) {
         offenders.push(
           `${path} mints or forges a RedactedPayload; pass the value to failureFrom instead, which is where the redactor is bound`,
         );
@@ -511,6 +531,25 @@ describe("nothing forges a RedactedPayload", () => {
         'import { redactPayload as mint } from "@developer-os/core";\nconst d = mint(r, s);',
       ),
     ).toBe(true);
+    /**
+     * The bound data redactor is a producer too: a caller that supplies its own `guards`
+     * mints a payload its own redactor never touched.
+     */
+    expect(
+      forgesRedactedPayload(
+        "const d = redactData({ guards: { redactDiagnostic: (t) => t } } as CliContext, secret);",
+      ),
+    ).toBe(true);
+    expect(forgesRedactedPayload("const d = forged.guards.redactData(secret);")).toBe(true);
+    /** The bound consumer may call it, and nothing else it could not before. */
+    const consumer = PRODUCERS.filter((name) => name !== "redactData");
+    expect(
+      forgesRedactedPayload("const redact = context.guards.redactData;\nredact(x);", consumer),
+    ).toBe(false);
+    expect(forgesRedactedPayload("const d = redactPayload((t) => t, secret);", consumer)).toBe(
+      true,
+    );
+    expect(forgesRedactedPayload("const d = payload as RedactedPayload;", consumer)).toBe(true);
 
     /** Forging: asserting the brand without running the walk. */
     expect(forgesRedactedPayload("const d = payload as RedactedPayload;")).toBe(true);

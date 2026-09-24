@@ -145,6 +145,12 @@ export interface CliGuards {
    */
   readonly canonicalize: (path: string) => Promise<string>;
   readonly redactDiagnostic: (text: string) => string;
+  /**
+   * **The bound redactor for structured data that is not a failure arm** — a scheduled run's
+   * log record. The walk is the same one `failureFrom` runs on `data`, bound in `createGuards`
+   * over the product redactor, so no caller can supply its own.
+   */
+  readonly redactData: (data: unknown) => ReturnType<typeof redactPayload>;
 }
 
 /**
@@ -422,6 +428,8 @@ export function createGuards(
     canonicalize: canonicalizePlannedPath,
     redactDiagnostic: (text: string): string =>
       transaction.redactDiagnostic(text),
+    redactData: (data: unknown) =>
+      redactPayload((text: string): string => transaction.redactDiagnostic(text), data),
   };
 }
 
@@ -884,14 +892,4 @@ function productionLifecycleContext(
     now,
     launchdHost: createProductionLaunchdHost(),
   });
-}
-
-/**
- * **The bound redactor for structured data that is not a failure arm** — a scheduled run's
- * log record. The walk is the same one `failureFrom` runs on `data`, and it is bound here for
- * the same reason: this is the one place the product redactor is in scope, so a caller
- * cannot supply its own.
- */
-export function redactData(context: Pick<CliContext, "guards">, data: unknown): ReturnType<typeof redactPayload> {
-  return redactPayload(context.guards.redactDiagnostic, data);
 }
