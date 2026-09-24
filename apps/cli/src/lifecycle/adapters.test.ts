@@ -238,17 +238,19 @@ describe("the composed lifecycle effect adapters", () => {
     await expect(REJECTING_LAUNCHD_HOST.operatingSystem()).rejects.toThrow();
   });
 
-  it("refuses the Git no-replace rename and the network push until the Git commands supply them", async () => {
+  it("refuses a no-replace rename whose source left its identity, and the network push (D59)", async () => {
     const home = await newHome("placeholders");
     const ports = createLifecycleEffectPorts(home.lifecycle, REJECTING_LAUNCHD_HOST);
     const plan = syntheticGitSync(home.productHome, NONCE, 1n, "existing_network");
+    const vanished = parseCanonicalAbsolutePathText(join(home.productHome, "vanished-pack"));
+    const source = { path: vanished, dev: parseUInt64Decimal("1"), ino: parseUInt64Decimal("1"), kind: "file" };
 
-    await expect(ports.git.fs.renameGitNoReplace({} as never, home.productHome)).rejects.toMatchObject({
-      code: EXIT_CODES.capabilityUnavailable,
-      reason: "unsupported_until_plan_1b",
-    });
+    await expect(
+      ports.git.fs.renameGitNoReplace(source as never, parseCanonicalAbsolutePathText(join(home.productHome, "dest"))),
+    ).rejects.toMatchObject({ code: EXIT_CODES.recoveryRequired, reason: "git_effect_third_state" });
     await expect(ports.push.push(plan, parseLowerHexSha256("0".repeat(64)))).rejects.toMatchObject({
-      reason: "unsupported_until_plan_1b",
+      code: EXIT_CODES.securityRefusal,
+      message: "unsupported_git_distribution",
     });
     expect(ports.git.journalRoot).toBe(home.lifecycle.roots.gitEffectJournals);
   });

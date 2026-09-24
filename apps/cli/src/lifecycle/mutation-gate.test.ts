@@ -27,8 +27,11 @@ afterEach(removeCommandFixtures);
 const ACCEPTED = { dryRun: false, assumeYes: true } as const;
 const OBSERVATION = "synthetic observation";
 
-/** Every command that mutates Foundation state through `context.executor`. */
-const MUTATORS = ["capture", "ingest", "review", "reindex", "uninstall", "init"] as const;
+/**
+ * Every command module that mutates Foundation state through `context.executor`.
+ * `capture` writes through `quarantine.ts`, the seam ac8d5f6 extracted from it.
+ */
+const MUTATORS = ["quarantine", "ingest", "review", "reindex", "uninstall", "init"] as const;
 
 function globalLockPath(fixture: CommandFixture): string {
   return join(fixture.paths.stateDir, ".lifecycle.lock");
