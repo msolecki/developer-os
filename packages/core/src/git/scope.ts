@@ -236,6 +236,15 @@ class GuardedScopeWalker {
   }
 }
 
+/**
+ * The Brain index's per-note SHA-256 `contentHash`: a digest is indistinguishable by content from
+ * a hex-encoded key, so the redactor's high-entropy rule flags every one, and every reindexed Brain
+ * refused `scope_secret`. Only this schema-known field of the generated index is masked, never
+ * the file: every other byte is still scanned, and the notes it digests are scanned in their own
+ * right. No other scope path ends in `index.json` — notes are Markdown.
+ */
+const INDEX_CONTENT_HASH = /"contentHash": "[0-9a-f]{64}"/gu;
+
 async function readScanned(
   dependencies: GitScopeDependenciesV1,
   entry: LifecycleGuardedEntryV1,
@@ -254,7 +263,8 @@ async function readScanned(
   } catch {
     return refuseGitPlanning("unsupported_scope_entry", path);
   }
-  if (dependencies.redact(text) !== text) refuseGitPlanning("scope_secret", path);
+  const scanned = path.endsWith("/index.json") ? text.replace(INDEX_CONTENT_HASH, '"contentHash": ""') : text;
+  if (dependencies.redact(scanned) !== scanned) refuseGitPlanning("scope_secret", path);
   return bytes;
 }
 

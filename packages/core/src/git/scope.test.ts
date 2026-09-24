@@ -205,6 +205,23 @@ describe("readGitScopeSnapshot", () => {
     expect(JSON.stringify(refused)).not.toContain(SECRET);
   });
 
+  it("masks only the index's contentHash digests from the secret scan", async () => {
+    const digest = "ce1d111db5aa6a715c2662810a0775bc78c57daa6d7d086e09788c9de2db4326";
+    const index = (extra: string) => encoder.encode(`{\n  "notes": [\n    {\n      "contentHash": "${digest}",\n      "title": "${extra}"\n    }\n  ]\n}\n`);
+    const hexAware = (text: string) => text.replace(/[0-9a-f]{64}/gu, "[REDACTED]").replaceAll(SECRET, "[REDACTED]");
+    const clean = fakeFs({ "content/_indexes/index.json": { kind: "regular_file", bytes: index("A") } });
+    const files = await readGitScopeSnapshot({ ...clean.dependencies, redact: hexAware }, scope(), paths(["content/_indexes/index.json"]));
+    expect(files.map((file) => file.bytes)).toEqual([index("A")]);
+
+    const leaked = fakeFs({ "content/_indexes/index.json": { kind: "regular_file", bytes: index(digest) } });
+    const refused = await refusal(readGitScopeSnapshot({ ...leaked.dependencies, redact: hexAware }, scope(), paths(["content/_indexes/index.json"])));
+    expect(refused.reason).toBe("scope_secret");
+
+    const note = fakeFs({ "content/DEV/a.md": { kind: "regular_file", bytes: encoder.encode(`"contentHash": "${digest}"\n`) } });
+    const noteRefused = await refusal(readGitScopeSnapshot({ ...note.dependencies, redact: hexAware }, scope(), paths(["content/DEV/a.md"])));
+    expect(noteRefused.reason).toBe("scope_secret");
+  });
+
   it("skips an absent index artifact but treats a vanished note as a concurrent edit", async () => {
     const fixture = fakeFs({ "content/DEV/a.md": { kind: "regular_file", bytes: encoder.encode("# A\n") } });
     const files = await readGitScopeSnapshot(
