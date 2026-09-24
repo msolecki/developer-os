@@ -332,7 +332,10 @@ describe("the durable manifest anchor after attach (D54)", () => {
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("never lets an earlier installation's anchor settle a reinstall (finding 1)", async () => {
+    /** Two real installations never share an instant; the fixture's default clock only moves with its ID sequence. */
+    let tick = 0;
     const fixture = await createCommandFixture("anchor-reinstall", {
+      now: () => new Date(Date.UTC(2026, 6, 30, 12, 0, 0) + 1000 * tick++),
       bootstrapAvailable: true,
       instructions: INSTRUCTIONS,
       runner: claudeRunner(),
