@@ -5,6 +5,8 @@
  * names: containment, nested repositories, links, owners, devices and the
  * 16-MiB per-file and 1-GiB aggregate snapshot bounds.
  */
+import { createHash } from "node:crypto";
+
 import type { GitScopeSnapshotV1 } from "../config/lifecycle.js";
 import {
   LifecycleRecoveryRequiredError,
@@ -239,31 +241,64 @@ class GuardedScopeWalker {
 /**
  * The Brain index's per-note SHA-256 `contentHash`: a digest is indistinguishable by content from
  * a hex-encoded key, so the redactor's high-entropy rule flags every one, and every reindexed Brain
- * refused `scope_secret`. Only this schema-known field of the generated index is masked, never
- * the file: every other byte is still scanned, and the notes it digests are scanned in their own
- * right. No other scope path ends in `index.json` — notes are Markdown.
+ * refused `scope_secret`. Only this schema-known field of the scope's own `index.json` is masked,
+ * and only where it equals the SHA-256 of the snapshot's bytes of the note its entry names, so the
+ * slot cannot carry a hex secret: every other byte is still scanned, and the notes it digests are
+ * scanned in their own right.
  */
-const INDEX_CONTENT_HASH = /"contentHash": "[0-9a-f]{64}"/gu;
+const INDEX_CONTENT_HASH = /"contentHash": "([0-9a-f]{64})"/gu;
 
-async function readScanned(
+function verifiedContentHashes(text: string, notes: ReadonlyMap<string, Uint8Array>): ReadonlySet<string> {
+  const verified = new Set<string>();
+  let document: unknown;
+  try {
+    document = JSON.parse(text);
+  } catch {
+    return verified;
+  }
+  const entries = (document as { readonly notes?: unknown } | null)?.notes;
+  if (!Array.isArray(entries)) return verified;
+  for (const entry of entries as unknown[]) {
+    const { path, contentHash } = (entry ?? {}) as { readonly path?: unknown; readonly contentHash?: unknown };
+    const bytes = typeof path === "string" ? notes.get(path) : undefined;
+    if (bytes !== undefined && typeof contentHash === "string" &&
+      createHash("sha256").update(bytes).digest("hex") === contentHash) {
+      verified.add(contentHash);
+    }
+  }
+  return verified;
+}
+
+async function readGuarded(
   dependencies: GitScopeDependenciesV1,
   entry: LifecycleGuardedEntryV1,
   path: VaultRelativePathV1,
 ): Promise<Uint8Array> {
-  let bytes: Uint8Array;
   try {
-    bytes = await dependencies.fs.readRegular(entry, GIT_SCOPE_BOUNDS.fileMaxBytes);
+    return await dependencies.fs.readRegular(entry, GIT_SCOPE_BOUNDS.fileMaxBytes);
   } catch (error) {
     if (error instanceof LifecycleRecoveryRequiredError) refuseGitPlanning("concurrent_change", path);
     throw error;
   }
+}
+
+/** `index` carries the snapshot's note bytes when `path` is the scope's own `index.json`. */
+function scan(
+  dependencies: GitScopeDependenciesV1,
+  bytes: Uint8Array,
+  path: VaultRelativePathV1,
+  index: ReadonlyMap<string, Uint8Array> | null,
+): Uint8Array {
   let text: string;
   try {
     text = strictUtf8.decode(bytes);
   } catch {
     return refuseGitPlanning("unsupported_scope_entry", path);
   }
-  const scanned = path.endsWith("/index.json") ? text.replace(INDEX_CONTENT_HASH, '"contentHash": ""') : text;
+  const verified = index === null ? null : verifiedContentHashes(text, index);
+  const scanned = verified === null
+    ? text
+    : text.replace(INDEX_CONTENT_HASH, (field, digest: string) => verified.has(digest) ? '"contentHash": ""' : field);
   if (dependencies.redact(scanned) !== scanned) refuseGitPlanning("scope_secret", path);
   return bytes;
 }
@@ -297,10 +332,17 @@ export async function readGitScopeSnapshot(
     entries.push(entry);
     present.push(path);
   }
+  const read = new Map<string, Uint8Array>();
+  for (const [index, entry] of entries.entries()) {
+    const path = present[index] as VaultRelativePathV1;
+    read.set(path, await readGuarded(dependencies, entry, path));
+  }
+  const indexPath = gitScopeIndexArtifactPaths(scope).find((artifact) => artifact.endsWith("/index.json"));
   const files: GitScopeFileV1[] = [];
   for (const [index, entry] of entries.entries()) {
     const path = present[index] as VaultRelativePathV1;
-    files.push({ path, bytes: await readScanned(dependencies, entry, path), executable: (entry.mode & 0o100) !== 0 });
+    const bytes = scan(dependencies, read.get(path) as Uint8Array, path, path === indexPath ? read : null);
+    files.push({ path, bytes, executable: (entry.mode & 0o100) !== 0 });
   }
   return files;
 }
@@ -315,5 +357,5 @@ export async function readGitRetiringPath(
   const entry = await new GuardedScopeWalker(dependencies, root).leaf(relative);
   if (entry === null) return null;
   if (BigInt(entry.size) > BigInt(GIT_SCOPE_BOUNDS.fileMaxBytes)) refuseGitPlanning("scope_file_too_large", relative);
-  return readScanned(dependencies, entry, relative);
+  return scan(dependencies, await readGuarded(dependencies, entry, relative), relative, null);
 }

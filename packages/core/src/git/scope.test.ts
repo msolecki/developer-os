@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import { gitScopeFingerprint, parseVaultSegment, type GitScopeSnapshotV1 } from "../config/lifecycle.js";
@@ -206,16 +208,29 @@ describe("readGitScopeSnapshot", () => {
   });
 
   it("masks only the index's contentHash digests from the secret scan", async () => {
-    const digest = "ce1d111db5aa6a715c2662810a0775bc78c57daa6d7d086e09788c9de2db4326";
-    const index = (extra: string) => encoder.encode(`{\n  "notes": [\n    {\n      "contentHash": "${digest}",\n      "title": "${extra}"\n    }\n  ]\n}\n`);
+    const noteBytes = encoder.encode("# A\n");
+    const digest = createHash("sha256").update(noteBytes).digest("hex");
+    const index = (extra: string, hash = digest) => encoder.encode(`{\n  "notes": [\n    {\n      "path": "content/DEV/a.md",\n      "title": "${extra}",\n      "contentHash": "${hash}"\n    }\n  ]\n}\n`);
     const hexAware = (text: string) => text.replace(/[0-9a-f]{64}/gu, "[REDACTED]").replaceAll(SECRET, "[REDACTED]");
-    const clean = fakeFs({ "content/_indexes/index.json": { kind: "regular_file", bytes: index("A") } });
-    const files = await readGitScopeSnapshot({ ...clean.dependencies, redact: hexAware }, scope(), paths(["content/_indexes/index.json"]));
-    expect(files.map((file) => file.bytes)).toEqual([index("A")]);
+    const snapshot = (nodes: Readonly<Record<string, FakeNode>>) => {
+      const fixture = fakeFs({ "content/DEV/a.md": { kind: "regular_file", bytes: noteBytes }, ...nodes });
+      return readGitScopeSnapshot({ ...fixture.dependencies, redact: hexAware }, scope(), paths(["content/DEV/a.md", ...Object.keys(nodes)]));
+    };
+    const files = await snapshot({ "content/_indexes/index.json": { kind: "regular_file", bytes: index("A") } });
+    expect(files.map((file) => file.bytes)).toEqual([noteBytes, index("A")]);
 
-    const leaked = fakeFs({ "content/_indexes/index.json": { kind: "regular_file", bytes: index(digest) } });
-    const refused = await refusal(readGitScopeSnapshot({ ...leaked.dependencies, redact: hexAware }, scope(), paths(["content/_indexes/index.json"])));
-    expect(refused.reason).toBe("scope_secret");
+    const leaked = await refusal(snapshot({ "content/_indexes/index.json": { kind: "regular_file", bytes: index(digest) } }));
+    expect(leaked.reason).toBe("scope_secret");
+
+    /** A 256-bit secret in the slot is not the digest of the note the entry names. */
+    const hidden = "5ec2e75ec2e75ec2e75ec2e75ec2e75ec2e75ec2e75ec2e75ec2e75ec2e75ec2";
+    const smuggled = await refusal(snapshot({ "content/_indexes/index.json": { kind: "regular_file", bytes: index("A", hidden) } }));
+    expect(smuggled.reason).toBe("scope_secret");
+    expect(smuggled.path).toBe("content/_indexes/index.json");
+
+    /** Only the scope's own index artifact is masked, not any file of that name. */
+    const elsewhere = await refusal(snapshot({ "content/DEV/index.json": { kind: "regular_file", bytes: index("A") } }));
+    expect(elsewhere.reason).toBe("scope_secret");
 
     const note = fakeFs({ "content/DEV/a.md": { kind: "regular_file", bytes: encoder.encode(`"contentHash": "${digest}"\n`) } });
     const noteRefused = await refusal(readGitScopeSnapshot({ ...note.dependencies, redact: hexAware }, scope(), paths(["content/DEV/a.md"])));
