@@ -528,12 +528,12 @@ export async function buildBootstrapRetentionEvidence(
   for (const participant of participants) {
     const physical = await physicalPath(participant.initialJournal.finalPath);
     /** Deliberately unmemoized: this pair must observe the file, not a cached answer, across the read below. */
-    const before = await projectBootstrapRetentionPostimage(physical);
+    const before = await projectBootstrapRetentionPostimage(physical, request.productHome);
     const observed = await request.reader.inventoryExactNamespaces([physical]);
     const file = observed.find((candidate) => candidate.path === physical);
     if (before?.kind !== "regular_file" || file?.kind !== "regular_file") throw new Error("Foundation terminal journal is absent");
     const bytes = await request.reader.readRegularFile(file, participant.maximumJournalBytes);
-    const after = await projectBootstrapRetentionPostimage(physical);
+    const after = await projectBootstrapRetentionPostimage(physical, request.productHome);
     if (after?.kind !== "regular_file" || !sameValue(before, after)) throw new Error("Foundation terminal journal changed during projection");
     foundationEvidence.push({
       participantId: participant.id,

@@ -81,6 +81,8 @@ const encoder = new TextEncoder();
 const roots = new Set<string>();
 
 const path = (value: string): CanonicalAbsolutePathV1 => value as CanonicalAbsolutePathV1;
+/** A product home no fixture tree lives under, so nothing a walk meets is judged elsewhere. */
+const UNRELATED_HOME = path("/developer-os-unrelated-product-home");
 const hash = (value: Uint8Array | string): LowerHexSha256 => parseLowerHexSha256(
   createHash("sha256").update(value).digest("hex"),
 );
@@ -192,7 +194,7 @@ describe("projectBootstrapRetentionPostimage public boundary", () => {
     await nodeFs.mkdir(subtree, { mode: 0o700 });
     await nodeFs.writeFile(nested, "nested\n", { mode: 0o600 });
 
-    const projectedFile = await projectBootstrapRetentionPostimage(path(file));
+    const projectedFile = await projectBootstrapRetentionPostimage(path(file), UNRELATED_HOME);
     expect(projectedFile).toMatchObject({
       kind: "regular_file",
       mode: 0o600,
@@ -200,7 +202,7 @@ describe("projectBootstrapRetentionPostimage public boundary", () => {
       bytes: "8",
       sha256: hash("payload\n"),
     });
-    const projectedTree = await projectBootstrapRetentionPostimage(path(subtree));
+    const projectedTree = await projectBootstrapRetentionPostimage(path(subtree), UNRELATED_HOME);
     expect(projectedTree).toMatchObject({
       kind: "directory_tree",
       mode: 0o700,
@@ -220,11 +222,55 @@ describe("projectBootstrapRetentionPostimage public boundary", () => {
     await nodeFs.writeFile(target, "target\n", { mode: 0o600 });
     await nodeFs.symlink(target, symlink);
 
-    await expect(projectBootstrapRetentionPostimage(path(missing))).resolves.toBeNull();
-    await expect(projectBootstrapRetentionPostimage(path(symlink)))
+    await expect(projectBootstrapRetentionPostimage(path(missing), UNRELATED_HOME)).resolves.toBeNull();
+    await expect(projectBootstrapRetentionPostimage(path(symlink), UNRELATED_HOME))
       .rejects.toBeInstanceOf(BootstrapStateError);
     expect(await nodeFs.readlink(symlink)).toBe(target);
     expect(await nodeFs.readFile(target, "utf8")).toBe("target\n");
+  });
+
+  async function productHomeWithState(prefix: string): Promise<{ home: string; state: string }> {
+    const home = await nodeFs.mkdtemp(join(tmpdir(), prefix));
+    roots.add(home);
+    await nodeFs.chmod(home, 0o700);
+    const state = join(home, "state");
+    await nodeFs.mkdir(state, { mode: 0o700 });
+    await nodeFs.writeFile(join(state, "row"), "row\n", { mode: 0o600 });
+    return { home, state };
+  }
+
+  it("refuses a directory standing where the manifest anchor belongs", async () => {
+    const { home, state } = await productHomeWithState("developer-os-retained-anchor-directory-");
+    await nodeFs.mkdir(join(state, "manifest-anchor.json"), { mode: 0o700 });
+    await nodeFs.writeFile(join(state, "manifest-anchor.json", "smuggled"), "smuggled\n", { mode: 0o600 });
+
+    await expect(projectBootstrapRetentionPostimage(path(state), path(home)))
+      .rejects.toBeInstanceOf(BootstrapStateError);
+  });
+
+  it("refuses the D52 link shape nested anywhere but the product home's own codex-ingest-home", async () => {
+    const { home, state } = await productHomeWithState("developer-os-retained-nested-link-");
+    const nested = join(state, "x", "state", "codex-ingest-home");
+    await nodeFs.mkdir(join(state, "x"), { mode: 0o700 });
+    await nodeFs.mkdir(join(state, "x", "state"), { mode: 0o700 });
+    await nodeFs.mkdir(nested, { mode: 0o700 });
+    await nodeFs.symlink(join(home, "elsewhere"), join(nested, "auth.json"));
+
+    await expect(projectBootstrapRetentionPostimage(path(state), path(home)))
+      .rejects.toBeInstanceOf(BootstrapStateError);
+  });
+
+  it("skips the product home's regular anchor at any mode and its own D52 link", async () => {
+    const { home, state } = await productHomeWithState("developer-os-retained-judged-elsewhere-");
+    await nodeFs.writeFile(join(state, "manifest-anchor.json"), "{}\n", { mode: 0o644 });
+    await nodeFs.chmod(join(state, "manifest-anchor.json"), 0o644);
+    await nodeFs.mkdir(join(state, "codex-ingest-home"), { mode: 0o700 });
+    await nodeFs.symlink(join(home, "codex-auth"), join(state, "codex-ingest-home", "auth.json"));
+
+    const projected = await projectBootstrapRetentionPostimage(path(state), path(home));
+    expect(projected?.kind).toBe("directory_tree");
+    expect(projected?.kind === "directory_tree" ? projected.entries?.map((entry) => entry.relativePath) : null)
+      .toEqual(["codex-ingest-home", "row"]);
   });
 });
 
@@ -784,7 +830,7 @@ describe("projectRetainedDirectoryTree", () => {
       },
       projectPostimage: (candidate) => {
         if (candidate === row.parent.path) return Promise.resolve(parentProjection(row));
-        if (candidate === row.sourcePath) return projectRetainedDirectoryTree(path(root), expected);
+        if (candidate === row.sourcePath) return projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME);
         return Promise.resolve(null);
       },
       syncDirectory: () => Promise.resolve(),
@@ -841,7 +887,7 @@ describe("projectRetainedDirectoryTree", () => {
       entries,
     };
 
-    await expect(projectRetainedDirectoryTree(path(root), expected)).resolves.toEqual(expected);
+    await expect(projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME)).resolves.toEqual(expected);
   });
 
   it("refuses a child inserted after the initial directory enumeration", async () => {
@@ -879,7 +925,7 @@ describe("projectRetainedDirectoryTree", () => {
     };
 
     try {
-      await expect(projectRetainedDirectoryTree(path(root), expected)).rejects.toBeInstanceOf(BootstrapStateError);
+      await expect(projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME)).rejects.toBeInstanceOf(BootstrapStateError);
     } finally {
       fsRaceControl.afterLstat = undefined;
     }
@@ -916,7 +962,7 @@ describe("projectRetainedDirectoryTree", () => {
     fsRaceControl.failClosePath = root;
 
     try {
-      await expect(projectRetainedDirectoryTree(path(root), expected)).rejects.toBeInstanceOf(BootstrapStateError);
+      await expect(projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME)).rejects.toBeInstanceOf(BootstrapStateError);
     } finally {
       fsRaceControl.failClosePath = undefined;
     }
@@ -958,7 +1004,7 @@ describe("projectRetainedDirectoryTree", () => {
     };
 
     try {
-      await expect(projectRetainedDirectoryTree(path(root), expected)).rejects.toBeInstanceOf(BootstrapStateError);
+      await expect(projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME)).rejects.toBeInstanceOf(BootstrapStateError);
     } finally {
       fsRaceControl.afterLstat = undefined;
     }
@@ -1018,7 +1064,7 @@ describe("projectRetainedDirectoryTree", () => {
     };
 
     try {
-      await expect(projectRetainedDirectoryTree(path(root), expected)).rejects.toBeInstanceOf(BootstrapStateError);
+      await expect(projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME)).rejects.toBeInstanceOf(BootstrapStateError);
     } finally {
       fsRaceControl.afterLstat = undefined;
     }
@@ -1073,7 +1119,7 @@ describe("projectRetainedDirectoryTree", () => {
       },
       projectPostimage: (candidate) => {
         if (candidate === row.parent.path) return Promise.resolve(parentProjection(row));
-        if (candidate === row.sourcePath) return projectRetainedDirectoryTree(path(root), expected);
+        if (candidate === row.sourcePath) return projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME);
         return Promise.resolve(null);
       },
       syncDirectory: () => Promise.resolve(),
@@ -1150,7 +1196,7 @@ describe("projectRetainedDirectoryTree", () => {
       },
       projectPostimage: (candidate) => {
         if (candidate === row.parent.path) return Promise.resolve(parentProjection(row));
-        if (candidate === row.sourcePath) return projectRetainedDirectoryTree(path(root), expected);
+        if (candidate === row.sourcePath) return projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME);
         return Promise.resolve(null);
       },
       syncDirectory: () => Promise.resolve(),
@@ -1195,11 +1241,11 @@ describe("projectRetainedDirectoryTree", () => {
       entries,
     };
 
-    await expect(projectRetainedDirectoryTree(path(root), expected)).resolves.toEqual(expected);
+    await expect(projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME)).resolves.toEqual(expected);
     await nodeFs.writeFile(join(root, "extra"), "extra", { mode: 0o600 });
     const namesBefore = (await nodeFs.readdir(root)).sort();
 
-    await expect(projectRetainedDirectoryTree(path(root), expected)).rejects.toBeInstanceOf(BootstrapStateError);
+    await expect(projectRetainedDirectoryTree(path(root), expected, UNRELATED_HOME)).rejects.toBeInstanceOf(BootstrapStateError);
     expect((await nodeFs.readdir(root)).sort()).toEqual(namesBefore);
   });
 });

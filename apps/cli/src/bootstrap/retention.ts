@@ -187,16 +187,23 @@ async function projectRegularEntry(
 
 /**
  * Runtime state beside retained rows whose shape another rule judges, so a parent walk over
- * `state` neither projects nor refuses it: D52's one symlink (cf. 53794c5), and D54's anchor,
- * which the gate admits by shape and which must not wedge the gate when malformed (D54 review,
- * finding 3).
+ * `state` neither projects nor refuses it: D52's one symlink (cf. 53794c5, owned by the effective
+ * uid as in the absent-manifest walk), and D54's anchor, which the gate admits by shape and which
+ * must not wedge the gate when malformed (D54 review, finding 3). Both are exact product-home
+ * paths. Only a regular file may stand at the anchor's path; a link of another owner, or either
+ * shape nested elsewhere, is projected or refused like any other entry.
  */
-function judgedElsewhere(absolutePath: string, stats: BigIntStats): boolean {
-  if (absolutePath.endsWith(`/${MANIFEST_ANCHOR_RELATIVE_PATH}`)) return true;
-  return stats.isSymbolicLink() && absolutePath.endsWith(`/${CODEX_INGEST_HOME_RELATIVE_PATH}/${CODEX_INGEST_AUTH_LINK}`);
+function judgedElsewhere(productHome: string, absolutePath: string, stats: BigIntStats): boolean {
+  if (absolutePath === `${productHome}/${MANIFEST_ANCHOR_RELATIVE_PATH}`) {
+    return stats.isFile() && !stats.isSymbolicLink() ? true : refuse();
+  }
+  return absolutePath === `${productHome}/${CODEX_INGEST_HOME_RELATIVE_PATH}/${CODEX_INGEST_AUTH_LINK}` &&
+    stats.isSymbolicLink() &&
+    stats.uid === BigInt(process.geteuid?.() ?? -1);
 }
 
 async function walkDirectory(
+  productHome: string,
   root: string,
   relativeDirectory: string,
   entries: BootstrapRetentionDirectoryEntryV1[],
@@ -228,7 +235,7 @@ async function walkDirectory(
       const identity = `${stats.dev.toString()}:${stats.ino.toString()}`;
       if (identities.has(identity) || entries.length >= BOOTSTRAP_RETAINED_MAX_ENTRIES) return refuse();
       identities.add(identity);
-      if (judgedElsewhere(absolutePath, stats)) {
+      if (judgedElsewhere(productHome, absolutePath, stats)) {
         skipped.add(relativePath);
         continue;
       }
@@ -245,7 +252,7 @@ async function walkDirectory(
           dev: uint64(stats.dev),
           ino: uint64(stats.ino),
         });
-        await walkDirectory(root, relativePath, entries, identities, stats, skipped);
+        await walkDirectory(productHome, root, relativePath, entries, identities, stats, skipped);
       } else if (stats.isFile() && !stats.isSymbolicLink()) {
         entries.push(await projectRegularEntry(absolutePath, relativePath, stats));
       } else {
@@ -277,13 +284,14 @@ async function walkDirectory(
 /** Exported so tests can inject a counting wrapper via `projectBootstrapRetentionPostimage`'s parameter; production callers rely on the default. */
 export async function projectRetainedDirectoryTreeOnce(
   root: CanonicalAbsolutePathV1,
+  productHome: CanonicalAbsolutePathV1,
 ): Promise<Extract<BootstrapRetentionPostimageV1, { kind: "directory_tree" }>> {
   const rootBefore = await nodeFs.lstat(root, { bigint: true }).catch(() => refuse());
   if (!exactDirectory(rootBefore)) return refuse();
   const entries: BootstrapRetentionDirectoryEntryV1[] = [];
   const identities = new Set<string>([`${rootBefore.dev.toString()}:${rootBefore.ino.toString()}`]);
   const skipped = new Set<string>();
-  await walkDirectory(root, "", entries, identities, rootBefore, skipped);
+  await walkDirectory(productHome, root, "", entries, identities, rootBefore, skipped);
   entries.sort((left, right) => compareUtf8(left.relativePath, right.relativePath));
   let regularFileBytes = 0n;
   for (const entry of entries) {
@@ -323,6 +331,7 @@ export async function projectRetainedDirectoryTreeOnce(
 /** Exact, no-follow projection shared by evidence construction and retained-row recovery. */
 export async function projectBootstrapRetentionPostimage(
   path: CanonicalAbsolutePathV1,
+  productHome: CanonicalAbsolutePathV1,
   walkDirectoryTreeOnce: typeof projectRetainedDirectoryTreeOnce = projectRetainedDirectoryTreeOnce,
 ): Promise<BootstrapRetentionPostimageV1 | null> {
   let firstStats: BigIntStats;
@@ -333,8 +342,8 @@ export async function projectBootstrapRetentionPostimage(
     return refuse();
   }
   if (firstStats.isDirectory() && !firstStats.isSymbolicLink()) {
-    const first = await walkDirectoryTreeOnce(path);
-    const second = await walkDirectoryTreeOnce(path);
+    const first = await walkDirectoryTreeOnce(path, productHome);
+    const second = await walkDirectoryTreeOnce(path, productHome);
     if (!sameValue(first, second)) return refuse();
     return structuredClone(second);
   }
@@ -362,10 +371,11 @@ export async function projectBootstrapRetentionPostimage(
 export async function projectRetainedDirectoryTree(
   root: CanonicalAbsolutePathV1,
   expectedRoot: Extract<BootstrapRetentionPostimageV1, { kind: "directory_tree" }>,
+  productHome: CanonicalAbsolutePathV1,
 ): Promise<Extract<BootstrapRetentionPostimageV1, { kind: "directory_tree" }>> {
   if (expectedRoot.entries === undefined) return refuse();
-  const first = await projectRetainedDirectoryTreeOnce(root);
-  const second = await projectRetainedDirectoryTreeOnce(root);
+  const first = await projectRetainedDirectoryTreeOnce(root, productHome);
+  const second = await projectRetainedDirectoryTreeOnce(root, productHome);
   if (!sameValue(first, second) || !sameValue(second, expectedRoot)) return refuse();
   return structuredClone(second);
 }

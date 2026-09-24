@@ -3678,7 +3678,10 @@ export class BootstrapExecutor {
             : foundationMutation?.digest?.ordinal === cursor && foundationMutation.stagedPath !== null
               ? `${foundationMutation.stagedPath}.sha256` as CanonicalAbsolutePathV1
               : reachedConsumer?.path ?? row.ref.path;
-        const payload = await projectBootstrapRetentionPostimage(retainedPath);
+        const payload = await projectBootstrapRetentionPostimage(
+          retainedPath,
+          this.#dependencies.paths.home as CanonicalAbsolutePathV1,
+        );
         const writing = journal.payloadWriteState;
         if (writing.state === "writing" && writing.ordinal === cursor) {
           if (
@@ -3770,7 +3773,8 @@ export class BootstrapExecutor {
     const retainer = new BootstrapRetainer({
       renameSameParentNoReplace: this.#dependencies.renameSameParentNoReplace,
       syncDirectory: (path) => syncDirectory(path),
-      projectPostimage: projectBootstrapRetentionPostimage,
+      projectPostimage: (path) =>
+        projectBootstrapRetentionPostimage(path, this.#dependencies.paths.home as CanonicalAbsolutePathV1),
       interrupt: (point) => {
         this.checkpoint(point);
       },

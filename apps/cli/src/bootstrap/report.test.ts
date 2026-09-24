@@ -285,13 +285,15 @@ describe("inspectBootstrapEvidence", () => {
     }
     if (retainedDirectory === null) throw new Error("fixture retained no directory tombstone");
     let walks = 0;
-    const countingWalk = (root: CanonicalAbsolutePathV1) => {
+    const countingWalk = (root: CanonicalAbsolutePathV1, productHome: CanonicalAbsolutePathV1) => {
       if (root === retainedDirectory) walks += 1;
-      return projectRetainedDirectoryTreeOnce(root);
+      return projectRetainedDirectoryTreeOnce(root, productHome);
     };
+    const base = requestFor(fixture);
     const request = {
-      ...requestFor(fixture),
-      projectPostimage: (path: CanonicalAbsolutePathV1) => projectBootstrapRetentionPostimage(path, countingWalk),
+      ...base,
+      projectPostimage: (path: CanonicalAbsolutePathV1) =>
+        projectBootstrapRetentionPostimage(path, base.productHome, countingWalk),
     };
 
     await inspectBootstrapEvidenceAdmission(request);

@@ -236,7 +236,8 @@ export function createBootstrapEvidenceInspectionRequest(input: {
       join(input.productHome, "staging", "fresh-v2-init"),
     ])].map((root) => root as CanonicalAbsolutePathV1),
     reader: input.reader ?? new NodeBootstrapEvidenceGuardedReader(),
-    projectPostimage: input.projectPostimage ?? projectBootstrapRetentionPostimage,
+    projectPostimage: input.projectPostimage ??
+      ((path) => projectBootstrapRetentionPostimage(path, input.productHome as CanonicalAbsolutePathV1)),
     listNames: input.listNames ?? ((directory) => nodeFs.readdir(directory)),
     validatePlan: (value) => {
       const candidate = typeof value === "object" && value !== null && !Array.isArray(value)
