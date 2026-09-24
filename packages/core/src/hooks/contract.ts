@@ -20,8 +20,12 @@ export class HookExecutablePathError extends Error {
   }
 }
 
-/** Vendors run the command string through a shell, so an unsafe path is refused rather than quoted. */
-const SAFE = /^\/[A-Za-z0-9._+/-]+$/u;
+/**
+ * Vendors run the command string through a shell, so an unsafe path is refused rather than quoted.
+ * `@` is inert in sh, bash and zsh without a following `(`, which the charset excludes; it admits a
+ * versioned cellar formula such as `/opt/homebrew/Cellar/node@24/...`.
+ */
+const SAFE = /^\/[A-Za-z0-9._+@/-]+$/u;
 const VERSION_SEGMENT = /^\d+\.\d+\.\d+/u;
 const HASH_SEGMENT = /^[0-9a-f]{16,}$/u;
 
