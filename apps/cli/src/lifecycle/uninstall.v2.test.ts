@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   EXIT_CODES,
+  MANIFEST_ANCHOR_RELATIVE_PATH,
   SCHEDULED_JOB_IDS,
   encodeCanonicalJson,
   lifecycleBookkeepingPaths,
@@ -278,7 +279,8 @@ async function productHomeResidue(fixture: CommandFixture): Promise<readonly str
 
 /**
  * A12's closed set, every retained bootstrap-evidence path, the directories that exist only to
- * hold one, and `state` itself — which no rule projects away. Nothing else may survive.
+ * hold one, and `state` itself — which no rule projects away. Nothing else may survive. The
+ * manifest anchor is the one member uninstall removes (D54 review, finding 1).
  */
 async function bookkeepingSetAndRetainedEvidence(
   fixture: CommandFixture,
@@ -286,7 +288,7 @@ async function bookkeepingSetAndRetainedEvidence(
   const evidence = await evidenceOf(fixture);
   const home = fixture.paths.home;
   const expected = new Set<string>([
-    ...[...lifecycleBookkeepingPaths(home)],
+    ...[...lifecycleBookkeepingPaths(home)].filter((path) => path !== join(home, MANIFEST_ANCHOR_RELATIVE_PATH)),
     ...evidence.retainedPaths,
     fixture.paths.stateDir,
   ]);
@@ -662,10 +664,10 @@ describe("V2 uninstall through the lifecycle coordinator", () => {
 describe("V2 uninstall and the state/hooks reserved runtime path (Spec 1 §6, amended 2026-09-22)", () => {
   const RECORDS = ["claude.PreToolUse.json", "codex.session_start.json", "claude.Stop.json.tmp-0123456789abcdef"];
 
-  /** Task 11 has fresh `init` create it; until then the fixture plants what a hook would have written. */
+  /** Fresh `init` creates the directory (Task 11); the fixture plants what a hook would have written. */
   async function plantHooks(fixture: CommandFixture): Promise<string> {
     const hooks = join(fixture.paths.stateDir, "hooks");
-    await nodeFs.mkdir(hooks, { mode: 0o700 });
+    await nodeFs.mkdir(hooks, { recursive: true, mode: 0o700 });
     await nodeFs.chmod(hooks, 0o700);
     for (const name of RECORDS) await nodeFs.writeFile(join(hooks, name), "{}\n", { mode: 0o600 });
     return hooks;
