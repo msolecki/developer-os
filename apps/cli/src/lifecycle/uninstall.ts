@@ -385,13 +385,18 @@ function placeholderRefs(
   coordinatorId: string,
   ids: readonly string[],
 ): readonly FoundationParticipantRefV1[] {
+  /** An empty chunk keeps the one widened placeholder mutation this pass has always measured. */
+  const targetsOf = (chunk: readonly ArtifactMutationV1[]): readonly CanonicalAbsolutePathV1[] =>
+    chunk.length === 0
+      ? [canonical(`${inputs.productHome}/state/0.placeholder`)]
+      : chunk.map((mutation) => mutation.targetPath);
   const pairs = [
-    { slot: "uninstall_marker" as const, forward: ids[0], compensation: ids[1], count: 1 },
+    { slot: "uninstall_marker" as const, forward: ids[0], compensation: ids[1], targets: [inputs.markerPreimage.targetPath] },
     ...inputs.chunks.map((chunk, index) => ({
       slot: "uninstall_artifacts" as const,
       forward: ids[2 + 2 * index],
       compensation: ids[3 + 2 * index],
-      count: Math.max(1, chunk.length),
+      targets: targetsOf(chunk),
     })),
   ];
   const refs: FoundationParticipantRefV1[] = [];
@@ -403,8 +408,9 @@ function placeholderRefs(
       const core = {
         slot: pair.slot,
         role,
-        mutations: Array.from({ length: pair.count }, (_unused, ordinal) => ({
-          targetPath: canonical(`${inputs.productHome}/state/${String(ordinal)}.placeholder`),
+        /** The inverse recreates its chunk in reverse, exactly as the staged pair will. */
+        mutations: (index === 0 ? pair.targets : [...pair.targets].reverse()).map((targetPath) => ({
+          targetPath,
           operation: "remove" as const,
           expectedBeforeHash: WIDEST_HASH as LowerHexSha256,
           contentHash: null,
