@@ -249,7 +249,8 @@ describe("automation end to end through an injected launchd domain", () => {
 
       const plan = home.plans.at(-1);
       if (plan === undefined) throw new Error("no coordinator plan was published");
-      expect(validateLifecyclePlanGrammar(plan, lifecycleVariantFacts(plan))).toBe("uninstall/present_manifest_without_launchd");
+      // Disable preserves the schedules, so the config's automation.lifecycle record selects P (Spec 1 A14), with nothing to unload.
+      expect(validateLifecyclePlanGrammar(plan, lifecycleVariantFacts(plan))).toBe("uninstall/present_manifest");
       expect(home.launchd.events).toStrictEqual(eventsBefore);
       expect(await nodeFs.readFile(foreign, "utf8")).toBe("<plist version=\"1.0\"><dict/></plist>\n");
       expect(await readOrNull(home.paths.manifestFile)).toBeNull();
