@@ -26,7 +26,12 @@ import type { GitCommandDataV1 } from "./index.js";
 import { gitScopeOf } from "./service.js";
 import { createBareRemote, scriptedEffectPorts, scriptedGitRuntime } from "./testing.js";
 
-afterAll(removeCommandFixtures);
+let fixtureRoot: string | null = null;
+
+afterAll(async () => {
+  await removeCommandFixtures();
+  if (fixtureRoot !== null) await nodeFs.rm(fixtureRoot, { recursive: true, force: true });
+});
 
 const runtime = scriptedGitRuntime();
 const rejectDestination = { on: false };
@@ -40,7 +45,14 @@ let shared: Promise<GitHomeFixtureV1> | null = null;
 
 function sharedHome(): Promise<GitHomeFixtureV1> {
   shared ??= (async () => {
+    /**
+     * Not under macOS's per-user TMPDIR (`/var/folders/<xx>/<random>/T`), which the redactor
+     * reads as high-entropy: the local remote's URL in `.git/config` would trip
+     * `git_config_secret`, a refusal this suite does not exercise.
+     */
+    fixtureRoot = await nodeFs.realpath(await nodeFs.mkdtemp("/tmp/developer-os-git-v2-"));
     const fixture = await createCommandFixture("git-v2", {
+      root: fixtureRoot,
       bootstrapAvailable: true,
       effectPorts: scriptedEffectPorts(runtime, rejectDestination),
     });
@@ -212,8 +224,12 @@ describe("git on a real V2 home", () => {
     async () => {
       const home = await sharedHome();
       const result = await runConfig(home.context, { operation: "set", key: "brainPath", value: join(home.root, "elsewhere") });
-      expect(result.ok).toBe(false);
-      expect(JSON.stringify(result)).toContain("config_brain_path_is_repository_identity");
+      /** The envelope carries `config_refusal` and the reason's fixed text, never the reason code (Spec 1 §2.2). */
+      expect(result).toMatchObject({
+        ok: false,
+        code: EXIT_CODES.invalidInput,
+        error: { kind: "config_refusal", message: "brainPath: brainPath is repository identity while a Git lifecycle record exists" },
+      });
     },
     REAL_FILESYSTEM_TIMEOUT_MS,
   );
