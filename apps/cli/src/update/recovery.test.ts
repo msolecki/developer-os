@@ -171,6 +171,14 @@ describe("the update_executor_cleanup suffix", () => {
     expect(await exists(finalPath)).toBe(false);
   });
 
+  it("reads fresh init's empty reservation as no record", async () => {
+    const { home, finalPath } = await world();
+    await nodeFs.writeFile(finalPath, "", { mode: 0o600 });
+    await expect(readUpdateExecutorRecord(guardedFs(), home, uid, SYNTHETIC_EVIDENCE)).resolves.toBeNull();
+    await removeOrphanTerminalExecutorRecord(guardedFs(), home, uid, SYNTHETIC_EVIDENCE, SYNTHETIC_COORDINATOR_ID);
+    expect(await exists(finalPath)).toBe(true);
+  });
+
   it("treats malformed record bytes as exit 6, never as absence", async () => {
     const { home, finalPath } = await world();
     await nodeFs.writeFile(finalPath, "not json\n", { mode: 0o600 });

@@ -559,6 +559,7 @@ describe("the package's public door", () => {
         "classifyLifecycleJournalClosureV2",
         "decodeRetainedInverseLeaf",
         "decodeRollbackPayloadInventory",
+        "decodeUpdateExecutorRecordSlot",
         "decodeUpdateRecoveryExecutorRecord",
         "deriveUpdateCompactionEntries",
         "deriveUpdateExecutorRecordPath",

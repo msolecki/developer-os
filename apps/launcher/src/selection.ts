@@ -1,7 +1,7 @@
 import {
   admitReleaseAgainstTrust,
   decodeCanonicalJson,
-  decodeUpdateRecoveryExecutorRecord,
+  decodeUpdateExecutorRecordSlot,
   isUnsignedLocalTrust,
   LifecycleRecoveryRequiredError,
   parseCanonicalAbsolutePathText,
@@ -375,11 +375,14 @@ async function readUpdateExecutorRecord(request: LauncherSelectionRequestV1): Pr
   if (entry.kind !== "regular_file" || entry.ownerUid !== request.effectiveUid || entry.mode !== 0o600 || entry.nlink !== 1 || BigInt(entry.size) > BigInt(MAX_EXECUTOR_RECORD_BYTES)) {
     recoveryRequired("launcher_update_executor_record_invalid", path);
   }
+  let record: ReturnType<typeof decodeUpdateExecutorRecordSlot>;
   try {
-    return decodeUpdateRecoveryExecutorRecord(await request.fs.readRegular(entry, MAX_EXECUTOR_RECORD_BYTES), createCanonicalPathEvidence());
+    record = decodeUpdateExecutorRecordSlot(await request.fs.readRegular(entry, MAX_EXECUTOR_RECORD_BYTES), createCanonicalPathEvidence());
   } catch {
     return recoveryRequired("launcher_update_executor_record_invalid", path);
   }
+  // Fresh `init`'s empty reservation holds no record.
+  return record === "reservation" ? null : record;
 }
 
 /**

@@ -2,7 +2,7 @@ import * as nodeFs from "node:fs/promises";
 
 import {
   LifecycleRecoveryRequiredError,
-  decodeUpdateRecoveryExecutorRecord,
+  decodeUpdateExecutorRecordSlot,
   deriveUpdateExecutorRecordPath,
   parseCanonicalAbsolutePathText,
   type CanonicalAbsolutePathV1,
@@ -186,7 +186,10 @@ export class UpdateRecoveryExecutorFiles implements UpdateRecoveryExecutorPortV1
   }
 }
 
-/** Reads the optional `state/update-executor.json`; malformed or foreign bytes are exit 6, never absence. */
+/**
+ * Reads the optional `state/update-executor.json`; fresh `init`'s empty reservation is no record,
+ * and malformed or foreign bytes are exit 6, never absence.
+ */
 export async function readUpdateExecutorRecord(
   fs: LifecycleGuardedFileSystemV1,
   productHome: CanonicalAbsolutePathV1,
@@ -197,11 +200,13 @@ export async function readUpdateExecutorRecord(
   const entry = await fs.lstat(path);
   if (entry === null) return null;
   if (entry.kind !== "regular_file" || entry.ownerUid !== effectiveUid || entry.mode !== RECORD_MODE || entry.nlink !== 1 || BigInt(entry.size) > 16_384n) refuse("update_executor_record_shape", path);
+  let record: ReturnType<typeof decodeUpdateExecutorRecordSlot>;
   try {
-    return { entry, record: decodeUpdateRecoveryExecutorRecord(await fs.readRegular(entry, 16_384), evidence) };
+    record = decodeUpdateExecutorRecordSlot(await fs.readRegular(entry, 16_384), evidence);
   } catch {
     return refuse("update_executor_record_malformed", path);
   }
+  return record === "reservation" ? null : { entry, record };
 }
 
 /**

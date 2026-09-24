@@ -627,6 +627,16 @@ describe("closure V2 over the recovery-executor record", () => {
     await plantExecutorRecord(foreign, "executing", SECOND);
     expect((await inspect(foreign)).closure).toStrictEqual(REQUIRED);
   });
+
+  it("refuses an executing coordinator whose executor record is only fresh init's empty reservation", async () => {
+    const home = await newHome();
+    const plan = outerPlan();
+    await plantEnvelope(home, plan, walk(plan, upTo(1)));
+    await mkdirs(home, `staging/lifecycle/${FIRST}/update`);
+    await write(home, "state/update-executor.json", "");
+
+    expect((await inspect(home)).closure).toStrictEqual(REQUIRED);
+  });
 });
 
 describe("closure V2 over a V1-only ledger", () => {

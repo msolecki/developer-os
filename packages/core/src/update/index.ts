@@ -610,6 +610,7 @@ export {
   advanceUpdateCoordinatorJournal,
   assertUpdateCoordinatorDerivation,
   buildUpdateCoordinatorPlan,
+  decodeUpdateExecutorRecordSlot,
   decodeUpdateRecoveryExecutorRecord,
   deriveUpdateCompactionEntries,
   deriveUpdateSteps,

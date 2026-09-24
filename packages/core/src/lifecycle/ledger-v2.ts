@@ -23,7 +23,7 @@ import {
   type UpdateConstructionPlanV1,
 } from "../update/construction.js";
 import {
-  decodeUpdateRecoveryExecutorRecord,
+  decodeUpdateExecutorRecordSlot,
   MAXIMUM_LIFECYCLE_EXECUTION_PLAN_BYTES,
   readLifecycleExecutionPlanV2,
   updateCoordinatorJournalBytes,
@@ -358,15 +358,14 @@ async function readConstructionJournal(
 async function readExecutorRecord(
   scan: ScanV1,
   evidence: CanonicalPathEvidenceV1,
-): Promise<LifecycleClosureV2ObservationV1["executorRecord"] | "malformed"> {
+): Promise<LifecycleClosureV2ObservationV1["executorRecord"] | "reservation" | "malformed"> {
   const path = deriveUpdateExecutorRecordPath(scan.roots.productHome);
   if ((await scan.fs.lstat(path)) === null) return null;
   const bytes = await ownedBytes(scan, path, MAX_EXECUTOR_RECORD_BYTES);
   if (bytes === null) return "malformed";
-  // Fresh `init`'s zero-byte runtime reservation holds no record, exactly as the V1 ledger reads it.
-  if (bytes.byteLength === 0) return null;
   try {
-    const record = decodeUpdateRecoveryExecutorRecord(bytes, evidence);
+    const record = decodeUpdateExecutorRecordSlot(bytes, evidence);
+    if (record === "reservation") return record;
     return { state: record.state, coordinatorId: record.coordinatorId };
   } catch {
     return "malformed";
@@ -433,10 +432,15 @@ export async function inspectLifecycleLedgerV2<TPlan extends CoordinatorPlan>(
   const executorRecord = await readExecutorRecord(scan, evidence);
   const observation: LifecycleClosureV2ObservationV1 = {
     v1: snapshot.closure,
-    malformed: malformed || executorRecord === "malformed",
+    /**
+     * The empty reservation holds no record, exactly as the V1 ledger reads it, but a coordinator
+     * never admits it at the final path: §9.2's states there are absent or a bound record.
+     */
+    malformed: malformed || executorRecord === "malformed" ||
+      (executorRecord === "reservation" && updateCoordinators.length > 0),
     updateCoordinators,
     constructions,
-    executorRecord: executorRecord === "malformed" ? null : executorRecord,
+    executorRecord: typeof executorRecord === "string" ? null : executorRecord,
   };
   return { snapshot, observation, closure: classifyLifecycleJournalClosureV2(observation) };
 }

@@ -367,6 +367,18 @@ export function updateRecoveryExecutorRecordHash(value: UpdateRecoveryExecutorRe
   return sha256Hex(updateRecoveryExecutorRecordBytes(value));
 }
 
+/**
+ * `state/update-executor.json` as every reader sees it. Fresh `init` reserves the path as an empty
+ * file (§6.4), which holds no record: `"reservation"`, never a decode failure. Any other bytes are
+ * the record or throw.
+ */
+export function decodeUpdateExecutorRecordSlot(
+  bytes: Uint8Array,
+  evidence: CanonicalPathEvidenceV1,
+): UpdateRecoveryExecutorRecordV1 | "reservation" {
+  return bytes.byteLength === 0 ? "reservation" : decodeUpdateRecoveryExecutorRecord(bytes, evidence);
+}
+
 /** Reads a guarded record's exact bytes: canonical, at most 16 KiB, and its own re-encoding. */
 export function decodeUpdateRecoveryExecutorRecord(bytes: Uint8Array, evidence: CanonicalPathEvidenceV1): UpdateRecoveryExecutorRecordV1 {
   if (bytes.byteLength > MAX_RECORD_BYTES) fail("UpdateRecoveryExecutorRecordV1: over 16 KiB");

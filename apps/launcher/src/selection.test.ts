@@ -386,6 +386,13 @@ describe("update recovery-executor routing", () => {
     await expect(selectLauncherCandidate(cleanupFixture(sha256(Buffer.from("other-manifest"))))).rejects.toMatchObject({ code: 6, reason: "launcher_update_fallback_mismatch" });
   });
 
+  it("selects normally over fresh init's empty executor-record reservation", async () => {
+    const { fs } = activeFixture();
+    const expected = await selectLauncherCandidate(baseRequest(fs));
+    fs.setFile(EXECUTOR_RECORD, Buffer.alloc(0));
+    await expect(selectLauncherCandidate(baseRequest(fs))).resolves.toStrictEqual(expected);
+  });
+
   it("never ignores a malformed record or envelope in favour of normal selection", async () => {
     const { fs } = activeFixture();
     fs.setFile(EXECUTOR_RECORD, Buffer.from("not json\n"));
