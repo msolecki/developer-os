@@ -76,6 +76,8 @@ describe("fresh V2 init layout", () => {
       "uninstalling.json", "update-rollback.json", "update-executor.json", "transactions",
       "lifecycle-journals", "git-effect-journals", "launchd-effect-journals", "release-metadata",
       "active-release.json", "release-trust.json",
+      // Spec 1 §2.1 amended 2026-09-22 (A13 Q3-A): fresh `init` creates `state/hooks`.
+      "hooks",
       ...jobs.flatMap((job) => [`automation-${job}.status.json`, `.automation-${job}.lock`]),
     ].map((name) => join(state, name)).toSorted();
     const expectedLogs = jobs
