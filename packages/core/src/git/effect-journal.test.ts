@@ -257,7 +257,8 @@ describe("journal feasibility", () => {
     expect(() =>
       validateGitEffectPlan(roundTrip({ ...small, maximumJournalBytes: MAX_GIT_EFFECT_JOURNAL_BYTES + 1 }), UID),
     ).toThrow();
-  });
+    // 200,001 canonical JSON observation encodes: ~5 s under a loaded full suite, past vitest's 5 s default.
+  }, 60_000);
 });
 
 describe("GitEffectJournalV1", () => {

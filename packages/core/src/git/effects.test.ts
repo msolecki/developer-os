@@ -440,7 +440,8 @@ describe("GitEffectExecutor forward publication", () => {
       expect(await world.read("refs/heads/main")).toBe(`${NEW_OID}\n`);
       expect((await readJournal(world)).observations).toHaveLength(syncSpecs().length);
     }
-  });
+    // One fresh real-filesystem world per boundary: ~5 s under a loaded full suite.
+  }, 60_000);
 });
 
 describe("GitEffectExecutor compensation", () => {
@@ -476,7 +477,8 @@ describe("GitEffectExecutor compensation", () => {
       expect(await world.read("refs/heads/main")).toBe(`${OLD_OID}\n`);
       expect(await world.objectExists()).toBe(true);
     }
-  });
+    // One fresh real-filesystem world per boundary: ~5 s under a loaded full suite.
+  }, 60_000);
 
   it("finishes a publication that started before the journal, then compensates it", async () => {
     const probe = await fixture(syncSpecs());

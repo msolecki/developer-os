@@ -419,7 +419,7 @@ describe("GitPlanner.planSync", () => {
     const readme = candidate.entries.find((entry) => Buffer.from(entry.name).toString("utf8") === "README.md");
     const originalIndex = parseAdmittedGitIndex(await nodeFs.readFile(join(fixture.git, "index")));
     const original = originalIndex.entries.find((entry) => Buffer.from(entry.name).toString("utf8") === "README.md");
-    expect(readme?.raw).toEqual(original?.raw);
+    expect(readme && Buffer.from(readme.raw)).toEqual(original?.raw);
   });
 
   it("binds every reflog append bijectively to one ref transition", async () => {
@@ -493,7 +493,8 @@ describe("GitPlanner.planSync", () => {
       "source_branch_reflog",
       "source_branch_ref",
     ]);
-    expect(objects.map((transition) => transition.path)).toEqual(sortUnsignedUtf8(objects.map((transition) => transition.path)));
+    const objectPaths = objects.map((transition) => transition.path);
+    expect(objectPaths).toEqual([...objectPaths].sort(compareUnsignedUtf8));
     expect(draft.transitions.every((transition) => transition.evidence === GIT_EFFECT_EVIDENCE_UNBOUND)).toBe(true);
     for (const transition of draft.transitions) {
       expect(validateGitEffectTransition(JSON.parse(JSON.stringify(transition)), UID)).toEqual(transition);
