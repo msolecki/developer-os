@@ -112,7 +112,6 @@ There are 65 numbered rows. They are not automatically ordered ahead of A11.
 
 ### A11 · DOS-P7
 
-- [x] Execute plan 1a (`plans/2026-09-17-developer-os-opt-in-surfaces-1a.md`, roadmap Phase 4, wave by wave per D33; closed 2026-09-22 as `43c6876..082e098`; Tasks 1–7, 21 and 23 of `plans/2026-08-28-developer-os-opt-in-surfaces.md` rewritten against Spec 1 as amended, founder decisions D24–D30, D42). Task 24 carved out to post-A16 hardening (D42, NEW-100). Plan 1b (Git, launchd) follows A15 from the rest of the 2026-08-28 plan.
 - [ ] Finish remaining update/release work and close the full Task 7 checkpoint.
 
 Required behavior:

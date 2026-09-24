@@ -15,7 +15,7 @@
 **Spec:** `docs/superpowers/specs/2026-08-21-developer-os-opt-in-surfaces-design.md` as amended 2026-09-17 and 2026-09-22 (its change record). It is normative for every literal this plan names by section instead of copying: process tables, argv, environment maps, byte bounds, the operation/step grammar, the point-of-no-return table and the §7 gate matrix. Where this plan and the spec disagree, the spec wins, except where a numbered founder question below asks for an amendment. Until that amendment is approved, the affected task implements the spec as written or stays blocked, as its task text says.
 
 **Sources:**
-- Tasks 8–20, 22 and 24 of `docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md` (superseded for execution). Each task below names its source task. Old Tasks 1–7, 21 and 23 landed through plan 1a (`43c6876..082e098`).
+- Tasks 8–20, 22 and 24 of the 2026-08-28 opt-in-surfaces plan, deleted 2026-09-24 once this plan carried every open task (git history holds it). Each task below names its source task. Old Tasks 1–7, 21 and 23 landed through plan 1a (`43c6876..082e098`).
 - Roadmap `docs/superpowers/plans/2026-09-04-developer-os-completion-roadmap.md`, Phase 9 and decisions D16, D25, D39, D42, D44, D47 and D56.
 - `docs/superpowers/BACKLOG.md` rows NEW-84 and NEW-100.
 - `docs/architecture/foundation.md` §10, `foundation-constraints.md` ("Plan 1a: lifecycle kernel bounds") and `threat-model.md` §5.13.
@@ -1674,7 +1674,6 @@ Source: roadmap Phase 9 gate, D56's phase-close clause, and the documentation ha
 - Modify: `docs/architecture/foundation-constraints.md` (plan 1b bounds by symbol)
 - Modify: `docs/architecture/threat-model.md` (a §5.13 successor for Git transport, launchd authority and the runner lease)
 - Modify: `docs/superpowers/BACKLOG.md` (close NEW-84; leave NEW-100 open, owned by post-A16 hardening per D42), `docs/superpowers/ORDER.md`, and the roadmap Phase 9 checkbox
-- Delete: `docs/superpowers/plans/2026-08-28-developer-os-opt-in-surfaces.md`. Its remaining tasks are carried by this plan; delete it only after the contract has moved into the architecture docs.
 - Keep: `docs/superpowers/plans/2026-09-17-developer-os-opt-in-surfaces-1a.md` (NEW-100's only copy of Task 24)
 
 - [ ] **Step 1:** Run every deferred command from Tasks 1–20, then `npm run check`, then (serially, one real `init` at a time) every `*.v2.test.ts` this plan added. Then run `npm run test:pinned-host` on the certified host. Show failures only.

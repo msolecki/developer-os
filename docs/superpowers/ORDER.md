@@ -55,9 +55,9 @@ Founder stops per phase, on top of that:
 - A14: Task 14's recorded observations tested (committed `4041286`, D57); `project init` templates' founder-local scan (Task 15
   Step 4).
 
-Spec 2: Tasks 1–7, 9, 10 and 11 complete, Task 8 withdrawn (D18), Task 11b parked (D46), Tasks 12–26
-remain. The 2026-08-28 Spec 1 plan stays as plan 1b's source; its Tasks 1–7, 21 and 23 were executed
-via plan 1a.
+Spec 2: Tasks 1–7, 9, 10 and 11 complete, Task 8 withdrawn (D18), Task 11b parked (D46), Tasks 12–25
+committed (D56), Task 26 parked. Spec 1's open work is plan 1b; the 2026-08-28 Spec 1 plan it was
+rewritten from was deleted on 2026-09-24.
 
 Open sequence (D16, daily use before completeness):
 
