@@ -789,7 +789,8 @@ describe("the scheduled brain handlers", () => {
 
       expect(result).toMatchObject({ outcome: "handler_refused", reasonCode: "lifecycle_mutation_home_not_v2" });
       expect(releases).toStrictEqual([]);
-      expect(await nodeFs.readdir(join(fixture.paths.brain, "content")).then((names) => names.includes("_indexes"))).toBe(false);
+      /** `installed()` creates `content/_indexes` empty; a refusal leaves it empty. */
+      expect(await nodeFs.readdir(join(fixture.paths.brain, "content", "_indexes"))).toStrictEqual([]);
     },
   );
 

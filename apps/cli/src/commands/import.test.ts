@@ -400,10 +400,12 @@ describe("redaction precedes everything", () => {
       "utf8",
     );
     expect(written).not.toContain(SENTINEL);
-    const envelope = await envelopeOf(fixture, file?.captureId ?? "");
-    expect(envelope.redaction.length).toBeGreaterThan(0);
-    for (const finding of envelope.redaction) {
-      expect(Object.keys(finding).sort()).toEqual(["class", "fingerprint"]);
+    /** `parseCaptureFile` re-derives `redaction` from the already-redacted body, so read the stored findings. */
+    const stored = /^redaction:\n((?: {2}.*\n)+)/mu.exec(written)?.[1] ?? "";
+    const findings = stored.split(/^ {2}- /mu).filter((chunk) => chunk !== "");
+    expect(findings.length).toBe(file?.redactionCount);
+    for (const finding of findings) {
+      expect([...finding.matchAll(/^\s*(\w+):/gmu)].map((match) => match[1]).sort()).toEqual(["class", "fingerprint"]);
     }
     expect(JSON.stringify(result)).not.toContain(SENTINEL);
   });

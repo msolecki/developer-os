@@ -141,7 +141,8 @@ describe("runStatus", () => {
     const initialized = await runInit(fixture.context, ACCEPTED);
     expect(initialized.ok).toBe(true);
     const manifestText = await nodeFs.readFile(fixture.paths.manifestFile, "utf8");
-    expect((JSON.parse(manifestText) as { schemaVersion: unknown }).schemaVersion).toBe(2);
+    const manifest = JSON.parse(manifestText) as { schemaVersion: unknown; productVersion: unknown };
+    expect(manifest.schemaVersion).toBe(2);
     const before = await inventory(fixture.root);
 
     const result = await runStatus(fixture.context);
@@ -150,7 +151,8 @@ describe("runStatus", () => {
     if (!result.ok) return;
     expect(result.warnings).toEqual([]);
     expect(result.data.installed).toBe(true);
-    expect(result.data.productVersion).toBe(fixture.context.productVersion);
+    /** A V2 home records the packaged release's version, not the running CLI's constant. */
+    expect(result.data.productVersion).toBe(manifest.productVersion);
     expect(result.data.managedArtifacts).toBeGreaterThan(0);
     expect(result.data.driftCount).toBe(0);
     expect(await inventory(fixture.root)).toEqual(before);
