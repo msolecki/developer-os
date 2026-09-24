@@ -757,7 +757,8 @@ describe("the installed-home gates beside a well-formed state/hooks", () => {
     hooksHome ??= (async () => {
       const fixture = await initialisedV2Home("gate-hooks", {});
       const hooks = join(fixture.paths.stateDir, "hooks");
-      await nodeFs.mkdir(hooks, { mode: 0o700 });
+      /** Fresh `init` creates the directory (Task 11); the records are what a firing hook adds. */
+      await nodeFs.mkdir(hooks, { recursive: true, mode: 0o700 });
       await nodeFs.chmod(hooks, 0o700);
       await nodeFs.writeFile(join(hooks, "claude.PreToolUse.json"), "{}\n", { mode: 0o600 });
       await nodeFs.writeFile(join(hooks, "codex.Stop.json.tmp-0123456789abcdef"), "{}\n", { mode: 0o600 });
