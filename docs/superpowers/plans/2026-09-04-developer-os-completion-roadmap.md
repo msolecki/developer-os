@@ -236,6 +236,12 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   dev/ino; identity comes from reopened construction evidence), F3-A (an automatic rollback is the
   error envelope, exit 5 for `update_verifier_rejected`, 1 otherwise; trust stays advanced), F4-A (the
   two V2 ref types are an accepted residual in §13.3).
+- **D61 (2026-09-24).** Two spec amendments follow shipped security fixes: the hooks spec
+  (`specs/2026-09-22-developer-os-hooks-design.md`) names firing records per verb
+  (`<vendor>.<verb>.json`) and scopes G7's "never the user home" base to Claude, with Codex patch paths
+  resolved against the canonical `cwd`; Spec 1 §4.2 (`specs/2026-08-21-developer-os-opt-in-surfaces-design.md`)
+  refuses a backslash in `GitConfigQuotedPathV1`, matching Core's `CanonicalAbsolutePathV1`. Also
+  decided: Spec 2 apply is parked (NEW-110) and the full suite runs now on `59b2c17`.
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 
