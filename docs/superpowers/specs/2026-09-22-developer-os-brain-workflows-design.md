@@ -363,7 +363,7 @@ options (`retire`: `dry-run`, `json`; `refactor`: `dry-run`, `json`, `rename`, `
 `split`); `COMMAND_OPTIONS.brain` gains the four mode flags; exactly one mode flag is required for
 `refactor`, else the parse refuses (exit 2). `capture` gains the `note` option. The help text gains
 both verbs and `--note`. Both verbs dispatch after `assertOrdinaryCommandAdmitted` like every
-non-`init` command (`main.ts:531-533`); a test pins it.
+non-`init` command (`apps/cli/src/main.ts:531-533`); a test pins it.
 
 ### 6.2 Algorithm, common to every mode
 

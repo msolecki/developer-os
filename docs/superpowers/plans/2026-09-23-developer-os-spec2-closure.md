@@ -28,7 +28,7 @@ cutover; D61: Spec 2 apply parked).
 1. `BundleSourceStagingPlanV1` / `RollbackPayloadSourceStagingPlanV1` require `sourceParentDev/Ino`
    of `update/source/{bundle,rollback}` (`bundle-participant.ts:105,412`, `rollback.ts`), but those
    plans are hashed into the construction plan before any directory exists, and construction never
-   lists `update/source/*` (`construction.ts:827,915`); tests `mkdir` by hand.
+   lists `update/source/*` (`packages/core/src/update/construction.ts:827,915`); tests `mkdir` by hand.
 2. `validateManifestBytesState` requires non-null `after.dev/ino` equal to the payload identity for
    lifecycle envelopes (`manifest-state.ts:383`) and a transitional `before` identity (`:380`) —
    both unknowable before execution. The analysis above wrongly said the manifest avoids the cycle.
@@ -60,7 +60,7 @@ Under the D56 lane, each **Test** is written and run red→green filtered with `
 Order: Task 9, then Task 10, once NEW-110's design is decided.
 
 9. **`compose` and the production apply binding** (L). Depends on Tasks 1, 2, 3, 5, 6, 7 and 8.
-   - **Where:** new `apps/cli/src/update/compose.ts` and `apps/cli/src/update/apply-ports.ts`; `context.ts:147-152` binds `apply`.
+   - **Where:** new `apps/cli/src/update/compose.ts` and `apps/cli/src/update/apply-ports.ts`; `apps/cli/src/update/context.ts:147-152` binds `apply`.
    - **How:**
      - From `MaterializedUpdateV1` plus the allocated IDs, build every leaf plan: owner and migration (with V2 refs), four state plans, bundle source and publication, rollback source and state, verifier, retirement, and execution.
      - Then build `buildConstructionPlan`, `buildUpdateCoordinatorPlan`, the outer bytes, and the exact capacity.

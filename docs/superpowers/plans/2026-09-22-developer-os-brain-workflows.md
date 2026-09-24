@@ -103,7 +103,7 @@ The orchestrator owns this task. Only it edits `docs/superpowers/`.
 
 Apply each amendment above.
 
-Re-locate every line citation the spec and the amended documents make into moved code, and cite the symbol where a line is unstable. Known movers: `ingest.ts:1096`, `ingest.ts:275-281`, `main.ts:531-533`, `validate.ts:401,967,980`, `lint.ts:14`, `build.ts:221-233`, `proposal.ts:129-136`, `context.ts:164`, `context.ts:263-305`.
+Re-locate every line citation the spec and the amended documents make into moved code, and cite the symbol where a line is unstable. Known movers: `ingest.ts:1096`, `ingest.ts:275-281`, `apps/cli/src/main.ts:531-533`, `packages/brain/src/ingest/validate.ts:401,967,980`, `lint.ts:14`, `packages/brain/src/indexes/build.ts:221-233`, `proposal.ts:129-136`, `apps/cli/src/context.ts:164`, `apps/cli/src/context.ts:263-305`.
 
 Create `docs/releases/compatibility-matrix.md` with a header row: workflow, version, vendor, vendor version, date, commit, result, command. DOS-P8 owns the rest of the matrix.
 
