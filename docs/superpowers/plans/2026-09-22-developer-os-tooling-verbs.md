@@ -4,9 +4,9 @@
 
 Completed tasks were removed on 2026-09-23; see git history (full plan as of `cb99d55`).
 
-**Open:** Task 14 (founder observation), the rest of Task 15 (founder-local scan and review), and
-Task 16 (phase close, which runs every deferred suite). Both verbs they complete stay safe while
-they are open: `--claude-memory` refuses exit 4 and `vendor-config` warns.
+**Open:** the rest of Task 15 (founder-local scan and review) and Task 16 (phase close, which runs
+every deferred suite). Task 14's observations were recorded on 2026-09-23 under D57 (`4041286`); its
+body was deleted on 2026-09-24 and its test (`observations.test.ts`) is in Task 16 Step 1.
 
 **Goal:** Ship A14 (roadmap Phase 7). The work is `developer-os import [<path>] | --claude-memory`,
 `developer-os project init|check [<dir>]` and the `doctor` check `vendor-config`, plus the recorded
@@ -87,55 +87,6 @@ Gate: every inventoried script is a verb or a recorded refusal. Plan base: `13eb
 
 ---
 
-### Task 14: Record the Claude observations · S — **FOUNDER STOP POINT**
-
-**Recorded 2026-09-23 under D57** (`4041286`): both rows observed on a disposable home and filled. Test owed at phase close (Step 3).
-
-Spec §5.5 "Capability precondition" and §8 "exact rule strings are vendor syntax". An agent never
-observes these facts. It does not run Claude Code, read the founder's `~/.claude`, or write a
-value from memory or documentation.
-
-**Files:**
-- Modify: `packages/adapter-claude/src/observations.ts`
-- Create: `tests/fixtures/claude/memory-layout/README.md` (a synthetic-tree description; no real data)
-- Modify: `docs/architecture/claude-adapter.md` (the dated observation section)
-
-**Interfaces:**
-- Consumes: Tasks 5, 10, 12, 13.
-- Produces: non-`null` `CLAUDE_MEMORY_LAYOUT` and/or `CLAUDE_DENY_RULES`.
-
-- [ ] **Step 1: STOP and ask the founder.** The orchestrator asks for one observation on a
-  **disposable** home with the Claude Code version A12 pinned. It must not be the founder's working
-  `~/.claude`. Ask for:
-  1. the directory layout auto-memory writes, relative to the vendor home (expected
-     `projects/*/memory/*.md`), and the exact name of the index file kept beside the memory files;
-  2. whether `CLAUDE_CONFIG_DIR` moves it;
-  3. for each rule id in `PROTECTED_PATH_RULES`, the exact `permissions.deny` string or strings
-     that Claude Code enforces as a read denial of that path, each proven by a denied read in that
-     disposable session;
-  4. the Claude Code version, the date, and one sentence of method.
-  **Status:** Owed: founder observation on a disposable home (NEW-109).
-
-  If the founder does not observe now, the orchestrator adds `BACKLOG.md` row "A14 observations
-  owed: `CLAUDE_MEMORY_LAYOUT`, `CLAUDE_DENY_RULES` (Task 14)" and skips to Task 16. Both verbs stay
-  safe: exit 4 and `warn`.
-- [ ] **Step 2: Record only what was observed.** Fill each row verbatim from the founder's answer,
-  and leave an unobserved row `null`. Add the dated section to `claude-adapter.md` in the
-  `AGENT_DETECTION_ROWS` style: version, date, method, values. Describe the synthetic fixture tree
-  that Task 12's test builds.
-- [ ] **Step 3: Test.** Task 5's `observations.test.ts` now validates the rows. Deferred to phase
-  close (D47). At close: `npx vitest run --root packages/adapter-claude src/observations.test.ts`
-- [ ] **Step 4: Gate and commit**
-
-```bash
-npm run lint
-git add packages/adapter-claude/src/observations.ts tests/fixtures/claude/memory-layout/README.md docs/architecture/claude-adapter.md
-git diff --cached --name-only
-git commit -m "feat(adapter-claude): record observed memory layout and deny rules"
-```
-
----
-
 ### Task 15: Project template content through A12's redaction procedure · M (remainder) — **FOUNDER STOP POINT**
 
 **Partial 2026-09-22, `10282ab`**: templates, `PROJECT_TEMPLATE`, `project-template.test.ts` and the
@@ -196,10 +147,8 @@ grep -nE 'repo (audit|bootstrap|secrets-scan)|project worktree|git-history-secre
 - [ ] **Step 4: Stop conditions (founder).**
   - If Task 15 did not land, `project init` still refuses exit 4. Ask whether that satisfies the
     Phase 7 gate or whether the phase stays open. Do not decide it.
-  - If Task 14 did not land, confirm its BACKLOG row exists. `--claude-memory` exits 4 and
-    `vendor-config` warns: the verbs exist, their vendor facts are owed.
 - [ ] **Step 5: Bookkeeping.** Tick the roadmap's Phase 7, remove A14 from `ORDER.md`'s open
-  entries and advance `NOW`, close NEW-98 in `BACKLOG.md`, and flip the inventory rows. Then push
+  entries and advance `NOW`, close NEW-98 and NEW-109 in `BACKLOG.md`, and flip the inventory rows. Then push
   one branch and open **one PR** (D44/D47). Do not merge; the founder merges.
 
 ```bash

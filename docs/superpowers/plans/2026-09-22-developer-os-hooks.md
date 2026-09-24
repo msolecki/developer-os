@@ -4,12 +4,13 @@
 
 Completed tasks were removed on 2026-09-23; see git history.
 
-**Open work:** Task 1 (rest) and Task 2 and Task 18 are **founder stop points**: they touch the live
-machine, spend model credits, or need manual Codex trust. The agent does not run them. Task 15 is the
-one remaining code task and is blocked on Task 1's Codex observations. Task 19 closes the phase.
+**Open work:** Task 2 and Task 18 are **founder stop points**: they touch the live machine, spend
+model credits, or need manual Codex trust. The agent does not run them. Task 19 closes the phase.
+Task 1's remaining observations and Task 15 (the Codex half) were committed on 2026-09-23 under D57
+(`4041286`; `4e308d2`, review fixes `2e75574` and `2bec6a7`, re-review ACCEPT); their bodies were
+deleted on 2026-09-24 and their tests are listed in Task 19 Step 1.
 
-**Order:** Task 2 runs any time. Task 15 waits for Task 1's Codex rows. Task 18 waits for Task 15.
-Task 19 runs last.
+**Order:** Task 2 runs any time. Task 18 runs on a disposable local-build install. Task 19 runs last.
 
 **Spec:** `docs/superpowers/specs/2026-09-22-developer-os-hooks-design.md` (A13, approved D47), with
 the G1–G10 amendment block (`f3605a7`, `f473a91`).
@@ -95,45 +96,6 @@ Gate: every supported hook is observed firing on Claude, and on Codex after manu
 
 ---
 
-### Task 1 (rest): Observation spike · founder stop point
-
-**Partial.** Already landed: the observation checklist in `docs/architecture/hooks.md` §1 (`83442c7`),
-the unbilled answers and two Claude fixtures, `SessionStart` and `UserPromptSubmit` (`e14a04a`).
-Q4-A does not trigger: plugin `hooks.json` fired on Claude. Every row that needs a model turn or Codex
-trust is still `founder-deferred`, and no Codex fixture exists.
-
-**Files:**
-- Create: `tests/fixtures/hooks/claude/{PreToolUse-Bash,PreToolUse-Edit,PreToolUse-Write,PostToolUse-Edit,Stop}.json`
-- Create: `tests/fixtures/hooks/codex/<event>.json` for each Codex event that fires
-- Modify: `docs/architecture/hooks.md` (§1 answer slots)
-
-**Interfaces:**
-- Consumes: nothing.
-- Produces: every `founder-deferred` slot in `docs/architecture/hooks.md` §1 filled with an observed
-  answer or `unsupported (<reason>)`; the scrubbed fixtures.
-
-- [ ] **Step 2: FOUNDER runs the observations** in disposable homes and records each payload
-  verbatim to a scratch location outside the repository.
-  **Status:** Partial: the agent ran the unbilled rows; the billed and Codex-trust rows are owed by the founder.
-
-- [ ] **Step 3: Agent scrubs and checks in the fixtures** that the founder hands over. For each
-  fixture:
-  - delete the transcript-path key;
-  - rewrite every absolute path to start with `/Users/synthetic/`;
-  - replace prompt and command text with the synthetic strings the contract tests name
-    (`echo synthetic`, `synthetic prompt`).
-  **Status:** Partial: 2 of 7 Claude fixtures, 0 Codex fixtures.
-
-  Confirm that `grep -rn "$(printf 'transcript%spath' _)" tests/fixtures/hooks` prints nothing. Fill
-  every answer slot in `docs/architecture/hooks.md` §1.
-
-```bash
-git add tests/fixtures/hooks docs/architecture/hooks.md
-git diff --cached --name-only
-npm run lint
-git commit -m "test(hooks): record scrubbed vendor hook payload fixtures"
-```
-
 ### Task 2: Legacy parity check · founder stop point
 
 **Open.** No parity list has been returned; owed by the founder.
@@ -155,67 +117,6 @@ extra fixture pair and table row in Task 8 or Task 9, or as a follow-up task aft
 - [ ] **Step 2: Orchestrator** records the list in the spec, in the Task 3 amendment block or a second
   dated block, and adds one task per accepted rule after Task 8 or Task 9. Each added task follows
   Task 8's pattern: a table row, a block fixture and a near-miss allow fixture.
-
-### Task 15: Codex half from the observations · M
-
-**Committed 2026-09-23 under D57** (`4041286` observations, `4e308d2` implementation, `2e75574` and `2bec6a7` review fixes; re-review ACCEPT). Tests written, not run (D56); they run at Task 19.
-
-Spec §3 (Codex column), §4.3, §4.4, §7.2 and §8.1 floors. Every *observe* cell is filled from
-`docs/architecture/hooks.md` §1, and no Codex value is guessed. A row Task 1 recorded `unsupported`
-renders nothing and is listed for founder acceptance.
-
-**Files:**
-- Create: `packages/adapter-codex/src/hooks.ts`, `packages/adapter-codex/src/hooks.test.ts`,
-  `apps/cli/src/hooks/fixtures-contract.test.ts`
-- Modify: `apps/cli/src/hooks/payload.ts` (`FIELD_MAPS.codex`, `HOOK_TOOL_MATCHERS.codex`),
-  `apps/cli/src/hooks/outcome.ts` (`OUTCOME_MAPS.codex`), `apps/cli/src/hooks/firing-records.ts`
-  (`HOOK_EVENT_OF.codex`), `packages/adapter-codex/src/plugin.ts`, `plugin.test.ts`, `index.ts`,
-  `index.test.ts`, `packages/adapter-{claude,codex}/src/versions.ts` (`DOCUMENTED_FLOORS` for the two
-  keys), the Codex install call site from A12, and `apps/cli/src/commands/doctor.ts`
-  (`codex=not-rendered` becomes the real check)
-
-**Interfaces:**
-- Consumes: Task 1 (the observations and fixtures), Task 5, Task 6 and Task 14 Step 1
-  (`renderHookCommand` and `HookCommandExecutable`, two-token form), Task 12 and Task 13. If Task 14
-  did not start (Q4-A: Claude hooks unsupported), Task 15 performs Task 14 Step 1's core widening
-  first, in its own commit, before Step 1 below.
-- Produces: `CODEX_HOOK_ROWS`, `renderCodexHooks(executable: HookCommandExecutable)` (in the manifest
-  shape Task 1 observed) and `withCodexHooks(tree, executable: HookCommandExecutable)`, plus the Codex field, matcher, outcome and
-  event maps.
-
-- [ ] **Step 1: Write the tests.**
-  - **`fixtures-contract.test.ts`:** for every file under `tests/fixtures/hooks/<vendor>/`, and every
-    verb whose row is supported on that vendor, run `runHookMode` with the fixture bytes and assert
-    the exact exit, stdout and stderr bytes for the fixture's expected outcome. Assert that the
-    fixture set is non-empty per vendor. Then run each fixture through a patched variant with the
-    transcript key added at runtime, and assert that the decoded payload is identical.
-  - **Codex render:** it is byte-exact to §4.1; two renders are identical; the checked-in tree stays
-    hook-free. Replace `plugin.test.ts`'s `ships no hooks file, no AGENTS.md, and no absolute path`
-    with the install-tree-only assertion, mirroring Task 6.
-  - **Patch grammar (only if Task 1 observed a patch body):** header lines only; at most 64 headers;
-    each names one relative path with no `..`; any other line refuses. `path` blocks and
-    `format`/`edit` allow.
-  - `CODEX_UNTRUSTED_HOOK_MESSAGE` appears for an installed Codex hook with no record.
-- [ ] **Step 2: Run the tests.** Deferred to phase close (D47).
-- [ ] **Step 3: Implement** exactly the observed values:
-  - fill the four Codex maps;
-  - add `CODEX_HOOK_ROWS`;
-  - render the manifest `"hooks"`, inline or as a file per question 7;
-  - set the `DOCUMENTED_FLOORS` for `plugin_hooks` and `session_start_injection` on both vendors to
-    the observed versions from question 10;
-  - pass `withCodexHooks` at A12's Codex install call site;
-  - make `init` and `doctor` print the fixed manual trust step, and make uninstall print the fixed
-    trust-residue line (§7.2).
-
-  Hook-manifest changes reach Codex only after `codex plugin add` runs again. Confirm that A12's
-  re-registration covers the hook manifest (NEW-61), and add a test at its seam.
-- [ ] **Step 4: Gate.** `npm run lint` must pass.
-- [ ] **Step 5: Commit.** Stage the exact paths. Then:
-
-```bash
-git diff --cached --name-only
-git commit -m "feat(adapter-codex): render observed Codex hooks and decode Codex payloads"
-```
 
 ### Task 18: Real-agent matrix · founder stop point
 
@@ -284,7 +185,17 @@ them.
   - Task 13 (`c69031e`): `apps/cli/src/commands/doctor.test.ts`, `tests/e2e/foundation.test.ts`
   - Task 14 (`416ec8e`, `a156b0c`): `apps/cli/src/commands/init-instructions.v2.test.ts`,
     `apps/cli/src/instructions/attach.test.ts`
-  - Task 15: its own tests, once it lands
+  - Task 1 rest (`4041286`): the observed fixtures under `tests/fixtures/hooks/{claude,codex}/`,
+    `apps/cli/src/commands/doctor.test.ts`, `tests/e2e/foundation.test.ts`
+  - Task 15 (`4e308d2`, `2e75574`, `2bec6a7`, D57):
+    `apps/cli/src/hooks/{fixtures-contract,patch,payload,outcome,firing-records,contract-parity,project-root}.test.ts`,
+    `apps/cli/src/hooks/guards/{edit,format,path}.test.ts`,
+    `packages/adapter-codex/src/{hooks,plugin,index,versions,capabilities}.test.ts`,
+    `packages/adapter-claude/src/{versions,capabilities}.test.ts`,
+    `apps/cli/src/commands/{doctor,claude-capabilities,codex-capabilities}.test.ts`,
+    `apps/cli/src/instructions/{attach,codex-registration}.test.ts`,
+    `apps/cli/src/commands/init-instructions.v2.test.ts`,
+    `apps/cli/src/lifecycle/uninstall-detach.v2.test.ts`
   - Task 16 (`8133c92`): the timeout pin in `packages/adapter-claude/src/hooks.test.ts`, and the CI
     half of the latency measurement (G5)
   - Task 17 (`b583ac3`): `tests/repository/citations.test.ts`
@@ -295,7 +206,12 @@ them.
   - no payload iteration;
   - no adapter import from the hook graph;
   - no `settings.json` write;
-  - `state/hooks` is removed only after the plugin trees.
+  - `state/hooks` is removed only after the plugin trees;
+  - a hook-manifest change reaches Codex only after `codex plugin add` runs again, so A12's
+    re-registration must cover the hook manifest (NEW-61), pinned at the
+    `codex-registration.test.ts` seam;
+  - the hooks items of `BACKLOG.md` §6 (the re-review minors m1–m4 and the Codex `apply_patch`
+    grammar observed on a mock Responses API).
 
   For each accepted finding, write a failing regression test first, then the smallest fix. Stage
   exact paths.
