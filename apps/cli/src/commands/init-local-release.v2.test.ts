@@ -209,7 +209,8 @@ describe("init --local-release writes the version-free entrypoint (D53)", () => 
     expect(await run(["init", "--yes", "--local-release", dir], rewrite, productionFactory(home)), rewrite.err.join("\n")).toBe(EXIT_CODES.success);
     expect(await nodeFs.readFile(entrypoint)).toStrictEqual(current);
     const after = (await readManifest(home)).manifest.artifacts.find((artifact) => artifact.path === entrypoint);
-    expect(after?.verification).toStrictEqual({ mode: "content", installedHash: hashBytes(current) });
+    // decodeCanonicalJson builds null-prototype objects, which toStrictEqual never equates with a literal.
+    expect({ ...after?.verification }).toStrictEqual({ mode: "content", installedHash: hashBytes(current) });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("is removed by uninstall with its bin directory", async () => {
