@@ -34,7 +34,7 @@ import { runBrain } from "@developer-os/cli/dist/commands/brain.js";
 import { createBareRemote, scriptedEffectPorts, scriptedGitRuntime } from "@developer-os/cli/dist/commands/git/testing.js";
 import type { ScriptedGitRuntimeV1 } from "@developer-os/cli/dist/commands/git/testing.js";
 import { runInit } from "@developer-os/cli/dist/commands/init.js";
-import { createCommandFixture } from "@developer-os/cli/dist/commands/testing.js";
+import { createCommandFixture, createLowEntropyFixtureRoot } from "@developer-os/cli/dist/commands/testing.js";
 import type { CommandFixture } from "@developer-os/cli/dist/commands/testing.js";
 import type { CliContext } from "@developer-os/cli/dist/context.js";
 import { gatedState, manifestMutation } from "@developer-os/cli/dist/instructions/apply.js";
@@ -221,7 +221,11 @@ export async function createOptInHome(name: string): Promise<OptInHomeV1> {
     bootoutDeath: false,
     deathAfterPublish: false,
   };
-  const fixture = await createCommandFixture(name, { bootstrapAvailable: true, effectPorts: composePorts(runtime, launchd, faults) });
+  const fixture = await createCommandFixture(name, {
+    root: await createLowEntropyFixtureRoot(name),
+    bootstrapAvailable: true,
+    effectPorts: composePorts(runtime, launchd, faults),
+  });
   await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
   const initialized = await runInit(fixture.context, { dryRun: false, assumeYes: true });
   if (!initialized.ok) throw new Error(`fixture init failed: ${JSON.stringify(initialized)}`);

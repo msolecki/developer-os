@@ -799,6 +799,19 @@ export async function createCommandFixture(
   };
 }
 
+/**
+ * A fixture root a local Git remote's URL can live under without tripping `git_config_secret`.
+ * The redactor scans runs of 40+ `[A-Za-z0-9+/=_-]` characters for entropy, and macOS's per-user
+ * TMPDIR (`/var/folders/<xx>/<random>/T`) is one such run; so is `/tmp/<label>-<random>` often
+ * enough to flake. The dots keep every run short. Removed by `removeCommandFixtures`.
+ */
+export async function createLowEntropyFixtureRoot(label: string): Promise<string> {
+  if (label.length > 24) throw new Error(`fixture label too long for a low-entropy root: ${label}`);
+  const root = await nodeFs.realpath(await nodeFs.mkdtemp(`/tmp/dos.${label}.`));
+  fixtureRoots.push(root);
+  return root;
+}
+
 export async function removeCommandFixtures(): Promise<void> {
   while (fixtureBootstrapExecutors.length > 0) {
     await fixtureBootstrapExecutors.pop()?.close();

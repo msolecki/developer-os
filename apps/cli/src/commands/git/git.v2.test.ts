@@ -19,19 +19,14 @@ import { runBrain } from "../brain.js";
 import { runConfig } from "../config.js";
 import { runInit } from "../init.js";
 import { manifestAdmissionFor } from "../uninstall.js";
-import { createCommandFixture, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../testing.js";
+import { createCommandFixture, createLowEntropyFixtureRoot, REAL_FILESYSTEM_TIMEOUT_MS, removeCommandFixtures } from "../testing.js";
 import type { CommandFixture } from "../testing.js";
 import { runGit } from "./index.js";
 import type { GitCommandDataV1 } from "./index.js";
 import { gitScopeOf } from "./service.js";
 import { createBareRemote, scriptedEffectPorts, scriptedGitRuntime } from "./testing.js";
 
-let fixtureRoot: string | null = null;
-
-afterAll(async () => {
-  await removeCommandFixtures();
-  if (fixtureRoot !== null) await nodeFs.rm(fixtureRoot, { recursive: true, force: true });
-});
+afterAll(removeCommandFixtures);
 
 const runtime = scriptedGitRuntime();
 const rejectDestination = { on: false };
@@ -45,14 +40,8 @@ let shared: Promise<GitHomeFixtureV1> | null = null;
 
 function sharedHome(): Promise<GitHomeFixtureV1> {
   shared ??= (async () => {
-    /**
-     * Not under macOS's per-user TMPDIR (`/var/folders/<xx>/<random>/T`), which the redactor
-     * reads as high-entropy: the local remote's URL in `.git/config` would trip
-     * `git_config_secret`, a refusal this suite does not exercise.
-     */
-    fixtureRoot = await nodeFs.realpath(await nodeFs.mkdtemp("/tmp/developer-os-git-v2-"));
     const fixture = await createCommandFixture("git-v2", {
-      root: fixtureRoot,
+      root: await createLowEntropyFixtureRoot("git-v2"),
       bootstrapAvailable: true,
       effectPorts: scriptedEffectPorts(runtime, rejectDestination),
     });
