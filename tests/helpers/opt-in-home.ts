@@ -76,6 +76,12 @@ export interface OptInFaultsV1 {
   bootoutDeath: boolean;
   /** The next coordinator dies right after its plan is published, before its first step. */
   deathAfterPublish: boolean;
+  /**
+   * Set when a `launchctl` death fires. A rejected step before the point of no return is a
+   * failure the coordinator compensates in-process; a dead process compensates nothing, so the
+   * coordinator's next journal rewrite dies too and the ledger stays open.
+   */
+  processDead: boolean;
 }
 
 export interface OptInHomeV1 extends CommandFixture {
@@ -138,6 +144,7 @@ function composePorts(
           bootout: (...args: Parameters<typeof base.launchctl.bootout>) => {
             if (!faults.bootoutDeath) return base.launchctl.bootout(...args);
             faults.bootoutDeath = false;
+            faults.processDead = true;
             return Promise.reject(new SyntheticDeath("launchctl bootout"));
           },
         },
@@ -146,6 +153,7 @@ function composePorts(
           bootstrap: (...args: Parameters<typeof base.bootstrapper.bootstrap>) => {
             if (!faults.bootstrapDeath) return base.bootstrapper.bootstrap(...args);
             faults.bootstrapDeath = false;
+            faults.processDead = true;
             return Promise.reject(new SyntheticDeath("launchctl bootstrap"));
           },
         },
@@ -170,6 +178,12 @@ function recordingStore(
             throw new SyntheticDeath(`published ${plan.operation}`);
           }
           return published;
+        };
+      }
+      if (property === "rewriteJournal" && faults.processDead) {
+        return () => {
+          faults.processDead = false;
+          return Promise.reject(new SyntheticDeath("coordinator journal rewrite after a launchctl death"));
         };
       }
       const value: unknown = Reflect.get(target, property);
@@ -220,6 +234,7 @@ export async function createOptInHome(name: string): Promise<OptInHomeV1> {
     bootstrapDeath: false,
     bootoutDeath: false,
     deathAfterPublish: false,
+    processDead: false,
   };
   const fixture = await createCommandFixture(name, {
     root: await createLowEntropyFixtureRoot(name),
@@ -229,6 +244,8 @@ export async function createOptInHome(name: string): Promise<OptInHomeV1> {
   await nodeFs.mkdir(fixture.paths.brain, { recursive: true, mode: 0o700 });
   const initialized = await runInit(fixture.context, { dryRun: false, assumeYes: true });
   if (!initialized.ok) throw new Error(`fixture init failed: ${JSON.stringify(initialized)}`);
+  // The Brain predates init, so no template was written; a reindex, the cheapest gated mutation, needs a content root.
+  await nodeFs.mkdir(join(fixture.paths.brain, "content"), { mode: 0o700 });
   await nodeFs.mkdir(join(fixture.userHome, "Library", "LaunchAgents"), { recursive: true, mode: 0o700 });
   const base = fixture.context.lifecycle;
   if (base === undefined) throw new Error("the fixture composed no lifecycle context");

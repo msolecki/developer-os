@@ -846,12 +846,7 @@ describe("the opt-in lifecycle end to end: enable → sync → automation → di
 let forgery: Promise<OptInHomeV1> | null = null;
 
 function forgeryHome(): Promise<OptInHomeV1> {
-  forgery ??= (async () => {
-    const home = await createOptInHome("opt-in-forgery");
-    // The Brain predates init, so no template was written; recoverThroughNextMutation's reindex needs a content root.
-    await nodeFs.mkdir(join(home.paths.brain, "content"), { mode: 0o700 });
-    return home;
-  })();
+  forgery ??= createOptInHome("opt-in-forgery");
   return forgery;
 }
 
