@@ -464,6 +464,21 @@ describe("the bootstrap refusal paths", () => {
   });
 });
 
+const networkModule = /(?:from\s+|import\s*\(\s*|require\s*\(\s*)["'](?:node:)?(?:https?|http2|net|tls|dns|dgram|undici)(?:\/[a-z]+)?["']/u;
+
+const GIT_GATEWAY_TRAMPOLINE_SOURCE = "packages/security/src/git/gateways.ts";
+
+/** The trampoline template's classification, shared by the sweep and its mutation cases. */
+function isLocalSocketClient(source: string): boolean {
+  const references = [...source.matchAll(new RegExp(networkModule.source, "gu"))].map((match) => match[0]);
+  const calls = [...source.matchAll(/\bnet\.(\w+)\(([^)]*)\)/gu)].map((match) => `${match[1] ?? ""}(${match[2] ?? ""})`);
+  /** `net` the binding, not `node:net` the module: bound once and called once, so no alias exists. */
+  const bindings = [...source.matchAll(/(?<!:)\bnet\b/gu)].length;
+  return references.length === 1 && references[0] === 'require("node:net"' && bindings === 2 &&
+    calls.length === 1 &&
+    calls[0] === 'createConnection({ path: process.env.DEVELOPER_OS_GIT_SUPERVISOR_SOCKET ?? \\"\\" })';
+}
+
 /**
  * **The update-only row.** No `update` command exists yet, so this row is a
  * static classifier rather than a command run: every non-test TypeScript
@@ -489,7 +504,6 @@ describe("the release transport is the only network entrypoint", () => {
     );
     expect(sources.length).toBeGreaterThan(0);
 
-    const networkModule = /(?:from\s+|import\s*\(\s*|require\s*\(\s*)["'](?:node:)?(?:https?|http2|net|tls|dns|dgram|undici)(?:\/[a-z]+)?["']/u;
     const networkCapable: string[] = [];
     for (const path of sources) {
       const source = await readFile(join(root, path), "utf8");
@@ -523,26 +537,31 @@ describe("the release transport is the only network entrypoint", () => {
      * The Git gateway trampoline template is source text for the child that reports to that
      * server: it connects only to the Unix-domain socket path its supervisor puts in the
      * environment. Classified while its one network reference is that template's
-     * `require("node:net")` and its one `net` call is that `createConnection`, so a TCP port, a
-     * second call or any real import reddens this case.
+     * `require("node:net")`, its `net` binding appears only there and in its one call, and that
+     * call is `createConnection({ path })` — a bare string that is all digits is a TCP port to
+     * Node — so a port, an alias, a second call or any real import reddens this case.
      */
-    const localSocketClients = ["packages/security/src/git/gateways.ts"];
+    const localSocketClients = [GIT_GATEWAY_TRAMPOLINE_SOURCE];
     for (const path of networkCapable.filter((candidate) => localSocketClients.includes(candidate))) {
-      const source = await readFile(join(root, path), "utf8");
-      const references = [...source.matchAll(new RegExp(networkModule.source, "gu"))].map((match) => match[0]);
-      const calls = [...source.matchAll(/\bnet\.(\w+)\(([^)]*)\)/gu)].map((match) => `${match[1] ?? ""}(${match[2] ?? ""})`);
-      if (
-        references.length === 1 && references[0] === 'require("node:net"' &&
-        calls.length === 1 && calls[0] === 'createConnection(process.env.DEVELOPER_OS_GIT_SUPERVISOR_SOCKET ?? \\"\\")'
-      ) {
-        localOnly.push(path);
-      }
+      if (isLocalSocketClient(await readFile(join(root, path), "utf8"))) localOnly.push(path);
     }
     expect(localOnly).toStrictEqual([...localSocketServers, ...localSocketClients]);
 
     expect(networkCapable.filter((path) => !localOnly.includes(path)).sort()).toStrictEqual([
       "packages/security/src/update/transport.ts",
     ]);
+  });
+
+  it("stops classifying the Git gateway trampoline once its net binding is aliased", async () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const root = (await promisify(execFile)("git", ["rev-parse", "--show-toplevel"], { cwd: here })).stdout.trim();
+    const source = await readFile(join(root, GIT_GATEWAY_TRAMPOLINE_SOURCE), "utf8");
+    expect(isLocalSocketClient(source)).toBe(true);
+
+    const call = '"const socket = net.createConnection(';
+    const aliased = source.replace(call, `"const n = net; n.connect(443, \\"example.test\\");",\n  ${call}`);
+    expect(aliased).not.toBe(source);
+    expect(isLocalSocketClient(aliased)).toBe(false);
   });
 });
 

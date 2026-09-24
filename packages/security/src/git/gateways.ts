@@ -61,7 +61,7 @@ export const GIT_GATEWAY_TRAMPOLINE_TEMPLATE = [
   'const net = require("node:net");',
   'const basename = "@@BASENAME@@";',
   "const refuse = () => process.exit(126);",
-  "const socket = net.createConnection(process.env.DEVELOPER_OS_GIT_SUPERVISOR_SOCKET ?? \"\");",
+  "const socket = net.createConnection({ path: process.env.DEVELOPER_OS_GIT_SUPERVISOR_SOCKET ?? \"\" });",
   'socket.on("error", refuse);',
   'socket.on("connect", () => {',
   "  socket.write(JSON.stringify({",
