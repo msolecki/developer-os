@@ -291,6 +291,8 @@ export interface GitHomeV1 {
   readonly manifestFile: ObservedFileV1 & { readonly entry: LifecycleGuardedEntryV1; readonly hash: LowerHexSha256 };
   readonly manifest: InstallationManifestV2;
   readonly syncRecord: SyncRecordV1 | null;
+  /** The bytes at `state/git-sync.json`, empty for fresh `init`'s reservation; null when absent. */
+  readonly syncRecordBytes: Uint8Array | null;
 }
 
 export async function observeHome(context: CliContext, lifecycle: CliLifecycleContext): Promise<GitHomeV1> {
@@ -340,6 +342,7 @@ export async function observeHome(context: CliContext, lifecycle: CliLifecycleCo
     manifestFile: { ...manifestFile, entry: manifestFile.entry, hash: manifestFile.hash },
     manifest: admitted.manifest,
     syncRecord: record?.record ?? null,
+    syncRecordBytes: record?.bytes ?? null,
   };
 }
 
@@ -1927,8 +1930,8 @@ export function createGitService(context: CliContext, lifecycle: CliLifecycleCon
         mutations: [
           {
             targetPath: syncRecordPath(context.paths),
-            operation: home.syncRecord === null ? "create" : "replace",
-            expectedBeforeHash: home.syncRecord === null ? null : sha256(encodeSyncRecord(home.syncRecord)),
+            operation: home.syncRecordBytes === null ? "create" : "replace",
+            expectedBeforeHash: home.syncRecordBytes === null ? null : sha256(home.syncRecordBytes),
             content: encodeSyncRecord(inputs.record),
           },
         ],

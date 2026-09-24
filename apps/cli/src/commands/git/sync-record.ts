@@ -141,7 +141,7 @@ export async function readSyncRecord(
   fs: LifecycleGuardedFileSystemV1,
   paths: Pick<RuntimePaths, "stateDir">,
   effectiveUid: number,
-): Promise<{ readonly record: SyncRecordV1; readonly bytes: Uint8Array } | null> {
+): Promise<{ readonly record: SyncRecordV1 | null; readonly bytes: Uint8Array } | null> {
   const path = syncRecordPath(paths);
   const entry = await fs.lstat(path);
   if (entry === null) return null;
@@ -149,5 +149,6 @@ export async function readSyncRecord(
     throw new Error("invalid SyncRecordV1: not the owned regular file");
   }
   const bytes = await fs.readRegular(entry, MAX_SYNC_RECORD_BYTES);
-  return { record: parseSyncRecord(bytes), bytes };
+  // Fresh `init`'s zero-byte runtime reservation holds no record, exactly as the lifecycle ledger reads it.
+  return { record: bytes.byteLength === 0 ? null : parseSyncRecord(bytes), bytes };
 }
