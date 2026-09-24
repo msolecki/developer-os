@@ -519,6 +519,27 @@ describe("the release transport is the only network entrypoint", () => {
     }
     expect(localOnly).toStrictEqual(localSocketServers);
 
+    /**
+     * The Git gateway trampoline template is source text for the child that reports to that
+     * server: it connects only to the Unix-domain socket path its supervisor puts in the
+     * environment. Classified while its one network reference is that template's
+     * `require("node:net")` and its one `net` call is that `createConnection`, so a TCP port, a
+     * second call or any real import reddens this case.
+     */
+    const localSocketClients = ["packages/security/src/git/gateways.ts"];
+    for (const path of networkCapable.filter((candidate) => localSocketClients.includes(candidate))) {
+      const source = await readFile(join(root, path), "utf8");
+      const references = [...source.matchAll(new RegExp(networkModule.source, "gu"))].map((match) => match[0]);
+      const calls = [...source.matchAll(/\bnet\.(\w+)\(([^)]*)\)/gu)].map((match) => `${match[1] ?? ""}(${match[2] ?? ""})`);
+      if (
+        references.length === 1 && references[0] === 'require("node:net"' &&
+        calls.length === 1 && calls[0] === 'createConnection(process.env.DEVELOPER_OS_GIT_SUPERVISOR_SOCKET ?? \\"\\")'
+      ) {
+        localOnly.push(path);
+      }
+    }
+    expect(localOnly).toStrictEqual([...localSocketServers, ...localSocketClients]);
+
     expect(networkCapable.filter((path) => !localOnly.includes(path)).sort()).toStrictEqual([
       "packages/security/src/update/transport.ts",
     ]);
