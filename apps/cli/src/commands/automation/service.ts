@@ -26,14 +26,17 @@ import {
   serializeConfig,
 } from "@developer-os/core";
 import type {
+  AllocatedLifecycleIdV1,
   AutomationConfigV1,
   CanonicalAbsolutePathV1,
   CanonicalJsonValue,
   ExitCode,
   FoundationParticipantExecutor,
   FoundationParticipantRefV1,
+  FoundationTransactionIdV1,
   HeldLifecycleStableLockV1,
   InstallationManifestV2,
+  LaunchdEffectIdV1,
   LifecycleActivationRecordV1,
   LifecycleCoordinatorIdV1,
   LifecycleCoordinatorStepV1,
@@ -186,7 +189,7 @@ export class AutomationCommandRefusal extends Error {
 
 const MAX_JOURNAL_BYTES = 1_048_576;
 const MAX_ENTRYPOINT_BYTES = 1_048_576n;
-const WIDEST_UINT64 = "18446744073709551615";
+const WIDEST_UINT64 = parseUInt64Decimal("18446744073709551615");
 const WIDEST_HASH = "f".repeat(64) as LowerHexSha256;
 const PLIST_MODE = 0o600;
 const encoder = new TextEncoder();
@@ -659,7 +662,7 @@ function placeholderRef(
       finalPath: canonical(`${productHome}/state/transactions/${id}.json`),
       plannedBytesHash: WIDEST_HASH,
       stagedPath: canonical(`${productHome}/staging/lifecycle/${coordinatorId}/foundation/${id}/journal.json`),
-      stagedIdentity: { hash: WIDEST_HASH, size: MAX_JOURNAL_BYTES, mode: 384, dev: WIDEST_UINT64 as never, ino: WIDEST_UINT64 as never },
+      stagedIdentity: { hash: WIDEST_HASH, size: MAX_JOURNAL_BYTES, mode: 384, dev: WIDEST_UINT64, ino: WIDEST_UINT64 },
     },
   };
 }
@@ -674,10 +677,10 @@ function placeholderFoundation(inputs: AutomationApplyInputsV1, coordinatorId: s
   }));
   const activationTarget = [{ path: home.authority.activationPath, size: files.activation.byteLength }];
   return [
-    placeholderRef(productHome, coordinatorId, plist, "plist_files", { kind: "forward", compensationId: plistInverse as never }, plists),
-    placeholderRef(productHome, coordinatorId, plistInverse, "plist_files", { kind: "compensation", forwardId: plist as never }, plists),
-    placeholderRef(productHome, coordinatorId, activation, "activation", { kind: "forward", compensationId: activationInverse as never }, activationTarget),
-    placeholderRef(productHome, coordinatorId, activationInverse, "activation", { kind: "compensation", forwardId: activation as never }, activationTarget),
+    placeholderRef(productHome, coordinatorId, plist, "plist_files", { kind: "forward", compensationId: plistInverse as AllocatedLifecycleIdV1<"tx"> }, plists),
+    placeholderRef(productHome, coordinatorId, plistInverse, "plist_files", { kind: "compensation", forwardId: plist as AllocatedLifecycleIdV1<"tx"> }, plists),
+    placeholderRef(productHome, coordinatorId, activation, "activation", { kind: "forward", compensationId: activationInverse as AllocatedLifecycleIdV1<"tx"> }, activationTarget),
+    placeholderRef(productHome, coordinatorId, activationInverse, "activation", { kind: "compensation", forwardId: activation as AllocatedLifecycleIdV1<"tx"> }, activationTarget),
     placeholderRef(productHome, coordinatorId, config, "config", { kind: "forward", compensationId: null }, [{ path: home.authority.configPath, size: files.config.byteLength }]),
   ];
 }
@@ -728,7 +731,7 @@ function effectId(id: string | null): string | null {
 }
 
 function widestIdentity(entry: LaunchdPlanPreviewEntryV1, hash: LowerHexSha256, size: number, uid: number): LaunchdBootstrapPlistIdentityV1 {
-  return { path: entry.plistPath, ownerUid: parseEffectiveUid(uid, uid), mode: 384, nlink: 1, size, hash, dev: WIDEST_UINT64 as never, ino: WIDEST_UINT64 as never };
+  return { path: entry.plistPath, ownerUid: parseEffectiveUid(uid, uid), mode: 384, nlink: 1, size, hash, dev: WIDEST_UINT64, ino: WIDEST_UINT64 };
 }
 
 /** Before staging, every unknown inode is the widest decimal; `keep` binds its one retained inode in both arms. */
@@ -822,8 +825,8 @@ function automationBuilder(inputs: AutomationApplyInputsV1): LifecycleExecutionB
           before: { state: "present", hash: home.manifestFile.hash },
           after: { state: "present", hash: liveOnly ? home.manifestFile.hash : sha256(files.manifest) },
         },
-        beforeFilesEffectId: effectId(beforeId) as never,
-        afterFilesEffectId: effectId(afterId) as never,
+        beforeFilesEffectId: effectId(beforeId) as LaunchdEffectIdV1 | null,
+        afterFilesEffectId: effectId(afterId) as LaunchdEffectIdV1 | null,
         bootstrapPlists: inputs.staged?.bootstrap ?? placeholderBootstrap(inputs),
       });
       const beforeRef = launchd.beforeFilesEffect;
@@ -841,11 +844,11 @@ function automationBuilder(inputs: AutomationApplyInputsV1): LifecycleExecutionB
           case "M2":
             return { kind: "manifest", transition: "finalize_tombstones" };
           case "Fp":
-            return { kind: "foundation", slot: "plist_files", participantId: plistId as never };
+            return { kind: "foundation", slot: "plist_files", participantId: plistId as AllocatedLifecycleIdV1<"tx"> };
           case "Fa":
-            return { kind: "foundation", slot: "activation", participantId: activationId as never };
+            return { kind: "foundation", slot: "activation", participantId: activationId as AllocatedLifecycleIdV1<"tx"> };
           case "Fc":
-            return { kind: "foundation", slot: "config", participantId: configId as never };
+            return { kind: "foundation", slot: "config", participantId: configId as AllocatedLifecycleIdV1<"tx"> };
         }
       };
       const base: LifecycleExecutionPlanV1 = {
@@ -900,16 +903,16 @@ async function stageFoundation(
   const foundation = gitAdapters(context, lifecycle, NO_PUSH).foundation;
   const { home, files } = inputs.planned;
   const stage = (id: string | undefined, slot: FoundationParticipantRefV1["slot"], role: FoundationParticipantRefV1["role"], mutations: FoundationMutationsV1): Promise<FoundationParticipantRefV1> =>
-    foundation.stage({ coordinatorId, id: id as never, slot, role, createdAt: inputs.createdAt, mutations });
+    foundation.stage({ coordinatorId, id: id as FoundationTransactionIdV1, slot, role, createdAt: inputs.createdAt, mutations });
   const plists = plistMutations(inputs);
   const activationBefore = home.activationFile.bytes;
   return [
-    await stage(plist, "plist_files", { kind: "forward", compensationId: plistInverse as never }, plists.forward),
-    await stage(plistInverse, "plist_files", { kind: "compensation", forwardId: plist as never }, plists.inverse),
-    await stage(activation, "activation", { kind: "forward", compensationId: activationInverse as never }, [
+    await stage(plist, "plist_files", { kind: "forward", compensationId: plistInverse as AllocatedLifecycleIdV1<"tx"> }, plists.forward),
+    await stage(plistInverse, "plist_files", { kind: "compensation", forwardId: plist as AllocatedLifecycleIdV1<"tx"> }, plists.inverse),
+    await stage(activation, "activation", { kind: "forward", compensationId: activationInverse as AllocatedLifecycleIdV1<"tx"> }, [
       { targetPath: home.authority.activationPath, operation: activationBefore === null ? "create" : "replace", expectedBeforeHash: home.activationFile.hash, content: files.activation },
     ]),
-    await stage(activationInverse, "activation", { kind: "compensation", forwardId: activation as never }, [
+    await stage(activationInverse, "activation", { kind: "compensation", forwardId: activation as AllocatedLifecycleIdV1<"tx"> }, [
       { targetPath: home.authority.activationPath, operation: activationBefore === null ? "remove" : "replace", expectedBeforeHash: sha256(files.activation), content: activationBefore },
     ]),
     await stage(config, "config", { kind: "forward", compensationId: null }, [

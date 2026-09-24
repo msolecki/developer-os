@@ -95,6 +95,10 @@ import type {
   PlannedGitPathStateV1,
   UtcTimestampV1,
   VaultFreeRelativePathV1,
+  AllocatedLifecycleIdV1,
+  UInt64DecimalV1,
+  GitEffectIdV1,
+  FoundationTransactionIdV1,
 } from "@developer-os/core";
 import { PRIVATE_FOLDERS, discoverNotes, lintVault, resolveBrainConfig } from "@developer-os/brain";
 import type { DirectoryEntry } from "@developer-os/brain";
@@ -211,9 +215,9 @@ const MAX_JOURNAL_BYTES = 1_048_576;
 const MAX_GIT_CONTROL_BYTES = 67_108_864;
 const MAX_FAST_FORWARD_WALK = 100_000;
 const FOUNDATION_BINDINGS_DOMAIN = "developer-os/manifest-foundation-bindings/v1\0";
-const WIDEST_UINT64 = "18446744073709551615";
+const WIDEST_UINT64 = parseUInt64Decimal("18446744073709551615");
 const WIDEST_HASH = "f".repeat(64) as LowerHexSha256;
-const ZERO_OID = "0".repeat(40);
+const ZERO_OID = "0000000000000000000000000000000000000000";
 const REFLOG_MESSAGE = "developer-os sync";
 const ACTIVATION_SOURCE = "generated/state/lifecycle-activation.json" as VaultFreeRelativePathV1;
 const encoder = new TextEncoder();
@@ -677,7 +681,7 @@ async function writeOwned(path: string, bytes: Uint8Array, mode: number): Promis
   }
 }
 
-async function identityOf(path: string): Promise<{ readonly dev: string; readonly ino: string; readonly mode: number; readonly ownerUid: number; readonly size: number }> {
+async function identityOf(path: string): Promise<{ readonly dev: UInt64DecimalV1; readonly ino: UInt64DecimalV1; readonly mode: number; readonly ownerUid: number; readonly size: number }> {
   const stats = await lstat(path, { bigint: true });
   return {
     dev: parseUInt64Decimal(stats.dev.toString(10)),
@@ -691,7 +695,7 @@ async function identityOf(path: string): Promise<{ readonly dev: string; readonl
 async function stagedRegular(path: string, bytes: Uint8Array, mode: number, semantic: GitSemanticStateV1): Promise<GuardedGitPathStateV1> {
   await writeOwned(path, bytes, mode);
   const identity = await identityOf(path);
-  return { state: "regular_file", hash: sha256(bytes), size: bytes.byteLength, mode, dev: identity.dev as never, ino: identity.ino as never, semantic };
+  return { state: "regular_file", hash: sha256(bytes), size: bytes.byteLength, mode, dev: identity.dev, ino: identity.ino, semantic };
 }
 
 function plannedOf(state: GuardedGitPathStateV1): PlannedGitPathStateV1 {
@@ -846,10 +850,10 @@ async function stageInitialTree(
     state: "directory_tree",
     treeHash: gitTreeFingerprintHash(fingerprint),
     entryCount: fingerprint.entries.length,
-    ownerUid: rootIdentity.ownerUid as never,
+    ownerUid: fingerprint.root.ownerUid,
     mode: rootIdentity.mode,
-    dev: rootIdentity.dev as never,
-    ino: rootIdentity.ino as never,
+    dev: fingerprint.root.dev,
+    ino: fingerprint.root.ino,
     symbolicHead: parseFullBranchRef(`refs/heads/${branch}`),
   };
 }
@@ -1128,7 +1132,7 @@ function placeholderFoundation(
       finalPath: canonical(`${productHome}/state/transactions/${id}.json`),
       plannedBytesHash: WIDEST_HASH,
       stagedPath: canonical(`${productHome}/staging/lifecycle/${coordinatorId}/foundation/${id}/journal.json`),
-      stagedIdentity: { hash: WIDEST_HASH, size: MAX_JOURNAL_BYTES, mode: 384, dev: WIDEST_UINT64 as never, ino: WIDEST_UINT64 as never },
+      stagedIdentity: { hash: WIDEST_HASH, size: MAX_JOURNAL_BYTES, mode: 384, dev: WIDEST_UINT64, ino: WIDEST_UINT64 },
     },
   };
 }
@@ -1155,17 +1159,17 @@ function lifecycleBuilder(inputs: LifecycleApplyInputsV1): LifecycleExecutionBui
       const foundation =
         inputs.staged?.foundation ??
         [
-          placeholderFoundation(authority.productHome, coordinatorId, activation, "activation", { kind: "forward", compensationId: activationCompensation as never }, authority.activationPath, inputs.files.activation.byteLength),
-          placeholderFoundation(authority.productHome, coordinatorId, activationCompensation, "activation", { kind: "compensation", forwardId: activation as never }, authority.activationPath, inputs.files.activation.byteLength),
+          placeholderFoundation(authority.productHome, coordinatorId, activation, "activation", { kind: "forward", compensationId: activationCompensation as AllocatedLifecycleIdV1<"tx"> }, authority.activationPath, inputs.files.activation.byteLength),
+          placeholderFoundation(authority.productHome, coordinatorId, activationCompensation, "activation", { kind: "compensation", forwardId: activation as AllocatedLifecycleIdV1<"tx"> }, authority.activationPath, inputs.files.activation.byteLength),
           placeholderFoundation(authority.productHome, coordinatorId, config, "config", { kind: "forward", compensationId: null }, authority.configPath, inputs.files.config.byteLength),
         ];
       const sourceRef = source === null ? null : (inputs.staged?.source ?? { id: source, planHash: WIDEST_HASH });
       const steps: LifecycleCoordinatorStepV1[] = [
         { kind: "manifest", transition: "preserve_before" },
-        { kind: "foundation", slot: "activation", participantId: activation as never },
+        { kind: "foundation", slot: "activation", participantId: activation as AllocatedLifecycleIdV1<"tx"> },
         { kind: "manifest", transition: "publish_after" },
-        ...(sourceRef === null ? [] : [{ kind: "source_git_effect" as const, participantId: sourceRef.id as never }]),
-        { kind: "foundation", slot: "config", participantId: config as never },
+        ...(sourceRef === null ? [] : [{ kind: "source_git_effect" as const, participantId: sourceRef.id as GitEffectIdV1 }]),
+        { kind: "foundation", slot: "config", participantId: config as AllocatedLifecycleIdV1<"tx"> },
         { kind: "manifest", transition: "finalize_tombstones" },
       ];
       const base: LifecycleExecutionPlanV1 = {
@@ -1178,7 +1182,7 @@ function lifecycleBuilder(inputs: LifecycleApplyInputsV1): LifecycleExecutionBui
         participants: {
           foundation: [...foundation].sort((left, right) => Buffer.compare(Buffer.from(left.id), Buffer.from(right.id))),
           manifest: manifestLeaf(inputs, coordinatorId, participantId, [activation, config], sourceRef),
-          sourceGitEffect: sourceRef === null ? null : { id: sourceRef.id as never, planHash: sourceRef.planHash },
+          sourceGitEffect: sourceRef === null ? null : { id: sourceRef.id as GitEffectIdV1, planHash: sourceRef.planHash },
           destinationGitEffect: null,
           launchdBeforeFiles: null,
           launchdAfterFiles: null,
@@ -1240,8 +1244,8 @@ async function stageEnableEffect(
   return effectPlanOf(
     {
       schemaVersion: 1,
-      id: id as never,
-      coordinatorId: coordinatorId as never,
+      id: id as GitEffectIdV1,
+      coordinatorId: coordinatorId as LifecycleCoordinatorIdV1,
       side: "source",
       worktreeRoot: git.repositoryRoot,
       gitDirectory,
@@ -1268,9 +1272,9 @@ async function stageLifecycleFoundation(
   const { home, files, createdAt } = inputs;
   const activationBefore = home.activationFile.bytes;
   const stage = (id: string | undefined, slot: FoundationParticipantRefV1["slot"], role: FoundationParticipantRefV1["role"], mutations: Parameters<FoundationParticipantExecutor["stage"]>[0]["mutations"]): Promise<FoundationParticipantRefV1> =>
-    foundation.stage({ coordinatorId, id: id as never, slot, role, createdAt, mutations });
+    foundation.stage({ coordinatorId, id: id as FoundationTransactionIdV1, slot, role, createdAt, mutations });
   return [
-    await stage(activation, "activation", { kind: "forward", compensationId: activationCompensation as never }, [
+    await stage(activation, "activation", { kind: "forward", compensationId: activationCompensation as AllocatedLifecycleIdV1<"tx"> }, [
       {
         targetPath: home.authority.activationPath,
         operation: activationBefore === null ? "create" : "replace",
@@ -1278,7 +1282,7 @@ async function stageLifecycleFoundation(
         content: files.activation,
       },
     ]),
-    await stage(activationCompensation, "activation", { kind: "compensation", forwardId: activation as never }, [
+    await stage(activationCompensation, "activation", { kind: "compensation", forwardId: activation as AllocatedLifecycleIdV1<"tx"> }, [
       {
         targetPath: home.authority.activationPath,
         operation: activationBefore === null ? "remove" : "replace",
@@ -1453,8 +1457,8 @@ async function stageSourceEffect(
   return effectPlanOf(
     {
       schemaVersion: 1,
-      id: id as never,
-      coordinatorId: coordinatorId as never,
+      id: id as GitEffectIdV1,
+      coordinatorId: coordinatorId as LifecycleCoordinatorIdV1,
       side: "source",
       worktreeRoot: draft.sync.repositoryRoot,
       gitDirectory: canonical(`${draft.sync.repositoryRoot}/.git`),
@@ -1501,7 +1505,7 @@ async function stageDestinationEffect(
   if (prepared.preparation.kind === "pack_received") {
     const oldOid = destination.targetRef.state === "present" ? destination.targetRef.oid : ZERO_OID;
     if (destination.targetReflogBytes !== null) {
-      const line = gitReflogAppendLine({ oldOid: oldOid as never, newOid: commitOid, committer: input.committer });
+      const line = gitReflogAppendLine({ oldOid, newOid: commitOid, committer: input.committer });
       const after = Buffer.concat([destination.targetReflogBytes, Buffer.from(line)]);
       reflogAppend = validateGitReflogAppend({
         role: "destination_branch_reflog",
@@ -1525,8 +1529,8 @@ async function stageDestinationEffect(
   return effectPlanOf(
     {
       schemaVersion: 1,
-      id: input.id as never,
-      coordinatorId: input.coordinatorId as never,
+      id: input.id as GitEffectIdV1,
+      coordinatorId: input.coordinatorId as LifecycleCoordinatorIdV1,
       side: "destination",
       worktreeRoot: null,
       gitDirectory: destination.gitDirectory,
@@ -1616,9 +1620,9 @@ function syncBuilder(inputs: SyncInputsV1, reservation: LifecycleLeafReservation
       const push = destination === null ? null : pushPlanOf(inputs, destination);
       const pushPlanHash = push === null ? null : PERSISTED_GIT_PUSH_PLAN_CODEC.hash(push);
       const steps: LifecycleCoordinatorStepV1[] = [
-        ...(source === null ? [] : [{ kind: "source_git_effect" as const, participantId: source.id as never }]),
-        ...(destination === null || pushPlanHash === null ? [] : [{ kind: "destination_git_effect" as const, participantId: destination.id as never, pushPlanHash }]),
-        { kind: "foundation", slot: "sync_record", participantId: syncRecord as never },
+        ...(source === null ? [] : [{ kind: "source_git_effect" as const, participantId: source.id as GitEffectIdV1 }]),
+        ...(destination === null || pushPlanHash === null ? [] : [{ kind: "destination_git_effect" as const, participantId: destination.id as GitEffectIdV1, pushPlanHash }]),
+        { kind: "foundation", slot: "sync_record", participantId: syncRecord as AllocatedLifecycleIdV1<"tx"> },
       ];
       const base: LifecycleExecutionPlanV1 = {
         schemaVersion: 1,
@@ -1630,8 +1634,8 @@ function syncBuilder(inputs: SyncInputsV1, reservation: LifecycleLeafReservation
         participants: {
           foundation: [foundation],
           manifest: null,
-          sourceGitEffect: source === null ? null : { id: source.id as never, planHash: source.planHash },
-          destinationGitEffect: destination === null ? null : { id: destination.id as never, planHash: destination.planHash },
+          sourceGitEffect: source === null ? null : { id: source.id as GitEffectIdV1, planHash: source.planHash },
+          destinationGitEffect: destination === null ? null : { id: destination.id as GitEffectIdV1, planHash: destination.planHash },
           launchdBeforeFiles: null,
           launchdAfterFiles: null,
           launchd: null,
@@ -1916,7 +1920,7 @@ export function createGitService(context: CliContext, lifecycle: CliLifecycleCon
       }
       const foundation = await gitAdapters(context, lifecycle, NO_PUSH).foundation.stage({
         coordinatorId,
-        id: ids[1] as never,
+        id: ids[1] as FoundationTransactionIdV1,
         slot: "sync_record",
         role: { kind: "forward", compensationId: null },
         createdAt: inputs.createdAt,

@@ -12,6 +12,7 @@ import {
   parseSafeReasonCode,
   parseUInt64Decimal,
   parseUtcTimestamp,
+  redactPayload,
   standaloneFoundationLeafReservation,
 } from "@developer-os/core";
 import type {
@@ -160,7 +161,7 @@ describe("AutomationStatusRecordV1", () => {
 describe("AutomationLogRecordV1 and redaction", () => {
   it("redacts the structured result before it is bounded or encoded", () => {
     const redact = (text: string): string => text.replaceAll(SECRET, "[redacted]");
-    const data = redactScheduledData(redact, { note: `token ${SECRET}`, nested: [{ key: SECRET }] });
+    const data = redactScheduledData(redactPayload(redact, { note: `token ${SECRET}`, nested: [{ key: SECRET }] }));
     const bytes = encodeAutomationLogRecord(success("brain-reindex", data));
     expect(new TextDecoder().decode(bytes)).not.toContain(SECRET);
     expect(parseAutomationLogRecord(bytes).data).toStrictEqual({ note: "token [redacted]", nested: [{ key: "[redacted]" }] });
@@ -169,11 +170,11 @@ describe("AutomationLogRecordV1 and redaction", () => {
   it("bounds depth, entries and non-integer numbers into BoundedRedactedJsonV1", () => {
     let deep: unknown = "leaf";
     for (let level = 0; level < MAX_REDACTED_JSON_DEPTH + 8; level += 1) deep = [deep];
-    const data = redactScheduledData((text) => text, {
+    const data = redactScheduledData(redactPayload((text) => text, {
       deep,
       wide: Array.from({ length: MAX_REDACTED_JSON_ENTRIES + 5 }, (_unused, index) => index),
       ratio: 0.5,
-    });
+    }));
     expect(() => validateAutomationLogRecord(success("doctor", data))).not.toThrow();
     const wide = (data as { readonly wide: readonly unknown[] }).wide;
     expect(wide).toHaveLength(MAX_REDACTED_JSON_ENTRIES);
@@ -187,7 +188,7 @@ describe("AutomationLogRecordV1 and redaction", () => {
 
   it("refuses a log record over its 1-MiB slot, envelope and LF included", () => {
     const strings = Array.from({ length: 20 }, () => "x".repeat(60_000));
-    const record = success("brain-lint", redactScheduledData((text) => text, strings));
+    const record = success("brain-lint", redactScheduledData(redactPayload((text) => text, strings)));
     expect(() => encodeAutomationLogRecord(record)).toThrow(AutomationRuntimeRecordError);
     expect(MAX_AUTOMATION_LOG_BYTES).toBe(1_048_576);
   });
@@ -249,7 +250,7 @@ describe("the fixed log rotation", () => {
     const fixture = await storeFixture();
     const strings = Array.from({ length: 20 }, () => "y".repeat(60_000));
     await fixture.store.writeLog(
-      success("brain-lint", redactScheduledData((text) => text, strings)),
+      success("brain-lint", redactScheduledData(redactPayload((text) => text, strings))),
       await fixture.lease("brain-lint"),
     );
     const bytes = await nodeFs.readFile(automationLogSlotPath(fixture.productHome, "brain-lint", 0));

@@ -12,13 +12,13 @@ import {
   parseCanonicalAbsolutePathText,
   parseSafeReasonCode,
   parseUtcTimestamp,
-  redactPayload,
 } from "@developer-os/core";
 import type {
   CanonicalAbsolutePathV1,
   HeldLifecycleStableLockV1,
   LifecycleGuardedFileSystemV1,
   PlannedFileMutation,
+  RedactedPayload,
   SafeReasonCodeV1,
   ScheduledJobIdV1,
   TransactionPlan,
@@ -263,10 +263,11 @@ function bound(value: unknown, depth: number): BoundedRedactedJsonV1 {
 /**
  * §5.4 step 7: the product redactor runs first, on the whole structured result, and only
  * the redacted tree is truncated to `BoundedRedactedJsonV1` — truncating first could cut a
- * secret in half and leave a prefix no pattern recognizes.
+ * secret in half and leave a prefix no pattern recognizes. The parameter's type is that
+ * order: only `redactData` in `context.ts`, where the product redactor is bound, produces one.
  */
-export function redactScheduledData(redact: (text: string) => string, data: unknown): BoundedRedactedJsonV1 {
-  return bound(redactPayload(redact, data), 0);
+export function redactScheduledData(data: RedactedPayload): BoundedRedactedJsonV1 {
+  return bound(data, 0);
 }
 
 /** A record whose encoding would pass the 1-MiB slot keeps its envelope and loses its data. */

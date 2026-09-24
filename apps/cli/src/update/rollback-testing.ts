@@ -40,6 +40,10 @@ import {
   type UpdateConstructionPlanV1,
   type UpdateConstructionRollbackEntrySourceV1,
 } from "@developer-os/core";
+import type {
+  CanonicalJsonV1,
+  EffectiveUidV1,
+} from "@developer-os/core";
 
 import type { BundleParticipantDependenciesV1 } from "./bundle-source.js";
 import { RollbackPayloadSourceExecutor } from "./rollback-source.js";
@@ -169,10 +173,10 @@ export async function createRollbackSourceFixture(homes: string[]): Promise<Roll
 
   const preimage = await identityOf(preimagePath);
   const sources: readonly UpdateConstructionRollbackEntrySourceV1[] = [
-    { kind: "guarded_preimage", authority: { kind: "owner_operation_before", ownerPlan, operationOrdinal: 1 }, path: preimagePath, ownerUid: uid as never, mode: 384, nlink: 1, bytes: Buffer.byteLength(OLD_OWNER), sha256: sha(OLD_OWNER), ...preimage },
+    { kind: "guarded_preimage", authority: { kind: "owner_operation_before", ownerPlan, operationOrdinal: 1 }, path: preimagePath, ownerUid: uid as EffectiveUidV1, mode: 384, nlink: 1, bytes: Buffer.byteLength(OLD_OWNER), sha256: sha(OLD_OWNER), ...preimage },
     { kind: "planner_output", ordinal: 0 },
-    { kind: "plan_derived", role: "owner_inverse_plan", plan: ownerPlan, value: leaves[0].projection as never, valueBytes: Buffer.byteLength(leaves[0].projection) },
-    { kind: "plan_derived", role: "schema_migration_inverse_plan", plan: migrationPlan, value: leaves[1].projection as never, valueBytes: Buffer.byteLength(leaves[1].projection) },
+    { kind: "plan_derived", role: "owner_inverse_plan", plan: ownerPlan, value: leaves[0].projection as CanonicalJsonV1, valueBytes: Buffer.byteLength(leaves[0].projection) },
+    { kind: "plan_derived", role: "schema_migration_inverse_plan", plan: migrationPlan, value: leaves[1].projection as CanonicalJsonV1, valueBytes: Buffer.byteLength(leaves[1].projection) },
   ];
   const partial = {
     payloadId: ROLLBACK_PAYLOAD_ID,

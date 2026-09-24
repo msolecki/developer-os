@@ -23,6 +23,7 @@ import type {
   LifecycleJournalClosureV1,
   LifecycleStableLockProviderV1,
   NormalizedScheduleV1,
+  RedactedPayload,
   SafeReasonCodeV1,
   ScheduledJobIdV1,
   UtcTimestampV1,
@@ -51,6 +52,7 @@ import type {
 import { createBootstrapEvidenceInspectionRequest } from "../../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission } from "../../bootstrap/report.js";
 import { readConfigFile } from "../../config-file.js";
+import { redactData } from "../../context.js";
 import type { CliContext } from "../../context.js";
 import { admitInstalledV2Home, observeLifecycleActivationRecord } from "../../lifecycle/admission.js";
 import { lifecycleHomeKeyFromAdmission, residueFrom } from "../../lifecycle/context.js";
@@ -114,7 +116,8 @@ export interface AutomationRunnerDependenciesV1 {
   readonly nowMs: () => number;
   readonly sleepMs: (milliseconds: number) => Promise<void>;
   readonly clock: () => UtcTimestampV1;
-  readonly redact: (text: string) => string;
+  /** `redactData` bound to the product redactor; see `context.ts`. */
+  readonly redact: (data: unknown) => RedactedPayload;
   /** Stage 1; throws `ScheduledAuthenticationError` (or an admission refusal) and writes nothing. */
   authenticate(request: ScheduledRunRequestV1): Promise<void>;
   inspect(job: ScheduledJobIdV1): Promise<ScheduledStateV1>;
@@ -285,7 +288,7 @@ export class AutomationRunner {
     const startedAt = clock();
     const result = await this.#invoke(request.job, global);
     const completedAt = clock();
-    const data = redactScheduledData(redact, result.data);
+    const data = redactScheduledData(redact(result.data));
 
     if (await this.#markerPresent()) return silent("uninstalling");
     if ((await this.#dependencies.inspect(request.job)).closure !== "clear") return silent("closure_not_clear");
@@ -504,7 +507,7 @@ export function createAutomationRunnerDependencies(
     nowMs: lifecycle.nowMs,
     sleepMs: lifecycle.sleepMs,
     clock: lifecycle.clock,
-    redact: context.guards.redactDiagnostic,
+    redact: (data) => redactData(context, data),
     authenticate: async (request) => {
       const { manifest } = await admit();
       const plistPath = launchdPlistPath(installation.userHome, request.job);

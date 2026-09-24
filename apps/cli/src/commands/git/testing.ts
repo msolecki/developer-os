@@ -7,7 +7,14 @@ import { createHash } from "node:crypto";
 import * as nodeFs from "node:fs/promises";
 import { basename, join } from "node:path";
 
-import { parseCanonicalAbsolutePathText, parseUInt64Decimal, validateGitEffectTransition, validateGitPackReaderBudget } from "@developer-os/core";
+import {
+  parseCanonicalAbsolutePathText,
+  parseLowerHexSha1,
+  parseLowerHexSha256,
+  parseUInt64Decimal,
+  validateGitEffectTransition,
+  validateGitPackReaderBudget,
+} from "@developer-os/core";
 import type { GitEffectTransitionV1 } from "@developer-os/core";
 import { SUPPORTED_GIT_DISTRIBUTION, SecurityRefusalError, hashGitProcessTable } from "@developer-os/security";
 
@@ -34,7 +41,7 @@ async function stage(path: string, bytes: Uint8Array): Promise<GitEffectTransiti
   const stats = await nodeFs.lstat(path, { bigint: true });
   return {
     state: "regular_file",
-    hash: sha256(bytes) as never,
+    hash: parseLowerHexSha256(sha256(bytes)),
     size: bytes.byteLength,
     mode: Number(stats.mode & 0o777n),
     dev: parseUInt64Decimal(stats.dev.toString(10)),
@@ -52,7 +59,8 @@ async function scriptedLocalPush(request: GitLocalPushRequestV1): ReturnType<Git
   await nodeFs.mkdir(post, { mode: 0o700 });
   const pack = new TextEncoder().encode(`PACK synthetic ${request.commitOid}\n`);
   const index = new TextEncoder().encode(`IDX synthetic ${request.commitOid}\n`);
-  const stem = `pack-${createHash("sha1").update(pack).digest("hex")}`;
+  const packChecksum = parseLowerHexSha1(createHash("sha1").update(pack).digest("hex"));
+  const stem = `pack-${packChecksum}`;
   const transitions = [];
   for (const [position, [role, bytes, suffix]] of ([
     ["destination_pack", pack, "pack"],
@@ -75,29 +83,45 @@ async function scriptedLocalPush(request: GitLocalPushRequestV1): ReturnType<Git
     );
   }
   const count = request.candidate.blobs.length + request.candidate.trees.length + (request.candidate.commit === null ? 0 : 1);
+  const budget = validateGitPackReaderBudget({
+    compressedPackMaxBytes: 2147483648,
+    packHeaderObjectCount: count,
+    closedEffectObjectCount: count,
+    admittedObjectCount: count,
+    perObjectInflatedMaxBytes: 536870912,
+    aggregateInflatedMaxBytes: 8589934592,
+    deltaDepthMax: 50,
+    deltaInstructionMax: 10000000,
+    deltaWorkMaxBytes: 8589934592,
+    residentMemoryMaxBytes: 268435456,
+    additionalTempMaxBytes: 10737418240,
+    inheritedPushDeadlineMs: 600000,
+  });
   return {
     preparation: {
       kind: "pack_received",
       commitOid: request.commitOid,
       processNodes: ["receive-pack", "index-pack"],
       destinationTransitions: transitions,
-      packReaderBudget: validateGitPackReaderBudget({
-        compressedPackMaxBytes: 2147483648,
-        packHeaderObjectCount: count,
-        closedEffectObjectCount: count,
-        admittedObjectCount: count,
-        perObjectInflatedMaxBytes: 536870912,
-        aggregateInflatedMaxBytes: 8589934592,
-        deltaDepthMax: 50,
-        deltaInstructionMax: 10000000,
-        deltaWorkMaxBytes: 8589934592,
-        residentMemoryMaxBytes: 268435456,
-        additionalTempMaxBytes: 10737418240,
-        inheritedPushDeadlineMs: 600000,
-      }),
-      closure: null as never,
+      packReaderBudget: budget,
+      closure: {
+        targetOid: request.commitOid,
+        packChecksum,
+        packSha256: parseLowerHexSha256(sha256(pack)),
+        packSize: pack.byteLength,
+        indexSha256: parseLowerHexSha256(sha256(index)),
+        indexSize: index.byteLength,
+        budget,
+        closureHash: parseLowerHexSha256(sha256(`${request.commitOid}\n`)),
+        inflatedBytes: 0,
+        deltaInstructions: 0,
+        deltaWorkBytes: 0,
+        maximumDeltaDepth: 0,
+        peakResidentBytes: 0,
+        peakTempBytes: 0,
+      },
     },
-    planningTranscriptHash: sha256(`scripted ${request.commitOid}`) as never,
+    planningTranscriptHash: parseLowerHexSha256(sha256(`scripted ${request.commitOid}`)),
   };
 }
 

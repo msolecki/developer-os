@@ -72,6 +72,9 @@ import type {
   ManifestStatePlanV1,
   RuntimePaths,
   ScheduledJobIdV1,
+  UtcTimestampV1,
+  FoundationTransactionIdV1,
+  AllocatedLifecycleIdV1,
 } from "@developer-os/core";
 import {
   LAUNCHD_PREVIEW_OBSERVATION_TABLE,
@@ -1735,7 +1738,7 @@ async function stageUninstallParticipants(
     encodeUninstallingMarker({
       schemaVersion: 1,
       coordinatorId,
-      createdAt: inputs.createdAt as never,
+      createdAt: inputs.createdAt as UtcTimestampV1,
     }),
   );
   const forwardMarker = [
@@ -1786,20 +1789,20 @@ async function stageUninstallParticipants(
     refs.push(
       await foundation.stage({
         coordinatorId,
-        id: forwardId as never,
+        id: forwardId as FoundationTransactionIdV1,
         slot: pair.slot,
-        role: { kind: "forward", compensationId: compensationId as never },
-        createdAt: inputs.createdAt as never,
+        role: { kind: "forward", compensationId: compensationId as AllocatedLifecycleIdV1<"tx"> },
+        createdAt: inputs.createdAt as UtcTimestampV1,
         mutations: pair.forwardMutations,
       }),
     );
     refs.push(
       await foundation.stage({
         coordinatorId,
-        id: compensationId as never,
+        id: compensationId as FoundationTransactionIdV1,
         slot: pair.slot,
-        role: { kind: "compensation", forwardId: forwardId as never },
-        createdAt: inputs.createdAt as never,
+        role: { kind: "compensation", forwardId: forwardId as AllocatedLifecycleIdV1<"tx"> },
+        createdAt: inputs.createdAt as UtcTimestampV1,
         mutations: pair.inverse,
       }),
     );

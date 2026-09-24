@@ -885,3 +885,13 @@ function productionLifecycleContext(
     launchdHost: createProductionLaunchdHost(),
   });
 }
+
+/**
+ * **The bound redactor for structured data that is not a failure arm** — a scheduled run's
+ * log record. The walk is the same one `failureFrom` runs on `data`, and it is bound here for
+ * the same reason: this is the one place the product redactor is in scope, so a caller
+ * cannot supply its own.
+ */
+export function redactData(context: Pick<CliContext, "guards">, data: unknown): ReturnType<typeof redactPayload> {
+  return redactPayload(context.guards.redactDiagnostic, data);
+}

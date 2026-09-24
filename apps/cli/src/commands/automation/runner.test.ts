@@ -13,6 +13,7 @@ import {
   parseSafeReasonCode,
   parseUInt64Decimal,
   parseUtcTimestamp,
+  redactPayload,
 } from "@developer-os/core";
 import type {
   CanonicalAbsolutePathV1,
@@ -181,7 +182,7 @@ function runnerFixture(options: RunnerFixtureOptions = {}) {
       clockTick += 1;
       return parseUtcTimestamp(new Date(START_MS + clockTick * 1_000).toISOString());
     },
-    redact: (text) => text.replaceAll(SECRET, "[redacted]"),
+    redact: (data) => redactPayload((text) => text.replaceAll(SECRET, "[redacted]"), data),
     authenticate: (request) => {
       authentications.push(request);
       return options.authenticationFailure === undefined
