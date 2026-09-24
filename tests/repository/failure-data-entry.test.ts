@@ -32,6 +32,7 @@ const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
  */
 const SCOPES = [
   "apps/cli/src",
+  "apps/launcher/src",
   "packages/adapter-claude/src",
   "packages/adapter-codex/src",
   "packages/brain/src",
