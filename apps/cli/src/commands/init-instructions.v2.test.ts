@@ -362,7 +362,8 @@ describe("init --adapters claude installs Claude hooks naming the local-build en
   it("removes hooks.json on uninstall, and state/hooks with it, leaving ~/.claude as it was", async () => {
     const { fixture } = installed;
     const records = join(fixture.paths.stateDir, "hooks");
-    await nodeFs.mkdir(records, { mode: 0o700 });
+    /** Fresh `init` creates it (Task 11); pinned so the removal below is of a directory that existed. */
+    expect(existsSync(records)).toBe(true);
 
     const result = await runUninstall(fixture.context, { dryRun: false, assumeYes: true });
 
