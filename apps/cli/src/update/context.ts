@@ -109,7 +109,7 @@ export interface UpdateTransportV1 {
 }
 
 export interface UpdateScratchAttemptV1 {
-  download(fetch: (sink: ReleaseBodySink) => Promise<BoundedReleaseResponseV1>): Promise<void>;
+  download(receive: (sink: ReleaseBodySink) => Promise<BoundedReleaseResponseV1>): Promise<void>;
   extract(bundle: ReleaseBundleReferenceV1): Promise<VerifiedScratchBundleV1>;
   cleanup(): Promise<void>;
 }

@@ -234,11 +234,11 @@ async function fetchDocument(
 /** Collects one bounded body; the transport already enforces the length, this only refuses a lie. */
 async function collect(
   maximumBytes: number,
-  fetch: (sink: (chunk: Uint8Array) => Promise<void>) => Promise<{ readonly bodyHash: LowerHexSha256 }>,
+  receive: (sink: (chunk: Uint8Array) => Promise<void>) => Promise<{ readonly bodyHash: LowerHexSha256 }>,
 ): Promise<{ readonly body: Uint8Array; readonly hash: LowerHexSha256 }> {
   const chunks: Uint8Array[] = [];
   let total = 0;
-  const response = await fetch((chunk) => {
+  const response = await receive((chunk) => {
     total += chunk.byteLength;
     if (total > maximumBytes) refuse("update_metadata_oversized", EXIT_CODES.securityRefusal);
     chunks.push(chunk);

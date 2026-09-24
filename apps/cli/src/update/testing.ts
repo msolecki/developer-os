@@ -466,9 +466,9 @@ export function createUpdateFixture(options: UpdateFixtureOptions = {}): UpdateF
   };
 
   const attempt = (manifest: ReleaseBundleManifestV1): UpdateScratchAttemptV1 => ({
-    download: async (fetch) => {
+    download: async (receive) => {
       events.push("scratch.download");
-      await fetch(() => Promise.resolve());
+      await receive(() => Promise.resolve());
     },
     extract: (bundle) => {
       events.push("scratch.extract");

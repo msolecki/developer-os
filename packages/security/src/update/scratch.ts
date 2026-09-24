@@ -623,13 +623,13 @@ export class ReleasePlanningScratchAttempt {
   }
 
   /**
-   * Streams the signed archive into `archive.zst`. `fetch` is the Task 12
+   * Streams the signed archive into `archive.zst`. `receive` is the Task 12
    * transport call bound to this sink. A policy refusal raised here is a
    * `SecurityRefusalError`, which the transport passes through; any other sink
    * failure (an identity third state, a disk error) is rethrown as itself
    * rather than as the transport's network label.
    */
-  async download(fetch: (sink: ReleaseBodySink) => Promise<BoundedReleaseResponseV1>): Promise<void> {
+  async download(receive: (sink: ReleaseBodySink) => Promise<BoundedReleaseResponseV1>): Promise<void> {
     const { fs, effectiveUid } = this.dependencies;
     if (this.#journal.phase !== "planned" || this.#journal.evidenceRootWriteState?.state !== "created") recovery("release_scratch_phase");
     const archivePath = parseCanonicalAbsolutePathText(`${this.plan.root}/${this.plan.archive.path}`);
@@ -644,7 +644,7 @@ export class ReleasePlanningScratchAttempt {
       await this.#boundary("archive_recorded");
       let response: BoundedReleaseResponseV1;
       try {
-        response = await fetch(async (chunk) => {
+        response = await receive(async (chunk) => {
           try {
             if (written + BigInt(chunk.byteLength) > BigInt(this.plan.archive.bytes)) {
               throw new SecurityRefusalError("Release archive exceeds its signed size");
