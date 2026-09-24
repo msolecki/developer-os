@@ -221,19 +221,19 @@ export class UpdateStepDispatcher implements UpdateCoordinatorParticipantsV1 {
     this.#retirement = retirement;
   }
 
-  apply(step: UpdateLifecycleCoordinatorStepV1): Promise<UpdateParticipantObservationV1> {
+  async apply(step: UpdateLifecycleCoordinatorStepV1): Promise<UpdateParticipantObservationV1> {
     return this.#handler(step).apply(step);
   }
 
-  observe(step: UpdateLifecycleCoordinatorStepV1): Promise<UpdateParticipantObservationV1> {
+  async observe(step: UpdateLifecycleCoordinatorStepV1): Promise<UpdateParticipantObservationV1> {
     return this.#handler(step).observe(step);
   }
 
-  compensate(step: UpdateLifecycleCoordinatorStepV1): Promise<UpdateParticipantObservationV1> {
+  async compensate(step: UpdateLifecycleCoordinatorStepV1): Promise<UpdateParticipantObservationV1> {
     return this.#handler(step).compensate(step);
   }
 
-  compact(entry: UpdateCompactionEntryV1): Promise<void> {
+  async compact(entry: UpdateCompactionEntryV1): Promise<void> {
     if (entry.kind === "coordinator_envelope") return refuse("update_dispatch_envelope");
     const handler = this.#compaction[entry.kind] as (value: UpdateCompactionEntryV1) => Promise<void>;
     return handler(entry);
