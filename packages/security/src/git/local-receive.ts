@@ -205,7 +205,7 @@ async function shadowPackFiles(shadow: SanitizedBareDestinationShadowV1, effecti
     const stats = await nodeFs.lstat(`${shadow.objectDirectory}/pack/${name}`, { bigint: true });
     if (!stats.isFile() || Number(stats.uid) !== effectiveUid || stats.nlink !== 1n) refuse("git_receive_unexpected_pack_file");
   }
-  return match[1] as string;
+  return stem;
 }
 
 /**
