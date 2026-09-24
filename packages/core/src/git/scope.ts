@@ -31,6 +31,7 @@ export type GitPlanningRefusalReasonV1 =
   | "scope_file_too_large"
   | "scope_aggregate_too_large"
   | "scope_secret"
+  | "scope_index_stale"
   | "cross_device_git_state"
   | "scope_reconcile_required"
   | "repository_identity_changed"
@@ -57,7 +58,8 @@ export class GitPlanningRefusalError extends Error {
   readonly path: string | null;
 
   constructor(reason: GitPlanningRefusalReasonV1, path: string | null = null, options?: ErrorOptions) {
-    super(`git planning refused: ${reason}${path === null ? "" : ` (${path})`}`, options);
+    const hint = reason === "scope_index_stale" ? "; run developer-os brain reindex" : "";
+    super(`git planning refused: ${reason}${path === null ? "" : ` (${path})`}${hint}`, options);
     this.name = "GitPlanningRefusalError";
     this.reason = reason;
     this.path = path;
@@ -244,29 +246,43 @@ class GuardedScopeWalker {
  * refused `scope_secret`. Only this schema-known field of the scope's own `index.json` is masked,
  * and only where it equals the SHA-256 of the snapshot's bytes of the note its entry names, so the
  * slot cannot carry a hex secret: every other byte is still scanned, and the notes it digests are
- * scanned in their own right.
+ * scanned in their own right. A 64-hex slot of an entry naming a scope note that it does not digest
+ * (the note was edited or removed after the last reindex) is never masked: it refuses as
+ * `scope_index_stale`, since a reindex, not a secret removal, is the recovery.
  */
 const INDEX_CONTENT_HASH = /"contentHash": "([0-9a-f]{64})"/gu;
+const HEX_DIGEST = /^[0-9a-f]{64}$/u;
 
-function verifiedContentHashes(text: string, notes: ReadonlyMap<string, Uint8Array>): ReadonlySet<string> {
+interface GitScopeIndexContextV1 {
+  readonly notes: ReadonlyMap<string, Uint8Array>;
+  readonly isScopeNote: (path: string) => boolean;
+}
+
+function checkedContentHashes(
+  text: string,
+  index: GitScopeIndexContextV1,
+): { readonly verified: ReadonlySet<string>; readonly stale: ReadonlySet<string> } {
   const verified = new Set<string>();
+  const stale = new Set<string>();
   let document: unknown;
   try {
     document = JSON.parse(text);
   } catch {
-    return verified;
+    return { verified, stale };
   }
   const entries = (document as { readonly notes?: unknown } | null)?.notes;
-  if (!Array.isArray(entries)) return verified;
+  if (!Array.isArray(entries)) return { verified, stale };
   for (const entry of entries as unknown[]) {
     const { path, contentHash } = (entry ?? {}) as { readonly path?: unknown; readonly contentHash?: unknown };
-    const bytes = typeof path === "string" ? notes.get(path) : undefined;
-    if (bytes !== undefined && typeof contentHash === "string" &&
-      createHash("sha256").update(bytes).digest("hex") === contentHash) {
+    if (typeof path !== "string" || typeof contentHash !== "string" || !HEX_DIGEST.test(contentHash)) continue;
+    const bytes = index.notes.get(path);
+    if (bytes !== undefined && createHash("sha256").update(bytes).digest("hex") === contentHash) {
       verified.add(contentHash);
+    } else if (index.isScopeNote(path)) {
+      stale.add(contentHash);
     }
   }
-  return verified;
+  return { verified, stale };
 }
 
 async function readGuarded(
@@ -287,7 +303,7 @@ function scan(
   dependencies: GitScopeDependenciesV1,
   bytes: Uint8Array,
   path: VaultRelativePathV1,
-  index: ReadonlyMap<string, Uint8Array> | null,
+  index: GitScopeIndexContextV1 | null,
 ): Uint8Array {
   let text: string;
   try {
@@ -295,11 +311,14 @@ function scan(
   } catch {
     return refuseGitPlanning("unsupported_scope_entry", path);
   }
-  const verified = index === null ? null : verifiedContentHashes(text, index);
-  const scanned = verified === null
+  const checked = index === null ? null : checkedContentHashes(text, index);
+  /** A stale slot is masked only so a secret elsewhere still refuses as one; the stale slot itself then refuses. */
+  const scanned = checked === null
     ? text
-    : text.replace(INDEX_CONTENT_HASH, (field, digest: string) => verified.has(digest) ? '"contentHash": ""' : field);
+    : text.replace(INDEX_CONTENT_HASH, (field, digest: string) =>
+      checked.verified.has(digest) || checked.stale.has(digest) ? '"contentHash": ""' : field);
   if (dependencies.redact(scanned) !== scanned) refuseGitPlanning("scope_secret", path);
+  if (checked !== null && checked.stale.size > 0) refuseGitPlanning("scope_index_stale", path);
   return bytes;
 }
 
@@ -341,7 +360,10 @@ export async function readGitScopeSnapshot(
   const files: GitScopeFileV1[] = [];
   for (const [index, entry] of entries.entries()) {
     const path = present[index] as VaultRelativePathV1;
-    const bytes = scan(dependencies, read.get(path) as Uint8Array, path, path === indexPath ? read : null);
+    const context = path === indexPath
+      ? { notes: read, isScopeNote: (note: string) => dependencies.enumerator.isCanonicalNote(scope, note) }
+      : null;
+    const bytes = scan(dependencies, read.get(path) as Uint8Array, path, context);
     files.push({ path, bytes, executable: (entry.mode & 0o100) !== 0 });
   }
   return files;

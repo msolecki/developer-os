@@ -222,11 +222,16 @@ describe("readGitScopeSnapshot", () => {
     const leaked = await refusal(snapshot({ "content/_indexes/index.json": { kind: "regular_file", bytes: index(digest) } }));
     expect(leaked.reason).toBe("scope_secret");
 
-    /** A 256-bit secret in the slot is not the digest of the note the entry names. */
+    /** A 256-bit secret in the slot is not the digest of the note the entry names: never masked, refused as stale. */
     const hidden = "5ec2e75ec2e75ec2e75ec2e75ec2e75ec2e75ec2e75ec2e75ec2e75ec2e75ec2";
     const smuggled = await refusal(snapshot({ "content/_indexes/index.json": { kind: "regular_file", bytes: index("A", hidden) } }));
-    expect(smuggled.reason).toBe("scope_secret");
+    expect(smuggled.reason).toBe("scope_index_stale");
     expect(smuggled.path).toBe("content/_indexes/index.json");
+    expect(smuggled.message).not.toContain(hidden);
+
+    /** A secret elsewhere in the index still refuses as a secret, even beside a stale slot. */
+    const both = await refusal(snapshot({ "content/_indexes/index.json": { kind: "regular_file", bytes: index(SECRET, hidden) } }));
+    expect(both.reason).toBe("scope_secret");
 
     /** Only the scope's own index artifact is masked, not any file of that name. */
     const elsewhere = await refusal(snapshot({ "content/DEV/index.json": { kind: "regular_file", bytes: index("A") } }));
@@ -235,6 +240,30 @@ describe("readGitScopeSnapshot", () => {
     const note = fakeFs({ "content/DEV/a.md": { kind: "regular_file", bytes: encoder.encode(`"contentHash": "${digest}"\n`) } });
     const noteRefused = await refusal(readGitScopeSnapshot({ ...note.dependencies, redact: hexAware }, scope(), paths(["content/DEV/a.md"])));
     expect(noteRefused.reason).toBe("scope_secret");
+  });
+
+  it("refuses an index whose contentHash no longer digests the note it names as stale, not secret", async () => {
+    const indexed = createHash("sha256").update(encoder.encode("# A\n")).digest("hex");
+    const index = (path: string) => encoder.encode(`{\n  "notes": [\n    {\n      "path": "${path}",\n      "contentHash": "${indexed}"\n    }\n  ]\n}\n`);
+    const hexAware = (text: string) => text.replace(/[0-9a-f]{64}/gu, "[REDACTED]");
+    const snapshot = async (path: string) => {
+      const fixture = fakeFs({
+        "content/DEV/a.md": { kind: "regular_file", bytes: encoder.encode("# A edited\n") },
+        "content/_indexes/index.json": { kind: "regular_file", bytes: index(path) },
+      });
+      return refusal(readGitScopeSnapshot({ ...fixture.dependencies, redact: hexAware }, scope(),
+        paths(["content/DEV/a.md", "content/_indexes/index.json"])));
+    };
+    for (const path of ["content/DEV/a.md", "content/DEV/gone.md"]) {
+      const refused = await snapshot(path);
+      expect(refused.reason).toBe("scope_index_stale");
+      expect(refused.code).toBe(1);
+      expect(refused.path).toBe("content/_indexes/index.json");
+      expect(refused.message).toContain("developer-os brain reindex");
+      expect(refused.message).not.toContain(indexed);
+    }
+    /** A digest in the slot of an entry that names no scope note is not index staleness. */
+    expect((await snapshot("README.md")).reason).toBe("scope_secret");
   });
 
   it("skips an absent index artifact but treats a vanished note as a concurrent edit", async () => {
