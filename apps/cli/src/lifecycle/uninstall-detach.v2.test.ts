@@ -198,10 +198,10 @@ async function install(
     const bytes = renderInstructionBlock({ productHome: home, vendor: owner, body });
     const restore = before === undefined
       ? {}
-      : { existedBefore: true, beforeHash: sha(encoder.encode(before)), backupRelativePath: `instructions/${id}` };
+      : { existedBefore: true, beforeHash: sha(encoder.encode(before)), backupRelativePath: `instruction-${owner}-${sha(encoder.encode(before))}` };
     if (before !== undefined) {
-      const backup = join(fixture.paths.backupsDir, "instructions", id);
-      await nodeFs.mkdir(dirname(backup), { recursive: true, mode: 0o700 });
+      /** attach's content-addressed whole-file backup (`attach.ts` `#backup`), the shape re-init admits. */
+      const backup = join(fixture.paths.backupsDir, `instruction-${owner}-${sha(encoder.encode(before))}`);
       await nodeFs.writeFile(backup, before, { mode: 0o600 });
     }
     files.push({ path, bytes: before === undefined ? bytes : insertInstructionBlock(encoder.encode(before), bytes) });
@@ -225,7 +225,10 @@ async function install(
   const claudeMd = join(claudeRoot, "CLAUDE.md");
   const agentsMd = join(codexHome, "AGENTS.md");
   const outputStyle = join(claudeRoot, "output-styles", "developer-os-terse.md");
+  /** attach records every missing parent below the product home as a `directory` row (`attach.ts` `#inspect`). */
   if (options.vendors.includes("claude")) {
+    directory("claude", join(home, "claude"));
+    directory("claude", join(home, "claude", "instructions"));
     content("claude", join(home, "claude", "instructions", "careful.md"), "rule", "careful", TEXT.careful);
     content("claude", outputStyle, "output-style", "terse", TEXT.terse);
     directory("claude", pluginDir);
@@ -235,6 +238,9 @@ async function install(
     await block("claude", claudeMd, "claude-md", `@${home}/claude/instructions/careful.md\n`, options.claudeMdBefore);
   }
   if (options.vendors.includes("codex")) {
+    for (const path of [join(home, "codex"), join(home, "codex", "plugins"), pluginRoot, join(pluginRoot, "skills"), join(pluginRoot, "skills", "triage")]) {
+      directory("codex", path);
+    }
     content("codex", join(pluginRoot, "skills", "triage", "SKILL.md"), "skill", "triage", TEXT.skill);
     await block("codex", agentsMd, "agents-md", `## careful\n${TEXT.careful}`, undefined);
   }
@@ -298,7 +304,11 @@ function inside(root: string, path: string): boolean {
 }
 
 async function snapshot(installed: Installed): Promise<readonly string[]> {
-  const read = async (path: string): Promise<string> => ((await exists(path)) ? sha(new Uint8Array(await nodeFs.readFile(path))) : "absent");
+  const read = async (path: string): Promise<string> => {
+    const stats = await nodeFs.lstat(path).catch(() => null);
+    if (stats === null) return "absent";
+    return stats.isDirectory() ? "directory" : sha(new Uint8Array(await nodeFs.readFile(path)));
+  };
   return Promise.all([installed.fixture.paths.manifestFile, installed.fixture.paths.configFile, ...installed.vendorPaths].map(read));
 }
 
