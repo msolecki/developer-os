@@ -156,7 +156,6 @@ describe("a dangerous line the tokenizer misreads", () => {
     "# note\rcat <<EOF\ngit push --force\nEOF",
     "cat <<'EOF'\nx\\\nEOF\ngit push --force\nEOF",
     "cat <<EOF\n$(\ngit push --force\n)\nEOF",
-    "echo $'\\''\ngit push --force\n'",
   ])("blocks force-push: %j", async (command) => {
     expect(await run(command)).toMatchObject({ kind: "block", ruleId: "force-push" });
   });
@@ -169,6 +168,13 @@ describe("a dangerous line the tokenizer misreads", () => {
 // Phase re-review R1: a `#` the splitter reads as a comment that bash does not still splits at `;`.
 it.each(["echo ${x:- # }; git push --force", "echo ` #` ; git push --force"])("blocks force-push: %j", async (command) => {
   expect(await run(command)).toMatchObject({ kind: "block", ruleId: "force-push" });
+});
+
+// Phase re-review R4: inside `$'…'` a backslash escapes the quote.
+it("blocks force-push after an ANSI-C quoted apostrophe", async () => {
+  expect(await run("echo $'\\'' ; git push --force #'")).toMatchObject({ kind: "block", ruleId: "force-push" });
+  // Read as bash reads it, the last line opens a quote it never closes.
+  expect(await run("echo $'\\''\ngit push --force\n'")).toMatchObject({ kind: "block", ruleId: "unterminated-quote" });
 });
 
 // Task 2 parity (founder): the rules read only a segment's first token, so a prefix hides the call.

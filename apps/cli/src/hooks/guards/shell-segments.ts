@@ -11,10 +11,10 @@ export interface ShellRule<Id extends string> {
 
 /**
  * Splits a normalized command at `;`, `&`, `|` (and `&&`, `||`) and an unquoted LF into tokenized
- * segments, honoring quotes: single quotes are literal, double quotes take backslash escapes, and a
- * backslash outside quotes makes the next character literal. A `#` that starts a word comments out
- * the rest of its line except `;`, `&` and `|`, and a heredoc body is skipped, so neither opens a
- * quote or arms a heredoc.
+ * segments, honoring quotes: single quotes are literal, double quotes and `$'…'` take backslash
+ * escapes, and a backslash outside quotes makes the next character literal. A `#` that starts a word
+ * comments out the rest of its line except `;`, `&` and `|`, and a heredoc body is skipped, so
+ * neither opens a quote or arms a heredoc.
  * Returns null for an unterminated quote so the guards can fail closed.
  */
 export function shellSegments(normalized: string): readonly (readonly string[])[] | null {
@@ -22,7 +22,7 @@ export function shellSegments(normalized: string): readonly (readonly string[])[
   let tokens: string[] = [];
   let token = "";
   let started = false;
-  let quote: "'" | '"' | null = null;
+  let quote: "'" | "$'" | '"' | null = null;
   // A `#` that starts a word opens a comment to the next LF; "head" drops its words until a split.
   let comment: "head" | "tail" | null = null;
   // A `<<` arms a heredoc; the delimiter is the rest of that token, or the next token.
@@ -77,13 +77,18 @@ export function shellSegments(normalized: string): readonly (readonly string[])[
         token += char;
         started = true;
       }
-    } else if (quote === "'") {
+    } else if (quote === "'" || quote === "$'") {
       if (char === "'") quote = null;
+      else if (char === "\\" && quote === "$'") token += normalized.charAt(++i);
       else token += char;
     } else if (quote === '"') {
       if (char === '"') quote = null;
       else if (char === "\\" && i + 1 < normalized.length && '"\\$`'.includes(normalized.charAt(i + 1))) token += normalized.charAt(++i);
       else token += char;
+    } else if (char === "$" && normalized.charAt(i + 1) === "'") {
+      quote = "$'";
+      i += 1;
+      started = true;
     } else if (char === "'" || char === '"') {
       quote = char;
       started = true;
