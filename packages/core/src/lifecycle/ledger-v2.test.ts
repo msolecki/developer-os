@@ -637,6 +637,14 @@ describe("closure V2 over the recovery-executor record", () => {
 
     expect((await inspect(home)).closure).toStrictEqual(REQUIRED);
   });
+
+  it("keeps the journal-less envelope suffix beside fresh init's empty reservation as update_recovery", async () => {
+    const home = await newHome();
+    await plantEnvelope(home, outerPlan(), null);
+    await write(home, "state/update-executor.json", "");
+
+    expect((await inspect(home)).closure).toMatchObject({ kind: "update_recovery", coordinatorId: FIRST });
+  });
 });
 
 describe("closure V2 over a V1-only ledger", () => {

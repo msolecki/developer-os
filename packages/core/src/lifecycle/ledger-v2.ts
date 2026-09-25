@@ -433,11 +433,12 @@ export async function inspectLifecycleLedgerV2<TPlan extends CoordinatorPlan>(
   const observation: LifecycleClosureV2ObservationV1 = {
     v1: snapshot.closure,
     /**
-     * The empty reservation holds no record, exactly as the V1 ledger reads it, but a coordinator
-     * never admits it at the final path: §9.2's states there are absent or a bound record.
+     * The empty reservation holds no record, exactly as the V1 ledger reads it, but a journaled
+     * coordinator never admits it at the final path: §9.2's states there are absent or a bound
+     * record. The journal-less envelope suffix stays `update_recovery`, which compaction resumes.
      */
     malformed: malformed || executorRecord === "malformed" ||
-      (executorRecord === "reservation" && updateCoordinators.length > 0),
+      (executorRecord === "reservation" && updateCoordinators.some(({ id }) => (envelopes.get(id)?.journal ?? null) !== null)),
     updateCoordinators,
     constructions,
     executorRecord: typeof executorRecord === "string" ? null : executorRecord,
