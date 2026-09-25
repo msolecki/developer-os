@@ -13,7 +13,8 @@ export interface ShellRule<Id extends string> {
  * Splits a normalized command at `;`, `&`, `|` (and `&&`, `||`) and an unquoted LF into tokenized
  * segments, honoring quotes: single quotes are literal, double quotes take backslash escapes, and a
  * backslash outside quotes makes the next character literal. A `#` that starts a word comments out
- * the rest of its line, and a heredoc body is skipped, so neither opens a quote or arms a heredoc.
+ * the rest of its line except `;`, `&` and `|`, and a heredoc body is skipped, so neither opens a
+ * quote or arms a heredoc.
  * Returns null for an unterminated quote so the guards can fail closed.
  */
 export function shellSegments(normalized: string): readonly (readonly string[])[] | null {
@@ -22,6 +23,8 @@ export function shellSegments(normalized: string): readonly (readonly string[])[
   let token = "";
   let started = false;
   let quote: "'" | '"' | null = null;
+  // A `#` that starts a word opens a comment to the next LF; "head" drops its words until a split.
+  let comment: "head" | "tail" | null = null;
   // A `<<` arms a heredoc; the delimiter is the rest of that token, or the next token.
   let armed: { readonly stripTabs: boolean; readonly from: number } | null = null;
   const heredocs: { readonly delimiter: string; readonly stripTabs: boolean }[] = [];
@@ -61,7 +64,20 @@ export function shellSegments(normalized: string): readonly (readonly string[])[
   };
   for (let i = 0; i < normalized.length; i += 1) {
     const char = normalized.charAt(i);
-    if (quote === "'") {
+    if (comment !== null && char !== "\n") {
+      // Bash may see no comment (`${x:- # }`, `` ` #` ``), so a comment still splits at `;`, `&` and
+      // `|` and keeps the words after a split; quotes, backslashes and `<<` in it stay plain text.
+      if (char === ";" || char === "&" || char === "|") {
+        endSegment();
+        comment = "tail";
+        if (normalized.charAt(i + 1) === char && char !== ";") i += 1;
+      } else if (/\s/u.test(char)) {
+        endToken();
+      } else if (comment === "tail") {
+        token += char;
+        started = true;
+      }
+    } else if (quote === "'") {
       if (char === "'") quote = null;
       else token += char;
     } else if (quote === '"') {
@@ -75,6 +91,7 @@ export function shellSegments(normalized: string): readonly (readonly string[])[
       token += normalized.charAt(++i);
       started = true;
     } else if (char === "\n") {
+      comment = null;
       endToken();
       const bodyEnd = heredocs.length > 0 ? heredocBodyEnd(i + 1) : -1;
       heredocs.length = 0;
@@ -82,9 +99,7 @@ export function shellSegments(normalized: string): readonly (readonly string[])[
       if (bodyEnd > i) i = bodyEnd - 1;
       else endSegment();
     } else if (char === "#" && !started) {
-      // A comment runs to the next LF, which still ends the segment.
-      const lineEnd = normalized.indexOf("\n", i);
-      i = (lineEnd === -1 ? normalized.length : lineEnd) - 1;
+      comment = "head";
     } else if (/\s/u.test(char)) {
       endToken();
     } else if (char === ";" || char === "&" || char === "|") {

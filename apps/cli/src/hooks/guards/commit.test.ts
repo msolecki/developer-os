@@ -166,6 +166,11 @@ describe("a dangerous line the tokenizer misreads", () => {
   });
 });
 
+// Phase re-review R1: a `#` the splitter reads as a comment that bash does not still splits at `;`.
+it.each(["echo ${x:- # }; git push --force", "echo ` #` ; git push --force"])("blocks force-push: %j", async (command) => {
+  expect(await run(command)).toMatchObject({ kind: "block", ruleId: "force-push" });
+});
+
 // Task 2 parity (founder): the rules read only a segment's first token, so a prefix hides the call.
 describe("a prefixed git call (residual in hooks.md §3.8)", () => {
   it.todo("blocks force-push: env git push -f");
