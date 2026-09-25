@@ -27,7 +27,9 @@ export function shellSegments(normalized: string): readonly (readonly string[])[
   const heredocs: { readonly delimiter: string; readonly stripTabs: boolean }[] = [];
   const endToken = (): void => {
     if (armed !== null && started && token.length > armed.from) {
-      heredocs.push({ delimiter: token.slice(armed.from), stripTabs: armed.stripTabs });
+      const delimiter = token.slice(armed.from);
+      // `1 << 3` and `$((1<<2))` shift; a delimiter starting with a digit or `)` arms nothing (fail closed).
+      if (!/^[\d)]/u.test(delimiter)) heredocs.push({ delimiter, stripTabs: armed.stripTabs });
       armed = null;
     } else if (armed !== null && armed.from > 0) {
       armed = { ...armed, from: 0 };

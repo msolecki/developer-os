@@ -132,6 +132,11 @@ it("blocks force-push after a here-string", async () => {
   expect(await run("grep x <<< EOF\ngit push --force\nEOF")).toMatchObject({ kind: "block", ruleId: "force-push" });
 });
 
+// Phase review minor 2: an arithmetic shift arms no heredoc.
+it("blocks force-push after an arithmetic shift", async () => {
+  expect(await run("(( x = 1 << 3 ))\ngit push --force\n3")).toMatchObject({ kind: "block", ruleId: "force-push" });
+});
+
 // Task 2 parity (founder): the rules read only a segment's first token, so a prefix hides the call.
 describe("a prefixed git call (residual in hooks.md §3.8)", () => {
   it.todo("blocks force-push: env git push -f");
