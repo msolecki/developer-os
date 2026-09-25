@@ -207,7 +207,18 @@ export function createNodeLifecycleGuardedFileSystem(dependencies: {
     }
     const handle = await openGuarded(entry, READ_FLAGS);
     try {
-      const bytes = new Uint8Array(await handle.readFile());
+      // Read at most one byte past the checked size (itself within the
+      // maximum): a file grown after the stat never becomes an unbounded
+      // buffer, and the size check below refuses it.
+      const buffer = Buffer.alloc(Number(entry.size) + 1);
+      let length = 0;
+      for (;;) {
+        const { bytesRead } = await handle.read(buffer, length, buffer.byteLength - length, null);
+        if (bytesRead === 0) break;
+        length += bytesRead;
+        if (length === buffer.byteLength) break;
+      }
+      const bytes = new Uint8Array(buffer.subarray(0, length));
       if (bytes.byteLength.toString(10) !== entry.size) {
         refuseLifecycleRecovery("lifecycle_guarded_size", entry.path);
       }

@@ -128,6 +128,31 @@ describe("the guarded filesystem port", () => {
     expect(await reasonOf(() => fs.readRegular(entry, 16))).toBe("lifecycle_guarded_identity");
   });
 
+  it("bounds readRegular by its maximum when the file grows after the opened handle's stat", async () => {
+    const root = await freshRoot("guarded-grow");
+    const { fs } = nodePort();
+    const entry = await fs.writeExclusive(leaf(root, "leaf"), encoder.encode("0123456789"));
+    const probe = await nodeFs.open(entry.path, "r");
+    const prototype = Object.getPrototypeOf(probe) as { stat: (...args: unknown[]) => Promise<unknown> };
+    await probe.close();
+    const original = prototype.stat;
+    let grown = false;
+    prototype.stat = async function (this: unknown, ...args: unknown[]) {
+      const stats = await original.apply(this, args);
+      if (!grown) {
+        grown = true;
+        // A same-uid writer grows the file sparse, past what one Buffer holds.
+        await nodeFs.truncate(entry.path, 3 * 1024 * MEBIBYTE);
+      }
+      return stats;
+    };
+    try {
+      expect(await reasonOf(() => fs.readRegular(entry, 16))).toBe("lifecycle_guarded_size");
+    } finally {
+      prototype.stat = original;
+    }
+  });
+
   it("hashes a 20-MiB sparse file through one reused 1-MiB chunk", async () => {
     const root = await freshRoot("guarded-hash");
     const { fs } = nodePort();
