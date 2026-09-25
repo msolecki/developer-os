@@ -404,8 +404,11 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
 - **`hooks`** reads each vendor's installed `hooks/hooks.json` no-follow (Claude under
   `~/.claude/skills/developer-os/`, Codex under `<product-home>/codex/plugins/developer-os/`) and
   reports each verb with the age of its own last firing, plus any missing verb and an inconsistent
-  executable. A Codex verb with no firing record of its own adds `CODEX_UNTRUSTED_HOOK_MESSAGE` and the fixed
-  trust step as `recovery`. It is `warn`, never `fail`.
+  executable. A Codex verb with no firing record of its own, or only one older than the installed
+  `hooks.json`, adds `CODEX_UNTRUSTED_HOOK_MESSAGE` and the fixed trust step as `recovery`. A shared
+  executable whose Node or entrypoint no longer exists (a Node upgrade removed the rendered path, so
+  every hook exits 127, which both vendors ignore) adds `executable=missing` with `recovery`
+  `developer-os init`, which takes precedence over the trust step. It is `warn`, never `fail`.
 - **`external-hooks`** (Q2-A) reads `~/.claude/settings.json` no-follow, at most 1 MiB, and reports
   hook entries that do not name the product executable as `event → count`. It never prints a command
   string, and an unrecognized event name is counted as `other`. Any read failure is `unknown`. Codex
@@ -435,7 +438,8 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
   lists as `modified` and does not fire, and Codex prints nothing (§1 question 8). A Node upgrade
   that moves the Node executable (G1), or a change to `CODEX_HOOK_ROWS`, therefore stops every
   affected Codex hook until the user trusts it again. Inserting a row also moves later groups of
-  the same event to new keys. `doctor`'s no-firing message is the only signal.
+  the same event to new keys. `doctor`'s no-firing message is the only signal; it counts a record
+  older than the installed `hooks.json` as not fired.
 - **The `apply_patch` grammar is a narrowing, not a proof.** `*** End of File`, a blank line, edge
   `White_Space` on a header or a `***` marker, or any other line outside §3.3 makes `guard path`
   block that patch; `format` and `edit` allow it. That is a security property only where Codex's
