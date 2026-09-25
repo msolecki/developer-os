@@ -26,7 +26,7 @@ The compiler unions those footprints and requires the result to *equal* the decl
 | `src/skill.ts` | the vendor-neutral skill body: source marker, `shared` preamble, refusals, steps, recovery, and the screen seam every adapter shares (added 2026-08-12 — see §2.2) |
 | `src/index.ts` | the package's only public door, and the one file that decides what a consumer can reach — see §4 for why `workflowContractSchema` is not on it |
 | `packages/security/src/screen.ts` | the one display screen, **moved** here from `packages/brain/src/redact.ts` in DOS-P3, because two peer subsystems needed it and neither may depend on the other |
-| `workflows/<id>/workflow.yaml` | the six canonical workflows |
+| `workflows/<id>/workflow.yaml` | the eleven canonical workflows (six until A12b added the five Brain workflows) |
 | `tests/fixtures/workflows/**` | seven synthetic negative fixtures |
 | `tests/contracts/workflows/*.test.ts` | the contract cases shared with two future adapters |
 
@@ -92,7 +92,7 @@ remember.
 
 ## 5. The remaining unimplemented verb
 
-The vocabulary has fifteen verbs. DOS-P6 implemented the capture and ingest commands; only
+The vocabulary has sixteen verbs (A12b added `capture.writeNote`). DOS-P6 implemented the capture and ingest commands; only
 `agent.prompt` has no step executor. It raises an `info` finding naming the adapters, and the exact
 list is pinned by a test so that closing it forces a return to this table.
 

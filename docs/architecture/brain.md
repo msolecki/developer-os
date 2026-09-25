@@ -85,7 +85,7 @@ lifecycle, and a test asserts this module's runtime surface stays one constant.
    `brain` imports from `core` is a cycle. This package owns the defaults and resolution and
    re-exports the type.
 
-### The six lint classes
+### The eight lint classes
 
 Severities are `error`, `warn`, `info`; `brain lint` exits 1 if any finding is an `error` and
 0 otherwise. Every finding carries the vault-relative path. Frontmatter findings carry the
@@ -100,9 +100,11 @@ symlink carry `key: null`.
 | `duplicates` | identical screened, normalized title within one topic folder (`warn`); identical content hash anywhere (`warn`); case-insensitive path collision (`error`) |
 | `staleness` | `reviewed` older than `staleness.reviewAfterDays` (`warn`); `stage: emerging` with `occurrences >= 3` and `reviewed: null` (`warn`) |
 | `index-drift` | any of the four artifacts whose canonical form differs from a fresh in-memory build, or an artifact missing entirely (`error`) |
+| `isolated` | a canonical note that is neither the source nor the target of any `graph.json` edge, self-edges excluded (`info`) |
+| `gap` | an index tag carried by at least three canonical notes, none of them of type `compiled-note`; `path` is the lowest such note, `key` `tags` (`info`) |
 
 `unclassified-folder` is reported by discovery through the `frontmatter` class's result envelope at
-`warn`, so it surfaces in `brain lint` without a seventh class. The five `frontmatter` warnings are
+`warn`, so it surfaces in `brain lint` without a ninth class. The five `frontmatter` warnings are
 enumerated because the completed spec had drifted from the implementation and `BACKLOG.md` NEW-48
 found the omission; moving the current inventory here closes that documentation-only row.
 
@@ -215,9 +217,9 @@ edge type.
 
 ### 6.4 Lint
 
-The table in §3 is the current six-class inventory and the source of truth for severity and exit
+The table in §3 is the current eight-class inventory and the source of truth for severity and exit
 behaviour. It includes the folder-level warning carried through the `frontmatter` result envelope
-without inventing a seventh class.
+without inventing a ninth class.
 
 ### 6.5 Retrieval
 
@@ -300,7 +302,10 @@ the search alias. Reindex is the only mutating command and stages exactly the fo
 through a Foundation transaction; dry-run writes nothing. Lint, search and status are read-only.
 
 Brain adds no exit class: `1` is validation or lint error, `2` malformed config or invalid query,
-`5` a path-security refusal, and `6` incomplete transaction/recovery required.
+`5` a path-security refusal, and `6` incomplete transaction/recovery required. `brain retire` and
+`brain refactor` also use Foundation's `3` for their conflicts: an occupied destination
+(`refactor_destination_exists`), a note still referred to (`retire_has_referrers`), and a note
+changed between planning and apply (`note_changed_since_read`).
 
 ### 6.12 Produced interfaces and gates
 

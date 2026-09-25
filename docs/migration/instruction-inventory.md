@@ -126,13 +126,13 @@ session-end event, so `sessionEndCapture` parity is impossible on that vendor.
 | `reindex` | `developer-os brain reindex` | shipped (index artifacts differ: `graph.json` and `index.json` replace `graph.md`) |
 | `lint` | `developer-os brain lint` | shipped (schema differs; no per-type `schema.yml`) |
 | `ingest` (inbox files, YouTube) | `developer-os ingest` from quarantine only | partial; inbox files need `developer-os import` (A14); YouTube refused |
-| `qa` (`--file-back`) | workflow `brain-answer` | planned A12b |
-| `compile` | workflow `brain-compile` | planned A12b |
-| `enhance` | workflow `brain-enhance` | planned A12b |
-| `curate`, `gaps`, lint classes for staleness | `brain lint` classes `stale`, `isolated`, `dead-link`, `duplicate`, `gap`; verb `brain retire` | planned A12b |
-| `garden` | workflow `brain-garden` (proposals as captures, never direct writes) | planned A12b |
-| `refactor` | verb `brain refactor --rename\|--move\|--merge\|--split` | planned A12b |
-| `output` | workflow `brain-report` | planned A12b |
+| `qa` (`--file-back`) | workflow `brain-answer`, input `file-back` | shipped A12b |
+| `compile` | workflow `brain-compile` | shipped A12b |
+| `enhance` | workflow `brain-enhance` (a verbatim `capture --note`) | shipped A12b |
+| `curate`, `gaps`, lint classes for staleness | `brain lint` classes `staleness`, `isolated`, `links`, `duplicates`, `gap` (the roadmap's `stale`, `dead-link` and `duplicate` ship under those names); `brain-garden`; verb `brain retire` | shipped A12b |
+| `garden` | workflow `brain-garden` (proposals as captures, never direct writes) | shipped A12b |
+| `refactor` | verb `brain refactor --rename\|--move\|--merge\|--split` | shipped A12b |
+| `output` | workflow `brain-report` | shipped A12b |
 | `onboard` | `init` template | shipped (no interview) |
 | `research`, `research-deep`, `research-add-fields`, `research-add-items`, `research-report`, `excalidraw-diagram` | third-party-derived (`excalidraw-diagram`: `coleam00/excalidraw-diagram-skill`; `research*`: origin unverified) → not vendored; founder keeps local overrides (D51) | refused (D51) |
 
