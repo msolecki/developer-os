@@ -250,7 +250,9 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   stays open; A12 conflict-evidence bounds are 1 MiB / 1,000 lines; A12b loads the redaction key before
   vendor selection. (3) Plan 1b Git sync: fix I2 (adoption publishes missing fan-out directories in the
   `enable` effect) and I3 (push advertises the destination ref and sends only new objects, no
-  `--thin`); I4 (packed history refuses `git_commit_not_loose`) is an accepted residual until A16.
+  `--thin`); I4 is an accepted residual until A16: `git_commit_not_loose` refuses only when the tip
+  commit read by the fast-forward check is packed; a packed target commit or subtree makes the shadow
+  advertise nothing and the push sends the whole history (reworded 2026-09-25).
   (4) A fourth full-suite run follows these changes and the re-reviews of phases 4b, 6 and 9.
 - **D63 (2026-09-25), amends hooks spec §5.2 step 4.** Belt and braces for the command guards
   (`force-push`, `hook-bypass`, `recursive-delete-root` and every first-token rule): besides the

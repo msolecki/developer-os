@@ -37,11 +37,12 @@ contents are quoted from those narratives; the sections column is derived from e
 | 2026-09-22 | founder, A13 Q3-A (D47) | `state/hooks` reserved runtime path for hook firing records: owner, admitted shape, best-effort write exception, uninstall order | §2.1, §6 |
 | 2026-09-23 | founder, plan 1b questions (D59) | Git and launchd rows re-pinned to the measured machine (NEW-84); `certification` field; stale launchd row refuses with the manual `bootout` (residual 10); HTTPS and SSH refuse `unsupported_git_distribution` until their process traces are recorded; pinned-host tests | §4.2, §5.3, §7, §8.3 |
 | 2026-09-24 | founder (D61) | backslash handling settled: `GitConfigQuotedPathV1` refuses a backslash, matching Core's `CanonicalAbsolutePathV1` | §4.2 |
-| 2026-09-25 | founder, after the whole-phase reviews (D62) | packed history refuses `git_commit_not_loose` until A16 (residual 11) | §8.3 |
+| 2026-09-25 | founder, after the whole-phase reviews (D62) | `git_commit_not_loose` refuses only when the tip commit read by the fast-forward check is packed; a packed target commit or subtree makes the shadow advertise nothing and the push sends the whole history (residual 11, until A16); §4.2 push argv carries `--no-thin` and pack-objects drops `--thin`; the gateway's pinned Git child-environment reconciliation; the destination shadow's fixed deny booleans (residual 12). Amended 2026-09-25 (D62) | §4.2, §8.3 |
 
 Each 2026-09-17 change is marked "Amended 2026-09-17" in place with its item number. The 2026-09-22
 change is marked "Amended 2026-09-22 (A13 Q3-A)"; the later ones are marked with their decision
-number, "Amended 2026-09-23 (D59)", "Amended 2026-09-24 (D61)" and "Added 2026-09-25 (D62)".
+number, "Amended 2026-09-23 (D59)", "Amended 2026-09-24 (D61)", "Added 2026-09-25 (D62)" and
+"Amended 2026-09-25 (D62)".
 
 ---
 
@@ -2670,7 +2671,9 @@ SanitizedGitShadowConfigTemplateV1 = {
 Every key above is required and no other key is legal. A source projection has `kind: "source"`,
 `core.bare: false`, `remote` equal to its one plan-bound destination, and `receive: null`. A bare-
 destination projection has `kind: "bare_destination"`, `core.bare: true`, `remote: null`, and the
-three exact receive fields; its two deny booleans equal the validated real-destination preimage.
+three exact receive fields; its two deny booleans are fixed at `denyNonFastForwards: false` and
+`denyDeletes: true` rather than mirroring the validated real-destination preimage (residual 12; amended
+2026-09-25, D62).
 `core.fileMode` equals the validated repository projection. `core.hooksPath` names that shadow's exact
 guarded empty hooks directory. There is no `pushurl`, `url.*`, `include`, `includeIf`, `filter.*`,
 `credential.*` key other than the one reset, `http.*` key other than the two printed fields,
@@ -2789,13 +2792,13 @@ literal argv/environment digests, stdin-class/count digests, exit statuses, and 
 form a canonical process transcript. `planningTranscriptHash` hashes
 `developer-os:git-planning-transcript:v1\0` plus those `CanonicalJsonV1` bytes and is fixed in the
 effect plan before coordinator intent. A config-only enable expands only the config alternative. There is no direct free-form
-Git argv surface. The `direct_source_push` root is exactly `git push --porcelain --no-verify
-developer-os <commit_to_branch_refspec>`, uses `push_https`, `push_ssh`, or `push_local` according to
+Git argv surface. The `direct_source_push` root is exactly `git push --porcelain --no-verify --no-thin
+developer-os <commit_to_branch_refspec>` (`--no-thin` amended 2026-09-25, D62), uses `push_https`, `push_ssh`, or `push_local` according to
 the validated destination, and occurs exactly once when `push` is non-null.
 
 | Edge chain | Exact argv alternatives after slot expansion |
 |---|---|
-| source Git → gateway `git` → same-PID `git_main` | `git pack-objects --all-progress-implied --revs --stdout --thin --delta-base-offset -q` |
+| source Git → gateway `git` → same-PID `git_main` | `git pack-objects --all-progress-implied --revs --stdout --delta-base-offset -q` (no `--thin`; amended 2026-09-25, D62) |
 | source Git → gateway `git` → same-PID `git_main` (HTTPS dispatcher) | `git remote-https developer-os <validated_https_url>` |
 | HTTPS dispatcher → gateway `git-remote-https` → same-PID `git_remote_https` | `git-remote-https developer-os <validated_https_url>` |
 | source Git → gateway `developer-os-ssh-bridge` → internal SSH bridge | either `developer-os-ssh-bridge <ssh_target> <ssh_receive_pack_command>` or `developer-os-ssh-bridge -p <ssh_port> <ssh_target> <ssh_receive_pack_command>` |
@@ -3105,6 +3108,19 @@ temporary home, guarded absolute Node path, `SSH_AUTH_SOCK` for SSH, exact gatew
 `GIT_EXEC_PATH`, supervisor socket/capability, and the exact internally generated shadow values
 (`GIT_DIR`, index/object paths, object alternate, config suppression, and transport bridge/helper
 variables) survive.
+
+The pinned Git adds variables to the environment of every child it starts, so the gateway reconciles
+a trampoline's reported environment once, at admission, before comparing it with the permit; the
+exec'd image and the local helper always receive the permit's own environment, never the reported
+one. Only these exact shapes are removed: `GIT_PREFIX` equal to the empty string; a `PATH` that begins
+with exactly one `<GIT_EXEC_PATH>:` prefix loses that prefix; and `__CF_USER_TEXT_ENCODING` in
+uppercase hex-triple form (`0x…:0x…:0x…`). The receive quarantine is folded back only for a child whose
+`cwd` is the destination shadow and whose `GIT_DIR` is `.`, when `GIT_OBJECT_DIRECTORY` and
+`GIT_QUARANTINE_PATH` both equal exactly `<shadow>/./objects/tmp_objdir-incoming-XXXXXX` (six ASCII
+alphanumerics) and `GIT_ALTERNATE_OBJECT_DIRECTORIES` equals exactly `<shadow>/./objects`; those three
+variables are dropped and `GIT_DIR` becomes the shadow path. Any other deviation refuses
+`git_env_mismatch` (`apps/cli/src/commands/git/runtime.ts`, `withoutGitChildAdditions` and
+`withoutReceiveQuarantine`). **Amended 2026-09-25 (D62).**
 
 HTTPS that requires an executable credential helper fails non-interactively; the product does not
 weaken the no-vendor boundary to make it work. Author and committer identity are read from the inert
@@ -4410,10 +4426,24 @@ filesystem/process/clock dependencies rather than reaching global state directly
     preserves every file. Residual 6 covers the same drift for Git. **Owner: DOS-P9 compatibility
     documentation; `bootout` on an unsupported build needs a new reviewed design. Amended 2026-09-23
     (D59).**
-11. **Sync reads only a loose tip commit.** `git sync` reads the adopted branch's tip commit as a
-    loose object; once `git gc` or a repack has moved it into a pack, sync refuses
-    `git_commit_not_loose` and changes nothing (`apps/cli/src/commands/git/runtime.ts`,
-    `readLooseObject`). The refusal is unambiguous, but a vault whose history was packed (adopt,
-    `git gc`, a manual commit, `git sync`) cannot sync. A commit reader that understands packs is not
-    built in version 1. **Owner: A16, which either adds the pack
-    reader or documents the limit. Added 2026-09-25 (D62).**
+11. **Sync reads only a loose tip commit.** `git_commit_not_loose` refuses only when the tip commit
+    read by the fast-forward check is packed; a packed target commit or subtree makes the shadow
+    advertise nothing and the push sends the whole history.
+    The refusal changes nothing (`apps/cli/src/commands/git/runtime.ts`, `readLooseObject`); it is
+    unambiguous, but a vault whose branch tip was packed (adopt, a manual commit, `git gc`,
+    `git sync`) cannot sync. When the target snapshot is not loose, the push stays correct but
+    sends every object the pushed commit reaches instead of only the new ones; when the target
+    already equals the pushed commit, no pack is sent and the target is still advertised. A commit
+    reader that understands packs is not built in version 1. **Owner: A16, which either adds the pack
+    reader or documents the limit. Added 2026-09-25 (D62); amended 2026-09-25 (D62).**
+12. **The destination shadow does not mirror the destination's deny booleans.**
+    `SanitizedBareDestinationShadowV1` pins `receive.denyNonFastForwards=false` and
+    `receive.denyDeletes=true` whatever the real destination's preimage says. Mirroring
+    `denyNonFastForwards=true` is impossible: the shadow holds none of the destination's objects and
+    the `destination_receive` profile has no read-only alternate to them, so receive-pack cannot read
+    the old commit and fails. Fast-forward is instead enforced by `requireFastForward` before any
+    push and by the ref compare-and-swap: after receive the shadow ref must equal the planned commit
+    (`packages/security/src/git/local-receive.ts`), and the guarded effect moves the real destination
+    ref only from its planned preimage; deletion stays refused by
+    `denyDeletes=true`. **Owner: the accepted local-write boundary; mirroring needs a read-only
+    destination alternate and a new reviewed design. Amended 2026-09-25 (D62).**
