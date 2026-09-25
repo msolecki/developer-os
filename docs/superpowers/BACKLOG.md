@@ -221,37 +221,119 @@ Status 2026-09-22: plan Tasks 1–13 and 15 committed (`a7cec3f`..`10282ab`); Ta
 - [ ] Build a triaged whole-history publication scan before A16; a raw whole-tree scan has known
   false positives in hashes and documentation examples.
 
-## 6. Phase-close handoffs from the 2026-09-23 implementers
+## 6. Phase-close handoffs
 
-Recorded by the orchestrator from each implementer's report (D56 lane: nothing below has been tested). Each phase-close review (Phase 8, plan 1b Task 21, A13 Task 19, A14 Task 16) owns the items for its subsystem; an item that is a real defect gets a failing test first.
+Recorded by the orchestrator from the 2026-09-23 implementers' reports and from the fix sessions after
+the 2026-09-25 whole-phase reviews (D56 lane: nothing below has been tested). Each phase close owns the
+items under its heading; an item that is a real defect gets a failing test first. Closed items leave
+this section with the commit or decision that closed them.
 
-- packages/core/src/index.test.ts export pin is stale: Spec 2 Tasks 14–17 exports (capacity, preview, planner, owner, migrations) not added. packages/security/src/index.test.ts likewise for Tasks 13/15.
-- Adapter update/plan.ts import the whole @developer-os/core index; not in PLANNER_ENTRYPOINTS; graph gate would fail once added — narrow imports (Task 15/16 follow-up).
+### Phase 4b · A11 (release plan)
+
+- Launcher exit and paths (phase 4b review M3, deferred): an EPIPE on the FD 3 trust write throws
+  before `await exit` and discards the child's real exit code (no deterministic test found yet);
+  nothing forwards SIGTERM/SIGHUP to the child; `apps/launcher/src/main.ts:79` takes `.pathname`,
+  which is percent-encoded, where `fileURLToPath` is right (placeholder location, replaced in A16).
+  The 128-plus-signal exit is fixed (`e29711e`); the stubs are NEW-111.
+- Phase 4b review M1 needs a test on two checkouts; I6 (`742748b`) removed one source of
+  nondeterminism. Travels with NEW-107.
+- Spec 2 §4.2 "no extra inherited FD", founder to confirm the reading: the child cannot tell
+  inherited descriptors from the 4–11 libuv opens, so the guarantee moved to the launcher's `stdio`
+  array (test `hands the child no descriptor beyond stdio and FD 3`). If §4.2 means an in-process
+  descriptor-set check, it is unimplementable as written and needs an amendment.
+
+### Phase 5 · A12
+
+- Phase 5 review M1 (a lock or per-run home for Codex ingest) is NEW-105; M7
+  (`invocationFromAgentPrompt` in `packages/adapter-codex/src/invoke.ts` builds a `CodexInvocation`
+  without `codexHome`, not live) travels with NEW-106.
+- The fix session's "spec amendments for the orchestrator (Task 29)" list did not reach this
+  handoff; D62 applied the conflict-evidence bounds. Task 29 re-reads the fix session's report for
+  any other amendment.
+
+### Phase 5b · A12b
+
+- Workflow versions (review M7, founder): nothing is released (D47), so no overlay pins the bytes of
+  `brain-search@2.0.0` before `714918a`, and the five `1.0.0` workflows whose prose changed were not
+  bumped. If the founder prefers bumps, bump all six at once.
+- Spec gap: after `brain refactor --merge`, `[[s]]` links in the target's own body become links to
+  itself. R6 forbids only frontmatter edits; body cleanup is unspecified.
+- Task 16: `knowledge-pipeline.md` §§1, 3, 5, 7 were not reviewed; `threat-model.md`'s
+  `proposal.ts:129-136` citation is three lines off and does not mention the `'` refusal.
+- A full `npm run check` on HEAD is owed before the close.
+
+### Phase 6 · A13
+
+- C1 code fix owed under the amended §5.2 step 3 (D62): collapse LF/CR/CRLF runs to one LF, split
+  segments on an unquoted LF, turn the own-line `it.todo` rows in `apps/cli/src/hooks/guards/commit.test.ts`
+  and `apps/cli/src/hooks/guards/command.test.ts` into tests, and drop the first residual of
+  `docs/architecture/hooks.md` §3.8.
+- First-token bypasses (review M1: `sudo rm -rf /`, `env git push -f`, `FOO=1 git push -f`,
+  `(git push -f)`, `git -c core.hooksPath=/dev/null commit`, `rm -rf /*`) are `it.todo` rows; Task 2
+  decides the rules.
+- Review M4 remainder, founder: the exit code no longer waits for the firing record (`6b7ac75`), but
+  the process lives until the write settles, so a slow gate can still overrun the vendor's
+  2-second window. Options: write without the gate on `block` (a §7.3 amendment), or `process.exit`
+  after a bounded wait, which can cut stderr.
+- m1: legacy per-event firing records are never cleaned before uninstall and count against the
+  32-child cap; stays open by D62 (spec §7.3).
+- m4: Codex cwd-relative resolution observed only outside git; confirm in the Task 18 matrix.
+- Codex `apply_patch` grammar covers only observed forms (`*** End of File`, blank line refuses);
+  Codex rows were observed on a mock Responses API (account quota exhausted until 2026-10-22).
+
+### Phase 7 · A14
+
+- Review M3: `project init` departs from the codebase's pattern with no observable failure,
+  because its path-overlap check already refuses the dangerous case, so no red test exists.
+- Review M4b: a race that fails closed (exit 5); a test needs filesystem fault injection.
+- Review M5: a spec wording change; its text did not reach this handoff.
+- Review M6: the inventory rows wait for Task 16 Step 5.
+
+### Phase 8 · Spec 2 update and rollback
+
+- `packages/security/src/index.test.ts` export pin is stale for Tasks 13/15 (the core pin landed in
+  `b7e88dc`).
 - Graph gate entrypoint is provisional packages/core/dist/update/planner.js until the packer emits the planner bundle.
 - RollbackPayloadIdV1 is a local nominal type (rb_ prefix missing from lifecycle/ids.ts) — Task 20 reconciles.
-- import --claude-memory does not follow CLAUDE_CONFIG_DIR though Claude moves the layout under it (observation 2026-09-23).
-- Codex apply_patch grammar covers only observed forms (*** End of File, blank line refuse); Codex rows observed on a mock Responses API (account quota exhausted until 2026-10-22).
-- Plan 1b Task 17: stale plist for a job no longer eligible (e.g. git-sync) — preview emits remove; spec §5.3 vs §5.1 ambiguity unpinned by tests.
 - Task 17: UpdateFoundationParticipantRefV2 local in migrations.ts vs bootstrap FoundationParticipantRefV2 — Task 21/22 must unify; journal byte image built by Task 21; brain planner not exported from packages/brain root and migrations.js not in PLANNER_ENTRYPOINTS.
-- Plan 1b Task 1 conventions for Tasks 8/12: effect journals must carry id, coordinatorId, planHash; stagingChildren relative '/'-paths with every parent listed; unpublished-plan staging deeper than <side>/<ge-id> needs manual recovery.
-- Hooks spec amendment needed (founder): specs/2026-09-22-developer-os-hooks-design.md line ~464 firing record name <vendor>.<event>.json -> per verb; G7 'never the user home' scoped to Claude, Codex resolves against cwd.
-- Hooks re-review minors (ACCEPT): m1 legacy per-event firing records never cleaned (32-child cap margin; unreleased so cosmetic); m2 hooks.md §3.8 'reaches the hook as Bash' -> presumably; m3 patch.test.ts should iterate all \p{White_Space}; m4 Codex cwd-relative resolution observed only outside git — confirm in first real session.
-- Plan 1b Task 7: LaunchdObservedStateV1 exact_* -> loaded mapping left to Task 12; production adapters (operatingSystem, inspectExecutable, inspectEmptyDirectory, consoleUserUid) wired by Task 14; Task 12 must place journaled label in retained/planned.
 - Spec 2 Task 23: RollbackRecordV1 + inverse-leaf codecs provisional in apps/cli/src/update/planning.ts — Tasks 20/21 adopt or replace; readOfflineReleaseTrustFd demands exact fd set {0,1,2,3} — real update without launcher likely refuses exit 5 (Task 11b parked); update schema not added to output-schemas.ts.
-- Plan 1b Task 5: GitEffectEvidenceV1 defined in core git planner (Task 8 reuses); commitTree/lintSnapshot injected — Tasks 14/15 supply; filenames with tab/LF/CR in scope refuse (spec §7 row 30 tension).
 - Spec 2 Task 18: local OwnerExternalEffectIdV1 (oe_ missing in ids.ts), ImmutableUpdatePlanRefV1/UpdateLeafPlanKindV1/UpdateInitialJournalRefV1 local in construction.ts; paths.ts deriveUpdateRecoveryExecutorStagedPath vs spec {initial,terminal}.json divergence; publishOuter takes bytes until Task 22.
-- Plan 1b Task 9: GitProcessSupervisor only exported via packages/security/src/git/index.js — root index + export-pin test to be extended (Task 14).
-- Plan 1b Task 8: stagingChildren omit unpublished .git contents in post/<i> (ledger rejects while staged); planner (Task 5) does not plan objects/xx/ dir creation — first sync into fresh repo refuses git_effect_parent. Task 14 must close.
-- Plan 1b Task 11: spec §4.2 GitConfigQuotedPathV1 allows backslash but Core CanonicalAbsolutePathV1 rejects it — spec footnote/founder decision; trampoline<->dispatcher socket + execve left to Tasks 14/15; hostile config/redirect only indirectly proven (needs pinned Git, Tasks 13/19).
 - Spec 2 Task 21: UpdateLifecycleCoordinatorStepV1/UpdateCompactionEntryV1/UpdateStateCompactionEntryV1 local in participants.ts (Task 22 owns); no step->participant dispatcher; UpdateFoundationPortV1 not wired to FoundationParticipantExecutor V1 (Task 22/24 composition).
 - Spec 2 Tasks 19/21: updateParticipantJournalPath defined twice (bundle-participant.ts and participants.ts, same path); index exports the participants.ts one; dedupe bundle-participant's copy.
-- Plan 1b Task 12: launchd symbols not re-exported from platform-macos root (Task 14); 30s budget enforced in executor not observer; bootstrapPlists before/after reading chosen; crash between snapshot create and unlink leaves linked snapshot -> recovery-required.
 - Spec 2 Task 20: plan-only rollback projection has empty externalEffects (Codex policy/registration hashes unavailable at planning) — Task 24 must add; terminal-plan leaf enumeration in UTF-8 order owned by Tasks 24/25.
 - Spec 2 Task 22 open handoffs: Task 24 wire UpdateFoundationPortV1, plan-only rollback externalEffects, V2 envelope reader for launcher+ledger; retirementLeaves port (24/25); UpdateFoundationParticipantRefV2 vs bootstrap FoundationParticipantRefV2 cannot alias.
-- Plan 1b Task 16 -> Task 17: derive ScheduledInstallationV1.executablePath from verified install data (entrypointPath + manifest row), never argv; run() releases lease on return — main.ts must not depend on locks after; inject git-sync handler (else git_sync_handler_unavailable). Task 21 note: runner.v2.test.ts 2000 gate passes in 900s limit.
-- Spec 2 Task 24 BLOCKERS (update --apply not end-to-end): (a) UpdateFoundationPortV1 V1 TransactionExecutor bridge path/slot mismatch (V2 participants/foundation/<tx>/initial-journal.json, slots owner_forward_files absent from FOUNDATION_PARTICIPANT_SLOTS); (b) inspectLifecycleLedger does not recognise V2 envelopes, nothing produces LifecycleClosureV2ObservationV1; (c) no codec for UpdateTerminalRetirementPlanV1; (d) cycle: CanonicalStateFileStateV1.after + bundle metadata need payload dev/ino that exist only after the immutable plan is written; (e) runTargetVerifier throws LifecycleRecoveryRequiredError -> exit 6 instead of §9.4 automatic rollback; rolled_back_automatically has no typed result variant (§7.3), update_verifier_rejected loses exit 5.
-- Plan 1b Task 15 limits: tip commit must be loose (packed history refuses git_commit_not_loose); local push sends full reachable history; trampoline env compared exactly (verify at Task 19); no PID/PPID check; sync needs [user] in Brain .git/config; staging cleanup fix without its own test.
+- Spec 2 Task 24 BLOCKERS (update --apply not end-to-end): (a) UpdateFoundationPortV1 V1 TransactionExecutor bridge path/slot mismatch (V2 participants/foundation/<tx>/initial-journal.json, slots owner_forward_files absent from FOUNDATION_PARTICIPANT_SLOTS); (b) inspectLifecycleLedger does not recognise V2 envelopes, nothing produces LifecycleClosureV2ObservationV1; (c) no codec for UpdateTerminalRetirementPlanV1; (d) cycle: CanonicalStateFileStateV1.after + bundle metadata need payload dev/ino that exist only after the immutable plan is written; (e) runTargetVerifier throws LifecycleRecoveryRequiredError -> exit 6 instead of §9.4 automatic rollback; rolled_back_automatically has no typed result variant (§7.3). The exit 5 for `update_verifier_rejected` landed (`00425f9`, D60).
 - Spec 2 Task 25 rollback blockers: no production composeRollback; retirementLeaves/retireLeaf for consumed_rollback_and_rejected_release stubbed; no bundle/verify_previous and verify_retained participants; compensation needs state-postimage identities; V2 ledger/closure reader must report update_rollback residue.
+- Phase 8 review I2 remainder: a run resumed after a crash reports `update_coordinator_compensated` and exits 1, losing `update_verifier_rejected`. Closing it changes the V2 coordinator journal format (codec, size bound, fixtures) or needs a spec amendment; unreachable in production while NEW-110 is open.
+- Phase 8 review M1: a spawn-time capability scanner would reject every real planner, because each
+  reads `process.stdin` (the production one in `apps/cli/src/context.ts` too); the spec puts the gate
+  at repository level. Needs a design decision.
+- Phase 8 review M2: memory use only; every input is written by the product or the same user.
+  M3 and M4 were deferred without a description in this handoff.
+
+### Phase 9 · plan 1b Git and launchd
+
+- I2 (D62 (3), fix owed): adoption publishes the missing object fan-out directories in the `enable`
+  effect, so the effect grammar is unchanged. Test sketch: adopt a one-commit repository, a file whose
+  blob has no prefix directory, `git sync` expects `pushed`. This is Task 8's
+  `git_effect_parent` refusal on a first sync into a fresh repository.
+- I3 (D62 (3), fix owed): push advertises the destination ref, passes the destination's `boundary`
+  and drops `--thin`, so only new objects are sent; without it a repository stops syncing after about
+  200,001 objects. Test sketch in `tests/integration/git/lifecycle.test.ts`: two consecutive syncs of
+  one file each, the second `packHeaderObjectCount` equals the number of new objects.
+- I4 is accepted residual 11 of Spec 1 §8.3 until A16 (D62).
+- The trampoline's reported `ppid` is not bound to the parent PID in the permit, because the permit
+  carries no PIDs.
+- Verification gap: a real push through Apple Git-157 has not run through the I1 fix; unit tests only.
+- Plan 1b Task 1 conventions for Tasks 8/12: effect journals must carry id, coordinatorId, planHash; stagingChildren relative '/'-paths with every parent listed; unpublished-plan staging deeper than <side>/<ge-id> needs manual recovery.
+- Plan 1b Task 7: LaunchdObservedStateV1 exact_* -> loaded mapping left to Task 12; production adapters (operatingSystem, inspectExecutable, inspectEmptyDirectory, consoleUserUid) wired by Task 14; Task 12 must place journaled label in retained/planned.
+- Plan 1b Task 5: GitEffectEvidenceV1 defined in core git planner (Task 8 reuses); commitTree/lintSnapshot injected — Tasks 14/15 supply; filenames with tab/LF/CR in scope refuse (spec §7 row 30 tension).
+- Plan 1b Task 9: GitProcessSupervisor only exported via packages/security/src/git/index.js — root index + export-pin test to be extended (Task 14).
+- Plan 1b Task 8: stagingChildren omit unpublished .git contents in post/<i> (ledger rejects while staged); the missing fan-out directories are I2 above.
+- Plan 1b Task 11: trampoline<->dispatcher socket + execve left to Tasks 14/15; hostile config/redirect only indirectly proven (needs pinned Git, Tasks 13/19). The backslash question was settled by D61 (`d2f18b4`).
+- Plan 1b Task 12: launchd symbols not re-exported from platform-macos root (Task 14); 30s budget enforced in executor not observer; bootstrapPlists before/after reading chosen; crash between snapshot create and unlink leaves linked snapshot -> recovery-required.
+- Plan 1b Task 16 -> Task 17: derive ScheduledInstallationV1.executablePath from verified install data (entrypointPath + manifest row), never argv; run() releases lease on return — main.ts must not depend on locks after; inject git-sync handler (else git_sync_handler_unavailable). Task 21 note: runner.v2.test.ts 2000 gate passes in 900s limit.
+- Plan 1b Task 15 limits: packed history is residual 11 (D62) and the full-history push is I3 above; trampoline env compared exactly (verify at Task 19); no PID/PPID check (see the `ppid` item); sync needs [user] in Brain .git/config; staging cleanup fix without its own test.
 
 ## 7. Standing gates
 
