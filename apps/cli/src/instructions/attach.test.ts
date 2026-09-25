@@ -553,6 +553,20 @@ describe("planInstructionAttach: the §5.2 merge", () => {
     expect(plan.report.restored).toContain("codex vendor-file/agents-md");
   });
 
+  it("records a vendor file the user deleted as product-created when it re-creates it", async () => {
+    const state = freshState();
+    state.fs.dir(C);
+    state.fs.file(AGENTS_MD, "# mine\n");
+    apply(state, transaction(await planInstructionAttach(input(state))));
+    expect(blockRowAt(state.manifest, AGENTS_MD)).toMatchObject({ existedBefore: true });
+    state.fs.entries.delete(AGENTS_MD);
+
+    const plan = transaction(await planInstructionAttach(input(state)));
+
+    expect(mutationAt(plan, AGENTS_MD)?.operation).toBe("create");
+    expect(blockRowAt(plan.manifest, AGENTS_MD)).toMatchObject({ existedBefore: false, beforeHash: null, backupRelativePath: null });
+  });
+
   it("refuses malformed markers with instruction_block_malformed, exit 3", async () => {
     const state = await installed();
     state.fs.file(AGENTS_MD, `${state.fs.text(AGENTS_MD) ?? ""}${INSTRUCTION_BLOCK_BEGIN}\n`);

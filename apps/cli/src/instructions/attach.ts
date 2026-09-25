@@ -361,10 +361,11 @@ class Planner {
       });
     }
 
-    const restore = row !== undefined
-      ? { existedBefore: row.existedBefore, beforeHash: row.beforeHash, backupRelativePath: row.backupRelativePath }
-      : file === null
-        ? { existedBefore: false, beforeHash: null, backupRelativePath: null }
+    // A file the user deleted is re-created by the product, so detach removes it rather than leave it empty.
+    const restore = file === null
+      ? { existedBefore: false, beforeHash: null, backupRelativePath: null }
+      : row !== undefined
+        ? { existedBefore: row.existedBefore, beforeHash: row.beforeHash, backupRelativePath: row.backupRelativePath }
         : await this.#backup(owner, file);
     if (decision.action === "write") {
       const next = extraction.kind === "present" && file !== null
