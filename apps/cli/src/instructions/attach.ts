@@ -49,7 +49,7 @@ import { compareCodePoints } from "@developer-os/workflow-schema";
 import type { WorkflowContractV1 } from "@developer-os/workflow-schema";
 
 import type { InstructionSourceSetV1, InstructionSourceV1 } from "./sources.js";
-import { claudeInstructionPaths, codexInstructionPaths } from "./vendor-homes.js";
+import { claudeInstructionPaths, codexHomeRecordPath, codexInstructionPaths } from "./vendor-homes.js";
 import type { VendorHomesV1 } from "./vendor-homes.js";
 
 type Vendor = "claude" | "codex";
@@ -579,6 +579,10 @@ async function planCodex(planner: Planner, input: InstructionAttachInputV1, repo
     );
   }
   await planner.block("codex", paths.instructionFile, render.block.body, render.block.members);
+  await planner.file(
+    { owner: "codex", path: codexHomeRecordPath(planner.homes.productHome), bytes: encoder.encode(`${planner.homes.codexHome}\n`), source: "generated/codex/codex-home", instruction: null },
+    null,
+  );
   report.emulated.push(...render.emulated.map((id) => label("codex", "scoped-rule", id)));
   const marketplaceRoot = join(planner.homes.productHome, "codex");
   await planner.stale("codex", (path) => under(marketplaceRoot, path) || path.startsWith(`${paths.agentsDir}/developer-os-`));

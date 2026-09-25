@@ -58,6 +58,8 @@ const INSTRUCTIONS: readonly ReleaseFileV1[] = [
 interface FakeCodex {
   marketplace: boolean;
   registered: boolean;
+  /** `<argv> @ <CODEX_HOME>` of every non-`--version` call. */
+  readonly calls: string[];
 }
 
 function vendorRunner(codex: FakeCodex, pluginRoot: () => string): ProcessRunner {
@@ -66,6 +68,7 @@ function vendorRunner(codex: FakeCodex, pluginRoot: () => string): ProcessRunner
     run(request: ProcessRequest): Promise<ProcessResult> {
       const argv = request.args.join(" ");
       if (argv === "--version") return Promise.resolve(ok(request.executable === CLAUDE ? "2.1.280 (Claude Code)\n" : "codex-cli 0.155.1\n"));
+      codex.calls.push(`${argv} @ ${String(request.env.CODEX_HOME)}`);
       switch (argv) {
         case "plugin list --json":
           return Promise.resolve(ok(JSON.stringify({
@@ -108,7 +111,7 @@ interface Home {
 }
 
 async function home(label: string): Promise<Home> {
-  const codex: FakeCodex = { marketplace: false, registered: false };
+  const codex: FakeCodex = { marketplace: false, registered: false, calls: [] };
   let codexPlugin = "";
   const fixture = await createCommandFixture(label, {
     bootstrapAvailable: true,
@@ -415,5 +418,57 @@ describe("init --adapters: a refused attach transaction leaves no product-create
     expect(result.ok).toBe(false);
     expect(existsSync(planted.claudeHome)).toBe(false);
     expect(existsSync(planted.codexHome)).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
+
+describe("init --adapters codex records CODEX_HOME for every later command (one chained home)", () => {
+  let installed: Home;
+  let recorded: string;
+  let unset: CommandFixture["context"];
+
+  it("installs into the CODEX_HOME in effect at attach", async () => {
+    installed = await home("init-codex-home");
+    const { fixture } = installed;
+    recorded = join(fixture.userHome, "elsewhere", "codex");
+    await nodeFs.mkdir(dirname(recorded), { recursive: true, mode: 0o700 });
+    await nodeFs.mkdir(join(fixture.userHome, "other"), { mode: 0o700 });
+    unset = { ...fixture.context, env: Object.fromEntries(Object.entries(fixture.context.env).filter(([name]) => name !== "CODEX_HOME")) };
+
+    const result = await runInit({ ...unset, env: { ...unset.env, CODEX_HOME: recorded } }, options(["codex"]));
+
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    expect(existsSync(join(recorded, "AGENTS.md"))).toBe(true);
+    expect(existsSync(installed.codexHome)).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("refuses an attach under a different explicit CODEX_HOME and writes nothing", async () => {
+    const manifestBefore = await nodeFs.readFile(installed.fixture.paths.manifestFile);
+    const other = join(installed.fixture.userHome, "other", "codex");
+
+    const result = await runInit({ ...unset, env: { ...unset.env, CODEX_HOME: other } }, options(["codex"]));
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.kind).toBe("codex_home_mismatch");
+    expect(result.code).toBe(EXIT_CODES.decisionRequired);
+    expect(existsSync(other)).toBe(false);
+    expect(await nodeFs.readFile(installed.fixture.paths.manifestFile)).toStrictEqual(manifestBefore);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("admits the manifest in doctor with CODEX_HOME unset", async () => {
+    const report = await runDoctorReport(unset);
+
+    expect(report.checks.find((check) => check.id === "manifest")?.status).toBe("pass");
+    expect(report.checks.find((check) => check.id === "instructions")?.status).not.toBe("fail");
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("uninstalls with CODEX_HOME unset, unregistering against the recorded home", async () => {
+    const callsBefore = installed.codex.calls.length;
+
+    const result = await runUninstall(unset, { dryRun: false, assumeYes: true });
+
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    expect(installed.codex.calls.slice(callsBefore)).toContain(`plugin remove developer-os@developer-os @ ${recorded}`);
+    expect(existsSync(join(recorded, "AGENTS.md"))).toBe(false);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });

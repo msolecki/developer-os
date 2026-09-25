@@ -1,6 +1,6 @@
 import { constants } from "node:fs";
 import * as nodeFs from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 import { CLAUDE_MINIMUM_VERSION, discoverClaude } from "@developer-os/adapter-claude";
 import { CODEX_HOOK_TRUST_RESIDUE, CODEX_HOOK_TRUST_STEP, CODEX_MINIMUM_VERSION, discoverCodex } from "@developer-os/adapter-codex";
@@ -51,7 +51,7 @@ import { InstructionRefusal as DetachRefusal, planInstructionDetach } from "./de
 import type { InstructionFileSystemV1 } from "./detach.js";
 import { loadInstructionDefaults, loadInstructionOverrides, loadReleaseWorkflows, mergeInstructionSources } from "./sources.js";
 import type { InstructionSourceSetV1 } from "./sources.js";
-import { codexInstructionPaths, resolveVendorHomes } from "./vendor-homes.js";
+import { codexHomeFromEnv, codexInstructionPaths, resolveVendorHomes } from "./vendor-homes.js";
 import type { VendorHomesV1 } from "./vendor-homes.js";
 
 type Vendor = "claude" | "codex";
@@ -379,6 +379,19 @@ export async function applyInstructions(context: CliContext, input: {
   }
 
   const homes = resolveVendorHomes(context.env, context.userHome, home);
+  const explicitCodexHome = context.env.CODEX_HOME;
+  if (selection.includes("codex") && explicitCodexHome !== undefined && isAbsolute(explicitCodexHome)) {
+    const requested = codexHomeFromEnv(context.env, context.userHome);
+    if (requested !== homes.codexHome) {
+      // ponytail: the record lives with P/codex until uninstall, so moving C means uninstall first.
+      throw new InstructionRefusal({
+        reason: "codex_home_mismatch",
+        code: EXIT_CODES.decisionRequired,
+        paths: [homes.codexHome, requested],
+        recovery: `unset CODEX_HOME or set it to ${homes.codexHome}, the Codex home this installation recorded; to move it, uninstall first`,
+      });
+    }
+  }
   const warnings: string[] = [];
 
   if (detached.length > 0) {
