@@ -194,6 +194,14 @@ it("blocks recursive-delete-root on a line that opens a quote in a heredoc comma
   expect(await run("cat <<EOF\n$(\nrm -rf ~; echo '\n')\nEOF")).toMatchObject({ kind: "block", ruleId: "recursive-delete-root" });
 });
 
+// D64: a line whose own quotes balance but flip in context is checked fragment by fragment.
+it("blocks recursive-delete-root on a line whose quotes flip in context", async () => {
+  expect(await run("cat <<EOF\n$(\necho '\n'; rm -rf ~; echo '\n')\nEOF")).toMatchObject({
+    kind: "block",
+    ruleId: "recursive-delete-root",
+  });
+});
+
 // Task 2 parity (founder): the rules read only a segment's first token, so a prefix hides the call.
 describe("a prefixed or globbed command (residual in hooks.md §3.8)", () => {
   it.todo("blocks recursive-delete-root: sudo rm -rf /");

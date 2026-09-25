@@ -363,9 +363,13 @@ physical line of the raw command, split on LF, CR or CRLF and trimmed, so a line
 own blocks the command whatever the tokenizer made of quotes, comments, heredocs or `$'…'` across
 lines. D63 reduces the tokenizer's part in the trust path; it does not remove it: the rules still
 tokenize each line with `shellSegments`, only with no state carried in from the lines around it
-(§3.8). A line whose own quotes do not close tokenizes to nothing, so it is checked again with every
-`'` and `"` removed (phase review I-1); otherwise `git push --force; echo '` would pass as a heredoc
-body line. Only the whole command is refused as `unterminated-quote`. `pipe-to-shell` is
+(§3.8). A line whose own quotes do not close tokenizes to nothing, and a line whose own quotes do
+close can still, in bash, close a quote opened on an earlier line and open another. So since D64
+every line after the first that holds a `'` or `"` also yields each fragment between quote
+characters, and the line with every `\`, every `$` before `'` and every quote removed; otherwise
+`git push --force; echo '` or `'; git push --force; echo '` would pass as a heredoc body line. The
+first line needs neither: bash starts it unquoted, as the whole-command analysis does. Only the
+whole command is refused as `unterminated-quote`. `pipe-to-shell` is
 unanchored, so for it the extra lines change nothing; it still reads the whole text.
 
 ### 3.5 Recursion
@@ -436,10 +440,12 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
   tokenizer's view of where a body starts and ends (an unquoted heredoc runs `$(…)`, and a
   backslash, a lone CR or `(( y << z ))` moved that view away from bash's in three review rounds).
   The same holds inside a multi-line quote: in `git commit -m "a` ⏎ `git push --force` ⏎ `b"` the
-  middle line blocks. A line that opens or closes the quote itself is read with its quotes
-  removed, so the last line of `git commit -m "a` ⏎ `git push --force"` blocks too, and so does
-  `echo 'x` ⏎ `rm -rf ~'`: the tokenizer cannot tell a line that closes a quote from one that opens
-  a new one, and trusting it to would reopen the bypass.
+  middle line blocks. A line after the first that holds a quote is also read fragment by fragment
+  and with its quotes removed (D64), so the last line of `git commit -m "a` ⏎ `git push --force"`
+  blocks too, and so do `echo 'x` ⏎ `rm -rf ~'`, `cd repo` ⏎ `git commit -m "git push --force is
+  banned"` and `cd repo` ⏎ `git commit -m "fix -n handling"`: without the lines before it, a line
+  cannot tell whether its quotes open or close, and trusting the tokenizer to would reopen the
+  bypass. The first line of a command is exempt, so `git commit -m "fix -n handling"` alone passes.
 - **A command hidden on the same physical line still depends on the tokenizer.** The line pass
   cannot split a single line, so only `shellSegments` reads `echo ${x:- # }; git push --force` or
   `echo $'\'' ; git push --force #'`. A `#` that starts a word comments out quotes, backslashes and

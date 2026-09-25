@@ -171,6 +171,24 @@ describe("a dangerous line the tokenizer misreads", () => {
     expect(await run(command)).toMatchObject({ kind: "block", ruleId: "force-push" });
   });
 
+  // D64: a line that closes a quote and opens another reads as balanced on its own, so every
+  // fragment between quote characters, and the line with `\\`, a `$` before `'` and every quote
+  // removed, are also candidates.
+  it.each([
+    "(( x = y << z ))\necho '\n'; git push --force; echo '\nz\n' #'",
+    "cat <<EOF\n$(\necho '\n'; git push --force; echo '\n')\nEOF",
+    "cat <<EOF\n$(\necho \\'; git push --force; echo '\n')\nEOF",
+    "cat <<EOF\n$(\ngit push $'--force'; echo '\n')\nEOF",
+    "cat <<EOF\n$(\necho '\n'; git push $'--force'; echo '\n')\nEOF",
+  ])("blocks force-push on a line whose quotes flip in context: %j", async (command) => {
+    expect(await run(command)).toMatchObject({ kind: "block", ruleId: "force-push" });
+  });
+
+  // D64: on any line after the first, quoted text that starts with a banned command is a candidate.
+  it("blocks a message that starts with a force-push (accepted false block, D64)", async () => {
+    expect(await run('cd repo\ngit commit -m "git push --force is banned"')).toMatchObject({ kind: "block", ruleId: "force-push" });
+  });
+
   it("blocks hook-bypass on a line inside a heredoc body (accepted false block, D63)", async () => {
     expect(await run("cat <<EOF > notes.md\ngit commit -n -m x\nEOF")).toMatchObject({ kind: "block", ruleId: "hook-bypass" });
   });
