@@ -1,11 +1,13 @@
 import {
   admitReleaseAgainstTrust,
+  admitReleaseIdentity,
   decodeCanonicalJson,
   decodeUpdateExecutorRecordSlot,
   isUnsignedLocalTrust,
   LifecycleRecoveryRequiredError,
   MAXIMUM_ROLLBACK_DOCUMENT_BYTES,
   parseCanonicalAbsolutePathText,
+  releaseIdentityHash,
   validateActiveReleaseRecord,
   validateBundleManifest,
   validateReleaseTrustState,
@@ -19,6 +21,9 @@ import type {
   LowerHexSha256,
   ReleaseBundleManifestV1,
   ReleaseIdentityV1,
+  ReleaseIndexV1,
+  ReleaseKeyDelegationV1,
+  ReleaseTrustStateV1,
   RollbackRecordV1,
   UpdateRecoveryExecutorRecordV1,
 } from "@developer-os/core";
@@ -74,19 +79,25 @@ export interface LauncherPackagedFallbackV1 {
   readonly manifestPath: CanonicalAbsolutePathV1;
 }
 
-/**
- * The Task 11 signature port, consumed here through an injected interface
- * rather than implemented: this module never verifies an Ed25519 signature
- * itself. It calls this on every retained delegation/index document it
- * reads, after confirming the document's content hash and structural
- * envelope shape, so wiring the real verifier later is a drop-in.
- */
-export type LauncherRetainedDocumentVerifierV1 = (document: {
+/** A retained signed document, structurally admitted and hash-pinned but not yet verified. */
+export interface LauncherRetainedDocumentV1 {
   readonly schemaVersion: 1;
   readonly kind: string;
   readonly signed: unknown;
   readonly signatures: readonly unknown[];
-}) => void;
+}
+
+/**
+ * The Task 11 signature port, consumed here through an injected interface
+ * rather than implemented: this module never verifies an Ed25519 signature
+ * itself. It hands over the delegation and index by the store slot each was
+ * read from and receives the validated chain, which it then binds to the
+ * release it launches.
+ */
+export type LauncherRetainedDocumentVerifierV1 = (documents: {
+  readonly delegation: LauncherRetainedDocumentV1;
+  readonly index: LauncherRetainedDocumentV1;
+}) => { readonly delegation: ReleaseKeyDelegationV1; readonly index: ReleaseIndexV1 };
 
 export interface LauncherSelectionRequestV1 {
   readonly productHome: CanonicalAbsolutePathV1;
@@ -217,7 +228,7 @@ function parseRetainedDocumentEnvelope(
   bytes: Uint8Array,
   path: CanonicalAbsolutePathV1,
   maximumBytes: number,
-): { readonly schemaVersion: 1; readonly kind: string; readonly signed: unknown; readonly signatures: readonly unknown[] } {
+): LauncherRetainedDocumentV1 {
   let value: unknown;
   try {
     value = decodeCanonicalJson(bytes, maximumBytes);
@@ -238,24 +249,18 @@ function parseRetainedDocumentEnvelope(
   return record;
 }
 
-async function admitRetainedDocument(
+async function readRetainedDocument(
   fs: LauncherGuardedReaderV1,
   path: CanonicalAbsolutePathV1,
   expectedHash: LowerHexSha256,
   maximumBytes: number,
   effectiveUid: number,
-  verify: LauncherRetainedDocumentVerifierV1,
-): Promise<void> {
+): Promise<LauncherRetainedDocumentV1> {
   const entry = await ownedRegular(fs, path, effectiveUid, maximumBytes, "launcher_retained_document_missing");
   const hash = await fs.hashRegular(entry, BigInt(maximumBytes));
   if (hash !== expectedHash) recoveryRequired("launcher_retained_document_hash_mismatch", path);
   const bytes = await fs.readRegular(entry, maximumBytes);
-  const document = parseRetainedDocumentEnvelope(bytes, path, maximumBytes);
-  try {
-    verify(document);
-  } catch {
-    recoveryRequired("launcher_retained_document_unverified", path);
-  }
+  return parseRetainedDocumentEnvelope(bytes, path, maximumBytes);
 }
 
 async function admitPackagedFallback(request: LauncherSelectionRequestV1): Promise<AdmittedReleaseBundleV1> {
@@ -301,7 +306,7 @@ async function admitActiveRelease(
   if (rollback !== null && rollback.installed.releaseIdentityHash !== active.releaseIdentityHash) {
     recoveryRequired("launcher_rollback_record_foreign", derive(productHome, "state/update-rollback.json"));
   }
-  return admitRetainedRelease(request, active, { retainedBeside: rollback?.previous ?? null });
+  return admitRetainedRelease(request, active, { retainedBeside: rollback?.previous ?? null, trust });
 }
 
 /** Absent, or fresh `init`'s empty reservation: no rollback identity is retained. */
@@ -332,7 +337,7 @@ async function readRollbackRecord(request: LauncherSelectionRequestV1): Promise<
 async function admitRetainedRelease(
   request: LauncherSelectionRequestV1,
   active: ReleaseIdentityV1,
-  stores: { readonly retainedBeside: ReleaseIdentityV1 | null } | "contains_release",
+  stores: { readonly retainedBeside: ReleaseIdentityV1 | null; readonly trust: ReleaseTrustStateV1 | null } | "contains_release",
 ): Promise<AdmittedReleaseBundleV1> {
   const { fs, productHome, effectiveUid, verifyRetainedDocument } = request;
   const delegationsRoot = derive(productHome, "state/release-metadata/delegations");
@@ -353,22 +358,22 @@ async function admitRetainedRelease(
     await assertExactStoreSet(fs, bundlesRoot, names((identity) => identity.bundleManifestHash), effectiveUid);
   }
 
-  await admitRetainedDocument(
+  const indexPath = derive(indexesRoot, `${active.releaseIndexHash}.json`);
+  const delegationDocument = await readRetainedDocument(
     fs,
     derive(delegationsRoot, `${active.delegationHash}.json`),
     active.delegationHash,
     MAX_DELEGATION_BYTES,
     effectiveUid,
-    verifyRetainedDocument,
   );
-  await admitRetainedDocument(
-    fs,
-    derive(indexesRoot, `${active.releaseIndexHash}.json`),
-    active.releaseIndexHash,
-    MAX_INDEX_BYTES,
-    effectiveUid,
-    verifyRetainedDocument,
-  );
+  const indexDocument = await readRetainedDocument(fs, indexPath, active.releaseIndexHash, MAX_INDEX_BYTES, effectiveUid);
+  let chain: ReturnType<LauncherRetainedDocumentVerifierV1>;
+  try {
+    chain = verifyRetainedDocument({ delegation: delegationDocument, index: indexDocument });
+  } catch {
+    return recoveryRequired("launcher_retained_document_unverified", indexPath);
+  }
+  if (stores !== "contains_release" && stores.trust !== null) assertTrustNamesDelegation(stores.trust, active, chain.delegation);
 
   const bundleManifestPath = derive(bundlesRoot, `${active.bundleManifestHash}.json`);
   const bundleManifestEntry = await ownedRegular(
@@ -384,15 +389,7 @@ async function admitRetainedRelease(
   }
   const manifestBytes = await fs.readRegular(bundleManifestEntry, MAX_BUNDLE_MANIFEST_BYTES);
   const manifest = parseBundleManifest(manifestBytes, bundleManifestPath, MAX_BUNDLE_MANIFEST_BYTES);
-  if (
-    manifest.version !== active.version ||
-    manifest.releaseSequence !== active.releaseSequence ||
-    manifest.architecture !== active.architecture ||
-    manifest.launcherProtocol !== active.launcherProtocol ||
-    manifest.updateProtocol !== active.updateProtocol
-  ) {
-    recoveryRequired("launcher_bundle_manifest_identity_mismatch", bundleManifestPath);
-  }
+  bindReleaseIdentity(productHome, active, chain, manifest, bundleManifestHash, bundleManifestPath);
 
   return new LauncherBundleAdmission().admit({
     platform: { platform: active.platform, architecture: active.architecture },
@@ -401,6 +398,69 @@ async function admitRetainedRelease(
     effectiveUid,
     fs,
   });
+}
+
+/**
+ * Spec 2 §3.1: the signed index must list this exact release, bundle manifest and metadata
+ * sequences -- core's `admitReleaseIdentity` is the one binding the `update` planner uses too.
+ */
+function bindReleaseIdentity(
+  productHome: CanonicalAbsolutePathV1,
+  active: ReleaseIdentityV1,
+  chain: ReturnType<LauncherRetainedDocumentVerifierV1>,
+  manifest: ReleaseBundleManifestV1,
+  bundleManifestHash: LowerHexSha256,
+  path: CanonicalAbsolutePathV1,
+): void {
+  const entry = chain.index.releases.find((candidate) => candidate.version === active.version);
+  if (entry === undefined) recoveryRequired("launcher_release_not_in_retained_index", path);
+  try {
+    admitReleaseIdentity(
+      {
+        version: active.version,
+        releaseSequence: active.releaseSequence,
+        releaseIdentityHash: active.releaseIdentityHash,
+        delegationSequence: active.delegationSequence,
+        delegationHash: active.delegationHash,
+        releaseIndexSequence: active.releaseIndexSequence,
+        releaseIndexHash: active.releaseIndexHash,
+        bundleManifestHash: active.bundleManifestHash,
+        bundleRoot: active.bundleRoot,
+        platform: active.platform,
+        architecture: active.architecture,
+        launcherProtocol: active.launcherProtocol,
+        updateProtocol: active.updateProtocol,
+      },
+      createCanonicalPathEvidence(),
+      {
+        productHome,
+        selected: {
+          entry,
+          bundle: entry.bundles[active.architecture === "arm64" ? 0 : 1],
+          releaseIdentityHash: releaseIdentityHash(entry, active.architecture),
+        },
+        metadata: {
+          delegationSequence: chain.delegation.sequence,
+          delegationHash: active.delegationHash,
+          delegatedReleaseKeyId: chain.delegation.releaseKey.keyId,
+          releaseIndexSequence: chain.index.sequence,
+          releaseIndexHash: active.releaseIndexHash,
+        },
+        bundleManifest: manifest,
+        bundleManifestHash,
+      },
+    );
+  } catch {
+    recoveryRequired("launcher_bundle_manifest_identity_mismatch", path);
+  }
+}
+
+/** The trust watermark at the active delegation's sequence must name that delegation and its key. */
+function assertTrustNamesDelegation(trust: ReleaseTrustStateV1, active: ReleaseIdentityV1, delegation: ReleaseKeyDelegationV1): void {
+  const comparison = BigInt(delegation.sequence) - BigInt(trust.highestDelegationSequence);
+  if (comparison > 0n || (comparison === 0n && (trust.delegationHash !== active.delegationHash || trust.delegatedReleaseKeyId !== delegation.releaseKey.keyId))) {
+    recoveryRequired("launcher_active_release_not_dominated_by_trust", active.bundleRoot);
+  }
 }
 
 async function readUpdateExecutorRecord(request: LauncherSelectionRequestV1): Promise<UpdateRecoveryExecutorRecordV1 | null> {

@@ -1,20 +1,27 @@
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync, sign as signEd25519 } from "node:crypto";
+import type { KeyObject } from "node:crypto";
 
 import {
   encodeCanonicalJson,
+  releaseIdentityHash,
+  signedReleaseDocumentSigningBytes,
   validateBundleManifest,
+  validateOfficialReleaseOrigin,
 } from "@developer-os/core";
 import type {
+  Base64UrlNoPaddingV1,
   CanonicalAbsolutePathV1,
   CanonicalJsonValue,
   LifecycleGuardedEntryV1,
   LowerHexSha256,
+  OfflineRootKeyV1,
   ReleaseBundleManifestV1,
   UInt64DecimalV1,
 } from "@developer-os/core";
 import type { LauncherGuardedReaderV1 } from "@developer-os/platform-macos";
 import { describe, expect, it } from "vitest";
 
+import { createLauncherRetainedDocumentVerifier } from "./handoff.js";
 import {
   buildLauncherProcessRequest,
   selectLauncherCandidate,
@@ -158,6 +165,41 @@ function writeBundle(
   return manifest;
 }
 
+function generateKey(): { readonly keyId: LowerHexSha256; readonly publicKey: Base64UrlNoPaddingV1; readonly privateKey: KeyObject } {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const encoded = (publicKey.export({ format: "jwk" }) as { readonly x: string }).x as Base64UrlNoPaddingV1;
+  return { keyId: sha256(Buffer.from(encoded, "base64url")), publicKey: encoded, privateKey };
+}
+
+const ROOT_KEY = generateKey();
+const RELEASE_KEY = generateKey();
+const ROOT: OfflineRootKeyV1 = { role: "online_current", algorithm: "ed25519", keyId: ROOT_KEY.keyId, publicKey: ROOT_KEY.publicKey };
+const ORIGIN = validateOfficialReleaseOrigin({ scheme: "https", host: "github.com", port: 443, pathPrefix: "/msolecki/developer-os/releases/latest/download/" });
+
+function signed(kind: string, body: CanonicalJsonValue, key: ReturnType<typeof generateKey>): Buffer {
+  const signature = signEd25519(null, signedReleaseDocumentSigningBytes(kind, body), key.privateKey).toString("base64url");
+  return canonicalBytes({ schemaVersion: 1, kind, signed: body, signatures: [{ algorithm: "ed25519", keyId: key.keyId, signature }] });
+}
+
+function indexEntry(version: string, releaseSequence: string, arm64ManifestHash: LowerHexSha256) {
+  const bundle = (architecture: "arm64" | "x64", manifestSha256: string) => ({
+    platform: "darwin",
+    architecture,
+    archiveFormat: "zstd-ustar-v1",
+    archivePath: `darwin-${architecture}.tar.zst`,
+    archiveBytes: "1",
+    archiveSha256: "a".repeat(64),
+    manifestPath: `darwin-${architecture}-manifest.json`,
+    manifestBytes: "1",
+    manifestSha256,
+  });
+  return { version, releaseSequence, minimumLauncherProtocol: 1, updateProtocol: 1, bundles: [bundle("arm64", arm64ManifestHash), bundle("x64", "d".repeat(64))] };
+}
+
+function signedIndex(entry: ReturnType<typeof indexEntry>): Buffer {
+  return signed("release-index", { sequence: "1", latestVersion: entry.version, releases: [entry] }, RELEASE_KEY);
+}
+
 function baseRequest(fs: FakeFileSystem): LauncherSelectionRequestV1 {
   return {
     productHome: PRODUCT_HOME,
@@ -166,7 +208,7 @@ function baseRequest(fs: FakeFileSystem): LauncherSelectionRequestV1 {
     fs,
     packagedFallback: { bundleRoot: FALLBACK_ROOT, manifestPath: FALLBACK_MANIFEST },
     bootstrapClosure: { kind: "handoff_complete" },
-    verifyRetainedDocument: () => undefined,
+    verifyRetainedDocument: createLauncherRetainedDocumentVerifier([ROOT]),
   };
 }
 
@@ -182,28 +224,24 @@ function activeFixture() {
   const bundleRoot = `${PRODUCT_HOME}/releases/2.0.0/darwin-arm64`;
   const manifest = writeBundle(fs, bundleRoot, "arm64", "2.0.0", "2");
 
-  const delegationBytes = canonicalBytes({
-    schemaVersion: 1,
-    kind: "release-key-delegation",
-    signed: { ok: true },
-    signatures: [{ ok: true }],
-  });
+  const delegationBytes = signed("release-key-delegation", {
+    sequence: "1",
+    releaseKey: { algorithm: "ed25519", keyId: RELEASE_KEY.keyId, publicKey: RELEASE_KEY.publicKey },
+    metadataOrigins: [ORIGIN],
+    assetOrigins: [ORIGIN],
+  } as unknown as CanonicalJsonValue, ROOT_KEY);
   const delegationHash = sha256(delegationBytes);
-  const indexBytes = canonicalBytes({
-    schemaVersion: 1,
-    kind: "release-index",
-    signed: { ok: true },
-    signatures: [{ ok: true }],
-  });
-  const releaseIndexHash = sha256(indexBytes);
   const bundleManifestBytes = canonicalBytes(manifest as unknown as CanonicalJsonValue);
   const bundleManifestHash = sha256(bundleManifestBytes);
+  const entry = indexEntry("2.0.0", "2", bundleManifestHash);
+  const indexBytes = signedIndex(entry);
+  const releaseIndexHash = sha256(indexBytes);
 
   const active = {
     schemaVersion: 1,
     version: "2.0.0",
     releaseSequence: "2",
-    releaseIdentityHash: sha256(Buffer.from("release-identity")),
+    releaseIdentityHash: releaseIdentityHash(entry, "arm64"),
     delegationSequence: "1",
     delegationHash,
     releaseIndexSequence: "1",
@@ -220,7 +258,7 @@ function activeFixture() {
     schemaVersion: 1,
     highestDelegationSequence: "1",
     delegationHash,
-    delegatedReleaseKeyId: sha256(Buffer.from("delegated-key")),
+    delegatedReleaseKeyId: RELEASE_KEY.keyId,
     highestReleaseIndexSequence: "1",
     releaseIndexHash,
     highestAcceptedReleaseSequence: "2",
@@ -237,7 +275,19 @@ function activeFixture() {
   fs.setDirectory(`${PRODUCT_HOME}/state/release-metadata/bundles`, [`${bundleManifestHash}.json`]);
   fs.setFile(`${PRODUCT_HOME}/state/release-metadata/bundles/${bundleManifestHash}.json`, bundleManifestBytes);
 
-  return { fs, active, bundleRoot, trust };
+  return { fs, active, bundleRoot, trust, delegationBytes };
+}
+
+/** Replaces the retained index with `bytes` and repoints the active record and trust at it. */
+function retainIndex(fixture: ReturnType<typeof activeFixture>, bytes: Buffer): void {
+  const { fs, active, trust } = fixture;
+  const indexes = `${PRODUCT_HOME}/state/release-metadata/indexes`;
+  const releaseIndexHash = sha256(bytes);
+  fs.deletePath(`${indexes}/${active.releaseIndexHash}.json`);
+  fs.setDirectory(indexes, [`${releaseIndexHash}.json`]);
+  fs.setFile(`${indexes}/${releaseIndexHash}.json`, bytes);
+  fs.setFile(`${PRODUCT_HOME}/state/active-release.json`, canonicalBytes({ ...active, releaseIndexHash }));
+  fs.setFile(`${PRODUCT_HOME}/state/release-trust.json`, canonicalBytes({ ...trust, releaseIndexHash }));
 }
 
 function malformedActiveFixture(): LauncherSelectionRequestV1 {
@@ -333,6 +383,30 @@ describe("selectLauncherCandidate", () => {
     }
 
     await expect(selectLauncherCandidate(baseRequest(fs))).resolves.toMatchObject({ kind: "active_release" });
+  });
+
+  it("never verifies a delegation retained in the index slot as the index", async () => {
+    const fixture = activeFixture();
+    retainIndex(fixture, fixture.delegationBytes);
+    await expect(selectLauncherCandidate(baseRequest(fixture.fs))).rejects.toMatchObject({
+      code: 6,
+      reason: "launcher_retained_document_unverified",
+    });
+  });
+
+  it("refuses a trust watermark naming another key at the active delegation's sequence", async () => {
+    const { fs, trust } = activeFixture();
+    fs.setFile(`${PRODUCT_HOME}/state/release-trust.json`, canonicalBytes({ ...trust, delegatedReleaseKeyId: sha256(Buffer.from("other-key")) }));
+    await expect(selectLauncherCandidate(baseRequest(fs))).rejects.toMatchObject({
+      code: 6,
+      reason: "launcher_active_release_not_dominated_by_trust",
+    });
+  });
+
+  it("refuses a genuine signed index that does not list the active bundle manifest", async () => {
+    const fixture = activeFixture();
+    retainIndex(fixture, signedIndex(indexEntry("2.0.0", "2", sha256(Buffer.from("another-manifest")))));
+    await expect(selectLauncherCandidate(baseRequest(fixture.fs))).rejects.toMatchObject({ code: 6 });
   });
 
   it("refuses when the retained delegation store holds an extra file", async () => {

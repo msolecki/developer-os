@@ -1,11 +1,11 @@
 import { spawn } from "node:child_process";
 
-import { validateOfflineReleaseTrust, validateReleaseKeyDelegation } from "@developer-os/core";
+import { validateOfflineReleaseTrust, validateReleaseIndex, validateReleaseKeyDelegation } from "@developer-os/core";
 import type {
-  DelegatedReleaseKeyV1,
   OfficialReleaseAssetOriginV1,
   OfflineReleaseTrustV1,
   OfflineRootKeyV1,
+  ReleaseKeyDelegationV1,
   SignedReleaseDocumentV1,
 } from "@developer-os/core";
 import { SecurityRefusalError, renderOfflineReleaseTrustPipe, verifySignedReleaseDocument } from "@developer-os/security";
@@ -71,49 +71,33 @@ export function compileLauncherOfflineReleaseTrust(
 }
 
 /**
- * Real Ed25519 verification for Task 10's injected
- * `LauncherRetainedDocumentVerifierV1` port (`./selection.ts`), matching its
- * existing shape exactly rather than declaring a new one. Retained
- * documents are already hash-pinned to the launcher's trust watermark
- * before this runs, so both the current and the retained-previous root are
- * accepted for the delegation (Spec 2 §3.1's guarded/retained admission,
- * never the online-only path). Stateful: `selection.ts`'s
- * `admitActiveRelease` always calls this for the delegation document before
- * the release-index document, so the verified delegation's release key is
- * captured and required for the index call that follows.
+ * Real Ed25519 verification for the injected `LauncherRetainedDocumentVerifierV1`
+ * port (`./selection.ts`). Each document is verified as the kind its store slot
+ * holds, never as the kind it claims: the delegation against an accepted root
+ * (current or retained previous -- retained documents are already hash-pinned,
+ * Spec 2 §3.1), then the index against the key that delegation names. Returns
+ * the validated chain for the caller to bind to the release it launches.
  */
 export function createLauncherRetainedDocumentVerifier(
   roots: readonly OfflineRootKeyV1[],
 ): LauncherRetainedDocumentVerifierV1 {
-  let delegatedReleaseKey: DelegatedReleaseKeyV1 | null = null;
-
-  return (document) => {
-    if (document.kind === DELEGATION_KIND) {
-      delegatedReleaseKey = null;
-      const delegationDocument = document as unknown as SignedReleaseDocumentV1<typeof DELEGATION_KIND, unknown>;
-      let refusal: unknown;
-      for (const root of roots) {
-        try {
-          const delegation = validateReleaseKeyDelegation(verifySignedReleaseDocument(delegationDocument, root));
-          delegatedReleaseKey = delegation.releaseKey;
-          return;
-        } catch (error) {
-          refusal = error;
-        }
+  return ({ delegation, index }) => {
+    if (delegation.kind !== DELEGATION_KIND) throw new SecurityRefusalError("Expected a release key delegation document");
+    if (index.kind !== INDEX_KIND) throw new SecurityRefusalError("Expected a release index document");
+    let verified: ReleaseKeyDelegationV1 | null = null;
+    for (const root of roots) {
+      try {
+        verified = validateReleaseKeyDelegation(
+          verifySignedReleaseDocument(delegation as unknown as SignedReleaseDocumentV1<typeof DELEGATION_KIND, unknown>, root),
+        );
+        break;
+      } catch {
+        continue;
       }
-      throw refusal instanceof Error ? refusal : new SecurityRefusalError("Release key delegation is not signed by an accepted root");
     }
-
-    if (document.kind === INDEX_KIND) {
-      if (delegatedReleaseKey === null) {
-        throw new SecurityRefusalError("Release index verified before an accepted delegation");
-      }
-      const indexDocument = document as unknown as SignedReleaseDocumentV1<typeof INDEX_KIND, unknown>;
-      verifySignedReleaseDocument(indexDocument, delegatedReleaseKey);
-      return;
-    }
-
-    throw new SecurityRefusalError(`Unknown retained release document kind: ${document.kind}`);
+    if (verified === null) throw new SecurityRefusalError("Release key delegation is not signed by an accepted root");
+    const indexDocument = index as unknown as SignedReleaseDocumentV1<typeof INDEX_KIND, unknown>;
+    return { delegation: verified, index: validateReleaseIndex(verifySignedReleaseDocument(indexDocument, verified.releaseKey)) };
   };
 }
 

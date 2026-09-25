@@ -134,15 +134,14 @@ describe("compileLauncherOfflineReleaseTrust", () => {
 });
 
 describe("createLauncherRetainedDocumentVerifier", () => {
-  it("verifies a delegation then its release index in order", () => {
+  it("verifies a delegation then its release index and returns the validated chain", () => {
     const current = generateRoot("online_current");
     const delegated = generateDelegatedKey();
     const delegation = sign("release-key-delegation", makeDelegation(delegated.releaseKey), current.root.keyId, current.privateKey);
     const index = sign("release-index", makeIndex(), delegated.releaseKey.keyId, delegated.privateKey);
     const verify = createLauncherRetainedDocumentVerifier([current.root]);
 
-    expect(() => { verify(delegation); }).not.toThrow();
-    expect(() => { verify(index); }).not.toThrow();
+    expect(verify({ delegation, index })).toEqual({ delegation: delegation.signed, index: index.signed });
   });
 
   it("accepts a delegation signed by the retained previous root", () => {
@@ -152,25 +151,33 @@ describe("createLauncherRetainedDocumentVerifier", () => {
     const index = sign("release-index", makeIndex(), delegated.releaseKey.keyId, delegated.privateKey);
     const verify = createLauncherRetainedDocumentVerifier([previous.root]);
 
-    expect(() => { verify(delegation); }).not.toThrow();
-    expect(() => { verify(index); }).not.toThrow();
+    expect(() => verify({ delegation, index })).not.toThrow();
   });
 
-  it("refuses a release index presented before its delegation", () => {
+  it("refuses a release index retained in the delegation slot", () => {
+    const current = generateRoot("online_current");
     const delegated = generateDelegatedKey();
     const index = sign("release-index", makeIndex(), delegated.releaseKey.keyId, delegated.privateKey);
-    const verify = createLauncherRetainedDocumentVerifier([]);
+    const verify = createLauncherRetainedDocumentVerifier([current.root]);
 
-    expect(() => { verify(index); }).toThrow(SecurityRefusalError);
+    expect(() => verify({ delegation: index, index })).toThrow(SecurityRefusalError);
+  });
+
+  it("refuses a delegation retained in the index slot", () => {
+    const current = generateRoot("online_current");
+    const delegated = generateDelegatedKey();
+    const delegation = sign("release-key-delegation", makeDelegation(delegated.releaseKey), current.root.keyId, current.privateKey);
+    const verify = createLauncherRetainedDocumentVerifier([current.root]);
+
+    expect(() => verify({ delegation, index: delegation })).toThrow(SecurityRefusalError);
   });
 
   it("refuses a document of an unknown kind", () => {
     const current = generateRoot("online_current");
     const verify = createLauncherRetainedDocumentVerifier([current.root]);
+    const unknown = { schemaVersion: 1 as const, kind: "something-else", signed: {}, signatures: [] };
 
-    expect(() => {
-      verify({ schemaVersion: 1, kind: "something-else", signed: {}, signatures: [] });
-    }).toThrow(SecurityRefusalError);
+    expect(() => verify({ delegation: unknown, index: unknown })).toThrow(SecurityRefusalError);
   });
 
   it("refuses a delegation signed by an untrusted root", () => {
@@ -178,9 +185,10 @@ describe("createLauncherRetainedDocumentVerifier", () => {
     const rogue = generateRoot("online_current");
     const delegated = generateDelegatedKey();
     const delegation = sign("release-key-delegation", makeDelegation(delegated.releaseKey), rogue.root.keyId, rogue.privateKey);
+    const index = sign("release-index", makeIndex(), delegated.releaseKey.keyId, delegated.privateKey);
     const verify = createLauncherRetainedDocumentVerifier([trusted.root]);
 
-    expect(() => { verify(delegation); }).toThrow(SecurityRefusalError);
+    expect(() => verify({ delegation, index })).toThrow(SecurityRefusalError);
   });
 
   it("refuses a release index signed by a key other than the verified delegation's", () => {
@@ -191,8 +199,7 @@ describe("createLauncherRetainedDocumentVerifier", () => {
     const index = sign("release-index", makeIndex(), rogue.releaseKey.keyId, rogue.privateKey);
     const verify = createLauncherRetainedDocumentVerifier([current.root]);
 
-    verify(delegation);
-    expect(() => { verify(index); }).toThrow(SecurityRefusalError);
+    expect(() => verify({ delegation, index })).toThrow(SecurityRefusalError);
   });
 });
 
