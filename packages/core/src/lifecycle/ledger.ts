@@ -127,7 +127,12 @@ export interface LifecycleLedgerSnapshotV1<TPlan> {
     readonly phase: TransactionPhase;
   }[];
   readonly coordinatorOrphans: readonly {
-    readonly kind: "planless_staging" | "initial_journal_temp" | "plan_publication_temp" | "rewrite_temp";
+    readonly kind:
+      | "planless_staging"
+      | "initial_journal_temp"
+      | "plan_publication_temp"
+      | "rewrite_temp"
+      | "unreferenced_effect_plan";
     readonly path: CanonicalAbsolutePathV1;
   }[];
   readonly findings: readonly {
@@ -1509,6 +1514,10 @@ function admitEffectCursors<TPlan extends CoordinatorPlan>(
       if (facts.malformed) continue;
       const reference = referencedEffect(records, id);
       if (reference === null) {
+        if (facts.planEntry !== null && isPlanOnlyEffectOrphan(scan, facts)) {
+          scan.orphans.push({ kind: "unreferenced_effect_plan", path: facts.planEntry.path });
+          continue;
+        }
         const path = facts.planEntry ?? facts.journalEntry ?? facts.lock;
         if (path !== null) refuse(scan, "lifecycle_effect_unreferenced", path.path);
         continue;
@@ -1537,6 +1546,22 @@ function admitEffectCursors<TPlan extends CoordinatorPlan>(
       }
     }
   }
+}
+
+/**
+ * §2.4 "Coordinator creation order": immutable effect plans precede the coordinator plan, so a
+ * crash or failure between them leaves plans nothing references. One is removable only while the
+ * coordinator it names has neither plan nor journal and the effect itself has no journal or lock.
+ */
+function isPlanOnlyEffectOrphan<TPlan extends CoordinatorPlan>(
+  scan: LedgerScanV1<TPlan>,
+  facts: EffectFactsV1,
+): boolean {
+  if (facts.journalEntry !== null || facts.lock !== null || facts.plan === null) return false;
+  const { coordinatorId } = facts.plan as { readonly coordinatorId?: unknown };
+  if (typeof coordinatorId !== "string") return false;
+  const coordinator = scan.coordinators.get(coordinatorId);
+  return coordinator === undefined || (coordinator.planEntry === null && coordinator.journalEntry === null);
 }
 
 function referencedEffect<TPlan extends CoordinatorPlan>(

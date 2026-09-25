@@ -1519,7 +1519,66 @@ describe("the effect journal roots", () => {
     expect(snapshot.closure).toStrictEqual({ kind: "lifecycle_recovery_required" });
   });
 
-  it("refuses an unreferenced effect plan once its codec is supplied", async () => {
+  /**
+   * §2.4 "Coordinator creation order": a crash or failure after the immutable effect plans but
+   * before the coordinator plan leaves them unreferenced, and recovery may remove them only while
+   * the named coordinator's plan and journal and the effect's own journal are all absent.
+   */
+  async function plantOrphanGitEffect(home: HomeV1, coordinatorId: string): Promise<string> {
+    const ref = GIT.plan.participants.sourceGitEffect;
+    if (ref === null) throw new Error("fixture lost its source Git effect");
+    await write(
+      home,
+      `state/git-effect-journals/${ref.id}.plan.json`,
+      encodeCanonicalJson({ coordinatorId, marker: "source-git" }),
+    );
+    return ref.id;
+  }
+
+  it("reports a plan-only unreferenced effect as a removable coordinator orphan", async () => {
+    const home = await newHome();
+    const id = await plantOrphanGitEffect(home, GIT.id);
+
+    const snapshot = await inspect(home, { gitEffectPlanCodec: effectCodec() });
+
+    expect(snapshot.findings).toStrictEqual([]);
+    expect(snapshot.coordinatorOrphans).toStrictEqual([
+      { kind: "unreferenced_effect_plan", path: path(`${HOME}/state/git-effect-journals/${id}.plan.json`) },
+    ]);
+    expect(snapshot.closure).toStrictEqual({ kind: "lifecycle_recovery_required" });
+  });
+
+  it("still refuses an unreferenced effect plan once its own journal exists", async () => {
+    const home = await newHome();
+    const id = await plantOrphanGitEffect(home, GIT.id);
+    const planHash = hashCanonicalJson(LIFECYCLE_HASH_DOMAINS.gitEffectPlan, {
+      coordinatorId: GIT.id,
+      marker: "source-git",
+    });
+    await write(
+      home,
+      `state/git-effect-journals/${id}.json`,
+      encodeCanonicalJson({ coordinatorId: GIT.id, id, phase: "planned", planHash }),
+    );
+
+    const snapshot = await inspect(home, { gitEffectPlanCodec: effectCodec() });
+
+    expect(reasons(snapshot)).toContain("lifecycle_effect_unreferenced");
+    expect(snapshot.coordinatorOrphans).toStrictEqual([]);
+  });
+
+  it("still refuses an unreferenced effect plan whose named coordinator exists", async () => {
+    const home = await newHome();
+    await plantOrphanGitEffect(home, LAUNCHD.id);
+    await plantCoordinator(home, LAUNCHD);
+
+    const snapshot = await inspect(home, { gitEffectPlanCodec: effectCodec() });
+
+    expect(reasons(snapshot)).toContain("lifecycle_effect_unreferenced");
+    expect(snapshot.coordinatorOrphans).toStrictEqual([]);
+  });
+
+  it("refuses an unreferenced effect plan that names no coordinator", async () => {
     const home = await newHome();
     await plantGitEffect(home);
 

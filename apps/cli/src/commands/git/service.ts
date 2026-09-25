@@ -1008,6 +1008,33 @@ export async function destroyUnpublishedStaging(productHome: string, coordinator
   await removeOwnedTree(join(productHome, "staging", "lifecycle", coordinatorId), effectiveUid);
 }
 
+/**
+ * Spec §2.4 creation order: until the coordinator plan is durable nothing references its staging
+ * tree or the effect plans published ahead of it, so a failure removes both. Once the plan exists,
+ * recovery owns every one of them.
+ */
+export async function abandonUnpublishedIntent(
+  lifecycle: CliLifecycleContext,
+  productHome: string,
+  coordinatorId: string,
+  effectPlans: readonly CanonicalAbsolutePathV1[],
+): Promise<void> {
+  // identity-free stat: the guarded port already returns an exact decimal identity.
+  if ((await lifecycle.fs.lstat(canonical(join(lifecycle.roots.coordinatorJournals, `${coordinatorId}.plan.json`)))) !== null) return;
+  for (const path of effectPlans) {
+    const entry = await lifecycle.fs.lstat(path);
+    if (entry === null) continue;
+    await lifecycle.fs.unlinkExact(entry);
+    const parent = await lifecycle.fs.lstat(canonical(dirname(path)));
+    if (parent !== null) await lifecycle.fs.syncDirectory(parent);
+  }
+  await destroyUnpublishedStaging(productHome, coordinatorId, lifecycle.effectiveUid);
+}
+
+export function gitEffectPlanPath(lifecycle: CliLifecycleContext, id: string): CanonicalAbsolutePathV1 {
+  return canonical(join(lifecycle.roots.gitEffectJournals, `${id}.plan.json`));
+}
+
 async function executeCoordinator(
   context: CliContext,
   lifecycle: CliLifecycleContext,
@@ -1748,7 +1775,7 @@ export function createGitService(context: CliContext, lifecycle: CliLifecycleCon
     const coordinatorId = parseLifecycleCoordinatorId(ids[0], prepared.home.key.nonce);
     const store = lifecycle.store(prepared.home.key);
     await store.ensureStagingDirectory(coordinatorId, global);
-    let published = false;
+    const effectPlans: CanonicalAbsolutePathV1[] = [];
     try {
       const participantId = String(ids.at(-1));
       const source = operation === "git_disable" ? null : await stageEnableEffect(lifecycle, runtime(), inputs, coordinatorId, String(ids[4]));
@@ -1756,11 +1783,13 @@ export function createGitService(context: CliContext, lifecycle: CliLifecycleCon
       const foundation = await stageLifecycleFoundation(context, lifecycle, inputs, coordinatorId, ids.slice(1, 4));
       inputs.staged = { foundation, source: source === null ? null : { id: source.plan.id, planHash: source.planHash }, payload };
       const { plan } = builder.build(ids);
-      if (source !== null) await publishGitEffectPlan(lifecycle, source.plan);
-      published = true;
+      if (source !== null) {
+        effectPlans.push(gitEffectPlanPath(lifecycle, source.plan.id));
+        await publishGitEffectPlan(lifecycle, source.plan);
+      }
       await store.publish(plan, global);
     } catch (error) {
-      if (!published) await destroyUnpublishedStaging(context.paths.home, coordinatorId, lifecycle.effectiveUid);
+      await abandonUnpublishedIntent(lifecycle, context.paths.home, coordinatorId, effectPlans);
       throw error;
     }
     await executeCoordinator(context, lifecycle, prepared.home.key, coordinatorId, global, NO_PUSH);
@@ -1900,7 +1929,7 @@ export function createGitService(context: CliContext, lifecycle: CliLifecycleCon
     const coordinatorId = parseLifecycleCoordinatorId(ids[0], home.key.nonce);
     const store = lifecycle.store(home.key);
     await store.ensureStagingDirectory(coordinatorId, global);
-    let published = false;
+    const effectPlans: CanonicalAbsolutePathV1[] = [];
     try {
       const source = draft.kind === "commit" ? await stageSourceEffect(lifecycle, runtime(), draft, home.key.productHome, coordinatorId, String(ids[2])) : null;
       const staged =
@@ -1942,12 +1971,14 @@ export function createGitService(context: CliContext, lifecycle: CliLifecycleCon
         destination: staged === null ? null : { id: staged.plan.id, planHash: staged.planHash },
       };
       const { plan } = builder.build(ids);
-      if (source !== null) await publishGitEffectPlan(lifecycle, source.plan);
-      if (staged !== null) await publishGitEffectPlan(lifecycle, staged.plan);
-      published = true;
+      for (const effect of [source, staged]) {
+        if (effect === null) continue;
+        effectPlans.push(gitEffectPlanPath(lifecycle, effect.plan.id));
+        await publishGitEffectPlan(lifecycle, effect.plan);
+      }
       await store.publish(plan, global);
     } catch (error) {
-      if (!published) await destroyUnpublishedStaging(context.paths.home, coordinatorId, lifecycle.effectiveUid);
+      await abandonUnpublishedIntent(lifecycle, context.paths.home, coordinatorId, effectPlans);
       throw error;
     }
     const outcome = await executeCoordinator(context, lifecycle, home.key, coordinatorId, global, lifecycle.effectPorts().push);

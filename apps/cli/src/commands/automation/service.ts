@@ -99,7 +99,7 @@ import { entrypointPath } from "../../update/local-release.js";
 import {
   NO_PUSH,
   admitManifestAfter,
-  destroyUnpublishedStaging,
+  abandonUnpublishedIntent,
   fileChange,
   foundationBindingsHash,
   gitAdapters,
@@ -1072,7 +1072,7 @@ export function createAutomationService(context: CliContext, lifecycle: CliLifec
     const coordinatorId = parseLifecycleCoordinatorId(ids[0], home.key.nonce);
     const store = lifecycle.store(home.key);
     await store.ensureStagingDirectory(coordinatorId, global);
-    let published = false;
+    const effectPlans: CanonicalAbsolutePathV1[] = [];
     try {
       const foundation = planned.liveOnly ? [] : await stageFoundation(context, lifecycle, inputs, coordinatorId, ids.slice(1, 6));
       const payload = planned.liveOnly
@@ -1086,12 +1086,13 @@ export function createAutomationService(context: CliContext, lifecycle: CliLifec
       if (launchd === null) recoveryRequired("launchd_effect_unbound", coordinatorId);
       for (const position of ["before_files", "after_files"] as const) {
         const effect = launchdEffectPlan(launchd, position);
-        if (effect !== null) await journals.publishPlan(effect);
+        if (effect === null) continue;
+        effectPlans.push(canonical(join(lifecycle.roots.launchdEffectJournals, `${effect.id}.plan.json`)));
+        await journals.publishPlan(effect);
       }
-      published = true;
       await store.publish(plan, global);
     } catch (error) {
-      if (!published) await destroyUnpublishedStaging(context.paths.home, coordinatorId, lifecycle.effectiveUid);
+      await abandonUnpublishedIntent(lifecycle, context.paths.home, coordinatorId, effectPlans);
       throw error;
     }
     await executeCoordinator(context, lifecycle, home.key, coordinatorId, global);

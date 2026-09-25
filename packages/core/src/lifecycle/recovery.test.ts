@@ -38,6 +38,8 @@ import {
   classifyLifecycleJournalClosureV2,
   type LifecycleClosureV2ObservationV1,
 } from "./recovery.js";
+import { encodeCanonicalJson, type CanonicalJsonV1, type CanonicalJsonValue } from "./canonical-json.js";
+import type { LifecycleEffectLedgerCodecV1 } from "./effect-ledger.js";
 import { encodeLifecycleIdAllocator } from "./records.js";
 import { LifecycleCoordinatorStore, maximumCoordinatorJournalBytes } from "./store.js";
 import {
@@ -84,6 +86,8 @@ interface RecoveryWorldV1 {
   standalone(id: string): Promise<void>;
   standaloneNonTerminal(id: string): Promise<string>;
   removeCoordinatorJournal(): Promise<void>;
+  /** An immutable Git effect plan naming this world's coordinator, returned as a home-relative path. */
+  plantGitEffectPlan(counter: bigint): Promise<string>;
   plantUnknownLeaf(): Promise<void>;
   exists(relative: string): Promise<boolean>;
   allocatorCounter(): Promise<string>;
@@ -91,7 +95,7 @@ interface RecoveryWorldV1 {
 
 async function recoveryWorld(
   label: string,
-  options: { readonly publish?: boolean } = {},
+  options: { readonly publish?: boolean; readonly gitEffectPlanCodec?: LifecycleEffectLedgerCodecV1 } = {},
 ): Promise<RecoveryWorldV1> {
   const { created, home } = await createSyntheticLifecycleHome(label);
   const roots = deriveLifecycleLedgerRoots(home);
@@ -331,7 +335,7 @@ async function recoveryWorld(
         coordinatorJournalCodec: codecs.coordinatorJournal,
         variantFacts: () => UNINSTALL_FACTS,
         pushPlanHash: () => null,
-        gitEffectPlanCodec: null,
+        gitEffectPlanCodec: options.gitEffectPlanCodec ?? null,
         launchdEffectPlanCodec: null,
         residue: NO_RESIDUE,
         manifestBeforeHash: () => digest(manifestBytes),
@@ -407,6 +411,16 @@ async function recoveryWorld(
       await nodeFs.rm(join(created, "state", "lifecycle-journals", `.${coordinatorId}.lock`), {
         force: true,
       });
+    },
+    plantGitEffectPlan: async (counter) => {
+      const id = formatAllocatedLifecycleId("ge", NONCE, counter);
+      const relative = join("state", "git-effect-journals", `${id}.plan.json`);
+      await nodeFs.writeFile(
+        join(created, relative),
+        encodeCanonicalJson({ coordinatorId, marker: "source-git" }),
+        { mode: 0o600 },
+      );
+      return relative;
     },
     plantUnknownLeaf: async () => {
       await nodeFs.writeFile(join(created, "state", "lifecycle-journals", "unknown.txt"), "", {
@@ -541,6 +555,26 @@ describe("coordinator orphans", () => {
     expect(snapshot.closure).toStrictEqual({ kind: "clear" });
     expect(await world.exists(`state/lifecycle-journals/${world.plan.id}.plan.json`)).toBe(false);
     expect(await world.exists("state/lifecycle-id-allocator.json")).toBe(true);
+  }, 120_000);
+
+  it("removes a plan-only Git effect orphan left before its coordinator plan was published", async () => {
+    const world = await recoveryWorld("recovery-effect-plan-orphan", {
+      publish: false,
+      gitEffectPlanCodec: syntheticEffectCodec(),
+    });
+    const effect = await world.plantGitEffectPlan(700n);
+    const opening = await world.inspect();
+    expect(opening.findings).toStrictEqual([]);
+    expect(opening.coordinatorOrphans.map((orphan) => orphan.kind).sort()).toStrictEqual([
+      "planless_staging",
+      "unreferenced_effect_plan",
+    ]);
+
+    const { snapshot } = await world.recovery().recover(world.global, { resumeUninstall: false });
+
+    expect(snapshot.coordinatorOrphans).toStrictEqual([]);
+    expect(snapshot.closure).toStrictEqual({ kind: "clear" });
+    expect(await world.exists(effect)).toBe(false);
   }, 120_000);
 
   it("refuses on any ledger finding and deletes nothing", async () => {
@@ -966,3 +1000,12 @@ describe("classifyLifecycleJournalClosureV2", () => {
     expect(classifyLifecycleJournalClosureV2({ ...clear, v1: { kind: "lifecycle_recovery_required" }, executorRecord: { state: "terminal_cleanup", coordinatorId: update } })).toEqual({ kind: "lifecycle_recovery_required" });
   });
 });
+
+/** Plans are `{ coordinatorId, marker }` leaves; the orphan rule never reads a journal. */
+function syntheticEffectCodec(): LifecycleEffectLedgerCodecV1 {
+  const passthrough = {
+    validate: (value: unknown): unknown => value,
+    encode: (value: unknown): CanonicalJsonV1 => encodeCanonicalJson(value as CanonicalJsonValue),
+  };
+  return { plan: passthrough, journal: passthrough, terminal: () => null, stagingChildren: () => [] };
+}

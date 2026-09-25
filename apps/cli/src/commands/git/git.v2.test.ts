@@ -188,6 +188,44 @@ describe("git on a real V2 home", () => {
   );
 
   it(
+    "abandons the Git effect plan and staging when the coordinator plan fails to publish",
+    async () => {
+      const home = await sharedHome();
+      const lifecycle = home.context.lifecycle;
+      if (lifecycle === undefined) throw new Error("the fixture composed no lifecycle context");
+      const effectJournals = join(home.paths.stateDir, "git-effect-journals");
+      const effectPlansAtPublish: string[] = [];
+      const failing = {
+        ...home.context,
+        lifecycle: {
+          ...lifecycle,
+          store: (key: Parameters<typeof lifecycle.store>[0]) => {
+            const store = lifecycle.store(key);
+            Object.defineProperty(store, "publish", {
+              value: async () => {
+                effectPlansAtPublish.push(...(await nodeFs.readdir(effectJournals)));
+                throw new Error("injected coordinator plan publication failure");
+              },
+            });
+            return store;
+          },
+        },
+      };
+      const failed = await runGit(failing, { subcommand: "enable", remote: home.remote, branch: null, apply: true });
+      expect(failed.ok).toBe(false);
+      expect(effectPlansAtPublish).toHaveLength(1);
+
+      expect(await nodeFs.readdir(effectJournals)).toEqual([]);
+      expect(await nodeFs.readdir(join(home.paths.stagingDir, "lifecycle"))).toEqual([]);
+      await nodeFs.mkdir(join(home.paths.brain, "content"), { recursive: true, mode: 0o700 });
+      const next = await runBrain(home.context, { subcommand: "reindex", query: null, limit: null, dryRun: false });
+      expect(next.ok, JSON.stringify(next)).toBe(true);
+      expect(await closureOf(home)).toBe("clear");
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
+  it(
     "enables against a local bare remote, publishing activation and manifest ownership with the enabled config",
     async () => {
       const home = await sharedHome();
