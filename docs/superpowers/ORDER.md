@@ -23,7 +23,8 @@ and 9, a fourth full-suite run after them, and one PR per phase (D44).
 
 **Phase close for A11–A14.** Every phase from 4b through 7 has its implementation committed and is
 waiting on evidence, not code. Under D44/D47 no test ran during implementation — each commit ran only
-`npm run lint` — so every "run the tests" step and every review is owed at the close of its phase.
+`npm run lint` — so every "run the tests" step is owed at the close of its phase; the reviews ran
+2026-09-25 (above).
 The next product work after these closes is the founder cutover A15.
 
 Phase 4b (A11, `plans/2026-08-29-developer-os-release-update.md`): code done — Task 10 (`1e214ce`),
@@ -49,8 +50,9 @@ Owed at every one of these phase closes, by the founder unless marked:
 
 - `npm run check` plus the plan's deferred slow suites (the `bootstrap-executor`, `lifecycle-v2` and
   e2e files each plan lists), on the integrated tree.
-- One whole-phase fresh-context review by an agent that authored none of the phase (orchestrator
-  dispatches); accepted findings get a failing test first.
+- The 2026-09-25 whole-phase reviews ran and their accepted findings landed (fix sessions,
+  deferrals in `BACKLOG.md` §6); re-reviews of Phases 4b, 6 and 9 are owed (D62 (4)), each by an
+  agent that authored none of the phase, and an accepted finding gets a failing test first.
 - One branch pushed and one PR opened (D44 lane). A direct push to `development` is refused by the
   ruleset (`GH013`).
 
