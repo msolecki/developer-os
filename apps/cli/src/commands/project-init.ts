@@ -198,8 +198,9 @@ export async function runProjectInit(
     guards = guardsWith(context.guards, redact);
 
     const target = resolve(dependencies.cwd(), options.dir ?? ".");
-    const targetStats = await lstatOrNull(context, target);
-    if (targetStats === null || !targetStats.isDirectory()) {
+    const root = await context.guards.canonicalize(target);
+    const rootStats = await lstatOrNull(context, root);
+    if (rootStats === null || !rootStats.isDirectory()) {
       throw new ProjectInitRefusal(
         EXIT_CODES.invalidInput,
         "project_root_not_directory",
@@ -207,7 +208,6 @@ export async function runProjectInit(
         [target],
       );
     }
-    const root = await context.guards.canonicalize(target);
 
     for (const product of [paths.home, paths.brain]) {
       const canonical = await context.guards.canonicalize(product);

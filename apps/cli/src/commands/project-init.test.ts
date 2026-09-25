@@ -163,6 +163,23 @@ describe("runProjectInit", () => {
     expect(await nodeFs.readFile(fixture.paths.manifestFile)).toEqual(manifestBefore);
   });
 
+  it("follows a symlinked project dir to its canonical directory", async () => {
+    const fixture = await installedFixture("project-init-symlinked-dir");
+    const link = join(fixture.root, "project-link");
+    await nodeFs.symlink(fixture.project, link);
+
+    const result = await runProjectInit(
+      fixture.context,
+      { dir: link, dryRun: false },
+      fixture.dependencies,
+    );
+
+    expect(result.ok ? null : result.error.kind).toBeNull();
+    if (!result.ok) return;
+    expect(result.data.root).toBe(fixture.project);
+    expect(await readProjectFiles(fixture.project)).toEqual(TEMPLATES.map((file) => file.content));
+  });
+
   it("targets the injected working directory when dir is null", async () => {
     const fixture = await installedFixture("project-init-default-dir");
 
