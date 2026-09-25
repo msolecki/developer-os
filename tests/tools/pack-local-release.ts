@@ -12,12 +12,13 @@
  * must not exist. It prints the directory's realpath, which is the spelling
  * admission requires.
  */
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { lstat, readdir, readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { argv, cwd, stdout } from "node:process";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 import { build } from "esbuild";
 
@@ -43,18 +44,23 @@ function git(root: string, args: readonly string[]): string {
 
 /**
  * Every committed file under `root/directory`, as bundle files at `directory/…`, mode 0600. Git,
- * not the working tree, names them: an ignored `.DS_Store` or an untracked draft is never packed,
- * and an uncommitted edit refuses, so the release is the checkout's committed state.
+ * not the working tree, names them and supplies their bytes: an ignored `.DS_Store`, an untracked
+ * draft, or an edit `skip-worktree` hides from `status` is never packed, and a visible uncommitted
+ * edit refuses, so the release is the checkout's committed state.
  */
 export async function collectTree(root: string, directory: string): Promise<readonly ReleaseFileV1[]> {
   if (git(root, ["status", "--porcelain", "--untracked-files=no", "--", directory]).length > 0) {
     throw new Error(`refusing to pack: ${directory}/ has uncommitted changes`);
   }
   const files: ReleaseFileV1[] = [];
-  for (const relativePath of git(root, ["ls-files", "-z", "--", directory]).split("\0").filter((name) => name.length > 0)) {
-    const path = join(root, ...relativePath.split("/"));
-    if (!(await lstat(path)).isFile()) throw new Error(`refusing to pack a non-regular file: ${path}`);
-    files.push({ relativePath, bytes: await readFile(path), mode: 0o600 });
+  for (const line of git(root, ["ls-tree", "-r", "-z", "HEAD", "--", directory]).split("\0").filter((row) => row.length > 0)) {
+    const [mode, type, object] = line.slice(0, line.indexOf("\t")).split(" ");
+    const relativePath = line.slice(line.indexOf("\t") + 1);
+    if (type !== "blob" || (mode !== "100644" && mode !== "100755") || object === undefined) {
+      throw new Error(`refusing to pack a non-regular file: ${relativePath}`);
+    }
+    const { stdout: bytes } = await promisify(execFile)("git", ["cat-file", "blob", object], { cwd: root, encoding: "buffer", maxBuffer: 64 * 1024 * 1024 });
+    files.push({ relativePath, bytes, mode: 0o600 });
   }
   return files;
 }

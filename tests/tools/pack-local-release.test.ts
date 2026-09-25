@@ -77,6 +77,16 @@ describe("release trees", () => {
 
     await expect(collectTree(root, "instructions")).rejects.toThrow(/uncommitted/u);
   });
+
+  it("packs the committed bytes of a file whose working-tree edit git status hides", async () => {
+    const root = await checkout();
+    git(root, "update-index", "--skip-worktree", "instructions/nested/tracked.md");
+    await writeFile(join(root, "instructions", "nested", "tracked.md"), "hidden edit\n");
+
+    const files = await collectTree(root, "instructions");
+
+    expect(files.map((file) => Buffer.from(file.bytes).toString("utf8"))).toStrictEqual(["tracked\n"]);
+  });
 });
 
 describe("third-party package directory", () => {
