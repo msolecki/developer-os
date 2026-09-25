@@ -1,3 +1,4 @@
+import { PROTECTED_PATH_RULES } from "@developer-os/security";
 import { describe, expect, it } from "vitest";
 import {
   CLAUDE_DENY_RULES,
@@ -38,8 +39,9 @@ describe("isValidClaudeObservation", () => {
 });
 
 describe("CLAUDE_MEMORY_LAYOUT", () => {
-  it("is null or a valid observation of single-segment names", () => {
+  it("is a recorded, valid observation of single-segment names", () => {
     const row = CLAUDE_MEMORY_LAYOUT;
+    expect(row).not.toBeNull();
     if (row === null) return;
     expect(isValidClaudeObservation(row)).toBe(true);
     const names = [row.projectsDirectory, row.memoryDirectory, row.extension, row.indexFileName];
@@ -48,8 +50,9 @@ describe("CLAUDE_MEMORY_LAYOUT", () => {
 });
 
 describe("CLAUDE_DENY_RULES", () => {
-  it("is null or a valid observation with non-empty rule strings", () => {
+  it("is a recorded, valid observation with non-empty rule strings", () => {
     const row = CLAUDE_DENY_RULES;
+    expect(row).not.toBeNull();
     if (row === null) return;
     expect(isValidClaudeObservation(row)).toBe(true);
     const entries = Object.entries(row.rules);
@@ -58,5 +61,11 @@ describe("CLAUDE_DENY_RULES", () => {
       expect(strings.length, id).toBeGreaterThan(0);
       for (const text of strings) expect(text.length, id).toBeGreaterThan(0);
     }
+  });
+
+  it("is keyed by exactly the protected-path rule ids", () => {
+    const ids = PROTECTED_PATH_RULES.map((rule) => rule.id).sort();
+    expect(ids.length).toBeGreaterThan(0);
+    expect(Object.keys(CLAUDE_DENY_RULES?.rules ?? {}).sort()).toEqual(ids);
   });
 });

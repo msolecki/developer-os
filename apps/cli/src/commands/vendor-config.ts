@@ -83,10 +83,7 @@ export async function checkVendorConfig(
     }
     const present = new Set(deny);
     const missing = PROTECTED_PATH_RULES.map((rule) => rule.id)
-      .filter((id) => {
-        const strings = observation.rules[id];
-        return strings === undefined || !strings.every((rule) => present.has(rule));
-      })
+      .filter((id) => !observation.rules[id].every((rule) => present.has(rule)))
       .sort();
     if (missing.length > 0) {
       return warn(`missing Claude deny rules: ${missing.join(", ")}`, paths, VENDOR_CONFIG_RECOVERY);

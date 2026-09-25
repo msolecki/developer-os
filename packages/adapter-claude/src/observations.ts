@@ -1,4 +1,5 @@
 import { parseStableSemver } from "@developer-os/core";
+import type { ProtectedPathRuleId } from "@developer-os/security";
 
 export interface ClaudeObservationV1 {
   /** Semver of the Claude Code build the observation ran on. */
@@ -21,8 +22,8 @@ export interface ClaudeMemoryLayoutV1 extends ClaudeObservationV1 {
 }
 
 export interface ClaudeDenyRulesV1 extends ClaudeObservationV1 {
-  /** Keyed by ProtectedPathRuleId (packages/security). A rule is present only if every string is present. */
-  readonly rules: Readonly<Record<string, readonly string[]>>;
+  /** A rule is present only if every string is present. */
+  readonly rules: Readonly<Record<ProtectedPathRuleId, readonly string[]>>;
 }
 
 /**

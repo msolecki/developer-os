@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { EXIT_CODES } from "@developer-os/core";
 import type { ClaudeDenyRulesV1 } from "@developer-os/adapter-claude";
 import { PROTECTED_PATH_RULES } from "@developer-os/security";
+import type { ProtectedPathRuleId } from "@developer-os/security";
 
 import type { CliContext } from "../context.js";
 import { run } from "../main.js";
@@ -33,7 +34,7 @@ function syntheticObservation(): ClaudeDenyRulesV1 {
     observedIn: "synthetic test observation",
     rules: Object.fromEntries(
       PROTECTED_PATH_RULES.map((rule) => [rule.id, [`Read(synthetic-${rule.id})`]]),
-    ),
+    ) as Record<ProtectedPathRuleId, string[]>,
   };
 }
 
