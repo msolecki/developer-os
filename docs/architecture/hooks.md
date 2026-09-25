@@ -418,6 +418,12 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
 
 ### 3.8 Residuals
 
+- **A command on its own line passes `force-push`, `hook-bypass` and `recursive-delete-root`.**
+  Spec §5.2 step 3 turns every run of LF/CR into one space, so in `cd repo` ⏎ `git push --force`
+  the push reads as arguments of `cd`; the same holds for `git commit -n` and `rm -rf ~`, with LF or
+  CRLF. `pipe-to-shell` still blocks, because it matches the whole string. The fix (collapse to one
+  LF; `shellSegments` treats an unquoted LF as `;`) changes normative spec text and waits for a
+  founder amendment. `it.todo` rows in `guards/commit.test.ts` and `guards/command.test.ts` pin it.
 - **`pipe-to-shell` is a heuristic, not a shell parser.** `| /bin/sh`, `| sudo sh` and
   `bash <(curl …)` pass it. `assertSafeCommand` matches on curl/wget argv, while the guard matches
   the whole command string. They share the normalizer, not the matcher. Task 2's parity check decides

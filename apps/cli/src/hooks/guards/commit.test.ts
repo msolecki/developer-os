@@ -93,3 +93,11 @@ describe("guard commit", () => {
     expect(await run(null)).toMatchObject({ kind: "block", ruleId: "payload-malformed" });
   });
 });
+
+// Known fail-open, awaiting a founder amendment of spec §5.2 step 3: the normalizer turns a line
+// break into a space, so a command on its own line is read as arguments of the previous one.
+describe("a command on its own line (spec §5.2 step 3, residual in hooks.md §3.8)", () => {
+  it.todo("blocks force-push: cd repo\\ngit push --force");
+  it.todo("blocks hook-bypass: cd repo\\ngit commit -n -m x");
+  it.todo("blocks force-push: cd repo\\r\\ngit push --force");
+});
