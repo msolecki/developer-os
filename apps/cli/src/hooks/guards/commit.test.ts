@@ -137,6 +137,12 @@ it("blocks force-push after an arithmetic shift", async () => {
   expect(await run("(( x = 1 << 3 ))\ngit push --force\n3")).toMatchObject({ kind: "block", ruleId: "force-push" });
 });
 
+// Spec §5.2 step 2 joins every backslash–newline pair, where bash does not (residual in hooks.md §3.8).
+describe("a backslash before a line break bash does not join", () => {
+  it.todo("blocks force-push on the line after `echo` ending in two backslashes");
+  it.todo("blocks force-push on the line after a comment ending in a backslash");
+});
+
 // Task 2 parity (founder): the rules read only a segment's first token, so a prefix hides the call.
 describe("a prefixed git call (residual in hooks.md §3.8)", () => {
   it.todo("blocks force-push: env git push -f");

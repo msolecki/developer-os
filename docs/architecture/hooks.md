@@ -428,6 +428,11 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
   delimiter line never comes arms nothing, so later LFs still split. A quote inside a heredoc body
   opens nothing, and a `#` that starts a word comments out the rest of its line, so an apostrophe
   or a `<<` there neither swallows nor hides a later line.
+- **A backslash before a line break always joins the lines.** Spec §5.2 step 2 deletes every
+  backslash–newline pair before splitting, but bash does not join after an even run of backslashes
+  (`echo \\` ⏎ `git push --force`) or at the end of a comment (`# note \` ⏎ `git push --force`),
+  so in both the second line runs while the guards read it as part of the first. Closing it
+  changes normative spec text.
 - **`recursive-delete-root`, `force-push` and `hook-bypass` read only a segment's first token.**
   `sudo rm -rf /`, `rm -rf /*`, `env git push -f`, `FOO=1 git push -f`, `(git push -f)` and
   `git -c core.hooksPath=/dev/null commit` pass them. Task 2's parity check decides the rules;
