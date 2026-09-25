@@ -300,6 +300,30 @@ describe("runHookMode and the firing record", () => {
     }
   });
 
+  it("returns the exit code without waiting for a record write that never settles", async () => {
+    HOOK_HANDLERS.stop = () => Promise.resolve({ kind: "block", ruleId: "synthetic", detail: "synthetic" });
+    const environment: HookEnvironment = {
+      env: {},
+      userHome: root,
+      processCwd: () => root,
+      nodeExecutable: "/usr/local/bin/node",
+      recordFiring: () =>
+        new Promise<void>(() => {
+          // never settles
+        }),
+    };
+    const pending = Symbol("pending");
+    const code = await Promise.race([
+      runHookMode(["guard", "stop", "--vendor", "claude"], io, factory, environment),
+      new Promise<typeof pending>((resolve) => {
+        setTimeout(() => {
+          resolve(pending);
+        }, 1_000);
+      }),
+    ]);
+    expect(code).toBe(2);
+  });
+
   it("does not record a firing when the recursion marker short-circuits the hook", async () => {
     HOOK_HANDLERS.stop = () => Promise.resolve({ kind: "allow" });
     let calls = 0;

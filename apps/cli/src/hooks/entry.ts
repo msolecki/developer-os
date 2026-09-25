@@ -101,6 +101,8 @@ export async function runHookMode(
       "hook failed internally",
     );
   } finally {
-    if (fired !== null && parsed.ok && environment !== undefined) await recordFiring(environment, parsed.vendor, fired);
+    // Not awaited, so the caller sets the exit code before the write settles (spec §7.3: best effort
+    // after the outcome). A slow write still delays the process exit; it no longer withholds the code.
+    if (fired !== null && parsed.ok && environment !== undefined) void recordFiring(environment, parsed.vendor, fired);
   }
 }
