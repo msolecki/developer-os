@@ -103,6 +103,10 @@ export async function installEntrypoint(context: CliContext): Promise<string | n
       throw error;
     });
     if (parent !== null && (!parent.isDirectory() || parent.isSymbolicLink())) throw occupied(directory);
+    // A directory this code creates is always recorded, so one without its row is unmanaged.
+    if (parent !== null && !state.manifest.artifacts.some((artifact) => artifact.path === directory && artifact.kind === "directory")) {
+      throw occupied(directory);
+    }
     const current = parent === null ? null : await readNoFollow(path);
     if (current === null && parent !== null) {
       const leaf = await nodeFs.lstat(path).catch(() => null);
@@ -147,10 +151,16 @@ export async function installEntrypoint(context: CliContext): Promise<string | n
 
     // The Foundation executor creates no directory; product-created ones are exactly 0700.
     if (parent === null) await nodeFs.mkdir(directory, { mode: 0o700 });
-    await context.executor.execute({
-      kind: "entrypoint",
-      mutations: [write, manifestMutation(context, manifest, state.manifestHash)],
-    });
+    try {
+      await context.executor.execute({
+        kind: "entrypoint",
+        mutations: [write, manifestMutation(context, manifest, state.manifestHash)],
+      });
+    } catch (error) {
+      // Only the directory this call created and the failed transaction left empty; a rerun refuses anything else.
+      if (parent === null) await nodeFs.rmdir(directory).catch(() => undefined);
+      throw error;
+    }
     return path;
   });
 }

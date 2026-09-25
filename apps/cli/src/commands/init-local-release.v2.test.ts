@@ -213,6 +213,40 @@ describe("init --local-release writes the version-free entrypoint (D53)", () => 
     expect({ ...after?.verification }).toStrictEqual({ mode: "content", installedHash: hashBytes(current) });
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("leaves no unmanaged bin directory when writing the entrypoint fails, and never adopts one", async () => {
+    const { root, home } = await temporaryHome("init-entrypoint-failure");
+    const dir = await launchableRelease(root);
+    const bin = join(home, ".developer-os", "bin");
+    const production = productionFactory(home);
+    const failing: CliContextFactory = async (io, request) => {
+      const context = await production(io, request);
+      const { executor } = context;
+      return {
+        ...context,
+        executor: {
+          execute: (plan) => plan.kind === "entrypoint" ? Promise.reject(new Error("injected entrypoint failure")) : executor.execute(plan),
+          resume: (id) => executor.resume(id),
+          rollback: (id) => executor.rollback(id),
+        },
+      };
+    };
+
+    expect(await run(["init", "--yes", "--local-release", dir], new RecordingIo(), failing)).not.toBe(EXIT_CODES.success);
+    await expect(nodeFs.lstat(bin)).rejects.toMatchObject({ code: "ENOENT" });
+
+    // What a process killed between the directory and the transaction would leave behind.
+    await nodeFs.mkdir(bin, { mode: 0o700 });
+    const residue = new RecordingIo();
+    expect(await run(["init", "--yes", "--local-release", dir], residue, production)).toBe(EXIT_CODES.decisionRequired);
+    expect(residue.err.join("\n")).toContain(bin);
+
+    await nodeFs.rmdir(bin);
+    const again = new RecordingIo();
+    expect(await run(["init", "--yes", "--local-release", dir], again, production), again.err.join("\n")).toBe(EXIT_CODES.success);
+    const rows = (await readManifest(home)).manifest.artifacts.filter((artifact) => artifact.path === bin);
+    expect(rows.map((row) => row.kind)).toStrictEqual(["directory"]);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("is removed by uninstall with its bin directory", async () => {
     const { root, home } = await temporaryHome("init-entrypoint-uninstall");
     const dir = await launchableRelease(root);
