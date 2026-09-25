@@ -292,6 +292,17 @@ describe("selectLauncherCandidate", () => {
     });
   });
 
+  it("refuses an active bundle root outside the product home's releases", async () => {
+    const { fs, active } = activeFixture();
+    const foreignRoot = "/Users/test/elsewhere/2.0.0/darwin-arm64";
+    writeBundle(fs, foreignRoot, "arm64", "2.0.0", "2");
+    fs.setFile(`${PRODUCT_HOME}/state/active-release.json`, canonicalBytes({ ...active, bundleRoot: foreignRoot }));
+    await expect(selectLauncherCandidate(baseRequest(fs))).rejects.toMatchObject({
+      code: 6,
+      reason: "launcher_release_root_invalid",
+    });
+  });
+
   it("refuses when the retained delegation store holds an extra file", async () => {
     const { fs } = activeFixture();
     const directory = `${PRODUCT_HOME}/state/release-metadata/delegations`;

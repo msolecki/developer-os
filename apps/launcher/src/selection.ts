@@ -312,6 +312,11 @@ async function admitRetainedRelease(
   const indexesRoot = derive(productHome, "state/release-metadata/indexes");
   const bundlesRoot = derive(productHome, "state/release-metadata/bundles");
 
+  const expectedRoot = derive(productHome, `releases/${active.version}/darwin-${active.architecture}`);
+  if (active.bundleRoot !== expectedRoot || active.architecture !== request.platform.architecture) {
+    recoveryRequired("launcher_release_root_invalid", active.bundleRoot);
+  }
+
   if (stores === "exact_stores") {
     await assertExactStoreSet(fs, delegationsRoot, [`${active.delegationHash}.json`], effectiveUid);
     await assertExactStoreSet(fs, indexesRoot, [`${active.releaseIndexHash}.json`], effectiveUid);
@@ -400,11 +405,6 @@ async function routeUpdateExecutor(
   const ownEnvelope = envelope.kind === "present" && envelope.coordinatorId === record.coordinatorId;
   if (record.executor.kind === "release_bundle") {
     if (!ownEnvelope) recoveryRequired("launcher_update_executor_orphan", recordPath);
-    const { release } = record.executor;
-    const expectedRoot = derive(request.productHome, `releases/${release.version}/darwin-${release.architecture}`);
-    if (release.bundleRoot !== expectedRoot || release.architecture !== request.platform.architecture) {
-      recoveryRequired("launcher_update_executor_release_root", recordPath);
-    }
     const bundle = await admitRetainedRelease(request, record.executor.release, "contains_release");
     return { kind: "update_executor", bundle, release: record.executor.release };
   }
