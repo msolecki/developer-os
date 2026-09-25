@@ -329,6 +329,37 @@ function parseReport(line: string): TrampolineReportV1 | null {
 }
 
 /**
+ * What the pinned Git adds to the environment of every child it starts, measured on the pinned
+ * host: `GIT_PREFIX` empty for a bare/shadow run, `GIT_EXEC_PATH` prepended to `PATH`, and the
+ * CoreFoundation text encoding macOS sets in each process. Each is removed only in exactly that
+ * shape, so any other difference still refuses `git_env_mismatch` at admission; the admitted
+ * image is exec'd with the permit's own environment either way.
+ */
+export function withoutGitChildAdditions(env: Readonly<Record<string, string>>): Readonly<Record<string, string>> {
+  const { GIT_PREFIX: prefix, __CF_USER_TEXT_ENCODING: encoding, ...rest } = env;
+  const result: Record<string, string> = rest;
+  if (prefix !== undefined && prefix !== "") result.GIT_PREFIX = prefix;
+  if (encoding !== undefined && !/^0x[0-9A-F]+:0x[0-9A-F]+:0x[0-9A-F]+$/u.test(encoding)) result.__CF_USER_TEXT_ENCODING = encoding;
+  const execPath = rest.GIT_EXEC_PATH;
+  if (execPath !== undefined && rest.PATH?.startsWith(`${execPath}:`) === true) result.PATH = rest.PATH.slice(execPath.length + 1);
+  return result;
+}
+
+/**
+ * receive-pack starts index-pack inside its temporary object quarantine: `GIT_DIR=.` from the
+ * shadow, and the quarantine directory as object directory with the shadow's objects as alternate.
+ * Only that exact shape, for a child running in the destination shadow, is folded back.
+ */
+export function withoutReceiveQuarantine(env: Readonly<Record<string, string>>, cwd: string, shadow: string): Readonly<Record<string, string>> {
+  const { GIT_OBJECT_DIRECTORY: objects, GIT_QUARANTINE_PATH: quarantine, GIT_ALTERNATE_OBJECT_DIRECTORIES: alternate, ...rest } = env;
+  const prefix = `${shadow}/./objects/tmp_objdir-incoming-`;
+  if (cwd !== shadow || rest.GIT_DIR !== "." || objects === undefined || objects !== quarantine || !objects.startsWith(prefix) || !/^[A-Za-z0-9]{6}$/u.test(objects.slice(prefix.length)) || alternate !== `${shadow}/./objects`) {
+    return env;
+  }
+  return { ...rest, GIT_DIR: shadow };
+}
+
+/**
  * Reads one LF-terminated line and hands back whatever arrived after it, refusing as soon as the
  * buffered bytes pass `maximumBytes` without a line feed.
  */
@@ -413,7 +444,8 @@ class GitGatewayServer {
         },
       },
     );
-    this.#server = createServer((socket) => {
+    // The helper half-closes when source Git finishes its pack; receive-pack's report must still flow back.
+    this.#server = createServer({ allowHalfOpen: true }, (socket) => {
       this.#serve(socket).catch((error: unknown) => {
         this.#failures.push(error instanceof Error ? error.message : "git_gateway_failed");
         socket.destroy();
@@ -452,7 +484,8 @@ class GitGatewayServer {
     if (report === null || report.capability !== this.#input.capability || rest.byteLength !== 0) refuse("git_gateway_report_invalid");
     const { supervisor, phase } = this.#input;
     const table = SUPPORTED_GIT_DISTRIBUTION.processTable;
-    const request = { argv: report.argv, env: report.env, cwd: report.cwd, stdin: "ignore" as const };
+    const env = withoutReceiveQuarantine(withoutGitChildAdditions(report.env), report.cwd, this.#input.destinationShadow.gitDir);
+    const request = { argv: report.argv, env, cwd: report.cwd, stdin: "ignore" as const };
 
     let permit: GitProcessPermitV1 | null = null;
     let slots: Readonly<Record<string, string>> = {};

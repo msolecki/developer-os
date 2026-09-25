@@ -7,7 +7,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import type { GitProcessPhaseV1 } from "@developer-os/security";
 
-import { bridgeReceivePack, readLine } from "./runtime.js";
+import { bridgeReceivePack, readLine, withoutGitChildAdditions, withoutReceiveQuarantine } from "./runtime.js";
 
 const roots: string[] = [];
 
@@ -113,5 +113,30 @@ describe("the gateway line reader", () => {
     }
 
     expect([socket.listenerCount("data"), socket.listenerCount("error"), socket.listenerCount("end")]).toStrictEqual([0, 0, 0]);
+  });
+});
+
+describe("the trampoline report's environment", () => {
+  const base = { GIT_EXEC_PATH: "/g", PATH: "/g", GIT_DIR: "/s" };
+
+  it("folds back exactly what the pinned Git adds to every child it starts", () => {
+    expect(withoutGitChildAdditions({ ...base, PATH: "/g:/g", GIT_PREFIX: "", __CF_USER_TEXT_ENCODING: "0x1F5:0x0:0x0" })).toEqual(base);
+  });
+
+  it("keeps any other value so admission still refuses it", () => {
+    expect(withoutGitChildAdditions({ ...base, PATH: "/evil:/g" })).toEqual({ ...base, PATH: "/evil:/g" });
+    expect(withoutGitChildAdditions({ ...base, GIT_PREFIX: "sub/" })).toEqual({ ...base, GIT_PREFIX: "sub/" });
+    expect(withoutGitChildAdditions({ ...base, __CF_USER_TEXT_ENCODING: "x" })).toEqual({ ...base, __CF_USER_TEXT_ENCODING: "x" });
+  });
+
+  it("folds receive-pack's object quarantine back only in the destination shadow", () => {
+    const incoming = "/s/./objects/tmp_objdir-incoming-AbC123";
+    const quarantined = { ...base, GIT_DIR: ".", GIT_OBJECT_DIRECTORY: incoming, GIT_QUARANTINE_PATH: incoming, GIT_ALTERNATE_OBJECT_DIRECTORIES: "/s/./objects" };
+    expect(withoutReceiveQuarantine(quarantined, "/s", "/s")).toEqual(base);
+    expect(withoutReceiveQuarantine(quarantined, "/elsewhere", "/s")).toBe(quarantined);
+    const redirected = { ...quarantined, GIT_ALTERNATE_OBJECT_DIRECTORIES: "/real/objects" };
+    expect(withoutReceiveQuarantine(redirected, "/s", "/s")).toBe(redirected);
+    const outside = { ...quarantined, GIT_OBJECT_DIRECTORY: "/tmp/x", GIT_QUARANTINE_PATH: "/tmp/x" };
+    expect(withoutReceiveQuarantine(outside, "/s", "/s")).toBe(outside);
   });
 });
