@@ -252,6 +252,13 @@ Gate: on a disposable home, a fresh `init` runs the V2 path in production throug
   `enable` effect) and I3 (push advertises the destination ref and sends only new objects, no
   `--thin`); I4 (packed history refuses `git_commit_not_loose`) is an accepted residual until A16.
   (4) A fourth full-suite run follows these changes and the re-reviews of phases 4b, 6 and 9.
+- **D63 (2026-09-25), amends hooks spec §5.2 step 4.** Belt and braces for the command guards
+  (`force-push`, `hook-bypass`, `recursive-delete-root` and every first-token rule): besides the
+  segment analysis, each guard also checks every physical line of the command, trimmed, as its own
+  candidate, so a dangerous line blocks whatever the shell tokenizer concluded about quotes, comments,
+  heredocs or `$'…'`. A false block is accepted when such text sits inside a heredoc body. Three review
+  rounds kept finding tokenizer-versus-bash divergences; this removes the tokenizer from the trust
+  path for these rules.
 
 Scope: `docs/migration/instruction-inventory.md` §1–§3, §6.
 
