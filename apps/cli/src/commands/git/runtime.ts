@@ -125,10 +125,14 @@ export const SOURCE_LOCAL_SHADOW_TEMPLATE: SanitizedGitShadowConfigTemplateV1 = 
   remote: { name: "developer-os", url: { kind: "slot", slot: "opaque_local_selector" } },
 };
 
+/**
+ * The shadow holds none of the destination's objects, so receive-pack could not parse the advertised
+ * target to judge a fast-forward; `requireFastForward` decides that before any push.
+ */
 export const DESTINATION_SHADOW_TEMPLATE: SanitizedGitShadowConfigTemplateV1 = {
   ...FIXED_SHADOW_SECTIONS,
   kind: "bare_destination",
-  receive: { unpackLimit: 0, denyNonFastForwards: true, denyDeletes: true },
+  receive: { unpackLimit: 0, denyNonFastForwards: false, denyDeletes: true },
   core: { repositoryFormatVersion: 0, fileMode: true, bare: true, hooksPath: { slot: "hooks_directory" }, fsmonitor: false },
   remote: null,
 };
@@ -267,6 +271,41 @@ async function readCommit(
     parents.push(parseLowerHexSha1(parent));
   }
   return { tree: parseLowerHexSha1(tree), parents };
+}
+
+/**
+ * Every object the destination's target commit reaches, read from the source repository's loose
+ * objects (the fast-forward check already found the target there). Blobs are named by their tree
+ * entry and never read. `pack-objects` excludes all of them once the shadow advertises the target,
+ * so the pack reader's closure walk stops at this set.
+ */
+async function reachableObjects(gitDirectory: CanonicalAbsolutePathV1, commitOid: LowerHexSha1): Promise<ReadonlySet<LowerHexSha1>> {
+  const reached = new Set<LowerHexSha1>();
+  const commits = [commitOid];
+  const trees: LowerHexSha1[] = [];
+  for (let commit = commits.pop(); commit !== undefined; commit = commits.pop()) {
+    if (reached.has(commit)) continue;
+    reached.add(commit);
+    const { tree, parents } = await readCommit(gitDirectory, commit);
+    trees.push(tree);
+    commits.push(...parents);
+  }
+  for (let tree = trees.pop(); tree !== undefined; tree = trees.pop()) {
+    if (reached.has(tree)) continue;
+    reached.add(tree);
+    const object = await readLooseObject(gitDirectory, tree);
+    if (object.type !== "tree") refuse("git_object_corrupt");
+    for (let offset = 0; offset < object.content.byteLength; ) {
+      const nul = object.content.indexOf(0, offset);
+      if (nul < 0 || nul + 21 > object.content.byteLength) refuse("git_object_corrupt");
+      const mode = object.content.subarray(offset, object.content.indexOf(0x20, offset)).toString("latin1");
+      const oid = parseLowerHexSha1(object.content.subarray(nul + 1, nul + 21).toString("hex"));
+      if (mode === "40000") trees.push(oid);
+      else reached.add(oid);
+      offset = nul + 21;
+    }
+  }
+  return reached;
 }
 
 function canonical(path: string): CanonicalAbsolutePathV1 {
@@ -750,12 +789,13 @@ async function prepareLocalPush(request: GitLocalPushRequestV1): Promise<GitLoca
       refs: [],
       effectiveUid: request.effectiveUid,
     });
+    const { target } = request.destination;
     const destinationShadow = await materializeSanitizedBareDestinationShadow({
       gitDir: canonical(join(request.quarantineRoot, "shadow.git")),
       template: DESTINATION_SHADOW_TEMPLATE,
       opaqueLocalToken: null,
       head: request.destination.head,
-      refs: [],
+      refs: target.state === "present" ? [{ ref: request.branchRef, bytes: new TextEncoder().encode(`${target.oid}\n`) }] : [],
       effectiveUid: request.effectiveUid,
     });
     const sourceSlots: GitEnvironmentSlotValuesV1 = {
@@ -839,7 +879,7 @@ async function prepareLocalPush(request: GitLocalPushRequestV1): Promise<GitLoca
       destinationShadow,
       destination: { gitDirectory: request.destination.gitDirectory, branchRef: request.branchRef, target: request.destination.target },
       commitOid: request.commitOid,
-      boundary: new Set(),
+      boundary: target.state === "present" ? await reachableObjects(request.sourceGitDirectory, target.oid) : new Set(),
       phase: pushPhase,
       effectiveUid: request.effectiveUid,
       receive: async () => {

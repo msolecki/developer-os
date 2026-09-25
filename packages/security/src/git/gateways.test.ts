@@ -143,7 +143,7 @@ async function beginPush(profile: "push_https" | "push_local" | "push_ssh"): Pro
     stdin: "ignore",
   });
   await supervisor.run(push, {
-    argv: ["git", "push", "--porcelain", "--no-verify", "developer-os", REFSPEC],
+    argv: ["git", "push", "--porcelain", "--no-verify", "--no-thin", "developer-os", REFSPEC],
     env: env(profile),
     cwd: SOURCE_SHADOW,
     stdin: "ignore",
@@ -312,7 +312,7 @@ describe("GitExecGatewayV1", () => {
 describe("runGitGateway", () => {
   it("identifies the pre-issued pack permit, execs the pinned Git, and refuses reuse or the wrong basename", async () => {
     const { phase, push } = await beginPush("push_https");
-    const packArgv = ["git", "pack-objects", "--all-progress-implied", "--revs", "--stdout", "--thin", "--delta-base-offset", "-q"];
+    const packArgv = ["git", "pack-objects", "--all-progress-implied", "--revs", "--stdout", "--delta-base-offset", "-q"];
     const step: GatewayStep = {
       parent: push,
       phase,

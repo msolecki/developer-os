@@ -647,7 +647,7 @@ const NODES: readonly GitProcessNodeV1[] = [
 ];
 
 const PACK_ARGV = [
-  argv("git", "pack-objects", "--all-progress-implied", "--revs", "--stdout", "--thin", "--delta-base-offset", "-q"),
+  argv("git", "pack-objects", "--all-progress-implied", "--revs", "--stdout", "--delta-base-offset", "-q"),
 ];
 const HTTPS_DISPATCH_ARGV = [argv("git", "remote-https", "developer-os", slotArg("validated_https_url"))];
 const HTTPS_HELPER_ARGV = [argv("git-remote-https", "developer-os", slotArg("validated_https_url"))];
@@ -759,7 +759,7 @@ const EDGES: readonly GitProcessEdgeV1[] = [
     transition: "spawn",
     phase: "push_transport",
     when: "any_push",
-    argvAlternatives: [argv("git", "push", "--porcelain", "--no-verify", "developer-os", slotArg("commit_to_branch_refspec"))],
+    argvAlternatives: [argv("git", "push", "--porcelain", "--no-verify", "--no-thin", "developer-os", slotArg("commit_to_branch_refspec"))],
     ioProfileId: "root_push",
     orderAfter: ["direct_distribution_probe", "direct_source_build"],
   }),

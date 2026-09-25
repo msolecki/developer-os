@@ -176,13 +176,13 @@ const pushIntent: GitProcessIntentV1 = {
   stdin: "ignore",
 };
 const pushRequest: GitConcreteProcessRequestV1 = {
-  argv: ["git", "push", "--porcelain", "--no-verify", "developer-os", REFSPEC],
+  argv: ["git", "push", "--porcelain", "--no-verify", "--no-thin", "developer-os", REFSPEC],
   env: environment("push_local"),
   cwd: SOURCE_SHADOW,
   stdin: "ignore",
 };
 
-const PACK_ARGV = ["git", "pack-objects", "--all-progress-implied", "--revs", "--stdout", "--thin", "--delta-base-offset", "-q"];
+const PACK_ARGV = ["git", "pack-objects", "--all-progress-implied", "--revs", "--stdout", "--delta-base-offset", "-q"];
 const packIntent = (edgeId: "spawn_pack_gateway" | "exec_pack_git"): GitProcessIntentV1 => ({
   edgeId,
   argvAlternative: 0,

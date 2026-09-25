@@ -268,6 +268,7 @@ const GATE_COVERAGE: readonly GateCoverageV1[] = [
       ["packages/security/src/git/supervisor.test.ts", "admits a child transition through consume without spawning, then rechecks before the same-PID exec"],
       ["packages/security/src/git/local-receive.test.ts", "accepts the exact up-to-date target without pack/index children"],
       ["tests/integration/git/local-receive.pinned-host.test.ts", "accepts a zero-object pack when the destination already owns the commit through another ref"],
+      ["tests/integration/git/local-push.pinned-host.test.ts", "takes the zero-transition up-to-date arm for an already-pushed commit"],
     ],
   },
   {

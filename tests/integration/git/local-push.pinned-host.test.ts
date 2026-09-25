@@ -36,6 +36,11 @@ async function commitFile(name: string, text: string): Promise<LowerHexSha1> {
   return parseLowerHexSha1(run(["rev-parse", "HEAD"], source));
 }
 
+/** Publishes `oid` into the real bare remote with plain Git, as an earlier sync would have. */
+function publish(oid: LowerHexSha1): void {
+  run(["push", "-q", remote, `${oid}:${BRANCH}`], source);
+}
+
 async function push(commitOid: LowerHexSha1): Promise<GitLocalPushPreparationV1> {
   quarantines += 1;
   const quarantineRoot = parseCanonicalAbsolutePathText(`${root}/staging/q${String(quarantines)}`);
@@ -90,5 +95,33 @@ describe("local push through the production gateway graph on the pinned Git dist
     const { preparation } = await push(head);
     expect(preparation.kind).toBe("pack_received");
     expect(preparation.packReaderBudget?.packHeaderObjectCount).toBe(3);
+  });
+
+  it("packs only the new objects on the second of two one-file syncs", async () => {
+    const first = await commitFile("a.md", "alpha\n");
+    publish(first);
+    const second = await commitFile("b.md", "beta\n");
+    // The new blob, the new root tree and the new commit; the first commit's tree and blob stay behind.
+    expect((await push(second)).preparation.packReaderBudget?.packHeaderObjectCount).toBe(3);
+  });
+
+  it("closes a pack that re-adds content only the destination's history holds", async () => {
+    await commitFile("a.md", "alpha\n");
+    const second = await commitFile("a.md", "beta\n");
+    publish(second);
+    const third = await commitFile("a.md", "alpha\n");
+    const { preparation } = await push(third);
+    expect(preparation.kind).toBe("pack_received");
+    // pack-objects excludes only the target's own tree, so the older blob travels again.
+    expect(preparation.packReaderBudget?.packHeaderObjectCount).toBe(3);
+  });
+
+  it("takes the zero-transition up-to-date arm for an already-pushed commit", async () => {
+    const head = await commitFile("a.md", "alpha\n");
+    publish(head);
+    const { preparation } = await push(head);
+    expect(preparation.kind).toBe("up_to_date");
+    expect(preparation.destinationTransitions).toEqual([]);
+    expect(preparation.processNodes).toEqual(["receive-pack"]);
   });
 });
