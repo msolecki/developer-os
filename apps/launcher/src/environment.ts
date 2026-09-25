@@ -40,9 +40,12 @@ export class LauncherEnvironmentError extends Error {
   }
 }
 
+/** Spec 2 §3.1 requires a canonical `HOME`: the same grammar as the Brain override below. */
 function assertAbsolute(value: string, label: string): void {
-  if (typeof value !== "string" || value.length === 0 || value.includes("\0") || !value.startsWith("/")) {
-    throw new LauncherEnvironmentError(`${label} must be a non-empty absolute path`);
+  try {
+    parseCanonicalAbsolutePathText(value);
+  } catch {
+    throw new LauncherEnvironmentError(`${label} must be a non-empty canonical absolute path`);
   }
 }
 

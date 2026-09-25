@@ -47,6 +47,12 @@ describe("buildLauncherEnvironment", () => {
     expect(() => buildLauncherEnvironment({ ...envFixture, home: "relative" })).toThrow(LauncherEnvironmentError);
   });
 
+  it("refuses a HOME that is not canonical", () => {
+    for (const home of ["/Users/x/../y", "/Users/./test", "/Users//test", "/Users/test/"]) {
+      expect(() => buildLauncherEnvironment({ ...envFixture, home }), home).toThrow(LauncherEnvironmentError);
+    }
+  });
+
   it("refuses a HOME containing a NUL byte", () => {
     expect(() => buildLauncherEnvironment({ ...envFixture, home: "/Users/te\0st" })).toThrow(
       LauncherEnvironmentError,
