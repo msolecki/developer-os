@@ -592,6 +592,7 @@ export interface ReceivePackBridgeV1 {
 export async function bridgeReceivePack(input: ReceivePackBridgeV1): Promise<void> {
   const { socket } = input;
   const io = SUPPORTED_GIT_DISTRIBUTION.processTable.ioProfiles.find((profile) => profile.id === "receive_stream") ?? unsupported();
+  const stdin = { overLimit: false };
   try {
     const evidence = await new SupervisedProcessRunner(nodeSupervisedProcessDependencies).run(
       {
@@ -599,7 +600,7 @@ export async function bridgeReceivePack(input: ReceivePackBridgeV1): Promise<voi
         argv: input.argv,
         env: input.env,
         cwd: input.cwd,
-        stdin: { stream: connectionBytes(input.rest, socket, io.stdinMaxBytes) },
+        stdin: { stream: connectionBytes(input.rest, socket, io.stdinMaxBytes, stdin) },
         inheritedFds: [],
         stdoutCap: io.stdoutMaxBytes,
         stderrCap: io.stderrMaxBytes,
@@ -612,19 +613,31 @@ export async function bridgeReceivePack(input: ReceivePackBridgeV1): Promise<voi
         if (stream === "stdout") socket.write(chunk);
       },
     );
+    if (stdin.overLimit) refuse("git_stdin_over_limit");
     if (evidence.termination !== "exited") refuse("git_process_failed");
   } finally {
     socket.end();
   }
 }
 
-async function* connectionBytes(rest: Uint8Array, socket: Duplex, cap: number): AsyncGenerator<Uint8Array> {
+/**
+ * Stops at the cap instead of throwing, because the runner's stdin pipe swallows a source error;
+ * the bridge reads the flag after the child is reaped. The socket outlives the child, so ending
+ * the iteration must not destroy it before the report-status bytes are written back.
+ */
+async function* connectionBytes(rest: Uint8Array, socket: Duplex, cap: number, state: { overLimit: boolean }): AsyncGenerator<Uint8Array> {
   let total = rest.byteLength;
-  if (total > cap) refuse("git_stdin_over_limit");
+  if (total > cap) {
+    state.overLimit = true;
+    return;
+  }
   if (total > 0) yield rest;
-  for await (const chunk of socket as AsyncIterable<Buffer>) {
+  for await (const chunk of socket.iterator({ destroyOnReturn: false }) as AsyncIterable<Buffer>) {
     total += chunk.byteLength;
-    if (total > cap) refuse("git_stdin_over_limit");
+    if (total > cap) {
+      state.overLimit = true;
+      return;
+    }
     yield chunk;
   }
 }
