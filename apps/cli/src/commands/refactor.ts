@@ -253,11 +253,14 @@ export async function runRefactor(
     if (options.dryRun) return success(result(null));
 
     const mutations: PlannedFileMutation[] = [];
+    /** Directories made for the executor's staging, removed again if it refuses. */
+    const madeDirectories: { readonly leaf: string; readonly first: string }[] = [];
     for (const [index, mutation] of plan.mutations.entries()) {
       const target = targets[index] as string;
       if (mutation.operation === "create") {
         await context.guards.transaction.assertTarget(target);
-        await context.fs.mkdir(dirname(target), { recursive: true, mode: 0o700 });
+        const first = await context.fs.mkdir(dirname(target), { recursive: true, mode: 0o700 });
+        if (first !== undefined) madeDirectories.push({ leaf: dirname(target), first });
         mutations.push({
           targetPath: target,
           operation: "create",
@@ -281,6 +284,13 @@ export async function runRefactor(
     } catch (error) {
       if (!(error instanceof TransactionPreconditionError || error instanceof TransactionPlanError)) {
         throw error;
+      }
+      for (const { leaf, first } of madeDirectories.reverse()) {
+        for (let directory = leaf; ; directory = dirname(directory)) {
+          // `rmdir` removes only an empty directory; one something else filled stays.
+          await context.fs.rmdir(directory).catch(() => undefined);
+          if (directory === first || directory === dirname(directory)) break;
+        }
       }
       throw new BrainRefactorRefusal(
         "note_changed_since_read",

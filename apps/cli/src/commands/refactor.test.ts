@@ -205,6 +205,22 @@ describe("runRefactor", () => {
     expect(await exists(join(fixture.content, LINKED))).toBe(true);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("leaves no graveyard directory behind when a precondition fails", async () => {
+    const fixture = await installed("refactor-race-mkdir");
+    const retired = join(fixture.content, ISOLATED);
+    const graveyard = join(fixture.content, "_graveyard");
+    const graveyardBefore = await exists(graveyard);
+    const { context } = recording(fixture.context, async (kind) => {
+      if (kind === "brain-retire") await nodeFs.appendFile(retired, "\nhand edit mid-run\n");
+    });
+
+    const result = await runRefactor(context, { subcommand: "retire", request: RETIRE, dryRun: false });
+
+    expect(!result.ok && result.error.kind).toBe("note_changed_since_read");
+    expect(await exists(join(graveyard, "INFRA"))).toBe(false);
+    expect(await exists(graveyard)).toBe(graveyardBefore);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("refuses exit 3 refactor_destination_exists for a non-note file already at the destination", async () => {
     const fixture = await installed("refactor-occupied");
     const occupied = join(fixture.content, "DEV", "c.md");
