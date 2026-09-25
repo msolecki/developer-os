@@ -434,6 +434,16 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
 
 ### 3.8 Residuals
 
+**The command guards are frozen (D64).** `guard commit` and `guard command` stop an accidental
+harmful command; they do not stop an agent that deliberately crafts shell syntax to evade them.
+After D64 a crafted bypass is recorded here as a residual, not fixed by another tokenizer round.
+Known classes that remain open: a command hidden on the same physical line where `shellSegments`
+diverges from bash (`${…}`, backticks and `$(…)` are not tracked); quote context carried across
+lines in a shape the D64 fragments and quote-stripped line do not reproduce; a prefix, wrapper,
+subshell or glob before a first-token rule (`sudo`, `env`, `FOO=1`, `(…)`, `rm -rf /*`); indirection
+the rules cannot see (a variable, alias, function, `eval`, `git -c core.hooksPath=…`, a script
+file); and `pipe-to-shell`'s heuristic gaps. The bullets below detail each.
+
 - **A dangerous line in a heredoc body blocks.** `shellSegments` skips a heredoc body up to its
   delimiter line, but the D63 line pass reads every body line as a command, so `cat <<EOF` ⏎
   `rm -rf ~` ⏎ `EOF` is blocked. That false block is accepted: it is the price of not trusting the
