@@ -1242,9 +1242,10 @@ export class GitPlanner {
     );
     assertGitSyncSourceTransitions(transitions, reflogPlan);
     /**
-     * The effect publishes no directory. Enable's own tree carries every fan-out and reflog
-     * parent; an adopted repository that lacks one refuses here, before any ID is reserved,
-     * instead of as `git_effect_parent` after intent.
+     * The effect publishes no directory. Enable's own tree publishes every fan-out and reflog
+     * parent, but `git gc`, `prune` or `prune-packed` removes an emptied `objects/xx` again; a
+     * repository that lacks one refuses here, before any ID is reserved, instead of as
+     * `git_effect_parent` after intent, and a repeated `git enable` republishes it.
      */
     for (const transition of transitions) {
       if (transition.operation === "reuse") continue;
