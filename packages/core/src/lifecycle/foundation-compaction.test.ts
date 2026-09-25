@@ -393,7 +393,8 @@ describe("compactTerminalFoundationTransaction", () => {
       await compactTerminalFoundationTransaction(home.compaction, record);
       expect(await home.leavesOf(journal.id)).toStrictEqual([]);
     }
-  });
+    // One fresh journaled replace plus two compactions per unlink boundary: ~1 s idle, past 5 s under a loaded full suite.
+  }, 60_000);
 
   it("leaves a lock-only orphan the ledger admits and removes it", async () => {
     const home = await compactionHome("compact-lock-only");
