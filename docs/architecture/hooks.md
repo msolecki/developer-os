@@ -360,10 +360,13 @@ ephemeral key (spec G3). The shell guards match only after `normalizeShellComman
 normalizer `assertSafeCommand` uses, and they split quote-aware segments with `shellSegments` at
 `;`, `&`, `|` and an unquoted LF. Since D63 (amending spec §5.2 step 4) every rule also runs on each
 physical line of the raw command, split on LF, CR or CRLF and trimmed, so a line that blocks on its
-own blocks the command whatever the tokenizer made of quotes, comments, heredocs or `$'…'`.
-`pipe-to-shell` is unanchored, so for it the extra lines change nothing; it still reads the whole
-text. A line whose own quotes do not close matches nothing, and only the whole command is refused
-as `unterminated-quote`.
+own blocks the command whatever the tokenizer made of quotes, comments, heredocs or `$'…'` across
+lines. D63 reduces the tokenizer's part in the trust path; it does not remove it: the rules still
+tokenize each line with `shellSegments`, only with no state carried in from the lines around it
+(§3.8). A line whose own quotes do not close tokenizes to nothing, so it is checked again with every
+`'` and `"` removed (phase review I-1); otherwise `git push --force; echo '` would pass as a heredoc
+body line. Only the whole command is refused as `unterminated-quote`. `pipe-to-shell` is
+unanchored, so for it the extra lines change nothing; it still reads the whole text.
 
 ### 3.5 Recursion
 
@@ -433,13 +436,17 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
   tokenizer's view of where a body starts and ends (an unquoted heredoc runs `$(…)`, and a
   backslash, a lone CR or `(( y << z ))` moved that view away from bash's in three review rounds).
   The same holds inside a multi-line quote: in `git commit -m "a` ⏎ `git push --force` ⏎ `b"` the
-  middle line blocks. Only a line that opens or closes the quote itself, such as the last line of
-  `git commit -m "a` ⏎ `git push --force"`, matches nothing and passes.
+  middle line blocks. A line that opens or closes the quote itself is read with its quotes
+  removed, so the last line of `git commit -m "a` ⏎ `git push --force"` blocks too, and so does
+  `echo 'x` ⏎ `rm -rf ~'`: the tokenizer cannot tell a line that closes a quote from one that opens
+  a new one, and trusting it to would reopen the bypass.
 - **A command hidden on the same physical line still depends on the tokenizer.** The line pass
   cannot split a single line, so only `shellSegments` reads `echo ${x:- # }; git push --force` or
   `echo $'\'' ; git push --force #'`. A `#` that starts a word comments out quotes, backslashes and
   `<<` but not `;`, `&` or `|`, and `$'…'` takes backslash escapes; any other single-line
   divergence from bash remains open. The splitter still does not track `${…}`, backticks or `$(…)`.
+  It also splits words at every Unicode `\s` (NBSP, U+2028, U+2029, NEL), and the line pass splits
+  at a lone CR, where bash sees an ordinary character; each divergence can only add a block.
 - **The segment analysis joins every backslash–newline pair.** Spec §5.2 step 2 deletes them
   before splitting, where bash does not join after an even run of backslashes (`echo \\` ⏎
   `git push --force`) or at the end of a comment (`# note \` ⏎ `git push --force`). The D63 line

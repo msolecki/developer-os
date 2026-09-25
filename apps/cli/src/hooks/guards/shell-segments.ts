@@ -146,8 +146,11 @@ export function shellRuleGuard(rules: readonly ShellRule<string>[]): HookVerbHan
       return Promise.resolve({ kind: "block", ruleId: "unterminated-quote", detail: excerpt(runtime.redact(normalized.text)) });
     }
     // D63: each physical line, trimmed, is also a candidate, so a line that blocks on its own blocks
-    // whatever the segment analysis made of quotes, comments, heredocs or `$'…'` around it.
-    const candidates = [normalized.text, ...payload.command.split(/\r\n|\r|\n/u).map((line) => line.trim())];
+    // whatever the segment analysis made of quotes, comments, heredocs or `$'…'` around it. A line
+    // that opens or closes a multi-line quote tokenizes to null and would match nothing, so it is
+    // checked again with its quotes removed (a false block only on an unbalanced line).
+    const lines = payload.command.split(/\r\n|\r|\n/u).map((line) => line.trim());
+    const candidates = [normalized.text, ...lines.map((line) => (shellSegments(line) === null ? line.replace(/['"]/gu, "") : line))];
     const rule = rules.find((candidate) => candidates.some((text) => candidate.matches(text)));
     return Promise.resolve(
       rule === undefined ? { kind: "allow" } : { kind: "block", ruleId: rule.id, detail: excerpt(runtime.redact(normalized.text)) },

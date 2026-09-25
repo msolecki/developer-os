@@ -106,8 +106,9 @@ describe("a command on its own line", () => {
     expect(await run(command)).toMatchObject({ kind: "block", ruleId });
   });
 
-  it("allows a line break inside a quoted message", async () => {
-    expect(await run('git commit -m "subject\n\ngit push --force"')).toStrictEqual({ kind: "allow" });
+  // Phase review I-1: the last line closes the quote, so it is checked without it.
+  it("blocks a quoted message whose last line reads as a force-push (accepted false block, I-1)", async () => {
+    expect(await run('git commit -m "subject\n\ngit push --force"')).toMatchObject({ kind: "block", ruleId: "force-push" });
   });
 });
 
@@ -157,6 +158,16 @@ describe("a dangerous line the tokenizer misreads", () => {
     "cat <<'EOF'\nx\\\nEOF\ngit push --force\nEOF",
     "cat <<EOF\n$(\ngit push --force\n)\nEOF",
   ])("blocks force-push: %j", async (command) => {
+    expect(await run(command)).toMatchObject({ kind: "block", ruleId: "force-push" });
+  });
+
+  // Phase review I-1: a line that opens or closes a multi-line quote reads as null on its own, so
+  // it is checked again with its quotes removed.
+  it.each([
+    "(( x = y << z ))\ngit push --force; echo '\nz\n' #'",
+    "cat <<EOF\n$(\ngit push --force; echo '\n')\nEOF",
+    "echo \\\\\ngit push --force; echo '\n'",
+  ])("blocks force-push on a line that opens a quote: %j", async (command) => {
     expect(await run(command)).toMatchObject({ kind: "block", ruleId: "force-push" });
   });
 
