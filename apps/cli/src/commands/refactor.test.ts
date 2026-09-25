@@ -189,6 +189,22 @@ describe("runRefactor", () => {
     expect(await nodeFs.readFile(referrer, "utf8")).toContain("hand edit mid-run");
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
+  it("refuses exit 2 brain_refactor_input_invalid for a note that is not valid UTF-8, instead of a note_changed_since_read loop", async () => {
+    const fixture = await installed("refactor-non-utf8");
+    const referrer = join(fixture.content, REFERRER);
+    await nodeFs.appendFile(referrer, Buffer.from([0x0a, 0xff, 0x0a]));
+    const before = await nodeFs.readFile(referrer);
+
+    const result = await runRefactor(fixture.context, { subcommand: "refactor", request: RENAME, dryRun: false });
+
+    expect(!result.ok && [result.code, result.error.kind]).toStrictEqual([
+      EXIT_CODES.invalidInput,
+      "brain_refactor_input_invalid",
+    ]);
+    expect(await nodeFs.readFile(referrer)).toStrictEqual(before);
+    expect(await exists(join(fixture.content, LINKED))).toBe(true);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
   it("refuses exit 3 refactor_destination_exists for a non-note file already at the destination", async () => {
     const fixture = await installed("refactor-occupied");
     const occupied = join(fixture.content, "DEV", "c.md");

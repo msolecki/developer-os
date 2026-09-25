@@ -1,3 +1,4 @@
+import { isUtf8 } from "node:buffer";
 import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 
@@ -219,6 +220,26 @@ export async function runRefactor(
           mutation.path,
         ),
       );
+    }
+
+    /**
+     * The planner reads notes decoded, and Node's utf8 decode is lossy: a note that is not valid
+     * UTF-8 would hash differently from its bytes at apply and refuse every run as
+     * `note_changed_since_read`, whose recovery ("run again") then loops for ever.
+     */
+    for (const [index, mutation] of plan.mutations.entries()) {
+      if (mutation.operation === "create") continue;
+      const encoding = await context.guards.readText(targets[index] as string, async (handle) =>
+        isUtf8(await handle.readFile()) ? "utf-8" : "other",
+      );
+      if (encoding !== "utf-8") {
+        throw new BrainRefactorRefusal(
+          "brain_refactor_input_invalid",
+          EXIT_CODES.invalidInput,
+          `${mutation.path} is not valid UTF-8; nothing was written`,
+          [mutation.path],
+        );
+      }
     }
 
     const result = (transactionId: string | null): BrainRefactorResultV1 => ({
