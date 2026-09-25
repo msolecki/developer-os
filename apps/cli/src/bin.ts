@@ -11,6 +11,7 @@ import { hookLastResortExit, isHookInvocation } from "./hooks/argv.js";
 import type { HookEnvironment } from "./hooks/entry.js";
 import type { CliIo } from "./io.js";
 import { run } from "./main.js";
+import { LAUNCHER_TRUST_ARGUMENT } from "./update/context.js";
 import { admitUnsignedLocalPackagedRelease } from "./update/packaged-release.js";
 
 /**
@@ -114,7 +115,9 @@ const io: CliIo = {
 };
 
 const home = process.env.HOME;
-const argv = process.argv.slice(2);
+const launchedArgv = process.argv.slice(2);
+// `update` reads FD 3 itself; the marker is not a public option, so no parser ever sees it.
+const argv = launchedArgv[0] === LAUNCHER_TRUST_ARGUMENT ? launchedArgv.slice(1) : launchedArgv;
 const hookMode = isHookInvocation(argv);
 const scheduledMode = parseScheduledInvocation(argv) !== null;
 const hookEnvironment = (userHome: string | null): HookEnvironment => ({

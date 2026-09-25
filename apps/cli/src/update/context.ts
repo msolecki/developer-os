@@ -158,6 +158,8 @@ const MAX_RELEASE_RECORD_BYTES = 16 * 1024;
 const MAX_BLOB_BYTES = 16_777_216;
 const MAX_BRAIN_BYTES = 1_073_741_824;
 const TRUST_DESCRIPTOR = 3;
+/** The launcher's fixed internal argument naming {@link TRUST_DESCRIPTOR}; it leads the argv it hands the CLI. */
+export const LAUNCHER_TRUST_ARGUMENT = "--offline-release-trust-fd=3";
 
 function refuse(reason: string, code: Exclude<ExitCode, 0>, paths: readonly string[] = [], recovery?: string): never {
   throw new UpdatePlanningRefusal(reason, code, paths, recovery);
@@ -501,7 +503,7 @@ const readAsync = promisify(read);
 const closeAsync = promisify(close);
 
 /** The CLI side of the launcher's FD 3 pipe; every admission rule lives in Security. */
-function readOfflineTrust(): Promise<OfflineReleaseTrustV1> {
+export function readOfflineTrust(): Promise<OfflineReleaseTrustV1> {
   return readOfflineReleaseTrustFd(TRUST_DESCRIPTOR, {
     parentProcessId: () => process.ppid,
     // `readdir` lists the descriptor it scanned with; it is closed by now, so only live ones survive.
@@ -514,7 +516,10 @@ function readOfflineTrust(): Promise<OfflineReleaseTrustV1> {
         return false;
       }
     }),
-    fstat: async (descriptor) => ({ isFIFO: (await fstatAsync(descriptor)).isFIFO() }),
+    fstat: async (descriptor) => {
+      const stats = await fstatAsync(descriptor);
+      return { isFIFO: stats.isFIFO(), isSocket: stats.isSocket() };
+    },
     read: async (descriptor, maximumBytes) => {
       const buffer = Buffer.alloc(maximumBytes);
       const { bytesRead } = await readAsync(descriptor, buffer, 0, maximumBytes, null);

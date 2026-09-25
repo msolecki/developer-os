@@ -1,3 +1,5 @@
+import { spawn } from "node:child_process";
+
 import { validateOfflineReleaseTrust, validateReleaseKeyDelegation } from "@developer-os/core";
 import type {
   DelegatedReleaseKeyV1,
@@ -8,7 +10,7 @@ import type {
 } from "@developer-os/core";
 import { SecurityRefusalError, renderOfflineReleaseTrustPipe, verifySignedReleaseDocument } from "@developer-os/security";
 
-import type { LauncherRetainedDocumentVerifierV1 } from "./selection.js";
+import type { LauncherProcessRequestV1, LauncherRetainedDocumentVerifierV1 } from "./selection.js";
 
 const DELEGATION_KIND = "release-key-delegation" as const;
 const INDEX_KIND = "release-index" as const;
@@ -132,4 +134,47 @@ export async function writeOfflineReleaseTrustHandoff(
       resolve();
     });
   });
+}
+
+/**
+ * Execs the admitted release with a real anonymous pipe at FD 3 when trust
+ * is configured, or without one otherwise — Task 11b's documented "absent"
+ * fallback. `execFileSync` cannot hand a child a real pipe descriptor, so
+ * this uses `spawn`'s extra `stdio` slot: the launcher writes the rendered
+ * trust bytes into its own write end and ends the stream (closing it)
+ * before the child is expected to have read past EOF, then waits for the
+ * child's own exit, which the caller mirrors as its own.
+ */
+export async function execAdmittedRelease(
+  request: LauncherProcessRequestV1,
+  trust: OfflineReleaseTrustV1 | null,
+): Promise<{ readonly code: number | null; readonly signal: NodeJS.Signals | null }> {
+  const child = spawn(request.executable, [...request.argv], {
+    env: { ...request.env },
+    stdio: trust === null ? ["inherit", "inherit", "inherit"] : ["inherit", "inherit", "inherit", "pipe"],
+  });
+
+  // Listeners attach immediately, before the FD 3 write below is ever
+  // awaited: an `error` event with no listener throws and crashes this
+  // process, and a child that exits early while the write is still pending
+  // (a full pipe buffer with nothing draining it) must still be observable
+  // rather than leaving the write's `await` stuck forever.
+  const exit = new Promise<{ readonly code: number | null; readonly signal: NodeJS.Signals | null }>(
+    (resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", (code, signal) => {
+        resolve({ code, signal });
+      });
+    },
+  );
+
+  if (trust !== null) {
+    const pipe = child.stdio[3];
+    if (pipe === null) {
+      throw new Error("developer-os-launcher: failed to open the offline-trust pipe");
+    }
+    await writeOfflineReleaseTrustHandoff(pipe as NodeJS.WritableStream, trust);
+  }
+
+  return exit;
 }

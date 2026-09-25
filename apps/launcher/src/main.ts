@@ -18,7 +18,6 @@ import type { BigIntStats } from "node:fs";
 import * as nodeFs from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { arch, platform as nodePlatform } from "node:os";
-import { spawn } from "node:child_process";
 
 import {
   admitLauncherPlatformIdentity,
@@ -38,9 +37,9 @@ import { buildLauncherEnvironment } from "./environment.js";
 import {
   compileLauncherOfflineReleaseTrust,
   createLauncherRetainedDocumentVerifier,
-  writeOfflineReleaseTrustHandoff,
+  execAdmittedRelease,
 } from "./handoff.js";
-import { buildLauncherProcessRequest, selectLauncherCandidate, type LauncherProcessRequestV1 } from "./selection.js";
+import { buildLauncherProcessRequest, selectLauncherCandidate } from "./selection.js";
 
 const READ_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW;
 const DIRECTORY_FLAGS = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
@@ -144,47 +143,6 @@ function createNodeLauncherReader(): LauncherGuardedReaderV1 {
   };
 }
 
-/**
- * Execs the admitted release with a real anonymous pipe at FD 3 when trust
- * is configured, or without one otherwise — Task 11b's documented "absent"
- * fallback. `execFileSync` cannot hand a child a real pipe descriptor, so
- * this uses `spawn`'s extra `stdio` slot: the launcher writes the rendered
- * trust bytes into its own write end and ends the stream (closing it)
- * before the child is expected to have read past EOF, then waits for the
- * child's own exit and mirrors it exactly as this process's exit.
- */
-async function execAdmittedRelease(request: LauncherProcessRequestV1, trust: OfflineReleaseTrustV1 | null): Promise<void> {
-  const child = spawn(request.executable, [...request.argv], {
-    env: { ...request.env },
-    stdio: trust === null ? ["inherit", "inherit", "inherit"] : ["inherit", "inherit", "inherit", "pipe"],
-  });
-
-  // Listeners attach immediately, before the FD 3 write below is ever
-  // awaited: an `error` event with no listener throws and crashes this
-  // process, and a child that exits early while the write is still pending
-  // (a full pipe buffer with nothing draining it) must still be observable
-  // rather than leaving the write's `await` stuck forever.
-  const exit = new Promise<{ readonly code: number | null; readonly signal: NodeJS.Signals | null }>(
-    (resolve, reject) => {
-      child.once("error", reject);
-      child.once("close", (code, signal) => {
-        resolve({ code, signal });
-      });
-    },
-  );
-
-  if (trust !== null) {
-    const pipe = child.stdio[3];
-    if (pipe === null) {
-      throw new Error("developer-os-launcher: failed to open the offline-trust pipe");
-    }
-    await writeOfflineReleaseTrustHandoff(pipe as NodeJS.WritableStream, trust);
-  }
-
-  const outcome = await exit;
-  process.exitCode = outcome.code ?? (outcome.signal === null ? 1 : 128);
-}
-
 async function main(): Promise<void> {
   const platform = admitLauncherPlatformIdentity({ platform: nodePlatform(), architecture: arch() });
 
@@ -238,7 +196,8 @@ async function main(): Promise<void> {
   });
   const request = buildLauncherProcessRequest(selection, env, process.argv.slice(2), trust !== null);
 
-  await execAdmittedRelease(request, trust);
+  const outcome = await execAdmittedRelease(request, trust);
+  process.exitCode = outcome.code ?? (outcome.signal === null ? 1 : 128);
 }
 
 function exitCodeOf(error: unknown): number {

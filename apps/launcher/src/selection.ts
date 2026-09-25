@@ -481,9 +481,9 @@ export async function selectLauncherCandidate(
  * argument, then the original public CLI argv — or, under bootstrap
  * recovery, exactly `init` in its place (Spec 2 §3.1). The FD 3 descriptor
  * is reserved read-only here; Task 11 owns actually opening and writing it.
- * Without a trust pipe both the flag and the reservation are omitted: the
- * CLI's strict parser refuses an unknown option, so a flag naming a
- * descriptor that was never handed over would fail every launch.
+ * The CLI's `bin.ts` removes the flag before its strict parser runs. Without
+ * a trust pipe both the flag and the reservation are omitted, so no flag
+ * ever names a descriptor that was never handed over.
  */
 export function buildLauncherProcessRequest(
   selection: LauncherSelectionV1,

@@ -1,6 +1,10 @@
 import { createHash, generateKeyPairSync, sign as signEd25519 } from "node:crypto";
 import type { KeyObject } from "node:crypto";
 import { spawn } from "node:child_process";
+import { mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   signedReleaseDocumentSigningBytes,
@@ -20,9 +24,11 @@ import type {
 import { SecurityRefusalError, renderOfflineReleaseTrustPipe } from "@developer-os/security";
 import { describe, expect, it } from "vitest";
 
+import type { LauncherEnvironmentV1 } from "./environment.js";
 import {
   compileLauncherOfflineReleaseTrust,
   createLauncherRetainedDocumentVerifier,
+  execAdmittedRelease,
   writeOfflineReleaseTrustHandoff,
 } from "./handoff.js";
 
@@ -220,5 +226,74 @@ describe("writeOfflineReleaseTrustHandoff", () => {
     });
     expect(exitCode).toBe(0);
     expect(Buffer.concat(stdoutChunks)).toEqual(Buffer.from(expected));
+  });
+});
+
+describe("the FD 3 handoff end to end", () => {
+  const cliDist = fileURLToPath(new URL("../../cli/dist/", import.meta.url));
+  const env = { HOME: tmpdir(), DEVELOPER_OS_HOME: join(tmpdir(), "developer-os-handoff") } as LauncherEnvironmentV1;
+  const trustFlag = "--offline-release-trust-fd=3";
+
+  function configuredTrust() {
+    const trust = compileLauncherOfflineReleaseTrust({ acceptedRoots: [generateRoot("online_current").root], metadataRedirectOrigins: [origin] });
+    if (trust === null) throw new Error("test fixture must compile a trust document");
+    return trust;
+  }
+
+  it("the launcher's spawn hands the CLI's production reader the trust document", async () => {
+    const trust = configuredTrust();
+    const directory = await mkdtemp(join(tmpdir(), "developer-os-handoff-"));
+    try {
+      const script = join(directory, "read-trust.mjs");
+      const output = join(directory, "trust.json");
+      await writeFile(script, [
+        `import { writeFileSync } from "node:fs";`,
+        `const { readOfflineTrust } = await import(${JSON.stringify(join(cliDist, "update", "context.js"))});`,
+        `try { writeFileSync(${JSON.stringify(output)}, JSON.stringify(await readOfflineTrust())); }`,
+        `catch (error) { process.stderr.write(String(error?.message ?? error) + "\\n"); process.exitCode = 9; }`,
+      ].join("\n"));
+
+      const outcome = await execAdmittedRelease(
+        { executable: process.execPath as never, argv: [script, trustFlag, "status"], env, extraDescriptors: [{ fd: 3, mode: "read_only_pipe" }] },
+        trust,
+      );
+
+      expect(outcome).toEqual({ code: 0, signal: null });
+      expect(JSON.parse(await readFile(output, "utf8"))).toEqual(trust);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("the launcher's spawn hands the child no descriptor beyond stdio and FD 3", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "developer-os-handoff-"));
+    const held = await open(join(directory, "held"), "w");
+    try {
+      const script = join(directory, "probe.mjs");
+      await writeFile(script, [
+        `import { fstatSync } from "node:fs";`,
+        `try { fstatSync(${String(held.fd)}); process.exitCode = 9; } catch { process.exitCode = 0; }`,
+      ].join("\n"));
+
+      const outcome = await execAdmittedRelease(
+        { executable: process.execPath as never, argv: [script], env, extraDescriptors: [{ fd: 3, mode: "read_only_pipe" }] },
+        configuredTrust(),
+      );
+
+      expect(held.fd).toBeGreaterThan(11);
+      expect(outcome).toEqual({ code: 0, signal: null });
+    } finally {
+      await held.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("the CLI dispatches a command behind the launcher's trust flag", async () => {
+    const outcome = await execAdmittedRelease(
+      { executable: process.execPath as never, argv: [join(cliDist, "bin.js"), trustFlag, "--version"], env, extraDescriptors: [{ fd: 3, mode: "read_only_pipe" }] },
+      configuredTrust(),
+    );
+
+    expect(outcome).toEqual({ code: 0, signal: null });
   });
 });

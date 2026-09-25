@@ -50,6 +50,7 @@ interface FakeOptions {
   readonly parentProcessId?: number;
   readonly openDescriptors?: readonly number[];
   readonly isFIFO?: boolean;
+  readonly isSocket?: boolean;
   readonly chunks?: readonly Uint8Array[];
 }
 
@@ -66,7 +67,7 @@ function createFakeDependencies(options: FakeOptions, log: string[]): OfflineTru
     },
     fstat: (descriptor) => {
       log.push(`fstat:${String(descriptor)}`);
-      return Promise.resolve({ isFIFO: options.isFIFO ?? true });
+      return Promise.resolve({ isFIFO: options.isFIFO ?? true, isSocket: options.isSocket ?? false });
     },
     read: (descriptor) => {
       log.push(`read:${String(descriptor)}`);
@@ -121,12 +122,24 @@ describe("readOfflineReleaseTrustFd", () => {
     expect(log.at(-1)).toBe("close:3");
   });
 
-  it("refuses extra inherited descriptors beyond stdio and the trust pipe", async () => {
+  it("admits the runtime's own descriptors beside stdio and the trust pipe", async () => {
+    const trust = validTrust();
     const log: string[] = [];
-    const dependencies = createFakeDependencies({ openDescriptors: [0, 1, 2, 3, 42] }, log);
+    const dependencies = createFakeDependencies(
+      { openDescriptors: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], chunks: [renderOfflineReleaseTrustPipe(trust)] },
+      log,
+    );
 
-    await expect(readOfflineReleaseTrustFd(3, dependencies)).rejects.toThrow(SecurityRefusalError);
+    await expect(readOfflineReleaseTrustFd(3, dependencies)).resolves.toEqual(trust);
     expect(log.at(-1)).toBe("close:3");
+  });
+
+  it("admits a socketpair, which a launcher pipe slot is on macOS", async () => {
+    const trust = validTrust();
+    const log: string[] = [];
+    const dependencies = createFakeDependencies({ isFIFO: false, isSocket: true, chunks: [renderOfflineReleaseTrustPipe(trust)] }, log);
+
+    await expect(readOfflineReleaseTrustFd(3, dependencies)).resolves.toEqual(trust);
   });
 
   it("refuses when the trust descriptor was never actually opened", async () => {

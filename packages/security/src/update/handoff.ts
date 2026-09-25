@@ -21,16 +21,23 @@ export function renderOfflineReleaseTrustPipe(trust: OfflineReleaseTrustV1): Uin
 /**
  * The CLI-side read step of the FD 3 offline-trust handoff. Every I/O and
  * identity primitive is injected so the admission logic -- pipe type, size
- * bound, parent identity, exact descriptor set, close-before-context -- is
- * tested without a real OS pipe; `apps/launcher/src/handoff.test.ts` covers
- * the real pipe end to end.
+ * bound, parent identity, close-before-context -- is tested without a real OS
+ * pipe; `apps/launcher/src/handoff.test.ts` runs this reader, through the
+ * CLI's production dependencies, against the launcher's real spawn and write.
+ *
+ * "No extra inherited FD" (Spec 2 §4.2) is not checked here: a process cannot
+ * tell an inherited descriptor from the ones its own runtime opens (Node holds
+ * 4-11 before any product code runs). It is decided where inheritance is: the
+ * launcher's `spawn` passes exactly stdio plus FD 3 and libuv closes every
+ * other descriptor in the child, which the launcher's test asserts.
  */
 export interface OfflineTrustReaderDependencies {
   /** The real parent process id (`process.ppid`) at read time. */
   readonly parentProcessId: () => number;
   /** Every file descriptor currently open in this process. */
   readonly openDescriptors: () => Promise<readonly number[]>;
-  readonly fstat: (descriptor: number) => Promise<{ readonly isFIFO: boolean }>;
+  /** A launcher `spawn` "pipe" slot is a FIFO or, on macOS, a socketpair. */
+  readonly fstat: (descriptor: number) => Promise<{ readonly isFIFO: boolean; readonly isSocket: boolean }>;
   /** One read; an empty result means EOF. */
   readonly read: (descriptor: number, maximumBytes: number) => Promise<Uint8Array>;
   readonly close: (descriptor: number) => Promise<void>;
@@ -56,13 +63,9 @@ export async function readOfflineReleaseTrustFd(
     if (!openDescriptors.includes(descriptor)) {
       throw new SecurityRefusalError("Offline release trust handoff descriptor is not open");
     }
-    const extra = openDescriptors.filter((candidate) => candidate !== 0 && candidate !== 1 && candidate !== 2 && candidate !== descriptor);
-    if (extra.length > 0) {
-      throw new SecurityRefusalError("Offline release trust handoff has unexpected inherited descriptors");
-    }
 
     const stat = await dependencies.fstat(descriptor);
-    if (!stat.isFIFO) {
+    if (!stat.isFIFO && !stat.isSocket) {
       throw new SecurityRefusalError("Offline release trust handoff descriptor is not a pipe");
     }
 
