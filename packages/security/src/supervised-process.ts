@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { isAbsolute } from "node:path";
-import type { Readable } from "node:stream";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 
 import type { LowerHexSha256 } from "@developer-os/core";
 
@@ -23,7 +24,8 @@ export interface SupervisedSpawnRequestV1 {
   /** Exact; nothing is inherited from the parent environment. */
   readonly env: Readonly<Record<string, string>>;
   readonly cwd: string;
-  readonly stdin: "ignore" | { readonly bytes: Uint8Array };
+  /** A stream is piped as it arrives, for the one bidirectional protocol child (receive-pack). */
+  readonly stdin: "ignore" | { readonly bytes: Uint8Array } | { readonly stream: AsyncIterable<Uint8Array> };
   /** Empty except for the launchd bootstrap's FD 3 plist snapshot. */
   readonly inheritedFds: readonly { readonly childFd: 3; readonly parentFd: number }[];
   readonly stdoutCap: number;
@@ -54,8 +56,9 @@ export interface SupervisedChildSpawnV1 {
   readonly env: Readonly<Record<string, string>>;
   readonly cwd: string;
   readonly stdio: readonly ["ignore" | "pipe", "pipe", "pipe", ...number[]];
-  /** Written once and closed when `stdio[0]` is `"pipe"`. */
+  /** Written once and closed when `stdio[0]` is `"pipe"` and no stream is given. */
   readonly stdinBytes: Uint8Array | null;
+  readonly stdinStream: AsyncIterable<Uint8Array> | null;
 }
 
 export interface SupervisedChildHandleV1 {
@@ -94,7 +97,9 @@ function validateRequest(request: SupervisedSpawnRequestV1): void {
   for (const [name, value] of Object.entries(request.env)) {
     if (name === "" || name.includes("=") || name.includes("\0") || value.includes("\0")) refuse("Supervised process environment is malformed");
   }
-  if (request.stdin !== "ignore" && !(request.stdin.bytes instanceof Uint8Array)) refuse("Supervised process stdin must be bytes");
+  if (request.stdin !== "ignore" && !("stream" in request.stdin) && !(request.stdin.bytes instanceof Uint8Array)) {
+    refuse("Supervised process stdin must be bytes");
+  }
   const fds = request.inheritedFds;
   if (fds.length > 1) refuse("Supervised process may inherit only FD 3");
   const fd = fds[0];
@@ -147,7 +152,8 @@ export class SupervisedProcessRunner {
       env: { ...request.env },
       cwd: request.cwd,
       stdio: [request.stdin === "ignore" ? "ignore" : "pipe", "pipe", "pipe", ...request.inheritedFds.map((fd) => fd.parentFd)],
-      stdinBytes: request.stdin === "ignore" ? null : request.stdin.bytes,
+      stdinBytes: request.stdin === "ignore" || "stream" in request.stdin ? null : request.stdin.bytes,
+      stdinStream: request.stdin !== "ignore" && "stream" in request.stdin ? request.stdin.stream : null,
     });
     const { pid } = child;
     if (pid === undefined) {
@@ -270,7 +276,9 @@ export const nodeSupervisedProcessDependencies: SupervisedProcessDependenciesV1 
     });
     if (child.stdin !== null) {
       child.stdin.on("error", () => undefined);
-      child.stdin.end(request.stdinBytes ?? new Uint8Array());
+      if (request.stdinStream === null) child.stdin.end(request.stdinBytes ?? new Uint8Array());
+      // A closed or killed child ends the pipe; the runner's own evidence reports why.
+      else pipeline(Readable.from(request.stdinStream), child.stdin).catch(() => undefined);
     }
     return {
       pid: child.pid,

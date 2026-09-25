@@ -65,6 +65,9 @@ export interface OptInAuthorityReportV1 {
 export const ALLOWED_SPAWN_SITES: readonly string[] = [
   "apps/cli/src/commands/git/runtime.ts::GitGatewayServer",
   "apps/launcher/src/handoff.ts::execAdmittedRelease",
+  "apps/cli/src/commands/git/runtime.ts::GitGatewayServer",
+  "apps/launcher/src/main.ts::execAdmittedRelease",
+  "apps/launcher/src/main.ts::execAdmittedRelease",
   "packages/platform-macos/src/retained-rename.ts::SpawnRenameAtxRunner",
   "packages/platform-macos/src/transaction-lock.ts::SpawnLockfRunner",
   "packages/security/src/process.ts::NodeProcessRunner",

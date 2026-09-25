@@ -8,12 +8,12 @@
  * Founder decision D59 (Q4-A): HTTPS and SSH refuse `unsupported_git_distribution`
  * until their process traces are recorded, so this runtime carries no network transport.
  */
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { constants, lstatSync, readFileSync, readlinkSync, realpathSync } from "node:fs";
 import { mkdir, mkdtemp, open, realpath, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import type { Server, Socket } from "node:net";
+import type { Duplex } from "node:stream";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inflateSync } from "node:zlib";
@@ -141,6 +141,7 @@ export const GIT_SHADOW_TEMPLATE_HASHES = {
 const XCODE_VERSION_PLIST = "/Applications/Xcode.app/Contents/version.plist";
 const MAX_LOOSE_COMMIT_BYTES = 1_048_576;
 const MAX_PROTOCOL_LINE_BYTES = 4096;
+const RECEIVE_PACK_TERMINATION_GRACE_MS = 100;
 
 function unsupported(): never {
   throw new SecurityRefusalError("unsupported_git_distribution");
@@ -541,24 +542,73 @@ class GitGatewayServer {
       }
       this.#receivePack = step.permit;
       const trampoline = this.#input.gateway.trampolines.find((entry) => entry.basename === "git-receive-pack") ?? unsupported();
-      const child = spawn(trampoline.path, step.request.argv.slice(1), {
-        cwd: step.request.cwd,
+      await bridgeReceivePack({
+        executable: trampoline.path,
+        argv: step.request.argv.slice(1),
         env: step.request.env,
-        shell: false,
-        stdio: ["pipe", "pipe", "ignore"],
+        cwd: step.request.cwd,
+        rest,
+        socket,
+        phase: this.#input.phase,
       });
-      child.stdin.write(rest);
-      socket.pipe(child.stdin);
-      child.stdout.pipe(socket);
-      socket.resume();
-      await new Promise<void>((resolve) => {
-        child.once("close", () => {
-          resolve();
-        });
-      });
-      socket.end();
       return;
     }
+  }
+}
+
+export interface ReceivePackBridgeV1 {
+  readonly executable: string;
+  readonly argv: readonly string[];
+  readonly env: Readonly<Record<string, string>>;
+  readonly cwd: string;
+  /** Bytes the helper read past its `connect` line. */
+  readonly rest: Uint8Array;
+  readonly socket: Duplex;
+  readonly phase: GitProcessPhaseV1;
+}
+
+/**
+ * Spec §4.2: the trampoline and the `real_receive_pack`/`index-pack` it becomes run in their own
+ * process group under the push phase deadline and the `receive_stream` caps, so a stalled helper
+ * ends in group termination and reaping instead of holding the global lock.
+ */
+export async function bridgeReceivePack(input: ReceivePackBridgeV1): Promise<void> {
+  const { socket } = input;
+  const io = SUPPORTED_GIT_DISTRIBUTION.processTable.ioProfiles.find((profile) => profile.id === "receive_stream") ?? unsupported();
+  try {
+    const evidence = await new SupervisedProcessRunner(nodeSupervisedProcessDependencies).run(
+      {
+        executable: input.executable,
+        argv: input.argv,
+        env: input.env,
+        cwd: input.cwd,
+        stdin: { stream: connectionBytes(input.rest, socket, io.stdinMaxBytes) },
+        inheritedFds: [],
+        stdoutCap: io.stdoutMaxBytes,
+        stderrCap: io.stderrMaxBytes,
+        idleMs: io.idleDeadlineMs,
+        wallMs: io.wallDeadlineMs,
+        terminationGraceMs: RECEIVE_PACK_TERMINATION_GRACE_MS,
+        phase: input.phase,
+      },
+      (chunk, stream) => {
+        if (stream === "stdout") socket.write(chunk);
+      },
+    );
+    if (evidence.termination !== "exited") refuse("git_process_failed");
+  } finally {
+    socket.end();
+  }
+}
+
+async function* connectionBytes(rest: Uint8Array, socket: Duplex, cap: number): AsyncGenerator<Uint8Array> {
+  let total = rest.byteLength;
+  if (total > cap) refuse("git_stdin_over_limit");
+  if (total > 0) yield rest;
+  for await (const chunk of socket as AsyncIterable<Buffer>) {
+    total += chunk.byteLength;
+    if (total > cap) refuse("git_stdin_over_limit");
+    yield chunk;
   }
 }
 
