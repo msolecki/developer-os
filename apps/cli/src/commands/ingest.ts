@@ -1386,11 +1386,12 @@ async function applyNotes(
      * precondition: the note moved on between `assertNoteUnchanged` and here. Both errors are
      * raised before any mutation lands, so `applied` stays null and the capture rolls back.
      */
-    if (
-      noteTarget !== null &&
-      (error instanceof TransactionPreconditionError || error instanceof TransactionPlanError)
-    ) {
+    if (noteTarget !== null && error instanceof TransactionPreconditionError) {
       throw new NoteChangedSinceCaptureRefusal(noteTarget.captureId, noteTarget.note.path);
+    }
+    /** A plan error is a changed note only when the note did change; re-check rather than assume. */
+    if (noteTarget !== null && error instanceof TransactionPlanError) {
+      await assertNoteUnchanged(context, contentRoot, noteTarget.note, noteTarget.captureId);
     }
     if (error instanceof TransactionPlanError) throw error;
     const landed: string[] = [];
@@ -1504,8 +1505,10 @@ async function assertNoteUnchanged(
     current = await context.guards.readText(abs, async (handle) =>
       createHash("sha256").update(await handle.readFile()).digest("hex"),
     );
-  } catch {
-    throw new NoteChangedSinceCaptureRefusal(captureId, note.path);
+  } catch (error) {
+    // Only a note that is gone has changed; EACCES or a symlink is a fault, not an edit.
+    if (!(await exists(context, abs))) throw new NoteChangedSinceCaptureRefusal(captureId, note.path);
+    throw error;
   }
   if (current !== note.beforeSha256) throw new NoteChangedSinceCaptureRefusal(captureId, note.path);
 }

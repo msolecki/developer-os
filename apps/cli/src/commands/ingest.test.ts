@@ -2773,6 +2773,26 @@ describe("runIngest, note captures applied verbatim (spec §3.4)", () => {
     expect(await fixture.statusOf(id)).toBe("accepted");
   });
 
+  it("does not report an unreadable note as note_changed_since_capture", async () => {
+    const fixture = await installedFixture("verbatim-unreadable", NO_VENDOR);
+    const target = join(fixture.content, EXAMPLE_NOTE);
+    const id = await seedNote(fixture, EXAMPLE_NOTE, REVISED);
+    await nodeFs.chmod(target, 0o000);
+    try {
+      const result = await fixture.run();
+
+      expect(result.ok).toBe(false);
+      expect(result.code).not.toBe(EXIT_CODES.decisionRequired);
+      if (!result.ok) {
+        expect(result.error.message).not.toContain("changed since");
+        expect(JSON.stringify(result.error.data ?? null)).not.toContain("note_changed_since_capture");
+      }
+    } finally {
+      await nodeFs.chmod(target, 0o600);
+    }
+    expect(await fixture.statusOf(id)).toBe("accepted");
+  });
+
   it("maps an apply-time precondition failure to the same refusal and rolls the capture back to accepted", async () => {
     const fixture = await installedFixture("verbatim-apply-race", NO_VENDOR);
     const target = join(fixture.content, EXAMPLE_NOTE);
