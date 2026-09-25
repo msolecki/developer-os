@@ -86,6 +86,7 @@ export async function runHookMode(
       cwd: decoded.payload.cwd ?? environment.processCwd(),
       runner: new NodeProcessRunner({ assertCommand: assertSafeCommand, redact }),
       nodeExecutable: environment.nodeExecutable,
+      redact: redactText,
       now: () => new Date(),
       io,
       createContext,

@@ -37,5 +37,5 @@ export const guardStop: HookVerbHandler = async (payload, runtime) => {
     .filter((line) => line.trim() !== "")
     .slice(0, MAX_DIAGNOSTIC_LINES)
     .join("\n");
-  return { kind: "block", ruleId: "typecheck", detail: capUtf8Bytes(diagnostics, MAX_DIAGNOSTIC_BYTES) };
+  return { kind: "block", ruleId: "typecheck", detail: capUtf8Bytes(runtime.redact(diagnostics), MAX_DIAGNOSTIC_BYTES) };
 };

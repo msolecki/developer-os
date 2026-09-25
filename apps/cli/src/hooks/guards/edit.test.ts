@@ -39,6 +39,7 @@ function runtimeFor(cwd: string): HookRuntime {
     cwd,
     runner: { run: () => Promise.reject(new Error("edit spawned a process")) },
     nodeExecutable: "/synthetic/bin/node",
+    redact: (text) => text,
     now: () => new Date(0),
     io: {
       stdout: () => undefined,

@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { createRedactor } from "@developer-os/security";
 import type { ProcessRequest, ProcessResult } from "@developer-os/security";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -46,6 +47,8 @@ async function pnpmTool(root: string, tool: string, pkg: string, bin: unknown, e
   });
 }
 
+const redact = createRedactor(new Uint8Array(32));
+
 const OK: ProcessResult = { stdout: "", stderr: "", exitCode: 0, signal: null, timedOut: false };
 
 function runtimeFor(cwd: string, respond: () => Promise<ProcessResult> = () => Promise.resolve(OK)) {
@@ -62,6 +65,7 @@ function runtimeFor(cwd: string, respond: () => Promise<ProcessResult> = () => P
       },
     },
     nodeExecutable: "/synthetic/bin/node",
+    redact: (text) => redact(text).text,
     now: () => new Date(0),
     io: {
       stdout: () => undefined,
@@ -130,6 +134,16 @@ describe("guardStop", () => {
     );
     const outcome = await guardStop(payload(false), runtime);
     expect(outcome).toStrictEqual({ kind: "block", ruleId: "typecheck", detail: lines.slice(0, 40).join("\n") });
+  });
+
+  it("redacts a quoted secret the 1,800-byte cap would cut before it truncates", async () => {
+    // Synthetic provider-token shape; the diagnostic byte cap (1,800) falls inside it.
+    const token = `ghp_${"SyntheticToken0".repeat(3)}`;
+    const quoted = `src/a.ts(1,1): error TS2322: ${"x".repeat(1790 - 30)}${token}`;
+    const { runtime } = runtimeFor(await project(), () => Promise.resolve({ ...OK, exitCode: 1, stdout: quoted }));
+    const outcome = await guardStop(payload(false), runtime);
+    expect(outcome.kind).toBe("block");
+    expect(outcome.kind === "block" ? outcome.detail : "").not.toContain(token.slice(0, 8));
   });
 
   it.each([

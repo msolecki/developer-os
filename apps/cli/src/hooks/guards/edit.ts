@@ -31,7 +31,7 @@ export const guardEdit: HookVerbHandler = async (payload, runtime) => {
     return {
       kind: "advise",
       ruleId: "shared-file",
-      detail: `${excerpt(path)} resolves outside the project root; it is shared with other projects`,
+      detail: `${excerpt(runtime.redact(path))} resolves outside the project root; it is shared with other projects`,
     };
   }
   return { kind: "allow" };

@@ -88,6 +88,6 @@ export const guardFormat: HookVerbHandler = async (payload, runtime) => {
   return {
     kind: "advise",
     ruleId: "format-failed",
-    detail: `${formatter.name} could not format ${excerpt(paths.join(", "))}`,
+    detail: `${formatter.name} could not format ${excerpt(runtime.redact(paths.join(", ")))}`,
   };
 };

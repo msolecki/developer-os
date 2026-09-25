@@ -31,7 +31,7 @@ export const guardPath: HookVerbHandler = async (payload, runtime) => {
       await policy.assertWritable(lexical);
       await policy.assertWritable(canonical);
     } catch (error) {
-      if (error instanceof SecurityRefusalError) return { kind: "block", ruleId: "protected-path", detail: excerpt(path) };
+      if (error instanceof SecurityRefusalError) return { kind: "block", ruleId: "protected-path", detail: excerpt(runtime.redact(path)) };
       throw error;
     }
   }

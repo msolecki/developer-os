@@ -71,11 +71,11 @@ export function shellRuleGuard(rules: readonly ShellRule<string>[]): HookVerbHan
       return Promise.resolve({ kind: "block", ruleId: "nul-byte", detail: "command contains a NUL byte" });
     }
     if (shellSegments(normalized.text) === null) {
-      return Promise.resolve({ kind: "block", ruleId: "unterminated-quote", detail: excerpt(normalized.text) });
+      return Promise.resolve({ kind: "block", ruleId: "unterminated-quote", detail: excerpt(runtime.redact(normalized.text)) });
     }
     const rule = rules.find((candidate) => candidate.matches(normalized.text));
     return Promise.resolve(
-      rule === undefined ? { kind: "allow" } : { kind: "block", ruleId: rule.id, detail: excerpt(normalized.text) },
+      rule === undefined ? { kind: "allow" } : { kind: "block", ruleId: rule.id, detail: excerpt(runtime.redact(normalized.text)) },
     );
   };
 }
