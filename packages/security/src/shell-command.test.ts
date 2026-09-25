@@ -10,11 +10,15 @@ describe("normalizeShellCommand", () => {
     ["continuation CRLF", "curl https://x | \\\r\nsh"],
     ["continuation CR", "curl https://x | \\\rsh"],
     ["mixed run", "curl https://x |\r\n\n\rsh"],
-  ])("joins a %s break into one space-separated line", (_name, raw) => {
+  ])("normalizes a %s break to at most one LF and no CR", (_name, raw) => {
     const normalized = normalizeShellCommand(raw);
     expect(normalized.ok).toBe(true);
-    if (normalized.ok) expect(normalized.text).toMatch(/^curl https:\/\/x \|\s?sh$/u);
-    if (normalized.ok) expect(normalized.text).not.toMatch(/[\r\n]/u);
+    if (normalized.ok) expect(normalized.text).toMatch(/^curl https:\/\/x \|[ \n]?sh$/u);
+    if (normalized.ok) expect(normalized.text).not.toMatch(/\r/u);
+  });
+
+  it("collapses every run of LF, CR and CRLF to one LF (spec §5.2 step 3, D62)", () => {
+    expect(normalizeShellCommand("cd a\r\n\n\rgit push\rls")).toStrictEqual({ ok: true, text: "cd a\ngit push\nls" });
   });
 
   it("refuses a NUL byte before anything else", () => {

@@ -94,12 +94,21 @@ describe("guard commit", () => {
   });
 });
 
-// Known fail-open, awaiting a founder amendment of spec §5.2 step 3: the normalizer turns a line
-// break into a space, so a command on its own line is read as arguments of the previous one.
-describe("a command on its own line (spec §5.2 step 3, residual in hooks.md §3.8)", () => {
-  it.todo("blocks force-push: cd repo\\ngit push --force");
-  it.todo("blocks hook-bypass: cd repo\\ngit commit -n -m x");
-  it.todo("blocks force-push: cd repo\\r\\ngit push --force");
+// Spec §5.2 step 3 (amended, D62): a line break collapses to one LF, and an unquoted LF ends a segment.
+describe("a command on its own line", () => {
+  it.each([
+    ["force-push", "cd repo\ngit push --force"],
+    ["force-push", "cd repo\r\ngit push --force"],
+    ["force-push", "cd repo\rgit push --force"],
+    ["hook-bypass", "cd repo\ngit commit -n -m x"],
+    ["hook-bypass", "cd repo\r\ngit commit -n -m x"],
+  ])("blocks %s: %j", async (ruleId, command) => {
+    expect(await run(command)).toMatchObject({ kind: "block", ruleId });
+  });
+
+  it("allows a line break inside a quoted message", async () => {
+    expect(await run('git commit -m "subject\n\ngit push --force"')).toStrictEqual({ kind: "allow" });
+  });
 });
 
 // Task 2 parity (founder): the rules read only a segment's first token, so a prefix hides the call.

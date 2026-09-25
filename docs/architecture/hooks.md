@@ -357,7 +357,8 @@ that matcher alternative never matches.
 
 The `guard` verbs skip the ordinary-command gate and read no product-home state. They redact with an
 ephemeral key (spec G3). The shell guards match only after `normalizeShellCommand`, the same
-normalizer `assertSafeCommand` uses, and they split quote-aware segments with `shellSegments`.
+normalizer `assertSafeCommand` uses, and they split quote-aware segments with `shellSegments` at
+`;`, `&`, `|` and an unquoted LF.
 
 ### 3.5 Recursion
 
@@ -421,12 +422,11 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
 
 ### 3.8 Residuals
 
-- **A command on its own line passes `force-push`, `hook-bypass` and `recursive-delete-root`.**
-  Spec §5.2 step 3 turns every run of LF/CR into one space, so in `cd repo` ⏎ `git push --force`
-  the push reads as arguments of `cd`; the same holds for `git commit -n` and `rm -rf ~`, with LF or
-  CRLF. `pipe-to-shell` still blocks, because it matches the whole string. The fix (collapse to one
-  LF; `shellSegments` treats an unquoted LF as `;`) changes normative spec text and waits for a
-  founder amendment. `it.todo` rows in `guards/commit.test.ts` and `guards/command.test.ts` pin it.
+- **A heredoc body is read as arguments of its command.** Since D62 the normalizer collapses every
+  run of LF/CR/CRLF to one LF and `shellSegments` splits at an unquoted LF, but the LFs of a heredoc
+  body (up to its delimiter line) read as spaces, so `bash <<EOF` ⏎ `rm -rf ~` passes as it did
+  before. A `<<` whose delimiter line never comes arms nothing, so later LFs still split. A quote
+  inside a heredoc body still counts, so `don't` in a body blocks as `unterminated-quote`.
 - **`recursive-delete-root`, `force-push` and `hook-bypass` read only a segment's first token.**
   `sudo rm -rf /`, `rm -rf /*`, `env git push -f`, `FOO=1 git push -f`, `(git push -f)` and
   `git -c core.hooksPath=/dev/null commit` pass them. Task 2's parity check decides the rules;

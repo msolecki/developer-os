@@ -135,11 +135,37 @@ describe("shellSegments", () => {
   });
 });
 
-// Known fail-open, awaiting a founder amendment of spec §5.2 step 3: the normalizer turns a line
-// break into a space, so a command on its own line is read as arguments of the previous one.
-describe("a command on its own line (spec §5.2 step 3, residual in hooks.md §3.8)", () => {
-  it.todo("blocks recursive-delete-root: cd /tmp\\nrm -rf ~");
-  it.todo("blocks recursive-delete-root: cd /tmp\\r\\nrm -rf ~");
+// Spec §5.2 step 3 (amended, D62): a line break collapses to one LF, and an unquoted LF ends a segment.
+describe("a command on its own line", () => {
+  it.each(["cd /tmp\nrm -rf ~", "cd /tmp\r\nrm -rf ~", "cd /tmp\rrm -rf ~", "cd /tmp\n\r\n\rrm -rf ~"])(
+    "blocks recursive-delete-root: %j",
+    async (command) => {
+      expect(await run(command)).toMatchObject({ kind: "block", ruleId: "recursive-delete-root" });
+    },
+  );
+
+  it("splits at an unquoted LF but not at a quoted one or inside a heredoc body", () => {
+    expect(shellSegments("cd a\nrm -rf b")).toStrictEqual([["cd", "a"], ["rm", "-rf", "b"]]);
+    expect(shellSegments("echo 'a\nrm -rf ~' \"b\nc\"")).toStrictEqual([["echo", "a\nrm -rf ~", "b\nc"]]);
+    expect(shellSegments("cat <<EOF >f\nrm -rf ~\nEOF\nls")).toStrictEqual([
+      ["cat", "<<EOF", ">f", "rm", "-rf", "~", "EOF"],
+      ["ls"],
+    ]);
+    expect(shellSegments("cat <<- 'EOF'\nrm -rf ~\n\tEOF\nls")).toStrictEqual([
+      ["cat", "<<-", "EOF", "rm", "-rf", "~", "EOF"],
+      ["ls"],
+    ]);
+  });
+
+  it("allows a recursive root delete that is only heredoc or quoted text", async () => {
+    expect(await run("cat <<EOF\nrm -rf ~\nEOF")).toStrictEqual({ kind: "allow" });
+    expect(await run("echo 'x\nrm -rf ~'")).toStrictEqual({ kind: "allow" });
+  });
+
+  it("still splits after a << whose delimiter line never comes", async () => {
+    expect(await run("echo $((1<<2))\nrm -rf ~")).toMatchObject({ kind: "block", ruleId: "recursive-delete-root" });
+    expect(await run("cat <<EOF\nrm -rf ~")).toMatchObject({ kind: "block", ruleId: "recursive-delete-root" });
+  });
 });
 
 // Task 2 parity (founder): the rules read only a segment's first token, so a prefix hides the call.
