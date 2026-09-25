@@ -58,7 +58,12 @@ export class GitPlanningRefusalError extends Error {
   readonly path: string | null;
 
   constructor(reason: GitPlanningRefusalReasonV1, path: string | null = null, options?: ErrorOptions) {
-    const hint = reason === "scope_index_stale" ? "; run developer-os brain reindex" : "";
+    const hint =
+      reason === "scope_index_stale"
+        ? "; run developer-os brain reindex"
+        : reason === "git_object_parent_absent"
+          ? "; run developer-os git enable --remote <url> --apply again to restore it"
+          : "";
     super(`git planning refused: ${reason}${path === null ? "" : ` (${path})`}${hint}`, options);
     this.name = "GitPlanningRefusalError";
     this.reason = reason;

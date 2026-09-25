@@ -332,3 +332,8 @@ describe("tracked roots and devices", () => {
     expect(await reason(assertGitSameDevice(other.dependencies.fs, home, ROOT))).toBe("cross_device_git_state");
   });
 });
+
+// Phase review M-2: `git gc` removes an emptied fan-out directory that a repeated enable republishes.
+it("points a missing object fan-out directory at git enable", () => {
+  expect(new GitPlanningRefusalError("git_object_parent_absent", "/repo/.git/objects/ab").message).toContain("run developer-os git enable --remote <url> --apply");
+});
