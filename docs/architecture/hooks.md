@@ -358,7 +358,12 @@ that matcher alternative never matches.
 The `guard` verbs skip the ordinary-command gate and read no product-home state. They redact with an
 ephemeral key (spec G3). The shell guards match only after `normalizeShellCommand`, the same
 normalizer `assertSafeCommand` uses, and they split quote-aware segments with `shellSegments` at
-`;`, `&`, `|` and an unquoted LF.
+`;`, `&`, `|` and an unquoted LF. Since D63 (amending spec §5.2 step 4) every rule also runs on each
+physical line of the raw command, split on LF, CR or CRLF and trimmed, so a line that blocks on its
+own blocks the command whatever the tokenizer made of quotes, comments, heredocs or `$'…'`.
+`pipe-to-shell` is unanchored, so for it the extra lines change nothing; it still reads the whole
+text. A line whose own quotes do not close matches nothing, and only the whole command is refused
+as `unterminated-quote`.
 
 ### 3.5 Recursion
 
@@ -422,17 +427,23 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
 
 ### 3.8 Residuals
 
-- **A heredoc body is data, never a command.** Since D62 the normalizer collapses every run of
-  LF/CR/CRLF to one LF and `shellSegments` splits at an unquoted LF, but it skips a heredoc body up
-  to its delimiter line, so `bash <<EOF` ⏎ `rm -rf ~` passes as it did before. A `<<` whose
-  delimiter line never comes arms nothing, so later LFs still split. A quote inside a heredoc body
-  opens nothing, and a `#` that starts a word comments out the rest of its line, so an apostrophe
-  or a `<<` there neither swallows nor hides a later line.
-- **A backslash before a line break always joins the lines.** Spec §5.2 step 2 deletes every
-  backslash–newline pair before splitting, but bash does not join after an even run of backslashes
-  (`echo \\` ⏎ `git push --force`) or at the end of a comment (`# note \` ⏎ `git push --force`),
-  so in both the second line runs while the guards read it as part of the first. Closing it
-  changes normative spec text.
+- **A dangerous line in a heredoc body blocks.** `shellSegments` skips a heredoc body up to its
+  delimiter line, but the D63 line pass reads every body line as a command, so `cat <<EOF` ⏎
+  `rm -rf ~` ⏎ `EOF` is blocked. That false block is accepted: it is the price of not trusting the
+  tokenizer's view of where a body starts and ends (an unquoted heredoc runs `$(…)`, and a
+  backslash, a lone CR or `(( y << z ))` moved that view away from bash's in three review rounds).
+  The same holds inside a multi-line quote: in `git commit -m "a` ⏎ `git push --force` ⏎ `b"` the
+  middle line blocks. Only a line that opens or closes the quote itself, such as the last line of
+  `git commit -m "a` ⏎ `git push --force"`, matches nothing and passes.
+- **A command hidden on the same physical line still depends on the tokenizer.** The line pass
+  cannot split a single line, so only `shellSegments` reads `echo ${x:- # }; git push --force` or
+  `echo $'\'' ; git push --force #'`. A `#` that starts a word comments out quotes, backslashes and
+  `<<` but not `;`, `&` or `|`, and `$'…'` takes backslash escapes; any other single-line
+  divergence from bash remains open. The splitter still does not track `${…}`, backticks or `$(…)`.
+- **The segment analysis joins every backslash–newline pair.** Spec §5.2 step 2 deletes them
+  before splitting, where bash does not join after an even run of backslashes (`echo \\` ⏎
+  `git push --force`) or at the end of a comment (`# note \` ⏎ `git push --force`). The D63 line
+  pass splits the raw command, so both second lines block.
 - **`recursive-delete-root`, `force-push` and `hook-bypass` read only a segment's first token.**
   `sudo rm -rf /`, `rm -rf /*`, `env git push -f`, `FOO=1 git push -f`, `(git push -f)`,
   `(cd a` ⏎ `git push --force)` (the last token reads `--force)`), ``x=`git push --force` `` and
