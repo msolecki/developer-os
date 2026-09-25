@@ -290,8 +290,8 @@ records what the code does at this commit. Where the phase is not finished, it s
 | `CLAUDE_HOOK_ROWS` and the install-tree render (`renderClaudeHooks`, `withClaudeHooks`) | shipped; the checked-in `plugins/claude/` tree stays hook-free | `packages/adapter-claude/src/hooks.ts` |
 | Firing records under `state/hooks/`, and the capability wiring that reads them | shipped | `recordHookFiring`, `readHookFiringObservations` |
 | `doctor` checks `hooks` and `external-hooks` | shipped | `checkHooks` in `apps/cli/src/commands/doctor.ts` |
-| Binding the render into A12's local-build install | **pending, plan Task 14.** `withClaudeHooks` has no production caller yet, so no install writes `hooks/hooks.json` | Task 14 |
-| The two-token command form `<node-executable> <entrypoint>` (spec G1 resolution) | **pending, plan Task 14 Step 1.** `renderHookCommand` takes one path today | Task 14 |
+| Binding the render into A12's local-build install | shipped (Task 14): `init` renders both vendor trees through `withClaudeHooks` and `withCodexHooks` with the installed executable | `apps/cli/src/instructions/attach.ts` |
+| The two-token command form `<node-executable> <entrypoint>` (spec G1 resolution) | shipped: `renderHookCommand` takes `{ node, entrypoint }`; the Node path is exempt from the version-or-hash rule and admits `@` | `packages/core/src/hooks/contract.ts` |
 | The Codex half: `CODEX_HOOK_ROWS`, `renderCodexHooks`, `withCodexHooks` (manifest `"hooks": "./hooks/hooks.json"`), the Codex field, matcher, outcome and event maps, the `apply_patch` header grammar, the manual-trust and trust-residue lines | shipped (Task 15), from §1's 2026-09-23 observations. Checked the same day in the disposable home: the `withCodexHooks` output loaded through `hooks/list` as eight hooks with no errors, and after a trust grant, on the mock model, the built CLI blocked an `apply_patch` adding `.env` (`protected-path`) and a `curl … \| sh` (`pipe-to-shell`) and let `echo synthetic` and a `note.txt` patch through | `packages/adapter-codex/src/hooks.ts`, `apps/cli/src/hooks/` |
 | Claude firing observed from a skills-directory plugin | observed for all five events (§1 question 1) | Task 1 |
 
@@ -447,8 +447,8 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
   it is for an absolute Claude path. The spec's G7 wording ("never the user home") needs the same
   refinement.
 - **`guard path` does not see a shell write.** `echo … > .env` through `Bash` passes it on both
-  vendors (parity with Claude). On Codex an `apply_patch` invoked from the shell tool also reaches
-  the hook as `Bash`, is unobserved, and is not protected.
+  vendors (parity with Claude). On Codex an `apply_patch` invoked from the shell tool presumably
+  reaches the hook as `Bash` (unobserved), and is then not protected.
 - **A Codex `PreToolUse` timeout is unobserved** (§1 question 6). If Codex does not block on it, a
   slow filesystem lets a patch through `guard path`.
 - **Case-folding filesystems.** On APFS, `Add File: .ENV` with no `.env` present creates a file that
