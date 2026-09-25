@@ -17,6 +17,9 @@ import {
 } from "./plan.js";
 import type { ModePlanV1, PreStateV1, RefactorMutationV1 } from "./plan.js";
 
+/** Spec §6.1's bound on `<heading>`; the slug's path length alone does not enforce it. */
+const MAX_HEADING_CHARS = 512;
+
 const ATX = /^ {0,3}(#{1,6})(?:[ \t]|$)/u;
 
 /** NFC lower-case, runs of non-[\p{L}\p{N}] → "-", "-" trimmed. */
@@ -47,6 +50,9 @@ function anchorOf(tail: string): string | null {
  * follow the section; every other link to the parent stays.
  */
 export function planSplit(state: PreStateV1, note: string, heading: string): ModePlanV1 {
+  if (heading.length > MAX_HEADING_CHARS) {
+    throw invalid(`the heading is over ${String(MAX_HEADING_CHARS)} characters`, [note]);
+  }
   const parentNote = requireNote(state, note);
   const bytes = bytesOf(state, note);
   const parsed = parseNote(bytes);

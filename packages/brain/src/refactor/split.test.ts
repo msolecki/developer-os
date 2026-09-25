@@ -4,6 +4,8 @@ import { planRefactor } from "./plan.js";
 import { splitSlug } from "./split.js";
 import { memoryInput, noteText } from "./testing.js";
 
+/** 600 characters, but the slug is "a": only an explicit bound refuses it (spec §6.1). */
+const LONG_HEADING = `a${"!".repeat(599)}`;
 const PARENT_BODY = "\n## Intro\n\ni\n\n## Deep Dive\n\nd\n\n### Sub\n\ns\n\n## Next\n\nn\n";
 
 describe("planSplit", () => {
@@ -40,6 +42,7 @@ describe("planSplit", () => {
     ["a heading inside fenced code", "```\n## Deep Dive\n```", "Deep Dive", "brain_refactor_input_invalid"],
     ["an empty slug: ## ---", "## ---\n\na", "---", "brain_refactor_input_invalid"],
     ["an occupied slug path", "## Deep Dive\n\na", "Deep Dive", "refactor_destination_exists"],
+    ["a heading over 512 characters whose slug is short", `## ${LONG_HEADING}\n\na`, LONG_HEADING, "brain_refactor_input_invalid"],
   ] as const;
   it.each(cases)("refuses %s", async (_label, body, heading, reason) => {
     expect(cases.length).toBeGreaterThan(0);
