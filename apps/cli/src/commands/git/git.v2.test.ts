@@ -226,6 +226,52 @@ describe("git on a real V2 home", () => {
   );
 
   it(
+    "keeps the Git effect plan when abandoning its staging fails, so recovery still clears both",
+    async () => {
+      const home = await sharedHome();
+      const lifecycle = home.context.lifecycle;
+      if (lifecycle === undefined) throw new Error("the fixture composed no lifecycle context");
+      const effectJournals = join(home.paths.stateDir, "git-effect-journals");
+      const staging = join(home.paths.stagingDir, "lifecycle");
+      const locked: string[] = [];
+      /** A read-only effect directory makes the CLI's own staging removal fail with EACCES. */
+      const failing = {
+        ...home.context,
+        lifecycle: {
+          ...lifecycle,
+          store: (key: Parameters<typeof lifecycle.store>[0]) => {
+            const store = lifecycle.store(key);
+            Object.defineProperty(store, "publish", {
+              value: async () => {
+                const [coordinator] = await nodeFs.readdir(staging);
+                const source = join(staging, String(coordinator), "git", "source");
+                const [effect] = await nodeFs.readdir(source);
+                locked.push(join(source, String(effect)));
+                await nodeFs.chmod(join(source, String(effect)), 0o500);
+                throw new Error("injected coordinator plan publication failure");
+              },
+            });
+            return store;
+          },
+        },
+      };
+      expect((await runGit(failing, { subcommand: "enable", remote: home.remote, branch: null, apply: true })).ok).toBe(false);
+      const [dir] = locked;
+      if (dir === undefined) throw new Error("the injected failure never ran");
+      await nodeFs.chmod(dir, 0o700);
+      expect(await nodeFs.readdir(effectJournals)).toHaveLength(1);
+
+      await nodeFs.mkdir(join(home.paths.brain, "content"), { recursive: true, mode: 0o700 });
+      const next = await runBrain(home.context, { subcommand: "reindex", query: null, limit: null, dryRun: false });
+      expect(next.ok, JSON.stringify(next)).toBe(true);
+      expect(await closureOf(home)).toBe("clear");
+      expect(await nodeFs.readdir(effectJournals)).toEqual([]);
+      expect(await nodeFs.readdir(staging)).toEqual([]);
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
+  it(
     "recovers the residue a death between the Git effect plan and the coordinator plan leaves",
     async () => {
       const home = await sharedHome();

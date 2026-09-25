@@ -1021,14 +1021,16 @@ export async function abandonUnpublishedIntent(
 ): Promise<void> {
   // identity-free stat: the guarded port already returns an exact decimal identity.
   if ((await lifecycle.fs.lstat(canonical(join(lifecycle.roots.coordinatorJournals, `${coordinatorId}.plan.json`)))) !== null) return;
+  // staging first: the ledger admits a planless tree's effect children only while their effect plan exists.
+  await destroyUnpublishedStaging(productHome, coordinatorId, lifecycle.effectiveUid);
   for (const path of effectPlans) {
     const entry = await lifecycle.fs.lstat(path);
     if (entry === null) continue;
     await lifecycle.fs.unlinkExact(entry);
+    // identity-free stat: the guarded port already returns an exact decimal identity.
     const parent = await lifecycle.fs.lstat(canonical(dirname(path)));
     if (parent !== null) await lifecycle.fs.syncDirectory(parent);
   }
-  await destroyUnpublishedStaging(productHome, coordinatorId, lifecycle.effectiveUid);
 }
 
 export function gitEffectPlanPath(lifecycle: CliLifecycleContext, id: string): CanonicalAbsolutePathV1 {

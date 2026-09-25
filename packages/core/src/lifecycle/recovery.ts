@@ -207,7 +207,16 @@ export class LifecycleRecoveryService<TPlan extends CoordinatorPlan> {
     global: HeldLifecycleStableLockV1,
   ): Promise<void> {
     const { fs } = this.dependencies;
-    for (const orphan of snapshot.coordinatorOrphans) {
+    /**
+     * A planless tree's effect children are admitted only while the effect plan naming them
+     * exists, so the staging goes first: a failure part-way then leaves a plan-only orphan the
+     * next pass removes, never staged postimages no plan admits.
+     */
+    const orphans = [
+      ...snapshot.coordinatorOrphans.filter((orphan) => orphan.kind === "planless_staging"),
+      ...snapshot.coordinatorOrphans.filter((orphan) => orphan.kind !== "planless_staging"),
+    ];
+    for (const orphan of orphans) {
       await requireHeldGlobalLock(fs, global);
       if (orphan.kind === "planless_staging") {
         await removePlanlessCoordinatorStaging(fs, orphan.path);

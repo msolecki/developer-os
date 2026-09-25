@@ -417,7 +417,7 @@ async function recoveryWorld(
       const relative = join("state", "git-effect-journals", `${id}.plan.json`);
       await nodeFs.writeFile(
         join(created, relative),
-        encodeCanonicalJson({ coordinatorId, marker: "source-git" }),
+        encodeCanonicalJson({ coordinatorId, marker: "source-git", side: "source" }),
         { mode: 0o600 },
       );
       return relative;
@@ -575,6 +575,37 @@ describe("coordinator orphans", () => {
     expect(snapshot.coordinatorOrphans).toStrictEqual([]);
     expect(snapshot.closure).toStrictEqual({ kind: "clear" });
     expect(await world.exists(effect)).toBe(false);
+  }, 120_000);
+
+  it("keeps a planless tree's effect plan until its staged postimage is gone, so a failed removal still recovers", async () => {
+    const world = await recoveryWorld("recovery-effect-plan-staging-order", {
+      publish: false,
+      gitEffectPlanCodec: syntheticEffectCodec(["post"]),
+    });
+    const effect = await world.plantGitEffectPlan(701n);
+    const id = formatAllocatedLifecycleId("ge", NONCE, 701n);
+    const post = join(world.home, "staging", "lifecycle", world.plan.id, "git", "source", id, "post");
+    await nodeFs.mkdir(join(post, ".."), { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(post, "postimage", { mode: 0o600 });
+    expect((await world.inspect()).findings).toStrictEqual([]);
+
+    const failing: LifecycleGuardedFileSystemV1 = {
+      ...world.fs,
+      unlinkExact: async (entry) => {
+        if (entry.path === post) throw new Error("injected EIO removing the staged postimage");
+        await world.fs.unlinkExact(entry);
+      },
+    };
+    await expect(
+      new LifecycleRecoveryService<SyntheticPlan>({ ...world.dependencies(), fs: failing, inspect: () => world.inspect() })
+        .recover(world.global, { resumeUninstall: false }),
+    ).rejects.toThrow("injected EIO");
+    expect((await world.inspect()).findings).toStrictEqual([]);
+
+    const { snapshot } = await world.recovery().recover(world.global, { resumeUninstall: false });
+    expect(snapshot.closure).toStrictEqual({ kind: "clear" });
+    expect(await world.exists(effect)).toBe(false);
+    expect(await world.exists(`staging/lifecycle/${world.plan.id}`)).toBe(false);
   }, 120_000);
 
   it("refuses on any ledger finding and deletes nothing", async () => {
@@ -1002,10 +1033,10 @@ describe("classifyLifecycleJournalClosureV2", () => {
 });
 
 /** Plans are `{ coordinatorId, marker }` leaves; the orphan rule never reads a journal. */
-function syntheticEffectCodec(): LifecycleEffectLedgerCodecV1 {
+function syntheticEffectCodec(children: readonly string[] = []): LifecycleEffectLedgerCodecV1 {
   const passthrough = {
     validate: (value: unknown): unknown => value,
     encode: (value: unknown): CanonicalJsonV1 => encodeCanonicalJson(value as CanonicalJsonValue),
   };
-  return { plan: passthrough, journal: passthrough, terminal: () => null, stagingChildren: () => [] };
+  return { plan: passthrough, journal: passthrough, terminal: () => null, stagingChildren: () => children };
 }
