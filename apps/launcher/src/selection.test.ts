@@ -409,7 +409,7 @@ describe("selectLauncherCandidate", () => {
   it("refuses a genuine signed index that does not list the active bundle manifest", async () => {
     const fixture = activeFixture();
     retainIndex(fixture, signedIndex(indexEntry("2.0.0", "2", sha256(Buffer.from("another-manifest")))));
-    await expect(selectLauncherCandidate(baseRequest(fixture.fs))).rejects.toMatchObject({ code: 6 });
+    await expect(selectLauncherCandidate(baseRequest(fixture.fs))).rejects.toMatchObject({ code: 6, reason: "launcher_bundle_manifest_identity_mismatch" });
   });
 
   it("parses the retained bundle manifest bytes it hash-pinned, not a second read", async () => {
@@ -417,21 +417,21 @@ describe("selectLauncherCandidate", () => {
     const path = `${PRODUCT_HOME}/state/release-metadata/bundles/${active.bundleManifestHash}.json`;
     const manifest = JSON.parse(fs.readBytes(path).toString("utf8")) as Record<string, unknown>;
     fs.substitutedReads.set(path, canonicalBytes({ ...manifest, entrypoint: "bin/planner" }));
-    await expect(selectLauncherCandidate(baseRequest(fs))).rejects.toMatchObject({ code: 6 });
+    await expect(selectLauncherCandidate(baseRequest(fs))).rejects.toMatchObject({ code: 6, reason: "launcher_bundle_manifest_hash_mismatch" });
   });
 
   it("refuses a hard-linked retained document", async () => {
     const { fs, active } = activeFixture();
     const path = `${PRODUCT_HOME}/state/release-metadata/delegations/${active.delegationHash}.json`;
     fs.setFile(path, fs.readBytes(path), EFFECTIVE_UID, 0o600, 2);
-    await expect(selectLauncherCandidate(baseRequest(fs))).rejects.toMatchObject({ code: 6 });
+    await expect(selectLauncherCandidate(baseRequest(fs))).rejects.toMatchObject({ code: 6, reason: "launcher_retained_document_missing" });
   });
 
   it("refuses a group-readable active release record", async () => {
     const { fs } = activeFixture();
     const path = `${PRODUCT_HOME}/state/active-release.json`;
     fs.setFile(path, fs.readBytes(path), EFFECTIVE_UID, 0o644);
-    await expect(selectLauncherCandidate(baseRequest(fs))).rejects.toMatchObject({ code: 6 });
+    await expect(selectLauncherCandidate(baseRequest(fs))).rejects.toMatchObject({ code: 6, reason: "launcher_active_release_record_invalid" });
   });
 
   it("refuses when the retained delegation store holds an extra file", async () => {
