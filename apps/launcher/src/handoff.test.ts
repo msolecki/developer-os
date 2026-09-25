@@ -1,7 +1,7 @@
 import { createHash, generateKeyPairSync, sign as signEd25519 } from "node:crypto";
 import type { KeyObject } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -273,24 +273,40 @@ describe("the FD 3 handoff end to end", () => {
   });
 
   it("the launcher's spawn hands the child no descriptor beyond stdio and FD 3", async () => {
+    // Node opens its own files O_CLOEXEC, so the launcher must hold a descriptor
+    // without it: `sh` opens FD 7 and execs the launcher, which inherits it as is.
     const directory = await mkdtemp(join(tmpdir(), "developer-os-handoff-"));
-    const held = await open(join(directory, "held"), "w");
     try {
-      const script = join(directory, "probe.mjs");
-      await writeFile(script, [
+      const held = join(directory, "held");
+      await writeFile(held, "");
+      const probe = join(directory, "probe.mjs");
+      await writeFile(probe, [
+        `import { fstatSync, statSync } from "node:fs";`,
+        // Node's own startup descriptors reach past 7, so compare identity, not openness.
+        `let inode = null; try { inode = fstatSync(7).ino; } catch {}`,
+        `process.exitCode = inode === statSync(${JSON.stringify(held)}).ino ? 9 : 0;`,
+      ].join("\n"));
+      const launcher = join(directory, "launcher.mjs");
+      await writeFile(launcher, [
         `import { fstatSync } from "node:fs";`,
-        `try { fstatSync(${String(held.fd)}); process.exitCode = 9; } catch { process.exitCode = 0; }`,
+        `import { execAdmittedRelease } from ${JSON.stringify(new URL("../dist/handoff.js", import.meta.url).href)};`,
+        `try { fstatSync(7); } catch { process.exit(8); }`,
+        `const [probe, env, trust] = process.argv.slice(2);`,
+        `process.exitCode = await execAdmittedRelease({ executable: process.execPath, argv: [probe], env: JSON.parse(env), extraDescriptors: [{ fd: 3, mode: "read_only_pipe" }] }, JSON.parse(trust));`,
       ].join("\n"));
 
-      const outcome = await execAdmittedRelease(
-        { executable: process.execPath as never, argv: [script], env, extraDescriptors: [{ fd: 3, mode: "read_only_pipe" }] },
-        configuredTrust(),
-      );
+      const outcome = await new Promise<number | null>((resolve, reject) => {
+        const child = spawn(
+          "/bin/sh",
+          ["-c", 'exec 7<"$1"; exec "$0" "$2" "$3" "$4" "$5"', process.execPath, held, launcher, probe, JSON.stringify(env), JSON.stringify(configuredTrust())],
+          { stdio: "inherit" },
+        );
+        child.once("error", reject);
+        child.once("close", resolve);
+      });
 
-      expect(held.fd).toBeGreaterThan(11);
       expect(outcome).toBe(0);
     } finally {
-      await held.close();
       await rm(directory, { recursive: true, force: true });
     }
   });

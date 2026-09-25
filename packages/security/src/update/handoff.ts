@@ -29,7 +29,8 @@ export function renderOfflineReleaseTrustPipe(trust: OfflineReleaseTrustV1): Uin
  * tell an inherited descriptor from the ones its own runtime opens (Node holds
  * 4-11 before any product code runs). It is decided where inheritance is: the
  * launcher's `spawn` passes exactly stdio plus FD 3 and libuv closes every
- * other descriptor in the child, which the launcher's test asserts.
+ * other descriptor in the child -- even one the launcher itself inherited
+ * without CLOEXEC, which the launcher's test asserts.
  */
 export interface OfflineTrustReaderDependencies {
   /** The real parent process id (`process.ppid`) at read time. */
