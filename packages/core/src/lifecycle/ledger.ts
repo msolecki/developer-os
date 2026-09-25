@@ -33,6 +33,7 @@ import {
   MAX_LAUNCHD_EFFECT_JOURNAL_BYTES,
   effectJournalBinding,
   parseEffectStagingChildren,
+  type GitEffectStagingSideV1,
   type LifecycleEffectLedgerCodecV1,
   type LifecycleEffectTerminalV1,
 } from "./effect-ledger.js";
@@ -315,7 +316,7 @@ function participantIdOf(
 }
 
 function allocatedIdOf(
-  prefix: "tx" | "ge" | "le",
+  prefix: "tx" | "ge" | "le" | "mf",
   value: string,
   nonce: LifecycleInstallNonceV1 | null,
 ): string | null {
@@ -954,7 +955,7 @@ async function scanCoordinatorStaging<TPlan extends CoordinatorPlan>(
       continue;
     }
     if (name === "participants") {
-      await countStagingSubtree(scan, facts, entry, manifestStagingAdmission(scan, coordinatorId), "");
+      await countStagingSubtree(scan, facts, entry, manifestStagingAdmission(scan, coordinatorId, nonce), "");
       if (scan.stopped) return;
       continue;
     }
@@ -1011,6 +1012,7 @@ function gitStagingAdmission<TPlan extends CoordinatorPlan>(
   const admitted = new Map<string, StagingShapeV1>();
   if (plan === null) {
     for (const side of GIT_EFFECT_STAGING_SIDES) admitted.set(side, "directory");
+    admitPlanlessEffectChildren(scan, coordinatorId, codec, path, admitted);
     return (relative) => {
       const known = admitted.get(relative);
       if (known !== undefined) return known;
@@ -1043,6 +1045,30 @@ function gitStagingAdmission<TPlan extends CoordinatorPlan>(
 }
 
 /**
+ * §2.4 creation order stages an effect's postimages before its immutable plan and that plan before
+ * the coordinator's, so a planless tree may hold exactly what a published effect plan naming this
+ * coordinator lists below its own `<side>/<ge-id>`.
+ */
+function admitPlanlessEffectChildren<TPlan extends CoordinatorPlan>(
+  scan: LedgerScanV1<TPlan>,
+  coordinatorId: string,
+  codec: LifecycleEffectLedgerCodecV1,
+  path: CanonicalAbsolutePathV1,
+  admitted: Map<string, StagingShapeV1>,
+): void {
+  for (const [id, effect] of scan.effects.git) {
+    if (effect.malformed || effect.plan === null) continue;
+    const { coordinatorId: owner, side } = effect.plan as { readonly coordinatorId?: unknown; readonly side?: unknown };
+    if (owner !== coordinatorId || !GIT_EFFECT_STAGING_SIDES.includes(side as GitEffectStagingSideV1)) continue;
+    const prefix = `${String(side)}/${id}`;
+    admitted.set(prefix, "directory");
+    for (const child of effectStagingChildren(scan, codec, effect.plan, path)) {
+      admitted.set(`${prefix}/${child}`, "entry");
+    }
+  }
+}
+
+/**
  * The manifest participant's staged `update_expected` postimage,
  * `participants/manifest/<mf>/after.json`, admitted only for the one manifest
  * participant this coordinator's plan names.
@@ -1050,11 +1076,11 @@ function gitStagingAdmission<TPlan extends CoordinatorPlan>(
 function manifestStagingAdmission<TPlan extends CoordinatorPlan>(
   scan: LedgerScanV1<TPlan>,
   coordinatorId: string,
+  nonce: LifecycleInstallNonceV1 | null,
 ): StagingAdmissionV1 {
-  const manifest = scan.coordinators.get(coordinatorId)?.plan?.participants.manifest as
-    | { readonly participantId?: unknown }
-    | null
-    | undefined;
+  const plan = scan.coordinators.get(coordinatorId)?.plan ?? null;
+  if (plan === null) return planlessManifestAdmission(nonce);
+  const manifest = plan.participants.manifest as { readonly participantId?: unknown } | null;
   const id = typeof manifest?.participantId === "string" ? manifest.participantId : null;
   if (id === null) return () => null;
   const admitted = new Map<string, StagingShapeV1>([
@@ -1063,6 +1089,18 @@ function manifestStagingAdmission<TPlan extends CoordinatorPlan>(
     [`manifest/${id}/after.json`, "entry"],
   ]);
   return (relative) => admitted.get(relative) ?? null;
+}
+
+/** §2.4: the manifest payload is staged before the coordinator plan that will name its `mf` ID. */
+function planlessManifestAdmission(nonce: LifecycleInstallNonceV1 | null): StagingAdmissionV1 {
+  return (relative) => {
+    const [manifest, id, leaf, ...rest] = relative.split("/");
+    if (manifest !== "manifest" || rest.length > 0) return null;
+    if (id === undefined) return "directory";
+    if (allocatedIdOf("mf", id, nonce) === null) return null;
+    if (leaf === undefined) return "directory";
+    return leaf === "after.json" ? "entry" : null;
+  };
 }
 
 /**

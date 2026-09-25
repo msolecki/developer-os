@@ -42,6 +42,7 @@ type CoordinatorPlan = LifecycleCoordinatorPlanCoreV1<unknown, unknown, unknown,
 
 const STAGED_JOURNAL_LEAF = "journal.json";
 const FOUNDATION_STAGING_LEAF = "foundation";
+const DERIVED_STAGING_CHILDREN: readonly string[] = ["git", "launchd-process", "participants"];
 
 export interface LifecycleRecoveryPolicyV1 {
   readonly resumeUninstall: boolean;
@@ -259,6 +260,11 @@ async function removePlanlessCoordinatorStaging(
   if (root === null) return;
   const children = await namesOf(fs, root);
   for (const name of children) {
+    if (DERIVED_STAGING_CHILDREN.includes(name)) {
+      const derived = await fs.lstat(childPath(path, name));
+      if (derived !== null) await removeAdmittedTree(fs, derived);
+      continue;
+    }
     if (name !== FOUNDATION_STAGING_LEAF) {
       refuseLifecycleRecovery("lifecycle_staging_shape", childPath(path, name));
     }
@@ -284,6 +290,25 @@ async function removePlanlessCoordinatorStaging(
   await fs.syncDirectory(root);
   await fs.rmdirExactEmpty(root);
   await syncDirectoryAt(fs, lifecycleParentPath(path));
+}
+
+/**
+ * The derived effect and manifest staging a planless tree may hold before its coordinator plan
+ * (§2.4). The ledger admitted every entry below it by exact path and shape, so removal walks it
+ * child first and refuses anything that is no longer a plain directory or regular file.
+ */
+async function removeAdmittedTree(fs: LifecycleGuardedFileSystemV1, entry: LifecycleGuardedEntryV1): Promise<void> {
+  if (entry.kind === "regular_file") {
+    await fs.unlinkExact(entry);
+    return;
+  }
+  if (entry.kind !== "directory") refuseLifecycleRecovery("lifecycle_staging_shape", entry.path);
+  for (const name of await namesOf(fs, entry)) {
+    const child = await fs.lstat(childPath(entry.path, name));
+    if (child !== null) await removeAdmittedTree(fs, child);
+  }
+  await fs.syncDirectory(entry);
+  await fs.rmdirExactEmpty(entry);
 }
 
 async function namesOf(

@@ -2149,6 +2149,45 @@ describe("the effect journal hookup", () => {
       expect(snapshot.coordinatorOrphans.map((orphan) => orphan.kind)).toStrictEqual(["planless_staging"]);
     });
 
+    it("admits a planless tree's children its own published effect plan lists, and nothing it does not", async () => {
+      const home = await newHome();
+      await write(
+        home,
+        `state/git-effect-journals/${SOURCE.id}.plan.json`,
+        encodeCanonicalJson({ coordinatorId: LOCAL.id, marker: "source-git", side: "source" }),
+      );
+      const effect = `staging/lifecycle/${LOCAL.id}/git/source/${SOURCE.id}`;
+      await plantStaging(home, `${effect}/post/0`, "file");
+      const manifest = `staging/lifecycle/${LOCAL.id}/participants/manifest/${formatAllocatedLifecycleId("mf", NONCE, 9n)}`;
+      await plantStaging(home, `${manifest}/after.json`, "file");
+
+      const admitted = await inspect(home, { gitEffectPlanCodec: effectLedgerCodec(CHILDREN) });
+      expect(admitted.findings).toStrictEqual([]);
+      expect(admitted.coordinatorOrphans.map((orphan) => orphan.kind).sort()).toStrictEqual([
+        "planless_staging",
+        "unreferenced_effect_plan",
+      ]);
+
+      await plantStaging(home, `${effect}/unlisted`, "file");
+      const refused = await inspect(home, { gitEffectPlanCodec: effectLedgerCodec(CHILDREN) });
+      expect(refused.findings).toStrictEqual([{ reason: "lifecycle_staging_name", path: path(`${HOME}/${effect}/unlisted`) }]);
+    });
+
+    it("refuses planless effect children whose plan names another coordinator", async () => {
+      const home = await newHome();
+      await write(
+        home,
+        `state/git-effect-journals/${SOURCE.id}.plan.json`,
+        encodeCanonicalJson({ coordinatorId: LIVE.id, marker: "source-git", side: "source" }),
+      );
+      const entry = `staging/lifecycle/${LOCAL.id}/git/source/${SOURCE.id}/post`;
+      await plantStaging(home, entry, "file");
+
+      const snapshot = await inspect(home, { gitEffectPlanCodec: effectLedgerCodec(CHILDREN) });
+
+      expect(snapshot.findings).toStrictEqual([{ reason: "lifecycle_staging_name", path: path(`${HOME}/${entry}`) }]);
+    });
+
     it("refuses anything below a planless effect ID directory", async () => {
       const home = await newHome();
       const entry = `staging/lifecycle/${LOCAL.id}/git/source/${SOURCE.id}/post`;

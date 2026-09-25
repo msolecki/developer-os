@@ -226,6 +226,50 @@ describe("git on a real V2 home", () => {
   );
 
   it(
+    "recovers the residue a death between the Git effect plan and the coordinator plan leaves",
+    async () => {
+      const home = await sharedHome();
+      const lifecycle = home.context.lifecycle;
+      if (lifecycle === undefined) throw new Error("the fixture composed no lifecycle context");
+      const effectJournals = join(home.paths.stateDir, "git-effect-journals");
+      const staging = join(home.paths.stagingDir, "lifecycle");
+      const aside = join(home.root, "sigterm-residue");
+      /** The failure path would clean up; moving the residue aside before it runs leaves what a SIGTERM leaves. */
+      const failing = {
+        ...home.context,
+        lifecycle: {
+          ...lifecycle,
+          store: (key: Parameters<typeof lifecycle.store>[0]) => {
+            const store = lifecycle.store(key);
+            Object.defineProperty(store, "publish", {
+              value: async () => {
+                await nodeFs.mkdir(join(aside, "effects"), { recursive: true, mode: 0o700 });
+                await nodeFs.mkdir(join(aside, "staging"), { recursive: true, mode: 0o700 });
+                for (const name of await nodeFs.readdir(effectJournals)) await nodeFs.rename(join(effectJournals, name), join(aside, "effects", name));
+                for (const name of await nodeFs.readdir(staging)) await nodeFs.rename(join(staging, name), join(aside, "staging", name));
+                throw new Error("injected death before the coordinator plan");
+              },
+            });
+            return store;
+          },
+        },
+      };
+      expect((await runGit(failing, { subcommand: "enable", remote: home.remote, branch: null, apply: true })).ok).toBe(false);
+      for (const name of await nodeFs.readdir(join(aside, "effects"))) await nodeFs.rename(join(aside, "effects", name), join(effectJournals, name));
+      for (const name of await nodeFs.readdir(join(aside, "staging"))) await nodeFs.rename(join(aside, "staging", name), join(staging, name));
+      expect(await nodeFs.readdir(effectJournals)).toHaveLength(1);
+
+      await nodeFs.mkdir(join(home.paths.brain, "content"), { recursive: true, mode: 0o700 });
+      const next = await runBrain(home.context, { subcommand: "reindex", query: null, limit: null, dryRun: false });
+      expect(next.ok, JSON.stringify(next)).toBe(true);
+      expect(await closureOf(home)).toBe("clear");
+      expect(await nodeFs.readdir(effectJournals)).toEqual([]);
+      expect(await nodeFs.readdir(staging)).toEqual([]);
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
+  it(
     "enables against a local bare remote, publishing activation and manifest ownership with the enabled config",
     async () => {
       const home = await sharedHome();
