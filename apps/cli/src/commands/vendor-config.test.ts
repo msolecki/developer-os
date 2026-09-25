@@ -85,6 +85,24 @@ describe("checkVendorConfig", () => {
     expect(lstat).not.toHaveBeenCalled();
   });
 
+  it("warns and reads nothing while CLAUDE_CONFIG_DIR moves the settings Claude reads", async () => {
+    const fixture = await createCommandFixture("vendor-config-config-dir", {
+      env: { CLAUDE_CONFIG_DIR: "/synthetic/claude-config" },
+    });
+    await plantSettings(fixture, denySettings(allRuleStrings()));
+    const readText = vi.fn(fixture.context.guards.readText);
+    const context: CliContext = {
+      ...fixture.context,
+      guards: { ...fixture.context.guards, readText },
+    };
+
+    const check = await checkVendorConfig(context, OBSERVED);
+
+    expect(check.status).toBe("warn");
+    expect(check.message).toContain("CLAUDE_CONFIG_DIR");
+    expect(readText).not.toHaveBeenCalled();
+  });
+
   it("passes when every rule string is present", async () => {
     const fixture = await createCommandFixture("vendor-config-pass");
     await plantSettings(fixture, denySettings(allRuleStrings()));

@@ -494,6 +494,14 @@ export async function runImport(
         "the Claude Code memory layout has not been observed for this product; nothing was read",
       );
     }
+    // Spec §5.5: the variable is not followed, so the memory under it would be missed silently.
+    if (options.claudeMemory && context.env.CLAUDE_CONFIG_DIR !== undefined && context.env.CLAUDE_CONFIG_DIR !== "") {
+      throw new ImportRunRefusal(
+        "claude_config_dir_not_followed",
+        EXIT_CODES.capabilityUnavailable,
+        "CLAUDE_CONFIG_DIR is set and not followed, so Claude's memory is not under the vendor home; nothing was read",
+      );
+    }
     const config = await readConfigFile(context, context.paths.configFile);
     if (config === null) {
       throw new ImportRunRefusal(

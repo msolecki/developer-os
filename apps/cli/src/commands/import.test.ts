@@ -686,6 +686,23 @@ describe("import --claude-memory", () => {
     expect(touched.filter((path) => path.startsWith(vendorOf(fixture)))).toEqual([]);
   });
 
+  it("refuses while CLAUDE_CONFIG_DIR is set and touches nothing under the vendor home", async () => {
+    const fixture = await installed("import-memory-config-dir");
+    await plantMemoryTree(fixture);
+    const probe = spied({
+      ...fixture.context,
+      env: { ...fixture.context.env, CLAUDE_CONFIG_DIR: "/synthetic/claude-config" },
+    });
+    const before = await digests(fixture);
+
+    const result = await importMemory(fixture, probe.context);
+
+    expect(result.code).toBe(EXIT_CODES.capabilityUnavailable);
+    expect(kindOf(result)).toBe("claude_config_dir_not_followed");
+    expect([...probe.listings, ...probe.stats, ...probe.reads]).toEqual([]);
+    expect(await digests(fixture)).toEqual(before);
+  });
+
   it("imports memory files, never lists a project directory, and names no vendor path", async () => {
     const fixture = await installed("import-memory");
     await plantMemoryTree(fixture);

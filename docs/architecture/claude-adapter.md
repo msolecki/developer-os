@@ -482,7 +482,8 @@ row's version, date and one-sentence provenance.
   extension and the index file to exclude, relative to `<user-home>/.claude`. While it is `null`,
   `import --claude-memory` exits 4 with `claude_memory_layout_unobserved` and reads nothing.
   `CLAUDE_CONFIG_DIR` is not honoured, although the observation shows that Claude Code moves the
-  layout under it.
+  layout under it; while it is set, `import --claude-memory` exits 4 with
+  `claude_config_dir_not_followed` and reads nothing, and `vendor-config` warns and compares nothing.
 - **`CLAUDE_DENY_RULES`** maps each product rule ID in `PROTECTED_PATH_RULES` (`packages/security`)
   to the exact Claude deny-rule strings for it. The IDs are derived from the protected-path policy,
   so there is no second list; only the vendor syntax lives here. While it is `null`, `vendor-config`

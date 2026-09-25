@@ -51,6 +51,9 @@ export async function checkVendorConfig(
   if (observation === null) {
     return warn("the Claude deny-rule syntax has not been observed for this product; nothing was compared", []);
   }
+  if (context.env.CLAUDE_CONFIG_DIR !== undefined && context.env.CLAUDE_CONFIG_DIR !== "") {
+    return warn("CLAUDE_CONFIG_DIR is set and not followed; the settings Claude reads were not compared", []);
+  }
   let path: string | null = null;
   try {
     path = join(await context.guards.canonicalize(context.userHome), ".claude", "settings.json");
