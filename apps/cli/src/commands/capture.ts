@@ -622,7 +622,7 @@ export async function runCapture(
           duplicate: true,
           status: found.status,
           redactionCount,
-          note: built.envelope.note,
+          note: found.note,
         },
         found.warning === null ? [] : [found.warning],
       );

@@ -1145,6 +1145,8 @@ describe("runCapture --note", () => {
       true,
       plain.data.captureId,
     ]);
+    // The stored capture is plain: the result must not claim this run's note target.
+    expect(result.ok && result.data.note).toBeNull();
     const key = loadOrCreateRedactionKey(fixture.paths.stateDir);
     const stored = parseCaptureFile(
       basename(plain.data.path),

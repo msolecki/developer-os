@@ -8,7 +8,7 @@ import type {
   RuntimePaths,
 } from "@developer-os/core";
 import { parseCaptureFile, resolveBrainConfig } from "@developer-os/brain";
-import type { CaptureStatus } from "@developer-os/brain";
+import type { CaptureNoteTargetV1, CaptureStatus } from "@developer-os/brain";
 import type { Redactor } from "@developer-os/security";
 
 import { resolveContainedRoot } from "../context.js";
@@ -116,6 +116,8 @@ export interface ExistingCapture {
    */
   readonly parsed: boolean;
   readonly status: CaptureStatus;
+  /** The stored envelope's note target, so a duplicate reports the file's, not this run's. */
+  readonly note: CaptureNoteTargetV1 | null;
   readonly warning: string | null;
   /**
    * The file's bytes, verbatim. The recovery path in `runCapture` compares
@@ -164,10 +166,17 @@ export async function readExistingCapture(
   const outcome = parseCaptureFile(fileName, text, redact);
 
   return outcome.ok
-    ? { parsed: true, status: outcome.envelope.status, warning: null, contents: text }
+    ? {
+        parsed: true,
+        status: outcome.envelope.status,
+        note: outcome.envelope.note,
+        warning: null,
+        contents: text,
+      }
     : {
         parsed: false,
         status: "failed",
+        note: null,
         warning: `the capture already at this path could not be read (${outcome.reason})`,
         contents: text,
       };
