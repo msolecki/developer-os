@@ -173,6 +173,20 @@ describe("local push through the production gateway graph on the pinned Git dist
     expect(preparation.packReaderBudget?.packHeaderObjectCount).toBe(historyObjectCount(head));
   });
 
+  // Phase review I-2: `^target` leaves out the fork point a merged branch still names.
+  it("pushes the whole history for a merge of a branch forked before the target", async () => {
+    await commitFile("b.md", "one\n");
+    run(["checkout", "-q", "-b", "feat"], source);
+    await commitFile("c.md", "gamma\n");
+    run(["checkout", "-q", "main"], source);
+    publish(await commitFile("b.md", "two\n"));
+    run(["merge", "-q", "--no-edit", "feat"], source);
+    const head = parseLowerHexSha1(run(["rev-parse", "HEAD"], source));
+    const { preparation } = await push(head);
+    expect(preparation.kind).toBe("pack_received");
+    expect(preparation.packReaderBudget?.packHeaderObjectCount).toBe(historyObjectCount(head));
+  });
+
   it("takes the up-to-date arm for an already-pushed packed commit", async () => {
     const head = await commitFile("a.md", "alpha\n");
     publish(head);

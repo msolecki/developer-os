@@ -273,19 +273,35 @@ async function readCommit(
   return { tree: parseLowerHexSha1(tree), parents };
 }
 
+const notLoose = (error: unknown): null => {
+  if (error instanceof SecurityRefusalError && error.message === "git_commit_not_loose") return null;
+  throw error;
+};
+
+/** Bounds the single-parent walk from the pushed commit's parent back to the target. */
+const MAX_LINEAR_WALK = 10_000;
+
 /**
  * The destination-owned objects a pack may name without carrying: the target commit and its
- * snapshot. `pack-objects --revs` given `^target` leaves out exactly the target's commit and tree
- * objects, so an older blob a sync brings back travels again. Blobs are named by their tree entry
- * and never read. `null` when the target commit or any subtree is not loose (a clone, `git gc`):
- * the loose reader cannot bound that snapshot, so the push excludes nothing and sends the whole
- * history instead of refusing.
+ * snapshot. On a single-parent path from `start` (the pushed commit, or its parent when the
+ * candidate commit is new) to the target, `pack-objects --revs` given `^target` leaves out exactly
+ * the target's commit and tree objects, so an older blob a sync brings back travels again. Blobs
+ * are named by their tree entry and never read. `null` sends the whole history instead of refusing:
+ * when a merge on that path names a fork point `^target` also leaves out, when the path is not
+ * loose or not found, or when the target commit or any subtree is not loose (a clone, `git gc`).
  */
-async function targetSnapshotObjects(gitDirectory: CanonicalAbsolutePathV1, targetOid: LowerHexSha1): Promise<ReadonlySet<LowerHexSha1> | null> {
-  const notLoose = (error: unknown): null => {
-    if (error instanceof SecurityRefusalError && error.message === "git_commit_not_loose") return null;
-    throw error;
-  };
+async function targetSnapshotObjects(
+  gitDirectory: CanonicalAbsolutePathV1,
+  start: LowerHexSha1 | null,
+  targetOid: LowerHexSha1,
+): Promise<ReadonlySet<LowerHexSha1> | null> {
+  let at = start;
+  for (let steps = 0; at !== targetOid; steps += 1) {
+    if (at === null || steps >= MAX_LINEAR_WALK) return null;
+    const parents: readonly LowerHexSha1[] | undefined = (await readCommit(gitDirectory, at).catch(notLoose))?.parents;
+    if (parents?.length !== 1) return null;
+    at = parents[0] ?? null;
+  }
   const commit = await readCommit(gitDirectory, targetOid).catch(notLoose);
   if (commit === null) return null;
   const reached = new Set<LowerHexSha1>([targetOid]);
@@ -791,7 +807,9 @@ async function prepareLocalPush(request: GitLocalPushRequestV1): Promise<GitLoca
       effectiveUid: request.effectiveUid,
     });
     const { target } = request.destination;
-    const boundary = target.state === "present" ? await targetSnapshotObjects(request.sourceGitDirectory, target.oid) : null;
+    const { candidate } = request;
+    const start = candidate.commit?.oid === request.commitOid ? candidate.commit.parentOid : request.commitOid;
+    const boundary = target.state === "present" ? await targetSnapshotObjects(request.sourceGitDirectory, start, target.oid) : null;
     // An unbounded target stays unadvertised, except the up-to-date arm, which sends no pack.
     const advertised = target.state === "present" && (boundary !== null || target.oid === request.commitOid) ? target.oid : null;
     const destinationShadow = await materializeSanitizedBareDestinationShadow({
@@ -818,7 +836,6 @@ async function prepareLocalPush(request: GitLocalPushRequestV1): Promise<GitLoca
     admitGitDistribution(observeGitDistribution(row, probed), row);
 
     const buildPhase = supervisor.beginPhase("source_build");
-    const { candidate } = request;
     const committer = candidate.commit?.committer;
     const buildSlots: GitEnvironmentSlotValuesV1 = {
       ...sourceSlots,
