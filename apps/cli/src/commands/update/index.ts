@@ -66,6 +66,11 @@ export function parseUpdateArgv(argv: readonly string[]): UpdateInvocationV1 | n
   return { kind: "update", version, apply, json };
 }
 
+/** Spec 2 §9.4 (D60): a compensated run exits with its cause's class; only a verifier rejection is a security refusal. */
+function compensatedExitCode(cause: string): typeof EXIT_CODES.securityRefusal | typeof EXIT_CODES.operationalFailure {
+  return cause === "update_verifier_rejected" ? EXIT_CODES.securityRefusal : EXIT_CODES.operationalFailure;
+}
+
 /**
  * `update --apply` heals any update residue first, previews with its scratch kept open, then
  * applies that same in-memory candidate. An automatic rollback is a failure: nothing changed.
@@ -76,7 +81,7 @@ async function runApply(update: CliUpdateContext, version: StableSemverV1 | null
   if (prepared.apply === null) return success(prepared.result);
   const applied = await applyUpdate(update, prepared.apply);
   if (applied.outcome === "applied") return success(applied);
-  return failure(EXIT_CODES.operationalFailure, {
+  return failure(compensatedExitCode(applied.cause), {
     kind: "update_rolled_back_automatically",
     message: applied.cause,
     paths: [],
@@ -92,7 +97,7 @@ async function runRollbackApply(update: CliUpdateContext): Promise<CliResult<Upd
   await recoverUpdate(update);
   const rolledBack = await applyRollback(update, await planRollback(update));
   if (rolledBack.outcome === "rolled_back") return success(rolledBack);
-  return failure(EXIT_CODES.operationalFailure, {
+  return failure(compensatedExitCode(rolledBack.cause), {
     kind: "update_rollback_compensated",
     message: rolledBack.cause,
     paths: [],

@@ -1,12 +1,26 @@
-import { EXIT_CODES } from "@developer-os/core";
-import { afterEach, describe, expect, it } from "vitest";
+import { EXIT_CODES, parseSafeReasonCode } from "@developer-os/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { renderPath } from "../../context.js";
+import { applyUpdate } from "../../update/apply.js";
+import type * as ApplyModule from "../../update/apply.js";
 import type { UpdateApplyPortsV1 } from "../../update/apply.js";
 import { planRollback, planUpdate, UpdatePlanningRefusal } from "../../update/planning.js";
+import { applyRollback } from "../../update/rollback-apply.js";
+import type * as RollbackApplyModule from "../../update/rollback-apply.js";
 import { createUpdateFixture, FILE_A_PATH, unreachableUpdateContext } from "../../update/testing.js";
 import { createCommandFixture, removeCommandFixtures } from "../testing.js";
 import { parseUpdateArgv, renderUpdate, runUpdate } from "./index.js";
+
+/** Pass-through by default; a case stubs one automatic-rollback outcome with `mockImplementationOnce`. */
+vi.mock("../../update/apply.js", async (original) => {
+  const actual = await original<typeof ApplyModule>();
+  return { ...actual, applyUpdate: vi.fn(actual.applyUpdate) };
+});
+vi.mock("../../update/rollback-apply.js", async (original) => {
+  const actual = await original<typeof RollbackApplyModule>();
+  return { ...actual, applyRollback: vi.fn(actual.applyRollback) };
+});
 
 afterEach(removeCommandFixtures);
 
@@ -153,6 +167,43 @@ describe("runUpdate", () => {
     expect(result.ok).toBe(false);
     expect(result.code).toBe(EXIT_CODES.decisionRequired);
     if (!result.ok) expect(result.error.paths).toStrictEqual([FILE_A_PATH]);
+  });
+
+  it.each([
+    ["update_verifier_rejected", EXIT_CODES.securityRefusal],
+    ["update_step_not_applied", EXIT_CODES.operationalFailure],
+  ] as const)("exits an automatic rollback caused by %s with its cause's class (D60)", async (cause, code) => {
+    const commandFixture = await createCommandFixture(`update-apply-rolled-back-${cause}`);
+    const update = createUpdateFixture();
+    const apply: UpdateApplyPortsV1 = { ...unreachableApplyPorts(), withGlobalLock: (work) => work(), closure: () => Promise.resolve({ kind: "clear" }) };
+    vi.mocked(applyUpdate).mockImplementationOnce((_update, prepared) =>
+      Promise.resolve({ schemaVersion: 1, outcome: "rolled_back_automatically", active: prepared.inputs.current, cause: parseSafeReasonCode(cause) }));
+    const result = await runUpdate({ ...commandFixture.context, update: { ...update.update, apply } }, { kind: "update", version: null, apply: true, json: false });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe(code);
+    if (!result.ok) expect(result.error).toMatchObject({ kind: "update_rolled_back_automatically", message: cause });
+  });
+
+  it.each([
+    ["update_verifier_rejected", EXIT_CODES.securityRefusal],
+    ["update_step_not_applied", EXIT_CODES.operationalFailure],
+  ] as const)("exits a compensated rollback caused by %s with its cause's class (D60)", async (cause, code) => {
+    const commandFixture = await createCommandFixture(`update-rollback-compensated-${cause}`);
+    const update = createUpdateFixture({ active: "1.1.0", rollbackPrevious: "1.0.0" });
+    const apply: UpdateApplyPortsV1 = {
+      ...unreachableApplyPorts(),
+      withGlobalLock: (work) => work(),
+      closure: () => Promise.resolve({ kind: "clear" }),
+      composeRollback: () => Promise.reject(new Error("unreachable")),
+    };
+    vi.mocked(applyRollback).mockImplementationOnce((_update, preview) =>
+      Promise.resolve({ schemaVersion: 1, outcome: "rollback_compensated", active: preview.current, cause: parseSafeReasonCode(cause) }));
+    const result = await runUpdate({ ...commandFixture.context, update: { ...update.update, apply } }, { kind: "rollback", apply: true, json: false });
+
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe(code);
+    if (!result.ok) expect(result.error).toMatchObject({ kind: "update_rollback_compensated", message: cause });
   });
 
   it("returns the plan-only arms through the injected ports", async () => {
