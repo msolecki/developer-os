@@ -1438,6 +1438,8 @@ export function parseGitUserIdentity(text: string, gitDirectory: string): { read
       if (section.startsWith("include")) unsupported();
       continue;
     }
+    // Git also reads a header with a trailing comment or an inline key; neither is parsed here.
+    if (/^\s*\[/u.test(line)) unsupported();
     const pair = /^\s*([A-Za-z][A-Za-z0-9-]*)\s*=\s*(.*?)\s*$/u.exec(line);
     if (section !== "user" || pair === null) continue;
     const raw = pair[2] ?? "";

@@ -146,6 +146,8 @@ describe("the Brain repository's committer identity", () => {
     ["a partly quoted value", '[user]\n\tname = "Synthetic" Tester\n\temail = tester@example.invalid\n'],
     ["an include", "[include]\n\tpath = identity.inc\n[user]\n\tname = Synthetic\n\temail = tester@example.invalid\n"],
     ["a conditional include", '[includeIf "gitdir:~/"]\n\tpath = identity.inc\n[user]\n\tname = Synthetic\n\temail = tester@example.invalid\n'],
+    ["a commented section header", "[user]\n\tname = A\n\temail = tester@example.invalid\n[core] # x\n\tname = B\n"],
+    ["a commented conditional include", '[includeIf "gitdir:~/"] # c\n\tpath = identity.inc\n[user]\n\tname = Synthetic\n\temail = tester@example.invalid\n'],
   ])("refuses %s instead of guessing what Git reads", (_label, text) => {
     expect(read(text)).toBe("git_identity_unsupported");
   });
