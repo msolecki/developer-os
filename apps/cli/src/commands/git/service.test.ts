@@ -13,7 +13,7 @@ import { validateShadowConfigTemplate } from "@developer-os/security";
 import { failureFrom } from "../../context.js";
 import { createCommandFixture, removeCommandFixtures } from "../testing.js";
 import { DESTINATION_SHADOW_TEMPLATE, GIT_SHADOW_TEMPLATE_HASHES, SOURCE_LOCAL_SHADOW_TEMPLATE, createProductionGitRuntime } from "./runtime.js";
-import { createGitService, GitCommandRefusal, gitScopeOf } from "./service.js";
+import { createGitService, GitCommandRefusal, gitScopeOf, parseGitUserIdentity } from "./service.js";
 import { scriptedEffectPorts, scriptedGitRuntime } from "./testing.js";
 
 const roots: string[] = [];
@@ -119,5 +119,34 @@ describe("the Git service on a home with no installation", () => {
     await expect(createGitService(fixture.context, lifecycle)[method]()).rejects.toThrow();
     expect(runtime.spawns).toEqual([]);
     expect(runtime.networkCalls).toEqual([]);
+  });
+});
+
+describe("the Brain repository's committer identity", () => {
+  const read = (text: string): unknown => {
+    try {
+      return parseGitUserIdentity(text, "/synthetic-brain/.git");
+    } catch (error) {
+      return error instanceof GitCommandRefusal ? error.reason : error;
+    }
+  };
+
+  it("reads a plain and a quoted [user] identity", () => {
+    expect(read('[user]\n\tname = "Synthetic Tester"\n\temail = tester@example.invalid\n')).toStrictEqual({
+      name: "Synthetic Tester",
+      email: "tester@example.invalid",
+    });
+  });
+
+  it.each([
+    ["an inline # comment", "[user]\n\tname = Synthetic # note\n\temail = tester@example.invalid\n"],
+    ["an inline ; comment", "[user]\n\tname = Synthetic\n\temail = tester@example.invalid ; note\n"],
+    ["an escape", "[user]\n\tname = Synthetic\\tTester\n\temail = tester@example.invalid\n"],
+    ["a line continuation", "[user]\n\tname = Synthetic \\\nTester\n\temail = tester@example.invalid\n"],
+    ["a partly quoted value", '[user]\n\tname = "Synthetic" Tester\n\temail = tester@example.invalid\n'],
+    ["an include", "[include]\n\tpath = identity.inc\n[user]\n\tname = Synthetic\n\temail = tester@example.invalid\n"],
+    ["a conditional include", '[includeIf "gitdir:~/"]\n\tpath = identity.inc\n[user]\n\tname = Synthetic\n\temail = tester@example.invalid\n'],
+  ])("refuses %s instead of guessing what Git reads", (_label, text) => {
+    expect(read(text)).toBe("git_identity_unsupported");
   });
 });

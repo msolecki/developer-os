@@ -1415,24 +1415,41 @@ async function requireSameDevice(productHome: CanonicalAbsolutePathV1, gitDirect
 /** The repository's own `user.name`/`user.email`; the shadows read no global config. */
 async function committerOf(context: CliContext, gitDirectory: CanonicalAbsolutePathV1): Promise<GitCommitterV1> {
   const config = await guardedPreimage(canonical(`${gitDirectory}/config`), { kind: "none" });
-  const text = config.bytes === null ? "" : new TextDecoder().decode(config.bytes);
+  const identity = parseGitUserIdentity(config.bytes === null ? "" : new TextDecoder().decode(config.bytes), gitDirectory);
+  return { ...identity, unixSeconds: Math.floor(context.now().getTime() / 1000), utcOffset: "+0000" };
+}
+
+/**
+ * The `[user]` name and email of a repository's own `config`. Anything this reader cannot take
+ * exactly as Git would — comments after a value, escapes, continuations, partial quoting, or an
+ * include that could supply another identity — refuses rather than committing under a guess.
+ */
+export function parseGitUserIdentity(text: string, gitDirectory: string): { readonly name: string; readonly email: string } {
+  const unsupported = (): never =>
+    refuse("git_identity_unsupported", EXIT_CODES.invalidInput, [gitDirectory], "set a plain user.name and user.email in the Brain repository's own .git/config");
   let section = "";
   const values: Record<string, string> = {};
   for (const line of text.split("\n")) {
     const header = /^\s*\[([^\]]+)\]\s*$/u.exec(line)?.[1];
     if (header !== undefined) {
       section = header.trim().toLowerCase();
+      if (section.startsWith("include")) unsupported();
       continue;
     }
     const pair = /^\s*([A-Za-z][A-Za-z0-9-]*)\s*=\s*(.*?)\s*$/u.exec(line);
-    if (section === "user" && pair !== null) values[(pair[1] ?? "").toLowerCase()] = (pair[2] ?? "").replace(/^"(.*)"$/u, "$1");
+    if (section !== "user" || pair === null) continue;
+    const raw = pair[2] ?? "";
+    const quoted = /^"([^"]*)"$/u.exec(raw)?.[1];
+    const value = quoted ?? raw;
+    if (/[#;\\]/u.test(value) || (quoted === undefined && raw.includes('"'))) unsupported();
+    values[(pair[1] ?? "").toLowerCase()] = value;
   }
   const name = values.name;
   const email = values.email;
   if (name === undefined || email === undefined || name === "" || email === "") {
     refuse("git_identity_missing", EXIT_CODES.invalidInput, [gitDirectory], "git config user.name and user.email in the Brain repository");
   }
-  return { name, email, unixSeconds: Math.floor(context.now().getTime() / 1000), utcOffset: "+0000" };
+  return { name, email };
 }
 
 function candidateOf(draft: GitSyncPlanningDraft, committer: GitCommitterV1): GitCandidateObjectsV1 {
