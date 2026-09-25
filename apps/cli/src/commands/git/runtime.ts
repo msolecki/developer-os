@@ -274,26 +274,23 @@ async function readCommit(
 }
 
 /**
- * Every object the destination's target commit reaches, read from the source repository's loose
- * objects (the fast-forward check already found the target there). Blobs are named by their tree
- * entry and never read. `pack-objects` excludes all of them once the shadow advertises the target,
- * so the pack reader's closure walk stops at this set.
+ * The destination-owned objects a pack may name without carrying: the target commit and its
+ * snapshot. `pack-objects --revs` given `^target` leaves out exactly the target's commit and tree
+ * objects, so an older blob a sync brings back travels again. Blobs are named by their tree entry
+ * and never read; a packed subtree the loose reader cannot open is kept as an opaque member, and
+ * a pack that names something beneath it still refuses in the pack reader's closure walk.
  */
-async function reachableObjects(gitDirectory: CanonicalAbsolutePathV1, commitOid: LowerHexSha1): Promise<ReadonlySet<LowerHexSha1>> {
-  const reached = new Set<LowerHexSha1>();
-  const commits = [commitOid];
-  const trees: LowerHexSha1[] = [];
-  for (let commit = commits.pop(); commit !== undefined; commit = commits.pop()) {
-    if (reached.has(commit)) continue;
-    reached.add(commit);
-    const { tree, parents } = await readCommit(gitDirectory, commit);
-    trees.push(tree);
-    commits.push(...parents);
-  }
+async function targetSnapshotObjects(gitDirectory: CanonicalAbsolutePathV1, targetOid: LowerHexSha1): Promise<ReadonlySet<LowerHexSha1>> {
+  const reached = new Set<LowerHexSha1>([targetOid]);
+  const trees = [(await readCommit(gitDirectory, targetOid)).tree];
   for (let tree = trees.pop(); tree !== undefined; tree = trees.pop()) {
     if (reached.has(tree)) continue;
     reached.add(tree);
-    const object = await readLooseObject(gitDirectory, tree);
+    const object = await readLooseObject(gitDirectory, tree).catch((error: unknown) => {
+      if (error instanceof SecurityRefusalError && error.message === "git_commit_not_loose") return null;
+      throw error;
+    });
+    if (object === null) continue;
     if (object.type !== "tree") refuse("git_object_corrupt");
     for (let offset = 0; offset < object.content.byteLength; ) {
       const nul = object.content.indexOf(0, offset);
@@ -879,7 +876,7 @@ async function prepareLocalPush(request: GitLocalPushRequestV1): Promise<GitLoca
       destinationShadow,
       destination: { gitDirectory: request.destination.gitDirectory, branchRef: request.branchRef, target: request.destination.target },
       commitOid: request.commitOid,
-      boundary: target.state === "present" ? await reachableObjects(request.sourceGitDirectory, target.oid) : new Set(),
+      boundary: target.state === "present" ? await targetSnapshotObjects(request.sourceGitDirectory, target.oid) : new Set(),
       phase: pushPhase,
       effectiveUid: request.effectiveUid,
       receive: async () => {

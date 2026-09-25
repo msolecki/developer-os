@@ -124,4 +124,18 @@ describe("local push through the production gateway graph on the pinned Git dist
     expect(preparation.destinationTransitions).toEqual([]);
     expect(preparation.processNodes).toEqual(["receive-pack"]);
   });
+
+  it("stops the boundary at packed history below a loose target", async () => {
+    await mkdir(`${source}/notes`);
+    await commitFile("notes/a.md", "alpha\n");
+    run(["repack", "-a", "-d", "-q"], source);
+    run(["prune-packed"], source);
+    const target = await commitFile("b.md", "beta\n");
+    publish(target);
+    const head = await commitFile("b.md", "gamma\n");
+    const { preparation } = await push(head);
+    expect(preparation.kind).toBe("pack_received");
+    // The new blob, the new root tree and the new commit; the packed notes/ subtree stays behind.
+    expect(preparation.packReaderBudget?.packHeaderObjectCount).toBe(3);
+  });
 });
