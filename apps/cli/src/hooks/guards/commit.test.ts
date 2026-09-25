@@ -138,9 +138,32 @@ it("blocks force-push after an arithmetic shift", async () => {
 });
 
 // Spec §5.2 step 2 joins every backslash–newline pair, where bash does not (residual in hooks.md §3.8).
+// D63 closes it: each physical line of the raw command is its own candidate.
 describe("a backslash before a line break bash does not join", () => {
-  it.todo("blocks force-push on the line after `echo` ending in two backslashes");
-  it.todo("blocks force-push on the line after a comment ending in a backslash");
+  it.each(["echo \\\\\ngit push --force", "# note \\\ngit push --force"])("blocks force-push: %j", async (command) => {
+    expect(await run(command)).toMatchObject({ kind: "block", ruleId: "force-push" });
+  });
+});
+
+// D63: every physical line (split on LF, CR or CRLF, trimmed) is also a candidate, so a line that
+// blocks on its own blocks the whole command whatever the tokenizer made of quotes, comments,
+// heredocs or `$'…'`. Each row is a bypass from the phase re-reviews, confirmed in bash.
+describe("a dangerous line the tokenizer misreads", () => {
+  it.each([
+    "(#<<EOF\ngit push --force\nEOF\n)",
+    "echo $(#<<EOF\ngit push --force\nEOF\n)",
+    "(( x = y << z ))\ngit push --force\nz",
+    "# note\rcat <<EOF\ngit push --force\nEOF",
+    "cat <<'EOF'\nx\\\nEOF\ngit push --force\nEOF",
+    "cat <<EOF\n$(\ngit push --force\n)\nEOF",
+    "echo $'\\''\ngit push --force\n'",
+  ])("blocks force-push: %j", async (command) => {
+    expect(await run(command)).toMatchObject({ kind: "block", ruleId: "force-push" });
+  });
+
+  it("blocks hook-bypass on a line inside a heredoc body (accepted false block, D63)", async () => {
+    expect(await run("cat <<EOF > notes.md\ngit commit -n -m x\nEOF")).toMatchObject({ kind: "block", ruleId: "hook-bypass" });
+  });
 });
 
 // Task 2 parity (founder): the rules read only a segment's first token, so a prefix hides the call.

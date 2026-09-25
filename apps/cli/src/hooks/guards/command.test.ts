@@ -157,9 +157,13 @@ describe("a command on its own line", () => {
     ]);
   });
 
-  it("allows a recursive root delete that is only heredoc or quoted text", async () => {
-    expect(await run("cat <<EOF\nrm -rf ~\nEOF")).toStrictEqual({ kind: "allow" });
+  it("allows a recursive root delete that is only quoted text glued to a quote", async () => {
     expect(await run("echo 'x\nrm -rf ~'")).toStrictEqual({ kind: "allow" });
+  });
+
+  // D63: a heredoc body line that blocks on its own blocks the command (accepted false block).
+  it("blocks a recursive root delete on its own line in a heredoc body", async () => {
+    expect(await run("cat <<EOF\nrm -rf ~\nEOF")).toMatchObject({ kind: "block", ruleId: "recursive-delete-root" });
   });
 
   it("still splits after a << whose delimiter line never comes", async () => {
@@ -175,6 +179,14 @@ it("blocks recursive-delete-root after a heredoc body with an apostrophe", async
     ruleId: "recursive-delete-root",
   });
 });
+
+// D63: each physical line is its own candidate, whatever the tokenizer made of the text around it.
+it.each(["cat <<'EOF'\nx\\\nEOF\nrm -rf ~\nEOF", "# note\rcat <<EOF\nrm -rf ~\nEOF", "echo \\\\\nrm -rf ~"])(
+  "blocks recursive-delete-root on its own line: %j",
+  async (command) => {
+    expect(await run(command)).toMatchObject({ kind: "block", ruleId: "recursive-delete-root" });
+  },
+);
 
 // Task 2 parity (founder): the rules read only a segment's first token, so a prefix hides the call.
 describe("a prefixed or globbed command (residual in hooks.md §3.8)", () => {
