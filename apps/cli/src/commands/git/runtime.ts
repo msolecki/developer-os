@@ -141,6 +141,7 @@ export const GIT_SHADOW_TEMPLATE_HASHES = {
 const XCODE_VERSION_PLIST = "/Applications/Xcode.app/Contents/version.plist";
 const MAX_LOOSE_COMMIT_BYTES = 1_048_576;
 const MAX_PROTOCOL_LINE_BYTES = 4096;
+const MAX_REPORT_LINE_BYTES = 16_777_216;
 const RECEIVE_PACK_TERMINATION_GRACE_MS = 100;
 
 function unsupported(): never {
@@ -327,26 +328,43 @@ function parseReport(line: string): TrampolineReportV1 | null {
   }
 }
 
-/** Reads one LF-terminated line and hands back whatever arrived after it. */
-function readLine(socket: Socket): Promise<{ readonly line: string; readonly rest: Buffer }> {
+/**
+ * Reads one LF-terminated line and hands back whatever arrived after it, refusing as soon as the
+ * buffered bytes pass `maximumBytes` without a line feed.
+ */
+export function readLine(socket: Socket, maximumBytes: number): Promise<{ readonly line: string; readonly rest: Buffer }> {
   return new Promise((resolve, reject) => {
     let buffered = Buffer.alloc(0);
+    const detach = (): void => {
+      socket.off("data", onData);
+      socket.off("error", onError);
+      socket.off("end", onEnd);
+    };
+    const onError = (error: Error): void => {
+      detach();
+      reject(error);
+    };
+    const onEnd = (): void => {
+      detach();
+      reject(new SecurityRefusalError("git_gateway_report_truncated"));
+    };
     const onData = (chunk: Buffer): void => {
       buffered = Buffer.concat([buffered, chunk]);
       const end = buffered.indexOf(0x0a);
-      if (end < 0) {
-        if (buffered.byteLength > 16_777_216) reject(new SecurityRefusalError("git_gateway_report_too_large"));
+      if (end < 0 ? buffered.byteLength > maximumBytes : end > maximumBytes) {
+        detach();
+        socket.pause();
+        reject(new SecurityRefusalError("git_gateway_line_too_long"));
         return;
       }
-      socket.off("data", onData);
+      if (end < 0) return;
+      detach();
       socket.pause();
       resolve({ line: buffered.subarray(0, end).toString("utf8"), rest: buffered.subarray(end + 1) });
     };
     socket.on("data", onData);
-    socket.once("error", reject);
-    socket.once("end", () => {
-      reject(new SecurityRefusalError("git_gateway_report_truncated"));
-    });
+    socket.once("error", onError);
+    socket.once("end", onEnd);
   });
 }
 
@@ -429,7 +447,7 @@ class GitGatewayServer {
   }
 
   async #serve(socket: Socket): Promise<void> {
-    const { line, rest } = await readLine(socket);
+    const { line, rest } = await readLine(socket, MAX_REPORT_LINE_BYTES);
     const report = parseReport(line);
     if (report === null || report.capability !== this.#input.capability || rest.byteLength !== 0) refuse("git_gateway_report_invalid");
     const { supervisor, phase } = this.#input;
@@ -531,8 +549,7 @@ class GitGatewayServer {
     helper.accept(argv, env);
     socket.resume();
     for (;;) {
-      const { line, rest } = await readLine(socket);
-      if (Buffer.byteLength(line) > MAX_PROTOCOL_LINE_BYTES) refuse("git_local_helper_protocol");
+      const { line, rest } = await readLine(socket, MAX_PROTOCOL_LINE_BYTES);
       const step = await helper.step(line);
       socket.write(step.bytes);
       if (step.kind === "reply") {

@@ -7,7 +7,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import type { GitProcessPhaseV1 } from "@developer-os/security";
 
-import { bridgeReceivePack } from "./runtime.js";
+import { bridgeReceivePack, readLine } from "./runtime.js";
 
 const roots: string[] = [];
 
@@ -92,4 +92,26 @@ describe("the receive-pack bridge", () => {
     expect(performance.now() - started).toBeLessThan(5_000);
     expect(isAlive(Number((await nodeFs.readFile(grandchildPid, "utf8")).trim()))).toBe(false);
   }, 15_000);
+});
+
+describe("the gateway line reader", () => {
+  it("refuses a line as soon as it passes its limit, without waiting for a line feed", async () => {
+    const socket = silentConnection();
+    const read = readLine(socket as never, 4096);
+    socket.push(Buffer.alloc(4097, 0x61));
+
+    await expect(read).rejects.toThrow("git_gateway_line_too_long");
+  });
+
+  it("leaves no listener behind once a line is read", async () => {
+    const socket = silentConnection();
+    for (const text of ["first", "second", "third"]) {
+      const read = readLine(socket as never, 4096);
+      socket.resume();
+      socket.push(`${text}\n`);
+      expect((await read).line).toBe(text);
+    }
+
+    expect([socket.listenerCount("data"), socket.listenerCount("error"), socket.listenerCount("end")]).toStrictEqual([0, 0, 0]);
+  });
 });
