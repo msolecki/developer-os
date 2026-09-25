@@ -8,7 +8,15 @@ notes are the archive.
 
 ## NOW
 
-**Full-suite evidence (2026-09-25).** Three full local runs (`lint`, `test:lifecycle`, `test:e2e`,
+**Full-suite evidence (2026-09-26, run 4, after the whole-phase reviews).** On `bc17550`, every part
+green: lint, `test:lifecycle` (21/21 files), `test:e2e`, `test:suite` (306/306 files, 9913 tests, 8
+todo = documented residuals), `test:bootstrap` (94) and build. Seven whole-phase fresh-context reviews
+ran (4b, 5, 5b, 6, 7, 8, plan 1b), every Critical and Important finding was fixed with a red-first test
+and re-reviewed, or recorded as a founder decision (D62–D64) or a BACKLOG row (NEW-110..112). Not run:
+`test:vendor-ingest`, `test:vendor-brain` (billed; Codex quota exhausted until 2026-10-22) and
+`test:pinned-host` (plan 1b Task 19, founder host).
+
+**Earlier full-suite evidence (2026-09-25).** Three full local runs (`lint`, `test:lifecycle`, `test:e2e`,
 `test:suite`, `test:bootstrap`, `build`) found and fixed 17 product defects and ~200 test defects in
 the D44/D47/D56 work. Run 3 on `ee388e4`: lint, `test:bootstrap` (94), `test:e2e` (60) and build green;
 `test:suite` 301/302 files (9752 tests) and `test:lifecycle` 20/21 files (191/192 tests), the two red
