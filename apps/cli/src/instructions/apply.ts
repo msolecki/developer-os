@@ -422,8 +422,18 @@ export async function applyInstructions(context: CliContext, input: {
     });
     if (plan.kind === "noop") return EMPTY_REPORT;
     // The Foundation executor creates no directory; product-created ones are exactly 0700.
-    for (const directory of plan.directories) await nodeFs.mkdir(directory, { mode: 0o700 });
-    await context.executor.execute({ kind: "instructions", mutations: plan.mutations });
+    const created: string[] = [];
+    try {
+      for (const directory of plan.directories) {
+        await nodeFs.mkdir(directory, { mode: 0o700 });
+        created.push(directory);
+      }
+      await context.executor.execute({ kind: "instructions", mutations: plan.mutations });
+    } catch (error) {
+      // Spec §2.2: a parent belongs to the transaction, so a refused one leaves none, deepest first.
+      for (const directory of created.reverse()) await nodeFs.rmdir(directory).catch(() => undefined);
+      throw error;
+    }
     return plan.report;
   });
 

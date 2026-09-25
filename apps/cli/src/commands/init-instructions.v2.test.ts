@@ -373,3 +373,30 @@ describe("init --adapters claude installs Claude hooks naming the local-build en
     expect(await claudeOutsidePlugin(installed.claudeHome)).toStrictEqual(outsideBefore);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 });
+
+describe("init --adapters: a refused attach transaction leaves no product-created parent (one chained home)", () => {
+  it("removes every directory it created for the attach when execute throws", async () => {
+    const planted = await home("init-attach-refused");
+    const { fixture } = planted;
+    expect((await runInit(fixture.context, { dryRun: false, assumeYes: true })).ok).toBe(true);
+    expect(existsSync(planted.claudeHome)).toBe(false);
+    expect(existsSync(planted.codexHome)).toBe(false);
+    const executor = fixture.context.executor;
+    const context = {
+      ...fixture.context,
+      executor: {
+        resume: (id: string) => executor.resume(id),
+        rollback: (id: string) => executor.rollback(id),
+        execute: (plan: Parameters<typeof executor.execute>[0]) => plan.kind === "instructions"
+          ? Promise.reject(new Error("synthetic refusal after the parents were created"))
+          : executor.execute(plan),
+      },
+    };
+
+    const result = await runInit(context, options(["claude", "codex"]));
+
+    expect(result.ok).toBe(false);
+    expect(existsSync(planted.claudeHome)).toBe(false);
+    expect(existsSync(planted.codexHome)).toBe(false);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+});
