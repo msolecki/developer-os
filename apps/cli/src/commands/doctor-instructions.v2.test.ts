@@ -372,10 +372,13 @@ describe("doctor names every instruction artifact", () => {
     expect(check(report, "instructions").message).toContain("block_malformed");
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
-  it("flips exactly the overridden row to `user`, and lists an uninstalled override as missing", async () => {
+  it("flips exactly the overridden row to `user`, and lists an uninstalled override as missing, or held back on Claude", async () => {
     const { fixture, home } = await install("doctor-instructions-override", { vendors: ["claude", "codex"], userRules: ["careful"] });
     const extra = join(home, "instructions", "claude", "rules", "extra.md");
     await nodeFs.writeFile(extra, "Another rule of mine.\n", { mode: 0o600 });
+    const extraSkill = join(home, "instructions", "claude", "skills", "extra");
+    await nodeFs.mkdir(extraSkill, { recursive: true, mode: 0o700 });
+    await nodeFs.writeFile(join(extraSkill, "SKILL.md"), "---\nname: extra\ndescription: Mine.\n---\nMine.\n", { mode: 0o600 });
 
     const report = await runDoctorReport(fixture.context);
 
@@ -384,8 +387,11 @@ describe("doctor names every instruction artifact", () => {
     );
     expect(brief(report.instructions)).toStrictEqual([
       ...flipped.slice(0, 2),
-      "claude rule/extra: user, missing",
-      ...flipped.slice(2),
+      // Attach withholds every Claude rule, an override included, until its loading is proven.
+      "claude rule/extra: user, held-back",
+      flipped[2],
+      "claude skill/extra: user, missing",
+      ...flipped.slice(3),
     ]);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 

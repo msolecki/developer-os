@@ -77,6 +77,7 @@ import {
   validateCodexRegistrationRecord,
 } from "../instructions/codex-registration.js";
 import type { CodexRegistrationRecordV1 } from "../instructions/codex-registration.js";
+import { UNPROVEN_CLAUDE_CATEGORIES } from "../instructions/attach.js";
 import { loadInstructionOverrides } from "../instructions/sources.js";
 import { claudeInstructionPaths, codexInstructionPaths, resolveVendorHomes } from "../instructions/vendor-homes.js";
 import type { VendorHomesV1 } from "../instructions/vendor-homes.js";
@@ -106,7 +107,8 @@ export interface InstructionStatusV1 {
   readonly category: InstructionCategoryV1;
   readonly id: InstructionIdV1;
   readonly source: "default" | "user";
-  readonly state: "installed" | "drifted" | "missing" | "emulated" | "unsupported-vendor";
+  /** `held-back`: a Claude category attach withholds until its loading is proven (invariant 3). */
+  readonly state: "installed" | "drifted" | "missing" | "emulated" | "unsupported-vendor" | "held-back";
   readonly paths: readonly string[];
 }
 
@@ -1409,6 +1411,10 @@ async function vendorInstructionStatuses(
       statuses.push({ owner: vendor, category, id, source, state: "unsupported-vendor", paths: [] });
       continue;
     }
+    if (vendor === "claude" && UNPROVEN_CLAUDE_CATEGORIES.has(category) && recorded.length === 0 && member === undefined) {
+      statuses.push({ owner: vendor, category, id, source, state: "held-back", paths: [] });
+      continue;
+    }
     const inBlock = category === "rule" || (vendor === "codex" && category === "scoped-rule");
     const hasFiles = !(vendor === "codex" && inBlock);
     membersExpected ||= inBlock;
@@ -1497,9 +1503,13 @@ async function inspectInstructions(
 /** Spec §2.2: a set `CLAUDE_CONFIG_DIR` is not followed, so the managed files are not what Claude reads. */
 function instructionAdvisories(context: CliContext, statuses: readonly InstructionStatusV1[], passMessage: string): Finding {
   const unsupported = statuses.filter((status) => status.state === "unsupported-vendor");
+  const heldBack = statuses.filter((status) => status.state === "held-back");
   const warnings = [
     ...(unsupported.length > 0
       ? [`${String(unsupported.length)} instruction artifacts are unsupported by their vendor: ${unsupported.map((status) => `${status.owner} ${status.category}/${status.id}`).join(", ")}`]
+      : []),
+    ...(heldBack.length > 0
+      ? [`${String(heldBack.length)} instruction artifacts are held back until their Claude loading is proven: ${heldBack.map((status) => `${status.owner} ${status.category}/${status.id}`).join(", ")}`]
       : []),
     ...(context.env.CLAUDE_CONFIG_DIR !== undefined && context.env.CLAUDE_CONFIG_DIR !== ""
       ? ["CLAUDE_CONFIG_DIR is set and not followed; Claude does not read the managed instruction files"]

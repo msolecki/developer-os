@@ -338,6 +338,10 @@ describe("init --adapters claude installs Claude hooks naming the local-build en
     const row = (await manifestOf(fixture)).artifacts.find((artifact) => artifact.path === hooksFile);
     expect(row).toMatchObject({ owner: "claude", kind: "file", verification: { mode: "content" } });
     expect(await claudeOutsidePlugin(installed.claudeHome)).toStrictEqual(outsideBefore);
+    // Review I1: the user is told what was held back.
+    expect(result.ok && result.warnings).toContain(
+      "held back until their Claude loading is proven: claude output-style/terse, claude rule/careful, claude scoped-rule/typescript",
+    );
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("renders a byte-identical hooks.json on a second install of the same build", async () => {
@@ -346,6 +350,19 @@ describe("init --adapters claude installs Claude hooks naming the local-build en
     expect(result.ok).toBe(true);
     expect(await nodeFs.readFile(hooksFile, "utf8")).toBe(firstRender);
     expect(await claudeOutsidePlugin(installed.claudeHome)).toStrictEqual(outsideBefore);
+  }, REAL_FILESYSTEM_TIMEOUT_MS);
+
+  it("reports the held-back Claude categories as held back, not missing, on an unedited install", async () => {
+    const report = await runDoctorReport(installed.fixture.context);
+
+    expect(report.checks.find((check) => check.id === "instructions")?.status).toBe("warn");
+    const claude = report.instructions.filter((status) => status.owner === "claude");
+    expect(claude.filter((status) => status.state !== "installed").map((status) => `${status.category}/${status.id}: ${status.state}`)).toStrictEqual([
+      "output-style/terse: held-back",
+      "rule/careful: held-back",
+      "scoped-rule/typescript: held-back",
+    ]);
+    expect(claude.some((status) => status.category === "vendor-file")).toBe(false);
   }, REAL_FILESYSTEM_TIMEOUT_MS);
 
   it("reports an edit to hooks.json as drift in doctor", async () => {

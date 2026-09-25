@@ -441,6 +441,7 @@ export async function applyInstructions(context: CliContext, input: {
   const registration = selection.includes("codex") && codex !== null
     ? await reconcileRegistration(context, lifecycle, homes, codex)
     : null;
+  if (report.heldBack.length > 0) warnings.push(`held back until their Claude loading is proven: ${report.heldBack.join(", ")}`);
   // Spec §7.2: Codex runs no hook until the user trusts it, and the product never writes that trust.
   if (selection.includes("codex")) warnings.push(CODEX_HOOK_TRUST_STEP);
   return { ...report, registration, warnings };
