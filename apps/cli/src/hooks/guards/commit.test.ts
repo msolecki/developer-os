@@ -101,3 +101,11 @@ describe("a command on its own line (spec §5.2 step 3, residual in hooks.md §3
   it.todo("blocks hook-bypass: cd repo\\ngit commit -n -m x");
   it.todo("blocks force-push: cd repo\\r\\ngit push --force");
 });
+
+// Task 2 parity (founder): the rules read only a segment's first token, so a prefix hides the call.
+describe("a prefixed git call (residual in hooks.md §3.8)", () => {
+  it.todo("blocks force-push: env git push -f");
+  it.todo("blocks force-push: FOO=1 git push -f");
+  it.todo("blocks force-push: (git push -f)");
+  it.todo("blocks hook-bypass: git -c core.hooksPath=/dev/null commit");
+});

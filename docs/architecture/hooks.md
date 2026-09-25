@@ -427,6 +427,10 @@ record, both stay `unknown`, never `no`. `session_end_capture` and `pre_compact_
   CRLF. `pipe-to-shell` still blocks, because it matches the whole string. The fix (collapse to one
   LF; `shellSegments` treats an unquoted LF as `;`) changes normative spec text and waits for a
   founder amendment. `it.todo` rows in `guards/commit.test.ts` and `guards/command.test.ts` pin it.
+- **`recursive-delete-root`, `force-push` and `hook-bypass` read only a segment's first token.**
+  `sudo rm -rf /`, `rm -rf /*`, `env git push -f`, `FOO=1 git push -f`, `(git push -f)` and
+  `git -c core.hooksPath=/dev/null commit` pass them. Task 2's parity check decides the rules;
+  `it.todo` rows in the guard tests list the cases.
 - **`pipe-to-shell` is a heuristic, not a shell parser.** `| /bin/sh` is blocked (the rule admits
   a path before the shell name), but `| sudo sh`, `curl … | tee f | sh` and `bash <(curl …)` pass
   it. `assertSafeCommand` matches on curl/wget argv, while the guard matches

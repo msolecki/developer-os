@@ -141,3 +141,9 @@ describe("a command on its own line (spec §5.2 step 3, residual in hooks.md §3
   it.todo("blocks recursive-delete-root: cd /tmp\\nrm -rf ~");
   it.todo("blocks recursive-delete-root: cd /tmp\\r\\nrm -rf ~");
 });
+
+// Task 2 parity (founder): the rules read only a segment's first token, so a prefix hides the call.
+describe("a prefixed or globbed command (residual in hooks.md §3.8)", () => {
+  it.todo("blocks recursive-delete-root: sudo rm -rf /");
+  it.todo("blocks recursive-delete-root: rm -rf /*");
+});
