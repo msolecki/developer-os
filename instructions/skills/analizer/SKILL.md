@@ -15,7 +15,7 @@ argument-hint: "[path | --diff <ref>] [--perspectives sec,types,perf,ui,a11y,tes
 
 ## Delegate independent perspectives
 
-Run relevant reviewers in parallel: security, types/errors, performance, tests, architecture/dead code, and UI/accessibility. Give each reviewer only the objective, paths, constraints, stack, and output format. Cap each at 15 material findings.
+Run relevant reviewers in parallel: security, types/errors, performance, tests, architecture/dead code, and UI/accessibility. Give each reviewer only the objective, paths, constraints, stack, and output format. Ask each for material findings only, ordered by impact.
 
 Require each finding to include a unique category ID, `file:line`, severity, problem, current-code evidence, actionable fix, and validation. Reject unsupported claims.
 

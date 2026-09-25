@@ -6,7 +6,7 @@ paths:
 ---
 # Shared Next.js and web conventions
 
-- Validate EVERY input from forms and APIs with a schema validator (for example Zod with `.safeParse()`).
+- Validate every input from forms and APIs with a schema validator (for example Zod with `.safeParse()`).
 - Default to Server Components. Use `'use client'` only for state or event handling.
 - Prefer Server Actions over API routes when possible. Return `{ ok: true, data? } | { ok: false, error }`.
 - Follow the project's migration policy; if it declares none, write forward-only migrations.

@@ -97,6 +97,8 @@ Then feed the still-unverified items into a gap-fill:
   completed agent (maps, auditors, verifiers) replays from cache instantly and ONLY the killed agents
   re-run. This has held across repeated resumes of the same run: each resume replayed every
   already-done agent from cache and re-ran only the ones that had errored, with zero lost work.
+  Resume works only inside the session that started the run, after stopping the prior run
+  (`TaskStop`); when the limit ended the session itself, use the gap-fill workflow instead.
   Reach for a fresh gap-fill workflow (above) ONLY when you deliberately changed post-processing or
   the dedup input (that is a cache miss that cascades downstream).
 - Limits reset on a clock (the notification states the reset time); if you are already past it,

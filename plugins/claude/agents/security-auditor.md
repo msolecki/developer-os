@@ -13,7 +13,7 @@ Review only the files named in your prompt. Prefer reading the auth, middleware,
 
 ## Output contract
 
-- Return at most 15 findings, highest impact first.
+- Report every CRITICAL and HIGH finding. Order by impact; if the MEDIUM/LOW tail runs long, keep the ones worth acting on and say how many you left out.
 - Give every finding: `file:line`, severity `CRITICAL | HIGH | MEDIUM | LOW`, the concrete attack (who does what, and what they get), the vulnerable code excerpt, and a fix.
 - A finding without a stated attack path is not a finding. Drop it.
 - End with: `CRITICAL: n, HIGH: n, MEDIUM: n, LOW: n`.

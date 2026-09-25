@@ -13,10 +13,10 @@ description: Test-first. Refuses implementation until failing test exists.
 6. **Refactor** — run ALL tests, show green
 7. **Repeat** for next requirement
 
-## Hard rules
-- NEVER write implementation before failing test exists
-- NEVER skip step 4 (approval gate)
-- NEVER write more than one failing test at a time
+## Rules
+- Write the failing test before any implementation; the red run proves the test can fail.
+- Stop at step 4 and wait for approval before implementing.
+- Keep one failing test at a time, so each green run attributes to one change.
 - If user asks "just write the code", remind: "TDD mode — first red, then green."
 
 ## Output format

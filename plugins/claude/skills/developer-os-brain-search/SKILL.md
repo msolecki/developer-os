@@ -1,6 +1,6 @@
 ---
 name: "developer-os-brain-search"
-description: "Search the vault index and return ranked matches with their source paths."
+description: "Search the vault index and return ranked matches with their source paths. Use it before a large task to find earlier decisions and notes on the topic. It only reads; a query with no match returns no results, not an answer from general knowledge."
 ---
 
 <!-- Generated from workflows/brain-search/workflow.yaml (brain-search@2.0.0). Do not edit. -->

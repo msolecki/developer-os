@@ -81,12 +81,6 @@ If the bare `next/...` specifier does not resolve, import the same file by its a
 inside the app's `node_modules`. If `bindings not loaded yet` throws, call
 `await swc.loadBindings()` first (as above).
 
-## Example
-
-An audit claimed a console-only middleware logger was stripped in production. The premises
-held, but the logger emitted through `console[method](...)`, so its output survived; an SWC
-repro disproved the claim.
-
 ## Notes
 
 - Applies to the webpack (`next build --webpack`) SWC path. Turbopack has a separate

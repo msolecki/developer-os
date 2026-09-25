@@ -5,10 +5,10 @@
 - When you do not know, ask with options A/B/C instead of assuming.
 - Keep one written plan per task in the repository's declared planning location (if the project declares none, `docs/plans/<YYYY-MM-DD-task>.md`) with the goal, decisions, and next action, updated after every stage; keep specifications next to it in the declared specification location. After a context reset, resume with "continue from <plan path>". End a session with a commit and an updated plan, never halfway through a change.
 - Every plan step must state What (deliverable), Where (files), How (approach), and **Test** (verification). The system must remain deployable after every step. Use S/M/L complexity instead of time estimates.
-- A FRESH subagent that did not inherit the author's context or assumptions must review agent-generated code. Reviewer and author must be different agents.
+- A fresh subagent that did not inherit the author's context reviews agent-generated code; reviewer and author are different agents.
 - An agent handoff (a handoff file or a subagent prompt) contains the objective, file paths, constraints, and expected output format. Exclude debugging history, rejected approaches, and full conversation dumps.
 - Before a large task, look for earlier decisions instead of starting from zero: search the knowledge base first with the `developer-os-brain-search` skill, then read the project's active plan. Raw session transcripts are a last resort; search them only when the knowledge base has no answer.
-- During compaction, ALWAYS preserve the modified-file list, project test commands, and current objective.
+- During compaction, preserve the modified-file list, the project's test commands, and the current objective.
 - Read the selected knowledge-base note before deriving an answer from scratch. Search through the index; never grep an entire knowledge tree.
 - Show only failures from tests and builds, never a full passing log.
 - Claims such as "works" or "fixed" require evidence: test output, command result, or screenshot. A declaration alone is not evidence.

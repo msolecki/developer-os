@@ -13,7 +13,7 @@ Review only the files named in your prompt. Identify the actual hot path before 
 
 ## Output contract
 
-- Return at most 10 findings, highest impact first.
+- Order findings by impact on the hot path; if minor ones run long, say how many you left out.
 - Give every finding: `file:line`, the mechanism (why it is slow), the expected magnitude, the fix, and how to measure it.
 - Distinguish MEASURED (you ran something and have numbers) from INFERRED (you read the code). Label every finding with one of the two. Never present inferred as measured.
 - End with the single highest-impact change and its expected effect.

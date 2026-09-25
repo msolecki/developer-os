@@ -8,7 +8,7 @@ description: Triage a reported defect or outage by setting severity, reproducing
 1. Set severity first: P0 production unavailable or all users blocked; P1 major feature broken with a workaround; P2 ordinary defect; P3 minor/cosmetic.
 2. Gather the exact stack trace, reproduction steps, affected users, frequency, environment, and first-known time. Ask only for data unavailable from the repository or observability tools.
 3. Inspect relevant logs/traces, recent commits, and data invariants. Do not mutate production while diagnosing.
-4. Rank at least three hypotheses with likelihood and evidence. Name the current leader and the observation that would falsify it.
+4. Rank competing hypotheses with likelihood and evidence, including at least one real alternative to the leader, so the leader is tested rather than assumed. Name the current leader and the observation that would falsify it.
 5. Propose:
    - immediate mitigation for P0/P1;
    - root-cause fix;

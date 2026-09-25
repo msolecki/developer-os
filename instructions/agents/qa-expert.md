@@ -14,7 +14,7 @@ Review only the files named in your prompt. Run the project's real test command,
 ## Output contract
 
 - List coverage gaps as: `file:line` — the untested branch or contract, the risk if it breaks, and the test that would pin it.
-- Return at most 10 gaps, ranked by the cost of the defect they would catch.
+- Rank gaps by the cost of the defect they would catch; if minor ones run long, say how many you left out.
 - When you write tests, write one test per contract, and show the failing run before the passing run.
 - End with a verdict: `VERIFIED`, or `UNVERIFIED: <what is untested>`.
 

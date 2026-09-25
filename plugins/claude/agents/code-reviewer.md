@@ -14,7 +14,7 @@ Review only the files named in your prompt. Read them before judging. Detect the
 ## Output contract
 
 - Start every finding with exactly one prefix: `blocker:`, `suggestion:`, `question:`, or `nit:`. Only `blocker:` prevents approval.
-- Return at most 15 findings, highest impact first.
+- Report every blocker. Order findings by impact; if the non-blocking tail runs long, keep the ones worth acting on and say how many you left out.
 - Give every finding `file:line`, one or two concrete sentences, and an actionable fix.
 - End with a one-line verdict: `APPROVE` or `BLOCK: <count> blockers`.
 

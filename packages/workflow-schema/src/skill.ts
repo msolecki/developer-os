@@ -201,7 +201,7 @@ export function renderSkillBody(
   ];
 
   if (rendered.id !== SHARED_WORKFLOW_ID) {
-    lines.push(...preamble(options.shared), "");
+    lines.push(...preamble(options.shared, rendered), "");
   }
 
   lines.push(`# ${screen(rendered.id)}`, "");
@@ -239,13 +239,16 @@ function applied(
   return outcome.contract;
 }
 
-function preamble(shared: WorkflowContractV1): readonly string[] {
+function preamble(
+  shared: WorkflowContractV1,
+  rendered: WorkflowContractV1,
+): readonly string[] {
   return [
     `<!-- preamble from ${SHARED_WORKFLOW_ID}; concatenated, not referenced -->`,
     "",
     "## Always",
     "",
-    ...preambleBody(shared),
+    ...preambleBody(shared, new Set(rendered.refusals.map((refusal) => refusal.when))),
   ];
 }
 
@@ -254,9 +257,19 @@ function preamble(shared: WorkflowContractV1): readonly string[] {
  * `assertUsablePreamble` can require it to be non-empty. A heading is not a
  * defence.
  */
-function preambleBody(shared: WorkflowContractV1): readonly string[] {
+function preambleBody(
+  shared: WorkflowContractV1,
+  redeclared: ReadonlySet<string>,
+): readonly string[] {
+  // A refusal the workflow declares itself renders once, in its own words:
+  // two `vault-missing` lines with different messages leave the agent to
+  // reconcile them.
+  const inherited = {
+    ...shared,
+    refusals: shared.refusals.filter((refusal) => !redeclared.has(refusal.when)),
+  };
   return [
-    ...renderRefusals(shared, (message) =>
+    ...renderRefusals(inherited, (message) =>
       screenOrRefuse(message, "refusal message"),
     ),
     ...preambleProse(shared),
