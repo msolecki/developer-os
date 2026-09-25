@@ -129,7 +129,7 @@ export interface AutomationJobStatusV1 {
   readonly eligible: boolean;
   /** `stale` is an owned plist whose generation is not the current eligible configuration's. */
   readonly installed: "absent" | "current" | "stale" | "drifted" | "unowned";
-  readonly live: "loaded" | "unloaded" | null;
+  readonly live: "loaded" | "unloaded" | "third_state" | null;
   readonly lastRun: AutomationStatusRecordV1 | "invalid" | null;
 }
 
@@ -353,6 +353,20 @@ async function observeLive(
   productHome: CanonicalAbsolutePathV1,
 ): Promise<ReadonlyMap<ScheduledJobIdV1, LaunchdLiveStateV1>> {
   const live = new Map<ScheduledJobIdV1, LaunchdLiveStateV1>();
+  for (const [job, state] of await observeLiveStates(lifecycle, jobs, productHome)) {
+    if (state === "third_state") recoveryRequired("launchd_live_state_third_state", productHome);
+    live.set(job, state);
+  }
+  return live;
+}
+
+/** `status` reports a third state or a foreign loaded generation; every mutation refuses on it. */
+async function observeLiveStates(
+  lifecycle: CliLifecycleContext,
+  jobs: readonly ObservedJobV1[],
+  productHome: CanonicalAbsolutePathV1,
+): Promise<ReadonlyMap<ScheduledJobIdV1, LaunchdLiveStateV1 | "third_state">> {
+  const live = new Map<ScheduledJobIdV1, LaunchdLiveStateV1 | "third_state">();
   if (jobs.length === 0) return live;
   const retainedLabels = jobs.flatMap((job) => (job.retained === null ? [] : [job.retained]));
   let observed: LaunchdLiveObservationV1;
@@ -370,7 +384,7 @@ async function observeLive(
     } else if ((state?.kind === "exact_old" || state?.kind === "exact_new") && state.label === job.retained) {
       live.set(job.job, { state: "loaded", label: state.label, generation: state.generation });
     } else {
-      recoveryRequired("launchd_live_state_third_state", productHome);
+      live.set(job.job, "third_state");
     }
   });
   return live;
@@ -1112,9 +1126,9 @@ export function createAutomationService(context: CliContext, lifecycle: CliLifec
     const retained = [...states.values()].flatMap((state) => (state.kind === "retained" ? [state.plist] : []));
     let distribution: "supported" | "unsupported_launchd_distribution" =
       launchdTemplate(lifecycle).certification === null ? "unsupported_launchd_distribution" : "supported";
-    let live: ReadonlyMap<ScheduledJobIdV1, LaunchdLiveStateV1> | null = null;
+    let live: ReadonlyMap<ScheduledJobIdV1, LaunchdLiveStateV1 | "third_state"> | null = null;
     try {
-      live = await observeLive(lifecycle, retained.map((plist) => ({ job: plist.job, retained: plist.label, planned: null })), home.key.productHome);
+      live = await observeLiveStates(lifecycle, retained.map((plist) => ({ job: plist.job, retained: plist.label, planned: null })), home.key.productHome);
     } catch (error) {
       if (!(error instanceof LaunchdDistributionUnsupportedError || error instanceof LifecycleRecoveryRequiredError)) throw error;
       if (error instanceof LaunchdDistributionUnsupportedError) distribution = "unsupported_launchd_distribution";
@@ -1133,7 +1147,7 @@ export function createAutomationService(context: CliContext, lifecycle: CliLifec
         schedule: schedules.find((entry) => entry.job === job)?.schedule ?? null,
         eligible,
         installed,
-        live: liveState === undefined ? null : liveState.state,
+        live: liveState === undefined ? null : liveState === "third_state" ? liveState : liveState.state,
         lastRun: await lastRunOf(lifecycle, home.key.productHome, job),
       });
     }

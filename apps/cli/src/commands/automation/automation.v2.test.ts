@@ -66,7 +66,7 @@ const ENTRYPOINT = "// synthetic Developer OS entrypoint\n";
 const encoder = new TextEncoder();
 
 const launchd = scriptedLaunchd({ clock: () => CLOCK, certified: true });
-const host = { drifted: false };
+const host = { drifted: false, thirdState: false };
 const runtime = scriptedGitRuntime();
 
 /**
@@ -95,7 +95,11 @@ function effectPorts(context: CliLifecycleContext): LifecycleEffectPortsV1 {
         observe: (request) =>
           host.drifted
             ? Promise.reject(new LaunchdDistributionUnsupportedError("operating system build 25G84 is not the pinned row"))
-            : launchd.ports.observer.observe(request),
+            : launchd.ports.observer.observe(request).then((observed) =>
+                host.thirdState && observed.kind === "observed"
+                  ? { ...observed, jobs: observed.jobs.map((entry) => ({ ...entry, state: { kind: "third_state" as const, reason: "dual_generation" as const } })) }
+                  : observed,
+              ),
       },
     },
   };
@@ -378,6 +382,27 @@ describe("automation on a real V2 home", () => {
         ["git-sync", false, "absent", null, null],
       ]);
       expect(launchd.events).toStrictEqual(eventsBefore);
+    },
+    REAL_FILESYSTEM_TIMEOUT_MS,
+  );
+
+  it(
+    "reports a live third state in status instead of hiding it as unobserved",
+    async () => {
+      const home = await sharedHome();
+      host.thirdState = true;
+      try {
+        const status = dataOf(await runAutomation(home.context, { subcommand: "status" }));
+        if (status.kind !== "status") throw new Error("unreachable");
+        expect(status.jobs.map((job) => [job.job, job.live])).toStrictEqual([
+          ["brain-reindex", "third_state"],
+          ["brain-lint", "third_state"],
+          ["doctor", "third_state"],
+          ["git-sync", null],
+        ]);
+      } finally {
+        host.thirdState = false;
+      }
     },
     REAL_FILESYSTEM_TIMEOUT_MS,
   );
