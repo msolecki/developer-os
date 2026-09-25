@@ -18,7 +18,8 @@ import type {
   LowerHexSha256,
   ScheduledJobIdV1,
 } from "@developer-os/core";
-import { LaunchdObserver, SUPPORTED_LAUNCHD_DISTRIBUTION, launchdEffectPlan } from "@developer-os/platform-macos";
+import { LaunchdObserver, SUPPORTED_LAUNCHD_DISTRIBUTION, launchdEffectPlan, parseGeneratedLabel } from "@developer-os/platform-macos";
+import type { GeneratedLaunchdLabelV1 } from "@developer-os/platform-macos";
 
 import { createBootstrapEvidenceInspectionRequest } from "../bootstrap/context.js";
 import { inspectBootstrapEvidenceAdmission } from "../bootstrap/report.js";
@@ -262,6 +263,25 @@ describe("uninstall/present_manifest (P)", () => {
     const { plan } = preview.builder.build(placeholderIds(preview.builder.slotCount, true));
     expect(launchdEffectPlan(launchdLeaf(plan), "before_files")?.transitions).toStrictEqual([]);
     expect(launchdLeaf(plan).entries[0]?.bootstrapPlists).toStrictEqual({ before: null, after: null });
+  });
+
+  it("refuses a loaded generation whose label is not the retained plist's", async () => {
+    const home = await syntheticUninstallHome({ withLaunchd: true });
+    const plist = home.plist;
+    if (plist === null) throw new Error("the home installs a plist");
+    const launchd = scriptedLaunchd({ clock: lifecycleOf(home.fixture).clock, certified: true });
+    const foreign = `${plist.label}0` as GeneratedLaunchdLabelV1;
+    const observer: LifecycleEffectPortsV1["launchd"]["observer"] = {
+      observe: () =>
+        Promise.resolve({
+          kind: "observed",
+          jobs: [{ job: DOCTOR, state: { kind: "exact_old", label: foreign, generation: parseGeneratedLabel(plist.label).generation } }],
+        }),
+    } as unknown as LifecycleEffectPortsV1["launchd"]["observer"];
+
+    await expect(
+      new LifecycleUninstaller().preview(await home.request({ ...launchd.ports, observer }), home.global),
+    ).rejects.toMatchObject({ reason: "launchd_live_state_third_state" });
   });
 
   it("refuses an edited installed plist as a decision, before it plans", async () => {

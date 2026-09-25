@@ -1303,7 +1303,7 @@ async function observeLabels(
     const state = observed.jobs[index]?.job === row.job ? observed.jobs[index].state : null;
     if (state?.kind === "unloaded") {
       live.set(row.job, { state: "unloaded" });
-    } else if (state?.kind === "exact_old" || state?.kind === "exact_new") {
+    } else if ((state?.kind === "exact_old" || state?.kind === "exact_new") && state.label === row.label) {
       live.set(row.job, { state: "loaded", label: state.label, generation: state.generation });
     } else {
       refuse("launchd_live_state_third_state", row.identity.path);
