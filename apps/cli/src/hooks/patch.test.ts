@@ -56,6 +56,17 @@ describe("applyPatchPaths", () => {
     expect(applyPatchPaths(patch(`*** Add File: ${space}.env`, "+S=2"))).toBeNull();
   });
 
+  it("refuses a header path edged with any Unicode White_Space character", () => {
+    const spaces = Array.from({ length: 0x3001 }, (_, code) => String.fromCodePoint(code)).filter((c) =>
+      /\p{White_Space}/u.test(c),
+    );
+    expect(spaces.length).toBeGreaterThan(20);
+    for (const space of spaces) {
+      expect(applyPatchPaths(patch(`*** Update File: .env${space}`, "@@", "-S=1", "+S=2"))).toBeNull();
+      expect(applyPatchPaths(patch(`*** Add File: ${space}.env`, "+S=2"))).toBeNull();
+    }
+  });
+
   it("refuses a header smuggled behind leading whitespace as a context line", () => {
     expect(
       applyPatchPaths(patch("*** Add File: new.txt", "+x", " *** Update File: .env", "@@", "-S=1", "+S=pwned")),
