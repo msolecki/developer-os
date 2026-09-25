@@ -309,6 +309,40 @@ describe("import from a path", () => {
     expect(await digests(fixture)).toEqual(before);
   });
 
+  it("refuses an ancestor of the product home without listing it", async () => {
+    const fixture = await installed("import-policy-home-ancestor");
+    await plant(workOf(fixture), { "a.md": "beside the product" });
+    const probe = spied(fixture.context);
+    const before = await digests(fixture);
+
+    const result = await importWith(fixture, { path: fixture.userHome }, probe.context);
+
+    expect(result.code).toBe(EXIT_CODES.securityRefusal);
+    expect(kindOf(result)).toBe("import_source_in_product_home");
+    expect(probe.listings).toEqual([]);
+    expect(await digests(fixture)).toEqual(before);
+  });
+
+  it("refuses an ancestor of the vault without listing it", async () => {
+    const scratch = await createCommandFixture("import-policy-vault-ancestor-root");
+    const vaults = join(scratch.root, "shared", "vaults");
+    const fixture = await createCommandFixture("import-policy-vault-ancestor", {
+      root: join(scratch.root, "shared"),
+      env: { DEVELOPER_OS_BRAIN: join(vaults, "brain") },
+    });
+    expect((await runInit(fixture.context, ACCEPTED)).ok).toBe(true);
+    await plant(vaults, { "loose.md": "beside the vault" });
+    const probe = spied(fixture.context);
+    const before = await digests(fixture);
+
+    const result = await importWith(fixture, { path: vaults }, probe.context);
+
+    expect(result.code).toBe(EXIT_CODES.invalidInput);
+    expect(kindOf(result)).toBe("import_source_in_vault");
+    expect(probe.listings).toEqual([]);
+    expect(await digests(fixture)).toEqual(before);
+  });
+
   it("refuses a quarantine directory replaced by a link out of the content root", async () => {
     const fixture = await installed("import-quarantine-link");
     await plant(inboxOf(fixture), { "a.md": "an observation" });

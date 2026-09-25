@@ -601,20 +601,21 @@ export async function runImport(
       }
       const home = await context.guards.canonicalize(paths.home);
       const brain = await context.guards.canonicalize(paths.brain);
-      if (containsPath(home, canonical)) {
+      // Both directions: an ancestor would walk into the product home or the vault.
+      if (containsPath(home, canonical) || containsPath(canonical, home)) {
         throw new ImportRunRefusal(
           "import_source_in_product_home",
           EXIT_CODES.securityRefusal,
-          "the import source is inside the Developer OS home, which is never imported",
+          "the import source overlaps the Developer OS home, which is never imported",
           [canonical],
         );
       }
       const inInbox = containsPath(inbox, canonical);
-      if (containsPath(brain, canonical) && !inInbox) {
+      if ((containsPath(brain, canonical) || containsPath(canonical, brain)) && !inInbox) {
         throw new ImportRunRefusal(
           "import_source_in_vault",
           EXIT_CODES.invalidInput,
-          "the import source is inside the vault but outside its inbox",
+          "the import source overlaps the vault outside its inbox",
           [canonical],
           "move the files into the vault's _raw/inbox, or import them from outside the vault",
         );
